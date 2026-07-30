@@ -126,7 +126,23 @@ jobs:
             fi
             sleep 5
           done
-          curl -fsS --max-time 10 https://openqareer.com/ >/dev/null
+          release_index="$(mktemp)"
+          curl --compressed -fsS --max-time 30 \
+            -H 'Cache-Control: no-cache' \
+            "https://openqareer.com/?release=$GITHUB_SHA" > "$release_index"
+          entry_asset="$(sed -nE 's#.*src="(/assets/[^"]+\.js)".*#\1#p' \
+            "$release_index" | head -n 1)"
+          case "$entry_asset" in
+            /assets/*.js) ;;
+            *)
+              printf 'production index has no safe entry asset path\n' >&2
+              exit 1
+              ;;
+          esac
+          release_asset="$(mktemp)"
+          curl --compressed -fsS --max-time 60 \
+            "https://openqareer.com$entry_asset" > "$release_asset"
+          grep -Fq "$GITHUB_SHA" "$release_asset"
           curl -fsS --max-time 10 https://eterapy.com/api/health >/dev/null
           curl -fsSI --max-time 10 https://openqareer.com/ |
             grep -Eiq '^content-security-policy:'

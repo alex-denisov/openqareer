@@ -36,7 +36,7 @@ wait_for_static_health() {
 }
 
 [[ "$(id -u)" == "0" ]] || fail "run with sudo/root"
-for command in awk cmp docker curl busybox flock mktemp scp sha256sum tar \
+for command in awk cmp docker curl flock mktemp python3 scp sha256sum tar \
   systemctl systemd-analyze visudo; do
   command -v "$command" >/dev/null 2>&1 || fail "missing command: $command"
 done
@@ -78,8 +78,6 @@ install -o root -g root -m 0755 \
 install -o root -g root -m 0755 \
   "$SCRIPT_DIR/openqareer-rollback" /usr/local/bin/openqareer-rollback
 install -o root -g root -m 0644 \
-  "$SCRIPT_DIR/openqareer-httpd.conf" /etc/openqareer-httpd.conf
-install -o root -g root -m 0644 \
   "$SCRIPT_DIR/openqareer-static.service" /etc/systemd/system/openqareer-static.service
 
 authorized_keys_temp="$(mktemp "$RELEASE_ROOT/.ssh/.authorized_keys.XXXXXX")"
@@ -90,8 +88,7 @@ install -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0600 \
   "$authorized_keys_temp" "$RELEASE_ROOT/.ssh/authorized_keys"
 chown -R "$DEPLOY_USER:$DEPLOY_USER" "$RELEASE_ROOT/.ssh"
 
-printf 'OPENQAREER_LISTEN=%s\n' "$LISTEN_ADDRESS" > /etc/openqareer-static.env
-chmod 0644 /etc/openqareer-static.env
+rm -f -- /etc/openqareer-static.env /etc/openqareer-httpd.conf
 
 cat > /etc/sudoers.d/openqareer-deploy <<'EOF'
 openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-static.service
