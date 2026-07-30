@@ -1,0 +1,136 @@
+name: Verify and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VITE_OPENQAREER_RELEASE: ${{ github.sha }}
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('verify-{0}', github.ref) || 'openqareer-production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Enforce coverage thresholds
+        run: npm run test:coverage
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build production artifact
+        run: npm run build
+
+  deploy:
+    name: Deploy production
+    if: github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Build immutable release
+        id: release
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          printf '%s\n' "$GITHUB_SHA" > dist/health
+          tar --sort=name --mtime='UTC 1970-01-01' \
+            --owner=0 --group=0 --numeric-owner \
+            -czf "openqareer-$GITHUB_SHA.tar.gz" -C dist .
+          checksum="$(sha256sum "openqareer-$GITHUB_SHA.tar.gz" | awk '{print $1}')"
+          printf 'checksum=%s\n' "$checksum" >> "$GITHUB_OUTPUT"
+
+      - name: Configure pinned SSH host identity
+        env:
+          DEPLOY_KEY: ${{ secrets.OPENQAREER_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.OPENQAREER_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/openqareer_deploy"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/openqareer_deploy" "$HOME/.ssh/known_hosts"
+
+      - name: Upload and activate release
+        env:
+          DEPLOY_HOST: ${{ vars.OPENQAREER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.OPENQAREER_DEPLOY_USER }}
+          CHECKSUM: ${{ steps.release.outputs.checksum }}
+        run: |
+          set -euo pipefail
+          ssh_options=(
+            -i "$HOME/.ssh/openqareer_deploy"
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts"
+          )
+          scp -O "${ssh_options[@]}" "openqareer-$GITHUB_SHA.tar.gz" \
+            "$DEPLOY_USER@$DEPLOY_HOST:/srv/openqareer/incoming/$GITHUB_SHA.tar.gz"
+          ssh "${ssh_options[@]}" "$DEPLOY_USER@$DEPLOY_HOST" \
+            /usr/local/bin/openqareer-activate "$GITHUB_SHA" "$CHECKSUM"
+
+      - name: Verify public release and eTerapy non-regression
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            deployed="$(curl -fsS --max-time 10 \
+              -H 'Cache-Control: no-cache' \
+              "https://openqareer.com/health?release=$GITHUB_SHA" 2>/dev/null || true)"
+            if [ "$deployed" = "$GITHUB_SHA" ]; then
+              printf 'release=%s public_health=ok attempt=%s\n' "$GITHUB_SHA" "$attempt"
+              break
+            fi
+            if [ "$attempt" = "30" ]; then
+              printf 'public health mismatch: expected %s got %s\n' "$GITHUB_SHA" "$deployed" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          curl -fsS --max-time 10 https://openqareer.com/ >/dev/null
+          curl -fsS --max-time 10 https://eterapy.com/api/health >/dev/null
+          curl -fsSI --max-time 10 https://openqareer.com/ |
+            grep -Eiq '^content-security-policy:'
+
+      - name: Remove runner SSH material
+        if: always()
+        run: rm -f "$HOME/.ssh/openqareer_deploy" "$HOME/.ssh/known_hosts"

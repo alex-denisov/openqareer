@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly RELEASE_ROOT=/srv/openqareer
+readonly ORIGINAL_COMMAND="${SSH_ORIGINAL_COMMAND:-}"
+
+fail() {
+  printf 'openqareer-ci-command: command is not permitted\n' >&2
+  exit 1
+}
+
+umask 0027
+
+if [[ "$ORIGINAL_COMMAND" =~ ^scp\ -t\ (/srv/openqareer/incoming/([0-9a-f]{40})\.tar\.gz)$ ]]; then
+  readonly upload_path="${BASH_REMATCH[1]}"
+  [[ -d "$RELEASE_ROOT/incoming" ]] || fail
+  ulimit -f 32768
+  exec /usr/bin/scp -t -- "$upload_path"
+fi
+
+if [[ "$ORIGINAL_COMMAND" =~ ^/usr/local/bin/openqareer-activate\ ([0-9a-f]{40})\ ([0-9a-f]{64})$ ]]; then
+  exec /usr/local/bin/openqareer-activate \
+    "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+fi
+
+if [[ "$ORIGINAL_COMMAND" == "/usr/local/bin/openqareer-rollback" ]]; then
+  exec /usr/local/bin/openqareer-rollback
+fi
+
+fail

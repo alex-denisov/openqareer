@@ -1,0 +1,434 @@
+import { describe, expect, it } from 'vitest';
+import {
+  createCandidateAnalysis,
+  completeCandidateAnalysis,
+} from '../evidence/evidenceEngine';
+import {
+  analyzeOpportunity,
+  createOpportunityRecord,
+  recordOpportunityDecision,
+} from '../opportunity/opportunityEngine';
+import {
+  clearWorkspace,
+  createWorkspace,
+  loadWorkspace,
+  saveWorkspace,
+  validateWorkspaceInput,
+  type StorageLike,
+} from './workspaceStorage';
+
+function createMemoryStorage(initial: Record<string, string> = {}): StorageLike {
+  const values = new Map(Object.entries(initial));
+
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key),
+  };
+}
+
+const validInput = {
+  resumeText:
+    'Руководил запуском продукта и координировал работу команды. Отвечал за сроки, приоритеты и проверку результата на каждом этапе.',
+  resumeSource: 'pdf' as const,
+  resumeFileName: 'synthetic-resume.pdf',
+  resumePageCount: 2,
+  targetDirection: 'Руководитель продукта',
+  market: 'ru' as const,
+  currentSituation:
+    'Завершил предыдущий проект и выбираю следующий осмысленный переход.',
+  constraints: 'Не рассматриваю роли без влияния на продуктовые решения.',
+  urgency: 'active' as const,
+  linkedinUrl: 'https://www.linkedin.com/in/example',
+  hhUrl: 'https://hh.ru/resume/example',
+};
+
+describe('workspace validation', () => {
+  it('returns accessible field errors for incomplete input', () => {
+    expect(
+      validateWorkspaceInput({
+        resumeText: 'Слишком коротко',
+        resumeSource: 'text',
+        targetDirection: '',
+        market: 'ru',
+        currentSituation: '',
+        constraints: '',
+        urgency: 'exploring',
+        linkedinUrl: 'https://example.com/not-linkedin',
+        hhUrl: 'not a url',
+      }),
+    ).toEqual({
+      resumeText: 'Добавьте хотя бы 80 знаков, чтобы сохранить рабочий контекст.',
+      targetDirection: 'Укажите роль или направление.',
+      currentSituation: 'Коротко опишите, где вы находитесь сейчас.',
+      linkedinUrl: 'Укажите ссылку на профиль linkedin.com.',
+      hhUrl: 'Укажите ссылку на резюме hh.ru.',
+    });
+  });
+
+  it('accepts a sufficiently complete local input', () => {
+    expect(validateWorkspaceInput(validInput)).toEqual({});
+  });
+});
+
+describe('workspace persistence', () => {
+  it('saves and restores a versioned workspace', () => {
+    const storage = createMemoryStorage();
+    const workspace = createWorkspace(validInput, '2026-07-30T16:00:00.000Z');
+
+    saveWorkspace(storage, workspace);
+
+    expect(loadWorkspace(storage)).toEqual({
+      status: 'ready',
+      workspace,
+    });
+  });
+
+  it('rejects corrupt or unknown persisted data without throwing', () => {
+    const corrupt = createMemoryStorage({
+      'candidate-workspace': '{not json',
+    });
+    const future = createMemoryStorage({
+      'candidate-workspace': JSON.stringify({ version: 99 }),
+    });
+
+    expect(loadWorkspace(corrupt)).toEqual({ status: 'invalid' });
+    expect(loadWorkspace(future)).toEqual({ status: 'invalid' });
+  });
+
+  it('migrates a valid version-one workspace without losing user input', () => {
+    const legacyWorkspace = {
+      ...createWorkspace(validInput, '2026-07-30T16:00:00.000Z'),
+      version: 1,
+    };
+    const storage = createMemoryStorage({
+      'candidate-workspace': JSON.stringify(legacyWorkspace),
+    });
+    const result = loadWorkspace(storage);
+
+    expect(result.status).toBe('ready');
+    if (result.status === 'ready') {
+      expect(result.workspace.version).toBe(3);
+      expect(result.workspace.resumeText).toBe(validInput.resumeText);
+      expect(result.workspace.analysis).toBeUndefined();
+    }
+  });
+
+  it('keeps reviewed evidence only while its resume and target stay current', () => {
+    const workspace = createWorkspace(validInput, '2026-07-30T16:00:00.000Z');
+    const analysis = completeCandidateAnalysis(
+      workspace.targetDirection,
+      createCandidateAnalysis(workspace.resumeText),
+      '2026-07-30T16:05:00.000Z',
+    );
+    const reviewedWorkspace = { ...workspace, analysis };
+
+    expect(
+      createWorkspace(
+        { ...validInput, constraints: 'Обновлённое ограничение' },
+        '2026-07-30T16:10:00.000Z',
+        reviewedWorkspace,
+      ).analysis,
+    ).toEqual(analysis);
+    expect(
+      createWorkspace(
+        { ...validInput, targetDirection: 'Program Manager' },
+        '2026-07-30T16:10:00.000Z',
+        reviewedWorkspace,
+      ).analysis,
+    ).toBeUndefined();
+  });
+
+  it('keeps an opportunity only while the evidence, market and constraints stay current', () => {
+    const workspace = createWorkspace(validInput, '2026-07-30T16:00:00.000Z');
+    const analysis = completeCandidateAnalysis(
+      workspace.targetDirection,
+      createCandidateAnalysis(workspace.resumeText),
+      '2026-07-30T16:05:00.000Z',
+    );
+    const record = createOpportunityRecord(
+      {
+        title: 'Руководитель продукта',
+        company: 'Пример',
+        text:
+          'Задачи\nФормировать продуктовую стратегию и управлять командой.\nТребования\nОпыт запуска цифровых продуктов и проведения исследований.\nУсловия\nУдалённая работа, полная занятость.',
+        sourceLabel: 'Ручной ввод',
+      },
+      '2026-07-30T16:06:00.000Z',
+    );
+    const withAnalysis = {
+      ...workspace,
+      analysis,
+      opportunity: {
+        ...record,
+        analysis: analyzeOpportunity(record, analysis.evidenceItems, 'clear'),
+      },
+    };
+
+    expect(
+      createWorkspace(
+        { ...validInput, currentSituation: `${validInput.currentSituation} Да.` },
+        '2026-07-30T16:10:00.000Z',
+        withAnalysis,
+      ).opportunity,
+    ).toEqual(withAnalysis.opportunity);
+    expect(
+      createWorkspace(
+        { ...validInput, constraints: 'Только офисная работа.' },
+        '2026-07-30T16:10:00.000Z',
+        withAnalysis,
+      ).opportunity,
+    ).toBeUndefined();
+  });
+
+  it('restores a valid reviewed analysis and rejects malformed derived data', () => {
+    const workspace = createWorkspace(validInput, '2026-07-30T16:00:00.000Z');
+    const extracted = createCandidateAnalysis(workspace.resumeText);
+    const evidenceItems = extracted.evidenceItems.map((item) => ({
+      ...item,
+      status: 'confirmed' as const,
+    }));
+    const analysis = completeCandidateAnalysis(
+      workspace.targetDirection,
+      { ...extracted, evidenceItems },
+      '2026-07-30T16:05:00.000Z',
+    );
+    const reviewed = { ...workspace, analysis };
+    const validStorage = createMemoryStorage({
+      'candidate-workspace': JSON.stringify(reviewed),
+    });
+
+    expect(loadWorkspace(validStorage)).toEqual({
+      status: 'ready',
+      workspace: reviewed,
+    });
+
+    const invalidVariants: unknown[] = [
+      { ...reviewed, analysis: null },
+      {
+        ...reviewed,
+        analysis: { ...analysis, evidenceMethodVersion: 'unknown' },
+      },
+      { ...reviewed, analysis: { ...analysis, roleMethodVersion: 'unknown' } },
+      { ...reviewed, analysis: { ...analysis, evidenceItems: 'not-an-array' } },
+      {
+        ...reviewed,
+        analysis: {
+          ...analysis,
+          evidenceItems: [{ ...analysis.evidenceItems[0], kind: 'opinion' }],
+        },
+      },
+      {
+        ...reviewed,
+        analysis: {
+          ...analysis,
+          evidenceItems: [
+            { ...analysis.evidenceItems[0], sourceExcerpt: 42 },
+          ],
+        },
+      },
+      {
+        ...reviewed,
+        analysis: {
+          ...analysis,
+          evidenceItems: [{ ...analysis.evidenceItems[0], status: 'approved' }],
+        },
+      },
+      { ...reviewed, analysis: { ...analysis, questions: [42] } },
+      {
+        ...reviewed,
+        analysis: { ...analysis, roleHypotheses: 'not-an-array' },
+      },
+      {
+        ...reviewed,
+        analysis: {
+          ...analysis,
+          roleHypotheses: [
+            { ...analysis.roleHypotheses[0], fitState: 'certain' },
+          ],
+        },
+      },
+      {
+        ...reviewed,
+        analysis: {
+          ...analysis,
+          roleHypotheses: [
+            { ...analysis.roleHypotheses[0], evidenceIds: [42] },
+          ],
+        },
+      },
+      {
+        ...reviewed,
+        analysis: {
+          ...analysis,
+          roleHypotheses: [{ ...analysis.roleHypotheses[0], gaps: [42] }],
+        },
+      },
+      { ...reviewed, analysis: { ...analysis, reviewedAt: 42 } },
+    ];
+
+    for (const invalid of invalidVariants) {
+      const storage = createMemoryStorage({
+        'candidate-workspace': JSON.stringify(invalid),
+      });
+      expect(loadWorkspace(storage)).toEqual({ status: 'invalid' });
+    }
+  });
+
+  it('restores a decided opportunity and rejects malformed opportunity state', () => {
+    const workspace = createWorkspace(validInput, '2026-07-30T16:00:00.000Z');
+    const extracted = createCandidateAnalysis(workspace.resumeText);
+    const candidateAnalysis = {
+      ...extracted,
+      evidenceItems: extracted.evidenceItems.map((item) => ({
+        ...item,
+        status: 'confirmed' as const,
+      })),
+    };
+    const record = createOpportunityRecord(
+      {
+        title: 'Руководитель продукта',
+        company: 'Пример',
+        text:
+          'Задачи\nФормировать продуктовую стратегию и управлять командой.\nТребования\nОпыт запуска цифровых продуктов и проведения исследований.\nУсловия\nУдалённая работа, полная занятость.',
+        sourceLabel: 'Ручной ввод',
+        sourceUrl: 'https://example.com/job',
+      },
+      '2026-07-30T16:06:00.000Z',
+    );
+    const analyzed = {
+      ...record,
+      analysis: analyzeOpportunity(
+        record,
+        candidateAnalysis.evidenceItems,
+        'clear',
+      ),
+    };
+    const opportunity = recordOpportunityDecision(
+      analyzed,
+      'network',
+      'Хочу сначала уточнить задачи и уровень роли.',
+      '2026-07-30T16:07:00.000Z',
+    );
+    const ready = {
+      ...workspace,
+      analysis: completeCandidateAnalysis(
+        workspace.targetDirection,
+        candidateAnalysis,
+        '2026-07-30T16:05:00.000Z',
+      ),
+      opportunity,
+    };
+
+    expect(
+      loadWorkspace(
+        createMemoryStorage({
+          'candidate-workspace': JSON.stringify(ready),
+        }),
+      ),
+    ).toEqual({ status: 'ready', workspace: ready });
+
+    const invalidVariants: unknown[] = [
+      { ...ready, opportunity: null },
+      { ...ready, opportunity: { ...opportunity, id: 42 } },
+      {
+        ...ready,
+        opportunity: {
+          ...opportunity,
+          sourceUrl: 42,
+        },
+      },
+      {
+        ...ready,
+        opportunity: {
+          ...opportunity,
+          parsed: { ...opportunity.parsed, methodVersion: 'unknown' },
+        },
+      },
+      {
+        ...ready,
+        opportunity: {
+          ...opportunity,
+          parsed: {
+            ...opportunity.parsed,
+            items: [{ ...opportunity.parsed.items[0], kind: 'benefit' }],
+          },
+        },
+      },
+      {
+        ...ready,
+        opportunity: {
+          ...opportunity,
+          parsed: { ...opportunity.parsed, unknowns: [42] },
+        },
+      },
+      {
+        ...ready,
+        opportunity: {
+          ...opportunity,
+          analysis: {
+            ...opportunity.analysis,
+            hardConstraintAssessment: 'maybe',
+          },
+        },
+      },
+      {
+        ...ready,
+        opportunity: {
+          ...opportunity,
+          analysis: { ...opportunity.analysis, recommendation: 'score' },
+        },
+      },
+      {
+        ...ready,
+        opportunity: {
+          ...opportunity,
+          analysis: {
+            ...opportunity.analysis,
+            matches: [
+              {
+                opportunityItemId: 42,
+                evidenceIds: [],
+                sharedSignals: [],
+              },
+            ],
+          },
+        },
+      },
+      {
+        ...ready,
+        opportunity: {
+          ...opportunity,
+          decision: { ...opportunity.decision, choice: 'maybe' },
+        },
+      },
+      {
+        ...ready,
+        opportunity: {
+          ...opportunity,
+          decision: { ...opportunity.decision, reason: 42 },
+        },
+      },
+    ];
+
+    for (const invalid of invalidVariants) {
+      expect(
+        loadWorkspace(
+          createMemoryStorage({
+            'candidate-workspace': JSON.stringify(invalid),
+          }),
+        ),
+      ).toEqual({ status: 'invalid' });
+    }
+  });
+
+  it('clears the local workspace', () => {
+    const storage = createMemoryStorage();
+    const workspace = createWorkspace(validInput, '2026-07-30T16:00:00.000Z');
+    saveWorkspace(storage, workspace);
+
+    clearWorkspace(storage);
+
+    expect(loadWorkspace(storage)).toEqual({ status: 'empty' });
+  });
+});

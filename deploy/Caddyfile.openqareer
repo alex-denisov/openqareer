@@ -1,0 +1,37 @@
+# BEGIN OPENQAREER — managed by the OpenQareer repository
+openqareer.com {
+	encode zstd gzip
+
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable" {
+		match status 2xx
+	}
+	header @assets Cache-Control "no-store" {
+		match status 4xx
+	}
+
+	@health path /health
+	header @health Cache-Control "no-store"
+
+	@document path / /index.html
+	header @document Cache-Control "no-cache"
+
+	@spa {
+		not path /assets/* /health /index.html
+	}
+	header @spa Cache-Control "no-cache"
+	rewrite @spa /index.html
+
+	header {
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'; worker-src 'self' blob:; upgrade-insecure-requests"
+		Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	reverse_proxy 172.31.34.140:3210
+}
+# END OPENQAREER

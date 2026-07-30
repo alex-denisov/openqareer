@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly RELEASE_ROOT=/srv/openqareer
+readonly SERVICE=openqareer-static.service
+readonly HEALTH_URL=http://172.31.34.140:3210/health
+
+fail() {
+  printf 'openqareer-rollback: %s\n' "$1" >&2
+  exit 1
+}
+
+[[ "$(id -un)" == "openqareer-deploy" ]] ||
+  fail "must run as openqareer-deploy"
+
+exec 9>"$RELEASE_ROOT/.deploy.lock"
+flock -n 9 || fail "another deploy or rollback is in progress"
+
+next_link=""
+cleanup() {
+  [[ -z "$next_link" ]] || rm -f -- "$next_link"
+}
+trap cleanup EXIT
+
+atomic_link() {
+  local -r target="$1"
+  local -r link_name="$2"
+  next_link="$RELEASE_ROOT/.${link_name}.next.$$"
+  rm -f -- "$next_link"
+  ln -s "$target" "$next_link"
+  mv -Tf "$next_link" "$RELEASE_ROOT/$link_name"
+  next_link=""
+}
+
+cd "$RELEASE_ROOT"
+current_target="$(readlink current 2>/dev/null || true)"
+previous_target="$(readlink previous 2>/dev/null || true)"
+[[ -n "$current_target" && -n "$previous_target" ]] ||
+  fail "current/previous release is unavailable"
+[[ -d "$previous_target" ]] || fail "previous release directory is missing"
+
+atomic_link "$previous_target" current
+atomic_link "$current_target" previous
+sudo -n /usr/bin/systemctl restart "$SERVICE"
+
+expected="$(basename "$previous_target")"
+healthy=0
+actual=""
+for _attempt in $(seq 1 20); do
+  actual="$(curl -fsS --max-time 3 "$HEALTH_URL" 2>/dev/null |
+    tr -d '\r\n' || true)"
+  if [[ "$actual" == "$expected" ]]; then
+    healthy=1
+    break
+  fi
+  sleep 1
+done
+
+if [[ "$healthy" != "1" ]]; then
+  atomic_link "$current_target" current
+  atomic_link "$previous_target" previous
+  sudo -n /usr/bin/systemctl restart "$SERVICE"
+  fail "rollback health failed; original current release restored"
+fi
+
+printf 'rollback=%s previous=%s health=ok\n' "$previous_target" "$current_target"

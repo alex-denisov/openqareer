@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly RELEASE_ROOT=/srv/openqareer
+readonly SERVICE=openqareer-static.service
+readonly HEALTH_URL=http://172.31.34.140:3210/health
+
+fail() {
+  printf 'openqareer-activate: %s\n' "$1" >&2
+  exit 1
+}
+
+[[ "$(id -un)" == "openqareer-deploy" ]] ||
+  fail "must run as openqareer-deploy"
+
+exec 9>"$RELEASE_ROOT/.deploy.lock"
+flock -n 9 || fail "another deploy or rollback is in progress"
+
+release_sha="${1:-}"
+expected_checksum="${2:-}"
+[[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || fail "invalid release SHA"
+[[ "$expected_checksum" =~ ^[0-9a-f]{64}$ ]] || fail "invalid checksum"
+
+archive="$RELEASE_ROOT/incoming/$release_sha.tar.gz"
+release_dir="$RELEASE_ROOT/releases/$release_sha"
+temp_dir="$RELEASE_ROOT/releases/.tmp-$release_sha-$$"
+next_link=""
+[[ -f "$archive" ]] || fail "release archive is missing"
+archive_bytes="$(stat -c '%s' "$archive")"
+[[ "$archive_bytes" =~ ^[0-9]+$ && "$archive_bytes" -le 33554432 ]] ||
+  fail "release archive exceeds 32 MiB"
+
+actual_checksum="$(sha256sum "$archive" | awk '{print $1}')"
+[[ "$actual_checksum" == "$expected_checksum" ]] ||
+  fail "release checksum mismatch"
+
+mapfile -t archive_entries < <(tar -tzf "$archive")
+[[ "${#archive_entries[@]}" -le 500 ]] ||
+  fail "release archive contains too many entries"
+for entry in "${archive_entries[@]}"; do
+  case "$entry" in
+    /*|../*|*/../*|*/..) fail "unsafe archive path" ;;
+  esac
+done
+
+unpacked_bytes="$(tar --numeric-owner -tvzf "$archive" |
+  awk '{ total += $3 } END { printf "%.0f", total }')"
+[[ "$unpacked_bytes" =~ ^[0-9]+$ && "$unpacked_bytes" -le 67108864 ]] ||
+  fail "release archive expands beyond 64 MiB"
+
+cleanup() {
+  rm -rf -- "$temp_dir"
+  [[ -z "$next_link" ]] || rm -f -- "$next_link"
+}
+trap cleanup EXIT
+
+atomic_link() {
+  local -r target="$1"
+  local -r link_name="$2"
+  next_link="$RELEASE_ROOT/.${link_name}.next.$$"
+  rm -f -- "$next_link"
+  ln -s "$target" "$next_link"
+  mv -Tf "$next_link" "$RELEASE_ROOT/$link_name"
+  next_link=""
+}
+
+if [[ ! -d "$release_dir" ]]; then
+  mkdir -p "$temp_dir"
+  tar -xzf "$archive" --no-same-owner --no-same-permissions -C "$temp_dir"
+  [[ -f "$temp_dir/index.html" ]] || fail "index.html is missing"
+  [[ -f "$temp_dir/health" ]] || fail "health marker is missing"
+  [[ "$(tr -d '\r\n' < "$temp_dir/health")" == "$release_sha" ]] ||
+    fail "health marker does not match release"
+  [[ -z "$(find "$temp_dir" ! -type d ! -type f -print -quit)" ]] ||
+    fail "release may contain only directories and regular files"
+  find "$temp_dir" -type d -exec chmod 0755 {} +
+  find "$temp_dir" -type f -exec chmod 0644 {} +
+  mv "$temp_dir" "$release_dir"
+fi
+[[ -f "$release_dir/index.html" ]] || fail "existing release has no index.html"
+[[ "$(tr -d '\r\n' < "$release_dir/health")" == "$release_sha" ]] ||
+  fail "existing release health marker does not match"
+
+cd "$RELEASE_ROOT"
+old_target="$(readlink current 2>/dev/null || true)"
+if [[ -n "$old_target" ]]; then
+  atomic_link "$old_target" previous
+fi
+atomic_link "releases/$release_sha" current
+
+if ! sudo -n /usr/bin/systemctl restart "$SERVICE"; then
+  if [[ -n "$old_target" ]]; then
+    atomic_link "$old_target" current
+    sudo -n /usr/bin/systemctl restart "$SERVICE" || true
+  fi
+  fail "service restart failed"
+fi
+
+healthy=0
+for _attempt in $(seq 1 20); do
+  if [[ "$(curl -fsS --max-time 3 "$HEALTH_URL" 2>/dev/null | tr -d '\r\n')" == "$release_sha" ]]; then
+    healthy=1
+    break
+  fi
+  sleep 1
+done
+
+if [[ "$healthy" != "1" ]]; then
+  if [[ -n "$old_target" ]]; then
+    atomic_link "$old_target" current
+    sudo -n /usr/bin/systemctl restart "$SERVICE"
+  fi
+  fail "release health check failed; previous release restored"
+fi
+
+rm -f -- "$archive"
+
+current_target="$(readlink current)"
+previous_target="$(readlink previous 2>/dev/null || true)"
+while IFS= read -r stale_dir; do
+  relative_dir="releases/$(basename "$stale_dir")"
+  if [[ "$relative_dir" != "$current_target" && "$relative_dir" != "$previous_target" ]]; then
+    rm -rf -- "$stale_dir"
+  fi
+done < <(find releases -regextype posix-extended -mindepth 1 -maxdepth 1 \
+  -type d -regex '.*/[0-9a-f]{40}' -printf '%T@ %p\n' |
+  sort -rn | awk 'NR > 5 {print $2}')
+
+printf 'release=%s health=ok previous=%s\n' "$release_sha" "${old_target:-none}"

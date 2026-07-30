@@ -1,0 +1,36 @@
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+*.crt
+*credentials*.json
+*token*.json
+
+# Dependencies and generated output
+node_modules/
+dist/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Test and browser artifacts
+test-results/
+playwright-report/
+blob-report/
+.playwright-mcp/
+.playwright-cli/
+screenshots/
+output/
+
+# Runtime and local tooling
+*.log
+*.pid
+.DS_Store
+.vscode/
+.idea/
+*.swp

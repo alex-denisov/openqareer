@@ -1,0 +1,33 @@
+{
+  "name": "openqareer",
+  "version": "1.0.0",
+  "description": "Candidate-owned local career decision workspace",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "render-shot": "node scripts/render_html_screenshot.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^6.2.108",
+    "playwright": "^1.40.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "@vitejs/plugin-react": "^6.0.5",
+    "@vitest/coverage-v8": "^4.1.6",
+    "typescript": "^5.3.3",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.6"
+  }
+}
