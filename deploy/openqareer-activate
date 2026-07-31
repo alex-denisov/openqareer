@@ -68,6 +68,7 @@ if [[ ! -d "$release_dir" ]]; then
   mkdir -p "$temp_dir"
   tar -xzf "$archive" --no-same-owner --no-same-permissions -C "$temp_dir"
   [[ -f "$temp_dir/index.html" ]] || fail "index.html is missing"
+  [[ -f "$temp_dir/server.mjs" ]] || fail "server.mjs is missing"
   [[ -f "$temp_dir/health" ]] || fail "health marker is missing"
   [[ "$(tr -d '\r\n' < "$temp_dir/health")" == "$release_sha" ]] ||
     fail "health marker does not match release"
@@ -78,6 +79,7 @@ if [[ ! -d "$release_dir" ]]; then
   mv "$temp_dir" "$release_dir"
 fi
 [[ -f "$release_dir/index.html" ]] || fail "existing release has no index.html"
+[[ -f "$release_dir/server.mjs" ]] || fail "existing release has no server.mjs"
 [[ "$(tr -d '\r\n' < "$release_dir/health")" == "$release_sha" ]] ||
   fail "existing release health marker does not match"
 

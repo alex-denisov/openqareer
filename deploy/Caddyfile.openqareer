@@ -12,11 +12,14 @@ openqareer.com {
 	@health path /health
 	header @health Cache-Control "no-store"
 
+	@api path /api/*
+	header @api Cache-Control "no-store"
+
 	@document path / /index.html
 	header @document Cache-Control "no-cache"
 
 	@spa {
-		not path /assets/* /health /index.html
+		not path /api/* /assets/* /health /index.html
 	}
 	header @spa Cache-Control "no-cache"
 	rewrite @spa /index.html

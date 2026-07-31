@@ -9,6 +9,11 @@ readonly CADDYFILE=/etc/caddy/Caddyfile
 readonly CADDY_KEY_URL=https://dl.cloudsmith.io/public/caddy/stable/gpg.key
 readonly CADDY_REPOSITORY_URL=https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt
 readonly CADDY_KEY_FINGERPRINT=65760C51EDEA2017CEA2CA15155B6D79CA56EA34
+readonly NODE_VERSION=24.14.1
+readonly NODE_ARCHIVE="node-v${NODE_VERSION}-linux-x64.tar.xz"
+readonly NODE_ARCHIVE_SHA256=84d38715d449447117d05c3e71acd78daa49d5b1bfa8aacf610303920c3322be
+readonly NODE_ROOT=/opt/openqareer
+readonly NODE_RUNTIME="$NODE_ROOT/node-v${NODE_VERSION}-linux-x64"
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly PUBLIC_KEY_FILE="${1:-}"
 
@@ -16,6 +21,7 @@ candidate_file=""
 authorized_keys_temp=""
 caddy_key_temp=""
 caddy_source_temp=""
+node_archive_temp=""
 
 fail() {
   printf 'openqareer-bootstrap: %s\n' "$1" >&2
@@ -28,14 +34,15 @@ cleanup() {
     "$candidate_file" \
     "$authorized_keys_temp" \
     "$caddy_key_temp" \
-    "$caddy_source_temp"; do
+    "$caddy_source_temp" \
+    "$node_archive_temp"; do
     [[ -z "$temporary_file" || ! -e "$temporary_file" ]] ||
       rm -f -- "$temporary_file"
   done
 }
 trap cleanup EXIT
 
-wait_for_static_health() {
+wait_for_application_health() {
   local -r expected="$1"
   local attempt
   for attempt in $(seq 1 20); do
@@ -46,6 +53,29 @@ wait_for_static_health() {
     sleep 1
   done
   return 1
+}
+
+install_node_runtime() {
+  if [[ -x "$NODE_RUNTIME/bin/node" ]]; then
+    [[ "$("$NODE_RUNTIME/bin/node" --version)" == "v$NODE_VERSION" ]] ||
+      fail "installed Node.js runtime has an unexpected version"
+    return 0
+  fi
+
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    ca-certificates curl xz-utils
+  install -d -o root -g root -m 0755 "$NODE_ROOT"
+  node_archive_temp="$(mktemp)"
+  curl --proto '=https' --tlsv1.2 -fsS --max-time 120 \
+    "https://nodejs.org/dist/v${NODE_VERSION}/${NODE_ARCHIVE}" \
+    -o "$node_archive_temp"
+  printf '%s  %s\n' "$NODE_ARCHIVE_SHA256" "$node_archive_temp" |
+    sha256sum -c - >/dev/null
+  tar -xJf "$node_archive_temp" -C "$NODE_ROOT" --no-same-owner
+  chown -R root:root "$NODE_RUNTIME"
+  [[ "$("$NODE_RUNTIME/bin/node" --version)" == "v$NODE_VERSION" ]] ||
+    fail "Node.js runtime verification failed"
 }
 
 install_caddy_package() {
@@ -148,6 +178,7 @@ ip -4 address show | grep -Fq "$EXPECTED_PRIVATE_ADDRESS/" ||
   fail "expected dedicated-host private address is absent"
 
 install_caddy_package
+install_node_runtime
 
 [[ ! -L "$RELEASE_ROOT" ]] ||
   fail "$RELEASE_ROOT must not be a symbolic link"
@@ -198,29 +229,24 @@ EOF
 chmod 0440 /etc/sudoers.d/openqareer-deploy
 visudo -cf /etc/sudoers.d/openqareer-deploy >/dev/null
 
-if [[ ! -L "$RELEASE_ROOT/current" ]]; then
-  install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 \
-    "$RELEASE_ROOT/releases/bootstrap"
-  printf '<!doctype html><title>OpenQareer deployment bootstrap</title>\n' \
-    > "$RELEASE_ROOT/releases/bootstrap/index.html"
-  printf 'bootstrap\n' > "$RELEASE_ROOT/releases/bootstrap/health"
-  chown -R "$DEPLOY_USER:$DEPLOY_USER" \
-    "$RELEASE_ROOT/releases/bootstrap"
-  ln -s releases/bootstrap "$RELEASE_ROOT/current"
-  chown -h "$DEPLOY_USER:$DEPLOY_USER" "$RELEASE_ROOT/current"
-fi
+[[ -L "$RELEASE_ROOT/current" ]] ||
+  fail "an immutable application release must be staged before migration"
+[[ -f "$RELEASE_ROOT/current/server.mjs" ]] ||
+  fail "current release does not contain server.mjs"
+[[ -f /etc/openqareer/openqareer.env ]] ||
+  fail "/etc/openqareer/openqareer.env must be installed before migration"
 
 systemctl daemon-reload
 systemd-analyze verify /etc/systemd/system/openqareer-static.service
 systemctl enable openqareer-static.service
 systemctl restart openqareer-static.service
 expected_health="$(basename "$(readlink "$RELEASE_ROOT/current")")"
-wait_for_static_health "$expected_health" ||
-  fail "static service health failed after restart"
+wait_for_application_health "$expected_health" ||
+  fail "application service health failed after restart"
 
 install_caddy_configuration
 systemctl is-active --quiet openqareer-static.service ||
-  fail "static service is not active"
+  fail "application service is not active"
 systemctl is-active --quiet caddy ||
   fail "Caddy is not active"
 

@@ -11,6 +11,11 @@ export default defineConfig({
         'src/features/evidence/evidenceEngine.ts',
         'src/features/opportunity/opportunityEngine.ts',
         'src/features/workspace/workspaceStorage.ts',
+        'server/config.ts',
+        'server/domain/coach.ts',
+        'server/providers/openAICoachProvider.ts',
+        'server/providers/openRouterCoachProvider.ts',
+        'server/providers/privacyAwareCoachProvider.ts',
       ],
       thresholds: {
         branches: 80,
