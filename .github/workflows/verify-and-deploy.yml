@@ -154,7 +154,7 @@ jobs:
           esac
           first_part="$(mktemp)"
           curl -fsS --max-time 20 \
-            "https://openqareer.com${part_prefix}000" > "$first_part"
+            "https://openqareer.com${part_prefix}000.js" > "$first_part"
           first_part_bytes="$(wc -c < "$first_part")"
           if [ "$first_part_bytes" -gt 12288 ]; then
             printf 'production delivery part exceeds 12 KiB: %s\n' \

@@ -50,7 +50,7 @@ describe('split browser entry delivery', () => {
     const entry = result.modules.find((module) => module.kind === 'app');
     assert.ok(entry.bootstrapBytes < 8_192);
     for (let index = 0; index < entry.partCount; index += 1) {
-      const path = `${entry.proxyPath}.oqpart-${String(index).padStart(3, '0')}`;
+      const path = `${entry.proxyPath}.oqpart-${String(index).padStart(3, '0')}.js`;
       const part = readFileSync(join(directory, path));
       assert.ok(part.length <= 4_096);
       assert.equal(part.length, index < 2 ? 4_096 : source.length - 8_192);

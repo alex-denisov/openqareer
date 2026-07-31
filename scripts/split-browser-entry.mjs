@@ -25,7 +25,7 @@ function assetKind(name, entryName) {
 }
 
 function partPath(proxyPath, index) {
-  return `${proxyPath}.oqpart-${String(index).padStart(3, '0')}`;
+  return `${proxyPath}.oqpart-${String(index).padStart(3, '0')}.js`;
 }
 
 function loaderCore({
@@ -51,7 +51,7 @@ const REWRITES=${JSON.stringify(rewrites)};
 const statusNode=typeof document==="object"?document.querySelector("#root [role=status]"):null;
 const setStatus=(text)=>{if(statusNode)statusNode.textContent=text};
 const sleep=(delay)=>new Promise(resolve=>setTimeout(resolve,delay));
-const pathFor=(index)=>PREFIX+String(index).padStart(3,"0");
+const pathFor=(index)=>PREFIX+String(index).padStart(3,"0")+".js";
 async function fetchPart(index){
   let lastError;
   for(let attempt=0;attempt<3;attempt+=1){
