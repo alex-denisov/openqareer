@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 User=openqareer-deploy
 Group=openqareer-deploy
-ExecStart=/usr/bin/python3 -m http.server 3210 --bind 172.31.34.140 --directory /srv/openqareer/current --protocol HTTP/1.1
+ExecStart=/usr/bin/python3 -m http.server 3210 --bind 127.0.0.1 --directory /srv/openqareer/current --protocol HTTP/1.1
 Restart=on-failure
 RestartSec=2s
 UMask=0027
@@ -27,6 +27,7 @@ ReadOnlyPaths=/srv/openqareer
 RestrictAddressFamilies=AF_INET AF_INET6
 RestrictNamespaces=true
 RestrictRealtime=true
+RestrictSUIDSGID=true
 SystemCallArchitectures=native
 
 [Install]

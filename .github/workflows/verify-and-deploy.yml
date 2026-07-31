@@ -109,7 +109,7 @@ jobs:
           ssh "${ssh_options[@]}" "$DEPLOY_USER@$DEPLOY_HOST" \
             /usr/local/bin/openqareer-activate "$GITHUB_SHA" "$CHECKSUM"
 
-      - name: Verify public release and eTerapy non-regression
+      - name: Verify public release
         run: |
           set -euo pipefail
           for attempt in $(seq 1 30); do
@@ -143,9 +143,10 @@ jobs:
           curl --compressed -fsS --max-time 60 \
             "https://openqareer.com$entry_asset" > "$release_asset"
           grep -Fq "$GITHUB_SHA" "$release_asset"
-          curl -fsS --max-time 10 https://eterapy.com/api/health >/dev/null
           curl -fsSI --max-time 10 https://openqareer.com/ |
             grep -Eiq '^content-security-policy:'
+          curl -fsSI --max-time 10 https://openqareer.com/ |
+            grep -Eiq '^x-openqareer-origin: eu-1'
 
       - name: Remove runner SSH material
         if: always()

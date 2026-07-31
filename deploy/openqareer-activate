@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 readonly RELEASE_ROOT=/srv/openqareer
 readonly SERVICE=openqareer-static.service
-readonly HEALTH_URL=http://172.31.34.140:3210/health
+readonly HEALTH_URL=http://127.0.0.1:3210/health
 
 fail() {
   printf 'openqareer-activate: %s\n' "$1" >&2

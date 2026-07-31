@@ -1,4 +1,3 @@
-# BEGIN OPENQAREER — managed by the OpenQareer repository
 openqareer.com {
 	encode gzip
 
@@ -29,9 +28,9 @@ openqareer.com {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
+		X-OpenQareer-Origin "eu-1"
 		-Server
 	}
 
-	reverse_proxy 172.31.34.140:3210
+	reverse_proxy 127.0.0.1:3210
 }
-# END OPENQAREER

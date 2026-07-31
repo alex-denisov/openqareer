@@ -3,13 +3,19 @@ set -Eeuo pipefail
 
 readonly DEPLOY_USER=openqareer-deploy
 readonly RELEASE_ROOT=/srv/openqareer
-readonly LISTEN_ADDRESS=172.31.34.140:3210
-readonly CADDY_CONTAINER=eterapy-caddy-1
-readonly CADDYFILE=/opt/eterapy/Caddyfile
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly LISTEN_ADDRESS=127.0.0.1:3210
+readonly EXPECTED_PRIVATE_ADDRESS=172.31.41.215
+readonly CADDYFILE=/etc/caddy/Caddyfile
+readonly CADDY_KEY_URL=https://dl.cloudsmith.io/public/caddy/stable/gpg.key
+readonly CADDY_REPOSITORY_URL=https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt
+readonly CADDY_KEY_FINGERPRINT=65760C51EDEA2017CEA2CA15155B6D79CA56EA34
+readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly PUBLIC_KEY_FILE="${1:-}"
+
 candidate_file=""
 authorized_keys_temp=""
+caddy_key_temp=""
+caddy_source_temp=""
 
 fail() {
   printf 'openqareer-bootstrap: %s\n' "$1" >&2
@@ -17,8 +23,15 @@ fail() {
 }
 
 cleanup() {
-  [[ -z "$candidate_file" ]] || rm -f -- "$candidate_file"
-  [[ -z "$authorized_keys_temp" ]] || rm -f -- "$authorized_keys_temp"
+  local temporary_file
+  for temporary_file in \
+    "$candidate_file" \
+    "$authorized_keys_temp" \
+    "$caddy_key_temp" \
+    "$caddy_source_temp"; do
+    [[ -z "$temporary_file" || ! -e "$temporary_file" ]] ||
+      rm -f -- "$temporary_file"
+  done
 }
 trap cleanup EXIT
 
@@ -35,23 +48,112 @@ wait_for_static_health() {
   return 1
 }
 
+install_caddy_package() {
+  local primary_fingerprint
+
+  if dpkg-query -W -f='${Status}' caddy 2>/dev/null |
+    grep -Fqx 'install ok installed'; then
+    [[ "$(command -v caddy)" == "/usr/bin/caddy" ]] ||
+      fail "installed Caddy binary has an unexpected path"
+    return 0
+  fi
+
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    apt-transport-https ca-certificates curl debian-archive-keyring \
+    debian-keyring gnupg
+  command -v gpg >/dev/null 2>&1 ||
+    fail "gnupg installation did not provide gpg"
+
+  caddy_key_temp="$(mktemp)"
+  curl --proto '=https' --tlsv1.2 -fsS --max-time 30 \
+    "$CADDY_KEY_URL" -o "$caddy_key_temp"
+  primary_fingerprint="$(
+    gpg --show-keys --with-colons "$caddy_key_temp" 2>/dev/null |
+      awk -F: '$1 == "fpr" { print $10; exit }'
+  )"
+  [[ "$primary_fingerprint" == "$CADDY_KEY_FINGERPRINT" ]] ||
+    fail "Caddy repository signing-key fingerprint mismatch"
+  gpg --batch --yes --dearmor \
+    --output /usr/share/keyrings/caddy-stable-archive-keyring.gpg \
+    "$caddy_key_temp"
+  chmod 0644 /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+
+  caddy_source_temp="$(mktemp)"
+  curl --proto '=https' --tlsv1.2 -fsS --max-time 30 \
+    "$CADDY_REPOSITORY_URL" -o "$caddy_source_temp"
+  grep -Fq 'signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg' \
+    "$caddy_source_temp" ||
+    fail "Caddy repository definition does not pin the expected keyring"
+  install -o root -g root -m 0644 \
+    "$caddy_source_temp" /etc/apt/sources.list.d/caddy-stable.list
+
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends caddy
+  [[ "$(command -v caddy)" == "/usr/bin/caddy" ]] ||
+    fail "Caddy installation did not provide /usr/bin/caddy"
+}
+
+install_caddy_configuration() {
+  local backup_dir
+  local backup_file
+
+  candidate_file="$(mktemp)"
+  install -o root -g root -m 0644 \
+    "$SCRIPT_DIR/Caddyfile.openqareer" "$candidate_file"
+  caddy validate --config "$candidate_file" --adapter caddyfile
+
+  if cmp -s "$candidate_file" "$CADDYFILE"; then
+    systemctl enable --now caddy
+    return 0
+  fi
+
+  backup_dir=/var/backups/openqareer/caddy
+  install -d -o root -g root -m 0700 "$backup_dir"
+  backup_file="$backup_dir/Caddyfile.$(date -u +%Y%m%dT%H%M%SZ)"
+  if [[ -f "$CADDYFILE" ]]; then
+    install -o root -g root -m 0600 "$CADDYFILE" "$backup_file"
+  else
+    printf 'absent\n' > "$backup_file.absent"
+    chmod 0600 "$backup_file.absent"
+  fi
+
+  install -o root -g root -m 0644 "$candidate_file" "$CADDYFILE"
+  if ! systemctl enable --now caddy; then
+    if [[ -f "$backup_file" ]]; then
+      install -o root -g root -m 0644 "$backup_file" "$CADDYFILE"
+      systemctl restart caddy || true
+    fi
+    fail "Caddy failed to start; prior configuration restored when available"
+  fi
+
+  if ! caddy validate --config "$CADDYFILE" --adapter caddyfile; then
+    if [[ -f "$backup_file" ]]; then
+      install -o root -g root -m 0644 "$backup_file" "$CADDYFILE"
+      systemctl reload caddy || true
+    fi
+    fail "installed Caddy configuration failed validation"
+  fi
+  systemctl reload caddy
+}
+
 [[ "$(id -u)" == "0" ]] || fail "run with sudo/root"
-for command in awk cmp docker curl flock mktemp python3 scp sha256sum tar \
-  systemctl systemd-analyze visudo; do
-  command -v "$command" >/dev/null 2>&1 || fail "missing command: $command"
+for command_name in apt-get awk basename cat chmod chown cmp curl cut \
+  dpkg-query flock getent grep id install ip ln mktemp readlink rm scp seq \
+  sha256sum tar systemctl systemd-analyze touch tr useradd visudo; do
+  command -v "$command_name" >/dev/null 2>&1 ||
+    fail "missing command: $command_name"
 done
-ip -4 address show | grep -Fq '172.31.34.140/' ||
-  fail "expected AWS private address is absent"
-docker inspect "$CADDY_CONTAINER" >/dev/null 2>&1 ||
-  fail "eTerapy Caddy container is absent"
-[[ -f "$CADDYFILE" ]] || fail "eTerapy Caddyfile is absent"
+ip -4 address show | grep -Fq "$EXPECTED_PRIVATE_ADDRESS/" ||
+  fail "expected dedicated-host private address is absent"
 
-pre_health="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 https://eterapy.com/api/health)"
-[[ "$pre_health" == "200" ]] || fail "eTerapy preflight health is $pre_health"
+install_caddy_package
 
-[[ ! -L "$RELEASE_ROOT" ]] || fail "$RELEASE_ROOT must not be a symbolic link"
+[[ ! -L "$RELEASE_ROOT" ]] ||
+  fail "$RELEASE_ROOT must not be a symbolic link"
 if ! id "$DEPLOY_USER" >/dev/null 2>&1; then
-  useradd --system --create-home --home-dir "$RELEASE_ROOT" --shell /bin/bash "$DEPLOY_USER"
+  useradd --system --create-home --home-dir "$RELEASE_ROOT" \
+    --shell /bin/bash "$DEPLOY_USER"
 else
   deploy_home="$(getent passwd "$DEPLOY_USER" | cut -d: -f6)"
   [[ "$deploy_home" == "$RELEASE_ROOT" ]] ||
@@ -60,7 +162,8 @@ fi
 
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 \
   "$RELEASE_ROOT" "$RELEASE_ROOT/releases" "$RELEASE_ROOT/incoming"
-install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0700 "$RELEASE_ROOT/.ssh"
+install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0700 \
+  "$RELEASE_ROOT/.ssh"
 
 [[ -n "$PUBLIC_KEY_FILE" && -f "$PUBLIC_KEY_FILE" ]] ||
   fail "usage: bootstrap.sh /absolute/path/to/openqareer-ci-public-key"
@@ -78,7 +181,8 @@ install -o root -g root -m 0755 \
 install -o root -g root -m 0755 \
   "$SCRIPT_DIR/openqareer-rollback" /usr/local/bin/openqareer-rollback
 install -o root -g root -m 0644 \
-  "$SCRIPT_DIR/openqareer-static.service" /etc/systemd/system/openqareer-static.service
+  "$SCRIPT_DIR/openqareer-static.service" \
+  /etc/systemd/system/openqareer-static.service
 
 authorized_keys_temp="$(mktemp "$RELEASE_ROOT/.ssh/.authorized_keys.XXXXXX")"
 awk -v blob="$public_key_blob" '$2 != blob && $3 != blob { print }' \
@@ -88,8 +192,6 @@ install -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0600 \
   "$authorized_keys_temp" "$RELEASE_ROOT/.ssh/authorized_keys"
 chown -R "$DEPLOY_USER:$DEPLOY_USER" "$RELEASE_ROOT/.ssh"
 
-rm -f -- /etc/openqareer-static.env /etc/openqareer-httpd.conf
-
 cat > /etc/sudoers.d/openqareer-deploy <<'EOF'
 openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-static.service
 EOF
@@ -97,11 +199,13 @@ chmod 0440 /etc/sudoers.d/openqareer-deploy
 visudo -cf /etc/sudoers.d/openqareer-deploy >/dev/null
 
 if [[ ! -L "$RELEASE_ROOT/current" ]]; then
-  install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 "$RELEASE_ROOT/releases/bootstrap"
+  install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 \
+    "$RELEASE_ROOT/releases/bootstrap"
   printf '<!doctype html><title>OpenQareer deployment bootstrap</title>\n' \
     > "$RELEASE_ROOT/releases/bootstrap/index.html"
   printf 'bootstrap\n' > "$RELEASE_ROOT/releases/bootstrap/health"
-  chown -R "$DEPLOY_USER:$DEPLOY_USER" "$RELEASE_ROOT/releases/bootstrap"
+  chown -R "$DEPLOY_USER:$DEPLOY_USER" \
+    "$RELEASE_ROOT/releases/bootstrap"
   ln -s releases/bootstrap "$RELEASE_ROOT/current"
   chown -h "$DEPLOY_USER:$DEPLOY_USER" "$RELEASE_ROOT/current"
 fi
@@ -113,45 +217,12 @@ systemctl restart openqareer-static.service
 expected_health="$(basename "$(readlink "$RELEASE_ROOT/current")")"
 wait_for_static_health "$expected_health" ||
   fail "static service health failed after restart"
-docker exec "$CADDY_CONTAINER" wget -qO- "http://$LISTEN_ADDRESS/health" |
-  grep -Fqx "$expected_health"
 
-begin_count="$(grep -Fc '# BEGIN OPENQAREER' "$CADDYFILE" || true)"
-end_count="$(grep -Fc '# END OPENQAREER' "$CADDYFILE" || true)"
-[[ "$begin_count" == "$end_count" ]] ||
-  fail "Caddyfile has an incomplete OpenQareer managed block"
-[[ "$begin_count" == "0" || "$begin_count" == "1" ]] ||
-  fail "Caddyfile has duplicate OpenQareer managed blocks"
+install_caddy_configuration
+systemctl is-active --quiet openqareer-static.service ||
+  fail "static service is not active"
+systemctl is-active --quiet caddy ||
+  fail "Caddy is not active"
 
-candidate_file="$(mktemp /opt/eterapy/.Caddyfile.openqareer.XXXXXX)"
-awk '
-  /^# BEGIN OPENQAREER/ { managed = 1; next }
-  /^# END OPENQAREER/ { managed = 0; next }
-  managed != 1 { print }
-' "$CADDYFILE" > "$candidate_file"
-cat "$SCRIPT_DIR/Caddyfile.openqareer" >> "$candidate_file"
-
-if ! cmp -s "$candidate_file" "$CADDYFILE"; then
-  backup_dir=/opt/eterapy/backups/caddy
-  install -d -m 0700 "$backup_dir"
-  backup_file="$backup_dir/Caddyfile.$(date -u +%Y%m%dT%H%M%SZ)"
-  cp "$CADDYFILE" "$backup_file"
-  cp "$candidate_file" "$CADDYFILE"
-  if ! docker exec "$CADDY_CONTAINER" caddy validate --config /etc/caddy/Caddyfile; then
-    cp "$backup_file" "$CADDYFILE"
-    fail "Caddy validation failed; original restored"
-  fi
-  if ! docker exec "$CADDY_CONTAINER" \
-    caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
-    cp "$backup_file" "$CADDYFILE"
-    docker exec "$CADDY_CONTAINER" \
-      caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile || true
-    fail "Caddy reload failed; original restored"
-  fi
-fi
-
-post_health="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 https://eterapy.com/api/health)"
-[[ "$post_health" == "200" ]] || fail "eTerapy post-change health is $post_health"
-
-printf 'bootstrap=ok eterapy_before=%s eterapy_after=%s listen=%s\n' \
-  "$pre_health" "$post_health" "$LISTEN_ADDRESS"
+printf 'bootstrap=ok health=%s listen=%s caddy=%s\n' \
+  "$expected_health" "$LISTEN_ADDRESS" "$(caddy version | awk '{print $1}')"
