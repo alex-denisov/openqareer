@@ -197,6 +197,7 @@ export const CAREER_COACH_INSTRUCTIONS = `
 export function serializeCoachInput(input: CoachTurnInput): string {
   return JSON.stringify({
     task: 'Continue the candidate discovery interview',
+    outputContract: COACH_TURN_JSON_SCHEMA,
     dataClass: input.dataClass,
     locale: input.locale,
     phase: input.phase,

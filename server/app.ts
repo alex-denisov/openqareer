@@ -113,6 +113,10 @@ export async function buildApp({
         syntheticDataRoute: {
           provider: 'openrouter',
           model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+          fallbackModels: [
+            'nvidia/nemotron-3-super-120b-a12b:free',
+          ],
+          outputValidation: 'server-side-strict-schema',
         },
         qualityFloor: 'gpt-5.6-sol',
         ready: true,

@@ -202,7 +202,12 @@ export async function changeMemory(
 
 export async function getProviderStatus(): Promise<{
   personalDataRoute: { provider: string; model: string };
-  syntheticDataRoute: { provider: string; model: string };
+  syntheticDataRoute: {
+    provider: string;
+    model: string;
+    fallbackModels?: string[];
+    outputValidation?: string;
+  };
   ready: boolean;
 }> {
   const response = await apiFetch('/api/v1/provider/status');

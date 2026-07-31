@@ -22,6 +22,10 @@ describe('career coach domain contract', () => {
     expect(input.phase).toBe('discovery');
     expect(JSON.parse(serializeCoachInput(input))).toMatchObject({
       task: 'Continue the candidate discovery interview',
+      outputContract: {
+        type: 'object',
+        required: expect.arrayContaining(['message', 'memoryCandidates']),
+      },
       conversation: [
         {
           id: 'message-1',

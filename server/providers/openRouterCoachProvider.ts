@@ -7,7 +7,6 @@ import {
 } from 'openai/error';
 import {
   CAREER_COACH_INSTRUCTIONS,
-  COACH_TURN_JSON_SCHEMA,
   coachTurnResultSchema,
   serializeCoachInput,
   type CoachTurnInput,
@@ -20,6 +19,10 @@ import {
 
 const OPENROUTER_MODEL =
   'nvidia/nemotron-3-ultra-550b-a55b:free';
+const OPENROUTER_MODELS = [
+  OPENROUTER_MODEL,
+  'nvidia/nemotron-3-super-120b-a12b:free',
+] as const;
 
 export interface OpenRouterCoachProviderOptions {
   apiKey: string;
@@ -57,30 +60,26 @@ export class OpenRouterCoachProvider implements CoachProvider {
     }
 
     try {
-      const response = await this.client.chat.completions.create(
-        {
-          model: OPENROUTER_MODEL,
-          messages: [
-            {
-              role: 'system',
-              content: CAREER_COACH_INSTRUCTIONS,
-            },
-            {
-              role: 'user',
-              content: serializeCoachInput(input),
-            },
-          ],
-          reasoning_effort: 'high',
-          max_completion_tokens: 2_400,
-          response_format: {
-            type: 'json_schema',
-            json_schema: {
-              name: 'career_coach_turn',
-              strict: true,
-              schema: COACH_TURN_JSON_SCHEMA,
-            },
+      const request: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
+        models: readonly string[];
+      } = {
+        model: OPENROUTER_MODEL,
+        models: OPENROUTER_MODELS,
+        messages: [
+          {
+            role: 'system',
+            content: CAREER_COACH_INSTRUCTIONS,
           },
-        },
+          {
+            role: 'user',
+            content: serializeCoachInput(input),
+          },
+        ],
+        reasoning_effort: 'high',
+        max_completion_tokens: 2_400,
+      };
+      const response = await this.client.chat.completions.create(
+        request,
         { idempotencyKey },
       );
       const content = response.choices[0]?.message.content;

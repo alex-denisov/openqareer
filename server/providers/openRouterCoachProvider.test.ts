@@ -33,7 +33,7 @@ const validOutput = {
 };
 
 describe('OpenRouter synthetic coach provider', () => {
-  it('uses the fixed free model and returns validated output', async () => {
+  it('uses Ultra with a same-family ordered fallback and server validation', async () => {
     const calls: Array<{ body: Record<string, unknown>; options: unknown }> = [];
     const client = {
       chat: {
@@ -73,8 +73,13 @@ describe('OpenRouter synthetic coach provider', () => {
     expect(output.provider).toBe('openrouter');
     expect(calls[0].body).toMatchObject({
       model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+      models: [
+        'nvidia/nemotron-3-ultra-550b-a55b:free',
+        'nvidia/nemotron-3-super-120b-a12b:free',
+      ],
       reasoning_effort: 'high',
     });
+    expect(calls[0].body).not.toHaveProperty('response_format');
     expect(calls[0].options).toEqual({
       idempotencyKey: 'idempotency-key',
     });
