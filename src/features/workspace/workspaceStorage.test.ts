@@ -8,6 +8,7 @@ import {
   createOpportunityRecord,
   recordOpportunityDecision,
 } from '../opportunity/opportunityEngine';
+import { createActionPackage } from '../action/actionPackageEngine';
 import {
   clearWorkspace,
   createWorkspace,
@@ -108,7 +109,7 @@ describe('workspace persistence', () => {
 
     expect(result.status).toBe('ready');
     if (result.status === 'ready') {
-      expect(result.workspace.version).toBe(3);
+      expect(result.workspace.version).toBe(4);
       expect(result.workspace.resumeText).toBe(validInput.resumeText);
       expect(result.workspace.analysis).toBeUndefined();
     }
@@ -179,6 +180,102 @@ describe('workspace persistence', () => {
         withAnalysis,
       ).opportunity,
     ).toBeUndefined();
+  });
+
+  it('saves an action package and migrates a version-three workspace without one', () => {
+    const workspace = createWorkspace(validInput, '2026-07-30T16:00:00.000Z');
+    const extracted = createCandidateAnalysis(workspace.resumeText);
+    const evidenceItems = extracted.evidenceItems.map((item) => ({
+      ...item,
+      status: 'confirmed' as const,
+    }));
+    const analysis = completeCandidateAnalysis(
+      workspace.targetDirection,
+      { ...extracted, evidenceItems },
+      '2026-07-30T16:05:00.000Z',
+    );
+    const opportunity = createOpportunityRecord(
+      {
+        title: 'Руководитель продукта',
+        company: 'Пример',
+        text:
+          'Задачи\nЗапускать цифровые продукты и управлять командой.\nТребования\nПодтверждённый опыт запуска продукта и управления командой.\nУсловия\nУдалённая работа, полная занятость.',
+        sourceLabel: 'Ручной ввод',
+      },
+      '2026-07-30T16:06:00.000Z',
+    );
+    const analyzed = {
+      ...opportunity,
+      analysis: analyzeOpportunity(opportunity, evidenceItems, 'clear'),
+    };
+    const decided = recordOpportunityDecision(
+      analyzed,
+      'apply',
+      'Вакансия соответствует выбранному направлению.',
+      '2026-07-30T16:07:00.000Z',
+    );
+    const actionPackage = createActionPackage(
+      decided,
+      evidenceItems,
+      workspace.targetDirection,
+      '2026-07-30T16:08:00.000Z',
+    );
+    const complete = {
+      ...workspace,
+      analysis,
+      opportunity: decided,
+      actionPackage,
+    };
+    const storage = createMemoryStorage();
+
+    saveWorkspace(storage, complete);
+    expect(loadWorkspace(storage)).toEqual({
+      status: 'ready',
+      workspace: complete,
+    });
+
+    const unknownEvidenceStorage = createMemoryStorage({
+      'candidate-workspace': JSON.stringify({
+        ...complete,
+        actionPackage: {
+          ...actionPackage,
+          selectedEvidenceIds: ['missing-evidence'],
+        },
+      }),
+    });
+    const mismatchedOpportunityStorage = createMemoryStorage({
+      'candidate-workspace': JSON.stringify({
+        ...complete,
+        actionPackage: {
+          ...actionPackage,
+          opportunityId: 'another-opportunity',
+        },
+      }),
+    });
+
+    expect(loadWorkspace(unknownEvidenceStorage)).toEqual({
+      status: 'invalid',
+    });
+    expect(loadWorkspace(mismatchedOpportunityStorage)).toEqual({
+      status: 'invalid',
+    });
+
+    const versionThree = {
+      ...complete,
+      version: 3,
+      actionPackage: undefined,
+    };
+    const legacyStorage = createMemoryStorage({
+      'candidate-workspace': JSON.stringify(versionThree),
+    });
+    const migrated = loadWorkspace(legacyStorage);
+
+    expect(migrated.status).toBe('ready');
+    if (migrated.status === 'ready') {
+      expect(migrated.workspace.version).toBe(4);
+      expect(migrated.workspace.opportunity).toEqual(decided);
+      expect(migrated.workspace.actionPackage).toBeUndefined();
+    }
   });
 
   it('restores a valid reviewed analysis and rejects malformed derived data', () => {

@@ -442,6 +442,11 @@
   font-size: 0.72rem;
 }
 
+.saved-decision-action {
+  justify-content: center;
+  margin-top: 10px;
+}
+
 @media (max-width: 1024px) {
   .opportunity-content-grid,
   .decision-panel {

@@ -1,4 +1,9 @@
 import { useState } from 'react';
+import { ActionPackageWorkbench } from './features/action/ActionPackageWorkbench';
+import {
+  createActionPackage,
+  type ActionPackage,
+} from './features/action/actionPackageEngine';
 import { EvidenceReview } from './features/evidence/EvidenceReview';
 import {
   createCandidateAnalysis,
@@ -17,7 +22,13 @@ import {
   type WorkspaceInput,
 } from './features/workspace/workspaceStorage';
 
-type AppMode = 'setup' | 'home' | 'edit' | 'evidence' | 'opportunity';
+type AppMode =
+  | 'setup'
+  | 'home'
+  | 'edit'
+  | 'evidence'
+  | 'opportunity'
+  | 'action';
 
 function readInitialState(): {
   mode: AppMode;
@@ -126,6 +137,7 @@ export default function App() {
     const workspace: CandidateWorkspace = {
       ...state.workspace,
       opportunity,
+      actionPackage: undefined,
       updatedAt: new Date().toISOString(),
     };
 
@@ -141,6 +153,73 @@ export default function App() {
     setState({ mode: 'opportunity', workspace, invalidStorage: false });
   }
 
+  function handleOpenActionPackage() {
+    if (
+      !state.workspace?.opportunity ||
+      !state.workspace.analysis
+    ) {
+      return;
+    }
+
+    let actionPackage = state.workspace.actionPackage;
+    if (
+      !actionPackage ||
+      actionPackage.opportunityId !== state.workspace.opportunity.id ||
+      actionPackage.decisionChoice !==
+        state.workspace.opportunity.decision?.choice
+    ) {
+      try {
+        actionPackage = createActionPackage(
+          state.workspace.opportunity,
+          state.workspace.analysis.evidenceItems,
+          state.workspace.targetDirection,
+        );
+      } catch {
+        return;
+      }
+    }
+
+    const workspace: CandidateWorkspace = {
+      ...state.workspace,
+      actionPackage,
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      saveWorkspace(window.localStorage, workspace);
+      setStorageError(undefined);
+    } catch {
+      setStorageError(
+        'Проверьте, разрешено ли локальное хранение данных для этой страницы.',
+      );
+    }
+
+    setState({ mode: 'action', workspace, invalidStorage: false });
+  }
+
+  function handleActionPackageChange(actionPackage: ActionPackage) {
+    if (!state.workspace) {
+      return;
+    }
+
+    const workspace: CandidateWorkspace = {
+      ...state.workspace,
+      actionPackage,
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      saveWorkspace(window.localStorage, workspace);
+      setStorageError(undefined);
+    } catch {
+      setStorageError(
+        'Проверьте, разрешено ли локальное хранение данных для этой страницы.',
+      );
+    }
+
+    setState({ mode: 'action', workspace, invalidStorage: false });
+  }
+
   return (
     <div className="app-root" data-testid="workspace-root">
       <div className="ambient ambient--one" aria-hidden="true" />
@@ -152,7 +231,20 @@ export default function App() {
           <span>Локальный MVP · без внешних действий</span>
         </div>
 
-        {state.mode === 'opportunity' && state.workspace?.analysis ? (
+        {state.mode === 'action' &&
+        state.workspace?.analysis &&
+        state.workspace.opportunity &&
+        state.workspace.actionPackage ? (
+          <ActionPackageWorkbench
+            workspace={state.workspace}
+            actionPackage={state.workspace.actionPackage}
+            storageError={storageError}
+            onBack={() =>
+              setState((current) => ({ ...current, mode: 'opportunity' }))
+            }
+            onChange={handleActionPackageChange}
+          />
+        ) : state.mode === 'opportunity' && state.workspace?.analysis ? (
           <OpportunityWorkbench
             workspace={state.workspace}
             storageError={storageError}
@@ -160,6 +252,7 @@ export default function App() {
               setState((current) => ({ ...current, mode: 'home' }))
             }
             onChange={handleOpportunityChange}
+            onOpenActionPackage={handleOpenActionPackage}
           />
         ) : state.mode === 'evidence' && state.workspace?.analysis ? (
           <EvidenceReview
@@ -180,6 +273,7 @@ export default function App() {
             onOpenOpportunity={() =>
               setState((current) => ({ ...current, mode: 'opportunity' }))
             }
+            onOpenActionPackage={handleOpenActionPackage}
             onEdit={() => setState((current) => ({ ...current, mode: 'edit' }))}
             onClear={handleClear}
           />

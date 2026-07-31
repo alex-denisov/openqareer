@@ -5,6 +5,7 @@ interface WorkspaceHomeProps {
   workspace: CandidateWorkspace;
   onOpenEvidence: () => void;
   onOpenOpportunity: () => void;
+  onOpenActionPackage: () => void;
   onEdit: () => void;
   onClear: () => void;
 }
@@ -24,6 +25,7 @@ export function WorkspaceHome({
   workspace,
   onOpenEvidence,
   onOpenOpportunity,
+  onOpenActionPackage,
   onEdit,
   onClear,
 }: WorkspaceHomeProps) {
@@ -35,6 +37,16 @@ export function WorkspaceHome({
   const roleMapReady = Boolean(workspace.analysis?.roleHypotheses.length);
   const reviewStarted = Boolean(workspace.analysis);
   const opportunityStarted = Boolean(workspace.opportunity);
+  const actionPackageReady = Boolean(workspace.actionPackage);
+  const nextTitle = actionPackageReady
+    ? 'Продолжить пакет действия'
+    : roleMapReady
+      ? opportunityStarted
+        ? 'Вернуться к решению по вакансии'
+        : 'Разобрать одну вакансию'
+      : reviewStarted
+        ? 'Продолжить проверку фактов'
+        : 'Подтвердить факты из резюме';
 
   return (
     <main className="workspace-layout" data-testid="workspace-home">
@@ -43,8 +55,9 @@ export function WorkspaceHome({
           <p className="eyebrow">Рабочий маршрут</p>
           <h1>{workspace.targetDirection}</h1>
           <p className="workspace-subtitle">
-            Контекст сохранён локально. Следующий этап: проверить факты, на
-            которых будет строиться стратегия.
+            {actionPackageReady
+              ? 'Пакет для выбранной вакансии сохранён локально и готов к продолжению.'
+              : 'Контекст сохранён локально. Следующий этап строится только на подтверждённых данных.'}
           </p>
         </div>
         <div className="local-status" aria-label="Статус сохранения">
@@ -58,20 +71,22 @@ export function WorkspaceHome({
           <div className="section-heading">
             <div>
               <p className="eyebrow">Следующее сильное действие</p>
-              <h2>
-                {roleMapReady
-                  ? opportunityStarted
-                    ? 'Вернуться к решению по вакансии'
-                    : 'Разобрать одну вакансию'
-                  : reviewStarted
-                    ? 'Продолжить проверку фактов'
-                    : 'Подтвердить факты из резюме'}
-              </h2>
+              <h2>{nextTitle}</h2>
             </div>
-            <span className="step-index">01 / 04</span>
+            <span className="step-index">
+              {actionPackageReady
+                ? '04 / 04'
+                : opportunityStarted
+                  ? '03 / 04'
+                  : roleMapReady
+                    ? '02 / 04'
+                    : '01 / 04'}
+            </span>
           </div>
           <p className="route-description">
-            {roleMapReady
+            {actionPackageReady
+              ? 'Акценты резюме, сообщение, источники фактов и чек-лист сохранены. Продолжите с того же места.'
+              : roleMapReady
               ? opportunityStarted
                 ? 'Источник, совпадения, gaps, неизвестное и ваше решение сохранены локально.'
                 : 'Проверьте одну реальную вакансию по подтверждённым фактам. Ссылка нужна только как подпись источника.'
@@ -81,7 +96,9 @@ export function WorkspaceHome({
             <div>
               <span>Вход</span>
               <strong>
-                {roleMapReady
+                {actionPackageReady
+                  ? 'Ваше решение и подтверждённые факты'
+                  : roleMapReady
                   ? 'Полный текст одной вакансии'
                   : 'Сохранённый текст резюме'}
               </strong>
@@ -89,7 +106,9 @@ export function WorkspaceHome({
             <div>
               <span>Результат</span>
               <strong>
-                {roleMapReady
+                {actionPackageReady
+                  ? 'Резюме, сообщение и чек-лист'
+                  : roleMapReady
                   ? 'Совпадения, gaps и неизвестное'
                   : 'Проверяемый список доказательств'}
               </strong>
@@ -97,7 +116,9 @@ export function WorkspaceHome({
             <div>
               <span>Контроль</span>
               <strong>
-                {roleMapReady
+                {actionPackageReady
+                  ? 'Каждый факт связан с источником'
+                  : roleMapReady
                   ? 'Итоговое действие выбираете вы'
                   : 'Каждый факт подтверждает пользователь'}
               </strong>
@@ -105,9 +126,17 @@ export function WorkspaceHome({
           </div>
           <button
             className="button button--primary route-action"
-            onClick={roleMapReady ? onOpenOpportunity : onOpenEvidence}
+            onClick={
+              actionPackageReady
+                ? onOpenActionPackage
+                : roleMapReady
+                  ? onOpenOpportunity
+                  : onOpenEvidence
+            }
           >
-            {roleMapReady
+            {actionPackageReady
+              ? 'Открыть пакет'
+              : roleMapReady
               ? opportunityStarted
                 ? 'Открыть решение'
                 : 'Добавить вакансию'

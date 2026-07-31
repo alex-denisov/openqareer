@@ -18,6 +18,7 @@ interface OpportunityWorkbenchProps {
   storageError?: string;
   onBack: () => void;
   onChange: (opportunity: OpportunityRecord) => void;
+  onOpenActionPackage: () => void;
 }
 
 const EMPTY_INPUT: OpportunityInput = {
@@ -56,6 +57,7 @@ export function OpportunityWorkbench({
   storageError,
   onBack,
   onChange,
+  onOpenActionPackage,
 }: OpportunityWorkbenchProps) {
   return (
     <main className="opportunity-layout" data-testid="opportunity-workbench">
@@ -89,6 +91,7 @@ export function OpportunityWorkbench({
           workspace={workspace}
           record={workspace.opportunity}
           onChange={onChange}
+          onOpenActionPackage={onOpenActionPackage}
         />
       ) : (
         <OpportunityIntake
@@ -314,10 +317,12 @@ function OpportunityReview({
   workspace,
   record,
   onChange,
+  onOpenActionPackage,
 }: {
   workspace: CandidateWorkspace;
   record: OpportunityRecord;
   onChange: (record: OpportunityRecord) => void;
+  onOpenActionPackage: () => void;
 }) {
   const [choice, setChoice] = useState<OpportunityChoice | undefined>(
     record.decision?.choice,
@@ -569,6 +574,21 @@ function OpportunityReview({
                   ? 'Ваш выбор отличается от рекомендации.'
                   : 'Ваш выбор совпадает с рекомендацией.'}
               </span>
+              {record.decision.choice === 'apply' ||
+              record.decision.choice === 'network' ? (
+                <button
+                  className="button button--primary saved-decision-action"
+                  onClick={onOpenActionPackage}
+                >
+                  Собрать пакет действия
+                  <span aria-hidden="true">→</span>
+                </button>
+              ) : (
+                <span>
+                  Пакет не нужен для решения «
+                  {CHOICE_LABELS[record.decision.choice]}».
+                </span>
+              )}
             </div>
           ) : null}
         </div>

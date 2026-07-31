@@ -12,9 +12,15 @@ import {
   type OpportunityItem,
   type OpportunityRecord,
 } from '../opportunity/opportunityEngine';
+import {
+  ACTION_PACKAGE_METHOD_VERSION,
+  getActionChecklist,
+  type ActionPackage,
+  type ActionPackageCitation,
+} from '../action/actionPackageEngine';
 
 export const WORKSPACE_STORAGE_KEY = 'candidate-workspace';
-export const WORKSPACE_VERSION = 3;
+export const WORKSPACE_VERSION = 4;
 
 export type WorkspaceMarket = 'ru' | 'international';
 export type ResumeSource = 'pdf' | 'linkedin-pdf' | 'hh-pdf' | 'text';
@@ -40,6 +46,7 @@ export interface CandidateWorkspace extends WorkspaceInput {
   updatedAt: string;
   analysis?: CandidateAnalysis;
   opportunity?: OpportunityRecord;
+  actionPackage?: ActionPackage;
 }
 
 export interface StorageLike {
@@ -118,6 +125,7 @@ export function createWorkspace(
     updatedAt: now,
     analysis: canKeepAnalysis ? previous.analysis : undefined,
     opportunity: canKeepOpportunity ? previous?.opportunity : undefined,
+    actionPackage: canKeepOpportunity ? previous?.actionPackage : undefined,
   };
 }
 
@@ -160,6 +168,16 @@ export function loadWorkspace(storage: StorageLike): WorkspaceLoadResult {
       };
     }
 
+    if (isVersionThreeWorkspace(parsed)) {
+      return {
+        status: 'ready',
+        workspace: {
+          ...parsed,
+          version: WORKSPACE_VERSION,
+        },
+      };
+    }
+
     return { status: 'invalid' };
   } catch {
     return { status: 'invalid' };
@@ -171,11 +189,25 @@ export function clearWorkspace(storage: StorageLike): void {
 }
 
 function isCandidateWorkspace(value: unknown): value is CandidateWorkspace {
+  if (
+    !(
+      isWorkspaceRecord(value, WORKSPACE_VERSION) &&
+      (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
+      (value.opportunity === undefined ||
+        isOpportunityRecord(value.opportunity)) &&
+      (value.actionPackage === undefined ||
+        isActionPackage(value.actionPackage))
+    )
+  ) {
+    return false;
+  }
+
   return (
-    isWorkspaceRecord(value, WORKSPACE_VERSION) &&
-    (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
-    (value.opportunity === undefined ||
-      isOpportunityRecord(value.opportunity))
+    value.actionPackage === undefined ||
+    (value.opportunity !== undefined &&
+      value.opportunity.decision !== undefined &&
+      value.actionPackage.opportunityId === value.opportunity.id &&
+      value.actionPackage.decisionChoice === value.opportunity.decision.choice)
   );
 }
 
@@ -187,7 +219,8 @@ function isLegacyWorkspace(
   return (
     isWorkspaceRecord(value, 1) &&
     value.analysis === undefined &&
-    value.opportunity === undefined
+    value.opportunity === undefined &&
+    value.actionPackage === undefined
   );
 }
 
@@ -199,7 +232,22 @@ function isVersionTwoWorkspace(
   return (
     isWorkspaceRecord(value, 2) &&
     (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
-    value.opportunity === undefined
+    value.opportunity === undefined &&
+    value.actionPackage === undefined
+  );
+}
+
+function isVersionThreeWorkspace(
+  value: unknown,
+): value is Omit<CandidateWorkspace, 'version' | 'actionPackage'> & {
+  version: 3;
+} {
+  return (
+    isWorkspaceRecord(value, 3) &&
+    (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
+    (value.opportunity === undefined ||
+      isOpportunityRecord(value.opportunity)) &&
+    value.actionPackage === undefined
   );
 }
 
@@ -207,10 +255,14 @@ function isWorkspaceRecord(
   value: unknown,
   version: number,
 ): value is Record<string, unknown> &
-  Omit<CandidateWorkspace, 'version' | 'analysis'> & {
+  Omit<
+    CandidateWorkspace,
+    'version' | 'analysis' | 'opportunity' | 'actionPackage'
+  > & {
     version: number;
     analysis?: unknown;
     opportunity?: unknown;
+    actionPackage?: unknown;
   } {
   if (!isRecord(value)) {
     return false;
@@ -375,6 +427,66 @@ function isOpportunityChoice(
     value === 'network' ||
     value === 'watch' ||
     value === 'skip'
+  );
+}
+
+function isActionPackage(value: unknown): value is ActionPackage {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (
+    !(
+    typeof value.id === 'string' &&
+    value.methodVersion === ACTION_PACKAGE_METHOD_VERSION &&
+    typeof value.opportunityId === 'string' &&
+    (value.decisionChoice === 'apply' || value.decisionChoice === 'network') &&
+    typeof value.roleTitle === 'string' &&
+    typeof value.company === 'string' &&
+    isOptionalString(value.sourceUrl) &&
+    typeof value.positioningLine === 'string' &&
+    typeof value.motivationNote === 'string' &&
+    isStringArray(value.selectedEvidenceIds) &&
+    Array.isArray(value.citations) &&
+    value.citations.every(isActionPackageCitation) &&
+    isStringArray(value.completedChecklistIds) &&
+    typeof value.createdAt === 'string' &&
+    typeof value.updatedAt === 'string' &&
+    (value.reviewedAt === undefined || typeof value.reviewedAt === 'string')
+    )
+  ) {
+    return false;
+  }
+
+  const citationIds = new Set(
+    value.citations.map((citation) => citation.evidenceId),
+  );
+  const checklistIds = new Set(
+    getActionChecklist(value.decisionChoice).map((item) => item.id),
+  );
+
+  return (
+    citationIds.size === value.citations.length &&
+    value.selectedEvidenceIds.every((id) => citationIds.has(id)) &&
+    new Set(value.selectedEvidenceIds).size ===
+      value.selectedEvidenceIds.length &&
+    value.completedChecklistIds.every((id) => checklistIds.has(id)) &&
+    new Set(value.completedChecklistIds).size ===
+      value.completedChecklistIds.length &&
+    value.positioningLine.length <= 140 &&
+    value.motivationNote.length <= 360
+  );
+}
+
+function isActionPackageCitation(
+  value: unknown,
+): value is ActionPackageCitation {
+  return (
+    isRecord(value) &&
+    typeof value.evidenceId === 'string' &&
+    typeof value.statement === 'string' &&
+    typeof value.sourceExcerpt === 'string' &&
+    isStringArray(value.opportunityItemIds)
   );
 }
 
