@@ -7,6 +7,7 @@ const validEnvironment = {
     'test-openrouter-key-that-is-long-enough',
   OPENQAREER_PREVIEW_API_TOKEN:
     'test-preview-token-that-is-at-least-thirty-two-characters',
+  OPENQAREER_DATA_ENCRYPTION_KEY: Buffer.alloc(32, 3).toString('base64'),
 };
 
 describe('server configuration', () => {
@@ -16,6 +17,7 @@ describe('server configuration', () => {
       port: 3210,
       model: 'gpt-5.6-sol',
       release: 'local',
+      databasePath: 'data/openqareer.db',
     });
 
     expect(() =>

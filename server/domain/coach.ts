@@ -61,6 +61,9 @@ export const coachTurnResultSchema = z.object({
 
 export type CoachTurnInput = z.infer<typeof coachTurnInputSchema>;
 export type CoachTurnResult = z.infer<typeof coachTurnResultSchema>;
+export type CoachMessage = z.infer<typeof coachMessageSchema>;
+export type MemoryCandidate = z.infer<typeof memoryCandidateSchema>;
+export type CoachPhase = (typeof COACH_PHASES)[number];
 
 export const COACH_TURN_JSON_SCHEMA = {
   type: 'object',

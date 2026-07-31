@@ -12,6 +12,18 @@ const configSchema = z.object({
   OPENQAREER_OPENAI_API_KEY: z.string().min(20),
   OPENQAREER_OPENROUTER_API_KEY: z.string().min(20),
   OPENQAREER_PREVIEW_API_TOKEN: z.string().min(32),
+  OPENQAREER_DATA_ENCRYPTION_KEY: z.string().transform((value, context) => {
+    const decoded = Buffer.from(value, 'base64');
+    if (decoded.length !== 32) {
+      context.addIssue({
+        code: 'custom',
+        message: 'data encryption key must decode to 32 bytes',
+      });
+      return z.NEVER;
+    }
+    return decoded;
+  }),
+  OPENQAREER_DATABASE_PATH: z.string().min(1).default('data/openqareer.db'),
   OPENQAREER_AI_MODEL: z.enum(supportedModels).default('gpt-5.6-sol'),
   OPENQAREER_STATIC_ROOT: z.string().min(1).optional(),
   OPENQAREER_LOG_LEVEL: z
@@ -25,6 +37,8 @@ export interface ServerConfig {
   openAIKey: string;
   openRouterKey: string;
   previewToken: string;
+  dataEncryptionKey: Buffer;
+  databasePath: string;
   model: (typeof supportedModels)[number];
   staticRoot: string;
   release: string;
@@ -47,6 +61,8 @@ export function readServerConfig(
     openAIKey: parsed.OPENQAREER_OPENAI_API_KEY,
     openRouterKey: parsed.OPENQAREER_OPENROUTER_API_KEY,
     previewToken: parsed.OPENQAREER_PREVIEW_API_TOKEN,
+    dataEncryptionKey: parsed.OPENQAREER_DATA_ENCRYPTION_KEY,
+    databasePath: parsed.OPENQAREER_DATABASE_PATH,
     model: parsed.OPENQAREER_AI_MODEL,
     staticRoot:
       parsed.OPENQAREER_STATIC_ROOT ??

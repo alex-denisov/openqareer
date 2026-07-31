@@ -6,11 +6,16 @@ import Fastify, {
   type FastifyReply,
   type FastifyRequest,
 } from 'fastify';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
+import { COACH_PHASES } from './domain/coach';
+import type {
+  CandidateIdentity,
+  CandidateStore,
+} from './data/candidateStore';
 import {
-  coachTurnInputSchema,
-  type CoachTurnInput,
-} from './domain/coach';
+  CandidateNotFoundError,
+  CandidateStoreConflictError,
+} from './data/sqliteCandidateStore';
 import {
   CoachProviderError,
   type CoachProvider,
@@ -20,6 +25,7 @@ import type { ServerConfig } from './config';
 interface BuildAppOptions {
   config: ServerConfig;
   coachProvider: CoachProvider;
+  candidateStore: CandidateStore;
   serveStatic?: boolean;
 }
 
@@ -35,6 +41,7 @@ interface ErrorBody {
 export async function buildApp({
   config,
   coachProvider,
+  candidateStore,
   serveStatic = true,
 }: BuildAppOptions): Promise<FastifyInstance> {
   const app = Fastify({
@@ -93,10 +100,99 @@ export async function buildApp({
     }),
   );
 
-  app.post<{ Body: CoachTurnInput }>(
-    '/api/v1/coach/turn',
+  app.post(
+    '/api/v1/candidates',
     {
       preHandler: previewAuth(config.previewToken),
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 hour',
+        },
+      },
+    },
+    async (request, reply) => {
+      const body = candidateCreateSchema.parse(request.body);
+      const credentials = candidateStore.createCandidate(body);
+      return reply.code(201).send({
+        data: credentials,
+        meta: { requestId: request.id },
+      });
+    },
+  );
+
+  app.get('/api/v1/candidate/me', async (request, reply) => {
+    const candidate = authenticateCandidate(request, reply, candidateStore);
+    if (!candidate) {
+      return;
+    }
+    return {
+      data: candidateStore.getSnapshot(candidate.id),
+      meta: { requestId: request.id },
+    };
+  });
+
+  app.get('/api/v1/candidate/export', async (request, reply) => {
+    const candidate = authenticateCandidate(request, reply, candidateStore);
+    if (!candidate) {
+      return;
+    }
+    reply.header(
+      'Content-Disposition',
+      'attachment; filename="openqareer-candidate-export.json"',
+    );
+    return {
+      data: candidateStore.exportCandidate(candidate.id),
+      meta: {
+        requestId: request.id,
+        exportedAt: new Date().toISOString(),
+      },
+    };
+  });
+
+  app.delete('/api/v1/candidate/me', async (request, reply) => {
+    const candidate = authenticateCandidate(request, reply, candidateStore);
+    if (!candidate) {
+      return;
+    }
+    candidateStore.deleteCandidate(candidate.id);
+    return reply.code(204).send();
+  });
+
+  app.patch<{ Params: { memoryId: string } }>(
+    '/api/v1/candidate/memory/:memoryId',
+    async (request, reply) => {
+      const candidate = authenticateCandidate(request, reply, candidateStore);
+      if (!candidate) {
+        return;
+      }
+      const memoryId = z.string().uuid().parse(request.params.memoryId);
+      const change = memoryChangeSchema.parse(request.body);
+      const memory = candidateStore.changeMemory(
+        candidate.id,
+        memoryId,
+        change,
+      );
+      if (!memory && change.action !== 'delete') {
+        return sendError(
+          reply,
+          request,
+          404,
+          'memory_not_found',
+          'Элемент памяти не найден.',
+          false,
+        );
+      }
+      return {
+        data: { memory, deleted: change.action === 'delete' },
+        meta: { requestId: request.id },
+      };
+    },
+  );
+
+  app.post(
+    '/api/v1/coach/turn',
+    {
       handlerTimeout: 85_000,
       config: {
         rateLimit: {
@@ -106,11 +202,13 @@ export async function buildApp({
       },
     },
     async (request, reply) => {
+      const candidate = authenticateCandidate(request, reply, candidateStore);
+      if (!candidate) {
+        return;
+      }
       const idempotencyKey = request.headers['idempotency-key'];
-      if (
-        typeof idempotencyKey !== 'string' ||
-        !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(idempotencyKey)
-      ) {
+      const parsedIdempotencyKey = z.string().uuid().safeParse(idempotencyKey);
+      if (!parsedIdempotencyKey.success) {
         return sendError(
           reply,
           request,
@@ -121,18 +219,38 @@ export async function buildApp({
         );
       }
 
-      const input = coachTurnInputSchema.parse(request.body);
-      const output = await coachProvider.createTurn(input, idempotencyKey);
-      return {
-        data: output.result,
-        meta: {
-          requestId: request.id,
-          provider: output.provider,
-          model: output.model,
-          responseId: output.responseId,
-          usage: output.usage,
-        },
-      };
+      const body = coachTurnRequestSchema.parse(request.body);
+      const started = candidateStore.startTurn(
+        candidate.id,
+        parsedIdempotencyKey.data,
+        body,
+      );
+      if (started.state === 'completed') {
+        return providerResponse(request, started.output);
+      }
+
+      let output;
+      try {
+        output = await coachProvider.createTurn(
+          started.input,
+          parsedIdempotencyKey.data,
+        );
+        candidateStore.completeTurn(
+          candidate.id,
+          parsedIdempotencyKey.data,
+          output,
+        );
+      } catch (error) {
+        candidateStore.failTurn(
+          candidate.id,
+          parsedIdempotencyKey.data,
+          error instanceof CoachProviderError
+            ? error.code
+            : 'internal_error',
+        );
+        throw error;
+      }
+      return providerResponse(request, output);
     },
   );
 
@@ -155,6 +273,26 @@ export async function buildApp({
         error.code,
         providerMessage(error.code),
         error.retryable,
+      );
+    }
+    if (error instanceof CandidateStoreConflictError) {
+      return sendError(
+        reply,
+        request,
+        409,
+        'candidate_state_conflict',
+        'Состояние кандидата изменилось. Обновите данные и повторите действие.',
+        false,
+      );
+    }
+    if (error instanceof CandidateNotFoundError) {
+      return sendError(
+        reply,
+        request,
+        404,
+        'candidate_not_found',
+        'Профиль кандидата не найден.',
+        false,
       );
     }
 
@@ -223,6 +361,72 @@ export async function buildApp({
   }
 
   return app;
+}
+
+const candidateCreateSchema = z.object({
+  dataClass: z.enum(['synthetic', 'personal']).default('personal'),
+  locale: z.enum(['ru-RU', 'en-US']).default('ru-RU'),
+});
+
+const coachTurnRequestSchema = z.object({
+  messageId: z.string().uuid(),
+  content: z.string().trim().min(1).max(8_000),
+  phase: z.enum(COACH_PHASES).default('discovery'),
+});
+
+const memoryChangeSchema = z
+  .object({
+    action: z.enum(['confirm', 'correct', 'delete']),
+    statement: z.string().trim().min(1).max(1_000).optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.action === 'correct' && !value.statement) {
+      context.addIssue({
+        code: 'custom',
+        path: ['statement'],
+        message: 'statement is required for correction',
+      });
+    }
+  });
+
+function authenticateCandidate(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  candidateStore: CandidateStore,
+): CandidateIdentity | null {
+  const authorization = request.headers.authorization;
+  const accessToken = authorization?.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : '';
+  const candidate = candidateStore.authenticate(accessToken);
+  if (!candidate) {
+    sendError(
+      reply,
+      request,
+      401,
+      'unauthorized',
+      'Нужна действующая сессия кандидата.',
+      false,
+    );
+    return null;
+  }
+  return candidate;
+}
+
+function providerResponse(
+  request: FastifyRequest,
+  output: Awaited<ReturnType<CoachProvider['createTurn']>>,
+) {
+  return {
+    data: output.result,
+    meta: {
+      requestId: request.id,
+      provider: output.provider,
+      model: output.model,
+      responseId: output.responseId,
+      usage: output.usage,
+    },
+  };
 }
 
 function hasValidation(

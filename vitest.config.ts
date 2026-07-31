@@ -12,6 +12,8 @@ export default defineConfig({
         'src/features/opportunity/opportunityEngine.ts',
         'src/features/workspace/workspaceStorage.ts',
         'server/config.ts',
+        'server/data/sealedText.ts',
+        'server/data/sqliteCandidateStore.ts',
         'server/domain/coach.ts',
         'server/providers/openAICoachProvider.ts',
         'server/providers/openRouterCoachProvider.ts',

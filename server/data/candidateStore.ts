@@ -1,0 +1,106 @@
+import type {
+  CoachMessage,
+  CoachPhase,
+  CoachTurnResult,
+  MemoryCandidate,
+} from '../domain/coach';
+import type { CoachProviderResult } from '../providers/coachProvider';
+
+export interface CandidateIdentity {
+  id: string;
+  dataClass: 'synthetic' | 'personal';
+  locale: 'ru-RU' | 'en-US';
+  createdAt: string;
+}
+
+export interface CandidateCredentials extends CandidateIdentity {
+  accessToken: string;
+}
+
+export interface CandidateSnapshot {
+  candidate: CandidateIdentity;
+  messages: CoachMessage[];
+  memory: StoredMemory[];
+  turns: StoredTurn[];
+}
+
+export interface StoredMemory extends MemoryCandidate {
+  id: string;
+  status: 'proposed' | 'confirmed' | 'corrected';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoredTurn {
+  idempotencyKey: string;
+  phase: CoachPhase;
+  status: 'pending' | 'failed' | 'completed';
+  result: CoachTurnResult | null;
+  provenance: {
+    provider: CoachProviderResult['provider'];
+    model: string;
+    responseId: string;
+    usage: CoachProviderResult['usage'];
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TurnRequest {
+  messageId: string;
+  content: string;
+  phase: CoachPhase;
+}
+
+export type StartedTurn =
+  | {
+      state: 'ready';
+      input: {
+        candidateReference: string;
+        dataClass: CandidateIdentity['dataClass'];
+        locale: CandidateIdentity['locale'];
+        phase: CoachPhase;
+        messages: CoachMessage[];
+      };
+    }
+  | {
+      state: 'completed';
+      output: CoachProviderResult;
+    };
+
+export interface MemoryChange {
+  action: 'confirm' | 'correct' | 'delete';
+  statement?: string;
+}
+
+export interface CandidateStore {
+  createCandidate(input: {
+    dataClass: CandidateIdentity['dataClass'];
+    locale: CandidateIdentity['locale'];
+  }): CandidateCredentials;
+  authenticate(accessToken: string): CandidateIdentity | null;
+  startTurn(
+    candidateId: string,
+    idempotencyKey: string,
+    request: TurnRequest,
+  ): StartedTurn;
+  completeTurn(
+    candidateId: string,
+    idempotencyKey: string,
+    output: CoachProviderResult,
+  ): void;
+  failTurn(
+    candidateId: string,
+    idempotencyKey: string,
+    errorCode: string,
+  ): void;
+  getSnapshot(candidateId: string): CandidateSnapshot;
+  changeMemory(
+    candidateId: string,
+    memoryId: string,
+    change: MemoryChange,
+  ): StoredMemory | null;
+  exportCandidate(candidateId: string): CandidateSnapshot;
+  deleteCandidate(candidateId: string): boolean;
+  close(): void;
+}

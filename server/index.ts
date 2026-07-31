@@ -3,8 +3,13 @@ import { readServerConfig } from './config';
 import { OpenAICoachProvider } from './providers/openAICoachProvider';
 import { OpenRouterCoachProvider } from './providers/openRouterCoachProvider';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
+import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 
 const config = readServerConfig(process.env);
+const candidateStore = new SqliteCandidateStore({
+  databasePath: config.databasePath,
+  encryptionKey: config.dataEncryptionKey,
+});
 const personalDataProvider = new OpenAICoachProvider({
   apiKey: config.openAIKey,
   model: config.model,
@@ -19,12 +24,14 @@ const coachProvider = new PrivacyAwareCoachProvider({
 const app = await buildApp({
   config,
   coachProvider,
+  candidateStore,
   serveStatic: process.env.NODE_ENV === 'production',
 });
 
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, 'shutdown-started');
   await app.close();
+  candidateStore.close();
   process.exit(0);
 }
 

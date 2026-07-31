@@ -6,6 +6,7 @@ import {
   CoachProviderError,
   type CoachProvider,
 } from './providers/coachProvider';
+import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 
 const config: ServerConfig = {
   host: '127.0.0.1',
@@ -13,6 +14,8 @@ const config: ServerConfig = {
   openAIKey: 'not-used-by-test',
   openRouterKey: 'not-used-by-test',
   previewToken: 'preview-token-that-is-at-least-thirty-two-characters',
+  dataEncryptionKey: Buffer.alloc(32, 7),
+  databasePath: ':memory:',
   model: 'gpt-5.6-sol',
   staticRoot: '/tmp/not-used',
   release: 'test-release',
@@ -49,31 +52,49 @@ const successProvider: CoachProvider = {
 };
 
 const apps: Awaited<ReturnType<typeof buildApp>>[] = [];
+const stores: SqliteCandidateStore[] = [];
+const candidateTokens = new WeakMap<
+  Awaited<ReturnType<typeof buildApp>>,
+  string
+>();
 
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
+  stores.splice(0).forEach((store) => store.close());
 });
 
 async function createApp(provider: CoachProvider = successProvider) {
+  const candidateStore = new SqliteCandidateStore({
+    databasePath: ':memory:',
+    encryptionKey: config.dataEncryptionKey,
+  });
+  const candidate = candidateStore.createCandidate({
+    dataClass: 'synthetic',
+    locale: 'ru-RU',
+  });
   const app = await buildApp({
     config,
     coachProvider: provider,
+    candidateStore,
     serveStatic: false,
   });
   apps.push(app);
+  stores.push(candidateStore);
+  candidateTokens.set(app, candidate.accessToken);
   return app;
 }
 
 const validPayload = {
-  candidateReference: 'candidate-test-001',
-  messages: [
-    {
-      id: 'message-1',
-      role: 'user',
-      content: 'Я запускал цифровой продукт.',
-    },
-  ],
+  messageId: '85512ddf-962c-4a7c-a4cc-30a35d1e5847',
+  content: 'Я запускал цифровой продукт.',
+  phase: 'discovery',
 };
+
+function candidateAuthorization(
+  app: Awaited<ReturnType<typeof buildApp>>,
+): string {
+  return `Bearer ${candidateTokens.get(app)}`;
+}
 
 describe('OpenQareer API boundary', () => {
   it('keeps health public and provider details authenticated', async () => {
@@ -119,7 +140,7 @@ describe('OpenQareer API boundary', () => {
   it('validates idempotency and input before calling the model', async () => {
     const app = await createApp();
     const headers = {
-      authorization: `Bearer ${config.previewToken}`,
+      authorization: candidateAuthorization(app),
     };
 
     const missingKey = await app.inject({
@@ -139,8 +160,8 @@ describe('OpenQareer API boundary', () => {
         'idempotency-key': randomUUID(),
       },
       payload: {
-        candidateReference: 'short',
-        messages: [],
+        messageId: randomUUID(),
+        content: '',
       },
     });
     expect(invalid.statusCode).toBe(422);
@@ -156,7 +177,7 @@ describe('OpenQareer API boundary', () => {
       method: 'POST',
       url: '/api/v1/coach/turn',
       headers: {
-        authorization: `Bearer ${config.previewToken}`,
+        authorization: candidateAuthorization(app),
         'idempotency-key': randomUUID(),
       },
       payload: validPayload,
@@ -191,7 +212,7 @@ describe('OpenQareer API boundary', () => {
       method: 'POST',
       url: '/api/v1/coach/turn',
       headers: {
-        authorization: `Bearer ${config.previewToken}`,
+        authorization: candidateAuthorization(app),
         'idempotency-key': randomUUID(),
       },
       payload: validPayload,
@@ -203,5 +224,68 @@ describe('OpenQareer API boundary', () => {
       retryable: true,
     });
     expect(response.json().error.message).not.toBe('limited');
+
+    const snapshot = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/me',
+      headers: {
+        authorization: candidateAuthorization(app),
+      },
+    });
+    expect(snapshot.json().data.messages).toEqual([
+      {
+        id: validPayload.messageId,
+        role: 'user',
+        content: validPayload.content,
+      },
+    ]);
+  });
+
+  it('creates one-time candidate credentials and isolates profiles', async () => {
+    const app = await createApp();
+    const unauthorized = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidates',
+      payload: { dataClass: 'synthetic', locale: 'ru-RU' },
+    });
+    expect(unauthorized.statusCode).toBe(401);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidates',
+      headers: {
+        authorization: `Bearer ${config.previewToken}`,
+      },
+      payload: { dataClass: 'synthetic', locale: 'ru-RU' },
+    });
+    expect(created.statusCode).toBe(201);
+    const credentials = created.json().data as {
+      id: string;
+      accessToken: string;
+    };
+    expect(credentials.accessToken).toMatch(/^oqc_/);
+
+    const ownSnapshot = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/me',
+      headers: {
+        authorization: `Bearer ${credentials.accessToken}`,
+      },
+    });
+    expect(ownSnapshot.statusCode).toBe(200);
+    expect(ownSnapshot.json().data).toMatchObject({
+      candidate: { id: credentials.id },
+      messages: [],
+      memory: [],
+    });
+
+    const otherSnapshot = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/me',
+      headers: {
+        authorization: candidateAuthorization(app),
+      },
+    });
+    expect(otherSnapshot.json().data.candidate.id).not.toBe(credentials.id);
   });
 });

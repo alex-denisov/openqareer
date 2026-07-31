@@ -194,6 +194,8 @@ fi
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 \
   "$RELEASE_ROOT" "$RELEASE_ROOT/releases" "$RELEASE_ROOT/incoming"
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0700 \
+  /var/lib/openqareer
+install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0700 \
   "$RELEASE_ROOT/.ssh"
 
 [[ -n "$PUBLIC_KEY_FILE" && -f "$PUBLIC_KEY_FILE" ]] ||
