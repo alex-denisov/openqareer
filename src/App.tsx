@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CoachPortal } from './features/coach/CoachPortal';
 import { ActionPackageWorkbench } from './features/action/ActionPackageWorkbench';
 import {
   createActionPackage,
@@ -31,7 +32,8 @@ type AppMode =
   | 'evidence'
   | 'opportunity'
   | 'action'
-  | 'outcome';
+  | 'outcome'
+  | 'coach';
 
 function readInitialState(): {
   mode: AppMode;
@@ -253,12 +255,34 @@ export default function App() {
       <div className="ambient ambient--two" aria-hidden="true" />
 
       <div className="app-frame">
-        <div className="utility-bar">
-          <p>Карьерный workspace</p>
-          <span>Локальный MVP · без внешних действий</span>
-        </div>
+        {state.mode !== 'coach' ? (
+          <div className="utility-bar">
+            <p>Карьерный workspace</p>
+            <div className="utility-actions">
+              <span>Сохранённый маршрут · защищённая сессия</span>
+              <button
+                className="coach-entry"
+                onClick={() =>
+                  setState((current) => ({ ...current, mode: 'coach' }))
+                }
+              >
+                <i aria-hidden="true" />
+                ИИ-коуч
+              </button>
+            </div>
+          </div>
+        ) : null}
 
-        {state.mode === 'outcome' &&
+        {state.mode === 'coach' ? (
+          <CoachPortal
+            onBack={() =>
+              setState((current) => ({
+                ...current,
+                mode: current.workspace ? 'home' : 'setup',
+              }))
+            }
+          />
+        ) : state.mode === 'outcome' &&
         state.workspace?.opportunity &&
         state.workspace.actionPackage ? (
           <OutcomeWorkbench

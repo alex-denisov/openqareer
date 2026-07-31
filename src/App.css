@@ -138,6 +138,43 @@ textarea:focus-visible {
   letter-spacing: -0.01em;
 }
 
+.utility-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.coach-entry {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--text-main);
+  background: oklch(24% 0.025 220 / 0.75);
+}
+
+.coach-entry i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary-emerald);
+  box-shadow: 0 0 12px var(--primary-emerald);
+}
+
+.coach-entry:hover {
+  border-color: oklch(79% 0.14 205 / 0.52);
+  background: var(--surface-raised);
+}
+
+@media (max-width: 640px) {
+  .utility-actions > span {
+    display: none;
+  }
+}
+
 .utility-bar span {
   font-family: var(--font-mono);
   font-size: 0.72rem;
@@ -153,4 +190,3 @@ textarea:focus-visible {
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-
