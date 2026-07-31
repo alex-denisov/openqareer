@@ -29,6 +29,16 @@ const configSchema = z.object({
   OPENQAREER_LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info'])
     .default('info'),
+  OPENQAREER_ADMIN_USERNAME: z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$/)
+    .optional(),
+  OPENQAREER_ADMIN_PASSWORD: z.string().min(16).max(256).optional(),
+  OPENQAREER_TEST_CANDIDATE_USERNAME: z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$/)
+    .optional(),
+  OPENQAREER_TEST_CANDIDATE_PASSWORD: z.string().min(16).max(256).optional(),
 });
 
 export interface ServerConfig {
@@ -43,6 +53,13 @@ export interface ServerConfig {
   staticRoot: string;
   release: string;
   logLevel: 'fatal' | 'error' | 'warn' | 'info';
+  secureCookies: boolean;
+  allowedOrigins: string[];
+  seedAccounts: Array<{
+    username: string;
+    password: string;
+    role: 'candidate' | 'admin';
+  }>;
 }
 
 export function readServerConfig(
@@ -54,6 +71,25 @@ export function readServerConfig(
     typeof __OPENQAREER_RELEASE__ === 'undefined'
       ? 'local'
       : __OPENQAREER_RELEASE__;
+  const secureCookies = environment.NODE_ENV === 'production';
+  const seedAccounts = [
+    seedAccount(
+      parsed.OPENQAREER_ADMIN_USERNAME,
+      parsed.OPENQAREER_ADMIN_PASSWORD,
+      'admin',
+    ),
+    seedAccount(
+      parsed.OPENQAREER_TEST_CANDIDATE_USERNAME,
+      parsed.OPENQAREER_TEST_CANDIDATE_PASSWORD,
+      'candidate',
+    ),
+  ].filter((account) => account !== null);
+  if (
+    new Set(seedAccounts.map((account) => account.username.toLowerCase()))
+      .size !== seedAccounts.length
+  ) {
+    throw new Error('seed account usernames must be unique');
+  }
 
   return {
     host: parsed.OPENQAREER_HOST,
@@ -69,5 +105,28 @@ export function readServerConfig(
       dirname(fileURLToPath(moduleUrl)),
     release: builtRelease,
     logLevel: parsed.OPENQAREER_LOG_LEVEL,
+    secureCookies,
+    allowedOrigins: secureCookies
+      ? ['https://openqareer.com']
+      : ['http://127.0.0.1:3000', 'http://localhost:3000'],
+    seedAccounts,
   };
+}
+
+function seedAccount(
+  username: string | undefined,
+  password: string | undefined,
+  role: 'candidate' | 'admin',
+): {
+  username: string;
+  password: string;
+  role: 'candidate' | 'admin';
+} | null {
+  if (username === undefined && password === undefined) {
+    return null;
+  }
+  if (!username || !password) {
+    throw new Error(`both ${role} seed credentials are required`);
+  }
+  return { username, password, role };
 }

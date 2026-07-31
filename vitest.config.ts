@@ -12,6 +12,7 @@ export default defineConfig({
         'src/features/opportunity/opportunityEngine.ts',
         'src/features/workspace/workspaceStorage.ts',
         'server/config.ts',
+        'server/auth/authService.ts',
         'server/data/sealedText.ts',
         'server/data/sqliteCandidateStore.ts',
         'server/domain/coach.ts',

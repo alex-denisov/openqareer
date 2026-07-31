@@ -81,3 +81,32 @@ CREATE TABLE memory_revisions (
   created_at TEXT NOT NULL
 ) STRICT;
 `;
+
+export const MIGRATION_2 = `
+CREATE TABLE users (
+  id TEXT PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  role TEXT NOT NULL CHECK (role IN ('candidate', 'admin')),
+  password_salt TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  candidate_id TEXT UNIQUE REFERENCES candidates(id) ON DELETE CASCADE,
+  is_test INTEGER NOT NULL CHECK (is_test IN (0, 1)),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  CHECK (
+    (role = 'candidate' AND candidate_id IS NOT NULL) OR
+    (role = 'admin' AND candidate_id IS NULL)
+  )
+) STRICT;
+
+CREATE TABLE sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL
+) STRICT;
+
+CREATE INDEX sessions_user ON sessions(user_id);
+CREATE INDEX sessions_expiry ON sessions(expires_at);
+`;

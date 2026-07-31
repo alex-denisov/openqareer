@@ -51,4 +51,37 @@ describe('server configuration', () => {
       ),
     ).toThrow();
   });
+
+  it('enables secure production cookies and only explicit seed accounts', () => {
+    const config = readServerConfig(
+      {
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        OPENQAREER_ADMIN_USERNAME: 'admin.test',
+        OPENQAREER_ADMIN_PASSWORD: 'admin-password-for-tests',
+        OPENQAREER_TEST_CANDIDATE_USERNAME: 'candidate.test',
+        OPENQAREER_TEST_CANDIDATE_PASSWORD:
+          'candidate-password-for-tests',
+      },
+      import.meta.url,
+    );
+    expect(config).toMatchObject({
+      secureCookies: true,
+      allowedOrigins: ['https://openqareer.com'],
+      seedAccounts: [
+        { username: 'admin.test', role: 'admin' },
+        { username: 'candidate.test', role: 'candidate' },
+      ],
+    });
+
+    expect(() =>
+      readServerConfig(
+        {
+          ...validEnvironment,
+          OPENQAREER_ADMIN_USERNAME: 'admin-without-password',
+        },
+        import.meta.url,
+      ),
+    ).toThrow();
+  });
 });

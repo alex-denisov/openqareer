@@ -7,6 +7,7 @@ import {
   type CoachProvider,
 } from './providers/coachProvider';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
+import type { SessionAuth } from './auth/authService';
 
 const config: ServerConfig = {
   host: '127.0.0.1',
@@ -20,6 +21,19 @@ const config: ServerConfig = {
   staticRoot: '/tmp/not-used',
   release: 'test-release',
   logLevel: 'fatal',
+  secureCookies: false,
+  allowedOrigins: ['http://localhost:3000'],
+  seedAccounts: [],
+};
+
+const noSessions: SessionAuth = {
+  async login() {
+    return null;
+  },
+  authenticate() {
+    return null;
+  },
+  logout() {},
 };
 
 const successProvider: CoachProvider = {
@@ -76,6 +90,7 @@ async function createApp(provider: CoachProvider = successProvider) {
     config,
     coachProvider: provider,
     candidateStore,
+    authService: noSessions,
     serveStatic: false,
   });
   apps.push(app);

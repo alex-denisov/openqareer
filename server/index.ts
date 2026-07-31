@@ -4,12 +4,17 @@ import { OpenAICoachProvider } from './providers/openAICoachProvider';
 import { OpenRouterCoachProvider } from './providers/openRouterCoachProvider';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
+import { AuthService } from './auth/authService';
 
 const config = readServerConfig(process.env);
 const candidateStore = new SqliteCandidateStore({
   databasePath: config.databasePath,
   encryptionKey: config.dataEncryptionKey,
 });
+const authService = new AuthService({
+  databasePath: config.databasePath,
+});
+await authService.seedAccounts(config.seedAccounts, candidateStore);
 const personalDataProvider = new OpenAICoachProvider({
   apiKey: config.openAIKey,
   model: config.model,
@@ -25,6 +30,7 @@ const app = await buildApp({
   config,
   coachProvider,
   candidateStore,
+  authService,
   serveStatic: process.env.NODE_ENV === 'production',
 });
 
@@ -32,6 +38,7 @@ async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, 'shutdown-started');
   await app.close();
   candidateStore.close();
+  authService.close();
   process.exit(0);
 }
 

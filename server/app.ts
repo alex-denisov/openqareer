@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, {
@@ -21,11 +22,16 @@ import {
   type CoachProvider,
 } from './providers/coachProvider';
 import type { ServerConfig } from './config';
+import type {
+  AuthPrincipal,
+  SessionAuth,
+} from './auth/authService';
 
 interface BuildAppOptions {
   config: ServerConfig;
   coachProvider: CoachProvider;
   candidateStore: CandidateStore;
+  authService: SessionAuth;
   serveStatic?: boolean;
 }
 
@@ -42,6 +48,7 @@ export async function buildApp({
   config,
   coachProvider,
   candidateStore,
+  authService,
   serveStatic = true,
 }: BuildAppOptions): Promise<FastifyInstance> {
   const app = Fastify({
@@ -57,6 +64,7 @@ export async function buildApp({
     requestTimeout: 90_000,
   });
 
+  await app.register(cookie);
   await app.register(rateLimit, {
     global: false,
     keyGenerator: (request) => request.ip,
@@ -82,8 +90,21 @@ export async function buildApp({
 
   app.get(
     '/api/v1/provider/status',
-    { preHandler: previewAuth(config.previewToken) },
-    async (request) => ({
+    async (request, reply) => {
+      if (
+        !hasPreviewAccess(request, config.previewToken) &&
+        authenticateSession(request, authService, config)?.role !== 'admin'
+      ) {
+        return sendError(
+          reply,
+          request,
+          401,
+          'unauthorized',
+          'Нужна сессия администратора.',
+          false,
+        );
+      }
+      return {
       data: {
         personalDataRoute: {
           provider: 'openai',
@@ -97,8 +118,76 @@ export async function buildApp({
         ready: true,
       },
       meta: { requestId: request.id },
-    }),
+      };
+    },
   );
+
+  app.post(
+    '/api/v1/auth/login',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '15 minutes',
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!hasAllowedOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const body = loginSchema.parse(request.body);
+      const authenticated = await authService.login(
+        body.username,
+        body.password,
+      );
+      if (!authenticated) {
+        return sendError(
+          reply,
+          request,
+          401,
+          'invalid_credentials',
+          'Неверный логин или пароль.',
+          false,
+        );
+      }
+      setSessionCookie(
+        reply,
+        authenticated.sessionToken,
+        config.secureCookies,
+      );
+      return {
+        data: publicPrincipal(authenticated.principal),
+        meta: { requestId: request.id },
+      };
+    },
+  );
+
+  app.get('/api/v1/auth/me', async (request, reply) => {
+    const principal = authenticateSession(request, authService, config);
+    if (!principal) {
+      return {
+        data: null,
+        meta: { requestId: request.id },
+      };
+    }
+    return {
+      data: publicPrincipal(principal),
+      meta: { requestId: request.id },
+    };
+  });
+
+  app.post('/api/v1/auth/logout', async (request, reply) => {
+    if (!hasAllowedOrigin(request, config)) {
+      return csrfError(request, reply);
+    }
+    const sessionToken = request.cookies[sessionCookieName(config.secureCookies)];
+    if (sessionToken) {
+      authService.logout(sessionToken);
+    }
+    clearSessionCookie(reply, config.secureCookies);
+    return reply.code(204).send();
+  });
 
   app.post(
     '/api/v1/candidates',
@@ -122,7 +211,13 @@ export async function buildApp({
   );
 
   app.get('/api/v1/candidate/me', async (request, reply) => {
-    const candidate = authenticateCandidate(request, reply, candidateStore);
+    const candidate = authenticateCandidate(
+      request,
+      reply,
+      candidateStore,
+      authService,
+      config,
+    );
     if (!candidate) {
       return;
     }
@@ -133,7 +228,13 @@ export async function buildApp({
   });
 
   app.get('/api/v1/candidate/export', async (request, reply) => {
-    const candidate = authenticateCandidate(request, reply, candidateStore);
+    const candidate = authenticateCandidate(
+      request,
+      reply,
+      candidateStore,
+      authService,
+      config,
+    );
     if (!candidate) {
       return;
     }
@@ -151,7 +252,16 @@ export async function buildApp({
   });
 
   app.delete('/api/v1/candidate/me', async (request, reply) => {
-    const candidate = authenticateCandidate(request, reply, candidateStore);
+    if (!hasSafeMutationOrigin(request, config)) {
+      return csrfError(request, reply);
+    }
+    const candidate = authenticateCandidate(
+      request,
+      reply,
+      candidateStore,
+      authService,
+      config,
+    );
     if (!candidate) {
       return;
     }
@@ -162,7 +272,16 @@ export async function buildApp({
   app.patch<{ Params: { memoryId: string } }>(
     '/api/v1/candidate/memory/:memoryId',
     async (request, reply) => {
-      const candidate = authenticateCandidate(request, reply, candidateStore);
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
       if (!candidate) {
         return;
       }
@@ -202,7 +321,16 @@ export async function buildApp({
       },
     },
     async (request, reply) => {
-      const candidate = authenticateCandidate(request, reply, candidateStore);
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
       if (!candidate) {
         return;
       }
@@ -368,6 +496,11 @@ const candidateCreateSchema = z.object({
   locale: z.enum(['ru-RU', 'en-US']).default('ru-RU'),
 });
 
+const loginSchema = z.object({
+  username: z.string().trim().min(3).max(80),
+  password: z.string().min(1).max(256),
+});
+
 const coachTurnRequestSchema = z.object({
   messageId: z.string().uuid(),
   content: z.string().trim().min(1).max(8_000),
@@ -393,12 +526,17 @@ function authenticateCandidate(
   request: FastifyRequest,
   reply: FastifyReply,
   candidateStore: CandidateStore,
+  authService: SessionAuth,
+  config: ServerConfig,
 ): CandidateIdentity | null {
   const authorization = request.headers.authorization;
   const accessToken = authorization?.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
     : '';
-  const candidate = candidateStore.authenticate(accessToken);
+  const bearerCandidate = candidateStore.authenticate(accessToken);
+  const sessionCandidate =
+    authenticateSession(request, authService, config)?.candidate ?? null;
+  const candidate = bearerCandidate ?? sessionCandidate;
   if (!candidate) {
     sendError(
       reply,
@@ -411,6 +549,100 @@ function authenticateCandidate(
     return null;
   }
   return candidate;
+}
+
+function authenticateSession(
+  request: FastifyRequest,
+  authService: SessionAuth,
+  config: ServerConfig,
+): AuthPrincipal | null {
+  const sessionToken =
+    request.cookies[sessionCookieName(config.secureCookies)] ?? '';
+  return authService.authenticate(sessionToken);
+}
+
+function hasPreviewAccess(
+  request: FastifyRequest,
+  expectedToken: string,
+): boolean {
+  const authorization = request.headers.authorization;
+  const suppliedToken = authorization?.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : '';
+  return secureEqual(suppliedToken, expectedToken);
+}
+
+function hasAllowedOrigin(
+  request: FastifyRequest,
+  config: ServerConfig,
+): boolean {
+  return (
+    typeof request.headers.origin === 'string' &&
+    config.allowedOrigins.includes(request.headers.origin)
+  );
+}
+
+function hasSafeMutationOrigin(
+  request: FastifyRequest,
+  config: ServerConfig,
+): boolean {
+  const authorization = request.headers.authorization;
+  if (authorization?.startsWith('Bearer oqc_')) {
+    return true;
+  }
+  return hasAllowedOrigin(request, config);
+}
+
+function csrfError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): FastifyReply {
+  return sendError(
+    reply,
+    request,
+    403,
+    'origin_not_allowed',
+    'Запрос отклонён: источник страницы не подтверждён.',
+    false,
+  );
+}
+
+function setSessionCookie(
+  reply: FastifyReply,
+  sessionToken: string,
+  secure: boolean,
+): void {
+  reply.setCookie(sessionCookieName(secure), sessionToken, {
+    path: '/',
+    httpOnly: true,
+    secure,
+    sameSite: 'strict',
+    maxAge: 12 * 60 * 60,
+  });
+}
+
+function clearSessionCookie(reply: FastifyReply, secure: boolean): void {
+  reply.clearCookie(sessionCookieName(secure), {
+    path: '/',
+    httpOnly: true,
+    secure,
+    sameSite: 'strict',
+  });
+}
+
+function sessionCookieName(secure: boolean): string {
+  return secure
+    ? '__Host-openqareer_session'
+    : 'openqareer_session';
+}
+
+function publicPrincipal(principal: AuthPrincipal) {
+  return {
+    username: principal.username,
+    role: principal.role,
+    isTest: principal.isTest,
+    candidateId: principal.candidate?.id ?? null,
+  };
 }
 
 function providerResponse(
@@ -505,14 +737,14 @@ function sendError(
 function providerMessage(code: CoachProviderError['code']): string {
   switch (code) {
     case 'provider_rate_limited':
-      return 'Модель временно достигла лимита. Ответ кандидата сохраните и повторите позже.';
+      return 'Ответ сохранён. Модель временно достигла лимита — повторите этот ход позже.';
     case 'provider_budget_exhausted':
-      return 'Бюджет приватной модели исчерпан. Ответ кандидата сохранён; администратору нужно пополнить лимит.';
+      return 'Ответ сохранён. Бюджет приватной модели исчерпан; администратору нужно пополнить лимит.';
     case 'provider_timeout':
-      return 'Модель не ответила вовремя. Повторите запрос — ввод кандидата не нужно терять.';
+      return 'Ответ сохранён. Модель не ответила вовремя — повторите этот ход.';
     case 'provider_output_invalid':
-      return 'Модель вернула неполную структуру. Данные кандидата не изменены.';
+      return 'Ответ сохранён. Модель вернула неполную структуру — повторите этот ход.';
     case 'provider_unavailable':
-      return 'Модель временно недоступна. Данные кандидата не изменены.';
+      return 'Ответ сохранён. Модель временно недоступна — повторите этот ход позже.';
   }
 }
