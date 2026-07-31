@@ -11,6 +11,8 @@ import {
 } from './features/evidence/evidenceEngine';
 import { OpportunityWorkbench } from './features/opportunity/OpportunityWorkbench';
 import type { OpportunityRecord } from './features/opportunity/opportunityEngine';
+import { OutcomeWorkbench } from './features/outcome/OutcomeWorkbench';
+import type { OutcomeEvent } from './features/outcome/outcomeEngine';
 import { WorkspaceHome } from './features/workspace/WorkspaceHome';
 import { WorkspaceSetup } from './features/workspace/WorkspaceSetup';
 import {
@@ -28,7 +30,8 @@ type AppMode =
   | 'edit'
   | 'evidence'
   | 'opportunity'
-  | 'action';
+  | 'action'
+  | 'outcome';
 
 function readInitialState(): {
   mode: AppMode;
@@ -138,6 +141,7 @@ export default function App() {
       ...state.workspace,
       opportunity,
       actionPackage: undefined,
+      outcomes: [],
       updatedAt: new Date().toISOString(),
     };
 
@@ -220,6 +224,29 @@ export default function App() {
     setState({ mode: 'action', workspace, invalidStorage: false });
   }
 
+  function handleOutcomeChange(outcomes: OutcomeEvent[]) {
+    if (!state.workspace) {
+      return;
+    }
+
+    const workspace: CandidateWorkspace = {
+      ...state.workspace,
+      outcomes,
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      saveWorkspace(window.localStorage, workspace);
+      setStorageError(undefined);
+    } catch {
+      setStorageError(
+        'Проверьте, разрешено ли локальное хранение данных для этой страницы.',
+      );
+    }
+
+    setState({ mode: 'outcome', workspace, invalidStorage: false });
+  }
+
   return (
     <div className="app-root" data-testid="workspace-root">
       <div className="ambient ambient--one" aria-hidden="true" />
@@ -231,7 +258,18 @@ export default function App() {
           <span>Локальный MVP · без внешних действий</span>
         </div>
 
-        {state.mode === 'action' &&
+        {state.mode === 'outcome' &&
+        state.workspace?.opportunity &&
+        state.workspace.actionPackage ? (
+          <OutcomeWorkbench
+            workspace={state.workspace}
+            storageError={storageError}
+            onBack={() =>
+              setState((current) => ({ ...current, mode: 'action' }))
+            }
+            onChange={handleOutcomeChange}
+          />
+        ) : state.mode === 'action' &&
         state.workspace?.analysis &&
         state.workspace.opportunity &&
         state.workspace.actionPackage ? (
@@ -243,6 +281,9 @@ export default function App() {
               setState((current) => ({ ...current, mode: 'opportunity' }))
             }
             onChange={handleActionPackageChange}
+            onOpenOutcome={() =>
+              setState((current) => ({ ...current, mode: 'outcome' }))
+            }
           />
         ) : state.mode === 'opportunity' && state.workspace?.analysis ? (
           <OpportunityWorkbench
@@ -274,6 +315,9 @@ export default function App() {
               setState((current) => ({ ...current, mode: 'opportunity' }))
             }
             onOpenActionPackage={handleOpenActionPackage}
+            onOpenOutcome={() =>
+              setState((current) => ({ ...current, mode: 'outcome' }))
+            }
             onEdit={() => setState((current) => ({ ...current, mode: 'edit' }))}
             onClear={handleClear}
           />

@@ -431,6 +431,12 @@
   text-decoration: none;
 }
 
+.action-outcome-button {
+  border: 1px solid oklch(75% 0.14 160 / 0.42);
+  color: var(--primary-emerald);
+  background: oklch(24% 0.05 160 / 0.15);
+}
+
 .copy-error {
   grid-column: 1 / -1;
   margin: 0;

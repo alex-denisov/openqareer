@@ -18,9 +18,13 @@ import {
   type ActionPackage,
   type ActionPackageCitation,
 } from '../action/actionPackageEngine';
+import {
+  OUTCOME_METHOD_VERSION,
+  type OutcomeEvent,
+} from '../outcome/outcomeEngine';
 
 export const WORKSPACE_STORAGE_KEY = 'candidate-workspace';
-export const WORKSPACE_VERSION = 4;
+export const WORKSPACE_VERSION = 5;
 
 export type WorkspaceMarket = 'ru' | 'international';
 export type ResumeSource = 'pdf' | 'linkedin-pdf' | 'hh-pdf' | 'text';
@@ -47,6 +51,7 @@ export interface CandidateWorkspace extends WorkspaceInput {
   analysis?: CandidateAnalysis;
   opportunity?: OpportunityRecord;
   actionPackage?: ActionPackage;
+  outcomes: OutcomeEvent[];
 }
 
 export interface StorageLike {
@@ -126,6 +131,7 @@ export function createWorkspace(
     analysis: canKeepAnalysis ? previous.analysis : undefined,
     opportunity: canKeepOpportunity ? previous?.opportunity : undefined,
     actionPackage: canKeepOpportunity ? previous?.actionPackage : undefined,
+    outcomes: canKeepOpportunity ? (previous?.outcomes ?? []) : [],
   };
 }
 
@@ -154,6 +160,7 @@ export function loadWorkspace(storage: StorageLike): WorkspaceLoadResult {
         workspace: {
           ...parsed,
           version: WORKSPACE_VERSION,
+          outcomes: [],
         },
       };
     }
@@ -164,6 +171,7 @@ export function loadWorkspace(storage: StorageLike): WorkspaceLoadResult {
         workspace: {
           ...parsed,
           version: WORKSPACE_VERSION,
+          outcomes: [],
         },
       };
     }
@@ -174,6 +182,18 @@ export function loadWorkspace(storage: StorageLike): WorkspaceLoadResult {
         workspace: {
           ...parsed,
           version: WORKSPACE_VERSION,
+          outcomes: [],
+        },
+      };
+    }
+
+    if (isVersionFourWorkspace(parsed)) {
+      return {
+        status: 'ready',
+        workspace: {
+          ...parsed,
+          version: WORKSPACE_VERSION,
+          outcomes: [],
         },
       };
     }
@@ -196,7 +216,96 @@ function isCandidateWorkspace(value: unknown): value is CandidateWorkspace {
       (value.opportunity === undefined ||
         isOpportunityRecord(value.opportunity)) &&
       (value.actionPackage === undefined ||
-        isActionPackage(value.actionPackage))
+        isActionPackage(value.actionPackage)) &&
+      Array.isArray(value.outcomes) &&
+      value.outcomes.every(isOutcomeEvent)
+    )
+  ) {
+    return false;
+  }
+
+  const actionPackageIsConsistent =
+    value.actionPackage === undefined ||
+    (value.opportunity !== undefined &&
+      value.opportunity.decision !== undefined &&
+      value.actionPackage.opportunityId === value.opportunity.id &&
+      value.actionPackage.decisionChoice === value.opportunity.decision.choice);
+  if (!actionPackageIsConsistent || value.outcomes.length === 0) {
+    return actionPackageIsConsistent;
+  }
+  if (value.opportunity === undefined || value.actionPackage === undefined) {
+    return false;
+  }
+
+  const opportunityId = value.opportunity.id;
+  return value.outcomes.every(
+    (event) => event.opportunityId === opportunityId,
+  );
+}
+
+function isLegacyWorkspace(
+  value: unknown,
+): value is Omit<CandidateWorkspace, 'version' | 'analysis' | 'outcomes'> & {
+  version: 1;
+} {
+  return (
+    isWorkspaceRecord(value, 1) &&
+    value.analysis === undefined &&
+    value.opportunity === undefined &&
+    value.actionPackage === undefined &&
+    value.outcomes === undefined
+  );
+}
+
+function isVersionTwoWorkspace(
+  value: unknown,
+): value is Omit<
+  CandidateWorkspace,
+  'version' | 'opportunity' | 'outcomes'
+> & {
+  version: 2;
+} {
+  return (
+    isWorkspaceRecord(value, 2) &&
+    (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
+    value.opportunity === undefined &&
+    value.actionPackage === undefined &&
+    value.outcomes === undefined
+  );
+}
+
+function isVersionThreeWorkspace(
+  value: unknown,
+): value is Omit<
+  CandidateWorkspace,
+  'version' | 'actionPackage' | 'outcomes'
+> & {
+  version: 3;
+} {
+  return (
+    isWorkspaceRecord(value, 3) &&
+    (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
+    (value.opportunity === undefined ||
+      isOpportunityRecord(value.opportunity)) &&
+    value.actionPackage === undefined &&
+    value.outcomes === undefined
+  );
+}
+
+function isVersionFourWorkspace(
+  value: unknown,
+): value is Omit<CandidateWorkspace, 'version' | 'outcomes'> & {
+  version: 4;
+} {
+  if (
+    !(
+      isWorkspaceRecord(value, 4) &&
+      (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
+      (value.opportunity === undefined ||
+        isOpportunityRecord(value.opportunity)) &&
+      (value.actionPackage === undefined ||
+        isActionPackage(value.actionPackage)) &&
+      value.outcomes === undefined
     )
   ) {
     return false;
@@ -211,58 +320,19 @@ function isCandidateWorkspace(value: unknown): value is CandidateWorkspace {
   );
 }
 
-function isLegacyWorkspace(
-  value: unknown,
-): value is Omit<CandidateWorkspace, 'version' | 'analysis'> & {
-  version: 1;
-} {
-  return (
-    isWorkspaceRecord(value, 1) &&
-    value.analysis === undefined &&
-    value.opportunity === undefined &&
-    value.actionPackage === undefined
-  );
-}
-
-function isVersionTwoWorkspace(
-  value: unknown,
-): value is Omit<CandidateWorkspace, 'version' | 'opportunity'> & {
-  version: 2;
-} {
-  return (
-    isWorkspaceRecord(value, 2) &&
-    (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
-    value.opportunity === undefined &&
-    value.actionPackage === undefined
-  );
-}
-
-function isVersionThreeWorkspace(
-  value: unknown,
-): value is Omit<CandidateWorkspace, 'version' | 'actionPackage'> & {
-  version: 3;
-} {
-  return (
-    isWorkspaceRecord(value, 3) &&
-    (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
-    (value.opportunity === undefined ||
-      isOpportunityRecord(value.opportunity)) &&
-    value.actionPackage === undefined
-  );
-}
-
 function isWorkspaceRecord(
   value: unknown,
   version: number,
 ): value is Record<string, unknown> &
   Omit<
     CandidateWorkspace,
-    'version' | 'analysis' | 'opportunity' | 'actionPackage'
+    'version' | 'analysis' | 'opportunity' | 'actionPackage' | 'outcomes'
   > & {
     version: number;
     analysis?: unknown;
     opportunity?: unknown;
     actionPackage?: unknown;
+    outcomes?: unknown;
   } {
   if (!isRecord(value)) {
     return false;
@@ -490,6 +560,36 @@ function isActionPackageCitation(
   );
 }
 
+function isOutcomeEvent(value: unknown): value is OutcomeEvent {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    value.id.length > 0 &&
+    value.methodVersion === OUTCOME_METHOD_VERSION &&
+    typeof value.opportunityId === 'string' &&
+    value.opportunityId.length > 0 &&
+    isOutcomeType(value.type) &&
+    isValidDateString(value.occurredAt) &&
+    isValidDateString(value.recordedAt) &&
+    typeof value.note === 'string' &&
+    value.note.length <= 500 &&
+    isOptionalDateString(value.followUpAt) &&
+    isOptionalDateString(value.undoneAt)
+  );
+}
+
+function isOutcomeType(value: unknown): value is OutcomeEvent['type'] {
+  return (
+    value === 'applied' ||
+    value === 'contacted' ||
+    value === 'positive-reply' ||
+    value === 'negative-reply' ||
+    value === 'interview' ||
+    value === 'offer' ||
+    value === 'withdrawn'
+  );
+}
+
 function isStringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
@@ -523,6 +623,18 @@ function isSearchUrgency(value: unknown): value is SearchUrgency {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
+}
+
+function isOptionalDateString(value: unknown): value is string | undefined {
+  return value === undefined || isValidDateString(value);
+}
+
+function isValidDateString(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    !Number.isNaN(new Date(value).getTime())
+  );
 }
 
 function isOptionalNumber(value: unknown): value is number | undefined {

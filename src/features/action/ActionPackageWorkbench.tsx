@@ -16,6 +16,7 @@ interface ActionPackageWorkbenchProps {
   storageError?: string;
   onBack: () => void;
   onChange: (actionPackage: ActionPackage) => void;
+  onOpenOutcome: () => void;
 }
 
 type CopyState = 'idle' | 'copied' | 'error';
@@ -26,6 +27,7 @@ export function ActionPackageWorkbench({
   storageError,
   onBack,
   onChange,
+  onOpenOutcome,
 }: ActionPackageWorkbenchProps) {
   const [copyState, setCopyState] = useState<CopyState>('idle');
   const resumePreview = useMemo(
@@ -363,6 +365,12 @@ export function ActionPackageWorkbench({
                   ? 'Не удалось скопировать'
                   : 'Скопировать пакет'}
             </span>
+          </button>
+          <button
+            className="button action-outcome-button"
+            onClick={onOpenOutcome}
+          >
+            Записать результат →
           </button>
           {actionPackage.sourceUrl ? (
             <a

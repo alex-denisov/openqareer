@@ -7,6 +7,7 @@ import './features/workspace/workspace.css';
 import './features/evidence/evidence.css';
 import './features/opportunity/opportunity.css';
 import './features/action/action.css';
+import './features/outcome/outcome.css';
 
 document.documentElement.dataset.release =
   import.meta.env.VITE_OPENQAREER_RELEASE || 'local';

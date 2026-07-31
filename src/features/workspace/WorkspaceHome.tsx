@@ -6,6 +6,7 @@ interface WorkspaceHomeProps {
   onOpenEvidence: () => void;
   onOpenOpportunity: () => void;
   onOpenActionPackage: () => void;
+  onOpenOutcome: () => void;
   onEdit: () => void;
   onClear: () => void;
 }
@@ -26,6 +27,7 @@ export function WorkspaceHome({
   onOpenEvidence,
   onOpenOpportunity,
   onOpenActionPackage,
+  onOpenOutcome,
   onEdit,
   onClear,
 }: WorkspaceHomeProps) {
@@ -38,7 +40,10 @@ export function WorkspaceHome({
   const reviewStarted = Boolean(workspace.analysis);
   const opportunityStarted = Boolean(workspace.opportunity);
   const actionPackageReady = Boolean(workspace.actionPackage);
-  const nextTitle = actionPackageReady
+  const outcomeStarted = workspace.outcomes.length > 0;
+  const nextTitle = outcomeStarted
+    ? 'Продолжить по результату'
+    : actionPackageReady
     ? 'Продолжить пакет действия'
     : roleMapReady
       ? opportunityStarted
@@ -55,7 +60,9 @@ export function WorkspaceHome({
           <p className="eyebrow">Рабочий маршрут</p>
           <h1>{workspace.targetDirection}</h1>
           <p className="workspace-subtitle">
-            {actionPackageReady
+            {outcomeStarted
+              ? 'История результата сохранена. Следующее действие пересчитано по последнему активному событию.'
+              : actionPackageReady
               ? 'Пакет для выбранной вакансии сохранён локально и готов к продолжению.'
               : 'Контекст сохранён локально. Следующий этап строится только на подтверждённых данных.'}
           </p>
@@ -74,17 +81,21 @@ export function WorkspaceHome({
               <h2>{nextTitle}</h2>
             </div>
             <span className="step-index">
-              {actionPackageReady
-                ? '04 / 04'
+              {outcomeStarted
+                ? '05 / 05'
+                : actionPackageReady
+                ? '04 / 05'
                 : opportunityStarted
-                  ? '03 / 04'
+                  ? '03 / 05'
                   : roleMapReady
-                    ? '02 / 04'
-                    : '01 / 04'}
+                    ? '02 / 05'
+                    : '01 / 05'}
             </span>
           </div>
           <p className="route-description">
-            {actionPackageReady
+            {outcomeStarted
+              ? 'Откройте историю, проверьте основание рекомендации и запишите следующий наблюдаемый факт.'
+              : actionPackageReady
               ? 'Акценты резюме, сообщение, источники фактов и чек-лист сохранены. Продолжите с того же места.'
               : roleMapReady
               ? opportunityStarted
@@ -96,7 +107,9 @@ export function WorkspaceHome({
             <div>
               <span>Вход</span>
               <strong>
-                {actionPackageReady
+                {outcomeStarted
+                  ? 'Последнее активное событие'
+                  : actionPackageReady
                   ? 'Ваше решение и подтверждённые факты'
                   : roleMapReady
                   ? 'Полный текст одной вакансии'
@@ -106,7 +119,9 @@ export function WorkspaceHome({
             <div>
               <span>Результат</span>
               <strong>
-                {actionPackageReady
+                {outcomeStarted
+                  ? 'Обновлённое следующее действие'
+                  : actionPackageReady
                   ? 'Резюме, сообщение и чек-лист'
                   : roleMapReady
                   ? 'Совпадения, gaps и неизвестное'
@@ -116,7 +131,9 @@ export function WorkspaceHome({
             <div>
               <span>Контроль</span>
               <strong>
-                {actionPackageReady
+                {outcomeStarted
+                  ? 'Событие, дата и ваша заметка'
+                  : actionPackageReady
                   ? 'Каждый факт связан с источником'
                   : roleMapReady
                   ? 'Итоговое действие выбираете вы'
@@ -127,14 +144,18 @@ export function WorkspaceHome({
           <button
             className="button button--primary route-action"
             onClick={
-              actionPackageReady
+              outcomeStarted
+                ? onOpenOutcome
+                : actionPackageReady
                 ? onOpenActionPackage
                 : roleMapReady
                   ? onOpenOpportunity
                   : onOpenEvidence
             }
           >
-            {actionPackageReady
+            {outcomeStarted
+              ? 'Открыть следующий шаг'
+              : actionPackageReady
               ? 'Открыть пакет'
               : roleMapReady
               ? opportunityStarted

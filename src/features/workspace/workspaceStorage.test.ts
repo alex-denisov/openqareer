@@ -9,6 +9,7 @@ import {
   recordOpportunityDecision,
 } from '../opportunity/opportunityEngine';
 import { createActionPackage } from '../action/actionPackageEngine';
+import { recordOutcome } from '../outcome/outcomeEngine';
 import {
   clearWorkspace,
   createWorkspace,
@@ -101,6 +102,7 @@ describe('workspace persistence', () => {
     const legacyWorkspace = {
       ...createWorkspace(validInput, '2026-07-30T16:00:00.000Z'),
       version: 1,
+      outcomes: undefined,
     };
     const storage = createMemoryStorage({
       'candidate-workspace': JSON.stringify(legacyWorkspace),
@@ -109,7 +111,7 @@ describe('workspace persistence', () => {
 
     expect(result.status).toBe('ready');
     if (result.status === 'ready') {
-      expect(result.workspace.version).toBe(4);
+      expect(result.workspace.version).toBe(5);
       expect(result.workspace.resumeText).toBe(validInput.resumeText);
       expect(result.workspace.analysis).toBeUndefined();
     }
@@ -260,10 +262,48 @@ describe('workspace persistence', () => {
       status: 'invalid',
     });
 
+    const outcome = recordOutcome(
+      decided.id,
+      {
+        type: 'applied',
+        occurredAt: '2026-07-30T16:09:00.000Z',
+        note: 'Отклик отправлен вручную.',
+        followUpAt: '2026-08-04T16:09:00.000Z',
+      },
+      '2026-07-30T16:10:00.000Z',
+    );
+    const withOutcome = { ...complete, outcomes: [outcome] };
+    const outcomeStorage = createMemoryStorage();
+    saveWorkspace(outcomeStorage, withOutcome);
+
+    expect(loadWorkspace(outcomeStorage)).toEqual({
+      status: 'ready',
+      workspace: withOutcome,
+    });
+    const foreignOutcomeStorage = createMemoryStorage({
+      'candidate-workspace': JSON.stringify({
+        ...complete,
+        outcomes: [{ ...outcome, opportunityId: 'another-opportunity' }],
+      }),
+    });
+    expect(loadWorkspace(foreignOutcomeStorage)).toEqual({
+      status: 'invalid',
+    });
+    const malformedOutcomeStorage = createMemoryStorage({
+      'candidate-workspace': JSON.stringify({
+        ...complete,
+        outcomes: [{ ...outcome, recordedAt: 'not-a-date' }],
+      }),
+    });
+    expect(loadWorkspace(malformedOutcomeStorage)).toEqual({
+      status: 'invalid',
+    });
+
     const versionThree = {
       ...complete,
       version: 3,
       actionPackage: undefined,
+      outcomes: undefined,
     };
     const legacyStorage = createMemoryStorage({
       'candidate-workspace': JSON.stringify(versionThree),
@@ -272,9 +312,28 @@ describe('workspace persistence', () => {
 
     expect(migrated.status).toBe('ready');
     if (migrated.status === 'ready') {
-      expect(migrated.workspace.version).toBe(4);
+      expect(migrated.workspace.version).toBe(5);
       expect(migrated.workspace.opportunity).toEqual(decided);
       expect(migrated.workspace.actionPackage).toBeUndefined();
+      expect(migrated.workspace.outcomes).toEqual([]);
+    }
+
+    const versionFourStorage = createMemoryStorage({
+      'candidate-workspace': JSON.stringify({
+        ...complete,
+        version: 4,
+        outcomes: undefined,
+      }),
+    });
+    const migratedVersionFour = loadWorkspace(versionFourStorage);
+
+    expect(migratedVersionFour.status).toBe('ready');
+    if (migratedVersionFour.status === 'ready') {
+      expect(migratedVersionFour.workspace.version).toBe(5);
+      expect(migratedVersionFour.workspace.actionPackage).toEqual(
+        actionPackage,
+      );
+      expect(migratedVersionFour.workspace.outcomes).toEqual([]);
     }
   });
 
