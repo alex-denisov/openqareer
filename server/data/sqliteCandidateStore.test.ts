@@ -1,12 +1,14 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import {
   CandidateStoreConflictError,
   SqliteCandidateStore,
 } from './sqliteCandidateStore';
+import { MIGRATION_1, MIGRATION_2 } from './sqliteSchema';
 
 const stores: SqliteCandidateStore[] = [];
 const directories: string[] = [];
@@ -45,6 +47,7 @@ const output: CoachProviderResult = {
     memoryCandidates: [
       {
         kind: 'fact',
+        domain: 'responsibility',
         statement: 'Кандидат сообщил об опыте запуска продукта.',
         confidence: 'candidate-reported',
         sourceMessageIds: ['85512ddf-962c-4a7c-a4cc-30a35d1e5847'],
@@ -90,6 +93,9 @@ describe('SQLite candidate memory', () => {
 
     expect(store.getSnapshot(candidateA.id).messages).toHaveLength(2);
     expect(store.getSnapshot(candidateA.id).memory).toHaveLength(1);
+    expect(store.getSnapshot(candidateA.id).dossier.sections[0]).toMatchObject({
+      domain: 'responsibility',
+    });
     expect(store.getSnapshot(candidateB.id).messages).toEqual([]);
     expect(store.getSnapshot(candidateB.id).memory).toEqual([]);
     const memoryId = store.getSnapshot(candidateA.id).memory[0].id;
@@ -184,5 +190,37 @@ describe('SQLite candidate memory', () => {
     expect(readFileSync(databasePath).toString('utf8')).not.toContain(
       'Уникальный секретный карьерный факт 731.',
     );
+  });
+
+  it('migrates an existing v2 database without losing candidate tables', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'openqareer-migration-'));
+    directories.push(directory);
+    const databasePath = join(directory, 'candidate.db');
+    const legacy = new DatabaseSync(databasePath);
+    legacy.exec(MIGRATION_1);
+    legacy.exec(MIGRATION_2);
+    legacy
+      .prepare(
+        'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?), (?, ?)',
+      )
+      .run(
+        1,
+        '2026-07-30T00:00:00.000Z',
+        2,
+        '2026-07-31T00:00:00.000Z',
+      );
+    legacy.close();
+
+    const store = createStore(databasePath);
+    const candidate = createCandidate(store);
+
+    expect(store.getSnapshot(candidate.id)).toMatchObject({
+      memory: [],
+      dossier: {
+        confirmedCount: 0,
+        proposedCount: 0,
+        readiness: { complete: false },
+      },
+    });
   });
 });

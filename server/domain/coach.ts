@@ -22,6 +22,17 @@ export const MEMORY_CONFIDENCE = [
   'coach-hypothesis',
 ] as const;
 
+export const DOSSIER_DOMAINS = [
+  'responsibility',
+  'outcome',
+  'skill',
+  'preference',
+  'constraint',
+  'gap',
+  'role-evidence',
+  'other',
+] as const;
+
 export const coachMessageSchema = z.object({
   id: z.string().min(1).max(80),
   role: z.enum(['user', 'assistant']),
@@ -38,6 +49,7 @@ export const coachTurnInputSchema = z.object({
 
 export const memoryCandidateSchema = z.object({
   kind: z.enum(MEMORY_KINDS),
+  domain: z.enum(DOSSIER_DOMAINS).default('other'),
   statement: z.string().trim().min(1).max(1_000),
   confidence: z.enum(MEMORY_CONFIDENCE),
   sourceMessageIds: z.array(z.string().min(1).max(80)).max(20),
@@ -77,6 +89,7 @@ export const COACH_TURN_JSON_SCHEMA = {
         type: 'object',
         properties: {
           kind: { type: 'string', enum: MEMORY_KINDS },
+          domain: { type: 'string', enum: DOSSIER_DOMAINS },
           statement: { type: 'string', minLength: 1, maxLength: 1_000 },
           confidence: { type: 'string', enum: MEMORY_CONFIDENCE },
           sourceMessageIds: {
@@ -88,6 +101,7 @@ export const COACH_TURN_JSON_SCHEMA = {
         },
         required: [
           'kind',
+          'domain',
           'statement',
           'confidence',
           'sourceMessageIds',
@@ -168,6 +182,14 @@ export const CAREER_COACH_INSTRUCTIONS = `
    здоровья, семейного положения, гражданства, документов, зарплаты и другой
    информации повышенной чувствительности.
 10. Не проси паспортные номера, реквизиты документов, пароли или токены.
+11. Для каждого memoryCandidate обязательно выбери domain:
+    responsibility — зона ответственности или задача; outcome — наблюдаемый
+    результат и масштаб; skill — применённый навык; preference — что человеку
+    действительно подходит; constraint — ограничение поиска/занятости/переезда;
+    gap — честный пробел или неясность в опыте; role-evidence — свидетельство в
+    пользу конкретной роли; other — только если ни одна категория не подходит.
+12. Не считай discovery завершённым, пока не понятны хотя бы одна реальная
+    ответственность, результат, применённая способность и предпочтение.
 
 Верни только структуру, соответствующую заданной JSON-схеме.
 `.trim();

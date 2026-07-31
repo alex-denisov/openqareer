@@ -11,6 +11,7 @@ import {
   type CoachMessage,
   type CoachTurnResult,
 } from '../domain/coach';
+import { buildExperienceDossier } from '../domain/dossier';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type {
   CandidateCredentials,
@@ -24,7 +25,7 @@ import type {
   TurnRequest,
 } from './candidateStore';
 import { SealedText } from './sealedText';
-import { MIGRATION_1 } from './sqliteSchema';
+import { MIGRATION_1, MIGRATION_2, MIGRATION_3 } from './sqliteSchema';
 
 interface SqliteCandidateStoreOptions {
   databasePath: string;
@@ -48,6 +49,7 @@ interface MessageRow {
 interface MemoryRow {
   id: string;
   kind: StoredMemory['kind'];
+  domain: StoredMemory['domain'];
   statement_cipher: string;
   confidence: StoredMemory['confidence'];
   source_message_ids: string;
@@ -220,16 +222,17 @@ export class SqliteCandidateStore implements CandidateStore {
         this.database
           .prepare(
             `INSERT INTO memory
-              (id, candidate_id, conversation_id, kind, statement_cipher,
+              (id, candidate_id, conversation_id, kind, domain, statement_cipher,
                confidence, source_message_ids, sensitive, status,
                created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?)`,
           )
           .run(
             memoryId,
             candidateId,
             conversationId,
             memory.kind,
+            memory.domain,
             this.sealedText.seal(
               memory.statement,
               memoryAssociatedData(candidateId, memoryId),
@@ -285,11 +288,13 @@ export class SqliteCandidateStore implements CandidateStore {
 
   getSnapshot(candidateId: string): CandidateSnapshot {
     const candidate = this.requireCandidate(candidateId);
+    const memory = this.memory(candidateId);
     return {
       candidate,
       messages: this.messages(candidateId),
-      memory: this.memory(candidateId),
+      memory,
       turns: this.turns(candidateId),
+      dossier: buildExperienceDossier(memory),
     };
   }
 
@@ -300,7 +305,7 @@ export class SqliteCandidateStore implements CandidateStore {
   ): StoredMemory | null {
     const row = this.database
       .prepare(
-        `SELECT id, kind, statement_cipher, confidence, source_message_ids,
+        `SELECT id, kind, domain, statement_cipher, confidence, source_message_ids,
                 sensitive, status, created_at, updated_at
          FROM memory
          WHERE id = ? AND candidate_id = ? AND status != 'deleted'`,
@@ -366,6 +371,7 @@ export class SqliteCandidateStore implements CandidateStore {
     return {
       id: row.id,
       kind: row.kind,
+      domain: row.domain,
       statement: nextStatement,
       confidence: row.confidence,
       sourceMessageIds: JSON.parse(row.source_message_ids) as string[],
@@ -410,6 +416,26 @@ export class SqliteCandidateStore implements CandidateStore {
         this.database
           .prepare(
             'INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?)',
+          )
+          .run(new Date().toISOString());
+      });
+    }
+    if ((row.version ?? 0) < 2) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_2);
+        this.database
+          .prepare(
+            'INSERT INTO schema_migrations (version, applied_at) VALUES (2, ?)',
+          )
+          .run(new Date().toISOString());
+      });
+    }
+    if ((row.version ?? 0) < 3) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_3);
+        this.database
+          .prepare(
+            'INSERT INTO schema_migrations (version, applied_at) VALUES (3, ?)',
           )
           .run(new Date().toISOString());
       });
@@ -523,7 +549,7 @@ export class SqliteCandidateStore implements CandidateStore {
   private memory(candidateId: string): StoredMemory[] {
     const rows = this.database
       .prepare(
-        `SELECT id, kind, statement_cipher, confidence, source_message_ids,
+        `SELECT id, kind, domain, statement_cipher, confidence, source_message_ids,
                 sensitive, status, created_at, updated_at
          FROM memory
          WHERE candidate_id = ? AND status != 'deleted'
@@ -582,6 +608,7 @@ export class SqliteCandidateStore implements CandidateStore {
     return {
       id: row.id,
       kind: row.kind,
+      domain: row.domain,
       statement: this.openMemoryStatement(candidateId, row),
       confidence: row.confidence,
       sourceMessageIds: JSON.parse(row.source_message_ids) as string[],

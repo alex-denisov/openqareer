@@ -110,3 +110,14 @@ CREATE TABLE sessions (
 CREATE INDEX sessions_user ON sessions(user_id);
 CREATE INDEX sessions_expiry ON sessions(expires_at);
 `;
+
+export const MIGRATION_3 = `
+ALTER TABLE memory
+  ADD COLUMN domain TEXT NOT NULL DEFAULT 'other'
+  CHECK (
+    domain IN (
+      'responsibility', 'outcome', 'skill', 'preference', 'constraint',
+      'gap', 'role-evidence', 'other'
+    )
+  );
+`;

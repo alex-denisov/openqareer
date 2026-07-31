@@ -39,6 +39,7 @@ describe('career coach domain contract', () => {
         memoryCandidates: [
           {
             kind: 'fact',
+            domain: 'outcome',
             statement: 'Кандидат сообщил о запуске продукта.',
             confidence: 'candidate-reported',
             sourceMessageIds: ['message-1'],
@@ -46,6 +47,7 @@ describe('career coach domain contract', () => {
           },
           {
             kind: 'hypothesis',
+            domain: 'role-evidence',
             statement: 'Может подойти продуктовая роль.',
             confidence: 'coach-hypothesis',
             sourceMessageIds: ['message-1'],

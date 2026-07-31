@@ -452,6 +452,7 @@ function CandidateCoach({ user }: { user: AuthUser }) {
             snapshot.messages.map((message) => (
               <article
                 key={message.id}
+                id={`message-${message.id}`}
                 className={`coach-message coach-message--${message.role}`}
               >
                 <div className="message-author">
@@ -557,16 +558,64 @@ function MemoryPanel({
     .slice()
     .reverse()
     .find((turn) => turn.result)?.result;
+  const memoryById = new Map(
+    snapshot.memory.map((memory) => [memory.id, memory]),
+  );
+  const userMessages = snapshot.messages.filter(
+    (message) => message.role === 'user',
+  );
 
   return (
     <aside className="coach-memory" aria-label="Память и полнота профиля">
       <div className="memory-heading">
         <div>
-          <p className="eyebrow">Память</p>
-          <h2>Что уже известно</h2>
+          <p className="eyebrow">Досье опыта</p>
+          <h2>Подтверждённая база</h2>
         </div>
-        <span>{snapshot.memory.length}</span>
+        <span>
+          {snapshot.dossier.confirmedCount}/{snapshot.memory.length}
+        </span>
       </div>
+
+      <section
+        className={`dossier-readiness ${
+          snapshot.dossier.readiness.complete ? 'is-complete' : ''
+        }`}
+        aria-label="Готовность досье"
+      >
+        <div className="dossier-readiness__heading">
+          <span aria-hidden="true">
+            {snapshot.dossier.readiness.complete ? '✓' : '◌'}
+          </span>
+          <div>
+            <strong>
+              {snapshot.dossier.readiness.complete
+                ? 'Факт-база собрана'
+                : 'Собираем факт-базу'}
+            </strong>
+            <small>
+              {snapshot.dossier.readiness.complete
+                ? 'Можно переходить к проверке ролей'
+                : 'Не оценка, а прозрачный минимум доказательств'}
+            </small>
+          </div>
+        </div>
+        <ul>
+          {snapshot.dossier.readiness.checks.map((check) => (
+            <li key={check.id} className={check.complete ? 'is-ready' : ''}>
+              <span aria-hidden="true">{check.complete ? '✓' : '·'}</span>
+              <span>{readinessLabel(check.id)}</span>
+              <strong>
+                {check.id === 'unknowns'
+                  ? check.complete
+                    ? 'нет'
+                    : check.evidenceCount
+                  : check.evidenceCount}
+              </strong>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <div className="memory-list">
         {snapshot.memory.length === 0 ? (
@@ -577,63 +626,106 @@ function MemoryPanel({
             </p>
           </div>
         ) : (
-          snapshot.memory.map((memory) => (
-            <article className="memory-card" key={memory.id}>
-              <div className="memory-card__meta">
-                <span>{memoryKind(memory.kind)}</span>
-                {memory.sensitive ? <i>чувствительное</i> : null}
+          snapshot.dossier.sections.map((section) => (
+            <section className="dossier-section" key={section.domain}>
+              <div className="dossier-section__heading">
+                <h3>{dossierDomain(section.domain)}</h3>
+                <span>{section.items.length}</span>
               </div>
-              {editingId === memory.id ? (
-                <textarea
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  rows={4}
-                  maxLength={1_000}
-                  aria-label="Исправленная формулировка"
-                />
-              ) : (
-                <p>{memory.statement}</p>
-              )}
-              <div className="memory-card__actions">
-                {editingId === memory.id ? (
-                  <>
-                    <button
-                      onClick={() => {
-                        void onChange(memory, 'correct', draft);
-                        setEditingId(undefined);
-                      }}
-                      disabled={!draft.trim()}
-                    >
-                      Сохранить
-                    </button>
-                    <button onClick={() => setEditingId(undefined)}>
-                      Отмена
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {memory.status === 'proposed' ? (
-                      <button onClick={() => void onChange(memory, 'confirm')}>
-                        Подтвердить
-                      </button>
+              {section.items.map((item) => {
+                const memory = memoryById.get(item.memoryId);
+                if (!memory) return null;
+                return (
+                  <article className="memory-card" key={memory.id}>
+                    <div className="memory-card__meta">
+                      <span>{memoryKind(memory.kind)}</span>
+                      {memory.sensitive ? <i>чувствительное</i> : null}
+                    </div>
+                    {editingId === memory.id ? (
+                      <textarea
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        rows={4}
+                        maxLength={1_000}
+                        aria-label="Исправленная формулировка"
+                      />
                     ) : (
-                      <span>✓ {memoryStatus(memory.status)}</span>
+                      <p>{memory.statement}</p>
                     )}
-                    <button
-                      onClick={() => {
-                        setDraft(memory.statement);
-                        setEditingId(memory.id);
-                      }}
-                    >
-                      Исправить
-                    </button>
-                    <button onClick={() => void onChange(memory, 'delete')}>
-                      Удалить
-                    </button>
-                  </>
-                )}
-              </div>
-            </article>
+                    {memory.sourceMessageIds.length > 0 ? (
+                      <div
+                        className="memory-sources"
+                        aria-label="Источники факта"
+                      >
+                        {memory.sourceMessageIds.map((sourceId) => {
+                          const answerIndex = userMessages.findIndex(
+                            (message) => message.id === sourceId,
+                          );
+                          return answerIndex >= 0 ? (
+                            <a
+                              key={sourceId}
+                              href={`#message-${sourceId}`}
+                            >
+                              Ответ {answerIndex + 1}
+                            </a>
+                          ) : null;
+                        })}
+                      </div>
+                    ) : null}
+                    <div className="memory-card__actions">
+                      {editingId === memory.id ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              void onChange(memory, 'correct', draft);
+                              setEditingId(undefined);
+                            }}
+                            disabled={!draft.trim()}
+                          >
+                            Сохранить
+                          </button>
+                          <button onClick={() => setEditingId(undefined)}>
+                            Отмена
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {memory.status === 'proposed' ? (
+                            <button
+                              onClick={() => void onChange(memory, 'confirm')}
+                            >
+                              {memory.kind === 'open-question'
+                                ? 'Закрыть вопрос'
+                                : 'Подтвердить'}
+                            </button>
+                          ) : (
+                            <span>
+                              ✓{' '}
+                              {memory.kind === 'open-question'
+                                ? 'вопрос закрыт'
+                                : memoryStatus(memory.status)}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => {
+                              setDraft(memory.statement);
+                              setEditingId(memory.id);
+                            }}
+                          >
+                            Исправить
+                          </button>
+                          <button
+                            onClick={() => void onChange(memory, 'delete')}
+                          >
+                            Удалить
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </section>
           ))
         )}
       </div>
@@ -713,6 +805,33 @@ function memoryKind(kind: CandidateMemory['kind']): string {
     'open-question': 'Открытый вопрос',
   };
   return labels[kind];
+}
+
+function dossierDomain(domain: CandidateMemory['domain']): string {
+  const labels: Record<CandidateMemory['domain'], string> = {
+    responsibility: 'Ответственность',
+    outcome: 'Результаты',
+    skill: 'Навыки в действии',
+    preference: 'Что подходит',
+    constraint: 'Ограничения',
+    gap: 'Пробелы и объяснения',
+    'role-evidence': 'Сигналы роли',
+    other: 'Другие факты',
+  };
+  return labels[domain];
+}
+
+function readinessLabel(
+  id: CandidateSnapshot['dossier']['readiness']['checks'][number]['id'],
+): string {
+  const labels = {
+    experience: 'Ответственность',
+    impact: 'Наблюдаемый результат',
+    capability: 'Навык или сигнал роли',
+    direction: 'Предпочтения',
+    unknowns: 'Открытые вопросы',
+  };
+  return labels[id];
 }
 
 function memoryStatus(status: CandidateMemory['status']): string {

@@ -23,6 +23,15 @@ export interface CoachMessage {
 export interface CandidateMemory {
   id: string;
   kind: 'fact' | 'preference' | 'hypothesis' | 'open-question';
+  domain:
+    | 'responsibility'
+    | 'outcome'
+    | 'skill'
+    | 'preference'
+    | 'constraint'
+    | 'gap'
+    | 'role-evidence'
+    | 'other';
   statement: string;
   confidence:
     | 'candidate-confirmed'
@@ -72,6 +81,29 @@ export interface CandidateSnapshot {
       };
     } | null;
   }>;
+  dossier: {
+    sections: Array<{
+      domain: CandidateMemory['domain'];
+      items: Array<{
+        memoryId: string;
+        statement: string;
+        status: CandidateMemory['status'];
+        sourceMessageIds: string[];
+        sensitive: boolean;
+      }>;
+    }>;
+    confirmedCount: number;
+    proposedCount: number;
+    readiness: {
+      complete: boolean;
+      unresolvedQuestions: number;
+      checks: Array<{
+        id: 'experience' | 'impact' | 'capability' | 'direction' | 'unknowns';
+        complete: boolean;
+        evidenceCount: number;
+      }>;
+    };
+  };
 }
 
 interface ApiEnvelope<T> {

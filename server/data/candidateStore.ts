@@ -4,6 +4,7 @@ import type {
   CoachTurnResult,
   MemoryCandidate,
 } from '../domain/coach';
+import type { ExperienceDossier } from '../domain/dossier';
 import type { CoachProviderResult } from '../providers/coachProvider';
 
 export interface CandidateIdentity {
@@ -22,6 +23,7 @@ export interface CandidateSnapshot {
   messages: CoachMessage[];
   memory: StoredMemory[];
   turns: StoredTurn[];
+  dossier: ExperienceDossier;
 }
 
 export interface StoredMemory extends MemoryCandidate {

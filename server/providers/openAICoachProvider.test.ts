@@ -25,6 +25,7 @@ const validOutput = {
   memoryCandidates: [
     {
       kind: 'fact',
+      domain: 'responsibility',
       statement: 'Кандидат сообщил об опыте запуска продукта.',
       confidence: 'candidate-reported',
       sourceMessageIds: ['message-1'],
