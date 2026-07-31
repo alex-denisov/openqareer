@@ -143,6 +143,24 @@ jobs:
           curl --compressed -fsS --max-time 60 \
             "https://openqareer.com$entry_asset" > "$release_asset"
           grep -Fq "$GITHUB_SHA" "$release_asset"
+          part_prefix="$(sed -nE 's#^const PREFIX="([^"]+)";#\1#p' \
+            "$release_asset" | head -n 1)"
+          case "$part_prefix" in
+            /assets/*.split.js.oqpart-) ;;
+            *)
+              printf 'production bootstrap has no safe part prefix\n' >&2
+              exit 1
+              ;;
+          esac
+          first_part="$(mktemp)"
+          curl -fsS --max-time 20 \
+            "https://openqareer.com${part_prefix}000" > "$first_part"
+          first_part_bytes="$(wc -c < "$first_part")"
+          if [ "$first_part_bytes" -gt 12288 ]; then
+            printf 'production delivery part exceeds 12 KiB: %s\n' \
+              "$first_part_bytes" >&2
+            exit 1
+          fi
           curl -fsSI --max-time 10 https://openqareer.com/ |
             grep -Eiq '^content-security-policy:'
           curl -fsSI --max-time 10 https://openqareer.com/ |
