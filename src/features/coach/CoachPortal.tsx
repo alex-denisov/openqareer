@@ -14,6 +14,7 @@ import {
   type CoachPhase,
 } from './coachApi';
 import { AssessmentStudio } from './AssessmentStudio';
+import { MarketStudio } from './MarketStudio';
 
 interface CoachPortalProps {
   onBack: () => void;
@@ -226,7 +227,7 @@ function LoginPanel({
 }
 
 function CandidateCoach({ user }: { user: AuthUser }) {
-  const [surface, setSurface] = useState<'coach' | 'assessment'>('coach');
+  const [surface, setSurface] = useState<'coach' | 'assessment' | 'market'>('coach');
   const [snapshot, setSnapshot] = useState<CandidateSnapshot>();
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -250,7 +251,7 @@ function CandidateCoach({ user }: { user: AuthUser }) {
   );
   const phase = latestTurn?.result?.phase ?? 'discovery';
   const phaseIndex = PHASES.findIndex(
-    (item) => item.id === (surface === 'assessment' ? 'role' : phase),
+    (item) => item.id === (surface === 'assessment' ? 'role' : surface === 'market' ? 'market' : phase),
   );
 
   async function refresh() {
@@ -381,17 +382,19 @@ function CandidateCoach({ user }: { user: AuthUser }) {
                     : ''
               }
             >
-              {item.id === 'role' || item.id === 'discovery' ? (
+              {item.id === 'role' || item.id === 'market' || item.id === 'discovery' ? (
                 <button
                   className="journey-hit-area"
                   aria-label={
                     item.id === 'role'
                       ? 'Открыть проверку роли'
+                      : item.id === 'market'
+                        ? 'Открыть выбор международного рынка'
                       : 'Вернуться к разговору с коучем'
                   }
                   aria-current={index === phaseIndex ? 'step' : undefined}
                   onClick={() =>
-                    setSurface(item.id === 'role' ? 'assessment' : 'coach')
+                    setSurface(item.id === 'role' ? 'assessment' : item.id === 'market' ? 'market' : 'coach')
                   }
                 />
               ) : null}
@@ -423,6 +426,12 @@ function CandidateCoach({ user }: { user: AuthUser }) {
           assessments={snapshot.assessments}
           onSaved={refresh}
           onBackToCoach={() => setSurface('coach')}
+        />
+      ) : surface === 'market' ? (
+        <MarketStudio
+          profile={snapshot.germanyMarket}
+          onSaved={refresh}
+          onBack={() => setSurface('coach')}
         />
       ) : (
       <section className="coach-dialogue" aria-label="Диалог с карьерным коучем">

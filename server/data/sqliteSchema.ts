@@ -135,3 +135,15 @@ CREATE TABLE assessments (
   PRIMARY KEY (candidate_id, assessment_id)
 ) STRICT;
 `;
+
+export const MIGRATION_5 = `
+CREATE TABLE market_profiles (
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  country TEXT NOT NULL CHECK (country = 'DE'),
+  submission_cipher TEXT NOT NULL,
+  result_cipher TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (candidate_id, country)
+) STRICT;
+`;

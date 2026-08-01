@@ -11,6 +11,7 @@ import './features/outcome/outcome.css';
 import './features/coach/coach-workspace.css';
 import './features/coach/coach.css';
 import './features/coach/assessment.css';
+import './features/coach/market.css';
 
 document.documentElement.dataset.release =
   import.meta.env.VITE_OPENQAREER_RELEASE || 'local';

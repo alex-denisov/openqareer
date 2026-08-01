@@ -16,6 +16,10 @@ import {
   workPreferenceSubmissionSchema,
   type AssessmentId,
 } from './domain/assessment';
+import {
+  evaluateGermanyMarket,
+  germanyMarketSubmissionSchema,
+} from './domain/germanyMarket';
 import type {
   CandidateIdentity,
   CandidateStore,
@@ -356,6 +360,38 @@ export async function buildApp({
       );
       return {
         data: assessment,
+        meta: { requestId: request.id },
+      };
+    },
+  );
+
+  app.post(
+    '/api/v1/candidate/markets/DE',
+    {
+      config: {
+        rateLimit: { max: 20, timeWindow: '1 minute' },
+      },
+    },
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const submission = germanyMarketSubmissionSchema.parse(request.body);
+      const profile = candidateStore.saveGermanyMarket(
+        candidate.id,
+        submission,
+        evaluateGermanyMarket(submission),
+      );
+      return {
+        data: profile,
         meta: { requestId: request.id },
       };
     },

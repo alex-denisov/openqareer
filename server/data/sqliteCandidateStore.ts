@@ -26,17 +26,24 @@ import type {
   MemoryChange,
   StartedTurn,
   StoredAssessment,
+  StoredGermanyMarket,
   StoredMemory,
   StoredTurn,
   TurnRequest,
 } from './candidateStore';
 import { SealedText } from './sealedText';
 import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
+import { SqliteMarketRepository } from './sqliteMarketRepository';
+import type {
+  GermanyMarketResult,
+  GermanyMarketSubmission,
+} from '../domain/germanyMarket';
 import {
   MIGRATION_1,
   MIGRATION_2,
   MIGRATION_3,
   MIGRATION_4,
+  MIGRATION_5,
 } from './sqliteSchema';
 interface SqliteCandidateStoreOptions {
   databasePath: string;
@@ -85,6 +92,7 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
   private readonly assessmentsRepository: SqliteAssessmentRepository;
+  private readonly marketRepository: SqliteMarketRepository;
 
   constructor(options: SqliteCandidateStoreOptions) {
     if (options.databasePath !== ':memory:') {
@@ -103,6 +111,10 @@ export class SqliteCandidateStore implements CandidateStore {
       this.database,
       this.sealedText,
     );
+    this.marketRepository = new SqliteMarketRepository(
+      this.database,
+      this.sealedText,
+    );
     this.database.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = FULL;
@@ -111,7 +123,6 @@ export class SqliteCandidateStore implements CandidateStore {
     `);
     this.migrate();
   }
-
   createCandidate(input: {
     dataClass: CandidateIdentity['dataClass'];
     locale: CandidateIdentity['locale'];
@@ -144,7 +155,6 @@ export class SqliteCandidateStore implements CandidateStore {
       createdAt: now,
     };
   }
-
   authenticate(accessToken: string): CandidateIdentity | null {
     if (!/^oqc_[A-Za-z0-9_-]{40,}$/.test(accessToken)) {
       return null;
@@ -157,7 +167,6 @@ export class SqliteCandidateStore implements CandidateStore {
       .get(hashToken(accessToken)) as CandidateRow | undefined;
     return row ? candidateFromRow(row) : null;
   }
-
   startTurn(
     candidateId: string,
     idempotencyKey: string,
@@ -206,7 +215,6 @@ export class SqliteCandidateStore implements CandidateStore {
       },
     };
   }
-
   completeTurn(
     candidateId: string,
     idempotencyKey: string,
@@ -283,7 +291,6 @@ export class SqliteCandidateStore implements CandidateStore {
       this.touchConversation(conversationId, now);
     });
   }
-
   failTurn(
     candidateId: string,
     idempotencyKey: string,
@@ -296,7 +303,6 @@ export class SqliteCandidateStore implements CandidateStore {
       )
       .run(errorCode, new Date().toISOString(), candidateId, idempotencyKey);
   }
-
   getSnapshot(candidateId: string): CandidateSnapshot {
     const candidate = this.requireCandidate(candidateId);
     const memory = this.memory(candidateId);
@@ -307,9 +313,9 @@ export class SqliteCandidateStore implements CandidateStore {
       turns: this.turns(candidateId),
       dossier: buildExperienceDossier(memory),
       assessments: this.assessmentsRepository.list(candidateId),
+      germanyMarket: this.marketRepository.get(candidateId),
     };
   }
-
   saveAssessment(
     candidateId: string,
     assessmentId: AssessmentId,
@@ -324,7 +330,14 @@ export class SqliteCandidateStore implements CandidateStore {
       result,
     );
   }
-
+  saveGermanyMarket(
+    candidateId: string,
+    submission: GermanyMarketSubmission,
+    result: GermanyMarketResult,
+  ): StoredGermanyMarket {
+    this.requireCandidate(candidateId);
+    return this.marketRepository.save(candidateId, submission, result);
+  }
   changeMemory(
     candidateId: string,
     memoryId: string,
@@ -408,11 +421,9 @@ export class SqliteCandidateStore implements CandidateStore {
       updatedAt: now,
     };
   }
-
   exportCandidate(candidateId: string): CandidateSnapshot {
     return this.getSnapshot(candidateId);
   }
-
   deleteCandidate(candidateId: string): boolean {
     const result = this.database
       .prepare('DELETE FROM candidates WHERE id = ?')
@@ -422,11 +433,9 @@ export class SqliteCandidateStore implements CandidateStore {
     }
     return result.changes === 1;
   }
-
   close(): void {
     this.database.close();
   }
-
   private migrate(): void {
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -477,8 +486,15 @@ export class SqliteCandidateStore implements CandidateStore {
           .run(new Date().toISOString());
       });
     }
+    if ((row.version ?? 0) < 5) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_5);
+        this.database.prepare(
+          'INSERT INTO schema_migrations (version, applied_at) VALUES (5, ?)',
+        ).run(new Date().toISOString());
+      });
+    }
   }
-
   private insertPendingTurn(
     candidateId: string,
     idempotencyKey: string,
@@ -514,7 +530,6 @@ export class SqliteCandidateStore implements CandidateStore {
       this.touchConversation(conversationId, now);
     });
   }
-
   private insertMessage(
     candidateId: string,
     conversationId: string,
@@ -541,7 +556,6 @@ export class SqliteCandidateStore implements CandidateStore {
         createdAt,
       );
   }
-
   private messages(candidateId: string): CoachMessage[] {
     const rows = this.database
       .prepare(
@@ -559,7 +573,6 @@ export class SqliteCandidateStore implements CandidateStore {
       ),
     }));
   }
-
   private getMessage(
     candidateId: string,
     messageId: string,
@@ -582,7 +595,6 @@ export class SqliteCandidateStore implements CandidateStore {
       ),
     };
   }
-
   private memory(candidateId: string): StoredMemory[] {
     const rows = this.database
       .prepare(
@@ -595,7 +607,6 @@ export class SqliteCandidateStore implements CandidateStore {
       .all(candidateId) as unknown as MemoryRow[];
     return rows.map((row) => this.memoryFromRow(candidateId, row));
   }
-
   private turns(candidateId: string): StoredTurn[] {
     const rows = this.database
       .prepare(
@@ -634,7 +645,6 @@ export class SqliteCandidateStore implements CandidateStore {
       };
     });
   }
-
   private memoryFromRow(
     candidateId: string,
     row: MemoryRow,
@@ -655,7 +665,6 @@ export class SqliteCandidateStore implements CandidateStore {
       updatedAt: row.updated_at,
     };
   }
-
   private openMemoryStatement(
     candidateId: string,
     row: MemoryRow,
@@ -665,7 +674,6 @@ export class SqliteCandidateStore implements CandidateStore {
       memoryAssociatedData(candidateId, row.id),
     );
   }
-
   private outputFromTurn(
     candidateId: string,
     idempotencyKey: string,
@@ -699,7 +707,6 @@ export class SqliteCandidateStore implements CandidateStore {
       },
     };
   }
-
   private requireCandidate(candidateId: string): CandidateIdentity {
     const row = this.database
       .prepare(
@@ -712,7 +719,6 @@ export class SqliteCandidateStore implements CandidateStore {
     }
     return candidateFromRow(row);
   }
-
   private conversationId(candidateId: string): string {
     const row = this.database
       .prepare('SELECT id FROM conversations WHERE candidate_id = ?')
@@ -722,13 +728,11 @@ export class SqliteCandidateStore implements CandidateStore {
     }
     return row.id;
   }
-
   private touchConversation(conversationId: string, now: string): void {
     this.database
       .prepare('UPDATE conversations SET updated_at = ? WHERE id = ?')
       .run(now, conversationId);
   }
-
   private getTurn(
     candidateId: string,
     idempotencyKey: string,
@@ -745,7 +749,6 @@ export class SqliteCandidateStore implements CandidateStore {
         .get(candidateId, idempotencyKey) as TurnRow | undefined) ?? null
     );
   }
-
   private transaction<T>(operation: () => T): T {
     this.database.exec('BEGIN IMMEDIATE');
     try {

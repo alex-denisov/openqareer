@@ -360,4 +360,44 @@ describe('OpenQareer API boundary', () => {
     });
     expect(invalid.statusCode).toBe(422);
   });
+
+  it('evaluates and returns a dated Germany route without eligibility claims', async () => {
+    const app = await createApp();
+    const authorization = candidateAuthorization(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/markets/DE',
+      headers: { authorization },
+      payload: {
+        workAuthorization: 'none',
+        jobOffer: 'yes',
+        grossAnnualSalaryEur: 55_000,
+        offerDurationMonths: 24,
+        qualification: 'recognized-comparable',
+        professionRegulation: 'non-regulated',
+        blueCardBand: 'general',
+        fundsMonthlyEur: null,
+        languageEvidence: 'english-b2-plus',
+        relocationReadiness: 'ready',
+        dependants: 'none',
+        targetWorkMode: 'hybrid',
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({
+      country: 'DE',
+      result: {
+        packVersion: 'DE-2026.1',
+        recommendedRouteId: 'eu-blue-card',
+      },
+    });
+    const snapshot = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/me',
+      headers: { authorization },
+    });
+    expect(snapshot.json().data.germanyMarket.result.caveat).toMatch(
+      /не юридическое решение/i,
+    );
+  });
 });

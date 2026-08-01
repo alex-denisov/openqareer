@@ -14,6 +14,7 @@ import {
   evaluateWorkPreferences,
   type WorkPreferenceSubmission,
 } from '../domain/assessment';
+import { evaluateGermanyMarket } from '../domain/germanyMarket';
 
 const stores: SqliteCandidateStore[] = [];
 const directories: string[] = [];
@@ -261,6 +262,56 @@ describe('SQLite candidate memory', () => {
     expect(reopened.deleteCandidate(candidateA.id)).toBe(true);
   });
 
+  it('persists one encrypted Germany profile with isolation and replacement', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'openqareer-market-'));
+    directories.push(directory);
+    const databasePath = join(directory, 'candidate.db');
+    const store = createStore(databasePath);
+    const candidateA = createCandidate(store);
+    const candidateB = createCandidate(store);
+    const submission = {
+      workAuthorization: 'none',
+      jobOffer: 'yes',
+      grossAnnualSalaryEur: 55_000,
+      offerDurationMonths: 24,
+      qualification: 'recognized-comparable',
+      professionRegulation: 'non-regulated',
+      blueCardBand: 'general',
+      fundsMonthlyEur: null,
+      languageEvidence: 'english-b2-plus',
+      relocationReadiness: 'ready',
+      dependants: 'none',
+      targetWorkMode: 'hybrid',
+    } as const;
+    store.saveGermanyMarket(
+      candidateA.id,
+      submission,
+      evaluateGermanyMarket(submission, new Date('2026-08-01T00:00:00Z')),
+    );
+    store.saveGermanyMarket(
+      candidateA.id,
+      { ...submission, grossAnnualSalaryEur: 60_000 },
+      evaluateGermanyMarket(
+        { ...submission, grossAnnualSalaryEur: 60_000 },
+        new Date('2026-08-01T00:00:00Z'),
+      ),
+    );
+    expect(store.getSnapshot(candidateA.id).germanyMarket).toMatchObject({
+      country: 'DE',
+      submission: { grossAnnualSalaryEur: 60_000 },
+      result: { recommendedRouteId: 'eu-blue-card' },
+    });
+    expect(store.getSnapshot(candidateB.id).germanyMarket).toBeNull();
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+    expect(readFileSync(databasePath).toString('utf8')).not.toContain(
+      'recommendedRouteId',
+    );
+    const reopened = createStore(databasePath);
+    expect(reopened.getSnapshot(candidateA.id).germanyMarket?.country).toBe('DE');
+    expect(reopened.deleteCandidate(candidateA.id)).toBe(true);
+  });
+
   it('migrates an existing v2 database without losing candidate tables', () => {
     const directory = mkdtempSync(join(tmpdir(), 'openqareer-migration-'));
     directories.push(directory);
@@ -286,6 +337,7 @@ describe('SQLite candidate memory', () => {
     expect(store.getSnapshot(candidate.id)).toMatchObject({
       memory: [],
       assessments: [],
+      germanyMarket: null,
       dossier: {
         confirmedCount: 0,
         proposedCount: 0,

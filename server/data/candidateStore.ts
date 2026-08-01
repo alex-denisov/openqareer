@@ -6,6 +6,10 @@ import type {
 } from '../domain/coach';
 import type { ExperienceDossier } from '../domain/dossier';
 import type {
+  GermanyMarketResult,
+  GermanyMarketSubmission,
+} from '../domain/germanyMarket';
+import type {
   AssessmentId,
   AssessmentResult,
   AssessmentSubmission,
@@ -30,6 +34,15 @@ export interface CandidateSnapshot {
   turns: StoredTurn[];
   dossier: ExperienceDossier;
   assessments: StoredAssessment[];
+  germanyMarket: StoredGermanyMarket | null;
+}
+
+export interface StoredGermanyMarket {
+  country: 'DE';
+  submission: GermanyMarketSubmission;
+  result: GermanyMarketResult;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface StoredAssessment {
@@ -122,6 +135,11 @@ export interface CandidateStore {
     submission: AssessmentSubmission,
     result: AssessmentResult,
   ): StoredAssessment;
+  saveGermanyMarket(
+    candidateId: string,
+    submission: GermanyMarketSubmission,
+    result: GermanyMarketResult,
+  ): StoredGermanyMarket;
   exportCandidate(candidateId: string): CandidateSnapshot;
   deleteCandidate(candidateId: string): boolean;
   close(): void;

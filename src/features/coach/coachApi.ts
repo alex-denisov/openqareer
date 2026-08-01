@@ -125,6 +125,48 @@ export type StoredAssessment =
       updatedAt: string;
     };
 
+export interface GermanyMarketSubmission {
+  workAuthorization: 'eu-eea-swiss' | 'german-permit' | 'none' | 'unknown';
+  jobOffer: 'yes' | 'no' | 'in-progress';
+  grossAnnualSalaryEur: number | null;
+  offerDurationMonths: number | null;
+  qualification: 'recognized-comparable' | 'state-recognized-origin' | 'none' | 'unknown';
+  professionRegulation: 'regulated-authorized' | 'regulated-unresolved' | 'non-regulated' | 'unknown';
+  blueCardBand: 'general' | 'reduced' | 'unknown';
+  fundsMonthlyEur: number | null;
+  languageEvidence: 'german-a1-plus' | 'english-b2-plus' | 'both' | 'below' | 'unknown';
+  relocationReadiness: 'ready' | 'exploring' | 'not-ready';
+  dependants: 'none' | 'partner' | 'children' | 'partner-and-children';
+  targetWorkMode: 'onsite' | 'hybrid' | 'remote-from-germany';
+}
+
+export interface StoredGermanyMarket {
+  country: 'DE';
+  submission: GermanyMarketSubmission;
+  result: {
+    packVersion: 'DE-2026.1';
+    packStatus: 'current' | 'stale';
+    reviewedAt: string;
+    recommendedRouteId: string | null;
+    routes: Array<{
+      id: string;
+      status: 'strong-signal' | 'possible-needs-check' | 'blocked' | 'not-applicable';
+      title: string;
+      summary: string;
+      evidence: string[];
+      missingEvidence: string[];
+      threshold: { amountEur: number; cadence: 'annual' | 'monthly'; validForYear: number } | null;
+      sourceIds: string[];
+    }>;
+    globalMissingEvidence: string[];
+    constraints: string[];
+    sources: Record<string, { title: string; url: string; publisher: string; reviewedAt: string }>;
+    caveat: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CoachResult {
   message: string;
   phase: CoachPhase;
@@ -188,6 +230,7 @@ export interface CandidateSnapshot {
     };
   };
   assessments: StoredAssessment[];
+  germanyMarket: StoredGermanyMarket | null;
 }
 
 interface ApiEnvelope<T> {
@@ -305,6 +348,17 @@ export async function submitAssessment(
     },
   );
   return readData<StoredAssessment>(response);
+}
+
+export async function saveGermanyMarket(
+  input: GermanyMarketSubmission,
+): Promise<StoredGermanyMarket> {
+  const response = await apiFetch('/api/v1/candidate/markets/DE', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return readData<StoredGermanyMarket>(response);
 }
 
 export async function getProviderStatus(): Promise<{
