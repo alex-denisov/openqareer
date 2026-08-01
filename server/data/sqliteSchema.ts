@@ -121,3 +121,17 @@ ALTER TABLE memory
     )
   );
 `;
+
+export const MIGRATION_4 = `
+CREATE TABLE assessments (
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  assessment_id TEXT NOT NULL CHECK (
+    assessment_id IN ('work-preferences-v1', 'product-case-v1')
+  ),
+  submission_cipher TEXT NOT NULL,
+  result_cipher TEXT NOT NULL,
+  completed_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (candidate_id, assessment_id)
+) STRICT;
+`;

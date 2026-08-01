@@ -12,6 +12,11 @@ import {
   type CoachTurnResult,
 } from '../domain/coach';
 import { buildExperienceDossier } from '../domain/dossier';
+import type {
+  AssessmentId,
+  AssessmentResult,
+  AssessmentSubmission,
+} from '../domain/assessment';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type {
   CandidateCredentials,
@@ -20,32 +25,35 @@ import type {
   CandidateStore,
   MemoryChange,
   StartedTurn,
+  StoredAssessment,
   StoredMemory,
   StoredTurn,
   TurnRequest,
 } from './candidateStore';
 import { SealedText } from './sealedText';
-import { MIGRATION_1, MIGRATION_2, MIGRATION_3 } from './sqliteSchema';
-
+import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
+import {
+  MIGRATION_1,
+  MIGRATION_2,
+  MIGRATION_3,
+  MIGRATION_4,
+} from './sqliteSchema';
 interface SqliteCandidateStoreOptions {
   databasePath: string;
   encryptionKey: Buffer;
 }
-
 interface CandidateRow {
   id: string;
   data_class: CandidateIdentity['dataClass'];
   locale: CandidateIdentity['locale'];
   created_at: string;
 }
-
 interface MessageRow {
   id: string;
   role: CoachMessage['role'];
   body_cipher: string;
   created_at: string;
 }
-
 interface MemoryRow {
   id: string;
   kind: StoredMemory['kind'];
@@ -58,7 +66,6 @@ interface MemoryRow {
   created_at: string;
   updated_at: string;
 }
-
 interface TurnRow {
   idempotency_key: string;
   status: 'pending' | 'failed' | 'completed';
@@ -74,10 +81,10 @@ interface TurnRow {
   created_at: string;
   updated_at: string;
 }
-
 export class SqliteCandidateStore implements CandidateStore {
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
+  private readonly assessmentsRepository: SqliteAssessmentRepository;
 
   constructor(options: SqliteCandidateStoreOptions) {
     if (options.databasePath !== ':memory:') {
@@ -92,6 +99,10 @@ export class SqliteCandidateStore implements CandidateStore {
       defensive: true,
     });
     this.sealedText = new SealedText(options.encryptionKey);
+    this.assessmentsRepository = new SqliteAssessmentRepository(
+      this.database,
+      this.sealedText,
+    );
     this.database.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = FULL;
@@ -295,7 +306,23 @@ export class SqliteCandidateStore implements CandidateStore {
       memory,
       turns: this.turns(candidateId),
       dossier: buildExperienceDossier(memory),
+      assessments: this.assessmentsRepository.list(candidateId),
     };
+  }
+
+  saveAssessment(
+    candidateId: string,
+    assessmentId: AssessmentId,
+    submission: AssessmentSubmission,
+    result: AssessmentResult,
+  ): StoredAssessment {
+    this.requireCandidate(candidateId);
+    return this.assessmentsRepository.save(
+      candidateId,
+      assessmentId,
+      submission,
+      result,
+    );
   }
 
   changeMemory(
@@ -436,6 +463,16 @@ export class SqliteCandidateStore implements CandidateStore {
         this.database
           .prepare(
             'INSERT INTO schema_migrations (version, applied_at) VALUES (3, ?)',
+          )
+          .run(new Date().toISOString());
+      });
+    }
+    if ((row.version ?? 0) < 4) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_4);
+        this.database
+          .prepare(
+            'INSERT INTO schema_migrations (version, applied_at) VALUES (4, ?)',
           )
           .run(new Date().toISOString());
       });
@@ -721,14 +758,11 @@ export class SqliteCandidateStore implements CandidateStore {
     }
   }
 }
-
 export class CandidateNotFoundError extends Error {}
 export class CandidateStoreConflictError extends Error {}
-
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
-
 function candidateFromRow(row: CandidateRow): CandidateIdentity {
   return {
     id: row.id,
@@ -737,21 +771,18 @@ function candidateFromRow(row: CandidateRow): CandidateIdentity {
     createdAt: row.created_at,
   };
 }
-
 function messageAssociatedData(
   candidateId: string,
   messageId: string,
 ): string {
   return `candidate:${candidateId}:message:${messageId}`;
 }
-
 function memoryAssociatedData(
   candidateId: string,
   memoryId: string,
 ): string {
   return `candidate:${candidateId}:memory:${memoryId}`;
 }
-
 function turnAssociatedData(
   candidateId: string,
   idempotencyKey: string,

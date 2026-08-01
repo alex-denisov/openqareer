@@ -307,4 +307,57 @@ describe('OpenQareer API boundary', () => {
     });
     expect(otherSnapshot.json().data.candidate.id).not.toBe(credentials.id);
   });
+
+  it('evaluates, stores and replaces candidate-scoped assessments', async () => {
+    const app = await createApp();
+    const authorization = candidateAuthorization(app);
+    const preferences = {
+      ambiguity: 5,
+      evidence: 5,
+      collaboration: 4,
+      persuasion: 2,
+      planning: 3,
+      detail: 2,
+      leadership: 3,
+      craft: 4,
+    };
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/assessments/work-preferences-v1',
+      headers: { authorization },
+      payload: preferences,
+    });
+    expect(first.statusCode).toBe(200);
+    const firstAssessment = first.json().data;
+    expect(firstAssessment).toMatchObject({
+      assessmentId: 'work-preferences-v1',
+      result: { kind: 'work-preferences' },
+    });
+    expect(firstAssessment.result.roleFamilies[0].id).toBe(
+      'product-discovery',
+    );
+
+    const revised = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/assessments/work-preferences-v1',
+      headers: { authorization },
+      payload: { ...preferences, planning: 5 },
+    });
+    expect(revised.statusCode).toBe(200);
+    const snapshot = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/me',
+      headers: { authorization },
+    });
+    expect(snapshot.json().data.assessments).toHaveLength(1);
+    expect(snapshot.json().data.assessments[0].submission.planning).toBe(5);
+
+    const invalid = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/assessments/product-case-v1',
+      headers: { authorization },
+      payload: { firstMove: 'invent-the-answer' },
+    });
+    expect(invalid.statusCode).toBe(422);
+  });
 });

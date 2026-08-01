@@ -13,6 +13,7 @@ import {
   type CandidateSnapshot,
   type CoachPhase,
 } from './coachApi';
+import { AssessmentStudio } from './AssessmentStudio';
 
 interface CoachPortalProps {
   onBack: () => void;
@@ -225,6 +226,7 @@ function LoginPanel({
 }
 
 function CandidateCoach({ user }: { user: AuthUser }) {
+  const [surface, setSurface] = useState<'coach' | 'assessment'>('coach');
   const [snapshot, setSnapshot] = useState<CandidateSnapshot>();
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -247,7 +249,9 @@ function CandidateCoach({ user }: { user: AuthUser }) {
     [snapshot],
   );
   const phase = latestTurn?.result?.phase ?? 'discovery';
-  const phaseIndex = PHASES.findIndex((item) => item.id === phase);
+  const phaseIndex = PHASES.findIndex(
+    (item) => item.id === (surface === 'assessment' ? 'role' : phase),
+  );
 
   async function refresh() {
     const candidate = await getCandidate();
@@ -377,6 +381,20 @@ function CandidateCoach({ user }: { user: AuthUser }) {
                     : ''
               }
             >
+              {item.id === 'role' || item.id === 'discovery' ? (
+                <button
+                  className="journey-hit-area"
+                  aria-label={
+                    item.id === 'role'
+                      ? 'Открыть проверку роли'
+                      : 'Вернуться к разговору с коучем'
+                  }
+                  aria-current={index === phaseIndex ? 'step' : undefined}
+                  onClick={() =>
+                    setSurface(item.id === 'role' ? 'assessment' : 'coach')
+                  }
+                />
+              ) : null}
               <span>{index < phaseIndex ? '✓' : item.short}</span>
               <div>
                 <strong>{item.title}</strong>
@@ -400,6 +418,13 @@ function CandidateCoach({ user }: { user: AuthUser }) {
         </div>
       </aside>
 
+      {surface === 'assessment' ? (
+        <AssessmentStudio
+          assessments={snapshot.assessments}
+          onSaved={refresh}
+          onBackToCoach={() => setSurface('coach')}
+        />
+      ) : (
       <section className="coach-dialogue" aria-label="Диалог с карьерным коучем">
         <header className="dialogue-header">
           <div>
@@ -532,10 +557,12 @@ function CandidateCoach({ user }: { user: AuthUser }) {
           </p>
         </div>
       </section>
+      )}
 
       <MemoryPanel
         snapshot={snapshot}
         onChange={handleMemoryChange}
+        onOpenAssessment={() => setSurface('assessment')}
       />
     </div>
   );
@@ -544,6 +571,7 @@ function CandidateCoach({ user }: { user: AuthUser }) {
 function MemoryPanel({
   snapshot,
   onChange,
+  onOpenAssessment,
 }: {
   snapshot: CandidateSnapshot;
   onChange: (
@@ -551,6 +579,7 @@ function MemoryPanel({
     action: 'confirm' | 'delete' | 'correct',
     statement?: string,
   ) => Promise<void>;
+  onOpenAssessment: () => void;
 }) {
   const [editingId, setEditingId] = useState<string>();
   const [draft, setDraft] = useState('');
@@ -615,6 +644,15 @@ function MemoryPanel({
             </li>
           ))}
         </ul>
+        <button
+          className="dossier-assessment-link"
+          onClick={onOpenAssessment}
+        >
+          {snapshot.assessments.length > 0
+            ? `Результаты проверок · ${snapshot.assessments.length}/2`
+            : 'Проверить гипотезы ролей'}
+          <span aria-hidden="true">→</span>
+        </button>
       </section>
 
       <div className="memory-list">

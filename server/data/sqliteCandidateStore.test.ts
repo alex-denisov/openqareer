@@ -9,6 +9,11 @@ import {
   SqliteCandidateStore,
 } from './sqliteCandidateStore';
 import { MIGRATION_1, MIGRATION_2 } from './sqliteSchema';
+import {
+  evaluateProductCase,
+  evaluateWorkPreferences,
+  type WorkPreferenceSubmission,
+} from '../domain/assessment';
 
 const stores: SqliteCandidateStore[] = [];
 const directories: string[] = [];
@@ -192,6 +197,70 @@ describe('SQLite candidate memory', () => {
     );
   });
 
+  it('persists encrypted candidate-scoped assessments and replaces one version', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'openqareer-assessment-'));
+    directories.push(directory);
+    const databasePath = join(directory, 'candidate.db');
+    const store = createStore(databasePath);
+    const candidateA = createCandidate(store);
+    const candidateB = createCandidate(store);
+    const firstPreferences: WorkPreferenceSubmission = {
+      ambiguity: 5,
+      evidence: 5,
+      collaboration: 4,
+      persuasion: 2,
+      planning: 3,
+      detail: 2,
+      leadership: 3,
+      craft: 4,
+    };
+    const revisedPreferences = { ...firstPreferences, planning: 5 } as const;
+    const productCase = {
+      firstMove: 'segment-funnel-and-interviews',
+      priorityRule: 'reversible-test-biggest-uncertainty',
+      successMeasure: 'activation-by-segment-with-guardrail',
+      rationale: 'Уникальное объяснение кейса 984.',
+    } as const;
+
+    store.saveAssessment(
+      candidateA.id,
+      'work-preferences-v1',
+      firstPreferences,
+      evaluateWorkPreferences(firstPreferences),
+    );
+    store.saveAssessment(
+      candidateA.id,
+      'work-preferences-v1',
+      revisedPreferences,
+      evaluateWorkPreferences(revisedPreferences),
+    );
+    store.saveAssessment(
+      candidateA.id,
+      'product-case-v1',
+      productCase,
+      evaluateProductCase(productCase),
+    );
+
+    expect(store.getSnapshot(candidateA.id).assessments).toHaveLength(2);
+    expect(
+      store.getSnapshot(candidateA.id).assessments[0].submission,
+    ).toMatchObject({ planning: 5 });
+    expect(store.getSnapshot(candidateB.id).assessments).toEqual([]);
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+    expect(readFileSync(databasePath).toString('utf8')).not.toContain(
+      productCase.rationale,
+    );
+
+    const reopened = createStore(databasePath);
+    expect(reopened.getSnapshot(candidateA.id).assessments).toHaveLength(2);
+    expect(reopened.exportCandidate(candidateA.id).assessments[1]).toMatchObject({
+      assessmentId: 'product-case-v1',
+      result: { kind: 'product-case' },
+    });
+    expect(reopened.deleteCandidate(candidateA.id)).toBe(true);
+  });
+
   it('migrates an existing v2 database without losing candidate tables', () => {
     const directory = mkdtempSync(join(tmpdir(), 'openqareer-migration-'));
     directories.push(directory);
@@ -216,6 +285,7 @@ describe('SQLite candidate memory', () => {
 
     expect(store.getSnapshot(candidate.id)).toMatchObject({
       memory: [],
+      assessments: [],
       dossier: {
         confirmedCount: 0,
         proposedCount: 0,

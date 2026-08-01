@@ -42,6 +42,89 @@ export interface CandidateMemory {
   status: 'proposed' | 'confirmed' | 'corrected';
 }
 
+export type WorkDimension =
+  | 'ambiguity'
+  | 'evidence'
+  | 'collaboration'
+  | 'persuasion'
+  | 'planning'
+  | 'detail'
+  | 'leadership'
+  | 'craft';
+
+export type WorkPreferenceSubmission = Record<WorkDimension, number>;
+
+export interface WorkPreferenceResult {
+  kind: 'work-preferences';
+  version: 1;
+  roleFamilies: Array<{
+    id:
+      | 'product-discovery'
+      | 'operations-program'
+      | 'commercial-customer'
+      | 'specialist-analysis';
+    signalStrength: number;
+    contributions: Array<{
+      dimension: WorkDimension;
+      answer: number;
+      weight: number;
+      contribution: number;
+    }>;
+  }>;
+  caveat: string;
+}
+
+export interface ProductCaseSubmission {
+  firstMove:
+    | 'segment-funnel-and-interviews'
+    | 'review-funnel-only'
+    | 'ship-largest-client-request';
+  priorityRule:
+    | 'reversible-test-biggest-uncertainty'
+    | 'revenue-weighted-request'
+    | 'loudest-stakeholder';
+  successMeasure:
+    | 'activation-by-segment-with-guardrail'
+    | 'delivery-date'
+    | 'features-shipped';
+  rationale: string;
+}
+
+export interface ProductCaseResult {
+  kind: 'product-case';
+  version: 1;
+  rubric: Array<{
+    criterion:
+      | 'problem-framing'
+      | 'evidence-prioritisation'
+      | 'outcome-measurement';
+    selectedOption: string;
+    points: number;
+    maxPoints: 2;
+  }>;
+  demonstratedSignals: string[];
+  openQuestions: string[];
+  rationale: string;
+  summary: string;
+  caveat: string;
+}
+
+export type StoredAssessment =
+  | {
+      assessmentId: 'work-preferences-v1';
+      submission: WorkPreferenceSubmission;
+      result: WorkPreferenceResult;
+      completedAt: string;
+      updatedAt: string;
+    }
+  | {
+      assessmentId: 'product-case-v1';
+      submission: ProductCaseSubmission;
+      result: ProductCaseResult;
+      completedAt: string;
+      updatedAt: string;
+    };
+
 export interface CoachResult {
   message: string;
   phase: CoachPhase;
@@ -104,6 +187,7 @@ export interface CandidateSnapshot {
       }>;
     };
   };
+  assessments: StoredAssessment[];
 }
 
 interface ApiEnvelope<T> {
@@ -198,6 +282,29 @@ export async function changeMemory(
   if (!response.ok) {
     await throwApiError(response);
   }
+}
+
+export async function submitAssessment(
+  assessmentId: 'work-preferences-v1',
+  input: WorkPreferenceSubmission,
+): Promise<StoredAssessment>;
+export async function submitAssessment(
+  assessmentId: 'product-case-v1',
+  input: ProductCaseSubmission,
+): Promise<StoredAssessment>;
+export async function submitAssessment(
+  assessmentId: StoredAssessment['assessmentId'],
+  input: WorkPreferenceSubmission | ProductCaseSubmission,
+): Promise<StoredAssessment> {
+  const response = await apiFetch(
+    `/api/v1/candidate/assessments/${assessmentId}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+  return readData<StoredAssessment>(response);
 }
 
 export async function getProviderStatus(): Promise<{

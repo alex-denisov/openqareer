@@ -5,6 +5,11 @@ import type {
   MemoryCandidate,
 } from '../domain/coach';
 import type { ExperienceDossier } from '../domain/dossier';
+import type {
+  AssessmentId,
+  AssessmentResult,
+  AssessmentSubmission,
+} from '../domain/assessment';
 import type { CoachProviderResult } from '../providers/coachProvider';
 
 export interface CandidateIdentity {
@@ -24,6 +29,15 @@ export interface CandidateSnapshot {
   memory: StoredMemory[];
   turns: StoredTurn[];
   dossier: ExperienceDossier;
+  assessments: StoredAssessment[];
+}
+
+export interface StoredAssessment {
+  assessmentId: AssessmentId;
+  submission: AssessmentSubmission;
+  result: AssessmentResult;
+  completedAt: string;
+  updatedAt: string;
 }
 
 export interface StoredMemory extends MemoryCandidate {
@@ -102,6 +116,12 @@ export interface CandidateStore {
     memoryId: string,
     change: MemoryChange,
   ): StoredMemory | null;
+  saveAssessment(
+    candidateId: string,
+    assessmentId: AssessmentId,
+    submission: AssessmentSubmission,
+    result: AssessmentResult,
+  ): StoredAssessment;
   exportCandidate(candidateId: string): CandidateSnapshot;
   deleteCandidate(candidateId: string): boolean;
   close(): void;

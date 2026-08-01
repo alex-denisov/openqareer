@@ -9,6 +9,13 @@ import Fastify, {
 } from 'fastify';
 import { z, ZodError } from 'zod';
 import { COACH_PHASES } from './domain/coach';
+import {
+  evaluateProductCase,
+  evaluateWorkPreferences,
+  productCaseSubmissionSchema,
+  workPreferenceSubmissionSchema,
+  type AssessmentId,
+} from './domain/assessment';
 import type {
   CandidateIdentity,
   CandidateStore,
@@ -313,6 +320,47 @@ export async function buildApp({
     },
   );
 
+  app.post<{ Params: { assessmentId: string } }>(
+    '/api/v1/candidate/assessments/:assessmentId',
+    {
+      config: {
+        rateLimit: {
+          max: 20,
+          timeWindow: '1 minute',
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) {
+        return;
+      }
+      const assessmentId = assessmentIdSchema.parse(
+        request.params.assessmentId,
+      );
+      const evaluated = evaluateAssessment(assessmentId, request.body);
+      const assessment = candidateStore.saveAssessment(
+        candidate.id,
+        assessmentId,
+        evaluated.submission,
+        evaluated.result,
+      );
+      return {
+        data: assessment,
+        meta: { requestId: request.id },
+      };
+    },
+  );
+
   app.post(
     '/api/v1/coach/turn',
     {
@@ -525,6 +573,20 @@ const memoryChangeSchema = z
       });
     }
   });
+
+const assessmentIdSchema = z.enum([
+  'work-preferences-v1',
+  'product-case-v1',
+]);
+
+function evaluateAssessment(assessmentId: AssessmentId, body: unknown) {
+  if (assessmentId === 'work-preferences-v1') {
+    const submission = workPreferenceSubmissionSchema.parse(body);
+    return { submission, result: evaluateWorkPreferences(submission) };
+  }
+  const submission = productCaseSubmissionSchema.parse(body);
+  return { submission, result: evaluateProductCase(submission) };
+}
 
 function authenticateCandidate(
   request: FastifyRequest,
