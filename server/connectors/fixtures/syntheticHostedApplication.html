@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Synthetic hosted application</title>
+  </head>
+  <body>
+    <main>
+      <h1>Apply to Synthetic Product Company</h1>
+      <form aria-label="Job application">
+        <label>
+          Full name
+          <input name="fullName" autocomplete="name" required />
+        </label>
+        <label>
+          Email
+          <input name="email" type="email" autocomplete="email" required />
+        </label>
+        <label>
+          Cover note
+          <textarea name="coverNote"></textarea>
+        </label>
+        <button type="submit">Submit application</button>
+      </form>
+      <p role="status" hidden></p>
+    </main>
+    <script>
+      document.querySelector('form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const count = Number(document.body.dataset.submissionCount || '0') + 1;
+        document.body.dataset.submissionCount = String(count);
+        const status = document.querySelector('[role="status"]');
+        status.hidden = false;
+        status.dataset.applicationId = 'synthetic-application-001';
+        status.textContent = 'Application received';
+      });
+    </script>
+  </body>
+</html>

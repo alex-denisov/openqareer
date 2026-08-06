@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+openqareer.env
 **/.env
 **/.env.*
 !**/.env.example
@@ -34,3 +35,8 @@ output/
 .vscode/
 .idea/
 *.swp
+
+# Local-only private research and candidate material
+private-research/
+**/private-research/
+data/private/
