@@ -19,7 +19,7 @@ function sha256Hex(value) {
 
 function assetKind(name, entryName) {
   if (name === entryName) return 'app';
-  if (/^pdf\.worker-[\w-]+\.mjs$/.test(name)) return 'worker';
+  if (/^[\w-]+\.worker-[\w-]+\.(?:js|mjs)$/.test(name)) return 'worker';
   if (/^pdf-[\w-]+\.js$/.test(name)) return 'pdf-module';
   throw new Error(`Large browser module needs an explicit loader contract: ${name}`);
 }
@@ -157,7 +157,13 @@ ${exportBridge(names)}
 `;
   }
   if (kind === 'worker') {
-    return `${core}await loadSplitModule();\n//# sourceURL=${options.sourcePath}.bootstrap\n`;
+    return `${core}const pendingMessages=[];
+const queueMessage=(event)=>{event.stopImmediatePropagation();pendingMessages.push({data:event.data,ports:event.ports})};
+self.addEventListener("message",queueMessage);
+try{await loadSplitModule()}finally{self.removeEventListener("message",queueMessage)}
+for(const pending of pendingMessages){self.dispatchEvent(new MessageEvent("message",pending))}
+//# sourceURL=${options.sourcePath}.bootstrap
+`;
   }
   return `${core}const loadedModule=await loadSplitModule();
 ${exportBridge(names)}

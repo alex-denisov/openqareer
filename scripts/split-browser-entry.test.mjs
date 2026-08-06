@@ -27,6 +27,10 @@ function makeFixture(source) {
     join(directory, 'assets/pdf-test.js'),
     `export const getDocument=1;export const GlobalWorkerOptions=2;${'y'.repeat(5_000)}`,
   );
+  writeFileSync(
+    join(directory, 'assets/pdfInspector.worker-test.js'),
+    `self.addEventListener("message",()=>{});${'w'.repeat(5_000)}`,
+  );
   return directory;
 }
 
@@ -38,7 +42,7 @@ afterEach(() => {
 
 describe('split browser entry delivery', () => {
   it('publishes bounded parts and a small integrity-checking bootstrap', () => {
-    const source = `const release="release-test";${'x'.repeat(10_000)};import("./pdf-test.js")`;
+    const source = `const release="release-test";${'x'.repeat(10_000)};import("./pdf-test.js");new Worker(new URL("./pdfInspector.worker-test.js",import.meta.url))`;
     const directory = makeFixture(source);
     const result = buildSplitDelivery({
       distDirectory: directory,
@@ -46,7 +50,7 @@ describe('split browser entry delivery', () => {
       partBytes: 4_096,
     });
 
-    assert.equal(result.modules.length, 2);
+    assert.equal(result.modules.length, 3);
     const entry = result.modules.find((module) => module.kind === 'app');
     assert.ok(entry.bootstrapBytes < 8_192);
     for (let index = 0; index < entry.partCount; index += 1) {
@@ -65,9 +69,27 @@ describe('split browser entry delivery', () => {
     assert.ok(bootstrap.includes('release-test'));
     assert.ok(bootstrap.includes(entry.sourceHash));
     assert.ok(bootstrap.includes('["./pdf-test.js","/assets/pdf-test.js.split.js"]'));
+    assert.ok(
+      bootstrap.includes(
+        '["./pdfInspector.worker-test.js","/assets/pdfInspector.worker-test.js.split.js"]',
+      ),
+    );
     assert.ok(bootstrap.includes('crypto.subtle.digest'));
     assert.equal(existsSync(join(directory, 'assets/index-test.js')), false);
     assert.equal(existsSync(join(directory, 'assets/pdf-test.js')), false);
+    assert.equal(
+      existsSync(join(directory, 'assets/pdfInspector.worker-test.js')),
+      false,
+    );
+    const worker = result.modules.find((module) => module.kind === 'worker');
+    assert.ok(worker);
+    const workerBootstrap = readFileSync(
+      join(directory, worker.proxyPath),
+      'utf8',
+    );
+    assert.ok(workerBootstrap.includes('pendingMessages'));
+    assert.ok(workerBootstrap.includes('event.stopImmediatePropagation()'));
+    assert.ok(workerBootstrap.includes('new MessageEvent("message",pending)'));
   });
 
   it('rejects an index without a safe production entry', () => {
