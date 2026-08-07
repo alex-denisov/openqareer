@@ -1,7 +1,6 @@
 import { buildApp } from './app';
 import { readServerConfig } from './config';
-import { OpenAICoachProvider } from './providers/openAICoachProvider';
-import { OpenRouterCoachProvider } from './providers/openRouterCoachProvider';
+import { buildCoachProvider } from './providers/coachProviderFactory';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { AuthService } from './auth/authService';
@@ -15,12 +14,19 @@ const authService = new AuthService({
   databasePath: config.databasePath,
 });
 await authService.seedAccounts(config.seedAccounts, candidateStore);
-const personalDataProvider = new OpenAICoachProvider({
-  apiKey: config.openAIKey,
+const personalProviderId = config.personalProvider ?? 'openai';
+const syntheticProviderId = config.syntheticProvider ?? 'openrouter';
+const personalDataProvider = buildCoachProvider({
+  provider: personalProviderId,
+  apiKey: config.providerCredentials?.[personalProviderId] ?? '',
   model: config.model,
+  folderId: config.yandexFolderId,
 });
-const syntheticDataProvider = new OpenRouterCoachProvider({
-  apiKey: config.openRouterKey,
+const syntheticDataProvider = buildCoachProvider({
+  provider: syntheticProviderId,
+  apiKey: config.providerCredentials?.[syntheticProviderId] ?? '',
+  model: config.syntheticModel,
+  folderId: config.yandexFolderId,
 });
 const coachProvider = new PrivacyAwareCoachProvider({
   personalDataProvider,

@@ -37,6 +37,7 @@ import type {
   AuthPrincipal,
   SessionAuth,
 } from './auth/authService';
+import { CAREER_SUPER_PROMPT_REVISION } from './prompts/careerSuperPrompt';
 
 interface BuildAppOptions {
   config: ServerConfig;
@@ -118,18 +119,23 @@ export async function buildApp({
       return {
       data: {
         personalDataRoute: {
-          provider: 'openai',
+          provider: config.personalProvider ?? 'openai',
           model: config.model,
         },
         syntheticDataRoute: {
-          provider: 'openrouter',
-          model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-          fallbackModels: [
-            'nvidia/nemotron-3-super-120b-a12b:free',
-          ],
+          provider: config.syntheticProvider ?? 'openrouter',
+          model:
+            config.syntheticModel ??
+            'nvidia/nemotron-3-ultra-550b-a55b:free',
+          fallbackModels:
+            (config.syntheticProvider ?? 'openrouter') === 'openrouter'
+              ? ['nvidia/nemotron-3-super-120b-a12b:free']
+              : [],
           outputValidation: 'server-side-strict-schema',
         },
         qualityFloor: 'gpt-5.6-sol',
+        promptRevision: CAREER_SUPER_PROMPT_REVISION,
+        providers: config.providerCatalogStatus ?? [],
         ready: true,
       },
       meta: { requestId: request.id },

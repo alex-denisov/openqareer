@@ -1,6 +1,14 @@
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+import {
+  allowedModels,
+  getProviderCatalogStatus,
+  modelRegistry,
+  PROVIDER_IDS,
+  type ProviderCatalogStatus,
+  type ProviderId,
+} from './providers/modelRegistry';
 
 declare const __OPENQAREER_RELEASE__: string;
 
@@ -9,8 +17,8 @@ const supportedModels = ['gpt-5.6', 'gpt-5.6-sol'] as const;
 const configSchema = z.object({
   OPENQAREER_HOST: z.literal('127.0.0.1').default('127.0.0.1'),
   OPENQAREER_PORT: z.coerce.number().int().min(1).max(65_535).default(3_210),
-  OPENQAREER_OPENAI_API_KEY: z.string().min(20),
-  OPENQAREER_OPENROUTER_API_KEY: z.string().min(20),
+  OPENQAREER_OPENAI_API_KEY: z.string().min(20).optional(),
+  OPENQAREER_OPENROUTER_API_KEY: z.string().min(20).optional(),
   OPENQAREER_PREVIEW_API_TOKEN: z.string().min(32),
   OPENQAREER_DATA_ENCRYPTION_KEY: z.string().transform((value, context) => {
     const decoded = Buffer.from(value, 'base64');
@@ -25,6 +33,12 @@ const configSchema = z.object({
   }),
   OPENQAREER_DATABASE_PATH: z.string().min(1).default('data/openqareer.db'),
   OPENQAREER_AI_MODEL: z.enum(supportedModels).default('gpt-5.6-sol'),
+  OPENQAREER_PERSONAL_AI_PROVIDER: z.enum(PROVIDER_IDS).default('openai'),
+  OPENQAREER_PERSONAL_AI_MODEL: z.string().min(1).optional(),
+  OPENQAREER_SYNTHETIC_AI_PROVIDER: z
+    .enum(PROVIDER_IDS)
+    .default('openrouter'),
+  OPENQAREER_SYNTHETIC_AI_MODEL: z.string().min(1).optional(),
   OPENQAREER_STATIC_ROOT: z.string().min(1).optional(),
   OPENQAREER_LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info'])
@@ -44,12 +58,17 @@ const configSchema = z.object({
 export interface ServerConfig {
   host: '127.0.0.1';
   port: number;
-  openAIKey: string;
-  openRouterKey: string;
+  openAIKey?: string;
+  openRouterKey?: string;
   previewToken: string;
   dataEncryptionKey: Buffer;
   databasePath: string;
-  model: (typeof supportedModels)[number];
+  model: string;
+  personalProvider?: ProviderId;
+  syntheticProvider?: ProviderId;
+  syntheticModel?: string;
+  providerCredentials?: Partial<Record<ProviderId, string>>;
+  yandexFolderId?: string;
   staticRoot: string;
   release: string;
   logLevel: 'fatal' | 'error' | 'warn' | 'info';
@@ -60,6 +79,7 @@ export interface ServerConfig {
     password: string;
     role: 'candidate' | 'admin';
   }>;
+  providerCatalogStatus?: ProviderCatalogStatus[];
 }
 
 export function readServerConfig(
@@ -67,6 +87,25 @@ export function readServerConfig(
   moduleUrl: string = import.meta.url,
 ): ServerConfig {
   const parsed = configSchema.parse(environment);
+  const providerCredentials = readProviderCredentials(environment);
+  const personalRoute = resolveProviderRoute({
+    provider: parsed.OPENQAREER_PERSONAL_AI_PROVIDER,
+    requestedModel:
+      parsed.OPENQAREER_PERSONAL_AI_MODEL ??
+      (parsed.OPENQAREER_PERSONAL_AI_PROVIDER === 'openai'
+        ? parsed.OPENQAREER_AI_MODEL
+        : undefined),
+    providerCredentials,
+  });
+  const syntheticRoute = resolveProviderRoute({
+    provider: parsed.OPENQAREER_SYNTHETIC_AI_PROVIDER,
+    requestedModel:
+      parsed.OPENQAREER_SYNTHETIC_AI_MODEL ??
+      (parsed.OPENQAREER_SYNTHETIC_AI_PROVIDER === 'openrouter'
+        ? 'nvidia/nemotron-3-ultra-550b-a55b:free'
+        : undefined),
+    providerCredentials,
+  });
   const builtRelease =
     typeof __OPENQAREER_RELEASE__ === 'undefined'
       ? 'local'
@@ -99,7 +138,12 @@ export function readServerConfig(
     previewToken: parsed.OPENQAREER_PREVIEW_API_TOKEN,
     dataEncryptionKey: parsed.OPENQAREER_DATA_ENCRYPTION_KEY,
     databasePath: parsed.OPENQAREER_DATABASE_PATH,
-    model: parsed.OPENQAREER_AI_MODEL,
+    model: personalRoute.model,
+    personalProvider: personalRoute.provider,
+    syntheticProvider: syntheticRoute.provider,
+    syntheticModel: syntheticRoute.model,
+    providerCredentials,
+    yandexFolderId: environment.OPENQAREER_YANDEX_FOLDER_ID?.trim(),
     staticRoot:
       parsed.OPENQAREER_STATIC_ROOT ??
       dirname(fileURLToPath(moduleUrl)),
@@ -110,7 +154,37 @@ export function readServerConfig(
       ? ['https://openqareer.com']
       : ['http://127.0.0.1:3000', 'http://localhost:3000'],
     seedAccounts,
+    providerCatalogStatus: getProviderCatalogStatus(environment),
   };
+}
+
+function readProviderCredentials(
+  environment: NodeJS.ProcessEnv,
+): Partial<Record<ProviderId, string>> {
+  return Object.fromEntries(
+    PROVIDER_IDS.flatMap((provider) => {
+      const credentialName = modelRegistry[provider].credentialEnvironment[0];
+      const credential = environment[credentialName]?.trim();
+      return credential ? [[provider, credential]] : [];
+    }),
+  );
+}
+
+function resolveProviderRoute(input: {
+  provider: ProviderId;
+  requestedModel?: string;
+  providerCredentials: Partial<Record<ProviderId, string>>;
+}): { provider: ProviderId; model: string } {
+  const credential = input.providerCredentials[input.provider];
+  if (!credential || credential.length < 20) {
+    throw new Error(`credential is required for provider ${input.provider}`);
+  }
+  const eligibleModels = allowedModels(input.provider);
+  const model = input.requestedModel ?? eligibleModels[0]?.id;
+  if (!model || !eligibleModels.some((item) => item.id === model)) {
+    throw new Error(`model is not allowed for provider ${input.provider}`);
+  }
+  return { provider: input.provider, model };
 }
 
 function seedAccount(

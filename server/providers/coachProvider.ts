@@ -2,6 +2,7 @@ import type {
   CoachTurnInput,
   CoachTurnResult,
 } from '../domain/coach';
+import type { ProviderId } from './modelRegistry';
 
 export interface ProviderUsage {
   inputTokens: number;
@@ -11,7 +12,7 @@ export interface ProviderUsage {
 
 export interface CoachProviderResult {
   result: CoachTurnResult;
-  provider: 'openai' | 'openrouter';
+  provider: ProviderId;
   model: string;
   responseId: string;
   usage: ProviderUsage;

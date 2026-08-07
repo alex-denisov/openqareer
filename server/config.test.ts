@@ -84,4 +84,35 @@ describe('server configuration', () => {
       ),
     ).toThrow();
   });
+
+  it('selects another configured provider only with an allowed fixed model', () => {
+    const config = readServerConfig(
+      {
+        ...validEnvironment,
+        OPENQAREER_PERSONAL_AI_PROVIDER: 'anthropic',
+        OPENQAREER_PERSONAL_AI_MODEL: 'claude-fable-5',
+        OPENQAREER_ANTHROPIC_API_KEY:
+          'test-anthropic-key-that-is-long-enough',
+      },
+      import.meta.url,
+    );
+    expect(config).toMatchObject({
+      personalProvider: 'anthropic',
+      model: 'claude-fable-5',
+      syntheticProvider: 'openrouter',
+    });
+
+    expect(() =>
+      readServerConfig(
+        {
+          ...validEnvironment,
+          OPENQAREER_PERSONAL_AI_PROVIDER: 'gemini',
+          OPENQAREER_PERSONAL_AI_MODEL: 'gemini-3.6-flash',
+          OPENQAREER_GEMINI_API_KEY:
+            'test-gemini-key-that-is-long-enough',
+        },
+        import.meta.url,
+      ),
+    ).toThrow('model is not allowed for provider gemini');
+  });
 });

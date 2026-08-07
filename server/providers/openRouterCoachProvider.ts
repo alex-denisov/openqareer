@@ -26,13 +26,19 @@ const OPENROUTER_MODELS = [
 
 export interface OpenRouterCoachProviderOptions {
   apiKey: string;
+  model?: string;
   timeoutMs?: number;
   client?: OpenAI;
 }
 export class OpenRouterCoachProvider implements CoachProvider {
   private readonly client: OpenAI;
+  private readonly model: string;
+  private readonly models: readonly string[];
 
   constructor(options: OpenRouterCoachProviderOptions) {
+    this.model = options.model ?? OPENROUTER_MODEL;
+    this.models =
+      this.model === OPENROUTER_MODEL ? OPENROUTER_MODELS : [this.model];
     this.client =
       options.client ??
       new OpenAI({
@@ -63,8 +69,8 @@ export class OpenRouterCoachProvider implements CoachProvider {
       const request: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
         models: readonly string[];
       } = {
-        model: OPENROUTER_MODEL,
-        models: OPENROUTER_MODELS,
+        model: this.model,
+        models: this.models,
         messages: [
           {
             role: 'system',

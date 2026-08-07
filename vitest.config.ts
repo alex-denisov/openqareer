@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    exclude: ['**/prototypes/**', '**/node_modules/**', '**/dist/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
@@ -9,6 +10,9 @@ export default defineConfig({
       include: [
         'src/services/*.ts',
         'src/features/evidence/evidenceEngine.ts',
+        'src/features/diagnostic/careerDiagnostic.ts',
+        'src/features/career-map/roleMarketMap.ts',
+        'src/features/next-action/careerActionPolicy.ts',
         'src/features/opportunity/opportunityEngine.ts',
         'src/features/workspace/workspaceStorage.ts',
         'src/features/workspace/linkedinArchive.ts',
@@ -22,12 +26,17 @@ export default defineConfig({
         'server/data/sealedText.ts',
         'server/data/sqliteCandidateStore.ts',
         'server/domain/coach.ts',
+        'server/prompts/careerSuperPrompt.ts',
         'server/connectors/connectorHarness.ts',
         'server/connectors/connectorActionQueue.ts',
         'server/connectors/hostedApplicationBrowser.ts',
         'server/connectors/jobPostingParser.ts',
         'server/providers/openAICoachProvider.ts',
         'server/providers/openRouterCoachProvider.ts',
+        'server/providers/openAICompatibleCoachProvider.ts',
+        'server/providers/nativeCoachProvider.ts',
+        'server/providers/coachProviderFactory.ts',
+        'server/providers/modelRegistry.ts',
         'server/providers/privacyAwareCoachProvider.ts',
       ],
       thresholds: {

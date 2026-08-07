@@ -14,7 +14,7 @@ import { OpportunityWorkbench } from './features/opportunity/OpportunityWorkbenc
 import type { OpportunityRecord } from './features/opportunity/opportunityEngine';
 import { OutcomeWorkbench } from './features/outcome/OutcomeWorkbench';
 import type { OutcomeEvent } from './features/outcome/outcomeEngine';
-import { WorkspaceHome } from './features/workspace/WorkspaceHome';
+import { CareerWorkspaceShell } from './features/shell/CareerWorkspaceShell';
 import { WorkspaceSetup } from './features/workspace/WorkspaceSetup';
 import {
   clearWorkspace,
@@ -249,30 +249,36 @@ export default function App() {
     setState({ mode: 'outcome', workspace, invalidStorage: false });
   }
 
+  if (state.mode === 'home' && state.workspace) {
+    return (
+      <CareerWorkspaceShell
+        workspace={state.workspace}
+        onOpenCoach={() =>
+          setState((current) => ({ ...current, mode: 'coach' }))
+        }
+        onOpenEvidence={handleOpenEvidence}
+        onOpenOpportunity={() => {
+          if (state.workspace?.analysis) {
+            setState((current) => ({ ...current, mode: 'opportunity' }));
+          } else {
+            handleOpenEvidence();
+          }
+        }}
+        onOpenActionPackage={handleOpenActionPackage}
+        onOpenOutcome={() =>
+          setState((current) => ({ ...current, mode: 'outcome' }))
+        }
+        onEdit={() => setState((current) => ({ ...current, mode: 'edit' }))}
+      />
+    );
+  }
+
   return (
     <div className="app-root" data-testid="workspace-root">
       <div className="ambient ambient--one" aria-hidden="true" />
       <div className="ambient ambient--two" aria-hidden="true" />
 
       <div className="app-frame">
-        {state.mode !== 'coach' ? (
-          <div className="utility-bar">
-            <p>Карьерный workspace</p>
-            <div className="utility-actions">
-              <span>Сохранённый маршрут · защищённая сессия</span>
-              <button
-                className="coach-entry"
-                onClick={() =>
-                  setState((current) => ({ ...current, mode: 'coach' }))
-                }
-              >
-                <i aria-hidden="true" />
-                ИИ-коуч
-              </button>
-            </div>
-          </div>
-        ) : null}
-
         {state.mode === 'coach' ? (
           <CoachPortal
             onBack={() =>
@@ -330,20 +336,6 @@ export default function App() {
             onOpenOpportunity={() =>
               setState((current) => ({ ...current, mode: 'opportunity' }))
             }
-          />
-        ) : state.mode === 'home' && state.workspace ? (
-          <WorkspaceHome
-            workspace={state.workspace}
-            onOpenEvidence={handleOpenEvidence}
-            onOpenOpportunity={() =>
-              setState((current) => ({ ...current, mode: 'opportunity' }))
-            }
-            onOpenActionPackage={handleOpenActionPackage}
-            onOpenOutcome={() =>
-              setState((current) => ({ ...current, mode: 'outcome' }))
-            }
-            onEdit={() => setState((current) => ({ ...current, mode: 'edit' }))}
-            onClear={handleClear}
           />
         ) : (
           <WorkspaceSetup
