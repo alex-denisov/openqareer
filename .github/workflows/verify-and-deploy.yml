@@ -35,6 +35,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Install Playwright Chromium for connector tests
+        run: npx playwright install --with-deps chromium
+
       - name: Audit dependencies
         run: npm audit --audit-level=high
 
