@@ -1,3 +1,9 @@
+{
+	servers :443 {
+		protocols h1
+	}
+}
+
 openqareer.com {
 	encode gzip
 

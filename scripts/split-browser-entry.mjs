@@ -56,7 +56,7 @@ async function fetchPart(index){
   let lastError;
   for(let attempt=0;attempt<3;attempt+=1){
     try{
-      const response=await fetch(pathFor(index),{cache:attempt===0?"default":"reload",signal:AbortSignal.timeout(15000)});
+      const response=await fetch(pathFor(index),{cache:attempt===0?"default":"reload",signal:AbortSignal.timeout(45000)});
       if(!response.ok)throw new Error("HTTP "+response.status);
       const bytes=new Uint8Array(await response.arrayBuffer());
       const expected=index===PART_COUNT-1?LAST_PART_BYTES:PART_BYTES;
@@ -72,11 +72,9 @@ async function fetchPart(index){
 async function loadSplitModule(){
   void RELEASE;
   const loaded=new Array(PART_COUNT);
-  for(let offset=0;offset<PART_COUNT;offset+=6){
-    const indexes=Array.from({length:Math.min(6,PART_COUNT-offset)},(_,index)=>offset+index);
-    const values=await Promise.all(indexes.map(fetchPart));
-    values.forEach((value,index)=>{loaded[offset+index]=value});
-    setStatus("Загружаем рабочее пространство — "+Math.round(Math.min(offset+6,PART_COUNT)/PART_COUNT*100)+"%");
+  for(let index=0;index<PART_COUNT;index+=1){
+    loaded[index]=await fetchPart(index);
+    setStatus("Загружаем рабочее пространство — "+Math.round((index+1)/PART_COUNT*100)+"%");
   }
   const joined=new Uint8Array(EXPECTED_BYTES);
   let cursor=0;
