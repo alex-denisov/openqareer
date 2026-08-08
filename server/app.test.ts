@@ -8,6 +8,7 @@ import {
 } from './providers/coachProvider';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import type { SessionAuth } from './auth/authService';
+import type { HhVacancySample } from './connectors/hhVacancySearch';
 
 const config: ServerConfig = {
   host: '127.0.0.1',
@@ -77,7 +78,10 @@ afterEach(async () => {
   stores.splice(0).forEach((store) => store.close());
 });
 
-async function createApp(provider: CoachProvider = successProvider) {
+async function createApp(
+  provider: CoachProvider = successProvider,
+  searchVacancies?: () => Promise<HhVacancySample>,
+) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',
     encryptionKey: config.dataEncryptionKey,
@@ -92,6 +96,7 @@ async function createApp(provider: CoachProvider = successProvider) {
     candidateStore,
     authService: noSessions,
     serveStatic: false,
+    searchVacancies,
   });
   apps.push(app);
   stores.push(candidateStore);
@@ -112,6 +117,30 @@ function candidateAuthorization(
 }
 
 describe('OpenQareer API boundary', () => {
+  it('returns a source-labelled public vacancy sample without candidate credentials', async () => {
+    const app = await createApp(successProvider, async () => ({
+      source: 'hh',
+      query: 'руководитель операций',
+      found: 18,
+      fetchedAt: '2026-08-07T13:00:00.000Z',
+      items: [],
+    }));
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/market/hh?text=руководитель%20операций',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: {
+        source: 'hh',
+        found: 18,
+        fetchedAt: '2026-08-07T13:00:00.000Z',
+      },
+    });
+  });
+
   it('keeps health public and provider details authenticated', async () => {
     const app = await createApp();
 

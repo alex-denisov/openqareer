@@ -44,11 +44,35 @@ export interface WorkspaceInput {
   hhUrl?: string;
 }
 
+export interface MarketVacancySampleItem {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  sourceUrl: string;
+  publishedAt: string | null;
+  salary: {
+    from: number | null;
+    to: number | null;
+    currency: string;
+    gross: boolean;
+  } | null;
+}
+
+export interface MarketVacancySample {
+  source: 'hh';
+  query: string;
+  found: number;
+  fetchedAt: string;
+  items: MarketVacancySampleItem[];
+}
+
 export interface CandidateWorkspace extends WorkspaceInput {
   version: typeof WORKSPACE_VERSION;
   createdAt: string;
   updatedAt: string;
   analysis?: CandidateAnalysis;
+  marketSample?: MarketVacancySample;
   opportunity?: OpportunityRecord;
   actionPackage?: ActionPackage;
   outcomes: OutcomeEvent[];
@@ -73,13 +97,20 @@ export function validateWorkspaceInput(
   input: WorkspaceInput,
 ): WorkspaceInputErrors {
   const errors: WorkspaceInputErrors = {};
+  const canStartFromCareerQuestion = input.currentSituation.trim().length >= 20;
 
-  if (input.resumeText.trim().length < 80) {
+  if (
+    input.resumeText.trim().length > 0 &&
+    input.resumeText.trim().length < 80
+  ) {
     errors.resumeText =
       'Добавьте хотя бы 80 знаков, чтобы сохранить рабочий контекст.';
+  } else if (!input.resumeText.trim() && !canStartFromCareerQuestion) {
+    errors.resumeText =
+      'Добавьте резюме или начните с вопроса о вашей ситуации.';
   }
 
-  if (input.targetDirection.trim().length < 2) {
+  if (input.targetDirection.trim().length < 2 && !canStartFromCareerQuestion) {
     errors.targetDirection = 'Укажите роль или направление.';
   }
 
@@ -129,6 +160,7 @@ export function createWorkspace(
     createdAt: previous?.createdAt ?? now,
     updatedAt: now,
     analysis: canKeepAnalysis ? previous.analysis : undefined,
+    marketSample: canKeepOpportunity ? previous?.marketSample : undefined,
     opportunity: canKeepOpportunity ? previous?.opportunity : undefined,
     actionPackage: canKeepOpportunity ? previous?.actionPackage : undefined,
     outcomes: canKeepOpportunity ? (previous?.outcomes ?? []) : [],
@@ -213,6 +245,7 @@ function isCandidateWorkspace(value: unknown): value is CandidateWorkspace {
     !(
       isWorkspaceRecord(value, WORKSPACE_VERSION) &&
       (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
+      (value.marketSample === undefined || isMarketSample(value.marketSample)) &&
       (value.opportunity === undefined ||
         isOpportunityRecord(value.opportunity)) &&
       (value.actionPackage === undefined ||
@@ -326,10 +359,11 @@ function isWorkspaceRecord(
 ): value is Record<string, unknown> &
   Omit<
     CandidateWorkspace,
-    'version' | 'analysis' | 'opportunity' | 'actionPackage' | 'outcomes'
+    'version' | 'analysis' | 'marketSample' | 'opportunity' | 'actionPackage' | 'outcomes'
   > & {
     version: number;
     analysis?: unknown;
+    marketSample?: unknown;
     opportunity?: unknown;
     actionPackage?: unknown;
     outcomes?: unknown;
@@ -341,12 +375,15 @@ function isWorkspaceRecord(
   return (
     value.version === version &&
     typeof value.resumeText === 'string' &&
-    value.resumeText.trim().length >= 80 &&
+    (value.resumeText.trim().length === 0 ||
+      value.resumeText.trim().length >= 80) &&
     isResumeSource(value.resumeSource) &&
     isOptionalString(value.resumeFileName) &&
     isOptionalNumber(value.resumePageCount) &&
     typeof value.targetDirection === 'string' &&
-    value.targetDirection.trim().length >= 2 &&
+    (value.targetDirection.trim().length >= 2 ||
+      (typeof value.currentSituation === 'string' &&
+        value.currentSituation.trim().length >= 20)) &&
     (value.market === 'ru' || value.market === 'international') &&
     typeof value.currentSituation === 'string' &&
     value.currentSituation.trim().length >= 20 &&
@@ -356,6 +393,35 @@ function isWorkspaceRecord(
     isOptionalString(value.hhUrl) &&
     typeof value.createdAt === 'string' &&
     typeof value.updatedAt === 'string'
+  );
+}
+
+function isMarketSample(value: unknown): value is MarketVacancySample {
+  return (
+    isRecord(value) &&
+    value.source === 'hh' &&
+    typeof value.query === 'string' &&
+    typeof value.found === 'number' &&
+    value.found >= 0 &&
+    isValidDateString(value.fetchedAt) &&
+    Array.isArray(value.items) &&
+    value.items.every(
+      (item) =>
+        isRecord(item) &&
+        typeof item.id === 'string' &&
+        typeof item.title === 'string' &&
+        typeof item.company === 'string' &&
+        typeof item.location === 'string' &&
+        typeof item.sourceUrl === 'string' &&
+        isAllowedHhVacancyUrl(item.sourceUrl) &&
+        (item.publishedAt === null || typeof item.publishedAt === 'string') &&
+        (item.salary === null ||
+          (isRecord(item.salary) &&
+            (item.salary.from === null || typeof item.salary.from === 'number') &&
+            (item.salary.to === null || typeof item.salary.to === 'number') &&
+            typeof item.salary.currency === 'string' &&
+            typeof item.salary.gross === 'boolean')),
+    )
   );
 }
 
@@ -603,6 +669,20 @@ function isAllowedProfileUrl(value: string, source: 'linkedin' | 'hh'): boolean 
     return source === 'linkedin'
       ? hostname === 'linkedin.com' || hostname.endsWith('.linkedin.com')
       : hostname === 'hh.ru' || hostname.endsWith('.hh.ru');
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedHhVacancyUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    return (
+      url.protocol === 'https:' &&
+      (hostname === 'hh.ru' || hostname.endsWith('.hh.ru')) &&
+      /^\/vacancy\/\d+\/?$/u.test(url.pathname)
+    );
   } catch {
     return false;
   }

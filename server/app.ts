@@ -38,6 +38,10 @@ import type {
   SessionAuth,
 } from './auth/authService';
 import { CAREER_SUPER_PROMPT_REVISION } from './prompts/careerSuperPrompt';
+import {
+  searchHhVacancies,
+  type HhVacancySample,
+} from './connectors/hhVacancySearch';
 
 interface BuildAppOptions {
   config: ServerConfig;
@@ -45,6 +49,10 @@ interface BuildAppOptions {
   candidateStore: CandidateStore;
   authService: SessionAuth;
   serveStatic?: boolean;
+  searchVacancies?: (input: {
+    text: string;
+    perPage?: number;
+  }) => Promise<HhVacancySample>;
 }
 
 interface ErrorBody {
@@ -62,6 +70,7 @@ export async function buildApp({
   candidateStore,
   authService,
   serveStatic = true,
+  searchVacancies = searchHhVacancies,
 }: BuildAppOptions): Promise<FastifyInstance> {
   const app = Fastify({
     trustProxy: '127.0.0.1',
@@ -197,6 +206,39 @@ export async function buildApp({
       meta: { requestId: request.id },
     };
   });
+
+  app.get(
+    '/api/v1/market/hh',
+    {
+      config: {
+        rateLimit: {
+          max: 20,
+          timeWindow: '5 minutes',
+        },
+      },
+    },
+    async (request, reply) => {
+      const query = hhMarketQuerySchema.parse(request.query);
+      try {
+        return {
+          data: await searchVacancies({
+            text: query.text,
+            perPage: query.perPage,
+          }),
+          meta: { requestId: request.id },
+        };
+      } catch {
+        return sendError(
+          reply,
+          request,
+          502,
+          'market_source_unavailable',
+          'hh.ru не вернул выборку. Попробуйте позже или добавьте вакансию вручную.',
+          true,
+        );
+      }
+    },
+  );
 
   app.post('/api/v1/auth/logout', async (request, reply) => {
     if (!hasAllowedOrigin(request, config)) {
@@ -588,6 +630,11 @@ export async function buildApp({
 const candidateCreateSchema = z.object({
   dataClass: z.enum(['synthetic', 'personal']).default('personal'),
   locale: z.enum(['ru-RU', 'en-US']).default('ru-RU'),
+});
+
+const hhMarketQuerySchema = z.object({
+  text: z.string().trim().min(2).max(200),
+  perPage: z.coerce.number().int().min(1).max(20).default(12),
 });
 
 const loginSchema = z.object({

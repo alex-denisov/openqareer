@@ -46,6 +46,21 @@ const validInput = {
 };
 
 describe('workspace validation', () => {
+  it('allows a candidate to start from a career question without a resume or target title', () => {
+    expect(
+      validateWorkspaceInput({
+        resumeText: '',
+        resumeSource: 'text',
+        targetDirection: '',
+        market: 'ru',
+        currentSituation:
+          'Я давно не получаю приглашений и не понимаю, какую роль искать.',
+        constraints: '',
+        urgency: 'exploring',
+      }),
+    ).toEqual({});
+  });
+
   it('returns accessible field errors for incomplete input', () => {
     expect(
       validateWorkspaceInput({
@@ -84,6 +99,34 @@ describe('workspace persistence', () => {
       status: 'ready',
       workspace,
     });
+  });
+
+  it('accepts only hh source links in a persisted market sample', () => {
+    const workspace = {
+      ...createWorkspace(validInput, '2026-07-30T16:00:00.000Z'),
+      marketSample: {
+        source: 'hh' as const,
+        query: 'Руководитель продукта',
+        found: 1,
+        fetchedAt: '2026-08-07T13:00:00.000Z',
+        items: [
+          {
+            id: '123',
+            title: 'Руководитель продукта',
+            company: 'Пример',
+            location: 'Москва',
+            sourceUrl: 'javascript:alert(1)',
+            publishedAt: null,
+            salary: null,
+          },
+        ],
+      },
+    };
+    const storage = createMemoryStorage({
+      'candidate-workspace': JSON.stringify(workspace),
+    });
+
+    expect(loadWorkspace(storage)).toEqual({ status: 'invalid' });
   });
 
   it('rejects corrupt or unknown persisted data without throwing', () => {
