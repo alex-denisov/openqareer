@@ -65,16 +65,33 @@ async function verifyViewport(browser, baseUrl, viewport) {
   );
   const interactiveMs = Math.round(performance.now() - startedAt);
 
-  await page.getByRole('button', { name: 'Посмотреть демо' }).click();
-  await page.getByRole('status').getByText('Демо · синтетические данные').waitFor();
+  assert(
+    (await page.getByText('Посмотреть демо', { exact: true }).count()) === 0,
+    `${viewport.name}: separate demo entry is still present`,
+  );
+  await page.getByRole('button', { name: 'Начать диагностику' }).click();
+  await page.getByRole('heading', { name: 'С чем разобраться?' }).waitFor();
+  await page.getByRole('button', { name: /Хочу найти работу/ }).click();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await page.getByRole('heading', { name: 'Что уже есть?' }).waitFor();
+  await page.getByRole('button', { name: 'Без документов' }).click();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await page.getByRole('heading', { name: 'Что должно измениться?' }).waitFor();
+  await page.getByLabel('Что происходит сейчас?').fill(
+    'После смены позиционирования стало меньше приглашений, хочу понять следующий карьерный шаг.',
+  );
+  await page.getByRole('button', { name: 'Собрать карьерную картину' }).click();
+  await page.getByRole('heading', { name: 'Что можно сказать уже сейчас' }).waitFor();
   assert(
     await page.locator('button[aria-label="Профиль"]:visible').isEnabled(),
-    `${viewport.name}: approved workspace is still inaccessible from demo`,
+    `${viewport.name}: real candidate workspace is inaccessible after intake`,
   );
   await page.locator('button[aria-label="Карьера"]:visible').click();
   await page.getByRole('heading', { name: 'Карьера', exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Выйти из демо' }).last().click();
-  await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).waitFor();
+  assert(
+    (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) !== null,
+    `${viewport.name}: candidate progress was not saved`,
+  );
 
   const tariffsButton = page
     .locator(

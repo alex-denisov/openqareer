@@ -205,34 +205,6 @@
   font-size: 0.8rem;
 }
 
-.career-demo-label {
-  color: var(--career-text-dim);
-  font-size: 0.72rem;
-}
-
-.career-demo-exit {
-  min-height: 44px;
-  border: 0;
-  padding: 0 4px;
-  color: var(--career-accent);
-  background: transparent;
-  font-size: 0.78rem;
-  font-weight: 720;
-}
-
-.career-demo-banner {
-  width: min(100%, 1120px);
-  margin: 0 auto 18px;
-  border-bottom: 1px solid var(--career-line);
-  padding: 0 0 12px;
-  color: var(--career-text-dim);
-  font-size: 0.76rem;
-}
-
-.career-demo-banner-exit {
-  display: none;
-}
-
 .career-topbar-actions {
   margin-left: auto;
   display: flex;
@@ -2253,34 +2225,6 @@
   .career-start h1 {
     font-size: 2rem;
     line-height: 1.07;
-  }
-
-  .career-demo-label {
-    display: none;
-  }
-
-  .career-demo-exit {
-    display: none;
-  }
-
-  .career-demo-banner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .career-demo-banner-exit {
-    min-height: 44px;
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    border: 0;
-    padding: 0;
-    color: var(--career-accent);
-    background: transparent;
-    font-size: 0.72rem;
-    font-weight: 720;
   }
 
   .career-start-stage {

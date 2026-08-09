@@ -25,7 +25,6 @@ type SourceChoice = 'pdf' | 'linkedin' | 'text' | 'none';
 
 interface CareerIntakeProps {
   onComplete: (input: WorkspaceInput) => void;
-  onOpenDemo?: () => void;
 }
 
 const goalOptions: Array<{
@@ -67,10 +66,7 @@ const conditionOptions = [
   'Нужна визовая поддержка',
 ];
 
-export function CareerIntake({
-  onComplete,
-  onOpenDemo = () => undefined,
-}: CareerIntakeProps) {
+export function CareerIntake({ onComplete }: CareerIntakeProps) {
   const [started, setStarted] = useState(false);
   const [step, setStep] = useState<IntakeStep>('intent');
   const [goal, setGoal] = useState<CareerGoal>();
@@ -108,14 +104,6 @@ export function CareerIntake({
             >
               Начать диагностику
               <ArrowRight size={18} weight="bold" />
-            </button>
-            <button
-              className="career-quiet-button"
-              type="button"
-              onClick={onOpenDemo}
-            >
-              <Sparkle size={18} weight="fill" />
-              Посмотреть демо
             </button>
           </div>
         </div>

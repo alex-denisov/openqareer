@@ -8,7 +8,6 @@ import {
   buildCareerJourney,
   prepareCareerWorkspace,
 } from '../journey/careerJourneyEngine';
-import { createDemoWorkspace } from '../journey/demoWorkspace';
 import { createActionPackage } from '../action/actionPackageEngine';
 import {
   analyzeOpportunity,
@@ -32,7 +31,10 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('data-testid="career-shell"');
     expect(html).toContain('Начните с карьерного вопроса');
     expect(html).toContain('Начать диагностику');
-    expect(html).toContain('Посмотреть демо');
+    expect(html).toContain('Можно начать без документов');
+    expect(html).not.toContain('Посмотреть демо');
+    expect(html).not.toContain('Выйти из демо');
+    expect(html).not.toContain('Демо · синтетические данные');
     expect(html).toContain('Профиль</span><strong>Не заполнен</strong>');
     expect(html).not.toContain('С чем разобраться?');
     expect(html).toContain('Сегодня');
@@ -41,19 +43,6 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('Возможности');
     expect(html).not.toContain('career-intent-list" role="list');
     expect(html).not.toContain('data-testid="workspace-setup"');
-  });
-
-  it('marks an interactive demo as synthetic and provides a visible exit', () => {
-    const workspace = createDemoWorkspace('2026-12-01T12:00:00.000Z');
-    const html = renderToStaticMarkup(
-      <CareerWorkspaceShell workspace={workspace} demo onExitDemo={() => undefined} />,
-    );
-
-    expect(html).toContain('Демо · синтетические данные');
-    expect(html).toContain('Выйти из демо');
-    expect(workspace.marketSample?.items).toHaveLength(5);
-    expect(workspace.marketSample?.fetchedAt).toBe('2026-12-01T12:00:00.000Z');
-    expect(workspace.currentSituation).toContain('Синтетический');
   });
 
   it('shows an honest free diagnostic before asking for more evidence', () => {

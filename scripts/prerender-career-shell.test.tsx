@@ -36,7 +36,9 @@ describe('production career shell prerender', () => {
     expect(html).not.toContain('style="display:contents"');
     expect(html).not.toContain('id="root" aria-busy="true" inert');
     expect(html).toContain('Начните с карьерного вопроса');
-    expect(html).toContain('Посмотреть демо');
+    expect(html).toContain('Можно начать без документов');
+    expect(html).not.toContain('Посмотреть демо');
+    expect(html).not.toContain('Демо · синтетические данные');
     expect(html).toContain('Сегодня');
     expect(html).toContain('Профиль');
     expect(html).toContain('Карьера');
