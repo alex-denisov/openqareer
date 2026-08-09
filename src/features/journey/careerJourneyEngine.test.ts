@@ -125,8 +125,17 @@ describe('buildCareerJourney', () => {
       state: 'needs-sample',
     });
     expect(journey.nextAction.id).toBe('compare-markets');
+    expect(journey.track).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'role-market', status: 'active' }),
+        expect.objectContaining({ id: 'positioning', status: 'waiting' }),
+      ]),
+    );
+    expect(journey.commercialBoundary).toMatchObject({
+      state: 'free-route-incomplete',
+    });
 
-    const sampled = buildCareerJourney(
+    const insufficient = buildCareerJourney(
       {
         ...withAnalysis,
         market: 'ru',
@@ -140,11 +149,63 @@ describe('buildCareerJourney', () => {
       },
       '2026-08-07T12:06:00.000Z',
     );
+    expect(insufficient.markets[0]).toMatchObject({ state: 'needs-sample' });
+    expect(insufficient.nextAction.id).toBe('compare-markets');
+
+    const sampled = buildCareerJourney(
+      {
+        ...withAnalysis,
+        market: 'ru',
+        marketSample: {
+          source: 'hh',
+          query: 'Руководитель операций',
+          found: 42,
+          fetchedAt: '2026-08-07T12:04:00.000Z',
+          items: Array.from({ length: 5 }, (_, index) => ({
+            id: `vacancy-${index + 1}`,
+            title: 'Руководитель операций',
+            company: `Компания ${index + 1}`,
+            location: 'Москва',
+            sourceUrl: `https://hh.ru/vacancy/${index + 1}`,
+            publishedAt: null,
+            salary: null,
+          })),
+        },
+      },
+      '2026-08-07T12:06:00.000Z',
+    );
     expect(sampled.markets[0].state).toBe('sample-ready');
     expect(sampled.nextAction).toMatchObject({
       id: 'review-opportunities',
       destination: 'opportunities',
     });
+    expect(sampled.track).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'role-market', status: 'complete' }),
+        expect.objectContaining({ id: 'positioning', status: 'active' }),
+      ]),
+    );
+    expect(sampled.commercialBoundary).toMatchObject({
+      state: 'assisted-setup-eligible',
+    });
+
+    const stale = buildCareerJourney(
+      {
+        ...withAnalysis,
+        market: 'ru',
+        marketSample: {
+          source: 'hh',
+          query: 'Руководитель операций',
+          found: 42,
+          fetchedAt: '2025-12-01T12:04:00.000Z',
+          items: [],
+        },
+      },
+      '2026-08-07T12:06:00.000Z',
+    );
+    expect(stale.markets[0]).toMatchObject({ state: 'needs-sample' });
+    expect(stale.markets[0]?.explanation).toContain('устарела');
+    expect(stale.nextAction.id).toBe('compare-markets');
   });
 
   it('asks for another result when every extracted fact is already confirmed', () => {

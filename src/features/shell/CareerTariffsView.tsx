@@ -7,25 +7,34 @@ const packages = [
     name: 'Диагностика',
     price: '0 ₽',
     time: 'без срока',
+    status: 'Доступно сейчас',
     points: ['Карьерная картина', 'Гипотезы ролей', 'Первое действие'],
+    note:
+      'Работает сейчас без оплаты: доказательства, гипотезы, рыночная проверка и первое действие остаются у кандидата.',
   },
   {
     id: 'setup',
     name: 'Настройка поиска',
     price: 'от 4 900 ₽',
     time: '30 дней',
+    status: 'Сопровождаемый пилот',
     points: ['Материалы под роль', 'Целевые компании', 'Старт кампании'],
+    note:
+      'Ориентир за объём и срок ручной сопровождаемой работы, не за обещание интервью или оффера. Оплата ещё не подключена.',
   },
   {
     id: 'auto',
     name: 'Автопилот',
-    price: 'от 12 900 ₽',
-    time: '90 дней',
+    price: 'Цена не определена',
+    time: 'после проверки адаптеров',
+    status: 'Автопилот пока недоступен',
     points: [
       'Поиск и приоритизация',
       'Отклики и outreach',
       'Ответы и интервью',
     ],
+    note:
+      'Автоматизация внешних аккаунтов не продаётся до проверки выделенных test-account, receipts, лимитов и аварийного отключения.',
   },
 ] as const;
 
@@ -65,13 +74,13 @@ export function CareerTariffsView({
             >
               <span>{item.name}</span>
               <strong>{item.price}</strong>
-              <small>{item.time}</small>
+              <small>{item.status} · {item.time}</small>
             </button>
           ))}
         </div>
         <section className="career-plan-detail" aria-live="polite">
           <div>
-            <p className="career-plan-time">{plan.time}</p>
+            <p className="career-plan-time">{plan.status} · {plan.time}</p>
             <h2>{plan.name}</h2>
             <strong className="career-plan-price">{plan.price}</strong>
           </div>
@@ -83,10 +92,7 @@ export function CareerTariffsView({
               </li>
             ))}
           </ul>
-          <p className="career-plan-note">
-            Оплата за объём и срок работы, не за обещание оффера. Подключение
-            оплаты появится после проверки спроса.
-          </p>
+          <p className="career-plan-note">{plan.note}</p>
         </section>
       </div>
     </div>

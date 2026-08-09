@@ -63,6 +63,13 @@ export interface CareerJourneyAction {
   destination: CareerJourneyDestination;
 }
 
+export interface CareerCommercialBoundary {
+  state: 'free-route-incomplete' | 'assisted-setup-eligible';
+  eligiblePlan: 'free' | 'setup';
+  headline: string;
+  reason: string;
+}
+
 export interface CareerJourney {
   revision: typeof CAREER_JOURNEY_REVISION;
   generatedAt: string;
@@ -72,6 +79,7 @@ export interface CareerJourney {
   diagnostic: CareerDiagnostic;
   track: CareerTrackItem[];
   nextAction: CareerJourneyAction;
+  commercialBoundary: CareerCommercialBoundary;
 }
 
 export function prepareCareerWorkspace(
@@ -118,7 +126,7 @@ export function buildCareerJourney(
   const hasGroundedRole = roles.some(
     (role) => role.fitState === 'plausible' && role.evidenceCount > 0,
   );
-  const hasMarketSample = Boolean(workspace.marketSample);
+  const hasFreshMarketSample = isFreshMarketSample(workspace.marketSample, now);
   const diagnostic = buildCareerDiagnostic(
     {
       resumeText: workspace.resumeText,
@@ -145,10 +153,11 @@ export function buildCareerJourney(
         sourceLabel: 'Начато с карьерного вопроса',
       },
       roles: [],
-      markets: marketRoutesFor(workspace),
+      markets: marketRoutesFor(workspace, now),
       diagnostic,
-      track: buildTrack(false, false),
+      track: buildTrack(false, false, false),
       nextAction: firstActionFor(workspace.careerGoal),
+      commercialBoundary: commercialBoundaryFor(false),
     };
   }
 
@@ -168,11 +177,15 @@ export function buildCareerJourney(
       sourceLabel: sourceLabelFor(workspace),
     },
     roles,
-    markets: marketRoutesFor(workspace),
+    markets: marketRoutesFor(workspace, now),
     diagnostic,
-    track: buildTrack(confirmedEvidence.length >= 3, hasGroundedRole),
+    track: buildTrack(
+      confirmedEvidence.length >= 3,
+      hasGroundedRole,
+      hasFreshMarketSample,
+    ),
     nextAction: hasGroundedRole
-      ? hasMarketSample
+      ? hasFreshMarketSample
         ? {
             id: 'review-opportunities',
             label: 'Сравнить вакансии',
@@ -214,7 +227,30 @@ export function buildCareerJourney(
               'Рабочие гипотезы ролей получат более надёжное основание.',
             destination: 'profile',
           },
+    commercialBoundary: commercialBoundaryFor(
+      hasGroundedRole && hasFreshMarketSample,
+    ),
   };
+}
+
+function commercialBoundaryFor(
+  routeGrounded: boolean,
+): CareerCommercialBoundary {
+  return routeGrounded
+    ? {
+        state: 'assisted-setup-eligible',
+        eligiblePlan: 'setup',
+        headline: 'Можно подключить сопровождаемую настройку поиска',
+        reason:
+          'Рабочая роль опирается на подтверждённые факты и свежую рыночную выборку. Платная работа может экономить время на материалах и подготовке кампании, но не обещает интервью или оффер.',
+      }
+    : {
+        state: 'free-route-incomplete',
+        eligiblePlan: 'free',
+        headline: 'Сначала завершим бесплатную проверку маршрута',
+        reason:
+          'До подтверждения роли и рынка openqareer не предлагает оплачивать настройку поиска.',
+      };
 }
 
 function firstActionFor(goal: CareerGoal | undefined): CareerJourneyAction {
@@ -269,7 +305,9 @@ function firstActionFor(goal: CareerGoal | undefined): CareerJourneyAction {
 function buildTrack(
   profileGrounded: boolean,
   roleGrounded: boolean,
+  marketGrounded: boolean,
 ): CareerTrackItem[] {
+  const routeGrounded = roleGrounded && marketGrounded;
   return [
     {
       id: 'career-picture',
@@ -282,15 +320,17 @@ function buildTrack(
     {
       id: 'role-market',
       label: 'Роль и рынок',
-      status: profileGrounded ? (roleGrounded ? 'complete' : 'active') : 'waiting',
-      reason: roleGrounded
-        ? 'Есть рабочая ролевая гипотеза.'
-        : 'Нужны подтверждённые факты и рыночная выборка.',
+      status: profileGrounded ? (routeGrounded ? 'complete' : 'active') : 'waiting',
+      reason: routeGrounded
+        ? 'Ролевая гипотеза проверена датированной рыночной выборкой.'
+        : roleGrounded
+          ? 'Есть рабочая ролевая гипотеза, рынок ещё не проверен.'
+          : 'Нужны подтверждённые факты и рыночная выборка.',
     },
     {
       id: 'positioning',
       label: 'Позиционирование',
-      status: roleGrounded ? 'active' : 'waiting',
+      status: routeGrounded ? 'active' : 'waiting',
       reason: 'Создаётся только после выбора рабочей роли и рынка.',
     },
     {
@@ -304,16 +344,23 @@ function buildTrack(
 
 function marketRoutesFor(
   workspace: CandidateWorkspace,
+  now: string,
 ): CareerJourneyMarket[] {
   const sample = workspace.marketSample;
+  const sampleIsFresh = isFreshMarketSample(sample, now);
+  const sampleIsRecent = isRecentMarketSample(sample, now);
   return [
     workspace.market === 'ru'
       ? {
           id: 'russia',
           label: 'Россия',
-          state: sample ? 'sample-ready' : 'needs-sample',
-          explanation: sample
+          state: sampleIsFresh ? 'sample-ready' : 'needs-sample',
+          explanation: sampleIsFresh && sample
             ? `hh.ru: ${sample.items.length} вакансий из ${sample.found} найденных, с датой наблюдения.`
+            : sample && !sampleIsRecent
+              ? `Выборка hh.ru от ${sample.fetchedAt.slice(0, 10)} устарела. Нужна новая датированная проверка.`
+              : sample
+                ? `В выборке только ${sample.items.length} релевантных вакансий. Для проверки маршрута нужно не менее 5.`
             : 'Нужна свежая выборка вакансий по рабочей гипотезе роли.',
         }
       : {
@@ -324,6 +371,25 @@ function marketRoutesFor(
             'Нужно выбрать страны, формат работы и проверить право на работу.',
         },
   ];
+}
+
+function isFreshMarketSample(
+  sample: CandidateWorkspace['marketSample'],
+  now: string,
+): boolean {
+  return Boolean(sample && sample.items.length >= 5 && isRecentMarketSample(sample, now));
+}
+
+function isRecentMarketSample(
+  sample: CandidateWorkspace['marketSample'],
+  now: string,
+): boolean {
+  if (!sample) return false;
+  const fetchedAt = new Date(sample.fetchedAt).valueOf();
+  const generatedAt = new Date(now).valueOf();
+  if (Number.isNaN(fetchedAt) || Number.isNaN(generatedAt)) return false;
+  const age = generatedAt - fetchedAt;
+  return age >= 0 && age <= 90 * 86_400_000;
 }
 
 function sourceLabelFor(workspace: CandidateWorkspace): string {

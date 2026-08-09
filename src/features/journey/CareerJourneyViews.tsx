@@ -565,6 +565,7 @@ export function CareerMapView({
       {workspace.marketSample ? (
         <MarketSampleView
           sample={workspace.marketSample}
+          fresh={journey.markets[0]?.state === 'sample-ready'}
           loading={marketLoading}
           onRefresh={collectMarketSample}
         />
@@ -577,10 +578,12 @@ export function CareerMapView({
 
 function MarketSampleView({
   sample,
+  fresh,
   loading,
   onRefresh,
 }: {
   sample: NonNullable<CandidateWorkspace['marketSample']>;
+  fresh: boolean;
   loading: boolean;
   onRefresh: () => void;
 }) {
@@ -588,8 +591,12 @@ function MarketSampleView({
     <section className="career-market-sample" aria-labelledby="market-sample-title">
       <div className="career-section-heading">
         <div>
-          <p className="career-eyebrow">hh.ru · {formatObservedAt(sample.fetchedAt)}</p>
-          <h2 id="market-sample-title">Свежие вакансии по гипотезе</h2>
+          <p className="career-eyebrow">
+            hh.ru · наблюдение от {formatObservedAt(sample.fetchedAt)}
+          </p>
+          <h2 id="market-sample-title">
+            {fresh ? 'Свежие вакансии по гипотезе' : 'Выборка устарела'}
+          </h2>
         </div>
         <div className="career-market-sample-actions">
           <span>{sample.items.length} из {sample.found}</span>
@@ -845,16 +852,37 @@ export function OpportunitiesView({
         </div>
       </section>
 
-      <section className="career-paid-moment">
+      <section
+        className={`career-paid-moment ${
+          journey.commercialBoundary.state === 'free-route-incomplete'
+            ? 'is-free-route'
+            : ''
+        }`}
+      >
         <div>
-          <Sparkle size={21} weight="fill" />
+          {journey.commercialBoundary.state === 'assisted-setup-eligible' ? (
+            <Sparkle size={21} weight="fill" />
+          ) : (
+            <Compass size={21} />
+          )}
           <span>
-            <strong>После выбора роли openqareer сможет делать рутину за вас</strong>
-            <small>Поиск, приоритизация и подготовка кампании с вашим контролем.</small>
+            <strong>{journey.commercialBoundary.headline}</strong>
+            <small>{journey.commercialBoundary.reason}</small>
           </span>
         </div>
-        <button type="button" onClick={() => onNavigate('tariffs')}>
-          Посмотреть объём работы
+        <button
+          type="button"
+          onClick={() =>
+            onNavigate(
+              journey.commercialBoundary.state === 'assisted-setup-eligible'
+                ? 'tariffs'
+                : 'career',
+            )
+          }
+        >
+          {journey.commercialBoundary.state === 'assisted-setup-eligible'
+            ? 'Посмотреть объём работы'
+            : 'Завершить роль и рынок'}
           <ArrowRight size={16} />
         </button>
       </section>

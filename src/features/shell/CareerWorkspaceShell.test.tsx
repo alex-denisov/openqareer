@@ -1,7 +1,15 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { prepareCareerWorkspace } from '../journey/careerJourneyEngine';
+import {
+  CareerMapView,
+  OpportunitiesView,
+} from '../journey/CareerJourneyViews';
+import {
+  buildCareerJourney,
+  prepareCareerWorkspace,
+} from '../journey/careerJourneyEngine';
 import { CareerWorkspaceShell } from './CareerWorkspaceShell';
+import { CareerTariffsView } from './CareerTariffsView';
 
 describe('CareerWorkspaceShell', () => {
   it('keeps a first-time candidate inside the canonical career shell', () => {
@@ -71,5 +79,91 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('Предварительная диагностика');
     expect(html).toContain('Результаты пока не доказаны');
     expect(html).toContain('Нужно проверить');
+  });
+
+  it('keeps the route free until role and market evidence are ready', () => {
+    const workspace = prepareCareerWorkspace(
+      {
+        careerGoal: 'find-job',
+        resumeText: '',
+        resumeSource: 'text',
+        targetDirection: 'Руководитель продукта',
+        market: 'ru',
+        currentSituation:
+          'После смены позиционирования стало заметно меньше приглашений на интервью.',
+        constraints: 'Удалённая работа.',
+        urgency: 'active',
+      },
+      '2026-08-09T17:00:00.000Z',
+    );
+    const journey = buildCareerJourney(
+      workspace,
+      '2026-08-09T17:05:00.000Z',
+    );
+    const html = renderToStaticMarkup(
+      <OpportunitiesView
+        workspace={workspace}
+        journey={journey}
+        onNavigate={() => undefined}
+        onOpenExpert={() => undefined}
+        onUpdateWorkspace={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Сначала завершим бесплатную проверку маршрута');
+    expect(html).not.toContain('Посмотреть объём работы');
+  });
+
+  it('separates available work, assisted pilot and unavailable automation', () => {
+    const html = renderToStaticMarkup(
+      <CareerTariffsView onOpenCoach={() => undefined} />,
+    );
+
+    expect(html).toContain('Доступно сейчас');
+    expect(html).toContain('Сопровождаемый пилот');
+    expect(html).toContain('Автопилот пока недоступен');
+  });
+
+  it('labels an old saved market sample as stale rather than fresh', () => {
+    const base = prepareCareerWorkspace(
+      {
+        careerGoal: 'market',
+        resumeText: '',
+        resumeSource: 'text',
+        targetDirection: 'Руководитель продукта',
+        market: 'ru',
+        currentSituation:
+          'Хочу проверить, существует ли спрос на выбранную продуктовую роль.',
+        constraints: 'Удалённая работа.',
+        urgency: 'exploring',
+      },
+      '2025-12-01T12:00:00.000Z',
+    );
+    const workspace = {
+      ...base,
+      marketSample: {
+        source: 'hh' as const,
+        query: 'Руководитель продукта',
+        found: 42,
+        fetchedAt: '2025-12-01T12:04:00.000Z',
+        items: [],
+      },
+    };
+    const journey = buildCareerJourney(
+      workspace,
+      '2026-08-09T17:05:00.000Z',
+    );
+    const html = renderToStaticMarkup(
+      <CareerMapView
+        workspace={workspace}
+        journey={journey}
+        onNavigate={() => undefined}
+        onOpenExpert={() => undefined}
+        onUpdateWorkspace={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Выборка устарела');
+    expect(html).not.toContain('Свежие вакансии по гипотезе');
   });
 });

@@ -1479,6 +1479,14 @@
   color: var(--career-accent);
 }
 
+.career-paid-moment.is-free-route {
+  background: transparent;
+}
+
+.career-paid-moment.is-free-route > div {
+  color: var(--career-text-dim);
+}
+
 .career-paid-moment span {
   display: grid;
   gap: 4px;
