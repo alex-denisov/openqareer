@@ -1,0 +1,8 @@
+# openqareer
+
+> Карьерная операционная система кандидата: профиль и доказательства, гипотезы ролей, рынок, карьерный трек и подготовленные действия для поиска работы.
+
+- Canonical product: [openqareer.com](https://openqareer.com)
+- Language: Russian
+- Audience: candidates exploring roles, job markets, remote work and relocation
+- Product boundary: openqareer does not guarantee an interview, offer, job or visa

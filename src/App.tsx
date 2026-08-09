@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   completeCandidateAnalysis,
   createCandidateAnalysis,
@@ -29,6 +29,10 @@ function readInitialState(): AppState {
 export default function App() {
   const [state, setState] = useState(readInitialState);
   const [storageError, setStorageError] = useState<string>();
+
+  useEffect(() => {
+    document.getElementById('root')?.removeAttribute('aria-busy');
+  }, []);
 
   function persist(workspace: CandidateWorkspace) {
     try {

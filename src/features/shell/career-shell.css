@@ -42,7 +42,7 @@
   font: inherit;
 }
 
-.career-shell button {
+.career-shell :where(button) {
   color: inherit;
 }
 

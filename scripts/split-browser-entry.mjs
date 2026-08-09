@@ -12,6 +12,7 @@ import { pathToFileURL } from 'node:url';
 
 const DEFAULT_PART_BYTES = 12 * 1024;
 const MAX_BOOTSTRAP_BYTES = 8 * 1024;
+const FETCH_CONCURRENCY = 2;
 
 function sha256Hex(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -47,6 +48,7 @@ const PREFIX=${JSON.stringify(`${proxyPath}.oqpart-`)};
 const PART_BYTES=${partBytes};
 const PART_COUNT=${partCount};
 const LAST_PART_BYTES=${lastPartBytes};
+const FETCH_CONCURRENCY=${FETCH_CONCURRENCY};
 const REWRITES=${JSON.stringify(rewrites)};
 const statusNode=typeof document==="object"?document.querySelector("#root [role=status]"):null;
 const setStatus=(text)=>{if(statusNode)statusNode.textContent=text};
@@ -72,10 +74,19 @@ async function fetchPart(index){
 async function loadSplitModule(){
   void RELEASE;
   const loaded=new Array(PART_COUNT);
-  for(let index=0;index<PART_COUNT;index+=1){
-    loaded[index]=await fetchPart(index);
-    setStatus("Загружаем рабочее пространство — "+Math.round((index+1)/PART_COUNT*100)+"%");
+  let nextIndex=0;
+  let completed=0;
+  async function loadNext(){
+    while(nextIndex<PART_COUNT){
+      const index=nextIndex;
+      nextIndex+=1;
+      loaded[index]=await fetchPart(index);
+      completed+=1;
+      setStatus("Подготавливаем интерфейс — "+Math.round(completed/PART_COUNT*100)+"%");
+    }
   }
+  const workers=Array.from({length:Math.min(FETCH_CONCURRENCY,PART_COUNT)},()=>loadNext());
+  await Promise.all(workers);
   const joined=new Uint8Array(EXPECTED_BYTES);
   let cursor=0;
   for(const value of loaded){joined.set(value,cursor);cursor+=value.byteLength}
@@ -124,6 +135,8 @@ function appFailureHandler(sourcePath) {
   return `function showLoadFailure(error){
   const root=document.getElementById("root");
   if(!root)return;
+  root.removeAttribute("inert");
+  root.removeAttribute("aria-busy");
   root.replaceChildren();
   const box=document.createElement("main");
   box.className="bootstrap-error";

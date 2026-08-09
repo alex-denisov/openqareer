@@ -7,7 +7,10 @@ import './features/shell/career-shell.css';
 document.documentElement.dataset.release =
   import.meta.env.VITE_OPENQAREER_RELEASE || 'local';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+const root = document.getElementById('root');
+if (!root) throw new Error('openqareer root mount point is missing');
+
+ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>

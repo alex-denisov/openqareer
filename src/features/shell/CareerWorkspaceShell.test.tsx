@@ -18,6 +18,7 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('Профиль');
     expect(html).toContain('Карьера');
     expect(html).toContain('Возможности');
+    expect(html).not.toContain('career-intent-list" role="list');
     expect(html).not.toContain('data-testid="workspace-setup"');
   });
 });

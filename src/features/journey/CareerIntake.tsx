@@ -11,7 +11,6 @@ import {
   Sparkle,
   Target,
 } from '@phosphor-icons/react';
-import { extractPdfResume } from '../workspace/pdfResume';
 import {
   validateWorkspaceInput,
   type ResumeSource,
@@ -93,6 +92,7 @@ export function CareerIntake({ onComplete }: CareerIntakeProps) {
     setReadingPdf(true);
     setError(undefined);
     try {
+      const { extractPdfResume } = await import('../workspace/pdfResume');
       const result = await extractPdfResume(file);
       setResumeText(result.text);
       setResumeSource('pdf');
@@ -201,7 +201,7 @@ export function CareerIntake({ onComplete }: CareerIntakeProps) {
       </header>
 
       {step === 'intent' ? (
-        <div className="career-intent-list" role="list">
+        <div className="career-intent-list">
           {goalOptions.map((item) => {
             const ItemIcon = item.icon;
             const selected = goal === item.id;

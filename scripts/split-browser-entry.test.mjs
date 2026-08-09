@@ -76,11 +76,14 @@ describe('split browser entry delivery', () => {
     );
     assert.ok(bootstrap.includes('crypto.subtle.digest'));
     assert.ok(bootstrap.includes('AbortSignal.timeout(45000)'));
-    assert.match(
-      bootstrap,
-      /for\(let index=0;index<PART_COUNT;index\+=1\)\{\s*loaded\[index\]=await fetchPart\(index\)/,
+    assert.ok(bootstrap.includes('const FETCH_CONCURRENCY=2'));
+    assert.ok(bootstrap.includes('await Promise.all(workers)'));
+    assert.equal(
+      bootstrap.includes(
+        'for(let index=0;index<PART_COUNT;index+=1){loaded[index]=await fetchPart(index)',
+      ),
+      false,
     );
-    assert.equal(bootstrap.includes('Promise.all(indexes.map(fetchPart))'), false);
     assert.equal(existsSync(join(directory, 'assets/index-test.js')), false);
     assert.equal(existsSync(join(directory, 'assets/pdf-test.js')), false);
     assert.equal(
