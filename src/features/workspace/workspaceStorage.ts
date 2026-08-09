@@ -24,13 +24,15 @@ import {
 } from '../outcome/outcomeEngine';
 
 export const WORKSPACE_STORAGE_KEY = 'candidate-workspace';
-export const WORKSPACE_VERSION = 5;
+export const WORKSPACE_VERSION = 6;
 
 export type WorkspaceMarket = 'ru' | 'international';
 export type ResumeSource = 'pdf' | 'linkedin-pdf' | 'hh-pdf' | 'text';
 export type SearchUrgency = 'exploring' | 'active' | 'urgent';
+export type CareerGoal = 'find-job' | 'choose-role' | 'positioning' | 'market';
 
 export interface WorkspaceInput {
+  careerGoal?: CareerGoal;
   resumeText: string;
   resumeSource: ResumeSource;
   resumeFileName?: string;
@@ -146,6 +148,7 @@ export function createWorkspace(
 
   return {
     version: WORKSPACE_VERSION,
+    careerGoal: input.careerGoal,
     resumeText,
     resumeSource: input.resumeSource,
     resumeFileName: input.resumeFileName?.trim() || undefined,
@@ -226,6 +229,16 @@ export function loadWorkspace(storage: StorageLike): WorkspaceLoadResult {
           ...parsed,
           version: WORKSPACE_VERSION,
           outcomes: [],
+        },
+      };
+    }
+
+    if (isVersionFiveWorkspace(parsed)) {
+      return {
+        status: 'ready',
+        workspace: {
+          ...parsed,
+          version: WORKSPACE_VERSION,
         },
       };
     }
@@ -364,6 +377,34 @@ function isVersionFourWorkspace(
   );
 }
 
+function isVersionFiveWorkspace(
+  value: unknown,
+): value is Omit<CandidateWorkspace, 'version'> & { version: 5 } {
+  if (
+    !(
+      isWorkspaceRecord(value, 5) &&
+      (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
+      (value.marketSample === undefined || isMarketSample(value.marketSample)) &&
+      (value.opportunity === undefined ||
+        isOpportunityRecord(value.opportunity)) &&
+      (value.actionPackage === undefined ||
+        isActionPackage(value.actionPackage)) &&
+      Array.isArray(value.outcomes) &&
+      value.outcomes.every(isOutcomeEvent)
+    )
+  ) {
+    return false;
+  }
+
+  return (
+    value.actionPackage === undefined ||
+    (value.opportunity !== undefined &&
+      value.opportunity.decision !== undefined &&
+      value.actionPackage.opportunityId === value.opportunity.id &&
+      value.actionPackage.decisionChoice === value.opportunity.decision.choice)
+  );
+}
+
 function isWorkspaceRecord(
   value: unknown,
   version: number,
@@ -385,6 +426,7 @@ function isWorkspaceRecord(
 
   return (
     value.version === version &&
+    (value.careerGoal === undefined || isCareerGoal(value.careerGoal)) &&
     typeof value.resumeText === 'string' &&
     (value.resumeText.trim().length === 0 ||
       value.resumeText.trim().length >= 80) &&
@@ -404,6 +446,15 @@ function isWorkspaceRecord(
     isOptionalString(value.hhUrl) &&
     typeof value.createdAt === 'string' &&
     typeof value.updatedAt === 'string'
+  );
+}
+
+function isCareerGoal(value: unknown): value is CareerGoal {
+  return (
+    value === 'find-job' ||
+    value === 'choose-role' ||
+    value === 'positioning' ||
+    value === 'market'
   );
 }
 

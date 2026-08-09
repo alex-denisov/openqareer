@@ -30,6 +30,7 @@ function createMemoryStorage(initial: Record<string, string> = {}): StorageLike 
 }
 
 const validInput = {
+  careerGoal: 'find-job' as const,
   resumeText:
     'Руководил запуском продукта и координировал работу команды. Отвечал за сроки, приоритеты и проверку результата на каждом этапе.',
   resumeSource: 'pdf' as const,
@@ -99,6 +100,7 @@ describe('workspace persistence', () => {
       status: 'ready',
       workspace,
     });
+    expect(workspace.careerGoal).toBe('find-job');
   });
 
   it('accepts only hh source links in a persisted market sample', () => {
@@ -187,9 +189,27 @@ describe('workspace persistence', () => {
 
     expect(result.status).toBe('ready');
     if (result.status === 'ready') {
-      expect(result.workspace.version).toBe(5);
+      expect(result.workspace.version).toBe(6);
       expect(result.workspace.resumeText).toBe(validInput.resumeText);
       expect(result.workspace.analysis).toBeUndefined();
+    }
+  });
+
+  it('migrates a version-five workspace without inventing a career goal', () => {
+    const storage = createMemoryStorage({
+      'candidate-workspace': JSON.stringify({
+        ...createWorkspace(validInput, '2026-07-30T16:00:00.000Z'),
+        version: 5,
+        careerGoal: undefined,
+      }),
+    });
+
+    const result = loadWorkspace(storage);
+
+    expect(result.status).toBe('ready');
+    if (result.status === 'ready') {
+      expect(result.workspace.version).toBe(6);
+      expect(result.workspace.careerGoal).toBeUndefined();
     }
   });
 
@@ -388,7 +408,7 @@ describe('workspace persistence', () => {
 
     expect(migrated.status).toBe('ready');
     if (migrated.status === 'ready') {
-      expect(migrated.workspace.version).toBe(5);
+      expect(migrated.workspace.version).toBe(6);
       expect(migrated.workspace.opportunity).toEqual(decided);
       expect(migrated.workspace.actionPackage).toBeUndefined();
       expect(migrated.workspace.outcomes).toEqual([]);
@@ -405,7 +425,7 @@ describe('workspace persistence', () => {
 
     expect(migratedVersionFour.status).toBe('ready');
     if (migratedVersionFour.status === 'ready') {
-      expect(migratedVersionFour.workspace.version).toBe(5);
+      expect(migratedVersionFour.workspace.version).toBe(6);
       expect(migratedVersionFour.workspace.actionPackage).toEqual(
         actionPackage,
       );

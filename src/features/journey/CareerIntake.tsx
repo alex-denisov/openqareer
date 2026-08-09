@@ -13,6 +13,7 @@ import {
 } from '@phosphor-icons/react';
 import {
   validateWorkspaceInput,
+  type CareerGoal,
   type ResumeSource,
   type SearchUrgency,
   type WorkspaceInput,
@@ -20,7 +21,6 @@ import {
 } from '../workspace/workspaceStorage';
 
 type IntakeStep = 'intent' | 'source' | 'context';
-type CareerGoal = 'find-job' | 'choose-role' | 'positioning' | 'market';
 type SourceChoice = 'pdf' | 'linkedin' | 'text' | 'none';
 
 interface CareerIntakeProps {
@@ -130,6 +130,7 @@ export function CareerIntake({ onComplete }: CareerIntakeProps) {
     const selectedGoal = goalOptions.find((item) => item.id === goal);
     const situation = currentSituation.trim();
     const input: WorkspaceInput = {
+      careerGoal: goal,
       resumeText,
       resumeSource,
       resumeFileName: resumeFile?.name,

@@ -23,7 +23,10 @@ import {
   analyzeOpportunity,
   createOpportunityRecord,
 } from '../opportunity/opportunityEngine';
-import type { CandidateWorkspace } from '../workspace/workspaceStorage';
+import type {
+  CandidateWorkspace,
+  CareerGoal,
+} from '../workspace/workspaceStorage';
 import {
   buildCareerJourney,
   type CareerJourney,
@@ -94,6 +97,7 @@ export function TodayJourneyView({
       <CareerDiagnosticSummary
         journey={journey}
         hasCareerEvidence={hasCareerEvidence}
+        careerGoal={workspace.careerGoal}
       />
 
       <section className="career-resume-note" aria-label="Состояние рабочего контекста">
@@ -118,9 +122,11 @@ export function TodayJourneyView({
 function CareerDiagnosticSummary({
   journey,
   hasCareerEvidence,
+  careerGoal,
 }: {
   journey: CareerJourney;
   hasCareerEvidence: boolean;
+  careerGoal?: CareerGoal;
 }) {
   const priorityFindings = journey.diagnostic.findings
     .filter((finding) => finding.severity === 'high')
@@ -132,6 +138,11 @@ function CareerDiagnosticSummary({
     >
       <div className="career-diagnostic-intro">
         <p className="career-eyebrow">Предварительная диагностика</p>
+        {careerGoal ? (
+          <p className="career-diagnostic-goal">
+            Цель: {careerGoalLabel(careerGoal)}
+          </p>
+        ) : null}
         <h2 id="career-diagnostic-title">Что можно сказать уже сейчас</h2>
         <p>
           {hasCareerEvidence
@@ -152,6 +163,16 @@ function CareerDiagnosticSummary({
       </ol>
     </section>
   );
+}
+
+function careerGoalLabel(goal: CareerGoal): string {
+  const labels: Record<CareerGoal, string> = {
+    'find-job': 'найти работу',
+    'choose-role': 'выбрать подходящую роль',
+    positioning: 'проверить резюме и позиционирование',
+    market: 'понять рынки и релокацию',
+  };
+  return labels[goal];
 }
 
 function CareerPictureRibbon({

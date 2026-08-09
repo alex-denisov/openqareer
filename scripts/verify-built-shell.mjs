@@ -104,7 +104,8 @@ async function verifyCandidateResult(browser, baseUrl, viewport) {
     localStorage.setItem(
       'candidate-workspace',
       JSON.stringify({
-        version: 5,
+        version: 6,
+        careerGoal: 'find-job',
         resumeText: '',
         resumeSource: 'text',
         targetDirection: 'Руководитель продукта',
@@ -124,6 +125,10 @@ async function verifyCandidateResult(browser, baseUrl, viewport) {
   });
   await page
     .getByRole('heading', { name: 'Что можно сказать уже сейчас' })
+    .waitFor();
+  await page.getByText('Цель: найти работу', { exact: true }).waitFor();
+  await page
+    .getByRole('heading', { name: 'Сначала проверим основу поиска' })
     .waitFor();
   assert(
     (await page

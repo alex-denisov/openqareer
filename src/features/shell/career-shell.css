@@ -725,6 +725,13 @@
   font-size: 1.4rem;
 }
 
+.career-diagnostic-goal {
+  margin: -2px 0 10px;
+  color: var(--career-text);
+  font-size: 0.78rem;
+  font-weight: 680;
+}
+
 .career-diagnostic-intro > p:last-child {
   max-width: 34rem;
   margin-bottom: 0;

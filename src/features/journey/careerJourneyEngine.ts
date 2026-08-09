@@ -9,6 +9,7 @@ import {
 } from '../diagnostic/careerDiagnostic';
 import {
   createWorkspace,
+  type CareerGoal,
   type CandidateWorkspace,
   type WorkspaceInput,
 } from '../workspace/workspaceStorage';
@@ -147,16 +148,7 @@ export function buildCareerJourney(
       markets: marketRoutesFor(workspace),
       diagnostic,
       track: buildTrack(false, false),
-      nextAction: {
-        id: 'clarify-experience',
-        label: 'Рассказать об опыте',
-        headline: 'Сначала найдём опорные задачи',
-        reason:
-          'Без примеров работы платформа не будет придумывать подходящие роли.',
-        expectedChange:
-          'После ответа появятся первые проверяемые гипотезы о направлении.',
-        destination: 'profile',
-      },
+      nextAction: firstActionFor(workspace.careerGoal),
     };
   }
 
@@ -222,6 +214,55 @@ export function buildCareerJourney(
               'Рабочие гипотезы ролей получат более надёжное основание.',
             destination: 'profile',
           },
+  };
+}
+
+function firstActionFor(goal: CareerGoal | undefined): CareerJourneyAction {
+  if (goal === 'find-job') {
+    return {
+      id: 'inspect-job-search',
+      label: 'Добавить резюме',
+      headline: 'Сначала проверим основу поиска',
+      reason:
+        'Первый шаг — отделить проблемы резюме и позиционирования от проблем роли и рынка.',
+      expectedChange:
+        'Резюме покажет проверяемые проблемы подачи; затем их можно будет сопоставить со свежими вакансиями.',
+      destination: 'profile',
+    };
+  }
+  if (goal === 'positioning') {
+    return {
+      id: 'inspect-positioning',
+      label: 'Добавить резюме',
+      headline: 'Сначала проверим позиционирование',
+      reason:
+        'Без текста резюме нельзя отличить слабую подачу от нехватки доказательств опыта.',
+      expectedChange:
+        'Появятся проверяемые проблемы документа и факты, которые нужно усилить.',
+      destination: 'profile',
+    };
+  }
+  if (goal === 'market') {
+    return {
+      id: 'clarify-market-constraints',
+      label: 'Добавить опыт и ограничения',
+      headline: 'Сначала зафиксируем рамки рынка',
+      reason:
+        'Сравнение стран и форматов работы зависит от опыта, географии и ограничений кандидата.',
+      expectedChange:
+        'Появится основание для сравнения рынков без обещаний по непроверенным условиям.',
+      destination: 'profile',
+    };
+  }
+  return {
+    id: 'clarify-experience',
+    label: 'Рассказать об опыте',
+    headline: 'Сначала найдём опорные задачи',
+    reason:
+      'Без примеров работы платформа не будет придумывать подходящие роли.',
+    expectedChange:
+      'После ответа появятся первые проверяемые гипотезы о направлении.',
+    destination: 'profile',
   };
 }
 

@@ -13,6 +13,7 @@ describe('buildCareerJourney', () => {
   it('keeps a conversation-only problem out of resume evidence and role hypotheses', () => {
     const workspace = prepareCareerWorkspace(
       {
+        careerGoal: 'find-job',
         resumeText: '',
         resumeSource: 'text',
         targetDirection: 'Synthetic Product Operations Lead',
@@ -33,7 +34,8 @@ describe('buildCareerJourney', () => {
     expect(workspace.analysis).toBeUndefined();
     expect(journey.roles).toEqual([]);
     expect(journey.nextAction).toMatchObject({
-      id: 'clarify-experience',
+      id: 'inspect-job-search',
+      headline: 'Сначала проверим основу поиска',
       destination: 'profile',
     });
     expect(journey.diagnostic).toMatchObject({

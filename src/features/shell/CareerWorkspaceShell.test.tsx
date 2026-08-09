@@ -26,6 +26,7 @@ describe('CareerWorkspaceShell', () => {
   it('shows an honest free diagnostic before asking for more evidence', () => {
     const workspace = prepareCareerWorkspace(
       {
+        careerGoal: 'find-job',
         resumeText: '',
         resumeSource: 'text',
         targetDirection: 'Руководитель продукта',
@@ -42,6 +43,8 @@ describe('CareerWorkspaceShell', () => {
     );
 
     expect(html).toContain('Предварительная диагностика');
+    expect(html).toContain('Цель: найти работу');
+    expect(html).toContain('Сначала проверим основу поиска');
     expect(html).toContain('Материала недостаточно для полного разбора');
     expect(html).toContain('Не вывод: пока нет доказательств опыта');
     expect(html).not.toMatch(/универсальн.{0,8}(балл|оценк)/iu);
