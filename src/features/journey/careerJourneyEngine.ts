@@ -4,6 +4,10 @@ import {
   type RoleFitState,
 } from '../evidence/evidenceEngine';
 import {
+  buildCareerDiagnostic,
+  type CareerDiagnostic,
+} from '../diagnostic/careerDiagnostic';
+import {
   createWorkspace,
   type CandidateWorkspace,
   type WorkspaceInput,
@@ -64,6 +68,7 @@ export interface CareerJourney {
   profile: CareerJourneyProfile;
   roles: CareerJourneyRole[];
   markets: CareerJourneyMarket[];
+  diagnostic: CareerDiagnostic;
   track: CareerTrackItem[];
   nextAction: CareerJourneyAction;
 }
@@ -74,12 +79,14 @@ export function prepareCareerWorkspace(
   previous?: CandidateWorkspace,
 ): CandidateWorkspace {
   const workspace = createWorkspace(input, now, previous);
-  const analysis = createCandidateAnalysis(workspace.resumeText);
+  const analysis = workspace.resumeText
+    ? createCandidateAnalysis(workspace.resumeText)
+    : undefined;
 
   return {
     ...workspace,
     analysis:
-      workspace.resumeText && workspace.targetDirection
+      analysis && workspace.targetDirection
         ? completeCandidateAnalysis(workspace.targetDirection, analysis, now)
         : analysis,
   };
@@ -111,6 +118,16 @@ export function buildCareerJourney(
     (role) => role.fitState === 'plausible' && role.evidenceCount > 0,
   );
   const hasMarketSample = Boolean(workspace.marketSample);
+  const diagnostic = buildCareerDiagnostic(
+    {
+      resumeText: workspace.resumeText,
+      resumeSource: hasSource ? workspace.resumeSource : 'conversation',
+      targetDirection: workspace.targetDirection,
+      analysis: workspace.analysis,
+      marketEvidenceUpdatedAt: workspace.marketSample?.fetchedAt ?? null,
+    },
+    now,
+  );
 
   if (!hasSource && roles.length === 0) {
     return {
@@ -128,6 +145,7 @@ export function buildCareerJourney(
       },
       roles: [],
       markets: marketRoutesFor(workspace),
+      diagnostic,
       track: buildTrack(false, false),
       nextAction: {
         id: 'clarify-experience',
@@ -159,6 +177,7 @@ export function buildCareerJourney(
     },
     roles,
     markets: marketRoutesFor(workspace),
+    diagnostic,
     track: buildTrack(confirmedEvidence.length >= 3, hasGroundedRole),
     nextAction: hasGroundedRole
       ? hasMarketSample

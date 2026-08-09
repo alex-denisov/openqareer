@@ -30,12 +30,18 @@ describe('buildCareerJourney', () => {
       '2026-08-09T12:05:00.000Z',
     );
 
-    expect(workspace.analysis?.evidenceItems).toEqual([]);
+    expect(workspace.analysis).toBeUndefined();
     expect(journey.roles).toEqual([]);
     expect(journey.nextAction).toMatchObject({
       id: 'clarify-experience',
       destination: 'profile',
     });
+    expect(journey.diagnostic).toMatchObject({
+      coverage: { sourceKinds: ['conversation'], isPartial: true },
+      nextAction: { findingIds: ['readability-short'] },
+    });
+    expect(journey.diagnostic.summary).toContain('частич');
+    expect(JSON.stringify(journey.diagnostic)).not.toMatch(/score|балл/iu);
   });
 
   it('asks for evidence instead of inventing roles for a conversation-only start', () => {

@@ -46,6 +46,10 @@ export function TodayJourneyView({
   onOpenExpert,
 }: JourneyViewProps) {
   const activeTrack = journey.track.find((item) => item.status === 'active');
+  const hasCareerEvidence =
+    journey.profile.confirmedEvidence > 0 ||
+    journey.profile.proposedEvidence > 0 ||
+    journey.roles.length > 0;
   return (
     <div className="career-view career-today-view">
       <section className="career-next-decision" aria-labelledby="today-title">
@@ -83,7 +87,14 @@ export function TodayJourneyView({
         </div>
       </section>
 
-      <CareerPictureRibbon journey={journey} onNavigate={onNavigate} />
+      {hasCareerEvidence ? (
+        <CareerPictureRibbon journey={journey} onNavigate={onNavigate} />
+      ) : null}
+
+      <CareerDiagnosticSummary
+        journey={journey}
+        hasCareerEvidence={hasCareerEvidence}
+      />
 
       <section className="career-resume-note" aria-label="Состояние рабочего контекста">
         <FileText size={21} />
@@ -101,6 +112,45 @@ export function TodayJourneyView({
         </button>
       </section>
     </div>
+  );
+}
+
+function CareerDiagnosticSummary({
+  journey,
+  hasCareerEvidence,
+}: {
+  journey: CareerJourney;
+  hasCareerEvidence: boolean;
+}) {
+  const priorityFindings = journey.diagnostic.findings
+    .filter((finding) => finding.severity === 'high')
+    .slice(0, 3);
+  return (
+    <section
+      className="career-diagnostic-summary"
+      aria-labelledby="career-diagnostic-title"
+    >
+      <div className="career-diagnostic-intro">
+        <p className="career-eyebrow">Предварительная диагностика</p>
+        <h2 id="career-diagnostic-title">Что можно сказать уже сейчас</h2>
+        <p>
+          {hasCareerEvidence
+            ? journey.diagnostic.summary
+            : 'Не вывод: пока нет доказательств опыта. Ниже показаны границы анализа, которые нужно закрыть до выбора роли и рынка.'}
+        </p>
+      </div>
+      <ol className="career-diagnostic-findings">
+        {priorityFindings.map((finding) => (
+          <li key={finding.id}>
+            <span>
+              {finding.certainty === 'fact' ? 'Проблема' : 'Неизвестно'}
+            </span>
+            <strong>{finding.title}</strong>
+            <p>{finding.correction}</p>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

@@ -85,6 +85,75 @@ async function verifyViewport(browser, baseUrl, viewport) {
   return { viewport: viewport.name, shellMs, interactiveMs, overflow };
 }
 
+async function verifyCandidateResult(browser, baseUrl, viewport) {
+  const context = await browser.newContext({
+    viewport: { width: viewport.width, height: viewport.height },
+    reducedMotion: 'reduce',
+    storageState: { cookies: [], origins: [] },
+  });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(`console:${message.text()}`);
+  });
+  page.on('pageerror', (error) => errors.push(`page:${error.message}`));
+  page.on('requestfailed', (request) =>
+    errors.push(`request:${new URL(request.url()).pathname}`),
+  );
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'candidate-workspace',
+      JSON.stringify({
+        version: 5,
+        resumeText: '',
+        resumeSource: 'text',
+        targetDirection: 'Руководитель продукта',
+        market: 'ru',
+        currentSituation:
+          'ПослеСменыПозиционированияСталоЗаметноМеньшеПриглашенийНаИнтервьюИПокаНеПонятноЧтоИменноМешаетСледующемуШагу',
+        constraints: 'Удалённая работа, без переезда в ближайшие шесть месяцев.',
+        urgency: 'active',
+        createdAt: '2026-08-09T17:00:00.000Z',
+        updatedAt: '2026-08-09T17:00:00.000Z',
+        outcomes: [],
+      }),
+    );
+  });
+  await page.goto(`${baseUrl}?candidate-result=${viewport.name}`, {
+    waitUntil: 'networkidle',
+  });
+  await page
+    .getByRole('heading', { name: 'Что можно сказать уже сейчас' })
+    .waitFor();
+  assert(
+    (await page
+      .getByText('Не вывод: пока нет доказательств опыта', { exact: false })
+      .count()) === 1,
+    `${viewport.name}: honest free diagnostic is absent`,
+  );
+  const todayWidth = await page.locator('.career-today-view').evaluate(
+    (element) => element.getBoundingClientRect().width,
+  );
+  if (viewport.name === 'desktop') {
+    assert(
+      todayWidth >= 760,
+      `desktop: candidate result is only ${todayWidth}px wide`,
+    );
+  }
+  await page.locator('button[aria-label="Профиль"]:visible').click();
+  await page.getByRole('heading', { name: 'Профиль' }).waitFor();
+  const profileOverflow = await page.locator('.career-profile-overview').evaluate(
+    (element) => element.scrollWidth - element.clientWidth,
+  );
+  assert(
+    profileOverflow <= 1,
+    `${viewport.name}: profile overview clips by ${profileOverflow}px`,
+  );
+  assert(errors.length === 0, `${viewport.name}: ${errors.join(', ')}`);
+  await context.close();
+  return { viewport: viewport.name, todayWidth, profileOverflow };
+}
+
 const server = await preview({
   logLevel: 'silent',
   preview: { host: '127.0.0.1', port: 0 },
@@ -99,10 +168,16 @@ const browser = await chromium.launch({ headless: true });
 try {
   const baseUrl = `http://127.0.0.1:${address.port}/`;
   const results = [];
+  const candidateResults = [];
   for (const viewport of viewports) {
     results.push(await verifyViewport(browser, baseUrl, viewport));
+    candidateResults.push(
+      await verifyCandidateResult(browser, baseUrl, viewport),
+    );
   }
-  process.stdout.write(`${JSON.stringify({ status: 'pass', results })}\n`);
+  process.stdout.write(
+    `${JSON.stringify({ status: 'pass', results, candidateResults })}\n`,
+  );
 } finally {
   await browser.close();
   await server.close();
