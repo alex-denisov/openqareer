@@ -1950,6 +1950,13 @@
     justify-self: start;
   }
 
+  .career-source-readiness article {
+    min-height: 0;
+    align-items: start;
+    row-gap: 8px;
+    padding: 14px 0;
+  }
+
   .career-view-heading {
     display: grid;
     gap: 18px;

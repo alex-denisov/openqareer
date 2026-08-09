@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react';
-import {
-  completeCandidateAnalysis,
-  createCandidateAnalysis,
-} from './features/evidence/evidenceEngine';
+import { prepareCareerWorkspace } from './features/journey/careerJourneyEngine';
 import { CareerWorkspaceShell } from './features/shell/CareerWorkspaceShell';
 import {
   clearWorkspace,
-  createWorkspace,
   loadWorkspace,
   saveWorkspace,
   type CandidateWorkspace,
@@ -47,13 +43,7 @@ export default function App() {
   }
 
   function handleSave(input: WorkspaceInput) {
-    const workspace = createWorkspace(input, undefined, state.workspace);
-    const evidenceSource = workspace.resumeText || workspace.currentSituation;
-    const extracted = createCandidateAnalysis(evidenceSource);
-    const analysis = workspace.targetDirection.trim()
-      ? completeCandidateAnalysis(workspace.targetDirection, extracted)
-      : extracted;
-    persist({ ...workspace, analysis });
+    persist(prepareCareerWorkspace(input, undefined, state.workspace));
   }
 
   function handleClear() {

@@ -1,5 +1,13 @@
-import type { RoleFitState } from '../evidence/evidenceEngine';
-import type { CandidateWorkspace } from '../workspace/workspaceStorage';
+import {
+  completeCandidateAnalysis,
+  createCandidateAnalysis,
+  type RoleFitState,
+} from '../evidence/evidenceEngine';
+import {
+  createWorkspace,
+  type CandidateWorkspace,
+  type WorkspaceInput,
+} from '../workspace/workspaceStorage';
 
 export const CAREER_JOURNEY_REVISION =
   'career-journey-v1-2026-08-07' as const;
@@ -58,6 +66,23 @@ export interface CareerJourney {
   markets: CareerJourneyMarket[];
   track: CareerTrackItem[];
   nextAction: CareerJourneyAction;
+}
+
+export function prepareCareerWorkspace(
+  input: WorkspaceInput,
+  now: string = new Date().toISOString(),
+  previous?: CandidateWorkspace,
+): CandidateWorkspace {
+  const workspace = createWorkspace(input, now, previous);
+  const analysis = createCandidateAnalysis(workspace.resumeText);
+
+  return {
+    ...workspace,
+    analysis:
+      workspace.resumeText && workspace.targetDirection
+        ? completeCandidateAnalysis(workspace.targetDirection, analysis, now)
+        : analysis,
+  };
 }
 
 export function buildCareerJourney(
@@ -121,7 +146,12 @@ export function buildCareerJourney(
     revision: CAREER_JOURNEY_REVISION,
     generatedAt: now,
     profile: {
-      state: confirmedEvidence.length >= 3 ? 'grounded' : 'needs-review',
+      state:
+        confirmedEvidence.length >= 3
+          ? 'grounded'
+          : proposedEvidence.length > 0
+            ? 'needs-review'
+            : 'forming',
       confirmedEvidence: confirmedEvidence.length,
       proposedEvidence: proposedEvidence.length,
       importantUnknowns: workspace.analysis?.questions.slice(0, 3) ?? [],

@@ -4,9 +4,40 @@ import {
   createCandidateAnalysis,
 } from '../evidence/evidenceEngine';
 import { createWorkspace } from '../workspace/workspaceStorage';
-import { buildCareerJourney } from './careerJourneyEngine';
+import {
+  buildCareerJourney,
+  prepareCareerWorkspace,
+} from './careerJourneyEngine';
 
 describe('buildCareerJourney', () => {
+  it('keeps a conversation-only problem out of resume evidence and role hypotheses', () => {
+    const workspace = prepareCareerWorkspace(
+      {
+        resumeText: '',
+        resumeSource: 'text',
+        targetDirection: 'Synthetic Product Operations Lead',
+        market: 'international',
+        currentSituation:
+          'Синтетическая проверка: мало приглашений после смены позиционирования.',
+        constraints: 'Только удалённо.',
+        urgency: 'active',
+      },
+      '2026-08-09T12:00:00.000Z',
+    );
+
+    const journey = buildCareerJourney(
+      workspace,
+      '2026-08-09T12:05:00.000Z',
+    );
+
+    expect(workspace.analysis?.evidenceItems).toEqual([]);
+    expect(journey.roles).toEqual([]);
+    expect(journey.nextAction).toMatchObject({
+      id: 'clarify-experience',
+      destination: 'profile',
+    });
+  });
+
   it('asks for evidence instead of inventing roles for a conversation-only start', () => {
     const workspace = createWorkspace(
       {
@@ -145,6 +176,7 @@ describe('buildCareerJourney', () => {
     );
 
     expect(journey.profile.proposedEvidence).toBe(0);
+    expect(journey.profile.state).toBe('forming');
     expect(journey.nextAction).toMatchObject({
       id: 'add-result-evidence',
       destination: 'profile',
