@@ -76,7 +76,7 @@ export function buildCareerDiagnostic(
     generatedAt: now,
     summary:
       knownIssues.length > 0
-        ? `Нашли ${knownIssues.length} подтверждённые зоны, которые мешают следующему решению. Диагностика частичная: неизвестное показано отдельно.`
+        ? diagnosticIssueSummary(knownIssues.length)
         : isPartial
           ? 'Первичная диагностика готова частично: материал читается, но для карьерного вывода пока не хватает подтверждений.'
           : 'Критичных дефектов в доступных данных не найдено; следующий шаг — проверить соответствие рынку.',
@@ -87,6 +87,16 @@ export function buildCareerDiagnostic(
     findings,
     nextAction: chooseNextAction(input, findings),
   };
+}
+
+function diagnosticIssueSummary(count: number): string {
+  if (count === 1) {
+    return 'Нашли 1 подтверждённую зону, которая мешает следующему решению. Диагностика частичная: неизвестное показано отдельно.';
+  }
+  if (count >= 2 && count <= 4) {
+    return `Нашли ${count} подтверждённые зоны, которые мешают следующему решению. Диагностика частичная: неизвестное показано отдельно.`;
+  }
+  return `Нашли ${count} подтверждённых зон, которые мешают следующему решению. Диагностика частичная: неизвестное показано отдельно.`;
 }
 
 function readabilityFinding(input: CareerDiagnosticInput): DiagnosticFinding {

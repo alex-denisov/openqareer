@@ -34,11 +34,14 @@ type ShellView =
 
 interface CareerWorkspaceShellProps {
   workspace?: CandidateWorkspace;
+  demo?: boolean;
   invalidStorage?: boolean;
   storageError?: string;
   onSaveWorkspace?: (input: WorkspaceInput) => void;
   onUpdateWorkspace?: (workspace: CandidateWorkspace) => void;
   onClearWorkspace?: () => void;
+  onOpenDemo?: () => void;
+  onExitDemo?: () => void;
 }
 
 const primaryNavigation: Array<{
@@ -68,11 +71,14 @@ const pageNames: Record<ShellView, string> = {
 
 export function CareerWorkspaceShell({
   workspace,
+  demo = false,
   invalidStorage = false,
   storageError,
   onSaveWorkspace = () => undefined,
   onUpdateWorkspace = () => undefined,
   onClearWorkspace = () => undefined,
+  onOpenDemo = () => undefined,
+  onExitDemo = () => undefined,
 }: CareerWorkspaceShellProps) {
   const [activeView, setActiveView] = useState<ShellView>('today');
   const [expertOpen, setExpertOpen] = useState(false);
@@ -171,6 +177,18 @@ export function CareerWorkspaceShell({
         </button>
         <span className="career-page-name">{pageNames[activeView]}</span>
         <div className="career-topbar-actions">
+          {demo ? (
+            <>
+              <span className="career-demo-label">Демо · синтетические данные</span>
+              <button
+                className="career-demo-exit"
+                type="button"
+                onClick={onExitDemo}
+              >
+                Выйти из демо
+              </button>
+            </>
+          ) : null}
           <button
             className="career-mobile-tariffs"
             type="button"
@@ -195,6 +213,18 @@ export function CareerWorkspaceShell({
         className="career-main"
         aria-hidden={expertOpen ? true : undefined}
       >
+        {demo ? (
+          <div className="career-demo-banner" role="status">
+            <span>Демо · синтетические данные. Изменения не сохраняются.</span>
+            <button
+              className="career-demo-banner-exit"
+              type="button"
+              onClick={onExitDemo}
+            >
+              Выйти из демо
+            </button>
+          </div>
+        ) : null}
         {invalidStorage ? (
           <div className="career-storage-warning" role="alert">
             <div>
@@ -209,7 +239,7 @@ export function CareerWorkspaceShell({
         ) : null}
 
         {!workspace && activeView === 'today' ? (
-          <CareerIntake onComplete={onSaveWorkspace} />
+          <CareerIntake onComplete={onSaveWorkspace} onOpenDemo={onOpenDemo} />
         ) : null}
         {workspace && journey && activeView === 'today' ? (
           <TodayJourneyView

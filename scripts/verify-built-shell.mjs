@@ -44,7 +44,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: shared shell was not prerendered before JavaScript`,
   );
   assert(
-    (await page.getByRole('heading', { name: 'С чем разобраться?' }).count()) === 1,
+    (await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).count()) === 1,
     `${viewport.name}: useful first decision is absent from initial HTML`,
   );
   for (const label of ['Сегодня', 'Профиль', 'Карьера', 'Возможности']) {
@@ -64,6 +64,16 @@ async function verifyViewport(browser, baseUrl, viewport) {
     { timeout: 15_000 },
   );
   const interactiveMs = Math.round(performance.now() - startedAt);
+
+  await page.getByRole('button', { name: 'Посмотреть демо' }).click();
+  await page.getByRole('status').getByText('Демо · синтетические данные').waitFor();
+  assert(
+    await page.locator('button[aria-label="Профиль"]:visible').isEnabled(),
+    `${viewport.name}: approved workspace is still inaccessible from demo`,
+  );
+  await page.getByRole('button', { name: 'Выйти из демо' }).last().click();
+  await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).waitFor();
+
   const tariffsButton = page
     .locator(
       '.career-mobile-tariffs:visible, .career-rail-bottom .career-nav-button:visible',

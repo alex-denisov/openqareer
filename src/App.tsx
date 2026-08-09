@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { prepareCareerWorkspace } from './features/journey/careerJourneyEngine';
+import { createDemoWorkspace } from './features/journey/demoWorkspace';
 import { CareerWorkspaceShell } from './features/shell/CareerWorkspaceShell';
 import {
   clearWorkspace,
@@ -12,14 +13,15 @@ import {
 interface AppState {
   workspace?: CandidateWorkspace;
   invalidStorage: boolean;
+  demo: boolean;
 }
 
 function readInitialState(): AppState {
   const result = loadWorkspace(window.localStorage);
   if (result.status === 'ready') {
-    return { workspace: result.workspace, invalidStorage: false };
+    return { workspace: result.workspace, invalidStorage: false, demo: false };
   }
-  return { invalidStorage: result.status === 'invalid' };
+  return { invalidStorage: result.status === 'invalid', demo: false };
 }
 
 export default function App() {
@@ -31,6 +33,10 @@ export default function App() {
   }, []);
 
   function persist(workspace: CandidateWorkspace) {
+    if (state.demo) {
+      setState({ workspace, invalidStorage: false, demo: true });
+      return;
+    }
     try {
       saveWorkspace(window.localStorage, workspace);
       setStorageError(undefined);
@@ -39,7 +45,7 @@ export default function App() {
         'Браузер не разрешил сохранить изменения. Проверьте настройки локального хранения.',
       );
     }
-    setState({ workspace, invalidStorage: false });
+    setState({ workspace, invalidStorage: false, demo: false });
   }
 
   function handleSave(input: WorkspaceInput) {
@@ -50,7 +56,7 @@ export default function App() {
     try {
       clearWorkspace(window.localStorage);
       setStorageError(undefined);
-      setState({ invalidStorage: false });
+      setState({ invalidStorage: false, demo: false });
     } catch {
       setStorageError(
         'Браузер не разрешил удалить запись. Очистите данные сайта в настройках.',
@@ -61,11 +67,20 @@ export default function App() {
   return (
     <CareerWorkspaceShell
       workspace={state.workspace}
+      demo={state.demo}
       invalidStorage={state.invalidStorage}
       storageError={storageError}
       onSaveWorkspace={handleSave}
       onUpdateWorkspace={persist}
       onClearWorkspace={handleClear}
+      onOpenDemo={() =>
+        setState({
+          workspace: createDemoWorkspace(),
+          invalidStorage: false,
+          demo: true,
+        })
+      }
+      onExitDemo={() => setState({ invalidStorage: false, demo: false })}
     />
   );
 }

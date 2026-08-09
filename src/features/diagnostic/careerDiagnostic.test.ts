@@ -117,4 +117,23 @@ describe('free career diagnostic', () => {
       diagnostic.findings.every((finding) => finding.correction.length > 0),
     ).toBe(true);
   });
+
+  it('uses singular Russian grammar for one confirmed issue', () => {
+    const diagnostic = buildCareerDiagnostic({
+      resumeText: 'Руководил операциями и улучшал процессы.',
+      resumeSource: 'text',
+      targetDirection: 'Директор по операциям',
+      analysis: {
+        ...partialAnalysis,
+        evidenceItems: partialAnalysis.evidenceItems.map((item) => ({
+          ...item,
+          status: 'confirmed' as const,
+        })),
+      },
+      marketEvidenceUpdatedAt: '2026-08-08',
+    }, '2026-08-09');
+
+    expect(diagnostic.summary).toContain('1 подтверждённую зону');
+    expect(diagnostic.summary).not.toContain('1 подтверждённые зоны');
+  });
 });

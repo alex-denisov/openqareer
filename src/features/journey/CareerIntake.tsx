@@ -25,6 +25,7 @@ type SourceChoice = 'pdf' | 'linkedin' | 'text' | 'none';
 
 interface CareerIntakeProps {
   onComplete: (input: WorkspaceInput) => void;
+  onOpenDemo?: () => void;
 }
 
 const goalOptions: Array<{
@@ -66,7 +67,11 @@ const conditionOptions = [
   'Нужна визовая поддержка',
 ];
 
-export function CareerIntake({ onComplete }: CareerIntakeProps) {
+export function CareerIntake({
+  onComplete,
+  onOpenDemo = () => undefined,
+}: CareerIntakeProps) {
+  const [started, setStarted] = useState(false);
   const [step, setStep] = useState<IntakeStep>('intent');
   const [goal, setGoal] = useState<CareerGoal>();
   const [sourceChoice, setSourceChoice] = useState<SourceChoice>('none');
@@ -85,6 +90,52 @@ export function CareerIntake({ onComplete }: CareerIntakeProps) {
   const [otherConstraint, setOtherConstraint] = useState('');
   const [error, setError] = useState<string>();
   const [readingPdf, setReadingPdf] = useState(false);
+
+  if (!started) {
+    return (
+      <section className="career-start" aria-labelledby="career-start-title">
+        <div className="career-start-stage">
+          <p className="career-eyebrow">Сегодня</p>
+          <h1 id="career-start-title">Начните с карьерного вопроса</h1>
+          <p className="career-lead">
+            Опишите ситуацию своими словами. Резюме можно добавить позже.
+          </p>
+          <div className="career-primary-actions">
+            <button
+              className="career-primary-button"
+              type="button"
+              onClick={() => setStarted(true)}
+            >
+              Начать диагностику
+              <ArrowRight size={18} weight="bold" />
+            </button>
+            <button
+              className="career-quiet-button"
+              type="button"
+              onClick={onOpenDemo}
+            >
+              <Sparkle size={18} weight="fill" />
+              Посмотреть демо
+            </button>
+          </div>
+        </div>
+
+        <div className="career-start-status" aria-label="Состояние карьерной картины">
+          <div><span>Профиль</span><strong>Не заполнен</strong></div>
+          <div><span>Карьера</span><strong>Нет гипотез</strong></div>
+          <div><span>Возможности</span><strong>Не добавлены</strong></div>
+        </div>
+
+        <div className="career-start-note">
+          <Sparkle size={20} weight="fill" />
+          <div>
+            <strong>Можно начать без документов</strong>
+            <span>Данные остаются в этом браузере, пока вы сами не решите иначе.</span>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   async function handlePdf(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
