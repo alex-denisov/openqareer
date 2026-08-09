@@ -341,6 +341,24 @@ async function verifyCandidateResult(browser, baseUrl, viewport) {
   await page.getByText('Решение сохранено', { exact: true }).waitFor();
   await page.getByRole('heading', { name: 'Пакет следующего действия' }).waitFor();
   await page.reload({ waitUntil: 'networkidle' });
+  await page
+    .getByRole('heading', {
+      name: 'Сделаем первый контакт по выбранной вакансии',
+    })
+    .waitFor();
+  await page.locator('button[aria-label="Карьера"]:visible').click();
+  assert(
+    (await page.locator('.career-track li', { hasText: 'Позиционирование' }).getAttribute('class'))?.includes(
+      'is-complete',
+    ),
+    `${viewport.name}: positioning did not complete after the action package`,
+  );
+  assert(
+    (await page.locator('.career-track li', { hasText: 'Кампания поиска' }).getAttribute('class'))?.includes(
+      'is-active',
+    ),
+    `${viewport.name}: campaign did not become active after the action package`,
+  );
   await page.locator('button[aria-label="Возможности"]:visible').click();
   await page.getByText('Решение сохранено', { exact: true }).waitFor();
   await page.getByRole('heading', { name: 'Пакет следующего действия' }).waitFor();
@@ -353,6 +371,7 @@ async function verifyCandidateResult(browser, baseUrl, viewport) {
     freeBoundary: true,
     assistedBoundary: true,
     opportunityPackage: true,
+    adaptiveNextAction: true,
   };
 }
 

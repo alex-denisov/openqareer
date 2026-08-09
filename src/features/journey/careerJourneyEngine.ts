@@ -183,8 +183,22 @@ export function buildCareerJourney(
       confirmedEvidence.length >= 3,
       hasGroundedRole,
       hasFreshMarketSample,
+      Boolean(workspace.actionPackage),
     ),
-    nextAction: hasGroundedRole
+    nextAction: workspace.actionPackage
+      ? {
+          id: 'execute-action-package',
+          label: 'Открыть пакет действия',
+          headline: 'Сделаем первый контакт по выбранной вакансии',
+          reason:
+            workspace.actionPackage.decisionChoice === 'apply'
+              ? 'Решение откликнуться сохранено. Проверьте сообщение, факты и условия перед отправкой в официальном интерфейсе.'
+              : 'Решение сначала найти контакт сохранено. Проверьте адресата, сообщение и подтверждённые факты перед отправкой.',
+          expectedChange:
+            'Подготовленное действие станет отправленным только после вашего явного шага на площадке; openqareer не отправляет его автоматически.',
+          destination: 'opportunities',
+        }
+      : hasGroundedRole
       ? hasFreshMarketSample
         ? {
             id: 'review-opportunities',
@@ -306,6 +320,7 @@ function buildTrack(
   profileGrounded: boolean,
   roleGrounded: boolean,
   marketGrounded: boolean,
+  actionPackageReady: boolean = false,
 ): CareerTrackItem[] {
   const routeGrounded = roleGrounded && marketGrounded;
   return [
@@ -330,14 +345,22 @@ function buildTrack(
     {
       id: 'positioning',
       label: 'Позиционирование',
-      status: routeGrounded ? 'active' : 'waiting',
-      reason: 'Создаётся только после выбора рабочей роли и рынка.',
+      status: routeGrounded
+        ? actionPackageReady
+          ? 'complete'
+          : 'active'
+        : 'waiting',
+      reason: actionPackageReady
+        ? 'Позиционирование собрано из подтверждённых фактов для выбранной вакансии.'
+        : 'Создаётся только после выбора рабочей роли и рынка.',
     },
     {
       id: 'campaign',
       label: 'Кампания поиска',
-      status: 'waiting',
-      reason: 'Запускается после согласования роли, рынка и материалов.',
+      status: actionPackageReady ? 'active' : 'waiting',
+      reason: actionPackageReady
+        ? 'Первое действие подготовлено и ждёт явной отправки кандидатом.'
+        : 'Запускается после согласования роли, рынка и материалов.',
     },
   ];
 }

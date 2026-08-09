@@ -4,6 +4,12 @@ import {
   createCandidateAnalysis,
 } from '../evidence/evidenceEngine';
 import { createWorkspace } from '../workspace/workspaceStorage';
+import { createActionPackage } from '../action/actionPackageEngine';
+import {
+  analyzeOpportunity,
+  createOpportunityRecord,
+  recordOpportunityDecision,
+} from '../opportunity/opportunityEngine';
 import {
   buildCareerJourney,
   prepareCareerWorkspace,
@@ -250,5 +256,102 @@ describe('buildCareerJourney', () => {
       id: 'add-result-evidence',
       destination: 'profile',
     });
+  });
+
+  it('moves from vacancy comparison to the saved action package', () => {
+    const base = createWorkspace(
+      {
+        careerGoal: 'find-job',
+        resumeText:
+          'Руководил продуктовой командой из восьми человек. Сократил срок проверки продуктовых гипотез на 30 процентов. Отвечал за планирование, метрики и взаимодействие с коммерческой командой.',
+        resumeSource: 'text',
+        targetDirection: 'Руководитель продукта',
+        market: 'ru',
+        currentSituation: 'Проверяю следующую продуктовую роль.',
+        constraints: 'Гибридный формат.',
+        urgency: 'active',
+      },
+      '2026-08-09T17:00:00.000Z',
+    );
+    const extracted = createCandidateAnalysis(base.resumeText);
+    const analysis = completeCandidateAnalysis(
+      base.targetDirection,
+      {
+        ...extracted,
+        evidenceItems: extracted.evidenceItems.map((item) => ({
+          ...item,
+          status: 'confirmed' as const,
+        })),
+      },
+      '2026-08-09T17:01:00.000Z',
+    );
+    const record = createOpportunityRecord(
+      {
+        title: 'Senior Product Manager',
+        company: 'Пример',
+        sourceLabel: 'Ручной ввод',
+        text: `
+Задачи
+Формировать продуктовую стратегию и руководить продуктовой командой.
+Требования
+Опыт работы с продуктовыми метриками и планированием.
+`,
+      },
+      '2026-08-09T17:03:00.000Z',
+    );
+    const analyzed = {
+      ...record,
+      analysis: analyzeOpportunity(record, analysis.evidenceItems, 'unknown'),
+    };
+    const opportunity = recordOpportunityDecision(
+      analyzed,
+      'network',
+      'Сначала уточню scope роли и формат работы у команды.',
+      '2026-08-09T17:04:00.000Z',
+    );
+    const actionPackage = createActionPackage(
+      opportunity,
+      analysis.evidenceItems,
+      base.targetDirection,
+      '2026-08-09T17:05:00.000Z',
+    );
+    const workspace = {
+      ...base,
+      analysis,
+      marketSample: {
+        source: 'hh' as const,
+        query: base.targetDirection,
+        found: 42,
+        fetchedAt: '2026-08-09T17:02:00.000Z',
+        items: Array.from({ length: 5 }, (_, index) => ({
+          id: `vacancy-${index + 1}`,
+          title: base.targetDirection,
+          company: `Компания ${index + 1}`,
+          location: 'Москва',
+          sourceUrl: `https://hh.ru/vacancy/${index + 1}`,
+          publishedAt: null,
+          salary: null,
+        })),
+      },
+      opportunity,
+      actionPackage,
+    };
+
+    const journey = buildCareerJourney(
+      workspace,
+      '2026-08-09T17:06:00.000Z',
+    );
+
+    expect(journey.nextAction).toMatchObject({
+      id: 'execute-action-package',
+      headline: 'Сделаем первый контакт по выбранной вакансии',
+      destination: 'opportunities',
+    });
+    expect(journey.track).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'positioning', status: 'complete' }),
+        expect.objectContaining({ id: 'campaign', status: 'active' }),
+      ]),
+    );
   });
 });
