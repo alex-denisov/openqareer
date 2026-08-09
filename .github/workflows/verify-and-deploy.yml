@@ -168,6 +168,21 @@ jobs:
             grep -Eiq '^content-security-policy:'
           curl -fsSI --max-time 10 https://openqareer.com/ |
             grep -Eiq '^x-openqareer-origin: eu-1'
+          root_headers="$(mktemp)"
+          curl -fsSI --max-time 10 https://openqareer.com/ > "$root_headers"
+          grep -Eiq '^cache-control:.*no-store' "$root_headers"
+          if grep -Eiq '^(etag|last-modified):' "$root_headers"; then
+            printf 'entry HTML exposes a release-agnostic cache validator\n' >&2
+            exit 1
+          fi
+          conditional_status="$(curl -sS --max-time 10 -o /dev/null \
+            -w '%{http_code}' -H 'If-None-Match: W/"legacy-release"' \
+            https://openqareer.com/)"
+          if [ "$conditional_status" != "200" ]; then
+            printf 'canonical entry accepted a stale validator: %s\n' \
+              "$conditional_status" >&2
+            exit 1
+          fi
 
       - name: Remove runner SSH material
         if: always()

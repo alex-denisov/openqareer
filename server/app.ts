@@ -582,6 +582,17 @@ export async function buildApp({
       root: config.staticRoot,
       wildcard: false,
       globIgnore: ['server.mjs', 'health'],
+      etag: false,
+      lastModified: false,
+      cacheControl: false,
+      setHeaders: (reply, filePath) => {
+        reply.header(
+          'Cache-Control',
+          filePath.endsWith('/index.html')
+            ? 'no-store, max-age=0'
+            : 'public, max-age=31536000, immutable',
+        );
+      },
       allowedPath: (pathName) =>
         pathName !== '/server.mjs' && pathName !== '/health',
     });
@@ -599,7 +610,7 @@ export async function buildApp({
       }
       if (request.method === 'GET') {
         return reply
-          .header('Cache-Control', 'no-cache')
+          .header('Cache-Control', 'no-store, max-age=0')
           .sendFile('index.html');
       }
       return sendError(
