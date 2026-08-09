@@ -108,6 +108,11 @@ export function CareerWorkspaceShell({
     setExpertOpen(false);
   }
 
+  function exitDemo() {
+    navigate('today');
+    onExitDemo();
+  }
+
   return (
     <div
       className={`career-shell ${expertOpen ? 'expert-is-open' : ''}`}
@@ -183,7 +188,7 @@ export function CareerWorkspaceShell({
               <button
                 className="career-demo-exit"
                 type="button"
-                onClick={onExitDemo}
+                onClick={exitDemo}
               >
                 Выйти из демо
               </button>
@@ -219,7 +224,7 @@ export function CareerWorkspaceShell({
             <button
               className="career-demo-banner-exit"
               type="button"
-              onClick={onExitDemo}
+              onClick={exitDemo}
             >
               Выйти из демо
             </button>

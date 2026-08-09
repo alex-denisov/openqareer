@@ -71,6 +71,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
     await page.locator('button[aria-label="Профиль"]:visible').isEnabled(),
     `${viewport.name}: approved workspace is still inaccessible from demo`,
   );
+  await page.locator('button[aria-label="Карьера"]:visible').click();
+  await page.getByRole('heading', { name: 'Карьера', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Выйти из демо' }).last().click();
   await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).waitFor();
 
