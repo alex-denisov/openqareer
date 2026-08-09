@@ -18,7 +18,7 @@ export async function prerenderCareerShell(indexPath: string): Promise<void> {
   const shell = renderToStaticMarkup(<CareerWorkspaceShell />);
   const prerenderedRoot =
     `<div id="root" aria-busy="true">` +
-    `<div data-bootstrap-shell="true" inert style="display:contents">` +
+    `<div class="career-bootstrap-shell" data-bootstrap-shell="true" inert>` +
     shell +
     '</div></div>';
   await writeFile(indexPath, html.replace(EMPTY_ROOT, prerenderedRoot));

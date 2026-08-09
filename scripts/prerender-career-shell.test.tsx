@@ -30,7 +30,10 @@ describe('production career shell prerender', () => {
     const html = readFileSync(indexPath, 'utf8');
     expect(html).toContain('data-testid="career-shell"');
     expect(html).toContain('id="root" aria-busy="true"');
-    expect(html).toContain('data-bootstrap-shell="true" inert');
+    expect(html).toContain(
+      'class="career-bootstrap-shell" data-bootstrap-shell="true" inert',
+    );
+    expect(html).not.toContain('style="display:contents"');
     expect(html).not.toContain('id="root" aria-busy="true" inert');
     expect(html).toContain('С чем разобраться?');
     expect(html).toContain('Сегодня');

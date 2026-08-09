@@ -46,6 +46,10 @@
   color: inherit;
 }
 
+.career-bootstrap-shell {
+  display: contents;
+}
+
 .career-shell button:focus-visible,
 .career-shell input:focus-visible,
 .career-shell textarea:focus-visible,
