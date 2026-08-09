@@ -141,6 +141,39 @@ describe('workspace persistence', () => {
     expect(loadWorkspace(future)).toEqual({ status: 'invalid' });
   });
 
+  it('drops legacy analysis that was invented from a conversation-only problem', () => {
+    const workspace = createWorkspace(
+      {
+        ...validInput,
+        resumeText: '',
+        resumeSource: 'text',
+        targetDirection: 'Synthetic Product Operations Lead',
+      },
+      '2026-08-09T12:00:00.000Z',
+    );
+    const staleAnalysis = completeCandidateAnalysis(
+      workspace.targetDirection,
+      createCandidateAnalysis(workspace.currentSituation),
+      '2026-08-09T12:05:00.000Z',
+    );
+    const storage = createMemoryStorage({
+      'candidate-workspace': JSON.stringify({
+        ...workspace,
+        analysis: staleAnalysis,
+      }),
+    });
+
+    const loaded = loadWorkspace(storage);
+
+    expect(loaded.status).toBe('ready');
+    if (loaded.status === 'ready') {
+      expect(loaded.workspace.analysis).toBeUndefined();
+      expect(loaded.workspace.currentSituation).toBe(
+        workspace.currentSituation,
+      );
+    }
+  });
+
   it('migrates a valid version-one workspace without losing user input', () => {
     const legacyWorkspace = {
       ...createWorkspace(validInput, '2026-07-30T16:00:00.000Z'),

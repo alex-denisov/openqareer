@@ -183,7 +183,7 @@ export function loadWorkspace(storage: StorageLike): WorkspaceLoadResult {
 
     const parsed: unknown = JSON.parse(raw);
     if (isCandidateWorkspace(parsed)) {
-      return { status: 'ready', workspace: parsed };
+      return { status: 'ready', workspace: normalizeLoadedWorkspace(parsed) };
     }
 
     if (isLegacyWorkspace(parsed)) {
@@ -234,6 +234,17 @@ export function loadWorkspace(storage: StorageLike): WorkspaceLoadResult {
   } catch {
     return { status: 'invalid' };
   }
+}
+
+function normalizeLoadedWorkspace(
+  workspace: CandidateWorkspace,
+): CandidateWorkspace {
+  if (workspace.resumeText.trim()) return workspace;
+
+  return {
+    ...workspace,
+    analysis: undefined,
+  };
 }
 
 export function clearWorkspace(storage: StorageLike): void {
