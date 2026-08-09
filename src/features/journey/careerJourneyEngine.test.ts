@@ -10,6 +10,7 @@ import {
   createOpportunityRecord,
   recordOpportunityDecision,
 } from '../opportunity/opportunityEngine';
+import { recordOutcome } from '../outcome/outcomeEngine';
 import {
   buildCareerJourney,
   prepareCareerWorkspace,
@@ -353,5 +354,25 @@ describe('buildCareerJourney', () => {
         expect.objectContaining({ id: 'campaign', status: 'active' }),
       ]),
     );
+
+    const contacted = recordOutcome(
+      opportunity.id,
+      {
+        type: 'contacted',
+        occurredAt: '2026-08-09T17:07:00.000Z',
+        note: 'Сообщение отправлено в официальном интерфейсе.',
+      },
+      '2026-08-09T17:08:00.000Z',
+    );
+    const afterContact = buildCareerJourney(
+      { ...workspace, outcomes: [contacted] },
+      '2026-08-09T17:09:00.000Z',
+    );
+
+    expect(afterContact.nextAction).toMatchObject({
+      id: 'outcome-set-follow-up',
+      headline: 'Назначить дату проверки ответа',
+      destination: 'opportunities',
+    });
   });
 });

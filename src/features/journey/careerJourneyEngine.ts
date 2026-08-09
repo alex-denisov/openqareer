@@ -7,6 +7,7 @@ import {
   buildCareerDiagnostic,
   type CareerDiagnostic,
 } from '../diagnostic/careerDiagnostic';
+import { recommendNextAction } from '../outcome/outcomeEngine';
 import {
   createWorkspace,
   type CareerGoal,
@@ -127,6 +128,18 @@ export function buildCareerJourney(
     (role) => role.fitState === 'plausible' && role.evidenceCount > 0,
   );
   const hasFreshMarketSample = isFreshMarketSample(workspace.marketSample, now);
+  const hasActiveOutcome = Boolean(
+    workspace.opportunity &&
+      workspace.outcomes.some(
+        (event) =>
+          event.opportunityId === workspace.opportunity?.id &&
+          event.undoneAt === undefined,
+      ),
+  );
+  const outcomeNextAction =
+    workspace.opportunity && hasActiveOutcome
+      ? recommendNextAction(workspace.opportunity.id, workspace.outcomes, now)
+      : undefined;
   const diagnostic = buildCareerDiagnostic(
     {
       resumeText: workspace.resumeText,
@@ -185,7 +198,17 @@ export function buildCareerJourney(
       hasFreshMarketSample,
       Boolean(workspace.actionPackage),
     ),
-    nextAction: workspace.actionPackage
+    nextAction: outcomeNextAction
+      ? {
+          id: `outcome-${outcomeNextAction.code}`,
+          label: 'Продолжить по факту',
+          headline: outcomeNextAction.title,
+          reason: outcomeNextAction.reason,
+          expectedChange:
+            'Следующее решение будет опираться на записанный исход этой возможности, а не на предположение об ответе работодателя.',
+          destination: 'opportunities',
+        }
+      : workspace.actionPackage
       ? {
           id: 'execute-action-package',
           label: 'Открыть пакет действия',

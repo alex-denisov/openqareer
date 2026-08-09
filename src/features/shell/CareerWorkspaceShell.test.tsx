@@ -14,6 +14,7 @@ import {
   createOpportunityRecord,
   recordOpportunityDecision,
 } from '../opportunity/opportunityEngine';
+import { recordOutcome } from '../outcome/outcomeEngine';
 import { CareerWorkspaceShell } from './CareerWorkspaceShell';
 import { CareerTariffsView } from './CareerTariffsView';
 
@@ -296,5 +297,31 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('Пакет следующего действия');
     expect(html).toContain('Здравствуйте!');
     expect(html).toContain('Выбрать адресата');
+    expect(html).toContain('Результат ещё не записан');
+    expect(html).toContain('Отметить отправку');
+
+    const contacted = recordOutcome(
+      opportunity.id,
+      {
+        type: 'contacted',
+        occurredAt: '2026-08-09T18:00:00.000Z',
+        note: 'Сообщение отправлено в официальном интерфейсе.',
+      },
+      '2026-08-09T18:01:00.000Z',
+    );
+    const withOutcome = { ...workspace, outcomes: [contacted] };
+    const outcomeHtml = renderToStaticMarkup(
+      <OpportunitiesView
+        workspace={withOutcome}
+        journey={buildCareerJourney(withOutcome, '2026-08-09T18:02:00.000Z')}
+        onNavigate={() => undefined}
+        onOpenExpert={() => undefined}
+        onUpdateWorkspace={() => undefined}
+      />,
+    );
+
+    expect(outcomeHtml).toContain('Следующий шаг по факту');
+    expect(outcomeHtml).toContain('Назначить дату проверки ответа');
+    expect(outcomeHtml).toContain('Получен положительный ответ');
   });
 });

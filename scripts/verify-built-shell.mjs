@@ -362,6 +362,19 @@ async function verifyCandidateResult(browser, baseUrl, viewport) {
   await page.locator('button[aria-label="Возможности"]:visible').click();
   await page.getByText('Решение сохранено', { exact: true }).waitFor();
   await page.getByRole('heading', { name: 'Пакет следующего действия' }).waitFor();
+  await page.getByRole('button', { name: 'Отметить отправку' }).click();
+  await page.getByText('Следующий шаг по факту', { exact: true }).waitFor();
+  await page
+    .getByRole('heading', { name: 'Назначить дату проверки ответа' })
+    .waitFor();
+  await page.reload({ waitUntil: 'networkidle' });
+  await page
+    .getByRole('heading', { name: 'Назначить дату проверки ответа' })
+    .waitFor();
+  await page.locator('button[aria-label="Возможности"]:visible').click();
+  await page
+    .getByRole('button', { name: 'Получен положительный ответ' })
+    .waitFor();
   assert(errors.length === 0, `${viewport.name}: ${errors.join(', ')}`);
   await context.close();
   return {
@@ -372,6 +385,7 @@ async function verifyCandidateResult(browser, baseUrl, viewport) {
     assistedBoundary: true,
     opportunityPackage: true,
     adaptiveNextAction: true,
+    outcomeLoop: true,
   };
 }
 

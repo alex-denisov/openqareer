@@ -30,6 +30,11 @@ import {
   createActionPackage,
   getActionChecklist,
 } from '../action/actionPackageEngine';
+import {
+  recommendNextAction,
+  recordOutcome,
+  type OutcomeType,
+} from '../outcome/outcomeEngine';
 import type {
   CandidateWorkspace,
   CareerGoal,
@@ -711,6 +716,7 @@ export function OpportunitiesView({
   const [company, setCompany] = useState('');
   const [text, setText] = useState('');
   const [decisionReason, setDecisionReason] = useState('');
+  const [followUpDate, setFollowUpDate] = useState('');
   const opportunity = workspace.opportunity;
   const decisionLabel = useMemo(() => {
     const value =
@@ -749,6 +755,24 @@ export function OpportunitiesView({
       };
     });
   }, [opportunity, workspace.analysis]);
+  const activeOutcomes = useMemo(
+    () =>
+      opportunity
+        ? workspace.outcomes.filter(
+            (event) =>
+              event.opportunityId === opportunity.id &&
+              event.undoneAt === undefined,
+          )
+        : [],
+    [opportunity, workspace.outcomes],
+  );
+  const outcomeNextAction = useMemo(
+    () =>
+      opportunity
+        ? recommendNextAction(opportunity.id, workspace.outcomes)
+        : undefined,
+    [opportunity, workspace.outcomes],
+  );
 
   function analyze() {
     if (title.trim().length < 2 || company.trim().length < 2 || text.trim().length < 80) {
@@ -820,6 +844,26 @@ export function OpportunitiesView({
       actionPackage: undefined,
       outcomes: [],
       updatedAt: new Date().toISOString(),
+    });
+  }
+
+  function addOutcome(type: OutcomeType, followUpAt?: string) {
+    if (!opportunity) return;
+    const now = new Date().toISOString();
+    const event = recordOutcome(
+      opportunity.id,
+      {
+        type,
+        occurredAt: now,
+        note: outcomeNote(type),
+        followUpAt,
+      },
+      now,
+    );
+    onUpdateWorkspace({
+      ...workspace,
+      outcomes: [...workspace.outcomes, event],
+      updatedAt: now,
     });
   }
 
@@ -1022,6 +1066,98 @@ export function OpportunitiesView({
                       </li>
                     ))}
                   </ol>
+                  <section className="career-outcome-loop">
+                    {activeOutcomes.length === 0 ? (
+                      <>
+                        <p className="career-eyebrow">Результат ещё не записан</p>
+                        <h4>Отправка остаётся вашим действием</h4>
+                        <p>
+                          После отправки в официальном интерфейсе отметьте факт
+                          здесь. До этого openqareer не считает действие выполненным.
+                        </p>
+                        <button
+                          className="career-primary-button"
+                          type="button"
+                          onClick={() =>
+                            addOutcome(
+                              workspace.actionPackage?.decisionChoice === 'apply'
+                                ? 'applied'
+                                : 'contacted',
+                            )
+                          }
+                        >
+                          Отметить отправку
+                          <Check size={17} weight="bold" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="career-eyebrow">Следующий шаг по факту</p>
+                        <h4>{outcomeNextAction?.title}</h4>
+                        <p>{outcomeNextAction?.reason}</p>
+                        {outcomeNextAction?.code === 'set-follow-up' ? (
+                          <div className="career-follow-up-date">
+                            <label>
+                              <span>Дата проверки ответа</span>
+                              <input
+                                type="date"
+                                value={followUpDate}
+                                min={new Date(Date.now() + 86_400_000)
+                                  .toISOString()
+                                  .slice(0, 10)}
+                                onChange={(event) =>
+                                  setFollowUpDate(event.target.value)
+                                }
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              disabled={!followUpDate}
+                              onClick={() =>
+                                addOutcome(
+                                  workspace.actionPackage?.decisionChoice ===
+                                    'apply'
+                                    ? 'applied'
+                                    : 'contacted',
+                                  new Date(
+                                    `${followUpDate}T12:00:00`,
+                                  ).toISOString(),
+                                )
+                              }
+                            >
+                              Сохранить дату проверки
+                            </button>
+                          </div>
+                        ) : null}
+                        <div className="career-outcome-choices">
+                          <button
+                            type="button"
+                            onClick={() => addOutcome('positive-reply')}
+                          >
+                            Получен положительный ответ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => addOutcome('negative-reply')}
+                          >
+                            Получен отказ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => addOutcome('interview')}
+                          >
+                            Назначено интервью
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => addOutcome('offer')}
+                          >
+                            Получен оффер
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </section>
                 </section>
               ) : null}
             </div>
@@ -1126,6 +1262,16 @@ function explainOpportunityRecommendation(choice: OpportunityChoice) {
     return 'Подтверждённых оснований для отклика пока недостаточно. Вакансию можно сохранить как наблюдение и сначала усилить профиль.';
   }
   return 'Обнаружен подтверждённый конфликт с важным ограничением кандидата.';
+}
+
+function outcomeNote(type: OutcomeType) {
+  if (type === 'applied') return 'Отклик отправлен кандидатом.';
+  if (type === 'contacted') return 'Контакт отправлен кандидатом.';
+  if (type === 'positive-reply') return 'Кандидат отметил положительный ответ.';
+  if (type === 'negative-reply') return 'Кандидат отметил отказ.';
+  if (type === 'interview') return 'Кандидат отметил назначенное интервью.';
+  if (type === 'offer') return 'Кандидат отметил полученный оффер.';
+  return 'Кандидат остановил процесс по этой возможности.';
 }
 
 function SourceCapability({
