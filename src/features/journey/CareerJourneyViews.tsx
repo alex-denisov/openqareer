@@ -22,7 +22,14 @@ import {
 import {
   analyzeOpportunity,
   createOpportunityRecord,
+  recordOpportunityDecision,
+  type OpportunityChoice,
 } from '../opportunity/opportunityEngine';
+import {
+  composeMessage,
+  createActionPackage,
+  getActionChecklist,
+} from '../action/actionPackageEngine';
 import type {
   CandidateWorkspace,
   CareerGoal,
@@ -703,15 +710,45 @@ export function OpportunitiesView({
   const [title, setTitle] = useState('');
   const [company, setCompany] = useState('');
   const [text, setText] = useState('');
+  const [decisionReason, setDecisionReason] = useState('');
   const opportunity = workspace.opportunity;
   const decisionLabel = useMemo(() => {
-    const value = opportunity?.analysis?.recommendation;
+    const value =
+      opportunity?.decision?.choice ?? opportunity?.analysis?.recommendation;
     if (value === 'apply') return 'Откликаться';
     if (value === 'network') return 'Сначала найти контакт';
     if (value === 'watch') return 'Наблюдать';
     if (value === 'skip') return 'Пропустить';
     return null;
   }, [opportunity]);
+  const comparisonRows = useMemo(() => {
+    if (!opportunity?.analysis) return [];
+    const evidence = new Map(
+      (workspace.analysis?.evidenceItems ?? []).map((item) => [item.id, item]),
+    );
+    const matches = new Map(
+      opportunity.analysis.matches.map((match) => [
+        match.opportunityItemId,
+        match,
+      ]),
+    );
+    const gapIds = new Set(opportunity.analysis.gapItemIds);
+
+    return opportunity.parsed.items.map((item) => {
+      const match = matches.get(item.id);
+      return {
+        item,
+        evidence: (match?.evidenceIds ?? [])
+          .map((id) => evidence.get(id))
+          .filter((value): value is EvidenceItem => value !== undefined),
+        state: match
+          ? ('matched' as const)
+          : gapIds.has(item.id)
+            ? ('gap' as const)
+            : ('unknown' as const),
+      };
+    });
+  }, [opportunity, workspace.analysis]);
 
   function analyze() {
     if (title.trim().length < 2 || company.trim().length < 2 || text.trim().length < 80) {
@@ -736,6 +773,50 @@ export function OpportunitiesView({
     onUpdateWorkspace({
       ...workspace,
       opportunity: analyzed,
+      actionPackage: undefined,
+      outcomes: [],
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  function decide(choice: OpportunityChoice) {
+    if (
+      !opportunity?.analysis ||
+      !workspace.analysis ||
+      decisionReason.trim().length < 10
+    ) {
+      return;
+    }
+    const decided = recordOpportunityDecision(
+      { ...opportunity, analysis: opportunity.analysis },
+      choice,
+      decisionReason,
+    );
+    const actionPackage =
+      choice === 'apply' || choice === 'network'
+        ? createActionPackage(
+            decided,
+            workspace.analysis.evidenceItems,
+            workspace.targetDirection,
+          )
+        : undefined;
+    onUpdateWorkspace({
+      ...workspace,
+      opportunity: decided,
+      actionPackage,
+      outcomes: [],
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  function resetOpportunity() {
+    setTitle('');
+    setCompany('');
+    setText('');
+    setDecisionReason('');
+    onUpdateWorkspace({
+      ...workspace,
+      opportunity: undefined,
       actionPackage: undefined,
       outcomes: [],
       updatedAt: new Date().toISOString(),
@@ -814,6 +895,137 @@ export function OpportunitiesView({
               <strong>{opportunity.analysis?.unknowns.length ?? 0}</strong>
             </div>
           </div>
+          {opportunity.analysis ? (
+            <div className="career-opportunity-explanation">
+              <section className="career-opportunity-route">
+                <p className="career-eyebrow">Рекомендация, а не решение за вас</p>
+                <h3>Почему такой маршрут</h3>
+                <p>
+                  {explainOpportunityRecommendation(
+                    opportunity.analysis.recommendation,
+                  )}
+                </p>
+              </section>
+
+              <section aria-labelledby="opportunity-comparison-title">
+                <div className="career-section-heading">
+                  <div>
+                    <p className="career-eyebrow">Вакансия ↔ профиль</p>
+                    <h3 id="opportunity-comparison-title">
+                      Что подтверждено, а что ещё нет
+                    </h3>
+                  </div>
+                </div>
+                <div className="career-opportunity-comparison">
+                  {comparisonRows.map(({ item, evidence, state }) => (
+                    <article key={item.id} data-state={state}>
+                      <div>
+                        <small>{opportunityItemLabel(item.kind)}</small>
+                        <p>{item.sourceExcerpt}</p>
+                      </div>
+                      <div className="career-opportunity-support">
+                        <strong>
+                          {state === 'matched'
+                            ? 'Есть опора в профиле'
+                            : state === 'gap'
+                              ? 'Нужно подтвердить'
+                              : 'Нужно проверить'}
+                        </strong>
+                        {evidence.map((itemEvidence) => (
+                          <span key={itemEvidence.id}>
+                            {itemEvidence.statement}
+                          </span>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              {opportunity.analysis.unknowns.length > 0 ? (
+                <section className="career-opportunity-unknowns">
+                  <p className="career-eyebrow">Неизвестно из вакансии</p>
+                  <ul>
+                    {opportunity.analysis.unknowns.map((unknown) => (
+                      <li key={unknown}>{unknown}</li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+
+              {!opportunity.decision ? (
+                <section className="career-opportunity-decision">
+                  <p className="career-eyebrow">Контроль остаётся у кандидата</p>
+                  <h3>Принять решение</h3>
+                  <label>
+                    <span>Почему это разумный следующий шаг?</span>
+                    <textarea
+                      value={decisionReason}
+                      onChange={(event) => setDecisionReason(event.target.value)}
+                      rows={3}
+                      placeholder="Например: сначала уточню scope роли и формат работы у команды."
+                    />
+                  </label>
+                  <div className="career-opportunity-choices">
+                    {(['apply', 'network', 'watch', 'skip'] as const).map(
+                      (choice) => (
+                        <button
+                          key={choice}
+                          type="button"
+                          disabled={decisionReason.trim().length < 10}
+                          className={
+                            opportunity.analysis?.recommendation === choice
+                              ? 'is-recommended'
+                              : undefined
+                          }
+                          onClick={() => decide(choice)}
+                        >
+                          {opportunityChoiceLabel(choice)}
+                          {opportunity.analysis?.recommendation === choice ? (
+                            <small>Рекомендуется</small>
+                          ) : null}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                </section>
+              ) : (
+                <section className="career-opportunity-saved-decision">
+                  <div>
+                    <p className="career-eyebrow">Решение сохранено</p>
+                    <h3>{opportunityChoiceLabel(opportunity.decision.choice)}</h3>
+                    <p>{opportunity.decision.reason}</p>
+                  </div>
+                  <button type="button" onClick={resetOpportunity}>
+                    Проверить другую вакансию
+                  </button>
+                </section>
+              )}
+
+              {workspace.actionPackage ? (
+                <section className="career-action-package">
+                  <div className="career-section-heading">
+                    <div>
+                      <p className="career-eyebrow">Готово из подтверждённых фактов</p>
+                      <h3>Пакет следующего действия</h3>
+                    </div>
+                  </div>
+                  <strong>{workspace.actionPackage.positioningLine}</strong>
+                  <pre>{composeMessage(workspace.actionPackage)}</pre>
+                  <ol>
+                    {getActionChecklist(
+                      workspace.actionPackage.decisionChoice,
+                    ).map((item) => (
+                      <li key={item.id}>
+                        <strong>{item.label}</strong>
+                        <span>{item.detail}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              ) : null}
+            </div>
+          ) : null}
           <p className="career-opportunity-caveat">
             Это сравнение с одной вакансией, не оценка всего рынка и не гарантия
             прохождения отбора.
@@ -888,6 +1100,32 @@ export function OpportunitiesView({
       </section>
     </div>
   );
+}
+
+function opportunityItemLabel(kind: 'task' | 'requirement' | 'condition') {
+  if (kind === 'task') return 'Задача';
+  if (kind === 'requirement') return 'Требование';
+  return 'Условие';
+}
+
+function opportunityChoiceLabel(choice: OpportunityChoice) {
+  if (choice === 'apply') return 'Откликаться';
+  if (choice === 'network') return 'Сначала найти контакт';
+  if (choice === 'watch') return 'Наблюдать';
+  return 'Пропустить';
+}
+
+function explainOpportunityRecommendation(choice: OpportunityChoice) {
+  if (choice === 'apply') {
+    return 'Ключевые требования имеют опору в подтверждённых фактах, а жёсткого конфликта с условиями не найдено.';
+  }
+  if (choice === 'network') {
+    return 'В профиле есть релевантная опора, но условия и контекст роли подтверждены не полностью. Сначала безопаснее уточнить их у команды.';
+  }
+  if (choice === 'watch') {
+    return 'Подтверждённых оснований для отклика пока недостаточно. Вакансию можно сохранить как наблюдение и сначала усилить профиль.';
+  }
+  return 'Обнаружен подтверждённый конфликт с важным ограничением кандидата.';
 }
 
 function SourceCapability({

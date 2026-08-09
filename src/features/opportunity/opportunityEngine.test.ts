@@ -103,6 +103,22 @@ describe('opportunity engine', () => {
     }
   });
 
+  it('does not treat one generic product word as evidence for a technical requirement', () => {
+    const record = createOpportunityRecord({
+      title: 'Senior Product Manager',
+      company: 'Пример',
+      text: `
+Требования
+Уверенное владение SQL для продуктовой аналитики.
+`,
+      sourceLabel: 'Ручной ввод',
+    });
+    const analysis = analyzeOpportunity(record, EVIDENCE, 'unknown');
+
+    expect(analysis.matches).toEqual([]);
+    expect(analysis.gapItemIds).toEqual(['vac-req-01']);
+  });
+
   it('turns a confirmed hard conflict into Skip rather than a score', () => {
     const record = createOpportunityRecord(
       {

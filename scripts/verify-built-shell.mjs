@@ -309,6 +309,41 @@ async function verifyCandidateResult(browser, baseUrl, viewport) {
       exact: true,
     })
     .waitFor();
+  await page.getByRole('textbox', { name: 'Название роли' }).fill(
+    'Senior Product Manager',
+  );
+  await page.getByRole('textbox', { name: 'Компания' }).fill('Компания Пример');
+  await page.getByRole('textbox', { name: 'Текст вакансии' }).fill(`
+Задачи
+Формировать продуктовую стратегию и руководить продуктовой командой.
+Требования
+Опыт работы с продуктовыми метриками и планированием.
+Уверенное владение SQL для продуктовой аналитики.
+Условия
+Гибридный формат работы, полная занятость.
+`);
+  await page.getByRole('button', { name: 'Проверить возможность' }).click();
+  await page.getByRole('heading', { name: 'Почему такой маршрут' }).waitFor();
+  assert(
+    (await page.getByText('Есть опора в профиле', { exact: true }).count()) >= 1,
+    `${viewport.name}: opportunity comparison has no evidence-backed match`,
+  );
+  assert(
+    (await page.getByText('Нужно подтвердить', { exact: true }).count()) >= 1,
+    `${viewport.name}: unsupported SQL requirement was not exposed as a gap`,
+  );
+  await page
+    .getByRole('textbox', { name: 'Почему это разумный следующий шаг?' })
+    .fill('Сначала уточню scope роли и формат работы у команды.');
+  await page
+    .getByRole('button', { name: 'Сначала найти контакт Рекомендуется' })
+    .click();
+  await page.getByText('Решение сохранено', { exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Пакет следующего действия' }).waitFor();
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.locator('button[aria-label="Возможности"]:visible').click();
+  await page.getByText('Решение сохранено', { exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Пакет следующего действия' }).waitFor();
   assert(errors.length === 0, `${viewport.name}: ${errors.join(', ')}`);
   await context.close();
   return {
@@ -317,6 +352,7 @@ async function verifyCandidateResult(browser, baseUrl, viewport) {
     profileOverflow,
     freeBoundary: true,
     assistedBoundary: true,
+    opportunityPackage: true,
   };
 }
 

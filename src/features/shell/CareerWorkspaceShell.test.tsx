@@ -8,6 +8,12 @@ import {
   buildCareerJourney,
   prepareCareerWorkspace,
 } from '../journey/careerJourneyEngine';
+import { createActionPackage } from '../action/actionPackageEngine';
+import {
+  analyzeOpportunity,
+  createOpportunityRecord,
+  recordOpportunityDecision,
+} from '../opportunity/opportunityEngine';
 import { CareerWorkspaceShell } from './CareerWorkspaceShell';
 import { CareerTariffsView } from './CareerTariffsView';
 
@@ -165,5 +171,130 @@ describe('CareerWorkspaceShell', () => {
 
     expect(html).toContain('Выборка устарела');
     expect(html).not.toContain('Свежие вакансии по гипотезе');
+  });
+
+  it('explains an opportunity through vacancy excerpts and confirmed evidence', () => {
+    const base = prepareCareerWorkspace(
+      {
+        careerGoal: 'find-job',
+        resumeText:
+          'Руководил продуктовой командой. Формировал продуктовую стратегию и запускал B2B-продукты.',
+        resumeSource: 'text',
+        targetDirection: 'Руководитель продукта',
+        market: 'ru',
+        currentSituation: 'Проверяю следующую продуктовую роль.',
+        constraints: 'Гибридный формат.',
+        urgency: 'active',
+      },
+      '2026-08-09T17:00:00.000Z',
+    );
+    const evidenceItems = (base.analysis?.evidenceItems ?? []).map((item) => ({
+      ...item,
+      status: 'confirmed' as const,
+    }));
+    const record = createOpportunityRecord({
+      title: 'Senior Product Manager',
+      company: 'Пример',
+      sourceLabel: 'Ручной ввод',
+      text: `
+Задачи
+Формировать продуктовую стратегию и управлять продуктовой командой.
+Требования
+Опыт запуска B2B-продуктов.
+Уверенное владение SQL для продуктовой аналитики.
+`,
+    });
+    const opportunity = {
+      ...record,
+      analysis: analyzeOpportunity(record, evidenceItems, 'unknown'),
+    };
+    const workspace = {
+      ...base,
+      analysis: base.analysis ? { ...base.analysis, evidenceItems } : undefined,
+      opportunity,
+    };
+    const html = renderToStaticMarkup(
+      <OpportunitiesView
+        workspace={workspace}
+        journey={buildCareerJourney(workspace)}
+        onNavigate={() => undefined}
+        onOpenExpert={() => undefined}
+        onUpdateWorkspace={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Почему такой маршрут');
+    expect(html).toContain('Формировать продуктовую стратегию');
+    expect(html).toContain('Есть опора в профиле');
+    expect(html).toContain('Уверенное владение SQL для продуктовой аналитики');
+    expect(html).toContain('Нужно подтвердить');
+    expect(html).toContain('Принять решение');
+  });
+
+  it('renders a persisted action package after the candidate decides', () => {
+    const base = prepareCareerWorkspace(
+      {
+        careerGoal: 'find-job',
+        resumeText:
+          'Руководил продуктовой командой. Формировал продуктовую стратегию и запускал B2B-продукты.',
+        resumeSource: 'text',
+        targetDirection: 'Руководитель продукта',
+        market: 'ru',
+        currentSituation: 'Проверяю следующую продуктовую роль.',
+        constraints: 'Гибридный формат.',
+        urgency: 'active',
+      },
+      '2026-08-09T17:00:00.000Z',
+    );
+    const evidenceItems = (base.analysis?.evidenceItems ?? []).map((item) => ({
+      ...item,
+      status: 'confirmed' as const,
+    }));
+    const record = createOpportunityRecord({
+      title: 'Senior Product Manager',
+      company: 'Пример',
+      sourceLabel: 'Ручной ввод',
+      text: `
+Задачи
+Формировать продуктовую стратегию и управлять продуктовой командой.
+Требования
+Опыт запуска B2B-продуктов.
+`,
+    });
+    const analyzed = {
+      ...record,
+      analysis: analyzeOpportunity(record, evidenceItems, 'unknown'),
+    };
+    const opportunity = recordOpportunityDecision(
+      analyzed,
+      'network',
+      'Хочу уточнить задачи и уровень роли у команды.',
+    );
+    const actionPackage = createActionPackage(
+      opportunity,
+      evidenceItems,
+      base.targetDirection,
+    );
+    const workspace = {
+      ...base,
+      analysis: base.analysis ? { ...base.analysis, evidenceItems } : undefined,
+      opportunity,
+      actionPackage,
+    };
+    const html = renderToStaticMarkup(
+      <OpportunitiesView
+        workspace={workspace}
+        journey={buildCareerJourney(workspace)}
+        onNavigate={() => undefined}
+        onOpenExpert={() => undefined}
+        onUpdateWorkspace={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Решение сохранено');
+    expect(html).toContain('Хочу уточнить задачи и уровень роли у команды.');
+    expect(html).toContain('Пакет следующего действия');
+    expect(html).toContain('Здравствуйте!');
+    expect(html).toContain('Выбрать адресата');
   });
 });

@@ -1426,6 +1426,188 @@
   text-transform: uppercase;
 }
 
+.career-opportunity-explanation {
+  display: grid;
+  gap: 28px;
+  margin-top: 28px;
+}
+
+.career-opportunity-explanation h3 {
+  margin: 5px 0 0;
+  font-size: clamp(1.05rem, 1.8vw, 1.3rem);
+}
+
+.career-opportunity-route,
+.career-opportunity-decision,
+.career-opportunity-saved-decision,
+.career-action-package {
+  border: 1px solid var(--career-line);
+  border-radius: 18px;
+  padding: clamp(18px, 3vw, 26px);
+  background: color-mix(in srgb, var(--career-surface) 76%, transparent);
+}
+
+.career-opportunity-route > p:last-child,
+.career-opportunity-saved-decision p,
+.career-opportunity-unknowns li {
+  color: var(--career-text-soft);
+  line-height: 1.55;
+}
+
+.career-opportunity-comparison {
+  display: grid;
+  border-top: 1px solid var(--career-line);
+}
+
+.career-opportunity-comparison article {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(220px, 0.75fr);
+  gap: 24px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--career-line);
+}
+
+.career-opportunity-comparison article > div:first-child {
+  display: grid;
+  gap: 7px;
+}
+
+.career-opportunity-comparison article small {
+  color: var(--career-text-dim);
+  font-size: 0.67rem;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.career-opportunity-comparison article p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.career-opportunity-support {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.career-opportunity-support strong {
+  color: var(--career-warning);
+  font-size: 0.78rem;
+}
+
+.career-opportunity-comparison article[data-state='matched']
+  .career-opportunity-support strong {
+  color: var(--career-success);
+}
+
+.career-opportunity-support span {
+  color: var(--career-text-soft);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.career-opportunity-unknowns ul {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding-left: 20px;
+}
+
+.career-opportunity-decision label {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.career-opportunity-decision label > span {
+  color: var(--career-text-soft);
+  font-size: 0.78rem;
+}
+
+.career-opportunity-choices {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.career-opportunity-choices button {
+  min-height: 54px;
+  display: grid;
+  place-content: center;
+  gap: 2px;
+  border: 1px solid var(--career-line-strong);
+  border-radius: 12px;
+  color: var(--career-text-soft);
+  background: transparent;
+}
+
+.career-opportunity-choices button.is-recommended {
+  border-color: var(--career-accent);
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.career-opportunity-choices button small {
+  font-size: 0.6rem;
+}
+
+.career-opportunity-saved-decision {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.career-opportunity-saved-decision button {
+  flex: 0 0 auto;
+  border: 0;
+  color: var(--career-accent);
+  background: transparent;
+}
+
+.career-action-package {
+  display: grid;
+  gap: 18px;
+  border-color: color-mix(in srgb, var(--career-accent) 32%, var(--career-line));
+}
+
+.career-action-package pre {
+  margin: 0;
+  border-radius: 14px;
+  padding: 18px;
+  overflow-x: auto;
+  color: var(--career-text);
+  background: color-mix(in srgb, var(--career-background) 72%, transparent);
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.career-action-package ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.career-action-package li {
+  padding-left: 5px;
+}
+
+.career-action-package li strong,
+.career-action-package li span {
+  display: block;
+}
+
+.career-action-package li span {
+  margin-top: 3px;
+  color: var(--career-text-soft);
+  font-size: 0.76rem;
+}
+
 .career-opportunity-caveat {
   margin: 16px 0 0;
   color: var(--career-text-dim);
@@ -2130,6 +2312,24 @@
 
   .career-opportunity-reasons > div:last-child {
     border-bottom: 0;
+  }
+
+  .career-opportunity-comparison article {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .career-opportunity-choices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .career-opportunity-saved-decision {
+    display: grid;
+    align-items: start;
+  }
+
+  .career-opportunity-saved-decision button {
+    justify-self: start;
   }
 
   .career-paid-moment {

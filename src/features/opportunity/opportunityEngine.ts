@@ -208,7 +208,9 @@ export function analyzeOpportunity(
           extractSignals(candidate.statement),
         ),
       }))
-      .filter(({ sharedSignals }) => sharedSignals.length > 0);
+      .filter(({ sharedSignals }) =>
+        hasSufficientSharedSignals(sharedSignals),
+      );
 
     if (matchingEvidence.length === 0) {
       return [];
@@ -363,14 +365,24 @@ function extractSignals(value: string): string[] {
         .split(/\s+/u)
         .filter((token) => token.length >= 4 || token === 'sql')
         .filter((token) => !STOP_WORDS.has(token))
-        .map((token) => (token === 'sql' ? token : token.slice(0, 6))),
+        .map(canonicalSignal),
     ),
   ];
+}
+
+function canonicalSignal(token: string): string {
+  if (token === 'sql') return token;
+  if (token.startsWith('запус')) return 'запуск';
+  return token.slice(0, 6);
 }
 
 function intersect(left: string[], right: string[]): string[] {
   const rightSet = new Set(right);
   return left.filter((value) => rightSet.has(value));
+}
+
+function hasSufficientSharedSignals(sharedSignals: string[]): boolean {
+  return sharedSignals.length >= 2 || sharedSignals.includes('sql');
 }
 
 function isHttpUrl(value: string): boolean {
