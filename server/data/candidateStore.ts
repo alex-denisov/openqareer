@@ -15,6 +15,7 @@ import type {
   AssessmentSubmission,
 } from '../domain/assessment';
 import type { CoachProviderResult } from '../providers/coachProvider';
+import type { OAuthPlatform } from '../connectors/oauthTypes';
 
 export interface CandidateIdentity {
   id: string;
@@ -102,6 +103,50 @@ export interface MemoryChange {
   statement?: string;
 }
 
+export interface OAuthAuthorizationInput {
+  platform: OAuthPlatform;
+  stateDigest: string;
+  codeVerifier: string;
+  expiresAt: string;
+}
+
+export interface ConsumedOAuthAuthorization {
+  candidateId: string;
+  codeVerifier: string;
+}
+
+export type OAuthCapability =
+  | 'lite_identity'
+  | 'profile_read'
+  | 'resume_read';
+
+export interface OAuthProfileFact {
+  kind: 'headline' | 'summary';
+  value: string;
+  sourceLocator: string;
+  confidence: 'official-api';
+}
+
+export interface OAuthConnectionInput {
+  platform: OAuthPlatform;
+  externalAccountId: string;
+  scopes: string[];
+  capabilities: ReadonlyArray<OAuthCapability>;
+  accessToken: string;
+  refreshToken: string | null;
+  accessTokenExpiresAt: string | null;
+  profile: {
+    capturedAt: string;
+    sourceUrl: string | null;
+    facts: OAuthProfileFact[];
+  };
+}
+
+export interface StoredOAuthConnection extends OAuthConnectionInput {
+  connectedAt: string;
+  updatedAt: string;
+}
+
 export interface CandidateStore {
   createCandidate(input: {
     dataClass: CandidateIdentity['dataClass'];
@@ -140,6 +185,28 @@ export interface CandidateStore {
     submission: GermanyMarketSubmission,
     result: GermanyMarketResult,
   ): StoredGermanyMarket;
+  createOAuthAuthorization(
+    candidateId: string,
+    authorization: OAuthAuthorizationInput,
+  ): void;
+  consumeOAuthAuthorization(
+    platform: OAuthPlatform,
+    stateDigest: string,
+    consumedAt: string,
+  ): ConsumedOAuthAuthorization | null;
+  saveOAuthConnection(
+    candidateId: string,
+    connection: OAuthConnectionInput,
+  ): StoredOAuthConnection;
+  getOAuthConnection(
+    candidateId: string,
+    platform: OAuthPlatform,
+  ): StoredOAuthConnection | null;
+  listOAuthConnections(candidateId: string): StoredOAuthConnection[];
+  deleteOAuthConnection(
+    candidateId: string,
+    platform: OAuthPlatform,
+  ): boolean;
   exportCandidate(candidateId: string): CandidateSnapshot;
   deleteCandidate(candidateId: string): boolean;
   close(): void;

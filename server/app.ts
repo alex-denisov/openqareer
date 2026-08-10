@@ -48,6 +48,13 @@ import {
   parseProfileUrl,
   type ProfileUrlImportResult,
 } from './connectors/profileUrlImport';
+import {
+  CandidateOAuthService,
+  OAuthConnectorError,
+  type OAuthTransport,
+} from './connectors/oauthConnector';
+import { OfficialOAuthTransport } from './connectors/officialOAuthTransport';
+import { OAUTH_PLATFORMS, type OAuthPlatform } from './connectors/oauthTypes';
 
 interface BuildAppOptions {
   config: ServerConfig;
@@ -60,6 +67,7 @@ interface BuildAppOptions {
     perPage?: number;
   }) => Promise<HhVacancySample>;
   importProfile?: (url: string) => Promise<ProfileUrlImportResult>;
+  oauthTransport?: OAuthTransport;
 }
 
 interface ErrorBody {
@@ -79,7 +87,13 @@ export async function buildApp({
   serveStatic = true,
   searchVacancies = searchHhVacancies,
   importProfile = importPublicProfileUrl,
+  oauthTransport,
 }: BuildAppOptions): Promise<FastifyInstance> {
+  const oauthService = new CandidateOAuthService({
+    store: candidateStore,
+    providers: config.oauthProviders,
+    transport: oauthTransport ?? new OfficialOAuthTransport(),
+  });
   const app = Fastify({
     trustProxy: '127.0.0.1',
     logger: {
@@ -298,6 +312,108 @@ export async function buildApp({
       const body = profileImportSchema.parse(request.body);
       return {
         data: await importProfile(body.url),
+        meta: { requestId: request.id },
+      };
+    },
+  );
+
+  app.get('/api/v1/candidate/connections', async (request, reply) => {
+    const candidate = authenticateCandidate(
+      request,
+      reply,
+      candidateStore,
+      authService,
+      config,
+    );
+    if (!candidate) return;
+    return {
+      data: oauthService.listConnections(candidate.id),
+      meta: { requestId: request.id },
+    };
+  });
+
+  app.post<{ Params: { platform: string } }>(
+    '/api/v1/candidate/connections/:platform/authorizations',
+    { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } },
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const platform = parsePlatform(request.params.platform);
+      if (!platform) return connectorNotFound(request, reply);
+      try {
+        return reply.code(201).send({
+          data: oauthService.startAuthorization(candidate.id, platform),
+          meta: { requestId: request.id },
+        });
+      } catch (error) {
+        return sendConnectorError(request, reply, error);
+      }
+    },
+  );
+
+  app.get<{ Params: { platform: string } }>(
+    '/api/v1/connectors/:platform/callback',
+    { config: { rateLimit: { max: 20, timeWindow: '15 minutes' } } },
+    async (request, reply) => {
+      const platform = parsePlatform(request.params.platform);
+      if (!platform) return connectorNotFound(request, reply);
+      const callback = oauthCallbackQuerySchema.parse(request.query);
+      if (callback.error) {
+        oauthService.declineAuthorization(platform, callback.state);
+        return connectionResultRedirect(reply, platform, 'declined');
+      }
+      try {
+        await oauthService.completeAuthorization(platform, {
+          state: callback.state,
+          code: callback.code ?? '',
+        });
+      } catch (error) {
+        request.log.warn(
+          {
+            platform,
+            errorCode:
+              error instanceof OAuthConnectorError
+                ? error.code
+                : 'internal_error',
+          },
+          'connector-callback-failed',
+        );
+        return connectionResultRedirect(
+          reply,
+          platform,
+          'failed',
+          error instanceof OAuthConnectorError
+            ? error.code
+            : 'provider_oauth_failed',
+        );
+      }
+      return connectionResultRedirect(reply, platform, 'connected');
+    },
+  );
+
+  app.delete<{ Params: { platform: string } }>(
+    '/api/v1/candidate/connections/:platform',
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const platform = parsePlatform(request.params.platform);
+      if (!platform) return connectorNotFound(request, reply);
+      return {
+        data: await oauthService.disconnect(candidate.id, platform),
         meta: { requestId: request.id },
       };
     },
@@ -724,6 +840,81 @@ const profileImportSchema = z.object({
       }
     }),
 });
+
+const oauthCallbackQuerySchema = z
+  .object({
+    state: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{32,256}$/),
+    code: z.string().min(8).max(2_048).optional(),
+    error: z.string().max(200).optional(),
+  })
+  .refine((value) => Boolean(value.code) !== Boolean(value.error));
+
+function parsePlatform(value: string): OAuthPlatform | null {
+  return (OAUTH_PLATFORMS as readonly string[]).includes(value)
+    ? (value as OAuthPlatform)
+    : null;
+}
+
+function connectorNotFound(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): FastifyReply {
+  return sendError(
+    reply,
+    request,
+    404,
+    'connector_not_found',
+    'Такая площадка не подключается.',
+    false,
+  );
+}
+
+function sendConnectorError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: unknown,
+): FastifyReply {
+  if (!(error instanceof OAuthConnectorError)) throw error;
+  return sendError(
+    reply,
+    request,
+    error.statusCode,
+    error.code,
+    connectorMessage(error.code),
+    error.retryable,
+  );
+}
+
+function connectorMessage(code: OAuthConnectorError['code']): string {
+  switch (code) {
+    case 'connector_not_configured':
+      return 'Подключение этой площадки ещё не настроено администратором.';
+    case 'oauth_state_invalid':
+      return 'Ссылка подключения истекла или уже использована. Начните подключение заново.';
+    case 'provider_oauth_failed':
+      return 'Площадка не подтвердила доступ. Повторите подключение позже.';
+    case 'provider_profile_unavailable':
+      return 'Площадка не вернула профиль по выданному доступу.';
+  }
+}
+
+/**
+ * The callback is opened by the platform authorization server in the
+ * candidate's browser, so the outcome is always handed to a fixed same-origin
+ * route. A caller-provided return URL is never accepted.
+ */
+function connectionResultRedirect(
+  reply: FastifyReply,
+  platform: OAuthPlatform,
+  status: 'connected' | 'declined' | 'failed',
+  reason?: OAuthConnectorError['code'],
+): FastifyReply {
+  const query = new URLSearchParams({ platform, status });
+  if (reason) query.set('reason', reason);
+  return reply.redirect(`/connections/result?${query.toString()}`, 303);
+}
 
 const coachTurnRequestSchema = z.object({
   messageId: z.string().uuid(),

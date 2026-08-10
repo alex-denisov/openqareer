@@ -115,4 +115,52 @@ describe('server configuration', () => {
       ),
     ).toThrow('model is not allowed for provider gemini');
   });
+
+  it('enables OAuth providers only from complete server-side configuration', () => {
+    expect(readServerConfig(validEnvironment, import.meta.url)).toMatchObject({
+      oauthProviders: {},
+    });
+
+    expect(() =>
+      readServerConfig(
+        {
+          ...validEnvironment,
+          OPENQAREER_HH_CLIENT_ID: 'hh-client-id',
+        },
+        import.meta.url,
+      ),
+    ).toThrow('complete OAuth configuration is required for hh');
+
+    expect(
+      readServerConfig(
+        {
+          ...validEnvironment,
+          OPENQAREER_HH_CLIENT_ID: 'hh-client-id',
+          OPENQAREER_HH_CLIENT_SECRET: 'hh-client-secret-for-tests',
+          OPENQAREER_HH_REDIRECT_URI:
+            'https://openqareer.com/api/v1/connectors/hh/callback',
+        },
+        import.meta.url,
+      ).oauthProviders.hh,
+    ).toEqual({
+      clientId: 'hh-client-id',
+      clientSecret: 'hh-client-secret-for-tests',
+      redirectUri:
+        'https://openqareer.com/api/v1/connectors/hh/callback',
+    });
+  });
+
+  it('treats a blank OAuth entry as an unconfigured provider', () => {
+    expect(
+      readServerConfig(
+        {
+          ...validEnvironment,
+          OPENQAREER_LINKEDIN_CLIENT_ID: '',
+          OPENQAREER_LINKEDIN_CLIENT_SECRET: '',
+          OPENQAREER_LINKEDIN_REDIRECT_URI: '',
+        },
+        import.meta.url,
+      ),
+    ).toMatchObject({ oauthProviders: {} });
+  });
 });

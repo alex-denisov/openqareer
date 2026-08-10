@@ -147,3 +147,26 @@ CREATE TABLE market_profiles (
   PRIMARY KEY (candidate_id, country)
 ) STRICT;
 `;
+
+export const MIGRATION_6 = `
+CREATE TABLE oauth_authorizations (
+  state_digest TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('linkedin', 'hh')),
+  code_verifier_cipher TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+) STRICT;
+
+CREATE INDEX oauth_authorizations_candidate
+  ON oauth_authorizations(candidate_id, platform, expires_at);
+
+CREATE TABLE oauth_connections (
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('linkedin', 'hh')),
+  connection_cipher TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (candidate_id, platform)
+) STRICT;
+`;

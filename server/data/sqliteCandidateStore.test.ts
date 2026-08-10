@@ -345,4 +345,88 @@ describe('SQLite candidate memory', () => {
       },
     });
   });
+
+  it('consumes an encrypted candidate OAuth authorization exactly once', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'openqareer-oauth-state-'));
+    directories.push(directory);
+    const databasePath = join(directory, 'candidate.db');
+    const store = createStore(databasePath);
+    const candidate = createCandidate(store);
+    const stateDigest = 'a'.repeat(64);
+    const codeVerifier = 'synthetic-pkce-verifier-that-must-not-be-plaintext';
+
+    store.createOAuthAuthorization(candidate.id, {
+      platform: 'hh',
+      stateDigest,
+      codeVerifier,
+      expiresAt: '2026-08-10T12:10:00.000Z',
+    });
+
+    expect(
+      store.consumeOAuthAuthorization(
+        'hh',
+        stateDigest,
+        '2026-08-10T12:05:00.000Z',
+      ),
+    ).toEqual({ candidateId: candidate.id, codeVerifier });
+    expect(
+      store.consumeOAuthAuthorization(
+        'hh',
+        stateDigest,
+        '2026-08-10T12:05:01.000Z',
+      ),
+    ).toBeNull();
+
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+    expect(readFileSync(databasePath).toString('utf8')).not.toContain(
+      codeVerifier,
+    );
+  });
+
+  it('persists an encrypted tenant-scoped OAuth connection outside candidate export', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'openqareer-oauth-connection-'));
+    directories.push(directory);
+    const databasePath = join(directory, 'candidate.db');
+    const store = createStore(databasePath);
+    const candidateA = createCandidate(store);
+    const candidateB = createCandidate(store);
+    const connection = {
+      platform: 'hh' as const,
+      externalAccountId: 'synthetic-hh-account-731',
+      scopes: ['profile_read', 'resume_read'],
+      capabilities: ['profile_read', 'resume_read'] as const,
+      accessToken: 'synthetic-access-token-731',
+      refreshToken: 'synthetic-refresh-token-731',
+      accessTokenExpiresAt: '2026-08-24T12:00:00.000Z',
+      profile: {
+        capturedAt: '2026-08-10T12:00:00.000Z',
+        sourceUrl: 'https://hh.ru/resume/synthetic731',
+        facts: [
+          {
+            kind: 'headline' as const,
+            value: 'Synthetic Operations Lead 731',
+            sourceLocator: 'hh:resume:synthetic731:title',
+            confidence: 'official-api' as const,
+          },
+        ],
+      },
+    };
+
+    store.saveOAuthConnection(candidateA.id, connection);
+
+    expect(store.getOAuthConnection(candidateA.id, 'hh')).toMatchObject(
+      connection,
+    );
+    expect(store.listOAuthConnections(candidateB.id)).toEqual([]);
+    expect(store.exportCandidate(candidateA.id)).not.toHaveProperty(
+      'oauthConnections',
+    );
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+    const rawDatabase = readFileSync(databasePath).toString('utf8');
+    expect(rawDatabase).not.toContain(connection.accessToken);
+    expect(rawDatabase).not.toContain(connection.refreshToken);
+    expect(rawDatabase).not.toContain(connection.profile.facts[0].value);
+  });
 });
