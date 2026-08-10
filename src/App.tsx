@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getSession, type AuthUser } from './features/coach/coachApi';
+import {
+  connectionResultMessage,
+  readConnectionResult,
+} from './features/connections/connectionResult';
 import { prepareCareerWorkspace } from './features/journey/careerJourneyEngine';
 import { CareerWorkspaceShell } from './features/shell/CareerWorkspaceShell';
 import {
@@ -22,6 +26,7 @@ export default function App() {
   const [state, setState] = useState<AppState>({ invalidStorage: false });
   const [storageError, setStorageError] = useState<string>();
   const [sessionError, setSessionError] = useState<string>();
+  const [connectionNotice, setConnectionNotice] = useState<string>();
 
   const resolveSession = useCallback(async () => {
     setSessionError(undefined);
@@ -48,6 +53,15 @@ export default function App() {
     document.getElementById('root')?.removeAttribute('aria-busy');
     void resolveSession();
   }, [resolveSession]);
+
+  useEffect(() => {
+    const result = readConnectionResult(window.location);
+    if (!result) return;
+    setConnectionNotice(connectionResultMessage(result));
+    // The callback lands on a dedicated route; the candidate continues in the
+    // canonical shell, so the one-time result is removed from the address bar.
+    window.history.replaceState(null, '', '/');
+  }, []);
 
   useEffect(() => {
     if (state.session === undefined) return;
@@ -133,6 +147,8 @@ export default function App() {
       workspace={state.workspace}
       invalidStorage={state.invalidStorage}
       storageError={storageError}
+      connectionNotice={connectionNotice}
+      onDismissConnectionNotice={() => setConnectionNotice(undefined)}
       onSaveWorkspace={handleSave}
       onUpdateWorkspace={persist}
       onClearWorkspace={handleClear}

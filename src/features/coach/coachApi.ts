@@ -41,6 +41,12 @@ export type ProfileUrlImportResult =
       nextAction: 'upload_export_or_pdf' | 'oauth_or_export';
     };
 
+export interface StartedConnection {
+  platform: 'linkedin' | 'hh';
+  authorizationUrl: string;
+  expiresAt: string;
+}
+
 export interface CoachMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -328,6 +334,16 @@ export async function importProfileUrl(url: string): Promise<ProfileUrlImportRes
     body: JSON.stringify({ url }),
   });
   return readData<ProfileUrlImportResult>(response);
+}
+
+export async function startConnection(
+  platform: 'linkedin' | 'hh',
+): Promise<StartedConnection> {
+  const response = await apiFetch(
+    `/api/v1/candidate/connections/${platform}/authorizations`,
+    { method: 'POST' },
+  );
+  return readData<StartedConnection>(response);
 }
 
 export async function getCandidate(): Promise<CandidateSnapshot> {

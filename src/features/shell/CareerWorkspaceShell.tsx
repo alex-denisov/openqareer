@@ -37,6 +37,8 @@ interface CareerWorkspaceShellProps {
   workspace?: CandidateWorkspace;
   invalidStorage?: boolean;
   storageError?: string;
+  connectionNotice?: string;
+  onDismissConnectionNotice?: () => void;
   onSaveWorkspace?: (input: WorkspaceInput) => void;
   onUpdateWorkspace?: (workspace: CandidateWorkspace) => void;
   onClearWorkspace?: () => void;
@@ -76,6 +78,8 @@ export function CareerWorkspaceShell({
   workspace,
   invalidStorage = false,
   storageError,
+  connectionNotice,
+  onDismissConnectionNotice,
   onSaveWorkspace = () => undefined,
   onUpdateWorkspace = () => undefined,
   onClearWorkspace = () => undefined,
@@ -255,11 +259,22 @@ export function CareerWorkspaceShell({
         {storageError ? (
           <p className="career-storage-warning" role="alert">{storageError}</p>
         ) : null}
+        {connectionNotice ? (
+          <div className="career-connection-notice" role="status">
+            <p>{connectionNotice}</p>
+            {onDismissConnectionNotice ? (
+              <button type="button" onClick={onDismissConnectionNotice}>
+                Понятно
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {!sessionPending && !visibleWorkspace && activeView === 'today' ? (
           <CareerIntake
             key={session?.candidateId ?? 'anonymous'}
             onComplete={onSaveWorkspace}
+            hasAccount={Boolean(session?.candidateId)}
           />
         ) : null}
         {visibleWorkspace && journey && activeView === 'today' ? (

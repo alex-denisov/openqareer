@@ -12,6 +12,7 @@ import {
   Target,
 } from '@phosphor-icons/react';
 import { importProfileUrl, type ProfileUrlImportResult } from '../coach/coachApi';
+import { PlatformConnectionSection } from '../connections/PlatformConnectionSection';
 import {
   ingestProfileSnapshot,
   reviewProfileFact,
@@ -31,6 +32,7 @@ type SourceChoice = 'pdf' | 'linkedin' | 'hh' | 'text' | 'none';
 
 interface CareerIntakeProps {
   onComplete: (input: WorkspaceInput) => void;
+  hasAccount?: boolean;
 }
 
 interface ProfileFactDraft {
@@ -78,7 +80,7 @@ const conditionOptions = [
   'Нужна визовая поддержка',
 ];
 
-export function CareerIntake({ onComplete }: CareerIntakeProps) {
+export function CareerIntake({ onComplete, hasAccount = false }: CareerIntakeProps) {
   const [started, setStarted] = useState(false);
   const [step, setStep] = useState<IntakeStep>('intent');
   const [goal, setGoal] = useState<CareerGoal>();
@@ -477,6 +479,7 @@ export function CareerIntake({ onComplete }: CareerIntakeProps) {
                 onError={setError}
                 platform="LinkedIn"
               />
+              <PlatformConnectionSection platform="linkedin" hasAccount={hasAccount} />
             </div>
           ) : null}
 
@@ -504,6 +507,7 @@ export function CareerIntake({ onComplete }: CareerIntakeProps) {
                 onError={setError}
                 platform="hh.ru"
               />
+              <PlatformConnectionSection platform="hh" hasAccount={hasAccount} />
             </div>
           ) : null}
 
@@ -761,8 +765,8 @@ function ProfileImportAction({
       ) : null}
       <p className="career-account-note">
         {platform === 'LinkedIn'
-          ? 'Для закрытых данных нужен официальный LinkedIn OAuth и одобрение расширенного Profile API; обычный вход отдаёт только ограниченные поля.'
-          : 'Полное резюме и разрешённые действия подключаются через официальный OAuth hh.ru. До настройки приложения используйте свой экспорт или PDF.'}
+          ? 'По ссылке доступны только открытые поля профиля. Карьерную историю приносит ваш экспорт LinkedIn или PDF.'
+          : 'По ссылке доступны только открытые поля резюме. Полные данные приходят через подключение ниже или ваш экспорт и PDF.'}
       </p>
     </div>
   );
