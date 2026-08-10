@@ -114,6 +114,46 @@ async function login(
 }
 
 describe('cookie auth routes', () => {
+  it('creates a personal candidate account and starts its own cookie session', async () => {
+    const app = await createApp();
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      headers: { origin: 'http://localhost:3000' },
+      payload: {
+        username: 'new.candidate',
+        password: 'candidate-password-for-tests',
+      },
+    });
+
+    expect(registered.statusCode).toBe(201);
+    expect(registered.json().data).toMatchObject({
+      username: 'new.candidate',
+      role: 'candidate',
+      isTest: false,
+    });
+    const cookie = String(registered.headers['set-cookie']).split(';')[0];
+    const profile = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/me',
+      headers: { cookie },
+    });
+    expect(profile.statusCode).toBe(200);
+    expect(profile.json().data.candidate.dataClass).toBe('personal');
+
+    const duplicate = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      headers: { origin: 'http://localhost:3000' },
+      payload: {
+        username: 'NEW.CANDIDATE',
+        password: 'another-password-for-tests',
+      },
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json().error.code).toBe('username_taken');
+  });
+
   it('enforces origin, role and candidate ownership boundaries', async () => {
     const app = await createApp();
     const noOrigin = await app.inject({

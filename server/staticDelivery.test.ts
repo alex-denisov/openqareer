@@ -23,6 +23,9 @@ afterEach(async () => {
 });
 
 const noSessions: SessionAuth = {
+  async register() {
+    throw new Error('registration unavailable in this test double');
+  },
   async login() {
     return null;
   },

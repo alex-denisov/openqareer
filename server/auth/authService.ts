@@ -33,6 +33,11 @@ export interface SeedAccount {
 }
 
 export interface SessionAuth {
+  register(
+    usernameInput: string,
+    password: string,
+    candidateStore: CandidateStore,
+  ): Promise<{ principal: AuthPrincipal; sessionToken: string }>;
   login(
     usernameInput: string,
     password: string,
@@ -70,6 +75,47 @@ export class AuthService implements SessionAuth {
     });
     this.database.exec('PRAGMA journal_mode = WAL;');
     this.migrate();
+  }
+
+  async register(
+    usernameInput: string,
+    password: string,
+    candidateStore: CandidateStore,
+  ): Promise<{ principal: AuthPrincipal; sessionToken: string }> {
+    const username = normalizeUsername(usernameInput);
+    if (this.findUser(username)) throw new AuthUsernameTakenError();
+    const salt = randomBytes(16);
+    const passwordHash = await derivePassword(password, salt);
+    const candidate = candidateStore.createCandidate({
+      dataClass: 'personal',
+      locale: 'ru-RU',
+    });
+    const now = new Date().toISOString();
+    try {
+      this.database
+        .prepare(
+          `INSERT INTO users
+            (id, username, role, password_salt, password_hash, candidate_id,
+             is_test, created_at, updated_at)
+           VALUES (?, ?, 'candidate', ?, ?, ?, 0, ?, ?)`,
+        )
+        .run(
+          randomUUID(),
+          username,
+          salt.toString('base64'),
+          passwordHash.toString('base64'),
+          candidate.id,
+          now,
+          now,
+        );
+    } catch (error) {
+      candidateStore.deleteCandidate(candidate.id);
+      if (this.findUser(username)) throw new AuthUsernameTakenError();
+      throw error;
+    }
+    const authenticated = await this.login(username, password);
+    if (!authenticated) throw new Error('registered account cannot authenticate');
+    return authenticated;
   }
 
   async seedAccounts(
@@ -224,6 +270,13 @@ export class AuthService implements SessionAuth {
         .prepare(`${USER_SELECT} WHERE users.username = ?`)
         .get(username) as UserRow | undefined) ?? null
     );
+  }
+}
+
+export class AuthUsernameTakenError extends Error {
+  constructor() {
+    super('username is already registered');
+    this.name = 'AuthUsernameTakenError';
   }
 }
 

@@ -440,6 +440,8 @@ function isRecentMarketSample(
 
 function sourceLabelFor(workspace: CandidateWorkspace): string {
   if (workspace.resumeFileName) return workspace.resumeFileName;
+  if (workspace.linkedinUrl && workspace.resumeText.trim()) return 'Профиль LinkedIn';
+  if (workspace.hhUrl && workspace.resumeText.trim()) return 'Резюме hh.ru';
   if (workspace.resumeSource === 'linkedin-pdf') return 'Экспорт LinkedIn';
   if (workspace.resumeSource === 'hh-pdf') return 'Экспорт hh.ru';
   if (workspace.resumeSource === 'text') return 'Текст или диалог';

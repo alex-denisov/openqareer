@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Compass,
   House,
@@ -9,7 +9,7 @@ import {
   Wallet,
   type Icon,
 } from '@phosphor-icons/react';
-import type { CoachPhase } from '../coach/coachApi';
+import type { AuthUser, CoachPhase } from '../coach/coachApi';
 import { CareerExpertPanel } from '../journey/CareerExpertPanel';
 import { CareerIntake } from '../journey/CareerIntake';
 import {
@@ -24,6 +24,7 @@ import type {
   WorkspaceInput,
 } from '../workspace/workspaceStorage';
 import { CareerTariffsView } from './CareerTariffsView';
+import { CareerAccountPanel } from './CareerAccountPanel';
 
 type ShellView =
   | 'today'
@@ -39,6 +40,11 @@ interface CareerWorkspaceShellProps {
   onSaveWorkspace?: (input: WorkspaceInput) => void;
   onUpdateWorkspace?: (workspace: CandidateWorkspace) => void;
   onClearWorkspace?: () => void;
+  session?: AuthUser | null;
+  sessionPending?: boolean;
+  sessionError?: string;
+  onRetrySession?: () => void;
+  onSessionChange?: (session: AuthUser | null) => void;
 }
 
 const primaryNavigation: Array<{
@@ -73,16 +79,23 @@ export function CareerWorkspaceShell({
   onSaveWorkspace = () => undefined,
   onUpdateWorkspace = () => undefined,
   onClearWorkspace = () => undefined,
+  session,
+  sessionPending = false,
+  sessionError,
+  onRetrySession = () => undefined,
+  onSessionChange = () => undefined,
 }: CareerWorkspaceShellProps) {
   const [activeView, setActiveView] = useState<ShellView>('today');
   const [expertOpen, setExpertOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const visibleWorkspace = sessionPending ? undefined : workspace;
   const journey = useMemo(
-    () => (workspace ? buildCareerJourney(workspace) : undefined),
-    [workspace],
+    () => (visibleWorkspace ? buildCareerJourney(visibleWorkspace) : undefined),
+    [visibleWorkspace],
   );
 
   function navigate(view: ShellView) {
-    if (!workspace && view !== 'today' && view !== 'tariffs') return;
+    if (!visibleWorkspace && view !== 'today' && view !== 'tariffs') return;
     setActiveView(view);
     setExpertOpen(false);
     window.requestAnimationFrame(() => {
@@ -102,6 +115,13 @@ export function CareerWorkspaceShell({
     setExpertOpen(false);
   }
 
+  const closeAccount = useCallback(() => setAccountOpen(false), []);
+  const resetForAccount = useCallback((nextSession: AuthUser | null) => {
+    setActiveView('today');
+    if (nextSession === null) onClearWorkspace();
+    onSessionChange(nextSession);
+  }, [onClearWorkspace, onSessionChange]);
+
   return (
     <div
       className={`career-shell ${expertOpen ? 'expert-is-open' : ''}`}
@@ -114,7 +134,7 @@ export function CareerWorkspaceShell({
       <aside
         className="career-rail"
         aria-label="Основная навигация"
-        aria-hidden={expertOpen ? true : undefined}
+        aria-hidden={expertOpen || accountOpen ? true : undefined}
       >
         <button
           className="career-brand-mark"
@@ -130,7 +150,7 @@ export function CareerWorkspaceShell({
               key={item.id}
               item={item}
               active={activeView === item.id}
-              disabled={!workspace && item.id !== 'today'}
+              disabled={!visibleWorkspace && item.id !== 'today'}
               onClick={() => navigate(item.id)}
             />
           ))}
@@ -149,18 +169,20 @@ export function CareerWorkspaceShell({
           <button
             className="career-avatar-button"
             type="button"
-            disabled={!workspace}
-            onClick={() => navigate('profile')}
-            aria-label="Открыть профиль"
+            disabled={sessionPending}
+            onClick={() => setAccountOpen(true)}
+            aria-label="Открыть аккаунт"
           >
-            {workspace?.targetDirection.slice(0, 1).toUpperCase() || '?'}
+            {session?.username.slice(0, 1).toUpperCase()
+              || visibleWorkspace?.targetDirection.slice(0, 1).toUpperCase()
+              || '?'}
           </button>
         </div>
       </aside>
 
       <header
         className="career-topbar"
-        aria-hidden={expertOpen ? true : undefined}
+        aria-hidden={expertOpen || accountOpen ? true : undefined}
       >
         <button
           className="career-wordmark"
@@ -187,15 +209,41 @@ export function CareerWorkspaceShell({
             <Sparkle size={18} weight="fill" />
             Эксперт
           </button>
+          <button
+            className="career-account-trigger"
+            type="button"
+            disabled={sessionPending}
+            onClick={() => setAccountOpen(true)}
+            aria-label="Открыть аккаунт"
+          >
+            <UserCircle size={20} />
+          </button>
         </div>
       </header>
 
       <main
         id="career-main"
         className="career-main"
-        aria-hidden={expertOpen ? true : undefined}
+        aria-hidden={expertOpen || accountOpen ? true : undefined}
       >
-        {invalidStorage ? (
+        {sessionPending ? (
+          <section className="career-session-gate" aria-live="polite" aria-busy="true">
+            <p className="career-eyebrow">Защита данных</p>
+            <h1>Проверяем защищённую сессию</h1>
+            <p>
+              Карьерные данные появятся только после проверки аккаунта этого
+              браузера.
+            </p>
+            {sessionError ? (
+              <>
+                <p className="career-expert-error" role="alert">{sessionError}</p>
+                <button className="career-quiet-button" type="button" onClick={onRetrySession}>
+                  Повторить проверку
+                </button>
+              </>
+            ) : null}
+          </section>
+        ) : invalidStorage ? (
           <div className="career-storage-warning" role="alert">
             <div>
               <strong>Сохранённый профиль не удалось прочитать</strong>
@@ -208,39 +256,42 @@ export function CareerWorkspaceShell({
           <p className="career-storage-warning" role="alert">{storageError}</p>
         ) : null}
 
-        {!workspace && activeView === 'today' ? (
-          <CareerIntake onComplete={onSaveWorkspace} />
+        {!sessionPending && !visibleWorkspace && activeView === 'today' ? (
+          <CareerIntake
+            key={session?.candidateId ?? 'anonymous'}
+            onComplete={onSaveWorkspace}
+          />
         ) : null}
-        {workspace && journey && activeView === 'today' ? (
+        {visibleWorkspace && journey && activeView === 'today' ? (
           <TodayJourneyView
-            workspace={workspace}
+            workspace={visibleWorkspace}
             journey={journey}
             onNavigate={navigate}
             onOpenExpert={openExpert}
             onUpdateWorkspace={onUpdateWorkspace}
           />
         ) : null}
-        {workspace && journey && activeView === 'profile' ? (
+        {visibleWorkspace && journey && activeView === 'profile' ? (
           <ProfileJourneyView
-            workspace={workspace}
+            workspace={visibleWorkspace}
             journey={journey}
             onNavigate={navigate}
             onOpenExpert={openExpert}
             onUpdateWorkspace={onUpdateWorkspace}
           />
         ) : null}
-        {workspace && journey && activeView === 'career' ? (
+        {visibleWorkspace && journey && activeView === 'career' ? (
           <CareerMapView
-            workspace={workspace}
+            workspace={visibleWorkspace}
             journey={journey}
             onNavigate={navigate}
             onOpenExpert={openExpert}
             onUpdateWorkspace={onUpdateWorkspace}
           />
         ) : null}
-        {workspace && journey && activeView === 'opportunities' ? (
+        {visibleWorkspace && journey && activeView === 'opportunities' ? (
           <OpportunitiesView
-            workspace={workspace}
+            workspace={visibleWorkspace}
             journey={journey}
             onNavigate={navigate}
             onOpenExpert={openExpert}
@@ -255,14 +306,14 @@ export function CareerWorkspaceShell({
       <nav
         className="career-mobile-nav"
         aria-label="Основная навигация"
-        aria-hidden={expertOpen ? true : undefined}
+        aria-hidden={expertOpen || accountOpen ? true : undefined}
       >
         {primaryNavigation.map((item) => (
           <NavigationButton
             key={item.id}
             item={item}
             active={activeView === item.id}
-            disabled={!workspace && item.id !== 'today'}
+            disabled={!visibleWorkspace && item.id !== 'today'}
             mobile
             onClick={() => navigate(item.id)}
           />
@@ -283,6 +334,16 @@ export function CareerWorkspaceShell({
             journey={journey}
             phase={phaseFor(activeView)}
             onClose={closeExpert}
+          />
+        </>
+      ) : null}
+      {accountOpen ? (
+        <>
+          <button className="career-expert-scrim" type="button" onClick={closeAccount} aria-label="Закрыть аккаунт" aria-hidden="true" tabIndex={-1} />
+          <CareerAccountPanel
+            initialUser={session}
+            onClose={closeAccount}
+            onIdentityChange={resetForAccount}
           />
         </>
       ) : null}

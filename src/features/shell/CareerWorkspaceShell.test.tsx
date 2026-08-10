@@ -19,6 +19,24 @@ import { CareerWorkspaceShell } from './CareerWorkspaceShell';
 import { CareerTariffsView } from './CareerTariffsView';
 
 describe('CareerWorkspaceShell', () => {
+  it('does not reveal a workspace or first-run form before session identity resolves', () => {
+    const html = renderToStaticMarkup(
+      <CareerWorkspaceShell sessionPending workspace={prepareCareerWorkspace({
+        resumeText: 'Синтетический профиль кандидата с достаточно длинным описанием для проверки приватной загрузки рабочего пространства.',
+        resumeSource: 'text',
+        targetDirection: 'Руководитель продукта',
+        market: 'ru',
+        currentSituation: 'Проверяю, что чужие данные не появляются до завершения проверки сессии.',
+        constraints: '',
+        urgency: 'active',
+      })} />,
+    );
+
+    expect(html).toContain('Проверяем защищённую сессию');
+    expect(html).not.toContain('Синтетический профиль кандидата');
+    expect(html).not.toContain('Начните с карьерного вопроса');
+  });
+
   it('keeps a first-time candidate inside the canonical career shell', () => {
     const html = renderToStaticMarkup(
       <CareerWorkspaceShell
@@ -41,6 +59,7 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('Профиль');
     expect(html).toContain('Карьера');
     expect(html).toContain('Возможности');
+    expect(html).toContain('aria-label="Открыть аккаунт"');
     expect(html).not.toContain('career-intent-list" role="list');
     expect(html).not.toContain('data-testid="workspace-setup"');
   });

@@ -28,6 +28,9 @@ const config: ServerConfig = {
 };
 
 const noSessions: SessionAuth = {
+  async register() {
+    throw new Error('registration unavailable in this test double');
+  },
   async login() {
     return null;
   },
@@ -81,6 +84,7 @@ afterEach(async () => {
 async function createApp(
   provider: CoachProvider = successProvider,
   searchVacancies?: () => Promise<HhVacancySample>,
+  importProfile?: Parameters<typeof buildApp>[0]['importProfile'],
 ) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',
@@ -97,6 +101,7 @@ async function createApp(
     authService: noSessions,
     serveStatic: false,
     searchVacancies,
+    importProfile,
   });
   apps.push(app);
   stores.push(candidateStore);
@@ -117,6 +122,36 @@ function candidateAuthorization(
 }
 
 describe('OpenQareer API boundary', () => {
+  it('delegates a permitted profile transport only inside the candidate boundary', async () => {
+    const app = await createApp(successProvider, undefined, async (url) => ({
+      status: 'imported',
+      platform: 'linkedin',
+      sourceUrl: url,
+      capturedAt: '2026-08-10T00:00:00.000Z',
+      accessPath: 'official_api',
+      facts: [{ kind: 'headline', value: 'Synthetic Product Lead', sourceLocator: 'public-meta:1', confidence: 'public-metadata' }],
+    }));
+    const unauthorized = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/profile-imports',
+      headers: { origin: 'http://localhost:3000' },
+      payload: { url: 'https://www.linkedin.com/in/synthetic-candidate' },
+    });
+    expect(unauthorized.statusCode).toBe(401);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/profile-imports',
+      headers: {
+        origin: 'http://localhost:3000',
+        authorization: candidateAuthorization(app),
+      },
+      payload: { url: 'https://www.linkedin.com/in/synthetic-candidate' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({ status: 'imported', facts: [{ value: 'Synthetic Product Lead' }] });
+  });
+
   it('returns a source-labelled public vacancy sample without candidate credentials', async () => {
     const app = await createApp(successProvider, async () => ({
       source: 'hh',

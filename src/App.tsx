@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { getSession, type AuthUser } from './features/coach/coachApi';
 import { prepareCareerWorkspace } from './features/journey/careerJourneyEngine';
 import { CareerWorkspaceShell } from './features/shell/CareerWorkspaceShell';
 import {
   clearWorkspace,
   loadWorkspace,
   saveWorkspace,
+  WORKSPACE_OWNER_KEY,
+  WORKSPACE_STORAGE_KEY,
   type CandidateWorkspace,
   type WorkspaceInput,
 } from './features/workspace/workspaceStorage';
@@ -12,34 +15,85 @@ import {
 interface AppState {
   workspace?: CandidateWorkspace;
   invalidStorage: boolean;
-}
-
-function readInitialState(): AppState {
-  const result = loadWorkspace(window.localStorage);
-  if (result.status === 'ready') {
-    return { workspace: result.workspace, invalidStorage: false };
-  }
-  return { invalidStorage: result.status === 'invalid' };
+  session?: AuthUser | null;
 }
 
 export default function App() {
-  const [state, setState] = useState(readInitialState);
+  const [state, setState] = useState<AppState>({ invalidStorage: false });
   const [storageError, setStorageError] = useState<string>();
+  const [sessionError, setSessionError] = useState<string>();
+
+  const resolveSession = useCallback(async () => {
+    setSessionError(undefined);
+    try {
+      const session = await getSession();
+      const result = loadWorkspace(
+        window.localStorage,
+        session?.candidateId ?? null,
+      );
+      setState({
+        session,
+        workspace: result.status === 'ready' ? result.workspace : undefined,
+        invalidStorage: result.status === 'invalid',
+      });
+    } catch {
+      setSessionError(
+        'Не удалось проверить аккаунт. Локальные карьерные данные скрыты до восстановления связи.',
+      );
+      setState({ invalidStorage: false });
+    }
+  }, []);
 
   useEffect(() => {
     document.getElementById('root')?.removeAttribute('aria-busy');
-  }, []);
+    void resolveSession();
+  }, [resolveSession]);
+
+  useEffect(() => {
+    if (state.session === undefined) return;
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.storageArea !== window.localStorage ||
+        (event.key !== WORKSPACE_STORAGE_KEY && event.key !== WORKSPACE_OWNER_KEY)
+      ) {
+        return;
+      }
+      const result = loadWorkspace(
+        window.localStorage,
+        state.session?.candidateId ?? null,
+      );
+      setState((current) => ({
+        ...current,
+        workspace: result.status === 'ready' ? result.workspace : undefined,
+        invalidStorage: result.status === 'invalid',
+      }));
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [state.session]);
 
   function persist(workspace: CandidateWorkspace) {
     try {
-      saveWorkspace(window.localStorage, workspace);
+      if (state.session?.candidateId) {
+        saveWorkspace(
+          window.localStorage,
+          workspace,
+          state.session.candidateId,
+        );
+      } else {
+        clearWorkspace(window.localStorage);
+      }
       setStorageError(undefined);
     } catch {
       setStorageError(
         'Браузер не разрешил сохранить изменения. Проверьте настройки локального хранения.',
       );
     }
-    setState({ workspace, invalidStorage: false });
+    setState((current) => ({
+      ...current,
+      workspace,
+      invalidStorage: false,
+    }));
   }
 
   function handleSave(input: WorkspaceInput) {
@@ -50,12 +104,28 @@ export default function App() {
     try {
       clearWorkspace(window.localStorage);
       setStorageError(undefined);
-      setState({ invalidStorage: false });
+      setState((current) => ({
+        ...current,
+        workspace: undefined,
+        invalidStorage: false,
+      }));
     } catch {
       setStorageError(
         'Браузер не разрешил удалить запись. Очистите данные сайта в настройках.',
       );
     }
+  }
+
+  function handleSessionChange(session: AuthUser | null) {
+    const result = session?.candidateId
+      ? loadWorkspace(window.localStorage, session.candidateId)
+      : { status: 'empty' as const };
+    setState({
+      session,
+      workspace: result.status === 'ready' ? result.workspace : undefined,
+      invalidStorage: result.status === 'invalid',
+    });
+    setSessionError(undefined);
   }
 
   return (
@@ -66,6 +136,11 @@ export default function App() {
       onSaveWorkspace={handleSave}
       onUpdateWorkspace={persist}
       onClearWorkspace={handleClear}
+      session={state.session}
+      sessionPending={state.session === undefined}
+      sessionError={sessionError}
+      onRetrySession={() => void resolveSession()}
+      onSessionChange={handleSessionChange}
     />
   );
 }

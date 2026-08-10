@@ -33,15 +33,21 @@ import {
   type CoachProvider,
 } from './providers/coachProvider';
 import type { ServerConfig } from './config';
-import type {
-  AuthPrincipal,
-  SessionAuth,
+import {
+  AuthUsernameTakenError,
+  type AuthPrincipal,
+  type SessionAuth,
 } from './auth/authService';
 import { CAREER_SUPER_PROMPT_REVISION } from './prompts/careerSuperPrompt';
 import {
   searchHhVacancies,
   type HhVacancySample,
 } from './connectors/hhVacancySearch';
+import {
+  importProfileUrl as importPublicProfileUrl,
+  parseProfileUrl,
+  type ProfileUrlImportResult,
+} from './connectors/profileUrlImport';
 
 interface BuildAppOptions {
   config: ServerConfig;
@@ -53,6 +59,7 @@ interface BuildAppOptions {
     text: string;
     perPage?: number;
   }) => Promise<HhVacancySample>;
+  importProfile?: (url: string) => Promise<ProfileUrlImportResult>;
 }
 
 interface ErrorBody {
@@ -71,6 +78,7 @@ export async function buildApp({
   authService,
   serveStatic = true,
   searchVacancies = searchHhVacancies,
+  importProfile = importPublicProfileUrl,
 }: BuildAppOptions): Promise<FastifyInstance> {
   const app = Fastify({
     trustProxy: '127.0.0.1',
@@ -149,6 +157,34 @@ export async function buildApp({
       },
       meta: { requestId: request.id },
       };
+    },
+  );
+
+  app.post(
+    '/api/v1/auth/register',
+    {
+      config: { rateLimit: { max: 3, timeWindow: '30 minutes' } },
+    },
+    async (request, reply) => {
+      if (!hasAllowedOrigin(request, config)) return csrfError(request, reply);
+      const body = registrationSchema.parse(request.body);
+      try {
+        const authenticated = await authService.register(
+          body.username,
+          body.password,
+          candidateStore,
+        );
+        setSessionCookie(reply, authenticated.sessionToken, config.secureCookies);
+        return reply.code(201).send({
+          data: publicPrincipal(authenticated.principal),
+          meta: { requestId: request.id },
+        });
+      } catch (error) {
+        if (error instanceof AuthUsernameTakenError) {
+          return sendError(reply, request, 409, 'username_taken', 'Такой логин уже занят.', false);
+        }
+        throw error;
+      }
     },
   );
 
@@ -251,6 +287,21 @@ export async function buildApp({
     clearSessionCookie(reply, config.secureCookies);
     return reply.code(204).send();
   });
+
+  app.post(
+    '/api/v1/candidate/profile-imports',
+    { config: { rateLimit: { max: 8, timeWindow: '15 minutes' } } },
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+      if (!candidate) return;
+      const body = profileImportSchema.parse(request.body);
+      return {
+        data: await importProfile(body.url),
+        meta: { requestId: request.id },
+      };
+    },
+  );
 
   app.post(
     '/api/v1/candidates',
@@ -651,6 +702,27 @@ const hhMarketQuerySchema = z.object({
 const loginSchema = z.object({
   username: z.string().trim().min(3).max(80),
   password: z.string().min(1).max(256),
+});
+
+const registrationSchema = z.object({
+  username: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$/),
+  password: z.string().min(12).max(256),
+});
+
+const profileImportSchema = z.object({
+  url: z
+    .string()
+    .trim()
+    .url()
+    .max(2_048)
+    .refine((value) => {
+      try {
+        parseProfileUrl(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }),
 });
 
 const coachTurnRequestSchema = z.object({

@@ -17,6 +17,45 @@ async function verifyViewport(browser, baseUrl, viewport) {
     storageState: { cookies: [], origins: [] },
   });
   const page = await context.newPage();
+  let authenticated = true;
+  await page.route('**/api/v1/auth/**', async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.endsWith('/logout')) authenticated = false;
+    if (pathname.endsWith('/register') || pathname.endsWith('/login')) authenticated = true;
+    if (request.method() === 'POST' && pathname.endsWith('/logout')) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+      return;
+    }
+    await route.fulfill({
+      status: pathname.endsWith('/register') ? 201 : 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: authenticated
+          ? { username: pathname.endsWith('/register') ? 'fresh.candidate' : 'candidate.test', role: 'candidate', isTest: !pathname.endsWith('/register'), candidateId: 'candidate-browser-test' }
+          : null,
+      }),
+    });
+  });
+  await page.route('**/api/v1/candidate/profile-imports', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          status: 'imported',
+          platform: 'linkedin',
+          sourceUrl: 'https://www.linkedin.com/in/synthetic-candidate',
+          capturedAt: '2026-08-10T00:00:00.000Z',
+          accessPath: 'official_api',
+          facts: [
+            { kind: 'headline', value: 'Synthetic Product Lead', sourceLocator: 'public-meta:1', confidence: 'public-metadata' },
+            { kind: 'summary', value: 'Builds evidence-led products.', sourceLocator: 'public-meta:2', confidence: 'public-metadata' },
+          ],
+        },
+      }),
+    });
+  });
   const errors = [];
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(`console:${message.text()}`);
@@ -77,6 +116,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByRole('button', { name: 'Без документов' }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await page.getByRole('heading', { name: 'Что должно измениться?' }).waitFor();
+
   await page.getByLabel('Что происходит сейчас?').fill(
     'После смены позиционирования стало меньше приглашений, хочу понять следующий карьерный шаг.',
   );
@@ -105,13 +145,138 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: Profile disappeared after navigation`,
   );
 
+  await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
+  await page.getByText('Вы вошли как', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Выйти и начать заново' }).click();
+  await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).waitFor();
+  assert(
+    (await page.getByRole('dialog', { name: 'Аккаунт' }).count()) === 0,
+    `${viewport.name}: account panel remained open after logout`,
+  );
+  assert(
+    (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) === null,
+    `${viewport.name}: logout retained candidate workspace`,
+  );
+  await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
+  await page.getByRole('button', { name: /Создать новый аккаунт/ }).waitFor();
+  await page.getByRole('button', { name: /Создать новый аккаунт/ }).click();
+  await page.getByLabel('Логин').fill('fresh.candidate');
+  await page.getByLabel('Пароль').fill('fresh-candidate-password');
+  await page.getByRole('button', { name: 'Создать и начать' }).click();
+  await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).waitFor();
+
+  await page.getByRole('button', { name: 'Начать диагностику' }).click();
+  await page.getByRole('button', { name: /Хочу найти работу/ }).click();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await page.getByRole('button', { name: 'LinkedIn' }).click();
+  await page.getByLabel('Ссылка на профиль').fill('https://www.linkedin.com/in/synthetic-candidate');
+  await page.getByRole('button', { name: 'Проверить способ импорта' }).click();
+  await page.getByText('Найдено: 2', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await page.getByText('Проверьте каждый найденный факт', { exact: false }).waitFor();
+  const headlineFact = page.getByRole('group', { name: 'Заголовок профиля' });
+  await headlineFact.getByRole('button', { name: 'Подтвердить' }).click();
+  const summaryFact = page.getByRole('group', { name: 'Описание профиля' });
+  await summaryFact.getByRole('textbox').fill('Builds evidence-led products with candidate-reviewed facts.');
+  await summaryFact.getByRole('button', { name: 'Подтвердить' }).click();
+  await summaryFact.getByRole('button', { name: 'Исправлено' }).waitFor();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await page.getByRole('heading', { name: 'Что должно измениться?' }).waitFor();
+
+  await page.getByRole('button', { name: 'Назад' }).click();
+  await page.getByRole('button', { name: 'Без документов' }).click();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await page.getByLabel('Что происходит сейчас?').fill(
+    'Проверяю, что смена источника удаляет факты и ссылки от ранее выбранного профиля.',
+  );
+  await page.getByRole('button', { name: 'Собрать карьерную картину' }).click();
+  await page.getByRole('heading', { name: 'Что можно сказать уже сейчас' }).waitFor();
+  const sourceCleanWorkspace = JSON.parse(
+    await page.evaluate(() => localStorage.getItem('candidate-workspace')),
+  );
+  assert(
+    sourceCleanWorkspace.resumeText === ''
+      && sourceCleanWorkspace.linkedinUrl === undefined
+      && sourceCleanWorkspace.hhUrl === undefined
+      && sourceCleanWorkspace.profileFacts?.length !== 2,
+    `${viewport.name}: source switch retained stale profile evidence`,
+  );
+
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
   );
   assert(overflow <= 1, `${viewport.name}: horizontal overflow is ${overflow}px`);
   assert(errors.length === 0, `${viewport.name}: ${errors.join(', ')}`);
   await context.close();
-  return { viewport: viewport.name, shellMs, interactiveMs, overflow };
+  return { viewport: viewport.name, shellMs, interactiveMs, overflow, accountRestart: true, profileFactReview: true };
+}
+
+async function verifyExpiredSessionRestore(browser, baseUrl) {
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+    reducedMotion: 'reduce',
+    storageState: { cookies: [], origins: [] },
+  });
+  const page = await context.newPage();
+  let authenticated = false;
+  await page.route('**/api/v1/auth/**', async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.endsWith('/login')) authenticated = true;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: authenticated
+          ? {
+              username: 'returning.candidate',
+              role: 'candidate',
+              isTest: true,
+              candidateId: 'candidate-expired-session',
+            }
+          : null,
+      }),
+    });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'candidate-workspace',
+      JSON.stringify({
+        version: 6,
+        careerGoal: 'find-job',
+        resumeText: '',
+        resumeSource: 'text',
+        targetDirection: 'Руководитель продукта',
+        market: 'ru',
+        currentSituation:
+          'Возвращаюсь в сохранённую карьерную картину после истечения браузерной сессии.',
+        constraints: '',
+        urgency: 'active',
+        createdAt: '2026-08-10T00:00:00.000Z',
+        updatedAt: '2026-08-10T00:00:00.000Z',
+        outcomes: [],
+      }),
+    );
+    localStorage.setItem(
+      'candidate-workspace-owner',
+      'candidate-expired-session',
+    );
+  });
+  await page.goto(`${baseUrl}?expired-session-restore`, {
+    waitUntil: 'networkidle',
+  });
+  await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).waitFor();
+  await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
+  await page.getByRole('button', { name: 'Войти' }).click();
+  await page.getByLabel('Логин').fill('returning.candidate');
+  await page.getByLabel('Пароль').fill('returning-candidate-password');
+  await page.getByRole('button', { name: 'Войти' }).click();
+  await page.getByRole('heading', { name: 'Что можно сказать уже сейчас' }).waitFor();
+  assert(
+    (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) !== null,
+    'expired session: matching candidate workspace was deleted during login',
+  );
+  await context.close();
+  return { matchingOwnerRestored: true };
 }
 
 async function verifyCandidateResult(browser, baseUrl, viewport) {
@@ -121,6 +286,20 @@ async function verifyCandidateResult(browser, baseUrl, viewport) {
     storageState: { cookies: [], origins: [] },
   });
   const page = await context.newPage();
+  await page.route('**/api/v1/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          username: 'candidate.result',
+          role: 'candidate',
+          isTest: true,
+          candidateId: `candidate-result-${viewport.name}`,
+        },
+      }),
+    });
+  });
   const errors = [];
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(`console:${message.text()}`);
@@ -148,6 +327,10 @@ async function verifyCandidateResult(browser, baseUrl, viewport) {
         updatedAt: '2026-08-09T17:00:00.000Z',
         outcomes: [],
       }),
+    );
+    localStorage.setItem(
+      'candidate-workspace-owner',
+      `candidate-result-${window.innerWidth >= 1000 ? 'desktop' : 'mobile'}`,
     );
   });
   await page.goto(`${baseUrl}?candidate-result=${viewport.name}`, {
@@ -439,8 +622,9 @@ try {
       await verifyCandidateResult(browser, baseUrl, viewport),
     );
   }
+  const sessionRestore = await verifyExpiredSessionRestore(browser, baseUrl);
   process.stdout.write(
-    `${JSON.stringify({ status: 'pass', results, candidateResults })}\n`,
+    `${JSON.stringify({ status: 'pass', results, candidateResults, sessionRestore })}\n`,
   );
 } finally {
   await browser.close();

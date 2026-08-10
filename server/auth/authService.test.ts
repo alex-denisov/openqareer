@@ -32,6 +32,28 @@ function createServices() {
 }
 
 describe('role and session authentication', () => {
+  it('registers an isolated personal candidate and rejects a duplicate username', async () => {
+    const { auth, candidates } = createServices();
+    const registered = await auth.register(
+      'New.Candidate',
+      'candidate-password-for-tests',
+      candidates,
+    );
+
+    expect(registered.principal).toMatchObject({
+      username: 'new.candidate',
+      role: 'candidate',
+      isTest: false,
+      candidate: { dataClass: 'personal' },
+    });
+    expect(auth.authenticate(registered.sessionToken)?.candidate?.id).toBe(
+      registered.principal.candidate?.id,
+    );
+    await expect(
+      auth.register('NEW.CANDIDATE', 'another-password-for-tests', candidates),
+    ).rejects.toThrow('username is already registered');
+  });
+
   it('seeds explicit candidate/admin identities and verifies passwords', async () => {
     const { auth, candidates } = createServices();
     await auth.seedAccounts(

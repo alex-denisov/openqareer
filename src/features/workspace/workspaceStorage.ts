@@ -22,8 +22,13 @@ import {
   OUTCOME_METHOD_VERSION,
   type OutcomeEvent,
 } from '../outcome/outcomeEngine';
+import {
+  isProfileFact,
+  type ProfileFact,
+} from './profileIngestion';
 
 export const WORKSPACE_STORAGE_KEY = 'candidate-workspace';
+export const WORKSPACE_OWNER_KEY = 'candidate-workspace-owner';
 export const WORKSPACE_VERSION = 6;
 
 export type WorkspaceMarket = 'ru' | 'international';
@@ -44,6 +49,7 @@ export interface WorkspaceInput {
   urgency: SearchUrgency;
   linkedinUrl?: string;
   hhUrl?: string;
+  profileFacts?: ProfileFact[];
 }
 
 export interface MarketVacancySampleItem {
@@ -128,6 +134,15 @@ export function validateWorkspaceInput(
     errors.hhUrl = 'Укажите ссылку на резюме hh.ru.';
   }
 
+  if (
+    input.profileFacts?.some(
+      (fact) => fact.status !== 'confirmed' && fact.status !== 'corrected',
+    )
+  ) {
+    errors.profileFacts =
+      'Проверьте каждый найденный факт: подтвердите, исправьте или исключите.';
+  }
+
   return errors;
 }
 
@@ -160,6 +175,9 @@ export function createWorkspace(
     urgency: input.urgency,
     linkedinUrl: input.linkedinUrl?.trim() || undefined,
     hhUrl: input.hhUrl?.trim() || undefined,
+    profileFacts: input.profileFacts?.filter(
+      (fact) => fact.status === 'confirmed' || fact.status === 'corrected',
+    ),
     createdAt: previous?.createdAt ?? now,
     updatedAt: now,
     analysis: canKeepAnalysis ? previous.analysis : undefined,
@@ -173,12 +191,31 @@ export function createWorkspace(
 export function saveWorkspace(
   storage: StorageLike,
   workspace: CandidateWorkspace,
+  ownerCandidateId: string | null = null,
 ): void {
   storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(workspace));
+  if (ownerCandidateId) {
+    storage.setItem(WORKSPACE_OWNER_KEY, ownerCandidateId);
+  } else {
+    storage.removeItem(WORKSPACE_OWNER_KEY);
+  }
 }
 
-export function loadWorkspace(storage: StorageLike): WorkspaceLoadResult {
+export function loadWorkspace(
+  storage: StorageLike,
+  ownerCandidateId?: string | null,
+): WorkspaceLoadResult {
   try {
+    if (ownerCandidateId !== undefined) {
+      const storedOwner = storage.getItem(WORKSPACE_OWNER_KEY);
+      if (
+        ownerCandidateId === null ||
+        storedOwner === null ||
+        storedOwner !== ownerCandidateId
+      ) {
+        return { status: 'empty' };
+      }
+    }
     const raw = storage.getItem(WORKSPACE_STORAGE_KEY);
     if (raw === null) {
       return { status: 'empty' };
@@ -262,6 +299,7 @@ function normalizeLoadedWorkspace(
 
 export function clearWorkspace(storage: StorageLike): void {
   storage.removeItem(WORKSPACE_STORAGE_KEY);
+  storage.removeItem(WORKSPACE_OWNER_KEY);
 }
 
 function isCandidateWorkspace(value: unknown): value is CandidateWorkspace {
@@ -444,6 +482,13 @@ function isWorkspaceRecord(
     isSearchUrgency(value.urgency) &&
     isOptionalString(value.linkedinUrl) &&
     isOptionalString(value.hhUrl) &&
+    (value.profileFacts === undefined ||
+      (Array.isArray(value.profileFacts) &&
+        value.profileFacts.every(
+          (fact) =>
+            isProfileFact(fact) &&
+            (fact.status === 'confirmed' || fact.status === 'corrected'),
+        ))) &&
     typeof value.createdAt === 'string' &&
     typeof value.updatedAt === 'string'
   );

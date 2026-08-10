@@ -14,6 +14,33 @@ export interface AuthUser {
   candidateId: string | null;
 }
 
+export type ProfileUrlImportResult =
+  | {
+      status: 'imported';
+      platform: 'linkedin' | 'hh';
+      sourceUrl: string;
+      capturedAt: string;
+      accessPath: 'official_api' | 'permitted_public_page';
+      facts: Array<{
+        kind: 'headline' | 'summary';
+        value: string;
+        sourceLocator: string;
+        confidence: 'public-metadata';
+      }>;
+    }
+  | {
+      status: 'unavailable';
+      platform: 'linkedin' | 'hh';
+      sourceUrl: string;
+      reason:
+        | 'authwall'
+        | 'not-public'
+        | 'network'
+        | 'insufficient'
+        | 'official-access-required';
+      nextAction: 'upload_export_or_pdf' | 'oauth_or_export';
+    };
+
 export interface CoachMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -273,6 +300,18 @@ export async function login(
   return readData<AuthUser>(response);
 }
 
+export async function register(
+  username: string,
+  password: string,
+): Promise<AuthUser> {
+  const response = await apiFetch('/api/v1/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  return readData<AuthUser>(response);
+}
+
 export async function logout(): Promise<void> {
   const response = await apiFetch('/api/v1/auth/logout', {
     method: 'POST',
@@ -280,6 +319,15 @@ export async function logout(): Promise<void> {
   if (!response.ok) {
     await throwApiError(response);
   }
+}
+
+export async function importProfileUrl(url: string): Promise<ProfileUrlImportResult> {
+  const response = await apiFetch('/api/v1/candidate/profile-imports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  return readData<ProfileUrlImportResult>(response);
 }
 
 export async function getCandidate(): Promise<CandidateSnapshot> {

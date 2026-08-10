@@ -16,8 +16,14 @@ import {
   loadWorkspace,
   saveWorkspace,
   validateWorkspaceInput,
+  WORKSPACE_OWNER_KEY,
+  WORKSPACE_STORAGE_KEY,
   type StorageLike,
 } from './workspaceStorage';
+import {
+  ingestProfileSnapshot,
+  reviewProfileFact,
+} from './profileIngestion';
 
 function createMemoryStorage(initial: Record<string, string> = {}): StorageLike {
   const values = new Map(Object.entries(initial));
@@ -90,6 +96,33 @@ describe('workspace validation', () => {
 });
 
 describe('workspace persistence', () => {
+  it('reveals candidate data only to the candidate identity that saved it', () => {
+    const storage = createMemoryStorage();
+    const workspace = createWorkspace(validInput, '2026-07-30T16:00:00.000Z');
+
+    saveWorkspace(storage, workspace, 'candidate-a');
+
+    expect(storage.getItem(WORKSPACE_OWNER_KEY)).toBe('candidate-a');
+    expect(loadWorkspace(storage, 'candidate-a')).toEqual({
+      status: 'ready',
+      workspace,
+    });
+    expect(loadWorkspace(storage, 'candidate-b')).toEqual({ status: 'empty' });
+    expect(loadWorkspace(storage, null)).toEqual({ status: 'empty' });
+
+    clearWorkspace(storage);
+    expect(storage.getItem(WORKSPACE_OWNER_KEY)).toBeNull();
+  });
+
+  it('does not restore an unowned legacy workspace into an anonymous session', () => {
+    const workspace = createWorkspace(validInput, '2026-07-30T16:00:00.000Z');
+    const storage = createMemoryStorage({
+      [WORKSPACE_STORAGE_KEY]: JSON.stringify(workspace),
+    });
+
+    expect(loadWorkspace(storage, null)).toEqual({ status: 'empty' });
+  });
+
   it('saves and restores a versioned workspace', () => {
     const storage = createMemoryStorage();
     const workspace = createWorkspace(validInput, '2026-07-30T16:00:00.000Z');
@@ -101,6 +134,43 @@ describe('workspace persistence', () => {
       workspace,
     });
     expect(workspace.careerGoal).toBe('find-job');
+  });
+
+  it('persists only candidate-reviewed profile facts with their provenance', () => {
+    const ingestion = ingestProfileSnapshot({
+      state: 'available',
+      source: {
+        sourceId: 'synthetic-official-profile',
+        platform: 'linkedin',
+        accessPath: 'official_api',
+        capturedAt: '2026-08-10T00:00:00.000Z',
+      },
+      snapshot: {
+        headline: 'Synthetic Product Lead',
+        summary: 'Builds evidence-led products for synthetic test fixtures.',
+        positions: [],
+        education: [],
+        skills: [],
+      },
+    });
+    if (ingestion.state !== 'ready_for_confirmation') throw new Error('unexpected');
+    const profileFacts = [
+      reviewProfileFact(ingestion.facts[0], { status: 'confirmed' }),
+      reviewProfileFact(ingestion.facts[1], {
+        status: 'corrected',
+        statement: 'Builds evidence-led products with candidate-reviewed facts.',
+      }),
+    ];
+    const workspace = createWorkspace({ ...validInput, profileFacts });
+    const storage = createMemoryStorage();
+
+    saveWorkspace(storage, workspace, 'candidate-a');
+
+    expect(workspace.profileFacts).toEqual(profileFacts);
+    expect(loadWorkspace(storage, 'candidate-a')).toEqual({
+      status: 'ready',
+      workspace,
+    });
   });
 
   it('accepts only hh source links in a persisted market sample', () => {

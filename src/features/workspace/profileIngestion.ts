@@ -83,6 +83,39 @@ export interface ProfileFact {
   };
 }
 
+const profileFactSchema = z.object({
+  id: z.string().min(1).max(200),
+  kind: z.enum([
+    'headline',
+    'summary',
+    'location',
+    'position',
+    'education',
+    'skill',
+  ]),
+  statement: z.string().min(1).max(20_000),
+  status: z.enum(['proposed', 'confirmed', 'corrected', 'rejected']),
+  confidence: z.enum(['source-reported', 'candidate-confirmed']),
+  userEdited: z.boolean(),
+  provenance: z.object({
+    sourceId: z.string().min(1).max(200).nullable(),
+    platform: z.enum(['linkedin', 'hh', 'other']),
+    accessPath: z.enum([
+      'candidate_export',
+      'official_api',
+      'permitted_public_page',
+      'test_account_browser',
+    ]),
+    capturedAt: z.iso.datetime(),
+    locator: z.string().min(1).max(500).nullable(),
+    rawSourceState: z.enum(['available', 'deleted']),
+  }),
+});
+
+export function isProfileFact(value: unknown): value is ProfileFact {
+  return profileFactSchema.safeParse(value).success;
+}
+
 export interface ProfileInstructionSignal {
   locator: string;
   kind: 'instruction_override' | 'system_prompt_reference';
