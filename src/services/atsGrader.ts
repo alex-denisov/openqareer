@@ -9,7 +9,7 @@ export interface ATSAnalysisResult {
   improvements: string[];
 }
 
-export function analyzeResumeATS(resumeText: string, targetRole: string = 'Senior Software Engineer'): ATSAnalysisResult {
+export function analyzeResumeATS(resumeText: string, _targetRole: string = 'Senior Software Engineer'): ATSAnalysisResult {
   const commonTechKeywords = [
     'React', 'TypeScript', 'Node.js', 'System Architecture', 'CI/CD',
     'Docker', 'Kubernetes', 'REST API', 'GraphQL', 'Agile', 'Microservices',

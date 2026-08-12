@@ -243,7 +243,7 @@ export async function buildApp({
     },
   );
 
-  app.get('/api/v1/auth/me', async (request, reply) => {
+  app.get('/api/v1/auth/me', async (request, _reply) => {
     const principal = authenticateSession(request, authService, config);
     if (!principal) {
       return {

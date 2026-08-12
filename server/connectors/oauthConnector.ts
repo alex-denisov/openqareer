@@ -179,6 +179,7 @@ export class CandidateOAuthService {
       !/^[A-Za-z0-9_-]{32,256}$/.test(callback.state) ||
       callback.code.length < 8 ||
       callback.code.length > 2_048 ||
+      // eslint-disable-next-line no-control-regex -- OAuth codes must reject ASCII controls.
       /[\u0000-\u001f\u007f]/u.test(callback.code)
     ) {
       throw new OAuthConnectorError('oauth_state_invalid', 409, false);

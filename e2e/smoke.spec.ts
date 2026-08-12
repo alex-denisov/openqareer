@@ -27,15 +27,11 @@ test('built career workspace is ready, operable and free of critical accessibili
   const shell = page.getByTestId('career-shell');
   await expect(shell).toBeVisible();
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy');
-  await expect(
-    page.getByRole('heading', { name: 'Начните с карьерного вопроса' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Начните с карьерного вопроса' })).toBeVisible();
   await expect(page.getByText('Загружаем рабочее пространство')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Начать диагностику' })).toBeEnabled();
 
-  const accountButton = page
-    .locator('button[aria-label="Открыть аккаунт"]:visible')
-    .last();
+  const accountButton = page.locator('button[aria-label="Открыть аккаунт"]:visible').last();
   await expect(accountButton).toBeEnabled();
   await accountButton.click();
   await expect(page.getByRole('dialog', { name: 'Аккаунт' })).toBeVisible();

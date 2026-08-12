@@ -41,6 +41,9 @@ jobs:
       - name: Audit dependencies
         run: npm audit --audit-level=high
 
+      - name: Lint and check adopted formatting baseline
+        run: npm run lint
+
       - name: Run unit tests
         run: npm test
 
