@@ -41,6 +41,8 @@ const validOutput = {
     needsHuman: false,
     reason: null,
   },
+  careerTrack: null,
+  actionProposals: [],
 };
 
 describe('OpenAI career coach provider', () => {

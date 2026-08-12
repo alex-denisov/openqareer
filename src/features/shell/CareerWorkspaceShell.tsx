@@ -9,7 +9,7 @@ import {
   Wallet,
   type Icon,
 } from '@phosphor-icons/react';
-import type { AuthUser, CoachPhase } from '../coach/coachApi';
+import type { AuthUser } from '../coach/coachApi';
 import { CareerExpertPanel } from '../journey/CareerExpertPanel';
 import { CareerIntake } from '../journey/CareerIntake';
 import {
@@ -347,7 +347,8 @@ export function CareerWorkspaceShell({
           />
           <CareerExpertPanel
             journey={journey}
-            phase={phaseFor(activeView)}
+            initialUser={session ?? null}
+            onIdentityChange={resetForAccount}
             onClose={closeExpert}
           />
         </>
@@ -399,11 +400,4 @@ function NavigationButton({
       <span>{mobile ? item.shortLabel : item.label}</span>
     </button>
   );
-}
-
-function phaseFor(view: ShellView): CoachPhase {
-  if (view === 'profile') return 'evidence';
-  if (view === 'career') return 'role';
-  if (view === 'opportunities') return 'targeting';
-  return 'discovery';
 }

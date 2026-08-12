@@ -19,6 +19,8 @@ function providerNamed(
         nextQuestion: 'Что для вас важно?',
         completeness: { known: [], unknown: ['Цель'] },
         safety: { needsHuman: false, reason: null },
+        careerTrack: null,
+        actionProposals: [],
       },
     })),
   };

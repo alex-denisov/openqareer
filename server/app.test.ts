@@ -65,6 +65,8 @@ const successProvider: CoachProvider = {
           needsHuman: false,
           reason: null,
         },
+        careerTrack: null,
+        actionProposals: [],
       },
     };
   },
@@ -212,9 +214,7 @@ describe('OpenQareer API boundary', () => {
       syntheticDataRoute: {
         provider: 'openrouter',
         model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-        fallbackModels: [
-          'nvidia/nemotron-3-super-120b-a12b:free',
-        ],
+        fallbackProviders: [],
         outputValidation: 'server-side-strict-schema',
       },
       qualityFloor: 'gpt-5.6-sol',
@@ -280,6 +280,58 @@ describe('OpenQareer API boundary', () => {
         responseId: 'response-1',
       },
     });
+  });
+
+  it('keeps phase selection on the server instead of trusting the browser', async () => {
+    let providerPhase: string | undefined;
+    const provider: CoachProvider = {
+      async createTurn(input) {
+        providerPhase = input.phase;
+        return successProvider.createTurn(input, randomUUID());
+      },
+    };
+    const app = await createApp(provider);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/coach/turn',
+      headers: {
+        authorization: candidateAuthorization(app),
+        'idempotency-key': randomUUID(),
+      },
+      payload: { ...validPayload, phase: 'targeting' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(providerPhase).toBe('discovery');
+  });
+
+  it('routes an explicit market request into the material three-role phase', async () => {
+    let providerPhase: string | undefined;
+    const provider: CoachProvider = {
+      async createTurn(input) {
+        providerPhase = input.phase;
+        return successProvider.createTurn(input, randomUUID());
+      },
+    };
+    const app = await createApp(provider);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/coach/turn',
+      headers: {
+        authorization: candidateAuthorization(app),
+        origin: 'http://localhost:3000',
+        'idempotency-key': randomUUID(),
+      },
+      payload: {
+        messageId: randomUUID(),
+        content: 'Сравни рынок вакансий в Германии и России',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(providerPhase).toBe('market');
   });
 
   it('returns a stable retryable error without provider payloads', async () => {

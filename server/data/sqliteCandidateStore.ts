@@ -185,8 +185,7 @@ export class SqliteCandidateStore implements CandidateStore {
       if (
         !storedMessage ||
         storedMessage.id !== request.messageId ||
-        storedMessage.content !== request.content ||
-        existing.phase !== request.phase
+        storedMessage.content !== request.content
       ) {
         throw new CandidateStoreConflictError();
       }

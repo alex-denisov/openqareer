@@ -30,6 +30,8 @@ const validOutput = {
     needsHuman: false,
     reason: null,
   },
+  careerTrack: null,
+  actionProposals: [],
 };
 
 describe('OpenRouter synthetic coach provider', () => {

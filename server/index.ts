@@ -2,6 +2,10 @@ import { buildApp } from './app';
 import { readServerConfig } from './config';
 import { buildCoachProvider } from './providers/coachProviderFactory';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
+import { CareerOrchestrator } from './orchestration/careerOrchestrator';
+import { CoachProviderRoleAgent } from './orchestration/coachProviderRoleAgent';
+import { ResilientCoachProvider } from './providers/resilientCoachProvider';
+import { selectSyntheticProviderRoutes } from './providers/syntheticProviderRoutes';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { AuthService } from './auth/authService';
 
@@ -22,15 +26,27 @@ const personalDataProvider = buildCoachProvider({
   model: config.model,
   folderId: config.yandexFolderId,
 });
-const syntheticDataProvider = buildCoachProvider({
-  provider: syntheticProviderId,
-  apiKey: config.providerCredentials?.[syntheticProviderId] ?? '',
-  model: config.syntheticModel,
-  folderId: config.yandexFolderId,
+const syntheticRoutes = selectSyntheticProviderRoutes({
+  selectedProvider: syntheticProviderId,
+  selectedModel: config.syntheticModel,
+  credentials: config.providerCredentials ?? {},
+}).map((route) => ({
+  id: route.provider,
+  provider: buildCoachProvider({
+    ...route,
+    folderId: config.yandexFolderId,
+  }),
+}));
+const syntheticDataProvider = new ResilientCoachProvider({
+  routes: syntheticRoutes,
+  maxAttempts: 3,
 });
-const coachProvider = new PrivacyAwareCoachProvider({
+const routedProvider = new PrivacyAwareCoachProvider({
   personalDataProvider,
   syntheticDataProvider,
+});
+const coachProvider = new CareerOrchestrator({
+  roleAgent: new CoachProviderRoleAgent({ provider: routedProvider }),
 });
 const app = await buildApp({
   config,

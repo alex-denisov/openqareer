@@ -9,31 +9,40 @@ import {
 } from '@phosphor-icons/react';
 import {
   CoachApiError,
-  getSession,
+  getCandidate,
   login,
   sendCoachTurn,
   type AuthUser,
-  type CoachPhase,
+  type CandidateSnapshot,
+  type CoachResult,
 } from '../coach/coachApi';
 import type { CareerJourney } from './careerJourneyEngine';
 
 interface CareerExpertPanelProps {
   journey?: CareerJourney;
-  phase: CoachPhase;
+  initialUser: AuthUser | null;
+  initialSnapshot?: CandidateSnapshot;
+  onIdentityChange?: (user: AuthUser) => void;
   onClose: () => void;
 }
 
 export function CareerExpertPanel({
   journey,
-  phase,
+  initialUser,
+  initialSnapshot,
+  onIdentityChange = () => undefined,
   onClose,
 }: CareerExpertPanelProps) {
-  const [user, setUser] = useState<AuthUser | null>();
+  const [user, setUser] = useState<AuthUser | null>(initialUser);
+  const [snapshot, setSnapshot] = useState<CandidateSnapshot | undefined>(
+    initialSnapshot,
+  );
+  const [liveResult, setLiveResult] = useState<CoachResult>();
+  const [loadingSnapshot, setLoadingSnapshot] = useState(Boolean(initialUser));
   const [loginOpen, setLoginOpen] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [content, setContent] = useState('');
-  const [answer, setAnswer] = useState<string>();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string>();
   const panel = useRef<HTMLElement>(null);
@@ -45,14 +54,6 @@ export function CareerExpertPanel({
         ? document.activeElement
         : null;
     closeButton.current?.focus();
-    let active = true;
-    void getSession()
-      .then((session) => {
-        if (active) setUser(session);
-      })
-      .catch(() => {
-        if (active) setUser(null);
-      });
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -78,18 +79,46 @@ export function CareerExpertPanel({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => {
-      active = false;
       window.removeEventListener('keydown', onKeyDown);
       returnFocusTo?.focus();
     };
   }, [onClose]);
+
+  useEffect(() => {
+    setUser(initialUser);
+  }, [initialUser]);
+
+  useEffect(() => {
+    if (!user) {
+      setSnapshot(undefined);
+      setLoadingSnapshot(false);
+      return;
+    }
+    let active = true;
+    setLoadingSnapshot(true);
+    void getCandidate()
+      .then((candidate) => {
+        if (active) setSnapshot(candidate);
+      })
+      .catch((reason) => {
+        if (active) setError(messageFrom(reason));
+      })
+      .finally(() => {
+        if (active) setLoadingSnapshot(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user]);
 
   async function handleLogin(event: React.FormEvent) {
     event.preventDefault();
     setSending(true);
     setError(undefined);
     try {
-      setUser(await login(username, password));
+      const authenticated = await login(username, password);
+      setUser(authenticated);
+      onIdentityChange(authenticated);
       setLoginOpen(false);
     } catch (reason) {
       setError(messageFrom(reason));
@@ -105,15 +134,25 @@ export function CareerExpertPanel({
     setSending(true);
     setError(undefined);
     try {
-      const result = await sendCoachTurn({ content: clean, phase });
-      setAnswer([result.message, result.nextQuestion].filter(Boolean).join('\n\n'));
+      const result = await sendCoachTurn({ content: clean });
+      setLiveResult(result);
       setContent('');
+      try {
+        setSnapshot(await getCandidate());
+      } catch {
+        setError('Ответ сохранён, но историю пока не удалось обновить.');
+      }
     } catch (reason) {
       setError(messageFrom(reason));
     } finally {
       setSending(false);
     }
   }
+
+  const latestStoredResult = [...(snapshot?.turns ?? [])]
+    .reverse()
+    .find((turn) => turn.status === 'completed' && turn.result)?.result;
+  const latestResult = liveResult ?? latestStoredResult ?? undefined;
 
   return (
     <aside
@@ -127,8 +166,8 @@ export function CareerExpertPanel({
         <div className="career-expert-identity">
           <span><Sparkle size={18} weight="fill" /></span>
           <div>
-            <strong>Карьерный эксперт</strong>
-            <small>{user ? 'Защищённый AI-диалог' : 'Контекст текущего решения'}</small>
+            <strong>Карьерное ядро</strong>
+            <small>{user ? 'Консультант · стратег · эксперт' : 'Защищённый AI-диалог'}</small>
           </div>
         </div>
         <button
@@ -152,17 +191,26 @@ export function CareerExpertPanel({
           </p>
         </div>
 
-        {answer ? (
-          <div className="career-expert-answer">
-            <span><Sparkle size={15} weight="fill" /> Ответ эксперта</span>
-            {answer.split('\n').map((paragraph) =>
-              paragraph ? <p key={paragraph}>{paragraph}</p> : null,
-            )}
+        {snapshot?.messages.length ? (
+          <div className="career-dialogue-history" aria-label="История диалога">
+            {snapshot.messages.map((message) => (
+              <article
+                className={`career-dialogue-turn is-${message.role}`}
+                key={message.id}
+              >
+                <span>{message.role === 'user' ? 'Вы' : 'Карьерное ядро'}</span>
+                {message.content.split('\n').map((paragraph, index) =>
+                  paragraph ? <p key={`${message.id}-${index}`}>{paragraph}</p> : null,
+                )}
+              </article>
+            ))}
           </div>
         ) : null}
 
-        {user === undefined ? (
-          <div className="career-expert-loading">Проверяем защищённую сессию…</div>
+        {latestResult ? <CareerIntelligenceSummary result={latestResult} /> : null}
+
+        {loadingSnapshot ? (
+          <div className="career-expert-loading">Загружаем историю и карьерный трек…</div>
         ) : null}
 
         {user === null && !loginOpen ? (
@@ -212,7 +260,7 @@ export function CareerExpertPanel({
 
       {user ? (
         <form className="career-expert-composer" onSubmit={handleSend}>
-          <label htmlFor="career-expert-input">Вопрос эксперту</label>
+          <label htmlFor="career-expert-input">Сообщение карьерному ядру</label>
           <div>
             <textarea
               id="career-expert-input"
@@ -231,6 +279,90 @@ export function CareerExpertPanel({
       {error ? <p className="career-expert-error" role="alert">{error}</p> : null}
     </aside>
   );
+}
+
+export function CareerIntelligenceSummary({ result }: { result: CoachResult }) {
+  return (
+    <section className="career-intelligence-summary" aria-label="Карьерный трек и действия">
+      {result.intelligence ? (
+        <div className="career-role-coverage">
+          <span>Проверено ролями</span>
+          <div>
+            {result.intelligence.roleCoverage.map((role) => (
+              <small key={role}>{roleLabel(role)}</small>
+            ))}
+          </div>
+          <p>
+            Привязка выводов к сообщениям: {Math.round(result.intelligence.evidenceCoverage * 100)}%
+          </p>
+        </div>
+      ) : null}
+
+      {result.careerTrack ? (
+        <div className="career-track-card">
+          <span>Измеримый карьерный трек</span>
+          <strong>{result.careerTrack.objective}</strong>
+          <ol>
+            {result.careerTrack.milestones.map((milestone) => (
+              <li key={`${milestone.label}-${milestone.measureAfter}`}>
+                <b>{milestone.label}</b>
+                <p>{milestone.successCriterion}</p>
+                <small>Проверка {formatDate(milestone.measureAfter)} · {milestone.expectedSignal}</small>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+
+      {result.actionProposals.length ? (
+        <div className="career-action-proposals">
+          <span>Следующие задания</span>
+          {result.actionProposals.map((proposal, index) => (
+            <article key={`${proposal.kind}-${index}`}>
+              <div>
+                <strong>{actionLabel(proposal.kind)}</strong>
+                <small>{proposal.risk === 'external_side_effect' ? 'Требует вашего подтверждения' : 'Предложено · ещё не запущено'}</small>
+              </div>
+              <p>{proposal.objective}</p>
+              <small>Сигнал: {proposal.expectedSignal} · проверка {formatDate(proposal.measureAfter)}</small>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function roleLabel(role: NonNullable<CoachResult['intelligence']>['roleCoverage'][number]) {
+  return {
+    career_consultant: 'Консультант',
+    career_strategist: 'Стратег',
+    career_expert: 'Эксперт',
+  }[role];
+}
+
+function actionLabel(kind: CoachResult['actionProposals'][number]['kind']) {
+  return {
+    'resume.draft': 'Подготовить резюме',
+    'resume.revise': 'Улучшить резюме',
+    'vacancies.search': 'Найти вакансии',
+    'vacancies.local_query': 'Проверить локальную базу вакансий',
+    'company.evaluate': 'Оценить компанию',
+    'market.evaluate': 'Оценить рынок',
+    'cover_letter.draft': 'Подготовить сопроводительное',
+    'application.prepare': 'Подготовить отклик',
+    'application.submit': 'Отправить отклик',
+    'outreach.prepare': 'Подготовить личный контакт',
+    'outreach.send': 'Отправить сообщение',
+    'connection.request': 'Запросить контакт',
+  }[kind];
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(`${value}T00:00:00Z`));
 }
 
 function messageFrom(reason: unknown): string {

@@ -6,12 +6,12 @@ import {
   RateLimitError,
 } from 'openai/error';
 import {
-  CAREER_COACH_INSTRUCTIONS,
   COACH_TURN_JSON_SCHEMA,
   coachTurnResultSchema,
   serializeCoachInput,
   type CoachTurnInput,
 } from '../domain/coach';
+import { careerInstructionsForRole } from '../prompts/careerRolePrompts';
 import {
   CoachProviderError,
   type CoachProvider,
@@ -23,7 +23,14 @@ export type OpenAICompatibleProviderId =
   | 'fireworks'
   | 'groq'
   | 'mistral'
-  | 'cerebras';
+  | 'cerebras'
+  | 'kilocode'
+  | 'nvidia'
+  | 'opencode_zen'
+  | 'tokenrouter'
+  | 'sambanova'
+  | 'pollinations'
+  | 'huggingface';
 
 export interface OpenAICompatibleCoachProviderOptions {
   provider: OpenAICompatibleProviderId;
@@ -66,7 +73,7 @@ export class OpenAICompatibleCoachProvider implements CoachProvider {
       const request: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
         model: this.model,
         messages: [
-          { role: 'system', content: CAREER_COACH_INSTRUCTIONS },
+          { role: 'system', content: careerInstructionsForRole(input.activeRole) },
           { role: 'user', content: serializeCoachInput(input) },
         ],
         max_completion_tokens: 2_400,
@@ -153,5 +160,17 @@ function mapProviderError(error: unknown): CoachProviderError {
 export function isOpenAICompatibleProvider(
   provider: ProviderId,
 ): provider is OpenAICompatibleProviderId {
-  return ['fireworks', 'groq', 'mistral', 'cerebras'].includes(provider);
+  return [
+    'fireworks',
+    'groq',
+    'mistral',
+    'cerebras',
+    'kilocode',
+    'nvidia',
+    'opencode_zen',
+    'tokenrouter',
+    'sambanova',
+    'pollinations',
+    'huggingface',
+  ].includes(provider);
 }

@@ -237,6 +237,64 @@ export interface CoachResult {
     needsHuman: boolean;
     reason: string | null;
   };
+  careerTrack: {
+    objective: string;
+    alternatives: Array<{
+      label: string;
+      reason: string;
+      evidenceRefs: string[];
+      unknowns: string[];
+    }>;
+    milestones: Array<{
+      label: string;
+      expectedSignal: string;
+      measureAfter: string;
+      successCriterion: string;
+    }>;
+  } | null;
+  actionProposals: Array<{
+    kind:
+      | 'resume.draft'
+      | 'resume.revise'
+      | 'vacancies.search'
+      | 'vacancies.local_query'
+      | 'company.evaluate'
+      | 'market.evaluate'
+      | 'cover_letter.draft'
+      | 'application.prepare'
+      | 'application.submit'
+      | 'outreach.prepare'
+      | 'outreach.send'
+      | 'connection.request';
+    objective: string;
+    evidenceRefs: string[];
+    acceptanceCriteria: string[];
+    expectedSignal: string;
+    measureAfter: string;
+    risk: 'read_only' | 'candidate_data_write' | 'external_side_effect';
+  }>;
+  intelligence?: {
+    orchestrationRevision: string;
+    roleCoverage: Array<
+      'career_consultant' | 'career_strategist' | 'career_expert'
+    >;
+    roleContributions: Array<{
+      role: 'career_consultant' | 'career_strategist' | 'career_expert';
+      summary: string;
+      evidenceRefs: string[];
+      unknowns: string[];
+      provider: string;
+      model: string;
+      promptRevision: string;
+      usage: {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+      };
+    }>;
+    evidenceCoverage: number;
+    unsupportedClaimCount: number;
+  };
 }
 
 export interface CandidateSnapshot {
@@ -254,7 +312,7 @@ export interface CandidateSnapshot {
     status: 'pending' | 'failed' | 'completed';
     result: CoachResult | null;
     provenance: {
-      provider: 'openai' | 'openrouter';
+      provider: string;
       model: string;
       responseId: string;
       usage: {
@@ -400,7 +458,6 @@ export async function getCandidate(): Promise<CandidateSnapshot> {
 
 export async function sendCoachTurn(input: {
   content: string;
-  phase: CoachPhase;
   idempotencyKey?: string;
   messageId?: string;
 }): Promise<CoachResult> {
@@ -413,10 +470,32 @@ export async function sendCoachTurn(input: {
     body: JSON.stringify({
       messageId: input.messageId ?? crypto.randomUUID(),
       content: input.content,
-      phase: input.phase,
     }),
   });
   return readData<CoachResult>(response);
+}
+
+export async function prepareCareerCommand(input: {
+  turnIdempotencyKey: string;
+  proposalIndex: number;
+  idempotencyKey?: string;
+}): Promise<{
+  commandId: string;
+  capability: CoachResult['actionProposals'][number]['kind'];
+  status: 'prepared' | 'awaiting_approval';
+}> {
+  const response = await apiFetch('/api/v1/candidate/career-commands', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID(),
+    },
+    body: JSON.stringify({
+      turnIdempotencyKey: input.turnIdempotencyKey,
+      proposalIndex: input.proposalIndex,
+    }),
+  });
+  return readData(response);
 }
 
 export async function changeMemory(
@@ -477,7 +556,7 @@ export async function getProviderStatus(): Promise<{
   syntheticDataRoute: {
     provider: string;
     model: string;
-    fallbackModels?: string[];
+    fallbackProviders?: string[];
     outputValidation?: string;
   };
   ready: boolean;

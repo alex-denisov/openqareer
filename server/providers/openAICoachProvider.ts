@@ -7,12 +7,12 @@ import {
   RateLimitError,
 } from 'openai/error';
 import {
-  CAREER_COACH_INSTRUCTIONS,
   COACH_TURN_JSON_SCHEMA,
   coachTurnResultSchema,
   serializeCoachInput,
   type CoachTurnInput,
 } from '../domain/coach';
+import { careerInstructionsForRole } from '../prompts/careerRolePrompts';
 import {
   CoachProviderError,
   type CoachProvider,
@@ -50,7 +50,7 @@ export class OpenAICoachProvider implements CoachProvider {
         {
           model: this.model,
           store: false,
-          instructions: CAREER_COACH_INSTRUCTIONS,
+          instructions: careerInstructionsForRole(input.activeRole),
           input: serializeCoachInput(input),
           reasoning: {
             effort: 'high',

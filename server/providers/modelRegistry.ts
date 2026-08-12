@@ -11,6 +11,13 @@ export const PROVIDER_IDS = [
   'cerebras',
   'cohere',
   'yandex',
+  'kilocode',
+  'nvidia',
+  'opencode_zen',
+  'tokenrouter',
+  'sambanova',
+  'pollinations',
+  'huggingface',
 ] as const;
 
 export type ProviderId = (typeof PROVIDER_IDS)[number];
@@ -219,6 +226,118 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
         releaseDate: null,
         pinned: false,
         lifecycle: 'rolling',
+        structuredOutput: false,
+      },
+    ],
+  }),
+  kilocode: provider({
+    id: 'kilocode',
+    label: 'Kilo Code',
+    transport: 'openai-compatible-chat',
+    baseUrl: 'https://kilo.ai/api/openrouter',
+    credentialEnvironment: ['OPENQAREER_KILO_CODE_AI_API_KEY'],
+    models: [
+      {
+        id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+        releaseDate: '2026-06-04',
+        pinned: true,
+        lifecycle: 'preview',
+        structuredOutput: false,
+      },
+    ],
+  }),
+  nvidia: provider({
+    id: 'nvidia',
+    label: 'NVIDIA NIM',
+    transport: 'openai-compatible-chat',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    credentialEnvironment: ['OPENQAREER_NVIDIA_NIM_API_KEY'],
+    models: [
+      {
+        id: 'nvidia/nemotron-3-super-120b-a12b',
+        releaseDate: '2026-03-11',
+        pinned: true,
+        lifecycle: 'production',
+        structuredOutput: false,
+      },
+    ],
+  }),
+  opencode_zen: provider({
+    id: 'opencode_zen',
+    label: 'OpenCode Zen',
+    transport: 'openai-compatible-chat',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    credentialEnvironment: ['OPENQAREER_OPENCODE_ZEN_AI_API_KEY'],
+    models: [
+      {
+        id: 'nemotron-3-ultra-free',
+        releaseDate: '2026-06-04',
+        pinned: true,
+        lifecycle: 'preview',
+        structuredOutput: false,
+      },
+    ],
+  }),
+  tokenrouter: provider({
+    id: 'tokenrouter',
+    label: 'TokenRouter',
+    transport: 'openai-compatible-chat',
+    baseUrl: 'https://api.tokenrouter.com/v1',
+    credentialEnvironment: ['OPENQAREER_TOKENROUTER_API_KEY'],
+    models: [
+      {
+        id: 'moonshotai/kimi-k3-free',
+        releaseDate: '2026-06-13',
+        pinned: true,
+        lifecycle: 'preview',
+        structuredOutput: false,
+      },
+    ],
+  }),
+  sambanova: provider({
+    id: 'sambanova',
+    label: 'SambaNova Cloud',
+    transport: 'openai-compatible-chat',
+    baseUrl: 'https://api.sambanova.ai/v1',
+    credentialEnvironment: ['OPENQAREER_SAMBANOVA_CLOUD_API_KEY'],
+    models: [
+      {
+        id: 'gemma-4-31B-it',
+        releaseDate: '2026-04-03',
+        pinned: true,
+        lifecycle: 'production',
+        structuredOutput: false,
+      },
+    ],
+  }),
+  pollinations: provider({
+    id: 'pollinations',
+    label: 'Pollinations',
+    transport: 'openai-compatible-chat',
+    baseUrl: 'https://text.pollinations.ai/openai',
+    credentialEnvironment: ['OPENQAREER_POLLINATIONS_AI_API_KEY'],
+    models: [
+      {
+        id: 'openai-fast',
+        releaseDate: null,
+        pinned: false,
+        lifecycle: 'rolling',
+        structuredOutput: false,
+      },
+    ],
+  }),
+  huggingface: provider({
+    id: 'huggingface',
+    label: 'Hugging Face Inference',
+    transport: 'openai-compatible-chat',
+    baseUrl: 'https://router.huggingface.co/v1',
+    credentialEnvironment: ['OPENQAREER_HUGGINGFACE_HUB_API_KEY'],
+    models: [
+      {
+        id: 'prism-ml/Ternary-Bonsai-27B-AWQ-4bit',
+        releaseDate: '2026-07-11',
+        pinned: true,
+        lifecycle: 'preview',
         structuredOutput: false,
       },
     ],

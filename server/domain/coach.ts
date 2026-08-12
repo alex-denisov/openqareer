@@ -34,6 +34,57 @@ export const DOSSIER_DOMAINS = [
   'other',
 ] as const;
 
+export const CAREER_ROLES = [
+  'career_consultant',
+  'career_strategist',
+  'career_expert',
+] as const;
+
+export const CAREER_ACTION_KINDS = [
+  'resume.draft',
+  'resume.revise',
+  'vacancies.search',
+  'vacancies.local_query',
+  'company.evaluate',
+  'market.evaluate',
+  'cover_letter.draft',
+  'application.prepare',
+  'application.submit',
+  'outreach.prepare',
+  'outreach.send',
+  'connection.request',
+] as const;
+
+export const careerActionProposalSchema = z.object({
+  kind: z.enum(CAREER_ACTION_KINDS),
+  objective: z.string().trim().min(1).max(1_000),
+  evidenceRefs: z.array(z.string().min(1).max(80)).min(1).max(100),
+  acceptanceCriteria: z.array(z.string().trim().min(1).max(500)).min(1).max(20),
+  expectedSignal: z.string().trim().min(1).max(1_000),
+  measureAfter: z.string().date(),
+  risk: z.enum(['read_only', 'candidate_data_write', 'external_side_effect']),
+});
+
+export const careerTrackSchema = z.object({
+  objective: z.string().trim().min(1).max(1_000),
+  alternatives: z.array(
+    z.object({
+      label: z.string().trim().min(1).max(300),
+      reason: z.string().trim().min(1).max(1_000),
+      evidenceRefs: z.array(z.string().min(1).max(80)).max(100),
+      unknowns: z.array(z.string().trim().min(1).max(300)).max(20),
+    }),
+  ).min(1).max(3),
+  milestones: z.array(
+    z.object({
+      label: z.string().trim().min(1).max(500),
+      expectedSignal: z.string().trim().min(1).max(1_000),
+      measureAfter: z.string().date(),
+      successCriterion: z.string().trim().min(1).max(1_000),
+    }),
+  ).min(1).max(12),
+});
+
 export const coachMessageSchema = z.object({
   id: z.string().min(1).max(80),
   role: z.enum(['user', 'assistant']),
@@ -46,6 +97,15 @@ export const coachTurnInputSchema = z.object({
   locale: z.enum(['ru-RU', 'en-US']).default('ru-RU'),
   phase: z.enum(COACH_PHASES).default('discovery'),
   messages: z.array(coachMessageSchema).min(1).max(30),
+  activeRole: z.enum(CAREER_ROLES).optional(),
+  priorRoleContributions: z.array(
+    z.object({
+      role: z.enum(CAREER_ROLES),
+      summary: z.string().trim().min(1).max(6_000),
+      evidenceRefs: z.array(z.string().min(1).max(80)).max(100),
+      unknowns: z.array(z.string().trim().min(1).max(300)).max(20),
+    }),
+  ).max(2).optional(),
 });
 
 export const memoryCandidateSchema = z.object({
@@ -70,6 +130,42 @@ export const coachTurnResultSchema = z.object({
     needsHuman: z.boolean(),
     reason: z.string().trim().min(1).max(500).nullable(),
   }),
+  careerTrack: careerTrackSchema.nullable().default(null),
+  actionProposals: z.array(careerActionProposalSchema).max(20).default([]),
+  intelligence: z
+    .object({
+      orchestrationRevision: z.string().min(1).max(80),
+      roleCoverage: z.array(
+        z.enum([
+          'career_consultant',
+          'career_strategist',
+          'career_expert',
+        ]),
+      ).min(1).max(3),
+      roleContributions: z.array(
+        z.object({
+          role: z.enum([
+            'career_consultant',
+            'career_strategist',
+            'career_expert',
+          ]),
+          summary: z.string().trim().min(1).max(6_000),
+          evidenceRefs: z.array(z.string().min(1).max(80)).max(100),
+          unknowns: z.array(z.string().trim().min(1).max(300)).max(20),
+          provider: z.string().min(1).max(40),
+          model: z.string().min(1).max(200),
+          promptRevision: z.string().min(1).max(80),
+          usage: z.object({
+            inputTokens: z.number().int().nonnegative(),
+            outputTokens: z.number().int().nonnegative(),
+            totalTokens: z.number().int().nonnegative(),
+          }),
+        }),
+      ).min(1).max(3),
+      evidenceCoverage: z.number().min(0).max(1),
+      unsupportedClaimCount: z.number().int().nonnegative(),
+    })
+    .optional(),
 });
 
 export type CoachTurnInput = z.infer<typeof coachTurnInputSchema>;
@@ -77,6 +173,9 @@ export type CoachTurnResult = z.infer<typeof coachTurnResultSchema>;
 export type CoachMessage = z.infer<typeof coachMessageSchema>;
 export type MemoryCandidate = z.infer<typeof memoryCandidateSchema>;
 export type CoachPhase = (typeof COACH_PHASES)[number];
+export type CareerRole = (typeof CAREER_ROLES)[number];
+export type CareerActionProposal = z.infer<typeof careerActionProposalSchema>;
+export type CareerTrack = z.infer<typeof careerTrackSchema>;
 
 export const COACH_TURN_JSON_SCHEMA = {
   type: 'object',
@@ -148,6 +247,104 @@ export const COACH_TURN_JSON_SCHEMA = {
       required: ['needsHuman', 'reason'],
       additionalProperties: false,
     },
+    careerTrack: {
+      anyOf: [
+        {
+          type: 'object',
+          properties: {
+            objective: { type: 'string', minLength: 1, maxLength: 1_000 },
+            alternatives: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 3,
+              items: {
+                type: 'object',
+                properties: {
+                  label: { type: 'string', minLength: 1, maxLength: 300 },
+                  reason: { type: 'string', minLength: 1, maxLength: 1_000 },
+                  evidenceRefs: {
+                    type: 'array',
+                    maxItems: 100,
+                    items: { type: 'string', minLength: 1, maxLength: 80 },
+                  },
+                  unknowns: {
+                    type: 'array',
+                    maxItems: 20,
+                    items: { type: 'string', minLength: 1, maxLength: 300 },
+                  },
+                },
+                required: ['label', 'reason', 'evidenceRefs', 'unknowns'],
+                additionalProperties: false,
+              },
+            },
+            milestones: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 12,
+              items: {
+                type: 'object',
+                properties: {
+                  label: { type: 'string', minLength: 1, maxLength: 500 },
+                  expectedSignal: { type: 'string', minLength: 1, maxLength: 1_000 },
+                  measureAfter: {
+                    type: 'string',
+                    pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+                  },
+                  successCriterion: { type: 'string', minLength: 1, maxLength: 1_000 },
+                },
+                required: ['label', 'expectedSignal', 'measureAfter', 'successCriterion'],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ['objective', 'alternatives', 'milestones'],
+          additionalProperties: false,
+        },
+        { type: 'null' },
+      ],
+    },
+    actionProposals: {
+      type: 'array',
+      maxItems: 20,
+      items: {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', enum: CAREER_ACTION_KINDS },
+          objective: { type: 'string', minLength: 1, maxLength: 1_000 },
+          evidenceRefs: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 100,
+            items: { type: 'string', minLength: 1, maxLength: 80 },
+          },
+          acceptanceCriteria: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 20,
+            items: { type: 'string', minLength: 1, maxLength: 500 },
+          },
+          expectedSignal: { type: 'string', minLength: 1, maxLength: 1_000 },
+          measureAfter: {
+            type: 'string',
+            pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+          },
+          risk: {
+            type: 'string',
+            enum: ['read_only', 'candidate_data_write', 'external_side_effect'],
+          },
+        },
+        required: [
+          'kind',
+          'objective',
+          'evidenceRefs',
+          'acceptanceCriteria',
+          'expectedSignal',
+          'measureAfter',
+          'risk',
+        ],
+        additionalProperties: false,
+      },
+    },
   },
   required: [
     'message',
@@ -156,6 +353,8 @@ export const COACH_TURN_JSON_SCHEMA = {
     'nextQuestion',
     'completeness',
     'safety',
+    'careerTrack',
+    'actionProposals',
   ],
   additionalProperties: false,
 } as const;
@@ -169,6 +368,8 @@ export function serializeCoachInput(input: CoachTurnInput): string {
     dataClass: input.dataClass,
     locale: input.locale,
     phase: input.phase,
+    activeRole: input.activeRole ?? 'career_consultant',
+    priorRoleContributions: input.priorRoleContributions ?? [],
     conversation: input.messages,
   });
 }

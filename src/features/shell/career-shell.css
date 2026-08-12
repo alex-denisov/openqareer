@@ -2212,6 +2212,125 @@
   background: var(--career-accent-soft);
 }
 
+.career-dialogue-history,
+.career-intelligence-summary {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.career-dialogue-turn {
+  max-width: 92%;
+  border: 1px solid var(--career-line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--career-surface);
+}
+
+.career-dialogue-turn.is-user {
+  justify-self: end;
+  background: var(--career-accent-soft);
+}
+
+.career-dialogue-turn > span,
+.career-role-coverage > span,
+.career-track-card > span,
+.career-action-proposals > span {
+  color: var(--career-accent);
+  font-size: 0.67rem;
+  font-weight: 760;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.career-dialogue-turn p,
+.career-track-card p,
+.career-action-proposals p,
+.career-role-coverage p {
+  margin: 6px 0 0;
+  color: var(--career-text-soft);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.career-role-coverage,
+.career-track-card,
+.career-action-proposals {
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  padding: 14px;
+  background: var(--career-surface);
+}
+
+.career-role-coverage > div {
+  margin-top: 9px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.career-role-coverage small {
+  border: 1px solid var(--career-line-strong);
+  border-radius: 999px;
+  padding: 5px 8px;
+  color: var(--career-text-soft);
+}
+
+.career-track-card > strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.88rem;
+}
+
+.career-track-card ol {
+  margin: 12px 0 0;
+  padding-left: 20px;
+}
+
+.career-track-card li + li {
+  margin-top: 12px;
+}
+
+.career-track-card li b {
+  color: var(--career-text);
+  font-size: 0.79rem;
+}
+
+.career-track-card li small,
+.career-action-proposals article > small {
+  display: block;
+  margin-top: 5px;
+  color: var(--career-text-dim);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.career-action-proposals > article {
+  margin-top: 10px;
+  border-top: 1px solid var(--career-line);
+  padding-top: 10px;
+}
+
+.career-action-proposals article > div {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.career-action-proposals article strong {
+  color: var(--career-text);
+  font-size: 0.79rem;
+}
+
+.career-action-proposals article div small {
+  max-width: 145px;
+  color: var(--career-text-dim);
+  font-size: 0.66rem;
+  line-height: 1.35;
+  text-align: right;
+}
+
 .career-expert-auth {
   margin-top: 18px;
   display: grid;

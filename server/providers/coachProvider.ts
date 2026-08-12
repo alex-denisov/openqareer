@@ -16,6 +16,14 @@ export interface CoachProviderResult {
   model: string;
   responseId: string;
   usage: ProviderUsage;
+  routing?: {
+    fallbackUsed: boolean;
+    attempts: Array<{
+      provider: ProviderId;
+      status: 'succeeded' | 'failed' | 'skipped';
+      code?: ProviderErrorCode | 'provider_cooldown';
+    }>;
+  };
 }
 
 export interface CoachProvider {

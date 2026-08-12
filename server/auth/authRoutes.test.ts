@@ -39,6 +39,8 @@ const provider: CoachProvider = {
         nextQuestion: 'Что изменилось?',
         completeness: { known: [], unknown: ['Результат'] },
         safety: { needsHuman: false, reason: null },
+        careerTrack: null,
+        actionProposals: [],
       },
     };
   },

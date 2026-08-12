@@ -85,4 +85,53 @@ describe('career coach domain contract', () => {
       }),
     ).toThrow();
   });
+
+  it('accepts only evidence-bound action proposals and a measurable career track', () => {
+    const base = {
+      message: 'Сначала проверим продуктовый маршрут на свежей выборке.',
+      phase: 'market' as const,
+      memoryCandidates: [],
+      nextQuestion: null,
+      completeness: { known: ['Цель'], unknown: ['Свежий спрос'] },
+      safety: { needsHuman: false, reason: null },
+      careerTrack: {
+        objective: 'Проверить переход в Product Manager в Германии.',
+        alternatives: [
+          {
+            label: 'Product Manager, Germany',
+            reason: 'Есть продуктовые evidence, рынок ещё нужно проверить.',
+            evidenceRefs: ['message-1'],
+            unknowns: ['Уровень немецкого'],
+          },
+        ],
+        milestones: [
+          {
+            label: 'Проверить 20 свежих вакансий',
+            expectedSignal: 'Не менее 5 вакансий проходят ограничения.',
+            measureAfter: '2026-08-19',
+            successCriterion: '5 релевантных вакансий',
+          },
+        ],
+      },
+      actionProposals: [
+        {
+          kind: 'vacancies.search' as const,
+          objective: 'Собрать датированную выборку по целевой роли.',
+          evidenceRefs: ['message-1'],
+          acceptanceCriteria: ['Минимум 20 вакансий', 'У каждой есть source URL'],
+          expectedSignal: 'Не менее 5 релевантных вакансий.',
+          measureAfter: '2026-08-19',
+          risk: 'read_only' as const,
+        },
+      ],
+    };
+
+    expect(coachTurnResultSchema.parse(base).actionProposals).toHaveLength(1);
+    expect(() =>
+      coachTurnResultSchema.parse({
+        ...base,
+        actionProposals: [{ ...base.actionProposals[0], evidenceRefs: [] }],
+      }),
+    ).toThrow();
+  });
 });

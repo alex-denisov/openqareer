@@ -8,7 +8,9 @@ import Fastify, {
   type FastifyRequest,
 } from 'fastify';
 import { z, ZodError } from 'zod';
-import { COACH_PHASES } from './domain/coach';
+import type { CoachPhase } from './domain/coach';
+import { selectCoachPhase } from './orchestration/coachPhaseRouter';
+import { CareerCommandPlanner } from './orchestration/careerCommandPlanner';
 import {
   evaluateProductCase,
   evaluateWorkPreferences,
@@ -104,7 +106,7 @@ export async function buildApp({
       },
     },
     bodyLimit: 256 * 1_024,
-    requestTimeout: 90_000,
+    requestTimeout: 190_000,
   });
 
   await app.register(cookie);
@@ -158,10 +160,15 @@ export async function buildApp({
           model:
             config.syntheticModel ??
             'nvidia/nemotron-3-ultra-550b-a55b:free',
-          fallbackModels:
-            (config.syntheticProvider ?? 'openrouter') === 'openrouter'
-              ? ['nvidia/nemotron-3-super-120b-a12b:free']
-              : [],
+          fallbackProviders: (config.providerCatalogStatus ?? [])
+            .filter(
+              (provider) =>
+                provider.configured &&
+                provider.eligible &&
+                provider.id !==
+                  (config.syntheticProvider ?? 'openrouter'),
+            )
+            .map((provider) => provider.id),
           outputValidation: 'server-side-strict-schema',
         },
         qualityFloor: 'gpt-5.6-sol',
@@ -615,7 +622,7 @@ export async function buildApp({
   app.post(
     '/api/v1/coach/turn',
     {
-      handlerTimeout: 85_000,
+      handlerTimeout: 180_000,
       config: {
         rateLimit: {
           max: 10,
@@ -651,10 +658,14 @@ export async function buildApp({
       }
 
       const body = coachTurnRequestSchema.parse(request.body);
+      const phase = nextCoachPhase(
+        candidateStore.getSnapshot(candidate.id),
+        body.content,
+      );
       const started = candidateStore.startTurn(
         candidate.id,
         parsedIdempotencyKey.data,
-        body,
+        { ...body, phase },
       );
       if (started.state === 'completed') {
         return providerResponse(request, started.output);
@@ -682,6 +693,70 @@ export async function buildApp({
         throw error;
       }
       return providerResponse(request, output);
+    },
+  );
+
+  app.post(
+    '/api/v1/candidate/career-commands',
+    {
+      config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+    },
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const idempotencyKey = z
+        .string()
+        .uuid()
+        .parse(request.headers['idempotency-key']);
+      const body = careerCommandRequestSchema.parse(request.body);
+      const snapshot = candidateStore.getSnapshot(candidate.id);
+      const turn = snapshot.turns.find(
+        (item) =>
+          item.idempotencyKey === body.turnIdempotencyKey &&
+          item.status === 'completed' &&
+          item.result,
+      );
+      const proposal = turn?.result?.actionProposals[body.proposalIndex];
+      if (!turn || !proposal) {
+        return sendError(
+          reply,
+          request,
+          404,
+          'career_proposal_not_found',
+          'Такого предложения нет в сохранённом карьерном ходе.',
+          false,
+        );
+      }
+      const planner = new CareerCommandPlanner({
+        createId: () => idempotencyKey,
+      });
+      return reply.code(201).send({
+        data: planner.materialize({
+          principal: { candidateId: candidate.id },
+          proposal,
+          availableEvidenceRefs: new Set(
+            snapshot.messages
+              .filter((message) => message.role === 'user')
+              .map((message) => message.id),
+          ),
+          strategyDecisionId: turn.idempotencyKey,
+          modelInvocationIds: turn.provenance
+            ? [turn.provenance.responseId]
+            : [],
+          idempotencyKey,
+          approval: null,
+        }),
+        meta: { requestId: request.id },
+      });
     },
   );
 
@@ -919,8 +994,25 @@ function connectionResultRedirect(
 const coachTurnRequestSchema = z.object({
   messageId: z.string().uuid(),
   content: z.string().trim().min(1).max(8_000),
-  phase: z.enum(COACH_PHASES).default('discovery'),
 });
+
+const careerCommandRequestSchema = z.object({
+  turnIdempotencyKey: z.string().uuid(),
+  proposalIndex: z.number().int().min(0).max(19),
+});
+
+function nextCoachPhase(
+  snapshot: ReturnType<CandidateStore['getSnapshot']>,
+  content: string,
+): CoachPhase {
+  const latestCompleted = [...snapshot.turns]
+    .reverse()
+    .find((turn) => turn.status === 'completed' && turn.result);
+  return selectCoachPhase({
+    content,
+    previousPhase: latestCompleted?.result?.phase ?? null,
+  });
+}
 
 const memoryChangeSchema = z
   .object({
@@ -1086,6 +1178,7 @@ function providerResponse(
       model: output.model,
       responseId: output.responseId,
       usage: output.usage,
+      routing: output.routing,
     },
   };
 }

@@ -1,10 +1,10 @@
 import {
-  CAREER_COACH_INSTRUCTIONS,
   COACH_TURN_JSON_SCHEMA,
   coachTurnResultSchema,
   serializeCoachInput,
   type CoachTurnInput,
 } from '../domain/coach';
+import { careerInstructionsForRole } from '../prompts/careerRolePrompts';
 import {
   CoachProviderError,
   type CoachProvider,
@@ -106,7 +106,7 @@ export class NativeCoachProvider implements CoachProvider {
       {
         model: this.options.model,
         max_tokens: 2_400,
-        system: CAREER_COACH_INSTRUCTIONS,
+        system: careerInstructionsForRole(input.activeRole),
         messages: [{ role: 'user', content: serializeCoachInput(input) }],
       },
     );
@@ -139,7 +139,7 @@ export class NativeCoachProvider implements CoachProvider {
         'x-client-request-id': idempotencyKey,
       },
       {
-        systemInstruction: { parts: [{ text: CAREER_COACH_INSTRUCTIONS }] },
+        systemInstruction: { parts: [{ text: careerInstructionsForRole(input.activeRole) }] },
         contents: [
           { role: 'user', parts: [{ text: serializeCoachInput(input) }] },
         ],
@@ -192,7 +192,7 @@ export class NativeCoachProvider implements CoachProvider {
       {
         model: this.options.model,
         messages: [
-          { role: 'system', content: CAREER_COACH_INSTRUCTIONS },
+          { role: 'system', content: careerInstructionsForRole(input.activeRole) },
           { role: 'user', content: serializeCoachInput(input) },
         ],
         max_tokens: 2_400,
@@ -241,7 +241,7 @@ export class NativeCoachProvider implements CoachProvider {
           maxTokens: '2400',
         },
         messages: [
-          { role: 'system', text: CAREER_COACH_INSTRUCTIONS },
+          { role: 'system', text: careerInstructionsForRole(input.activeRole) },
           { role: 'user', text: serializeCoachInput(input) },
         ],
       },

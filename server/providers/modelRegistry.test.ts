@@ -20,6 +20,13 @@ describe('LLM provider and model registry', () => {
       'cerebras',
       'cohere',
       'yandex',
+      'kilocode',
+      'nvidia',
+      'opencode_zen',
+      'tokenrouter',
+      'sambanova',
+      'pollinations',
+      'huggingface',
     ]);
     expect(Object.keys(modelRegistry)).toEqual(PROVIDER_IDS);
   });

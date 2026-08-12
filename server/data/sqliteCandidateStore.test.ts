@@ -66,6 +66,8 @@ const output: CoachProviderResult = {
       unknown: ['Результат'],
     },
     safety: { needsHuman: false, reason: null },
+    careerTrack: null,
+    actionProposals: [],
   },
 };
 

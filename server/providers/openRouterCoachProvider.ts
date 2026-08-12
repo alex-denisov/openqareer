@@ -6,11 +6,11 @@ import {
   RateLimitError,
 } from 'openai/error';
 import {
-  CAREER_COACH_INSTRUCTIONS,
   coachTurnResultSchema,
   serializeCoachInput,
   type CoachTurnInput,
 } from '../domain/coach';
+import { careerInstructionsForRole } from '../prompts/careerRolePrompts';
 import {
   CoachProviderError,
   type CoachProvider,
@@ -74,7 +74,7 @@ export class OpenRouterCoachProvider implements CoachProvider {
         messages: [
           {
             role: 'system',
-            content: CAREER_COACH_INSTRUCTIONS,
+            content: careerInstructionsForRole(input.activeRole),
           },
           {
             role: 'user',

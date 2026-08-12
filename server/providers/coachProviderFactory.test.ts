@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildCoachProvider } from './coachProviderFactory';
-import { PROVIDER_IDS } from './modelRegistry';
+import { allowedModels, PROVIDER_IDS } from './modelRegistry';
 
 describe('coach provider factory', () => {
   it('constructs every connector that has a cutoff-safe model', () => {
-    for (const provider of PROVIDER_IDS.filter((id) => id !== 'yandex')) {
+    for (const provider of PROVIDER_IDS.filter((id) => allowedModels(id).length > 0)) {
       expect(
         buildCoachProvider({
           provider,
