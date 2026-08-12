@@ -4,12 +4,47 @@ import {
   careerActionProposalSchema,
   type CareerActionProposal,
 } from '../domain/coach';
+import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 
 export interface VerifiedCareerApproval {
   id: string;
   candidateId: string;
+  commandId: string;
   capability: CareerActionProposal['kind'];
   expiresAt: string;
+}
+
+export type CareerCommandStatus =
+  | 'awaiting_approval'
+  | 'prepared'
+  | 'queued'
+  | 'executing'
+  | 'completed_with_receipt'
+  | 'paused'
+  | 'failed'
+  | 'native_handoff';
+
+export interface CareerCommandRecord {
+  schemaVersion: 'career-command-v1';
+  commandId: string;
+  candidateId: string;
+  capability: CareerActionProposal['kind'];
+  proposal: CareerActionProposal;
+  status: CareerCommandStatus;
+  provenance: {
+    strategyDecisionId: string;
+    evidenceRefs: string[];
+    modelInvocationIds: string[];
+  };
+  authorization: { approvalId: string | null };
+  idempotency: {
+    key: string;
+    payloadDigest: string;
+    semantics: 'at_most_once';
+  };
+  execution: ConnectorActionRecord | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CareerCommandPlannerOptions {
@@ -18,7 +53,12 @@ export interface CareerCommandPlannerOptions {
 }
 
 export class CareerCommandPolicyError extends Error {
-  constructor(readonly code: 'unknown_evidence' | 'invalid_approval') {
+  constructor(
+    readonly code:
+      | 'unknown_evidence'
+      | 'invalid_approval'
+      | 'invalid_capability_risk',
+  ) {
     super(code);
     this.name = 'CareerCommandPolicyError';
   }
@@ -41,11 +81,15 @@ export class CareerCommandPlanner {
     modelInvocationIds: string[];
     idempotencyKey: string;
     approval: VerifiedCareerApproval | null;
-  }) {
+  }): CareerCommandRecord {
     const proposal = validateProposal(input);
+    const commandId = this.createId();
 
     const externalWrite = proposal.risk === 'external_side_effect';
-    if (input.approval && !approvalMatches(input, proposal, this.now())) {
+    if (
+      input.approval &&
+      !approvalMatches(input, commandId, proposal, this.now())
+    ) {
       throw new CareerCommandPolicyError('invalid_approval');
     }
     const approvalId = input.approval?.id ?? null;
@@ -55,7 +99,7 @@ export class CareerCommandPlanner {
 
     return {
       schemaVersion: 'career-command-v1' as const,
-      commandId: this.createId(),
+      commandId,
       candidateId: input.principal.candidateId,
       capability: proposal.kind,
       proposal,
@@ -73,7 +117,9 @@ export class CareerCommandPlanner {
         payloadDigest: commandDigest(input, proposal),
         semantics: 'at_most_once' as const,
       },
+      execution: null,
       createdAt,
+      updatedAt: createdAt,
     };
   }
 }
@@ -85,6 +131,16 @@ function validateProposal(input: {
 }): CareerActionProposal {
   const proposal = careerActionProposalSchema.parse(input.proposal);
   z.string().uuid().parse(input.idempotencyKey);
+  if (
+    proposal.risk === 'external_side_effect' &&
+    ![
+      'application.submit',
+      'outreach.send',
+      'connection.request',
+    ].includes(proposal.kind)
+  ) {
+    throw new CareerCommandPolicyError('invalid_capability_risk');
+  }
   if (!proposal.evidenceRefs.every((ref) => input.availableEvidenceRefs.has(ref))) {
     throw new CareerCommandPolicyError('unknown_evidence');
   }
@@ -110,12 +166,14 @@ function approvalMatches(
     principal: { candidateId: string };
     approval: VerifiedCareerApproval | null;
   },
+  commandId: string,
   proposal: CareerActionProposal,
   now: Date,
 ): boolean {
   return Boolean(
     input.approval &&
       input.approval.candidateId === input.principal.candidateId &&
+      input.approval.commandId === commandId &&
       input.approval.capability === proposal.kind &&
       Date.parse(input.approval.expiresAt) > now.getTime(),
   );

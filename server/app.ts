@@ -10,7 +10,12 @@ import Fastify, {
 import { z, ZodError } from 'zod';
 import type { CoachPhase, MarketObservation } from './domain/coach';
 import { selectCoachPhase } from './orchestration/coachPhaseRouter';
-import { CareerCommandPlanner } from './orchestration/careerCommandPlanner';
+import {
+  CareerCommandPlanner,
+  CareerCommandPolicyError,
+} from './orchestration/careerCommandPlanner';
+import { CareerCommandDispatcher } from './orchestration/careerCommandDispatcher';
+import type { ConnectorExecutor } from './connectors/connectorHarness';
 import {
   evaluateProductCase,
   evaluateWorkPreferences,
@@ -30,6 +35,11 @@ import {
   CandidateNotFoundError,
   CandidateStoreConflictError,
 } from './data/sqliteCandidateStore';
+import {
+  CareerCommandApprovalError,
+  CareerCommandConflictError,
+  CareerCommandNotFoundError,
+} from './data/sqliteCareerCommandRepository';
 import {
   CoachProviderError,
   type CoachProvider,
@@ -70,6 +80,7 @@ interface BuildAppOptions {
   }) => Promise<HhVacancySample>;
   importProfile?: (url: string) => Promise<ProfileUrlImportResult>;
   oauthTransport?: OAuthTransport;
+  careerCommandExecutor?: ConnectorExecutor;
 }
 
 interface ErrorBody {
@@ -90,12 +101,19 @@ export async function buildApp({
   searchVacancies = searchHhVacancies,
   importProfile = importPublicProfileUrl,
   oauthTransport,
+  careerCommandExecutor,
 }: BuildAppOptions): Promise<FastifyInstance> {
   const oauthService = new CandidateOAuthService({
     store: candidateStore,
     providers: config.oauthProviders,
     transport: oauthTransport ?? new OfficialOAuthTransport(),
   });
+  const careerCommandDispatcher = careerCommandExecutor
+    ? new CareerCommandDispatcher({
+        store: candidateStore,
+        executor: careerCommandExecutor,
+      })
+    : null;
   const app = Fastify({
     trustProxy: '127.0.0.1',
     logger: {
@@ -762,8 +780,8 @@ export async function buildApp({
       const planner = new CareerCommandPlanner({
         createId: () => idempotencyKey,
       });
-      return reply.code(201).send({
-        data: planner.materialize({
+      const command = candidateStore.saveCareerCommand(
+        planner.materialize({
           principal: { candidateId: candidate.id },
           proposal,
           availableEvidenceRefs: new Set(
@@ -778,8 +796,79 @@ export async function buildApp({
           idempotencyKey,
           approval: null,
         }),
+      );
+      return reply.code(201).send({
+        data: command,
         meta: { requestId: request.id },
       });
+    },
+  );
+
+  app.get(
+    '/api/v1/candidate/career-commands/:commandId',
+    async (request, reply) => {
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const { commandId } = careerCommandParamsSchema.parse(request.params);
+      const command = candidateStore.getCareerCommand(candidate.id, commandId);
+      if (!command) throw new CareerCommandNotFoundError();
+      return { data: command, meta: { requestId: request.id } };
+    },
+  );
+
+  app.post(
+    '/api/v1/candidate/career-commands/:commandId/approvals',
+    {
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const { commandId } = careerCommandParamsSchema.parse(request.params);
+      const approvalId = z
+        .string()
+        .uuid()
+        .parse(request.headers['idempotency-key']);
+      const command = candidateStore.getCareerCommand(candidate.id, commandId);
+      if (!command) throw new CareerCommandNotFoundError();
+      const consumedAt = new Date();
+      let approved = candidateStore.approveCareerCommand({
+        candidateId: candidate.id,
+        commandId,
+        approval: {
+          id: approvalId,
+          candidateId: candidate.id,
+          commandId,
+          capability: command.capability,
+          expiresAt: new Date(consumedAt.getTime() + 5 * 60_000).toISOString(),
+        },
+        consumedAt: consumedAt.toISOString(),
+      });
+      if (careerCommandDispatcher && approved.status === 'queued') {
+        approved = await careerCommandDispatcher.dispatch(
+          candidate.id,
+          commandId,
+        );
+      }
+      return {
+        data: approved,
+        meta: { requestId: request.id },
+      };
     },
   );
 
@@ -812,13 +901,46 @@ export async function buildApp({
         error.retryable,
       );
     }
-    if (error instanceof CandidateStoreConflictError) {
+    if (
+      error instanceof CandidateStoreConflictError ||
+      error instanceof CareerCommandConflictError
+    ) {
       return sendError(
         reply,
         request,
         409,
         'candidate_state_conflict',
         'Состояние кандидата изменилось. Обновите данные и повторите действие.',
+        false,
+      );
+    }
+    if (error instanceof CareerCommandApprovalError) {
+      return sendError(
+        reply,
+        request,
+        409,
+        'career_command_approval_invalid',
+        'Подтверждение не совпадает с командой или уже истекло.',
+        false,
+      );
+    }
+    if (error instanceof CareerCommandPolicyError) {
+      return sendError(
+        reply,
+        request,
+        error.code === 'invalid_approval' ? 409 : 422,
+        `career_command_${error.code}`,
+        'Предложение не прошло серверную policy-проверку.',
+        false,
+      );
+    }
+    if (error instanceof CareerCommandNotFoundError) {
+      return sendError(
+        reply,
+        request,
+        404,
+        'career_command_not_found',
+        'Карьерная команда не найдена.',
         false,
       );
     }
@@ -1043,6 +1165,10 @@ function marketObservationsFrom(sample: HhVacancySample) {
 const careerCommandRequestSchema = z.object({
   turnIdempotencyKey: z.string().uuid(),
   proposalIndex: z.number().int().min(0).max(19),
+});
+
+const careerCommandParamsSchema = z.object({
+  commandId: z.string().uuid(),
 });
 
 function nextCoachPhase(

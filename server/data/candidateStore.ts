@@ -16,6 +16,11 @@ import type {
 } from '../domain/assessment';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type { OAuthPlatform } from '../connectors/oauthTypes';
+import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
+import type {
+  CareerCommandRecord,
+  VerifiedCareerApproval,
+} from '../orchestration/careerCommandPlanner';
 
 export interface CandidateIdentity {
   id: string;
@@ -208,6 +213,28 @@ export interface CandidateStore {
     candidateId: string,
     platform: OAuthPlatform,
   ): boolean;
+  saveCareerCommand(command: CareerCommandRecord): CareerCommandRecord;
+  getCareerCommand(
+    candidateId: string,
+    commandId: string,
+  ): CareerCommandRecord | null;
+  approveCareerCommand(input: {
+    candidateId: string;
+    commandId: string;
+    approval: VerifiedCareerApproval;
+    consumedAt: string;
+  }): CareerCommandRecord;
+  claimCareerCommand(
+    candidateId: string,
+    commandId: string,
+    execution: ConnectorActionRecord,
+    claimedAt: string,
+  ): CareerCommandRecord;
+  finishCareerCommand(
+    candidateId: string,
+    commandId: string,
+    command: CareerCommandRecord,
+  ): CareerCommandRecord;
   exportCandidate(candidateId: string): CandidateSnapshot;
   deleteCandidate(candidateId: string): boolean;
   close(): void;

@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from './app';
 import type { SessionAuth } from './auth/authService';
 import type { ServerConfig } from './config';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import type { CoachProvider } from './providers/coachProvider';
+import type {
+  ConnectorExecutor,
+  ConnectorReceipt,
+} from './connectors/connectorHarness';
 
 const apps: Array<Awaited<ReturnType<typeof buildApp>>> = [];
 const stores: SqliteCandidateStore[] = [];
@@ -53,9 +57,210 @@ describe('career command API', () => {
       },
     });
   });
+
+  it('atomically approves a saved command into one durable outbox entry', async () => {
+    const { app, authorization } = await createApp();
+    const turnIdempotencyKey = randomUUID();
+    const messageId = randomUUID();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/coach/turn',
+      headers: { authorization, 'idempotency-key': turnIdempotencyKey },
+      payload: { messageId, content: 'Подготовь отклик' },
+    });
+    const commandId = randomUUID();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/career-commands',
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': commandId,
+      },
+      payload: { turnIdempotencyKey, proposalIndex: 0 },
+    });
+
+    const approvalId = randomUUID();
+    const approved = await app.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/career-commands/${commandId}/approvals`,
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': approvalId,
+      },
+    });
+    const replay = await app.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/career-commands/${commandId}/approvals`,
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': approvalId,
+      },
+    });
+
+    expect(approved.statusCode).toBe(200);
+    expect(approved.json().data).toMatchObject({
+      commandId,
+      status: 'queued',
+      authorization: { approvalId },
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().data).toEqual(approved.json().data);
+  });
+
+  it('dispatches once and completes only from a matching connector receipt', async () => {
+    const execute = vi.fn(
+      async (request): Promise<ConnectorReceipt> => ({
+        connectorId: 'synthetic-api',
+        transport: 'official_api',
+        action: request.action,
+        status: 'completed',
+        idempotencyKey: request.idempotencyKey,
+        opportunityId: request.opportunityId,
+        providerReference: 'synthetic-receipt-1',
+        evidence: {
+          kind: 'provider_receipt',
+          observedAt: '2026-08-12T19:00:01.000Z',
+        },
+      }),
+    );
+    const executor: ConnectorExecutor = {
+      connectorId: 'synthetic-api',
+      transport: 'official_api',
+      execute,
+    };
+    const { app, authorization } = await createApp(executor);
+    const turnIdempotencyKey = randomUUID();
+    const messageId = randomUUID();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/coach/turn',
+      headers: { authorization, 'idempotency-key': turnIdempotencyKey },
+      payload: { messageId, content: 'Подготовь отклик' },
+    });
+    const commandId = randomUUID();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/career-commands',
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': commandId,
+      },
+      payload: { turnIdempotencyKey, proposalIndex: 0 },
+    });
+    const approvalId = randomUUID();
+    const headers = {
+      authorization,
+      origin: 'http://localhost:3000',
+      'idempotency-key': approvalId,
+    };
+
+    const approved = await app.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/career-commands/${commandId}/approvals`,
+      headers,
+    });
+    const replay = await app.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/career-commands/${commandId}/approvals`,
+      headers,
+    });
+
+    expect(approved.statusCode).toBe(200);
+    expect(approved.json().data).toMatchObject({
+      status: 'completed_with_receipt',
+      execution: {
+        status: 'completed_with_receipt',
+        connector: {
+          id: 'synthetic-api',
+          providerReference: 'synthetic-receipt-1',
+        },
+      },
+    });
+    expect(replay.json().data).toEqual(approved.json().data);
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps commands tenant-scoped and fails closed on a mismatched receipt', async () => {
+    const executor: ConnectorExecutor = {
+      connectorId: 'synthetic-api',
+      transport: 'official_api',
+      async execute(request) {
+        return {
+          connectorId: 'synthetic-api',
+          transport: 'official_api',
+          action: request.action,
+          status: 'completed',
+          idempotencyKey: request.idempotencyKey,
+          opportunityId: 'different-command-target',
+          providerReference: 'must-not-be-accepted',
+          evidence: {
+            kind: 'provider_receipt',
+            observedAt: '2026-08-12T19:00:01.000Z',
+          },
+        };
+      },
+    };
+    const { app, authorization, store } = await createApp(executor);
+    const turnIdempotencyKey = randomUUID();
+    const messageId = randomUUID();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/coach/turn',
+      headers: { authorization, 'idempotency-key': turnIdempotencyKey },
+      payload: { messageId, content: 'Подготовь отклик' },
+    });
+    const commandId = randomUUID();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/career-commands',
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': commandId,
+      },
+      payload: { turnIdempotencyKey, proposalIndex: 0 },
+    });
+
+    const approved = await app.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/career-commands/${commandId}/approvals`,
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': randomUUID(),
+      },
+    });
+    expect(approved.json().data).toMatchObject({
+      status: 'paused',
+      execution: {
+        status: 'paused',
+        diagnosticReason: 'receipt_invalid',
+        connector: { providerReference: null },
+      },
+    });
+    expect(JSON.stringify(approved.json())).not.toContain(
+      'must-not-be-accepted',
+    );
+
+    const foreignCandidate = store.createCandidate({
+      dataClass: 'synthetic',
+      locale: 'ru-RU',
+    });
+    const foreignRead = await app.inject({
+      method: 'GET',
+      url: `/api/v1/candidate/career-commands/${commandId}`,
+      headers: { authorization: `Bearer ${foreignCandidate.accessToken}` },
+    });
+    expect(foreignRead.statusCode).toBe(404);
+    expect(foreignRead.json().error.code).toBe('career_command_not_found');
+  });
 });
 
-async function createApp() {
+async function createApp(careerCommandExecutor?: ConnectorExecutor) {
   const store = new SqliteCandidateStore({
     databasePath: ':memory:',
     encryptionKey: Buffer.alloc(32, 7),
@@ -70,10 +275,11 @@ async function createApp() {
     candidateStore: store,
     authService: noSessions,
     serveStatic: false,
+    careerCommandExecutor,
   });
   apps.push(app);
   stores.push(store);
-  return { app, authorization: `Bearer ${candidate.accessToken}` };
+  return { app, authorization: `Bearer ${candidate.accessToken}`, store };
 }
 
 const provider: CoachProvider = {

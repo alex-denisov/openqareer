@@ -174,3 +174,49 @@ CREATE TABLE oauth_connections (
 export const MIGRATION_7 = `
 ALTER TABLE turns ADD COLUMN request_digest TEXT;
 `;
+
+export const MIGRATION_8 = `
+CREATE TABLE career_commands (
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  command_id TEXT NOT NULL,
+  capability TEXT NOT NULL,
+  payload_digest TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (
+    status IN (
+      'awaiting_approval', 'prepared', 'queued', 'executing',
+      'completed_with_receipt', 'paused', 'failed', 'native_handoff'
+    )
+  ),
+  command_cipher TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (candidate_id, command_id)
+) STRICT;
+
+CREATE TABLE career_command_approvals (
+  approval_id TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  command_id TEXT NOT NULL,
+  capability TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  consumed_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (candidate_id, command_id)
+    REFERENCES career_commands(candidate_id, command_id) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE career_command_outbox (
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  command_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'delivered')),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (candidate_id, command_id),
+  FOREIGN KEY (candidate_id, command_id)
+    REFERENCES career_commands(candidate_id, command_id) ON DELETE CASCADE
+) STRICT;
+
+CREATE INDEX career_command_outbox_pending
+  ON career_command_outbox(status, created_at);
+`;

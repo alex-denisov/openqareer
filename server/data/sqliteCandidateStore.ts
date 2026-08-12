@@ -36,9 +36,11 @@ import type {
   StoredOAuthConnection,
 } from './candidateStore';
 import type { OAuthPlatform } from '../connectors/oauthTypes';
+import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import { SealedText } from './sealedText';
 import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
 import { SqliteMarketRepository } from './sqliteMarketRepository';
+import { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
 import type {
   GermanyMarketResult,
   GermanyMarketSubmission,
@@ -51,7 +53,12 @@ import {
   MIGRATION_5,
   MIGRATION_6,
   MIGRATION_7,
+  MIGRATION_8,
 } from './sqliteSchema';
+import type {
+  CareerCommandRecord,
+  VerifiedCareerApproval,
+} from '../orchestration/careerCommandPlanner';
 interface SqliteCandidateStoreOptions {
   databasePath: string;
   encryptionKey: Buffer;
@@ -101,6 +108,7 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly sealedText: SealedText;
   private readonly assessmentsRepository: SqliteAssessmentRepository;
   private readonly marketRepository: SqliteMarketRepository;
+  private readonly careerCommandRepository: SqliteCareerCommandRepository;
 
   constructor(options: SqliteCandidateStoreOptions) {
     if (options.databasePath !== ':memory:') {
@@ -120,6 +128,10 @@ export class SqliteCandidateStore implements CandidateStore {
       this.sealedText,
     );
     this.marketRepository = new SqliteMarketRepository(
+      this.database,
+      this.sealedText,
+    );
+    this.careerCommandRepository = new SqliteCareerCommandRepository(
       this.database,
       this.sealedText,
     );
@@ -609,6 +621,48 @@ export class SqliteCandidateStore implements CandidateStore {
     }
     return result.changes === 1;
   }
+  saveCareerCommand(command: CareerCommandRecord): CareerCommandRecord {
+    this.requireCandidate(command.candidateId);
+    return this.careerCommandRepository.save(command);
+  }
+  getCareerCommand(
+    candidateId: string,
+    commandId: string,
+  ): CareerCommandRecord | null {
+    return this.careerCommandRepository.get(candidateId, commandId);
+  }
+  approveCareerCommand(input: {
+    candidateId: string;
+    commandId: string;
+    approval: VerifiedCareerApproval;
+    consumedAt: string;
+  }): CareerCommandRecord {
+    return this.careerCommandRepository.approve(input);
+  }
+  claimCareerCommand(
+    candidateId: string,
+    commandId: string,
+    execution: ConnectorActionRecord,
+    claimedAt: string,
+  ): CareerCommandRecord {
+    return this.careerCommandRepository.claim(
+      candidateId,
+      commandId,
+      execution,
+      claimedAt,
+    );
+  }
+  finishCareerCommand(
+    candidateId: string,
+    commandId: string,
+    command: CareerCommandRecord,
+  ): CareerCommandRecord {
+    return this.careerCommandRepository.finish(
+      candidateId,
+      commandId,
+      command,
+    );
+  }
   close(): void {
     this.database.close();
   }
@@ -683,6 +737,14 @@ export class SqliteCandidateStore implements CandidateStore {
         this.database.exec(MIGRATION_7);
         this.database.prepare(
           'INSERT INTO schema_migrations (version, applied_at) VALUES (7, ?)',
+        ).run(new Date().toISOString());
+      });
+    }
+    if ((row.version ?? 0) < 8) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_8);
+        this.database.prepare(
+          'INSERT INTO schema_migrations (version, applied_at) VALUES (8, ?)',
         ).run(new Date().toISOString());
       });
     }

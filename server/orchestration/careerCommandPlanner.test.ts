@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { CareerCommandPlanner } from './careerCommandPlanner';
+import {
+  CareerCommandPlanner,
+  CareerCommandPolicyError,
+} from './careerCommandPlanner';
 
 describe('CareerCommandPlanner', () => {
   it('keeps an external side effect awaiting server-verified candidate approval', () => {
@@ -65,5 +68,33 @@ describe('CareerCommandPlanner', () => {
     });
 
     expect(command.status).toBe('prepared');
+  });
+
+  it('rejects a non-dispatchable capability disguised as an external write', () => {
+    const planner = new CareerCommandPlanner({ createId: () => 'command-3' });
+
+    expect(() =>
+      planner.materialize({
+        principal: { candidateId: 'candidate-server-scope' },
+        proposal: {
+          kind: 'resume.draft',
+          objective: 'Создать черновик резюме.',
+          evidenceRefs: ['evidence-1'],
+          acceptanceCriteria: ['Черновик создан'],
+          expectedSignal: 'Кандидат видит черновик.',
+          measureAfter: '2026-08-19',
+          risk: 'external_side_effect',
+        },
+        availableEvidenceRefs: new Set(['evidence-1']),
+        strategyDecisionId: 'strategy-1',
+        modelInvocationIds: ['response-strategist'],
+        idempotencyKey: '66666666-6666-4666-8666-666666666666',
+        approval: null,
+      }),
+    ).toThrowError(
+      expect.objectContaining<Partial<CareerCommandPolicyError>>({
+        code: 'invalid_capability_risk',
+      }),
+    );
   });
 });
