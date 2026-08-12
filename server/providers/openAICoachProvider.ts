@@ -17,6 +17,7 @@ import {
   CoachProviderError,
   type CoachProvider,
   type CoachProviderResult,
+  type ProviderOutputDiagnostic,
 } from './coachProvider';
 
 export interface OpenAICoachProviderOptions {
@@ -56,7 +57,7 @@ export class OpenAICoachProvider implements CoachProvider {
             effort: 'high',
             context: 'all_turns',
           },
-          max_output_tokens: 2_400,
+          max_output_tokens: outputBudgetForRole(input.activeRole),
           safety_identifier: hashCandidateReference(input.candidateReference),
           text: {
             format: {
@@ -70,24 +71,31 @@ export class OpenAICoachProvider implements CoachProvider {
         { idempotencyKey },
       );
 
+      if (response.status === 'incomplete') {
+        throw invalidOutput(
+          response.incomplete_details?.reason === 'max_output_tokens'
+            ? 'response_incomplete_max_output_tokens'
+            : 'response_incomplete_other',
+          input.activeRole,
+        );
+      }
+      if (hasRefusal(response.output)) {
+        throw invalidOutput('response_refusal', input.activeRole);
+      }
+      if (!response.output_text) {
+        throw invalidOutput('response_text_missing', input.activeRole);
+      }
+
       let parsed: unknown;
       try {
         parsed = JSON.parse(response.output_text);
       } catch {
-        throw new CoachProviderError(
-          'provider_output_invalid',
-          502,
-          true,
-        );
+        throw invalidOutput('response_json_invalid', input.activeRole);
       }
 
       const result = coachTurnResultSchema.safeParse(parsed);
       if (!result.success) {
-        throw new CoachProviderError(
-          'provider_output_invalid',
-          502,
-          true,
-        );
+        throw invalidOutput('response_schema_invalid', input.activeRole);
       }
 
       return {
@@ -139,6 +147,33 @@ export class OpenAICoachProvider implements CoachProvider {
       throw new CoachProviderError('provider_unavailable', 503, true);
     }
   }
+}
+
+function outputBudgetForRole(role: CoachTurnInput['activeRole']): number {
+  return role === 'career_strategist' ? 6_000 : 3_200;
+}
+
+function hasRefusal(
+  output: OpenAI.Responses.ResponseOutputItem[] | undefined,
+): boolean {
+  return (output ?? []).some(
+    (item) =>
+      item.type === 'message' &&
+      item.content.some((content) => content.type === 'refusal'),
+  );
+}
+
+function invalidOutput(
+  diagnostic: ProviderOutputDiagnostic,
+  role: CoachTurnInput['activeRole'],
+): CoachProviderError {
+  return new CoachProviderError(
+    'provider_output_invalid',
+    502,
+    true,
+    diagnostic,
+    role,
+  );
 }
 
 function hashCandidateReference(value: string): string {

@@ -84,6 +84,7 @@ describe('OpenAI career coach provider', () => {
     expect(calls[0].body).toMatchObject({
       model: 'gpt-5.6-sol',
       store: false,
+      max_output_tokens: 3_200,
       reasoning: {
         effort: 'high',
         context: 'all_turns',
@@ -95,6 +96,103 @@ describe('OpenAI career coach provider', () => {
     );
     expect(calls[0].options).toEqual({
       idempotencyKey: '95fb73e7-f531-4a79-a494-52217a2a54cd',
+    });
+  });
+
+  it('reserves a larger output budget for the strategist role', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = {
+      responses: {
+        create: async (body: Record<string, unknown>) => {
+          calls.push(body);
+          return {
+            id: 'response-strategist',
+            model: 'gpt-5.6-sol',
+            status: 'completed',
+            output: [],
+            output_text: JSON.stringify(validOutput),
+          };
+        },
+      },
+    } as unknown as OpenAI;
+    const provider = new OpenAICoachProvider({
+      apiKey: 'not-used-by-test',
+      model: 'gpt-5.6-sol',
+      client,
+    });
+
+    await provider.createTurn(
+      { ...input, activeRole: 'career_strategist' },
+      '95fb73e7-f531-4a79-a494-52217a2a54cd',
+    );
+
+    expect(calls[0]).toMatchObject({ max_output_tokens: 6_000 });
+  });
+
+  it('classifies a token-limited response without parsing partial JSON', async () => {
+    const client = {
+      responses: {
+        create: async () => ({
+          id: 'response-incomplete',
+          model: 'gpt-5.6-sol',
+          status: 'incomplete',
+          incomplete_details: { reason: 'max_output_tokens' },
+          output: [],
+          output_text: '{"message":"partial',
+        }),
+      },
+    } as unknown as OpenAI;
+    const provider = new OpenAICoachProvider({
+      apiKey: 'not-used-by-test',
+      model: 'gpt-5.6-sol',
+      client,
+    });
+
+    await expect(
+      provider.createTurn(
+        { ...input, activeRole: 'career_strategist' },
+        '95fb73e7-f531-4a79-a494-52217a2a54cd',
+      ),
+    ).rejects.toMatchObject({
+      code: 'provider_output_invalid',
+      diagnostic: 'response_incomplete_max_output_tokens',
+      role: 'career_strategist',
+    });
+  });
+
+  it('classifies a structured-output refusal without exposing its text', async () => {
+    const client = {
+      responses: {
+        create: async () => ({
+          id: 'response-refusal',
+          model: 'gpt-5.6-sol',
+          status: 'completed',
+          output_text: '',
+          output: [
+            {
+              type: 'message',
+              content: [{ type: 'refusal', refusal: 'sensitive provider text' }],
+            },
+          ],
+        }),
+      },
+    } as unknown as OpenAI;
+    const provider = new OpenAICoachProvider({
+      apiKey: 'not-used-by-test',
+      model: 'gpt-5.6-sol',
+      client,
+    });
+
+    await expect(
+      provider.createTurn(
+        { ...input, activeRole: 'career_expert' },
+        '95fb73e7-f531-4a79-a494-52217a2a54cd',
+      ),
+    ).rejects.toMatchObject({
+      code: 'provider_output_invalid',
+      diagnostic: 'response_refusal',
+      role: 'career_expert',
+      message: 'provider_output_invalid',
     });
   });
 

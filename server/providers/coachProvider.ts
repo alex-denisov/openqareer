@@ -40,11 +40,21 @@ export type ProviderErrorCode =
   | 'provider_unavailable'
   | 'provider_output_invalid';
 
+export type ProviderOutputDiagnostic =
+  | 'response_incomplete_max_output_tokens'
+  | 'response_incomplete_other'
+  | 'response_refusal'
+  | 'response_text_missing'
+  | 'response_json_invalid'
+  | 'response_schema_invalid';
+
 export class CoachProviderError extends Error {
   constructor(
     readonly code: ProviderErrorCode,
     readonly statusCode: 429 | 502 | 503 | 504,
     readonly retryable: boolean,
+    readonly diagnostic?: ProviderOutputDiagnostic,
+    readonly role?: CoachTurnInput['activeRole'],
   ) {
     super(code);
     this.name = 'CoachProviderError';

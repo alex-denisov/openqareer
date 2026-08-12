@@ -795,6 +795,14 @@ export async function buildApp({
       );
     }
     if (error instanceof CoachProviderError) {
+      request.log.warn(
+        {
+          providerCode: error.code,
+          providerDiagnostic: error.diagnostic,
+          careerRole: error.role,
+        },
+        'coach-provider-request-failed',
+      );
       return sendError(
         reply,
         request,
