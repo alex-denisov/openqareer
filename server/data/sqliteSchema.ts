@@ -170,3 +170,7 @@ CREATE TABLE oauth_connections (
   PRIMARY KEY (candidate_id, platform)
 ) STRICT;
 `;
+
+export const MIGRATION_7 = `
+ALTER TABLE turns ADD COLUMN request_digest TEXT;
+`;

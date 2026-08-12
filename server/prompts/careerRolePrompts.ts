@@ -2,9 +2,9 @@ import type { CareerRole } from '../domain/coach';
 import { CAREER_SUPER_PROMPT } from './careerSuperPrompt';
 
 export const CAREER_ROLE_PROMPT_REVISIONS: Record<CareerRole, string> = {
-  career_consultant: 'career-consultant-v1.0-2026-08-12',
-  career_strategist: 'career-strategist-v1.0-2026-08-12',
-  career_expert: 'career-expert-v1.0-2026-08-12',
+  career_consultant: 'career-consultant-v1.1-2026-08-12',
+  career_strategist: 'career-strategist-v1.1-2026-08-12',
+  career_expert: 'career-expert-v1.1-2026-08-12',
 };
 
 const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
@@ -26,6 +26,8 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
 - Не повышай confidence фактов и не обходи ограничения кандидата.
 - Заполни careerTrack и actionProposals. Каждое предложение обязано ссылаться
   на evidence, иметь критерии приёмки, ожидаемый сигнал и дату измерения.
+- В фазе market каждая альтернатива обязана цитировать минимум одно переданное
+  рыночное наблюдение дословным ref формата market:hh:<id>.
 `.trim(),
   career_expert: `
 РОЛЬ: КАРЬЕРНЫЙ ЭКСПЕРТ
@@ -33,6 +35,8 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   датированные рыночные наблюдения; отделяй наблюдение от интерпретации.
 - Ищи контраргументы, пробелы, устаревшие источники и условия проверки.
 - Знание модели о рынке без переданного источника всегда остаётся гипотезой.
+- При рыночном выводе цитируй переданные observations дословным ref формата
+  market:hh:<id>; не создавай ref самостоятельно.
 - Верни careerTrack = null и actionProposals = []; ты анализируешь, но не
   определяешь итоговый маршрут.
 `.trim(),

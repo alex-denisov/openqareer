@@ -5,6 +5,7 @@ import type {
   CoachProviderResult,
   ProviderUsage,
 } from '../providers/coachProvider';
+import { CAREER_ROLE_PROMPT_REVISIONS } from '../prompts/careerRolePrompts';
 
 export const CAREER_ORCHESTRATION_REVISION =
   'career-orchestration-v1.0-2026-08-12' as const;
@@ -112,6 +113,10 @@ function finalizeCareerTurn(
       .filter((message) => message.role === 'user')
       .map((message) => message.id),
   );
+  const supportedProposalRefs = new Set([
+    ...supportedMessageIds,
+    ...(input.marketObservations?.map((observation) => observation.ref) ?? []),
+  ]);
   const claimRefs = runs.flatMap(({ output }) =>
     output.result.memoryCandidates.map((candidate) => candidate.sourceMessageIds),
   );
@@ -124,19 +129,49 @@ function finalizeCareerTurn(
     usage: sumUsage(runs.map(({ output }) => output.usage)),
     result: {
       ...final.output.result,
-      careerTrack:
-        strategist?.output.result.careerTrack ?? final.output.result.careerTrack,
+      careerTrack: careerTrackFrom(input, strategist, final),
       actionProposals: proposalsFrom(strategist, final).filter((proposal) =>
-        proposal.evidenceRefs.every((ref) => supportedMessageIds.has(ref)),
+        proposal.evidenceRefs.every((ref) => supportedProposalRefs.has(ref)),
       ),
       intelligence: intelligenceFrom(
         roles,
         runs,
         claimRefs,
         supportedClaims,
+        input.marketObservations ?? [],
       ),
     },
   };
+}
+
+function careerTrackFrom(
+  input: CoachTurnInput,
+  strategist: RoleRun | undefined,
+  final: RoleRun,
+) {
+  const track =
+    strategist?.output.result.careerTrack ?? final.output.result.careerTrack;
+  if (!track) return track;
+  const marketRefs = new Set(
+    input.marketObservations?.map((observation) => observation.ref) ?? [],
+  );
+  const supportedRefs = new Set([
+    ...input.messages
+      .filter((message) => message.role === 'user')
+      .map((message) => message.id),
+    ...marketRefs,
+  ]);
+  const fullySupported = track.alternatives.every(
+    (alternative) =>
+      alternative.evidenceRefs.length > 0 &&
+      alternative.evidenceRefs.every((ref) => supportedRefs.has(ref)),
+  );
+  if (!fullySupported) return null;
+  if (input.phase !== 'market') return track;
+  const citesMarket = track.alternatives.every((alternative) =>
+    alternative.evidenceRefs.some((ref) => marketRefs.has(ref)),
+  );
+  return citesMarket ? track : null;
 }
 
 function proposalsFrom(strategist: RoleRun | undefined, final: RoleRun) {
@@ -148,6 +183,7 @@ function intelligenceFrom(
   runs: RoleRun[],
   claimRefs: string[][],
   supportedClaims: number,
+  marketObservations: NonNullable<CoachTurnInput['marketObservations']>,
 ) {
   return {
     orchestrationRevision: CAREER_ORCHESTRATION_REVISION,
@@ -162,6 +198,22 @@ function intelligenceFrom(
     evidenceCoverage:
       claimRefs.length === 0 ? 1 : supportedClaims / claimRefs.length,
     unsupportedClaimCount: claimRefs.length - supportedClaims,
+    marketEvidence: marketEvidenceFrom(marketObservations),
+  };
+}
+
+function marketEvidenceFrom(
+  observations: NonNullable<CoachTurnInput['marketObservations']>,
+) {
+  if (!observations.length) return null;
+  return {
+    source: 'hh' as const,
+    observationCount: observations.length,
+    observedAt: observations.reduce(
+      (latest, observation) =>
+        observation.observedAt > latest ? observation.observedAt : latest,
+      observations[0].observedAt,
+    ),
   };
 }
 
@@ -188,7 +240,7 @@ function contribution(role: CareerRole, output: CoachProviderResult) {
 }
 
 function promptRevision(role: CareerRole): string {
-  return `${role}-v1.0-2026-08-12`;
+  return CAREER_ROLE_PROMPT_REVISIONS[role];
 }
 
 function sumUsage(usages: ProviderUsage[]): ProviderUsage {

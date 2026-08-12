@@ -50,6 +50,7 @@ import {
   MIGRATION_4,
   MIGRATION_5,
   MIGRATION_6,
+  MIGRATION_7,
 } from './sqliteSchema';
 interface SqliteCandidateStoreOptions {
   databasePath: string;
@@ -84,6 +85,7 @@ interface TurnRow {
   status: 'pending' | 'failed' | 'completed';
   phase: TurnRequest['phase'];
   user_message_id: string;
+  request_digest: string | null;
   result_cipher: string | null;
   provider: CoachProviderResult['provider'] | null;
   model: string | null;
@@ -185,7 +187,10 @@ export class SqliteCandidateStore implements CandidateStore {
       if (
         !storedMessage ||
         storedMessage.id !== request.messageId ||
-        storedMessage.content !== request.content
+        storedMessage.content !== request.content ||
+        (existing.request_digest === null
+          ? request.marketQuery !== undefined
+          : existing.request_digest !== turnRequestDigest(request))
       ) {
         throw new CandidateStoreConflictError();
       }
@@ -673,6 +678,14 @@ export class SqliteCandidateStore implements CandidateStore {
         ).run(new Date().toISOString());
       });
     }
+    if ((row.version ?? 0) < 7) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_7);
+        this.database.prepare(
+          'INSERT INTO schema_migrations (version, applied_at) VALUES (7, ?)',
+        ).run(new Date().toISOString());
+      });
+    }
   }
   private insertPendingTurn(
     candidateId: string,
@@ -694,14 +707,15 @@ export class SqliteCandidateStore implements CandidateStore {
         .prepare(
           `INSERT INTO turns
             (candidate_id, idempotency_key, conversation_id, user_message_id,
-             phase, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`,
+             request_digest, phase, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
         )
         .run(
           candidateId,
           idempotencyKey,
           conversationId,
           request.messageId,
+          turnRequestDigest(request),
           request.phase,
           now,
           now,
@@ -789,7 +803,7 @@ export class SqliteCandidateStore implements CandidateStore {
   private turns(candidateId: string): StoredTurn[] {
     const rows = this.database
       .prepare(
-        `SELECT idempotency_key, status, phase, user_message_id,
+        `SELECT idempotency_key, status, phase, user_message_id, request_digest,
                 result_cipher, provider, model, response_id,
                 input_tokens, output_tokens, total_tokens,
                 created_at, updated_at
@@ -919,7 +933,7 @@ export class SqliteCandidateStore implements CandidateStore {
     return (
       (this.database
         .prepare(
-          `SELECT idempotency_key, status, phase, user_message_id,
+          `SELECT idempotency_key, status, phase, user_message_id, request_digest,
                   result_cipher, provider, model, response_id,
                   input_tokens, output_tokens, total_tokens,
                   created_at, updated_at
@@ -944,6 +958,17 @@ export class CandidateNotFoundError extends Error {}
 export class CandidateStoreConflictError extends Error {}
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
+}
+function turnRequestDigest(request: TurnRequest): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify([
+        request.messageId,
+        request.content,
+        request.marketQuery ?? null,
+      ]),
+    )
+    .digest('hex');
 }
 function candidateFromRow(row: CandidateRow): CandidateIdentity {
   return {

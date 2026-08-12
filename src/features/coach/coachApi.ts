@@ -294,6 +294,11 @@ export interface CoachResult {
     }>;
     evidenceCoverage: number;
     unsupportedClaimCount: number;
+    marketEvidence?: {
+      source: 'hh';
+      observationCount: number;
+      observedAt: string;
+    } | null;
   };
 }
 
@@ -458,6 +463,7 @@ export async function getCandidate(): Promise<CandidateSnapshot> {
 
 export async function sendCoachTurn(input: {
   content: string;
+  marketQuery?: string;
   idempotencyKey?: string;
   messageId?: string;
 }): Promise<CoachResult> {
@@ -470,6 +476,7 @@ export async function sendCoachTurn(input: {
     body: JSON.stringify({
       messageId: input.messageId ?? crypto.randomUUID(),
       content: input.content,
+      marketQuery: input.marketQuery,
     }),
   });
   return readData<CoachResult>(response);

@@ -20,6 +20,7 @@ import type { CareerJourney } from './careerJourneyEngine';
 
 interface CareerExpertPanelProps {
   journey?: CareerJourney;
+  marketQuery?: string;
   initialUser: AuthUser | null;
   initialSnapshot?: CandidateSnapshot;
   onIdentityChange?: (user: AuthUser) => void;
@@ -28,6 +29,7 @@ interface CareerExpertPanelProps {
 
 export function CareerExpertPanel({
   journey,
+  marketQuery,
   initialUser,
   initialSnapshot,
   onIdentityChange = () => undefined,
@@ -134,7 +136,10 @@ export function CareerExpertPanel({
     setSending(true);
     setError(undefined);
     try {
-      const result = await sendCoachTurn({ content: clean });
+      const result = await sendCoachTurn({
+        content: clean,
+        marketQuery: marketQuery?.trim() || undefined,
+      });
       setLiveResult(result);
       setContent('');
       try {
@@ -295,6 +300,15 @@ export function CareerIntelligenceSummary({ result }: { result: CoachResult }) {
           <p>
             Привязка выводов к сообщениям: {Math.round(result.intelligence.evidenceCoverage * 100)}%
           </p>
+          {result.intelligence.marketEvidence ? (
+            <p>
+              Рыночная база: {observationCountLabel(
+                result.intelligence.marketEvidence.observationCount,
+              )} hh.ru · {formatObservedAt(
+                result.intelligence.marketEvidence.observedAt,
+              )}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -363,6 +377,25 @@ function formatDate(value: string) {
     day: 'numeric',
     month: 'short',
   }).format(new Date(`${value}T00:00:00Z`));
+}
+
+function formatObservedAt(value: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(value));
+}
+
+function observationCountLabel(count: number) {
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+  const noun =
+    mod10 === 1 && mod100 !== 11
+      ? 'наблюдение'
+      : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+        ? 'наблюдения'
+        : 'наблюдений';
+  return `${count} ${noun}`;
 }
 
 function messageFrom(reason: unknown): string {

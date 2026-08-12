@@ -31,6 +31,7 @@ describe('CareerOrchestrator', () => {
             content: 'Сравни продуктовую роль в Германии и удалённую роль в России.',
           },
         ],
+        marketObservations: [marketObservation()],
       },
       '11111111-1111-4111-8111-111111111111',
     );
@@ -49,6 +50,11 @@ describe('CareerOrchestrator', () => {
       ],
       evidenceCoverage: 1,
       unsupportedClaimCount: 0,
+      marketEvidence: {
+        source: 'hh',
+        observationCount: 1,
+        observedAt: '2026-08-12T12:00:00.000Z',
+      },
     });
     expect(output.result.intelligence?.roleContributions).toHaveLength(3);
     expect(output.result.careerTrack?.objective).toBe('career_strategist track');
@@ -116,7 +122,111 @@ describe('CareerOrchestrator', () => {
 
     expect(output.result.actionProposals).toEqual([]);
   });
+
+  it('rejects a market track that has no dated server observation', async () => {
+    const orchestrator = new CareerOrchestrator({
+      roleAgent: {
+        async run(input) {
+          const output = roleResult(input.role);
+          if (input.role === 'career_strategist' && output.result.careerTrack) {
+            output.result.careerTrack.alternatives[0].evidenceRefs = ['message-1'];
+          }
+          return output;
+        },
+      },
+    });
+
+    const output = await orchestrator.createTurn(
+      {
+        candidateReference: 'candidate-test-001',
+        dataClass: 'synthetic',
+        locale: 'ru-RU',
+        phase: 'market',
+        messages: [
+          { id: 'message-1', role: 'user', content: 'Проверим рынок.' },
+        ],
+      },
+      '44444444-4444-4444-8444-444444444444',
+    );
+
+    expect(output.result.careerTrack).toBeNull();
+  });
+
+  it('rejects a market track that does not cite the supplied observation', async () => {
+    const orchestrator = new CareerOrchestrator({
+      roleAgent: {
+        async run(input) {
+          const output = roleResult(input.role);
+          if (input.role === 'career_strategist' && output.result.careerTrack) {
+            output.result.careerTrack.alternatives[0].evidenceRefs = ['message-1'];
+          }
+          return output;
+        },
+      },
+    });
+
+    const output = await orchestrator.createTurn(
+      {
+        candidateReference: 'candidate-test-001',
+        dataClass: 'synthetic',
+        locale: 'ru-RU',
+        phase: 'market',
+        messages: [
+          { id: 'message-1', role: 'user', content: 'Проверим рынок.' },
+        ],
+        marketObservations: [marketObservation()],
+      },
+      '55555555-5555-4555-8555-555555555555',
+    );
+
+    expect(output.result.careerTrack).toBeNull();
+  });
+
+  it('rejects a market track that mixes a valid observation with an assistant ref', async () => {
+    const orchestrator = new CareerOrchestrator({
+      roleAgent: {
+        async run(input) {
+          const output = roleResult(input.role);
+          if (input.role === 'career_strategist' && output.result.careerTrack) {
+            output.result.careerTrack.alternatives[0].evidenceRefs.push(
+              'assistant-1',
+            );
+          }
+          return output;
+        },
+      },
+    });
+
+    const output = await orchestrator.createTurn(
+      {
+        candidateReference: 'candidate-test-001',
+        dataClass: 'synthetic',
+        locale: 'ru-RU',
+        phase: 'market',
+        messages: [
+          { id: 'assistant-1', role: 'assistant', content: 'Гипотеза модели.' },
+          { id: 'message-1', role: 'user', content: 'Проверим рынок.' },
+        ],
+        marketObservations: [marketObservation()],
+      },
+      '66666666-6666-4666-8666-666666666666',
+    );
+
+    expect(output.result.careerTrack).toBeNull();
+  });
 });
+
+function marketObservation() {
+  return {
+    ref: 'market:hh:123',
+    source: 'hh' as const,
+    title: 'Руководитель продукта',
+    company: 'Synthetic Company',
+    location: 'Москва',
+    sourceUrl: 'https://hh.ru/vacancy/123',
+    observedAt: '2026-08-12T12:00:00.000Z',
+  };
+}
 
 function roleResult(role: CareerRole): CoachProviderResult {
   return {
@@ -152,7 +262,7 @@ function roleResult(role: CareerRole): CoachProviderResult {
                 {
                   label: 'Product route',
                   reason: 'Evidence-bound experiment',
-                  evidenceRefs: ['message-1'],
+                  evidenceRefs: ['message-1', 'market:hh:123'],
                   unknowns: [],
                 },
               ],
@@ -172,7 +282,7 @@ function roleResult(role: CareerRole): CoachProviderResult {
               {
                 kind: 'vacancies.search',
                 objective: 'Collect fresh market evidence',
-                evidenceRefs: ['message-1'],
+                evidenceRefs: ['message-1', 'market:hh:123'],
                 acceptanceCriteria: ['At least twenty sourced vacancies'],
                 expectedSignal: 'Five relevant vacancies',
                 measureAfter: '2026-08-19',

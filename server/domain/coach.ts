@@ -91,12 +91,23 @@ export const coachMessageSchema = z.object({
   content: z.string().trim().min(1).max(8_000),
 });
 
+export const marketObservationSchema = z.object({
+  ref: z.string().regex(/^market:hh:[A-Za-z0-9_-]{1,128}$/u),
+  source: z.literal('hh'),
+  title: z.string().trim().min(1).max(500),
+  company: z.string().trim().min(1).max(500),
+  location: z.string().trim().min(1).max(500),
+  sourceUrl: z.string().url().max(2_048),
+  observedAt: z.string().datetime(),
+});
+
 export const coachTurnInputSchema = z.object({
   candidateReference: z.string().min(8).max(80),
   dataClass: z.enum(['synthetic', 'personal']).default('personal'),
   locale: z.enum(['ru-RU', 'en-US']).default('ru-RU'),
   phase: z.enum(COACH_PHASES).default('discovery'),
   messages: z.array(coachMessageSchema).min(1).max(30),
+  marketObservations: z.array(marketObservationSchema).max(20).optional(),
   activeRole: z.enum(CAREER_ROLES).optional(),
   priorRoleContributions: z.array(
     z.object({
@@ -164,6 +175,14 @@ export const coachTurnResultSchema = z.object({
       ).min(1).max(3),
       evidenceCoverage: z.number().min(0).max(1),
       unsupportedClaimCount: z.number().int().nonnegative(),
+      marketEvidence: z
+        .object({
+          source: z.literal('hh'),
+          observationCount: z.number().int().positive().max(20),
+          observedAt: z.string().datetime(),
+        })
+        .nullable()
+        .optional(),
     })
     .optional(),
 });
@@ -176,6 +195,7 @@ export type CoachPhase = (typeof COACH_PHASES)[number];
 export type CareerRole = (typeof CAREER_ROLES)[number];
 export type CareerActionProposal = z.infer<typeof careerActionProposalSchema>;
 export type CareerTrack = z.infer<typeof careerTrackSchema>;
+export type MarketObservation = z.infer<typeof marketObservationSchema>;
 
 export const COACH_TURN_JSON_SCHEMA = {
   type: 'object',
@@ -370,6 +390,7 @@ export function serializeCoachInput(input: CoachTurnInput): string {
     phase: input.phase,
     activeRole: input.activeRole ?? 'career_consultant',
     priorRoleContributions: input.priorRoleContributions ?? [],
+    marketObservations: input.marketObservations ?? [],
     conversation: input.messages,
   });
 }

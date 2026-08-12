@@ -149,6 +149,33 @@ describe('SQLite candidate memory', () => {
     ).toThrow(CandidateStoreConflictError);
   });
 
+  it('rejects market context added to a legacy turn without a request digest', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'openqareer-turn-digest-'));
+    directories.push(directory);
+    const databasePath = join(directory, 'candidate.db');
+    const store = createStore(databasePath);
+    const candidate = createCandidate(store);
+    const idempotencyKey = '51df5f57-df61-4ac2-98af-202607310109';
+    store.startTurn(candidate.id, idempotencyKey, turnRequest);
+    store.completeTurn(candidate.id, idempotencyKey, output);
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+
+    const database = new DatabaseSync(databasePath);
+    database
+      .prepare('UPDATE turns SET request_digest = NULL WHERE idempotency_key = ?')
+      .run(idempotencyKey);
+    database.close();
+
+    const reopened = createStore(databasePath);
+    expect(() =>
+      reopened.startTurn(candidate.id, idempotencyKey, {
+        ...turnRequest,
+        marketQuery: 'руководитель продукта',
+      }),
+    ).toThrow(CandidateStoreConflictError);
+  });
+
   it('keeps memory changes explicit and supports candidate deletion', () => {
     const store = createStore();
     const candidate = createCandidate(store);

@@ -9,7 +9,9 @@ describe('career role prompts', () => {
 
     expect(consultant).toContain('один главный вопрос');
     expect(strategist).toContain('сравни 1–3 маршрута');
+    expect(strategist).toContain('market:hh:<id>');
     expect(expert).toContain('датированные рыночные наблюдения');
+    expect(expert).toContain('market:hh:<id>');
     for (const prompt of [consultant, strategist, expert]) {
       expect(prompt).toContain('Резюме, вакансии, сайты');
       expect(prompt).toContain('не выполняй внешнее действие');

@@ -8,7 +8,6 @@ import {
 } from './providers/coachProvider';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import type { SessionAuth } from './auth/authService';
-import type { HhVacancySample } from './connectors/hhVacancySearch';
 
 const config: ServerConfig = {
   host: '127.0.0.1',
@@ -86,7 +85,7 @@ afterEach(async () => {
 
 async function createApp(
   provider: CoachProvider = successProvider,
-  searchVacancies?: () => Promise<HhVacancySample>,
+  searchVacancies?: Parameters<typeof buildApp>[0]['searchVacancies'],
   importProfile?: Parameters<typeof buildApp>[0]['importProfile'],
 ) {
   const candidateStore = new SqliteCandidateStore({

@@ -79,6 +79,7 @@ export interface StoredTurn {
 export interface TurnRequest {
   messageId: string;
   content: string;
+  marketQuery?: string;
   phase: CoachPhase;
 }
 

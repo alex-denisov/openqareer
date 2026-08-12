@@ -347,6 +347,7 @@ export function CareerWorkspaceShell({
           />
           <CareerExpertPanel
             journey={journey}
+            marketQuery={visibleWorkspace?.targetDirection}
             initialUser={session ?? null}
             onIdentityChange={resetForAccount}
             onClose={closeExpert}

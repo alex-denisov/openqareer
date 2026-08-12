@@ -51,6 +51,11 @@ describe('CareerIntelligenceSummary', () => {
         roleContributions: [],
         evidenceCoverage: 1,
         unsupportedClaimCount: 0,
+        marketEvidence: {
+          source: 'hh',
+          observationCount: 1,
+          observedAt: '2026-08-12T12:00:00.000Z',
+        },
       },
     };
 
@@ -63,6 +68,8 @@ describe('CareerIntelligenceSummary', () => {
     expect(html).toContain('Эксперт');
     expect(html).toContain('Проверить переход в продуктовую роль');
     expect(html).toContain('Пять релевантных вакансий');
+    expect(html).toContain('1 наблюдение hh.ru');
+    expect(html).toContain('12 авг.');
     expect(html).toContain('Требует вашего подтверждения');
     expect(html).not.toContain('Выполнено');
   });

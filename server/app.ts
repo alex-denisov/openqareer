@@ -8,7 +8,7 @@ import Fastify, {
   type FastifyRequest,
 } from 'fastify';
 import { z, ZodError } from 'zod';
-import type { CoachPhase } from './domain/coach';
+import type { CoachPhase, MarketObservation } from './domain/coach';
 import { selectCoachPhase } from './orchestration/coachPhaseRouter';
 import { CareerCommandPlanner } from './orchestration/careerCommandPlanner';
 import {
@@ -671,10 +671,33 @@ export async function buildApp({
         return providerResponse(request, started.output);
       }
 
+      let marketObservations: MarketObservation[] = [];
+      if (phase === 'market' && body.marketQuery) {
+        try {
+          marketObservations = marketObservationsFrom(
+            await searchVacancies({ text: body.marketQuery, perPage: 12 }),
+          );
+        } catch {
+          candidateStore.failTurn(
+            candidate.id,
+            parsedIdempotencyKey.data,
+            'market_source_unavailable',
+          );
+          return sendError(
+            reply,
+            request,
+            502,
+            'market_source_unavailable',
+            'hh.ru не вернул свежую выборку. Повторите позже.',
+            true,
+          );
+        }
+      }
+
       let output;
       try {
         output = await coachProvider.createTurn(
-          started.input,
+          { ...started.input, marketObservations },
           parsedIdempotencyKey.data,
         );
         candidateStore.completeTurn(
@@ -994,7 +1017,20 @@ function connectionResultRedirect(
 const coachTurnRequestSchema = z.object({
   messageId: z.string().uuid(),
   content: z.string().trim().min(1).max(8_000),
+  marketQuery: z.string().trim().min(2).max(200).optional(),
 });
+
+function marketObservationsFrom(sample: HhVacancySample) {
+  return sample.items.map((item) => ({
+    ref: `market:hh:${item.id}`,
+    source: sample.source,
+    title: item.title,
+    company: item.company,
+    location: item.location,
+    sourceUrl: item.sourceUrl,
+    observedAt: sample.fetchedAt,
+  }));
+}
 
 const careerCommandRequestSchema = z.object({
   turnIdempotencyKey: z.string().uuid(),
