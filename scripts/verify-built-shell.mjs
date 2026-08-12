@@ -18,6 +18,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
   });
   const page = await context.newPage();
   let authenticated = true;
+  let connectionCatalogRequests = 0;
+  let hhConnected = true;
+  let hhDisconnectAttempts = 0;
   await page.route('**/api/v1/auth/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -55,6 +58,71 @@ async function verifyViewport(browser, baseUrl, viewport) {
         },
       }),
     });
+  });
+  await page.route('**/api/v1/candidate/connections**', async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() === 'GET' && pathname === '/api/v1/candidate/connections') {
+      connectionCatalogRequests += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: [
+            {
+              platform: 'linkedin',
+              available: false,
+              status: 'disconnected',
+              capabilities: ['lite_identity'],
+              importsCareerHistory: false,
+            },
+            hhConnected
+              ? {
+                  platform: 'hh',
+                  available: true,
+                  status: 'connected',
+                  capabilities: ['profile_read', 'resume_read'],
+                  importsCareerHistory: true,
+                  scopes: ['applicant_resumes'],
+                  accessTokenExpiresAt: null,
+                  connectedAt: '2026-08-10T12:00:00.000Z',
+                  profile: {
+                    capturedAt: '2026-08-10T12:00:00.000Z',
+                    sourceUrl: null,
+                    facts: [],
+                  },
+                }
+              : {
+                  platform: 'hh',
+                  available: true,
+                  status: 'disconnected',
+                  capabilities: ['profile_read', 'resume_read'],
+                  importsCareerHistory: true,
+                },
+          ],
+        }),
+      });
+      return;
+    }
+    if (request.method() === 'DELETE' && pathname.endsWith('/hh')) {
+      hhDisconnectAttempts += 1;
+      const localDataRemoved = hhDisconnectAttempts > 1;
+      hhConnected = !localDataRemoved;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            platform: 'hh',
+            status: 'disconnected',
+            localDataRemoved,
+            upstreamRevocation: 'unsupported',
+          },
+        }),
+      });
+      return;
+    }
+    await route.fallback();
   });
   const errors = [];
   page.on('console', (message) => {
@@ -145,8 +213,33 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: Profile disappeared after navigation`,
   );
 
+  assert(
+    connectionCatalogRequests === 0,
+    `${viewport.name}: connection catalog loaded before the candidate opened account settings`,
+  );
   await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
   await page.getByText('Вы вошли как', { exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Подключённые площадки' }).waitFor();
+  await page.getByRole('button', { name: 'Отключить hh.ru' }).waitFor();
+  assert(
+    connectionCatalogRequests === 1,
+    `${viewport.name}: account settings did not load one connection catalog`,
+  );
+  await page.getByRole('button', { name: 'Отключить hh.ru' }).click();
+  await page.getByText('Не удалось удалить локальные данные hh.ru', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Отключить hh.ru' }).waitFor();
+  await page
+    .locator('.career-account-connection-list article')
+    .filter({ hasText: 'hh.ru' })
+    .getByText('Подключено', { exact: true })
+    .waitFor();
+  await page.getByRole('button', { name: 'Отключить hh.ru' }).click();
+  await page.getByText('hh.ru отключён', { exact: false }).waitFor();
+  await page
+    .locator('.career-account-connection-list article')
+    .filter({ hasText: 'hh.ru' })
+    .getByText('Не подключено', { exact: true })
+    .waitFor();
   await page.getByRole('button', { name: 'Выйти и начать заново' }).click();
   await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).waitFor();
   assert(

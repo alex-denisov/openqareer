@@ -47,6 +47,31 @@ export interface StartedConnection {
   expiresAt: string;
 }
 
+export type CandidateConnection = {
+  platform: 'linkedin' | 'hh';
+  available: boolean;
+  capabilities: Array<'lite_identity' | 'profile_read' | 'resume_read'>;
+  importsCareerHistory: boolean;
+} & (
+  | { status: 'disconnected' }
+  | {
+      status: 'connected';
+      scopes: string[];
+      accessTokenExpiresAt: string | null;
+      connectedAt: string;
+      profile: {
+        capturedAt: string;
+        sourceUrl: string | null;
+        facts: Array<{
+          kind: 'headline' | 'summary';
+          value: string;
+          sourceLocator: string;
+          confidence: 'official-api';
+        }>;
+      };
+    }
+);
+
 export interface CoachMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -344,6 +369,28 @@ export async function startConnection(
     { method: 'POST' },
   );
   return readData<StartedConnection>(response);
+}
+
+export async function getConnections(): Promise<CandidateConnection[]> {
+  const response = await apiFetch('/api/v1/candidate/connections');
+  return readData<CandidateConnection[]>(response);
+}
+
+export interface DisconnectedConnection {
+  platform: 'linkedin' | 'hh';
+  status: 'disconnected';
+  localDataRemoved: boolean;
+  upstreamRevocation: 'revoked' | 'failed' | 'unsupported';
+}
+
+export async function disconnectConnection(
+  platform: 'linkedin' | 'hh',
+): Promise<DisconnectedConnection> {
+  const response = await apiFetch(
+    `/api/v1/candidate/connections/${platform}`,
+    { method: 'DELETE' },
+  );
+  return readData<DisconnectedConnection>(response);
 }
 
 export async function getCandidate(): Promise<CandidateSnapshot> {

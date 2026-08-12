@@ -22,7 +22,9 @@
     "lint": "eslint . --max-warnings=0 && npm run format:check",
     "lint:fix": "eslint . --fix && npm run format",
     "format:check": "prettier --check package.json eslint.config.mjs playwright.config.ts e2e scripts/render_html_screenshot.js",
-    "format": "prettier --write package.json eslint.config.mjs playwright.config.ts e2e scripts/render_html_screenshot.js"
+    "format": "prettier --write package.json eslint.config.mjs playwright.config.ts e2e scripts/render_html_screenshot.js",
+    "check:agents": "node scripts/check-agent-contract.mjs",
+    "security:history": "gitleaks detect --no-banner --redact -c .gitleaks.toml -s ."
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

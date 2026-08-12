@@ -7,6 +7,7 @@ import {
   register,
   type AuthUser,
 } from '../coach/coachApi';
+import { AccountConnectionsManager } from '../connections/AccountConnections';
 
 interface CareerAccountPanelProps {
   initialUser?: AuthUser | null;
@@ -121,6 +122,7 @@ export function CareerAccountPanel({
               <strong>{user.username}</strong>
               <small>{user.isTest ? 'Тестовый кандидат' : 'Личный аккаунт кандидата'}</small>
             </div>
+            <AccountConnectionsManager />
             <button className="career-danger-button" type="button" disabled={busy} onClick={signOut}>
               <SignOut size={18} />
               {busy ? 'Выходим…' : 'Выйти и начать заново'}

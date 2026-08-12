@@ -170,6 +170,70 @@
   background: var(--career-surface);
 }
 
+.career-account-connections {
+  display: grid;
+  gap: 14px;
+  padding: 20px 0;
+  border-top: 1px solid var(--career-line);
+  border-bottom: 1px solid var(--career-line);
+}
+
+.career-account-connections h2,
+.career-account-connections p {
+  margin: 0;
+}
+
+.career-account-connections > div:first-child {
+  display: grid;
+  gap: 6px;
+}
+
+.career-account-connections > div:first-child p,
+.career-account-connection-list article p,
+.career-account-connection-list article small {
+  color: var(--career-text-dim);
+  line-height: 1.5;
+}
+
+.career-account-connection-list {
+  display: grid;
+  gap: 10px;
+}
+
+.career-account-connection-list article {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--career-line);
+  border-radius: 14px;
+  background: var(--career-surface);
+}
+
+.career-account-connection-list article > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.career-account-connection-list article > div span {
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--career-text-soft);
+  background: var(--career-surface-raised);
+  font-size: 0.7rem;
+  font-weight: 720;
+}
+
+.career-account-connection-list article > div span.is-connected {
+  color: var(--career-success);
+  background: var(--career-success-soft);
+}
+
+.career-account-connection-list .career-quiet-button {
+  justify-self: start;
+}
+
 .career-danger-button {
   min-height: 48px;
   display: inline-flex;
