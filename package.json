@@ -16,7 +16,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "node scripts/verify-built-shell.mjs"
+    "test:e2e": "playwright test && node scripts/verify-built-shell.mjs",
+    "test:e2e:smoke": "playwright test",
+    "test:e2e:built-shell": "node scripts/verify-built-shell.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
@@ -34,6 +36,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^26.1.2",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",

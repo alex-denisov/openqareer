@@ -26,7 +26,7 @@ describe('hosted application browser executor', () => {
 
   afterAll(async () => {
     if (browser) await browser.close();
-  });
+  }, 30_000);
 
   it('submits a synthetic hosted form once and emits a normalized receipt', async () => {
     const session = await HostedApplicationBrowserExecutor.create(browser, {
