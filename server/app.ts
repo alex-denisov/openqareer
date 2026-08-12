@@ -737,6 +737,21 @@ export async function buildApp({
     },
   );
 
+  app.get('/api/v1/candidate/career-commands', async (request, reply) => {
+    const candidate = authenticateCandidate(
+      request,
+      reply,
+      candidateStore,
+      authService,
+      config,
+    );
+    if (!candidate) return;
+    return {
+      data: candidateStore.listCareerCommands(candidate.id),
+      meta: { requestId: request.id },
+    };
+  });
+
   app.post(
     '/api/v1/candidate/career-commands',
     {

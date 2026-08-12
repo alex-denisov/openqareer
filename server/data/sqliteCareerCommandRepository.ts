@@ -1,5 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
+import {
+  pauseInterruptedConnectorAction,
+  type ConnectorActionRecord,
+} from '../connectors/connectorActionQueue';
 import type {
   CareerCommandRecord,
   VerifiedCareerApproval,
@@ -69,6 +72,20 @@ export class SqliteCareerCommandRepository {
       throw new CareerCommandConflictError();
     }
     return command;
+  }
+
+  list(candidateId: string): CareerCommandRecord[] {
+    const rows = this.database
+      .prepare(
+        `SELECT command_id FROM career_commands
+         WHERE candidate_id = ? ORDER BY created_at DESC LIMIT 100`,
+      )
+      .all(candidateId) as Array<{ command_id: string }>;
+    return rows.map((row) => {
+      const command = this.get(candidateId, row.command_id);
+      if (!command) throw new CareerCommandConflictError();
+      return command;
+    });
   }
 
   approve(input: {
@@ -226,6 +243,43 @@ export class SqliteCareerCommandRepository {
       if (result.changes !== 1) throw new CareerCommandConflictError();
     });
     return command;
+  }
+
+  recoverInterruptedProcessing(recoveredAt: string): number {
+    const rows = this.database
+      .prepare(
+        `SELECT candidate_id, command_id
+         FROM career_command_outbox WHERE status = 'processing'`,
+      )
+      .all() as Array<{ candidate_id: string; command_id: string }>;
+    if (!rows.length) return 0;
+    this.transaction(() => {
+      for (const row of rows) {
+        const command = this.get(row.candidate_id, row.command_id);
+        if (command?.status !== 'executing' || !command.execution) {
+          throw new CareerCommandConflictError();
+        }
+        const paused: CareerCommandRecord = {
+          ...command,
+          status: 'paused',
+          execution: pauseInterruptedConnectorAction(
+            command.execution,
+            recoveredAt,
+          ),
+          updatedAt: recoveredAt,
+        };
+        this.write(paused);
+        const result = this.database
+          .prepare(
+            `UPDATE career_command_outbox
+             SET status = 'delivered', updated_at = ?
+             WHERE candidate_id = ? AND command_id = ? AND status = 'processing'`,
+          )
+          .run(recoveredAt, row.candidate_id, row.command_id);
+        if (result.changes !== 1) throw new CareerCommandConflictError();
+      }
+    });
+    return rows.length;
   }
 
   private seal(command: CareerCommandRecord): string {

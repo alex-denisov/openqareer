@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from './app';
 import type { SessionAuth } from './auth/authService';
@@ -12,10 +15,14 @@ import type {
 
 const apps: Array<Awaited<ReturnType<typeof buildApp>>> = [];
 const stores: SqliteCandidateStore[] = [];
+const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
   stores.splice(0).forEach((store) => store.close());
+  temporaryDirectories.splice(0).forEach((directory) =>
+    rmSync(directory, { recursive: true, force: true }),
+  );
 });
 
 describe('career command API', () => {
@@ -108,6 +115,14 @@ describe('career command API', () => {
     });
     expect(replay.statusCode).toBe(200);
     expect(replay.json().data).toEqual(approved.json().data);
+
+    const listed = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/career-commands',
+      headers: { authorization },
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().data).toEqual([approved.json().data]);
   });
 
   it('dispatches once and completes only from a matching connector receipt', async () => {
@@ -257,6 +272,66 @@ describe('career command API', () => {
     });
     expect(foreignRead.statusCode).toBe(404);
     expect(foreignRead.json().error.code).toBe('career_command_not_found');
+    const foreignList = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/career-commands',
+      headers: { authorization: `Bearer ${foreignCandidate.accessToken}` },
+    });
+    expect(foreignList.json().data).toEqual([]);
+  });
+
+  it('pauses interrupted processing on restart without replaying the write', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'openqareer-command-recovery-'));
+    temporaryDirectories.push(directory);
+    const databasePath = join(directory, 'candidate.sqlite');
+    const key = Buffer.alloc(32, 7);
+    const firstStore = new SqliteCandidateStore({ databasePath, encryptionKey: key });
+    const candidate = firstStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+    const commandId = randomUUID();
+    const planner = new (await import('./orchestration/careerCommandPlanner')).CareerCommandPlanner({ createId: () => commandId });
+    const command = planner.materialize({
+      principal: { candidateId: candidate.id },
+      proposal: {
+        kind: 'application.submit', objective: 'Отправить проверенный отклик.',
+        evidenceRefs: ['message-1'], acceptanceCriteria: ['Получен receipt'],
+        expectedSignal: 'Отклик принят', measureAfter: '2026-08-19',
+        risk: 'external_side_effect',
+      },
+      availableEvidenceRefs: new Set(['message-1']), strategyDecisionId: randomUUID(),
+      modelInvocationIds: [], idempotencyKey: commandId, approval: null,
+    });
+    firstStore.saveCareerCommand(command);
+    const approvalId = randomUUID();
+    firstStore.approveCareerCommand({
+      candidateId: candidate.id, commandId,
+      approval: {
+        id: approvalId, candidateId: candidate.id, commandId,
+        capability: 'application.submit', expiresAt: '2099-01-01T00:00:00.000Z',
+      },
+      consumedAt: '2026-08-12T19:00:00.000Z',
+    });
+    firstStore.claimCareerCommand(candidate.id, commandId, {
+      actionId: commandId, idempotencyKey: commandId,
+      opportunityId: `command:${commandId}`, action: 'application',
+      autonomy: 'approve_once', status: 'executing',
+      createdAt: '2026-08-12T19:00:00.000Z', updatedAt: '2026-08-12T19:00:01.000Z',
+      connector: null, diagnosticReason: null,
+      history: [
+        { from: null, to: 'drafted', at: '2026-08-12T19:00:00.000Z', reason: null },
+        { from: 'drafted', to: 'executing', at: '2026-08-12T19:00:01.000Z', reason: null },
+      ],
+    }, '2026-08-12T19:00:01.000Z');
+    firstStore.close();
+
+    const restartedStore = new SqliteCandidateStore({ databasePath, encryptionKey: key });
+    stores.push(restartedStore);
+    expect(restartedStore.getCareerCommand(candidate.id, commandId)).toMatchObject({
+      status: 'paused',
+      execution: {
+        status: 'paused',
+        diagnosticReason: 'processing_interrupted_manual_review',
+      },
+    });
   });
 });
 

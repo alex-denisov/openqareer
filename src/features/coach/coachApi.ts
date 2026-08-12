@@ -302,6 +302,49 @@ export interface CoachResult {
   };
 }
 
+export type CareerCommandStatus =
+  | 'awaiting_approval'
+  | 'prepared'
+  | 'queued'
+  | 'executing'
+  | 'completed_with_receipt'
+  | 'paused'
+  | 'failed'
+  | 'native_handoff';
+
+export interface CareerCommand {
+  commandId: string;
+  capability: CoachResult['actionProposals'][number]['kind'];
+  status: CareerCommandStatus;
+  proposal: CoachResult['actionProposals'][number];
+  provenance?: {
+    strategyDecisionId: string;
+    evidenceRefs: string[];
+    modelInvocationIds: string[];
+  };
+  execution: {
+    status: 'executing' | 'completed_with_receipt' | 'paused' | 'failed' | 'native_handoff';
+    updatedAt: string;
+    connector: {
+      id: string;
+      transport:
+        | 'official_api'
+        | 'public_feed'
+        | 'public_http_parser'
+        | 'browser_session'
+        | 'native_handoff';
+      providerReference: string | null;
+      evidenceKind:
+        | 'provider_receipt'
+        | 'dom_confirmation'
+        | 'candidate_confirmation'
+        | null;
+      evidenceObservedAt: string | null;
+    } | null;
+    diagnosticReason: string | null;
+  } | null;
+}
+
 export interface CandidateSnapshot {
   candidate: {
     id: string;
@@ -486,11 +529,7 @@ export async function prepareCareerCommand(input: {
   turnIdempotencyKey: string;
   proposalIndex: number;
   idempotencyKey?: string;
-}): Promise<{
-  commandId: string;
-  capability: CoachResult['actionProposals'][number]['kind'];
-  status: 'prepared' | 'awaiting_approval';
-}> {
+}): Promise<CareerCommand> {
   const response = await apiFetch('/api/v1/candidate/career-commands', {
     method: 'POST',
     headers: {
@@ -502,6 +541,36 @@ export async function prepareCareerCommand(input: {
       proposalIndex: input.proposalIndex,
     }),
   });
+  return readData(response);
+}
+
+export async function approveCareerCommand(
+  commandId: string,
+  input: { idempotencyKey?: string } = {},
+): Promise<CareerCommand> {
+  const response = await apiFetch(
+    `/api/v1/candidate/career-commands/${encodeURIComponent(commandId)}/approvals`,
+    {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID(),
+      },
+    },
+  );
+  return readData(response);
+}
+
+export async function getCareerCommand(
+  commandId: string,
+): Promise<CareerCommand> {
+  const response = await apiFetch(
+    `/api/v1/candidate/career-commands/${encodeURIComponent(commandId)}`,
+  );
+  return readData(response);
+}
+
+export async function getCareerCommands(): Promise<CareerCommand[]> {
+  const response = await apiFetch('/api/v1/candidate/career-commands');
   return readData(response);
 }
 

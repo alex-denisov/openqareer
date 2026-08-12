@@ -142,6 +142,9 @@ export class SqliteCandidateStore implements CandidateStore {
       PRAGMA trusted_schema = OFF;
     `);
     this.migrate();
+    this.careerCommandRepository.recoverInterruptedProcessing(
+      new Date().toISOString(),
+    );
   }
   createCandidate(input: {
     dataClass: CandidateIdentity['dataClass'];
@@ -630,6 +633,10 @@ export class SqliteCandidateStore implements CandidateStore {
     commandId: string,
   ): CareerCommandRecord | null {
     return this.careerCommandRepository.get(candidateId, commandId);
+  }
+  listCareerCommands(candidateId: string): CareerCommandRecord[] {
+    this.requireCandidate(candidateId);
+    return this.careerCommandRepository.list(candidateId);
   }
   approveCareerCommand(input: {
     candidateId: string;

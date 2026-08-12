@@ -17,6 +17,7 @@ import {
   type CoachResult,
 } from '../coach/coachApi';
 import type { CareerJourney } from './careerJourneyEngine';
+import { CareerActionProposalList } from './CareerCommandActions';
 
 interface CareerExpertPanelProps {
   journey?: CareerJourney;
@@ -40,6 +41,7 @@ export function CareerExpertPanel({
     initialSnapshot,
   );
   const [liveResult, setLiveResult] = useState<CoachResult>();
+  const [liveTurnIdempotencyKey, setLiveTurnIdempotencyKey] = useState<string>();
   const [loadingSnapshot, setLoadingSnapshot] = useState(Boolean(initialUser));
   const [loginOpen, setLoginOpen] = useState(false);
   const [username, setUsername] = useState('');
@@ -136,11 +138,14 @@ export function CareerExpertPanel({
     setSending(true);
     setError(undefined);
     try {
+      const idempotencyKey = crypto.randomUUID();
       const result = await sendCoachTurn({
         content: clean,
         marketQuery: marketQuery?.trim() || undefined,
+        idempotencyKey,
       });
       setLiveResult(result);
+      setLiveTurnIdempotencyKey(idempotencyKey);
       setContent('');
       try {
         setSnapshot(await getCandidate());
@@ -154,10 +159,13 @@ export function CareerExpertPanel({
     }
   }
 
-  const latestStoredResult = [...(snapshot?.turns ?? [])]
+  const latestStoredTurn = [...(snapshot?.turns ?? [])]
     .reverse()
-    .find((turn) => turn.status === 'completed' && turn.result)?.result;
-  const latestResult = liveResult ?? latestStoredResult ?? undefined;
+    .find((turn) => turn.status === 'completed' && turn.result);
+  const latestResult = liveResult ?? latestStoredTurn?.result ?? undefined;
+  const latestTurnIdempotencyKey = liveResult
+    ? liveTurnIdempotencyKey
+    : latestStoredTurn?.idempotencyKey;
 
   return (
     <aside
@@ -212,7 +220,12 @@ export function CareerExpertPanel({
           </div>
         ) : null}
 
-        {latestResult ? <CareerIntelligenceSummary result={latestResult} /> : null}
+        {latestResult ? (
+          <CareerIntelligenceSummary
+            result={latestResult}
+            turnIdempotencyKey={latestTurnIdempotencyKey}
+          />
+        ) : null}
 
         {loadingSnapshot ? (
           <div className="career-expert-loading">Загружаем историю и карьерный трек…</div>
@@ -286,7 +299,13 @@ export function CareerExpertPanel({
   );
 }
 
-export function CareerIntelligenceSummary({ result }: { result: CoachResult }) {
+export function CareerIntelligenceSummary({
+  result,
+  turnIdempotencyKey,
+}: {
+  result: CoachResult;
+  turnIdempotencyKey?: string;
+}) {
   return (
     <section className="career-intelligence-summary" aria-label="Карьерный трек и действия">
       {result.intelligence ? (
@@ -329,19 +348,10 @@ export function CareerIntelligenceSummary({ result }: { result: CoachResult }) {
       ) : null}
 
       {result.actionProposals.length ? (
-        <div className="career-action-proposals">
-          <span>Следующие задания</span>
-          {result.actionProposals.map((proposal, index) => (
-            <article key={`${proposal.kind}-${index}`}>
-              <div>
-                <strong>{actionLabel(proposal.kind)}</strong>
-                <small>{proposal.risk === 'external_side_effect' ? 'Требует вашего подтверждения' : 'Предложено · ещё не запущено'}</small>
-              </div>
-              <p>{proposal.objective}</p>
-              <small>Сигнал: {proposal.expectedSignal} · проверка {formatDate(proposal.measureAfter)}</small>
-            </article>
-          ))}
-        </div>
+        <CareerActionProposalList
+          proposals={result.actionProposals}
+          turnIdempotencyKey={turnIdempotencyKey}
+        />
       ) : null}
     </section>
   );
@@ -353,23 +363,6 @@ function roleLabel(role: NonNullable<CoachResult['intelligence']>['roleCoverage'
     career_strategist: 'Стратег',
     career_expert: 'Эксперт',
   }[role];
-}
-
-function actionLabel(kind: CoachResult['actionProposals'][number]['kind']) {
-  return {
-    'resume.draft': 'Подготовить резюме',
-    'resume.revise': 'Улучшить резюме',
-    'vacancies.search': 'Найти вакансии',
-    'vacancies.local_query': 'Проверить локальную базу вакансий',
-    'company.evaluate': 'Оценить компанию',
-    'market.evaluate': 'Оценить рынок',
-    'cover_letter.draft': 'Подготовить сопроводительное',
-    'application.prepare': 'Подготовить отклик',
-    'application.submit': 'Отправить отклик',
-    'outreach.prepare': 'Подготовить личный контакт',
-    'outreach.send': 'Отправить сообщение',
-    'connection.request': 'Запросить контакт',
-  }[kind];
 }
 
 function formatDate(value: string) {

@@ -218,6 +218,7 @@ export interface CandidateStore {
     candidateId: string,
     commandId: string,
   ): CareerCommandRecord | null;
+  listCareerCommands(candidateId: string): CareerCommandRecord[];
   approveCareerCommand(input: {
     candidateId: string;
     commandId: string;

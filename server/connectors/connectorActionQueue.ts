@@ -98,6 +98,26 @@ export function markConnectorActionExecuting(
   });
 }
 
+export function pauseInterruptedConnectorAction(
+  record: ConnectorActionRecord,
+  at: string,
+): ConnectorActionRecord {
+  const timestamp = z.string().datetime().parse(at);
+  if (record.status !== 'executing') {
+    throw new Error('connector_action_not_executing');
+  }
+  return transition(
+    record,
+    'paused',
+    timestamp,
+    'processing_interrupted_manual_review',
+    {
+      connector: record.connector ? { ...record.connector } : null,
+      diagnosticReason: 'processing_interrupted_manual_review',
+    },
+  );
+}
+
 export function applyConnectorReceipt(
   record: ConnectorActionRecord,
   receipt: ConnectorReceipt,

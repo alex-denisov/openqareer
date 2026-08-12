@@ -2331,6 +2331,37 @@
   text-align: right;
 }
 
+.career-action-proposal > button {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  border: 1px solid var(--career-line-strong);
+  border-radius: 10px;
+  color: var(--career-accent);
+  background: transparent;
+  font-weight: 720;
+}
+
+.career-action-proposal > button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.career-action-proposals .career-command-status {
+  color: var(--career-text);
+}
+
+.career-action-proposals .career-command-receipt {
+  display: block;
+  margin-top: 7px;
+  overflow-wrap: anywhere;
+  color: var(--career-success);
+}
+
+.career-command-error {
+  color: var(--career-danger);
+}
+
 .career-expert-auth {
   margin-top: 18px;
   display: grid;
