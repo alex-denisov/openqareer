@@ -22,12 +22,13 @@ import type {
   CareerCommandRecord,
   VerifiedCareerApproval,
 } from '../orchestration/careerCommandPlanner';
-import type { HhVacancySample } from '../connectors/hhVacancySearch';
 import type {
   StoredVacancy,
   StoredVacancySubscription,
   ClaimedVacancySubscription,
   VacancyRefreshResult,
+  VacancySample,
+  VacancySourceHealth,
   VacancySubscriptionInput,
 } from '../domain/vacancy';
 
@@ -265,7 +266,7 @@ export interface CandidateStore {
   ): StoredVacancySubscription | null;
   recordVacancyRefresh(
     subscriptionId: string,
-    sample: HhVacancySample,
+    sample: VacancySample,
   ): VacancyRefreshResult;
   listSubscriptionVacancies(
     candidateId: string,
@@ -282,6 +283,7 @@ export interface CandidateStore {
     attemptedAt: string,
     retryAfterAt?: string,
   ): void;
+  listVacancySourceHealth(): VacancySourceHealth[];
   setVacancySubscriptionStatus(
     candidateId: string,
     subscriptionId: string,

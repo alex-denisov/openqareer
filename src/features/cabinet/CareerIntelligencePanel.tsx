@@ -15,11 +15,14 @@ import {
   createVacancySubscription,
   deleteVacancySubscription,
   getVacancySubscription,
+  getVacancySources,
   refreshVacancySubscription,
   updateVacancySubscription,
   type CandidateSnapshot,
   type VacancySubscription,
   type VacancySubscriptionView,
+  type VacancySourceId,
+  type VacancySourceRegistryEntry,
 } from '../coach/coachApi';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 
@@ -51,12 +54,28 @@ export function CareerIntelligencePanel({
   const [activeId, setActiveId] = useState<string>();
   const [view, setView] = useState<VacancySubscriptionView>();
   const [query, setQuery] = useState(defaultQuery ?? '');
+  const [source, setSource] = useState<VacancySourceId>('hh');
+  const [sources, setSources] = useState<VacancySourceRegistryEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
     if (!query && defaultQuery) setQuery(defaultQuery);
   }, [defaultQuery, query]);
+
+  useEffect(() => {
+    let active = true;
+    void getVacancySources()
+      .then((result) => {
+        if (active) setSources(result);
+      })
+      .catch((reason) => {
+        if (active) setError(intelligenceError(reason));
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const nextId =
@@ -90,6 +109,7 @@ export function CareerIntelligencePanel({
     setError(undefined);
     try {
       const created = await createVacancySubscription({
+        source,
         query: clean,
         cadenceMinutes: 360,
       });
@@ -150,6 +170,8 @@ export function CareerIntelligencePanel({
 
   const activeSubscription =
     view?.subscription ?? subscriptions.find((item) => item.id === activeId);
+  const activeSource = sources.find((item) => item.id === activeSubscription?.source);
+  const selectedSource = sources.find((item) => item.id === source);
 
   return (
     <aside
@@ -191,7 +213,9 @@ export function CareerIntelligencePanel({
                 className={subscription.id === activeId ? 'is-active' : ''}
                 onClick={() => setActiveId(subscription.id)}
               >
-                {subscription.query}
+                {subscription.query} ·{' '}
+                {sources.find((item) => item.id === subscription.source)?.name ??
+                  subscription.source}
               </button>
             ))}
           </div>
@@ -202,7 +226,11 @@ export function CareerIntelligencePanel({
             <div className="career-market-query-row">
               <div>
                 <strong>{activeSubscription.query}</strong>
-                <small>hh.ru · каждые {cadenceLabel(activeSubscription.cadenceMinutes)}</small>
+                <small>
+                  {activeSource?.name ?? activeSubscription.source} ·{' '}
+                  {sourceHealthLabel(activeSource?.health.status)} · каждые{' '}
+                  {cadenceLabel(activeSubscription.cadenceMinutes)}
+                </small>
               </div>
               <div>
                 <button
@@ -260,10 +288,11 @@ export function CareerIntelligencePanel({
             ) : (
               <p className="career-market-empty">
                 {activeSubscription.lastErrorCode
-                  ? 'Источник сейчас недоступен. Поиск сохранён и повторится по расписанию.'
+                  ? sourceFailureMessage(activeSubscription.lastErrorCode)
                   : 'Первая выборка ещё не собрана.'}
               </p>
             )}
+            {activeSource ? <SourceAttribution source={activeSource} /> : null}
             {view?.vacancies.length && !expanded ? (
               <button
                 className="career-inline-link"
@@ -276,6 +305,26 @@ export function CareerIntelligencePanel({
           </>
         ) : (
           <form className="career-market-create" onSubmit={createSearch}>
+            <label htmlFor="career-market-source">Источник вакансий</label>
+            <select
+              id="career-market-source"
+              data-testid="vacancy-source-select"
+              value={source}
+              onChange={(event) => setSource(event.target.value as VacancySourceId)}
+              disabled={busy || sources.length === 0}
+            >
+              {(sources.length ? sources : fallbackSources).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} · {item.market}
+                </option>
+              ))}
+            </select>
+            {selectedSource ? (
+              <p className={`career-source-health is-${selectedSource.health.status}`}>
+                {sourceHealthLabel(selectedSource.health.status)} ·{' '}
+                {selectedSource.searchCoverage}
+              </p>
+            ) : null}
             <label htmlFor="career-market-query">Роль или поисковый запрос</label>
             <div>
               <input
@@ -287,11 +336,16 @@ export function CareerIntelligencePanel({
                 maxLength={200}
                 required
               />
-              <button type="submit" disabled={busy || query.trim().length < 2}>
+              <button
+                type="submit"
+                data-testid="vacancy-search-create"
+                disabled={busy || query.trim().length < 2}
+              >
                 <Plus size={17} /> Создать
               </button>
             </div>
             <small>После создания первая выборка запускается сразу, затем — каждые 6 часов.</small>
+            {selectedSource ? <SourceAttribution source={selectedSource} /> : null}
           </form>
         )}
       </section>
@@ -306,6 +360,44 @@ export function CareerIntelligencePanel({
       ) : null}
     </aside>
   );
+}
+
+const fallbackSources = [
+  { id: 'hh', name: 'hh.ru', market: 'Россия и СНГ' },
+  { id: 'arbeitnow', name: 'Arbeitnow', market: 'Германия и Европа' },
+] as const;
+
+function SourceAttribution({ source }: { source: VacancySourceRegistryEntry }) {
+  return (
+    <a
+      className="career-source-attribution"
+      href={source.attributionUrl}
+      target="_blank"
+      rel="noreferrer"
+    >
+      Источник: {source.name}
+    </a>
+  );
+}
+
+function sourceHealthLabel(status?: VacancySourceRegistryEntry['health']['status']) {
+  return {
+    healthy: 'источник доступен',
+    degraded: 'временные ошибки',
+    unavailable: 'временно недоступен',
+    official_access_required: 'нужен официальный доступ',
+    not_checked: 'ещё не проверен',
+  }[status ?? 'not_checked'];
+}
+
+function sourceFailureMessage(errorCode: string) {
+  if (errorCode === 'official_access_required') {
+    return 'Нужен официальный доступ к API. Поиск сохранён, но данные не отмечены свежими.';
+  }
+  if (errorCode === 'source_rate_limited') {
+    return 'Источник ограничил частоту запросов. Поиск сохранён и повторится после Retry-After.';
+  }
+  return 'Источник сейчас недоступен. Поиск сохранён и повторится по расписанию.';
 }
 
 function AtsReadability({
@@ -359,26 +451,34 @@ function MarketAnalytics({ subscription }: { subscription: VacancySubscription }
   const analytics = subscription.analytics;
   const primaryCurrency = analytics.currencies[0];
   return (
-    <dl className="career-market-metrics">
-      <div>
-        <dt>Найдено источником</dt>
-        <dd>{analytics.sourceFound ?? '—'}</dd>
-      </div>
-      <div>
-        <dt>Зарплата указана</dt>
-        <dd>
-          {analytics.salaryKnown} из {analytics.sampleSize}
-        </dd>
-      </div>
-      <div>
-        <dt>Медиана вилки</dt>
-        <dd>{primaryCurrency ? salaryMedian(primaryCurrency) : 'Нет данных'}</dd>
-      </div>
-      <div>
-        <dt>Главная локация</dt>
-        <dd>{analytics.topLocations[0]?.location ?? 'Нет данных'}</dd>
-      </div>
-    </dl>
+    <>
+      <dl className="career-market-metrics">
+        <div>
+          <dt>Найдено в последней выборке</dt>
+          <dd>{analytics.sourceFound ?? '—'}</dd>
+        </div>
+        <div>
+          <dt>Зарплата указана</dt>
+          <dd>
+            {analytics.salaryKnown} из {analytics.sampleSize}
+          </dd>
+        </div>
+        <div>
+          <dt>Медиана вилки</dt>
+          <dd>{primaryCurrency ? salaryMedian(primaryCurrency) : 'Нет данных'}</dd>
+        </div>
+        <div>
+          <dt>Главная локация</dt>
+          <dd>{analytics.topLocations[0]?.location ?? 'Нет данных'}</dd>
+        </div>
+      </dl>
+      <p className="career-market-freshness">
+        {analytics.observedTo
+          ? `Наблюдения: ${dateLabel(analytics.observedFrom)} — ${dateLabel(analytics.observedTo)}`
+          : 'Наблюдений пока нет'}
+        {' · '}неизвестная зарплата: {analytics.unknownSalary}
+      </p>
+    </>
   );
 }
 
@@ -416,6 +516,17 @@ function cadenceLabel(minutes: number) {
   if (minutes % 1_440 === 0) return `${minutes / 1_440} дн.`;
   if (minutes % 60 === 0) return `${minutes / 60} ч.`;
   return `${minutes} мин.`;
+}
+
+function dateLabel(value: string | null) {
+  if (!value) return '—';
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
 }
 
 function findingLabel(dimension: CareerJourney['diagnostic']['findings'][number]['dimension']) {

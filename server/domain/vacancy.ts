@@ -1,7 +1,44 @@
 import { z } from 'zod';
 
-export const VACANCY_SOURCES = ['hh'] as const;
+export const VACANCY_SOURCES = ['hh', 'arbeitnow'] as const;
 export type VacancySource = (typeof VACANCY_SOURCES)[number];
+
+export interface VacancySample {
+  source: VacancySource;
+  query: string;
+  found: number;
+  fetchedAt: string;
+  items: Array<{
+    id: string;
+    title: string;
+    company: string;
+    location: string;
+    sourceUrl: string;
+    publishedAt: string | null;
+    salary: {
+      from: number | null;
+      to: number | null;
+      currency: string;
+      gross: boolean;
+    } | null;
+    workMode: 'remote' | 'hybrid' | 'onsite' | 'unknown';
+    requirements: string[];
+  }>;
+}
+
+export interface VacancySourceHealth {
+  source: VacancySource;
+  status:
+    | 'healthy'
+    | 'degraded'
+    | 'unavailable'
+    | 'official_access_required';
+  lastAttemptAt: string;
+  lastSuccessAt: string | null;
+  lastErrorCode: string | null;
+  retryAfterAt: string | null;
+  consecutiveFailures: number;
+}
 
 export const vacancySubscriptionInputSchema = z.object({
   source: z.enum(VACANCY_SOURCES),
@@ -63,6 +100,8 @@ export interface StoredVacancy {
     currency: string;
     gross: boolean;
   } | null;
+  workMode: VacancySample['items'][number]['workMode'];
+  requirements: string[];
   version: number;
   firstSeenAt: string;
   lastSeenAt: string;

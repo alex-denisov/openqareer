@@ -1,4 +1,5 @@
 import { chromium } from 'playwright';
+import { mkdir } from 'node:fs/promises';
 import { preview } from 'vite';
 
 const viewports = [
@@ -21,6 +22,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   let connectionCatalogRequests = 0;
   let hhConnected = true;
   let hhDisconnectAttempts = 0;
+  let vacancyCreateSource = null;
   await page.route('**/api/v1/auth/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -85,6 +87,92 @@ async function verifyViewport(browser, baseUrl, viewport) {
           germanyMarket: null,
           documents: [],
           vacancySubscriptions: [],
+        },
+      }),
+    });
+  });
+  await page.route('**/api/v1/candidate/vacancy-sources', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: [
+          {
+            id: 'hh',
+            name: 'hh.ru',
+            market: 'Россия и СНГ',
+            transport: 'official_api',
+            searchCoverage: 'Полный результат официального поиска в пределах API',
+            attributionUrl: 'https://hh.ru/',
+            documentationUrl: 'https://api.hh.ru/openapi/redoc',
+            reviewedAt: '2026-08-13',
+            health: {
+              status: 'official_access_required',
+              lastAttemptAt: '2026-08-13T08:00:00.000Z',
+              lastSuccessAt: null,
+              lastErrorCode: 'official_access_required',
+              retryAfterAt: null,
+              consecutiveFailures: 1,
+            },
+          },
+          {
+            id: 'arbeitnow',
+            name: 'Arbeitnow',
+            market: 'Германия и Европа',
+            transport: 'public_api',
+            searchCoverage: 'Совпадения в ограниченной свежей API-выборке',
+            attributionUrl: 'https://www.arbeitnow.com/',
+            documentationUrl: 'https://www.arbeitnow.com/blog/job-board-api',
+            reviewedAt: '2026-08-13',
+            health: {
+              status: 'healthy',
+              lastAttemptAt: '2026-08-13T08:00:00.000Z',
+              lastSuccessAt: '2026-08-13T08:00:00.000Z',
+              lastErrorCode: null,
+              retryAfterAt: null,
+              consecutiveFailures: 0,
+            },
+          },
+        ],
+      }),
+    });
+  });
+  await page.route('**/api/v1/candidate/vacancy-subscriptions', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+    const payload = route.request().postDataJSON();
+    vacancyCreateSource = payload.source;
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          subscription: {
+            id: '00000000-0000-4000-8000-000000000134',
+            source: payload.source,
+            query: payload.query,
+            cadenceMinutes: payload.cadenceMinutes,
+            status: 'active',
+            nextRunAt: '2026-08-13T14:00:00.000Z',
+            lastAttemptAt: '2026-08-13T08:00:00.000Z',
+            lastSuccessAt: '2026-08-13T08:00:00.000Z',
+            lastErrorCode: null,
+            createdAt: '2026-08-13T08:00:00.000Z',
+            updatedAt: '2026-08-13T08:00:00.000Z',
+            analytics: {
+              sampleSize: 0,
+              sourceFound: 0,
+              salaryKnown: 0,
+              unknownSalary: 0,
+              observedFrom: null,
+              observedTo: null,
+              currencies: [],
+              topLocations: [],
+            },
+          },
+          vacancies: [],
         },
       }),
     });
@@ -228,6 +316,38 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByRole('heading', { name: 'Карьерный кабинет' }).waitFor();
   await page.getByRole('heading', { name: 'Диалог со стратегом' }).waitFor();
   await page.getByRole('heading', { name: 'Рынок и следующие шаги' }).waitFor();
+  await page.getByRole('combobox', { name: 'Источник вакансий' }).waitFor();
+  assert(
+    (await page.getByText('нужен официальный доступ', { exact: false }).count()) >= 1,
+    `${viewport.name}: official access requirement is hidden`,
+  );
+  await page.getByRole('combobox', { name: 'Источник вакансий' }).selectOption(
+    'arbeitnow',
+  );
+  await page
+    .getByText('Совпадения в ограниченной свежей API-выборке', { exact: false })
+    .waitFor();
+  await page.getByRole('link', { name: 'Источник: Arbeitnow' }).waitFor();
+  await mkdir('output/playwright', { recursive: true });
+  await page.screenshot({
+    path: `output/playwright/b134-vacancy-sources-${viewport.name}.png`,
+    fullPage: true,
+  });
+  await page.getByRole('textbox', { name: 'Роль или поисковый запрос' }).fill(
+    'product manager',
+  );
+  const vacancyCreateResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname ===
+        '/api/v1/candidate/vacancy-subscriptions',
+  );
+  await page.getByRole('button', { name: 'Создать' }).click();
+  await vacancyCreateResponse;
+  assert(
+    vacancyCreateSource === 'arbeitnow',
+    `${viewport.name}: selected vacancy source was not sent to the API`,
+  );
   await page.locator('button[aria-label="Профиль"]:visible').click();
   await page.getByRole('heading', { name: 'Профессиональный профиль' }).waitFor();
   await page.locator('button[aria-label="Сегодня"]:visible').click();

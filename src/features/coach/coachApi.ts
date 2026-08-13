@@ -6,6 +6,8 @@ import type {
   CandidateDocumentKind,
   VacancySubscription,
   VacancySubscriptionView,
+  VacancySourceId,
+  VacancySourceRegistryEntry,
 } from './cabinetTypes';
 export type {
   AccountSnapshot,
@@ -15,6 +17,8 @@ export type {
   VacancyAnalytics,
   VacancySubscription,
   VacancySubscriptionView,
+  VacancySourceId,
+  VacancySourceRegistryEntry,
 } from './cabinetTypes';
 
 export interface AuthUser {
@@ -592,14 +596,20 @@ export async function setCandidateDocumentRetention(
 }
 
 export async function createVacancySubscription(input: {
+  source: VacancySourceId;
   query: string;
   cadenceMinutes?: number;
 }): Promise<VacancySubscriptionView> {
   const response = await apiFetch('/api/v1/candidate/vacancy-subscriptions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ source: 'hh', ...input }),
+    body: JSON.stringify(input),
   });
+  return readData(response);
+}
+
+export async function getVacancySources(): Promise<VacancySourceRegistryEntry[]> {
+  const response = await apiFetch('/api/v1/candidate/vacancy-sources');
   return readData(response);
 }
 

@@ -63,6 +63,7 @@ import {
   searchHhVacancies,
   type HhVacancySample,
 } from './connectors/hhVacancySearch';
+import { searchArbeitnowVacancies } from './connectors/arbeitnowVacancySearch';
 import {
   importProfileUrl as importPublicProfileUrl,
   parseProfileUrl,
@@ -75,10 +76,14 @@ import {
 } from './connectors/oauthConnector';
 import { OfficialOAuthTransport } from './connectors/officialOAuthTransport';
 import { OAUTH_PLATFORMS, type OAuthPlatform } from './connectors/oauthTypes';
-import { vacancySubscriptionInputSchema } from './domain/vacancy';
+import {
+  vacancySubscriptionInputSchema,
+  type VacancySample,
+} from './domain/vacancy';
 import {
   VacancyIntelligenceService,
 } from './vacancies/vacancyIntelligenceService';
+import { vacancySourceRegistryView } from './vacancies/vacancySourceRegistry';
 
 interface BuildAppOptions {
   config: ServerConfig;
@@ -90,6 +95,10 @@ interface BuildAppOptions {
     text: string;
     perPage?: number;
   }) => Promise<HhVacancySample>;
+  searchArbeitnow?: (input: {
+    text: string;
+    perPage?: number;
+  }) => Promise<VacancySample>;
   importProfile?: (url: string) => Promise<ProfileUrlImportResult>;
   oauthTransport?: OAuthTransport;
   careerCommandExecutor?: ConnectorExecutor;
@@ -112,6 +121,7 @@ export async function buildApp({
   authService,
   serveStatic = true,
   searchVacancies = searchHhVacancies,
+  searchArbeitnow = searchArbeitnowVacancies,
   importProfile = importPublicProfileUrl,
   oauthTransport,
   careerCommandExecutor,
@@ -132,7 +142,10 @@ export async function buildApp({
     vacancyIntelligenceService ??
     new VacancyIntelligenceService({
       store: candidateStore,
-      connectors: { hh: searchVacancies },
+      connectors: {
+        hh: searchVacancies,
+        arbeitnow: searchArbeitnow,
+      },
     });
   const app = Fastify({
     trustProxy: '127.0.0.1',
@@ -900,6 +913,21 @@ export async function buildApp({
       return reply.code(204).send();
     },
   );
+
+  app.get('/api/v1/candidate/vacancy-sources', async (request, reply) => {
+    const candidate = authenticateCandidate(
+      request,
+      reply,
+      candidateStore,
+      authService,
+      config,
+    );
+    if (!candidate) return;
+    return {
+      data: vacancySourceRegistryView(candidateStore.listVacancySourceHealth()),
+      meta: { requestId: request.id },
+    };
+  });
 
   app.get('/api/v1/candidate/vacancy-subscriptions', async (request, reply) => {
     const candidate = authenticateCandidate(

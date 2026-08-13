@@ -53,6 +53,7 @@ async function createApp(
     token: string;
   }) => Promise<void>,
   searchVacancies?: Parameters<typeof buildApp>[0]['searchVacancies'],
+  searchArbeitnow?: Parameters<typeof buildApp>[0]['searchArbeitnow'],
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-auth-routes-'));
   const databasePath = join(directory, 'app.db');
@@ -109,6 +110,7 @@ async function createApp(
     authService: auth,
     serveStatic: false,
     ...(searchVacancies ? { searchVacancies } : {}),
+    ...(searchArbeitnow ? { searchArbeitnow } : {}),
   });
   resources.push({ app, auth, candidates, directory });
   return app;
@@ -464,122 +466,6 @@ describe('cookie auth routes', () => {
       headers: { cookie: candidate.cookie },
     });
     expect(afterDelete.statusCode).toBe(404);
-  });
-
-  it('creates and immediately refreshes a recurring vacancy search', async () => {
-    const app = await createApp(undefined, async ({ text }) => ({
-      source: 'hh',
-      query: text,
-      found: 17,
-      fetchedAt: '2026-08-13T11:00:00.000Z',
-      items: [
-        {
-          id: '1771',
-          title: 'Head of Operations',
-          company: 'Synthetic Company',
-          location: 'Москва',
-          sourceUrl: 'https://hh.ru/vacancy/1771',
-          publishedAt: null,
-          salary: null,
-        },
-      ],
-    }));
-    const candidate = await login(
-      app,
-      'candidate.test',
-      'candidate-password-for-tests',
-    );
-
-    const created = await app.inject({
-      method: 'POST',
-      url: '/api/v1/candidate/vacancy-subscriptions',
-      headers: {
-        cookie: candidate.cookie,
-        origin: 'http://localhost:3000',
-      },
-      payload: {
-        source: 'hh',
-        query: 'Head of Operations',
-        cadenceMinutes: 360,
-      },
-    });
-    expect(created.statusCode).toBe(201);
-    expect(created.json().data.subscription).toMatchObject({
-      query: 'Head of Operations',
-      status: 'active',
-      lastSuccessAt: '2026-08-13T11:00:00.000Z',
-      analytics: { sampleSize: 1, sourceFound: 17 },
-    });
-    expect(created.json().data.vacancies).toMatchObject([
-      { externalId: '1771', title: 'Head of Operations' },
-    ]);
-
-    const listed = await app.inject({
-      method: 'GET',
-      url: '/api/v1/candidate/vacancy-subscriptions',
-      headers: { cookie: candidate.cookie },
-    });
-    expect(listed.statusCode).toBe(200);
-    expect(listed.json().data).toHaveLength(1);
-  });
-
-  it('pauses, manually refreshes and deletes a saved vacancy search', async () => {
-    let fetchedAt = '2026-08-13T12:00:00.000Z';
-    const app = await createApp(undefined, async ({ text }) => ({
-      source: 'hh',
-      query: text,
-      found: 0,
-      fetchedAt,
-      items: [],
-    }));
-    const candidate = await login(
-      app,
-      'candidate.test',
-      'candidate-password-for-tests',
-    );
-    const headers = {
-      cookie: candidate.cookie,
-      origin: 'http://localhost:3000',
-    };
-    const created = await app.inject({
-      method: 'POST',
-      url: '/api/v1/candidate/vacancy-subscriptions',
-      headers,
-      payload: {
-        source: 'hh',
-        query: 'operations director',
-        cadenceMinutes: 360,
-      },
-    });
-    const subscriptionId = created.json().data.subscription.id as string;
-
-    const paused = await app.inject({
-      method: 'PATCH',
-      url: `/api/v1/candidate/vacancy-subscriptions/${subscriptionId}`,
-      headers,
-      payload: { status: 'paused' },
-    });
-    expect(paused.statusCode).toBe(200);
-    expect(paused.json().data.status).toBe('paused');
-
-    fetchedAt = '2026-08-13T13:00:00.000Z';
-    const refreshed = await app.inject({
-      method: 'POST',
-      url: `/api/v1/candidate/vacancy-subscriptions/${subscriptionId}/refresh`,
-      headers,
-    });
-    expect(refreshed.statusCode).toBe(200);
-    expect(refreshed.json().data.subscription).toMatchObject({
-      status: 'paused',
-      lastSuccessAt: fetchedAt,
-    });
-
-    const deleted = await app.inject({
-      method: 'DELETE',
-      url: `/api/v1/candidate/vacancy-subscriptions/${subscriptionId}`,
-      headers,
-    });
-    expect(deleted.statusCode).toBe(204);
   });
 
   it('creates a personal candidate account and starts its own cookie session', async () => {

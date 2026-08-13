@@ -3896,6 +3896,13 @@
   margin: 6px 0 0;
 }
 
+.career-market-freshness {
+  margin: 8px 0 0;
+  color: var(--career-text-dim);
+  font-size: 0.58rem;
+  line-height: 1.45;
+}
+
 .career-cabinet-vacancies {
   margin-top: 8px;
   border-top: 1px solid var(--career-line);
@@ -3956,6 +3963,43 @@
   min-height: 42px;
   padding: 9px 10px;
   font-size: 0.7rem;
+}
+
+.career-market-create select {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid var(--career-line);
+  border-radius: 10px;
+  padding: 9px 34px 9px 10px;
+  color: var(--career-text);
+  background: var(--career-bg-elevated);
+  font: inherit;
+  font-size: 0.7rem;
+}
+
+.career-source-health {
+  margin: -2px 0 3px;
+  color: var(--career-text-dim);
+  font-size: 0.6rem;
+  line-height: 1.45;
+}
+
+.career-source-health.is-healthy {
+  color: var(--career-success);
+}
+
+.career-source-health.is-official_access_required,
+.career-source-health.is-degraded,
+.career-source-health.is-unavailable {
+  color: var(--career-warning);
+}
+
+.career-source-attribution {
+  width: fit-content;
+  color: var(--career-text-dim);
+  font-size: 0.58rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .career-market-create button {

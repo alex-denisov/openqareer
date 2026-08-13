@@ -60,7 +60,7 @@ export interface VacancyAnalytics {
 
 export interface VacancySubscription {
   id: string;
-  source: 'hh';
+  source: VacancySourceId;
   query: string;
   cadenceMinutes: number;
   status: 'active' | 'paused';
@@ -75,7 +75,7 @@ export interface VacancySubscription {
 
 export interface StoredVacancy {
   id: string;
-  source: 'hh';
+  source: VacancySourceId;
   externalId: string;
   title: string;
   company: string;
@@ -88,9 +88,37 @@ export interface StoredVacancy {
     currency: string;
     gross: boolean;
   } | null;
+  workMode: 'remote' | 'hybrid' | 'onsite' | 'unknown';
+  requirements: string[];
   version: number;
   firstSeenAt: string;
   lastSeenAt: string;
+}
+
+export type VacancySourceId = 'hh' | 'arbeitnow';
+
+export interface VacancySourceRegistryEntry {
+  id: VacancySourceId;
+  name: string;
+  market: string;
+  transport: 'official_api' | 'public_api';
+  searchCoverage: string;
+  attributionUrl: string;
+  documentationUrl: string;
+  reviewedAt: string;
+  health: {
+    status:
+      | 'not_checked'
+      | 'healthy'
+      | 'degraded'
+      | 'unavailable'
+      | 'official_access_required';
+    lastAttemptAt: string | null;
+    lastSuccessAt: string | null;
+    lastErrorCode: string | null;
+    retryAfterAt: string | null;
+    consecutiveFailures: number;
+  };
 }
 
 export interface VacancySubscriptionView {

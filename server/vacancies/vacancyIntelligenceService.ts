@@ -1,24 +1,25 @@
-import type { HhVacancySample } from '../connectors/hhVacancySearch';
 import type { CandidateStore } from '../data/candidateStore';
+import { VacancyConnectorError } from '../connectors/vacancyConnectorError';
 import type {
   StoredVacancy,
   StoredVacancySubscription,
   VacancySource,
   VacancySubscriptionInput,
+  VacancySample,
 } from '../domain/vacancy';
 
-type VacancyConnector = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
+type VacancyConnector = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
 
 interface VacancyIntelligenceServiceOptions {
   store: CandidateStore;
-  connectors: Record<VacancySource, VacancyConnector>;
+  connectors: Partial<Record<VacancySource, VacancyConnector>>;
   maxBatchSize?: number;
   leaseMinutes?: number;
 }
 
 export class VacancyIntelligenceService {
   private readonly store: CandidateStore;
-  private readonly connectors: Record<VacancySource, VacancyConnector>;
+  private readonly connectors: Partial<Record<VacancySource, VacancyConnector>>;
   private readonly maxBatchSize: number;
   private readonly leaseMinutes: number;
 
@@ -53,13 +54,18 @@ export class VacancyIntelligenceService {
     const subscription = this.store.getVacancySubscription(candidateId, subscriptionId);
     if (!subscription) throw new VacancySubscriptionAccessError();
     try {
-      const sample = await this.connectors[subscription.source]({
+      const sample = await this.connector(subscription.source)({
         text: subscription.query,
         perPage: 20,
       });
       this.store.recordVacancyRefresh(subscription.id, sample);
     } catch (error) {
-      this.store.recordVacancyFailure(subscription.id, vacancyErrorCode(error), attemptedAt);
+      this.store.recordVacancyFailure(
+        subscription.id,
+        vacancyErrorCode(error),
+        attemptedAt,
+        retryAfterAt(error),
+      );
     }
     return this.subscriptionView(candidateId, subscriptionId);
   }
@@ -79,7 +85,7 @@ export class VacancyIntelligenceService {
     let failed = 0;
     for (const subscription of claimed) {
       try {
-        const sample = await this.connectors[subscription.source]({
+        const sample = await this.connector(subscription.source)({
           text: subscription.query,
           perPage: 20,
         });
@@ -90,6 +96,7 @@ export class VacancyIntelligenceService {
           subscription.id,
           vacancyErrorCode(error),
           now.toISOString(),
+          retryAfterAt(error),
         );
         failed += 1;
       }
@@ -109,6 +116,12 @@ export class VacancyIntelligenceService {
       vacancies: this.store.listSubscriptionVacancies(candidateId, subscriptionId),
     };
   }
+
+  private connector(source: VacancySource): VacancyConnector {
+    const connector = this.connectors[source];
+    if (!connector) throw new Error(`${source}_vacancy_search_unavailable`);
+    return connector;
+  }
 }
 
 export class VacancySubscriptionAccessError extends Error {}
@@ -118,7 +131,12 @@ function vacancyErrorCode(error: unknown): string {
   if (message.includes('official_access_required')) {
     return 'official_access_required';
   }
+  if (message.includes('rate_limited')) return 'source_rate_limited';
   if (message.includes('challenge')) return 'source_challenge';
   if (message.includes('invalid')) return 'source_response_invalid';
   return 'source_unavailable';
+}
+
+function retryAfterAt(error: unknown): string | undefined {
+  return error instanceof VacancyConnectorError ? error.retryAfterAt : undefined;
 }

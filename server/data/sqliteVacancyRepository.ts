@@ -1,12 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { HhVacancySample } from '../connectors/hhVacancySearch';
 import {
   vacancySubscriptionInputSchema,
   type ClaimedVacancySubscription,
   type StoredVacancy,
   type StoredVacancySubscription,
   type VacancyAnalytics,
+  type VacancySample,
+  type VacancySource,
+  type VacancySourceHealth,
   type VacancyRefreshResult,
   type VacancySubscriptionInput,
 } from '../domain/vacancy';
@@ -15,7 +17,7 @@ import type { SealedText } from './sealedText';
 interface SubscriptionRow {
   id: string;
   candidate_id: string;
-  source: 'hh';
+  source: VacancySource;
   query_cipher: string;
   cadence_minutes: number;
   status: StoredVacancySubscription['status'];
@@ -30,7 +32,7 @@ interface SubscriptionRow {
 
 interface VacancyRow {
   id: string;
-  source: 'hh';
+  source: VacancySource;
   external_id: string;
   canonical_url: string;
   first_seen_at: string;
@@ -40,7 +42,17 @@ interface VacancyRow {
   snapshot_json: string;
 }
 
-type VacancySnapshot = HhVacancySample['items'][number];
+interface SourceHealthRow {
+  source: VacancySource;
+  status: VacancySourceHealth['status'];
+  last_attempt_at: string;
+  last_success_at: string | null;
+  last_error_code: string | null;
+  retry_after_at: string | null;
+  consecutive_failures: number;
+}
+
+type VacancySnapshot = VacancySample['items'][number];
 
 export class SqliteVacancyRepository {
   constructor(
@@ -97,7 +109,7 @@ export class SqliteVacancyRepository {
 
   recordRefresh(
     subscriptionId: string,
-    sample: HhVacancySample,
+    sample: VacancySample,
   ): VacancyRefreshResult {
     const subscription = this.findInternal(subscriptionId);
     if (!subscription) throw new VacancySubscriptionNotFoundError();
@@ -110,7 +122,9 @@ export class SqliteVacancyRepository {
       throw new VacancyRefreshConflictError();
     }
     const nextRunAt = new Date(
-      observedAt.getTime() + subscription.cadence_minutes * 60 * 1_000,
+      observedAt.getTime() +
+        subscription.cadence_minutes * 60 * 1_000 +
+        scheduleJitterMs(subscriptionId, sample.fetchedAt),
     ).toISOString();
     const counts = this.persistRefresh(subscriptionId, sample, nextRunAt);
     return {
@@ -123,7 +137,7 @@ export class SqliteVacancyRepository {
 
   private persistRefresh(
     subscriptionId: string,
-    sample: HhVacancySample,
+    sample: VacancySample,
     nextRunAt: string,
   ): { created: number; updated: number; unchanged: number } {
     this.database.exec('BEGIN IMMEDIATE');
@@ -214,9 +228,17 @@ export class SqliteVacancyRepository {
     if (Number.isNaN(attempted.getTime())) {
       throw new VacancyRefreshConflictError();
     }
+    const backoffHours =
+      errorCode === 'official_access_required' || errorCode === 'source_challenge'
+        ? 24
+        : 1;
     const nextRunAt =
       retryAfterAt ??
-      new Date(attempted.getTime() + 60 * 60 * 1_000).toISOString();
+      new Date(
+        attempted.getTime() +
+          backoffHours * 60 * 60 * 1_000 +
+          scheduleJitterMs(subscriptionId, attemptedAt),
+      ).toISOString();
     this.database.exec('BEGIN IMMEDIATE');
     try {
       this.recordSubscriptionFailure(
@@ -270,8 +292,27 @@ export class SqliteVacancyRepository {
     );
   }
 
+  listSourceHealth(): VacancySourceHealth[] {
+    const rows = this.database
+      .prepare(
+        `SELECT source, status, last_attempt_at, last_success_at,
+                last_error_code, retry_after_at, consecutive_failures
+         FROM vacancy_source_health ORDER BY source`,
+      )
+      .all() as unknown as SourceHealthRow[];
+    return rows.map((row) => ({
+      source: row.source,
+      status: row.status,
+      lastAttemptAt: row.last_attempt_at,
+      lastSuccessAt: row.last_success_at,
+      lastErrorCode: row.last_error_code,
+      retryAfterAt: row.retry_after_at,
+      consecutiveFailures: row.consecutive_failures,
+    }));
+  }
+
   private upsertVacancy(
-    source: 'hh',
+    source: VacancySource,
     snapshot: VacancySnapshot,
     observedAt: string,
   ): 'created' | 'updated' | 'unchanged' {
@@ -362,7 +403,7 @@ export class SqliteVacancyRepository {
     );
   }
 
-  private findVacancy(source: 'hh', externalId: string): VacancyRow | null {
+  private findVacancy(source: VacancySource, externalId: string): VacancyRow | null {
     return (
       (this.database
         .prepare(
@@ -429,7 +470,7 @@ export class SqliteVacancyRepository {
 
   private linkSampleItems(
     subscriptionId: string,
-    sample: HhVacancySample,
+    sample: VacancySample,
   ): { created: number; updated: number; unchanged: number } {
     const counts = { created: 0, updated: 0, unchanged: 0 };
     for (const item of sample.items) {
@@ -452,7 +493,7 @@ export class SqliteVacancyRepository {
 
   private recordSubscriptionSuccess(
     subscriptionId: string,
-    sample: HhVacancySample,
+    sample: VacancySample,
     nextRunAt: string,
   ): void {
     this.database
@@ -473,7 +514,7 @@ export class SqliteVacancyRepository {
       );
   }
 
-  private recordSourceSuccess(sample: HhVacancySample): void {
+  private recordSourceSuccess(sample: VacancySample): void {
     this.database
       .prepare(
         `INSERT INTO vacancy_source_health
@@ -504,7 +545,7 @@ export class SqliteVacancyRepository {
   }
 
   private recordSourceFailure(
-    source: 'hh',
+    source: VacancySource,
     errorCode: string,
     attemptedAt: string,
     retryAfterAt?: string,
@@ -514,16 +555,22 @@ export class SqliteVacancyRepository {
         `INSERT INTO vacancy_source_health
           (source, status, last_attempt_at, last_success_at, last_error_code,
            retry_after_at, consecutive_failures)
-         VALUES (?, 'degraded', ?, NULL, ?, ?, 1)
+         VALUES (?, CASE WHEN ? = 'official_access_required'
+           THEN 'official_access_required' ELSE 'degraded' END, ?, NULL, ?, ?, 1)
          ON CONFLICT(source) DO UPDATE SET
-           status = CASE WHEN vacancy_source_health.consecutive_failures + 1 >= 3
-             THEN 'unavailable' ELSE 'degraded' END,
+           status = CASE
+             WHEN excluded.last_error_code = 'official_access_required'
+               THEN 'official_access_required'
+             WHEN vacancy_source_health.consecutive_failures + 1 >= 3
+               THEN 'unavailable'
+             ELSE 'degraded'
+           END,
            last_attempt_at = excluded.last_attempt_at,
            last_error_code = excluded.last_error_code,
            retry_after_at = excluded.retry_after_at,
            consecutive_failures = vacancy_source_health.consecutive_failures + 1`,
       )
-      .run(source, attemptedAt, errorCode, retryAfterAt ?? null);
+      .run(source, errorCode, attemptedAt, errorCode, retryAfterAt ?? null);
   }
 }
 
@@ -560,6 +607,8 @@ function vacancyFromRow(row: VacancyRow): StoredVacancy {
     sourceUrl: row.canonical_url,
     publishedAt: snapshot.publishedAt,
     salary: snapshot.salary,
+    workMode: snapshot.workMode ?? 'unknown',
+    requirements: snapshot.requirements ?? [],
     version: row.latest_version,
     firstSeenAt: row.first_seen_at,
     lastSeenAt: row.last_seen_at,
@@ -571,6 +620,13 @@ function subscriptionAssociatedData(
   subscriptionId: string,
 ): string {
   return `candidate:${candidateId}:vacancy-subscription:${subscriptionId}:query`;
+}
+
+function scheduleJitterMs(subscriptionId: string, timestamp: string): number {
+  const digest = createHash('sha256')
+    .update(`${subscriptionId}:${timestamp}`)
+    .digest();
+  return (1 + (digest.readUInt16BE(0) % 15)) * 60 * 1_000;
 }
 
 function median(values: number[]): number | null {

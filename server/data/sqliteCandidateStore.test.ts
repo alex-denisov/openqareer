@@ -497,6 +497,8 @@ describe('SQLite candidate memory', () => {
             currency: 'RUR',
             gross: true,
           },
+          workMode: 'unknown' as const,
+          requirements: [],
         },
       ],
     };
@@ -674,6 +676,50 @@ describe('SQLite candidate memory', () => {
     const reopened = createStore(databasePath);
     expect(reopened.getSnapshot(candidateA.id).germanyMarket?.country).toBe('DE');
     expect(reopened.deleteCandidate(candidateA.id)).toBe(true);
+  });
+
+  it('persists an Arbeitnow subscription in the shared versioned corpus', () => {
+    const store = createStore();
+    const candidate = createCandidate(store);
+    const subscription = store.createVacancySubscription(
+      candidate.id,
+      {
+        source: 'arbeitnow',
+        query: 'product manager',
+        cadenceMinutes: 360,
+      },
+      '2026-08-13T12:00:00.000Z',
+    );
+
+    expect(
+      store.recordVacancyRefresh(subscription.id, {
+        source: 'arbeitnow',
+        query: 'product manager',
+        found: 1,
+        fetchedAt: '2026-08-13T12:01:00.000Z',
+        items: [
+          {
+            id: 'senior-product-manager-berlin-101',
+            title: 'Senior Product Manager',
+            company: 'Synthetic GmbH',
+            location: 'Berlin',
+            sourceUrl: 'https://jobs.example.test/product-101',
+            publishedAt: '2026-08-12T06:40:00.000Z',
+            salary: null,
+            workMode: 'remote',
+            requirements: ['Product', 'SaaS'],
+          },
+        ],
+      }),
+    ).toMatchObject({ created: 1, updated: 0, unchanged: 0 });
+    expect(store.listSubscriptionVacancies(candidate.id, subscription.id)).toMatchObject([
+      {
+        source: 'arbeitnow',
+        externalId: 'senior-product-manager-berlin-101',
+        workMode: 'remote',
+        requirements: ['Product', 'SaaS'],
+      },
+    ]);
   });
 
   it('migrates an existing v2 database without losing candidate tables', () => {

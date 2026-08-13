@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import type { VacancySample } from '../domain/vacancy';
+import {
+  parseRetryAfter,
+  VacancyConnectorError,
+} from './vacancyConnectorError';
+import { readBoundedJson } from './readBoundedJson';
 
 const inputSchema = z.object({
   text: z.string().trim().min(2).max(200),
@@ -7,8 +13,9 @@ const inputSchema = z.object({
 
 const hhResponseSchema = z.object({
   found: z.number().int().nonnegative(),
-  items: z.array(
-    z.object({
+  items: z
+    .array(
+      z.object({
       id: z.string().min(1).max(128),
       name: z.string().min(1).max(500),
       alternate_url: z.string().url().refine(isAllowedHhVacancyUrl),
@@ -23,29 +30,13 @@ const hhResponseSchema = z.object({
           gross: z.boolean(),
         })
         .nullable(),
-    }),
-  ),
+      }),
+    )
+    .max(20),
 });
 
-export interface HhVacancySample {
+export interface HhVacancySample extends VacancySample {
   source: 'hh';
-  query: string;
-  found: number;
-  fetchedAt: string;
-  items: Array<{
-    id: string;
-    title: string;
-    company: string;
-    location: string;
-    sourceUrl: string;
-    publishedAt: string | null;
-    salary: {
-      from: number | null;
-      to: number | null;
-      currency: string;
-      gross: boolean;
-    } | null;
-  }>;
 }
 
 interface SearchOptions {
@@ -88,10 +79,16 @@ export async function searchHhVacancies(
     }
     return searchHhPublicPage(value, fetchImpl, observedAt);
   }
+  if (response.status === 429) {
+    throw new VacancyConnectorError(
+      'hh_vacancy_search_rate_limited',
+      parseRetryAfter(response.headers.get('Retry-After'), observedAt),
+    );
+  }
   if (!response.ok) {
     throw new Error('hh_vacancy_search_unavailable');
   }
-  const parsed = hhResponseSchema.safeParse(await response.json());
+  const parsed = hhResponseSchema.safeParse(await readBoundedJson(response));
   if (!parsed.success) {
     throw new Error('hh_vacancy_search_invalid');
   }
@@ -108,6 +105,8 @@ export async function searchHhVacancies(
       sourceUrl: item.alternate_url,
       publishedAt: item.published_at,
       salary: item.salary,
+      workMode: 'unknown',
+      requirements: [],
     })),
   };
 }
@@ -160,6 +159,8 @@ async function searchHhPublicPage(
       sourceUrl,
       publishedAt: null,
       salary: null,
+      workMode: 'unknown',
+      requirements: [],
     });
     if (items.length >= input.perPage) break;
   }

@@ -48,11 +48,12 @@ import { SqliteMarketRepository } from './sqliteMarketRepository';
 import { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
 import { SqliteDocumentRepository } from './sqliteDocumentRepository';
 import { SqliteVacancyRepository } from './sqliteVacancyRepository';
-import type { HhVacancySample } from '../connectors/hhVacancySearch';
 import type {
   StoredVacancy,
   StoredVacancySubscription,
   ClaimedVacancySubscription,
+  VacancySample,
+  VacancySourceHealth,
   VacancyRefreshResult,
   VacancySubscriptionInput,
 } from '../domain/vacancy';
@@ -74,6 +75,7 @@ import {
   MIGRATION_11,
   MIGRATION_12,
   MIGRATION_13,
+  MIGRATION_14,
 } from './sqliteSchema';
 import type {
   CareerCommandRecord,
@@ -460,7 +462,7 @@ export class SqliteCandidateStore implements CandidateStore {
   }
   recordVacancyRefresh(
     subscriptionId: string,
-    sample: HhVacancySample,
+    sample: VacancySample,
   ): VacancyRefreshResult {
     return this.vacancyRepository.recordRefresh(subscriptionId, sample);
   }
@@ -490,6 +492,9 @@ export class SqliteCandidateStore implements CandidateStore {
       attemptedAt,
       retryAfterAt,
     );
+  }
+  listVacancySourceHealth(): VacancySourceHealth[] {
+    return this.vacancyRepository.listSourceHealth();
   }
   setVacancySubscriptionStatus(
     candidateId: string,
@@ -979,6 +984,14 @@ export class SqliteCandidateStore implements CandidateStore {
         this.database.exec(MIGRATION_13);
         this.database.prepare(
           'INSERT INTO schema_migrations (version, applied_at) VALUES (13, ?)',
+        ).run(new Date().toISOString());
+      });
+    }
+    if ((row.version ?? 0) < 14) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_14);
+        this.database.prepare(
+          'INSERT INTO schema_migrations (version, applied_at) VALUES (14, ?)',
         ).run(new Date().toISOString());
       });
     }

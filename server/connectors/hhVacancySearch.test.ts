@@ -54,13 +54,23 @@ describe('hh vacancy search', () => {
     });
   });
 
-  it('fails closed when hh returns an unexpected response', async () => {
+  it('fails closed and preserves Retry-After when hh rate limits the search', async () => {
     await expect(
       searchHhVacancies(
         { text: 'operations' },
-        { fetchImpl: async () => new Response('limited', { status: 429 }) },
+        {
+          fetchImpl: async () =>
+            new Response('limited', {
+              status: 429,
+              headers: { 'Retry-After': '120' },
+            }),
+          now: () => '2026-08-13T12:00:00.000Z',
+        },
       ),
-    ).rejects.toThrow('hh_vacancy_search_unavailable');
+    ).rejects.toMatchObject({
+      message: 'hh_vacancy_search_rate_limited',
+      retryAfterAt: '2026-08-13T12:02:00.000Z',
+    });
   });
 
   it('fails closed when an upstream response contains a non-hh vacancy URL', async () => {

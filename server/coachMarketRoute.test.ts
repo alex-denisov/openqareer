@@ -108,6 +108,8 @@ function sample(query: string) {
         sourceUrl: 'https://hh.ru/vacancy/123',
         publishedAt: '2026-08-12T10:00:00+0300',
         salary: null,
+        workMode: 'unknown' as const,
+        requirements: [],
       },
     ],
   };
