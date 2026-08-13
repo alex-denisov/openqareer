@@ -84,6 +84,7 @@ export function CareerWorkspaceShell({
 }: CareerWorkspaceShellProps) {
   const [activeView, setActiveView] = useState<ShellView>('today');
   const [expertOpen, setExpertOpen] = useState(false);
+  const [cabinetRevision, setCabinetRevision] = useState(0);
   const [accountOpen, setAccountOpen] = useState(
     () => typeof window !== 'undefined' && window.location.pathname === '/auth/reset-password',
   );
@@ -124,6 +125,7 @@ export function CareerWorkspaceShell({
     (nextSession: AuthUser | null) => {
       setActiveView('today');
       if (nextSession === null) onClearWorkspace();
+      else setCabinetRevision((revision) => revision + 1);
       onSessionChange(nextSession);
     },
     [onClearWorkspace, onSessionChange],
@@ -278,7 +280,7 @@ export function CareerWorkspaceShell({
         ) : null}
         {cabinetSession && activeView !== 'tariffs' ? (
           <CareerCabinet
-            key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}`}
+            key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
             view={activeView as CareerCabinetView}
             session={cabinetSession}
             workspace={visibleWorkspace}
