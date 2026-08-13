@@ -406,6 +406,62 @@ describe('SQLite candidate memory', () => {
     });
   });
 
+  it('purges an explicitly expired document through provenance invalidation', () => {
+    const store = createStore();
+    const candidate = createCandidate(store);
+    const otherCandidate = createCandidate(store);
+    const document = store.saveDocument(candidate.id, {
+      kind: 'resume',
+      source: 'upload',
+      fileName: 'retained-source.pdf',
+      mimeType: 'application/pdf',
+      contentBase64: Buffer.from('%PDF retained source').toString('base64'),
+      extractedText: 'Опыт, подтверждённый временно хранимым источником.',
+      parseStatus: 'ready',
+    }).document;
+    const derivedOutput = structuredClone(output);
+    derivedOutput.result.memoryCandidates[0]!.sourceMessageIds = [
+      `document:${document.id}`,
+    ];
+    const turnId = '51df5f57-df61-4ac2-98af-202608130211';
+    store.startTurn(candidate.id, turnId, turnRequest);
+    store.completeTurn(candidate.id, turnId, derivedOutput);
+    const memory = store.getSnapshot(candidate.id).memory[0]!;
+    store.changeMemory(candidate.id, memory.id, { action: 'confirm' });
+
+    expect(
+      store.setDocumentRetention(
+        otherCandidate.id,
+        document.id,
+        '2026-09-01T00:00:00.000Z',
+        '2026-08-13T10:00:00.000Z',
+      ),
+    ).toBeNull();
+    expect(
+      store.setDocumentRetention(
+        candidate.id,
+        document.id,
+        '2026-09-01T00:00:00.000Z',
+        '2026-08-13T10:00:00.000Z',
+      ),
+    ).toMatchObject({
+      id: document.id,
+      retentionUntil: '2026-09-01T00:00:00.000Z',
+    });
+    expect(
+      store.purgeExpiredDocuments('2026-08-31T23:59:59.999Z', 100),
+    ).toBe(0);
+    expect(
+      store.purgeExpiredDocuments('2026-09-01T00:00:00.000Z', 100),
+    ).toBe(1);
+    expect(store.getDocument(candidate.id, document.id)).toBeNull();
+    expect(store.getSnapshot(candidate.id).memory[0]).toMatchObject({
+      id: memory.id,
+      status: 'proposed',
+      sourceMessageIds: [`deleted-document:${document.id}`],
+    });
+  });
+
   it('persists isolated vacancy subscriptions and versions changed observations', () => {
     const directory = mkdtempSync(join(tmpdir(), 'openqareer-vacancies-'));
     directories.push(directory);

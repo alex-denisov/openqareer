@@ -73,6 +73,7 @@ import {
   MIGRATION_10,
   MIGRATION_11,
   MIGRATION_12,
+  MIGRATION_13,
 } from './sqliteSchema';
 import type {
   CareerCommandRecord,
@@ -393,6 +394,49 @@ export class SqliteCandidateStore implements CandidateStore {
       const deleted = this.documentRepository.delete(candidateId, documentId);
       if (deleted) this.invalidateDocumentKnowledge(candidateId, documentId);
       return deleted;
+    });
+  }
+  setDocumentRetention(
+    candidateId: string,
+    documentId: string,
+    retentionUntil: string | null,
+    now: string,
+  ): StoredCandidateDocument | null {
+    this.requireCandidate(candidateId);
+    const normalizedRetentionUntil = normalizeRetentionUntil(
+      retentionUntil,
+      now,
+    );
+    return this.documentRepository.setRetention(
+      candidateId,
+      documentId,
+      normalizedRetentionUntil,
+    );
+  }
+  purgeExpiredDocuments(now: string, limit: number): number {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new CandidateStoreConflictError();
+    }
+    const expired = this.documentRepository.listExpired(now, limit);
+    return this.transaction(() => {
+      let purged = 0;
+      for (const document of expired) {
+        if (
+          this.documentRepository.delete(
+            document.candidateId,
+            document.documentId,
+            now,
+          )
+        ) {
+          this.invalidateDocumentKnowledge(
+            document.candidateId,
+            document.documentId,
+            now,
+          );
+          purged += 1;
+        }
+      }
+      return purged;
     });
   }
   createVacancySubscription(
@@ -930,6 +974,14 @@ export class SqliteCandidateStore implements CandidateStore {
         ).run(new Date().toISOString());
       });
     }
+    if ((row.version ?? 0) < 13) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_13);
+        this.database.prepare(
+          'INSERT INTO schema_migrations (version, applied_at) VALUES (13, ?)',
+        ).run(new Date().toISOString());
+      });
+    }
   }
   private insertPendingTurn(
     candidateId: string,
@@ -1089,6 +1141,7 @@ export class SqliteCandidateStore implements CandidateStore {
   private invalidateDocumentKnowledge(
     candidateId: string,
     documentId: string,
+    invalidatedAt = new Date().toISOString(),
   ): void {
     const sourceRef = `document:${documentId}`;
     const deletedSourceRef = `deleted-document:${documentId}`;
@@ -1103,7 +1156,6 @@ export class SqliteCandidateStore implements CandidateStore {
       status: StoredMemory['status'];
       source_message_ids: string;
     }>;
-    const now = new Date().toISOString();
     for (const row of rows) {
       const sourceRefs = JSON.parse(row.source_message_ids) as string[];
       if (!sourceRefs.includes(sourceRef)) continue;
@@ -1119,7 +1171,7 @@ export class SqliteCandidateStore implements CandidateStore {
             remainingRefs.length > 0 ? remainingRefs : [deletedSourceRef],
           ),
           remainingRefs.length > 0 ? row.status : 'proposed',
-          now,
+          invalidatedAt,
           candidateId,
           row.id,
         );
@@ -1293,6 +1345,27 @@ export class SqliteCandidateStore implements CandidateStore {
 }
 export class CandidateNotFoundError extends Error {}
 export class CandidateStoreConflictError extends Error {}
+export class CandidateDocumentRetentionError extends Error {}
+
+function normalizeRetentionUntil(
+  retentionUntil: string | null,
+  now: string,
+): string | null {
+  if (retentionUntil === null) return null;
+  const nowTime = Date.parse(now);
+  const retentionTime = Date.parse(retentionUntil);
+  const maxRetentionTime = nowTime + 10 * 366 * 24 * 60 * 60 * 1_000;
+  if (
+    !Number.isFinite(nowTime) ||
+    !Number.isFinite(retentionTime) ||
+    retentionTime <= nowTime ||
+    retentionTime > maxRetentionTime
+  ) {
+    throw new CandidateDocumentRetentionError();
+  }
+  return new Date(retentionTime).toISOString();
+}
+
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }

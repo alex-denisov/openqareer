@@ -36,6 +36,7 @@ export interface CandidateDocument {
   byteSize: number;
   sha256: string;
   parseStatus: 'pending' | 'ready' | 'failed' | 'not_applicable';
+  retentionUntil: string | null;
   supersedesDocumentId: string | null;
   createdAt: string;
   updatedAt: string;

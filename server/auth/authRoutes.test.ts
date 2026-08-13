@@ -392,6 +392,22 @@ describe('cookie auth routes', () => {
       { id: documentId, fileName: 'candidate-cv.pdf', kind: 'resume' },
     ]);
 
+    const retentionUntil = new Date(Date.now() + 24 * 60 * 60 * 1_000).toISOString();
+    const retained = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/candidate/documents/${documentId}/retention`,
+      headers: {
+        cookie: candidate.cookie,
+        origin: 'http://localhost:3000',
+      },
+      payload: { retentionUntil },
+    });
+    expect(retained.statusCode).toBe(200);
+    expect(retained.json().data).toMatchObject({
+      id: documentId,
+      retentionUntil,
+    });
+
     const downloaded = await app.inject({
       method: 'GET',
       url: `/api/v1/candidate/documents/${documentId}`,

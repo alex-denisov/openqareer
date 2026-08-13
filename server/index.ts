@@ -77,6 +77,7 @@ const app = await buildApp({
 });
 
 let vacancyRefreshTimer: NodeJS.Timeout | undefined;
+let documentRetentionTimer: NodeJS.Timeout | undefined;
 
 function runVacancyRefresh(): void {
   void vacancyIntelligenceService
@@ -94,9 +95,27 @@ function runVacancyRefresh(): void {
     });
 }
 
+function runDocumentRetentionPurge(): void {
+  try {
+    const purged = candidateStore.purgeExpiredDocuments(
+      new Date().toISOString(),
+      100,
+    );
+    if (purged > 0) {
+      app.log.info({ purged }, 'document-retention-purge-completed');
+    }
+  } catch (error) {
+    app.log.error(
+      { errorName: error instanceof Error ? error.name : 'UnknownError' },
+      'document-retention-purge-failed',
+    );
+  }
+}
+
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, 'shutdown-started');
   if (vacancyRefreshTimer) clearInterval(vacancyRefreshTimer);
+  if (documentRetentionTimer) clearInterval(documentRetentionTimer);
   await app.close();
   candidateStore.close();
   authService.close();
@@ -109,8 +128,14 @@ process.once('SIGTERM', () => void shutdown('SIGTERM'));
 try {
   await app.listen({ host: config.host, port: config.port });
   runVacancyRefresh();
+  runDocumentRetentionPurge();
   vacancyRefreshTimer = setInterval(runVacancyRefresh, 5 * 60 * 1_000);
   vacancyRefreshTimer.unref();
+  documentRetentionTimer = setInterval(
+    runDocumentRetentionPurge,
+    5 * 60 * 1_000,
+  );
+  documentRetentionTimer.unref();
 } catch (error) {
   app.log.fatal(
     { errorName: error instanceof Error ? error.name : 'UnknownError' },

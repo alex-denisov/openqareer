@@ -88,6 +88,7 @@ export interface StoredCandidateDocument {
   byteSize: number;
   sha256: string;
   parseStatus: CandidateDocumentInput['parseStatus'];
+  retentionUntil: string | null;
   supersedesDocumentId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -245,6 +246,13 @@ export interface CandidateStore {
     documentId: string,
   ): CandidateDocumentWithContent | null;
   deleteDocument(candidateId: string, documentId: string): boolean;
+  setDocumentRetention(
+    candidateId: string,
+    documentId: string,
+    retentionUntil: string | null,
+    now: string,
+  ): StoredCandidateDocument | null;
+  purgeExpiredDocuments(now: string, limit: number): number;
   createVacancySubscription(
     candidateId: string,
     input: VacancySubscriptionInput,

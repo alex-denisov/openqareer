@@ -346,3 +346,11 @@ CREATE TABLE vacancy_source_health (
   consecutive_failures INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 `;
+
+export const MIGRATION_13 = `
+ALTER TABLE candidate_documents ADD COLUMN retention_until TEXT;
+
+CREATE INDEX candidate_documents_retention
+  ON candidate_documents(retention_until, candidate_id)
+  WHERE deleted_at IS NULL AND retention_until IS NOT NULL;
+`;

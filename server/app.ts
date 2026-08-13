@@ -32,6 +32,7 @@ import type {
   CandidateStore,
 } from './data/candidateStore';
 import {
+  CandidateDocumentRetentionError,
   CandidateNotFoundError,
   CandidateStoreConflictError,
 } from './data/sqliteCandidateStore';
@@ -817,6 +818,57 @@ export async function buildApp({
       return reply
         .type(document.mimeType)
         .send(Buffer.from(document.contentBase64, 'base64'));
+    },
+  );
+
+  app.patch<{ Params: { documentId: string } }>(
+    '/api/v1/candidate/documents/:documentId/retention',
+    { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const documentId = z.string().uuid().parse(request.params.documentId);
+      const body = documentRetentionSchema.parse(request.body);
+      try {
+        const document = candidateStore.setDocumentRetention(
+          candidate.id,
+          documentId,
+          body.retentionUntil,
+          new Date().toISOString(),
+        );
+        if (!document) {
+          return sendError(
+            reply,
+            request,
+            404,
+            'document_not_found',
+            'Документ не найден.',
+            false,
+          );
+        }
+        return { data: document, meta: { requestId: request.id } };
+      } catch (error) {
+        if (error instanceof CandidateDocumentRetentionError) {
+          return sendError(
+            reply,
+            request,
+            422,
+            'document_retention_invalid',
+            'Срок хранения должен быть в будущем и не дальше десяти лет.',
+            false,
+          );
+        }
+        throw error;
+      }
     },
   );
 
@@ -1666,6 +1718,10 @@ const candidateDocumentSchema = z.object({
   extractedText: z.string().trim().max(200_000).optional(),
   parseStatus: z.enum(['pending', 'ready', 'failed', 'not_applicable']),
   replacesDocumentId: z.string().uuid().optional(),
+});
+
+const documentRetentionSchema = z.object({
+  retentionUntil: z.string().datetime({ offset: true }).nullable(),
 });
 
 const hhMarketQuerySchema = z.object({

@@ -29,6 +29,7 @@ interface DocumentRow {
   content_cipher: string | null;
   extracted_text_cipher: string | null;
   parse_status: StoredCandidateDocument['parseStatus'];
+  retention_until: string | null;
   supersedes_document_id: string | null;
   created_at: string;
   updated_at: string;
@@ -155,8 +156,11 @@ export class SqliteDocumentRepository {
     };
   }
 
-  delete(candidateId: string, documentId: string): boolean {
-    const now = new Date().toISOString();
+  delete(
+    candidateId: string,
+    documentId: string,
+    deletedAt = new Date().toISOString(),
+  ): boolean {
     const result = this.database
       .prepare(
         `UPDATE candidate_documents
@@ -164,8 +168,43 @@ export class SqliteDocumentRepository {
              deleted_at = ?, updated_at = ?
          WHERE candidate_id = ? AND id = ? AND deleted_at IS NULL`,
       )
-      .run(now, now, candidateId, documentId);
+      .run(deletedAt, deletedAt, candidateId, documentId);
     return result.changes === 1;
+  }
+
+  setRetention(
+    candidateId: string,
+    documentId: string,
+    retentionUntil: string | null,
+  ): StoredCandidateDocument | null {
+    const updatedAt = new Date().toISOString();
+    const result = this.database
+      .prepare(
+        `UPDATE candidate_documents
+         SET retention_until = ?, updated_at = ?
+         WHERE candidate_id = ? AND id = ? AND deleted_at IS NULL`,
+      )
+      .run(retentionUntil, updatedAt, candidateId, documentId);
+    if (result.changes !== 1) return null;
+    const row = this.find(candidateId, documentId);
+    return row ? this.metadata(candidateId, row) : null;
+  }
+
+  listExpired(
+    now: string,
+    limit: number,
+  ): Array<{ candidateId: string; documentId: string }> {
+    return this.database
+      .prepare(
+        `SELECT candidate_id AS candidateId, id AS documentId
+         FROM candidate_documents
+         WHERE deleted_at IS NULL
+           AND retention_until IS NOT NULL
+           AND retention_until <= ?
+         ORDER BY retention_until, id
+         LIMIT ?`,
+      )
+      .all(now, limit) as Array<{ candidateId: string; documentId: string }>;
   }
 
   private rows(candidateId: string): DocumentRow[] {
@@ -218,6 +257,7 @@ export class SqliteDocumentRepository {
       byteSize: row.byte_size,
       sha256: row.content_sha256,
       parseStatus: row.parse_status,
+      retentionUntil: row.retention_until,
       supersedesDocumentId: row.supersedes_document_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -242,7 +282,7 @@ export class CandidateDocumentValidationError extends Error {
 const DOCUMENT_SELECT = `
   SELECT id, family_id, version, kind, source, file_name_cipher, mime_type,
          byte_size, content_sha256, content_cipher, extracted_text_cipher,
-         parse_status, supersedes_document_id, created_at, updated_at
+         parse_status, retention_until, supersedes_document_id, created_at, updated_at
   FROM candidate_documents
 `;
 

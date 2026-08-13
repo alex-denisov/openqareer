@@ -576,6 +576,21 @@ export async function downloadCandidateDocument(documentId: string): Promise<Blo
   return response.blob();
 }
 
+export async function setCandidateDocumentRetention(
+  documentId: string,
+  retentionUntil: string | null,
+): Promise<CandidateDocument> {
+  const response = await apiFetch(
+    `/api/v1/candidate/documents/${encodeURIComponent(documentId)}/retention`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ retentionUntil }),
+    },
+  );
+  return readData(response);
+}
+
 export async function createVacancySubscription(input: {
   query: string;
   cadenceMinutes?: number;
