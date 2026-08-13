@@ -389,7 +389,11 @@ export class SqliteCandidateStore implements CandidateStore {
   }
   deleteDocument(candidateId: string, documentId: string): boolean {
     this.requireCandidate(candidateId);
-    return this.documentRepository.delete(candidateId, documentId);
+    return this.transaction(() => {
+      const deleted = this.documentRepository.delete(candidateId, documentId);
+      if (deleted) this.invalidateDocumentKnowledge(candidateId, documentId);
+      return deleted;
+    });
   }
   createVacancySubscription(
     candidateId: string,
@@ -686,6 +690,14 @@ export class SqliteCandidateStore implements CandidateStore {
         : change.action === 'delete'
           ? '[deleted]'
           : currentStatement;
+    const currentSourceRefs = JSON.parse(row.source_message_ids) as string[];
+    const activeSourceRefs = currentSourceRefs.filter(
+      (ref) => !ref.startsWith('deleted-document:'),
+    );
+    const nextSourceRefs =
+      change.action !== 'delete' && activeSourceRefs.length === 0
+        ? [`candidate-review:${now}`]
+        : activeSourceRefs;
 
     this.transaction(() => {
       this.database
@@ -705,7 +717,7 @@ export class SqliteCandidateStore implements CandidateStore {
       this.database
         .prepare(
           `UPDATE memory
-           SET statement_cipher = ?, status = ?, updated_at = ?
+           SET statement_cipher = ?, source_message_ids = ?, status = ?, updated_at = ?
            WHERE id = ? AND candidate_id = ?`,
         )
         .run(
@@ -713,6 +725,7 @@ export class SqliteCandidateStore implements CandidateStore {
             nextStatement,
             memoryAssociatedData(candidateId, memoryId),
           ),
+          JSON.stringify(nextSourceRefs),
           nextStatus,
           now,
           memoryId,
@@ -728,7 +741,7 @@ export class SqliteCandidateStore implements CandidateStore {
       domain: row.domain,
       statement: nextStatement,
       confidence: row.confidence,
-      sourceMessageIds: JSON.parse(row.source_message_ids) as string[],
+      sourceMessageIds: nextSourceRefs,
       sensitive: row.sensitive === 1,
       status: nextStatus,
       createdAt: row.created_at,
@@ -1072,6 +1085,45 @@ export class SqliteCandidateStore implements CandidateStore {
       })
       .slice(0, 2);
     return { confirmedFacts, documents, openQuestions };
+  }
+  private invalidateDocumentKnowledge(
+    candidateId: string,
+    documentId: string,
+  ): void {
+    const sourceRef = `document:${documentId}`;
+    const deletedSourceRef = `deleted-document:${documentId}`;
+    const rows = this.database
+      .prepare(
+        `SELECT id, status, source_message_ids
+         FROM memory
+         WHERE candidate_id = ? AND status != 'deleted'`,
+      )
+      .all(candidateId) as Array<{
+      id: string;
+      status: StoredMemory['status'];
+      source_message_ids: string;
+    }>;
+    const now = new Date().toISOString();
+    for (const row of rows) {
+      const sourceRefs = JSON.parse(row.source_message_ids) as string[];
+      if (!sourceRefs.includes(sourceRef)) continue;
+      const remainingRefs = sourceRefs.filter((ref) => ref !== sourceRef);
+      this.database
+        .prepare(
+          `UPDATE memory
+           SET source_message_ids = ?, status = ?, updated_at = ?
+           WHERE candidate_id = ? AND id = ?`,
+        )
+        .run(
+          JSON.stringify(
+            remainingRefs.length > 0 ? remainingRefs : [deletedSourceRef],
+          ),
+          remainingRefs.length > 0 ? row.status : 'proposed',
+          now,
+          candidateId,
+          row.id,
+        );
+    }
   }
   private memory(candidateId: string): StoredMemory[] {
     const rows = this.database

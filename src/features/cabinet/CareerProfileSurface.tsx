@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import {
   Check,
+  DownloadSimple,
   FileArrowUp,
   FilePdf,
   FileText,
@@ -13,6 +14,7 @@ import {
   changeMemory,
   CoachApiError,
   deleteCandidateDocument,
+  downloadCandidateDocument,
   uploadCandidateDocument,
   type AccountSnapshot,
   type AuthUser,
@@ -85,6 +87,27 @@ export function CareerProfileSurface({
       await deleteCandidateDocument(document.id);
       setNotice(`«${document.fileName}» удалён из защищённого хранилища.`);
       await onRefresh();
+    } catch (reason) {
+      setError(profileError(reason));
+    } finally {
+      setBusyId(undefined);
+    }
+  }
+
+  async function downloadDocument(document: CandidateDocument) {
+    setBusyId(document.id);
+    setError(undefined);
+    try {
+      const blob = await downloadCandidateDocument(document.id);
+      const url = URL.createObjectURL(blob);
+      const link = window.document.createElement('a');
+      link.href = url;
+      link.download = document.fileName;
+      window.document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setNotice(`«${document.fileName}» передан браузеру для скачивания.`);
     } catch (reason) {
       setError(profileError(reason));
     } finally {
@@ -269,6 +292,7 @@ export function CareerProfileSurface({
             busyId={busyId}
             uploading={uploading}
             onUpload={uploadFile}
+            onDownload={downloadDocument}
             onDelete={removeDocument}
           />
         ) : null}
@@ -416,12 +440,14 @@ function DocumentVault({
   busyId,
   uploading,
   onUpload,
+  onDownload,
   onDelete,
 }: {
   documents: CandidateDocument[];
   busyId?: string;
   uploading: boolean;
   onUpload: (file: File) => Promise<void>;
+  onDownload: (document: CandidateDocument) => Promise<void>;
   onDelete: (document: CandidateDocument) => Promise<void>;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -469,14 +495,25 @@ function DocumentVault({
                   {parseStatusLabel(document.parseStatus)}
                 </small>
               </div>
-              <button
-                type="button"
-                disabled={busyId === document.id}
-                onClick={() => void onDelete(document)}
-                aria-label={`Удалить ${document.fileName}`}
-              >
-                <Trash size={17} />
-              </button>
+              <div className="career-document-actions">
+                <button
+                  type="button"
+                  disabled={busyId === document.id}
+                  onClick={() => void onDownload(document)}
+                  aria-label={`Скачать ${document.fileName}`}
+                >
+                  <DownloadSimple size={18} />
+                </button>
+                <button
+                  className="is-danger"
+                  type="button"
+                  disabled={busyId === document.id}
+                  onClick={() => void onDelete(document)}
+                  aria-label={`Удалить ${document.fileName}`}
+                >
+                  <Trash size={17} />
+                </button>
+              </div>
             </article>
           ))}
         </div>

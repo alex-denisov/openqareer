@@ -784,6 +784,42 @@ export async function buildApp({
     },
   );
 
+  app.get<{ Params: { documentId: string } }>(
+    '/api/v1/candidate/documents/:documentId/download',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const documentId = z.string().uuid().parse(request.params.documentId);
+      const document = candidateStore.getDocument(candidate.id, documentId);
+      if (!document) {
+        return sendError(
+          reply,
+          request,
+          404,
+          'document_not_found',
+          'Документ не найден.',
+          false,
+        );
+      }
+      reply.header('Cache-Control', 'private, no-store');
+      reply.header('X-Content-Type-Options', 'nosniff');
+      reply.header(
+        'Content-Disposition',
+        `attachment; filename="openqareer-document"; filename*=UTF-8''${encodeHeaderFileName(document.fileName)}`,
+      );
+      return reply
+        .type(document.mimeType)
+        .send(Buffer.from(document.contentBase64, 'base64'));
+    },
+  );
+
   app.delete<{ Params: { documentId: string } }>(
     '/api/v1/candidate/documents/:documentId',
     async (request, reply) => {
@@ -1506,6 +1542,16 @@ export async function buildApp({
         false,
       );
     }
+    if (getErrorStatusCode(error) === 429) {
+      return sendError(
+        reply,
+        request,
+        429,
+        'rate_limit_exceeded',
+        'Слишком много запросов. Повторите действие через минуту.',
+        true,
+      );
+    }
 
     request.log.error(
       {
@@ -2005,6 +2051,18 @@ function getErrorCode(error: unknown): string | undefined {
   return undefined;
 }
 
+function getErrorStatusCode(error: unknown): number | undefined {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    typeof error.statusCode === 'number'
+  ) {
+    return error.statusCode;
+  }
+  return undefined;
+}
+
 function previewAuth(expectedToken: string) {
   return async (
     request: FastifyRequest,
@@ -2033,6 +2091,12 @@ function secureEqual(left: string, right: string): boolean {
   return (
     leftBuffer.length === rightBuffer.length &&
     timingSafeEqual(leftBuffer, rightBuffer)
+  );
+}
+
+function encodeHeaderFileName(fileName: string): string {
+  return encodeURIComponent(fileName).replace(/[!'()*]/gu, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 }
 

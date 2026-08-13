@@ -404,6 +404,35 @@ describe('cookie auth routes', () => {
       extractedText: 'Руководил операциями и улучшал удержание на 18%.',
     });
 
+    const binaryDownload = await app.inject({
+      method: 'GET',
+      url: `/api/v1/candidate/documents/${documentId}/download`,
+      headers: { cookie: candidate.cookie },
+    });
+    expect(binaryDownload.statusCode).toBe(200);
+    expect(binaryDownload.headers['content-type']).toBe('application/pdf');
+    expect(binaryDownload.headers['content-disposition']).toContain(
+      "filename*=UTF-8''candidate-cv.pdf",
+    );
+    expect(binaryDownload.rawPayload).toEqual(
+      Buffer.from('%PDF candidate CV 881'),
+    );
+    expect(binaryDownload.body).not.toContain('Руководил операциями');
+    for (let requestNumber = 2; requestNumber <= 30; requestNumber += 1) {
+      const repeated = await app.inject({
+        method: 'GET',
+        url: `/api/v1/candidate/documents/${documentId}/download`,
+        headers: { cookie: candidate.cookie },
+      });
+      expect(repeated.statusCode).toBe(200);
+    }
+    const limitedDownload = await app.inject({
+      method: 'GET',
+      url: `/api/v1/candidate/documents/${documentId}/download`,
+      headers: { cookie: candidate.cookie },
+    });
+    expect(limitedDownload.statusCode).toBe(429);
+
     const deleted = await app.inject({
       method: 'DELETE',
       url: `/api/v1/candidate/documents/${documentId}`,

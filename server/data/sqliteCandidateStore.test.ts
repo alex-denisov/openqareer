@@ -345,6 +345,67 @@ describe('SQLite candidate memory', () => {
     );
   });
 
+  it('invalidates confirmed knowledge when its only document source is deleted', () => {
+    const store = createStore();
+    const candidate = createCandidate(store);
+    const document = store.saveDocument(candidate.id, {
+      kind: 'resume',
+      source: 'upload',
+      fileName: 'source.pdf',
+      mimeType: 'application/pdf',
+      contentBase64: Buffer.from('%PDF provenance source').toString('base64'),
+      extractedText: 'Подтверждённый опыт управления операциями.',
+      parseStatus: 'ready',
+    }).document;
+    const documentRef = `document:${document.id}`;
+    const derivedOutput = structuredClone(output);
+    derivedOutput.result.memoryCandidates[0]!.sourceMessageIds = [documentRef];
+    const firstTurnId = '51df5f57-df61-4ac2-98af-202608130201';
+    store.startTurn(candidate.id, firstTurnId, turnRequest);
+    store.completeTurn(candidate.id, firstTurnId, derivedOutput);
+    const memory = store.getSnapshot(candidate.id).memory[0]!;
+    store.changeMemory(candidate.id, memory.id, { action: 'confirm' });
+
+    expect(store.deleteDocument(candidate.id, document.id)).toBe(true);
+    expect(store.getSnapshot(candidate.id).memory[0]).toMatchObject({
+      id: memory.id,
+      status: 'proposed',
+      sourceMessageIds: [`deleted-document:${document.id}`],
+    });
+
+    const next = store.startTurn(
+      candidate.id,
+      '51df5f57-df61-4ac2-98af-202608130202',
+      {
+        ...turnRequest,
+        messageId: '85512ddf-962c-4a7c-a4cc-30a35d1e6802',
+      },
+    );
+    if (next.state !== 'ready') throw new Error('expected ready turn');
+    expect(next.input.knowledgeContext.confirmedFacts).toEqual([]);
+    expect(next.input.knowledgeContext.documents).toEqual([]);
+
+    expect(
+      store.changeMemory(candidate.id, memory.id, { action: 'confirm' }),
+    ).toMatchObject({
+      status: 'confirmed',
+      sourceMessageIds: [expect.stringMatching(/^candidate-review:/u)],
+    });
+    const afterReview = store.startTurn(
+      candidate.id,
+      '51df5f57-df61-4ac2-98af-202608130203',
+      {
+        ...turnRequest,
+        messageId: '85512ddf-962c-4a7c-a4cc-30a35d1e6803',
+      },
+    );
+    if (afterReview.state !== 'ready') throw new Error('expected ready turn');
+    expect(afterReview.input.knowledgeContext.confirmedFacts[0]).toMatchObject({
+      ref: `memory:${memory.id}`,
+      sourceRefs: [expect.stringMatching(/^candidate-review:/u)],
+    });
+  });
+
   it('persists isolated vacancy subscriptions and versions changed observations', () => {
     const directory = mkdtempSync(join(tmpdir(), 'openqareer-vacancies-'));
     directories.push(directory);

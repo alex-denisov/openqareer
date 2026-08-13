@@ -567,6 +567,15 @@ export async function deleteCandidateDocument(documentId: string): Promise<void>
   if (!response.ok) await throwApiError(response);
 }
 
+export async function downloadCandidateDocument(documentId: string): Promise<Blob> {
+  const response = await apiFetch(
+    `/api/v1/candidate/documents/${encodeURIComponent(documentId)}/download`,
+    { headers: { Accept: 'application/octet-stream' } },
+  );
+  if (!response.ok) await throwApiError(response);
+  return response.blob();
+}
+
 export async function createVacancySubscription(input: {
   query: string;
   cadenceMinutes?: number;
