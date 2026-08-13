@@ -227,6 +227,224 @@ describe('SQLite candidate memory', () => {
     );
   });
 
+  it('stores, deduplicates and soft-deletes an encrypted candidate document', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'openqareer-documents-'));
+    directories.push(directory);
+    const databasePath = join(directory, 'candidate.db');
+    const store = createStore(databasePath);
+    const candidateA = createCandidate(store);
+    const candidateB = createCandidate(store);
+    const contentBase64 = Buffer.from(
+      '%PDF synthetic private document bytes 482',
+    ).toString('base64');
+    const input = {
+      kind: 'resume' as const,
+      source: 'upload' as const,
+      fileName: 'Алексей Денисов CV.pdf',
+      mimeType: 'application/pdf',
+      contentBase64,
+      extractedText: 'Уникальный текст резюме 482',
+      parseStatus: 'ready' as const,
+    };
+
+    const first = store.saveDocument(candidateA.id, input);
+    expect(first).toMatchObject({
+      created: true,
+      document: {
+        kind: 'resume',
+        source: 'upload',
+        fileName: 'Алексей Денисов CV.pdf',
+        mimeType: 'application/pdf',
+        version: 1,
+        parseStatus: 'ready',
+      },
+    });
+    expect(store.getDocument(candidateB.id, first.document.id)).toBeNull();
+    expect(store.getDocument(candidateA.id, first.document.id)).toMatchObject({
+      contentBase64,
+      extractedText: 'Уникальный текст резюме 482',
+    });
+    expect(store.saveDocument(candidateA.id, input)).toMatchObject({
+      created: false,
+      document: { id: first.document.id },
+    });
+    expect(store.getSnapshot(candidateA.id).documents).toHaveLength(1);
+    expect(store.getSnapshot(candidateB.id).documents).toEqual([]);
+    expect(store.exportCandidate(candidateA.id).documentContents).toMatchObject([
+      { id: first.document.id, contentBase64 },
+    ]);
+
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+    const rawDatabase = readFileSync(databasePath).toString('utf8');
+    expect(rawDatabase).not.toContain('Алексей Денисов CV.pdf');
+    expect(rawDatabase).not.toContain('Уникальный текст резюме 482');
+    expect(rawDatabase).not.toContain('%PDF synthetic private document bytes 482');
+
+    const reopened = createStore(databasePath);
+    expect(reopened.deleteDocument(candidateA.id, first.document.id)).toBe(true);
+    expect(reopened.getDocument(candidateA.id, first.document.id)).toBeNull();
+    expect(reopened.getSnapshot(candidateA.id).documents).toEqual([]);
+  });
+
+  it('projects confirmed knowledge and bounded document excerpts into a coach turn', () => {
+    const store = createStore();
+    const candidate = createCandidate(store);
+    const firstTurnId = '51df5f57-df61-4ac2-98af-202607310112';
+    store.startTurn(candidate.id, firstTurnId, turnRequest);
+    store.completeTurn(candidate.id, firstTurnId, output);
+    const memory = store.getSnapshot(candidate.id).memory[0]!;
+    store.changeMemory(candidate.id, memory.id, { action: 'confirm' });
+    const document = store.saveDocument(candidate.id, {
+      kind: 'resume',
+      source: 'upload',
+      fileName: 'candidate.pdf',
+      mimeType: 'application/pdf',
+      contentBase64: Buffer.from('%PDF coach context').toString('base64'),
+      extractedText: `Подтверждённый фрагмент CV. ${'A'.repeat(8_000)}`,
+      parseStatus: 'ready',
+    }).document;
+
+    const next = store.startTurn(
+      candidate.id,
+      '51df5f57-df61-4ac2-98af-202607310113',
+      {
+        messageId: '0e59bb5c-8d83-4d63-b75c-e0fe9e9d8320',
+        content: 'Помоги выбрать следующий карьерный шаг.',
+        phase: 'role',
+      },
+    );
+
+    expect(next).toMatchObject({
+      state: 'ready',
+      input: {
+        knowledgeContext: {
+          confirmedFacts: [
+            {
+              ref: `memory:${memory.id}`,
+              statement: output.result.memoryCandidates[0]?.statement,
+              domain: 'responsibility',
+            },
+          ],
+          documents: [
+            {
+              ref: `document:${document.id}`,
+              fileName: 'candidate.pdf',
+              kind: 'resume',
+            },
+          ],
+        },
+      },
+    });
+    if (next.state !== 'ready') throw new Error('expected ready turn');
+    expect(next.input.knowledgeContext.documents[0]?.excerpt.length).toBeLessThanOrEqual(
+      6_000,
+    );
+    expect(JSON.stringify(next.input.knowledgeContext)).not.toContain(
+      Buffer.from('%PDF coach context').toString('base64'),
+    );
+  });
+
+  it('persists isolated vacancy subscriptions and versions changed observations', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'openqareer-vacancies-'));
+    directories.push(directory);
+    const databasePath = join(directory, 'candidate.db');
+    const store = createStore(databasePath);
+    const candidateA = createCandidate(store);
+    const candidateB = createCandidate(store);
+    const subscription = store.createVacancySubscription(
+      candidateA.id,
+      {
+        source: 'hh',
+        query: 'руководитель операций',
+        cadenceMinutes: 360,
+      },
+      '2026-08-13T08:00:00.000Z',
+    );
+    const firstSample = {
+      source: 'hh' as const,
+      query: 'руководитель операций',
+      found: 42,
+      fetchedAt: '2026-08-13T08:01:00.000Z',
+      items: [
+        {
+          id: 'hh-881',
+          title: 'Руководитель операций',
+          company: 'Synthetic Company',
+          location: 'Москва',
+          sourceUrl: 'https://hh.ru/vacancy/881',
+          publishedAt: '2026-08-13T07:00:00+0300',
+          salary: {
+            from: 250_000,
+            to: 320_000,
+            currency: 'RUR',
+            gross: true,
+          },
+        },
+      ],
+    };
+
+    expect(store.listVacancySubscriptions(candidateB.id)).toEqual([]);
+    expect(store.getVacancySubscription(candidateB.id, subscription.id)).toBeNull();
+    expect(store.recordVacancyRefresh(subscription.id, firstSample)).toMatchObject({
+      created: 1,
+      updated: 0,
+      unchanged: 0,
+    });
+    expect(store.recordVacancyRefresh(subscription.id, firstSample)).toMatchObject({
+      created: 0,
+      updated: 0,
+      unchanged: 1,
+    });
+    expect(
+      store.recordVacancyRefresh(subscription.id, {
+        ...firstSample,
+        fetchedAt: '2026-08-13T10:01:00.000Z',
+        items: [
+          {
+            ...firstSample.items[0]!,
+            title: 'Head of Operations',
+          },
+        ],
+      }),
+    ).toMatchObject({ created: 0, updated: 1, unchanged: 0 });
+
+    expect(store.listVacancySubscriptions(candidateA.id)).toMatchObject([
+      {
+        id: subscription.id,
+        query: 'руководитель операций',
+        status: 'active',
+        analytics: {
+          sampleSize: 1,
+          sourceFound: 42,
+          salaryKnown: 1,
+          unknownSalary: 0,
+          observedFrom: '2026-08-13T08:01:00.000Z',
+          observedTo: '2026-08-13T10:01:00.000Z',
+        },
+      },
+    ]);
+    expect(
+      store.listSubscriptionVacancies(candidateA.id, subscription.id),
+    ).toMatchObject([
+      {
+        externalId: 'hh-881',
+        title: 'Head of Operations',
+        version: 2,
+        source: 'hh',
+      },
+    ]);
+    expect(store.listSubscriptionVacancies(candidateB.id, subscription.id)).toEqual(
+      [],
+    );
+
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+    expect(readFileSync(databasePath).toString('utf8')).not.toContain(
+      'руководитель операций',
+    );
+  });
+
   it('persists encrypted candidate-scoped assessments and replaces one version', () => {
     const directory = mkdtempSync(join(tmpdir(), 'openqareer-assessment-'));
     directories.push(directory);

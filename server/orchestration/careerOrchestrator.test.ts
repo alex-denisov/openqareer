@@ -123,6 +123,61 @@ describe('CareerOrchestrator', () => {
     expect(output.result.actionProposals).toEqual([]);
   });
 
+  it('accepts candidate-owned document references as career evidence', async () => {
+    const documentRef = 'document:11111111-1111-4111-8111-111111111111';
+    const orchestrator = new CareerOrchestrator({
+      roleAgent: {
+        async run(input) {
+          const output = roleResult(input.role);
+          output.result.memoryCandidates.forEach((candidate) => {
+            candidate.sourceMessageIds = [documentRef];
+          });
+          if (input.role === 'career_strategist') {
+            output.result.careerTrack!.alternatives[0]!.evidenceRefs = [
+              documentRef,
+            ];
+            output.result.actionProposals[0]!.evidenceRefs = [documentRef];
+          }
+          return output;
+        },
+      },
+    });
+
+    const output = await orchestrator.createTurn(
+      {
+        candidateReference: 'candidate-test-001',
+        dataClass: 'synthetic',
+        locale: 'ru-RU',
+        phase: 'role',
+        messages: [
+          { id: 'message-1', role: 'user', content: 'Проверь мой опыт.' },
+        ],
+        knowledgeContext: {
+          confirmedFacts: [],
+          openQuestions: [],
+          documents: [
+            {
+              ref: documentRef,
+              kind: 'resume',
+              fileName: 'candidate.pdf',
+              version: 1,
+              sha256: 'a'.repeat(64),
+              excerpt: 'Подтверждённый опыт руководства операциями.',
+            },
+          ],
+        },
+      },
+      '77777777-7777-4777-8777-777777777777',
+    );
+
+    expect(output.result.careerTrack).not.toBeNull();
+    expect(output.result.actionProposals).toHaveLength(1);
+    expect(output.result.intelligence).toMatchObject({
+      evidenceCoverage: 1,
+      unsupportedClaimCount: 0,
+    });
+  });
+
   it('rejects a market track that has no dated server observation', async () => {
     const orchestrator = new CareerOrchestrator({
       roleAgent: {

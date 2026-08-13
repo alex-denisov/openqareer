@@ -1,6 +1,7 @@
 import type {
   CoachMessage,
   CoachPhase,
+  CoachTurnInput,
   CoachTurnResult,
   MemoryCandidate,
 } from '../domain/coach';
@@ -21,6 +22,14 @@ import type {
   CareerCommandRecord,
   VerifiedCareerApproval,
 } from '../orchestration/careerCommandPlanner';
+import type { HhVacancySample } from '../connectors/hhVacancySearch';
+import type {
+  StoredVacancy,
+  StoredVacancySubscription,
+  ClaimedVacancySubscription,
+  VacancyRefreshResult,
+  VacancySubscriptionInput,
+} from '../domain/vacancy';
 
 export interface CandidateIdentity {
   id: string;
@@ -41,6 +50,52 @@ export interface CandidateSnapshot {
   dossier: ExperienceDossier;
   assessments: StoredAssessment[];
   germanyMarket: StoredGermanyMarket | null;
+  documents: StoredCandidateDocument[];
+  vacancySubscriptions: StoredVacancySubscription[];
+}
+
+export interface CandidateExport extends CandidateSnapshot {
+  documentContents: CandidateDocumentWithContent[];
+}
+
+export type CandidateDocumentKind =
+  | 'resume'
+  | 'cover_letter'
+  | 'certificate'
+  | 'portfolio'
+  | 'profile_export'
+  | 'other';
+
+export interface CandidateDocumentInput {
+  kind: CandidateDocumentKind;
+  source: 'upload' | 'generated' | 'import';
+  fileName: string;
+  mimeType: string;
+  contentBase64: string;
+  extractedText?: string;
+  parseStatus: 'pending' | 'ready' | 'failed' | 'not_applicable';
+  replacesDocumentId?: string;
+}
+
+export interface StoredCandidateDocument {
+  id: string;
+  familyId: string;
+  version: number;
+  kind: CandidateDocumentKind;
+  source: CandidateDocumentInput['source'];
+  fileName: string;
+  mimeType: string;
+  byteSize: number;
+  sha256: string;
+  parseStatus: CandidateDocumentInput['parseStatus'];
+  supersedesDocumentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CandidateDocumentWithContent extends StoredCandidateDocument {
+  contentBase64: string;
+  extractedText: string | null;
 }
 
 export interface StoredGermanyMarket {
@@ -97,6 +152,7 @@ export type StartedTurn =
         locale: CandidateIdentity['locale'];
         phase: CoachPhase;
         messages: CoachMessage[];
+        knowledgeContext: NonNullable<CoachTurnInput['knowledgeContext']>;
       };
     }
   | {
@@ -180,6 +236,54 @@ export interface CandidateStore {
     memoryId: string,
     change: MemoryChange,
   ): StoredMemory | null;
+  saveDocument(
+    candidateId: string,
+    input: CandidateDocumentInput,
+  ): { created: boolean; document: StoredCandidateDocument };
+  getDocument(
+    candidateId: string,
+    documentId: string,
+  ): CandidateDocumentWithContent | null;
+  deleteDocument(candidateId: string, documentId: string): boolean;
+  createVacancySubscription(
+    candidateId: string,
+    input: VacancySubscriptionInput,
+    now: string,
+  ): StoredVacancySubscription;
+  listVacancySubscriptions(candidateId: string): StoredVacancySubscription[];
+  getVacancySubscription(
+    candidateId: string,
+    subscriptionId: string,
+  ): StoredVacancySubscription | null;
+  recordVacancyRefresh(
+    subscriptionId: string,
+    sample: HhVacancySample,
+  ): VacancyRefreshResult;
+  listSubscriptionVacancies(
+    candidateId: string,
+    subscriptionId: string,
+  ): StoredVacancy[];
+  claimDueVacancySubscriptions(
+    now: string,
+    leaseUntil: string,
+    limit: number,
+  ): ClaimedVacancySubscription[];
+  recordVacancyFailure(
+    subscriptionId: string,
+    errorCode: string,
+    attemptedAt: string,
+    retryAfterAt?: string,
+  ): void;
+  setVacancySubscriptionStatus(
+    candidateId: string,
+    subscriptionId: string,
+    status: StoredVacancySubscription['status'],
+    now: string,
+  ): StoredVacancySubscription | null;
+  deleteVacancySubscription(
+    candidateId: string,
+    subscriptionId: string,
+  ): boolean;
   saveAssessment(
     candidateId: string,
     assessmentId: AssessmentId,
@@ -236,7 +340,7 @@ export interface CandidateStore {
     commandId: string,
     command: CareerCommandRecord,
   ): CareerCommandRecord;
-  exportCandidate(candidateId: string): CandidateSnapshot;
+  exportCandidate(candidateId: string): CandidateExport;
   deleteCandidate(candidateId: string): boolean;
   close(): void;
 }

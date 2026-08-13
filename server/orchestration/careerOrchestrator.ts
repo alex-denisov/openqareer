@@ -108,20 +108,17 @@ function finalizeCareerTurn(
   const final = runs.at(-1);
   if (!final) throw new Error('career orchestration produced no role output');
   const strategist = runs.find(({ role }) => role === 'career_strategist');
-  const supportedMessageIds = new Set(
-    input.messages
-      .filter((message) => message.role === 'user')
-      .map((message) => message.id),
-  );
+  const supportedEvidenceRefs = new Set(candidateEvidenceRefs(input));
   const supportedProposalRefs = new Set([
-    ...supportedMessageIds,
+    ...supportedEvidenceRefs,
     ...(input.marketObservations?.map((observation) => observation.ref) ?? []),
   ]);
   const claimRefs = runs.flatMap(({ output }) =>
     output.result.memoryCandidates.map((candidate) => candidate.sourceMessageIds),
   );
   const supportedClaims = claimRefs.filter(
-    (refs) => refs.length > 0 && refs.every((ref) => supportedMessageIds.has(ref)),
+    (refs) =>
+      refs.length > 0 && refs.every((ref) => supportedProposalRefs.has(ref)),
   ).length;
 
   return {
@@ -156,9 +153,7 @@ function careerTrackFrom(
     input.marketObservations?.map((observation) => observation.ref) ?? [],
   );
   const supportedRefs = new Set([
-    ...input.messages
-      .filter((message) => message.role === 'user')
-      .map((message) => message.id),
+    ...candidateEvidenceRefs(input),
     ...marketRefs,
   ]);
   const fullySupported = track.alternatives.every(
@@ -172,6 +167,17 @@ function careerTrackFrom(
     alternative.evidenceRefs.some((ref) => marketRefs.has(ref)),
   );
   return citesMarket ? track : null;
+}
+
+function candidateEvidenceRefs(input: CoachTurnInput): string[] {
+  return [
+    ...input.messages
+      .filter((message) => message.role === 'user')
+      .map((message) => message.id),
+    ...(input.knowledgeContext?.confirmedFacts.map((fact) => fact.ref) ?? []),
+    ...(input.knowledgeContext?.documents.map((document) => document.ref) ?? []),
+    ...(input.knowledgeContext?.openQuestions.map((question) => question.ref) ?? []),
+  ];
 }
 
 function proposalsFrom(strategist: RoleRun | undefined, final: RoleRun) {

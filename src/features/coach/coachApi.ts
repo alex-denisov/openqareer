@@ -1,14 +1,26 @@
 export type UserRole = 'candidate' | 'admin';
-export type CoachPhase =
-  | 'discovery'
-  | 'evidence'
-  | 'role'
-  | 'market'
-  | 'resume'
-  | 'targeting';
+export type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
+import type {
+  AccountSnapshot,
+  CandidateDocument,
+  CandidateDocumentKind,
+  VacancySubscription,
+  VacancySubscriptionView,
+} from './cabinetTypes';
+export type {
+  AccountSnapshot,
+  CandidateDocument,
+  CandidateDocumentKind,
+  StoredVacancy,
+  VacancyAnalytics,
+  VacancySubscription,
+  VacancySubscriptionView,
+} from './cabinetTypes';
 
 export interface AuthUser {
   username: string;
+  email: string | null;
+  displayName: string | null;
   role: UserRole;
   isTest: boolean;
   candidateId: string | null;
@@ -32,12 +44,7 @@ export type ProfileUrlImportResult =
       status: 'unavailable';
       platform: 'linkedin' | 'hh';
       sourceUrl: string;
-      reason:
-        | 'authwall'
-        | 'not-public'
-        | 'network'
-        | 'insufficient'
-        | 'official-access-required';
+      reason: 'authwall' | 'not-public' | 'network' | 'insufficient' | 'official-access-required';
       nextAction: 'upload_export_or_pdf' | 'oauth_or_export';
     };
 
@@ -91,10 +98,7 @@ export interface CandidateMemory {
     | 'role-evidence'
     | 'other';
   statement: string;
-  confidence:
-    | 'candidate-confirmed'
-    | 'candidate-reported'
-    | 'coach-hypothesis';
+  confidence: 'candidate-confirmed' | 'candidate-reported' | 'coach-hypothesis';
   sourceMessageIds: string[];
   sensitive: boolean;
   status: 'proposed' | 'confirmed' | 'corrected';
@@ -116,11 +120,7 @@ export interface WorkPreferenceResult {
   kind: 'work-preferences';
   version: 1;
   roleFamilies: Array<{
-    id:
-      | 'product-discovery'
-      | 'operations-program'
-      | 'commercial-customer'
-      | 'specialist-analysis';
+    id: 'product-discovery' | 'operations-program' | 'commercial-customer' | 'specialist-analysis';
     signalStrength: number;
     contributions: Array<{
       dimension: WorkDimension;
@@ -133,18 +133,10 @@ export interface WorkPreferenceResult {
 }
 
 export interface ProductCaseSubmission {
-  firstMove:
-    | 'segment-funnel-and-interviews'
-    | 'review-funnel-only'
-    | 'ship-largest-client-request';
+  firstMove: 'segment-funnel-and-interviews' | 'review-funnel-only' | 'ship-largest-client-request';
   priorityRule:
-    | 'reversible-test-biggest-uncertainty'
-    | 'revenue-weighted-request'
-    | 'loudest-stakeholder';
-  successMeasure:
-    | 'activation-by-segment-with-guardrail'
-    | 'delivery-date'
-    | 'features-shipped';
+    'reversible-test-biggest-uncertainty' | 'revenue-weighted-request' | 'loudest-stakeholder';
+  successMeasure: 'activation-by-segment-with-guardrail' | 'delivery-date' | 'features-shipped';
   rationale: string;
 }
 
@@ -152,10 +144,7 @@ export interface ProductCaseResult {
   kind: 'product-case';
   version: 1;
   rubric: Array<{
-    criterion:
-      | 'problem-framing'
-      | 'evidence-prioritisation'
-      | 'outcome-measurement';
+    criterion: 'problem-framing' | 'evidence-prioritisation' | 'outcome-measurement';
     selectedOption: string;
     points: number;
     maxPoints: 2;
@@ -189,7 +178,8 @@ export interface GermanyMarketSubmission {
   grossAnnualSalaryEur: number | null;
   offerDurationMonths: number | null;
   qualification: 'recognized-comparable' | 'state-recognized-origin' | 'none' | 'unknown';
-  professionRegulation: 'regulated-authorized' | 'regulated-unresolved' | 'non-regulated' | 'unknown';
+  professionRegulation:
+    'regulated-authorized' | 'regulated-unresolved' | 'non-regulated' | 'unknown';
   blueCardBand: 'general' | 'reduced' | 'unknown';
   fundsMonthlyEur: number | null;
   languageEvidence: 'german-a1-plus' | 'english-b2-plus' | 'both' | 'below' | 'unknown';
@@ -275,9 +265,7 @@ export interface CoachResult {
   }>;
   intelligence?: {
     orchestrationRevision: string;
-    roleCoverage: Array<
-      'career_consultant' | 'career_strategist' | 'career_expert'
-    >;
+    roleCoverage: Array<'career_consultant' | 'career_strategist' | 'career_expert'>;
     roleContributions: Array<{
       role: 'career_consultant' | 'career_strategist' | 'career_expert';
       summary: string;
@@ -334,11 +322,7 @@ export interface CareerCommand {
         | 'browser_session'
         | 'native_handoff';
       providerReference: string | null;
-      evidenceKind:
-        | 'provider_receipt'
-        | 'dom_confirmation'
-        | 'candidate_confirmation'
-        | null;
+      evidenceKind: 'provider_receipt' | 'dom_confirmation' | 'candidate_confirmation' | null;
       evidenceObservedAt: string | null;
     } | null;
     diagnosticReason: string | null;
@@ -395,6 +379,8 @@ export interface CandidateSnapshot {
   };
   assessments: StoredAssessment[];
   germanyMarket: StoredGermanyMarket | null;
+  documents: CandidateDocument[];
+  vacancySubscriptions: VacancySubscription[];
 }
 
 interface ApiEnvelope<T> {
@@ -425,10 +411,7 @@ export async function getSession(): Promise<AuthUser | null> {
   return readData<AuthUser | null>(response);
 }
 
-export async function login(
-  username: string,
-  password: string,
-): Promise<AuthUser> {
+export async function login(username: string, password: string): Promise<AuthUser> {
   const response = await apiFetch('/api/v1/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -437,14 +420,16 @@ export async function login(
   return readData<AuthUser>(response);
 }
 
-export async function register(
-  username: string,
-  password: string,
-): Promise<AuthUser> {
+export async function register(input: {
+  username: string;
+  email?: string;
+  displayName?: string;
+  password: string;
+}): Promise<AuthUser> {
   const response = await apiFetch('/api/v1/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify(input),
   });
   return readData<AuthUser>(response);
 }
@@ -467,13 +452,10 @@ export async function importProfileUrl(url: string): Promise<ProfileUrlImportRes
   return readData<ProfileUrlImportResult>(response);
 }
 
-export async function startConnection(
-  platform: 'linkedin' | 'hh',
-): Promise<StartedConnection> {
-  const response = await apiFetch(
-    `/api/v1/candidate/connections/${platform}/authorizations`,
-    { method: 'POST' },
-  );
+export async function startConnection(platform: 'linkedin' | 'hh'): Promise<StartedConnection> {
+  const response = await apiFetch(`/api/v1/candidate/connections/${platform}/authorizations`, {
+    method: 'POST',
+  });
   return readData<StartedConnection>(response);
 }
 
@@ -492,16 +474,163 @@ export interface DisconnectedConnection {
 export async function disconnectConnection(
   platform: 'linkedin' | 'hh',
 ): Promise<DisconnectedConnection> {
-  const response = await apiFetch(
-    `/api/v1/candidate/connections/${platform}`,
-    { method: 'DELETE' },
-  );
+  const response = await apiFetch(`/api/v1/candidate/connections/${platform}`, {
+    method: 'DELETE',
+  });
   return readData<DisconnectedConnection>(response);
 }
 
 export async function getCandidate(): Promise<CandidateSnapshot> {
   const response = await apiFetch('/api/v1/candidate/me');
   return readData<CandidateSnapshot>(response);
+}
+
+export async function getAccount(): Promise<AccountSnapshot> {
+  const response = await apiFetch('/api/v1/account');
+  return readData<AccountSnapshot>(response);
+}
+
+export async function updateAccount(input: {
+  email?: string | null;
+  displayName?: string | null;
+  headline?: string | null;
+  location?: string | null;
+  workMode?: AccountSnapshot['profile']['workMode'];
+}): Promise<AccountSnapshot> {
+  const response = await apiFetch('/api/v1/account/profile', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return readData<AccountSnapshot>(response);
+}
+
+export async function changePassword(input: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<AuthUser> {
+  const response = await apiFetch('/api/v1/account/password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return readData<AuthUser>(response);
+}
+
+export async function requestPasswordReset(identifier: string): Promise<boolean> {
+  const response = await apiFetch('/api/v1/auth/password-reset-requests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier }),
+  });
+  const result = await readData<{ accepted: true; deliveryConfigured: boolean }>(response);
+  return result.deliveryConfigured;
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<AuthUser> {
+  const response = await apiFetch('/api/v1/auth/password-resets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, newPassword }),
+  });
+  return readData<AuthUser>(response);
+}
+
+export async function revokeOtherSessions(): Promise<number> {
+  const response = await apiFetch('/api/v1/account/sessions', {
+    method: 'DELETE',
+  });
+  return (await readData<{ revoked: number }>(response)).revoked;
+}
+
+export async function uploadCandidateDocument(input: {
+  kind: CandidateDocumentKind;
+  fileName: string;
+  mimeType: string;
+  contentBase64: string;
+  extractedText?: string;
+  parseStatus: CandidateDocument['parseStatus'];
+  replacesDocumentId?: string;
+}): Promise<{ created: boolean; document: CandidateDocument }> {
+  const response = await apiFetch('/api/v1/candidate/documents', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...input, source: 'upload' }),
+  });
+  return readData(response);
+}
+
+export async function deleteCandidateDocument(documentId: string): Promise<void> {
+  const response = await apiFetch(`/api/v1/candidate/documents/${encodeURIComponent(documentId)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) await throwApiError(response);
+}
+
+export async function createVacancySubscription(input: {
+  query: string;
+  cadenceMinutes?: number;
+}): Promise<VacancySubscriptionView> {
+  const response = await apiFetch('/api/v1/candidate/vacancy-subscriptions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source: 'hh', ...input }),
+  });
+  return readData(response);
+}
+
+export async function getVacancySubscription(
+  subscriptionId: string,
+): Promise<VacancySubscriptionView> {
+  const response = await apiFetch(
+    `/api/v1/candidate/vacancy-subscriptions/${encodeURIComponent(subscriptionId)}/vacancies`,
+  );
+  return readData(response);
+}
+
+export async function refreshVacancySubscription(
+  subscriptionId: string,
+): Promise<VacancySubscriptionView> {
+  const response = await apiFetch(
+    `/api/v1/candidate/vacancy-subscriptions/${encodeURIComponent(subscriptionId)}/refresh`,
+    { method: 'POST' },
+  );
+  return readData(response);
+}
+
+export async function updateVacancySubscription(
+  subscriptionId: string,
+  status: VacancySubscription['status'],
+): Promise<VacancySubscription> {
+  const response = await apiFetch(
+    `/api/v1/candidate/vacancy-subscriptions/${encodeURIComponent(subscriptionId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    },
+  );
+  return readData(response);
+}
+
+export async function deleteVacancySubscription(subscriptionId: string): Promise<void> {
+  const response = await apiFetch(
+    `/api/v1/candidate/vacancy-subscriptions/${encodeURIComponent(subscriptionId)}`,
+    { method: 'DELETE' },
+  );
+  if (!response.ok) await throwApiError(response);
+}
+
+export async function exportCandidateData(): Promise<unknown> {
+  const response = await apiFetch('/api/v1/candidate/export');
+  return readData(response);
+}
+
+export async function deleteCandidateAccount(): Promise<void> {
+  const response = await apiFetch('/api/v1/candidate/me', {
+    method: 'DELETE',
+  });
+  if (!response.ok) await throwApiError(response);
 }
 
 export async function sendCoachTurn(input: {
@@ -560,9 +689,7 @@ export async function approveCareerCommand(
   return readData(response);
 }
 
-export async function getCareerCommand(
-  commandId: string,
-): Promise<CareerCommand> {
+export async function getCareerCommand(commandId: string): Promise<CareerCommand> {
   const response = await apiFetch(
     `/api/v1/candidate/career-commands/${encodeURIComponent(commandId)}`,
   );
@@ -576,18 +703,13 @@ export async function getCareerCommands(): Promise<CareerCommand[]> {
 
 export async function changeMemory(
   memoryId: string,
-  input:
-    | { action: 'confirm' | 'delete' }
-    | { action: 'correct'; statement: string },
+  input: { action: 'confirm' | 'delete' } | { action: 'correct'; statement: string },
 ): Promise<void> {
-  const response = await apiFetch(
-    `/api/v1/candidate/memory/${encodeURIComponent(memoryId)}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    },
-  );
+  const response = await apiFetch(`/api/v1/candidate/memory/${encodeURIComponent(memoryId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
   if (!response.ok) {
     await throwApiError(response);
   }
@@ -605,14 +727,11 @@ export async function submitAssessment(
   assessmentId: StoredAssessment['assessmentId'],
   input: WorkPreferenceSubmission | ProductCaseSubmission,
 ): Promise<StoredAssessment> {
-  const response = await apiFetch(
-    `/api/v1/candidate/assessments/${assessmentId}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    },
-  );
+  const response = await apiFetch(`/api/v1/candidate/assessments/${assessmentId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
   return readData<StoredAssessment>(response);
 }
 
@@ -641,10 +760,7 @@ export async function getProviderStatus(): Promise<{
   return readData(response);
 }
 
-async function apiFetch(
-  input: string,
-  init: RequestInit = {},
-): Promise<Response> {
+async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
   try {
     return await fetch(input, {
       ...init,
@@ -679,8 +795,7 @@ async function throwApiError(response: Response): Promise<never> {
     // The stable fallback below intentionally ignores untrusted response text.
   }
   throw new CoachApiError(
-    envelope.error?.message ??
-      'Сервис не завершил действие. Попробуйте ещё раз.',
+    envelope.error?.message ?? 'Сервис не завершил действие. Попробуйте ещё раз.',
     envelope.error?.code ?? `http_${response.status}`,
     envelope.error?.retryable ?? response.status >= 500,
   );

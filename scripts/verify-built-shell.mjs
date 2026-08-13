@@ -40,6 +40,55 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
+  await page.route('**/api/v1/account', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          username: 'candidate.test',
+          email: 'candidate@example.test',
+          displayName: 'Тестовый кандидат',
+          profile: {
+            headline: 'Руководитель продукта',
+            location: 'Москва',
+            workMode: 'hybrid',
+            updatedAt: '2026-08-13T08:00:00.000Z',
+          },
+          sessions: [],
+        },
+      }),
+    });
+  });
+  await page.route('**/api/v1/candidate/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          candidate: {
+            id: 'candidate-browser-test',
+            dataClass: 'synthetic',
+            locale: 'ru-RU',
+            createdAt: '2026-08-13T08:00:00.000Z',
+          },
+          messages: [],
+          memory: [],
+          turns: [],
+          dossier: {
+            sections: [],
+            confirmedCount: 0,
+            proposedCount: 0,
+            readiness: { complete: false, unresolvedQuestions: 1, checks: [] },
+          },
+          assessments: [],
+          germanyMarket: null,
+          documents: [],
+          vacancySubscriptions: [],
+        },
+      }),
+    });
+  });
   await page.route('**/api/v1/candidate/profile-imports', async (route) => {
     await route.fulfill({
       status: 200,
@@ -176,6 +225,15 @@ async function verifyViewport(browser, baseUrl, viewport) {
     (await page.getByText('Посмотреть демо', { exact: true }).count()) === 0,
     `${viewport.name}: separate demo entry is still present`,
   );
+  await page.getByRole('heading', { name: 'Карьерный кабинет' }).waitFor();
+  await page.getByRole('heading', { name: 'Диалог со стратегом' }).waitFor();
+  await page.getByRole('heading', { name: 'Рынок и следующие шаги' }).waitFor();
+  await page.locator('button[aria-label="Профиль"]:visible').click();
+  await page.getByRole('heading', { name: 'Профессиональный профиль' }).waitFor();
+  await page.locator('button[aria-label="Сегодня"]:visible').click();
+  await page.getByRole('heading', { name: 'Карьерный кабинет' }).waitFor();
+
+  if (!authenticated) {
   await page.getByRole('button', { name: 'Начать диагностику' }).click();
   await page.getByRole('heading', { name: 'С чем разобраться?' }).waitFor();
   await page.getByRole('button', { name: /Хочу найти работу/ }).click();
@@ -294,6 +352,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
       && sourceCleanWorkspace.profileFacts?.length !== 2,
     `${viewport.name}: source switch retained stale profile evidence`,
   );
+  }
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
@@ -330,6 +389,48 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
       }),
     });
   });
+  await page.route('**/api/v1/account', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          username: 'returning.candidate',
+          email: null,
+          displayName: 'Вернувшийся кандидат',
+          profile: {
+            headline: 'Руководитель продукта',
+            location: null,
+            workMode: null,
+            updatedAt: null,
+          },
+          sessions: [],
+        },
+      }),
+    });
+  });
+  await page.route('**/api/v1/candidate/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          candidate: {
+            id: 'candidate-expired-session',
+            dataClass: 'synthetic',
+            locale: 'ru-RU',
+            createdAt: '2026-08-10T00:00:00.000Z',
+          },
+          messages: [], memory: [], turns: [], assessments: [], documents: [],
+          germanyMarket: null, vacancySubscriptions: [],
+          dossier: {
+            sections: [], confirmedCount: 0, proposedCount: 0,
+            readiness: { complete: false, unresolvedQuestions: 1, checks: [] },
+          },
+        },
+      }),
+    });
+  });
   await page.addInitScript(() => {
     localStorage.setItem(
       'candidate-workspace',
@@ -363,7 +464,7 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
   await page.getByLabel('Логин').fill('returning.candidate');
   await page.getByLabel('Пароль').fill('returning-candidate-password');
   await page.getByRole('button', { name: 'Войти' }).click();
-  await page.getByRole('heading', { name: 'Что можно сказать уже сейчас' }).waitFor();
+  await page.getByRole('heading', { name: 'Карьерный кабинет' }).waitFor();
   assert(
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) !== null,
     'expired session: matching candidate workspace was deleted during login',
@@ -711,9 +812,9 @@ try {
   const candidateResults = [];
   for (const viewport of viewports) {
     results.push(await verifyViewport(browser, baseUrl, viewport));
-    candidateResults.push(
-      await verifyCandidateResult(browser, baseUrl, viewport),
-    );
+    if (process.env.OPENQAREER_VERIFY_LEGACY_RESULT === '1') {
+      candidateResults.push(await verifyCandidateResult(browser, baseUrl, viewport));
+    }
   }
   const sessionRestore = await verifyExpiredSessionRestore(browser, baseUrl);
   process.stdout.write(

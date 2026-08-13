@@ -8,6 +8,9 @@ import { ResilientCoachProvider } from './providers/resilientCoachProvider';
 import { selectSyntheticProviderRoutes } from './providers/syntheticProviderRoutes';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { AuthService } from './auth/authService';
+import { buildPasswordResetNotifier } from './auth/passwordResetEmail';
+import { searchHhVacancies } from './connectors/hhVacancySearch';
+import { VacancyIntelligenceService } from './vacancies/vacancyIntelligenceService';
 
 const config = readServerConfig(process.env);
 const candidateStore = new SqliteCandidateStore({
@@ -16,6 +19,15 @@ const candidateStore = new SqliteCandidateStore({
 });
 const authService = new AuthService({
   databasePath: config.databasePath,
+  ...(config.accountEmail
+    ? {
+        onPasswordReset: buildPasswordResetNotifier({
+          apiKey: config.accountEmail.apiKey,
+          from: config.accountEmail.from,
+          publicBaseUrl: config.accountEmail.publicBaseUrl,
+        }),
+      }
+    : {}),
 });
 await authService.seedAccounts(config.seedAccounts, candidateStore);
 const personalProviderId = config.personalProvider ?? 'openai';
@@ -48,16 +60,43 @@ const routedProvider = new PrivacyAwareCoachProvider({
 const coachProvider = new CareerOrchestrator({
   roleAgent: new CoachProviderRoleAgent({ provider: routedProvider }),
 });
+const vacancyIntelligenceService = new VacancyIntelligenceService({
+  store: candidateStore,
+  connectors: {
+    hh: (input) => searchHhVacancies(input, { allowPublicFallback: false }),
+  },
+  maxBatchSize: 5,
+});
 const app = await buildApp({
   config,
   coachProvider,
   candidateStore,
   authService,
+  vacancyIntelligenceService,
   serveStatic: process.env.NODE_ENV === 'production',
 });
 
+let vacancyRefreshTimer: NodeJS.Timeout | undefined;
+
+function runVacancyRefresh(): void {
+  void vacancyIntelligenceService
+    .runDue()
+    .then((result) => {
+      if (result.claimed > 0) {
+        app.log.info(result, 'vacancy-refresh-completed');
+      }
+    })
+    .catch((error: unknown) => {
+      app.log.error(
+        { errorName: error instanceof Error ? error.name : 'UnknownError' },
+        'vacancy-refresh-failed',
+      );
+    });
+}
+
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, 'shutdown-started');
+  if (vacancyRefreshTimer) clearInterval(vacancyRefreshTimer);
   await app.close();
   candidateStore.close();
   authService.close();
@@ -69,6 +108,9 @@ process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
 try {
   await app.listen({ host: config.host, port: config.port });
+  runVacancyRefresh();
+  vacancyRefreshTimer = setInterval(runVacancyRefresh, 5 * 60 * 1_000);
+  vacancyRefreshTimer.unref();
 } catch (error) {
   app.log.fatal(
     { errorName: error instanceof Error ? error.name : 'UnknownError' },

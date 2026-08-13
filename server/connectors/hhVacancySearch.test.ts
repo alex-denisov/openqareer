@@ -3,24 +3,25 @@ import { searchHhVacancies } from './hhVacancySearch';
 
 describe('hh vacancy search', () => {
   it('normalizes a public vacancy sample with source and observation time', async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async () =>
-      new Response(
-        JSON.stringify({
-          found: 143,
-          items: [
-            {
-              id: '123',
-              name: 'Руководитель клиентских операций',
-              alternate_url: 'https://hh.ru/vacancy/123',
-              published_at: '2026-08-07T10:00:00+0300',
-              employer: { name: 'Synthetic Company' },
-              area: { name: 'Москва' },
-              salary: { from: 250000, to: 320000, currency: 'RUR', gross: true },
-            },
-          ],
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            found: 143,
+            items: [
+              {
+                id: '123',
+                name: 'Руководитель клиентских операций',
+                alternate_url: 'https://hh.ru/vacancy/123',
+                published_at: '2026-08-07T10:00:00+0300',
+                employer: { name: 'Synthetic Company' },
+                area: { name: 'Москва' },
+                salary: { from: 250000, to: 320000, currency: 'RUR', gross: true },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
     );
 
     const sample = await searchHhVacancies(
@@ -95,14 +96,17 @@ describe('hh vacancy search', () => {
       .fn<typeof fetch>()
       .mockResolvedValueOnce(new Response('{"errors":[{"type":"forbidden"}]}', { status: 403 }))
       .mockResolvedValueOnce(
-        new Response(`
+        new Response(
+          `
           <h1>Найдено 27 вакансий</h1>
           <a data-qa="serp-item__title" href="https://hh.ru/vacancy/456?from=search">
             <span data-qa="serp-item__title-text">Head of Operations</span>
           </a>
           <span data-qa="vacancy-serp__vacancy-employer-text">Synthetic &amp; Co</span>
           <span data-qa="vacancy-serp__vacancy-address">Санкт-Петербург</span>
-        `, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+        `,
+          { status: 200, headers: { 'Content-Type': 'text/html' } },
+        ),
       );
 
     const sample = await searchHhVacancies(
@@ -119,5 +123,19 @@ describe('hh vacancy search', () => {
       publishedAt: null,
     });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not use the public-page fallback for unattended scheduled collection', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () => new Response('{"errors":[{"type":"forbidden"}]}', { status: 403 }),
+    );
+
+    await expect(
+      searchHhVacancies(
+        { text: 'Head of Operations', perPage: 10 },
+        { fetchImpl, allowPublicFallback: false },
+      ),
+    ).rejects.toThrow('hh_vacancy_search_official_access_required');
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 });

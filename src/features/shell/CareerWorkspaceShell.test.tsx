@@ -1,13 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import {
-  CareerMapView,
-  OpportunitiesView,
-} from '../journey/CareerJourneyViews';
-import {
-  buildCareerJourney,
-  prepareCareerWorkspace,
-} from '../journey/careerJourneyEngine';
+import { CareerMapView, OpportunitiesView } from '../journey/CareerJourneyViews';
+import { buildCareerJourney, prepareCareerWorkspace } from '../journey/careerJourneyEngine';
 import { createActionPackage } from '../action/actionPackageEngine';
 import {
   analyzeOpportunity,
@@ -19,17 +13,43 @@ import { CareerWorkspaceShell } from './CareerWorkspaceShell';
 import { CareerTariffsView } from './CareerTariffsView';
 
 describe('CareerWorkspaceShell', () => {
+  it('opens the authenticated candidate inside one working command center', () => {
+    const html = renderToStaticMarkup(
+      <CareerWorkspaceShell
+        session={{
+          username: 'alexey',
+          email: 'alexey@example.com',
+          displayName: 'Алексей Денисов',
+          role: 'candidate',
+          isTest: false,
+          candidateId: 'candidate-1',
+        }}
+      />,
+    );
+
+    expect(html).toContain('Карьерный кабинет');
+    expect(html).toContain('Диалог со стратегом');
+    expect(html).toContain('Профиль и документы');
+    expect(html).toContain('Рынок и следующие шаги');
+    expect(html).not.toContain('Начните с карьерного вопроса');
+  });
+
   it('does not reveal a workspace or first-run form before session identity resolves', () => {
     const html = renderToStaticMarkup(
-      <CareerWorkspaceShell sessionPending workspace={prepareCareerWorkspace({
-        resumeText: 'Синтетический профиль кандидата с достаточно длинным описанием для проверки приватной загрузки рабочего пространства.',
-        resumeSource: 'text',
-        targetDirection: 'Руководитель продукта',
-        market: 'ru',
-        currentSituation: 'Проверяю, что чужие данные не появляются до завершения проверки сессии.',
-        constraints: '',
-        urgency: 'active',
-      })} />,
+      <CareerWorkspaceShell
+        sessionPending
+        workspace={prepareCareerWorkspace({
+          resumeText:
+            'Синтетический профиль кандидата с достаточно длинным описанием для проверки приватной загрузки рабочего пространства.',
+          resumeSource: 'text',
+          targetDirection: 'Руководитель продукта',
+          market: 'ru',
+          currentSituation:
+            'Проверяю, что чужие данные не появляются до завершения проверки сессии.',
+          constraints: '',
+          urgency: 'active',
+        })}
+      />,
     );
 
     expect(html).toContain('Проверяем защищённую сессию');
@@ -95,9 +115,7 @@ describe('CareerWorkspaceShell', () => {
       },
       '2026-08-09T17:00:00.000Z',
     );
-    const html = renderToStaticMarkup(
-      <CareerWorkspaceShell workspace={workspace} />,
-    );
+    const html = renderToStaticMarkup(<CareerWorkspaceShell workspace={workspace} />);
 
     expect(html).toContain('Предварительная диагностика');
     expect(html).toContain('Цель: найти работу');
@@ -121,9 +139,7 @@ describe('CareerWorkspaceShell', () => {
       },
       '2026-08-09T17:00:00.000Z',
     );
-    const html = renderToStaticMarkup(
-      <CareerWorkspaceShell workspace={workspace} />,
-    );
+    const html = renderToStaticMarkup(<CareerWorkspaceShell workspace={workspace} />);
 
     expect(html).toContain('Предварительная диагностика');
     expect(html).toContain('Результаты пока не доказаны');
@@ -145,10 +161,7 @@ describe('CareerWorkspaceShell', () => {
       },
       '2026-08-09T17:00:00.000Z',
     );
-    const journey = buildCareerJourney(
-      workspace,
-      '2026-08-09T17:05:00.000Z',
-    );
+    const journey = buildCareerJourney(workspace, '2026-08-09T17:05:00.000Z');
     const html = renderToStaticMarkup(
       <OpportunitiesView
         workspace={workspace}
@@ -164,9 +177,7 @@ describe('CareerWorkspaceShell', () => {
   });
 
   it('separates available work, assisted pilot and unavailable automation', () => {
-    const html = renderToStaticMarkup(
-      <CareerTariffsView onOpenCoach={() => undefined} />,
-    );
+    const html = renderToStaticMarkup(<CareerTariffsView onOpenCoach={() => undefined} />);
 
     expect(html).toContain('Доступно сейчас');
     expect(html).toContain('Сопровождаемый пилот');
@@ -181,8 +192,7 @@ describe('CareerWorkspaceShell', () => {
         resumeSource: 'text',
         targetDirection: 'Руководитель продукта',
         market: 'ru',
-        currentSituation:
-          'Хочу проверить, существует ли спрос на выбранную продуктовую роль.',
+        currentSituation: 'Хочу проверить, существует ли спрос на выбранную продуктовую роль.',
         constraints: 'Удалённая работа.',
         urgency: 'exploring',
       },
@@ -198,10 +208,7 @@ describe('CareerWorkspaceShell', () => {
         items: [],
       },
     };
-    const journey = buildCareerJourney(
-      workspace,
-      '2026-08-09T17:05:00.000Z',
-    );
+    const journey = buildCareerJourney(workspace, '2026-08-09T17:05:00.000Z');
     const html = renderToStaticMarkup(
       <CareerMapView
         workspace={workspace}
@@ -313,11 +320,7 @@ describe('CareerWorkspaceShell', () => {
       'network',
       'Хочу уточнить задачи и уровень роли у команды.',
     );
-    const actionPackage = createActionPackage(
-      opportunity,
-      evidenceItems,
-      base.targetDirection,
-    );
+    const actionPackage = createActionPackage(opportunity, evidenceItems, base.targetDirection);
     const workspace = {
       ...base,
       analysis: base.analysis ? { ...base.analysis, evidenceItems } : undefined,

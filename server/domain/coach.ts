@@ -101,12 +101,56 @@ export const marketObservationSchema = z.object({
   observedAt: z.string().datetime(),
 });
 
+export const knowledgeContextSchema = z.object({
+  confirmedFacts: z
+    .array(
+      z.object({
+        ref: z.string().regex(/^memory:[0-9a-f-]{36}$/u),
+        kind: z.enum(MEMORY_KINDS),
+        domain: z.enum(DOSSIER_DOMAINS),
+        statement: z.string().trim().min(1).max(1_000),
+        sourceRefs: z.array(z.string().min(1).max(80)).max(20),
+        sensitive: z.boolean(),
+      }),
+    )
+    .max(12),
+  documents: z
+    .array(
+      z.object({
+        ref: z.string().regex(/^document:[0-9a-f-]{36}$/u),
+        kind: z.enum([
+          'resume',
+          'cover_letter',
+          'certificate',
+          'portfolio',
+          'profile_export',
+          'other',
+        ]),
+        fileName: z.string().trim().min(1).max(240),
+        version: z.number().int().positive(),
+        sha256: z.string().regex(/^[0-9a-f]{64}$/u),
+        excerpt: z.string().trim().min(1).max(6_000),
+      }),
+    )
+    .max(2),
+  openQuestions: z
+    .array(
+      z.object({
+        ref: z.string().regex(/^memory:[0-9a-f-]{36}$/u),
+        statement: z.string().trim().min(1).max(1_000),
+        sourceRefs: z.array(z.string().min(1).max(80)).max(20),
+      }),
+    )
+    .max(12),
+});
+
 export const coachTurnInputSchema = z.object({
   candidateReference: z.string().min(8).max(80),
   dataClass: z.enum(['synthetic', 'personal']).default('personal'),
   locale: z.enum(['ru-RU', 'en-US']).default('ru-RU'),
   phase: z.enum(COACH_PHASES).default('discovery'),
   messages: z.array(coachMessageSchema).min(1).max(30),
+  knowledgeContext: knowledgeContextSchema.optional(),
   marketObservations: z.array(marketObservationSchema).max(20).optional(),
   activeRole: z.enum(CAREER_ROLES).optional(),
   priorRoleContributions: z.array(
@@ -391,6 +435,11 @@ export function serializeCoachInput(input: CoachTurnInput): string {
     activeRole: input.activeRole ?? 'career_consultant',
     priorRoleContributions: input.priorRoleContributions ?? [],
     marketObservations: input.marketObservations ?? [],
+    knowledgeContext: input.knowledgeContext ?? {
+      confirmedFacts: [],
+      documents: [],
+      openQuestions: [],
+    },
     conversation: input.messages,
   });
 }

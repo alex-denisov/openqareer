@@ -9,6 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import {
   coachTurnResultSchema,
   type CoachMessage,
+  type CoachTurnInput,
   type CoachTurnResult,
 } from '../domain/coach';
 import { buildExperienceDossier } from '../domain/dossier';
@@ -20,6 +21,7 @@ import type {
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type {
   CandidateCredentials,
+  CandidateExport,
   CandidateIdentity,
   CandidateSnapshot,
   CandidateStore,
@@ -34,6 +36,9 @@ import type {
   OAuthAuthorizationInput,
   OAuthConnectionInput,
   StoredOAuthConnection,
+  CandidateDocumentInput,
+  CandidateDocumentWithContent,
+  StoredCandidateDocument,
 } from './candidateStore';
 import type { OAuthPlatform } from '../connectors/oauthTypes';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
@@ -41,6 +46,16 @@ import { SealedText } from './sealedText';
 import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
 import { SqliteMarketRepository } from './sqliteMarketRepository';
 import { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
+import { SqliteDocumentRepository } from './sqliteDocumentRepository';
+import { SqliteVacancyRepository } from './sqliteVacancyRepository';
+import type { HhVacancySample } from '../connectors/hhVacancySearch';
+import type {
+  StoredVacancy,
+  StoredVacancySubscription,
+  ClaimedVacancySubscription,
+  VacancyRefreshResult,
+  VacancySubscriptionInput,
+} from '../domain/vacancy';
 import type {
   GermanyMarketResult,
   GermanyMarketSubmission,
@@ -54,6 +69,10 @@ import {
   MIGRATION_6,
   MIGRATION_7,
   MIGRATION_8,
+  MIGRATION_9,
+  MIGRATION_10,
+  MIGRATION_11,
+  MIGRATION_12,
 } from './sqliteSchema';
 import type {
   CareerCommandRecord,
@@ -109,6 +128,8 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly assessmentsRepository: SqliteAssessmentRepository;
   private readonly marketRepository: SqliteMarketRepository;
   private readonly careerCommandRepository: SqliteCareerCommandRepository;
+  private readonly documentRepository: SqliteDocumentRepository;
+  private readonly vacancyRepository: SqliteVacancyRepository;
 
   constructor(options: SqliteCandidateStoreOptions) {
     if (options.databasePath !== ':memory:') {
@@ -132,6 +153,14 @@ export class SqliteCandidateStore implements CandidateStore {
       this.sealedText,
     );
     this.careerCommandRepository = new SqliteCareerCommandRepository(
+      this.database,
+      this.sealedText,
+    );
+    this.documentRepository = new SqliteDocumentRepository(
+      this.database,
+      this.sealedText,
+    );
+    this.vacancyRepository = new SqliteVacancyRepository(
       this.database,
       this.sealedText,
     );
@@ -237,6 +266,7 @@ export class SqliteCandidateStore implements CandidateStore {
         locale: candidate.locale,
         phase: request.phase,
         messages: this.messages(candidateId).slice(-30),
+        knowledgeContext: this.knowledgeContext(candidateId),
       },
     };
   }
@@ -339,7 +369,100 @@ export class SqliteCandidateStore implements CandidateStore {
       dossier: buildExperienceDossier(memory),
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
+      documents: this.documentRepository.list(candidateId),
+      vacancySubscriptions: this.vacancyRepository.list(candidateId),
     };
+  }
+  saveDocument(
+    candidateId: string,
+    input: CandidateDocumentInput,
+  ): { created: boolean; document: StoredCandidateDocument } {
+    this.requireCandidate(candidateId);
+    return this.documentRepository.save(candidateId, input);
+  }
+  getDocument(
+    candidateId: string,
+    documentId: string,
+  ): CandidateDocumentWithContent | null {
+    this.requireCandidate(candidateId);
+    return this.documentRepository.get(candidateId, documentId);
+  }
+  deleteDocument(candidateId: string, documentId: string): boolean {
+    this.requireCandidate(candidateId);
+    return this.documentRepository.delete(candidateId, documentId);
+  }
+  createVacancySubscription(
+    candidateId: string,
+    input: VacancySubscriptionInput,
+    now: string,
+  ): StoredVacancySubscription {
+    this.requireCandidate(candidateId);
+    return this.vacancyRepository.create(candidateId, input, now);
+  }
+  listVacancySubscriptions(candidateId: string): StoredVacancySubscription[] {
+    this.requireCandidate(candidateId);
+    return this.vacancyRepository.list(candidateId);
+  }
+  getVacancySubscription(
+    candidateId: string,
+    subscriptionId: string,
+  ): StoredVacancySubscription | null {
+    this.requireCandidate(candidateId);
+    return this.vacancyRepository.get(candidateId, subscriptionId);
+  }
+  recordVacancyRefresh(
+    subscriptionId: string,
+    sample: HhVacancySample,
+  ): VacancyRefreshResult {
+    return this.vacancyRepository.recordRefresh(subscriptionId, sample);
+  }
+  listSubscriptionVacancies(
+    candidateId: string,
+    subscriptionId: string,
+  ): StoredVacancy[] {
+    this.requireCandidate(candidateId);
+    return this.vacancyRepository.listVacancies(candidateId, subscriptionId);
+  }
+  claimDueVacancySubscriptions(
+    now: string,
+    leaseUntil: string,
+    limit: number,
+  ): ClaimedVacancySubscription[] {
+    return this.vacancyRepository.claimDue(now, leaseUntil, limit);
+  }
+  recordVacancyFailure(
+    subscriptionId: string,
+    errorCode: string,
+    attemptedAt: string,
+    retryAfterAt?: string,
+  ): void {
+    this.vacancyRepository.recordFailure(
+      subscriptionId,
+      errorCode,
+      attemptedAt,
+      retryAfterAt,
+    );
+  }
+  setVacancySubscriptionStatus(
+    candidateId: string,
+    subscriptionId: string,
+    status: StoredVacancySubscription['status'],
+    now: string,
+  ): StoredVacancySubscription | null {
+    this.requireCandidate(candidateId);
+    return this.vacancyRepository.setStatus(
+      candidateId,
+      subscriptionId,
+      status,
+      now,
+    );
+  }
+  deleteVacancySubscription(
+    candidateId: string,
+    subscriptionId: string,
+  ): boolean {
+    this.requireCandidate(candidateId);
+    return this.vacancyRepository.delete(candidateId, subscriptionId);
   }
   saveAssessment(
     candidateId: string,
@@ -612,8 +735,15 @@ export class SqliteCandidateStore implements CandidateStore {
       updatedAt: now,
     };
   }
-  exportCandidate(candidateId: string): CandidateSnapshot {
-    return this.getSnapshot(candidateId);
+  exportCandidate(candidateId: string): CandidateExport {
+    const snapshot = this.getSnapshot(candidateId);
+    return {
+      ...snapshot,
+      documentContents: snapshot.documents.flatMap((document) => {
+        const stored = this.documentRepository.get(candidateId, document.id);
+        return stored ? [stored] : [];
+      }),
+    };
   }
   deleteCandidate(candidateId: string): boolean {
     const result = this.database
@@ -755,6 +885,38 @@ export class SqliteCandidateStore implements CandidateStore {
         ).run(new Date().toISOString());
       });
     }
+    if ((row.version ?? 0) < 9) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_9);
+        this.database.prepare(
+          'INSERT INTO schema_migrations (version, applied_at) VALUES (9, ?)',
+        ).run(new Date().toISOString());
+      });
+    }
+    if ((row.version ?? 0) < 10) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_10);
+        this.database.prepare(
+          'INSERT INTO schema_migrations (version, applied_at) VALUES (10, ?)',
+        ).run(new Date().toISOString());
+      });
+    }
+    if ((row.version ?? 0) < 11) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_11);
+        this.database.prepare(
+          'INSERT INTO schema_migrations (version, applied_at) VALUES (11, ?)',
+        ).run(new Date().toISOString());
+      });
+    }
+    if ((row.version ?? 0) < 12) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_12);
+        this.database.prepare(
+          'INSERT INTO schema_migrations (version, applied_at) VALUES (12, ?)',
+        ).run(new Date().toISOString());
+      });
+    }
   }
   private insertPendingTurn(
     candidateId: string,
@@ -856,6 +1018,60 @@ export class SqliteCandidateStore implements CandidateStore {
         messageAssociatedData(candidateId, row.id),
       ),
     };
+  }
+  private knowledgeContext(
+    candidateId: string,
+  ): NonNullable<CoachTurnInput['knowledgeContext']> {
+    const memory = this.memory(candidateId);
+    const confirmedFacts = memory
+      .filter(
+        (item) =>
+          item.status === 'confirmed' || item.status === 'corrected',
+      )
+      .slice(-12)
+      .map((item) => ({
+        ref: `memory:${item.id}`,
+        kind: item.kind,
+        domain: item.domain,
+        statement: item.statement,
+        sourceRefs: item.sourceMessageIds,
+        sensitive: item.sensitive,
+      }));
+    const openQuestions = memory
+      .filter(
+        (item) => item.kind === 'open-question' && item.status === 'proposed',
+      )
+      .slice(-12)
+      .map((item) => ({
+        ref: `memory:${item.id}`,
+        statement: item.statement,
+        sourceRefs: item.sourceMessageIds,
+      }));
+    const documents = this.documentRepository
+      .list(candidateId)
+      .filter(
+        (document) =>
+          document.parseStatus === 'ready' &&
+          (document.kind === 'resume' || document.kind === 'profile_export'),
+      )
+      .flatMap((document) => {
+        const stored = this.documentRepository.get(candidateId, document.id);
+        const excerpt = stored?.extractedText?.trim();
+        return excerpt
+          ? [
+              {
+                ref: `document:${document.id}`,
+                kind: document.kind,
+                fileName: document.fileName,
+                version: document.version,
+                sha256: document.sha256,
+                excerpt: excerpt.slice(0, 6_000),
+              },
+            ]
+          : [];
+      })
+      .slice(0, 2);
+    return { confirmedFacts, documents, openQuestions };
   }
   private memory(candidateId: string): StoredMemory[] {
     const rows = this.database

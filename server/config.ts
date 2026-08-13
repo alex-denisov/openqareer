@@ -62,6 +62,11 @@ const configSchema = z.object({
   OPENQAREER_HH_CLIENT_ID: blankAsUnset(z.string().min(5).max(512)),
   OPENQAREER_HH_CLIENT_SECRET: blankAsUnset(z.string().min(16).max(2_048)),
   OPENQAREER_HH_REDIRECT_URI: blankAsUnset(z.string().url().max(2_048)),
+  OPENQAREER_RESEND_API_KEY: blankAsUnset(z.string().min(10).max(2_048)),
+  OPENQAREER_ACCOUNT_EMAIL_FROM: blankAsUnset(
+    z.string().min(3).max(320),
+  ),
+  OPENQAREER_PUBLIC_URL: blankAsUnset(z.string().url().max(2_048)),
 });
 
 /**
@@ -109,6 +114,11 @@ export interface ServerConfig {
   }>;
   providerCatalogStatus?: ProviderCatalogStatus[];
   oauthProviders: Partial<Record<OAuthPlatform, OAuthProviderConfig>>;
+  accountEmail?: {
+    apiKey: string;
+    from: string;
+    publicBaseUrl: string;
+  };
 }
 
 export function readServerConfig(
@@ -184,6 +194,29 @@ export function readServerConfig(
       return [[platform, { clientId, clientSecret, redirectUri }]];
     }),
   ) as Partial<Record<OAuthPlatform, OAuthProviderConfig>>;
+  const resendApiKey =
+    parsed.OPENQAREER_RESEND_API_KEY ??
+    nonBlankEnvironmentValue(environment.RESEND_API_KEY);
+  const accountEmailValues = [
+    resendApiKey,
+    parsed.OPENQAREER_ACCOUNT_EMAIL_FROM,
+    parsed.OPENQAREER_PUBLIC_URL,
+  ];
+  const accountEmail = accountEmailValues.every(
+    (value) => value === undefined,
+  )
+    ? undefined
+    : accountEmailValues.every((value) => value !== undefined)
+      ? {
+          apiKey: resendApiKey!,
+          from: parsed.OPENQAREER_ACCOUNT_EMAIL_FROM!,
+          publicBaseUrl: parsed.OPENQAREER_PUBLIC_URL!,
+        }
+      : (() => {
+          throw new Error(
+            'complete account email configuration is required',
+          );
+        })();
 
   return {
     host: parsed.OPENQAREER_HOST,
@@ -211,7 +244,13 @@ export function readServerConfig(
     seedAccounts,
     providerCatalogStatus: getProviderCatalogStatus(environment),
     oauthProviders,
+    accountEmail,
   };
+}
+
+function nonBlankEnvironmentValue(value: string | undefined) {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
 }
 
 function validateOAuthRedirect(

@@ -36,6 +36,10 @@ import {
   CandidateStoreConflictError,
 } from './data/sqliteCandidateStore';
 import {
+  CandidateDocumentValidationError,
+  CandidateDocumentVersionError,
+} from './data/sqliteDocumentRepository';
+import {
   CareerCommandApprovalError,
   CareerCommandConflictError,
   CareerCommandNotFoundError,
@@ -46,6 +50,9 @@ import {
 } from './providers/coachProvider';
 import type { ServerConfig } from './config';
 import {
+  AuthEmailTakenError,
+  AuthInvalidPasswordError,
+  AuthInvalidResetTokenError,
   AuthUsernameTakenError,
   type AuthPrincipal,
   type SessionAuth,
@@ -67,6 +74,10 @@ import {
 } from './connectors/oauthConnector';
 import { OfficialOAuthTransport } from './connectors/officialOAuthTransport';
 import { OAUTH_PLATFORMS, type OAuthPlatform } from './connectors/oauthTypes';
+import { vacancySubscriptionInputSchema } from './domain/vacancy';
+import {
+  VacancyIntelligenceService,
+} from './vacancies/vacancyIntelligenceService';
 
 interface BuildAppOptions {
   config: ServerConfig;
@@ -81,6 +92,7 @@ interface BuildAppOptions {
   importProfile?: (url: string) => Promise<ProfileUrlImportResult>;
   oauthTransport?: OAuthTransport;
   careerCommandExecutor?: ConnectorExecutor;
+  vacancyIntelligenceService?: VacancyIntelligenceService;
 }
 
 interface ErrorBody {
@@ -102,6 +114,7 @@ export async function buildApp({
   importProfile = importPublicProfileUrl,
   oauthTransport,
   careerCommandExecutor,
+  vacancyIntelligenceService,
 }: BuildAppOptions): Promise<FastifyInstance> {
   const oauthService = new CandidateOAuthService({
     store: candidateStore,
@@ -114,6 +127,12 @@ export async function buildApp({
         executor: careerCommandExecutor,
       })
     : null;
+  const vacancyIntelligence =
+    vacancyIntelligenceService ??
+    new VacancyIntelligenceService({
+      store: candidateStore,
+      connectors: { hh: searchVacancies },
+    });
   const app = Fastify({
     trustProxy: '127.0.0.1',
     logger: {
@@ -212,6 +231,10 @@ export async function buildApp({
           body.username,
           body.password,
           candidateStore,
+          {
+            email: body.email,
+            displayName: body.displayName,
+          },
         );
         setSessionCookie(reply, authenticated.sessionToken, config.secureCookies);
         return reply.code(201).send({
@@ -221,6 +244,16 @@ export async function buildApp({
       } catch (error) {
         if (error instanceof AuthUsernameTakenError) {
           return sendError(reply, request, 409, 'username_taken', 'Такой логин уже занят.', false);
+        }
+        if (error instanceof AuthEmailTakenError) {
+          return sendError(
+            reply,
+            request,
+            409,
+            'email_taken',
+            'Этот email уже связан с другим аккаунтом.',
+            false,
+          );
         }
         throw error;
       }
@@ -281,6 +314,194 @@ export async function buildApp({
       meta: { requestId: request.id },
     };
   });
+
+  app.get('/api/v1/account', async (request, reply) => {
+    const sessionToken =
+      request.cookies[sessionCookieName(config.secureCookies)] ?? '';
+    const account = authService.getAccount?.(sessionToken) ?? null;
+    if (!account) {
+      return sendError(
+        reply,
+        request,
+        401,
+        'unauthorized',
+        'Нужна действующая сессия.',
+        false,
+      );
+    }
+    return {
+      data: account,
+      meta: { requestId: request.id },
+    };
+  });
+
+  app.patch('/api/v1/account/profile', async (request, reply) => {
+    if (!hasAllowedOrigin(request, config)) return csrfError(request, reply);
+    const sessionToken =
+      request.cookies[sessionCookieName(config.secureCookies)] ?? '';
+    const body = accountProfileSchema.parse(request.body);
+    try {
+      const account = authService.updateAccount?.(sessionToken, body) ?? null;
+      if (!account) {
+        return sendError(
+          reply,
+          request,
+          401,
+          'unauthorized',
+          'Нужна действующая сессия.',
+          false,
+        );
+      }
+      return {
+        data: account,
+        meta: { requestId: request.id },
+      };
+    } catch (error) {
+      if (error instanceof AuthEmailTakenError) {
+        return sendError(
+          reply,
+          request,
+          409,
+          'email_taken',
+          'Этот email уже связан с другим аккаунтом.',
+          false,
+        );
+      }
+      throw error;
+    }
+  });
+
+  app.post('/api/v1/account/password', async (request, reply) => {
+    if (!hasAllowedOrigin(request, config)) return csrfError(request, reply);
+    const sessionToken =
+      request.cookies[sessionCookieName(config.secureCookies)] ?? '';
+    const body = passwordChangeSchema.parse(request.body);
+    try {
+      const authenticated =
+        (await authService.changePassword?.(
+          sessionToken,
+          body.currentPassword,
+          body.newPassword,
+        )) ?? null;
+      if (!authenticated) {
+        return sendError(
+          reply,
+          request,
+          401,
+          'unauthorized',
+          'Нужна действующая сессия.',
+          false,
+        );
+      }
+      setSessionCookie(
+        reply,
+        authenticated.sessionToken,
+        config.secureCookies,
+      );
+      return {
+        data: publicPrincipal(authenticated.principal),
+        meta: { requestId: request.id },
+      };
+    } catch (error) {
+      if (error instanceof AuthInvalidPasswordError) {
+        return sendError(
+          reply,
+          request,
+          400,
+          'current_password_invalid',
+          'Текущий пароль указан неверно.',
+          false,
+        );
+      }
+      throw error;
+    }
+  });
+
+  app.post(
+    '/api/v1/auth/password-reset-requests',
+    {
+      config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
+    },
+    async (request, reply) => {
+      if (!hasAllowedOrigin(request, config)) return csrfError(request, reply);
+      const body = passwordResetRequestSchema.parse(request.body);
+      try {
+        await authService.requestPasswordReset?.(body.identifier);
+      } catch (error) {
+        request.log.warn(
+          { errorName: error instanceof Error ? error.name : 'UnknownError' },
+          'password-reset-delivery-failed',
+        );
+      }
+      return reply.code(202).send({
+        data: {
+          accepted: true,
+          deliveryConfigured: Boolean(config.accountEmail),
+        },
+        meta: { requestId: request.id },
+      });
+    },
+  );
+
+  app.delete('/api/v1/account/sessions', async (request, reply) => {
+    if (!hasAllowedOrigin(request, config)) return csrfError(request, reply);
+    const sessionToken =
+      request.cookies[sessionCookieName(config.secureCookies)] ?? '';
+    const revoked = authService.revokeOtherSessions?.(sessionToken) ?? null;
+    if (revoked === null) {
+      return sendError(
+        reply,
+        request,
+        401,
+        'unauthorized',
+        'Нужна действующая сессия.',
+        false,
+      );
+    }
+    return {
+      data: { revoked },
+      meta: { requestId: request.id },
+    };
+  });
+
+  app.post(
+    '/api/v1/auth/password-resets',
+    {
+      config: { rateLimit: { max: 8, timeWindow: '15 minutes' } },
+    },
+    async (request, reply) => {
+      if (!hasAllowedOrigin(request, config)) return csrfError(request, reply);
+      const body = passwordResetSchema.parse(request.body);
+      try {
+        const authenticated = await authService.resetPassword?.(
+          body.token,
+          body.newPassword,
+        );
+        if (!authenticated) throw new AuthInvalidResetTokenError();
+        setSessionCookie(
+          reply,
+          authenticated.sessionToken,
+          config.secureCookies,
+        );
+        return {
+          data: publicPrincipal(authenticated.principal),
+          meta: { requestId: request.id },
+        };
+      } catch (error) {
+        if (error instanceof AuthInvalidResetTokenError) {
+          return sendError(
+            reply,
+            request,
+            400,
+            'password_reset_invalid',
+            'Ссылка недействительна или уже истекла.',
+            false,
+          );
+        }
+        throw error;
+      }
+    },
+  );
 
   app.get(
     '/api/v1/market/hh',
@@ -481,6 +702,322 @@ export async function buildApp({
       meta: { requestId: request.id },
     };
   });
+
+  app.post(
+    '/api/v1/candidate/documents',
+    {
+      bodyLimit: 8 * 1_024 * 1_024,
+      config: { rateLimit: { max: 20, timeWindow: '1 hour' } },
+    },
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const body = candidateDocumentSchema.parse(request.body);
+      try {
+        const stored = candidateStore.saveDocument(candidate.id, body);
+        return reply.code(stored.created ? 201 : 200).send({
+          data: stored,
+          meta: { requestId: request.id },
+        });
+      } catch (error) {
+        if (error instanceof CandidateDocumentValidationError) {
+          return sendError(
+            reply,
+            request,
+            400,
+            'document_invalid',
+            'Файл не прошёл проверку формата или размера.',
+            false,
+          );
+        }
+        if (error instanceof CandidateDocumentVersionError) {
+          return sendError(
+            reply,
+            request,
+            409,
+            'document_version_conflict',
+            'Предыдущая версия документа недоступна.',
+            false,
+          );
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.get<{ Params: { documentId: string } }>(
+    '/api/v1/candidate/documents/:documentId',
+    async (request, reply) => {
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const documentId = z.string().uuid().parse(request.params.documentId);
+      const document = candidateStore.getDocument(candidate.id, documentId);
+      if (!document) {
+        return sendError(
+          reply,
+          request,
+          404,
+          'document_not_found',
+          'Документ не найден.',
+          false,
+        );
+      }
+      return {
+        data: document,
+        meta: { requestId: request.id },
+      };
+    },
+  );
+
+  app.delete<{ Params: { documentId: string } }>(
+    '/api/v1/candidate/documents/:documentId',
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const documentId = z.string().uuid().parse(request.params.documentId);
+      if (!candidateStore.deleteDocument(candidate.id, documentId)) {
+        return sendError(
+          reply,
+          request,
+          404,
+          'document_not_found',
+          'Документ не найден.',
+          false,
+        );
+      }
+      return reply.code(204).send();
+    },
+  );
+
+  app.get('/api/v1/candidate/vacancy-subscriptions', async (request, reply) => {
+    const candidate = authenticateCandidate(
+      request,
+      reply,
+      candidateStore,
+      authService,
+      config,
+    );
+    if (!candidate) return;
+    return {
+      data: candidateStore.listVacancySubscriptions(candidate.id),
+      meta: { requestId: request.id },
+    };
+  });
+
+  app.post(
+    '/api/v1/candidate/vacancy-subscriptions',
+    { config: { rateLimit: { max: 12, timeWindow: '1 hour' } } },
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const body = vacancySubscriptionInputSchema.parse(request.body);
+      const data = await vacancyIntelligence.createAndRefresh(
+        candidate.id,
+        body,
+      );
+      return reply.code(201).send({
+        data,
+        meta: { requestId: request.id },
+      });
+    },
+  );
+
+  app.get<{ Params: { subscriptionId: string } }>(
+    '/api/v1/candidate/vacancy-subscriptions/:subscriptionId/vacancies',
+    async (request, reply) => {
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const subscriptionId = z
+        .string()
+        .uuid()
+        .parse(request.params.subscriptionId);
+      const subscription = candidateStore.getVacancySubscription(
+        candidate.id,
+        subscriptionId,
+      );
+      if (!subscription) {
+        return sendError(
+          reply,
+          request,
+          404,
+          'vacancy_subscription_not_found',
+          'Поисковое направление не найдено.',
+          false,
+        );
+      }
+      return {
+        data: {
+          subscription,
+          vacancies: candidateStore.listSubscriptionVacancies(
+            candidate.id,
+            subscriptionId,
+          ),
+        },
+        meta: { requestId: request.id },
+      };
+    },
+  );
+
+  app.patch<{ Params: { subscriptionId: string } }>(
+    '/api/v1/candidate/vacancy-subscriptions/:subscriptionId',
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const subscriptionId = z
+        .string()
+        .uuid()
+        .parse(request.params.subscriptionId);
+      const body = z
+        .object({ status: z.enum(['active', 'paused']) })
+        .parse(request.body);
+      const subscription = candidateStore.setVacancySubscriptionStatus(
+        candidate.id,
+        subscriptionId,
+        body.status,
+        new Date().toISOString(),
+      );
+      if (!subscription) {
+        return sendError(
+          reply,
+          request,
+          404,
+          'vacancy_subscription_not_found',
+          'Поисковое направление не найдено.',
+          false,
+        );
+      }
+      return {
+        data: subscription,
+        meta: { requestId: request.id },
+      };
+    },
+  );
+
+  app.post<{ Params: { subscriptionId: string } }>(
+    '/api/v1/candidate/vacancy-subscriptions/:subscriptionId/refresh',
+    { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const subscriptionId = z
+        .string()
+        .uuid()
+        .parse(request.params.subscriptionId);
+      if (
+        !candidateStore.getVacancySubscription(candidate.id, subscriptionId)
+      ) {
+        return sendError(
+          reply,
+          request,
+          404,
+          'vacancy_subscription_not_found',
+          'Поисковое направление не найдено.',
+          false,
+        );
+      }
+      return {
+        data: await vacancyIntelligence.refreshCandidateSubscription(
+          candidate.id,
+          subscriptionId,
+        ),
+        meta: { requestId: request.id },
+      };
+    },
+  );
+
+  app.delete<{ Params: { subscriptionId: string } }>(
+    '/api/v1/candidate/vacancy-subscriptions/:subscriptionId',
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const subscriptionId = z
+        .string()
+        .uuid()
+        .parse(request.params.subscriptionId);
+      if (
+        !candidateStore.deleteVacancySubscription(
+          candidate.id,
+          subscriptionId,
+        )
+      ) {
+        return sendError(
+          reply,
+          request,
+          404,
+          'vacancy_subscription_not_found',
+          'Поисковое направление не найдено.',
+          false,
+        );
+      }
+      return reply.code(204).send();
+    },
+  );
 
   app.get('/api/v1/candidate/export', async (request, reply) => {
     const candidate = authenticateCandidate(
@@ -1053,10 +1590,49 @@ const candidateCreateSchema = z.object({
   locale: z.enum(['ru-RU', 'en-US']).default('ru-RU'),
 });
 
+const candidateDocumentSchema = z.object({
+  kind: z.enum([
+    'resume',
+    'cover_letter',
+    'certificate',
+    'portfolio',
+    'profile_export',
+    'other',
+  ]),
+  source: z.enum(['upload', 'generated', 'import']),
+  fileName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(240)
+    .refine((value) => !hasUnsafeFileNameCharacter(value)),
+  mimeType: z.enum([
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
+    'application/json',
+  ]),
+  contentBase64: z
+    .string()
+    .min(4)
+    .max(7_100_000)
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/u),
+  extractedText: z.string().trim().max(200_000).optional(),
+  parseStatus: z.enum(['pending', 'ready', 'failed', 'not_applicable']),
+  replacesDocumentId: z.string().uuid().optional(),
+});
+
 const hhMarketQuerySchema = z.object({
   text: z.string().trim().min(2).max(200),
   perPage: z.coerce.number().int().min(1).max(20).default(12),
 });
+
+function hasUnsafeFileNameCharacter(value: string): boolean {
+  return [...value].some(
+    (character) =>
+      character === '/' || character === '\\' || character.charCodeAt(0) < 32,
+  );
+}
 
 const loginSchema = z.object({
   username: z.string().trim().min(3).max(80),
@@ -1065,7 +1641,43 @@ const loginSchema = z.object({
 
 const registrationSchema = z.object({
   username: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$/),
+  email: z.string().trim().email().max(254).optional(),
+  displayName: z.string().trim().min(2).max(120).optional(),
   password: z.string().min(12).max(256),
+});
+
+const accountProfileSchema = z
+  .object({
+    email: z.string().trim().email().max(254).nullable().optional(),
+    displayName: z.string().trim().min(2).max(120).nullable().optional(),
+    headline: z.string().trim().min(2).max(220).nullable().optional(),
+    location: z.string().trim().min(2).max(160).nullable().optional(),
+    workMode: z
+      .enum(['office', 'hybrid', 'remote', 'flexible'])
+      .nullable()
+      .optional(),
+  })
+  .refine((value) => Object.values(value).some((item) => item !== undefined), {
+    message: 'at least one profile field is required',
+  });
+
+const passwordChangeSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(256),
+    newPassword: z.string().min(12).max(256),
+  })
+  .refine((value) => value.currentPassword !== value.newPassword, {
+    path: ['newPassword'],
+    message: 'new password must be different',
+  });
+
+const passwordResetRequestSchema = z.object({
+  identifier: z.string().trim().min(3).max(254),
+});
+
+const passwordResetSchema = z.object({
+  token: z.string().regex(/^oqr_[A-Za-z0-9_-]{40,}$/),
+  newPassword: z.string().min(12).max(256),
 });
 
 const profileImportSchema = z.object({
@@ -1345,6 +1957,8 @@ function sessionCookieName(secure: boolean): string {
 function publicPrincipal(principal: AuthPrincipal) {
   return {
     username: principal.username,
+    email: principal.email,
+    displayName: principal.displayName,
     role: principal.role,
     isTest: principal.isTest,
     candidateId: principal.candidate?.id ?? null,

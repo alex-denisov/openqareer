@@ -51,6 +51,7 @@ export interface HhVacancySample {
 interface SearchOptions {
   fetchImpl?: typeof fetch;
   now?: () => string;
+  allowPublicFallback?: boolean;
 }
 
 export async function searchHhVacancies(
@@ -82,6 +83,9 @@ export async function searchHhVacancies(
     throw new Error('hh_vacancy_search_unavailable');
   }
   if (response.status === 403) {
+    if (options.allowPublicFallback === false) {
+      throw new Error('hh_vacancy_search_official_access_required');
+    }
     return searchHhPublicPage(value, fetchImpl, observedAt);
   }
   if (!response.ok) {
@@ -122,8 +126,7 @@ async function searchHhPublicPage(
   try {
     response = await fetchImpl(`https://hh.ru/search/vacancy?${params}`, {
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)',
+        'User-Agent': 'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)',
         Accept: 'text/html,application/xhtml+xml',
       },
       signal: AbortSignal.timeout(8_000),
@@ -143,7 +146,8 @@ async function searchHhPublicPage(
     throw new Error('hh_vacancy_search_challenge');
   }
   const items: HhVacancySample['items'] = [];
-  const itemPattern = /<a[^>]*data-qa="serp-item__title"[^>]*href="([^"]+)"[^>]*>[\s\S]*?<span[^>]*data-qa="serp-item__title-text"[^>]*>([\s\S]*?)<\/span>[\s\S]*?data-qa="vacancy-serp__vacancy-employer-text"[^>]*>([\s\S]*?)<\/span>[\s\S]*?data-qa="vacancy-serp__vacancy-address"[^>]*>([\s\S]*?)<\/span>/giu;
+  const itemPattern =
+    /<a[^>]*data-qa="serp-item__title"[^>]*href="([^"]+)"[^>]*>[\s\S]*?<span[^>]*data-qa="serp-item__title-text"[^>]*>([\s\S]*?)<\/span>[\s\S]*?data-qa="vacancy-serp__vacancy-employer-text"[^>]*>([\s\S]*?)<\/span>[\s\S]*?data-qa="vacancy-serp__vacancy-address"[^>]*>([\s\S]*?)<\/span>/giu;
   for (const match of html.matchAll(itemPattern)) {
     const sourceUrl = decodeHtml(match[1]);
     const id = /\/vacancy\/(\d+)/u.exec(sourceUrl)?.[1];
@@ -163,9 +167,7 @@ async function searchHhPublicPage(
     throw new Error('hh_vacancy_search_invalid');
   }
   const foundText = /Найден[оа]\s+([\d\s\u00a0]+)\s+ваканс/iu.exec(html)?.[1];
-  const found = foundText
-    ? Number(foundText.replace(/\D/gu, ''))
-    : items.length;
+  const found = foundText ? Number(foundText.replace(/\D/gu, '')) : items.length;
   return {
     source: 'hh',
     query: input.text,

@@ -163,4 +163,33 @@ describe('server configuration', () => {
       ),
     ).toMatchObject({ oauthProviders: {} });
   });
+
+  it('enables account email only from a complete Resend configuration', () => {
+    expect(
+      readServerConfig(
+        {
+          ...validEnvironment,
+          RESEND_API_KEY: 're_shared_key_that_is_long_enough',
+          OPENQAREER_ACCOUNT_EMAIL_FROM:
+            'openqareer <account@openqareer.com>',
+          OPENQAREER_PUBLIC_URL: 'https://openqareer.com',
+        },
+        import.meta.url,
+      ).accountEmail,
+    ).toEqual({
+      apiKey: 're_shared_key_that_is_long_enough',
+      from: 'openqareer <account@openqareer.com>',
+      publicBaseUrl: 'https://openqareer.com',
+    });
+
+    expect(() =>
+      readServerConfig(
+        {
+          ...validEnvironment,
+          RESEND_API_KEY: 're_shared_key_that_is_long_enough',
+        },
+        import.meta.url,
+      ),
+    ).toThrow('complete account email configuration is required');
+  });
 });

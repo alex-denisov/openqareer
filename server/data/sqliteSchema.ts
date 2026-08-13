@@ -220,3 +220,129 @@ CREATE TABLE career_command_outbox (
 CREATE INDEX career_command_outbox_pending
   ON career_command_outbox(status, created_at);
 `;
+
+export const MIGRATION_9 = `
+ALTER TABLE users ADD COLUMN email TEXT;
+ALTER TABLE users ADD COLUMN display_name TEXT;
+ALTER TABLE users ADD COLUMN headline TEXT;
+ALTER TABLE users ADD COLUMN location TEXT;
+ALTER TABLE users ADD COLUMN work_mode TEXT CHECK (
+  work_mode IS NULL OR work_mode IN ('office', 'hybrid', 'remote', 'flexible')
+);
+ALTER TABLE users ADD COLUMN profile_updated_at TEXT;
+
+CREATE UNIQUE INDEX users_email_unique
+  ON users(email) WHERE email IS NOT NULL;
+`;
+
+export const MIGRATION_10 = `
+CREATE TABLE password_reset_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL,
+  consumed_at TEXT,
+  created_at TEXT NOT NULL
+) STRICT;
+
+CREATE INDEX password_reset_tokens_user
+  ON password_reset_tokens(user_id, expires_at);
+`;
+
+export const MIGRATION_11 = `
+CREATE TABLE candidate_documents (
+  id TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  family_id TEXT NOT NULL,
+  version INTEGER NOT NULL CHECK (version > 0),
+  kind TEXT NOT NULL CHECK (
+    kind IN (
+      'resume', 'cover_letter', 'certificate', 'portfolio',
+      'profile_export', 'other'
+    )
+  ),
+  source TEXT NOT NULL CHECK (source IN ('upload', 'generated', 'import')),
+  file_name_cipher TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  byte_size INTEGER NOT NULL CHECK (byte_size > 0 AND byte_size <= 5242880),
+  content_sha256 TEXT NOT NULL,
+  content_cipher TEXT,
+  extracted_text_cipher TEXT,
+  parse_status TEXT NOT NULL CHECK (
+    parse_status IN ('pending', 'ready', 'failed', 'not_applicable')
+  ),
+  supersedes_document_id TEXT REFERENCES candidate_documents(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT
+) STRICT;
+
+CREATE UNIQUE INDEX candidate_documents_active_hash
+  ON candidate_documents(candidate_id, content_sha256)
+  WHERE deleted_at IS NULL;
+CREATE INDEX candidate_documents_candidate
+  ON candidate_documents(candidate_id, kind, created_at);
+`;
+
+export const MIGRATION_12 = `
+CREATE TABLE vacancy_subscriptions (
+  id TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  source TEXT NOT NULL CHECK (source = 'hh'),
+  query_cipher TEXT NOT NULL,
+  cadence_minutes INTEGER NOT NULL CHECK (
+    cadence_minutes BETWEEN 60 AND 10080
+  ),
+  status TEXT NOT NULL CHECK (status IN ('active', 'paused')),
+  next_run_at TEXT NOT NULL,
+  last_attempt_at TEXT,
+  last_success_at TEXT,
+  last_error_code TEXT,
+  lease_until TEXT,
+  source_found INTEGER,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
+
+CREATE INDEX vacancy_subscriptions_due
+  ON vacancy_subscriptions(status, next_run_at, lease_until);
+CREATE INDEX vacancy_subscriptions_candidate
+  ON vacancy_subscriptions(candidate_id, created_at);
+
+CREATE TABLE vacancies (
+  id TEXT PRIMARY KEY,
+  source TEXT NOT NULL CHECK (source = 'hh'),
+  external_id TEXT NOT NULL,
+  canonical_url TEXT NOT NULL,
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  latest_version INTEGER NOT NULL CHECK (latest_version > 0),
+  UNIQUE (source, external_id)
+) STRICT;
+
+CREATE TABLE vacancy_versions (
+  vacancy_id TEXT NOT NULL REFERENCES vacancies(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL CHECK (version > 0),
+  content_hash TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  observed_at TEXT NOT NULL,
+  PRIMARY KEY (vacancy_id, version)
+) STRICT;
+
+CREATE TABLE vacancy_subscription_items (
+  subscription_id TEXT NOT NULL REFERENCES vacancy_subscriptions(id) ON DELETE CASCADE,
+  vacancy_id TEXT NOT NULL REFERENCES vacancies(id) ON DELETE CASCADE,
+  first_matched_at TEXT NOT NULL,
+  last_matched_at TEXT NOT NULL,
+  PRIMARY KEY (subscription_id, vacancy_id)
+) STRICT;
+
+CREATE TABLE vacancy_source_health (
+  source TEXT PRIMARY KEY CHECK (source = 'hh'),
+  status TEXT NOT NULL CHECK (status IN ('healthy', 'degraded', 'unavailable')),
+  last_attempt_at TEXT NOT NULL,
+  last_success_at TEXT,
+  last_error_code TEXT,
+  retry_after_at TEXT,
+  consecutive_failures INTEGER NOT NULL DEFAULT 0
+) STRICT;
+`;
