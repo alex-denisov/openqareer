@@ -3995,7 +3995,9 @@
 }
 
 .career-source-attribution {
+  display: inline-flex;
   width: fit-content;
+  margin-inline-end: 12px;
   color: var(--career-text-dim);
   font-size: 0.58rem;
   text-decoration: underline;
