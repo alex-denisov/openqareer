@@ -63,7 +63,7 @@ import {
   searchHhVacancies,
   type HhVacancySample,
 } from './connectors/hhVacancySearch';
-import { searchArbeitnowVacancies } from './connectors/arbeitnowVacancySearch';
+import { searchRemotiveVacancies } from './connectors/remotiveVacancySearch';
 import {
   importProfileUrl as importPublicProfileUrl,
   parseProfileUrl,
@@ -95,7 +95,7 @@ interface BuildAppOptions {
     text: string;
     perPage?: number;
   }) => Promise<HhVacancySample>;
-  searchArbeitnow?: (input: {
+  searchRemotive?: (input: {
     text: string;
     perPage?: number;
   }) => Promise<VacancySample>;
@@ -121,7 +121,7 @@ export async function buildApp({
   authService,
   serveStatic = true,
   searchVacancies = searchHhVacancies,
-  searchArbeitnow = searchArbeitnowVacancies,
+  searchRemotive = searchRemotiveVacancies,
   importProfile = importPublicProfileUrl,
   oauthTransport,
   careerCommandExecutor,
@@ -144,7 +144,7 @@ export async function buildApp({
       store: candidateStore,
       connectors: {
         hh: searchVacancies,
-        arbeitnow: searchArbeitnow,
+        remotive: searchRemotive,
       },
     });
   const app = Fastify({

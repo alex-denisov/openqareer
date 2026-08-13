@@ -438,3 +438,112 @@ CREATE INDEX vacancy_subscriptions_due
 CREATE INDEX vacancy_subscriptions_candidate
   ON vacancy_subscriptions(candidate_id, created_at);
 `;
+
+export const MIGRATION_15 = `
+CREATE TABLE vacancy_subscriptions_v15 (
+  id TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  source TEXT NOT NULL CHECK (source IN ('hh', 'remotive')),
+  query_cipher TEXT NOT NULL,
+  cadence_minutes INTEGER NOT NULL CHECK (
+    cadence_minutes BETWEEN 60 AND 10080
+  ),
+  status TEXT NOT NULL CHECK (status IN ('active', 'paused')),
+  next_run_at TEXT NOT NULL,
+  last_attempt_at TEXT,
+  last_success_at TEXT,
+  last_error_code TEXT,
+  lease_until TEXT,
+  source_found INTEGER,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE vacancies_v15 (
+  id TEXT PRIMARY KEY,
+  source TEXT NOT NULL CHECK (source IN ('hh', 'remotive')),
+  external_id TEXT NOT NULL,
+  canonical_url TEXT NOT NULL,
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  latest_version INTEGER NOT NULL CHECK (latest_version > 0),
+  UNIQUE (source, external_id)
+) STRICT;
+
+CREATE TABLE vacancy_versions_v15 (
+  vacancy_id TEXT NOT NULL REFERENCES vacancies_v15(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL CHECK (version > 0),
+  content_hash TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  observed_at TEXT NOT NULL,
+  PRIMARY KEY (vacancy_id, version)
+) STRICT;
+
+CREATE TABLE vacancy_subscription_items_v15 (
+  subscription_id TEXT NOT NULL REFERENCES vacancy_subscriptions_v15(id) ON DELETE CASCADE,
+  vacancy_id TEXT NOT NULL REFERENCES vacancies_v15(id) ON DELETE CASCADE,
+  first_matched_at TEXT NOT NULL,
+  last_matched_at TEXT NOT NULL,
+  PRIMARY KEY (subscription_id, vacancy_id)
+) STRICT;
+
+CREATE TABLE vacancy_source_health_v15 (
+  source TEXT PRIMARY KEY CHECK (source IN ('hh', 'remotive')),
+  status TEXT NOT NULL CHECK (
+    status IN ('healthy', 'degraded', 'unavailable', 'official_access_required')
+  ),
+  last_attempt_at TEXT NOT NULL,
+  last_success_at TEXT,
+  last_error_code TEXT,
+  retry_after_at TEXT,
+  consecutive_failures INTEGER NOT NULL DEFAULT 0
+) STRICT;
+
+INSERT INTO vacancy_subscriptions_v15
+  SELECT id, candidate_id,
+    CASE source WHEN 'arbeitnow' THEN 'remotive' ELSE source END,
+    query_cipher, cadence_minutes,
+    CASE source WHEN 'arbeitnow' THEN 'paused' ELSE status END,
+    next_run_at,
+    CASE source WHEN 'arbeitnow' THEN NULL ELSE last_attempt_at END,
+    CASE source WHEN 'arbeitnow' THEN NULL ELSE last_success_at END,
+    CASE source WHEN 'arbeitnow' THEN 'source_replaced_review_required'
+      ELSE last_error_code END,
+    NULL,
+    CASE source WHEN 'arbeitnow' THEN NULL ELSE source_found END,
+    created_at,
+    CASE source WHEN 'arbeitnow' THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      ELSE updated_at END
+  FROM vacancy_subscriptions;
+
+INSERT INTO vacancies_v15 SELECT * FROM vacancies WHERE source = 'hh';
+INSERT INTO vacancy_versions_v15
+  SELECT versions.* FROM vacancy_versions AS versions
+  JOIN vacancies ON vacancies.id = versions.vacancy_id
+  WHERE vacancies.source = 'hh';
+INSERT INTO vacancy_subscription_items_v15
+  SELECT items.* FROM vacancy_subscription_items AS items
+  JOIN vacancy_subscriptions AS subscriptions
+    ON subscriptions.id = items.subscription_id
+  JOIN vacancies ON vacancies.id = items.vacancy_id
+  WHERE subscriptions.source = 'hh' AND vacancies.source = 'hh';
+INSERT INTO vacancy_source_health_v15
+  SELECT * FROM vacancy_source_health WHERE source = 'hh';
+
+DROP TABLE vacancy_subscription_items;
+DROP TABLE vacancy_versions;
+DROP TABLE vacancies;
+DROP TABLE vacancy_subscriptions;
+DROP TABLE vacancy_source_health;
+
+ALTER TABLE vacancy_subscriptions_v15 RENAME TO vacancy_subscriptions;
+ALTER TABLE vacancies_v15 RENAME TO vacancies;
+ALTER TABLE vacancy_versions_v15 RENAME TO vacancy_versions;
+ALTER TABLE vacancy_subscription_items_v15 RENAME TO vacancy_subscription_items;
+ALTER TABLE vacancy_source_health_v15 RENAME TO vacancy_source_health;
+
+CREATE INDEX vacancy_subscriptions_due
+  ON vacancy_subscriptions(status, next_run_at, lease_until);
+CREATE INDEX vacancy_subscriptions_candidate
+  ON vacancy_subscriptions(candidate_id, created_at);
+`;

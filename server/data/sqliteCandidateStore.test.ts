@@ -678,13 +678,13 @@ describe('SQLite candidate memory', () => {
     expect(reopened.deleteCandidate(candidateA.id)).toBe(true);
   });
 
-  it('persists an Arbeitnow subscription in the shared versioned corpus', () => {
+  it('persists a Remotive subscription in the shared versioned corpus', () => {
     const store = createStore();
     const candidate = createCandidate(store);
     const subscription = store.createVacancySubscription(
       candidate.id,
       {
-        source: 'arbeitnow',
+        source: 'remotive',
         query: 'product manager',
         cadenceMinutes: 360,
       },
@@ -693,7 +693,7 @@ describe('SQLite candidate memory', () => {
 
     expect(
       store.recordVacancyRefresh(subscription.id, {
-        source: 'arbeitnow',
+        source: 'remotive',
         query: 'product manager',
         found: 1,
         fetchedAt: '2026-08-13T12:01:00.000Z',
@@ -714,7 +714,7 @@ describe('SQLite candidate memory', () => {
     ).toMatchObject({ created: 1, updated: 0, unchanged: 0 });
     expect(store.listSubscriptionVacancies(candidate.id, subscription.id)).toMatchObject([
       {
-        source: 'arbeitnow',
+        source: 'remotive',
         externalId: 'senior-product-manager-berlin-101',
         workMode: 'remote',
         requirements: ['Product', 'SaaS'],

@@ -53,7 +53,7 @@ async function createApp(
     token: string;
   }) => Promise<void>,
   searchVacancies?: Parameters<typeof buildApp>[0]['searchVacancies'],
-  searchArbeitnow?: Parameters<typeof buildApp>[0]['searchArbeitnow'],
+  searchRemotive?: Parameters<typeof buildApp>[0]['searchRemotive'],
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-auth-routes-'));
   const databasePath = join(directory, 'app.db');
@@ -110,7 +110,7 @@ async function createApp(
     authService: auth,
     serveStatic: false,
     ...(searchVacancies ? { searchVacancies } : {}),
-    ...(searchArbeitnow ? { searchArbeitnow } : {}),
+    ...(searchRemotive ? { searchRemotive } : {}),
   });
   resources.push({ app, auth, candidates, directory });
   return app;

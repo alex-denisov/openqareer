@@ -32,7 +32,7 @@ afterEach(async () => {
 
 async function createApp(
   searchVacancies?: Parameters<typeof buildApp>[0]['searchVacancies'],
-  searchArbeitnow?: Parameters<typeof buildApp>[0]['searchArbeitnow'],
+  searchRemotive?: Parameters<typeof buildApp>[0]['searchRemotive'],
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-vacancy-routes-'));
   const databasePath = join(directory, 'app.db');
@@ -75,7 +75,7 @@ async function createApp(
     authService: auth,
     serveStatic: false,
     ...(searchVacancies ? { searchVacancies } : {}),
-    ...(searchArbeitnow ? { searchArbeitnow } : {}),
+    ...(searchRemotive ? { searchRemotive } : {}),
   });
   resources.push({ app, auth, candidates, directory });
   return app;
@@ -157,16 +157,16 @@ describe('candidate vacancy routes', () => {
         health: expect.objectContaining({ status: 'not_checked' }),
       }),
       expect.objectContaining({
-        id: 'arbeitnow',
+        id: 'remotive',
         transport: 'public_api',
         health: expect.objectContaining({ status: 'not_checked' }),
       }),
     ]);
   });
 
-  it('creates an Arbeitnow subscription through the shared API', async () => {
+  it('creates a Remotive subscription through the shared API', async () => {
     const app = await createApp(undefined, async ({ text }) => ({
-      source: 'arbeitnow',
+      source: 'remotive',
       query: text,
       found: 1,
       fetchedAt: '2026-08-13T12:00:00.000Z',
@@ -190,7 +190,7 @@ describe('candidate vacancy routes', () => {
       url: '/api/v1/candidate/vacancy-subscriptions',
       headers: { cookie, origin: 'http://localhost:3000' },
       payload: {
-        source: 'arbeitnow',
+        source: 'remotive',
         query: 'product manager',
         cadenceMinutes: 360,
       },
@@ -199,12 +199,12 @@ describe('candidate vacancy routes', () => {
     expect(response.statusCode).toBe(201);
     expect(response.json().data).toMatchObject({
       subscription: {
-        source: 'arbeitnow',
+        source: 'remotive',
         lastSuccessAt: '2026-08-13T12:00:00.000Z',
       },
       vacancies: [
         {
-          source: 'arbeitnow',
+          source: 'remotive',
           workMode: 'remote',
           requirements: ['Product'],
         },

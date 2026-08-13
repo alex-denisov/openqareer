@@ -95,7 +95,7 @@ export interface StoredVacancy {
   lastSeenAt: string;
 }
 
-export type VacancySourceId = 'hh' | 'arbeitnow';
+export type VacancySourceId = 'hh' | 'remotive';
 
 export interface VacancySourceRegistryEntry {
   id: VacancySourceId;

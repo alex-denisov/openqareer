@@ -116,13 +116,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
             },
           },
           {
-            id: 'arbeitnow',
-            name: 'Arbeitnow',
-            market: 'Германия и Европа',
+            id: 'remotive',
+            name: 'Remotive',
+            market: 'Международный remote',
             transport: 'public_api',
-            searchCoverage: 'Совпадения в ограниченной свежей API-выборке',
-            attributionUrl: 'https://www.arbeitnow.com/',
-            documentationUrl: 'https://www.arbeitnow.com/blog/job-board-api',
+            searchCoverage: 'Совпадения в общей выборке до 50 remote-вакансий; задержка источника до 24 часов',
+            attributionUrl: 'https://remotive.com/',
+            documentationUrl: 'https://remotive.com/remote-jobs/api',
             reviewedAt: '2026-08-13',
             health: {
               status: 'healthy',
@@ -322,12 +322,12 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: official access requirement is hidden`,
   );
   await page.getByRole('combobox', { name: 'Источник вакансий' }).selectOption(
-    'arbeitnow',
+    'remotive',
   );
   await page
-    .getByText('Совпадения в ограниченной свежей API-выборке', { exact: false })
+    .getByText('Совпадения в общей выборке до 50 remote-вакансий', { exact: false })
     .waitFor();
-  await page.getByRole('link', { name: 'Источник: Arbeitnow' }).waitFor();
+  await page.getByRole('link', { name: 'Источник: Remotive' }).waitFor();
   await mkdir('output/playwright', { recursive: true });
   await page.screenshot({
     path: `output/playwright/b134-vacancy-sources-${viewport.name}.png`,
@@ -345,7 +345,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByRole('button', { name: 'Создать' }).click();
   await vacancyCreateResponse;
   assert(
-    vacancyCreateSource === 'arbeitnow',
+    vacancyCreateSource === 'remotive',
     `${viewport.name}: selected vacancy source was not sent to the API`,
   );
   await page.locator('button[aria-label="Профиль"]:visible').click();

@@ -10,7 +10,7 @@ import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { AuthService } from './auth/authService';
 import { buildPasswordResetNotifier } from './auth/passwordResetEmail';
 import { searchHhVacancies } from './connectors/hhVacancySearch';
-import { searchArbeitnowVacancies } from './connectors/arbeitnowVacancySearch';
+import { searchRemotiveVacancies } from './connectors/remotiveVacancySearch';
 import { VacancyIntelligenceService } from './vacancies/vacancyIntelligenceService';
 
 const config = readServerConfig(process.env);
@@ -65,7 +65,7 @@ const vacancyIntelligenceService = new VacancyIntelligenceService({
   store: candidateStore,
   connectors: {
     hh: (input) => searchHhVacancies(input, { allowPublicFallback: false }),
-    arbeitnow: searchArbeitnowVacancies,
+    remotive: searchRemotiveVacancies,
   },
   maxBatchSize: 5,
 });

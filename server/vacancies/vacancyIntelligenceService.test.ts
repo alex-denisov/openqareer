@@ -93,7 +93,7 @@ describe('vacancy intelligence scheduler', () => {
     );
     const succeeded = store.createVacancySubscription(
       candidate.id,
-      { source: 'arbeitnow', query: 'working query', cadenceMinutes: 360 },
+      { source: 'remotive', query: 'working query', cadenceMinutes: 360 },
       '2026-08-13T09:00:00.000Z',
     );
     const service = new VacancyIntelligenceService({
@@ -102,9 +102,9 @@ describe('vacancy intelligence scheduler', () => {
         hh: async () => {
           throw new Error('hh_vacancy_search_unavailable');
         },
-        arbeitnow: async ({ text }) => {
+        remotive: async ({ text }) => {
           return {
-            source: 'arbeitnow',
+            source: 'remotive',
             query: text,
             found: 0,
             fetchedAt: '2026-08-13T09:01:00.000Z',
@@ -135,8 +135,8 @@ describe('vacancy intelligence scheduler', () => {
       lastErrorCode: null,
     });
     expect(store.listVacancySourceHealth()).toMatchObject([
-      { source: 'arbeitnow', status: 'healthy' },
       { source: 'hh', status: 'degraded' },
+      { source: 'remotive', status: 'healthy' },
     ]);
   });
 
@@ -148,15 +148,15 @@ describe('vacancy intelligence scheduler', () => {
     });
     const subscription = store.createVacancySubscription(
       candidate.id,
-      { source: 'arbeitnow', query: 'product manager', cadenceMinutes: 360 },
+      { source: 'remotive', query: 'product manager', cadenceMinutes: 360 },
       '2026-08-13T10:00:00.000Z',
     );
     const service = new VacancyIntelligenceService({
       store,
       connectors: {
-        arbeitnow: async () => {
+        remotive: async () => {
           throw new VacancyConnectorError(
-            'arbeitnow_vacancy_search_rate_limited',
+            'remotive_vacancy_search_rate_limited',
             '2026-08-13T10:15:00.000Z',
           );
         },

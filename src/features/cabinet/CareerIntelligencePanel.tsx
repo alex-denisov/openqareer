@@ -364,7 +364,7 @@ export function CareerIntelligencePanel({
 
 const fallbackSources = [
   { id: 'hh', name: 'hh.ru', market: 'Россия и СНГ' },
-  { id: 'arbeitnow', name: 'Arbeitnow', market: 'Германия и Европа' },
+  { id: 'remotive', name: 'Remotive', market: 'Международный remote' },
 ] as const;
 
 function SourceAttribution({ source }: { source: VacancySourceRegistryEntry }) {
@@ -391,6 +391,9 @@ function sourceHealthLabel(status?: VacancySourceRegistryEntry['health']['status
 }
 
 function sourceFailureMessage(errorCode: string) {
+  if (errorCode === 'source_replaced_review_required') {
+    return 'Источник заменён на Remotive после production-сбоя. Проверьте направление и возобновите его вручную.';
+  }
   if (errorCode === 'official_access_required') {
     return 'Нужен официальный доступ к API. Поиск сохранён, но данные не отмечены свежими.';
   }

@@ -76,6 +76,7 @@ import {
   MIGRATION_12,
   MIGRATION_13,
   MIGRATION_14,
+  MIGRATION_15,
 } from './sqliteSchema';
 import type {
   CareerCommandRecord,
@@ -992,6 +993,14 @@ export class SqliteCandidateStore implements CandidateStore {
         this.database.exec(MIGRATION_14);
         this.database.prepare(
           'INSERT INTO schema_migrations (version, applied_at) VALUES (14, ?)',
+        ).run(new Date().toISOString());
+      });
+    }
+    if ((row.version ?? 0) < 15) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_15);
+        this.database.prepare(
+          'INSERT INTO schema_migrations (version, applied_at) VALUES (15, ?)',
         ).run(new Date().toISOString());
       });
     }
