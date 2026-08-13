@@ -194,9 +194,7 @@ export function readServerConfig(
       return [[platform, { clientId, clientSecret, redirectUri }]];
     }),
   ) as Partial<Record<OAuthPlatform, OAuthProviderConfig>>;
-  const resendApiKey =
-    parsed.OPENQAREER_RESEND_API_KEY ??
-    nonBlankEnvironmentValue(environment.RESEND_API_KEY);
+  const resendApiKey = parsed.OPENQAREER_RESEND_API_KEY;
   const accountEmailValues = [
     resendApiKey,
     parsed.OPENQAREER_ACCOUNT_EMAIL_FROM,
@@ -246,11 +244,6 @@ export function readServerConfig(
     oauthProviders,
     accountEmail,
   };
-}
-
-function nonBlankEnvironmentValue(value: string | undefined) {
-  const normalized = value?.trim();
-  return normalized ? normalized : undefined;
 }
 
 function validateOAuthRedirect(

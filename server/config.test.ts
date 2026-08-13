@@ -169,16 +169,17 @@ describe('server configuration', () => {
       readServerConfig(
         {
           ...validEnvironment,
-          RESEND_API_KEY: 're_shared_key_that_is_long_enough',
+          OPENQAREER_RESEND_API_KEY:
+            're_openqareer_key_that_is_long_enough',
           OPENQAREER_ACCOUNT_EMAIL_FROM:
-            'openqareer <account@openqareer.com>',
+            'openqareer <noreply@openqareer.com>',
           OPENQAREER_PUBLIC_URL: 'https://openqareer.com',
         },
         import.meta.url,
       ).accountEmail,
     ).toEqual({
-      apiKey: 're_shared_key_that_is_long_enough',
-      from: 'openqareer <account@openqareer.com>',
+      apiKey: 're_openqareer_key_that_is_long_enough',
+      from: 'openqareer <noreply@openqareer.com>',
       publicBaseUrl: 'https://openqareer.com',
     });
 
@@ -186,7 +187,23 @@ describe('server configuration', () => {
       readServerConfig(
         {
           ...validEnvironment,
-          RESEND_API_KEY: 're_shared_key_that_is_long_enough',
+          OPENQAREER_RESEND_API_KEY:
+            're_openqareer_key_that_is_long_enough',
+        },
+        import.meta.url,
+      ),
+    ).toThrow('complete account email configuration is required');
+  });
+
+  it('never reuses an unscoped Resend credential for account email', () => {
+    expect(() =>
+      readServerConfig(
+        {
+          ...validEnvironment,
+          RESEND_API_KEY: 're_other_product_key_that_is_long_enough',
+          OPENQAREER_ACCOUNT_EMAIL_FROM:
+            'openqareer <noreply@openqareer.com>',
+          OPENQAREER_PUBLIC_URL: 'https://openqareer.com',
         },
         import.meta.url,
       ),
