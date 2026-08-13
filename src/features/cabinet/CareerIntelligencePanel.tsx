@@ -83,8 +83,7 @@ export function CareerIntelligencePanel({
         ? activeId
         : subscriptions[0]?.id;
     if (!nextId) {
-      setActiveId(undefined);
-      setView(undefined);
+      if (!activeId) setView(undefined);
       return;
     }
     if (nextId !== activeId) setActiveId(nextId);
@@ -170,6 +169,8 @@ export function CareerIntelligencePanel({
 
   const activeSubscription =
     view?.subscription ?? subscriptions.find((item) => item.id === activeId);
+  const activeView =
+    view?.subscription.id === activeSubscription?.id ? view : undefined;
   const activeSource = sources.find((item) => item.id === activeSubscription?.source);
   const selectedSource = sources.find((item) => item.id === source);
 
@@ -270,9 +271,9 @@ export function CareerIntelligencePanel({
 
             <MarketAnalytics subscription={activeSubscription} />
 
-            {view?.vacancies.length ? (
+            {activeView?.vacancies.length ? (
               <div className="career-cabinet-vacancies">
-                {view.vacancies.slice(0, expanded ? 12 : 4).map((vacancy) => (
+                {activeView.vacancies.slice(0, expanded ? 12 : 4).map((vacancy) => (
                   <a key={vacancy.id} href={vacancy.sourceUrl} target="_blank" rel="noreferrer">
                     <Briefcase size={16} />
                     <span>
@@ -289,11 +290,13 @@ export function CareerIntelligencePanel({
               <p className="career-market-empty">
                 {activeSubscription.lastErrorCode
                   ? sourceFailureMessage(activeSubscription.lastErrorCode)
-                  : 'Первая выборка ещё не собрана.'}
+                  : activeView
+                    ? 'В последней выборке совпадений нет.'
+                    : 'Обновляем выборку…'}
               </p>
             )}
             {activeSource ? <SourceAttribution source={activeSource} /> : null}
-            {view?.vacancies.length && !expanded ? (
+            {activeView?.vacancies.length && !expanded ? (
               <button
                 className="career-inline-link"
                 type="button"

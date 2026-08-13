@@ -23,6 +23,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   let hhConnected = true;
   let hhDisconnectAttempts = 0;
   let vacancyCreateSource = null;
+  let createdVacancyView = null;
   await page.route('**/api/v1/auth/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -86,7 +87,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
           assessments: [],
           germanyMarket: null,
           documents: [],
-          vacancySubscriptions: [],
+          vacancySubscriptions: createdVacancyView
+            ? [createdVacancyView.subscription]
+            : [],
         },
       }),
     });
@@ -138,43 +141,70 @@ async function verifyViewport(browser, baseUrl, viewport) {
     });
   });
   await page.route('**/api/v1/candidate/vacancy-subscriptions', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.fallback();
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: createdVacancyView }),
+      });
       return;
     }
     const payload = route.request().postDataJSON();
     vacancyCreateSource = payload.source;
+    createdVacancyView = {
+      subscription: {
+        id: '00000000-0000-4000-8000-000000000134',
+        source: payload.source,
+        query: payload.query,
+        cadenceMinutes: payload.cadenceMinutes,
+        status: 'active',
+        nextRunAt: '2026-08-13T14:00:00.000Z',
+        lastAttemptAt: '2026-08-13T08:00:00.000Z',
+        lastSuccessAt: '2026-08-13T08:00:00.000Z',
+        lastErrorCode: null,
+        createdAt: '2026-08-13T08:00:00.000Z',
+        updatedAt: '2026-08-13T08:00:00.000Z',
+        analytics: {
+          sampleSize: 1,
+          sourceFound: 1,
+          salaryKnown: 0,
+          unknownSalary: 1,
+          observedFrom: '2026-08-13T08:00:00.000Z',
+          observedTo: '2026-08-13T08:00:00.000Z',
+          currencies: [],
+          topLocations: [{ location: 'Worldwide', vacancies: 1 }],
+        },
+      },
+      vacancies: [
+        {
+          id: '00000000-0000-4000-8000-000000000535',
+          source: payload.source,
+          externalId: '535',
+          title: 'Product Manager',
+          company: 'Synthetic Company',
+          location: 'Worldwide',
+          sourceUrl: 'https://remotive.com/remote-jobs/product/product-manager-535',
+          publishedAt: '2026-08-13T08:00:00.000Z',
+          salary: null,
+          workMode: 'remote',
+          requirements: ['Product'],
+          version: 1,
+          firstSeenAt: '2026-08-13T08:00:00.000Z',
+          lastSeenAt: '2026-08-13T08:00:00.000Z',
+        },
+      ],
+    };
     await route.fulfill({
       status: 201,
       contentType: 'application/json',
-      body: JSON.stringify({
-        data: {
-          subscription: {
-            id: '00000000-0000-4000-8000-000000000134',
-            source: payload.source,
-            query: payload.query,
-            cadenceMinutes: payload.cadenceMinutes,
-            status: 'active',
-            nextRunAt: '2026-08-13T14:00:00.000Z',
-            lastAttemptAt: '2026-08-13T08:00:00.000Z',
-            lastSuccessAt: '2026-08-13T08:00:00.000Z',
-            lastErrorCode: null,
-            createdAt: '2026-08-13T08:00:00.000Z',
-            updatedAt: '2026-08-13T08:00:00.000Z',
-            analytics: {
-              sampleSize: 0,
-              sourceFound: 0,
-              salaryKnown: 0,
-              unknownSalary: 0,
-              observedFrom: null,
-              observedTo: null,
-              currencies: [],
-              topLocations: [],
-            },
-          },
-          vacancies: [],
-        },
-      }),
+      body: JSON.stringify({ data: createdVacancyView }),
+    });
+  });
+  await page.route('**/api/v1/candidate/vacancy-subscriptions/*/vacancies', async (route) => {
+    await route.fulfill({
+      status: createdVacancyView ? 200 : 404,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: createdVacancyView }),
     });
   });
   await page.route('**/api/v1/candidate/profile-imports', async (route) => {
@@ -348,6 +378,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     vacancyCreateSource === 'remotive',
     `${viewport.name}: selected vacancy source was not sent to the API`,
   );
+  await page.getByRole('link', { name: /Product Manager/ }).waitFor();
   await page.locator('button[aria-label="Профиль"]:visible').click();
   await page.getByRole('heading', { name: 'Профессиональный профиль' }).waitFor();
   await page.locator('button[aria-label="Сегодня"]:visible').click();
