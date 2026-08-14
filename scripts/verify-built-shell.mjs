@@ -75,7 +75,20 @@ async function verifyViewport(browser, baseUrl, viewport) {
             locale: 'ru-RU',
             createdAt: '2026-08-13T08:00:00.000Z',
           },
-          messages: [],
+          messages: [
+            {
+              id: 'message-long-user',
+              role: 'user',
+              content:
+                'Это вымышленный тестовый карьерный эпизод: руководил запуском цифрового продукта для 1200 пользователей и сократил срок релиза на 30 процентов.',
+            },
+            {
+              id: 'message-long-assistant',
+              role: 'assistant',
+              content:
+                'Зафиксировал измеримый результат. Чтобы превратить его в полноценный карьерный эпизод, уточним роль, зону ответственности, период и ключевые решения.',
+            },
+          ],
           memory: [
             {
               id: 'confirmed-product-result',
@@ -362,6 +375,54 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByText('Другой путь', { exact: true }).waitFor();
   await page.getByText('Исправить исходные данные', { exact: true }).waitFor();
   await page.getByText(/только после согласования кандидата/iu).waitFor();
+  const dialogueContainment = await page
+    .locator('.career-coach-history')
+    .evaluate((history) => {
+      const boundary = history
+        .closest('.career-coach-desk')
+        .getBoundingClientRect();
+      const paragraphs = [...history.querySelectorAll('p')].map((paragraph) => {
+        const rect = paragraph.getBoundingClientRect();
+        return {
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          clientWidth: paragraph.clientWidth,
+          scrollWidth: paragraph.scrollWidth,
+        };
+      });
+      return {
+        contained: paragraphs.every(
+          (paragraph) =>
+            paragraph.left >= boundary.left - 1 &&
+            paragraph.right <= boundary.right + 1 &&
+            paragraph.scrollWidth <= paragraph.clientWidth + 1,
+        ),
+        boundary: {
+          left: Math.round(boundary.left),
+          right: Math.round(boundary.right),
+        },
+        paragraphs,
+      };
+    });
+  assert(
+    dialogueContainment.contained,
+    `${viewport.name}: long dialogue text escaped its cabinet column ${JSON.stringify(dialogueContainment)}`,
+  );
+  const coachHeaderContained = await page
+    .locator('.career-coach-desk .career-cabinet-panel-heading')
+    .evaluate((header) => {
+      const boundary = header
+        .closest('.career-coach-desk')
+        .getBoundingClientRect();
+      return [...header.children].every((child) => {
+        const rect = child.getBoundingClientRect();
+        return rect.left >= boundary.left - 1 && rect.right <= boundary.right + 1;
+      });
+    });
+  assert(
+    coachHeaderContained,
+    `${viewport.name}: coach status escaped its cabinet header`,
+  );
   await page.locator('button[aria-label="Карьера"]:visible').click();
   await page.getByRole('heading', { name: 'Карьерный трек' }).waitFor();
   const roleCards = page.locator('.career-role-hypotheses article');

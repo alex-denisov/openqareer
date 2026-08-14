@@ -3109,10 +3109,13 @@
 .career-coach-desk {
   min-height: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto minmax(220px, 1fr) auto auto;
 }
 
 .career-cabinet-panel-heading {
+  width: 100%;
+  min-width: 0;
   min-height: 72px;
   display: flex;
   align-items: center;
@@ -3120,6 +3123,10 @@
   gap: 16px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--career-line);
+}
+
+.career-cabinet-panel-heading > div {
+  min-width: 0;
 }
 
 .career-cabinet-panel-heading h2 {
@@ -3130,11 +3137,14 @@
 }
 
 .career-online-state {
+  min-width: 0;
+  flex: 0 1 auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   color: var(--career-success);
   font-size: 0.65rem;
+  white-space: nowrap;
 }
 
 .career-online-state i {
@@ -3168,7 +3178,11 @@
 }
 
 .career-coach-history {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   display: grid;
   align-content: start;
@@ -3181,6 +3195,8 @@
 .career-coach-starter,
 .career-coach-message,
 .career-coach-next-question {
+  min-width: 0;
+  max-width: 100%;
   display: grid;
   gap: 8px;
 }
@@ -3198,10 +3214,13 @@
 .career-coach-starter p,
 .career-coach-message p,
 .career-coach-next-question p {
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
   color: var(--career-text-soft);
   font-size: 0.76rem;
   line-height: 1.58;
+  overflow-wrap: anywhere;
 }
 
 .career-coach-message {
