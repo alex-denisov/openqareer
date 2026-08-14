@@ -3577,6 +3577,21 @@
   gap: 6px;
 }
 
+.career-profile-open-questions {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--career-line);
+}
+
+.career-profile-open-questions > strong {
+  color: var(--career-text-soft);
+  font-size: 0.67rem;
+}
+
+.career-profile-open-questions article:last-child {
+  padding-bottom: 0;
+}
+
 .career-profile-review-queue article button:first-child {
   display: inline-flex;
   align-items: center;

@@ -12,11 +12,119 @@ import {
 } from '../opportunity/opportunityEngine';
 import { recordOutcome } from '../outcome/outcomeEngine';
 import {
+  applyCanonicalProfileToJourney,
+  buildCanonicalProfileJourney,
   buildCareerJourney,
   prepareCareerWorkspace,
 } from './careerJourneyEngine';
 
 describe('buildCareerJourney', () => {
+  it('builds a partial diagnostic from server profile memory without local workspace', () => {
+    const journey = buildCanonicalProfileJourney(
+      undefined,
+      [
+        {
+          id: 'server-only-result',
+          statement: 'Сократил срок запуска на 30 процентов.',
+          kind: 'fact',
+          domain: 'outcome',
+          status: 'proposed',
+          sourceMessageIds: ['message-1'],
+        },
+      ],
+      'Руководитель продукта',
+      '2026-08-14T00:00:00.000Z',
+    );
+
+    expect(journey.profile).toMatchObject({
+      state: 'needs-review',
+      proposedEvidence: 1,
+      sourceLabel: 'Диалог и канонический профиль',
+    });
+    expect(journey.diagnostic.coverage).toMatchObject({
+      sourceKinds: ['conversation'],
+      isPartial: true,
+      profileEvidence: { proposed: 1 },
+    });
+    expect(
+      journey.diagnostic.findings.find((finding) => finding.dimension === 'ats'),
+    ).toMatchObject({ certainty: 'unknown', status: 'unknown' });
+    expect(journey.nextAction).toMatchObject({
+      id: 'review-evidence',
+      destination: 'profile',
+    });
+  });
+
+  it('rebuilds the visible profile and diagnostic from canonical dialogue memory', () => {
+    const workspace = createWorkspace(
+      {
+        resumeText: '',
+        resumeSource: 'text',
+        targetDirection: 'Руководитель продукта',
+        market: 'ru',
+        currentSituation: 'Хочу проверить следующий карьерный шаг.',
+        constraints: '',
+        urgency: 'exploring',
+      },
+      '2026-08-14T00:00:00.000Z',
+    );
+    const base = buildCareerJourney(workspace, '2026-08-14T00:01:00.000Z');
+
+    const journey = applyCanonicalProfileToJourney(base, [
+      {
+        id: 'result-memory',
+        kind: 'fact',
+        domain: 'outcome',
+        status: 'proposed',
+        sourceMessageIds: ['message-1'],
+      },
+      {
+        id: 'question-memory',
+        kind: 'open-question',
+        domain: 'gap',
+        status: 'proposed',
+        sourceMessageIds: ['message-2'],
+        statement: 'Как измерялся результат?',
+      },
+    ]);
+
+    expect(journey.profile).toMatchObject({
+      state: 'needs-review',
+      confirmedEvidence: 0,
+      proposedEvidence: 1,
+      importantUnknowns: ['Как измерялся результат?'],
+      sourceLabel: 'Диалог и канонический профиль',
+    });
+    expect(journey.nextAction).toMatchObject({
+      id: 'review-evidence',
+      destination: 'profile',
+    });
+    expect(
+      journey.diagnostic.findings.find((finding) => finding.dimension === 'evidence'),
+    ).toMatchObject({ sourceRefs: ['memory:result-memory'] });
+    expect(JSON.stringify(journey)).not.toMatch(/score|балл/iu);
+  });
+
+  it('routes a confirmed profile without an outcome back to the dialogue', () => {
+    const journey = buildCanonicalProfileJourney(
+      undefined,
+      ['запуск продукта', 'команду', 'бюджет'].map((statement, index) => ({
+        id: `confirmed-responsibility-${index}`,
+        statement: `Отвечал за ${statement}.`,
+        kind: 'fact' as const,
+        domain: 'responsibility' as const,
+        status: 'confirmed' as const,
+        sourceMessageIds: [`message-${index}`],
+      })),
+    );
+
+    expect(journey.profile.state).toBe('forming');
+    expect(journey.nextAction).toMatchObject({
+      id: 'add-result-evidence',
+      destination: 'today',
+    });
+  });
+
   it('keeps a conversation-only problem out of resume evidence and role hypotheses', () => {
     const workspace = prepareCareerWorkspace(
       {

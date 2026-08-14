@@ -25,6 +25,9 @@ import {
   type VacancySourceRegistryEntry,
 } from '../coach/coachApi';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
+import { diagnosticActionDestination } from '../diagnostic/careerDiagnostic';
+
+type IntelligenceDestination = 'today' | 'profile' | 'career' | 'opportunities';
 
 interface CareerIntelligencePanelProps {
   snapshot?: CandidateSnapshot;
@@ -33,7 +36,7 @@ interface CareerIntelligencePanelProps {
   loading: boolean;
   expanded?: boolean;
   onRefresh: () => Promise<void>;
-  onNavigate: (view: 'profile' | 'career' | 'opportunities') => void;
+  onNavigate: (view: IntelligenceDestination) => void;
 }
 
 // The market panel keeps its state transitions beside the conditional UI they govern.
@@ -186,7 +189,7 @@ export function CareerIntelligencePanel({
         </div>
       </header>
 
-      <AtsReadability journey={journey} onOpenProfile={() => onNavigate('profile')} />
+      <AtsReadability journey={journey} onNavigate={onNavigate} />
 
       <section className="career-market-watch" aria-labelledby="career-market-watch-title">
         <header>
@@ -408,10 +411,10 @@ function sourceFailureMessage(errorCode: string) {
 
 function AtsReadability({
   journey,
-  onOpenProfile,
+  onNavigate,
 }: {
   journey?: CareerJourney;
-  onOpenProfile: () => void;
+  onNavigate: (view: IntelligenceDestination) => void;
 }) {
   const findings = (journey?.diagnostic.findings ?? []).filter((finding) =>
     ['readability', 'ats', 'evidence', 'freshness'].includes(finding.dimension),
@@ -446,10 +449,27 @@ function AtsReadability({
       ) : (
         <p>Загрузите PDF или DOCX: без исходной вёрстки нельзя честно оценить порядок чтения.</p>
       )}
-      <button className="career-inline-link" type="button" onClick={onOpenProfile}>
-        {findings.length ? 'Открыть разбор' : 'Добавить документ'} <ArrowRight size={15} />
-      </button>
+      <DiagnosticAction journey={journey} onNavigate={onNavigate} />
     </section>
+  );
+}
+
+function DiagnosticAction({
+  journey,
+  onNavigate,
+}: {
+  journey?: CareerJourney;
+  onNavigate: (view: IntelligenceDestination) => void;
+}) {
+  const action = journey?.diagnostic.nextAction;
+  return (
+    <button
+      className="career-inline-link"
+      type="button"
+      onClick={() => onNavigate(action ? diagnosticActionDestination(action) : 'profile')}
+    >
+      {action?.label ?? 'Добавить документ'} <ArrowRight size={15} />
+    </button>
   );
 }
 
@@ -493,10 +513,9 @@ function NextAction({
   onNavigate,
 }: {
   journey?: CareerJourney;
-  onNavigate: (view: 'profile' | 'career' | 'opportunities') => void;
+  onNavigate: (view: IntelligenceDestination) => void;
 }) {
   const destination = journey?.nextAction.destination ?? 'profile';
-  const supportedDestination = destination === 'today' ? 'profile' : destination;
   return (
     <section className="career-next-action-card">
       <span>Следующее действие</span>
@@ -505,7 +524,7 @@ function NextAction({
         {journey?.nextAction.reason ??
           'Добавьте CV или ответьте стратегу: следующий шаг появится только после проверяемого факта.'}
       </p>
-      <button type="button" onClick={() => onNavigate(supportedDestination)}>
+      <button type="button" onClick={() => onNavigate(destination)}>
         {journey?.nextAction.label ?? 'Открыть профиль'} <ArrowRight size={16} />
       </button>
     </section>

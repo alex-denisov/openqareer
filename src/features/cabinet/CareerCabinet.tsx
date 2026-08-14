@@ -1,6 +1,10 @@
+import { useMemo } from 'react';
 import { ArrowRight, CheckCircle, Circle, Compass, TrendUp } from '@phosphor-icons/react';
 import type { AuthUser } from '../coach/coachApi';
-import type { CareerJourney } from '../journey/careerJourneyEngine';
+import {
+  buildCanonicalProfileJourney,
+  type CareerJourney,
+} from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { CareerCoachDesk } from './CareerCoachDesk';
 import { CareerIntelligencePanel } from './CareerIntelligencePanel';
@@ -30,11 +34,22 @@ export function CareerCabinet({
 }: CareerCabinetProps) {
   const data = useCareerCabinetData(session.candidateId);
   const name = data.account?.displayName ?? session.displayName ?? session.username;
+  const canonicalJourney = useMemo(
+    () =>
+      data.snapshot
+        ? buildCanonicalProfileJourney(
+            journey,
+            data.snapshot.memory,
+            workspace?.targetDirection ?? data.account?.profile.headline ?? '',
+          )
+        : journey,
+    [data.account?.profile.headline, data.snapshot, journey, workspace?.targetDirection],
+  );
   return (
     <div className={`career-cabinet career-cabinet-view-${view}`}>
       <CabinetHeader view={view} name={name} data={data} />
       {data.error ? <p className="career-cabinet-global-error" role="alert">{data.error}</p> : null}
-      <CabinetView {...{ view, session, workspace, journey, onNavigate, onUpdateWorkspace, onOpenAccount, data }} />
+      <CabinetView {...{ view, session, workspace, onNavigate, onUpdateWorkspace, onOpenAccount, data }} journey={canonicalJourney} />
     </div>
   );
 }

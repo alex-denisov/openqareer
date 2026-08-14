@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { CandidateAnalysis } from '../evidence/evidenceEngine';
-import { buildCareerDiagnostic } from './careerDiagnostic';
+import {
+  applyCanonicalProfileEvidence,
+  buildCareerDiagnostic,
+  diagnosticActionDestination,
+} from './careerDiagnostic';
 
 const partialAnalysis: CandidateAnalysis = {
   evidenceMethodVersion: 'evidence-local-v1',
@@ -28,6 +32,122 @@ const partialAnalysis: CandidateAnalysis = {
 };
 
 describe('free career diagnostic', () => {
+  it('projects dialogue memory into the evidence finding without treating it as resume proof', () => {
+    const base = buildCareerDiagnostic({
+      resumeText: '',
+      resumeSource: 'conversation',
+      sourceUpdatedAt: null,
+      targetDirection: 'Руководитель продукта',
+      analysis: undefined,
+      marketEvidenceUpdatedAt: null,
+    });
+
+    const diagnostic = applyCanonicalProfileEvidence(base, [
+      {
+        id: 'proposed-result',
+        kind: 'fact',
+        domain: 'outcome',
+        status: 'proposed',
+        sourceMessageIds: ['message-1'],
+      },
+      {
+        id: 'open-question',
+        kind: 'open-question',
+        domain: 'gap',
+        status: 'proposed',
+        sourceMessageIds: ['message-2'],
+      },
+    ]);
+
+    expect(diagnostic.coverage.profileEvidence).toEqual({
+      confirmed: 0,
+      proposed: 1,
+      openQuestions: 1,
+    });
+    expect(
+      diagnostic.findings.find((finding) => finding.dimension === 'evidence'),
+    ).toMatchObject({
+      certainty: 'fact',
+      status: 'issue',
+      sourceRefs: ['memory:proposed-result'],
+    });
+    expect(
+      diagnostic.findings.find((finding) => finding.dimension === 'ats'),
+    ).toMatchObject({ certainty: 'unknown', status: 'unknown' });
+    expect(diagnostic.nextAction).toMatchObject({
+      type: 'review',
+      findingIds: ['profile-evidence-review'],
+    });
+    expect(JSON.stringify(diagnostic)).not.toMatch(/score|балл/iu);
+  });
+
+  it('recognizes only candidate-confirmed profile outcomes as evidence strengths', () => {
+    const base = buildCareerDiagnostic({
+      resumeText: '',
+      resumeSource: 'conversation',
+      targetDirection: 'Operations Lead',
+    });
+
+    const diagnostic = applyCanonicalProfileEvidence(base, [
+      {
+        id: 'confirmed-result',
+        kind: 'fact',
+        domain: 'outcome',
+        status: 'confirmed',
+        sourceMessageIds: ['message-1'],
+      },
+      {
+        id: 'confirmed-responsibility',
+        kind: 'fact',
+        domain: 'responsibility',
+        status: 'corrected',
+        sourceMessageIds: ['message-2'],
+      },
+    ]);
+
+    expect(
+      diagnostic.findings.find((finding) => finding.dimension === 'evidence'),
+    ).toMatchObject({
+      certainty: 'fact',
+      status: 'strength',
+      sourceRefs: ['memory:confirmed-result'],
+    });
+  });
+
+  it('keeps an open question separate when the profile has no factual memory', () => {
+    const base = buildCareerDiagnostic({
+      resumeText: '',
+      resumeSource: 'conversation',
+      targetDirection: '',
+    });
+
+    const diagnostic = applyCanonicalProfileEvidence(base, [
+      {
+        id: 'question-only',
+        kind: 'open-question',
+        domain: 'gap',
+        status: 'proposed',
+        sourceMessageIds: ['message-1'],
+      },
+    ]);
+
+    expect(diagnostic.coverage.profileEvidence).toEqual({
+      confirmed: 0,
+      proposed: 0,
+      openQuestions: 1,
+    });
+    expect(
+      diagnostic.findings.find((finding) => finding.dimension === 'evidence'),
+    ).toMatchObject({ id: 'evidence-not-reviewed', certainty: 'unknown' });
+    expect(diagnostic.nextAction.type).toBe('question');
+  });
+
+  it('routes the diagnostic correction to the surface that can perform it', () => {
+    expect(diagnosticActionDestination({ type: 'question' })).toBe('today');
+    expect(diagnosticActionDestination({ type: 'review' })).toBe('profile');
+    expect(diagnosticActionDestination({ type: 'research' })).toBe('opportunities');
+  });
+
   it('makes stale PDF evidence visible without inventing an ATS score', () => {
     const diagnostic = buildCareerDiagnostic(
       {

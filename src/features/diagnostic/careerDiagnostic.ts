@@ -41,6 +41,11 @@ export interface CareerDiagnostic {
   coverage: {
     sourceKinds: CareerDiagnosticInput['resumeSource'][];
     isPartial: boolean;
+    profileEvidence?: {
+      confirmed: number;
+      proposed: number;
+      openQuestions: number;
+    };
   };
   findings: DiagnosticFinding[];
   nextAction: {
@@ -49,6 +54,23 @@ export interface CareerDiagnostic {
     reason: string;
     findingIds: string[];
   };
+}
+
+export interface CanonicalProfileMemory {
+  id: string;
+  statement?: string;
+  kind: 'fact' | 'preference' | 'hypothesis' | 'open-question';
+  domain:
+    | 'responsibility'
+    | 'outcome'
+    | 'skill'
+    | 'preference'
+    | 'constraint'
+    | 'gap'
+    | 'role-evidence'
+    | 'other';
+  status: 'proposed' | 'confirmed' | 'corrected';
+  sourceMessageIds: string[];
 }
 
 export function buildCareerDiagnostic(
@@ -87,6 +109,112 @@ export function buildCareerDiagnostic(
     findings,
     nextAction: chooseNextAction(input, findings),
   };
+}
+
+export function applyCanonicalProfileEvidence(
+  diagnostic: CareerDiagnostic,
+  memory: CanonicalProfileMemory[],
+): CareerDiagnostic {
+  if (memory.length === 0) return diagnostic;
+  const factualMemory = memory.filter((item) => item.kind !== 'open-question');
+  const confirmed = factualMemory.filter((item) => item.status !== 'proposed');
+  const proposed = factualMemory.filter((item) => item.status === 'proposed');
+  const openQuestions = memory.filter(
+    (item) => item.kind === 'open-question' && item.status === 'proposed',
+  );
+  const profileEvidence = {
+    confirmed: confirmed.length,
+    proposed: proposed.length,
+    openQuestions: openQuestions.length,
+  };
+  if (factualMemory.length === 0) {
+    return {
+      ...diagnostic,
+      coverage: { ...diagnostic.coverage, profileEvidence },
+    };
+  }
+  const confirmedOutcomes = confirmed.filter((item) => item.domain === 'outcome');
+  const profileFinding = canonicalProfileEvidenceFinding({
+    confirmed,
+    proposed,
+    confirmedOutcomes,
+  });
+
+  return {
+    ...diagnostic,
+    coverage: {
+      ...diagnostic.coverage,
+      profileEvidence,
+    },
+    findings: diagnostic.findings.map((finding) =>
+      finding.dimension === 'evidence' ? profileFinding : finding,
+    ),
+    nextAction:
+      profileFinding.status === 'issue'
+        ? {
+            type: 'review',
+            label: profileFinding.correction,
+            reason: `Сначала закрываем «${profileFinding.title.toLowerCase()}»: канонический профиль должен опираться только на проверенные выводы.`,
+            findingIds: [profileFinding.id],
+          }
+        : diagnostic.nextAction,
+  };
+}
+
+export function diagnosticActionDestination(
+  action: Pick<CareerDiagnostic['nextAction'], 'type'>,
+): 'today' | 'profile' | 'opportunities' {
+  if (action.type === 'question') return 'today';
+  if (action.type === 'research') return 'opportunities';
+  return 'profile';
+}
+
+function canonicalProfileEvidenceFinding({
+  confirmed,
+  proposed,
+  confirmedOutcomes,
+}: {
+  confirmed: CanonicalProfileMemory[];
+  proposed: CanonicalProfileMemory[];
+  confirmedOutcomes: CanonicalProfileMemory[];
+}): DiagnosticFinding {
+  if (proposed.length > 0) {
+    return finding({
+      id: 'profile-evidence-review',
+      dimension: 'evidence',
+      certainty: 'fact',
+      status: 'issue',
+      severity: 'high',
+      title: 'Профиль содержит выводы, которые нужно проверить',
+      explanation: `${confirmed.length} утверждений подтверждено, ${proposed.length} ждут проверки; подтверждённых результатов — ${confirmedOutcomes.length}.`,
+      sourceRefs: proposed.map((item) => `memory:${item.id}`),
+      correction: 'Проверьте выводы диалога по одному: подтвердите, исправьте или исключите каждый.',
+    });
+  }
+  if (confirmedOutcomes.length > 0) {
+    return finding({
+      id: 'profile-evidence-confirmed',
+      dimension: 'evidence',
+      certainty: 'fact',
+      status: 'strength',
+      severity: 'info',
+      title: 'В профиле есть подтверждённый результат',
+      explanation: `${confirmedOutcomes.length} результатов подтверждено кандидатом в каноническом профиле.`,
+      sourceRefs: confirmedOutcomes.map((item) => `memory:${item.id}`),
+      correction: 'При необходимости дополните результат масштабом, датой и способом измерения.',
+    });
+  }
+  return finding({
+    id: 'profile-result-gap',
+    dimension: 'evidence',
+    certainty: 'fact',
+    status: 'issue',
+    severity: 'high',
+    title: 'В профиле нет подтверждённого результата',
+    explanation: `${confirmed.length} утверждений подтверждено, но ни одно ещё не описывает наблюдаемый результат.`,
+    sourceRefs: confirmed.map((item) => `memory:${item.id}`),
+    correction: 'Для одного сильного эпизода уточните контекст, действие, масштаб и наблюдаемый результат.',
+  });
 }
 
 function diagnosticIssueSummary(count: number): string {

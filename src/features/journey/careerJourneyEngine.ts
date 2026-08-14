@@ -4,7 +4,9 @@ import {
   type RoleFitState,
 } from '../evidence/evidenceEngine';
 import {
+  applyCanonicalProfileEvidence,
   buildCareerDiagnostic,
+  type CanonicalProfileMemory,
   type CareerDiagnostic,
 } from '../diagnostic/careerDiagnostic';
 import { recommendNextAction } from '../outcome/outcomeEngine';
@@ -268,6 +270,94 @@ export function buildCareerJourney(
       hasGroundedRole && hasFreshMarketSample,
     ),
   };
+}
+
+export function applyCanonicalProfileToJourney(
+  journey: CareerJourney,
+  memory: CanonicalProfileMemory[],
+): CareerJourney {
+  if (memory.length === 0) return journey;
+  const profileEvidence = memory.filter((item) => item.kind !== 'open-question');
+  const confirmedEvidence = profileEvidence.filter(
+    (item) => item.status !== 'proposed',
+  );
+  const proposedEvidence = profileEvidence.filter(
+    (item) => item.status === 'proposed',
+  );
+  const openQuestions = memory
+    .filter((item) => item.kind === 'open-question' && item.status === 'proposed')
+    .flatMap((item) => (item.statement?.trim() ? [item.statement.trim()] : []));
+  const confirmedOutcomes = confirmedEvidence.filter(
+    (item) => item.domain === 'outcome',
+  );
+
+  return {
+    ...journey,
+    profile: {
+      state:
+        confirmedEvidence.length >= 3 && confirmedOutcomes.length > 0
+          ? 'grounded'
+          : proposedEvidence.length > 0
+            ? 'needs-review'
+            : 'forming',
+      confirmedEvidence: confirmedEvidence.length,
+      proposedEvidence: proposedEvidence.length,
+      importantUnknowns:
+        openQuestions.length > 0 ? openQuestions.slice(0, 3) : journey.profile.importantUnknowns,
+      sourceLabel: 'Диалог и канонический профиль',
+    },
+    diagnostic: applyCanonicalProfileEvidence(journey.diagnostic, memory),
+    nextAction:
+      proposedEvidence.length > 0
+        ? {
+            id: 'review-evidence',
+            label: 'Проверить выводы',
+            headline: 'Подтвердите опорные факты',
+            reason:
+              'Диалог добавил выводы в профиль, но кандидат ещё не подтвердил их точность.',
+            expectedChange:
+              'Подтверждённые факты станут основанием для диагностики и сравнения ролей.',
+            destination: 'profile',
+          }
+        : confirmedOutcomes.length === 0
+          ? {
+              id: 'add-result-evidence',
+              label: 'Рассказать о результате',
+              headline: 'Добавим наблюдаемый результат',
+              reason:
+                'В профиле есть подтверждённый контекст, но для диагностики уровня роли не хватает результата.',
+              expectedChange:
+                'Следующий ответ станет предложенным фактом с источником и потребует проверки.',
+              destination: 'today',
+            }
+          : journey.nextAction,
+  };
+}
+
+export function buildCanonicalProfileJourney(
+  journey: CareerJourney | undefined,
+  memory: CanonicalProfileMemory[],
+  targetDirection: string = '',
+  now: string = new Date().toISOString(),
+): CareerJourney {
+  const baseJourney =
+    journey ??
+    buildCareerJourney(
+      createWorkspace(
+        {
+          resumeText: '',
+          resumeSource: 'text',
+          targetDirection,
+          market: 'ru',
+          currentSituation: 'Канонический профиль собран из защищённого диалога.',
+          constraints: '',
+          urgency: 'exploring',
+        },
+        now,
+      ),
+      now,
+    );
+  return applyCanonicalProfileToJourney(baseJourney, memory);
 }
 
 function commercialBoundaryFor(

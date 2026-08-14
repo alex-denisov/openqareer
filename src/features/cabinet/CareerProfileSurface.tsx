@@ -323,24 +323,24 @@ function ProfileSummary({
   onReview: (memoryId: string, action: 'confirm' | 'delete') => Promise<void>;
 }) {
   const facts = snapshot?.memory ?? [];
-  const proposed = facts.filter((item) => item.status === 'proposed');
-  const confirmed = facts.filter((item) => item.status !== 'proposed');
+  const { confirmedFacts, proposedFacts, openQuestions } =
+    partitionProfileMemory(facts);
   return (
     <div className="career-profile-summary-grid">
       <ProfileFacts
         title="Опорные факты"
         empty="Пока нет подтверждённых фактов. Стратег начнёт с одного карьерного эпизода."
-        facts={confirmed.slice(0, 8)}
+        facts={confirmedFacts.slice(0, 8)}
         busyId={busyId}
         onReview={onReview}
       />
       <aside className="career-profile-review-queue">
         <header>
           <span>Нужно проверить</span>
-          <strong>{proposed.length}</strong>
+          <strong>{proposedFacts.length}</strong>
         </header>
-        {proposed.length ? (
-          proposed.slice(0, 4).map((item) => (
+        {proposedFacts.length ? (
+          proposedFacts.slice(0, 4).map((item) => (
             <article key={item.id}>
               <p>{item.statement}</p>
               <small>{memorySourceLabel(item.sourceMessageIds)}</small>
@@ -364,11 +364,35 @@ function ProfileSummary({
             </article>
           ))
         ) : (
-          <p>Все текущие выводы уже проверены кандидатом.</p>
+          <p>
+            {openQuestions.length
+              ? 'Фактических выводов на проверке нет.'
+              : 'Все текущие выводы уже проверены кандидатом.'}
+          </p>
         )}
+        {openQuestions.length ? (
+          <section className="career-profile-open-questions">
+            <strong>Открытые вопросы</strong>
+            {openQuestions.slice(0, 3).map((item) => (
+              <article key={item.id}>
+                <p>{item.statement}</p>
+                <small>Уточнение из диалога · {memorySourceLabel(item.sourceMessageIds)}</small>
+              </article>
+            ))}
+          </section>
+        ) : null}
       </aside>
     </div>
   );
+}
+
+export function partitionProfileMemory(memory: CandidateSnapshot['memory']) {
+  const factual = memory.filter((item) => item.kind !== 'open-question');
+  return {
+    confirmedFacts: factual.filter((item) => item.status !== 'proposed'),
+    proposedFacts: factual.filter((item) => item.status === 'proposed'),
+    openQuestions: memory.filter((item) => item.kind === 'open-question'),
+  };
 }
 
 // eslint-disable-next-line max-lines-per-function
