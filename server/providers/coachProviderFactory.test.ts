@@ -14,14 +14,25 @@ describe('coach provider factory', () => {
     }
   });
 
-  it('fails closed when a provider exposes only a rolling model alias', () => {
+  it('fails closed when an unlisted model is requested', () => {
     expect(() =>
       buildCoachProvider({
         provider: 'yandex',
         apiKey: 'test-key-that-is-never-sent',
         folderId: 'test-folder',
+        model: 'unlisted-yandex-model',
       }),
     ).toThrow('model is not allowed for provider yandex');
+  });
+
+  it('fails closed when an unsupported OpenAI model is requested', () => {
+    expect(() =>
+      buildCoachProvider({
+        provider: 'openai',
+        apiKey: 'test-key-that-is-never-sent',
+        model: 'gpt-4o',
+      }),
+    ).toThrow('model is not allowed for provider openai');
   });
 
   it('rejects a model newer than the release cutoff', () => {

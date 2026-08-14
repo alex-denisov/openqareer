@@ -18,7 +18,15 @@
  * Запуск:  node scripts/check-agent-contract.mjs
  *          node scripts/check-agent-contract.mjs --fix   (создаёт недостающие симлинки)
  */
-import { existsSync, lstatSync, readlinkSync, readdirSync, symlinkSync, mkdirSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  readlinkSync,
+  readdirSync,
+  symlinkSync,
+  mkdirSync,
+} from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
@@ -37,7 +45,7 @@ const RUNTIMES = [
   { dir: ".gemini", entry: "GEMINI.md" },
   { dir: ".qwen", entry: "QWEN.md" },
   { dir: ".opencode", entry: null }, // читает AGENTS.md нативно
-  { dir: ".antigravity", entry: null }, // читает AGENTS.md + .antigravity/rules/
+  { dir: ".antigravity", entry: null }, // legacy skill path; current Antigravity reads .agents/* natively
   { dir: ".zcode", entry: "ZCODE.md" },
 ];
 
@@ -93,9 +101,41 @@ for (const { dir, entry } of RUNTIMES) {
   }
 }
 
-const agRules = path.join(ROOT, ".antigravity/rules/00-agents-contract.md");
-if (!existsSync(agRules)) {
-  problems.push(".antigravity/rules/00-agents-contract.md отсутствует — Antigravity не загрузит контракт автоматически");
+const agRule = path.join(ROOT, ".agents/rules/00-agents-contract.md");
+if (!existsSync(agRule)) {
+  problems.push(".agents/rules/00-agents-contract.md отсутствует — current Antigravity не загрузит контракт автоматически");
+}
+
+const deliverySkill = path.join(ROOT, ".agents/skills/openqareer-delivery/SKILL.md");
+if (!existsSync(deliverySkill)) {
+  problems.push("нет openqareer-delivery skill — Antigravity может остановиться после кода или unit-тестов");
+}
+
+const legacyAgRule = path.join(ROOT, ".antigravity/rules/00-agents-contract.md");
+if (!existsSync(legacyAgRule)) {
+  problems.push("нет legacy .antigravity rule — старые Antigravity IDE не увидят редирект");
+}
+
+const legacyMcp = path.join(ROOT, ".mcp.json");
+const antigravityMcp = path.join(ROOT, ".agents/mcp_config.json");
+if (!existsSync(antigravityMcp)) {
+  problems.push("нет .agents/mcp_config.json — Antigravity не увидит workspace MCP servers");
+} else if (existsSync(legacyMcp)) {
+  try {
+    const legacyServers = Object.keys(
+      JSON.parse(readFileSync(legacyMcp, "utf8")).mcpServers ?? {},
+    ).sort();
+    const antigravityServers = Object.keys(
+      JSON.parse(readFileSync(antigravityMcp, "utf8")).mcpServers ?? {},
+    ).sort();
+    if (JSON.stringify(legacyServers) !== JSON.stringify(antigravityServers)) {
+      problems.push(
+        `.agents/mcp_config.json расходится с .mcp.json: ${antigravityServers.join(", ")} вместо ${legacyServers.join(", ")}`,
+      );
+    }
+  } catch (error) {
+    problems.push(`не удалось прочитать MCP config: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 const skillCount = readdirSync(CANON).filter((n) => !n.startsWith(".") && n !== "README.md").length;

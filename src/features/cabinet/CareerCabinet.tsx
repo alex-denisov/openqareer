@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { ArrowRight, CheckCircle, Circle, Compass, TrendUp } from '@phosphor-icons/react';
-import type { AuthUser } from '../coach/coachApi';
+import type { AccountSnapshot, AuthUser } from '../coach/coachApi';
 import {
   buildCanonicalProfileJourney,
   type CareerJourney,
@@ -34,16 +34,25 @@ export function CareerCabinet({
 }: CareerCabinetProps) {
   const data = useCareerCabinetData(session.candidateId);
   const name = data.account?.displayName ?? session.displayName ?? session.username;
+  const targetDirection =
+    data.account?.profile.headline?.trim() || workspace?.targetDirection || '';
   const canonicalJourney = useMemo(
     () =>
       data.snapshot
         ? buildCanonicalProfileJourney(
             journey,
             data.snapshot.memory,
-            workspace?.targetDirection ?? data.account?.profile.headline ?? '',
+            targetDirection,
+            undefined,
+            workspace?.constraints ?? '',
           )
         : journey,
-    [data.account?.profile.headline, data.snapshot, journey, workspace?.targetDirection],
+    [
+      data.snapshot,
+      journey,
+      targetDirection,
+      workspace?.constraints,
+    ],
   );
   return (
     <div className={`career-cabinet career-cabinet-view-${view}`}>
@@ -98,7 +107,7 @@ function ProfileView(props: CareerCabinetProps & { data: CabinetData }) {
 
 function TrackView(props: CareerCabinetProps & { data: CabinetData }) {
   const shared = cabinetPanelProps(props);
-  return <div className="career-cabinet-focus-layout is-track"><CareerTrackBoard journey={props.journey} snapshot={props.data.snapshot} onNavigate={props.onNavigate} /><CareerCoachDesk {...shared.coach} /></div>;
+  return <div className="career-cabinet-focus-layout is-track"><CareerTrackBoard journey={props.journey} snapshot={props.data.snapshot} account={props.data.account} targetDirection={shared.targetDirection} onNavigate={props.onNavigate} onEditPremises={props.onOpenAccount} /><CareerCoachDesk {...shared.coach} /></div>;
 }
 
 function MarketView(props: CareerCabinetProps & { data: CabinetData }) {
@@ -108,8 +117,12 @@ function MarketView(props: CareerCabinetProps & { data: CabinetData }) {
 
 function cabinetPanelProps(props: CareerCabinetProps & { data: CabinetData }) {
   const { data, workspace, journey, session } = props;
-  const query = workspace?.targetDirection ?? data.account?.profile.headline ?? undefined;
+  const query =
+    data.account?.profile.headline?.trim() ||
+    workspace?.targetDirection ||
+    undefined;
   return {
+    targetDirection: query ?? '',
     coach: { snapshot: data.snapshot, journey, marketQuery: query, loading: data.loading, onRefresh: data.refresh },
     profile: { account: data.account, session, snapshot: data.snapshot, workspace, loading: data.loading, onRefresh: data.refresh, onUpdateWorkspace: props.onUpdateWorkspace, onOpenAccount: props.onOpenAccount },
     market: { snapshot: data.snapshot, journey, defaultQuery: query, loading: data.loading, onRefresh: data.refresh, onNavigate: props.onNavigate },
@@ -119,11 +132,17 @@ function cabinetPanelProps(props: CareerCabinetProps & { data: CabinetData }) {
 function CareerTrackBoard({
   journey,
   snapshot,
+  account,
+  targetDirection,
   onNavigate,
+  onEditPremises,
 }: {
   journey?: CareerJourney;
   snapshot?: ReturnType<typeof useCareerCabinetData>['snapshot'];
+  account?: AccountSnapshot;
+  targetDirection: string;
   onNavigate: (view: CareerCabinetView) => void;
+  onEditPremises: () => void;
 }) {
   const latestTrack = [...(snapshot?.turns ?? [])]
     .reverse()
@@ -141,11 +160,47 @@ function CareerTrackBoard({
       </header>
 
       <TrackTimeline items={latestTrack?.milestones ?? journey?.track ?? []} empty={!latestTrack && !journey} />
+      <CareerRoutePremises
+        targetRole={targetDirection}
+        location={account?.profile.location ?? undefined}
+        workMode={account?.profile.workMode ?? undefined}
+        onEdit={onEditPremises}
+      />
       <RoleHypotheses journey={journey} />
 
       <button className="career-primary-button" type="button" onClick={() => onNavigate('profile')}>
         Укрепить профиль <ArrowRight size={17} />
       </button>
+    </section>
+  );
+}
+
+export function CareerRoutePremises({
+  targetRole,
+  location,
+  workMode,
+  onEdit,
+}: {
+  targetRole?: string;
+  location?: string;
+  workMode?: AccountSnapshot['profile']['workMode'];
+  onEdit: () => void;
+}) {
+  return (
+    <section className="career-route-premises" aria-labelledby="career-route-premises-title">
+      <header>
+        <div>
+          <span className="career-cabinet-kicker">Изменяемые предпосылки</span>
+          <h3 id="career-route-premises-title">Роль и условия маршрута</h3>
+        </div>
+        <button type="button" onClick={onEdit}>Изменить роль и условия</button>
+      </header>
+      <dl>
+        <div><dt>Роль и уровень</dt><dd>{targetRole?.trim() || 'Уточняются'}</dd></div>
+        <div><dt>География</dt><dd>{location?.trim() || 'Не указана'}</dd></div>
+        <div><dt>Формат работы</dt><dd>{routeWorkModeLabel(workMode)}</dd></div>
+      </dl>
+      <p>После сохранения гипотезы и поисковый запрос пересчитываются; прошлые варианты остаются обратимыми.</p>
     </section>
   );
 }
@@ -216,4 +271,14 @@ function trackStatus(status: CareerJourney['track'][number]['status']) {
     active: 'В работе',
     waiting: 'Ожидает',
   }[status];
+}
+
+function routeWorkModeLabel(mode?: AccountSnapshot['profile']['workMode']) {
+  if (!mode) return 'Не указан';
+  return {
+    remote: 'Удалённо',
+    hybrid: 'Гибрид',
+    office: 'Офис',
+    flexible: 'Гибко',
+  }[mode];
 }

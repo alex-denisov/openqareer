@@ -109,6 +109,20 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
     credentialEnvironment: ['OPENQAREER_OPENROUTER_API_KEY'],
     models: [
       {
+        id: 'openrouter/free',
+        releaseDate: null,
+        pinned: false,
+        lifecycle: 'rolling',
+        structuredOutput: false,
+      },
+      {
+        id: 'openrouter/auto',
+        releaseDate: null,
+        pinned: false,
+        lifecycle: 'rolling',
+        structuredOutput: false,
+      },
+      {
         id: 'anthropic/claude-fable-5',
         releaseDate: '2026-06-09',
         pinned: true,
@@ -348,8 +362,25 @@ export function isModelAllowed(model: ModelDefinition): boolean {
   return (
     model.pinned &&
     model.releaseDate !== null &&
-    model.releaseDate <= MODEL_RELEASE_CUTOFF
+    model.releaseDate <= MODEL_RELEASE_CUTOFF &&
+    !isMutableModelAlias(model.id)
   );
+}
+
+const MUTABLE_MODEL_ALIASES = new Set([
+  'openrouter/free',
+  'openrouter/auto',
+  'yandexgpt',
+  'yandexgpt-lite',
+  'yandexgpt-32k',
+  'openai',
+  'openai-fast',
+  'mistral',
+  'claude-hybrid',
+]);
+
+export function isMutableModelAlias(modelId: string): boolean {
+  return /\/latest$/u.test(modelId) || MUTABLE_MODEL_ALIASES.has(modelId);
 }
 
 export function allowedModels(providerId: ProviderId): readonly ModelDefinition[] {

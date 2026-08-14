@@ -1,4 +1,10 @@
 import type OpenAI from 'openai';
+import {
+  APIConnectionError,
+  APIConnectionTimeoutError,
+  APIError,
+  RateLimitError,
+} from 'openai/error';
 import { describe, expect, it } from 'vitest';
 import type { CoachTurnInput } from '../domain/coach';
 import { OpenRouterCoachProvider } from './openRouterCoachProvider';
@@ -104,4 +110,120 @@ describe('OpenRouter synthetic coach provider', () => {
       retryable: false,
     });
   });
+
+  it.each([
+    ['a fenced JSON block', `\`\`\`json\n${JSON.stringify(validOutput)}\n\`\`\``],
+    ['surrounding prose', `Result follows: ${JSON.stringify(validOutput)} done`],
+  ])('extracts %s while preserving a pinned custom model', async (_case, content) => {
+    const calls: Record<string, unknown>[] = [];
+    const provider = routerWith(async (body) => {
+      calls.push(body);
+      return routerResponse(content);
+    }, 'pinned/provider-model');
+
+    const result = await provider.createTurn(syntheticInput, 'idempotency-key');
+
+    expect(result.result).toEqual(validOutput);
+    expect(calls[0]).toMatchObject({
+      model: 'pinned/provider-model',
+      models: ['pinned/provider-model'],
+    });
+  });
+
+  it.each([
+    ['missing content', undefined],
+    ['malformed JSON', 'not-json'],
+    ['schema mismatch', '{}'],
+  ])('fails closed on %s', async (_case, content) => {
+    const provider = routerWith(async () => routerResponse(content));
+
+    await expect(
+      provider.createTurn(syntheticInput, 'idempotency-key'),
+    ).rejects.toMatchObject({ code: 'provider_output_invalid', statusCode: 502 });
+  });
+
+  it.each([
+    [
+      'rate limit class',
+      new RateLimitError(429, { message: 'limited' }, 'limited', new Headers()),
+      'provider_rate_limited',
+      429,
+      true,
+    ],
+    [
+      'timeout',
+      new APIConnectionTimeoutError(),
+      'provider_timeout',
+      504,
+      true,
+    ],
+    [
+      'connection error',
+      new APIConnectionError({ message: 'offline' }),
+      'provider_unavailable',
+      503,
+      true,
+    ],
+    [
+      'HTTP 429',
+      new APIError(429, { message: 'limited' }, 'limited', new Headers()),
+      'provider_rate_limited',
+      429,
+      true,
+    ],
+    [
+      'HTTP 402',
+      new APIError(402, { message: 'credits' }, 'credits', new Headers()),
+      'provider_budget_exhausted',
+      502,
+      false,
+    ],
+    [
+      'HTTP 500',
+      new APIError(500, { message: 'failed' }, 'failed', new Headers()),
+      'provider_unavailable',
+      503,
+      true,
+    ],
+    [
+      'unknown client error',
+      new APIError(400, { message: 'bad' }, 'bad', new Headers()),
+      'provider_unavailable',
+      503,
+      true,
+    ],
+  ] as const)(
+    'maps %s without leaking provider payloads',
+    async (_case, error, code, statusCode, retryable) => {
+      const provider = routerWith(async () => {
+        throw error;
+      });
+
+      await expect(
+        provider.createTurn(syntheticInput, 'idempotency-key'),
+      ).rejects.toMatchObject({ code, statusCode, retryable });
+    },
+  );
 });
+
+function routerWith(
+  create: (body: Record<string, unknown>) => Promise<unknown>,
+  model?: string,
+) {
+  const client = {
+    chat: { completions: { create } },
+  } as unknown as OpenAI;
+  return new OpenRouterCoachProvider({
+    apiKey: 'not-used-by-test',
+    model,
+    client,
+  });
+}
+
+function routerResponse(content: string | undefined) {
+  return {
+    id: 'router-response',
+    model: 'pinned/provider-model',
+    choices: [{ message: { content } }],
+  };
+}

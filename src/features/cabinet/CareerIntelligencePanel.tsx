@@ -25,6 +25,7 @@ import {
   type VacancySourceRegistryEntry,
 } from '../coach/coachApi';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
+import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import { diagnosticActionDestination } from '../diagnostic/careerDiagnostic';
 
 type IntelligenceDestination = 'today' | 'profile' | 'career' | 'opportunities';
@@ -508,27 +509,90 @@ function MarketAnalytics({ subscription }: { subscription: VacancySubscription }
   );
 }
 
-function NextAction({
+export function NextAction({
   journey,
   onNavigate,
 }: {
   journey?: CareerJourney;
   onNavigate: (view: IntelligenceDestination) => void;
 }) {
-  const destination = journey?.nextAction.destination ?? 'profile';
+  const reasonedAction = journey?.reasonedAction;
+  const destination = reasonedAction
+    ? reasonedDestination(reasonedAction.destination)
+    : journey?.nextAction.destination ?? 'profile';
   return (
     <section className="career-next-action-card">
       <span>Следующее действие</span>
-      <h3>{journey?.nextAction.headline ?? 'Уточнить основу профиля'}</h3>
+      <h3>
+        {reasonedAction?.headline ??
+          journey?.nextAction.headline ??
+          'Уточнить основу профиля'}
+      </h3>
       <p>
-        {journey?.nextAction.reason ??
+        {reasonedAction?.rationale ??
+          journey?.nextAction.reason ??
           'Добавьте CV или ответьте стратегу: следующий шаг появится только после проверяемого факта.'}
       </p>
+      {reasonedAction ? (
+        <ReasonedActionDetails action={reasonedAction} onNavigate={onNavigate} />
+      ) : journey?.nextAction.expectedChange ? (
+        <div className="career-next-action-effect">
+          <strong>Что изменится</strong>
+          <p>{journey.nextAction.expectedChange}</p>
+        </div>
+      ) : null}
       <button type="button" onClick={() => onNavigate(destination)}>
-        {journey?.nextAction.label ?? 'Открыть профиль'} <ArrowRight size={16} />
+        {reasonedAction?.label ?? journey?.nextAction.label ?? 'Открыть профиль'}{' '}
+        <ArrowRight size={16} />
       </button>
     </section>
   );
+}
+
+function ReasonedActionDetails({
+  action,
+  onNavigate,
+}: {
+  action: ReasonedCareerAction;
+  onNavigate: (view: IntelligenceDestination) => void;
+}) {
+  return (
+    <>
+      <div className="career-next-action-effect">
+        <strong>Что изменится</strong>
+        <p>{action.expectedChange}</p>
+      </div>
+      <div className="career-next-action-alternatives" aria-label="Другой путь">
+        <strong>Другой путь</strong>
+        <div>
+          {action.alternatives.map((alternative) => (
+            <button
+              type="button"
+              key={alternative.id}
+              onClick={() => onNavigate(reasonedDestination(alternative.destination))}
+            >
+              {alternative.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <small className="career-next-action-boundary">{action.approvalBoundary}</small>
+    </>
+  );
+}
+
+function reasonedDestination(
+  destination: ReasonedCareerAction['destination'],
+): IntelligenceDestination {
+  return ({
+    coach: 'today',
+    profile: 'profile',
+    evidence: 'profile',
+    career: 'career',
+    search: 'opportunities',
+  } satisfies Record<ReasonedCareerAction['destination'], IntelligenceDestination>)[
+    destination
+  ];
 }
 
 function salaryMedian(currency: VacancySubscription['analytics']['currencies'][number]) {

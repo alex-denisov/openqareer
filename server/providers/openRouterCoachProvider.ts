@@ -99,7 +99,7 @@ export class OpenRouterCoachProvider implements CoachProvider {
 
       let parsed: unknown;
       try {
-        parsed = JSON.parse(content);
+        parsed = JSON.parse(extractJsonPayload(content));
       } catch {
         throw new CoachProviderError(
           'provider_output_invalid',
@@ -149,15 +149,43 @@ export class OpenRouterCoachProvider implements CoachProvider {
         );
       }
       if (error instanceof APIError) {
-        throw new CoachProviderError(
-          'provider_unavailable',
-          error.status && error.status >= 500 ? 503 : 502,
-          error.status === 408 ||
-            error.status === 409 ||
-            error.status === 429,
-        );
+        if (error.status === 429) {
+          throw new CoachProviderError(
+            'provider_rate_limited',
+            429,
+            true,
+          );
+        }
+        if (error.status === 402) {
+          throw new CoachProviderError(
+            'provider_budget_exhausted',
+            502,
+            false,
+          );
+        }
+        if (error.status && error.status >= 500) {
+          throw new CoachProviderError(
+            'provider_unavailable',
+            503,
+            true,
+          );
+        }
       }
       throw new CoachProviderError('provider_unavailable', 503, true);
     }
   }
+}
+
+function extractJsonPayload(text: string): string {
+  const trimmed = text.trim();
+  const match = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(trimmed);
+  if (match && match[1]) {
+    return match[1].trim();
+  }
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1);
+  }
+  return trimmed;
 }

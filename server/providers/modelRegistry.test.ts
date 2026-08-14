@@ -4,6 +4,7 @@ import {
   PROVIDER_IDS,
   getProviderCatalogStatus,
   isModelAllowed,
+  isMutableModelAlias,
   modelRegistry,
 } from './modelRegistry';
 
@@ -37,7 +38,8 @@ describe('LLM provider and model registry', () => {
         expect(isModelAllowed(model)).toBe(
           model.pinned &&
             model.releaseDate !== null &&
-            model.releaseDate <= MODEL_RELEASE_CUTOFF,
+            model.releaseDate <= MODEL_RELEASE_CUTOFF &&
+            !isMutableModelAlias(model.id),
         );
       }
     }
@@ -58,6 +60,28 @@ describe('LLM provider and model registry', () => {
         pinned: false,
         lifecycle: 'production',
         structuredOutput: true,
+      }),
+    ).toBe(false);
+  });
+
+  it.each([
+    'openrouter/free',
+    'openrouter/auto',
+    'yandexgpt/latest',
+    'yandexgpt',
+    'yandexgpt-lite/latest',
+    'yandexgpt-32k',
+    'openai',
+    'mistral',
+    'claude-hybrid',
+  ])('rejects mutable routing alias %s even when metadata claims it is pinned', (id) => {
+    expect(
+      isModelAllowed({
+        id,
+        releaseDate: '2024-01-01',
+        pinned: true,
+        lifecycle: 'production',
+        structuredOutput: false,
       }),
     ).toBe(false);
   });
@@ -83,8 +107,21 @@ describe('LLM provider and model registry', () => {
     expect(status.find((item) => item.id === 'yandex')).toMatchObject({
       configured: false,
       eligible: false,
+      reason: 'no-cutoff-safe-model',
     });
     expect(serialized).not.toContain('secret-openai-value');
     expect(serialized).not.toContain('secret-yandex-value');
+
+    const fullyConfiguredEnv = {
+      OPENQAREER_OPENAI_API_KEY: 'secret-openai-value',
+      OPENQAREER_YANDEX_API_KEY: 'secret-yandex-value',
+      OPENQAREER_YANDEX_FOLDER_ID: 'secret-yandex-folder',
+    };
+    const readyStatus = getProviderCatalogStatus(fullyConfiguredEnv);
+    expect(readyStatus.find((item) => item.id === 'yandex')).toMatchObject({
+      configured: true,
+      eligible: false,
+      reason: 'no-cutoff-safe-model',
+    });
   });
 });

@@ -104,4 +104,116 @@ describe('native provider connectors', () => {
       expect(requests[0].init.method).toBe('POST');
     });
   }
+
+  for (const provider of [
+    'anthropic',
+    'gemini',
+    'cohere',
+    'yandex',
+  ] as const satisfies readonly NativeProviderId[]) {
+    it(`fails closed when ${provider} omits its structured payload`, async () => {
+      const connector = nativeWith(provider, async () =>
+        new Response('{}', {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      await expect(
+        connector.createTurn(input, 'idempotency-key'),
+      ).rejects.toMatchObject({
+        code: 'provider_output_invalid',
+        statusCode: 502,
+      });
+    });
+  }
+
+  it.each([
+    [429, 'provider_rate_limited', 429, true],
+    [500, 'provider_unavailable', 503, false],
+    [408, 'provider_unavailable', 502, true],
+    [400, 'provider_unavailable', 502, false],
+  ] as const)(
+    'maps HTTP %s to a typed provider error',
+    async (status, code, statusCode, retryable) => {
+      const connector = nativeWith('anthropic', async () =>
+        new Response('upstream payload must not escape', { status }),
+      );
+
+      await expect(
+        connector.createTurn(input, 'idempotency-key'),
+      ).rejects.toMatchObject({ code, statusCode, retryable });
+    },
+  );
+
+  it('requires a Yandex folder before making a request', async () => {
+    const connector = new NativeCoachProvider({
+      provider: 'yandex',
+      apiKey: 'not-used-by-test',
+      baseUrl: 'https://provider.invalid/v1/',
+      model: 'yandexgpt/latest',
+      fetchImpl: async () => {
+        throw new Error('must not be called');
+      },
+    });
+
+    await expect(
+      connector.createTurn(input, 'idempotency-key'),
+    ).rejects.toMatchObject({
+      code: 'provider_unavailable',
+      retryable: false,
+    });
+  });
+
+  it.each([
+    [new DOMException('timed out', 'TimeoutError'), 'provider_timeout', 504],
+    [new Error('offline'), 'provider_unavailable', 503],
+  ])('maps a transport failure without leaking it', async (error, code, statusCode) => {
+    const connector = nativeWith('anthropic', async () => {
+      throw error;
+    });
+
+    await expect(
+      connector.createTurn(input, 'idempotency-key'),
+    ).rejects.toMatchObject({ code, statusCode, retryable: true });
+  });
+
+  it('normalizes invalid and missing numeric Yandex usage to zero', async () => {
+    const connector = nativeWith('yandex', async () =>
+      new Response(
+        JSON.stringify({
+          result: {
+            alternatives: [
+              { message: { text: JSON.stringify(result) } },
+            ],
+            usage: {
+              inputTextTokens: 'not-a-number',
+              completionTokens: undefined,
+              totalTokens: '33',
+            },
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const output = await connector.createTurn(input, 'idempotency-key');
+
+    expect(output.usage).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 33,
+    });
+  });
 });
+
+function nativeWith(provider: NativeProviderId, fetchImpl: typeof fetch) {
+  return new NativeCoachProvider({
+    provider,
+    apiKey: 'not-used-by-test',
+    baseUrl: 'https://provider.invalid/v1/',
+    model: provider === 'yandex' ? 'yandexgpt/latest' : `${provider}-model`,
+    folderId: provider === 'yandex' ? 'folder-test' : undefined,
+    fetchImpl,
+  });
+}

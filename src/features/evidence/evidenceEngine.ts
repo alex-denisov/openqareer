@@ -256,9 +256,35 @@ export function buildRoleHypotheses(
       : []),
   ];
 
+  const family = findRoleFamily(
+    `${targetDirection} ${confirmed.map((item) => item.statement).join(' ')}`,
+  );
+  const cleanTarget = targetDirection.trim();
+
+  if (!cleanTarget) {
+    const inferredTitles = family?.alternatives.slice(0, 2) ?? [
+      'Рабочая гипотеза по подтверждённым задачам',
+    ];
+    return inferredTitles.map((title, index) => ({
+      id: family ? `role-${family.id}-${index + 1}` : 'role-unclear',
+      title,
+      fitState: confirmed.length > 0 ? 'adjacent' : 'needs-evidence',
+      basis: family
+        ? `Гипотеза выведена из ${confirmed.length} подтверждённых карьерных ${
+            confirmed.length === 1 ? 'эпизода' : 'эпизодов'
+          }; название и уровень нужно проверить по вакансиям.`
+        : 'Текущих фактов достаточно для проверки задач, но недостаточно для честного названия роли.',
+      evidenceIds: confirmedIds.slice(0, 4),
+      gaps: [
+        ...primaryGaps,
+        'Сравнить повторяющиеся задачи и название роли в 5–10 вакансиях.',
+      ],
+    }));
+  }
+
   const primary: RoleHypothesis = {
     id: 'role-target',
-    title: targetDirection.trim(),
+    title: cleanTarget,
     fitState:
       confirmed.length >= 3 && hasResult
         ? 'plausible'
@@ -275,9 +301,6 @@ export function buildRoleHypotheses(
     gaps: primaryGaps,
   };
 
-  const family = findRoleFamily(
-    `${targetDirection} ${confirmed.map((item) => item.statement).join(' ')}`,
-  );
   if (!family) {
     return [
       primary,
@@ -296,7 +319,7 @@ export function buildRoleHypotheses(
     ];
   }
 
-  const comparableTarget = normalizeForMatch(targetDirection);
+  const comparableTarget = normalizeForMatch(cleanTarget);
   const alternatives = family.alternatives
     .filter((title) => normalizeForMatch(title) !== comparableTarget)
     .slice(0, 2);

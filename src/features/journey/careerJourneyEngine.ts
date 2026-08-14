@@ -1,8 +1,15 @@
 import {
   completeCandidateAnalysis,
   createCandidateAnalysis,
+  buildRoleHypotheses,
+  type EvidenceItem,
   type RoleFitState,
 } from '../evidence/evidenceEngine';
+import { buildRoleMarketMap } from '../career-map/roleMarketMap';
+import {
+  buildReasonedCareerAction,
+  type ReasonedCareerAction,
+} from '../next-action/careerActionPolicy';
 import {
   applyCanonicalProfileEvidence,
   buildCareerDiagnostic,
@@ -82,6 +89,7 @@ export interface CareerJourney {
   diagnostic: CareerDiagnostic;
   track: CareerTrackItem[];
   nextAction: CareerJourneyAction;
+  reasonedAction?: ReasonedCareerAction;
   commercialBoundary: CareerCommercialBoundary;
 }
 
@@ -275,8 +283,10 @@ export function buildCareerJourney(
 export function applyCanonicalProfileToJourney(
   journey: CareerJourney,
   memory: CanonicalProfileMemory[],
+  targetDirection: string = '',
+  now: string = new Date().toISOString(),
+  constraints: string = '',
 ): CareerJourney {
-  if (memory.length === 0) return journey;
   const profileEvidence = memory.filter((item) => item.kind !== 'open-question');
   const confirmedEvidence = profileEvidence.filter(
     (item) => item.status !== 'proposed',
@@ -290,6 +300,33 @@ export function applyCanonicalProfileToJourney(
   const confirmedOutcomes = confirmedEvidence.filter(
     (item) => item.domain === 'outcome',
   );
+  const roleMarketMap = buildCanonicalRoleMarketMap(
+    journey,
+    memory,
+    targetDirection,
+    now,
+  );
+  const roles = roleMarketMap.roles.map((role) => ({
+    id: role.id,
+    title: role.title,
+    fitState: role.fitState,
+    basis: role.basis,
+    evidenceCount: role.evidenceRefs.length,
+    gaps: role.gaps,
+  }));
+  const roleGrounded = roles.some((role) => role.evidenceCount > 0);
+  const marketGrounded = journey.markets.some(
+    (market) => market.state === 'sample-ready',
+  );
+  const actionPackageReady = journey.track.some(
+    (item) => item.id === 'campaign' && item.status === 'active',
+  );
+  const diagnostic = applyCanonicalProfileEvidence(journey.diagnostic, memory);
+  const reasonedAction = buildReasonedCareerAction({
+    diagnostic,
+    roleMarketMap,
+    constraints,
+  });
 
   return {
     ...journey,
@@ -306,7 +343,15 @@ export function applyCanonicalProfileToJourney(
         openQuestions.length > 0 ? openQuestions.slice(0, 3) : journey.profile.importantUnknowns,
       sourceLabel: 'Диалог и канонический профиль',
     },
-    diagnostic: applyCanonicalProfileEvidence(journey.diagnostic, memory),
+    roles,
+    track: buildTrack(
+      confirmedEvidence.length >= 3 && confirmedOutcomes.length > 0,
+      roleGrounded,
+      marketGrounded,
+      actionPackageReady,
+    ),
+    diagnostic,
+    reasonedAction,
     nextAction:
       proposedEvidence.length > 0
         ? {
@@ -339,6 +384,7 @@ export function buildCanonicalProfileJourney(
   memory: CanonicalProfileMemory[],
   targetDirection: string = '',
   now: string = new Date().toISOString(),
+  constraints: string = '',
 ): CareerJourney {
   const baseJourney =
     journey ??
@@ -357,7 +403,61 @@ export function buildCanonicalProfileJourney(
       ),
       now,
     );
-  return applyCanonicalProfileToJourney(baseJourney, memory);
+  return applyCanonicalProfileToJourney(
+    baseJourney,
+    memory,
+    targetDirection,
+    now,
+    constraints,
+  );
+}
+
+function buildCanonicalRoleMarketMap(
+  journey: CareerJourney,
+  memory: CanonicalProfileMemory[],
+  targetDirection: string,
+  now: string,
+) {
+  const evidence = memory.flatMap((item): EvidenceItem[] => {
+    const statement = item.statement?.trim();
+    if (
+      !statement ||
+      item.kind === 'open-question' ||
+      ['preference', 'constraint', 'gap', 'other'].includes(item.domain)
+    ) {
+      return [];
+    }
+    return [
+      {
+        id: item.id,
+        kind:
+          item.domain === 'outcome'
+            ? 'result'
+            : item.domain === 'responsibility'
+              ? 'responsibility'
+              : 'expertise',
+        sourceExcerpt: statement,
+        statement,
+        status: item.status === 'proposed' ? 'pending' : 'confirmed',
+        userEdited: item.status === 'corrected',
+      },
+    ];
+  });
+  const roles = buildRoleHypotheses(targetDirection, evidence);
+  return buildRoleMarketMap(
+    {
+      roleHypotheses: roles,
+      evidence,
+      markets: journey.markets.map((market) => ({
+        id: market.id,
+        geography: market.id === 'russia' ? 'russia' : 'worldwide-remote',
+        label: market.label,
+        workMode: market.id === 'russia' ? 'hybrid' : 'remote',
+        observations: [],
+      })),
+    },
+    now,
+  );
 }
 
 function commercialBoundaryFor(
@@ -448,7 +548,7 @@ function buildTrack(
     {
       id: 'role-market',
       label: 'Роль и рынок',
-      status: profileGrounded ? (routeGrounded ? 'complete' : 'active') : 'waiting',
+      status: routeGrounded ? 'complete' : roleGrounded ? 'active' : 'waiting',
       reason: routeGrounded
         ? 'Ролевая гипотеза проверена датированной рыночной выборкой.'
         : roleGrounded

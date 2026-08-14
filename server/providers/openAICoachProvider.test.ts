@@ -1,5 +1,10 @@
 import type OpenAI from 'openai';
-import { RateLimitError } from 'openai/error';
+import {
+  APIConnectionError,
+  APIConnectionTimeoutError,
+  APIError,
+  RateLimitError,
+} from 'openai/error';
 import { describe, expect, it } from 'vitest';
 import type { CoachTurnInput } from '../domain/coach';
 import { CoachProviderError } from './coachProvider';
@@ -255,4 +260,82 @@ describe('OpenAI career coach provider', () => {
       }),
     );
   });
+
+  it.each([
+    [
+      'another incomplete reason',
+      { status: 'incomplete', incomplete_details: { reason: 'content_filter' }, output: [], output_text: '' },
+      'response_incomplete_other',
+    ],
+    ['missing text', { status: 'completed', output: [], output_text: '' }, 'response_text_missing'],
+    ['malformed JSON', { status: 'completed', output: [], output_text: '{not-json' }, 'response_json_invalid'],
+  ] as const)('classifies %s precisely', async (_case, response, diagnostic) => {
+    const provider = providerWith(async () => ({
+      id: 'response-invalid',
+      model: 'gpt-5.6-sol',
+      ...response,
+    }));
+
+    await expect(
+      provider.createTurn(input, 'idempotency-key'),
+    ).rejects.toMatchObject({ code: 'provider_output_invalid', diagnostic });
+  });
+
+  it.each([
+    [
+      'credit exhaustion',
+      new RateLimitError(
+        429,
+        { message: 'credits', code: 'credit_balance_exhausted' },
+        'credits',
+        new Headers(),
+      ),
+      'provider_budget_exhausted',
+      503,
+      false,
+    ],
+    ['timeout', new APIConnectionTimeoutError(), 'provider_timeout', 504, true],
+    [
+      'connection error',
+      new APIConnectionError({ message: 'offline' }),
+      'provider_unavailable',
+      503,
+      true,
+    ],
+    [
+      'retryable API error',
+      new APIError(409, { message: 'conflict' }, 'conflict', new Headers()),
+      'provider_unavailable',
+      502,
+      true,
+    ],
+    [
+      'server API error',
+      new APIError(500, { message: 'failed' }, 'failed', new Headers()),
+      'provider_unavailable',
+      503,
+      false,
+    ],
+    ['unknown error', new Error('offline'), 'provider_unavailable', 503, true],
+  ] as const)(
+    'maps %s to the public provider error contract',
+    async (_case, error, code, statusCode, retryable) => {
+      const provider = providerWith(async () => {
+        throw error;
+      });
+
+      await expect(
+        provider.createTurn(input, 'idempotency-key'),
+      ).rejects.toMatchObject({ code, statusCode, retryable });
+    },
+  );
 });
+
+function providerWith(create: () => Promise<unknown>) {
+  const client = { responses: { create } } as unknown as OpenAI;
+  return new OpenAICoachProvider({
+    apiKey: 'not-used-by-test',
+    model: 'gpt-5.6-sol',
+    client,
+  });
+}
