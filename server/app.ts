@@ -28,6 +28,17 @@ import {
   evaluateGermanyMarket,
   germanyMarketSubmissionSchema,
 } from './domain/germanyMarket';
+import {
+  buildResumeStudioProjection,
+  validateResumeEvidenceFreshness,
+  type ResumeEvidenceFreshness,
+  type ResumeStudioProjection,
+} from './domain/resumeStudio';
+import {
+  resumeDraftSchema,
+  EMPTY_RESUME_DRAFT,
+  type ResumeDraft,
+} from './domain/resumeDraft';
 import type {
   CandidateIdentity,
   CandidateStore,
@@ -1259,6 +1270,55 @@ export async function buildApp({
     },
   );
 
+  app.get('/api/v1/candidate/resume', async (request, reply) => {
+    const candidate = authenticateCandidate(
+      request,
+      reply,
+      candidateStore,
+      authService,
+      config,
+    );
+    if (!candidate) return;
+    return {
+      data: resumeStudioView(candidateStore, candidate.id),
+      meta: { requestId: request.id },
+    };
+  });
+
+  app.put(
+    '/api/v1/candidate/resume',
+    {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    },
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const draft = resumeDraftSchema.parse(request.body);
+      const projection = buildResumeStudioProjection({
+        ...draft,
+        evidence: candidateStore.getSnapshot(candidate.id).memory,
+      });
+      candidateStore.saveResumeDraft(
+        candidate.id,
+        draft,
+        projection.evidenceSnapshot,
+      );
+      return {
+        data: resumeStudioView(candidateStore, candidate.id),
+        meta: { requestId: request.id },
+      };
+    },
+  );
+
   app.post(
     '/api/v1/candidate/markets/DE',
     {
@@ -1971,6 +2031,41 @@ function evaluateAssessment(assessmentId: AssessmentId, body: unknown) {
   }
   const submission = productCaseSubmissionSchema.parse(body);
   return { submission, result: evaluateProductCase(submission) };
+}
+
+interface ResumeStudioView {
+  draft: ResumeDraft | null;
+  savedAt: { createdAt: string; updatedAt: string } | null;
+  projection: ResumeStudioProjection;
+  evidenceFreshness: ResumeEvidenceFreshness;
+}
+
+/**
+ * Rebuilds both resume variants from the dossier as it stands now and compares
+ * it with the evidence the candidate approved when the draft was saved, so a
+ * revoked fact surfaces instead of surviving inside a generated document.
+ */
+function resumeStudioView(
+  candidateStore: CandidateStore,
+  candidateId: string,
+): ResumeStudioView {
+  const snapshot = candidateStore.getSnapshot(candidateId);
+  const stored = snapshot.resume;
+  const projection = buildResumeStudioProjection({
+    ...(stored?.draft ?? EMPTY_RESUME_DRAFT),
+    evidence: snapshot.memory,
+  });
+  return {
+    draft: stored?.draft ?? null,
+    savedAt: stored
+      ? { createdAt: stored.createdAt, updatedAt: stored.updatedAt }
+      : null,
+    projection,
+    evidenceFreshness: validateResumeEvidenceFreshness(
+      stored?.evidenceSnapshot ?? projection.evidenceSnapshot,
+      snapshot.memory,
+    ),
+  };
 }
 
 function authenticateCandidate(

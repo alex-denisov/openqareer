@@ -547,3 +547,13 @@ CREATE INDEX vacancy_subscriptions_due
 CREATE INDEX vacancy_subscriptions_candidate
   ON vacancy_subscriptions(candidate_id, created_at);
 `;
+
+export const MIGRATION_16 = `
+CREATE TABLE resume_drafts (
+  candidate_id TEXT PRIMARY KEY REFERENCES candidates(id) ON DELETE CASCADE,
+  draft_cipher TEXT NOT NULL,
+  evidence_snapshot_cipher TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
+`;

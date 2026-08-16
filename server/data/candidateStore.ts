@@ -15,6 +15,8 @@ import type {
   AssessmentResult,
   AssessmentSubmission,
 } from '../domain/assessment';
+import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
+import type { ResumeDraft } from '../domain/resumeDraft';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type { OAuthPlatform } from '../connectors/oauthTypes';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
@@ -51,6 +53,7 @@ export interface CandidateSnapshot {
   dossier: ExperienceDossier;
   assessments: StoredAssessment[];
   germanyMarket: StoredGermanyMarket | null;
+  resume: StoredResumeDraft | null;
   documents: StoredCandidateDocument[];
   vacancySubscriptions: StoredVacancySubscription[];
 }
@@ -98,6 +101,13 @@ export interface StoredCandidateDocument {
 export interface CandidateDocumentWithContent extends StoredCandidateDocument {
   contentBase64: string;
   extractedText: string | null;
+}
+
+export interface StoredResumeDraft {
+  draft: ResumeDraft;
+  evidenceSnapshot: ResumeEvidenceSnapshot[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface StoredGermanyMarket {
@@ -305,6 +315,11 @@ export interface CandidateStore {
     submission: GermanyMarketSubmission,
     result: GermanyMarketResult,
   ): StoredGermanyMarket;
+  saveResumeDraft(
+    candidateId: string,
+    draft: ResumeDraft,
+    evidenceSnapshot: readonly ResumeEvidenceSnapshot[],
+  ): StoredResumeDraft;
   createOAuthAuthorization(
     candidateId: string,
     authorization: OAuthAuthorizationInput,

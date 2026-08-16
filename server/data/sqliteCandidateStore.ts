@@ -18,6 +18,8 @@ import type {
   AssessmentResult,
   AssessmentSubmission,
 } from '../domain/assessment';
+import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
+import type { ResumeDraft } from '../domain/resumeDraft';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type {
   CandidateCredentials,
@@ -30,6 +32,7 @@ import type {
   StoredAssessment,
   StoredGermanyMarket,
   StoredMemory,
+  StoredResumeDraft,
   StoredTurn,
   TurnRequest,
   ConsumedOAuthAuthorization,
@@ -45,6 +48,7 @@ import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import { SealedText } from './sealedText';
 import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
 import { SqliteMarketRepository } from './sqliteMarketRepository';
+import { SqliteResumeRepository } from './sqliteResumeRepository';
 import { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
 import { SqliteDocumentRepository } from './sqliteDocumentRepository';
 import { SqliteVacancyRepository } from './sqliteVacancyRepository';
@@ -77,6 +81,7 @@ import {
   MIGRATION_13,
   MIGRATION_14,
   MIGRATION_15,
+  MIGRATION_16,
 } from './sqliteSchema';
 import type {
   CareerCommandRecord,
@@ -131,6 +136,7 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly sealedText: SealedText;
   private readonly assessmentsRepository: SqliteAssessmentRepository;
   private readonly marketRepository: SqliteMarketRepository;
+  private readonly resumeRepository: SqliteResumeRepository;
   private readonly careerCommandRepository: SqliteCareerCommandRepository;
   private readonly documentRepository: SqliteDocumentRepository;
   private readonly vacancyRepository: SqliteVacancyRepository;
@@ -153,6 +159,10 @@ export class SqliteCandidateStore implements CandidateStore {
       this.sealedText,
     );
     this.marketRepository = new SqliteMarketRepository(
+      this.database,
+      this.sealedText,
+    );
+    this.resumeRepository = new SqliteResumeRepository(
       this.database,
       this.sealedText,
     );
@@ -373,6 +383,7 @@ export class SqliteCandidateStore implements CandidateStore {
       dossier: buildExperienceDossier(memory),
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
+      resume: this.resumeRepository.get(candidateId),
       documents: this.documentRepository.list(candidateId),
       vacancySubscriptions: this.vacancyRepository.list(candidateId),
     };
@@ -539,6 +550,14 @@ export class SqliteCandidateStore implements CandidateStore {
   ): StoredGermanyMarket {
     this.requireCandidate(candidateId);
     return this.marketRepository.save(candidateId, submission, result);
+  }
+  saveResumeDraft(
+    candidateId: string,
+    draft: ResumeDraft,
+    evidenceSnapshot: readonly ResumeEvidenceSnapshot[],
+  ): StoredResumeDraft {
+    this.requireCandidate(candidateId);
+    return this.resumeRepository.save(candidateId, draft, evidenceSnapshot);
   }
   createOAuthAuthorization(
     candidateId: string,
@@ -1001,6 +1020,14 @@ export class SqliteCandidateStore implements CandidateStore {
         this.database.exec(MIGRATION_15);
         this.database.prepare(
           'INSERT INTO schema_migrations (version, applied_at) VALUES (15, ?)',
+        ).run(new Date().toISOString());
+      });
+    }
+    if ((row.version ?? 0) < 16) {
+      this.transaction(() => {
+        this.database.exec(MIGRATION_16);
+        this.database.prepare(
+          'INSERT INTO schema_migrations (version, applied_at) VALUES (16, ?)',
         ).run(new Date().toISOString());
       });
     }
