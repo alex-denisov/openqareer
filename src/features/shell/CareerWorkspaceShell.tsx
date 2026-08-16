@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
   Compass,
+  FileText,
   House,
   MapTrifold,
   Path,
@@ -24,7 +25,13 @@ import type { CandidateWorkspace, WorkspaceInput } from '../workspace/workspaceS
 import { CareerTariffsView } from './CareerTariffsView';
 import { CareerAccountPanel } from './CareerAccountPanel';
 
-type ShellView = 'today' | 'profile' | 'career' | 'opportunities' | 'tariffs';
+type ShellView =
+  | 'today'
+  | 'profile'
+  | 'resume'
+  | 'career'
+  | 'opportunities'
+  | 'tariffs';
 
 interface CareerWorkspaceShellProps {
   workspace?: CandidateWorkspace;
@@ -50,6 +57,7 @@ const primaryNavigation: Array<{
 }> = [
   { id: 'today', label: 'Сегодня', shortLabel: 'Сегодня', icon: House },
   { id: 'profile', label: 'Профиль', shortLabel: 'Профиль', icon: UserCircle },
+  { id: 'resume', label: 'Резюме', shortLabel: 'Резюме', icon: FileText },
   { id: 'career', label: 'Карьера', shortLabel: 'Карьера', icon: Path },
   {
     id: 'opportunities',
@@ -62,6 +70,7 @@ const primaryNavigation: Array<{
 const pageNames: Record<ShellView, string> = {
   today: 'Сегодня',
   profile: 'Профиль',
+  resume: 'Резюме',
   career: 'Карьера',
   opportunities: 'Возможности',
   tariffs: 'Тарифы',
@@ -99,8 +108,17 @@ export function CareerWorkspaceShell({
     [visibleWorkspace],
   );
 
+  // Resume Studio reads and writes a candidate-scoped API, so a browser-local
+  // workspace without an account has nothing to show and must not pretend to.
+  const resumeAvailable = Boolean(cabinetSession);
+
+  function isNavigable(view: ShellView) {
+    if (view === 'resume') return resumeAvailable;
+    return canUseWorkspaceViews || view === 'today' || view === 'tariffs';
+  }
+
   function navigate(view: ShellView) {
-    if (!canUseWorkspaceViews && view !== 'today' && view !== 'tariffs') return;
+    if (!isNavigable(view)) return;
     setActiveView(view);
     setExpertOpen(false);
     window.requestAnimationFrame(() => {
@@ -159,7 +177,7 @@ export function CareerWorkspaceShell({
               key={item.id}
               item={item}
               active={activeView === item.id}
-              disabled={!canUseWorkspaceViews && item.id !== 'today'}
+              disabled={!isNavigable(item.id)}
               onClick={() => navigate(item.id)}
             />
           ))}
@@ -339,7 +357,7 @@ export function CareerWorkspaceShell({
             key={item.id}
             item={item}
             active={activeView === item.id}
-            disabled={!canUseWorkspaceViews && item.id !== 'today'}
+            disabled={!isNavigable(item.id)}
             mobile
             onClick={() => navigate(item.id)}
           />
@@ -413,7 +431,13 @@ function NavigationButton({
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       aria-label={item.label}
-      title={disabled ? 'Сначала соберите карьерную картину' : item.label}
+      title={
+        disabled
+          ? item.id === 'resume'
+            ? 'Резюме доступно после входа в аккаунт'
+            : 'Сначала соберите карьерную картину'
+          : item.label
+      }
     >
       <ItemIcon size={22} weight={active ? 'fill' : 'regular'} />
       <span>{mobile ? item.shortLabel : item.label}</span>

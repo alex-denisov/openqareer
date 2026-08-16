@@ -15,13 +15,13 @@
  *   npm run verify:hh-test-account -- --headed
  */
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { verifyHhTestAccount } from '../server/connectors/hh/hhBrowserLogin';
 import { resolveHhTestAccountEnvironment } from '../server/connectors/hh/hhTestAccountEnvironment';
+import { resolveLocalEnvironmentFilePath } from '../server/localEnvironmentFile';
 
 const headed = process.argv.includes('--headed');
-const environmentFile = resolve(process.cwd(), 'openqareer.env');
+const environmentFile = resolveLocalEnvironmentFilePath();
 const fileContents = await readFile(environmentFile, 'utf8').catch(() => null);
 const environment = resolveHhTestAccountEnvironment(process.env, fileContents);
 
@@ -37,7 +37,7 @@ if (
         identityMarker: null,
         resumes: [],
         observedAt: new Date().toISOString(),
-        hint: 'set OPENQAREER_HH_TEST_USERNAME / OPENQAREER_HH_TEST_PASSWORD in the environment or openqareer.env',
+        hint: `set OPENQAREER_HH_TEST_USERNAME / OPENQAREER_HH_TEST_PASSWORD in the environment or in ${environmentFile}`,
       },
       null,
       2,

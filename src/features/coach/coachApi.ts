@@ -1,5 +1,7 @@
 export type UserRole = 'candidate' | 'admin';
 export type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
+import { apiFetch, readData, throwApiError } from './apiClient';
+export { CoachApiError } from './apiClient';
 import type {
   AccountSnapshot,
   CandidateDocument,
@@ -387,29 +389,6 @@ export interface CandidateSnapshot {
   vacancySubscriptions: VacancySubscription[];
 }
 
-interface ApiEnvelope<T> {
-  data: T;
-}
-
-interface ApiErrorEnvelope {
-  error?: {
-    code?: string;
-    message?: string;
-    retryable?: boolean;
-  };
-}
-
-export class CoachApiError extends Error {
-  constructor(
-    message: string,
-    readonly code: string,
-    readonly retryable: boolean,
-  ) {
-    super(message);
-    this.name = 'CoachApiError';
-  }
-}
-
 export async function getSession(): Promise<AuthUser | null> {
   const response = await apiFetch('/api/v1/auth/me');
   return readData<AuthUser | null>(response);
@@ -792,45 +771,4 @@ export async function getProviderStatus(): Promise<{
 }> {
   const response = await apiFetch('/api/v1/provider/status');
   return readData(response);
-}
-
-async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
-  try {
-    return await fetch(input, {
-      ...init,
-      credentials: 'include',
-      headers: {
-        Accept: 'application/json',
-        ...init.headers,
-      },
-    });
-  } catch {
-    throw new CoachApiError(
-      'Не удалось связаться с сервисом. Проверьте соединение и повторите.',
-      'network_error',
-      true,
-    );
-  }
-}
-
-async function readData<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    await throwApiError(response);
-  }
-  const envelope = (await response.json()) as ApiEnvelope<T>;
-  return envelope.data;
-}
-
-async function throwApiError(response: Response): Promise<never> {
-  let envelope: ApiErrorEnvelope = {};
-  try {
-    envelope = (await response.json()) as ApiErrorEnvelope;
-  } catch {
-    // The stable fallback below intentionally ignores untrusted response text.
-  }
-  throw new CoachApiError(
-    envelope.error?.message ?? 'Сервис не завершил действие. Попробуйте ещё раз.',
-    envelope.error?.code ?? `http_${response.status}`,
-    envelope.error?.retryable ?? response.status >= 500,
-  );
 }

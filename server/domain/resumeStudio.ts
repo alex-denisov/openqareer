@@ -6,6 +6,7 @@ import type {
   ResumeExperienceInput,
   ResumeLanguageInput,
 } from './resumeDraft';
+import { isResumeEvidenceEligible } from './resumeEvidenceEligibility';
 
 export type { CefrLevel, ResumeDraft } from './resumeDraft';
 
@@ -352,14 +353,7 @@ function normalizeEvidence(evidence: ResumeEvidence): NormalizedEvidence {
 }
 
 function isEligible(evidence: NormalizedEvidence): boolean {
-  return (
-    evidence.id.length > 0 &&
-    evidence.statement.length > 0 &&
-    evidence.kind === 'fact' &&
-    (evidence.status === 'confirmed' || evidence.status === 'corrected') &&
-    !evidence.sensitive &&
-    evidence.sourceMessageIds.length > 0
-  );
+  return isResumeEvidenceEligible(evidence);
 }
 
 function resolveEvidence(
@@ -376,7 +370,8 @@ function resolveEvidence(
   if (id) context.excludedEvidenceIds.add(id);
   context.unknowns.push({
     code: 'ineligible-evidence',
-    message: 'Факт отсутствует, не подтверждён, чувствителен или лишён provenance.',
+    message:
+      'Факт отсутствует, не подтверждён, помечен чувствительным или не имеет источника.',
     scope: 'both',
     blocking: true,
     entryId,
@@ -612,7 +607,7 @@ function germanyVariantUnknowns(
       unknowns.push({
         ...unknown(
           'germany-bullet-count',
-          'Для версии DE проверьте диапазон от трёх до пяти bullets на роль.',
+          'Для версии DE проверьте диапазон от трёх до пяти пунктов на роль.',
           role.id,
           false,
         ),

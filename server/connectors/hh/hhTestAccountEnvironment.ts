@@ -1,11 +1,11 @@
 /**
  * Resolves the hh.ru test-account credentials for the B120/B123 live gate.
  *
- * Values are read from the process environment first and from the repository
- * `openqareer.env` (mode 0600, never committed) only as a fallback, so a CI or
- * systemd unit can supply them without a file. Nothing here logs, returns or
- * formats a credential value — callers only ever learn whether the pair is
- * present.
+ * Values are read from the process environment first and from the owner-only
+ * local secret file (`server/localEnvironmentFile.ts`, mode 0600, outside the
+ * working tree) only as a fallback, so a CI or systemd unit can supply them
+ * without a file. Nothing here logs, returns or formats a credential value —
+ * callers only ever learn whether the pair is present.
  */
 const USERNAME_KEY = 'OPENQAREER_HH_TEST_USERNAME';
 const PASSWORD_KEY = 'OPENQAREER_HH_TEST_PASSWORD';

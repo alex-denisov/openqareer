@@ -1,27 +1,48 @@
+/**
+ * Copies provider credentials from an external local environment file into the
+ * owner-only OpenQareer secret file and fills in the values the server requires.
+ *
+ * The target is edited in place: existing lines are rewritten, new keys are
+ * appended, and every comment, section header and unmanaged key is preserved.
+ * A previous version rewrote the file from a fixed key list, which would now
+ * silently drop the deploy, LinkedIn and hh.ru sections that live in the same
+ * file.
+ *
+ * The target must be an absolute path outside the repository working tree:
+ * a secret file inside the checkout is one careless `git add -f` away from a
+ * committed credential (`DEPLOY.md` §7). The canonical target is
+ * `~/.openqareer/openqareer.env`.
+ *
+ *   node scripts/sync-local-provider-secrets.mjs \
+ *     --source <external.env> --target ~/.openqareer/openqareer.env
+ */
 import { randomBytes } from 'node:crypto';
-import {
-  chmod,
-  readFile,
-  rename,
-  stat,
-  writeFile,
-} from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { chmod, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { dirname, relative, resolve } from 'node:path';
 
 const sourcePath = argument('--source');
 const targetPath = argument('--target');
-const expectedTarget = resolve(process.cwd(), 'openqareer.env');
-if (resolve(targetPath) !== expectedTarget) {
-  throw new Error('target must be the repository root openqareer.env');
+if (!targetPath.startsWith('/')) {
+  throw new Error('--target must be an absolute path');
+}
+const resolvedTarget = resolve(targetPath);
+const insideRepository = !relative(process.cwd(), resolvedTarget).startsWith(
+  '..',
+);
+if (insideRepository) {
+  throw new Error(
+    'target must live outside the repository working tree; see DEPLOY.md §7',
+  );
 }
 const sourceStats = await stat(sourcePath);
 if (!sourceStats.isFile()) throw new Error('source must be a regular file');
-if (dirname(resolve(sourcePath)) === dirname(expectedTarget)) {
-  throw new Error('source must be an external local environment file');
+if (dirname(resolve(sourcePath)) === dirname(resolvedTarget)) {
+  throw new Error('source must be a separate external environment file');
 }
 
 const source = parseEnvironment(await readFile(sourcePath, 'utf8'));
-const current = await readEnvironmentIfPresent(targetPath);
+const currentContents = await readFileIfPresent(resolvedTarget);
+const current = parseEnvironment(currentContents ?? '');
 const mapped = {
   OPENQAREER_OPENAI_API_KEY: source.OPENAI_API_KEY ?? '',
   OPENQAREER_OPENROUTER_API_KEY: source.OPENROUTER_API_KEY ?? '',
@@ -44,9 +65,8 @@ const providerFields = Object.fromEntries(
   ]),
 );
 const next = {
-  OPENQAREER_HOST: '127.0.0.1',
-  OPENQAREER_PORT: '3210',
-  ...current,
+  OPENQAREER_HOST: current.OPENQAREER_HOST ?? '127.0.0.1',
+  OPENQAREER_PORT: current.OPENQAREER_PORT ?? '3210',
   ...providerFields,
   OPENQAREER_PREVIEW_API_TOKEN:
     current.OPENQAREER_PREVIEW_API_TOKEN ?? randomBytes(32).toString('base64url'),
@@ -75,52 +95,12 @@ const next = {
     randomBytes(24).toString('base64url'),
 };
 
-const orderedNames = [
-  'OPENQAREER_HOST',
-  'OPENQAREER_PORT',
-  'OPENQAREER_OPENAI_API_KEY',
-  'OPENQAREER_ANTHROPIC_API_KEY',
-  'OPENQAREER_FIREWORKS_API_KEY',
-  'OPENQAREER_OPENROUTER_API_KEY',
-  'OPENQAREER_GEMINI_API_KEY',
-  'OPENQAREER_GROQ_API_KEY',
-  'OPENQAREER_MISTRAL_API_KEY',
-  'OPENQAREER_CEREBRAS_API_KEY',
-  'OPENQAREER_COHERE_API_KEY',
-  'OPENQAREER_YANDEX_API_KEY',
-  'OPENQAREER_YANDEX_FOLDER_ID',
-  'OPENQAREER_KILO_CODE_AI_API_KEY',
-  'OPENQAREER_NVIDIA_NIM_API_KEY',
-  'OPENQAREER_OPENCODE_ZEN_AI_API_KEY',
-  'OPENQAREER_TOKENROUTER_API_KEY',
-  'OPENQAREER_SAMBANOVA_CLOUD_API_KEY',
-  'OPENQAREER_POLLINATIONS_AI_API_KEY',
-  'OPENQAREER_HUGGINGFACE_HUB_API_KEY',
-  'OPENQAREER_RESEND_API_KEY',
-  'OPENQAREER_ACCOUNT_EMAIL_FROM',
-  'OPENQAREER_PUBLIC_URL',
-  'OPENQAREER_PREVIEW_API_TOKEN',
-  'OPENQAREER_DATA_ENCRYPTION_KEY',
-  'OPENQAREER_DATABASE_PATH',
-  'OPENQAREER_AI_MODEL',
-  'OPENQAREER_PERSONAL_AI_PROVIDER',
-  'OPENQAREER_PERSONAL_AI_MODEL',
-  'OPENQAREER_SYNTHETIC_AI_PROVIDER',
-  'OPENQAREER_SYNTHETIC_AI_MODEL',
-  'OPENQAREER_LOG_LEVEL',
-  'OPENQAREER_ADMIN_USERNAME',
-  'OPENQAREER_ADMIN_PASSWORD',
-  'OPENQAREER_TEST_CANDIDATE_USERNAME',
-  'OPENQAREER_TEST_CANDIDATE_PASSWORD',
-];
-const serialized = `${orderedNames
-  .map((name) => `${name}=${encodeEnvironmentValue(next[name] ?? '')}`)
-  .join('\n')}\n`;
-const temporaryPath = `${targetPath}.tmp-${process.pid}`;
+const serialized = mergeEnvironment(currentContents ?? '', next);
+const temporaryPath = `${resolvedTarget}.tmp-${process.pid}`;
 await writeFile(temporaryPath, serialized, { mode: 0o600, flag: 'wx' });
 await chmod(temporaryPath, 0o600);
-await rename(temporaryPath, targetPath);
-await chmod(targetPath, 0o600);
+await rename(temporaryPath, resolvedTarget);
+await chmod(resolvedTarget, 0o600);
 
 const copiedNames = Object.entries(mapped)
   .filter(([, value]) => Boolean(value))
@@ -136,11 +116,36 @@ function argument(name) {
   return value;
 }
 
-async function readEnvironmentIfPresent(path) {
+/**
+ * Rewrites the managed keys in place and appends the ones the file does not
+ * have yet, so comments and unmanaged sections survive untouched.
+ */
+function mergeEnvironment(contents, values) {
+  const pending = new Set(Object.keys(values));
+  const lines = contents.split(/\r?\n/);
+  const rewritten = lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) {
+      return line;
+    }
+    const name = trimmed.slice(0, trimmed.indexOf('=')).trim();
+    if (!pending.has(name)) return line;
+    pending.delete(name);
+    return `${name}=${encodeEnvironmentValue(values[name])}`;
+  });
+  const appended = [...pending].map(
+    (name) => `${name}=${encodeEnvironmentValue(values[name])}`,
+  );
+  const body = rewritten.join('\n').replace(/\n+$/u, '');
+  if (appended.length === 0) return `${body}\n`;
+  return `${body}\n\n# Added by scripts/sync-local-provider-secrets.mjs\n${appended.join('\n')}\n`;
+}
+
+async function readFileIfPresent(path) {
   try {
-    return parseEnvironment(await readFile(path, 'utf8'));
+    return await readFile(path, 'utf8');
   } catch (error) {
-    if (error && error.code === 'ENOENT') return {};
+    if (error && error.code === 'ENOENT') return null;
     throw error;
   }
 }
@@ -172,7 +177,9 @@ function decodeEnvironmentValue(value) {
 }
 
 function encodeEnvironmentValue(value) {
-  if (/^[A-Za-z0-9_./:+-]*$/.test(value)) return value;
+  // `=` is safe unquoted for both `source` and systemd `EnvironmentFile`, and
+  // base64 padding would otherwise re-quote an unchanged key on every run.
+  if (/^[A-Za-z0-9_./:+=-]*$/.test(value)) return value;
   return JSON.stringify(value);
 }
 

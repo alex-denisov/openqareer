@@ -9,9 +9,15 @@ import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { CareerCoachDesk } from './CareerCoachDesk';
 import { CareerIntelligencePanel } from './CareerIntelligencePanel';
 import { CareerProfileSurface } from './CareerProfileSurface';
+import { ResumeStudio } from '../resume/ResumeStudio';
 import { useCareerCabinetData } from './useCareerCabinetData';
 
-export type CareerCabinetView = 'today' | 'profile' | 'career' | 'opportunities';
+export type CareerCabinetView =
+  | 'today'
+  | 'profile'
+  | 'resume'
+  | 'career'
+  | 'opportunities';
 
 interface CareerCabinetProps {
   view: CareerCabinetView;
@@ -85,6 +91,7 @@ function CabinetHeader({ view, name, data }: { view: CareerCabinetView; name: st
 function CabinetView(props: CareerCabinetProps & { data: CabinetData }) {
   if (props.view === 'today') return <TodayView {...props} />;
   if (props.view === 'profile') return <ProfileView {...props} />;
+  if (props.view === 'resume') return <ResumeView {...props} />;
   if (props.view === 'career') return <TrackView {...props} />;
   return <MarketView {...props} />;
 }
@@ -103,6 +110,15 @@ function TodayView(props: CareerCabinetProps & { data: CabinetData }) {
 function ProfileView(props: CareerCabinetProps & { data: CabinetData }) {
   const shared = cabinetPanelProps(props);
   return <div className="career-cabinet-focus-layout"><CareerProfileSurface {...shared.profile} expanded /><CareerIntelligencePanel {...shared.market} /></div>;
+}
+
+function ResumeView(props: CareerCabinetProps & { data: CabinetData }) {
+  return (
+    <ResumeStudio
+      memory={props.data.snapshot?.memory ?? []}
+      onRefreshDossier={() => void props.data.refresh()}
+    />
+  );
 }
 
 function TrackView(props: CareerCabinetProps & { data: CabinetData }) {
@@ -240,6 +256,7 @@ function viewTitle(view: CareerCabinetView) {
   return {
     today: 'Карьерный кабинет',
     profile: 'Профессиональный профиль',
+    resume: 'Резюме',
     career: 'Карьерный трек',
     opportunities: 'Вакансии и рынок',
   }[view];
@@ -249,6 +266,8 @@ function viewDescription(view: CareerCabinetView) {
   return {
     today: '',
     profile: 'Компактная карьерная история, документы и проверяемые факты.',
+    resume:
+      'Мастер-резюме и вариант под страну — только из подтверждённых фактов, с видимыми пробелами.',
     career: 'Гипотезы ролей, milestones и наблюдаемые критерии успеха.',
     opportunities: 'Регулярные выборки, сохранённые вакансии и рыночные сигналы.',
   }[view];
