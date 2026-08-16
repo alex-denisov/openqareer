@@ -446,10 +446,16 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.locator('button[aria-label="Сегодня"]:visible').click();
   await page.getByRole('heading', { name: 'Карьерный кабинет' }).waitFor();
   await page.getByRole('combobox', { name: 'Источник вакансий' }).waitFor();
-  assert(
-    (await page.getByText('нужен официальный доступ', { exact: false }).count()) >= 1,
-    `${viewport.name}: official access requirement is hidden`,
-  );
+  // The source registry loads asynchronously, so wait for the honest health
+  // line instead of counting a DOM that may not have rendered yet.
+  const officialAccessNotice = page
+    .getByText('нужен официальный доступ', { exact: false })
+    .first();
+  try {
+    await officialAccessNotice.waitFor({ state: 'visible', timeout: 10_000 });
+  } catch {
+    assert(false, `${viewport.name}: official access requirement is hidden`);
+  }
   await page.getByRole('combobox', { name: 'Источник вакансий' }).selectOption(
     'remotive',
   );

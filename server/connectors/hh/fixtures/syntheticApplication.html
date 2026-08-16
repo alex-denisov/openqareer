@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>Синтетическая вакансия hh.ru</title>
+  </head>
+  <body>
+    <a data-qa="mainmenu_applicantProfile" href="/applicant/resumes">Мои резюме</a>
+    <main>
+      <h1 data-qa="vacancy-title">Руководитель продукта</h1>
+      <button data-qa="vacancy-response-link-top" type="button">Откликнуться</button>
+      <section data-qa="vacancy-response-popup" hidden>
+        <label data-qa="vacancy-response-popup__resume-item" data-resume-id="synthetic-resume-1">
+          <input type="radio" name="resume" value="synthetic-resume-1" />
+          Основное резюме
+        </label>
+        <button data-qa="vacancy-response-popup__letter-toggle" type="button">
+          Добавить сопроводительное письмо
+        </button>
+        <label>
+          Сопроводительное письмо
+          <textarea data-qa="vacancy-response-popup__letter-textarea" hidden></textarea>
+        </label>
+        <button data-qa="vacancy-response-submit-popup" type="button">Отправить отклик</button>
+      </section>
+      <p data-qa="vacancy-response-success" data-response-id="synthetic-response-42" hidden>
+        Отклик отправлен
+      </p>
+    </main>
+    <script>
+      const popup = document.querySelector('[data-qa="vacancy-response-popup"]');
+      const textarea = document.querySelector(
+        '[data-qa="vacancy-response-popup__letter-textarea"]',
+      );
+      document
+        .querySelector('[data-qa="vacancy-response-link-top"]')
+        .addEventListener('click', () => {
+          window.syntheticApplyOpened = true;
+          popup.hidden = false;
+        });
+      document
+        .querySelector('[data-qa="vacancy-response-popup__letter-toggle"]')
+        .addEventListener('click', () => {
+          textarea.hidden = false;
+        });
+      document
+        .querySelector('[data-qa="vacancy-response-submit-popup"]')
+        .addEventListener('click', () => {
+          window.syntheticSubmitted = true;
+          document.querySelector('[data-qa="vacancy-response-success"]').hidden = false;
+        });
+    </script>
+  </body>
+</html>

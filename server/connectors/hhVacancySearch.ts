@@ -4,7 +4,7 @@ import {
   parseRetryAfter,
   VacancyConnectorError,
 } from './vacancyConnectorError';
-import { readBoundedJson } from './readBoundedJson';
+import { readBoundedJson, readBoundedText } from './readBoundedJson';
 
 const inputSchema = z.object({
   text: z.string().trim().min(2).max(200),
@@ -136,7 +136,7 @@ async function searchHhPublicPage(
   if (!response.ok) {
     throw new Error('hh_vacancy_search_unavailable');
   }
-  const html = await response.text();
+  const html = await readBoundedText(response);
   if (
     /<title>[^<]*(captcha|verify you are human|security check)|data-qa="captcha|id="captcha/iu.test(
       html,

@@ -12,6 +12,8 @@ import { buildPasswordResetNotifier } from './auth/passwordResetEmail';
 import { searchHhVacancies } from './connectors/hhVacancySearch';
 import { searchRemotiveVacancies } from './connectors/remotiveVacancySearch';
 import { VacancyIntelligenceService } from './vacancies/vacancyIntelligenceService';
+import { CareerCommandConnectorRouter } from './connectors/careerCommandConnectorRouter';
+import { HhConnector } from './connectors/hh/hhConnector';
 
 const config = readServerConfig(process.env);
 const candidateStore = new SqliteCandidateStore({
@@ -69,12 +71,16 @@ const vacancyIntelligenceService = new VacancyIntelligenceService({
   },
   maxBatchSize: 5,
 });
+const careerCommandExecutor = new CareerCommandConnectorRouter({
+  hh: new HhConnector(),
+});
 const app = await buildApp({
   config,
   coachProvider,
   candidateStore,
   authService,
   vacancyIntelligenceService,
+  careerCommandExecutor,
   serveStatic: process.env.NODE_ENV === 'production',
 });
 

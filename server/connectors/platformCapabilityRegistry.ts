@@ -103,12 +103,12 @@ const DEFINITIONS: CapabilityDefinition[] = [
       platform: 'hh',
       label: 'hh.ru',
       action,
-      route: 'official_api',
+      route: 'browser_session',
       credentialKeys: HH_TEST_KEYS,
       baseReadiness: 'test_account',
       sourceUrl: 'https://api.hh.ru/openapi/redoc',
       note:
-        'Проверяется OAuth-поток соискателя и фактическая доступность действия для конкретного резюме/вакансии.',
+        'Кандидатская browser-сессия проверяется по identity; действие разрешается только для точной цели и подтверждается receipt. Публичный OpenAPI остаётся read-only контуром вакансий.',
     }),
   ),
   {

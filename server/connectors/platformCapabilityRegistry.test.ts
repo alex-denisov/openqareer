@@ -26,6 +26,7 @@ describe('platform capability registry', () => {
     expect(hhApply).toMatchObject({
       readiness: 'credentials_required',
       configured: false,
+      route: 'browser_session',
     });
     expect(serialized).not.toContain('secret-value');
     expect(serialized).not.toContain('candidate-test@example.invalid');

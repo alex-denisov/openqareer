@@ -13,6 +13,7 @@ import { selectCoachPhase } from './orchestration/coachPhaseRouter';
 import {
   CareerCommandPlanner,
   CareerCommandPolicyError,
+  hhApplicationExecutionTargetSchema,
 } from './orchestration/careerCommandPlanner';
 import { CareerCommandDispatcher } from './orchestration/careerCommandDispatcher';
 import type { ConnectorExecutor } from './connectors/connectorHarness';
@@ -1463,6 +1464,7 @@ export async function buildApp({
             : [],
           idempotencyKey,
           approval: null,
+          executionTarget: body.executionTarget ?? null,
         }),
       );
       return reply.code(201).send({
@@ -1922,6 +1924,7 @@ function marketObservationsFrom(sample: HhVacancySample) {
 const careerCommandRequestSchema = z.object({
   turnIdempotencyKey: z.string().uuid(),
   proposalIndex: z.number().int().min(0).max(19),
+  executionTarget: hhApplicationExecutionTargetSchema.optional(),
 });
 
 const careerCommandParamsSchema = z.object({

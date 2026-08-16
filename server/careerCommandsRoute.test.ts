@@ -199,6 +199,97 @@ describe('career command API', () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
+  it('binds an hh.ru approval to the candidate and exact external target', async () => {
+    const execute = vi.fn(
+      async (request): Promise<ConnectorReceipt> => ({
+        connectorId: 'hh-connector',
+        transport: 'official_api',
+        action: request.action,
+        status: 'completed',
+        idempotencyKey: request.idempotencyKey,
+        opportunityId: request.opportunityId,
+        providerReference: 'synthetic-hh-response-1',
+        evidence: {
+          kind: 'provider_receipt',
+          observedAt: '2026-08-14T15:00:01.000Z',
+        },
+      }),
+    );
+    const executor: ConnectorExecutor = {
+      connectorId: 'hh-connector',
+      transport: 'official_api',
+      execute,
+    };
+    const { app, authorization, store } = await createApp(executor);
+    const turnIdempotencyKey = randomUUID();
+    const messageId = randomUUID();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/coach/turn',
+      headers: { authorization, 'idempotency-key': turnIdempotencyKey },
+      payload: { messageId, content: 'Подготовь отклик' },
+    });
+    const commandId = randomUUID();
+    const prepared = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/career-commands',
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': commandId,
+      },
+      payload: {
+        turnIdempotencyKey,
+        proposalIndex: 0,
+        executionTarget: {
+          platform: 'hh',
+          vacancyId: '123456789',
+          resumeId: 'synthetic-resume-1',
+          message: 'Отклик с подтверждённым кандидатом текстом.',
+        },
+      },
+    });
+
+    expect(prepared.statusCode).toBe(201);
+    expect(prepared.json().data.executionTarget).toEqual({
+      platform: 'hh',
+      vacancyId: '123456789',
+      resumeId: 'synthetic-resume-1',
+      message: 'Отклик с подтверждённым кандидатом текстом.',
+    });
+    expect(execute).not.toHaveBeenCalled();
+
+    const approvalId = randomUUID();
+    const approved = await app.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/career-commands/${commandId}/approvals`,
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': approvalId,
+      },
+    });
+
+    expect(approved.json().data.status).toBe('completed_with_receipt');
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]?.[0]).toMatchObject({
+      candidateId: store.authenticate(authorization.slice('Bearer '.length))?.id,
+      opportunityId: 'hh:vacancy:123456789',
+      payload: {
+        commandId,
+        capability: 'application.submit',
+        approvalId,
+        executionTarget: {
+          platform: 'hh',
+          vacancyId: '123456789',
+          resumeId: 'synthetic-resume-1',
+          message: 'Отклик с подтверждённым кандидатом текстом.',
+        },
+      },
+    });
+    expect(JSON.stringify(approved.json())).not.toContain('accessToken');
+  });
+
   it('keeps commands tenant-scoped and fails closed on a mismatched receipt', async () => {
     const executor: ConnectorExecutor = {
       connectorId: 'synthetic-api',

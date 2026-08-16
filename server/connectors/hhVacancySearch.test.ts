@@ -148,4 +148,23 @@ describe('hh vacancy search', () => {
     ).rejects.toThrow('hh_vacancy_search_official_access_required');
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
+
+  it('rejects an oversized public HTML fallback before parsing it', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 403 }))
+      .mockResolvedValueOnce(
+        new Response('<h1>Найдено 1 вакансий</h1>', {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html',
+            'Content-Length': '1000001',
+          },
+        }),
+      );
+
+    await expect(
+      searchHhVacancies({ text: 'operations' }, { fetchImpl }),
+    ).rejects.toThrow('vacancy_source_response_too_large');
+  });
 });

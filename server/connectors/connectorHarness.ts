@@ -24,6 +24,7 @@ const safeIdSchema = z
   .regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/);
 
 const connectorRequestSchema = z.object({
+  candidateId: safeIdSchema.max(128).optional(),
   idempotencyKey: z.string().uuid(),
   opportunityId: safeIdSchema.max(128),
   action: connectorActionSchema,

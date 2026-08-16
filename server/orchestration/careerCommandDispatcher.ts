@@ -39,7 +39,7 @@ export class CareerCommandDispatcher {
     if (command.status !== 'queued') return command;
 
     const startedAt = this.now().toISOString();
-    const opportunityId = `command:${command.commandId}`;
+    const opportunityId = opportunityIdFor(command);
     const action = markConnectorActionExecuting(
       createConnectorAction({
         actionId: command.commandId,
@@ -51,12 +51,7 @@ export class CareerCommandDispatcher {
       }),
       startedAt,
     );
-    this.store.claimCareerCommand(
-      candidateId,
-      commandId,
-      action,
-      startedAt,
-    );
+    this.store.claimCareerCommand(candidateId, commandId, action, startedAt);
 
     const harness = new ConnectorHarness({
       executor: this.executor,
@@ -64,12 +59,15 @@ export class CareerCommandDispatcher {
       observedAt: () => this.now().toISOString(),
     });
     const receipt = await harness.execute({
+      candidateId,
       idempotencyKey: command.idempotency.key,
       opportunityId,
       action: action.action,
       payload: {
         commandId: command.commandId,
         capability: command.capability,
+        approvalId: command.authorization.approvalId,
+        executionTarget: command.executionTarget,
       },
     });
     const finishedAt = this.now().toISOString();
@@ -82,6 +80,16 @@ export class CareerCommandDispatcher {
       updatedAt: finishedAt,
     });
   }
+}
+
+/**
+ * A command bound to an external target is addressed by that target, so the
+ * harness's at-most-once key and the connector's expected opportunity agree.
+ */
+function opportunityIdFor(command: CareerCommandRecord): string {
+  return command.executionTarget
+    ? `hh:vacancy:${command.executionTarget.vacancyId}`
+    : `command:${command.commandId}`;
 }
 
 function finishedStatus(

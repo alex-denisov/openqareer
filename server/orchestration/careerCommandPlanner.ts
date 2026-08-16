@@ -6,6 +6,23 @@ import {
 } from '../domain/coach';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 
+export const hhApplicationExecutionTargetSchema = z
+  .object({
+    platform: z.literal('hh'),
+    vacancyId: z.string().regex(/^[1-9][0-9]{0,19}$/u),
+    resumeId: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/u),
+    message: z.string().trim().min(1).max(10_000).optional(),
+  })
+  .strict();
+
+export type CareerCommandExecutionTarget = z.infer<
+  typeof hhApplicationExecutionTargetSchema
+>;
+
 export interface VerifiedCareerApproval {
   id: string;
   candidateId: string;
@@ -30,6 +47,7 @@ export interface CareerCommandRecord {
   candidateId: string;
   capability: CareerActionProposal['kind'];
   proposal: CareerActionProposal;
+  executionTarget: CareerCommandExecutionTarget | null;
   status: CareerCommandStatus;
   provenance: {
     strategyDecisionId: string;
@@ -57,7 +75,8 @@ export class CareerCommandPolicyError extends Error {
     readonly code:
       | 'unknown_evidence'
       | 'invalid_approval'
-      | 'invalid_capability_risk',
+      | 'invalid_capability_risk'
+      | 'invalid_execution_target',
   ) {
     super(code);
     this.name = 'CareerCommandPolicyError';
@@ -81,11 +100,15 @@ export class CareerCommandPlanner {
     modelInvocationIds: string[];
     idempotencyKey: string;
     approval: VerifiedCareerApproval | null;
+    executionTarget?: CareerCommandExecutionTarget | null;
   }): CareerCommandRecord {
     const proposal = validateProposal(input);
+    const executionTarget = validateExecutionTarget(
+      proposal,
+      input.executionTarget ?? null,
+    );
     const commandId = this.createId();
 
-    const externalWrite = proposal.risk === 'external_side_effect';
     if (
       input.approval &&
       !approvalMatches(input, commandId, proposal, this.now())
@@ -93,8 +116,7 @@ export class CareerCommandPlanner {
       throw new CareerCommandPolicyError('invalid_approval');
     }
     const approvalId = input.approval?.id ?? null;
-    const status =
-      externalWrite && !approvalId ? 'awaiting_approval' : 'prepared';
+    const externalWrite = proposal.risk === 'external_side_effect';
     const createdAt = this.now().toISOString();
 
     return {
@@ -103,18 +125,17 @@ export class CareerCommandPlanner {
       candidateId: input.principal.candidateId,
       capability: proposal.kind,
       proposal,
-      status,
+      executionTarget,
+      status: externalWrite && !approvalId ? 'awaiting_approval' : 'prepared',
       provenance: {
         strategyDecisionId: input.strategyDecisionId,
         evidenceRefs: proposal.evidenceRefs,
         modelInvocationIds: input.modelInvocationIds,
       },
-      authorization: {
-        approvalId,
-      },
+      authorization: { approvalId },
       idempotency: {
         key: input.idempotencyKey,
-        payloadDigest: commandDigest(input, proposal),
+        payloadDigest: commandDigest(input, proposal, executionTarget),
         semantics: 'at_most_once' as const,
       },
       execution: null,
@@ -122,6 +143,22 @@ export class CareerCommandPlanner {
       updatedAt: createdAt,
     };
   }
+}
+
+/**
+ * An external target is only ever accepted for the capability that can act on
+ * it, and a malformed one is a policy rejection (400) rather than a crash.
+ */
+function validateExecutionTarget(
+  proposal: CareerActionProposal,
+  input: CareerCommandExecutionTarget | null,
+): CareerCommandExecutionTarget | null {
+  if (!input) return null;
+  const target = hhApplicationExecutionTargetSchema.safeParse(input);
+  if (!target.success || proposal.kind !== 'application.submit') {
+    throw new CareerCommandPolicyError('invalid_execution_target');
+  }
+  return target.data;
 }
 
 function validateProposal(input: {
@@ -153,10 +190,12 @@ function commandDigest(
     strategyDecisionId: string;
   },
   proposal: CareerActionProposal,
+  executionTarget: CareerCommandExecutionTarget | null,
 ): string {
   return digest({
     candidateId: input.principal.candidateId,
     proposal,
+    executionTarget,
     strategyDecisionId: input.strategyDecisionId,
   });
 }
