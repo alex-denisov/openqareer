@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Compass,
   FileText,
@@ -76,6 +76,13 @@ const pageNames: Record<ShellView, string> = {
   tariffs: 'Тарифы',
 };
 
+/**
+ * A session check normally finishes in tens of milliseconds. Rendering the
+ * explanation immediately turned that into a flash of a full-height heading on
+ * every mount, so the screen only explains itself once the wait is real.
+ */
+const SESSION_GATE_DELAY_MS = 400;
+
 export function CareerWorkspaceShell({
   workspace,
   invalidStorage = false,
@@ -97,6 +104,7 @@ export function CareerWorkspaceShell({
   const [accountOpen, setAccountOpen] = useState(
     () => typeof window !== 'undefined' && window.location.pathname === '/auth/reset-password',
   );
+  const [sessionWaitIsLong, setSessionWaitIsLong] = useState(false);
   const visibleWorkspace = sessionPending ? undefined : workspace;
   const cabinetSession =
     !sessionPending && session?.candidateId
@@ -111,6 +119,21 @@ export function CareerWorkspaceShell({
   // Resume Studio reads and writes a candidate-scoped API, so a browser-local
   // workspace without an account has nothing to show and must not pretend to.
   const resumeAvailable = Boolean(cabinetSession);
+
+  useEffect(() => {
+    if (!sessionPending) {
+      setSessionWaitIsLong(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setSessionWaitIsLong(true), SESSION_GATE_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [sessionPending]);
+
+  // The page name lives in the navigation and in the tab title; repeating it in
+  // the top bar only duplicated the active item.
+  useEffect(() => {
+    document.title = `${pageNames[activeView]} · openqareer`;
+  }, [activeView]);
 
   function isNavigable(view: ShellView) {
     if (view === 'resume') return resumeAvailable;
@@ -216,7 +239,6 @@ export function CareerWorkspaceShell({
         >
           <BrandMark variant="lockup" size={26} />
         </button>
-        <span className="career-page-name">{pageNames[activeView]}</span>
         <div className="career-topbar-actions">
           <button
             className="career-mobile-tariffs"
@@ -251,7 +273,7 @@ export function CareerWorkspaceShell({
         className="career-main"
         aria-hidden={expertOpen || accountOpen ? true : undefined}
       >
-        {sessionPending ? (
+        {sessionPending && (sessionWaitIsLong || sessionError) ? (
           <section className="career-session-gate" aria-live="polite" aria-busy="true">
             <p className="career-eyebrow">Защита данных</p>
             <h1>Проверяем защищённую сессию</h1>
@@ -267,7 +289,7 @@ export function CareerWorkspaceShell({
               </>
             ) : null}
           </section>
-        ) : invalidStorage ? (
+        ) : !sessionPending && invalidStorage ? (
           <div className="career-storage-warning" role="alert">
             <div>
               <strong>Сохранённый профиль не удалось прочитать</strong>
@@ -299,6 +321,7 @@ export function CareerWorkspaceShell({
             key={session?.candidateId ?? 'anonymous'}
             onComplete={onSaveWorkspace}
             hasAccount={Boolean(session?.candidateId)}
+            onOpenAccount={() => setAccountOpen(true)}
           />
         ) : null}
         {cabinetSession && activeView !== 'tariffs' ? (

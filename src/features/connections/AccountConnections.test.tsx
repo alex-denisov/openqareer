@@ -23,6 +23,7 @@ describe('AccountConnections', () => {
             },
           },
         ]}
+        onConnect={() => undefined}
         onDisconnect={() => undefined}
       />,
     );
@@ -33,5 +34,47 @@ describe('AccountConnections', () => {
     expect(html).toContain('не переносит карьерную историю');
     expect(html).toContain('Отключить LinkedIn');
     expect(html).toContain('может потребовать отдельного отзыва');
+  });
+
+  it('starts an available connection where the account lives, not in a step the candidate cannot reach', () => {
+    const html = renderToStaticMarkup(
+      <AccountConnections
+        connections={[
+          {
+            platform: 'hh',
+            available: true,
+            status: 'disconnected',
+            capabilities: ['profile_read', 'resume_read'],
+            importsCareerHistory: true,
+          },
+        ]}
+        onConnect={() => undefined}
+        onDisconnect={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Подключить hh.ru');
+    expect(html).not.toContain('на шаге добавления источников');
+  });
+
+  it('does not offer a connection the platform has not enabled', () => {
+    const html = renderToStaticMarkup(
+      <AccountConnections
+        connections={[
+          {
+            platform: 'linkedin',
+            available: false,
+            status: 'disconnected',
+            capabilities: [],
+            importsCareerHistory: false,
+          },
+        ]}
+        onConnect={() => undefined}
+        onDisconnect={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Официальное подключение пока не настроено');
+    expect(html).not.toContain('Подключить LinkedIn');
   });
 });

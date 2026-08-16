@@ -52,9 +52,33 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    expect(html).toContain('Проверяем защищённую сессию');
+    // The wait is normally tens of milliseconds, so the first paint stays
+    // silent; the explanation appears only once the wait becomes real.
+    expect(html).not.toContain('Проверяем защищённую сессию');
     expect(html).not.toContain('Синтетический профиль кандидата');
     expect(html).not.toContain('Начните с карьерного вопроса');
+  });
+
+  it('explains a session check that failed instead of waiting silently', () => {
+    const html = renderToStaticMarkup(
+      <CareerWorkspaceShell
+        sessionPending
+        sessionError="Не удалось проверить аккаунт. Локальные карьерные данные скрыты до восстановления связи."
+      />,
+    );
+
+    expect(html).toContain('Проверяем защищённую сессию');
+    expect(html).toContain('Не удалось проверить аккаунт');
+    expect(html).toContain('Повторить проверку');
+  });
+
+  it('does not repeat the active navigation item in the top bar', () => {
+    const html = renderToStaticMarkup(
+      <CareerWorkspaceShell onSaveWorkspace={() => undefined} />,
+    );
+
+    expect(html).not.toContain('career-page-name');
+    expect(html).toContain('career-topbar');
   });
 
   it('reports a platform connection outcome inside the shell', () => {

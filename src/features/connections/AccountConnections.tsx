@@ -3,18 +3,22 @@ import {
   CoachApiError,
   disconnectConnection,
   getConnections,
+  startConnection,
   type CandidateConnection,
 } from '../coach/coachApi';
 import { PLATFORM_LABELS, type ConnectionPlatform } from './connectionResult';
 import {
   applyConnectionDisconnectResult,
   connectionDisconnectNotice,
+  connectionStartNotice,
 } from './connectionState';
+import { PlatformConnectionPanel } from './PlatformConnectionPanel';
 
 interface AccountConnectionsProps {
   connections: CandidateConnection[];
   busyPlatform?: ConnectionPlatform;
   notice?: string;
+  onConnect: (platform: ConnectionPlatform) => void;
   onDisconnect: (platform: ConnectionPlatform) => void;
 }
 
@@ -36,6 +40,23 @@ export function AccountConnectionsManager() {
       current = false;
     };
   }, []);
+
+  /**
+   * The connection starts where the account is. The wizard used to own this
+   * button while it only ever ran for anonymous visitors, so no candidate could
+   * reach it and this panel pointed at a step that could not deliver.
+   */
+  async function handleConnect(platform: ConnectionPlatform) {
+    setBusyPlatform(platform);
+    setNotice(undefined);
+    try {
+      const started = await startConnection(platform);
+      window.location.assign(started.authorizationUrl);
+    } catch (error) {
+      setBusyPlatform(undefined);
+      setNotice(connectionStartNotice(error, platform));
+    }
+  }
 
   async function handleDisconnect(platform: ConnectionPlatform) {
     setBusyPlatform(platform);
@@ -67,6 +88,7 @@ export function AccountConnectionsManager() {
       connections={connections}
       busyPlatform={busyPlatform}
       notice={notice}
+      onConnect={(platform) => void handleConnect(platform)}
       onDisconnect={(platform) => void handleDisconnect(platform)}
     />
   );
@@ -76,6 +98,7 @@ export function AccountConnections({
   connections,
   busyPlatform,
   notice,
+  onConnect,
   onDisconnect,
 }: AccountConnectionsProps) {
   return (
@@ -89,7 +112,7 @@ export function AccountConnections({
           const label = PLATFORM_LABELS[connection.platform];
           return (
             <article key={connection.platform}>
-              <div>
+              <div className="career-connection-headline">
                 <strong>{label}</strong>
                 <span className={connection.status === 'connected' ? 'is-connected' : undefined}>
                   {connection.status === 'connected' ? 'Подключено' : 'Не подключено'}
@@ -113,12 +136,14 @@ export function AccountConnections({
                     на стороне площадки может потребовать отдельного отзыва.
                   </small>
                 </>
+              ) : connection.available ? (
+                <PlatformConnectionPanel
+                  platform={connection.platform}
+                  busy={busyPlatform === connection.platform}
+                  onConnect={() => onConnect(connection.platform)}
+                />
               ) : (
-                <p>
-                  {connection.available
-                    ? 'Подключить можно на шаге добавления источников.'
-                    : 'Официальное подключение пока не настроено.'}
-                </p>
+                <p>Официальное подключение пока не настроено.</p>
               )}
             </article>
           );

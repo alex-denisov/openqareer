@@ -12,7 +12,8 @@ import {
   Target,
 } from '@phosphor-icons/react';
 import { importProfileUrl, type ProfileUrlImportResult } from '../coach/coachApi';
-import { PlatformConnectionSection } from '../connections/PlatformConnectionSection';
+import type { ConnectionPlatform } from '../connections/connectionResult';
+import { accountRequiredNotice } from '../connections/connectionState';
 import {
   ingestProfileSnapshot,
   reviewProfileFact,
@@ -33,7 +34,18 @@ type SourceChoice = 'pdf' | 'linkedin' | 'hh' | 'text' | 'none';
 interface CareerIntakeProps {
   onComplete: (input: WorkspaceInput) => void;
   hasAccount?: boolean;
+  /** Opens the account panel, so the wizard never names a door it cannot open. */
+  onOpenAccount?: () => void;
 }
+
+/**
+ * The wizard's own copy and its button must never drift apart: the owner hit a
+ * message pointing at «Импортировать по ссылке» while the button said something
+ * else, so both now read the same constant.
+ */
+export const IMPORT_ACTION_LABEL = 'Проверить способ импорта';
+
+export const PRESS_IMPORT_FIRST_MESSAGE = `Сначала нажмите «${IMPORT_ACTION_LABEL}».`;
 
 interface ProfileFactDraft {
   fact: ProfileFact;
@@ -80,7 +92,11 @@ const conditionOptions = [
   'Нужна визовая поддержка',
 ];
 
-export function CareerIntake({ onComplete, hasAccount = false }: CareerIntakeProps) {
+export function CareerIntake({
+  onComplete,
+  hasAccount = false,
+  onOpenAccount,
+}: CareerIntakeProps) {
   const [started, setStarted] = useState(false);
   const [step, setStep] = useState<IntakeStep>('intent');
   const [goal, setGoal] = useState<CareerGoal>();
@@ -252,13 +268,19 @@ export function CareerIntake({ onComplete, hasAccount = false }: CareerIntakePro
 
   function moveFromSource() {
     if (sourceChoice === 'linkedin' || sourceChoice === 'hh') {
+      if (!hasAccount) {
+        setError(
+          'Импорт профиля читает данные площадки в ваш аккаунт, поэтому сначала нужен аккаунт. Можно создать его здесь или выбрать PDF, текст либо «Без документов».',
+        );
+        return;
+      }
       const selectedUrl = sourceChoice === 'linkedin' ? linkedinUrl.trim() : hhUrl.trim();
       if (!selectedUrl) {
         setError('Вставьте ссылку или выберите другой способ начать.');
         return;
       }
       if (!profileImport) {
-        setError('Сначала нажмите «Импортировать по ссылке».');
+        setError(PRESS_IMPORT_FIRST_MESSAGE);
         return;
       }
       if (profileImport.status === 'unavailable') {
@@ -455,59 +477,48 @@ export function CareerIntake({ onComplete, hasAccount = false }: CareerIntakePro
             </label>
           ) : null}
 
-          {sourceChoice === 'linkedin' ? (
+          {sourceChoice === 'linkedin' || sourceChoice === 'hh' ? (
             <div className="career-source-fields">
-              <label>
-                <span>Ссылка на профиль</span>
-                <input
-                  value={linkedinUrl}
-                  onChange={(event) => {
-                    setLinkedinUrl(event.target.value);
-                    setProfileImport(undefined);
-                    setProfileFactDrafts([]);
-                  }}
-                  placeholder="https://www.linkedin.com/in/..."
-                  inputMode="url"
+              {hasAccount ? (
+                <>
+                  <label>
+                    <span>
+                      {sourceChoice === 'linkedin'
+                        ? 'Ссылка на профиль'
+                        : 'Ссылка на резюме hh.ru'}
+                    </span>
+                    <input
+                      value={sourceChoice === 'linkedin' ? linkedinUrl : hhUrl}
+                      onChange={(event) => {
+                        if (sourceChoice === 'linkedin') setLinkedinUrl(event.target.value);
+                        else setHhUrl(event.target.value);
+                        setProfileImport(undefined);
+                        setProfileFactDrafts([]);
+                      }}
+                      placeholder={
+                        sourceChoice === 'linkedin'
+                          ? 'https://www.linkedin.com/in/...'
+                          : 'https://hh.ru/resume/...'
+                      }
+                      inputMode="url"
+                    />
+                  </label>
+                  <ProfileImportAction
+                    result={profileImport}
+                    drafts={profileFactDrafts}
+                    busy={importingProfile}
+                    onImport={handleProfileUrlImport}
+                    onDraftChange={setProfileFactDrafts}
+                    onError={setError}
+                    platform={sourceChoice === 'linkedin' ? 'LinkedIn' : 'hh.ru'}
+                  />
+                </>
+              ) : (
+                <AccountRequiredImport
+                  platform={sourceChoice}
+                  onOpenAccount={onOpenAccount}
                 />
-              </label>
-              <ProfileImportAction
-                result={profileImport}
-                drafts={profileFactDrafts}
-                busy={importingProfile}
-                onImport={handleProfileUrlImport}
-                onDraftChange={setProfileFactDrafts}
-                onError={setError}
-                platform="LinkedIn"
-              />
-              <PlatformConnectionSection platform="linkedin" hasAccount={hasAccount} />
-            </div>
-          ) : null}
-
-          {sourceChoice === 'hh' ? (
-            <div className="career-source-fields">
-              <label>
-                <span>Ссылка на резюме hh.ru</span>
-                <input
-                  value={hhUrl}
-                  onChange={(event) => {
-                    setHhUrl(event.target.value);
-                    setProfileImport(undefined);
-                    setProfileFactDrafts([]);
-                  }}
-                  placeholder="https://hh.ru/resume/..."
-                  inputMode="url"
-                />
-              </label>
-              <ProfileImportAction
-                result={profileImport}
-                drafts={profileFactDrafts}
-                busy={importingProfile}
-                onImport={handleProfileUrlImport}
-                onDraftChange={setProfileFactDrafts}
-                onError={setError}
-                platform="hh.ru"
-              />
-              <PlatformConnectionSection platform="hh" hasAccount={hasAccount} />
+              )}
             </div>
           ) : null}
 
@@ -669,6 +680,35 @@ export function CareerIntake({ onComplete, hasAccount = false }: CareerIntakePro
   );
 }
 
+/**
+ * Importing a profile writes into a candidate-scoped store, so without an
+ * account there is nothing to import into. The wizard says that once and hands
+ * over the same account panel the top bar opens, instead of failing later with
+ * a server message about a missing session.
+ */
+function AccountRequiredImport({
+  platform,
+  onOpenAccount,
+}: {
+  platform: ConnectionPlatform;
+  onOpenAccount?: () => void;
+}) {
+  return (
+    <div className="career-source-account-required career-field-wide">
+      <p className="career-inline-note">{accountRequiredNotice(platform)}</p>
+      {onOpenAccount ? (
+        <button className="career-primary-button" type="button" onClick={onOpenAccount}>
+          Создать аккаунт
+        </button>
+      ) : null}
+      <p className="career-account-note">
+        Уже есть аккаунт? Вход открывается в том же окне. Без аккаунта остаются
+        PDF, экспорт площадки, текст и разговор без документов.
+      </p>
+    </div>
+  );
+}
+
 function ProfileImportAction({
   result,
   drafts,
@@ -715,7 +755,7 @@ function ProfileImportAction({
   return (
     <div className="career-profile-import-result" aria-live="polite">
       <button className="career-quiet-button" type="button" disabled={busy} onClick={onImport}>
-        {busy ? 'Проверяем доступ…' : 'Проверить способ импорта'}
+        {busy ? 'Проверяем доступ…' : IMPORT_ACTION_LABEL}
       </button>
       {result?.status === 'imported' ? (
         <div className="career-profile-fact-review">

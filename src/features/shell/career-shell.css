@@ -209,14 +209,17 @@
   background: var(--career-surface);
 }
 
-.career-account-connection-list article > div {
+/* Scoped to the platform headline: a bare `> div` also caught the connection
+   panel nested in the same card and squeezed its copy, button and consent note
+   into three columns. */
+.career-connection-headline {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.career-account-connection-list article > div span {
+.career-connection-headline span {
   border-radius: 999px;
   padding: 4px 8px;
   color: var(--career-text-soft);
@@ -225,13 +228,20 @@
   font-weight: 720;
 }
 
-.career-account-connection-list article > div span.is-connected {
+.career-connection-headline span.is-connected {
   color: var(--career-success);
   background: var(--career-success-soft);
 }
 
 .career-account-connection-list .career-quiet-button {
   justify-self: start;
+}
+
+/* The card already carries the surface; the panel inside it only needs rhythm. */
+.career-account-connection-list .career-connection-panel {
+  padding: 0;
+  border: 0;
+  background: none;
 }
 
 .career-danger-button {
@@ -400,11 +410,6 @@
 .career-shell .brand-lockup {
   --brand-ink: var(--career-text);
   --brand-core: oklch(78% 0.13 250);
-}
-
-.career-page-name {
-  color: var(--career-text-dim);
-  font-size: 0.8rem;
 }
 
 .career-topbar-actions {
@@ -746,6 +751,21 @@
   margin-top: 22px;
 }
 
+.career-source-account-required {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+}
+
+.career-source-account-required .career-inline-note {
+  margin-top: 0;
+  padding: 0;
+}
+
+.career-source-account-required .career-account-note {
+  max-width: 52rem;
+}
+
 .career-session-gate {
   max-width: 44rem;
   padding-top: clamp(42px, 9vh, 112px);
@@ -910,12 +930,24 @@
 .career-source-fields label,
 .career-source-textarea,
 .career-context-form label,
-.career-context-form fieldset,
 .career-add-evidence label,
 .career-opportunity-form label,
 .career-expert-login label {
   display: grid;
   gap: 8px;
+}
+
+/* A <legend> is placed by the browser outside its fieldset's own formatting
+   context, so a grid fieldset never applied the 8px gap and the heading landed
+   flush on the chips. Block layout with an explicit margin puts the legend back
+   on the same rhythm as the labels beside it. */
+.career-context-form fieldset {
+  display: block;
+}
+
+.career-context-form legend {
+  margin-bottom: 8px;
+  padding: 0;
 }
 
 .career-source-fields label > span,
@@ -2642,10 +2674,6 @@
     position: sticky;
     top: 0;
     padding: 0 14px;
-  }
-
-  .career-page-name {
-    display: none;
   }
 
   /* The lockup is wider than the plain wordmark it replaced and pushed the
