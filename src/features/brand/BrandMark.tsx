@@ -6,7 +6,12 @@ export type BrandVariant = 'mark' | 'lockup';
 interface BrandMarkProps {
   /** `mark` draws the sign alone; `lockup` sets it beside the wordmark. */
   variant?: BrandVariant;
-  /** Edge length of the sign in pixels. The wordmark scales with it. */
+  /**
+   * Edge length of the sign in pixels. The wordmark is sized by the stylesheet
+   * rather than by this prop: production serves `style-src 'self'`, which drops
+   * any inline style attribute, so a size written into `style` would silently
+   * do nothing there.
+   */
   size?: number;
   /** `mono` inherits `currentColor` for inverted or single-ink surfaces. */
   tone?: BrandTone;
@@ -19,7 +24,6 @@ interface BrandMarkProps {
 const BRAND_LIGHT = '#0488F4';
 const BRAND_CORE = '#0A70E0';
 const BRAND_DEEP = '#0F43A2';
-const BRAND_INK = '#182344';
 
 // Geometry measured off the owner's logo.png rather than eyeballed: the sign
 // bounding box was normalised to this 64×64 grid, and the tail axis was fitted
@@ -59,25 +63,16 @@ export function BrandMark({
 
   if (variant === 'mark') return sign;
 
+  const lockupClasses = ['brand-lockup'];
+  if (tone === 'mono') lockupClasses.push('is-mono');
+  if (className) lockupClasses.push(className);
+
   return (
-    <span
-      className={className ? `brand-lockup ${className}` : 'brand-lockup'}
-      style={{ fontSize: `${Math.round(size * 0.66)}px` }}
-    >
+    <span className={lockupClasses.join(' ')}>
       {sign}
       <span className="brand-lockup-word">
-        <span
-          className="brand-lockup-open"
-          style={{ color: tone === 'mono' ? 'currentColor' : `var(--brand-ink, ${BRAND_INK})` }}
-        >
-          open
-        </span>
-        <span
-          className="brand-lockup-qareer"
-          style={{ color: tone === 'mono' ? 'currentColor' : `var(--brand-core, ${BRAND_CORE})` }}
-        >
-          qareer
-        </span>
+        <span className="brand-lockup-open">open</span>
+        <span className="brand-lockup-qareer">qareer</span>
       </span>
     </span>
   );

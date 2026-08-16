@@ -366,14 +366,31 @@
 
 /* Brand lockup. The sign keeps its gradient on any surface; the wordmark
    swaps to light ink here because the shell is dark. */
+/* Sized and coloured here, never through a style attribute: production serves
+   `style-src 'self'`, which drops inline styles and would leave the wordmark
+   at the inherited size in its inherited colour. */
 .brand-lockup {
   display: inline-flex;
   align-items: center;
   gap: 0.44em;
+  font-size: 1.06rem;
   font-weight: 720;
   letter-spacing: -0.028em;
   line-height: 1;
   white-space: nowrap;
+}
+
+.brand-lockup-open {
+  color: var(--brand-ink);
+}
+
+.brand-lockup-qareer {
+  color: var(--brand-core);
+}
+
+.brand-lockup.is-mono .brand-lockup-open,
+.brand-lockup.is-mono .brand-lockup-qareer {
+  color: currentColor;
 }
 
 .brand-lockup-sign {

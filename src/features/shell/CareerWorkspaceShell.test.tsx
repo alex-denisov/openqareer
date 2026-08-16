@@ -380,4 +380,10 @@ describe('CareerWorkspaceShell brand chrome', () => {
     expect(html).toContain('#0488F4');
     expect(html).toContain('brand-lockup');
   });
+
+  it('ships no inline style attribute, which production CSP would drop', () => {
+    // `style-src 'self'` on openqareer.com blocks style attributes outright, so
+    // anything styled that way is styled only in development.
+    expect(renderToStaticMarkup(<CareerWorkspaceShell />)).not.toContain('style="');
+  });
 });

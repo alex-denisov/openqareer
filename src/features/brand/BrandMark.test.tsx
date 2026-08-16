@@ -27,7 +27,13 @@ describe('BrandMark', () => {
 
     expect(html).toContain('open');
     expect(html).toContain('qareer');
-    expect(html).toContain('#182344');
+    expect(html).toContain('brand-lockup-open');
+    expect(html).toContain('brand-lockup-qareer');
+    // The wordmark ink is a stylesheet token, because CSP forbids the inline
+    // style attribute that used to carry it.
+    expect(readFileSync(new URL('../../App.css', import.meta.url), 'utf8')).toContain(
+      '--brand-ink: #182344;',
+    );
   });
 
   it('gives every instance its own gradient ids so two marks never collide', () => {
@@ -40,10 +46,28 @@ describe('BrandMark', () => {
   });
 
   it('drops the brand colours in monochrome so it survives inverted surfaces', () => {
-    const html = renderToStaticMarkup(<BrandMark tone="mono" />);
+    const html = renderToStaticMarkup(<BrandMark tone="mono" className="x" />);
 
     expect(html).toContain('currentColor');
     expect(html).not.toContain('#0488F4');
+  });
+
+  it('styles itself without a style attribute, which production CSP blocks', () => {
+    // openqareer.com serves `style-src 'self'`, so an inline style attribute is
+    // dropped by the browser and the wordmark loses its size and its colours.
+    for (const html of [
+      renderToStaticMarkup(<BrandMark />),
+      renderToStaticMarkup(<BrandMark variant="lockup" size={26} />),
+      renderToStaticMarkup(<BrandMark variant="lockup" tone="mono" />),
+    ]) {
+      expect(html).not.toContain('style="');
+    }
+  });
+
+  it('marks the monochrome lockup with a class so CSS can drop the brand ink', () => {
+    const html = renderToStaticMarkup(<BrandMark variant="lockup" tone="mono" />);
+
+    expect(html).toContain('is-mono');
   });
 });
 
