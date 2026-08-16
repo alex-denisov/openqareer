@@ -2,10 +2,14 @@
  * B120/B123 live evidence gate for the hh.ru connector (B130).
  *
  * Runs exactly one read-only sequence against the dedicated test account:
- * sign in, then confirm the candidate resume surface belongs to that account.
- * It never applies to a vacancy, never publishes a resume, never persists
- * storage state and never prints a credential. A CAPTCHA or one-time-code
- * prompt is reported as a stop for the owner to handle by hand.
+ * sign in, confirm the candidate resume surface belongs to that account and
+ * list every resume hh.ru shows for it. It never applies to a vacancy, never
+ * publishes a resume, never persists storage state and never prints a
+ * credential. A CAPTCHA or one-time-code prompt is reported as a stop for the
+ * owner to handle by hand.
+ *
+ * `OPENQAREER_HH_TEST_RESUME_ID` (optional, not a secret) binds the run to one
+ * exact account: without it the gate can only prove "some signed-in applicant".
  *
  *   npm run verify:hh-test-account
  *   npm run verify:hh-test-account -- --headed
@@ -31,6 +35,7 @@ if (
         status: 'invalid',
         reason: 'credential_environment_missing',
         identityMarker: null,
+        resumes: [],
         observedAt: new Date().toISOString(),
         hint: 'set OPENQAREER_HH_TEST_USERNAME / OPENQAREER_HH_TEST_PASSWORD in the environment or openqareer.env',
       },

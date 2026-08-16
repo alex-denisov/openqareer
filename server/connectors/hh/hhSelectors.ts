@@ -42,8 +42,20 @@ export const HH_SELECTORS = {
     questionnaireWarning: '[data-qa="vacancy-response-questionnaire"]',
     success: '[data-qa="vacancy-response-success"]',
   },
+  /**
+   * `/applicant/resumes` card structure, confirmed live on 2026-08-16: the card
+   * carries the internal numeric id, the public hash id lives on the card link,
+   * and both visibility counters are rendered inside the same card.
+   */
   resume: {
+    card: '[data-qa="resume"]',
+    cardLink: 'a[data-qa^="resume-card-link-"]',
     item: '[data-qa="resume-title"]',
+    updatedLabel: '[data-qa="title-description"]',
+    searchShows: '[data-qa="search-shows"]',
+    newViews: '[data-qa="count-new-views"]',
+    // hh.ru writes two space-separated tokens into this one attribute.
+    updateDateButton: '[data-qa~="resume-update-button"]',
     publishButton: '[data-qa="resume-publish-button"]',
     nextPublishTime: '[data-qa="resume-next-publish-time"]',
   },

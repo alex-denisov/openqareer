@@ -40,6 +40,7 @@ export default defineConfig({
         'server/connectors/hh/hhConnector.ts',
         'server/connectors/hh/hhApplicationBrowser.ts',
         'server/connectors/hh/hhBrowserLogin.ts',
+        'server/connectors/hh/hhResumeInventory.ts',
         'server/connectors/hh/hhTestAccountEnvironment.ts',
         'server/connectors/hostedApplicationBrowser.ts',
         'server/connectors/jobPostingParser.ts',

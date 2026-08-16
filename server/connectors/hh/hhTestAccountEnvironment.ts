@@ -9,10 +9,17 @@
  */
 const USERNAME_KEY = 'OPENQAREER_HH_TEST_USERNAME';
 const PASSWORD_KEY = 'OPENQAREER_HH_TEST_PASSWORD';
+/**
+ * Owner-declared resume id of the test account. Not a secret — it is the
+ * identity anchor that turns "some signed-in applicant" into "this account",
+ * because the live hh.ru surface prints no account email.
+ */
+const RESUME_ID_KEY = 'OPENQAREER_HH_TEST_RESUME_ID';
 
 export interface HhTestAccountEnvironment {
   readonly OPENQAREER_HH_TEST_USERNAME: string | undefined;
   readonly OPENQAREER_HH_TEST_PASSWORD: string | undefined;
+  readonly OPENQAREER_HH_TEST_RESUME_ID: string | undefined;
 }
 
 /** Parses `KEY=value` lines; ignores comments, blanks and malformed lines. */
@@ -40,6 +47,8 @@ export function resolveHhTestAccountEnvironment(
       processEnvironment[USERNAME_KEY] || fromFile[USERNAME_KEY] || undefined,
     [PASSWORD_KEY]:
       processEnvironment[PASSWORD_KEY] || fromFile[PASSWORD_KEY] || undefined,
+    [RESUME_ID_KEY]:
+      processEnvironment[RESUME_ID_KEY] || fromFile[RESUME_ID_KEY] || undefined,
   };
 }
 

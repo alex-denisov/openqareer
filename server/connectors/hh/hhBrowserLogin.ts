@@ -5,6 +5,11 @@ import type {
   Page,
 } from 'playwright';
 import { HH_SELECTORS } from './hhSelectors';
+import {
+  hasResumeId,
+  readHhResumeInventory,
+  type HhResumeSummary,
+} from './hhResumeInventory';
 
 const HH_LOGIN_URL = 'https://hh.ru/account/login';
 const HH_RESUMES_PATH = '/applicant/resumes';
@@ -29,20 +34,23 @@ export type HhBrowserLoginReason =
   | 'identity_marker_missing'
   | 'identity_marker_mismatch'
   | 'resume_marker_missing'
+  | 'declared_resume_missing'
   | 'browser_navigation_failed'
   | 'context_close_failed';
 
 /**
  * What the run actually proved, never more:
+ * - `declared_resume_owner_match` — the account exposes the exact resume id the
+ *   owner declared for this account. Strongest available binding, because the
+ *   live surface does not print an account email.
  * - `candidate_resume_owner_match` — hh.ru showed an account email and it is the
  *   configured test account.
  * - `signed_in_applicant_session` — an applicant session with its own resumes
- *   was confirmed, but hh.ru exposed no account email to bind it to (the live
- *   `/applicant/resumes` surface does not render one). Enough to read; not proof
- *   of which account. Binding a specific account needs an owner-supplied
- *   expected identity — see the B130 work log.
+ *   was confirmed, but hh.ru exposed no account email and no expected resume id
+ *   was configured. Enough to read; not proof of which account.
  */
 export type HhIdentityMarker =
+  | 'declared_resume_owner_match'
   | 'candidate_resume_owner_match'
   | 'signed_in_applicant_session';
 
@@ -51,6 +59,8 @@ export interface HhBrowserLoginResult {
   readonly reason: HhBrowserLoginReason;
   readonly identityMarker: HhIdentityMarker | null;
   readonly observedAt: string;
+  /** Resumes hh.ru actually listed for this account; empty unless signed in. */
+  readonly resumes: readonly HhResumeSummary[];
 }
 
 export interface HhBrowserFactory {
@@ -108,6 +118,8 @@ export async function verifyHhTestAccount(
     verification = await signInAndVerify(page, {
       username,
       password,
+      declaredResumeId:
+        options.environment.OPENQAREER_HH_TEST_RESUME_ID?.trim() || undefined,
       timeoutMs,
       observedAt,
     });
@@ -139,6 +151,7 @@ async function closeContext(
 interface SignInOptions {
   username: string;
   password: string;
+  declaredResumeId: string | undefined;
   timeoutMs: number;
   observedAt: () => string;
 }
@@ -160,7 +173,11 @@ async function signInAndVerify(
 
   const settled = await settleAfterSubmit(page, options);
   if (settled) return settled;
-  return verifyCandidateIdentity(page, username, observedAt());
+  return verifyCandidateIdentity(page, {
+    username,
+    declaredResumeId: options.declaredResumeId,
+    observedAt: observedAt(),
+  });
 }
 
 /** Step 1 — hh.ru asks which account type is signing in before anything else. */
@@ -273,17 +290,40 @@ async function settleAfterSubmit(
   return null;
 }
 
+interface IdentityExpectation {
+  readonly username: string;
+  /** Owner-declared resume id of this account, when one is configured. */
+  readonly declaredResumeId: string | undefined;
+  readonly observedAt: string;
+}
+
 async function verifyCandidateIdentity(
   page: Page,
-  expectedUsername: string,
-  observedAt: string,
+  expectation: IdentityExpectation,
 ): Promise<HhBrowserLoginResult> {
+  const { observedAt } = expectation;
   // Signed-in-only nodes; hh.ru keeps responsive variants attached but hidden.
   if ((await page.locator(HH_SELECTORS.security.applicantProfile).count()) === 0) {
     return result('surface_changed', 'candidate_surface_changed', observedAt);
   }
   if (!(await isVisible(page.locator(HH_SELECTORS.resume.item), 0))) {
     return result('surface_changed', 'resume_marker_missing', observedAt);
+  }
+
+  const resumes = await readHhResumeInventory(page);
+  const declaredResumeId = expectation.declaredResumeId?.trim();
+  if (declaredResumeId) {
+    // The owner named this account's resume, so the binding is exact: a session
+    // that does not expose it is some other account, not a weaker proof.
+    return hasResumeId(resumes, declaredResumeId)
+      ? result(
+          'ready',
+          'candidate_resume_identity_verified',
+          observedAt,
+          'declared_resume_owner_match',
+          resumes,
+        )
+      : result('surface_changed', 'declared_resume_missing', observedAt);
   }
 
   const identityMarker = page
@@ -297,11 +337,12 @@ async function verifyCandidateIdentity(
       'candidate_session_confirmed',
       observedAt,
       'signed_in_applicant_session',
+      resumes,
     );
   }
   if (
     normalizeIdentity(await identityMarker.textContent()) !==
-    normalizeIdentity(expectedUsername)
+    normalizeIdentity(expectation.username)
   ) {
     return result('surface_changed', 'identity_marker_mismatch', observedAt);
   }
@@ -310,6 +351,7 @@ async function verifyCandidateIdentity(
     'candidate_resume_identity_verified',
     observedAt,
     'candidate_resume_owner_match',
+    resumes,
   );
 }
 
@@ -391,6 +433,7 @@ function result(
   reason: HhBrowserLoginReason,
   observedAt: string,
   identityMarker: HhIdentityMarker | null = null,
+  resumes: readonly HhResumeSummary[] = [],
 ): HhBrowserLoginResult {
-  return { status, reason, identityMarker, observedAt };
+  return { status, reason, identityMarker, observedAt, resumes };
 }

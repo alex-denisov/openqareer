@@ -35,12 +35,14 @@ describe('hh.ru test-account environment resolution', () => {
       [
         'OPENQAREER_HH_TEST_USERNAME=from-file@example.test',
         'OPENQAREER_HH_TEST_PASSWORD=from-file-password',
+        'OPENQAREER_HH_TEST_RESUME_ID=260801e7ff10eeac690039ed1f4f655a417a35',
       ].join('\n'),
     );
 
     expect(resolved).toEqual({
       OPENQAREER_HH_TEST_USERNAME: 'from-process@example.test',
       OPENQAREER_HH_TEST_PASSWORD: 'from-file-password',
+      OPENQAREER_HH_TEST_RESUME_ID: '260801e7ff10eeac690039ed1f4f655a417a35',
     });
   });
 
@@ -48,10 +50,12 @@ describe('hh.ru test-account environment resolution', () => {
     expect(resolveHhTestAccountEnvironment({}, null)).toEqual({
       OPENQAREER_HH_TEST_USERNAME: undefined,
       OPENQAREER_HH_TEST_PASSWORD: undefined,
+      OPENQAREER_HH_TEST_RESUME_ID: undefined,
     });
     expect(resolveHhTestAccountEnvironment({}, '# only a comment')).toEqual({
       OPENQAREER_HH_TEST_USERNAME: undefined,
       OPENQAREER_HH_TEST_PASSWORD: undefined,
+      OPENQAREER_HH_TEST_RESUME_ID: undefined,
     });
   });
 });
