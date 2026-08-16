@@ -256,6 +256,26 @@
   background: var(--career-surface);
 }
 
+/* Per-field validation (B139). The message sits under its own input so a
+   rejected form points at the field to fix. */
+.career-account-field {
+  gap: 6px;
+}
+
+.career-account-field.has-error input {
+  border-color: var(--career-danger);
+}
+
+.career-account-field-error {
+  color: var(--career-danger);
+  font-size: 0.79rem;
+}
+
+.career-account-panel .career-account-field-hint {
+  color: var(--career-text-dim);
+  font-size: 0.79rem;
+}
+
 .career-brand-mark {
   width: 48px;
   height: 44px;
@@ -342,14 +362,27 @@
   min-height: 44px;
   display: inline-flex;
   align-items: center;
-  color: var(--career-text);
-  font-size: 1rem;
-  font-weight: 790;
-  letter-spacing: -0.025em;
 }
 
-.career-wordmark span {
-  color: var(--career-accent);
+/* Brand lockup. The sign keeps its gradient on any surface; the wordmark
+   swaps to light ink here because the shell is dark. */
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.44em;
+  font-weight: 720;
+  letter-spacing: -0.028em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.brand-lockup-sign {
+  flex: none;
+}
+
+.career-shell .brand-lockup {
+  --brand-ink: var(--career-text);
+  --brand-core: oklch(78% 0.13 250);
 }
 
 .career-page-name {
@@ -2595,6 +2628,13 @@
   }
 
   .career-page-name {
+    display: none;
+  }
+
+  /* The lockup is wider than the plain wordmark it replaced and pushed the
+     topbar actions past the viewport at 390px. Narrow screens keep the sign,
+     which still carries the accessible name from the button. */
+  .career-topbar .brand-lockup-word {
     display: none;
   }
 

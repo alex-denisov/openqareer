@@ -27,6 +27,14 @@ import {
   type AuthUser,
 } from '../coach/coachApi';
 import { AccountConnectionsManager } from '../connections/AccountConnections';
+import {
+  MIN_PASSWORD_LENGTH,
+  getEmailError,
+  getNameError,
+  getPasswordError,
+  sanitizeEmail,
+  sanitizeName,
+} from '../../../shared/accountValidation';
 
 interface CareerAccountPanelProps {
   initialUser?: AuthUser | null;
@@ -54,6 +62,7 @@ export function CareerAccountPanel({
   const [newPassword, setNewPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string>();
   const closeButton = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
@@ -119,29 +128,56 @@ export function CareerAccountPanel({
 
   async function submitAuth(event: React.FormEvent) {
     event.preventDefault();
-    setBusy(true);
     setError(undefined);
     setNotice(undefined);
+
+    if (mode === 'register') {
+      // Check every field at once so the candidate fixes one form, not one
+      // field per round trip.
+      const found: Record<string, string> = {};
+      const name = getNameError(displayName);
+      if (name) found.displayName = name;
+      const address = getEmailError(email);
+      if (address) found.email = address;
+      const secret = getPasswordError(password);
+      if (secret) found.password = secret;
+      setFieldErrors(found);
+      if (Object.keys(found).length > 0) return;
+    } else {
+      setFieldErrors({});
+    }
+
+    setBusy(true);
     try {
       const authenticated =
         mode === 'register'
           ? await register({
-              username,
-              email: email.trim() || undefined,
-              displayName: displayName.trim() || undefined,
+              email: email.trim(),
+              displayName: displayName.trim(),
               password,
             })
-          : await login(username, password);
+          : await login(username.trim(), password);
       onIdentityChange(authenticated);
       setUser(authenticated);
       setMode('choose');
       setPassword('');
+      setFieldErrors({});
       onClose();
     } catch (reason) {
       setError(accountError(reason));
+      setFieldErrors(reason instanceof CoachApiError ? reason.fields : {});
     } finally {
       setBusy(false);
     }
+  }
+
+  function clearFieldError(field: string) {
+    setFieldErrors((current) => {
+      if (!(field in current)) return current;
+      return Object.fromEntries(
+        Object.entries(current).filter(([name]) => name !== field),
+      );
+    });
   }
 
   async function submitResetRequest(event: React.FormEvent) {
@@ -382,53 +418,66 @@ export function CareerAccountPanel({
             <h2>{mode === 'register' ? 'Новый аккаунт' : 'Вход'}</h2>
             {mode === 'register' ? (
               <>
-                <label>
-                  <span>Имя и фамилия</span>
+                <AuthField label="Как к вам обращаться" error={fieldErrors.displayName}>
                   <input
                     value={displayName}
-                    onChange={(event) => setDisplayName(event.target.value)}
-                    autoComplete="name"
-                    minLength={2}
-                    maxLength={120}
-                    required
+                    onChange={(event) => {
+                      setDisplayName(sanitizeName(event.target.value));
+                      clearFieldError('displayName');
+                    }}
+                    placeholder="Алексей"
+                    autoComplete="given-name"
+                    aria-invalid={fieldErrors.displayName ? true : undefined}
                   />
-                </label>
-                <label>
-                  <span>Email</span>
+                </AuthField>
+                <AuthField label="Email" error={fieldErrors.email}>
                   <input
                     type="email"
                     value={email}
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) => {
+                      setEmail(sanitizeEmail(event.target.value));
+                      clearFieldError('email');
+                    }}
+                    placeholder="you@example.com"
                     autoComplete="email"
-                    maxLength={254}
-                    required
+                    aria-invalid={fieldErrors.email ? true : undefined}
                   />
-                </label>
+                </AuthField>
               </>
-            ) : null}
-            <label>
-              <span>Логин</span>
-              <input
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                autoComplete="username"
-                minLength={3}
-                maxLength={80}
-                required
-              />
-            </label>
-            <label>
-              <span>Пароль</span>
+            ) : (
+              <AuthField label="Email или логин" error={fieldErrors.username}>
+                <input
+                  value={username}
+                  onChange={(event) => {
+                    setUsername(event.target.value);
+                    clearFieldError('username');
+                  }}
+                  autoComplete="username"
+                  maxLength={254}
+                  required
+                />
+              </AuthField>
+            )}
+            <AuthField
+              label="Пароль"
+              error={fieldErrors.password}
+              hint={
+                mode === 'register' ? `Не короче ${MIN_PASSWORD_LENGTH} символов` : undefined
+              }
+            >
               <input
                 type="password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  clearFieldError('password');
+                }}
                 autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-                minLength={mode === 'register' ? 12 : 1}
                 maxLength={256}
-                required
+                aria-invalid={fieldErrors.password ? true : undefined}
+                required={mode === 'login'}
               />
-            </label>
+            </AuthField>
             <button className="career-primary-button" disabled={busy}>
               {busy ? 'Сохраняем…' : mode === 'register' ? 'Создать и начать' : 'Войти'}
             </button>
@@ -477,13 +526,13 @@ export function CareerAccountPanel({
             <Key size={24} />
             <h2>Новый пароль</h2>
             <label>
-              <span>Пароль не короче 12 знаков</span>
+              <span>Пароль не короче {MIN_PASSWORD_LENGTH} символов</span>
               <input
                 type="password"
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
                 autoComplete="new-password"
-                minLength={12}
+                minLength={MIN_PASSWORD_LENGTH}
                 maxLength={256}
                 required
               />
@@ -653,7 +702,7 @@ function AuthenticatedAccount({
                 name="newPassword"
                 type="password"
                 autoComplete="new-password"
-                minLength={12}
+                minLength={MIN_PASSWORD_LENGTH}
                 maxLength={256}
                 required
               />
@@ -733,4 +782,35 @@ function stringValue(form: FormData, name: string) {
 function accountError(reason: unknown): string {
   if (reason instanceof CoachApiError || reason instanceof Error) return reason.message;
   return 'Не удалось изменить аккаунт. Попробуйте ещё раз.';
+}
+
+/**
+ * One labelled field with its own error line. Keeping the message next to the
+ * input is the whole point of B139: a rejected form must say which field to
+ * fix, not print one shared sentence at the bottom.
+ */
+function AuthField({
+  label,
+  error,
+  hint,
+  children,
+}: {
+  label: string;
+  error?: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className={error ? 'career-account-field has-error' : 'career-account-field'}>
+      <span>{label}</span>
+      {children}
+      {error ? (
+        <small className="career-account-field-error" role="alert">
+          {error}
+        </small>
+      ) : hint ? (
+        <small className="career-account-field-hint">{hint}</small>
+      ) : null}
+    </label>
+  );
 }

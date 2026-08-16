@@ -81,9 +81,11 @@ export interface SessionAuth {
     profile?: RegistrationProfile,
   ): Promise<{ principal: AuthPrincipal; sessionToken: string }>;
   login(
-    usernameInput: string,
+    identifierInput: string,
     password: string,
   ): Promise<{ principal: AuthPrincipal; sessionToken: string } | null>;
+  /** Lets the caller resolve collisions for handles it derives itself. */
+  isUsernameTaken(username: string): boolean;
   authenticate(sessionToken: string): AuthPrincipal | null;
   logout(sessionToken: string): void;
   getAccount?(sessionToken: string): AccountSnapshot | null;
@@ -254,12 +256,24 @@ export class AuthService implements SessionAuth {
     }
   }
 
+  /**
+   * B139 removed the login field from registration, so handles are derived
+   * rather than chosen. Callers need to see collisions to resolve them.
+   */
+  isUsernameTaken(username: string): boolean {
+    return this.findUser(normalizeUsername(username)) !== null;
+  }
+
   async login(
-    usernameInput: string,
+    identifierInput: string,
     password: string,
   ): Promise<{ principal: AuthPrincipal; sessionToken: string } | null> {
-    const username = normalizeUsername(usernameInput);
-    const user = this.findUser(username);
+    const identifier = normalizeUsername(identifierInput);
+    // Accounts created before B139 have a handle their owner typed and knows;
+    // accounts created after it only ever saw their email. Both must sign in.
+    const user = identifier.includes('@')
+      ? (this.findUserByEmail(normalizeEmail(identifier)) ?? this.findUser(identifier))
+      : this.findUser(identifier);
     const salt = user
       ? Buffer.from(user.password_salt, 'base64')
       : Buffer.alloc(16, 0);

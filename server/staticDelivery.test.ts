@@ -29,6 +29,9 @@ const noSessions: SessionAuth = {
   async login() {
     return null;
   },
+  isUsernameTaken() {
+    return false;
+  },
   authenticate() {
     return null;
   },

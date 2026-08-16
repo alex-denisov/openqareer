@@ -404,9 +404,8 @@ export async function login(username: string, password: string): Promise<AuthUse
 }
 
 export async function register(input: {
-  username: string;
-  email?: string;
-  displayName?: string;
+  email: string;
+  displayName: string;
   password: string;
 }): Promise<AuthUser> {
   const response = await apiFetch('/api/v1/auth/register', {

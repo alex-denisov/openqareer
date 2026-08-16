@@ -63,6 +63,12 @@ import {
 } from './providers/coachProvider';
 import type { ServerConfig } from './config';
 import {
+  deriveUsernameFromEmail,
+  getEmailError,
+  getNameError,
+  getPasswordError,
+} from '../shared/accountValidation';
+import {
   AuthEmailTakenError,
   AuthInvalidPasswordError,
   AuthInvalidResetTokenError,
@@ -123,6 +129,12 @@ interface ErrorBody {
     message: string;
     requestId: string;
     retryable: boolean;
+    /**
+     * Per-field messages for form submissions. Without these a rejected
+     * registration collapses into one anonymous line and the candidate cannot
+     * tell which field to fix (B139).
+     */
+    fields?: Record<string, string>;
   };
 }
 
@@ -251,10 +263,25 @@ export async function buildApp({
     },
     async (request, reply) => {
       if (!hasAllowedOrigin(request, config)) return csrfError(request, reply);
-      const body = registrationSchema.parse(request.body);
+      const parsed = registrationSchema.safeParse(request.body);
+      if (!parsed.success) {
+        const fields = fieldMessages(parsed.error);
+        return sendError(
+          reply,
+          request,
+          422,
+          'validation_failed',
+          Object.values(fields)[0] ?? 'Проверьте заполненные поля.',
+          false,
+          fields,
+        );
+      }
+      const body = parsed.data;
       try {
         const authenticated = await authService.register(
-          body.username,
+          deriveUsernameFromEmail(body.email, (candidate) =>
+            authService.isUsernameTaken(candidate),
+          ),
           body.password,
           candidateStore,
           {
@@ -268,18 +295,15 @@ export async function buildApp({
           meta: { requestId: request.id },
         });
       } catch (error) {
-        if (error instanceof AuthUsernameTakenError) {
-          return sendError(reply, request, 409, 'username_taken', 'Такой логин уже занят.', false);
-        }
-        if (error instanceof AuthEmailTakenError) {
-          return sendError(
-            reply,
-            request,
-            409,
-            'email_taken',
-            'Этот email уже связан с другим аккаунтом.',
-            false,
-          );
+        if (error instanceof AuthUsernameTakenError || error instanceof AuthEmailTakenError) {
+          // Both collisions now trace back to the address: the handle is
+          // derived from it, so the address is the field the candidate can act
+          // on. Wording stays identical either way, so a probe cannot tell a
+          // taken handle from a taken address.
+          const message = 'Этот email уже связан с другим аккаунтом.';
+          return sendError(reply, request, 409, 'email_taken', message, false, {
+            email: message,
+          });
         }
         throw error;
       }
@@ -1831,11 +1855,29 @@ const loginSchema = z.object({
   password: z.string().min(1).max(256),
 });
 
+/**
+ * B139: no login field. The candidate gives a name, an address and a password;
+ * the account handle is derived. Every rule carries the message the form shows
+ * next to the offending field, so a rejection can never collapse into one
+ * anonymous "проверьте формат и длину переданных данных".
+ *
+ * The message comes from the shared rule itself rather than being fixed per
+ * field: a 300-character password must not be answered with "сделайте длиннее".
+ */
+function fieldGovernedBy(check: (value: string) => string | null, trim: boolean) {
+  const base = trim ? z.string().trim() : z.string();
+  return base.superRefine((value, ctx) => {
+    const message = check(value);
+    if (message !== null) ctx.addIssue({ code: 'custom', message });
+  });
+}
+
+const passwordField = fieldGovernedBy(getPasswordError, false);
+
 const registrationSchema = z.object({
-  username: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$/),
-  email: z.string().trim().email().max(254).optional(),
-  displayName: z.string().trim().min(2).max(120).optional(),
-  password: z.string().min(12).max(256),
+  displayName: fieldGovernedBy(getNameError, true),
+  email: fieldGovernedBy(getEmailError, true),
+  password: passwordField,
 });
 
 const accountProfileSchema = z
@@ -1856,7 +1898,7 @@ const accountProfileSchema = z
 const passwordChangeSchema = z
   .object({
     currentPassword: z.string().min(1).max(256),
-    newPassword: z.string().min(12).max(256),
+    newPassword: passwordField,
   })
   .refine((value) => value.currentPassword !== value.newPassword, {
     path: ['newPassword'],
@@ -1869,7 +1911,7 @@ const passwordResetRequestSchema = z.object({
 
 const passwordResetSchema = z.object({
   token: z.string().regex(/^oqr_[A-Za-z0-9_-]{40,}$/),
-  newPassword: z.string().min(12).max(256),
+  newPassword: passwordField,
 });
 
 const profileImportSchema = z.object({
@@ -2289,6 +2331,7 @@ function sendError(
   code: string,
   message: string,
   retryable: boolean,
+  fields?: Record<string, string>,
 ): FastifyReply {
   const body: ErrorBody = {
     error: {
@@ -2296,9 +2339,22 @@ function sendError(
       message,
       requestId: request.id,
       retryable,
+      ...(fields && Object.keys(fields).length > 0 ? { fields } : {}),
     },
   };
   return reply.code(statusCode).send(body);
+}
+
+/** Turns a Zod failure into the `{ field: message }` map the forms render. */
+function fieldMessages(error: ZodError): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const field = issue.path[0];
+    if (typeof field === 'string' && !(field in fields)) {
+      fields[field] = issue.message;
+    }
+  }
+  return fields;
 }
 
 function providerMessage(code: CoachProviderError['code']): string {

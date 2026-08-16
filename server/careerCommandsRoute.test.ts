@@ -482,6 +482,7 @@ const provider: CoachProvider = {
 const noSessions: SessionAuth = {
   async register() { throw new Error('not used'); },
   async login() { return null; },
+  isUsernameTaken() { return false; },
   authenticate() { return null; },
   logout() {},
 };

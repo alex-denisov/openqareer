@@ -370,3 +370,14 @@ describe('CareerWorkspaceShell', () => {
     expect(outcomeHtml).toContain('Получен положительный ответ');
   });
 });
+
+describe('CareerWorkspaceShell brand chrome', () => {
+  it('wears the real openqareer sign in the rail and the topbar', () => {
+    const html = renderToStaticMarkup(<CareerWorkspaceShell />);
+
+    // The brand gradient only exists inside BrandMark, so its presence proves
+    // the drawn sign replaced the stand-in Phosphor icon.
+    expect(html).toContain('#0488F4');
+    expect(html).toContain('brand-lockup');
+  });
+});

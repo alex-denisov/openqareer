@@ -3,13 +3,13 @@ import {
   Compass,
   FileText,
   House,
-  MapTrifold,
   Path,
   Sparkle,
   UserCircle,
   Wallet,
   type Icon,
 } from '@phosphor-icons/react';
+import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
 import { CareerExpertPanel } from '../journey/CareerExpertPanel';
@@ -169,7 +169,7 @@ export function CareerWorkspaceShell({
           onClick={() => navigate('today')}
           aria-label="openqareer, сегодня"
         >
-          <MapTrifold size={25} weight="duotone" />
+          <BrandMark size={30} />
         </button>
         <nav>
           {primaryNavigation.map((item) => (
@@ -208,8 +208,13 @@ export function CareerWorkspaceShell({
       </aside>
 
       <header className="career-topbar" aria-hidden={expertOpen || accountOpen ? true : undefined}>
-        <button className="career-wordmark" type="button" onClick={() => navigate('today')}>
-          <span>open</span>qareer
+        <button
+          className="career-wordmark"
+          type="button"
+          onClick={() => navigate('today')}
+          aria-label="openqareer, сегодня"
+        >
+          <BrandMark variant="lockup" size={26} />
         </button>
         <span className="career-page-name">{pageNames[activeView]}</span>
         <div className="career-topbar-actions">

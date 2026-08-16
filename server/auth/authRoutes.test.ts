@@ -143,7 +143,6 @@ describe('cookie auth routes', () => {
       url: '/api/v1/auth/register',
       headers: { origin: 'http://localhost:3000' },
       payload: {
-        username: 'profile.owner',
         email: 'Owner@Example.com',
         displayName: 'Алексей Денисов',
         password: 'candidate-password-for-tests',
@@ -152,7 +151,7 @@ describe('cookie auth routes', () => {
 
     expect(registered.statusCode).toBe(201);
     expect(registered.json().data).toMatchObject({
-      username: 'profile.owner',
+      username: 'owner',
       email: 'owner@example.com',
       displayName: 'Алексей Денисов',
     });
@@ -165,7 +164,7 @@ describe('cookie auth routes', () => {
 
     expect(account.statusCode).toBe(200);
     expect(account.json().data).toMatchObject({
-      username: 'profile.owner',
+      username: 'owner',
       email: 'owner@example.com',
       displayName: 'Алексей Денисов',
       profile: {
@@ -273,7 +272,6 @@ describe('cookie auth routes', () => {
       url: '/api/v1/auth/register',
       headers: { origin: 'http://localhost:3000' },
       payload: {
-        username: 'recover.me',
         email: 'recover@example.com',
         displayName: 'Анна Смирнова',
         password: 'candidate-password-before-reset',
@@ -307,11 +305,11 @@ describe('cookie auth routes', () => {
     });
     expect(reset.statusCode).toBe(200);
     expect(
-      (await login(app, 'recover.me', 'candidate-password-before-reset'))
+      (await login(app, 'recover@example.com', 'candidate-password-before-reset'))
         .response.statusCode,
     ).toBe(401);
     expect(
-      (await login(app, 'recover.me', 'candidate-password-after-reset'))
+      (await login(app, 'recover@example.com', 'candidate-password-after-reset'))
         .response.statusCode,
     ).toBe(200);
   });
@@ -475,7 +473,8 @@ describe('cookie auth routes', () => {
       url: '/api/v1/auth/register',
       headers: { origin: 'http://localhost:3000' },
       payload: {
-        username: 'new.candidate',
+        email: 'new.candidate@example.com',
+        displayName: 'Новый кандидат',
         password: 'candidate-password-for-tests',
       },
     });
@@ -500,12 +499,14 @@ describe('cookie auth routes', () => {
       url: '/api/v1/auth/register',
       headers: { origin: 'http://localhost:3000' },
       payload: {
-        username: 'NEW.CANDIDATE',
+        email: 'NEW.CANDIDATE@example.com',
+        displayName: 'Другой кандидат',
         password: 'another-password-for-tests',
       },
     });
     expect(duplicate.statusCode).toBe(409);
-    expect(duplicate.json().error.code).toBe('username_taken');
+    expect(duplicate.json().error.code).toBe('email_taken');
+    expect(duplicate.json().error.fields.email).toBeTruthy();
   });
 
   it('enforces origin, role and candidate ownership boundaries', async () => {
@@ -609,5 +610,127 @@ describe('cookie auth routes', () => {
     });
     expect(afterLogout.statusCode).toBe(200);
     expect(afterLogout.json().data).toBeNull();
+  });
+});
+
+describe('registration without a login field (B139)', () => {
+  async function register(
+    app: Awaited<ReturnType<typeof buildApp>>,
+    payload: Record<string, unknown>,
+  ) {
+    return app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      headers: { origin: 'http://localhost:3000' },
+      payload,
+    });
+  }
+
+  it('creates the account the owner tried to create and could not', async () => {
+    const app = await createApp();
+    const response = await register(app, {
+      displayName: 'Алексей Денисов',
+      email: 'alexey@example.com',
+      password: 'parol123',
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().data.username).toBe('alexey');
+    expect(String(response.headers['set-cookie'])).toContain('oqs_');
+  });
+
+  it('accepts an eight-character password, which the old floor of twelve refused', async () => {
+    const app = await createApp();
+    expect((await register(app, {
+      displayName: 'Анна',
+      email: 'anna@example.com',
+      password: '12345678',
+    })).statusCode).toBe(201);
+  });
+
+  it('says which field is wrong instead of one anonymous line', async () => {
+    const app = await createApp();
+    const short = await register(app, {
+      displayName: 'Анна',
+      email: 'anna@example.com',
+      password: 'parol12',
+    });
+
+    expect(short.statusCode).toBe(422);
+    expect(short.json().error.fields.password).toContain('8');
+    expect(short.json().error.message).not.toBe(
+      'Проверьте формат и длину переданных данных.',
+    );
+
+    const badEmail = await register(app, {
+      displayName: 'Анна',
+      email: 'anna@example',
+      password: 'parol123',
+    });
+    expect(badEmail.json().error.fields.email).toBe('Введите корректный email');
+
+    const badName = await register(app, {
+      displayName: 'A1',
+      email: 'anna2@example.com',
+      password: 'parol123',
+    });
+    expect(badName.json().error.fields.displayName).toContain('буквы');
+  });
+
+  it('reports the rule the value actually broke, not the first rule of the field', async () => {
+    const app = await createApp();
+    const tooLong = await register(app, {
+      displayName: 'Анна',
+      email: 'anna@example.com',
+      password: 'x'.repeat(300),
+    });
+
+    expect(tooLong.statusCode).toBe(422);
+    // A 300-character password is not "короче 8": telling the candidate to
+    // lengthen it would send them the wrong way.
+    expect(tooLong.json().error.fields.password).toBe('Пароль слишком длинный');
+
+    const plusAlias = await register(app, {
+      displayName: 'Анна',
+      email: 'anna+job@example.com',
+      password: 'parol123',
+    });
+    expect(plusAlias.json().error.fields.email).toBe('Email не должен содержать символ «+»');
+  });
+
+  it('resolves a derived-handle collision instead of failing the second candidate', async () => {
+    const app = await createApp();
+    const first = await register(app, {
+      displayName: 'Анна',
+      email: 'anna@example.com',
+      password: 'parol123',
+    });
+    const second = await register(app, {
+      displayName: 'Анна',
+      email: 'anna@other.example.com',
+      password: 'parol123',
+    });
+
+    expect(first.json().data.username).toBe('anna');
+    expect(second.statusCode).toBe(201);
+    expect(second.json().data.username).toBe('anna2');
+  });
+
+  it('lets the new candidate sign in with the address they registered with', async () => {
+    const app = await createApp();
+    await register(app, {
+      displayName: 'Анна',
+      email: 'anna@example.com',
+      password: 'parol123',
+    });
+
+    const signedIn = await login(app, 'anna@example.com', 'parol123');
+    expect(signedIn.response.statusCode).toBe(200);
+  });
+
+  it('keeps sign-in working for handles typed before the field was removed', async () => {
+    const app = await createApp();
+    const seeded = await login(app, 'candidate.test', 'candidate-password-for-tests');
+    expect(seeded.response.statusCode).toBe(200);
   });
 });

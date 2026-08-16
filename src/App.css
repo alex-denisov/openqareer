@@ -14,6 +14,18 @@
   --text-muted: oklch(72% 0.025 220);
   --text-dim: oklch(60% 0.025 220);
   --focus: oklch(84% 0.12 205);
+  /* Brand — sampled from the owner-provided logo (B138). Interface colour
+     stays with the Liquid Glass tokens above; these are the identity marks. */
+  --brand-light: #0488f4;
+  --brand-core: #0a70e0;
+  --brand-deep: #0f43a2;
+  --brand-ink: #182344;
+  --brand-gradient: linear-gradient(
+    135deg,
+    var(--brand-light),
+    var(--brand-core) 55%,
+    var(--brand-deep)
+  );
   --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
     sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;

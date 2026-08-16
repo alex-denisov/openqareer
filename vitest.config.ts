@@ -13,6 +13,7 @@ export default defineConfig({
       reporter: ['text', 'html'],
       reportsDirectory: 'coverage',
       include: [
+        'shared/*.ts',
         'src/services/*.ts',
         'src/features/evidence/evidenceEngine.ts',
         'src/features/diagnostic/careerDiagnostic.ts',
