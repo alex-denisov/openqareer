@@ -28,7 +28,17 @@ openqareer.com {
 		not path /api/* /assets/* /health /index.html
 	}
 	header @spa Cache-Control "no-cache"
-	rewrite @spa /index.html
+
+	# INC-018 — there used to be `rewrite @spa /index.html` here. It rewrote
+	# every path outside the four exceptions above *before* proxying, so the
+	# application never saw the real path: `/robots.txt`, `/llms.txt`,
+	# `/favicon.svg`, `/og-cover.png`, `/apple-touch-icon.png` and `/admin`
+	# all arrived upstream as `/index.html` and came back as the SPA document.
+	# That is why the same artifact serves them correctly on localhost and not
+	# here. The rewrite was redundant as well as harmful: the application's own
+	# not-found handler already answers any unknown GET with the right entry
+	# document, and since B089 that is a per-surface choice this proxy must not
+	# make on its behalf.
 
 	header {
 		Connection "close"
