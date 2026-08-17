@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AdminConsole } from './features/admin/AdminConsole';
 import { getSession, type AuthUser } from './features/coach/coachApi';
 import {
   connectionResultMessage,
@@ -142,6 +143,16 @@ export default function App() {
     setSessionError(undefined);
   }
 
+  // The administrator console is a separate surface, not a workspace view: it
+  // must not inherit candidate chrome, and a candidate must never reach it by
+  // switching a tab (B089). Full client routing arrives with B137; until then
+  // this one path is read from the address bar.
+  if (isAdminPath()) {
+    return (
+      <AdminConsole session={state.session} sessionPending={state.session === undefined} />
+    );
+  }
+
   return (
     <CareerWorkspaceShell
       workspace={state.workspace}
@@ -159,4 +170,11 @@ export default function App() {
       onSessionChange={handleSessionChange}
     />
   );
+}
+
+/** `/admin` and anything under it belong to the administrator console. */
+function isAdminPath(): boolean {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname;
+  return path === '/admin' || path.startsWith('/admin/');
 }

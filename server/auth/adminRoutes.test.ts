@@ -1,0 +1,245 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { buildApp } from '../app';
+import type { ServerConfig } from '../config';
+import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
+import type { CoachProvider } from '../providers/coachProvider';
+import { AuthService } from './authService';
+
+/**
+ * B089 — the administrator directory. The owner asked for an admin account and
+ * an admin screen; an account without a screen is a password to nowhere, and a
+ * screen without an authorisation gate is worse than no screen at all. These
+ * tests pin the gate first and the payload second.
+ */
+
+const resources: Array<{
+  app: Awaited<ReturnType<typeof buildApp>>;
+  auth: AuthService;
+  candidates: SqliteCandidateStore;
+  directory: string;
+}> = [];
+
+afterEach(async () => {
+  for (const resource of resources.splice(0)) {
+    await resource.app.close();
+    resource.auth.close();
+    resource.candidates.close();
+    rmSync(resource.directory, { recursive: true, force: true });
+  }
+});
+
+const provider: CoachProvider = {
+  async createTurn() {
+    throw new Error('the admin directory must not call a language model');
+  },
+};
+
+const ADMIN = { username: 'admin.test', password: 'admin-password-for-tests' };
+const CANDIDATE = {
+  username: 'candidate.test',
+  password: 'candidate-password-for-tests',
+};
+
+async function createApp() {
+  const directory = mkdtempSync(join(tmpdir(), 'openqareer-admin-routes-'));
+  const databasePath = join(directory, 'app.db');
+  const candidates = new SqliteCandidateStore({
+    databasePath,
+    encryptionKey: Buffer.alloc(32, 8),
+  });
+  const auth = new AuthService({ databasePath });
+  await auth.seedAccounts(
+    [
+      { ...ADMIN, role: 'admin' as const },
+      { ...CANDIDATE, role: 'candidate' as const },
+    ],
+    candidates,
+  );
+  const config: ServerConfig = {
+    host: '127.0.0.1',
+    port: 3210,
+    openAIKey: 'not-used-by-test',
+    openRouterKey: 'not-used-by-test',
+    previewToken: 'preview-token-that-is-at-least-thirty-two-characters',
+    dataEncryptionKey: Buffer.alloc(32, 8),
+    databasePath,
+    model: 'gpt-5.6-sol',
+    staticRoot: directory,
+    release: 'test',
+    logLevel: 'fatal',
+    secureCookies: false,
+    allowedOrigins: ['http://localhost:3000'],
+    seedAccounts: [],
+    oauthProviders: {},
+  };
+  const app = await buildApp({
+    config,
+    coachProvider: provider,
+    candidateStore: candidates,
+    authService: auth,
+    serveStatic: false,
+  });
+  resources.push({ app, auth, candidates, directory });
+  return app;
+}
+
+async function signIn(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  account: { username: string; password: string },
+) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    headers: { origin: 'http://localhost:3000' },
+    payload: account,
+  });
+  expect(response.statusCode).toBe(200);
+  return String(response.headers['set-cookie']).split(';')[0];
+}
+
+async function register(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  displayName: string,
+  email: string,
+) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/register',
+    headers: { origin: 'http://localhost:3000' },
+    payload: { displayName, email, password: 'candidate-password-for-tests' },
+  });
+  expect(response.statusCode).toBe(201);
+}
+
+describe('GET /api/v1/admin/users', () => {
+  it('refuses an anonymous caller', async () => {
+    const app = await createApp();
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/admin/users' });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.code).toBe('unauthorized');
+  });
+
+  it('refuses a signed-in candidate, who must never see other accounts', async () => {
+    const app = await createApp();
+    const cookie = await signIn(app, CANDIDATE);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/users',
+      headers: { cookie },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.code).toBe('forbidden');
+    expect(response.body).not.toContain(ADMIN.username);
+  });
+
+  it('lists every account for an administrator, newest first', async () => {
+    const app = await createApp();
+    await register(app, 'Мария', 'maria@example.com');
+    const cookie = await signIn(app, ADMIN);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/users',
+      headers: { cookie },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const { data } = response.json();
+    expect(data.total).toBe(3);
+    expect(data.users).toHaveLength(3);
+    expect(data.users[0].displayName).toBe('Мария');
+    expect(data.users.map((user: { username: string }) => user.username)).toContain(
+      ADMIN.username,
+    );
+
+    const administrator = data.users.find(
+      (user: { role: string }) => user.role === 'admin',
+    );
+    expect(administrator.candidateId).toBeNull();
+    expect(administrator.activeSessions).toBe(1);
+  });
+
+  it('never puts a password, a hash or a session token in the payload', async () => {
+    const app = await createApp();
+    const cookie = await signIn(app, ADMIN);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/users',
+      headers: { cookie },
+    });
+
+    const body = response.body.toLowerCase();
+    for (const secret of ['password', 'hash', 'salt', 'token']) {
+      expect(body, `the directory leaked "${secret}"`).not.toContain(secret);
+    }
+  });
+
+  it('searches by username, email and display name', async () => {
+    const app = await createApp();
+    await register(app, 'Мария Иванова', 'maria@example.com');
+    await register(app, 'Пётр Сидоров', 'petr@example.com');
+    const cookie = await signIn(app, ADMIN);
+
+    const byName = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/users?query=Мария',
+      headers: { cookie },
+    });
+    expect(byName.json().data.total).toBe(1);
+    expect(byName.json().data.users[0].email).toBe('maria@example.com');
+
+    const byEmail = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/users?query=petr@example.com',
+      headers: { cookie },
+    });
+    expect(byEmail.json().data.total).toBe(1);
+    expect(byEmail.json().data.users[0].displayName).toBe('Пётр Сидоров');
+
+    const byUsername = await app.inject({
+      method: 'GET',
+      url: `/api/v1/admin/users?query=${ADMIN.username}`,
+      headers: { cookie },
+    });
+    expect(byUsername.json().data.total).toBe(1);
+    expect(byUsername.json().data.users[0].role).toBe('admin');
+  });
+
+  it('pages without losing the total', async () => {
+    const app = await createApp();
+    await register(app, 'Первый', 'first@example.com');
+    await register(app, 'Второй', 'second@example.com');
+    const cookie = await signIn(app, ADMIN);
+
+    const page = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/users?limit=2&offset=2',
+      headers: { cookie },
+    });
+
+    expect(page.json().data.total).toBe(4);
+    expect(page.json().data.users).toHaveLength(2);
+  });
+
+  it('refuses a page size it cannot serve instead of silently truncating', async () => {
+    const app = await createApp();
+    const cookie = await signIn(app, ADMIN);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/users?limit=5000',
+      headers: { cookie },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json().error.code).toBe('validation_failed');
+  });
+});

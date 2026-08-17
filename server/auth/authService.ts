@@ -73,6 +73,37 @@ export interface SeedAccount {
   role: UserRole;
 }
 
+/**
+ * What an administrator may see about an account (B089): identity, role and
+ * session activity — the facts needed to manage the account itself. Career
+ * content, dialogue, documents and memory are deliberately absent; managing a
+ * user is not a reason to read what that user wrote.
+ */
+export interface AdminUserRecord {
+  id: string;
+  username: string;
+  role: UserRole;
+  isTest: boolean;
+  email: string | null;
+  displayName: string | null;
+  candidateId: string | null;
+  createdAt: string;
+  activeSessions: number;
+  lastSeenAt: string | null;
+}
+
+export interface AdminUserPage {
+  total: number;
+  users: AdminUserRecord[];
+}
+
+export interface AdminUserQuery {
+  /** Free text matched against username, email and display name. */
+  query?: string;
+  limit: number;
+  offset: number;
+}
+
 export interface SessionAuth {
   register(
     usernameInput: string,
@@ -89,6 +120,8 @@ export interface SessionAuth {
   authenticate(sessionToken: string): AuthPrincipal | null;
   logout(sessionToken: string): void;
   getAccount?(sessionToken: string): AccountSnapshot | null;
+  /** Administrator-only directory; the route, not this method, owns the gate. */
+  listUsers?(input: AdminUserQuery): AdminUserPage;
   updateAccount?(
     sessionToken: string,
     input: AccountProfileUpdate,
@@ -129,6 +162,47 @@ interface UserRow {
   location: string | null;
   work_mode: AccountSnapshot['profile']['workMode'];
   profile_updated_at: string | null;
+}
+
+/** One needle matched against every human-readable identifier of an account. */
+const DIRECTORY_FILTER = `WHERE users.username LIKE ?1 ESCAPE '\\'
+     OR IFNULL(users.email, '') LIKE ?1 ESCAPE '\\'
+     OR IFNULL(users.display_name, '') LIKE ?1 ESCAPE '\\'`;
+
+/**
+ * `LIKE` reads `%` and `_` as wildcards, so a search for a literal underscore
+ * in a handle must not quietly match every account.
+ */
+function likePattern(needle: string): string {
+  return `%${needle.replace(/[\\%_]/gu, (character) => `\\${character}`)}%`;
+}
+
+function toAdminUserRecord(row: AdminUserRow): AdminUserRecord {
+  return {
+    id: row.id,
+    username: row.username,
+    role: row.role,
+    isTest: row.is_test === 1,
+    email: row.email,
+    displayName: row.display_name,
+    candidateId: row.candidate_id,
+    createdAt: row.created_at,
+    activeSessions: row.active_sessions,
+    lastSeenAt: row.last_seen_at,
+  };
+}
+
+interface AdminUserRow {
+  id: string;
+  username: string;
+  role: UserRole;
+  is_test: number;
+  candidate_id: string | null;
+  email: string | null;
+  display_name: string | null;
+  created_at: string;
+  active_sessions: number;
+  last_seen_at: string | null;
 }
 
 interface SessionRow {
@@ -339,6 +413,62 @@ export class AuthService implements SessionAuth {
     this.database
       .prepare('DELETE FROM sessions WHERE token_hash = ?')
       .run(hashToken(sessionToken));
+  }
+
+  /**
+   * The administrator directory. Authorisation belongs to the route: this
+   * method is what an already-authorised administrator is allowed to read, and
+   * it selects columns explicitly so a future column cannot leak by being
+   * added to the table.
+   */
+  listUsers(input: AdminUserQuery): AdminUserPage {
+    const needle = input.query?.trim() ?? '';
+    const pattern = needle ? likePattern(needle) : undefined;
+    return {
+      total: this.countDirectory(pattern),
+      users: this.selectDirectory(pattern, input.limit, input.offset).map(
+        toAdminUserRecord,
+      ),
+    };
+  }
+
+  private countDirectory(pattern?: string): number {
+    const row = this.database
+      .prepare(
+        `SELECT COUNT(*) AS total FROM users ${pattern ? DIRECTORY_FILTER : ''}`,
+      )
+      .get(...(pattern ? [pattern] : [])) as unknown as { total: number };
+    return row.total;
+  }
+
+  private selectDirectory(
+    pattern: string | undefined,
+    limit: number,
+    offset: number,
+  ): AdminUserRow[] {
+    const parameter = (position: number) => `?${position + (pattern ? 1 : 0)}`;
+    return this.database
+      .prepare(
+        `SELECT users.id, users.username, users.role, users.is_test,
+                users.candidate_id, users.email, users.display_name,
+                users.created_at,
+                (SELECT COUNT(*) FROM sessions
+                  WHERE sessions.user_id = users.id
+                    AND sessions.expires_at > ${parameter(1)})
+                  AS active_sessions,
+                (SELECT MAX(sessions.last_seen_at) FROM sessions
+                  WHERE sessions.user_id = users.id) AS last_seen_at
+         FROM users
+         ${pattern ? DIRECTORY_FILTER : ''}
+         ORDER BY users.created_at DESC, users.rowid DESC
+         LIMIT ${parameter(2)} OFFSET ${parameter(3)}`,
+      )
+      .all(
+        ...(pattern ? [pattern] : []),
+        new Date().toISOString(),
+        limit,
+        offset,
+      ) as unknown as AdminUserRow[];
   }
 
   getAccount(sessionToken: string): AccountSnapshot | null {

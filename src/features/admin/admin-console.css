@@ -1,0 +1,288 @@
+/* B089 — the administrator surface. It reuses the global brand tokens from
+   `App.css` rather than the candidate shell grid: this is an operator screen,
+   not a candidate workspace, and it must never inherit workspace chrome. */
+
+.admin-console {
+  min-height: 100dvh;
+  padding: 24px clamp(16px, 4vw, 48px) 64px;
+  background: var(--bg-dark);
+  color: var(--text-main);
+}
+
+.admin-console > main {
+  width: min(100%, 1120px);
+  margin-inline: auto;
+}
+
+.admin-brand {
+  display: inline-flex;
+  margin-bottom: 28px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.admin-console .brand-lockup {
+  --brand-ink: var(--text-main);
+  --brand-core: var(--primary-accent);
+}
+
+.admin-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.admin-eyebrow {
+  margin: 0 0 6px;
+  color: var(--primary-accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.admin-console h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 4vw, 2.3rem);
+  letter-spacing: -0.03em;
+}
+
+.admin-console h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.admin-note,
+.admin-count,
+.admin-scope-note {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.admin-scope-note {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+  max-width: 60rem;
+}
+
+.admin-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-search {
+  margin: 28px 0 20px;
+}
+
+.admin-search label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.admin-search > div {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-search input {
+  flex: 1 1 18rem;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+  color: var(--text-main);
+}
+
+.admin-primary-button,
+.admin-quiet-button,
+.admin-primary-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border-radius: var(--radius-small);
+  border: 1px solid transparent;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.admin-primary-button,
+.admin-primary-link {
+  background: var(--primary-accent);
+  color: var(--bg-dark);
+}
+
+.admin-quiet-button {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--text-main);
+}
+
+.admin-quiet-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.admin-quiet-link {
+  color: var(--text-muted);
+}
+
+.admin-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 18px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--danger-red);
+  border-radius: var(--radius-medium);
+  background: var(--surface);
+}
+
+.admin-error p {
+  margin: 0;
+}
+
+/* A data table must never scroll the page sideways: it scrolls inside itself,
+   and under 768px it becomes stacked cards. */
+.admin-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-medium);
+  background: var(--surface);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  font-weight: 400;
+}
+
+.admin-table thead th {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-table tbody tr:last-child th,
+.admin-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.admin-table tbody tr.is-selected {
+  background: var(--surface-soft);
+}
+
+.admin-table tbody th strong {
+  display: block;
+}
+
+.admin-table tbody th small {
+  color: var(--text-dim);
+}
+
+.admin-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.admin-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.admin-card {
+  margin-top: 24px;
+  padding: 18px 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-medium);
+  background: var(--surface-raised);
+}
+
+.admin-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.admin-card dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 14px 24px;
+  margin: 0;
+}
+
+.admin-card dt {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.admin-card dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .admin-table thead {
+    display: none;
+  }
+
+  .admin-table,
+  .admin-table tbody,
+  .admin-table tr,
+  .admin-table th,
+  .admin-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .admin-table tbody tr {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .admin-table th,
+  .admin-table td {
+    padding: 4px 0;
+    border-bottom: 0;
+  }
+
+  .admin-table td::before {
+    content: attr(data-label) ' ';
+    color: var(--text-dim);
+    font-size: 0.78rem;
+  }
+}

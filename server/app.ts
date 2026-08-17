@@ -208,6 +208,41 @@ export async function buildApp({
     },
   }));
 
+  app.get('/api/v1/admin/users', async (request, reply) => {
+    const principal = authenticateSession(request, authService, config);
+    if (!principal) {
+      return sendError(
+        reply,
+        request,
+        401,
+        'unauthorized',
+        'Нужен вход в аккаунт.',
+        false,
+      );
+    }
+    // A candidate is refused with 403, not 401: they are signed in, and telling
+    // them to sign in again would be a lie.
+    if (principal.role !== 'admin' || !authService.listUsers) {
+      return sendError(
+        reply,
+        request,
+        403,
+        'forbidden',
+        'Раздел доступен только администратору.',
+        false,
+      );
+    }
+    const query = adminUserQuerySchema.parse(request.query);
+    return {
+      data: authService.listUsers({
+        query: query.query,
+        limit: query.limit,
+        offset: query.offset,
+      }),
+      meta: { requestId: request.id },
+    };
+  });
+
   app.get(
     '/api/v1/provider/status',
     async (request, reply) => {
@@ -1836,6 +1871,12 @@ const candidateDocumentSchema = z.object({
 
 const documentRetentionSchema = z.object({
   retentionUntil: z.string().datetime({ offset: true }).nullable(),
+});
+
+const adminUserQuerySchema = z.object({
+  query: z.string().trim().max(80).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
 });
 
 const hhMarketQuerySchema = z.object({
