@@ -1,16 +1,16 @@
 .career-shell {
-  --career-bg: oklch(13% 0.016 210);
-  --career-bg-elevated: oklch(16.5% 0.018 210);
-  --career-surface: oklch(19% 0.02 210);
-  --career-surface-raised: oklch(23% 0.022 210);
-  --career-line: oklch(91% 0.012 210 / 0.12);
-  --career-line-strong: oklch(91% 0.012 210 / 0.23);
-  --career-text: oklch(95% 0.008 205);
-  --career-text-soft: oklch(76% 0.02 207);
-  --career-text-dim: oklch(61% 0.024 208);
-  --career-accent: oklch(79% 0.145 184);
-  --career-accent-ink: oklch(18% 0.042 194);
-  --career-accent-soft: oklch(25% 0.055 184);
+  --career-bg: oklch(13% 0.016 255);
+  --career-bg-elevated: oklch(16.5% 0.018 255);
+  --career-surface: oklch(19% 0.02 255);
+  --career-surface-raised: oklch(23% 0.022 255);
+  --career-line: oklch(91% 0.012 255 / 0.12);
+  --career-line-strong: oklch(91% 0.012 255 / 0.23);
+  --career-text: oklch(95% 0.008 255);
+  --career-text-soft: oklch(76% 0.02 255);
+  --career-text-dim: oklch(61% 0.024 255);
+  --career-accent: oklch(79% 0.145 255);
+  --career-accent-ink: oklch(18% 0.042 255);
+  --career-accent-soft: oklch(25% 0.055 255);
   --career-success: oklch(76% 0.14 154);
   --career-success-soft: oklch(23% 0.045 154);
   --career-warning: oklch(79% 0.13 79);
@@ -26,7 +26,7 @@
   grid-template-rows: 64px minmax(0, 1fr);
   color: var(--career-text);
   background:
-    radial-gradient(circle at 90% 0%, oklch(33% 0.055 202 / 0.22), transparent 30rem),
+    radial-gradient(circle at 90% 0%, oklch(33% 0.055 255 / 0.22), transparent 30rem),
     var(--career-bg);
 }
 
@@ -94,7 +94,7 @@
   align-items: center;
   padding: 10px 10px 18px;
   border-right: 1px solid var(--career-line);
-  background: oklch(14% 0.022 208);
+  background: oklch(14% 0.022 255);
 }
 
 .career-brand-mark,
@@ -336,7 +336,7 @@
 
 .career-nav-button.is-active {
   color: var(--career-accent);
-  border-color: oklch(79% 0.145 184 / 0.3);
+  border-color: oklch(79% 0.145 255 / 0.3);
   background: var(--career-accent-soft);
 }
 
@@ -358,7 +358,7 @@
   gap: 18px;
   padding: 0 26px;
   border-bottom: 1px solid var(--career-line);
-  background: oklch(14.5% 0.019 210 / 0.96);
+  background: oklch(14.5% 0.019 255 / 0.96);
 }
 
 .career-wordmark,
@@ -407,9 +407,13 @@
   flex: none;
 }
 
+/* The logo blue at its printed lightness (L 56%) is too dark to read on the
+   dark shell, so the wordmark is lifted — but to the shell accent itself, not
+   to a private colour. Since B141 that accent belongs to the same brand hue
+   family, so lockup and interface can no longer drift apart (B138). */
 .career-shell .brand-lockup {
   --brand-ink: var(--career-text);
-  --brand-core: oklch(78% 0.13 250);
+  --brand-core: var(--career-accent);
 }
 
 .career-topbar-actions {
@@ -601,7 +605,7 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  border: 1px solid oklch(86% 0.1 184 / 0.42);
+  border: 1px solid oklch(86% 0.1 255 / 0.42);
   border-radius: 12px;
   padding: 0 18px;
   color: var(--career-accent-ink);
@@ -614,7 +618,7 @@
 
 .career-primary-button:not(:disabled):hover {
   transform: translateY(-1px);
-  background: oklch(84% 0.135 184);
+  background: oklch(84% 0.135 255);
 }
 
 .career-text-button {
@@ -1033,7 +1037,7 @@
 .career-segmented-control > button.is-selected,
 .career-chip-picker > button.is-selected {
   color: var(--career-accent);
-  border-color: oklch(79% 0.145 184 / 0.38);
+  border-color: oklch(79% 0.145 255 / 0.38);
   background: var(--career-accent-soft);
 }
 
@@ -2178,7 +2182,7 @@
   inset: 0;
   z-index: 50;
   border: 0;
-  background: oklch(7% 0.012 210 / 0.62);
+  background: oklch(7% 0.012 255 / 0.62);
 }
 
 .career-expert-panel {
@@ -2193,7 +2197,7 @@
   border-left: 1px solid var(--career-line-strong);
   color: var(--career-text);
   background: var(--career-bg-elevated);
-  box-shadow: -24px 0 70px oklch(5% 0.01 210 / 0.35);
+  box-shadow: -24px 0 70px oklch(5% 0.01 255 / 0.35);
   animation: career-panel-enter 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -2661,7 +2665,7 @@
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 58px minmax(0, 1fr) 72px;
     background:
-      radial-gradient(circle at 100% 0%, oklch(33% 0.055 202 / 0.18), transparent 22rem),
+      radial-gradient(circle at 100% 0%, oklch(33% 0.055 255 / 0.18), transparent 22rem),
       var(--career-bg);
   }
 
@@ -2711,7 +2715,7 @@
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     border-top: 1px solid var(--career-line-strong);
-    background: oklch(14% 0.022 208 / 0.98);
+    background: oklch(14% 0.022 255 / 0.98);
     padding-bottom: env(safe-area-inset-bottom);
   }
 
@@ -2844,7 +2848,13 @@
     z-index: 8;
     margin-inline: -16px;
     padding: 14px 16px;
-    background: oklch(13% 0.016 210 / 0.97);
+    background: oklch(13% 0.016 255 / 0.97);
+  }
+
+  /* The sticky bar paints over whatever precedes it, so anything scrolled to
+     must reserve the bar's own height plus the mobile navigation under it. */
+  .career-intake-error {
+    scroll-margin-block-end: 156px;
   }
 
   .career-intake-actions .career-primary-button {
@@ -3175,8 +3185,8 @@
   border: 1px solid var(--career-line-strong);
   border-radius: 20px;
   overflow: clip;
-  background: oklch(15% 0.018 210 / 0.78);
-  box-shadow: 0 28px 80px oklch(5% 0.01 210 / 0.17);
+  background: oklch(15% 0.018 255 / 0.78);
+  box-shadow: 0 28px 80px oklch(5% 0.01 255 / 0.17);
 }
 
 .career-command-center > * + * {
@@ -3188,7 +3198,7 @@
 .career-intelligence-panel,
 .career-track-board {
   min-width: 0;
-  background: linear-gradient(180deg, oklch(19% 0.022 210 / 0.28), transparent 12rem), transparent;
+  background: linear-gradient(180deg, oklch(19% 0.022 255 / 0.28), transparent 12rem), transparent;
 }
 
 .career-coach-desk {
@@ -3333,7 +3343,7 @@
 .career-coach-next-question {
   border-left: 2px solid var(--career-accent);
   padding: 11px 12px;
-  background: oklch(25% 0.055 184 / 0.35);
+  background: oklch(25% 0.055 255 / 0.35);
 }
 
 .career-coach-next-question span {
@@ -3372,7 +3382,7 @@
   gap: 8px;
   padding: 14px 18px 16px;
   border-top: 1px solid var(--career-line);
-  background: oklch(14% 0.018 210 / 0.72);
+  background: oklch(14% 0.018 255 / 0.72);
 }
 
 .career-coach-composer-inline > div {
@@ -3432,14 +3442,14 @@
   height: 66px;
   display: grid;
   place-items: center;
-  border: 1px solid oklch(79% 0.145 184 / 0.26);
+  border: 1px solid oklch(79% 0.145 255 / 0.26);
   border-radius: 50%;
   color: var(--career-accent);
-  background: linear-gradient(145deg, oklch(31% 0.05 188), oklch(21% 0.022 210));
+  background: linear-gradient(145deg, oklch(31% 0.05 255), oklch(21% 0.022 255));
   font-size: 1rem;
   font-weight: 790;
   letter-spacing: 0.02em;
-  box-shadow: inset 0 1px 0 oklch(98% 0.01 184 / 0.12);
+  box-shadow: inset 0 1px 0 oklch(98% 0.01 255 / 0.12);
 }
 
 .career-profile-identity-copy {
@@ -3958,7 +3968,7 @@
 
 .career-search-switcher button.is-active {
   color: var(--career-accent);
-  border-color: oklch(79% 0.145 184 / 0.34);
+  border-color: oklch(79% 0.145 255 / 0.34);
   background: var(--career-accent-soft);
 }
 
@@ -4146,7 +4156,7 @@
 .career-next-action-card {
   margin-top: auto;
   background:
-    radial-gradient(circle at 100% 0%, oklch(79% 0.145 184 / 0.1), transparent 12rem),
+    radial-gradient(circle at 100% 0%, oklch(79% 0.145 255 / 0.1), transparent 12rem),
     var(--career-bg-elevated);
 }
 
@@ -4223,7 +4233,7 @@
   border: 1px solid var(--career-line-strong);
   border-radius: 20px;
   overflow: clip;
-  background: oklch(15% 0.018 210 / 0.78);
+  background: oklch(15% 0.018 255 / 0.78);
 }
 
 .career-cabinet-focus-layout > * + * {
@@ -4296,7 +4306,7 @@
   height: 29px;
   display: grid;
   place-items: center;
-  border: 1px solid oklch(79% 0.145 184 / 0.35);
+  border: 1px solid oklch(79% 0.145 255 / 0.35);
   border-radius: 50%;
   color: var(--career-accent);
   background: var(--career-accent-soft);
@@ -4774,7 +4784,7 @@
   border: 1px solid var(--career-line-strong);
   border-radius: 20px;
   overflow: clip;
-  background: oklch(15% 0.018 210 / 0.78);
+  background: oklch(15% 0.018 255 / 0.78);
 }
 
 .career-resume-studio.is-state {
@@ -4790,7 +4800,7 @@
   gap: 14px;
   padding: 22px 24px 18px;
   border-bottom: 1px solid var(--career-line);
-  background: linear-gradient(180deg, oklch(21% 0.026 200 / 0.42), transparent);
+  background: linear-gradient(180deg, oklch(21% 0.026 255 / 0.42), transparent);
 }
 
 .career-resume-head-title h2 {

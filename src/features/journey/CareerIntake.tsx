@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -36,6 +36,13 @@ interface CareerIntakeProps {
   hasAccount?: boolean;
   /** Opens the account panel, so the wizard never names a door it cannot open. */
   onOpenAccount?: () => void;
+  /**
+   * Tells the shell a diagnostic is under way. The wizard's own source step
+   * sends the candidate off to register, and the shell has to know that the
+   * session arriving next belongs to an unfinished diagnostic rather than to a
+   * returning candidate opening their cabinet (B141).
+   */
+  onStartedChange?: (started: boolean) => void;
 }
 
 /**
@@ -96,6 +103,7 @@ export function CareerIntake({
   onComplete,
   hasAccount = false,
   onOpenAccount,
+  onStartedChange,
 }: CareerIntakeProps) {
   const [started, setStarted] = useState(false);
   const [step, setStep] = useState<IntakeStep>('intent');
@@ -120,6 +128,20 @@ export function CareerIntake({
   const [otherConstraint, setOtherConstraint] = useState('');
   const [error, setError] = useState<string>();
   const [readingPdf, setReadingPdf] = useState(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+
+  /**
+   * On a phone the wizard's action bar is sticky, so a refusal rendered above
+   * it is painted over: the candidate presses «Продолжить», nothing appears to
+   * happen, and the sentence saying why is under the bar. The refusal is
+   * brought to the candidate instead. `scroll-margin-block-end` on the element
+   * is what keeps the bar out of the way; the scroll is instant, because this
+   * is a correction and not an animation.
+   */
+  useEffect(() => {
+    if (!error) return;
+    errorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+  }, [error]);
 
   if (!started) {
     return (
@@ -134,7 +156,10 @@ export function CareerIntake({
             <button
               className="career-primary-button"
               type="button"
-              onClick={() => setStarted(true)}
+              onClick={() => {
+                setStarted(true);
+                onStartedChange?.(true);
+              }}
             >
               Начать диагностику
               <ArrowRight size={18} weight="bold" />
@@ -642,7 +667,7 @@ export function CareerIntake({
       ) : null}
 
       {error ? (
-        <p className="career-intake-error" role="alert">
+        <p className="career-intake-error" role="alert" ref={errorRef}>
           {error}
         </p>
       ) : null}

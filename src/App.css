@@ -1,21 +1,22 @@
 :root {
   color-scheme: dark;
-  --bg-dark: oklch(15% 0.015 220);
-  --surface: oklch(20% 0.018 220 / 0.9);
-  --surface-raised: oklch(24% 0.02 220 / 0.94);
-  --surface-soft: oklch(27% 0.018 220 / 0.56);
-  --line: oklch(93% 0.015 220 / 0.13);
-  --line-strong: oklch(93% 0.015 220 / 0.24);
-  --primary-cyan: oklch(79% 0.14 205);
-  --primary-emerald: oklch(75% 0.14 160);
-  --warning-amber: oklch(79% 0.13 80);
-  --danger-red: oklch(68% 0.18 25);
-  --text-main: oklch(95% 0.008 220);
-  --text-muted: oklch(72% 0.025 220);
-  --text-dim: oklch(60% 0.025 220);
-  --focus: oklch(84% 0.12 205);
-  /* Brand — sampled from the owner-provided logo (B138). Interface colour
-     stays with the Liquid Glass tokens above; these are the identity marks. */
+  --bg-dark: oklch(15% 0.015 255);
+  --surface: oklch(20% 0.018 255 / 0.9);
+  --surface-raised: oklch(24% 0.02 255 / 0.94);
+  --surface-soft: oklch(27% 0.018 255 / 0.56);
+  --line: oklch(93% 0.015 255 / 0.13);
+  --line-strong: oklch(93% 0.015 255 / 0.24);
+  --primary-accent: oklch(79% 0.14 255);
+  --primary-success: oklch(75% 0.14 154);
+  --warning-amber: oklch(79% 0.13 79);
+  --danger-red: oklch(68% 0.18 28);
+  --text-main: oklch(95% 0.008 255);
+  --text-muted: oklch(72% 0.025 255);
+  --text-dim: oklch(60% 0.025 255);
+  --focus: oklch(84% 0.12 255);
+  /* Brand — sampled from the owner-provided logo (B138). The interface tokens
+     above now sit on the same hue (255) so the mark and the product read as one
+     identity; only the three state signals keep their own hue. */
   --brand-light: #0488f4;
   --brand-core: #0a70e0;
   --brand-deep: #0f43a2;

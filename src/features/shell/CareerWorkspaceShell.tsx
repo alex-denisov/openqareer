@@ -24,6 +24,10 @@ import { buildCareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace, WorkspaceInput } from '../workspace/workspaceStorage';
 import { CareerTariffsView } from './CareerTariffsView';
 import { CareerAccountPanel } from './CareerAccountPanel';
+import {
+  keepsIntakeAcrossIdentityChange,
+  shouldShowIntake,
+} from './intakeContinuity';
 
 type ShellView =
   | 'today'
@@ -105,6 +109,13 @@ export function CareerWorkspaceShell({
     () => typeof window !== 'undefined' && window.location.pathname === '/auth/reset-password',
   );
   const [sessionWaitIsLong, setSessionWaitIsLong] = useState(false);
+  // A diagnostic that is under way owns the «Сегодня» screen even after the
+  // account its own source step demanded arrives (B141).
+  const [intakeStarted, setIntakeStarted] = useState(false);
+  // Identity, not the candidate id, decides when the wizard is thrown away: the
+  // seed changes on every identity change except the registration the wizard
+  // itself asked for, so answers never travel between candidates.
+  const [intakeSeed, setIntakeSeed] = useState(0);
   const visibleWorkspace = sessionPending ? undefined : workspace;
   const cabinetSession =
     !sessionPending && session?.candidateId
@@ -119,6 +130,14 @@ export function CareerWorkspaceShell({
   // Resume Studio reads and writes a candidate-scoped API, so a browser-local
   // workspace without an account has nothing to show and must not pretend to.
   const resumeAvailable = Boolean(cabinetSession);
+
+  const intakeVisible = shouldShowIntake({
+    sessionPending,
+    hasWorkspace: Boolean(visibleWorkspace),
+    hasCabinetSession: Boolean(cabinetSession),
+    intakeStarted,
+    isTodayView: activeView === 'today',
+  });
 
   useEffect(() => {
     if (!sessionPending) {
@@ -165,11 +184,32 @@ export function CareerWorkspaceShell({
   const resetForAccount = useCallback(
     (nextSession: AuthUser | null) => {
       setActiveView('today');
+      if (
+        !keepsIntakeAcrossIdentityChange(
+          session?.candidateId,
+          nextSession?.candidateId,
+        )
+      ) {
+        setIntakeStarted(false);
+        setIntakeSeed((seed) => seed + 1);
+      }
       if (nextSession === null) onClearWorkspace();
       else setCabinetRevision((revision) => revision + 1);
       onSessionChange(nextSession);
     },
-    [onClearWorkspace, onSessionChange],
+    [onClearWorkspace, onSessionChange, session?.candidateId],
+  );
+
+  // A finished diagnostic hands the screen to the cabinet and leaves a clean
+  // wizard behind, so clearing the workspace later starts from the first
+  // question instead of from someone's half-filled answers.
+  const completeIntake = useCallback(
+    (input: WorkspaceInput) => {
+      setIntakeStarted(false);
+      setIntakeSeed((seed) => seed + 1);
+      onSaveWorkspace(input);
+    },
+    [onSaveWorkspace],
   );
 
   return (
@@ -316,15 +356,16 @@ export function CareerWorkspaceShell({
           </div>
         ) : null}
 
-        {!sessionPending && !visibleWorkspace && !cabinetSession && activeView === 'today' ? (
+        {intakeVisible ? (
           <CareerIntake
-            key={session?.candidateId ?? 'anonymous'}
-            onComplete={onSaveWorkspace}
+            key={`intake-${intakeSeed}`}
+            onComplete={completeIntake}
             hasAccount={Boolean(session?.candidateId)}
             onOpenAccount={() => setAccountOpen(true)}
+            onStartedChange={setIntakeStarted}
           />
         ) : null}
-        {cabinetSession && activeView !== 'tariffs' ? (
+        {cabinetSession && !intakeVisible && activeView !== 'tariffs' ? (
           <CareerCabinet
             key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
             view={activeView as CareerCabinetView}
