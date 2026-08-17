@@ -1,4 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
@@ -1803,9 +1805,12 @@ export async function buildApp({
         );
       }
       if (request.method === 'GET') {
+        // Each surface has its own prerendered first paint. Serving the
+        // workspace document on `/admin` left administrators looking at the
+        // candidate cabinet for seconds while the bundle arrived (B089).
         return reply
           .header('Cache-Control', 'no-store, max-age=0')
-          .sendFile('index.html');
+          .sendFile(entryDocumentFor(request.url, config.staticRoot));
       }
       return sendError(
         reply,
@@ -1872,6 +1877,8 @@ const candidateDocumentSchema = z.object({
 const documentRetentionSchema = z.object({
   retentionUntil: z.string().datetime({ offset: true }).nullable(),
 });
+
+const ADMIN_DOCUMENT = 'admin.html';
 
 const adminUserQuerySchema = z.object({
   query: z.string().trim().max(80).optional(),
@@ -2178,6 +2185,20 @@ function authenticateCandidate(
     return null;
   }
   return candidate;
+}
+
+/**
+ * Which prerendered document answers a deep link. Only surfaces that actually
+ * have their own first paint are listed; anything else keeps the workspace
+ * document, and a missing file falls back to it rather than 404ing a route
+ * that used to work.
+ */
+function entryDocumentFor(url: string, staticRoot: string): string {
+  const path = url.split('?')[0] ?? '';
+  if (path === '/admin' || path.startsWith('/admin/')) {
+    if (existsSync(join(staticRoot, ADMIN_DOCUMENT))) return ADMIN_DOCUMENT;
+  }
+  return 'index.html';
 }
 
 function authenticateSession(

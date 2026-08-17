@@ -13,6 +13,8 @@ import { pathToFileURL } from 'node:url';
 const DEFAULT_PART_BYTES = 12 * 1024;
 const MAX_BOOTSTRAP_BYTES = 8 * 1024;
 const FETCH_CONCURRENCY = 2;
+/** Prerendered documents that share the entry bundle with `index.html`. */
+const ADDITIONAL_SURFACES = ['admin.html'];
 
 function sha256Hex(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -283,6 +285,20 @@ export function buildSplitDelivery({
   }
 
   const loaderTag = `<script type="module" crossorigin src="${entryPlan.proxyPath}"></script>`;
+
+  // Every prerendered surface is built from the same Vite output and therefore
+  // carries the same entry tag. A surface that keeps the original tag would
+  // request a module this step has just deleted, so it boots nothing.
+  for (const surface of ADDITIONAL_SURFACES) {
+    const surfacePath = join(distDirectory, surface);
+    if (!existsSync(surfacePath)) continue;
+    const surfaceHtml = readFileSync(surfacePath, 'utf8');
+    if (!surfaceHtml.includes(scriptMatch[0])) {
+      throw new Error(`${surface} does not carry the production module entry`);
+    }
+    writeFileSync(surfacePath, surfaceHtml.replace(scriptMatch[0], loaderTag));
+  }
+
   let nextHtml = html.replace(scriptMatch[0], loaderTag);
   if (!nextHtml.includes('role="status"')) {
     nextHtml = nextHtml.replace(

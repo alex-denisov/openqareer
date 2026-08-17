@@ -44,12 +44,18 @@ const provider: CoachProvider = {
   },
 };
 
-async function createStaticApp() {
+async function createStaticApp(options: { adminDocument?: boolean } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-static-'));
   writeFileSync(
     join(directory, 'index.html'),
     '<!doctype html><title>current release</title>',
   );
+  if (options.adminDocument !== false) {
+    writeFileSync(
+      join(directory, 'admin.html'),
+      '<!doctype html><title>administrator console</title>',
+    );
+  }
   const store = new SqliteCandidateStore({
     databasePath: ':memory:',
     encryptionKey: Buffer.alloc(32, 5),
@@ -99,5 +105,42 @@ describe('static release delivery', () => {
 
     expect(conditional.statusCode).toBe(200);
     expect(conditional.body).toContain('current release');
+  });
+
+  /**
+   * B089 — the administrator deep link used to receive the workspace document,
+   * so the console's visitors watched the candidate cabinet for seconds while
+   * the bundle arrived. Each surface now answers with its own first paint.
+   */
+  it('answers the administrator deep link with the administrator document', async () => {
+    const app = await createStaticApp();
+
+    for (const url of ['/admin', '/admin/', '/admin/users?query=maria']) {
+      const response = await app.inject({ method: 'GET', url });
+      expect(response.statusCode, url).toBe(200);
+      expect(response.body, url).toContain('administrator console');
+      expect(response.body, url).not.toContain('current release');
+    }
+  });
+
+  it('keeps every other deep link on the workspace document', async () => {
+    const app = await createStaticApp();
+
+    for (const url of ['/', '/career', '/administrators', '/adminsomething']) {
+      const response = await app.inject({ method: 'GET', url });
+      expect(response.statusCode, url).toBe(200);
+      expect(response.body, url).toContain('current release');
+    }
+  });
+
+  it('falls back to the workspace document when the release has no admin one', async () => {
+    const app = await createStaticApp({ adminDocument: false });
+
+    const response = await app.inject({ method: 'GET', url: '/admin' });
+
+    // A release built before this split must keep serving a working route
+    // rather than 404 a page that used to load.
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('current release');
   });
 });

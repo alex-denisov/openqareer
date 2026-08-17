@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { prerenderCareerShell } from './prerender-career-shell';
+import { prerenderShells } from './prerender-career-shell';
 
 const temporaryDirectories: string[] = [];
 
@@ -20,12 +20,13 @@ describe('production career shell prerender', () => {
     const directory = await mkdtemp(join(tmpdir(), 'openqareer-prerender-'));
     temporaryDirectories.push(directory);
     const indexPath = join(directory, 'index.html');
+    const adminPath = join(directory, 'admin.html');
     writeFileSync(
       indexPath,
       '<!doctype html><html><body><div id="root"></div></body></html>',
     );
 
-    await prerenderCareerShell(indexPath);
+    await prerenderShells(indexPath, adminPath);
 
     const html = readFileSync(indexPath, 'utf8');
     expect(html).toContain('data-testid="career-shell"');
@@ -55,11 +56,64 @@ describe('production career shell prerender', () => {
     writeFileSync(missingRoot, '<html><body></body></html>');
     writeFileSync(populatedRoot, '<div id="root"><p>old</p></div>');
 
-    await expect(prerenderCareerShell(missingRoot)).rejects.toThrow(
+    const adminPath = join(directory, 'admin.html');
+    await expect(prerenderShells(missingRoot, adminPath)).rejects.toThrow(
       'production root mount point is missing',
     );
-    await expect(prerenderCareerShell(populatedRoot)).rejects.toThrow(
+    await expect(prerenderShells(populatedRoot, adminPath)).rejects.toThrow(
       'production root mount point is not empty',
     );
+  });
+
+  /**
+   * B089 — `/admin` used to inherit the workspace prerender, so the console's
+   * own visitors watched the candidate cabinet for a measured 5356 ms before
+   * React replaced it. The administrator surface now has its own first paint.
+   */
+  it('gives the administrator console its own first paint, free of workspace chrome', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'openqareer-prerender-'));
+    temporaryDirectories.push(directory);
+    const indexPath = join(directory, 'index.html');
+    const adminPath = join(directory, 'admin.html');
+    writeFileSync(
+      indexPath,
+      '<!doctype html><html><body><div id="root"></div></body></html>',
+    );
+
+    await prerenderShells(indexPath, adminPath);
+
+    const admin = readFileSync(adminPath, 'utf8');
+    expect(admin).toContain('id="root" aria-busy="true"');
+    expect(admin).toContain('class="admin-console"');
+    expect(admin).toContain('Проверяем сессию');
+    for (const chrome of [
+      'data-testid="career-shell"',
+      'Начните с карьерного вопроса',
+      'Возможности',
+      'Тарифы',
+    ]) {
+      expect(admin, `the administrator first paint leaked "${chrome}"`).not.toContain(chrome);
+    }
+  });
+
+  it('builds both documents from the same untouched entry HTML', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'openqareer-prerender-'));
+    temporaryDirectories.push(directory);
+    const indexPath = join(directory, 'index.html');
+    const adminPath = join(directory, 'admin.html');
+    writeFileSync(
+      indexPath,
+      '<!doctype html><html><head><script type="module" src="/assets/app.js"></script>' +
+        '</head><body><div id="root"></div></body></html>',
+    );
+
+    await prerenderShells(indexPath, adminPath);
+
+    // Both surfaces must keep the same entry, or one of them boots nothing.
+    for (const path of [indexPath, adminPath]) {
+      expect(readFileSync(path, 'utf8')).toContain(
+        '<script type="module" src="/assets/app.js"></script>',
+      );
+    }
   });
 });
