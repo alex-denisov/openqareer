@@ -1,11 +1,19 @@
 import type { ResumeDocumentEditor } from './ResumeDocumentView';
 import {
+  addCourse,
   addEducation,
   addExperience,
   addLanguage,
+  addRecommendation,
+  addSkill,
+  addTest,
+  removeCourse,
   removeEducation,
   removeExperience,
   removeLanguage,
+  removeRecommendation,
+  removeSkill,
+  removeTest,
   setTargetRole,
   toggleBullet,
   updateCandidate,
@@ -31,6 +39,17 @@ export function buildResumeEditor(
     onRemoveExperience: (id) => onChange(removeExperience(draft, id)),
     onToggleBullet: (experienceId, memoryId) =>
       onChange(toggleBullet(draft, experienceId, memoryId)),
+    onAddSkill: (name, level) => onChange(addSkill(draft, name, level)),
+    onRemoveSkill: (id) => onChange(removeSkill(draft, id)),
+    onAddCourse: (name, institution, year) =>
+      onChange(addCourse(draft, name, institution, year)),
+    onRemoveCourse: (id) => onChange(removeCourse(draft, id)),
+    onAddTest: (name, provider, score) =>
+      onChange(addTest(draft, name, provider, score)),
+    onRemoveTest: (id) => onChange(removeTest(draft, id)),
+    onAddRecommendation: (recommender, organization) =>
+      onChange(addRecommendation(draft, recommender, organization)),
+    onRemoveRecommendation: (id) => onChange(removeRecommendation(draft, id)),
     onAddEducation: (memoryId) => onChange(addEducation(draft, memoryId)),
     onEducation: (id, patch) => onChange(updateEducation(draft, id, patch)),
     onRemoveEducation: (id) => onChange(removeEducation(draft, id)),

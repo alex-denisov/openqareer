@@ -50,6 +50,8 @@ export interface WorkspaceInput {
   linkedinUrl?: string;
   hhUrl?: string;
   profileFacts?: ProfileFact[];
+  resumeDraft?: import('../resume/resumeTypes').ResumeDraft;
+  parsedResume?: import('./resumeParser').ParsedResume;
 }
 
 export interface MarketVacancySampleItem {
@@ -178,6 +180,8 @@ export function createWorkspace(
     profileFacts: input.profileFacts?.filter(
       (fact) => fact.status === 'confirmed' || fact.status === 'corrected',
     ),
+    resumeDraft: input.resumeDraft ?? previous?.resumeDraft,
+    parsedResume: input.parsedResume ?? previous?.parsedResume,
     createdAt: previous?.createdAt ?? now,
     updatedAt: now,
     analysis: canKeepAnalysis ? previous.analysis : undefined,

@@ -26,7 +26,7 @@ import { extractTextDocument } from '../workspace/documentText';
 import { extractPdfResume } from '../workspace/pdfResume';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 
-type ProfileTab = 'summary' | 'experience' | 'skills' | 'documents';
+type ProfileTab = 'summary' | 'experience' | 'skills' | 'education' | 'documents';
 
 interface CareerProfileSurfaceProps {
   account?: AccountSnapshot;
@@ -44,6 +44,7 @@ const profileTabs: Array<{ id: ProfileTab; label: string }> = [
   { id: 'summary', label: 'Сводка' },
   { id: 'experience', label: 'Опыт' },
   { id: 'skills', label: 'Навыки' },
+  { id: 'education', label: 'Образование и курсы' },
   { id: 'documents', label: 'Документы' },
 ];
 
@@ -282,6 +283,20 @@ export function CareerProfileSurface({
             title="Навыки и рабочие сигналы"
             empty="Навыки ещё не подтверждены источником или в разговоре."
             facts={facts.filter((item) => item.domain === 'skill')}
+            busyId={busyId}
+            onReview={reviewMemory}
+          />
+        ) : null}
+        {activeTab === 'education' ? (
+          <ProfileFacts
+            title="Образование, курсы и сертификаты"
+            empty="Сведения об образовании и курсах появятся после импорта резюме или разговора."
+            facts={facts.filter((item) =>
+              ['role-evidence', 'other'].includes(item.domain) ||
+              /образован|университет|институт|диплом|курс|сертификат|степень|бакалавр|магистр|ielts|toefl|gmat|mba/iu.test(
+                item.statement,
+              ),
+            )}
             busyId={busyId}
             onReview={reviewMemory}
           />

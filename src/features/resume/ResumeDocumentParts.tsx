@@ -122,3 +122,35 @@ export function Field({
     </label>
   );
 }
+
+export function TextAreaField({
+  label,
+  value,
+  placeholder,
+  onChange,
+  readOnly = false,
+  disabled = false,
+  rows = 4,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+  readOnly?: boolean;
+  disabled?: boolean;
+  rows?: number;
+}) {
+  return (
+    <label className="career-resume-field is-textarea">
+      <span>{label}</span>
+      <textarea
+        rows={rows}
+        value={value}
+        placeholder={placeholder}
+        readOnly={readOnly}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import type {
   CefrLevel,
   ResumeCandidateInput,
@@ -108,6 +109,7 @@ export interface ResumeContact {
   readonly fullName: string | null;
   readonly email: string | null;
   readonly phone: string | null;
+  readonly telegram?: string | null;
   readonly location: string | null;
   readonly links: readonly string[];
 }
@@ -122,9 +124,16 @@ export interface ResumeDocument {
   readonly kind: 'master' | 'country-role';
   readonly targetRole: string | null;
   readonly contact: ResumeContact;
+  readonly about?: string | null;
+  readonly photoUrl?: string | null;
   readonly experience: readonly ResumeExperience[];
+  readonly skills?: readonly import('./resumeDraft').ResumeSkillInput[];
   readonly education: readonly ResumeEducation[];
+  readonly courses?: readonly import('./resumeDraft').ResumeCourseInput[];
+  readonly tests?: readonly import('./resumeDraft').ResumeTestInput[];
+  readonly recommendations?: readonly import('./resumeDraft').ResumeRecommendationInput[];
   readonly languages: readonly ResumeLanguage[];
+  readonly additional?: import('./resumeDraft').ResumeAdditionalInput | null;
   readonly unknowns: readonly ResumeUnknown[];
   readonly conventions: ResumeConventions;
   readonly length: ResumeLengthEstimate;
@@ -210,6 +219,7 @@ const GERMANY_CONVENTIONS: ResumeConventions = {
   discriminatoryPii: 'omitted',
 };
 
+// eslint-disable-next-line max-lines-per-function
 export function buildResumeStudioProjection(
   input: ResumeStudioInput,
 ): ResumeStudioProjection {
@@ -223,6 +233,13 @@ export function buildResumeStudioProjection(
   const experience = projectExperience(input.experience, context);
   const education = projectEducation(input.education, context);
   const languages = projectLanguages(input.languages, context);
+  const skills = input.skills ?? [];
+  const courses = input.courses ?? [];
+  const tests = input.tests ?? [];
+  const recommendations = input.recommendations ?? [];
+  const about = clean(input.candidate.about);
+  const photoUrl = clean(input.candidate.photoUrl);
+  const additional = input.additional ?? null;
   addSectionUnknowns(experience, education, languages, context.unknowns);
   const masterUnknowns = [...context.unknowns];
   return {
@@ -230,16 +247,30 @@ export function buildResumeStudioProjection(
       'master',
       null,
       contact,
+      about,
+      photoUrl,
       experience,
+      skills,
       education,
+      courses,
+      tests,
+      recommendations,
       languages,
+      additional,
       masterUnknowns,
       estimateLength(contact, experience, education, languages),
     ),
     germanyVariant: germanyDocument(input.targetRole, contact, {
+      about,
+      photoUrl,
       experience,
+      skills,
       education,
+      courses,
+      tests,
+      recommendations,
       languages,
+      additional,
       commonUnknowns: masterUnknowns,
     }),
     evidenceSnapshot: evidenceSnapshot(context),
@@ -248,9 +279,16 @@ export function buildResumeStudioProjection(
 }
 
 interface GermanySections {
+  readonly about?: string | null;
+  readonly photoUrl?: string | null;
   readonly experience: readonly ResumeExperience[];
+  readonly skills?: readonly import('./resumeDraft').ResumeSkillInput[];
   readonly education: readonly ResumeEducation[];
+  readonly courses?: readonly import('./resumeDraft').ResumeCourseInput[];
+  readonly tests?: readonly import('./resumeDraft').ResumeTestInput[];
+  readonly recommendations?: readonly import('./resumeDraft').ResumeRecommendationInput[];
   readonly languages: readonly ResumeLanguage[];
+  readonly additional?: import('./resumeDraft').ResumeAdditionalInput | null;
   readonly commonUnknowns: readonly ResumeUnknown[];
 }
 
@@ -272,9 +310,16 @@ function germanyDocument(
     'country-role',
     clean(targetRole),
     contact,
+    sections.about,
+    sections.photoUrl,
     experience,
+    sections.skills,
     sections.education,
+    sections.courses,
+    sections.tests,
+    sections.recommendations,
     sections.languages,
+    sections.additional,
     germanyVariantUnknowns(
       targetRole,
       experience,
@@ -385,6 +430,7 @@ function projectContact(candidate: ResumeCandidateInput): ResumeContact {
     fullName: clean(candidate.fullName),
     email: clean(candidate.contact?.email),
     phone: clean(candidate.contact?.phone),
+    telegram: clean(candidate.contact?.telegram),
     location: clean(candidate.contact?.location),
     links: (candidate.contact?.links ?? []).flatMap((link) => {
       const normalized = clean(link);
@@ -631,9 +677,16 @@ function document(
   kind: ResumeDocument['kind'],
   targetRole: string | null,
   contact: ResumeContact,
+  about: string | null | undefined,
+  photoUrl: string | null | undefined,
   experience: readonly ResumeExperience[],
+  skills: readonly import('./resumeDraft').ResumeSkillInput[] | undefined,
   education: readonly ResumeEducation[],
+  courses: readonly import('./resumeDraft').ResumeCourseInput[] | undefined,
+  tests: readonly import('./resumeDraft').ResumeTestInput[] | undefined,
+  recommendations: readonly import('./resumeDraft').ResumeRecommendationInput[] | undefined,
   languages: readonly ResumeLanguage[],
+  additional: import('./resumeDraft').ResumeAdditionalInput | null | undefined,
   unknowns: readonly ResumeUnknown[],
   length: ResumeLengthEstimate,
 ): ResumeDocument {
@@ -641,9 +694,16 @@ function document(
     kind,
     targetRole,
     contact,
+    about: about ?? null,
+    photoUrl: photoUrl ?? null,
     experience,
+    skills: skills ?? [],
     education,
+    courses: courses ?? [],
+    tests: tests ?? [],
+    recommendations: recommendations ?? [],
     languages,
+    additional: additional ?? null,
     unknowns,
     conventions: kind === 'master' ? MASTER_CONVENTIONS : GERMANY_CONVENTIONS,
     length,

@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { Plus } from '@phosphor-icons/react';
 import type { CandidateMemory } from '../coach/coachApi';
 import {
   EntryUnknowns,
@@ -5,6 +7,7 @@ import {
   EvidencePicker,
   Field,
   RemoveButton,
+  TextAreaField,
 } from './ResumeDocumentParts';
 import { ResumeExperienceEntry } from './ResumeExperienceEntry';
 import {
@@ -20,8 +23,11 @@ const CEFR_LEVELS: readonly CefrLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 export interface ResumeDocumentEditor {
   readonly onCandidate: (patch: {
     fullName?: string;
+    photoUrl?: string;
+    about?: string;
     email?: string;
     phone?: string;
+    telegram?: string;
     location?: string;
     links?: readonly string[];
   }) => void;
@@ -40,6 +46,14 @@ export interface ResumeDocumentEditor {
   ) => void;
   readonly onRemoveExperience: (id: string) => void;
   readonly onToggleBullet: (experienceId: string, memoryId: string) => void;
+  readonly onAddSkill: (name: string, level?: string) => void;
+  readonly onRemoveSkill: (id: string) => void;
+  readonly onAddCourse: (name: string, institution?: string, year?: string) => void;
+  readonly onRemoveCourse: (id: string) => void;
+  readonly onAddTest: (name: string, provider?: string, score?: string) => void;
+  readonly onRemoveTest: (id: string) => void;
+  readonly onAddRecommendation: (recommender: string, organization?: string) => void;
+  readonly onRemoveRecommendation: (id: string) => void;
   readonly onAddEducation: (memoryId: string) => void;
   readonly onEducation: (
     id: string,
@@ -81,7 +95,11 @@ export function ResumeDocumentView(props: ResumeDocumentViewProps) {
     <article className="career-resume-document" aria-label="Резюме">
       <IdentitySection {...sectionProps} />
       <ExperienceSection {...sectionProps} />
+      <SkillsSection {...sectionProps} />
       <EducationSection {...sectionProps} />
+      <CoursesSection {...sectionProps} />
+      <TestsSection {...sectionProps} />
+      <RecommendationsSection {...sectionProps} />
       <LanguagesSection {...sectionProps} />
     </article>
   );
@@ -106,17 +124,27 @@ function IdentitySection({ draft, document, editor }: SectionProps) {
         readOnly={!editor}
         onChange={(value) => editor?.onTargetRole(value)}
       />
-      <ContactGrid contact={contact} editor={editor} />
+      <ContactGrid contact={contact} photoUrl={draft.candidate.photoUrl} editor={editor} />
+      <TextAreaField
+        label="О себе"
+        value={draft.candidate.about ?? ''}
+        placeholder="Краткое резюме опыта, ключевых компетенций и профессиональных приоритетов..."
+        readOnly={!editor}
+        onChange={(value) => editor?.onCandidate({ about: value })}
+      />
       <EntryUnknowns unknowns={document.unknowns.filter((item) => !item.entryId)} />
     </section>
   );
 }
 
+// eslint-disable-next-line max-lines-per-function
 function ContactGrid({
   contact,
+  photoUrl,
   editor,
 }: {
   contact?: ResumeDraft['candidate']['contact'];
+  photoUrl?: string;
   editor?: ResumeDocumentEditor;
 }) {
   return (
@@ -137,6 +165,13 @@ function ContactGrid({
         onChange={(value) => editor?.onCandidate({ phone: value })}
       />
       <Field
+        label="Telegram"
+        value={contact?.telegram ?? ''}
+        placeholder="@username"
+        readOnly={!editor}
+        onChange={(value) => editor?.onCandidate({ telegram: value })}
+      />
+      <Field
         label="Город"
         value={contact?.location ?? ''}
         placeholder="Не указан"
@@ -149,6 +184,13 @@ function ContactGrid({
         placeholder="https://"
         readOnly={!editor}
         onChange={(value) => editor?.onCandidate({ links: value ? [value] : [] })}
+      />
+      <Field
+        label="Фото / Аватар (URL)"
+        value={photoUrl ?? ''}
+        placeholder="https://"
+        readOnly={!editor}
+        onChange={(value) => editor?.onCandidate({ photoUrl: value })}
       />
     </div>
   );
@@ -165,7 +207,7 @@ function ExperienceSection({
   const statements = new Map(evidence.map((item) => [item.id, item.statement]));
   return (
     <section className="career-resume-section" aria-labelledby="career-resume-experience">
-      <h3 id="career-resume-experience">Опыт</h3>
+      <h3 id="career-resume-experience">Опыт работы</h3>
       {rows.length === 0 ? (
         <p className="career-resume-empty">
           Ни одной роли. Добавьте её из подтверждённого факта досье — резюме не
@@ -189,6 +231,90 @@ function ExperienceSection({
           options={available}
           onPick={editor.onAddExperience}
         />
+      ) : null}
+    </section>
+  );
+}
+
+// eslint-disable-next-line max-lines-per-function
+function SkillsSection({ draft, editor }: SectionProps) {
+  const [newSkill, setNewSkill] = useState('');
+  const skills = draft.skills ?? [];
+
+  function handleAdd() {
+    const trimmed = newSkill.trim();
+    if (!trimmed) return;
+    editor?.onAddSkill(trimmed);
+    setNewSkill('');
+  }
+
+  return (
+    <section className="career-resume-section" aria-labelledby="career-resume-skills">
+      <h3 id="career-resume-skills">Ключевые навыки</h3>
+      {skills.length === 0 ? (
+        <p className="career-resume-empty">Навыки не указаны.</p>
+      ) : (
+        <div className="career-resume-skills-grid" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+          {skills.map((skill) => (
+            <span
+              key={skill.id}
+              className="career-chip"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 10px',
+                background: 'rgba(255,255,255,0.06)',
+                borderRadius: '6px',
+                border: '1px solid rgba(255,255,255,0.12)',
+              }}
+            >
+              <span>{skill.name}</span>
+              {editor ? (
+                <button
+                  type="button"
+                  onClick={() => editor.onRemoveSkill(skill.id)}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', opacity: 0.7 }}
+                  title="Удалить навык"
+                >
+                  ×
+                </button>
+              ) : null}
+            </span>
+          ))}
+        </div>
+      )}
+      {editor ? (
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <input
+            type="text"
+            value={newSkill}
+            placeholder="Новый навык (например, Product Management)"
+            onChange={(e) => setNewSkill(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAdd();
+              }
+            }}
+            style={{
+              flex: 1,
+              padding: '6px 10px',
+              borderRadius: '6px',
+              border: '1px solid rgba(255,255,255,0.12)',
+              background: 'rgba(0,0,0,0.2)',
+              color: 'inherit',
+            }}
+          />
+          <button
+            type="button"
+            className="career-button is-compact"
+            onClick={handleAdd}
+            disabled={!newSkill.trim()}
+          >
+            <Plus size={14} /> Добавить
+          </button>
+        </div>
       ) : null}
     </section>
   );
@@ -283,6 +409,205 @@ function EducationFields({
         onChange={(value) => editor?.onEducation(entry.id, { endDate: value })}
       />
     </div>
+  );
+}
+
+// eslint-disable-next-line max-lines-per-function
+function CoursesSection({ draft, editor }: SectionProps) {
+  const [courseName, setCourseName] = useState('');
+  const [institution, setInstitution] = useState('');
+  const [year, setYear] = useState('');
+  const courses = draft.courses ?? [];
+
+  function handleAdd() {
+    if (!courseName.trim()) return;
+    editor?.onAddCourse(courseName.trim(), institution.trim() || undefined, year.trim() || undefined);
+    setCourseName('');
+    setInstitution('');
+    setYear('');
+  }
+
+  return (
+    <section className="career-resume-section" aria-labelledby="career-resume-courses">
+      <h3 id="career-resume-courses">Курсы и сертификаты</h3>
+      {courses.length === 0 ? (
+        <p className="career-resume-empty">Курсы и сертификаты не указаны.</p>
+      ) : null}
+      {courses.map((course) => (
+        <div key={course.id} className="career-resume-entry is-compact" style={{ marginBottom: '8px' }}>
+          <div className="career-resume-entry-grid">
+            <Field
+              label="Название курса / сертификата"
+              value={course.name}
+              placeholder="Например, Reforge Product Leadership"
+              readOnly={true}
+              onChange={() => {}}
+            />
+            <Field
+              label="Организация"
+              value={course.provider ?? course.institution ?? ''}
+              placeholder="Не указана"
+              readOnly={true}
+              onChange={() => {}}
+            />
+            <Field
+              label="Год"
+              value={course.year ? String(course.year) : ''}
+              placeholder="ГГГГ"
+              mono
+              readOnly={true}
+              onChange={() => {}}
+            />
+          </div>
+          {editor ? (
+            <RemoveButton
+              label="Удалить курс"
+              onClick={() => editor.onRemoveCourse(course.id)}
+            />
+          ) : null}
+        </div>
+      ))}
+      {editor ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 80px auto', gap: '8px', marginTop: '8px' }}>
+          <input
+            type="text"
+            value={courseName}
+            placeholder="Название курса"
+            onChange={(e) => setCourseName(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
+          />
+          <input
+            type="text"
+            value={institution}
+            placeholder="Платформа / Вуз"
+            onChange={(e) => setInstitution(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
+          />
+          <input
+            type="text"
+            value={year}
+            placeholder="Год"
+            onChange={(e) => setYear(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
+          />
+          <button
+            type="button"
+            className="career-button is-compact"
+            onClick={handleAdd}
+            disabled={!courseName.trim()}
+          >
+            <Plus size={14} /> Добавить
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function TestsSection({ draft, editor }: SectionProps) {
+  const tests = draft.tests ?? [];
+  const [testName, setTestName] = useState('');
+  const [score, setScore] = useState('');
+
+  function handleAdd() {
+    if (!testName.trim()) return;
+    editor?.onAddTest(testName.trim(), undefined, score.trim() || undefined);
+    setTestName('');
+    setScore('');
+  }
+
+  return (
+    <section className="career-resume-section" aria-labelledby="career-resume-tests">
+      <h3 id="career-resume-tests">Тесты и оценки</h3>
+      {tests.length === 0 ? <p className="career-resume-empty">Тесты не указаны.</p> : null}
+      {tests.map((test) => (
+        <div key={test.id} className="career-resume-entry is-compact" style={{ marginBottom: '8px' }}>
+          <div className="career-resume-entry-grid">
+            <Field label="Тест / Экзамен" value={test.name} placeholder="GMAT, IELTS..." readOnly={true} onChange={() => {}} />
+            <Field label="Организация" value={test.provider ?? ''} placeholder="Не указана" readOnly={true} onChange={() => {}} />
+            <Field label="Результат / Балл" value={test.score ?? ''} placeholder="720, 8.5..." readOnly={true} onChange={() => {}} />
+          </div>
+          {editor ? <RemoveButton label="Удалить тест" onClick={() => editor.onRemoveTest(test.id)} /> : null}
+        </div>
+      ))}
+      {editor ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '8px', marginTop: '8px' }}>
+          <input
+            type="text"
+            value={testName}
+            placeholder="Тест / Экзамен (напр. GMAT, IELTS)"
+            onChange={(e) => setTestName(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
+          />
+          <input
+            type="text"
+            value={score}
+            placeholder="Балл / Результат"
+            onChange={(e) => setScore(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
+          />
+          <button type="button" className="career-button is-compact" onClick={handleAdd} disabled={!testName.trim()}>
+            <Plus size={14} /> Добавить
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+// eslint-disable-next-line max-lines-per-function
+function RecommendationsSection({ draft, editor }: SectionProps) {
+  const recommendations = draft.recommendations ?? [];
+  const [recommender, setRecommender] = useState('');
+  const [organization, setOrganization] = useState('');
+
+  function handleAdd() {
+    if (!recommender.trim()) return;
+    editor?.onAddRecommendation(recommender.trim(), organization.trim() || undefined);
+    setRecommender('');
+    setOrganization('');
+  }
+
+  return (
+    <section className="career-resume-section" aria-labelledby="career-resume-recommendations">
+      <h3 id="career-resume-recommendations">Рекомендации</h3>
+      {recommendations.length === 0 ? <p className="career-resume-empty">Рекомендации не указаны.</p> : null}
+      {recommendations.map((rec) => (
+        <div key={rec.id} className="career-resume-entry is-compact" style={{ marginBottom: '8px' }}>
+          <div className="career-resume-entry-grid">
+            <Field label="Рекомендатель" value={rec.recommender ?? rec.author ?? ''} placeholder="ФИО" readOnly={true} onChange={() => {}} />
+            <Field label="Организация / Роль" value={rec.organization ?? rec.role ?? ''} placeholder="CTO в TechCorp" readOnly={true} onChange={() => {}} />
+          </div>
+          {rec.text ? (
+            <p style={{ margin: '6px 0 0 0', fontStyle: 'italic', fontSize: '13px', opacity: 0.85 }}>
+              «{rec.text}»
+            </p>
+          ) : null}
+          {editor ? <RemoveButton label="Удалить рекомендацию" onClick={() => editor.onRemoveRecommendation(rec.id)} /> : null}
+        </div>
+      ))}
+      {editor ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px', marginTop: '8px' }}>
+          <input
+            type="text"
+            value={recommender}
+            placeholder="ФИО рекомендателя"
+            onChange={(e) => setRecommender(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
+          />
+          <input
+            type="text"
+            value={organization}
+            placeholder="Компания и должность"
+            onChange={(e) => setOrganization(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
+          />
+          <button type="button" className="career-button is-compact" onClick={handleAdd} disabled={!recommender.trim()}>
+            <Plus size={14} /> Добавить
+          </button>
+        </div>
+      ) : null}
+    </section>
   );
 }
 

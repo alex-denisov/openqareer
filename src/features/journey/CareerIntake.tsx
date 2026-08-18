@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Briefcase,
   Check,
+  CheckCircle,
   FilePdf,
   GlobeHemisphereWest,
   LinkedinLogo,
@@ -26,6 +27,13 @@ import {
   type ProfileFact,
 } from '../workspace/profileIngestion';
 import { extractPdfResume } from '../workspace/pdfResume';
+import {
+  parseResumeContent,
+  parsedResumeToDraft,
+  parsedResumeToFactDrafts,
+  type ParsedResume,
+} from '../workspace/resumeParser';
+import type { ResumeDraft } from '../resume/resumeTypes';
 import {
   validateWorkspaceInput,
   type CareerGoal,
@@ -137,6 +145,8 @@ export function CareerIntake({
   const [otherConstraint, setOtherConstraint] = useState('');
   const [error, setError] = useState<string>();
   const [readingPdf, setReadingPdf] = useState(false);
+  const [parsedResume, setParsedResume] = useState<ParsedResume>();
+  const [parsedDraft, setParsedDraft] = useState<ResumeDraft>();
   const errorRef = useRef<HTMLParagraphElement>(null);
 
   /**
@@ -228,6 +238,9 @@ export function CareerIntake({
               <ArrowRight size={18} weight="bold" />
             </button>
           </div>
+          <p className="career-start-footnote">
+            2–3 минуты на первичную диагностику. Без обязательной регистрации.
+          </p>
         </div>
 
         <div className="career-start-status" aria-label="Состояние карьерной картины">
@@ -236,7 +249,7 @@ export function CareerIntake({
           <div><span>Возможности</span><strong>Не добавлены</strong></div>
         </div>
 
-        <div className="career-start-note">
+        <div className="career-start-benefit">
           <Sparkle size={20} weight="fill" />
           <div>
             <strong>Можно начать без документов</strong>
@@ -254,9 +267,18 @@ export function CareerIntake({
     setError(undefined);
     try {
       const result = await extractPdfResume(file);
+      const parsed = parseResumeContent(result.text);
+      setParsedResume(parsed);
+      const draft = parsedResumeToDraft(parsed);
+      setParsedDraft(draft);
+      const factDrafts = parsedResumeToFactDrafts(parsed, 'resume-pdf');
+      setProfileFactDrafts(factDrafts);
       setResumeText(result.text);
       setResumeSource('pdf');
       setResumeFile({ name: result.fileName, pages: result.pageCount });
+      if (parsed.targetRole && !targetDirection) {
+        setTargetDirection(parsed.targetRole);
+      }
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -334,6 +356,17 @@ export function CareerIntake({
               };
             }),
           );
+        }
+      } else {
+        // Fallback parse if text or URL structure is available
+        const parsed = parseResumeContent(resumeText || url);
+        setParsedResume(parsed);
+        const draft = parsedResumeToDraft(parsed);
+        setParsedDraft(draft);
+        const factDrafts = parsedResumeToFactDrafts(parsed, `${sourceChoice}-resume`);
+        setProfileFactDrafts(factDrafts);
+        if (parsed.targetRole && !targetDirection) {
+          setTargetDirection(parsed.targetRole);
         }
       }
     } catch (reason) {
@@ -425,9 +458,11 @@ export function CareerIntake({
         sourceChoice === 'linkedin' ? linkedinUrl.trim() || undefined : undefined,
       hhUrl: sourceChoice === 'hh' ? hhUrl.trim() || undefined : undefined,
       profileFacts:
-        sourceChoice === 'linkedin' || sourceChoice === 'hh'
+        profileFactDrafts.length > 0
           ? acceptedProfileFacts(profileFactDrafts)
           : undefined,
+      resumeDraft: parsedDraft,
+      parsedResume,
     };
     const errors = validateWorkspaceInput(input);
     if (errors.currentSituation) {
@@ -554,28 +589,135 @@ export function CareerIntake({
           </div>
 
           {sourceChoice === 'pdf' ? (
-            <label className="career-upload-control">
-              <input type="file" accept="application/pdf,.pdf" onChange={handlePdf} />
-              <FilePdf size={26} />
-              <span>
-                <strong>
-                  {readingPdf
-                    ? 'Читаем файл…'
-                    : resumeFile
-                      ? resumeFile.name
-                      : 'Выбрать PDF'}
-                </strong>
-                <small>
-                  {resumeFile
-                    ? `${resumeFile.pages} стр. · текст извлечён локально`
-                    : 'До 20 МБ · оригинал не отправляется'}
-                </small>
-              </span>
-            </label>
+            <div className="career-pdf-source-container">
+              <label className="career-upload-control">
+                <input type="file" accept="application/pdf,.pdf" onChange={handlePdf} />
+                <FilePdf size={26} />
+                <span>
+                  <strong>
+                    {readingPdf
+                      ? 'Читаем и парсим файл…'
+                      : resumeFile
+                        ? resumeFile.name
+                        : 'Выбрать PDF'}
+                  </strong>
+                  <small>
+                    {resumeFile
+                      ? `${resumeFile.pages} стр. · текст и структура извлечены`
+                      : 'До 20 МБ · оригинал не отправляется'}
+                  </small>
+                </span>
+              </label>
+
+              {parsedResume && resumeFile ? (
+                <div
+                  className="career-source-parsed-badge"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '14px',
+                    padding: '16px',
+                    background: 'rgba(34, 197, 94, 0.12)',
+                    border: '1px solid rgba(34, 197, 94, 0.35)',
+                    borderRadius: '12px',
+                    marginTop: '16px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <CheckCircle
+                    size={28}
+                    weight="fill"
+                    style={{ color: '#22c55e', flexShrink: 0, marginTop: '2px' }}
+                  />
+                  <div>
+                    <strong
+                      style={{
+                        fontSize: '15px',
+                        color: '#22c55e',
+                        display: 'block',
+                        marginBottom: '4px',
+                      }}
+                    >
+                      Резюме успешно загружено и распарсено в Resume Studio
+                    </strong>
+                    <span
+                      style={{
+                        fontSize: '13px',
+                        opacity: 0.9,
+                        lineHeight: '1.4',
+                        display: 'block',
+                      }}
+                    >
+                      Файл «{resumeFile.name}» ({resumeFile.pages} стр.) · Найдено:{' '}
+                      {parsedResume.experience.length} мест работы,{' '}
+                      {parsedResume.skills.length} навыков,{' '}
+                      {parsedResume.education.length} записей образования,{' '}
+                      {parsedResume.courses.length} курсов, контакты и блок «О себе».
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+
+              {profileFactDrafts.length > 0 ? (
+                <ProfileFactReview
+                  drafts={profileFactDrafts}
+                  onDraftChange={setProfileFactDrafts}
+                  onError={setError}
+                />
+              ) : null}
+            </div>
           ) : null}
 
           {sourceChoice === 'linkedin' || sourceChoice === 'hh' ? (
             <div className="career-source-fields">
+              {parsedResume ? (
+                <div
+                  className="career-source-parsed-badge"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '14px',
+                    padding: '16px',
+                    background: 'rgba(34, 197, 94, 0.12)',
+                    border: '1px solid rgba(34, 197, 94, 0.35)',
+                    borderRadius: '12px',
+                    marginTop: '16px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <CheckCircle
+                    size={28}
+                    weight="fill"
+                    style={{ color: '#22c55e', flexShrink: 0, marginTop: '2px' }}
+                  />
+                  <div>
+                    <strong
+                      style={{
+                        fontSize: '15px',
+                        color: '#22c55e',
+                        display: 'block',
+                        marginBottom: '4px',
+                      }}
+                    >
+                      Резюме {sourceChoice === 'hh' ? 'hh.ru' : 'LinkedIn'} успешно загружено и распарсено в Resume Studio
+                    </strong>
+                    <span
+                      style={{
+                        fontSize: '13px',
+                        opacity: 0.9,
+                        lineHeight: '1.4',
+                        display: 'block',
+                      }}
+                    >
+                      Найдено: {parsedResume.experience.length} мест работы,{' '}
+                      {parsedResume.skills.length} навыков,{' '}
+                      {parsedResume.education.length} записей образования,{' '}
+                      {parsedResume.courses.length} курсов, контакты.
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+
               {hasAccount ? (
                 <>
                   <PlatformConnectionSection

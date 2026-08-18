@@ -26,7 +26,11 @@ const MAX_LINKS = 10;
 export const EMPTY_DRAFT: ResumeDraft = {
   candidate: {},
   experience: [],
+  skills: [],
   education: [],
+  courses: [],
+  tests: [],
+  recommendations: [],
   languages: [],
 };
 
@@ -140,8 +144,11 @@ export function updateCandidate(
   draft: ResumeDraft,
   patch: {
     fullName?: string;
+    photoUrl?: string;
+    about?: string;
     email?: string;
     phone?: string;
+    telegram?: string;
     location?: string;
     links?: readonly string[];
   },
@@ -151,9 +158,12 @@ export function updateCandidate(
     ...draft,
     candidate: {
       fullName: patch.fullName ?? draft.candidate.fullName,
+      photoUrl: patch.photoUrl ?? draft.candidate.photoUrl,
+      about: patch.about ?? draft.candidate.about,
       contact: {
         email: patch.email ?? contact.email,
         phone: patch.phone ?? contact.phone,
+        telegram: patch.telegram ?? contact.telegram,
         location: patch.location ?? contact.location,
         links: (patch.links ?? contact.links ?? []).slice(0, MAX_LINKS),
       },
@@ -163,6 +173,16 @@ export function updateCandidate(
 
 export function setTargetRole(draft: ResumeDraft, targetRole: string): ResumeDraft {
   return { ...draft, targetRole };
+}
+
+export function setAbout(draft: ResumeDraft, about: string): ResumeDraft {
+  return {
+    ...draft,
+    candidate: {
+      ...draft.candidate,
+      about,
+    },
+  };
 }
 
 export function addExperience(
@@ -225,6 +245,84 @@ export function toggleBullet(
   };
 }
 
+export function addSkill(
+  draft: ResumeDraft,
+  name: string,
+  level?: string,
+): ResumeDraft {
+  const existing = draft.skills ?? [];
+  return {
+    ...draft,
+    skills: [...existing, { id: entryId(), name, level }],
+  };
+}
+
+export function removeSkill(draft: ResumeDraft, id: string): ResumeDraft {
+  return {
+    ...draft,
+    skills: (draft.skills ?? []).filter((s) => s.id !== id),
+  };
+}
+
+export function addCourse(
+  draft: ResumeDraft,
+  name: string,
+  institution?: string,
+  year?: string,
+): ResumeDraft {
+  const existing = draft.courses ?? [];
+  return {
+    ...draft,
+    courses: [...existing, { id: entryId(), name, institution, year }],
+  };
+}
+
+export function removeCourse(draft: ResumeDraft, id: string): ResumeDraft {
+  return {
+    ...draft,
+    courses: (draft.courses ?? []).filter((c) => c.id !== id),
+  };
+}
+
+export function addTest(
+  draft: ResumeDraft,
+  name: string,
+  provider?: string,
+  score?: string,
+): ResumeDraft {
+  const existing = draft.tests ?? [];
+  return {
+    ...draft,
+    tests: [...existing, { id: entryId(), name, provider, score }],
+  };
+}
+
+export function removeTest(draft: ResumeDraft, id: string): ResumeDraft {
+  return {
+    ...draft,
+    tests: (draft.tests ?? []).filter((t) => t.id !== id),
+  };
+}
+
+export function addRecommendation(
+  draft: ResumeDraft,
+  recommender: string,
+  organization?: string,
+): ResumeDraft {
+  const existing = draft.recommendations ?? [];
+  return {
+    ...draft,
+    recommendations: [...existing, { id: entryId(), recommender, organization }],
+  };
+}
+
+export function removeRecommendation(draft: ResumeDraft, id: string): ResumeDraft {
+  return {
+    ...draft,
+    recommendations: (draft.recommendations ?? []).filter((r) => r.id !== id),
+  };
+}
+
 export function addEducation(
   draft: ResumeDraft,
   evidenceMemoryId: string,
@@ -284,13 +382,17 @@ export function removeLanguage(draft: ResumeDraft, id: string): ResumeDraft {
  * an email or URL. An emptied field means "unknown", so it is omitted and comes
  * back as a visible unknown instead of a validation error.
  */
+// eslint-disable-next-line max-lines-per-function
 export function toSavePayload(draft: ResumeDraft): ResumeDraft {
   return {
     candidate: {
       fullName: trimmed(draft.candidate.fullName),
+      photoUrl: trimmed(draft.candidate.photoUrl),
+      about: trimmed(draft.candidate.about),
       contact: {
         email: trimmed(draft.candidate.contact?.email),
         phone: trimmed(draft.candidate.contact?.phone),
+        telegram: trimmed(draft.candidate.contact?.telegram),
         location: trimmed(draft.candidate.contact?.location),
         links: (draft.candidate.contact?.links ?? [])
           .map((link) => link.trim())
@@ -309,6 +411,12 @@ export function toSavePayload(draft: ResumeDraft): ResumeDraft {
       current: entry.current,
       bulletMemoryIds: [...entry.bulletMemoryIds],
     })),
+    skills: (draft.skills ?? []).map((s) => ({
+      id: s.id,
+      evidenceMemoryId: s.evidenceMemoryId,
+      name: s.name.trim(),
+      level: trimmed(s.level),
+    })),
     education: draft.education.map((entry) => ({
       id: entry.id,
       evidenceMemoryId: entry.evidenceMemoryId,
@@ -317,18 +425,52 @@ export function toSavePayload(draft: ResumeDraft): ResumeDraft {
       startDate: trimmed(entry.startDate),
       endDate: trimmed(entry.endDate),
     })),
+    courses: (draft.courses ?? []).map((c) => ({
+      id: c.id,
+      evidenceMemoryId: c.evidenceMemoryId,
+      name: c.name.trim(),
+      institution: trimmed(c.institution),
+      year: trimmed(c.year),
+      certificateUrl: trimmed(c.certificateUrl),
+    })),
+    tests: (draft.tests ?? []).map((t) => ({
+      id: t.id,
+      evidenceMemoryId: t.evidenceMemoryId,
+      name: t.name.trim(),
+      provider: trimmed(t.provider),
+      score: trimmed(t.score),
+      year: trimmed(t.year),
+    })),
+    recommendations: (draft.recommendations ?? []).map((r) => ({
+      id: r.id,
+      evidenceMemoryId: r.evidenceMemoryId,
+      recommender: trimmed(r.recommender),
+      organization: trimmed(r.organization),
+      position: trimmed(r.position),
+      text: trimmed(r.text),
+      contact: trimmed(r.contact),
+    })),
     languages: draft.languages.map((entry) => ({
       id: entry.id,
       evidenceMemoryId: entry.evidenceMemoryId,
       name: trimmed(entry.name),
       cefr: entry.cefr,
     })),
+    additional: draft.additional
+      ? {
+          citizenship: trimmed(draft.additional.citizenship),
+          workSchedule: trimmed(draft.additional.workSchedule),
+          relocation: trimmed(draft.additional.relocation),
+          driversLicense: trimmed(draft.additional.driversLicense),
+        }
+      : undefined,
   };
 }
 
-function trimmed(value: string | undefined): string | undefined {
-  const next = value?.trim();
-  return next && next.length > 0 ? next : undefined;
+function trimmed(value: string | number | undefined): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  const next = String(value).trim();
+  return next.length > 0 ? next : undefined;
 }
 
 /** Matches `entryIdSchema`: leading alphanumeric, then alphanumeric/`_`/`-`. */

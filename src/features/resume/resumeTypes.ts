@@ -26,9 +26,15 @@ export type {
 } from '../../../server/domain/resumeStudio';
 
 export type {
+  ResumeAdditionalInput,
+  ResumeCandidateInput,
+  ResumeCourseInput,
   ResumeEducationInput,
   ResumeExperienceInput,
   ResumeLanguageInput,
+  ResumeRecommendationInput,
+  ResumeSkillInput,
+  ResumeTestInput,
 } from '../../../server/domain/resumeDraft';
 
 import type { ResumeDraft } from '../../../server/domain/resumeDraft';

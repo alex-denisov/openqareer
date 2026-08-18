@@ -227,4 +227,69 @@ describe('ResumeStudioSurface', () => {
     expect(html).toMatch(/Мастер/u);
     expect(html).toMatch(/Германия/u);
   });
+
+  it('renders all full resume sections: about, photo, telegram, skills, courses, tests, and recommendations', () => {
+    const richDraft: ResumeDraft = {
+      ...populatedDraft,
+      candidate: {
+        ...populatedDraft.candidate,
+        about: 'Опытный технологический лидер с фокусом на масштабирование.',
+        photoUrl: 'https://example.com/photo.jpg',
+        contact: {
+          ...populatedDraft.candidate.contact,
+          telegram: '@techlead',
+          phone: '+7 999 123-45-67',
+          location: 'Москва, Россия',
+        },
+      },
+      skills: [
+        { id: 'skill-1', name: 'TypeScript' },
+        { id: 'skill-2', name: 'Product Management' },
+      ],
+      courses: [
+        {
+          id: 'course-1',
+          name: 'Executive Leadership',
+          provider: 'Stanford Online',
+          year: 2023,
+        },
+      ],
+      tests: [
+        {
+          id: 'test-1',
+          name: 'IELTS Academic',
+          provider: 'British Council',
+          score: '8.5',
+          year: 2024,
+        },
+      ],
+      recommendations: [
+        {
+          id: 'rec-1',
+          author: 'Александр Смирнов',
+          role: 'CTO Example Corp',
+          text: 'Выдающийся руководитель и сильный инженер.',
+        },
+      ],
+    };
+
+    const html = render(
+      <ResumeStudioSurface
+        view={viewOf()}
+        draft={richDraft}
+        memory={populatedMemory}
+      />,
+    );
+
+    expect(html).toMatch(/Опытный технологический лидер/u);
+    expect(html).toMatch(/@techlead/u);
+    expect(html).toMatch(/TypeScript/u);
+    expect(html).toMatch(/Product Management/u);
+    expect(html).toMatch(/Executive Leadership/u);
+    expect(html).toMatch(/Stanford Online/u);
+    expect(html).toMatch(/IELTS Academic/u);
+    expect(html).toMatch(/8\.5/u);
+    expect(html).toMatch(/Александр Смирнов/u);
+    expect(html).toMatch(/CTO Example Corp/u);
+  });
 });
