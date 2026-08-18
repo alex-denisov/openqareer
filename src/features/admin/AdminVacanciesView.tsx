@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   listAdminVacancies,
   syncAllAdminVacancySources,
   type AdminVacancy,
   type AdminVacancyPage,
 } from './adminApi';
+import { VacancyDetailModal } from './VacancyDetailModal';
 
 type RemoteFilter = 'all' | 'remote' | 'office';
 
@@ -18,7 +19,7 @@ function formatSalary(salary?: AdminVacancy['salary']): string {
   return parts.join(' ');
 }
 
-// ---------- Stats ----------
+// ---------- Stats & Filters ----------
 
 function VacancyStatsGrid({ data }: { data: AdminVacancyPage }) {
   const remoteCount = data.items.filter((i) => i.isRemote).length;
@@ -40,8 +41,6 @@ function VacancyStatsGrid({ data }: { data: AdminVacancyPage }) {
   );
 }
 
-// ---------- Filters ----------
-
 function VacancyFilters({
   searchQuery, onSearchChange, selectedSource, onSourceChange,
   selectedRemote, onRemoteChange, sources,
@@ -54,11 +53,11 @@ function VacancyFilters({
   return (
     <div className="admin-vacancies-controls">
       <div className="admin-search-wrapper">
-        <input type="text" className="admin-input" placeholder="Поиск по должности, компании, навыкам..." value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} />
+        <input type="text" className="admin-input" placeholder="Поиск по должности, компании, навыкам, ID..." value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} />
       </div>
       <div className="admin-filter-group">
         <select className="admin-select" value={selectedSource} onChange={(e) => onSourceChange(e.target.value)}>
-          <option value="all">Все источники</option>
+          <option value="all">Все источники (18+)</option>
           {sources?.map((s) => (
             <option key={s.sourceId} value={s.sourceId}>{s.sourceName} ({s.count})</option>
           ))}
@@ -73,15 +72,16 @@ function VacancyFilters({
   );
 }
 
-// ---------- Vacancy card ----------
+// ---------- Vacancy Card ----------
 
-function VacancyCardSkills({ skills }: { skills: string[] }) {
-  if (skills.length === 0) return null;
+function VacancyCardMeta({ vacancy }: { vacancy: AdminVacancy }) {
   return (
-    <div className="admin-vacancy-skills">
-      {skills.slice(0, 6).map((skill, idx) => (
-        <span key={idx} className="admin-skill-chip">{skill}</span>
-      ))}
+    <div className="admin-vacancy-card__meta">
+      <span className="admin-vacancy-company">{vacancy.company}</span>
+      <span className="admin-dot-sep">•</span>
+      <span className="admin-vacancy-location">{vacancy.location}</span>
+      {vacancy.isRemote && <span className="admin-badge admin-badge--pro">Remote</span>}
+      {vacancy.experienceLevel && <span className="admin-badge admin-badge--info">{vacancy.experienceLevel}</span>}
     </div>
   );
 }
@@ -92,18 +92,22 @@ function VacancyCard({ vacancy, onSelect }: { vacancy: AdminVacancy; onSelect: (
       <div className="admin-vacancy-card__header">
         <div className="admin-vacancy-card__title-row">
           <h3 className="admin-vacancy-card__title">{vacancy.title}</h3>
-          <span className="admin-source-badge admin-source-badge--active">{vacancy.provenance.sourceId}</span>
+          <div className="admin-vacancy-badges">
+            <span className="admin-vacancy-id-chip">ID: {vacancy.id}</span>
+            <span className="admin-source-badge admin-source-badge--active">{vacancy.provenance.sourceId}</span>
+          </div>
         </div>
-        <div className="admin-vacancy-card__meta">
-          <span className="admin-vacancy-company">{vacancy.company}</span>
-          <span className="admin-dot-sep">•</span>
-          <span className="admin-vacancy-location">{vacancy.location}</span>
-          {vacancy.isRemote && <span className="admin-badge admin-badge--pro">Remote</span>}
-        </div>
+        <VacancyCardMeta vacancy={vacancy} />
       </div>
       <div className="admin-vacancy-salary">{formatSalary(vacancy.salary)}</div>
       <p className="admin-vacancy-desc">{vacancy.description}</p>
-      {vacancy.requiredSkills && <VacancyCardSkills skills={vacancy.requiredSkills} />}
+      {vacancy.requiredSkills && vacancy.requiredSkills.length > 0 && (
+        <div className="admin-vacancy-skills">
+          {vacancy.requiredSkills.slice(0, 6).map((s, idx) => (
+            <span key={idx} className="admin-skill-chip">{s}</span>
+          ))}
+        </div>
+      )}
       <VacancyCardFooter vacancy={vacancy} onSelect={onSelect} />
     </article>
   );
@@ -117,79 +121,17 @@ function VacancyCardFooter({ vacancy, onSelect }: { vacancy: AdminVacancy; onSel
       </span>
       <div className="admin-vacancy-card__actions">
         <button type="button" className="admin-btn admin-btn--secondary" onClick={() => onSelect(vacancy)}>
-          Подробнее
+          Подробнее & Структура
         </button>
         <a href={vacancy.url} target="_blank" rel="noopener noreferrer" className="admin-btn admin-btn--outline">
-          Открыть на источнике ↗
+          Источник ↗
         </a>
       </div>
     </div>
   );
 }
 
-// ---------- Detail modal ----------
-
-function VacancyDetailRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="admin-detail-row">
-      <span className="admin-detail-label">{label}</span>
-      <span className="admin-detail-val">{children}</span>
-    </div>
-  );
-}
-
-function VacancyDetailModal({ vacancy, onClose }: { vacancy: AdminVacancy; onClose: () => void }) {
-  return (
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
-    <div className="admin-modal-overlay" role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}>
-      <button type="button" className="admin-modal-backdrop" aria-label="Закрыть" onClick={onClose} tabIndex={-1} />
-      <div className="admin-modal">
-        <div className="admin-modal__header">
-          <h3 className="admin-modal__title">{vacancy.title}</h3>
-          <button type="button" className="admin-modal__close" onClick={onClose}>✕</button>
-        </div>
-        <VacancyDetailBody vacancy={vacancy} />
-        <div className="admin-modal__footer">
-          <a href={vacancy.url} target="_blank" rel="noopener noreferrer" className="admin-btn admin-btn--primary">
-            Перейти к оригиналу вакансии ↗
-          </a>
-          <button type="button" className="admin-btn admin-btn--secondary" onClick={onClose}>
-            Закрыть
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function VacancyDetailBody({ vacancy }: { vacancy: AdminVacancy }) {
-  return (
-    <div className="admin-modal__body">
-      <VacancyDetailRow label="Компания:">{vacancy.company}</VacancyDetailRow>
-      <VacancyDetailRow label="Зарплата:">{formatSalary(vacancy.salary)}</VacancyDetailRow>
-      <VacancyDetailRow label="Локация / Формат:">
-        {vacancy.location} {vacancy.isRemote ? '(Remote)' : ''}
-      </VacancyDetailRow>
-      <VacancyDetailRow label="Источник:">
-        {vacancy.provenance.sourceId} ({vacancy.provenance.sourceType})
-      </VacancyDetailRow>
-      <div className="admin-detail-row">
-        <span className="admin-detail-label">Навыки:</span>
-        <div className="admin-vacancy-skills">
-          {vacancy.requiredSkills?.map((s, i) => (
-            <span key={i} className="admin-skill-chip">{s}</span>
-          ))}
-        </div>
-      </div>
-      <div className="admin-detail-section">
-        <span className="admin-detail-label">Описание:</span>
-        <div className="admin-detail-text">{vacancy.description}</div>
-      </div>
-    </div>
-  );
-}
-
-// ---------- Header ----------
+// ---------- Header & List ----------
 
 function VacanciesHeader({ syncing, onSyncAll }: { syncing: boolean; onSyncAll: () => void }) {
   return (
@@ -207,8 +149,6 @@ function VacanciesHeader({ syncing, onSyncAll }: { syncing: boolean; onSyncAll: 
   );
 }
 
-// ---------- List ----------
-
 function VacanciesList({ items, onSelect }: { items: AdminVacancy[]; onSelect: (v: AdminVacancy) => void }) {
   if (items.length === 0) {
     return <div className="admin-empty-state">По выбранным фильтрам вакансий не найдено.</div>;
@@ -222,7 +162,7 @@ function VacanciesList({ items, onSelect }: { items: AdminVacancy[]; onSelect: (
   );
 }
 
-// ---------- Root export ----------
+// ---------- Data Loading Hook ----------
 
 function useVacancyLoader(selectedSource: string, searchQuery: string, selectedRemote: RemoteFilter) {
   const [data, setData] = useState<AdminVacancyPage | null>(null);
@@ -252,6 +192,40 @@ function useVacancyLoader(selectedSource: string, searchQuery: string, selectedR
   return { data, loading, error, setError, fetchVacancies };
 }
 
+function useVacancyUrlSync(
+  data: AdminVacancyPage | null,
+  selectedVacancy: AdminVacancy | null,
+  setSelectedVacancy: (v: AdminVacancy | null) => void,
+) {
+  useEffect(() => {
+    if (data?.items && typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlVacId = params.get('vacancyId');
+      if (urlVacId && !selectedVacancy) {
+        const found = data.items.find((i) => i.id === urlVacId);
+        if (found) setSelectedVacancy(found);
+      }
+    }
+  }, [data, selectedVacancy, setSelectedVacancy]);
+
+  return (v: AdminVacancy | null) => {
+    setSelectedVacancy(v);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (v) {
+        params.set('tab', 'vacancies');
+        params.set('vacancyId', v.id);
+      } else {
+        params.delete('vacancyId');
+      }
+      const query = params.toString();
+      window.history.replaceState(null, '', query ? `/admin?${query}` : '/admin');
+    }
+  };
+}
+
+// ---------- Root Export ----------
+
 export function AdminVacanciesView() {
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -259,6 +233,7 @@ export function AdminVacanciesView() {
   const [selectedRemote, setSelectedRemote] = useState<RemoteFilter>('all');
   const [selectedVacancy, setSelectedVacancy] = useState<AdminVacancy | null>(null);
   const { data, loading, error, setError, fetchVacancies } = useVacancyLoader(selectedSource, searchQuery, selectedRemote);
+  const handleSelectVacancy = useVacancyUrlSync(data, selectedVacancy, setSelectedVacancy);
 
   const handleSyncAll = async () => {
     setSyncing(true);
@@ -276,10 +251,18 @@ export function AdminVacanciesView() {
     <div className="admin-vacancies-view">
       <VacanciesHeader syncing={syncing} onSyncAll={handleSyncAll} />
       {data && <VacancyStatsGrid data={data} />}
-      <VacancyFilters searchQuery={searchQuery} onSearchChange={setSearchQuery} selectedSource={selectedSource} onSourceChange={setSelectedSource} selectedRemote={selectedRemote} onRemoteChange={setSelectedRemote} sources={data?.statsBySource} />
+      <VacancyFilters
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        selectedSource={selectedSource}
+        onSourceChange={setSelectedSource}
+        selectedRemote={selectedRemote}
+        onRemoteChange={setSelectedRemote}
+        sources={data?.statsBySource}
+      />
       {error && <div className="admin-alert admin-alert--error">{error}</div>}
-      {loading ? <div className="admin-loading-state">Загрузка вакансий...</div> : data ? <VacanciesList items={data.items} onSelect={setSelectedVacancy} /> : null}
-      {selectedVacancy && <VacancyDetailModal vacancy={selectedVacancy} onClose={() => setSelectedVacancy(null)} />}
+      {loading ? <div className="admin-loading-state">Загрузка вакансий...</div> : data ? <VacanciesList items={data.items} onSelect={handleSelectVacancy} /> : null}
+      {selectedVacancy && <VacancyDetailModal vacancy={selectedVacancy} onClose={() => handleSelectVacancy(null)} />}
     </div>
   );
 }

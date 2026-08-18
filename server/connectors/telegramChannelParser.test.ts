@@ -43,6 +43,9 @@ describe('Telegram Channel Job Parser', () => {
     expect(job.requiredSkills).toContain('PostgreSQL');
     expect(job.url).toBe('https://t.me/it_jobs/1234');
     expect(job.provenance.sourceType).toBe('telegram');
+    expect(job.qualifications).toBeDefined();
+    expect(job.qualifications?.length).toBeGreaterThan(0);
+    expect(job.contactInfo).toBe('@hr_recruiter');
   });
 
   it('extracts salary and remote flags from freeform Russian text', () => {
@@ -62,5 +65,49 @@ describe('Telegram Channel Job Parser', () => {
     expect(parsed?.salary?.to).toBe(7000);
     expect(parsed?.salary?.currency).toBe('USD');
     expect(parsed?.isRemote).toBe(true);
+    expect(parsed?.experienceLevel).toBe('Lead');
+  });
+
+  it('filters out candidate CVs / resume ads and returns null', () => {
+    const resumeText = `
+#резюме #middle #fullstack
+Имя: Александр
+Опыт работы: 4 года в разработке
+Стек: React, TypeScript, Node.js, PostgreSQL
+Ищу работу на полный день, удаленка.
+Зарплатные ожидания: от 200 000 руб.
+Обо мне: ответственный, пишу чистый код.
+Контакты: @alex_dev
+    `;
+
+    const parsed = parseTelegramJobPost(resumeText, {
+      postId: '1892',
+      channelName: 'relocate_today',
+      postUrl: 'https://t.me/relocate_today/1892',
+      publishedAt: '2026-08-17T10:00:00.000Z',
+      observedAt: '2026-08-18T00:00:00.000Z',
+    });
+
+    expect(parsed).toBeNull();
+  });
+
+  it('filters out marketing / course promotional ads and returns null', () => {
+    const adText = `
+#реклама
+Хочешь стать Senior DevOps за 3 месяца?
+Записывайтесь на курс по Kubernetes и Terraform!
+Скидка 40% по промокоду DEV2026.
+Подробнее: https://school.example.com
+    `;
+
+    const parsed = parseTelegramJobPost(adText, {
+      postId: '999',
+      channelName: 'devops_jobs',
+      postUrl: 'https://t.me/devops_jobs/999',
+      publishedAt: '2026-08-17T10:00:00.000Z',
+      observedAt: '2026-08-18T00:00:00.000Z',
+    });
+
+    expect(parsed).toBeNull();
   });
 });

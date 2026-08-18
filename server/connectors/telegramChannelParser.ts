@@ -103,6 +103,45 @@ function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function hasResumeSignals(clean: string): boolean {
+  if (/#резюме|#cv|#ищу_работу|#ищуработу|#кандидат/iu.test(clean.slice(0, 150))) return true;
+  const resumePatterns = [
+    /#резюме/iu, /#cv\b/i, /#ищу_работу/iu, /#ищуработу/iu, /#кандидат/iu,
+    /ищу работу/iu, /ищу проект/iu, /ищу команду/iu, /рассматриваю предложения/iu,
+    /готов к предложениям/iu, /обо мне:/iu, /обо мне\s/iu, /о себе:/iu,
+    /мой стек:/iu, /мои навыки:/iu, /ищу позицию/iu, /ищу удаленку/iu,
+    /открыт к предложениям/iu, /желаемая зарплата/iu, /желаемая должность/iu,
+  ];
+  return resumePatterns.some((rx) => rx.test(clean));
+}
+
+function hasHiringSignals(clean: string): boolean {
+  const hiringPatterns = [
+    /#вакансия/iu, /#job\b/i, /мы ищем/iu, /ищем в команду/iu, /в поисках/iu,
+    /открыта позиция/iu, /открыта вакансия/iu, /требуется/iu, /нанимаем/iu,
+    /предлагаем работу/iu, /о компании:/iu, /наш стек:/iu, /чем предстоит заниматься/iu,
+    /что мы предлагаем/iu, /мы предлагаем/iu, /требования:/iu, /обязанности:/iu,
+  ];
+  return hiringPatterns.some((rx) => rx.test(clean));
+}
+
+function hasPromoSignals(clean: string): boolean {
+  if (/#реклама|#партнерский|#дайджест/iu.test(clean.slice(0, 150))) return true;
+  const promoPatterns = [
+    /#реклама/iu, /#партнерский/iu, /записывайтесь на курс/iu,
+    /бесплатный вебинар/iu, /скидка \d+%/iu, /промокод/iu,
+  ];
+  return promoPatterns.some((rx) => rx.test(clean));
+}
+
+export function isCandidateResumeOrNonVacancy(text: string): boolean {
+  const clean = text.toLowerCase();
+  if (hasPromoSignals(clean)) return true;
+  const hasResume = hasResumeSignals(clean);
+  const hasHiring = hasHiringSignals(clean);
+  return hasResume && !hasHiring;
+}
+
 function extractJobTitleAndCompany(text: string, cleanText: string) {
   const rawLines = text
     .split(/<br\s*\/?>|\n/)
@@ -128,6 +167,90 @@ function extractJobTitleAndCompany(text: string, cleanText: string) {
   return { title, company };
 }
 
+function extractExperienceLevel(text: string): string | undefined {
+  if (/\b(?:intern|стажер|стажёр)\b/i.test(text)) return 'Junior / Intern';
+  if (/\b(?:junior|джуниор|джун)\b/i.test(text)) return 'Junior';
+  if (/\b(?:lead|team lead|tech lead|тимлид|техлид)\b/i.test(text)) return 'Lead';
+  if (/\b(?:head of|director|vp of|c-level|cto|cpo|executive)\b/i.test(text)) return 'Executive';
+  if (/\b(?:principal|staff|architect|архитектор)\b/i.test(text)) return 'Principal / Staff';
+  if (/\b(?:senior|сеньор|сениор|сеньёр)\b/i.test(text)) return 'Senior';
+  if (/\b(?:middle|мидл|миддл)\b/i.test(text)) return 'Middle';
+  return undefined;
+}
+
+function extractEmploymentType(text: string): string | undefined {
+  if (/\bpart-time|парт-тайм|частичная занятость|проектная\b/i.test(text)) return 'Part-time / Project';
+  if (/\bcontract|контракт|b2b|гпх|ип|самозанят\b/i.test(text)) return 'Contract / B2B';
+  if (/\binternship|стажировка\b/i.test(text)) return 'Internship';
+  return 'Full-time';
+}
+
+function extractContactInfo(text: string): string | undefined {
+  const tgMatch = text.match(/(?:контакты|отклик|связь|apply|contact|hr|telegram|tg):\s*(@[a-zA-Z0-9_]{4,32}|\S+@\S+\.\S+|https:\/\/t\.me\/\S+)/i);
+  if (tgMatch) return tgMatch[1];
+  const directUsername = text.match(/@[a-zA-Z0-9_]{5,32}/);
+  if (directUsername) return directUsername[0];
+  const directEmail = text.match(/[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/);
+  if (directEmail) return directEmail[0];
+  return undefined;
+}
+
+function extractListUnderHeading(text: string, headings: string[]): string[] {
+  const results: string[] = [];
+  const lines = text.split(/<br\s*\/?>|\n/);
+  let capturing = false;
+
+  for (const rawLine of lines) {
+    const clean = rawLine.replace(/<[^>]+>/g, '').trim();
+    if (!clean) continue;
+
+    const isHeader = headings.some((h) => clean.toLowerCase().includes(h.toLowerCase()));
+    if (isHeader) {
+      capturing = true;
+      continue;
+    }
+
+    if (
+      capturing &&
+      /(?:требования|обязанности|условия|будет плюсом|стек|контакты|локация|зарплата):/i.test(clean)
+    ) {
+      capturing = false;
+      continue;
+    }
+
+    if (capturing) {
+      const item = clean.replace(/^[-•*–—]\s*/, '').trim();
+      if (item.length > 3 && item.length < 250) {
+        results.push(item);
+      }
+    }
+  }
+
+  return results.slice(0, 8);
+}
+
+function extractStructuredJobSections(text: string) {
+  const responsibilities = extractListUnderHeading(text, [
+    'обязанности', 'задачи', 'чем предстоит заниматься', 'что предстоит делать', 'responsibilities',
+  ]);
+  const qualifications = extractListUnderHeading(text, [
+    'требования', 'ожидания', 'что нужно знать', 'requirements', 'qualifications', 'стек',
+  ]);
+  const niceToHave = extractListUnderHeading(text, [
+    'будет плюсом', 'плюсом будет', 'будет преимуществом', 'nice to have', 'желательно',
+  ]);
+  const benefits = extractListUnderHeading(text, [
+    'условия', 'мы предлагаем', 'бенефиты', 'что мы предлагаем', 'benefits', 'offering',
+  ]);
+
+  return {
+    responsibilities: responsibilities.length > 0 ? responsibilities : undefined,
+    qualifications: qualifications.length > 0 ? qualifications : undefined,
+    niceToHave: niceToHave.length > 0 ? niceToHave : undefined,
+    benefits: benefits.length > 0 ? benefits : undefined,
+  };
+}
+
 export function parseTelegramJobPost(
   text: string,
   meta: {
@@ -139,20 +262,15 @@ export function parseTelegramJobPost(
   },
 ): UnifiedVacancy | null {
   const cleanText = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  if (cleanText.length < 30) return null;
+  if (cleanText.length < 30 || isCandidateResumeOrNonVacancy(text)) return null;
 
   const { title, company } = extractJobTitleAndCompany(text, cleanText);
-  const isRemote = /удален|remote|удалён|anywhere/i.test(cleanText);
   const salary = parseSalaryText(cleanText);
-  const requiredSkills = extractSkillsFromText(cleanText);
+  const sections = extractStructuredJobSections(text);
 
   const fingerprint = calculateVacancyFingerprint({
-    title,
-    company,
-    description: cleanText,
-    salaryFrom: salary?.from,
-    salaryTo: salary?.to,
-    currency: salary?.currency,
+    title, company, description: cleanText,
+    salaryFrom: salary?.from, salaryTo: salary?.to, currency: salary?.currency,
   });
 
   return {
@@ -160,10 +278,16 @@ export function parseTelegramJobPost(
     fingerprint,
     title,
     company,
-    isRemote,
+    isRemote: /удален|remote|удалён|anywhere/i.test(cleanText),
     salary,
     description: cleanText,
-    requiredSkills,
+    requiredSkills: extractSkillsFromText(cleanText),
+    experienceLevel: extractExperienceLevel(cleanText),
+    employmentType: extractEmploymentType(cleanText),
+    ...sections,
+    contactInfo: extractContactInfo(text),
+    fullDescription: text.replace(/<[^>]+>/g, '\n').trim(),
+    postType: 'vacancy',
     url: meta.postUrl,
     provenance: {
       sourceType: 'telegram',

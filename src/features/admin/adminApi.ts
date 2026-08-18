@@ -60,6 +60,16 @@ export interface AdminVacancy {
   };
   description: string;
   requiredSkills: string[];
+  employmentType?: string;
+  experienceLevel?: string;
+  responsibilities?: string[];
+  qualifications?: string[];
+  niceToHave?: string[];
+  benefits?: string[];
+  aboutCompany?: string;
+  contactInfo?: string;
+  fullDescription?: string;
+  postType?: 'vacancy' | 'candidate_resume' | 'ad' | 'digest';
   url: string;
   provenance: {
     sourceType: string;

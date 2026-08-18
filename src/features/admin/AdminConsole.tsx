@@ -113,13 +113,39 @@ function AdminVacancySourcesTab() {
   );
 }
 
+function getInitialAdminTab(): 'users' | 'vacancies' | 'sources' | 'audit' {
+  if (typeof window === 'undefined') return 'users';
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get('tab');
+  if (tab === 'vacancies' || tab === 'sources' || tab === 'audit') return tab;
+  if (params.get('vacancyId')) return 'vacancies';
+  return 'users';
+}
+
 export function AdminConsole({ session, sessionPending = false }: AdminConsoleProps) {
   const isAdmin = session?.role === 'admin';
-  const [activeTab, setActiveTab] = useState<'users' | 'vacancies' | 'sources' | 'audit'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'vacancies' | 'sources' | 'audit'>(getInitialAdminTab);
 
   useEffect(() => {
     document.title = 'Администрирование · openqareer';
   }, []);
+
+  const handleSelectTab = (tab: 'users' | 'vacancies' | 'sources' | 'audit') => {
+    setActiveTab(tab);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (tab === 'users') {
+        params.delete('tab');
+        params.delete('vacancyId');
+      } else {
+        params.set('tab', tab);
+        if (tab !== 'vacancies') params.delete('vacancyId');
+      }
+      const query = params.toString();
+      const newUrl = query ? `/admin?${query}` : '/admin';
+      window.history.replaceState(null, '', newUrl);
+    }
+  };
 
   if (sessionPending) {
     return (
@@ -135,7 +161,7 @@ export function AdminConsole({ session, sessionPending = false }: AdminConsolePr
 
   return (
     <AdminFrame>
-      <AdminNav activeTab={activeTab} onSelectTab={setActiveTab} />
+      <AdminNav activeTab={activeTab} onSelectTab={handleSelectTab} />
       {activeTab === 'users' && <AdminDirectory />}
       {activeTab === 'vacancies' && <AdminVacanciesView />}
       {activeTab === 'sources' && <AdminVacancySourcesTab />}
