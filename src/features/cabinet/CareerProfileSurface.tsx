@@ -23,6 +23,7 @@ import {
 } from '../coach/coachApi';
 import { prepareCareerWorkspace } from '../journey/careerJourneyEngine';
 import { extractTextDocument } from '../workspace/documentText';
+import { extractPdfResume } from '../workspace/pdfResume';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 
 type ProfileTab = 'summary' | 'experience' | 'skills' | 'documents';
@@ -133,7 +134,6 @@ export function CareerProfileSurface({
 
       if (mimeType === 'application/pdf') {
         try {
-          const { extractPdfResume } = await import('../workspace/pdfResume');
           const extracted = await extractPdfResume(file);
           extractedText = extracted.text;
           pageCount = extracted.pageCount;

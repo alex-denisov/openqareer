@@ -213,4 +213,27 @@ test.describe('B140 workspace shell and intake defects', () => {
       ).toHaveCount(1);
     }
   });
+
+  test('quick fallbacks switch the intake source without error', async ({ page }) => {
+    await stubEmptySession(page);
+
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await waitForLiveApp(page);
+    await page.getByRole('button', { name: 'Начать диагностику' }).click();
+    await page.getByRole('button', { name: /Хочу найти работу/ }).click();
+    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await page.getByRole('button', { name: 'hh.ru', exact: true }).click();
+
+    await page.getByRole('button', { name: 'Загрузить PDF или экспорт резюме' }).click();
+    await expect(page.locator('.career-upload-control')).toBeVisible();
+
+    await page.getByRole('button', { name: 'LinkedIn', exact: true }).click();
+    await page.getByRole('button', { name: 'Ввести опыт текстом' }).click();
+    await expect(page.locator('.career-source-textarea')).toBeVisible();
+
+    await page.getByRole('button', { name: 'hh.ru', exact: true }).click();
+    await page.getByRole('button', { name: 'Пропустить файлы' }).click();
+    await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Что должно измениться?' })).toBeVisible();
+  });
 });

@@ -821,6 +821,13 @@
   line-height: 1.5;
 }
 
+.career-quick-fallbacks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .career-connection-notice {
   width: min(100%, 1120px);
   margin: 0 auto 22px;

@@ -17,13 +17,13 @@ describe('connection start failures', () => {
     ).toBe(accountRequiredNotice('hh'));
   });
 
-  it('states plainly that an unconfigured platform is not worked around', () => {
+  it('states plainly that an unconfigured platform is not configured in this environment', () => {
     expect(
       connectionStartNotice(
         new CoachApiError('Не настроено.', 'connector_not_configured', false),
         'linkedin',
       ),
-    ).toMatch(/не обходим ограничения/i);
+    ).toMatch(/ещё не настроено/i);
   });
 
   it('keeps document import available when the platform refuses', () => {

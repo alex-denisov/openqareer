@@ -11,14 +11,21 @@ import {
   Sparkle,
   Target,
 } from '@phosphor-icons/react';
-import { importProfileUrl, type ProfileUrlImportResult } from '../coach/coachApi';
-import type { ConnectionPlatform } from '../connections/connectionResult';
+import {
+  getConnections,
+  importProfileUrl,
+  startConnection,
+  type CandidateConnection,
+  type ProfileUrlImportResult,
+} from '../coach/coachApi';
+import { PLATFORM_LABELS, type ConnectionPlatform } from '../connections/connectionResult';
 import { accountRequiredNotice } from '../connections/connectionState';
 import {
   ingestProfileSnapshot,
   reviewProfileFact,
   type ProfileFact,
 } from '../workspace/profileIngestion';
+import { extractPdfResume } from '../workspace/pdfResume';
 import {
   validateWorkspaceInput,
   type CareerGoal,
@@ -117,6 +124,8 @@ export function CareerIntake({
   }>();
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [hhUrl, setHhUrl] = useState('');
+  const [connections, setConnections] = useState<CandidateConnection[]>();
+  const [connectingPlatform, setConnectingPlatform] = useState<ConnectionPlatform>();
   const [profileImport, setProfileImport] = useState<ProfileUrlImportResult>();
   const [profileFactDrafts, setProfileFactDrafts] = useState<ProfileFactDraft[]>([]);
   const [importingProfile, setImportingProfile] = useState(false);
@@ -142,6 +151,60 @@ export function CareerIntake({
     if (!error) return;
     errorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
   }, [error]);
+
+  useEffect(() => {
+    if (!hasAccount) {
+      setConnections(undefined);
+      return;
+    }
+    let current = true;
+    void getConnections()
+      .then((loaded) => {
+        if (current) setConnections(loaded);
+      })
+      .catch(() => {
+        if (current) setConnections([]);
+      });
+    return () => {
+      current = false;
+    };
+  }, [hasAccount]);
+
+  useEffect(() => {
+    if (sourceChoice !== 'linkedin' && sourceChoice !== 'hh') return;
+    const activeConnection = connections?.find((c) => c.platform === sourceChoice);
+    if (
+      activeConnection?.status === 'connected' &&
+      activeConnection.profile.facts.length > 0 &&
+      profileFactDrafts.length === 0
+    ) {
+      const snapshot = ingestProfileSnapshot({
+        state: 'available',
+        source: {
+          sourceId: `${sourceChoice}-official`,
+          platform: sourceChoice,
+          accessPath: 'official_api',
+          capturedAt: activeConnection.profile.capturedAt,
+        },
+        snapshot: {
+          headline: activeConnection.profile.facts.find((fact) => fact.kind === 'headline')?.value,
+          summary: activeConnection.profile.facts.find((fact) => fact.kind === 'summary')?.value,
+          positions: [],
+          education: [],
+          skills: [],
+        },
+      });
+      if (snapshot.state === 'ready_for_confirmation') {
+        setProfileFactDrafts(
+          snapshot.facts.map((fact) => ({
+            fact,
+            value: fact.statement,
+            decision: 'confirmed',
+          })),
+        );
+      }
+    }
+  }, [sourceChoice, connections, profileFactDrafts.length]);
 
   if (!started) {
     return (
@@ -190,7 +253,6 @@ export function CareerIntake({
     setReadingPdf(true);
     setError(undefined);
     try {
-      const { extractPdfResume } = await import('../workspace/pdfResume');
       const result = await extractPdfResume(file);
       setResumeText(result.text);
       setResumeSource('pdf');
@@ -203,6 +265,22 @@ export function CareerIntake({
       );
     } finally {
       setReadingPdf(false);
+    }
+  }
+
+  async function handleConnectPlatform(platform: ConnectionPlatform) {
+    setConnectingPlatform(platform);
+    setError(undefined);
+    try {
+      const started = await startConnection(platform);
+      window.location.assign(started.authorizationUrl);
+    } catch (reason) {
+      setConnectingPlatform(undefined);
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : `Не удалось начать подключение ${PLATFORM_LABELS[platform]}. Можно загрузить PDF или ввести опыт текстом.`,
+      );
     }
   }
 
@@ -293,23 +371,11 @@ export function CareerIntake({
 
   function moveFromSource() {
     if (sourceChoice === 'linkedin' || sourceChoice === 'hh') {
+      const platformLabel = PLATFORM_LABELS[sourceChoice];
       if (!hasAccount) {
         setError(
-          'Импорт профиля читает данные площадки в ваш аккаунт, поэтому сначала нужен аккаунт. Можно создать его здесь или выбрать PDF, текст либо «Без документов».',
+          `Импорт ${platformLabel} читает данные площадки в ваш аккаунт, поэтому сначала нужен аккаунт. Можно создать его здесь или выбрать PDF, текст либо «Без документов».`,
         );
-        return;
-      }
-      const selectedUrl = sourceChoice === 'linkedin' ? linkedinUrl.trim() : hhUrl.trim();
-      if (!selectedUrl) {
-        setError('Вставьте ссылку или выберите другой способ начать.');
-        return;
-      }
-      if (!profileImport) {
-        setError(PRESS_IMPORT_FIRST_MESSAGE);
-        return;
-      }
-      if (profileImport.status === 'unavailable') {
-        setError('Для этой площадки нужен официальный доступ. Выберите PDF/экспорт или начните без документов.');
         return;
       }
       if (profileFactDrafts.some((draft) => draft.decision === 'pending')) {
@@ -317,12 +383,18 @@ export function CareerIntake({
         return;
       }
       const reviewedFacts = acceptedProfileFacts(profileFactDrafts);
-      if (!reviewedFacts.length) {
-        setError('Подтвердите хотя бы один факт или выберите другой способ начать.');
-        return;
+      if (reviewedFacts.length > 0) {
+        setResumeText(reviewedFacts.map((fact) => fact.statement).join('\n'));
+        setResumeSource('text');
+      } else {
+        const activeConnection = connections?.find((c) => c.platform === sourceChoice);
+        if (activeConnection?.status !== 'connected') {
+          setError(
+            `Подключите ${platformLabel}, подтвердите факты или выберите другой способ: PDF, текст либо «Без документов».`,
+          );
+          return;
+        }
       }
-      setResumeText(reviewedFacts.map((fact) => fact.statement).join('\n'));
-      setResumeSource('text');
     }
     if (sourceChoice === 'text' && resumeText.trim().length > 0 && resumeText.trim().length < 80) {
       setError('Добавьте чуть больше контекста или продолжите без документа.');
@@ -506,6 +578,16 @@ export function CareerIntake({
             <div className="career-source-fields">
               {hasAccount ? (
                 <>
+                  <PlatformConnectionSection
+                    platform={sourceChoice}
+                    connection={connections?.find((c) => c.platform === sourceChoice)}
+                    connecting={connectingPlatform === sourceChoice}
+                    drafts={profileFactDrafts}
+                    onConnect={() => handleConnectPlatform(sourceChoice)}
+                    onChooseSource={chooseSource}
+                    onDraftChange={setProfileFactDrafts}
+                    onError={setError}
+                  />
                   <label>
                     <span>
                       {sourceChoice === 'linkedin'
@@ -518,7 +600,6 @@ export function CareerIntake({
                         if (sourceChoice === 'linkedin') setLinkedinUrl(event.target.value);
                         else setHhUrl(event.target.value);
                         setProfileImport(undefined);
-                        setProfileFactDrafts([]);
                       }}
                       placeholder={
                         sourceChoice === 'linkedin'
@@ -535,13 +616,18 @@ export function CareerIntake({
                     onImport={handleProfileUrlImport}
                     onDraftChange={setProfileFactDrafts}
                     onError={setError}
-                    platform={sourceChoice === 'linkedin' ? 'LinkedIn' : 'hh.ru'}
+                    platform={sourceChoice}
+                    connection={connections?.find((c) => c.platform === sourceChoice)}
+                    connecting={connectingPlatform === sourceChoice}
+                    onConnect={() => handleConnectPlatform(sourceChoice)}
+                    onChooseSource={chooseSource}
                   />
                 </>
               ) : (
                 <AccountRequiredImport
                   platform={sourceChoice}
                   onOpenAccount={onOpenAccount}
+                  onChooseSource={chooseSource}
                 />
               )}
             </div>
@@ -708,15 +794,16 @@ export function CareerIntake({
 /**
  * Importing a profile writes into a candidate-scoped store, so without an
  * account there is nothing to import into. The wizard says that once and hands
- * over the same account panel the top bar opens, instead of failing later with
- * a server message about a missing session.
+ * over the same account panel the top bar opens, plus 1-click fallback options.
  */
 function AccountRequiredImport({
   platform,
   onOpenAccount,
+  onChooseSource,
 }: {
   platform: ConnectionPlatform;
   onOpenAccount?: () => void;
+  onChooseSource: (choice: SourceChoice) => void;
 }) {
   return (
     <div className="career-source-account-required career-field-wide">
@@ -726,6 +813,17 @@ function AccountRequiredImport({
           Создать аккаунт
         </button>
       ) : null}
+      <div className="career-quick-fallbacks">
+        <button className="career-quiet-button" type="button" onClick={() => onChooseSource('pdf')}>
+          Загрузить PDF или экспорт резюме
+        </button>
+        <button className="career-quiet-button" type="button" onClick={() => onChooseSource('text')}>
+          Ввести опыт текстом
+        </button>
+        <button className="career-quiet-button" type="button" onClick={() => onChooseSource('none')}>
+          Пропустить файлы
+        </button>
+      </div>
       <p className="career-account-note">
         Уже есть аккаунт? Вход открывается в том же окне. Без аккаунта остаются
         PDF, экспорт площадки, текст и разговор без документов.
@@ -734,22 +832,126 @@ function AccountRequiredImport({
   );
 }
 
-function ProfileImportAction({
-  result,
+function PlatformConnectionSection({
+  platform,
+  connection,
+  connecting,
   drafts,
-  busy,
-  onImport,
+  onConnect,
+  onChooseSource,
   onDraftChange,
   onError,
-  platform,
 }: {
-  result?: ProfileUrlImportResult;
+  platform: ConnectionPlatform;
+  connection?: CandidateConnection;
+  connecting: boolean;
   drafts: ProfileFactDraft[];
-  busy: boolean;
-  onImport: () => void;
+  onConnect: () => void;
+  onChooseSource: (choice: SourceChoice) => void;
   onDraftChange: (drafts: ProfileFactDraft[]) => void;
   onError: (message: string | undefined) => void;
-  platform: string;
+}) {
+  const platformLabel = PLATFORM_LABELS[platform];
+
+  if (connection?.status === 'connected') {
+    return (
+      <div className="career-connection-panel">
+        <div className="career-connection-headline">
+          <strong>{platformLabel}</strong>
+          <span className="is-connected">Подключено</span>
+        </div>
+        <p>
+          {platform === 'hh'
+            ? 'Официальный доступ hh.ru читает ваш профиль и резюме. Мы не выполняем действий от вашего имени.'
+            : 'Официальный доступ LinkedIn отдаёт базовые поля профиля.'}
+        </p>
+        {drafts.length > 0 ? (
+          <ProfileFactReview
+            drafts={drafts}
+            onDraftChange={onDraftChange}
+            onError={onError}
+          />
+        ) : (
+          <>
+            <p className="career-inline-note">
+              В подключённом профиле пока нет извлечённых фактов. Вы можете загрузить PDF или ввести опыт текстом.
+            </p>
+            <div className="career-quick-fallbacks">
+              <button className="career-quiet-button" type="button" onClick={() => onChooseSource('pdf')}>
+                Загрузить PDF или экспорт резюме
+              </button>
+              <button className="career-quiet-button" type="button" onClick={() => onChooseSource('text')}>
+                Ввести опыт текстом
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  if (connection?.available) {
+    return (
+      <div className="career-connection-panel">
+        <p>
+          {platform === 'hh'
+            ? 'Официальный доступ hh.ru читает ваш профиль и резюме. Мы не выполняем действий от вашего имени: ни откликов, ни правок резюме.'
+            : 'Официальный вход LinkedIn отдаёт базовые поля профиля: он не переносит карьерную историю. Опыт можно дополнить экспортом или PDF.'}
+        </p>
+        <button
+          className="career-primary-button"
+          type="button"
+          disabled={connecting}
+          onClick={onConnect}
+        >
+          {connecting ? 'Готовим подключение…' : `Подключить ${platformLabel}`}
+        </button>
+        <small>
+          Вы подтверждаете доступ на стороне {platformLabel}. Ничего не читается без вашего согласия.
+        </small>
+        <div className="career-quick-fallbacks">
+          <button className="career-quiet-button" type="button" onClick={() => onChooseSource('pdf')}>
+            Загрузить PDF или экспорт резюме
+          </button>
+          <button className="career-quiet-button" type="button" onClick={() => onChooseSource('text')}>
+            Ввести опыт текстом
+          </button>
+          <button className="career-quiet-button" type="button" onClick={() => onChooseSource('none')}>
+            Пропустить файлы
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="career-connection-panel">
+      <p>
+        Официальное подключение {platformLabel} пока не настроено в этой среде. Загрузите PDF/экспорт, введите опыт текстом или начните без документов.
+      </p>
+      <div className="career-quick-fallbacks">
+        <button className="career-quiet-button" type="button" onClick={() => onChooseSource('pdf')}>
+          Загрузить PDF или экспорт резюме
+        </button>
+        <button className="career-quiet-button" type="button" onClick={() => onChooseSource('text')}>
+          Ввести опыт текстом
+        </button>
+        <button className="career-quiet-button" type="button" onClick={() => onChooseSource('none')}>
+          Пропустить файлы
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProfileFactReview({
+  drafts,
+  onDraftChange,
+  onError,
+}: {
+  drafts: ProfileFactDraft[];
+  onDraftChange: (drafts: ProfileFactDraft[]) => void;
+  onError: (message: string | undefined) => void;
 }) {
   function decide(index: number, decision: 'confirmed' | 'rejected') {
     const draft = drafts[index];
@@ -778,61 +980,132 @@ function ProfileImportAction({
   }
 
   return (
+    <div className="career-profile-fact-review">
+      <p>
+        <strong>Найдено: {drafts.length}</strong> Решите по каждому факту, можно ли использовать его в карьерной картине.
+      </p>
+      {drafts.map((draft, index) => (
+        <fieldset key={draft.fact.id}>
+          <legend>
+            {draft.fact.kind === 'headline'
+              ? 'Заголовок профиля'
+              : draft.fact.kind === 'summary'
+                ? 'Описание профиля'
+                : 'Факт профиля'}
+          </legend>
+          <textarea
+            aria-label={`Факт ${index + 1}`}
+            value={draft.value}
+            onChange={(event) =>
+              onDraftChange(
+                drafts.map((item, itemIndex) =>
+                  itemIndex === index
+                    ? { ...item, value: event.target.value, decision: 'pending' }
+                    : item,
+                ),
+              )
+            }
+            rows={3}
+          />
+          <small>
+            Источник: {draft.fact.provenance.locator ?? 'официальный профиль'} ·{' '}
+            {draft.fact.provenance.capturedAt.slice(0, 10)}
+          </small>
+          <div>
+            <button
+              className="career-quiet-button"
+              type="button"
+              aria-pressed={draft.decision === 'confirmed' || draft.decision === 'corrected'}
+              onClick={() => decide(index, 'confirmed')}
+            >
+              {draft.decision === 'corrected'
+                ? 'Исправлено'
+                : draft.decision === 'confirmed'
+                  ? 'Подтверждено'
+                  : 'Подтвердить'}
+            </button>
+            <button
+              className="career-quiet-button"
+              type="button"
+              aria-pressed={draft.decision === 'rejected'}
+              onClick={() => decide(index, 'rejected')}
+            >
+              Не использовать
+            </button>
+          </div>
+        </fieldset>
+      ))}
+    </div>
+  );
+}
+
+function ProfileImportAction({
+  result,
+  drafts,
+  busy,
+  onImport,
+  onDraftChange,
+  onError,
+  platform,
+  connection,
+  connecting,
+  onConnect,
+  onChooseSource,
+}: {
+  result?: ProfileUrlImportResult;
+  drafts: ProfileFactDraft[];
+  busy: boolean;
+  onImport: () => void;
+  onDraftChange: (drafts: ProfileFactDraft[]) => void;
+  onError: (message: string | undefined) => void;
+  platform: ConnectionPlatform;
+  connection?: CandidateConnection;
+  connecting: boolean;
+  onConnect: () => void;
+  onChooseSource: (choice: SourceChoice) => void;
+}) {
+  const platformLabel = PLATFORM_LABELS[platform];
+
+  return (
     <div className="career-profile-import-result" aria-live="polite">
       <button className="career-quiet-button" type="button" disabled={busy} onClick={onImport}>
         {busy ? 'Проверяем доступ…' : IMPORT_ACTION_LABEL}
       </button>
       {result?.status === 'imported' ? (
-        <div className="career-profile-fact-review">
-          <p><strong>Найдено: {drafts.length}</strong> Решите по каждому факту, можно ли использовать его в карьерной картине.</p>
-          {drafts.map((draft, index) => (
-            <fieldset key={draft.fact.id}>
-              <legend>{draft.fact.kind === 'headline' ? 'Заголовок профиля' : 'Описание профиля'}</legend>
-              <textarea
-                aria-label={`Факт ${index + 1}`}
-                value={draft.value}
-                onChange={(event) =>
-                  onDraftChange(
-                    drafts.map((item, itemIndex) =>
-                      itemIndex === index
-                        ? { ...item, value: event.target.value, decision: 'pending' }
-                        : item,
-                    ),
-                  )
-                }
-                rows={3}
-              />
-              <small>Источник: {draft.fact.provenance.locator ?? 'официальный профиль'} · {draft.fact.provenance.capturedAt.slice(0, 10)}</small>
-              <div>
-                <button
-                  className="career-quiet-button"
-                  type="button"
-                  aria-pressed={draft.decision === 'confirmed' || draft.decision === 'corrected'}
-                  onClick={() => decide(index, 'confirmed')}
-                >
-                  {draft.decision === 'corrected' ? 'Исправлено' : draft.decision === 'confirmed' ? 'Подтверждено' : 'Подтвердить'}
-                </button>
-                <button
-                  className="career-quiet-button"
-                  type="button"
-                  aria-pressed={draft.decision === 'rejected'}
-                  onClick={() => decide(index, 'rejected')}
-                >
-                  Не использовать
-                </button>
-              </div>
-            </fieldset>
-          ))}
-        </div>
+        <ProfileFactReview
+          drafts={drafts}
+          onDraftChange={onDraftChange}
+          onError={onError}
+        />
       ) : null}
       {result?.status === 'unavailable' ? (
-        <p><strong>Автоматический импорт {platform} пока не подключён.</strong> Мы не обходим ограничения площадки. Загрузите свой PDF/экспорт или продолжите без документа.</p>
+        <div className="career-connection-panel">
+          <p>
+            <strong>По ссылке доступны только открытые поля.</strong> Полные данные приходят через официальное подключение аккаунта или ваш экспорт и PDF.
+          </p>
+          {connection?.available ? (
+            <button
+              className="career-primary-button"
+              type="button"
+              disabled={connecting}
+              onClick={onConnect}
+            >
+              {connecting ? 'Готовим подключение…' : `Подключить ${platformLabel}`}
+            </button>
+          ) : null}
+          <div className="career-quick-fallbacks">
+            <button className="career-quiet-button" type="button" onClick={() => onChooseSource('pdf')}>
+              Загрузить PDF или экспорт
+            </button>
+            <button className="career-quiet-button" type="button" onClick={() => onChooseSource('text')}>
+              Ввести текстом
+            </button>
+            <button className="career-quiet-button" type="button" onClick={() => onChooseSource('none')}>
+              Пропустить файлы
+            </button>
+          </div>
+        </div>
       ) : null}
-      <p className="career-account-note">
-        {platform === 'LinkedIn'
-          ? 'По ссылке доступны только открытые поля профиля. Карьерную историю приносит ваш экспорт LinkedIn или PDF.'
-          : 'По ссылке доступны только открытые поля резюме. Полные данные приходят через подключение ниже или ваш экспорт и PDF.'}
-      </p>
     </div>
   );
 }

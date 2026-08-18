@@ -26,7 +26,7 @@ export function connectionStartNotice(
     case 'unauthorized':
       return accountRequiredNotice(platform);
     case 'connector_not_configured':
-      return `Подключение ${label} ещё не настроено. Мы не обходим ограничения площадки — загрузите свой экспорт или PDF.`;
+      return `Подключение ${label} ещё не настроено в этой среде — загрузите свой экспорт или PDF.`;
     default:
       return `Не удалось начать подключение ${label}. Повторите позже или используйте экспорт и PDF.`;
   }

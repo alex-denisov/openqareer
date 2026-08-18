@@ -101,6 +101,33 @@ describe('split browser entry delivery', () => {
     assert.ok(workerBootstrap.includes('new MessageEvent("message",pending)'));
   });
 
+  it('rewrites imports to small asset modules and updates non-split files referencing split modules', () => {
+    const source = `const release="release-test";${'x'.repeat(10_000)};import("./pdfResume-test.js");import("./pdf-test.js")`;
+    const directory = makeFixture(source);
+    writeFileSync(
+      join(directory, 'assets/pdfResume-test.js'),
+      'import("./pdf-test.js");export const extractPdfResume = () => {};',
+    );
+
+    const result = buildSplitDelivery({
+      distDirectory: directory,
+      release: 'release-test',
+      partBytes: 4_096,
+    });
+
+    const bootstrap = readFileSync(join(directory, result.entryProxyPath), 'utf8');
+    assert.ok(
+      bootstrap.includes('["./pdfResume-test.js","/assets/pdfResume-test.js"]'),
+      'bootstrap must rewrite relative import of small module to absolute /assets/ path',
+    );
+
+    const smallModule = readFileSync(join(directory, 'assets/pdfResume-test.js'), 'utf8');
+    assert.ok(
+      smallModule.includes('/assets/pdf-test.js.split.js') || smallModule.includes('./pdf-test.js.split.js'),
+      'small module on disk must have reference to split module rewritten to .split.js proxy',
+    );
+  });
+
   it('rejects an index without a safe production entry', () => {
     const directory = makeFixture('export default 1');
     writeFileSync(

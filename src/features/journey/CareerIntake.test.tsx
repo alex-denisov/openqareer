@@ -21,4 +21,11 @@ describe('CareerIntake', () => {
     expect(PRESS_IMPORT_FIRST_MESSAGE).toContain(`«${IMPORT_ACTION_LABEL}»`);
     expect(PRESS_IMPORT_FIRST_MESSAGE).not.toContain('Импортировать по ссылке');
   });
+
+  it('renders start screen note explaining documents are optional', () => {
+    const html = renderToStaticMarkup(<CareerIntake onComplete={() => undefined} />);
+
+    expect(html).toContain('Можно начать без документов');
+    expect(html).toContain('Без аккаунта прогресс хранится только в текущей вкладке.');
+  });
 });

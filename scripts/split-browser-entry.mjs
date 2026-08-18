@@ -24,7 +24,7 @@ function assetKind(name, entryName) {
   if (name === entryName) return 'app';
   if (/^[\w-]+\.worker-[\w-]+\.(?:js|mjs)$/.test(name)) return 'worker';
   if (/^pdf-[\w-]+\.js$/.test(name)) return 'pdf-module';
-  throw new Error(`Large browser module needs an explicit loader contract: ${name}`);
+  return 'module';
 }
 
 function partPath(proxyPath, index) {
@@ -205,8 +205,11 @@ export function buildSplitDelivery({
   const entryPath = scriptMatch[1];
   const entryName = basename(entryPath);
   const assetsDirectory = join(distDirectory, 'assets');
-  const largeModules = readdirSync(assetsDirectory)
-    .filter((name) => /\.(?:js|mjs)$/.test(name))
+  const allAssetNames = readdirSync(assetsDirectory).filter((name) =>
+    /\.(?:js|mjs)$/.test(name),
+  );
+
+  const largeModules = allAssetNames
     .filter((name) => statSync(join(assetsDirectory, name)).size > partBytes)
     .map((name) => {
       const sourcePath = `/assets/${name}`;
@@ -224,6 +227,18 @@ export function buildSplitDelivery({
       };
     });
 
+  const smallModules = allAssetNames
+    .filter((name) => statSync(join(assetsDirectory, name)).size <= partBytes)
+    .map((name) => {
+      const sourcePath = `/assets/${name}`;
+      const sourceFile = join(distDirectory, sourcePath);
+      return {
+        name,
+        sourceFile,
+        sourcePath,
+      };
+    });
+
   const entryPlan = largeModules.find((plan) => plan.name === entryName);
   if (!entryPlan) {
     throw new Error('Production entry is unexpectedly smaller than one delivery part');
@@ -232,13 +247,21 @@ export function buildSplitDelivery({
   const results = [];
   for (const plan of largeModules) {
     const sourceText = plan.source.toString('utf8');
-    const rewrites = largeModules.flatMap((target) => {
-      const candidates = [
-        [`./${target.name}`, target.proxyPath],
-        [`/assets/${target.name}`, target.proxyPath],
-      ];
-      return candidates.filter(([from]) => sourceText.includes(from));
-    });
+    const rewrites = [
+      ...largeModules.flatMap((target) => {
+        const candidates = [
+          [`./${target.name}`, target.proxyPath],
+          [`/assets/${target.name}`, target.proxyPath],
+        ];
+        return candidates.filter(([from]) => sourceText.includes(from));
+      }),
+      ...smallModules.flatMap((target) => {
+        const candidates = [
+          [`./${target.name}`, target.sourcePath],
+        ];
+        return candidates.filter(([from]) => sourceText.includes(from));
+      }),
+    ];
     const partCount = Math.ceil(plan.source.length / partBytes);
     for (let index = 0; index < partCount; index += 1) {
       const start = index * partBytes;
@@ -278,6 +301,27 @@ export function buildSplitDelivery({
       sourceHash: sha256Hex(plan.source),
       sourcePath: plan.sourcePath,
     });
+  }
+
+  // Also update small modules remaining on disk if they import split large modules
+  for (const small of smallModules) {
+    let content = readFileSync(small.sourceFile, 'utf8');
+    let changed = false;
+    for (const large of largeModules) {
+      const relativeRef = `./${large.name}`;
+      const absoluteRef = `/assets/${large.name}`;
+      if (content.includes(relativeRef)) {
+        content = content.replaceAll(relativeRef, `./${large.name}.split.js`);
+        changed = true;
+      }
+      if (content.includes(absoluteRef)) {
+        content = content.replaceAll(absoluteRef, large.proxyPath);
+        changed = true;
+      }
+    }
+    if (changed) {
+      writeFileSync(small.sourceFile, content);
+    }
   }
 
   for (const plan of largeModules) {
