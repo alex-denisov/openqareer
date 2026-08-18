@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AdminConsole } from '../src/features/admin/AdminConsole';
-import { CareerWorkspaceShell } from '../src/features/shell/CareerWorkspaceShell';
+import { LandingPage } from '../src/features/site/LandingPage';
 
 const EMPTY_ROOT = '<div id="root"></div>';
 
@@ -19,14 +19,9 @@ function bootstrapRoot(markup: string): string {
 /**
  * Two documents, one bundle.
  *
- * The client takes seconds to arrive over the production route (49 delivery
- * parts, one connection per response), and whatever the HTML already contains
- * is what the visitor stares at meanwhile. One shared document therefore meant
- * `/admin` showed the candidate workspace for five seconds before the console
- * replaced it — a measured 5356 ms on desktop, not a flash (B089).
- *
- * So each surface gets its own prerendered first paint, both built from the
- * same Vite output and both carrying the same entry script.
+ * The public root `/` delivers the indexed landing page with semantic H1,
+ * structured JSON-LD and instant first paint.
+ * The administrator console `/admin` has its own prerendered first paint.
  */
 export async function prerenderShells(
   indexPath: string,
@@ -44,7 +39,7 @@ export async function prerenderShells(
     indexPath,
     html.replace(
       EMPTY_ROOT,
-      bootstrapRoot(renderToStaticMarkup(<CareerWorkspaceShell />)),
+      bootstrapRoot(renderToStaticMarkup(<LandingPage onNavigate={() => {}} />)),
     ),
   );
   // The console's own pending state, rendered by the console itself, so the

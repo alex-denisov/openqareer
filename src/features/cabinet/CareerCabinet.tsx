@@ -10,6 +10,7 @@ import { CareerCoachDesk } from './CareerCoachDesk';
 import { CareerIntelligencePanel } from './CareerIntelligencePanel';
 import { CareerProfileSurface } from './CareerProfileSurface';
 import { ResumeStudio } from '../resume/ResumeStudio';
+import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { useCareerCabinetData } from './useCareerCabinetData';
 
 export type CareerCabinetView =
@@ -61,11 +62,17 @@ export function CareerCabinet({
     ],
   );
   return (
-    <div className={`career-cabinet career-cabinet-view-${view}`}>
-      <CabinetHeader view={view} name={name} data={data} />
-      {data.error ? <p className="career-cabinet-global-error" role="alert">{data.error}</p> : null}
-      <CabinetView {...{ view, session, workspace, onNavigate, onUpdateWorkspace, onOpenAccount, data }} journey={canonicalJourney} />
-    </div>
+    <AppErrorBoundary
+      fallbackTitle="Не удалось отобразить кабинет"
+      fallbackMessage="При отображении разделов кабинета произошла ошибка. Ваши сохранённые данные в безопасности."
+      onReset={() => void data.refresh()}
+    >
+      <div className={`career-cabinet career-cabinet-view-${view}`}>
+        <CabinetHeader view={view} name={name} data={data} />
+        {data.error ? <p className="career-cabinet-global-error" role="alert">{data.error}</p> : null}
+        <CabinetView {...{ view, session, workspace, onNavigate, onUpdateWorkspace, onOpenAccount, data }} journey={canonicalJourney} />
+      </div>
+    </AppErrorBoundary>
   );
 }
 

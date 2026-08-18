@@ -27,6 +27,25 @@ export function useCareerCabinetData(candidateId: string): CareerCabinetData {
     setError(undefined);
     try {
       const [nextAccount, nextSnapshot] = await Promise.all([getAccount(), getCandidate()]);
+      if (!nextAccount || typeof nextAccount !== 'object' || !nextAccount.profile) {
+        throw new CoachApiError(
+          'Не удалось загрузить данные аккаунта. Повторите запрос.',
+          'malformed_account',
+          true,
+        );
+      }
+      if (
+        !nextSnapshot ||
+        typeof nextSnapshot !== 'object' ||
+        !Array.isArray(nextSnapshot.memory) ||
+        !nextSnapshot.candidate
+      ) {
+        throw new CoachApiError(
+          'Не удалось загрузить профиль кандидата. Повторите запрос.',
+          'malformed_snapshot',
+          true,
+        );
+      }
       setAccount(nextAccount);
       setSnapshot(nextSnapshot);
     } catch (reason) {

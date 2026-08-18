@@ -40,3 +40,5 @@ output/
 private-research/
 **/private-research/
 data/private/
+.serena/
+prototypes/

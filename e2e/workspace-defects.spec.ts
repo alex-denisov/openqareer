@@ -73,7 +73,7 @@ test.describe('B140 workspace shell and intake defects', () => {
       response.url().includes('/api/v1/auth/'),
     );
 
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await sessionResolved;
     await waitForLiveApp(page);
     await expect(page.getByRole('heading', { name: 'Начните с карьерного вопроса' })).toBeVisible();
@@ -87,14 +87,14 @@ test.describe('B140 workspace shell and intake defects', () => {
       await route.fulfill({ json: { data: null } });
     });
 
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.getByText(SESSION_GATE_TEXT)).toBeVisible({ timeout: 3_000 });
   });
 
   test('the topbar does not repeat the active navigation item', async ({ page }) => {
     await stubEmptySession(page);
 
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
     await expect(page.locator('.career-topbar .career-page-name')).toHaveCount(0);
@@ -104,7 +104,7 @@ test.describe('B140 workspace shell and intake defects', () => {
   test('step three gives every legend the same breathing room as a label', async ({ page }) => {
     await stubEmptySession(page);
 
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
     await openContextStep(page);
 
@@ -148,7 +148,7 @@ test.describe('B140 workspace shell and intake defects', () => {
   test('step three keeps side-by-side controls on one baseline', async ({ page }) => {
     await stubEmptySession(page);
 
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
     await openContextStep(page);
 
@@ -175,7 +175,7 @@ test.describe('B140 workspace shell and intake defects', () => {
   test('an intake without an account offers a real way to get one', async ({ page }) => {
     await stubEmptySession(page);
 
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
     await page.getByRole('button', { name: 'Начать диагностику' }).click();
     await page.getByRole('button', { name: /Хочу найти работу/ }).click();
@@ -193,7 +193,7 @@ test.describe('B140 workspace shell and intake defects', () => {
   test('the intake never names a button that is not on screen', async ({ page }) => {
     await stubEmptySession(page);
 
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
     await page.getByRole('button', { name: 'Начать диагностику' }).click();
     await page.getByRole('button', { name: /Хочу найти работу/ }).click();

@@ -24,6 +24,7 @@ import { buildCareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace, WorkspaceInput } from '../workspace/workspaceStorage';
 import { CareerTariffsView } from './CareerTariffsView';
 import { CareerAccountPanel } from './CareerAccountPanel';
+import { AppErrorBoundary } from './AppErrorBoundary';
 import {
   keepsIntakeAcrossIdentityChange,
   shouldShowIntake,
@@ -313,107 +314,109 @@ export function CareerWorkspaceShell({
         className="career-main"
         aria-hidden={expertOpen || accountOpen ? true : undefined}
       >
-        {sessionPending && (sessionWaitIsLong || sessionError) ? (
-          <section className="career-session-gate" aria-live="polite" aria-busy="true">
-            <p className="career-eyebrow">Защита данных</p>
-            <h1>Проверяем защищённую сессию</h1>
-            <p>Карьерные данные появятся только после проверки аккаунта этого браузера.</p>
-            {sessionError ? (
-              <>
-                <p className="career-expert-error" role="alert">
-                  {sessionError}
-                </p>
-                <button className="career-quiet-button" type="button" onClick={onRetrySession}>
-                  Повторить проверку
-                </button>
-              </>
-            ) : null}
-          </section>
-        ) : !sessionPending && invalidStorage ? (
-          <div className="career-storage-warning" role="alert">
-            <div>
-              <strong>Сохранённый профиль не удалось прочитать</strong>
-              <p>Удалите повреждённую локальную запись и начните заново.</p>
-            </div>
-            <button type="button" onClick={onClearWorkspace}>
-              Очистить запись
-            </button>
-          </div>
-        ) : null}
-        {storageError ? (
-          <p className="career-storage-warning" role="alert">
-            {storageError}
-          </p>
-        ) : null}
-        {connectionNotice ? (
-          <div className="career-connection-notice" role="status">
-            <p>{connectionNotice}</p>
-            {onDismissConnectionNotice ? (
-              <button type="button" onClick={onDismissConnectionNotice}>
-                Понятно
+        <AppErrorBoundary>
+          {sessionPending && (sessionWaitIsLong || sessionError) ? (
+            <section className="career-session-gate" aria-live="polite" aria-busy="true">
+              <p className="career-eyebrow">Защита данных</p>
+              <h1>Проверяем защищённую сессию</h1>
+              <p>Карьерные данные появятся только после проверки аккаунта этого браузера.</p>
+              {sessionError ? (
+                <>
+                  <p className="career-expert-error" role="alert">
+                    {sessionError}
+                  </p>
+                  <button className="career-quiet-button" type="button" onClick={onRetrySession}>
+                    Повторить проверку
+                  </button>
+                </>
+              ) : null}
+            </section>
+          ) : !sessionPending && invalidStorage ? (
+            <div className="career-storage-warning" role="alert">
+              <div>
+                <strong>Сохранённый профиль не удалось прочитать</strong>
+                <p>Удалите повреждённую локальную запись и начните заново.</p>
+              </div>
+              <button type="button" onClick={onClearWorkspace}>
+                Очистить запись
               </button>
-            ) : null}
-          </div>
-        ) : null}
+            </div>
+          ) : null}
+          {storageError ? (
+            <p className="career-storage-warning" role="alert">
+              {storageError}
+            </p>
+          ) : null}
+          {connectionNotice ? (
+            <div className="career-connection-notice" role="status">
+              <p>{connectionNotice}</p>
+              {onDismissConnectionNotice ? (
+                <button type="button" onClick={onDismissConnectionNotice}>
+                  Понятно
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
-        {intakeVisible ? (
-          <CareerIntake
-            key={`intake-${intakeSeed}`}
-            onComplete={completeIntake}
-            hasAccount={Boolean(session?.candidateId)}
-            onOpenAccount={() => setAccountOpen(true)}
-            onStartedChange={setIntakeStarted}
-          />
-        ) : null}
-        {cabinetSession && !intakeVisible && activeView !== 'tariffs' ? (
-          <CareerCabinet
-            key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
-            view={activeView as CareerCabinetView}
-            session={cabinetSession}
-            workspace={visibleWorkspace}
-            journey={journey}
-            onNavigate={navigate}
-            onUpdateWorkspace={onUpdateWorkspace}
-            onOpenAccount={() => setAccountOpen(true)}
-          />
-        ) : null}
-        {!cabinetSession && visibleWorkspace && journey && activeView === 'today' ? (
-          <TodayJourneyView
-            workspace={visibleWorkspace}
-            journey={journey}
-            onNavigate={navigate}
-            onOpenExpert={openExpert}
-            onUpdateWorkspace={onUpdateWorkspace}
-          />
-        ) : null}
-        {!cabinetSession && visibleWorkspace && journey && activeView === 'profile' ? (
-          <ProfileJourneyView
-            workspace={visibleWorkspace}
-            journey={journey}
-            onNavigate={navigate}
-            onOpenExpert={openExpert}
-            onUpdateWorkspace={onUpdateWorkspace}
-          />
-        ) : null}
-        {!cabinetSession && visibleWorkspace && journey && activeView === 'career' ? (
-          <CareerMapView
-            workspace={visibleWorkspace}
-            journey={journey}
-            onNavigate={navigate}
-            onOpenExpert={openExpert}
-            onUpdateWorkspace={onUpdateWorkspace}
-          />
-        ) : null}
-        {!cabinetSession && visibleWorkspace && journey && activeView === 'opportunities' ? (
-          <OpportunitiesView
-            workspace={visibleWorkspace}
-            journey={journey}
-            onNavigate={navigate}
-            onOpenExpert={openExpert}
-            onUpdateWorkspace={onUpdateWorkspace}
-          />
-        ) : null}
-        {activeView === 'tariffs' ? <CareerTariffsView onOpenCoach={openExpert} /> : null}
+          {intakeVisible ? (
+            <CareerIntake
+              key={`intake-${intakeSeed}`}
+              onComplete={completeIntake}
+              hasAccount={Boolean(session?.candidateId)}
+              onOpenAccount={() => setAccountOpen(true)}
+              onStartedChange={setIntakeStarted}
+            />
+          ) : null}
+          {cabinetSession && !intakeVisible && activeView !== 'tariffs' ? (
+            <CareerCabinet
+              key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
+              view={activeView as CareerCabinetView}
+              session={cabinetSession}
+              workspace={visibleWorkspace}
+              journey={journey}
+              onNavigate={navigate}
+              onUpdateWorkspace={onUpdateWorkspace}
+              onOpenAccount={() => setAccountOpen(true)}
+            />
+          ) : null}
+          {!cabinetSession && visibleWorkspace && journey && activeView === 'today' ? (
+            <TodayJourneyView
+              workspace={visibleWorkspace}
+              journey={journey}
+              onNavigate={navigate}
+              onOpenExpert={openExpert}
+              onUpdateWorkspace={onUpdateWorkspace}
+            />
+          ) : null}
+          {!cabinetSession && visibleWorkspace && journey && activeView === 'profile' ? (
+            <ProfileJourneyView
+              workspace={visibleWorkspace}
+              journey={journey}
+              onNavigate={navigate}
+              onOpenExpert={openExpert}
+              onUpdateWorkspace={onUpdateWorkspace}
+            />
+          ) : null}
+          {!cabinetSession && visibleWorkspace && journey && activeView === 'career' ? (
+            <CareerMapView
+              workspace={visibleWorkspace}
+              journey={journey}
+              onNavigate={navigate}
+              onOpenExpert={openExpert}
+              onUpdateWorkspace={onUpdateWorkspace}
+            />
+          ) : null}
+          {!cabinetSession && visibleWorkspace && journey && activeView === 'opportunities' ? (
+            <OpportunitiesView
+              workspace={visibleWorkspace}
+              journey={journey}
+              onNavigate={navigate}
+              onOpenExpert={openExpert}
+              onUpdateWorkspace={onUpdateWorkspace}
+            />
+          ) : null}
+          {activeView === 'tariffs' ? <CareerTariffsView onOpenCoach={openExpert} /> : null}
+        </AppErrorBoundary>
       </main>
 
       <nav

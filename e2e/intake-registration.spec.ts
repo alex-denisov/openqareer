@@ -73,7 +73,7 @@ test.describe('B141 diagnostic survives registration', () => {
     page,
   }) => {
     await stubAuth(page);
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
     await reachHhSourceStep(page);
@@ -88,7 +88,7 @@ test.describe('B141 diagnostic survives registration', () => {
 
   test('the account the wizard demanded unlocks the import it was needed for', async ({ page }) => {
     await stubAuth(page);
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
     await reachHhSourceStep(page);
@@ -108,7 +108,7 @@ test.describe('B141 diagnostic survives registration', () => {
 
   test('a refused step shows why on screen instead of below the action bar', async ({ page }) => {
     await stubAuth(page);
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
     await reachHhSourceStep(page);
@@ -138,7 +138,7 @@ test.describe('B141 diagnostic survives registration', () => {
     await page.route('**/api/v1/auth/me', async (route) => {
       await route.fulfill({ json: { data: REGISTERED_CANDIDATE } });
     });
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
     await expect(page.getByRole('heading', { name: 'Карьерный кабинет' })).toBeVisible();

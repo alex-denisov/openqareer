@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('built career workspace is ready, operable and free of critical accessibility violations', async ({
+test('public landing page is ready, indexed and free of critical accessibility violations', async ({
   page,
 }) => {
   const browserErrors: string[] = [];
@@ -24,6 +24,39 @@ test('built career workspace is ready, operable and free of critical accessibili
   });
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy');
+  await expect(
+    page.getByRole('heading', { name: 'Карьерная операционная система кандидата' }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Пройти карьерную диагностику' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Войти' }).first()).toBeEnabled();
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
+
+  const accessibility = await new AxeBuilder({ page }).analyze();
+  const criticalViolations = accessibility.violations.filter(
+    (violation) => violation.impact === 'critical',
+  );
+  expect(criticalViolations).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
+test('built career workspace is ready, operable and free of critical accessibility violations', async ({
+  page,
+}) => {
+  const browserErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') browserErrors.push(`console:${message.text()}`);
+  });
+  page.on('pageerror', (error) => browserErrors.push(`page:${error.message}`));
+  page.on('requestfailed', (request) => {
+    browserErrors.push(`request:${new URL(request.url()).pathname}`);
+  });
+
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
   const shell = page.getByTestId('career-shell');
   await expect(shell).toBeVisible();
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy');
@@ -87,7 +120,7 @@ test('candidate confirms one saved command and sees an honest queued state', asy
     return route.fulfill({ status: 404, json: { error: { code: 'not_mocked' } } });
   });
 
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Эксперт' }).click();
   const dialog = page.getByRole('dialog', { name: 'Карьерный эксперт' });
   await expect(dialog.getByText('Ничего не отправлено')).toBeVisible();

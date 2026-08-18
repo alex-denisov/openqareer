@@ -4,6 +4,7 @@ import App from './App.tsx';
 import './App.css';
 import './features/shell/career-shell.css';
 import './features/admin/admin-console.css';
+import './features/site/landing.css';
 
 document.documentElement.dataset.release =
   import.meta.env.VITE_OPENQAREER_RELEASE || 'local';

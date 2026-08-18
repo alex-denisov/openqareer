@@ -5307,3 +5307,79 @@
     display: none;
   }
 }
+
+.career-error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  padding: 24px;
+}
+
+.career-error-boundary-card {
+  display: grid;
+  gap: 14px;
+  max-width: 480px;
+  width: 100%;
+  padding: 28px 24px;
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-lg, 16px);
+  background: var(--career-surface-card, oklch(18% 0.02 255 / 0.85));
+  backdrop-filter: blur(20px);
+  box-shadow: 0 16px 36px oklch(0% 0 255 / 0.35);
+  text-align: center;
+}
+
+.career-error-boundary-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--career-accent, #0A70E0);
+  margin-bottom: 4px;
+}
+
+.career-error-boundary-card h2 {
+  margin: 0;
+  color: var(--career-text);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.career-error-boundary-card p {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.career-error-boundary-details {
+  text-align: left;
+  border: 1px solid var(--career-line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: oklch(12% 0.015 255 / 0.5);
+  font-size: 0.76rem;
+  color: var(--career-text-soft);
+}
+
+.career-error-boundary-details summary {
+  cursor: pointer;
+  color: var(--career-text);
+  font-weight: 600;
+}
+
+.career-error-boundary-details code {
+  display: block;
+  margin-top: 6px;
+  overflow-x: auto;
+  font-family: var(--career-font-mono, monospace);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.career-error-boundary-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+

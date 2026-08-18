@@ -7,6 +7,9 @@ import {
 } from './features/connections/connectionResult';
 import { prepareCareerWorkspace } from './features/journey/careerJourneyEngine';
 import { CareerWorkspaceShell } from './features/shell/CareerWorkspaceShell';
+import { AppErrorBoundary } from './features/shell/AppErrorBoundary';
+import { LandingPage } from './features/site/LandingPage';
+import { LoginPage, SignupPage, ResetPasswordPage } from './features/site/AuthPages';
 import {
   clearWorkspace,
   loadWorkspace,
@@ -24,10 +27,21 @@ interface AppState {
 }
 
 export default function App() {
+  const [currentPath, setCurrentPath] = useState<string>(() =>
+    typeof window !== 'undefined' ? window.location.pathname : '/',
+  );
   const [state, setState] = useState<AppState>({ invalidStorage: false });
   const [storageError, setStorageError] = useState<string>();
   const [sessionError, setSessionError] = useState<string>();
   const [connectionNotice, setConnectionNotice] = useState<string>();
+
+  const navigate = useCallback((path: string) => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState(null, '', path);
+      setCurrentPath(path);
+      window.scrollTo(0, 0);
+    }
+  }, []);
 
   const resolveSession = useCallback(async () => {
     setSessionError(undefined);
@@ -56,12 +70,21 @@ export default function App() {
   }, [resolveSession]);
 
   useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPath(window.location.pathname);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
     const result = readConnectionResult(window.location);
     if (!result) return;
     setConnectionNotice(connectionResultMessage(result));
     // The callback lands on a dedicated route; the candidate continues in the
     // canonical shell, so the one-time result is removed from the address bar.
-    window.history.replaceState(null, '', '/');
+    window.history.replaceState(null, '', '/app');
+    setCurrentPath('/app');
   }, []);
 
   useEffect(() => {
@@ -143,38 +166,83 @@ export default function App() {
     setSessionError(undefined);
   }
 
-  // The administrator console is a separate surface, not a workspace view: it
-  // must not inherit candidate chrome, and a candidate must never reach it by
-  // switching a tab (B089). Full client routing arrives with B137; until then
-  // this one path is read from the address bar.
-  if (isAdminPath()) {
+  // Routing checks
+  if (isAdminPath(currentPath)) {
     return (
-      <AdminConsole session={state.session} sessionPending={state.session === undefined} />
+      <AppErrorBoundary>
+        <AdminConsole session={state.session} sessionPending={state.session === undefined} />
+      </AppErrorBoundary>
     );
   }
 
+  if (currentPath === '/login') {
+    return (
+      <AppErrorBoundary>
+        <LoginPage
+          onNavigate={navigate}
+          onSessionChange={handleSessionChange}
+          nextPath="/app"
+        />
+      </AppErrorBoundary>
+    );
+  }
+
+  if (currentPath === '/signup') {
+    return (
+      <AppErrorBoundary>
+        <SignupPage
+          onNavigate={navigate}
+          onSessionChange={handleSessionChange}
+          nextPath="/app"
+        />
+      </AppErrorBoundary>
+    );
+  }
+
+  if (currentPath === '/reset-password') {
+    return (
+      <AppErrorBoundary>
+        <ResetPasswordPage onNavigate={navigate} />
+      </AppErrorBoundary>
+    );
+  }
+
+  if (isAppPath(currentPath)) {
+    return (
+      <AppErrorBoundary>
+        <CareerWorkspaceShell
+          workspace={state.workspace}
+          invalidStorage={state.invalidStorage}
+          storageError={storageError}
+          connectionNotice={connectionNotice}
+          onDismissConnectionNotice={() => setConnectionNotice(undefined)}
+          onSaveWorkspace={handleSave}
+          onUpdateWorkspace={persist}
+          onClearWorkspace={handleClear}
+          session={state.session}
+          sessionPending={state.session === undefined}
+          sessionError={sessionError}
+          onRetrySession={() => void resolveSession()}
+          onSessionChange={handleSessionChange}
+        />
+      </AppErrorBoundary>
+    );
+  }
+
+  // Default: Public landing page at `/`
   return (
-    <CareerWorkspaceShell
-      workspace={state.workspace}
-      invalidStorage={state.invalidStorage}
-      storageError={storageError}
-      connectionNotice={connectionNotice}
-      onDismissConnectionNotice={() => setConnectionNotice(undefined)}
-      onSaveWorkspace={handleSave}
-      onUpdateWorkspace={persist}
-      onClearWorkspace={handleClear}
-      session={state.session}
-      sessionPending={state.session === undefined}
-      sessionError={sessionError}
-      onRetrySession={() => void resolveSession()}
-      onSessionChange={handleSessionChange}
-    />
+    <AppErrorBoundary>
+      <LandingPage session={state.session} onNavigate={navigate} />
+    </AppErrorBoundary>
   );
 }
 
 /** `/admin` and anything under it belong to the administrator console. */
-function isAdminPath(): boolean {
-  if (typeof window === 'undefined') return false;
-  const path = window.location.pathname;
+function isAdminPath(path: string): boolean {
   return path === '/admin' || path.startsWith('/admin/');
+}
+
+/** `/app` and anything under it belong to the authenticated candidate workspace. */
+function isAppPath(path: string): boolean {
+  return path === '/app' || path.startsWith('/app/');
 }

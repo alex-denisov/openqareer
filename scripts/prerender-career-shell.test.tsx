@@ -16,7 +16,7 @@ afterEach(async () => {
 });
 
 describe('production career shell prerender', () => {
-  it('places the real shared shell in the entry HTML before JavaScript runs', async () => {
+  it('places the real indexed landing page in the entry HTML before JavaScript runs', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'openqareer-prerender-'));
     temporaryDirectories.push(directory);
     const indexPath = join(directory, 'index.html');
@@ -29,23 +29,16 @@ describe('production career shell prerender', () => {
     await prerenderShells(indexPath, adminPath);
 
     const html = readFileSync(indexPath, 'utf8');
-    expect(html).toContain('data-testid="career-shell"');
     expect(html).toContain('id="root" aria-busy="true"');
     expect(html).toContain(
       'class="career-bootstrap-shell" data-bootstrap-shell="true" inert',
     );
-    expect(html).not.toContain('style="display:contents"');
-    expect(html).not.toContain('id="root" aria-busy="true" inert');
-    expect(html).toContain('Начните с карьерного вопроса');
-    expect(html).toContain('Можно начать без документов');
-    expect(html).not.toContain('Посмотреть демо');
-    expect(html).not.toContain('Демо · синтетические данные');
-    expect(html).toContain('Сегодня');
-    expect(html).toContain('Профиль');
-    expect(html).toContain('Карьера');
-    expect(html).toContain('Возможности');
+    expect(html).toContain('Карьерная операционная система кандидата');
+    expect(html).toContain('Доказательный профиль');
+    expect(html).toContain('Честная ATS-диагностика');
     expect(html).toContain('Тарифы');
-    expect(html).not.toContain('Загружаем рабочее пространство');
+    expect(html).toContain('FAQ');
+    expect(html).toContain('application/ld+json');
   });
 
   it('fails closed when the root mount point is missing or already populated', async () => {
