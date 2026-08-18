@@ -102,7 +102,7 @@ test.describe('B141 diagnostic survives registration', () => {
       'aria-pressed',
       'true',
     );
-    await expect(fields.getByRole('button', { name: 'Проверить способ импорта' })).toBeVisible();
+    await expect(fields.getByRole('button', { name: 'Импортировать' })).toBeVisible();
     await expect(fields.getByRole('textbox')).toBeVisible();
   });
 

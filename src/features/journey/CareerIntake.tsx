@@ -65,7 +65,7 @@ interface CareerIntakeProps {
  * message pointing at «Импортировать по ссылке» while the button said something
  * else, so both now read the same constant.
  */
-export const IMPORT_ACTION_LABEL = 'Проверить способ импорта';
+export const IMPORT_ACTION_LABEL = 'Импортировать';
 
 export const PRESS_IMPORT_FIRST_MESSAGE = `Сначала нажмите «${IMPORT_ACTION_LABEL}».`;
 
@@ -271,8 +271,7 @@ export function CareerIntake({
       setParsedResume(parsed);
       const draft = parsedResumeToDraft(parsed);
       setParsedDraft(draft);
-      const factDrafts = parsedResumeToFactDrafts(parsed, 'resume-pdf');
-      setProfileFactDrafts(factDrafts);
+      setProfileFactDrafts([]);
       setResumeText(result.text);
       setResumeSource('pdf');
       setResumeFile({ name: result.fileName, pages: result.pageCount });
@@ -557,12 +556,6 @@ export function CareerIntake({
         <div className="career-source-step">
           <div className="career-source-choice" role="group" aria-label="Источник опыта">
             <SourceButton
-              icon={FilePdf}
-              label="PDF или экспорт hh.ru"
-              selected={sourceChoice === 'pdf'}
-              onClick={() => chooseSource('pdf')}
-            />
-            <SourceButton
               icon={LinkedinLogo}
               label="LinkedIn"
               selected={sourceChoice === 'linkedin'}
@@ -573,6 +566,12 @@ export function CareerIntake({
               label="hh.ru"
               selected={sourceChoice === 'hh'}
               onClick={() => chooseSource('hh')}
+            />
+            <SourceButton
+              icon={FilePdf}
+              label="PDF"
+              selected={sourceChoice === 'pdf'}
+              onClick={() => chooseSource('pdf')}
             />
             <SourceButton
               icon={Sparkle}
@@ -589,25 +588,47 @@ export function CareerIntake({
           </div>
 
           {sourceChoice === 'pdf' ? (
-            <div className="career-pdf-source-container">
-              <label className="career-upload-control">
-                <input type="file" accept="application/pdf,.pdf" onChange={handlePdf} />
-                <FilePdf size={26} />
-                <span>
-                  <strong>
-                    {readingPdf
-                      ? 'Читаем и парсим файл…'
-                      : resumeFile
-                        ? resumeFile.name
-                        : 'Выбрать PDF'}
-                  </strong>
-                  <small>
-                    {resumeFile
-                      ? `${resumeFile.pages} стр. · текст и структура извлечены`
-                      : 'До 20 МБ · оригинал не отправляется'}
-                  </small>
-                </span>
-              </label>
+            <div className="career-pdf-source-container" style={{ marginTop: '22px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                <label
+                  className="career-primary-button career-file-button"
+                  style={{
+                    position: 'relative',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    minWidth: '160px',
+                    height: '42px',
+                    padding: '0 20px',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    onChange={handlePdf}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      opacity: 0,
+                      width: '100%',
+                      height: '100%',
+                      cursor: 'pointer',
+                      zIndex: 2,
+                    }}
+                  />
+                  <FilePdf size={20} />
+                  <span>{readingPdf ? 'Читаем файл…' : resumeFile ? resumeFile.name : 'Выбрать PDF'}</span>
+                </label>
+                <small style={{ color: 'var(--career-text-dim)', fontSize: '13px' }}>
+                  {resumeFile
+                    ? `${resumeFile.pages} стр. · резюме импортировано в Resume Studio`
+                    : 'PDF до 20 МБ · оригинал не отправляется'}
+                </small>
+              </div>
 
               {parsedResume && resumeFile ? (
                 <div
@@ -652,18 +673,10 @@ export function CareerIntake({
                       {parsedResume.experience.length} мест работы,{' '}
                       {parsedResume.skills.length} навыков,{' '}
                       {parsedResume.education.length} записей образования,{' '}
-                      {parsedResume.courses.length} курсов, контакты и блок «О себе».
+                      {parsedResume.courses.length} сертификатов/курсов, контакты и блок «О себе».
                     </span>
                   </div>
                 </div>
-              ) : null}
-
-              {profileFactDrafts.length > 0 ? (
-                <ProfileFactReview
-                  drafts={profileFactDrafts}
-                  onDraftChange={setProfileFactDrafts}
-                  onError={setError}
-                />
               ) : null}
             </div>
           ) : null}
@@ -724,11 +737,7 @@ export function CareerIntake({
                     platform={sourceChoice}
                     connection={connections?.find((c) => c.platform === sourceChoice)}
                     connecting={connectingPlatform === sourceChoice}
-                    drafts={profileFactDrafts}
                     onConnect={() => handleConnectPlatform(sourceChoice)}
-                    onChooseSource={chooseSource}
-                    onDraftChange={setProfileFactDrafts}
-                    onError={setError}
                   />
                   <label>
                     <span>
@@ -762,7 +771,6 @@ export function CareerIntake({
                     connection={connections?.find((c) => c.platform === sourceChoice)}
                     connecting={connectingPlatform === sourceChoice}
                     onConnect={() => handleConnectPlatform(sourceChoice)}
-                    onChooseSource={chooseSource}
                   />
                 </>
               ) : (
@@ -951,13 +959,23 @@ function AccountRequiredImport({
     <div className="career-source-account-required career-field-wide">
       <p className="career-inline-note">{accountRequiredNotice(platform)}</p>
       {onOpenAccount ? (
-        <button className="career-primary-button" type="button" onClick={onOpenAccount}>
+        <button
+          className="career-primary-button"
+          style={{
+            height: '42px',
+            minWidth: '160px',
+            padding: '0 20px',
+            borderRadius: '8px',
+          }}
+          type="button"
+          onClick={onOpenAccount}
+        >
           Создать аккаунт
         </button>
       ) : null}
       <div className="career-quick-fallbacks">
         <button className="career-quiet-button" type="button" onClick={() => onChooseSource('pdf')}>
-          Загрузить PDF или экспорт резюме
+          Загрузить PDF
         </button>
         <button className="career-quiet-button" type="button" onClick={() => onChooseSource('text')}>
           Ввести опыт текстом
@@ -978,20 +996,12 @@ function PlatformConnectionSection({
   platform,
   connection,
   connecting,
-  drafts,
   onConnect,
-  onChooseSource,
-  onDraftChange,
-  onError,
 }: {
   platform: ConnectionPlatform;
   connection?: CandidateConnection;
   connecting: boolean;
-  drafts: ProfileFactDraft[];
   onConnect: () => void;
-  onChooseSource: (choice: SourceChoice) => void;
-  onDraftChange: (drafts: ProfileFactDraft[]) => void;
-  onError: (message: string | undefined) => void;
 }) {
   const platformLabel = PLATFORM_LABELS[platform];
 
@@ -1004,30 +1014,9 @@ function PlatformConnectionSection({
         </div>
         <p>
           {platform === 'hh'
-            ? 'Официальный доступ hh.ru читает ваш профиль и резюме. Мы не выполняем действий от вашего имени.'
-            : 'Официальный доступ LinkedIn отдаёт базовые поля профиля.'}
+            ? 'Доступ hh.ru подключен. Ваши резюме и опыт синхронизированы.'
+            : 'Доступ LinkedIn подключен. Ваш профиль синхронизирован.'}
         </p>
-        {drafts.length > 0 ? (
-          <ProfileFactReview
-            drafts={drafts}
-            onDraftChange={onDraftChange}
-            onError={onError}
-          />
-        ) : (
-          <>
-            <p className="career-inline-note">
-              В подключённом профиле пока нет извлечённых фактов. Вы можете загрузить PDF или ввести опыт текстом.
-            </p>
-            <div className="career-quick-fallbacks">
-              <button className="career-quiet-button" type="button" onClick={() => onChooseSource('pdf')}>
-                Загрузить PDF или экспорт резюме
-              </button>
-              <button className="career-quiet-button" type="button" onClick={() => onChooseSource('text')}>
-                Ввести опыт текстом
-              </button>
-            </div>
-          </>
-        )}
       </div>
     );
   }
@@ -1037,31 +1026,26 @@ function PlatformConnectionSection({
       <div className="career-connection-panel">
         <p>
           {platform === 'hh'
-            ? 'Официальный доступ hh.ru читает ваш профиль и резюме. Мы не выполняем действий от вашего имени: ни откликов, ни правок резюме.'
-            : 'Официальный вход LinkedIn отдаёт базовые поля профиля: он не переносит карьерную историю. Опыт можно дополнить экспортом или PDF.'}
+            ? 'Подключение hh.ru позволяет импортировать данные вашего резюме напрямую из аккаунта.'
+            : 'Подключение LinkedIn позволяет перенести полную карьерную историю и навыки из аккаунта.'}
         </p>
         <button
           className="career-primary-button"
+          style={{
+            height: '42px',
+            minWidth: '160px',
+            padding: '0 20px',
+            borderRadius: '8px',
+          }}
           type="button"
           disabled={connecting}
           onClick={onConnect}
         >
-          {connecting ? 'Готовим подключение…' : `Подключить ${platformLabel}`}
+          {connecting ? 'Готовим вход…' : `Войти через браузерную сессию в ${platformLabel}`}
         </button>
         <small>
           Вы подтверждаете доступ на стороне {platformLabel}. Ничего не читается без вашего согласия.
         </small>
-        <div className="career-quick-fallbacks">
-          <button className="career-quiet-button" type="button" onClick={() => onChooseSource('pdf')}>
-            Загрузить PDF или экспорт резюме
-          </button>
-          <button className="career-quiet-button" type="button" onClick={() => onChooseSource('text')}>
-            Ввести опыт текстом
-          </button>
-          <button className="career-quiet-button" type="button" onClick={() => onChooseSource('none')}>
-            Пропустить файлы
-          </button>
-        </div>
       </div>
     );
   }
@@ -1069,19 +1053,8 @@ function PlatformConnectionSection({
   return (
     <div className="career-connection-panel">
       <p>
-        Официальное подключение {platformLabel} пока не настроено в этой среде. Загрузите PDF/экспорт, введите опыт текстом или начните без документов.
+        Для импорта профиля {platformLabel} укажите ссылку на профиль ниже или войдите через браузерную сессию.
       </p>
-      <div className="career-quick-fallbacks">
-        <button className="career-quiet-button" type="button" onClick={() => onChooseSource('pdf')}>
-          Загрузить PDF или экспорт резюме
-        </button>
-        <button className="career-quiet-button" type="button" onClick={() => onChooseSource('text')}>
-          Ввести опыт текстом
-        </button>
-        <button className="career-quiet-button" type="button" onClick={() => onChooseSource('none')}>
-          Пропустить файлы
-        </button>
-      </div>
     </div>
   );
 }
@@ -1192,7 +1165,6 @@ function ProfileImportAction({
   connection,
   connecting,
   onConnect,
-  onChooseSource,
 }: {
   result?: ProfileUrlImportResult;
   drafts: ProfileFactDraft[];
@@ -1204,48 +1176,76 @@ function ProfileImportAction({
   connection?: CandidateConnection;
   connecting: boolean;
   onConnect: () => void;
-  onChooseSource: (choice: SourceChoice) => void;
 }) {
   const platformLabel = PLATFORM_LABELS[platform];
 
   return (
     <div className="career-profile-import-result" aria-live="polite">
-      <button className="career-quiet-button" type="button" disabled={busy} onClick={onImport}>
+      <button
+        className="career-primary-button"
+        style={{
+          height: '42px',
+          minWidth: '160px',
+          padding: '0 20px',
+          borderRadius: '8px',
+        }}
+        type="button"
+        disabled={busy}
+        onClick={onImport}
+      >
         {busy ? 'Проверяем доступ…' : IMPORT_ACTION_LABEL}
       </button>
       {result?.status === 'imported' ? (
-        <ProfileFactReview
-          drafts={drafts}
-          onDraftChange={onDraftChange}
-          onError={onError}
-        />
+        <>
+          <ProfileFactReview
+            drafts={drafts}
+            onDraftChange={onDraftChange}
+            onError={onError}
+          />
+          <div className="career-connection-panel">
+            <p style={{ margin: 0 }}>
+              <strong>Профиль {platformLabel} частично загружен.</strong> Для полного импорта всех данных (включая скрытые контакты и полную историю) рекомендуем войти в аккаунт через браузерную сессию.
+            </p>
+            {connection?.available ? (
+              <button
+                className="career-primary-button"
+                style={{
+                  height: '42px',
+                  minWidth: '160px',
+                  padding: '0 20px',
+                  borderRadius: '8px',
+                }}
+                type="button"
+                disabled={connecting}
+                onClick={onConnect}
+              >
+                {connecting ? 'Готовим вход…' : `Войти через браузерную сессию в ${platformLabel}`}
+              </button>
+            ) : null}
+          </div>
+        </>
       ) : null}
       {result?.status === 'unavailable' ? (
         <div className="career-connection-panel">
-          <p>
-            <strong>По ссылке доступны только открытые поля.</strong> Полные данные приходят через официальное подключение аккаунта или ваш экспорт и PDF.
+          <p style={{ margin: 0 }}>
+            <strong>Не удалось получить информацию о профиле.</strong> Вероятно, профиль скрыт настройками приватности или указана неверная ссылка. Для полного импорта всех данных рекомендуем войти в аккаунт через браузерную сессию или загрузить PDF-экспорт профиля.
           </p>
           {connection?.available ? (
             <button
               className="career-primary-button"
+              style={{
+                height: '42px',
+                minWidth: '160px',
+                padding: '0 20px',
+                borderRadius: '8px',
+              }}
               type="button"
               disabled={connecting}
               onClick={onConnect}
             >
-              {connecting ? 'Готовим подключение…' : `Подключить ${platformLabel}`}
+              {connecting ? 'Готовим вход…' : `Войти через браузерную сессию в ${platformLabel}`}
             </button>
           ) : null}
-          <div className="career-quick-fallbacks">
-            <button className="career-quiet-button" type="button" onClick={() => onChooseSource('pdf')}>
-              Загрузить PDF или экспорт
-            </button>
-            <button className="career-quiet-button" type="button" onClick={() => onChooseSource('text')}>
-              Ввести текстом
-            </button>
-            <button className="career-quiet-button" type="button" onClick={() => onChooseSource('none')}>
-              Пропустить файлы
-            </button>
-          </div>
         </div>
       ) : null}
     </div>

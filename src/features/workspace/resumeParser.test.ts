@@ -133,4 +133,66 @@ describe('resumeParser', () => {
     expect(factDrafts.some((f) => f.fact.kind === 'education')).toBe(true);
     expect(factDrafts.every((f) => f.decision === 'confirmed')).toBe(true);
   });
+
+  it('parses authentic LinkedIn PDF export format seamlessly', () => {
+    const LINKEDIN_PDF_EXPORT = `
+Contact
+www.linkedin.com/in/marina-orlova-qa (LinkedIn)
+Top Skills
+Product Management
+Engineering Management
+System Architecture
+Languages
+English (Full Professional)
+Russian (Native or Bilingual)
+Certifications
+Reforge Product Leadership
+Marina Orlova
+VP of Technology & Operations | Ex-COO | FinTech & AI Scaling
+London, United Kingdom
+Summary
+Executive leader with 15+ years of experience transforming tech organizations, building scalable platforms, and driving rapid business growth across Europe and global markets.
+Experience
+OpenQareer
+Chief Operating Officer
+January 2022 - Present (4 years 7 months)
+London, United Kingdom
+• Built and launched candidate-first career operating system.
+• Grew organic user base with high retention.
+Global FinTech Corp
+Head of Engineering
+March 2018 - December 2021 (3 years 10 months)
+London, United Kingdom
+• Led engineering organization of 60+ engineers.
+• Reduced platform latency by 65% and increased transaction throughput.
+Education
+Bauman Moscow State Technical University
+Master's degree, Computer Science · (2008 - 2014)
+`;
+
+    const parsed = parseResumeContent(LINKEDIN_PDF_EXPORT);
+
+    expect(parsed.fullName).toBe('Marina Orlova');
+    expect(parsed.targetRole).toContain('VP of Technology');
+    expect(parsed.contact.location).toBe('London');
+    expect(parsed.contact.links).toContain('https://www.linkedin.com/in/marina-orlova-qa');
+    expect(parsed.about).toContain('Executive leader with 15+ years');
+    expect(parsed.skills).toContain('Product Management');
+    expect(parsed.skills).toContain('Engineering Management');
+    expect(parsed.skills).toContain('System Architecture');
+    expect(parsed.experience.length).toBe(2);
+    expect(parsed.experience[0].employer).toBe('OpenQareer');
+    expect(parsed.experience[0].title).toBe('Chief Operating Officer');
+    expect(parsed.experience[0].current).toBe(true);
+    expect(parsed.experience[0].startDate).toBe('2022-01');
+    expect(parsed.experience[1].employer).toBe('Global FinTech Corp');
+    expect(parsed.experience[1].title).toBe('Head of Engineering');
+    expect(parsed.experience[1].current).toBe(false);
+    expect(parsed.experience[1].startDate).toBe('2018-03');
+    expect(parsed.experience[1].endDate).toBe('2021-12');
+    expect(parsed.education[0].institution).toContain('Bauman');
+    expect(parsed.courses[0].name).toContain('Reforge');
+    expect(parsed.languages[0].name).toBe('English');
+    expect(parsed.languages[0].cefr).toBe('C2');
+  });
 });

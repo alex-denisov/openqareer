@@ -592,7 +592,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await dialog.getByLabel('Пароль').fill('fresh-candidate-password');
   await dialog.getByRole('button', { name: 'Создать и начать' }).click();
   await page.getByLabel('Ссылка на профиль').fill('https://www.linkedin.com/in/synthetic-candidate');
-  await page.getByRole('button', { name: 'Проверить способ импорта' }).click();
+  await page.getByRole('button', { name: 'Импортировать' }).click();
   await page.getByText('Найдено: 2', { exact: false }).waitFor();
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await page.getByText('Проверьте каждый найденный факт', { exact: false }).waitFor();

@@ -185,7 +185,7 @@ test.describe('B140 workspace shell and intake defects', () => {
     const fields = page.locator('.career-source-fields');
     // An anonymous visitor cannot reach the candidate-scoped import endpoint,
     // so offering the button at all is the dead end the owner reported.
-    await expect(fields.getByRole('button', { name: 'Проверить способ импорта' })).toHaveCount(0);
+    await expect(fields.getByRole('button', { name: 'Импортировать' })).toHaveCount(0);
     await fields.getByRole('button', { name: 'Создать аккаунт' }).click();
     await expect(page.getByRole('dialog', { name: 'Аккаунт' })).toBeVisible();
   });
@@ -224,8 +224,8 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.getByRole('button', { name: 'Продолжить' }).click();
     await page.getByRole('button', { name: 'hh.ru', exact: true }).click();
 
-    await page.getByRole('button', { name: 'Загрузить PDF или экспорт резюме' }).click();
-    await expect(page.locator('.career-upload-control')).toBeVisible();
+    await page.getByRole('button', { name: 'Загрузить PDF' }).click();
+    await expect(page.locator('.career-pdf-source-container')).toBeVisible();
 
     await page.getByRole('button', { name: 'LinkedIn', exact: true }).click();
     await page.getByRole('button', { name: 'Ввести опыт текстом' }).click();
