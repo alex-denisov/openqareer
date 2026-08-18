@@ -28,4 +28,9 @@ describe('CareerIntake', () => {
     expect(html).toContain('Можно начать без документов');
     expect(html).toContain('Без аккаунта прогресс хранится только в текущей вкладке.');
   });
+
+  it('exports IMPORT_ACTION_LABEL correctly', () => {
+    expect(IMPORT_ACTION_LABEL).toBe('Импортировать');
+  });
 });
+

@@ -38,6 +38,8 @@ export interface AuthUser {
   candidateId: string | null;
 }
 
+import type { ParsedResume } from '../workspace/resumeParser';
+
 export type ProfileUrlImportResult =
   | {
       status: 'imported';
@@ -51,6 +53,7 @@ export type ProfileUrlImportResult =
         sourceLocator: string;
         confidence: 'public-metadata';
       }>;
+      parsedResume?: ParsedResume;
     }
   | {
       status: 'unavailable';

@@ -1,3 +1,6 @@
+import type { ParsedResume } from '../../src/features/workspace/resumeParser';
+import { parseHhResumeFromUrl } from './hhResumeParser';
+
 export type ProfilePlatform = 'linkedin' | 'hh';
 
 export type ProfileUrlImportResult =
@@ -13,6 +16,7 @@ export type ProfileUrlImportResult =
         sourceLocator: string;
         confidence: 'public-metadata';
       }>;
+      parsedResume?: ParsedResume;
     }
   | {
       status: 'unavailable';
@@ -35,7 +39,11 @@ export async function importProfileUrl(
   } = {},
 ): Promise<ProfileUrlImportResult> {
   const { url, platform } = parseProfileUrl(value);
-  void options;
+
+  if (platform === 'hh') {
+    return parseHhResumeFromUrl(url, options);
+  }
+
   return {
     status: 'unavailable',
     platform,

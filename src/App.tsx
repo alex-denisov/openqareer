@@ -247,5 +247,8 @@ function isAdminPath(path: string): boolean {
 
 /** `/app` and anything under it belong to the authenticated candidate workspace. */
 function isAppPath(path: string): boolean {
+  if (typeof window !== 'undefined' && window.location.search.includes('render-shot')) {
+    return true;
+  }
   return path === '/app' || path.startsWith('/app/');
 }

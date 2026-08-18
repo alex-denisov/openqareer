@@ -574,7 +574,7 @@ function DocumentVault({
 }
 
 function latestResume(snapshot?: CandidateSnapshot) {
-  return snapshot?.documents.find((document) => document.kind === 'resume');
+  return snapshot?.documents?.find((document) => document.kind === 'resume');
 }
 
 function normalizedMimeType(file: File) {

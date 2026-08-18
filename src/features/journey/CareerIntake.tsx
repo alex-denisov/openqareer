@@ -319,42 +319,59 @@ export function CareerIntake({
       const result = await importProfileUrl(url);
       setProfileImport(result);
       if (result.status === 'imported') {
-        const snapshot = ingestProfileSnapshot({
-          state: 'available',
-          source: {
-            sourceId: profileSourceId(result),
-            platform: result.platform,
-            accessPath: result.accessPath,
-            capturedAt: result.capturedAt,
-          },
-          snapshot: {
-            headline: result.facts.find((fact) => fact.kind === 'headline')?.value,
-            summary: result.facts.find((fact) => fact.kind === 'summary')?.value,
-            positions: [],
-            education: [],
-            skills: [],
-          },
-        });
-        if (snapshot.state === 'ready_for_confirmation') {
-          setProfileFactDrafts(
-            snapshot.facts.map((fact) => {
-              const source = result.facts.find(
-                (item) => item.kind === fact.kind && item.value === fact.statement,
-              );
-              const factWithSourceLocator = {
-                ...fact,
-                provenance: {
-                  ...fact.provenance,
-                  locator: source?.sourceLocator ?? fact.provenance.locator,
-                },
-              };
-              return {
-                fact: factWithSourceLocator,
-                value: factWithSourceLocator.statement,
-                decision: 'pending' as const,
-              };
-            }),
-          );
+        if (result.parsedResume) {
+          const parsed = result.parsedResume;
+          setParsedResume(parsed);
+          const draft = parsedResumeToDraft(parsed);
+          setParsedDraft(draft);
+          const factDrafts = parsedResumeToFactDrafts(parsed, profileSourceId(result));
+          setProfileFactDrafts(factDrafts);
+          setResumeText(parsed.rawText || result.facts.map((f) => f.value).join('\n'));
+          setResumeSource(sourceChoice === 'hh' ? 'hh-pdf' : 'linkedin-pdf');
+          if (parsed.targetRole && !targetDirection) {
+            setTargetDirection(parsed.targetRole);
+          }
+        } else {
+          const snapshot = ingestProfileSnapshot({
+            state: 'available',
+            source: {
+              sourceId: profileSourceId(result),
+              platform: result.platform,
+              accessPath: result.accessPath,
+              capturedAt: result.capturedAt,
+            },
+            snapshot: {
+              headline: result.facts.find((fact) => fact.kind === 'headline')?.value,
+              summary: result.facts.find((fact) => fact.kind === 'summary')?.value,
+              positions: [],
+              education: [],
+              skills: [],
+            },
+          });
+          if (snapshot.state === 'ready_for_confirmation') {
+            setProfileFactDrafts(
+              snapshot.facts.map((fact) => {
+                const source = result.facts.find(
+                  (item) => item.kind === fact.kind && item.value === fact.statement,
+                );
+                const factWithSourceLocator = {
+                  ...fact,
+                  provenance: {
+                    ...fact.provenance,
+                    locator: source?.sourceLocator ?? fact.provenance.locator,
+                  },
+                };
+                return {
+                  fact: factWithSourceLocator,
+                  value: factWithSourceLocator.statement,
+                  decision: 'pending' as const,
+                };
+              }),
+            );
+          }
+          const parsed = parseResumeContent(result.facts.map((f) => f.value).join('\n') || url);
+          setParsedResume(parsed);
+          setResumeText(result.facts.map((f) => f.value).join('\n'));
         }
       } else {
         // Fallback parse if text or URL structure is available
@@ -404,12 +421,6 @@ export function CareerIntake({
   function moveFromSource() {
     if (sourceChoice === 'linkedin' || sourceChoice === 'hh') {
       const platformLabel = PLATFORM_LABELS[sourceChoice];
-      if (!hasAccount) {
-        setError(
-          `Импорт ${platformLabel} читает данные площадки в ваш аккаунт, поэтому сначала нужен аккаунт. Можно создать его здесь или выбрать PDF, текст либо «Без документов».`,
-        );
-        return;
-      }
       if (profileFactDrafts.some((draft) => draft.decision === 'pending')) {
         setError('Проверьте каждый найденный факт: подтвердите, исправьте или исключите.');
         return;
@@ -417,12 +428,12 @@ export function CareerIntake({
       const reviewedFacts = acceptedProfileFacts(profileFactDrafts);
       if (reviewedFacts.length > 0) {
         setResumeText(reviewedFacts.map((fact) => fact.statement).join('\n'));
-        setResumeSource('text');
+        setResumeSource(sourceChoice === 'hh' ? 'hh-pdf' : 'linkedin-pdf');
       } else {
         const activeConnection = connections?.find((c) => c.platform === sourceChoice);
-        if (activeConnection?.status !== 'connected') {
+        if (activeConnection?.status !== 'connected' && !parsedResume && !resumeText.trim()) {
           setError(
-            `Подключите ${platformLabel}, подтвердите факты или выберите другой способ: PDF, текст либо «Без документов».`,
+            `Подключите ${platformLabel}, импортируйте резюме по ссылке или выберите другой способ: PDF, текст либо «Без документов».`,
           );
           return;
         }
@@ -732,47 +743,48 @@ export function CareerIntake({
               ) : null}
 
               {hasAccount ? (
-                <>
-                  <PlatformConnectionSection
-                    platform={sourceChoice}
-                    connection={connections?.find((c) => c.platform === sourceChoice)}
-                    connecting={connectingPlatform === sourceChoice}
-                    onConnect={() => handleConnectPlatform(sourceChoice)}
-                  />
-                  <label>
-                    <span>
-                      {sourceChoice === 'linkedin'
-                        ? 'Ссылка на профиль'
-                        : 'Ссылка на резюме hh.ru'}
-                    </span>
-                    <input
-                      value={sourceChoice === 'linkedin' ? linkedinUrl : hhUrl}
-                      onChange={(event) => {
-                        if (sourceChoice === 'linkedin') setLinkedinUrl(event.target.value);
-                        else setHhUrl(event.target.value);
-                        setProfileImport(undefined);
-                      }}
-                      placeholder={
-                        sourceChoice === 'linkedin'
-                          ? 'https://www.linkedin.com/in/...'
-                          : 'https://hh.ru/resume/...'
-                      }
-                      inputMode="url"
-                    />
-                  </label>
-                  <ProfileImportAction
-                    result={profileImport}
-                    drafts={profileFactDrafts}
-                    busy={importingProfile}
-                    onImport={handleProfileUrlImport}
-                    onDraftChange={setProfileFactDrafts}
-                    onError={setError}
-                    platform={sourceChoice}
-                    connection={connections?.find((c) => c.platform === sourceChoice)}
-                    connecting={connectingPlatform === sourceChoice}
-                    onConnect={() => handleConnectPlatform(sourceChoice)}
-                  />
-                </>
+                <PlatformConnectionSection
+                  platform={sourceChoice}
+                  connection={connections?.find((c) => c.platform === sourceChoice)}
+                  connecting={connectingPlatform === sourceChoice}
+                  onConnect={() => handleConnectPlatform(sourceChoice)}
+                />
+              ) : null}
+
+              <label>
+                <span>
+                  {sourceChoice === 'linkedin'
+                    ? 'Ссылка на профиль'
+                    : 'Ссылка на резюме hh.ru'}
+                </span>
+                <input
+                  value={sourceChoice === 'linkedin' ? linkedinUrl : hhUrl}
+                  onChange={(event) => {
+                    if (sourceChoice === 'linkedin') setLinkedinUrl(event.target.value);
+                    else setHhUrl(event.target.value);
+                    setProfileImport(undefined);
+                  }}
+                  placeholder={
+                    sourceChoice === 'linkedin'
+                      ? 'https://www.linkedin.com/in/...'
+                      : 'https://hh.ru/resume/...'
+                  }
+                  inputMode="url"
+                />
+              </label>
+              {hasAccount ? (
+                <ProfileImportAction
+                  result={profileImport}
+                  drafts={profileFactDrafts}
+                  busy={importingProfile}
+                  onImport={handleProfileUrlImport}
+                  onDraftChange={setProfileFactDrafts}
+                  onError={setError}
+                  platform={sourceChoice}
+                  connection={connections?.find((c) => c.platform === sourceChoice)}
+                  connecting={connectingPlatform === sourceChoice}
+                  onConnect={() => handleConnectPlatform(sourceChoice)}
+                />
               ) : (
                 <AccountRequiredImport
                   platform={sourceChoice}
