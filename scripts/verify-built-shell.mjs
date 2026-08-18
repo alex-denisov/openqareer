@@ -357,6 +357,30 @@ async function verifyViewport(browser, baseUrl, viewport) {
   );
   const interactiveMs = Math.round(performance.now() - startedAt);
 
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'candidate-workspace',
+      JSON.stringify({
+        version: 6,
+        careerGoal: 'find-job',
+        resumeText: '',
+        resumeSource: 'text',
+        targetDirection: 'Руководитель продукта',
+        market: 'ru',
+        currentSituation: 'Ищу продуктовую роль в сильной технологической компании.',
+        constraints: 'Удалённый или гибридный формат.',
+        urgency: 'active',
+        createdAt: '2026-08-13T08:00:00.000Z',
+        updatedAt: '2026-08-13T08:00:00.000Z',
+        outcomes: [],
+      }),
+    );
+    localStorage.setItem(
+      'candidate-workspace-owner',
+      'candidate-browser-test',
+    );
+  });
+
   // Navigate to candidate workspace
   await page.goto(`${baseUrl}app?built-shell=${viewport.name}`);
   const shell = page.getByTestId('career-shell');

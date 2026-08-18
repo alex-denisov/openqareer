@@ -13,7 +13,7 @@ import { CareerWorkspaceShell } from './CareerWorkspaceShell';
 import { CareerTariffsView } from './CareerTariffsView';
 
 describe('CareerWorkspaceShell', () => {
-  it('opens the authenticated candidate inside one working command center', () => {
+  it('opens the authenticated candidate with a workspace inside one working command center', () => {
     const html = renderToStaticMarkup(
       <CareerWorkspaceShell
         session={{
@@ -24,6 +24,17 @@ describe('CareerWorkspaceShell', () => {
           isTest: false,
           candidateId: 'candidate-1',
         }}
+        workspace={prepareCareerWorkspace({
+          resumeText:
+            'Синтетический профиль кандидата с достаточно длинным описанием для проверки приватной загрузки рабочего пространства.',
+          resumeSource: 'text',
+          targetDirection: 'Руководитель продукта',
+          market: 'ru',
+          currentSituation:
+            'Проверяю, что чужие данные не появляются до завершения проверки сессии.',
+          constraints: '',
+          urgency: 'active',
+        })}
       />,
     );
 
@@ -32,6 +43,25 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('Профиль и документы');
     expect(html).toContain('Рынок и следующие шаги');
     expect(html).not.toContain('Начните с карьерного вопроса');
+  });
+
+  it('opens the diagnostic wizard for a newly signed-in candidate without a workspace', () => {
+    const html = renderToStaticMarkup(
+      <CareerWorkspaceShell
+        session={{
+          username: 'new_candidate',
+          email: 'new@example.com',
+          displayName: 'Новый Кандидат',
+          role: 'candidate',
+          isTest: false,
+          candidateId: 'candidate-new',
+        }}
+      />,
+    );
+
+    expect(html).toContain('Начните с карьерного вопроса');
+    expect(html).toContain('Начать диагностику');
+    expect(html).not.toContain('Карьерный кабинет');
   });
 
   it('does not reveal a workspace or first-run form before session identity resolves', () => {

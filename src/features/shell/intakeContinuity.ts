@@ -23,15 +23,16 @@ export interface IntakeVisibilityInput {
 }
 
 /**
- * A started diagnostic keeps the screen even after an account appears; a
- * signed-in candidate who never started one still opens the cabinet, which is
- * the contract the cabinet was built on.
+ * A candidate without a completed career picture (whether anonymous or newly
+ * registered/signed in) sees the diagnostic wizard on the «Сегодня» screen so
+ * they can assemble their career profile. Once a workspace exists, the cabinet
+ * takes over.
  */
 export function shouldShowIntake(input: IntakeVisibilityInput): boolean {
   if (input.sessionPending) return false;
   if (input.hasWorkspace) return false;
   if (!input.isTodayView) return false;
-  return !input.hasCabinetSession || input.intakeStarted;
+  return true;
 }
 
 /**

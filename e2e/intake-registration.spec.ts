@@ -131,7 +131,7 @@ test.describe('B141 diagnostic survives registration', () => {
     expect(occluded, 'the refusal must not sit under the action bar').toBe(false);
   });
 
-  test('a signed-in candidate who never started a diagnostic still opens the cabinet', async ({
+  test('a signed-in candidate without a workspace opens the diagnostic wizard', async ({
     page,
   }) => {
     await stubAuth(page);
@@ -141,9 +141,8 @@ test.describe('B141 diagnostic survives registration', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
-    await expect(page.getByRole('heading', { name: 'Карьерный кабинет' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Начните с карьерного вопроса' })).toHaveCount(
-      0,
-    );
+    await expect(page.getByRole('heading', { name: 'Начните с карьерного вопроса' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Начать диагностику' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Карьерный кабинет' })).toHaveCount(0);
   });
 });

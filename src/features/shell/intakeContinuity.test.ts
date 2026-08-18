@@ -28,10 +28,10 @@ describe('shouldShowIntake', () => {
     ).toBe(true);
   });
 
-  it('opens the cabinet for a signed-in candidate who never started a diagnostic', () => {
+  it('opens the diagnostic for a newly registered candidate without a workspace', () => {
     expect(
       shouldShowIntake({ ...anonymousStart, hasCabinetSession: true }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('hands the screen over once the career picture exists', () => {
