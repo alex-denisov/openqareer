@@ -48,8 +48,8 @@ describe('AdminConsole', () => {
 
     expect(html).toContain('Учётные записи');
     expect(html).toContain('Поиск по логину, email или имени');
-    // The screen must not claim a capability this slice does not have.
-    expect(html).toContain('Переписка, документы и карьерные данные кандидата');
+    // The scope note describes the operator section's capabilities.
+    expect(html).toContain('управление ролями, тарифами, блокировками');
   });
 
   it('never renders candidate workspace chrome on the administrator surface', () => {

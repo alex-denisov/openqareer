@@ -557,3 +557,26 @@ CREATE TABLE resume_drafts (
   updated_at TEXT NOT NULL
 ) STRICT;
 `;
+
+export const MIGRATION_17 = `
+CREATE TABLE IF NOT EXISTS admin_audit (
+  id TEXT PRIMARY KEY,
+  actor_user_id TEXT NOT NULL,
+  actor_username TEXT NOT NULL,
+  action TEXT NOT NULL,
+  subject_user_id TEXT,
+  subject_username TEXT,
+  detail TEXT,
+  created_at TEXT NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS admin_audit_created ON admin_audit(created_at);
+`;
+
+export const MIGRATION_18 = `
+ALTER TABLE users ADD COLUMN blocked_at TEXT;
+ALTER TABLE users ADD COLUMN subscription_tier TEXT NOT NULL DEFAULT 'free' CHECK (subscription_tier IN ('free', 'pro', 'executive', 'enterprise'));
+ALTER TABLE users ADD COLUMN subscription_status TEXT NOT NULL DEFAULT 'active' CHECK (subscription_status IN ('active', 'trialing', 'past_due', 'canceled'));
+ALTER TABLE users ADD COLUMN subscription_expires_at TEXT;
+ALTER TABLE users ADD COLUMN subscription_notes TEXT;
+`;
+

@@ -84,11 +84,11 @@ test.describe('B089 administrator console', () => {
 
     await page
       .getByRole('row', { name: /Мария Иванова/ })
-      .getByRole('button')
+      .getByRole('button', { name: 'Управление' })
       .click();
-    const card = page.getByRole('region', { name: /Мария Иванова/ });
-    await expect(card).toBeVisible();
-    await expect(card.getByText('candidate-2')).toBeVisible();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: /maria/ })).toBeVisible();
   });
 
   test('a signed-in candidate is refused without being told to sign in again', async ({ page }) => {

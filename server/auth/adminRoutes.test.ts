@@ -81,6 +81,25 @@ async function createApp() {
     candidateStore: candidates,
     authService: auth,
     serveStatic: false,
+    searchVacancies: async () => ({
+      source: 'hh',
+      query: 'Frontend',
+      found: 1,
+      fetchedAt: new Date().toISOString(),
+      items: [
+        {
+          id: 'test-1',
+          title: 'Frontend Developer',
+          company: 'Test Corp',
+          location: 'Remote',
+          sourceUrl: 'https://hh.ru/1',
+          publishedAt: new Date().toISOString(),
+          salary: null,
+          workMode: 'remote',
+          requirements: ['React'],
+        },
+      ],
+    }),
   });
   resources.push({ app, auth, candidates, directory });
   return app;
@@ -112,6 +131,7 @@ async function register(
     payload: { displayName, email, password: 'candidate-password-for-tests' },
   });
   expect(response.statusCode).toBe(201);
+  return response.json().data as { id: string; username: string };
 }
 
 describe('GET /api/v1/admin/users', () => {
@@ -243,3 +263,70 @@ describe('GET /api/v1/admin/users', () => {
     expect(response.json().error.code).toBe('validation_failed');
   });
 });
+
+describe('PATCH /api/v1/admin/users/:userId', () => {
+  it('allows an administrator to promote a candidate to admin', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+    await register(app, 'Новичок', 'newbie@example.com');
+    const directory = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/users?query=newbie@example.com',
+      headers: { cookie: adminCookie },
+    });
+    const candidateUser = directory.json().data.users[0];
+
+    const updateResponse = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/admin/users/${candidateUser.id}`,
+      headers: { cookie: adminCookie },
+      payload: { role: 'admin' },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(updateResponse.json().data.role).toBe('admin');
+  });
+
+  it('forbids candidate accounts from changing roles', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+    const candidateCookie = await signIn(app, CANDIDATE);
+    await register(app, 'Другой', 'other@example.com');
+    const directory = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/users?query=other@example.com',
+      headers: { cookie: adminCookie },
+    });
+    const candidateUser = directory.json().data.users[0];
+
+    const updateResponse = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/admin/users/${candidateUser.id}`,
+      headers: { cookie: candidateCookie },
+      payload: { role: 'admin' },
+    });
+
+    expect(updateResponse.statusCode).toBe(403);
+  });
+});
+
+describe('POST /api/v1/admin/vacancy-sources/:sourceId/test', () => {
+  it('allows admin to test a vacancy source with a search query', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+
+    const testResponse = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/vacancy-sources/hh/test',
+      headers: { cookie: adminCookie },
+      payload: { query: 'Frontend' },
+    });
+
+    expect(testResponse.statusCode).toBe(200);
+    const body = testResponse.json().data;
+    expect(body.sourceId).toBe('hh');
+    expect(typeof body.latencyMs).toBe('number');
+    expect(Array.isArray(body.vacancies)).toBe(true);
+  });
+});
+

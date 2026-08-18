@@ -164,6 +164,9 @@ export default function App() {
       invalidStorage: result.status === 'invalid',
     });
     setSessionError(undefined);
+    if (session === null) {
+      navigate('/');
+    }
   }
 
   // Routing checks

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const VACANCY_SOURCES = ['hh', 'remotive'] as const;
-export type VacancySource = (typeof VACANCY_SOURCES)[number];
+export type VacancySource = (typeof VACANCY_SOURCES)[number] | string;
 
 export interface VacancySample {
   source: VacancySource;
@@ -27,7 +27,7 @@ export interface VacancySample {
 }
 
 export interface VacancySourceHealth {
-  source: VacancySource;
+  source: string;
   status:
     | 'healthy'
     | 'degraded'

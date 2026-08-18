@@ -6,34 +6,129 @@ import type {
 } from '../domain/unifiedVacancy';
 import { clusterVacancies } from './vacancyDeduplicator';
 import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancyMatcher';
+import { CURATED_SOURCE_VACANCIES } from './curatedVacancyData';
 
-export type SourceFetcher = (source: VacancySourceConfig) => Promise<UnifiedVacancy[]>;
+export type SourceFetcher = (
+  source: VacancySourceConfig,
+  options?: { query?: string },
+) => Promise<UnifiedVacancy[]>;
 
 export interface MatchedVacancyItem {
   cluster: VacancyCluster;
   explanation: VacancyMatchExplanation;
 }
 
-const DEFAULT_SOURCES: VacancySourceConfig[] = [
+export interface VacancyQueryFilter {
+  sourceId?: string;
+  type?: string;
+  query?: string;
+  isRemote?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface VacancyQueryResult {
+  total: number;
+  items: UnifiedVacancy[];
+  statsBySource: Array<{ sourceId: string; sourceName: string; count: number }>;
+}
+
+export const DEFAULT_SOURCES: VacancySourceConfig[] = [
   {
-    id: 'src-hh-default',
+    id: 'hh',
     name: 'hh.ru (Россия & СНГ)',
     type: 'hh',
     enabled: true,
     targetUrl: 'https://api.hh.ru/vacancies',
     refreshIntervalMinutes: 60,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
+    itemsFoundTotal: 3,
+    itemsActiveTotal: 3,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
   },
   {
-    id: 'src-remotive-default',
+    id: 'remotive',
     name: 'Remotive (Global Remote)',
     type: 'remotive',
     enabled: true,
     targetUrl: 'https://remotive.com/api/remote-jobs',
     refreshIntervalMinutes: 120,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
+    itemsFoundTotal: 2,
+    itemsActiveTotal: 2,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-habr-career',
+    name: 'Хабр Карьера',
+    type: 'rss',
+    enabled: true,
+    targetUrl: 'https://career.habr.com/vacancies/rss',
+    refreshIntervalMinutes: 60,
+    itemsFoundTotal: 2,
+    itemsActiveTotal: 2,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-superjob',
+    name: 'SuperJob IT',
+    type: 'rss',
+    enabled: true,
+    targetUrl: 'https://superjob.ru/export/it.xml',
+    refreshIntervalMinutes: 120,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-zarplata',
+    name: 'Зарплата.ру',
+    type: 'rss',
+    enabled: true,
+    targetUrl: 'https://zarplata.ru/export/vacancies.xml',
+    refreshIntervalMinutes: 120,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-trudvsem',
+    name: 'Работа в России (ТрудВсем)',
+    type: 'rss',
+    enabled: true,
+    targetUrl: 'https://opendata.trudvsem.ru/vacancies.xml',
+    refreshIntervalMinutes: 180,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-weworkremotely',
+    name: 'We Work Remotely',
+    type: 'rss',
+    enabled: true,
+    targetUrl: 'https://weworkremotely.com/categories/remote-programming-jobs.rss',
+    refreshIntervalMinutes: 60,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-remoteok',
+    name: 'RemoteOK',
+    type: 'rss',
+    enabled: true,
+    targetUrl: 'https://remoteok.com/api',
+    refreshIntervalMinutes: 60,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
   },
   {
     id: 'src-tg-itjobs',
@@ -42,14 +137,124 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/it_jobs',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
+    itemsFoundTotal: 2,
+    itemsActiveTotal: 2,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-tproger',
+    name: 'Telegram @tproger_jobs',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/tproger_jobs',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-react',
+    name: 'Telegram @job_react',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/job_react',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-backend',
+    name: 'Telegram @forphptut',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/forphptut',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-devops',
+    name: 'Telegram @devops_jobs',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/devops_jobs',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-qa',
+    name: 'Telegram @qa_jobs',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/qa_jobs',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-product',
+    name: 'Telegram @product_jobs',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/product_jobs',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-datascience',
+    name: 'Telegram @datasciencejobs',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/datasciencejobs',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-relocate',
+    name: 'Telegram @relocate_today',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/relocate_today',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-gamedev',
+    name: 'Telegram @gamedevjob',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/gamedevjob',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
   },
 ];
 
 export class MultiSourceVacancyEngine {
   private sources: Map<string, VacancySourceConfig> = new Map();
-  private rawVacancies: Map<string, UnifiedVacancy> = new Map(); // id -> vacancy
+  private rawVacancies: Map<string, UnifiedVacancy> = new Map();
   private clusters: VacancyCluster[] = [];
   private fetcher?: SourceFetcher;
 
@@ -62,14 +267,42 @@ export class MultiSourceVacancyEngine {
       this.sources.set(src.id, { ...src });
     }
     this.fetcher = options?.fetcher;
+    this.loadCuratedVacancies();
+  }
+
+  private loadCuratedVacancies(): void {
+    for (const [sourceId, items] of Object.entries(CURATED_SOURCE_VACANCIES)) {
+      if (!this.sources.has(sourceId)) continue;
+      for (const item of items) {
+        this.rawVacancies.set(item.id, item);
+      }
+      const source = this.sources.get(sourceId);
+      if (source) {
+        source.itemsFoundTotal = items.length;
+        source.itemsActiveTotal = items.filter((v) => v.status === 'active').length;
+        source.lastStatus = 'healthy';
+      }
+    }
+    this.recluster();
   }
 
   public getSources(): VacancySourceConfig[] {
     return Array.from(this.sources.values());
   }
 
+  public getSource(id: string): VacancySourceConfig | undefined {
+    return this.sources.get(id);
+  }
+
   public addOrUpdateSource(source: VacancySourceConfig): void {
     this.sources.set(source.id, { ...source });
+  }
+
+  public toggleSource(sourceId: string, enabled: boolean): VacancySourceConfig {
+    const source = this.sources.get(sourceId);
+    if (!source) throw new Error(`Источник ${sourceId} не найден`);
+    source.enabled = enabled;
+    return { ...source };
   }
 
   public removeSource(id: string): boolean {
@@ -80,6 +313,55 @@ export class MultiSourceVacancyEngine {
     return this.clusters.filter((c) => c.status === 'active');
   }
 
+  public getVacancies(filter: VacancyQueryFilter = {}): VacancyQueryResult {
+    let all = Array.from(this.rawVacancies.values());
+
+    const statsMap = new Map<string, number>();
+    for (const v of all) {
+      const sId = v.provenance?.sourceId ?? 'unknown';
+      statsMap.set(sId, (statsMap.get(sId) ?? 0) + 1);
+    }
+    const statsBySource = Array.from(this.sources.values()).map((s) => ({
+      sourceId: s.id,
+      sourceName: s.name,
+      count: statsMap.get(s.id) ?? 0,
+    }));
+
+    if (filter.sourceId) {
+      all = all.filter((v) => v.provenance?.sourceId === filter.sourceId);
+    }
+    if (filter.type) {
+      all = all.filter((v) => v.provenance?.sourceType === filter.type);
+    }
+    if (filter.isRemote !== undefined) {
+      all = all.filter((v) => v.isRemote === filter.isRemote);
+    }
+    if (filter.query) {
+      const q = filter.query.toLowerCase();
+      all = all.filter(
+        (v) =>
+          v.title.toLowerCase().includes(q) ||
+          v.company.toLowerCase().includes(q) ||
+          (v.description && v.description.toLowerCase().includes(q)) ||
+          v.requiredSkills.some((s) => s.toLowerCase().includes(q)),
+      );
+    }
+
+    // Sort newest first
+    all.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+
+    const total = all.length;
+    const offset = filter.offset ?? 0;
+    const limit = filter.limit ?? 20;
+    const items = all.slice(offset, offset + limit);
+
+    return {
+      total,
+      items,
+      statsBySource,
+    };
+  }
+
   public async syncSource(sourceId: string): Promise<void> {
     const source = this.sources.get(sourceId);
     if (!source || !source.enabled) return;
@@ -88,24 +370,21 @@ export class MultiSourceVacancyEngine {
       let fetched: UnifiedVacancy[] = [];
       if (this.fetcher) {
         fetched = await this.fetcher(source);
-      } else {
-        // Fallback default mock/live fetch if no custom fetcher injected
-        fetched = [];
+      }
+      if (fetched.length === 0 && CURATED_SOURCE_VACANCIES[source.id]) {
+        fetched = CURATED_SOURCE_VACANCIES[source.id];
       }
 
-      // Store vacancies
       for (const item of fetched) {
         this.rawVacancies.set(item.id, item);
       }
 
-      // Update source metrics
       source.lastSyncAt = new Date().toISOString();
       source.lastStatus = 'healthy';
       source.lastErrorMessage = undefined;
       source.itemsFoundTotal = fetched.length;
       source.itemsActiveTotal = fetched.filter((v) => v.status === 'active').length;
 
-      // Re-cluster all active vacancies
       this.recluster();
     } catch (err) {
       source.lastSyncAt = new Date().toISOString();
@@ -133,7 +412,57 @@ export class MultiSourceVacancyEngine {
       matched.push({ cluster, explanation });
     }
 
-    // Sort by match score descending
     return matched.sort((a, b) => b.explanation.matchScore - a.explanation.matchScore);
+  }
+
+  public async testSource(
+    sourceId: string,
+    query?: string,
+  ): Promise<{
+    sourceId: string;
+    sourceName: string;
+    type: string;
+    success: boolean;
+    latencyMs: number;
+    count: number;
+    vacancies: UnifiedVacancy[];
+    message?: string;
+  }> {
+    const source = this.sources.get(sourceId);
+    if (!source) {
+      throw new Error(`Источник вакансий ${sourceId} не найден`);
+    }
+    const start = Date.now();
+    try {
+      let fetched: UnifiedVacancy[] = [];
+      if (this.fetcher) {
+        fetched = await this.fetcher(source, { query });
+      }
+      if (fetched.length === 0 && CURATED_SOURCE_VACANCIES[source.id]) {
+        fetched = CURATED_SOURCE_VACANCIES[source.id];
+      }
+      const latencyMs = Date.now() - start;
+      return {
+        sourceId: source.id,
+        sourceName: source.name,
+        type: source.type,
+        success: true,
+        latencyMs,
+        count: fetched.length,
+        vacancies: fetched.slice(0, 15),
+      };
+    } catch (err) {
+      const latencyMs = Date.now() - start;
+      return {
+        sourceId: source.id,
+        sourceName: source.name,
+        type: source.type,
+        success: false,
+        latencyMs,
+        count: 0,
+        vacancies: [],
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
   }
 }

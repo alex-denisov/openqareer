@@ -176,19 +176,31 @@ export async function buildApp({
         remotive: searchRemotive,
       },
     });
+  if (authService && 'setCandidateStore' in authService) {
+    (authService as { setCandidateStore(s: CandidateStore): void }).setCandidateStore(candidateStore);
+  }
   const multiSourceEngine =
     multiSourceVacancyEngine ??
     new MultiSourceVacancyEngine({
-      fetcher: async (source) => {
+      fetcher: async (source, options) => {
         if (source.type === 'hh') {
-          const sample = await searchVacancies({ text: 'Developer', perPage: 20 });
+          const sample = await searchVacancies({
+            text: options?.query || 'Developer',
+            perPage: 20,
+          });
           return sample.items.map((v) => ({
             id: v.id,
             fingerprint: v.id,
             title: v.title,
             company: v.company,
             location: v.location,
-            salary: v.salary ? { from: v.salary.from ?? undefined, to: v.salary.to ?? undefined, currency: v.salary.currency } : undefined,
+            salary: v.salary
+              ? {
+                  from: v.salary.from ?? undefined,
+                  to: v.salary.to ?? undefined,
+                  currency: v.salary.currency,
+                }
+              : undefined,
             description: v.title,
             requiredSkills: v.requirements ?? [],
             url: v.sourceUrl,
@@ -203,7 +215,10 @@ export async function buildApp({
           }));
         }
         if (source.type === 'remotive') {
-          const sample = await searchRemotive({ text: 'Engineer', perPage: 20 });
+          const sample = await searchRemotive({
+            text: options?.query || 'Engineer',
+            perPage: 20,
+          });
           return sample.items.map((v) => ({
             id: v.id,
             fingerprint: v.id,
@@ -264,67 +279,245 @@ export async function buildApp({
     },
   }));
 
-  app.get('/api/v1/admin/users', async (request, reply) => {
+  function requireAdmin(
+    request: Parameters<typeof authenticateSession>[0],
+    reply: Parameters<typeof sendError>[0],
+  ): AuthPrincipal | null {
     const principal = authenticateSession(request, authService, config);
     if (!principal) {
-      return sendError(
-        reply,
-        request,
-        401,
-        'unauthorized',
-        'Нужен вход в аккаунт.',
-        false,
-      );
+      void sendError(reply, request, 401, 'unauthorized', 'Нужен вход в аккаунт.', false);
+      return null;
     }
-    // A candidate is refused with 403, not 401: they are signed in, and telling
-    // them to sign in again would be a lie.
-    if (principal.role !== 'admin' || !authService.listUsers) {
-      return sendError(
-        reply,
-        request,
-        403,
-        'forbidden',
-        'Раздел доступен только администратору.',
-        false,
-      );
+    if (principal.role !== 'admin') {
+      void sendError(reply, request, 403, 'forbidden', 'Раздел доступен только администратору.', false);
+      return null;
     }
+    return principal;
+  }
+
+  app.get('/api/v1/admin/users', async (request, reply) => {
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
     const query = adminUserQuerySchema.parse(request.query);
     return {
-      data: authService.listUsers({
-        query: query.query,
-        limit: query.limit,
-        offset: query.offset,
-      }),
+      data: authService.listUsers
+        ? authService.listUsers({ query: query.query, limit: query.limit, offset: query.offset })
+        : { total: 0, users: [] },
+      meta: { requestId: request.id },
+    };
+  });
+
+  app.get('/api/v1/admin/users/:userId', async (request, reply) => {
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
+    const { userId } = request.params as { userId: string };
+    const user = authService.getUser ? authService.getUser(userId) : null;
+    if (!user) {
+      return sendError(reply, request, 404, 'not_found', 'Пользователь не найден.', false);
+    }
+    return { data: user, meta: { requestId: request.id } };
+  });
+
+  const adminUserPatchSchema = z.object({
+    role: z.enum(['candidate', 'admin']).optional(),
+    email: z.string().email().nullable().optional(),
+    displayName: z.string().max(255).nullable().optional(),
+    headline: z.string().max(255).nullable().optional(),
+    location: z.string().max(255).nullable().optional(),
+    workMode: z.enum(['office', 'hybrid', 'remote', 'flexible']).nullable().optional(),
+    subscriptionTier: z.enum(['free', 'pro', 'executive', 'enterprise']).optional(),
+    subscriptionStatus: z.enum(['active', 'trialing', 'past_due', 'canceled']).optional(),
+    subscriptionExpiresAt: z.string().nullable().optional(),
+    subscriptionNotes: z.string().max(1000).nullable().optional(),
+  });
+
+  app.patch('/api/v1/admin/users/:userId', async (request, reply) => {
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
+    const { userId } = request.params as { userId: string };
+    const body = adminUserPatchSchema.parse(request.body ?? {});
+    try {
+      if (body.role && authService.setUserRole) {
+        authService.setUserRole(userId, body.role, principal);
+      }
+      const updated = authService.updateUserByAdmin
+        ? authService.updateUserByAdmin(userId, body, principal)
+        : authService.getUser?.(userId);
+      return { data: updated, meta: { requestId: request.id } };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Не удалось обновить пользователя.';
+      return sendError(reply, request, 400, 'bad_request', message, false);
+    }
+  });
+
+  const adminUserBlockSchema = z.object({
+    blocked: z.boolean(),
+  });
+
+  app.post('/api/v1/admin/users/:userId/block', async (request, reply) => {
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
+    const { userId } = request.params as { userId: string };
+    const body = adminUserBlockSchema.parse(request.body ?? {});
+    try {
+      const updated = authService.setUserBlocked
+        ? authService.setUserBlocked(userId, body.blocked, principal)
+        : null;
+      return { data: updated, meta: { requestId: request.id } };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Не удалось изменить статус блокировки.';
+      return sendError(reply, request, 400, 'bad_request', message, false);
+    }
+  });
+
+  const adminUserPasswordResetSchema = z.object({
+    newPassword: z.string().min(8).max(256),
+  });
+
+  app.post('/api/v1/admin/users/:userId/reset-password', async (request, reply) => {
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
+    const { userId } = request.params as { userId: string };
+    const body = adminUserPasswordResetSchema.parse(request.body ?? {});
+    try {
+      if (authService.adminSetUserPassword) {
+        await authService.adminSetUserPassword(userId, body.newPassword, principal);
+      }
+      return { data: { success: true }, meta: { requestId: request.id } };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Не удалось сбросить пароль.';
+      return sendError(reply, request, 400, 'bad_request', message, false);
+    }
+  });
+
+  app.post('/api/v1/admin/users/:userId/impersonate', async (request, reply) => {
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
+    const { userId } = request.params as { userId: string };
+    try {
+      if (!authService.impersonateUser) {
+        throw new Error('Имперсонация не поддерживается службой авторизации.');
+      }
+      const impersonated = await authService.impersonateUser(userId, principal);
+      setSessionCookie(reply, impersonated.sessionToken, config.secureCookies);
+      return {
+        data: {
+          redirectUrl: '/app',
+          user: impersonated.principal,
+        },
+        meta: { requestId: request.id },
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Не удалось войти от имени пользователя.';
+      return sendError(reply, request, 400, 'bad_request', message, false);
+    }
+  });
+
+  app.delete('/api/v1/admin/users/:userId', async (request, reply) => {
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
+    const { userId } = request.params as { userId: string };
+    try {
+      if (authService.deleteUserByAdmin) {
+        authService.deleteUserByAdmin(userId, principal);
+      }
+      return { data: { success: true }, meta: { requestId: request.id } };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Не удалось удалить пользователя.';
+      return sendError(reply, request, 400, 'bad_request', message, false);
+    }
+  });
+
+  app.get('/api/v1/admin/audit', async (request, reply) => {
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
+    const query = request.query as { limit?: string; offset?: string };
+    const limit = Math.min(Number(query.limit) || 50, 100);
+    const offset = Math.max(Number(query.offset) || 0, 0);
+    const result = authService.listAudit
+      ? authService.listAudit({ limit, offset })
+      : { total: 0, records: [] };
+    return { data: result, meta: { requestId: request.id } };
+  });
+
+  const adminVacancyQuerySchema = z.object({
+    sourceId: z.string().optional(),
+    type: z.string().optional(),
+    query: z.string().optional(),
+    isRemote: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    offset: z.coerce.number().int().min(0).default(0),
+  });
+
+  app.get('/api/v1/admin/vacancies', async (request, reply) => {
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
+    const query = adminVacancyQuerySchema.parse(request.query ?? {});
+    const result = multiSourceEngine.getVacancies(query);
+    return {
+      data: result,
       meta: { requestId: request.id },
     };
   });
 
   app.get('/api/v1/admin/vacancy-sources', async (request, reply) => {
-    const principal = authenticateSession(request, authService, config);
-    if (!principal) {
-      return sendError(reply, request, 401, 'unauthorized', 'Нужен вход в аккаунт.', false);
-    }
-    if (principal.role !== 'admin') {
-      return sendError(reply, request, 403, 'forbidden', 'Раздел доступен только администратору.', false);
-    }
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
     return {
       data: multiSourceEngine.getSources(),
       meta: { requestId: request.id },
     };
   });
 
+  const adminVacancySourceTestSchema = z.object({
+    query: z.string().max(100).optional(),
+  });
+
+  app.post('/api/v1/admin/vacancy-sources/:sourceId/test', async (request, reply) => {
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
+    const { sourceId } = request.params as { sourceId: string };
+    const body = adminVacancySourceTestSchema.parse(request.body ?? {});
+    const result = await multiSourceEngine.testSource(sourceId, body.query);
+    return {
+      data: result,
+      meta: { requestId: request.id },
+    };
+  });
+
+  app.post('/api/v1/admin/vacancy-sources/sync-all', async (request, reply) => {
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
+    await multiSourceEngine.syncAll();
+    return {
+      data: { success: true, count: multiSourceEngine.getVacancies().total },
+      meta: { requestId: request.id },
+    };
+  });
+
   app.post('/api/v1/admin/vacancy-sources/:sourceId/sync', async (request, reply) => {
-    const principal = authenticateSession(request, authService, config);
-    if (!principal) {
-      return sendError(reply, request, 401, 'unauthorized', 'Нужен вход в аккаунт.', false);
-    }
-    if (principal.role !== 'admin') {
-      return sendError(reply, request, 403, 'forbidden', 'Раздел доступен только администратору.', false);
-    }
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
     const { sourceId } = request.params as { sourceId: string };
     await multiSourceEngine.syncSource(sourceId);
     return {
       data: { success: true },
+      meta: { requestId: request.id },
+    };
+  });
+
+  const adminVacancySourceToggleSchema = z.object({
+    enabled: z.boolean(),
+  });
+
+  app.post('/api/v1/admin/vacancy-sources/:sourceId/toggle', async (request, reply) => {
+    const principal = requireAdmin(request, reply);
+    if (!principal) return;
+    const { sourceId } = request.params as { sourceId: string };
+    const body = adminVacancySourceToggleSchema.parse(request.body ?? {});
+    const updated = multiSourceEngine.toggleSource(sourceId, body.enabled);
+    return {
+      data: updated,
       meta: { requestId: request.id },
     };
   });

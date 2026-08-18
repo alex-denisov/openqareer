@@ -7,11 +7,15 @@ import {
   listAdminUsers,
   listAdminVacancySources,
   syncAdminVacancySource,
+  impersonateAdminUser,
   type AdminUser,
   type AdminUserPage,
   type AdminVacancySource,
 } from './adminApi';
 import { AdminVacancySourcesView } from './AdminVacancySourcesView';
+import { AdminVacanciesView } from './AdminVacanciesView';
+import { AdminAuditView } from './AdminAuditView';
+import { AdminUserProfileModal } from './AdminUserProfileModal';
 
 interface AdminConsoleProps {
   session?: AuthUser | null;
@@ -60,8 +64,8 @@ function AdminNav({
   activeTab,
   onSelectTab,
 }: {
-  activeTab: 'users' | 'sources';
-  onSelectTab: (tab: 'users' | 'sources') => void;
+  activeTab: 'users' | 'vacancies' | 'sources' | 'audit';
+  onSelectTab: (tab: 'users' | 'vacancies' | 'sources' | 'audit') => void;
 }) {
   return (
     <nav className="admin-nav" aria-label="Разделы администратора">
@@ -70,23 +74,48 @@ function AdminNav({
         className={`admin-nav-item ${activeTab === 'users' ? 'is-active' : ''}`}
         onClick={() => onSelectTab('users')}
       >
-        Учётные записи
+        👥 Учётные записи
+      </button>
+      <button
+        type="button"
+        className={`admin-nav-item ${activeTab === 'vacancies' ? 'is-active' : ''}`}
+        onClick={() => onSelectTab('vacancies')}
+      >
+        💼 База вакансий (18+)
       </button>
       <button
         type="button"
         className={`admin-nav-item ${activeTab === 'sources' ? 'is-active' : ''}`}
         onClick={() => onSelectTab('sources')}
       >
-        Источники вакансий
+        📡 Источники вакансий
+      </button>
+      <button
+        type="button"
+        className={`admin-nav-item ${activeTab === 'audit' ? 'is-active' : ''}`}
+        onClick={() => onSelectTab('audit')}
+      >
+        🛡️ Журнал аудита
       </button>
     </nav>
   );
 }
 
+function AdminVacancySourcesTab() {
+  const { sources, loading, refresh, sync } = useVacancySourcesPage();
+  return (
+    <AdminVacancySourcesView
+      sources={sources}
+      loading={loading}
+      onRefresh={refresh}
+      onSync={sync}
+    />
+  );
+}
+
 export function AdminConsole({ session, sessionPending = false }: AdminConsoleProps) {
   const isAdmin = session?.role === 'admin';
-  const [activeTab, setActiveTab] = useState<'users' | 'sources'>('users');
-  const sourcesHook = useVacancySourcesPage();
+  const [activeTab, setActiveTab] = useState<'users' | 'vacancies' | 'sources' | 'audit'>('users');
 
   useEffect(() => {
     document.title = 'Администрирование · openqareer';
@@ -107,16 +136,10 @@ export function AdminConsole({ session, sessionPending = false }: AdminConsolePr
   return (
     <AdminFrame>
       <AdminNav activeTab={activeTab} onSelectTab={setActiveTab} />
-      {activeTab === 'users' ? (
-        <AdminDirectory />
-      ) : (
-        <AdminVacancySourcesView
-          sources={sourcesHook.sources}
-          loading={sourcesHook.loading}
-          onRefresh={sourcesHook.refresh}
-          onSync={sourcesHook.sync}
-        />
-      )}
+      {activeTab === 'users' && <AdminDirectory />}
+      {activeTab === 'vacancies' && <AdminVacanciesView />}
+      {activeTab === 'sources' && <AdminVacancySourcesTab />}
+      {activeTab === 'audit' && <AdminAuditView />}
     </AdminFrame>
   );
 }
@@ -141,42 +164,40 @@ function AdminDirectory() {
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [offset, setOffset] = useState(0);
-  const [selected, setSelected] = useState<AdminUser>();
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const { state, load } = useDirectoryPage(submittedQuery, offset);
 
   return (
     <>
       <AdminDirectoryHeader />
-
       <AdminSearchForm
         query={query}
         onQueryChange={setQuery}
         onSubmit={() => {
           setOffset(0);
-          setSelected(undefined);
           setSubmittedQuery(query);
         }}
       />
-
       <AdminDirectoryStatus state={state} onRetry={() => void load()} />
-
-      {state.status === 'ready' ? (
+      {state.status === 'ready' && (
         <AdminDirectoryPage
           page={state.page}
           searched={Boolean(submittedQuery)}
           offset={offset}
-          selectedId={selected?.id}
-          onSelect={setSelected}
+          selectedId={selectedUser?.id}
+          onSelect={setSelectedUser}
           onOffset={setOffset}
         />
-      ) : null}
-
-      {selected ? <AdminUserCard user={selected} onClose={() => setSelected(undefined)} /> : null}
-
+      )}
+      {selectedUser && (
+        <AdminUserProfileModal
+          user={selectedUser}
+          onClose={() => setSelectedUser(null)}
+          onUpdated={() => void load()}
+        />
+      )}
       <p className="admin-scope-note">
-        Раздел показывает только учётные данные аккаунта: логин, email, роль и активность сессий.
-        Переписка, документы и карьерные данные кандидата здесь не открываются. Управление ролями,
-        блокировка, сброс пароля, удаление и журнал действий добавляются следующим срезом B089.
+        Раздел оператора: управление ролями, тарифами, блокировками, сброс паролей и бесшовная имперсонация сессий.
       </p>
     </>
   );
@@ -189,14 +210,18 @@ function AdminDirectoryHeader() {
         <p className="admin-eyebrow">Администрирование</p>
         <h1>Учётные записи</h1>
       </div>
-      <a className="admin-quiet-link" href="/">
-        В кабинет
-      </a>
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <a className="admin-quiet-link" href="/app">
+          В кабинет
+        </a>
+        <a className="admin-quiet-link" href="/">
+          На главную
+        </a>
+      </div>
     </header>
   );
 }
 
-/** A directory that is loading or broken says so; it never shows a blank page. */
 function AdminDirectoryStatus({ state, onRetry }: { state: DirectoryState; onRetry: () => void }) {
   if (state.status === 'failed') {
     return (
@@ -218,44 +243,6 @@ function AdminDirectoryStatus({ state, onRetry }: { state: DirectoryState; onRet
   return null;
 }
 
-/**
- * One request per query/page, cancelled when either changes, so a slow earlier
- * page can never overwrite the page the administrator is actually looking at.
- */
-function useDirectoryPage(query: string, offset: number) {
-  const [state, setState] = useState<DirectoryState>({ status: 'loading' });
-
-  const load = useCallback(
-    async (signal?: AbortSignal) => {
-      setState({ status: 'loading' });
-      try {
-        const page = await listAdminUsers({
-          ...(query ? { query } : {}),
-          offset,
-          ...(signal ? { signal } : {}),
-        });
-        if (!signal?.aborted) setState({ status: 'ready', page });
-      } catch (reason) {
-        if (signal?.aborted) return;
-        setState({
-          status: 'failed',
-          message:
-            reason instanceof Error ? reason.message : 'Не удалось загрузить список аккаунтов.',
-        });
-      }
-    },
-    [offset, query],
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void load(controller.signal);
-    return () => controller.abort();
-  }, [load]);
-
-  return { state, load };
-}
-
 function AdminSearchForm({
   query,
   onQueryChange,
@@ -268,26 +255,59 @@ function AdminSearchForm({
   return (
     <form
       className="admin-search"
-      onSubmit={(event) => {
-        event.preventDefault();
+      role="search"
+      onSubmit={(e) => {
+        e.preventDefault();
         onSubmit();
       }}
     >
-      <label htmlFor="admin-search-field">Поиск по логину, email или имени</label>
+      <label htmlFor="admin-query">Поиск по логину, email или имени</label>
       <div>
         <input
-          id="admin-search-field"
+          id="admin-query"
+          type="search"
           value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="например, maria@example.com"
-          maxLength={80}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="Поиск пользователей…"
+          autoComplete="off"
         />
-        <button className="admin-primary-button" type="submit">
-          <MagnifyingGlass size={16} weight="bold" />
+        <button className="admin-btn is-secondary" type="submit">
+          <MagnifyingGlass size={16} />
           Найти
         </button>
       </div>
     </form>
+  );
+}
+
+function AdminTableRowActions({
+  user,
+  onSelect,
+  onImpersonate,
+}: {
+  user: AdminUser;
+  onSelect: (user: AdminUser) => void;
+  onImpersonate: (user: AdminUser) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: '6px' }}>
+      <button
+        className="admin-btn is-secondary"
+        type="button"
+        onClick={() => onSelect(user)}
+        title="Открыть полное управление профилем, тарифом и паролем"
+      >
+        Управление
+      </button>
+      <button
+        className="admin-btn admin-btn--impersonate"
+        type="button"
+        onClick={() => onImpersonate(user)}
+        title="Войти в кабинет пользователя (имперсонация)"
+      >
+        Войти
+      </button>
+    </div>
   );
 }
 
@@ -304,60 +324,75 @@ function AdminDirectoryPage({
   offset: number;
   selectedId?: string;
   onSelect: (user: AdminUser) => void;
-  onOffset: (next: (current: number) => number) => void;
+  onOffset: React.Dispatch<React.SetStateAction<number>>;
 }) {
-  const shown = page.users.length;
+  const handleImpersonate = async (user: AdminUser) => {
+    if (!window.confirm(`Войти в личный кабинет под именем @${user.username}?`)) return;
+    try {
+      const res = await impersonateAdminUser(user.id);
+      window.location.href = res.redirectUrl || '/app';
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Не удалось войти');
+    }
+  };
+
+  if (page.users.length === 0) {
+    return (
+      <p className="admin-note">
+        {searched ? 'По этому запросу никого не найдено.' : 'В системе пока нет учётных записей.'}
+      </p>
+    );
+  }
+
   return (
     <>
-      <p className="admin-count">
-        {page.total === 0
-          ? searched
-            ? 'Ни одна учётная запись не подошла под запрос.'
-            : 'В системе пока нет учётных записей.'
-          : `Показано ${shown} из ${page.total}`}
-      </p>
-
-      {page.total > 0 ? (
-        <AdminTable users={page.users} selectedId={selectedId} onSelect={onSelect} />
-      ) : null}
-
-      {page.total > ADMIN_PAGE_SIZE ? (
-        <AdminPager total={page.total} shown={shown} offset={offset} onOffset={onOffset} />
-      ) : null}
+      <div className="admin-table-container">
+        <AdminTable
+          users={page.users}
+          selectedId={selectedId}
+          onSelect={onSelect}
+          onImpersonate={handleImpersonate}
+        />
+      </div>
+      <AdminPagination total={page.total} offset={offset} shown={page.users.length} onOffset={onOffset} />
     </>
   );
 }
 
-function AdminPager({
+function AdminPagination({
   total,
-  shown,
   offset,
+  shown,
   onOffset,
 }: {
   total: number;
-  shown: number;
   offset: number;
-  onOffset: (next: (current: number) => number) => void;
+  shown: number;
+  onOffset: React.Dispatch<React.SetStateAction<number>>;
 }) {
+  const hasMultiplePages = total > ADMIN_PAGE_SIZE;
+
   return (
-    <nav className="admin-pager" aria-label="Страницы списка">
+    <nav className="admin-pagination" aria-label="Страницы справочника">
       <button
         className="admin-quiet-button"
         type="button"
         disabled={offset === 0}
         onClick={() => onOffset((current) => Math.max(0, current - ADMIN_PAGE_SIZE))}
+        style={{ visibility: hasMultiplePages ? 'visible' : 'hidden' }}
       >
         <ArrowLeft size={16} />
         Назад
       </button>
       <span className="admin-mono">
-        {offset + 1}–{offset + shown} из {total}
+        Показано {shown} из {total}
       </span>
       <button
         className="admin-quiet-button"
         type="button"
         disabled={offset + shown >= total}
         onClick={() => onOffset((current) => current + ADMIN_PAGE_SIZE)}
+        style={{ visibility: hasMultiplePages ? 'visible' : 'hidden' }}
       >
         Далее
         <ArrowRight size={16} />
@@ -366,14 +401,61 @@ function AdminPager({
   );
 }
 
+function AdminTableRow({
+  user,
+  isSelected,
+  onSelect,
+  onImpersonate,
+}: {
+  user: AdminUser;
+  isSelected: boolean;
+  onSelect: (user: AdminUser) => void;
+  onImpersonate: (user: AdminUser) => void;
+}) {
+  return (
+    <tr className={isSelected ? 'is-selected' : ''}>
+      <th scope="row">
+        <strong>{user.displayName ?? user.username}</strong>
+        <small>{user.email ?? user.username}</small>
+      </th>
+      <td data-label="Роль:">
+        <span className={`admin-badge ${user.role === 'admin' ? 'is-warning' : 'is-muted'}`}>
+          {roleLabel(user.role)}
+        </span>
+      </td>
+      <td data-label="Тариф:">
+        <span className={`admin-badge admin-badge--${user.subscriptionTier || 'free'}`}>
+          {(user.subscriptionTier || 'free').toUpperCase()}
+        </span>
+        {user.blockedAt && (
+          <span className="admin-badge admin-badge--blocked" style={{ marginLeft: '4px' }}>
+            Блок
+          </span>
+        )}
+      </td>
+      <td className="admin-mono" data-label="Создан:">
+        {formatMoment(user.createdAt)}
+      </td>
+      <td className="admin-mono" data-label="Активные сессии:">
+        {user.activeSessions}
+      </td>
+      <td>
+        <AdminTableRowActions user={user} onSelect={onSelect} onImpersonate={onImpersonate} />
+      </td>
+    </tr>
+  );
+}
+
 function AdminTable({
   users,
   selectedId,
   onSelect,
+  onImpersonate,
 }: {
   users: AdminUser[];
   selectedId?: string;
   onSelect: (user: AdminUser) => void;
+  onImpersonate: (user: AdminUser) => void;
 }) {
   return (
     <div className="admin-table-scroll">
@@ -383,31 +465,21 @@ function AdminTable({
           <tr>
             <th scope="col">Аккаунт</th>
             <th scope="col">Роль</th>
+            <th scope="col">Тариф / Статус</th>
             <th scope="col">Создан</th>
-            <th scope="col">Активные сессии</th>
-            <th scope="col"> </th>
+            <th scope="col">Сессии</th>
+            <th scope="col">Действия</th>
           </tr>
         </thead>
         <tbody>
           {users.map((user) => (
-            <tr key={user.id} className={selectedId === user.id ? 'is-selected' : ''}>
-              <th scope="row">
-                <strong>{user.displayName ?? user.username}</strong>
-                <small>{user.email ?? user.username}</small>
-              </th>
-              <td data-label="Роль:">{roleLabel(user.role)}</td>
-              <td className="admin-mono" data-label="Создан:">
-                {formatMoment(user.createdAt)}
-              </td>
-              <td className="admin-mono" data-label="Активные сессии:">
-                {user.activeSessions}
-              </td>
-              <td>
-                <button className="admin-quiet-button" type="button" onClick={() => onSelect(user)}>
-                  Карточка
-                </button>
-              </td>
-            </tr>
+            <AdminTableRow
+              key={user.id}
+              user={user}
+              isSelected={selectedId === user.id}
+              onSelect={onSelect}
+              onImpersonate={onImpersonate}
+            />
           ))}
         </tbody>
       </table>
@@ -415,51 +487,55 @@ function AdminTable({
   );
 }
 
-function AdminUserCard({ user, onClose }: { user: AdminUser; onClose: () => void }) {
-  return (
-    <section className="admin-card" aria-label={`Карточка: ${user.displayName ?? user.username}`}>
-      <header>
-        <h2>{user.displayName ?? user.username}</h2>
-        <button className="admin-quiet-button" type="button" onClick={onClose}>
-          Закрыть
-        </button>
-      </header>
-      <dl>
-        <Row label="Логин" value={user.username} mono />
-        <Row label="Email" value={user.email ?? 'Не указан'} />
-        <Row label="Роль" value={roleLabel(user.role)} />
-        <Row label="Тестовый аккаунт" value={user.isTest ? 'Да' : 'Нет'} />
-        <Row label="Идентификатор кандидата" value={user.candidateId ?? '—'} mono />
-        <Row label="Создан" value={formatMoment(user.createdAt)} mono />
-        <Row
-          label="Последняя активность"
-          value={user.lastSeenAt ? formatMoment(user.lastSeenAt) : 'Не входил'}
-          mono
-        />
-        <Row label="Активные сессии" value={String(user.activeSessions)} mono />
-      </dl>
-    </section>
-  );
-}
-
-function Row({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd className={mono ? 'admin-mono' : undefined}>{value}</dd>
-    </div>
-  );
-}
-
 function AdminFrame({ children }: { children: ReactNode }) {
   return (
     <div className="admin-console">
-      <a className="admin-brand" href="/" aria-label="openqareer">
-        <BrandMark variant="lockup" size={24} />
-      </a>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <a className="admin-brand" href="/" aria-label="openqareer" style={{ margin: 0 }}>
+          <BrandMark variant="lockup" size={26} />
+        </a>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <a href="/app" className="admin-btn is-secondary">
+            В кабинет
+          </a>
+          <a href="/" className="admin-btn is-secondary">
+            На главную
+          </a>
+        </div>
+      </header>
       <main>{children}</main>
     </div>
   );
+}
+
+function useDirectoryPage(query: string, offset: number) {
+  const [state, setState] = useState<DirectoryState>({ status: 'loading' });
+
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      setState({ status: 'loading' });
+      try {
+        const page = await listAdminUsers({ query, offset, signal });
+        if (!signal?.aborted) setState({ status: 'ready', page });
+      } catch (reason) {
+        if (!signal?.aborted) {
+          setState({
+            status: 'failed',
+            message: reason instanceof Error ? reason.message : 'Не удалось загрузить пользователей.',
+          });
+        }
+      }
+    },
+    [offset, query],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
+
+  return { state, load };
 }
 
 function roleLabel(role: AdminUser['role']) {

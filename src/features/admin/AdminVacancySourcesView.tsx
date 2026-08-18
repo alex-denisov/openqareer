@@ -1,6 +1,18 @@
 import { useState } from 'react';
-import { ArrowsClockwise, CheckCircle, Warning, XCircle } from '@phosphor-icons/react';
-import type { AdminVacancySource } from './adminApi';
+import {
+  ArrowsClockwise,
+  CheckCircle,
+  MagnifyingGlass,
+  Warning,
+  X,
+  XCircle,
+} from '@phosphor-icons/react';
+import {
+  testAdminVacancySource,
+  type AdminVacancySource,
+  type VacancySourceTestItem,
+  type VacancySourceTestResult,
+} from './adminApi';
 
 interface AdminVacancySourcesViewProps {
   sources: AdminVacancySource[];
@@ -34,12 +46,46 @@ function SourceStatusBadge({ status }: { status?: AdminVacancySource['lastStatus
   return <span className="admin-badge is-muted">Не проверялся</span>;
 }
 
+function SourceCardActions({
+  syncing,
+  onSync,
+  onOpenTest,
+}: {
+  syncing: boolean;
+  onSync: () => void;
+  onOpenTest: () => void;
+}) {
+  return (
+    <div className="admin-source-actions" style={{ display: 'flex', gap: '8px' }}>
+      <button
+        className="admin-btn is-secondary"
+        type="button"
+        disabled={syncing}
+        onClick={onSync}
+      >
+        <ArrowsClockwise size={14} className={syncing ? 'is-spinning' : ''} />
+        {syncing ? 'Синхронизация…' : 'Синхронизировать'}
+      </button>
+      <button
+        className="admin-btn is-secondary"
+        type="button"
+        onClick={onOpenTest}
+      >
+        <MagnifyingGlass size={14} />
+        Проверить выдачу
+      </button>
+    </div>
+  );
+}
+
 function SourceCard({
   source,
   onSync,
+  onOpenTest,
 }: {
   source: AdminVacancySource;
   onSync: (sourceId: string) => Promise<void>;
+  onOpenTest: (source: AdminVacancySource) => void;
 }) {
   const [syncing, setSyncing] = useState(false);
 
@@ -72,18 +118,165 @@ function SourceCard({
         <span>Интервал: {source.refreshIntervalMinutes} мин</span>
       </div>
 
-      <div className="admin-source-actions">
-        <button
-          className="admin-btn is-secondary"
-          type="button"
-          disabled={syncing}
-          onClick={handleSync}
-        >
-          <ArrowsClockwise size={14} className={syncing ? 'is-spinning' : ''} />
-          {syncing ? 'Синхронизация…' : 'Синхронизировать'}
-        </button>
+      <SourceCardActions
+        syncing={syncing}
+        onSync={handleSync}
+        onOpenTest={() => onOpenTest(source)}
+      />
+    </article>
+  );
+}
+
+function VacancyTestItemCard({ v }: { v: VacancySourceTestItem }) {
+  return (
+    <article className="admin-test-vacancy-item">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+        <strong>{v.title}</strong>
+        {v.salary ? (
+          <span className="admin-badge is-success">
+            {v.salary.from ? `от ${v.salary.from.toLocaleString('ru-RU')}` : ''}{' '}
+            {v.salary.to ? `до ${v.salary.to.toLocaleString('ru-RU')}` : ''}{' '}
+            {v.salary.currency ?? 'RUB'}
+          </span>
+        ) : null}
+      </div>
+      <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: '4px 0' }}>
+        <span>{v.company}</span> • <span>{v.location || 'Удаленно'}</span>
+      </div>
+      {v.requiredSkills && v.requiredSkills.length > 0 ? (
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+          {v.requiredSkills.map((s) => (
+            <span key={s} className="admin-badge is-muted">{s}</span>
+          ))}
+        </div>
+      ) : null}
+      <div style={{ marginTop: '8px' }}>
+        <a href={v.url} target="_blank" rel="noreferrer" className="admin-primary-link" style={{ fontSize: '0.8rem' }}>
+          Открыть вакансию в источнике →
+        </a>
       </div>
     </article>
+  );
+}
+
+function VacancyTestResultsView({ result }: { result: VacancySourceTestResult }) {
+  return (
+    <div className="admin-test-results">
+      <div className="admin-test-metrics">
+        <span className={`admin-badge ${result.success ? 'is-success' : 'is-error'}`}>
+          {result.success ? '200 OK' : 'Ошибка'}
+        </span>
+        <span>Время ответа: <strong>{result.latencyMs} мс</strong></span>
+        <span>Найдено вакансий: <strong>{result.count}</strong></span>
+      </div>
+
+      {result.vacancies.length > 0 ? (
+        <div className="admin-test-vacancies-list">
+          {result.vacancies.map((v) => (
+            <VacancyTestItemCard key={v.id} v={v} />
+          ))}
+        </div>
+      ) : (
+        <p className="admin-note" style={{ marginTop: '16px' }}>По запросу ничего не найдено.</p>
+      )}
+    </div>
+  );
+}
+
+function VacancySourceTestHeader({
+  name,
+  targetUrl,
+  onClose,
+}: {
+  name: string;
+  targetUrl: string;
+  onClose: () => void;
+}) {
+  return (
+    <header className="admin-test-header">
+      <div>
+        <h3>Тест источника: {name}</h3>
+        <p className="admin-note">
+          Проверка реального ответа и инспекция спарсенных вакансий ({targetUrl})
+        </p>
+      </div>
+      <button className="admin-quiet-button" type="button" onClick={onClose} aria-label="Закрыть">
+        <X size={20} />
+      </button>
+    </header>
+  );
+}
+
+function VacancySourceTestSearchForm({
+  query,
+  busy,
+  onQueryChange,
+  onSubmit,
+}: {
+  query: string;
+  busy: boolean;
+  onQueryChange: (val: string) => void;
+  onSubmit: (e: React.FormEvent) => void;
+}) {
+  return (
+    <form className="admin-test-form" onSubmit={onSubmit}>
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          className="admin-input"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="Поисковый запрос (например: React, QA, Team Lead)"
+          style={{ flex: '1 1 240px', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--line-strong)', background: 'var(--surface-soft)', color: 'var(--text)' }}
+        />
+        <button className="admin-btn is-secondary" type="submit" disabled={busy}>
+          <MagnifyingGlass size={14} />
+          {busy ? 'Выполняем запрос…' : 'Запустить тест'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function VacancySourceTestModal({
+  source,
+  onClose,
+}: {
+  source: AdminVacancySource;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState('Developer');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<VacancySourceTestResult>();
+  const [error, setError] = useState<string>();
+
+  const runTest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(undefined);
+    try {
+      const res = await testAdminVacancySource(source.id, { query: query.trim() || undefined });
+      setResult(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка при тестировании источника');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="admin-test-modal-backdrop" role="dialog" aria-modal="true">
+      <div className="admin-test-modal">
+        <VacancySourceTestHeader name={source.name} targetUrl={source.targetUrl} onClose={onClose} />
+        <VacancySourceTestSearchForm query={query} busy={busy} onQueryChange={setQuery} onSubmit={runTest} />
+        {error ? (
+          <div className="admin-badge is-error" style={{ margin: '14px 0', padding: '8px 12px' }} role="alert">
+            {error}
+          </div>
+        ) : null}
+        {result ? <VacancyTestResultsView result={result} /> : null}
+      </div>
+    </div>
   );
 }
 
@@ -93,13 +286,15 @@ export function AdminVacancySourcesView({
   onRefresh,
   onSync,
 }: AdminVacancySourcesViewProps) {
+  const [testingSource, setTestingSource] = useState<AdminVacancySource | null>(null);
+
   return (
     <div className="admin-vacancy-sources-view">
       <div className="admin-section-header">
         <div>
           <h2>Мультиисточниковый сбор вакансий</h2>
           <p className="admin-note">
-            Управление парсерами, каналами Telegram, RSS-фидами и дедупликацией вакансий.
+            Управление парсерами, каналами Telegram, RSS-фидами, дедупликацией и интерактивное тестирование выдачи.
           </p>
         </div>
         <button
@@ -115,9 +310,21 @@ export function AdminVacancySourcesView({
 
       <div className="admin-sources-grid">
         {sources.map((source) => (
-          <SourceCard key={source.id} source={source} onSync={onSync} />
+          <SourceCard
+            key={source.id}
+            source={source}
+            onSync={onSync}
+            onOpenTest={(src) => setTestingSource(src)}
+          />
         ))}
       </div>
+
+      {testingSource ? (
+        <VacancySourceTestModal
+          source={testingSource}
+          onClose={() => setTestingSource(null)}
+        />
+      ) : null}
     </div>
   );
 }

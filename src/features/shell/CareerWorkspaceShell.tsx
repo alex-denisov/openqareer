@@ -297,6 +297,23 @@ export function CareerWorkspaceShell({
             <Sparkle size={18} weight="fill" />
             Эксперт
           </button>
+          {session?.role === 'admin' ? (
+            <a
+              href="/admin"
+              className="career-quiet-button"
+              style={{
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                color: 'var(--career-accent)',
+                textDecoration: 'none',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid var(--career-accent)',
+              }}
+            >
+              Админка
+            </a>
+          ) : null}
           <button
             className="career-account-trigger"
             type="button"
@@ -362,7 +379,7 @@ export function CareerWorkspaceShell({
             <CareerIntake
               key={`intake-${intakeSeed}`}
               onComplete={completeIntake}
-              hasAccount={Boolean(session?.candidateId)}
+              hasAccount={Boolean(session)}
               onOpenAccount={() => setAccountOpen(true)}
               onStartedChange={setIntakeStarted}
             />

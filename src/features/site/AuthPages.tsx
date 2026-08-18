@@ -104,7 +104,8 @@ function useLoginForm({
     try {
       const user = await login(identifier.trim(), password);
       onSessionChange?.(user);
-      onNavigate(nextPath);
+      const destination = user.role === 'admin' && nextPath === '/app' ? '/admin' : nextPath;
+      onNavigate(destination);
     } catch (err) {
       if (err instanceof CoachApiError) {
         setError(err.message);

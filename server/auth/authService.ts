@@ -11,137 +11,74 @@ import type {
   CandidateIdentity,
   CandidateStore,
 } from '../data/candidateStore';
-import { MIGRATION_2 } from '../data/sqliteSchema';
+import { MIGRATION_2, MIGRATION_17, MIGRATION_18 } from '../data/sqliteSchema';
+import type {
+  UserRole,
+  AuthPrincipal,
+  RegistrationProfile,
+  AccountSnapshot,
+  AccountProfileUpdate,
+  PasswordResetDelivery,
+  SeedAccount,
+  AdminUserRecord,
+  AdminUserPage,
+  AdminUserQuery,
+  AdminAuditPage,
+  AdminUserUpdateInput,
+  SessionAuth,
+} from './authTypes';
+import {
+  AuthUsernameTakenError,
+  AuthEmailTakenError,
+  AuthInvalidPasswordError,
+  AuthInvalidResetTokenError,
+  AuthUserBlockedError,
+} from './authErrors';
+import {
+  listUsers as adminListUsers,
+  getUser as adminGetUser,
+  setUserRole as adminSetUserRole,
+  setUserBlocked as adminSetUserBlocked,
+  updateUserByAdmin as adminUpdateUser,
+  adminSetUserPassword as adminSetPassword,
+  deleteUserByAdmin as adminDeleteUser,
+  listAudit as adminListAudit,
+  recordAdminAudit,
+  ensureSystemAdmins,
+} from './adminUserManager';
 
 const scrypt = promisify(scryptCallback);
 const SESSION_HOURS = 12;
 const PASSWORD_RESET_HOURS = 1;
 
-export type UserRole = 'candidate' | 'admin';
+export type {
+  UserRole,
+  AuthPrincipal,
+  RegistrationProfile,
+  AccountSnapshot,
+  AccountProfileUpdate,
+  PasswordResetDelivery,
+  SeedAccount,
+  AdminUserRecord,
+  AdminUserPage,
+  AdminUserQuery,
+  AdminAuditPage,
+  AdminUserUpdateInput,
+  SessionAuth,
+} from './authTypes';
 
-export interface AuthPrincipal {
-  userId: string;
-  username: string;
-  email: string | null;
-  displayName: string | null;
-  role: UserRole;
-  isTest: boolean;
-  candidate: CandidateIdentity | null;
-}
-
-export interface RegistrationProfile {
-  email?: string;
-  displayName?: string;
-}
-
-export interface AccountSnapshot {
-  username: string;
-  email: string | null;
-  displayName: string | null;
-  profile: {
-    headline: string | null;
-    location: string | null;
-    workMode: 'office' | 'hybrid' | 'remote' | 'flexible' | null;
-    updatedAt: string | null;
-  };
-  sessions: Array<{
-    id: string;
-    current: boolean;
-    createdAt: string;
-    lastSeenAt: string;
-    expiresAt: string;
-  }>;
-}
-
-export interface AccountProfileUpdate {
-  email?: string | null;
-  displayName?: string | null;
-  headline?: string | null;
-  location?: string | null;
-  workMode?: AccountSnapshot['profile']['workMode'];
-}
-
-export interface PasswordResetDelivery {
-  email: string;
-  displayName: string | null;
-  token: string;
-}
-
-export interface SeedAccount {
-  username: string;
-  password: string;
-  role: UserRole;
-}
-
-/**
- * What an administrator may see about an account (B089): identity, role and
- * session activity — the facts needed to manage the account itself. Career
- * content, dialogue, documents and memory are deliberately absent; managing a
- * user is not a reason to read what that user wrote.
- */
-export interface AdminUserRecord {
-  id: string;
-  username: string;
-  role: UserRole;
-  isTest: boolean;
-  email: string | null;
-  displayName: string | null;
-  candidateId: string | null;
-  createdAt: string;
-  activeSessions: number;
-  lastSeenAt: string | null;
-}
-
-export interface AdminUserPage {
-  total: number;
-  users: AdminUserRecord[];
-}
-
-export interface AdminUserQuery {
-  /** Free text matched against username, email and display name. */
-  query?: string;
-  limit: number;
-  offset: number;
-}
-
-export interface SessionAuth {
-  register(
-    usernameInput: string,
-    password: string,
-    candidateStore: CandidateStore,
-    profile?: RegistrationProfile,
-  ): Promise<{ principal: AuthPrincipal; sessionToken: string }>;
-  login(
-    identifierInput: string,
-    password: string,
-  ): Promise<{ principal: AuthPrincipal; sessionToken: string } | null>;
-  /** Lets the caller resolve collisions for handles it derives itself. */
-  isUsernameTaken(username: string): boolean;
-  authenticate(sessionToken: string): AuthPrincipal | null;
-  logout(sessionToken: string): void;
-  getAccount?(sessionToken: string): AccountSnapshot | null;
-  /** Administrator-only directory; the route, not this method, owns the gate. */
-  listUsers?(input: AdminUserQuery): AdminUserPage;
-  updateAccount?(
-    sessionToken: string,
-    input: AccountProfileUpdate,
-  ): AccountSnapshot | null;
-  changePassword?(
-    sessionToken: string,
-    currentPassword: string,
-    newPassword: string,
-  ): Promise<{ principal: AuthPrincipal; sessionToken: string } | null>;
-  requestPasswordReset?(identifier: string): Promise<void>;
-  resetPassword?(
-    token: string,
-    newPassword: string,
-  ): Promise<{ principal: AuthPrincipal; sessionToken: string }>;
-  revokeOtherSessions?(sessionToken: string): number | null;
-}
+export {
+  AuthUsernameTakenError,
+  AuthEmailTakenError,
+  AuthInvalidPasswordError,
+  AuthInvalidResetTokenError,
+  AuthUserBlockedError,
+} from './authErrors';
 
 interface AuthServiceOptions {
   databasePath: string;
   onPasswordReset?: (input: PasswordResetDelivery) => Promise<void>;
+  candidateStore?: CandidateStore;
 }
 
 interface UserRow {
@@ -161,48 +98,8 @@ interface UserRow {
   headline: string | null;
   location: string | null;
   work_mode: AccountSnapshot['profile']['workMode'];
+  blocked_at: string | null;
   profile_updated_at: string | null;
-}
-
-/** One needle matched against every human-readable identifier of an account. */
-const DIRECTORY_FILTER = `WHERE users.username LIKE ?1 ESCAPE '\\'
-     OR IFNULL(users.email, '') LIKE ?1 ESCAPE '\\'
-     OR IFNULL(users.display_name, '') LIKE ?1 ESCAPE '\\'`;
-
-/**
- * `LIKE` reads `%` and `_` as wildcards, so a search for a literal underscore
- * in a handle must not quietly match every account.
- */
-function likePattern(needle: string): string {
-  return `%${needle.replace(/[\\%_]/gu, (character) => `\\${character}`)}%`;
-}
-
-function toAdminUserRecord(row: AdminUserRow): AdminUserRecord {
-  return {
-    id: row.id,
-    username: row.username,
-    role: row.role,
-    isTest: row.is_test === 1,
-    email: row.email,
-    displayName: row.display_name,
-    candidateId: row.candidate_id,
-    createdAt: row.created_at,
-    activeSessions: row.active_sessions,
-    lastSeenAt: row.last_seen_at,
-  };
-}
-
-interface AdminUserRow {
-  id: string;
-  username: string;
-  role: UserRole;
-  is_test: number;
-  candidate_id: string | null;
-  email: string | null;
-  display_name: string | null;
-  created_at: string;
-  active_sessions: number;
-  last_seen_at: string | null;
 }
 
 interface SessionRow {
@@ -219,9 +116,11 @@ interface PasswordResetRow extends UserRow {
 export class AuthService implements SessionAuth {
   private readonly database: DatabaseSync;
   private readonly onPasswordReset?: AuthServiceOptions['onPasswordReset'];
+  private candidateStore?: CandidateStore;
 
   constructor(options: AuthServiceOptions) {
     this.onPasswordReset = options.onPasswordReset;
+    this.candidateStore = options.candidateStore;
     this.database = new DatabaseSync(options.databasePath, {
       timeout: 5_000,
       enableForeignKeyConstraints: true,
@@ -229,6 +128,10 @@ export class AuthService implements SessionAuth {
     });
     this.database.exec('PRAGMA journal_mode = WAL;');
     this.migrate();
+  }
+
+  setCandidateStore(candidateStore: CandidateStore): void {
+    this.candidateStore = candidateStore;
   }
 
   async register(
@@ -330,10 +233,6 @@ export class AuthService implements SessionAuth {
     }
   }
 
-  /**
-   * B139 removed the login field from registration, so handles are derived
-   * rather than chosen. Callers need to see collisions to resolve them.
-   */
   isUsernameTaken(username: string): boolean {
     return this.findUser(normalizeUsername(username)) !== null;
   }
@@ -343,34 +242,29 @@ export class AuthService implements SessionAuth {
     password: string,
   ): Promise<{ principal: AuthPrincipal; sessionToken: string } | null> {
     const identifier = normalizeUsername(identifierInput);
-    // Accounts created before B139 have a handle their owner typed and knows;
-    // accounts created after it only ever saw their email. Both must sign in.
     const user = identifier.includes('@')
       ? (this.findUserByEmail(normalizeEmail(identifier)) ?? this.findUser(identifier))
       : this.findUser(identifier);
-    const salt = user
-      ? Buffer.from(user.password_salt, 'base64')
-      : Buffer.alloc(16, 0);
-    const expected = user
-      ? Buffer.from(user.password_hash, 'base64')
-      : Buffer.alloc(64, 0);
+
+    if (!user) return null;
+    if (user.blocked_at) throw new AuthUserBlockedError();
+
+    const salt = Buffer.from(user.password_salt, 'base64');
+    const expected = Buffer.from(user.password_hash, 'base64');
     const actual = await derivePassword(password, salt);
-    if (!user || !timingSafeEqual(actual, expected)) {
+    if (!timingSafeEqual(actual, expected)) {
       return null;
     }
 
     const sessionToken = `oqs_${randomBytes(32).toString('base64url')}`;
     const now = new Date();
-    const expiresAt = new Date(
-      now.getTime() + SESSION_HOURS * 60 * 60 * 1_000,
-    );
+    const expiresAt = new Date(now.getTime() + SESSION_HOURS * 60 * 60 * 1_000);
     this.database
       .prepare('DELETE FROM sessions WHERE expires_at <= ?')
       .run(now.toISOString());
     this.database
       .prepare(
-        `INSERT INTO sessions
-          (token_hash, user_id, expires_at, created_at, last_seen_at)
+        `INSERT INTO sessions (token_hash, user_id, expires_at, created_at, last_seen_at)
          VALUES (?, ?, ?, ?, ?)`,
       )
       .run(
@@ -395,16 +289,14 @@ export class AuthService implements SessionAuth {
       .prepare(
         `${USER_SELECT}
          JOIN sessions ON sessions.user_id = users.id
-         WHERE sessions.token_hash = ? AND sessions.expires_at > ?`,
+         WHERE sessions.token_hash = ? AND sessions.expires_at > ? AND users.blocked_at IS NULL`,
       )
       .get(hashToken(sessionToken), now) as UserRow | undefined;
     if (!row) {
       return null;
     }
     this.database
-      .prepare(
-        'UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?',
-      )
+      .prepare('UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?')
       .run(now, hashToken(sessionToken));
     return principalFromRow(row);
   }
@@ -415,60 +307,100 @@ export class AuthService implements SessionAuth {
       .run(hashToken(sessionToken));
   }
 
-  /**
-   * The administrator directory. Authorisation belongs to the route: this
-   * method is what an already-authorised administrator is allowed to read, and
-   * it selects columns explicitly so a future column cannot leak by being
-   * added to the table.
-   */
   listUsers(input: AdminUserQuery): AdminUserPage {
-    const needle = input.query?.trim() ?? '';
-    const pattern = needle ? likePattern(needle) : undefined;
+    return adminListUsers(this.database, input);
+  }
+
+  getUser(userId: string): AdminUserRecord | null {
+    return adminGetUser(this.database, userId);
+  }
+
+  setUserRole(
+    targetUserId: string,
+    newRole: UserRole,
+    actorPrincipal?: AuthPrincipal,
+  ): AdminUserRecord {
+    if (!this.candidateStore) throw new Error('CandidateStore не инициализирован.');
+    return adminSetUserRole(this.database, this.candidateStore, targetUserId, newRole, actorPrincipal);
+  }
+
+  setUserBlocked(
+    targetUserId: string,
+    blocked: boolean,
+    actorPrincipal?: AuthPrincipal,
+  ): AdminUserRecord {
+    return adminSetUserBlocked(this.database, targetUserId, blocked, actorPrincipal);
+  }
+
+  updateUserByAdmin(
+    targetUserId: string,
+    input: AdminUserUpdateInput,
+    actorPrincipal?: AuthPrincipal,
+  ): AdminUserRecord {
+    return adminUpdateUser(this.database, targetUserId, input, actorPrincipal);
+  }
+
+  async adminSetUserPassword(
+    targetUserId: string,
+    newPassword: string,
+    actorPrincipal?: AuthPrincipal,
+  ): Promise<void> {
+    await adminSetPassword(this.database, targetUserId, newPassword, actorPrincipal);
+  }
+
+  async impersonateUser(
+    targetUserId: string,
+    actorPrincipal?: AuthPrincipal,
+  ): Promise<{ principal: AuthPrincipal; sessionToken: string }> {
+    const user = adminGetUser(this.database, targetUserId);
+    if (!user) throw new Error('Пользователь не найден.');
+    if (user.blockedAt) throw new AuthUserBlockedError();
+
+    const userRow = this.findUserById(targetUserId);
+    if (!userRow) throw new Error('Пользователь не найден.');
+
+    const sessionToken = `oqs_${randomBytes(32).toString('base64url')}`;
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + SESSION_HOURS * 60 * 60 * 1_000);
+    this.database
+      .prepare(
+        `INSERT INTO sessions (token_hash, user_id, expires_at, created_at, last_seen_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(
+        hashToken(sessionToken),
+        user.id,
+        expiresAt.toISOString(),
+        now.toISOString(),
+        now.toISOString(),
+      );
+
+    if (actorPrincipal) {
+      recordAdminAudit(this.database, {
+        actorUserId: actorPrincipal.userId,
+        actorUsername: actorPrincipal.username,
+        action: 'impersonate_user',
+        subjectUserId: user.id,
+        subjectUsername: user.username,
+        detail: 'Admin impersonated candidate workspace session',
+      });
+    }
+
     return {
-      total: this.countDirectory(pattern),
-      users: this.selectDirectory(pattern, input.limit, input.offset).map(
-        toAdminUserRecord,
-      ),
+      principal: principalFromRow(userRow),
+      sessionToken,
     };
   }
 
-  private countDirectory(pattern?: string): number {
-    const row = this.database
-      .prepare(
-        `SELECT COUNT(*) AS total FROM users ${pattern ? DIRECTORY_FILTER : ''}`,
-      )
-      .get(...(pattern ? [pattern] : [])) as unknown as { total: number };
-    return row.total;
+  deleteUserByAdmin(
+    targetUserId: string,
+    actorPrincipal?: AuthPrincipal,
+  ): void {
+    adminDeleteUser(this.database, targetUserId, actorPrincipal);
   }
 
-  private selectDirectory(
-    pattern: string | undefined,
-    limit: number,
-    offset: number,
-  ): AdminUserRow[] {
-    const parameter = (position: number) => `?${position + (pattern ? 1 : 0)}`;
-    return this.database
-      .prepare(
-        `SELECT users.id, users.username, users.role, users.is_test,
-                users.candidate_id, users.email, users.display_name,
-                users.created_at,
-                (SELECT COUNT(*) FROM sessions
-                  WHERE sessions.user_id = users.id
-                    AND sessions.expires_at > ${parameter(1)})
-                  AS active_sessions,
-                (SELECT MAX(sessions.last_seen_at) FROM sessions
-                  WHERE sessions.user_id = users.id) AS last_seen_at
-         FROM users
-         ${pattern ? DIRECTORY_FILTER : ''}
-         ORDER BY users.created_at DESC, users.rowid DESC
-         LIMIT ${parameter(2)} OFFSET ${parameter(3)}`,
-      )
-      .all(
-        ...(pattern ? [pattern] : []),
-        new Date().toISOString(),
-        limit,
-        offset,
-      ) as unknown as AdminUserRow[];
+  listAudit(query?: { limit: number; offset: number }): AdminAuditPage {
+    return adminListAudit(this.database, query);
   }
 
   getAccount(sessionToken: string): AccountSnapshot | null {
@@ -747,6 +679,17 @@ export class AuthService implements SessionAuth {
         throw error;
       }
     }
+    try {
+      this.database.exec(MIGRATION_17);
+    } catch {
+      // audit table migration fail-open
+    }
+    try {
+      this.database.exec(MIGRATION_18);
+    } catch {
+      // schema migration fail-open
+    }
+    ensureSystemAdmins(this.database);
   }
 
   private findUser(username: string): UserRow | null {
@@ -774,39 +717,11 @@ export class AuthService implements SessionAuth {
   }
 }
 
-export class AuthUsernameTakenError extends Error {
-  constructor() {
-    super('username is already registered');
-    this.name = 'AuthUsernameTakenError';
-  }
-}
-
-export class AuthEmailTakenError extends Error {
-  constructor() {
-    super('email is already registered');
-    this.name = 'AuthEmailTakenError';
-  }
-}
-
-export class AuthInvalidPasswordError extends Error {
-  constructor() {
-    super('current password is invalid');
-    this.name = 'AuthInvalidPasswordError';
-  }
-}
-
-export class AuthInvalidResetTokenError extends Error {
-  constructor() {
-    super('password reset token is invalid or expired');
-    this.name = 'AuthInvalidResetTokenError';
-  }
-}
-
 const USER_SELECT = `
   SELECT users.id, users.username, users.role, users.password_salt,
          users.password_hash, users.is_test, users.candidate_id,
          users.email, users.display_name, users.headline, users.location,
-         users.work_mode, users.profile_updated_at,
+         users.work_mode, users.blocked_at, users.profile_updated_at,
          users.created_at AS user_created_at,
          candidates.data_class, candidates.locale,
          candidates.created_at AS candidate_created_at

@@ -1,9 +1,8 @@
 import { apiFetch, readData } from '../coach/apiClient';
 
-/**
- * The administrator directory transport (B089). It mirrors the server record
- * exactly: identity, role and session activity — never career content.
- */
+export type SubscriptionTier = 'free' | 'pro' | 'executive' | 'enterprise';
+export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled';
+
 export interface AdminUser {
   id: string;
   username: string;
@@ -11,7 +10,15 @@ export interface AdminUser {
   isTest: boolean;
   email: string | null;
   displayName: string | null;
+  headline: string | null;
+  location: string | null;
+  workMode: string | null;
   candidateId: string | null;
+  blockedAt: string | null;
+  subscriptionTier: SubscriptionTier;
+  subscriptionStatus: SubscriptionStatus;
+  subscriptionExpiresAt: string | null;
+  subscriptionNotes: string | null;
   createdAt: string;
   activeSessions: number;
   lastSeenAt: string | null;
@@ -20,6 +27,55 @@ export interface AdminUser {
 export interface AdminUserPage {
   total: number;
   users: AdminUser[];
+}
+
+export interface AdminAuditRecord {
+  id: string;
+  actorUserId: string;
+  actorUsername: string;
+  action: string;
+  subjectUserId: string | null;
+  subjectUsername: string | null;
+  detail: string | null;
+  createdAt: string;
+}
+
+export interface AdminAuditPage {
+  total: number;
+  records: AdminAuditRecord[];
+}
+
+export interface AdminVacancy {
+  id: string;
+  fingerprint: string;
+  title: string;
+  company: string;
+  location: string;
+  isRemote: boolean;
+  salary?: {
+    from?: number;
+    to?: number;
+    currency: string;
+    gross?: boolean;
+  };
+  description: string;
+  requiredSkills: string[];
+  url: string;
+  provenance: {
+    sourceType: string;
+    sourceId: string;
+    sourceUrl?: string;
+    channelName?: string;
+    observedAt: string;
+  };
+  publishedAt: string;
+  status: 'active' | 'archived' | 'expired';
+}
+
+export interface AdminVacancyPage {
+  total: number;
+  items: AdminVacancy[];
+  statsBySource: Array<{ sourceId: string; sourceName: string; count: number }>;
 }
 
 export interface AdminVacancySource {
@@ -34,6 +90,29 @@ export interface AdminVacancySource {
   lastErrorMessage?: string;
   itemsFoundTotal: number;
   itemsActiveTotal: number;
+}
+
+export interface VacancySourceTestItem {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  salary?: { from?: number; to?: number; currency?: string };
+  description?: string;
+  requiredSkills?: string[];
+  url: string;
+  publishedAt?: string;
+}
+
+export interface VacancySourceTestResult {
+  sourceId: string;
+  sourceName: string;
+  type: string;
+  success: boolean;
+  latencyMs: number;
+  count: number;
+  vacancies: VacancySourceTestItem[];
+  message?: string;
 }
 
 export const ADMIN_PAGE_SIZE = 25;
@@ -55,6 +134,111 @@ export async function listAdminUsers(input: {
   return readData<AdminUserPage>(response);
 }
 
+export async function getAdminUser(userId: string): Promise<AdminUser> {
+  const response = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(userId)}`);
+  return readData<AdminUser>(response);
+}
+
+export async function updateAdminUser(
+  userId: string,
+  input: {
+    role?: 'candidate' | 'admin';
+    email?: string | null;
+    displayName?: string | null;
+    headline?: string | null;
+    location?: string | null;
+    workMode?: 'office' | 'hybrid' | 'remote' | 'flexible' | null;
+    subscriptionTier?: SubscriptionTier;
+    subscriptionStatus?: SubscriptionStatus;
+    subscriptionExpiresAt?: string | null;
+    subscriptionNotes?: string | null;
+  },
+): Promise<AdminUser> {
+  const response = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return readData<AdminUser>(response);
+}
+
+export async function blockAdminUser(
+  userId: string,
+  blocked: boolean,
+): Promise<AdminUser> {
+  const response = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(userId)}/block`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ blocked }),
+  });
+  return readData<AdminUser>(response);
+}
+
+export async function resetAdminUserPassword(
+  userId: string,
+  newPassword: string,
+): Promise<void> {
+  await apiFetch(`/api/v1/admin/users/${encodeURIComponent(userId)}/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newPassword }),
+  });
+}
+
+export async function impersonateAdminUser(
+  userId: string,
+): Promise<{ redirectUrl: string; user: unknown }> {
+  const response = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(userId)}/impersonate`, {
+    method: 'POST',
+  });
+  return readData<{ redirectUrl: string; user: unknown }>(response);
+}
+
+export async function deleteAdminUser(userId: string): Promise<void> {
+  await apiFetch(`/api/v1/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function listAdminAudit(input?: {
+  limit?: number;
+  offset?: number;
+  signal?: AbortSignal;
+}): Promise<AdminAuditPage> {
+  const params = new URLSearchParams({
+    limit: String(input?.limit ?? 50),
+    offset: String(input?.offset ?? 0),
+  });
+  const response = await apiFetch(`/api/v1/admin/audit?${params.toString()}`, {
+    ...(input?.signal ? { signal: input.signal } : {}),
+  });
+  return readData<AdminAuditPage>(response);
+}
+
+export async function listAdminVacancies(input?: {
+  sourceId?: string;
+  type?: string;
+  query?: string;
+  isRemote?: boolean;
+  limit?: number;
+  offset?: number;
+  signal?: AbortSignal;
+}): Promise<AdminVacancyPage> {
+  const params = new URLSearchParams({
+    limit: String(input?.limit ?? 20),
+    offset: String(input?.offset ?? 0),
+  });
+  if (input?.sourceId) params.set('sourceId', input.sourceId);
+  if (input?.type) params.set('type', input.type);
+  if (input?.query?.trim()) params.set('query', input.query.trim());
+  if (input?.isRemote !== undefined) params.set('isRemote', String(input.isRemote));
+
+  const response = await apiFetch(`/api/v1/admin/vacancies?${params.toString()}`, {
+    ...(input?.signal ? { signal: input.signal } : {}),
+  });
+  return readData<AdminVacancyPage>(response);
+}
+
 export async function listAdminVacancySources(
   signal?: AbortSignal,
 ): Promise<AdminVacancySource[]> {
@@ -64,8 +248,42 @@ export async function listAdminVacancySources(
   return readData<AdminVacancySource[]>(response);
 }
 
+export async function syncAllAdminVacancySources(): Promise<{ success: boolean; count: number }> {
+  const response = await apiFetch('/api/v1/admin/vacancy-sources/sync-all', {
+    method: 'POST',
+  });
+  return readData<{ success: boolean; count: number }>(response);
+}
+
 export async function syncAdminVacancySource(sourceId: string): Promise<void> {
   await apiFetch(`/api/v1/admin/vacancy-sources/${encodeURIComponent(sourceId)}/sync`, {
     method: 'POST',
   });
+}
+
+export async function toggleAdminVacancySource(
+  sourceId: string,
+  enabled: boolean,
+): Promise<AdminVacancySource> {
+  const response = await apiFetch(`/api/v1/admin/vacancy-sources/${encodeURIComponent(sourceId)}/toggle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  return readData<AdminVacancySource>(response);
+}
+
+export async function testAdminVacancySource(
+  sourceId: string,
+  input?: { query?: string },
+): Promise<VacancySourceTestResult> {
+  const response = await apiFetch(
+    `/api/v1/admin/vacancy-sources/${encodeURIComponent(sourceId)}/test`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input ?? {}),
+    },
+  );
+  return readData<VacancySourceTestResult>(response);
 }

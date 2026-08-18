@@ -150,18 +150,20 @@ describe('candidate vacancy routes', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data).toEqual([
-      expect.objectContaining({
-        id: 'hh',
-        transport: 'official_api',
-        health: expect.objectContaining({ status: 'not_checked' }),
-      }),
-      expect.objectContaining({
-        id: 'remotive',
-        transport: 'public_api',
-        health: expect.objectContaining({ status: 'not_checked' }),
-      }),
-    ]);
+    expect(response.json().data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'hh',
+          transport: 'official_api',
+          health: expect.objectContaining({ status: 'not_checked' }),
+        }),
+        expect.objectContaining({
+          id: 'remotive',
+          transport: 'public_api',
+          health: expect.objectContaining({ status: 'not_checked' }),
+        }),
+      ]),
+    );
   });
 
   it('creates a Remotive subscription through the shared API', async () => {

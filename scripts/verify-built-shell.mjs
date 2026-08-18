@@ -24,7 +24,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   let hhDisconnectAttempts = 0;
   let vacancyCreateSource = null;
   let createdVacancyView = null;
-  await page.route('**/api/v1/auth/**', async (route) => {
+  await page.route((url) => url.pathname.startsWith('/api/v1/auth'), async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
     if (pathname.endsWith('/logout')) authenticated = false;
@@ -321,9 +321,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
     if (message.type() === 'error') errors.push(`console:${message.text()}`);
   });
   page.on('pageerror', (error) => errors.push(`page:${error.message}`));
-  page.on('requestfailed', (request) =>
-    errors.push(`request:${new URL(request.url()).pathname}`),
-  );
+  page.on('requestfailed', (request) => {
+    if (request.failure()?.errorText === 'net::ERR_ABORTED') return;
+    errors.push(`request:${new URL(request.url()).pathname}`);
+  });
 
   await page.route('**/*.oqpart-000.js', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -535,10 +536,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
     .waitFor();
   await page.getByRole('button', { name: 'Отключить hh.ru' }).click();
   await page.getByText('hh.ru отключён', { exact: false }).waitFor();
-  await page
-    .locator('.career-account-connection-list article')
+  const logoutResponse = page.waitForResponse((res) => res.url().includes('/api/v1/auth/logout'));
   await page.getByRole('button', { name: 'Выйти' }).click();
-  await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).waitFor();
+  await logoutResponse;
+  await page.getByRole('heading', { name: 'Карьерная операционная система кандидата' }).waitFor();
   assert(
     (await page.getByRole('dialog', { name: 'Аккаунт' }).count()) === 0,
     `${viewport.name}: account panel remained open after logout`,
@@ -547,6 +548,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) === null,
     `${viewport.name}: logout retained candidate workspace`,
   );
+  await page.goto(`${baseUrl}app?built-shell=${viewport.name}`);
+  await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).waitFor();
   const accountRestart = true;
 
   await page.getByRole('button', { name: 'Начать диагностику' }).click();
@@ -625,7 +628,7 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
   });
   const page = await context.newPage();
   let authenticated = false;
-  await page.route('**/api/v1/auth/**', async (route) => {
+  await page.route((url) => url.pathname.startsWith('/api/v1/auth'), async (route) => {
     const pathname = new URL(route.request().url()).pathname;
     if (pathname.endsWith('/login')) authenticated = true;
     await route.fulfill({
