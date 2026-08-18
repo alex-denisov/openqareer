@@ -22,6 +22,20 @@ export interface AdminUserPage {
   users: AdminUser[];
 }
 
+export interface AdminVacancySource {
+  id: string;
+  name: string;
+  type: 'hh' | 'remotive' | 'telegram' | 'rss' | 'career_site' | 'direct';
+  enabled: boolean;
+  targetUrl: string;
+  refreshIntervalMinutes: number;
+  lastSyncAt?: string;
+  lastStatus?: 'healthy' | 'degraded' | 'error';
+  lastErrorMessage?: string;
+  itemsFoundTotal: number;
+  itemsActiveTotal: number;
+}
+
 export const ADMIN_PAGE_SIZE = 25;
 
 export async function listAdminUsers(input: {
@@ -39,4 +53,19 @@ export async function listAdminUsers(input: {
     ...(input.signal ? { signal: input.signal } : {}),
   });
   return readData<AdminUserPage>(response);
+}
+
+export async function listAdminVacancySources(
+  signal?: AbortSignal,
+): Promise<AdminVacancySource[]> {
+  const response = await apiFetch('/api/v1/admin/vacancy-sources', {
+    ...(signal ? { signal } : {}),
+  });
+  return readData<AdminVacancySource[]>(response);
+}
+
+export async function syncAdminVacancySource(sourceId: string): Promise<void> {
+  await apiFetch(`/api/v1/admin/vacancy-sources/${encodeURIComponent(sourceId)}/sync`, {
+    method: 'POST',
+  });
 }

@@ -286,3 +286,175 @@
     font-size: 0.78rem;
   }
 }
+
+/* Admin Nav Tabs */
+.admin-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.admin-nav-item {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-small, 6px);
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.admin-nav-item:hover {
+  color: var(--text);
+  background: var(--surface-soft);
+}
+
+.admin-nav-item.is-active {
+  color: var(--text);
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+  font-weight: 600;
+}
+
+/* Vacancy Sources View */
+.admin-vacancy-sources-view {
+  margin-top: 16px;
+}
+
+.admin-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.admin-sources-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: 16px;
+}
+
+.admin-source-card {
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-medium, 10px);
+  background: var(--surface-raised);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-source-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.admin-source-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.admin-source-type {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.admin-source-url {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono, monospace);
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+.admin-source-stats {
+  display: flex;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  flex-wrap: wrap;
+}
+
+.admin-source-actions {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.admin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  border-radius: var(--radius-small, 6px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.admin-btn.is-secondary {
+  background: var(--surface-soft);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.admin-btn.is-secondary:hover:not(:disabled) {
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+}
+
+.admin-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.admin-badge.is-success {
+  background: oklch(0.92 0.06 154);
+  color: oklch(0.35 0.12 154);
+}
+
+.admin-badge.is-warning {
+  background: oklch(0.94 0.08 79);
+  color: oklch(0.42 0.14 79);
+}
+
+.admin-badge.is-error {
+  background: oklch(0.93 0.07 28);
+  color: oklch(0.4 0.15 28);
+}
+
+.admin-badge.is-muted {
+  background: var(--surface-soft);
+  color: var(--text-dim);
+}
+
+@keyframes admin-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.is-spinning {
+  animation: admin-spin 1s linear infinite;
+}

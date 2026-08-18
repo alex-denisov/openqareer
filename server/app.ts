@@ -104,6 +104,7 @@ import {
   VacancyIntelligenceService,
 } from './vacancies/vacancyIntelligenceService';
 import { vacancySourceRegistryView } from './vacancies/vacancySourceRegistry';
+import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
 
 interface BuildAppOptions {
   config: ServerConfig;
@@ -123,6 +124,7 @@ interface BuildAppOptions {
   oauthTransport?: OAuthTransport;
   careerCommandExecutor?: ConnectorExecutor;
   vacancyIntelligenceService?: VacancyIntelligenceService;
+  multiSourceVacancyEngine?: MultiSourceVacancyEngine;
 }
 
 interface ErrorBody {
@@ -152,6 +154,7 @@ export async function buildApp({
   oauthTransport,
   careerCommandExecutor,
   vacancyIntelligenceService,
+  multiSourceVacancyEngine,
 }: BuildAppOptions): Promise<FastifyInstance> {
   const oauthService = new CandidateOAuthService({
     store: candidateStore,
@@ -171,6 +174,57 @@ export async function buildApp({
       connectors: {
         hh: searchVacancies,
         remotive: searchRemotive,
+      },
+    });
+  const multiSourceEngine =
+    multiSourceVacancyEngine ??
+    new MultiSourceVacancyEngine({
+      fetcher: async (source) => {
+        if (source.type === 'hh') {
+          const sample = await searchVacancies({ text: 'Developer', perPage: 20 });
+          return sample.items.map((v) => ({
+            id: v.id,
+            fingerprint: v.id,
+            title: v.title,
+            company: v.company,
+            location: v.location,
+            salary: v.salary ? { from: v.salary.from ?? undefined, to: v.salary.to ?? undefined, currency: v.salary.currency } : undefined,
+            description: v.title,
+            requiredSkills: v.requirements ?? [],
+            url: v.sourceUrl,
+            provenance: {
+              sourceType: 'hh' as const,
+              sourceId: source.id,
+              sourceUrl: v.sourceUrl,
+              observedAt: new Date().toISOString(),
+            },
+            publishedAt: v.publishedAt ?? new Date().toISOString(),
+            status: 'active' as const,
+          }));
+        }
+        if (source.type === 'remotive') {
+          const sample = await searchRemotive({ text: 'Engineer', perPage: 20 });
+          return sample.items.map((v) => ({
+            id: v.id,
+            fingerprint: v.id,
+            title: v.title,
+            company: v.company,
+            location: v.location,
+            isRemote: true,
+            description: v.title,
+            requiredSkills: v.requirements ?? [],
+            url: v.sourceUrl,
+            provenance: {
+              sourceType: 'remotive' as const,
+              sourceId: source.id,
+              sourceUrl: v.sourceUrl,
+              observedAt: new Date().toISOString(),
+            },
+            publishedAt: v.publishedAt ?? new Date().toISOString(),
+            status: 'active' as const,
+          }));
+        }
+        return [];
       },
     });
   const app = Fastify({
@@ -241,6 +295,36 @@ export async function buildApp({
         limit: query.limit,
         offset: query.offset,
       }),
+      meta: { requestId: request.id },
+    };
+  });
+
+  app.get('/api/v1/admin/vacancy-sources', async (request, reply) => {
+    const principal = authenticateSession(request, authService, config);
+    if (!principal) {
+      return sendError(reply, request, 401, 'unauthorized', 'Нужен вход в аккаунт.', false);
+    }
+    if (principal.role !== 'admin') {
+      return sendError(reply, request, 403, 'forbidden', 'Раздел доступен только администратору.', false);
+    }
+    return {
+      data: multiSourceEngine.getSources(),
+      meta: { requestId: request.id },
+    };
+  });
+
+  app.post('/api/v1/admin/vacancy-sources/:sourceId/sync', async (request, reply) => {
+    const principal = authenticateSession(request, authService, config);
+    if (!principal) {
+      return sendError(reply, request, 401, 'unauthorized', 'Нужен вход в аккаунт.', false);
+    }
+    if (principal.role !== 'admin') {
+      return sendError(reply, request, 403, 'forbidden', 'Раздел доступен только администратору.', false);
+    }
+    const { sourceId } = request.params as { sourceId: string };
+    await multiSourceEngine.syncSource(sourceId);
+    return {
+      data: { success: true },
       meta: { requestId: request.id },
     };
   });
@@ -986,6 +1070,36 @@ export async function buildApp({
       return reply.code(204).send();
     },
   );
+
+  app.get('/api/v1/candidate/matched-vacancies', async (request, reply) => {
+    const candidate = authenticateCandidate(
+      request,
+      reply,
+      candidateStore,
+      authService,
+      config,
+    );
+    if (!candidate) return;
+
+    const snapshot = candidateStore.getSnapshot(candidate.id);
+    const memory = snapshot?.memory ?? [];
+    const confirmedSkills = memory
+      .filter((m) => m.kind === 'fact' && m.confidence === 'candidate-confirmed')
+      .map((m) => m.statement);
+
+    const matched = multiSourceEngine.getMatchedVacancies({
+      candidateId: candidate.id,
+      targetRoles: ['Руководитель разработки', 'Senior Developer'],
+      confirmedSkills: confirmedSkills.length > 0 ? confirmedSkills : ['TypeScript', 'React', 'Node.js', 'PostgreSQL'],
+      confirmedFacts: confirmedSkills,
+      preferredRemote: true,
+    });
+
+    return {
+      data: matched,
+      meta: { requestId: request.id },
+    };
+  });
 
   app.get('/api/v1/candidate/vacancy-sources', async (request, reply) => {
     const candidate = authenticateCandidate(

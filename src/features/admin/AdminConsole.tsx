@@ -2,7 +2,16 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, MagnifyingGlass } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
-import { ADMIN_PAGE_SIZE, listAdminUsers, type AdminUser, type AdminUserPage } from './adminApi';
+import {
+  ADMIN_PAGE_SIZE,
+  listAdminUsers,
+  listAdminVacancySources,
+  syncAdminVacancySource,
+  type AdminUser,
+  type AdminUserPage,
+  type AdminVacancySource,
+} from './adminApi';
+import { AdminVacancySourcesView } from './AdminVacancySourcesView';
 
 interface AdminConsoleProps {
   session?: AuthUser | null;
@@ -14,14 +23,70 @@ type DirectoryState =
   | { status: 'ready'; page: AdminUserPage }
   | { status: 'failed'; message: string };
 
-/**
- * B089, first slice — the administrator can sign in and see who is in the
- * system. Management actions (role, block, password reset, deletion) and the
- * audit trail follow in the next slice; this screen deliberately shows only
- * what it can prove, and says so on the screen itself.
- */
+function useVacancySourcesPage() {
+  const [sources, setSources] = useState<AdminVacancySource[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    try {
+      const data = await listAdminVacancySources(signal);
+      if (!signal?.aborted) setSources(data);
+    } catch {
+      // ignore
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
+
+  const sync = useCallback(
+    async (sourceId: string) => {
+      await syncAdminVacancySource(sourceId);
+      await load();
+    },
+    [load],
+  );
+
+  return { sources, loading, refresh: () => void load(), sync };
+}
+
+function AdminNav({
+  activeTab,
+  onSelectTab,
+}: {
+  activeTab: 'users' | 'sources';
+  onSelectTab: (tab: 'users' | 'sources') => void;
+}) {
+  return (
+    <nav className="admin-nav" aria-label="Разделы администратора">
+      <button
+        type="button"
+        className={`admin-nav-item ${activeTab === 'users' ? 'is-active' : ''}`}
+        onClick={() => onSelectTab('users')}
+      >
+        Учётные записи
+      </button>
+      <button
+        type="button"
+        className={`admin-nav-item ${activeTab === 'sources' ? 'is-active' : ''}`}
+        onClick={() => onSelectTab('sources')}
+      >
+        Источники вакансий
+      </button>
+    </nav>
+  );
+}
+
 export function AdminConsole({ session, sessionPending = false }: AdminConsoleProps) {
   const isAdmin = session?.role === 'admin';
+  const [activeTab, setActiveTab] = useState<'users' | 'sources'>('users');
+  const sourcesHook = useVacancySourcesPage();
 
   useEffect(() => {
     document.title = 'Администрирование · openqareer';
@@ -41,7 +106,17 @@ export function AdminConsole({ session, sessionPending = false }: AdminConsolePr
 
   return (
     <AdminFrame>
-      <AdminDirectory />
+      <AdminNav activeTab={activeTab} onSelectTab={setActiveTab} />
+      {activeTab === 'users' ? (
+        <AdminDirectory />
+      ) : (
+        <AdminVacancySourcesView
+          sources={sourcesHook.sources}
+          loading={sourcesHook.loading}
+          onRefresh={sourcesHook.refresh}
+          onSync={sourcesHook.sync}
+        />
+      )}
     </AdminFrame>
   );
 }

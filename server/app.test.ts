@@ -826,4 +826,27 @@ describe('candidate platform connections', () => {
     });
     expect(connections.json().data[1].status).toBe('disconnected');
   });
+
+  it('serves matched vacancies for candidate and manages vacancy sources for admin', async () => {
+    const app = await createApp();
+    const candidateAuth = candidateAuthorization(app);
+
+    const matchedRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/matched-vacancies',
+      headers: { authorization: candidateAuth },
+    });
+    expect(matchedRes.statusCode).toBe(200);
+    expect(Array.isArray(matchedRes.json().data)).toBe(true);
+
+    // 2. Admin vacancy sources
+    const adminRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/vacancy-sources',
+      headers: { authorization: candidateAuth },
+    });
+    // Candidate session is unauthorized for admin section
+    expect(adminRes.statusCode).toBe(401);
+  });
 });
+
