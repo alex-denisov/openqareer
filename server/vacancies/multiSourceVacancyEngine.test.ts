@@ -105,4 +105,75 @@ describe('MultiSourceVacancyEngine', () => {
     expect(matched[0].explanation.fitLevel).toBe('strong');
     expect(matched[0].cluster.primaryUrl).toBe('https://hh.ru/1');
   });
+
+  it('filters out vacancies older than 30 days', async () => {
+    const now = Date.now();
+    const freshDate = new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString();
+    const staleDate = new Date(now - 35 * 24 * 60 * 60 * 1000).toISOString();
+
+    const engine = new MultiSourceVacancyEngine({
+      sources: [
+        {
+          id: 'test-src',
+          name: 'Test Source',
+          type: 'telegram',
+          enabled: true,
+          targetUrl: 'https://t.me/s/test',
+          refreshIntervalMinutes: 60,
+          itemsFoundTotal: 0,
+          itemsActiveTotal: 0,
+        },
+      ],
+      fetcher: async () => [
+        {
+          id: 'fresh-1',
+          fingerprint: 'fp-fresh',
+          title: 'Fresh React Developer',
+          company: 'Active Studio',
+          isRemote: true,
+          description: 'Active vacancy from 5 days ago.',
+          requiredSkills: ['React'],
+          url: 'https://t.me/test/1',
+          provenance: {
+            sourceType: 'telegram',
+            sourceId: 'test-src',
+            sourceUrl: 'https://t.me/test/1',
+            observedAt: new Date().toISOString(),
+          },
+          publishedAt: freshDate,
+          status: 'active',
+        },
+        {
+          id: 'stale-1',
+          fingerprint: 'fp-stale',
+          title: 'Stale React Developer',
+          company: 'Old Corp',
+          isRemote: true,
+          description: 'Old vacancy from 35 days ago.',
+          requiredSkills: ['React'],
+          url: 'https://t.me/test/2',
+          provenance: {
+            sourceType: 'telegram',
+            sourceId: 'test-src',
+            sourceUrl: 'https://t.me/test/2',
+            observedAt: new Date().toISOString(),
+          },
+          publishedAt: staleDate,
+          status: 'active',
+        },
+      ],
+    });
+
+    await engine.syncAll();
+
+    const vacancies = engine.getVacancies();
+    expect(vacancies.items.some((v) => v.id === 'fresh-1')).toBe(true);
+    expect(vacancies.items.some((v) => v.id === 'stale-1')).toBe(false);
+
+    const clusters = engine.getActiveClusters();
+    expect(clusters.some((c) => c.canonicalTitle === 'Fresh React Developer')).toBe(true);
+    expect(clusters.some((c) => c.canonicalTitle === 'Stale React Developer')).toBe(false);
+  });
 });
+
+

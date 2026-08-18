@@ -250,7 +250,93 @@ export const DEFAULT_SOURCES: VacancySourceConfig[] = [
     lastSyncAt: new Date().toISOString(),
     lastStatus: 'healthy',
   },
+  {
+    id: 'src-tg-uiux',
+    name: 'Telegram @uiuxjobs',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/uiuxjobs',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-ios',
+    name: 'Telegram @ios_jobs',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/ios_jobs',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-marketing',
+    name: 'Telegram @marketing_jobs',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/marketing_jobs',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-golang',
+    name: 'Telegram @golang_jobs',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/golang_jobs',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-python',
+    name: 'Telegram @python_jobs_feed',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/python_jobs_feed',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
+  {
+    id: 'src-tg-java',
+    name: 'Telegram @javajob',
+    type: 'telegram',
+    enabled: true,
+    targetUrl: 'https://t.me/s/javajob',
+    refreshIntervalMinutes: 30,
+    itemsFoundTotal: 1,
+    itemsActiveTotal: 1,
+    lastSyncAt: new Date().toISOString(),
+    lastStatus: 'healthy',
+  },
 ];
+
+
+export const MAX_VACANCY_AGE_DAYS = 30;
+
+export function isVacancyFresh(
+  publishedAt: string,
+  nowMs: number = Date.now(),
+  maxAgeDays: number = MAX_VACANCY_AGE_DAYS,
+): boolean {
+  const pubTime = new Date(publishedAt).getTime();
+  if (Number.isNaN(pubTime)) return false;
+  const ageMs = nowMs - pubTime;
+  return ageMs >= 0 && ageMs <= maxAgeDays * 24 * 60 * 60 * 1000;
+}
 
 export class MultiSourceVacancyEngine {
   private sources: Map<string, VacancySourceConfig> = new Map();
@@ -274,12 +360,15 @@ export class MultiSourceVacancyEngine {
     for (const [sourceId, items] of Object.entries(CURATED_SOURCE_VACANCIES)) {
       if (!this.sources.has(sourceId)) continue;
       for (const item of items) {
-        this.rawVacancies.set(item.id, item);
+        if (isVacancyFresh(item.publishedAt)) {
+          this.rawVacancies.set(item.id, item);
+        }
       }
       const source = this.sources.get(sourceId);
       if (source) {
-        source.itemsFoundTotal = items.length;
-        source.itemsActiveTotal = items.filter((v) => v.status === 'active').length;
+        const freshItems = items.filter((v) => isVacancyFresh(v.publishedAt));
+        source.itemsFoundTotal = freshItems.length;
+        source.itemsActiveTotal = freshItems.filter((v) => v.status === 'active').length;
         source.lastStatus = 'healthy';
       }
     }
@@ -314,7 +403,9 @@ export class MultiSourceVacancyEngine {
   }
 
   public getVacancies(filter: VacancyQueryFilter = {}): VacancyQueryResult {
-    let all = Array.from(this.rawVacancies.values());
+    let all = Array.from(this.rawVacancies.values()).filter((v) =>
+      isVacancyFresh(v.publishedAt),
+    );
 
     const statsMap = new Map<string, number>();
     for (const v of all) {
@@ -375,15 +466,17 @@ export class MultiSourceVacancyEngine {
         fetched = CURATED_SOURCE_VACANCIES[source.id];
       }
 
-      for (const item of fetched) {
+      const freshFetched = fetched.filter((v) => isVacancyFresh(v.publishedAt));
+
+      for (const item of freshFetched) {
         this.rawVacancies.set(item.id, item);
       }
 
       source.lastSyncAt = new Date().toISOString();
       source.lastStatus = 'healthy';
       source.lastErrorMessage = undefined;
-      source.itemsFoundTotal = fetched.length;
-      source.itemsActiveTotal = fetched.filter((v) => v.status === 'active').length;
+      source.itemsFoundTotal = freshFetched.length;
+      source.itemsActiveTotal = freshFetched.filter((v) => v.status === 'active').length;
 
       this.recluster();
     } catch (err) {
@@ -399,8 +492,10 @@ export class MultiSourceVacancyEngine {
   }
 
   public recluster(): void {
-    const allVacancies = Array.from(this.rawVacancies.values());
-    this.clusters = clusterVacancies(allVacancies);
+    const freshVacancies = Array.from(this.rawVacancies.values()).filter((v) =>
+      isVacancyFresh(v.publishedAt),
+    );
+    this.clusters = clusterVacancies(freshVacancies);
   }
 
   public getMatchedVacancies(candidate: CandidateMatchProfile): MatchedVacancyItem[] {
@@ -414,6 +509,7 @@ export class MultiSourceVacancyEngine {
 
     return matched.sort((a, b) => b.explanation.matchScore - a.explanation.matchScore);
   }
+
 
   public async testSource(
     sourceId: string,

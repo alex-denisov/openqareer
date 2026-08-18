@@ -105,6 +105,9 @@ import {
 } from './vacancies/vacancyIntelligenceService';
 import { vacancySourceRegistryView } from './vacancies/vacancySourceRegistry';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
+import { parseTelegramChannelHtml } from './connectors/telegramChannelParser';
+import { parseRssJobFeed } from './connectors/rssFeedParser';
+
 
 interface BuildAppOptions {
   config: ServerConfig;
@@ -239,9 +242,59 @@ export async function buildApp({
             status: 'active' as const,
           }));
         }
+        if (source.type === 'telegram') {
+          const channelMatch = source.targetUrl.match(/t\.me\/(?:s\/)?([a-zA-Z0-9_]+)/i);
+          const channelName = channelMatch ? channelMatch[1] : source.id.replace(/^src-tg-/, '');
+          const url = `https://t.me/s/${channelName}`;
+          try {
+            const res = await fetch(url, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)',
+                Accept: 'text/html,application/xhtml+xml',
+              },
+              signal: AbortSignal.timeout(8_000),
+            });
+            if (res.ok) {
+              const html = await res.text();
+              const vacancies = parseTelegramChannelHtml(html, {
+                channelName,
+                observedAt: new Date().toISOString(),
+              });
+              if (vacancies.length > 0) return vacancies;
+            }
+          } catch {
+            // fallback to curated
+          }
+          return [];
+        }
+        if (source.type === 'rss') {
+          try {
+            const res = await fetch(source.targetUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)',
+                Accept: 'application/rss+xml, application/xml, text/xml',
+              },
+              signal: AbortSignal.timeout(8_000),
+            });
+            if (res.ok) {
+              const xml = await res.text();
+              const vacancies = parseRssJobFeed(xml, {
+                sourceId: source.id,
+                sourceUrl: source.targetUrl,
+                companyName: source.name,
+                observedAt: new Date().toISOString(),
+              });
+              if (vacancies.length > 0) return vacancies;
+            }
+          } catch {
+            // fallback to curated
+          }
+          return [];
+        }
         return [];
       },
     });
+
   const app = Fastify({
     trustProxy: '127.0.0.1',
     logger: {
@@ -1277,13 +1330,31 @@ export async function buildApp({
     const snapshot = candidateStore.getSnapshot(candidate.id);
     const memory = snapshot?.memory ?? [];
     const confirmedSkills = memory
-      .filter((m) => m.kind === 'fact' && m.confidence === 'candidate-confirmed')
+      .filter((m) => m.kind === 'fact' && (m.domain === 'skill' || m.confidence === 'candidate-confirmed'))
       .map((m) => m.statement);
+
+    const roleHypotheses = memory
+      .filter((m) => m.domain === 'role-evidence' || m.kind === 'hypothesis')
+      .map((m) => m.statement);
+
+    const subscriptionQueries = (snapshot?.vacancySubscriptions ?? [])
+      .map((s) => s.query);
+
+    const resumeTitle = snapshot?.resume?.draft?.targetRole;
+
+    const targetRoles = Array.from(
+      new Set([
+        ...roleHypotheses,
+        ...subscriptionQueries,
+        ...(resumeTitle ? [resumeTitle] : []),
+      ].filter(Boolean)),
+    );
+
 
     const matched = multiSourceEngine.getMatchedVacancies({
       candidateId: candidate.id,
-      targetRoles: ['Руководитель разработки', 'Senior Developer'],
-      confirmedSkills: confirmedSkills.length > 0 ? confirmedSkills : ['TypeScript', 'React', 'Node.js', 'PostgreSQL'],
+      targetRoles: targetRoles.length > 0 ? targetRoles : ['Разработчик', 'Engineer', 'Руководитель разработки'],
+      confirmedSkills: confirmedSkills.length > 0 ? confirmedSkills : ['TypeScript', 'React', 'Node.js', 'PostgreSQL', 'Python'],
       confirmedFacts: confirmedSkills,
       preferredRemote: true,
     });

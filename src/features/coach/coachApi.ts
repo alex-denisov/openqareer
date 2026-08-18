@@ -6,6 +6,7 @@ import type {
   AccountSnapshot,
   CandidateDocument,
   CandidateDocumentKind,
+  MatchedVacancyItem,
   VacancySubscription,
   VacancySubscriptionView,
   VacancySourceId,
@@ -15,13 +16,18 @@ export type {
   AccountSnapshot,
   CandidateDocument,
   CandidateDocumentKind,
+  MatchedVacancyItem,
   StoredVacancy,
   VacancyAnalytics,
+  VacancyCluster,
+  VacancyMatchExplanation,
   VacancySubscription,
   VacancySubscriptionView,
   VacancySourceId,
   VacancySourceRegistryEntry,
 } from './cabinetTypes';
+
+
 
 export interface AuthUser {
   username: string;
@@ -771,3 +777,13 @@ export async function getProviderStatus(): Promise<{
   const response = await apiFetch('/api/v1/provider/status');
   return readData(response);
 }
+
+export async function getMatchedVacancies(signal?: AbortSignal): Promise<MatchedVacancyItem[]> {
+  const response = await apiFetch('/api/v1/candidate/matched-vacancies', { signal });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return readData<MatchedVacancyItem[]>(response);
+}
+
+

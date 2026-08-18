@@ -1,6 +1,7 @@
 import { CheckCircle, Info, WarningCircle } from '@phosphor-icons/react';
 import { conventionLines, staleReasonLabel } from './resumeLabels';
 import { orderUnknowns } from './resumeStudioModel';
+import { ResumeTargetVacanciesBlock } from './ResumeTargetVacanciesBlock';
 import type {
   ResumeConventions,
   ResumeDocument,
@@ -26,6 +27,7 @@ export function ResumeControlRail({
 }: ResumeControlRailProps) {
   return (
     <aside className="career-resume-rail" aria-label="Что уточнить">
+      <ResumeTargetVacanciesBlock />
       <StaleEvidenceBlock freshness={freshness} />
       <UnknownsBlock unknowns={orderUnknowns(document.unknowns)} />
       <ExcludedBlock memoryIds={excludedEvidenceIds} />
@@ -33,6 +35,7 @@ export function ResumeControlRail({
     </aside>
   );
 }
+
 
 function StaleEvidenceBlock({ freshness }: { freshness: ResumeEvidenceFreshness }) {
   if (freshness.stale.length === 0) return null;

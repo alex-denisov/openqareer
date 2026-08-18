@@ -5241,7 +5241,146 @@
   font-size: 0.83rem;
 }
 
+.career-resume-target-vacancies {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.career-resume-target-item {
+  display: grid;
+  gap: 8px;
+  background: var(--career-surface-soft, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--career-line, rgba(255, 255, 255, 0.08));
+  border-radius: var(--career-radius-md, 8px);
+  padding: 12px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.career-resume-target-item.is-selected {
+  border-color: var(--career-accent, #3b82f6);
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.career-resume-target-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.career-resume-target-header strong {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--career-text, #fff);
+}
+
+.career-resume-target-header small {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--career-text-soft, #94a3b8);
+  margin-top: 2px;
+}
+
+.career-match-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.career-match-badge.is-strong {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.career-match-badge.is-good {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.career-match-badge.is-potential {
+  background: rgba(234, 179, 8, 0.15);
+  color: #facc15;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.career-match-badge.is-low {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.career-resume-target-points {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.career-resume-target-points.is-matched {
+  color: #4ade80;
+}
+
+.career-resume-target-points.is-missing {
+  color: #fbbf24;
+}
+
+.career-resume-target-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--career-line-subtle, rgba(255, 255, 255, 0.05));
+}
+
+.career-target-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+  color: var(--career-accent, #60a5fa);
+  text-decoration: none;
+}
+
+.career-target-link:hover {
+  text-decoration: underline;
+}
+
+.career-target-select-btn {
+  background: transparent;
+  border: 1px solid var(--career-line, rgba(255, 255, 255, 0.15));
+  border-radius: 4px;
+  color: var(--career-text-soft, #cbd5e1);
+  font-size: 0.74rem;
+  padding: 3px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.career-target-select-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.career-target-select-btn.is-active {
+  background: var(--career-accent, #3b82f6);
+  color: #fff;
+  border-color: var(--career-accent, #3b82f6);
+}
+
 @media (max-width: 900px) {
+
   .career-resume-studio {
     border-radius: var(--career-radius-md);
   }

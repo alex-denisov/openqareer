@@ -125,3 +125,47 @@ export interface VacancySubscriptionView {
   subscription: VacancySubscription;
   vacancies: StoredVacancy[];
 }
+
+export interface VacancyCluster {
+  id: string;
+  canonicalTitle: string;
+  canonicalCompany: string;
+  canonicalLocation?: string;
+  isRemote: boolean;
+  salary?: {
+    from?: number;
+    to?: number;
+    currency?: string;
+    gross?: boolean;
+  };
+  descriptionSummary: string;
+  skills: string[];
+  primaryUrl: string;
+  sources: Array<{
+    sourceType: string;
+    sourceId: string;
+    sourceUrl: string;
+    channelName?: string;
+    observedAt: string;
+  }>;
+  firstObservedAt: string;
+  lastSeenAt: string;
+  status: 'active' | 'archived';
+  vacanciesCount: number;
+}
+
+export interface VacancyMatchExplanation {
+  clusterId: string;
+  matchScore: number;
+  fitLevel: 'strong' | 'good' | 'potential' | 'low';
+  matchingPoints: string[];
+  missingPoints: string[];
+  summary: string;
+  calculatedAt: string;
+}
+
+export interface MatchedVacancyItem {
+  cluster: VacancyCluster;
+  explanation: VacancyMatchExplanation;
+}
+
