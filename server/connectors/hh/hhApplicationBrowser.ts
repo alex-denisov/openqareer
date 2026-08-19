@@ -102,6 +102,7 @@ export class HhApplicationBrowserSession implements ConnectorExecutor {
     return { target: payload.data.executionTarget };
   }
 
+  // eslint-disable-next-line max-lines-per-function
   private async openApprovedVacancy(
     request: ConnectorRequest,
     target: HhApplicationExecutionTarget,
@@ -109,9 +110,21 @@ export class HhApplicationBrowserSession implements ConnectorExecutor {
     try {
       await this.page.goto(`https://hh.ru/vacancy/${target.vacancyId}`, {
         waitUntil: 'domcontentloaded',
-        timeout: 15_000,
+        timeout: 25_000,
       });
     } catch {
+      if (
+        this.page.url() &&
+        !isExactVacancyUrl(this.page.url(), target.vacancyId) &&
+        this.page.url() !== 'about:blank'
+      ) {
+        return this.paused(
+          request,
+          'hh_target_mismatch',
+          'unexpected',
+          'vacancy-url-mismatch',
+        );
+      }
       return this.paused(
         request,
         'hh_navigation_failed',

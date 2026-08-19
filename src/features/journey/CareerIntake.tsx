@@ -13,6 +13,7 @@ import {
 } from '@phosphor-icons/react';
 import {
   getConnections,
+  importProfileUrl,
   startConnection,
   type CandidateConnection,
 } from '../coach/coachApi';
@@ -264,6 +265,64 @@ export function CareerIntake({
   async function handleConnectPlatform(platform: ConnectionPlatform) {
     setConnectingPlatform(platform);
     setError(undefined);
+    const enteredUrl = platform === 'hh' ? hhUrl.trim() : linkedinUrl.trim();
+
+    if (platform === 'hh') {
+      if (!enteredUrl) {
+        setConnectingPlatform(undefined);
+        setError(
+          'Вставьте ссылку на ваше резюме hh.ru (например, https://hh.ru/resume/...) либо загрузите PDF или введите опыт текстом.',
+        );
+        return;
+      }
+      try {
+        const result = await importProfileUrl(enteredUrl);
+        if (result.status === 'imported' && result.parsedResume) {
+          setParsedResume(result.parsedResume);
+          setParsedDraft(parsedResumeToDraft(result.parsedResume));
+          setResumeText(result.parsedResume.rawText);
+          setResumeSource('hh-pdf');
+          if (result.parsedResume.targetRole && !targetDirection) {
+            setTargetDirection(result.parsedResume.targetRole);
+          }
+          setError(undefined);
+        } else {
+          setError(
+            'Не удалось загрузить данные резюме с hh.ru. Проверьте ссылку (должна быть https://hh.ru/resume/...) либо загрузите PDF резюме.',
+          );
+        }
+      } catch (reason) {
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : 'Не удалось прочитать резюме по ссылке. Можно загрузить PDF или ввести опыт текстом.',
+        );
+      } finally {
+        setConnectingPlatform(undefined);
+      }
+      return;
+    }
+
+    if (enteredUrl) {
+      try {
+        const result = await importProfileUrl(enteredUrl);
+        if (result.status === 'imported' && result.parsedResume) {
+          setParsedResume(result.parsedResume);
+          setParsedDraft(parsedResumeToDraft(result.parsedResume));
+          setResumeText(result.parsedResume.rawText);
+          setResumeSource('linkedin-pdf');
+          if (result.parsedResume.targetRole && !targetDirection) {
+            setTargetDirection(result.parsedResume.targetRole);
+          }
+          setError(undefined);
+          setConnectingPlatform(undefined);
+          return;
+        }
+      } catch {
+        // Fallback to official OAuth below
+      }
+    }
+
     try {
       const started = await startConnection(platform);
       window.location.assign(started.authorizationUrl);
@@ -299,15 +358,40 @@ export function CareerIntake({
     setStep('source');
   }
 
-  function moveFromSource() {
+  async function moveFromSource() {
     if (sourceChoice === 'profile-import') {
       const platformLabel = PLATFORM_LABELS[connectorPlatform];
       const activeConnection = connections?.find((c) => c.platform === connectorPlatform);
+      const enteredUrl = connectorPlatform === 'hh' ? hhUrl.trim() : linkedinUrl.trim();
+
       if (activeConnection?.status !== 'connected' && !parsedResume && !resumeText.trim()) {
-        const enteredUrl = connectorPlatform === 'hh' ? hhUrl.trim() : linkedinUrl.trim();
         if (!enteredUrl) {
           setError(
             `Подключите ${platformLabel} или выберите другой способ: PDF, текст либо «Без документов».`,
+          );
+          return;
+        }
+        try {
+          const result = await importProfileUrl(enteredUrl);
+          if (result.status === 'imported' && result.parsedResume) {
+            setParsedResume(result.parsedResume);
+            setParsedDraft(parsedResumeToDraft(result.parsedResume));
+            setResumeText(result.parsedResume.rawText);
+            setResumeSource(connectorPlatform === 'hh' ? 'hh-pdf' : 'linkedin-pdf');
+            if (result.parsedResume.targetRole && !targetDirection) {
+              setTargetDirection(result.parsedResume.targetRole);
+            }
+          } else {
+            setError(
+              `Не удалось загрузить данные ${platformLabel}. Проверьте ссылку либо загрузите PDF.`,
+            );
+            return;
+          }
+        } catch (reason) {
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : `Не удалось прочитать ${platformLabel}. Нажмите «Подключить» или загрузите PDF.`,
           );
           return;
         }

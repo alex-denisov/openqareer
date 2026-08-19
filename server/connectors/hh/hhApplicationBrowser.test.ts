@@ -5,7 +5,7 @@ import { expect as expectPage } from '@playwright/test';
 import type { ConnectorRequest } from '../connectorHarness';
 import { HhApplicationBrowserSession } from './hhApplicationBrowser';
 
-describe('hh.ru candidate-scoped application browser session', { timeout: 15_000 }, () => {
+describe('hh.ru candidate-scoped application browser session', { timeout: 35_000 }, () => {
   const fixedNow = '2026-08-14T15:00:00.000Z';
   const candidateId = '11111111-1111-4111-8111-111111111111';
   const fixtureUrl = new URL('./fixtures/syntheticApplication.html', import.meta.url);

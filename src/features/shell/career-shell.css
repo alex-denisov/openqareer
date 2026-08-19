@@ -719,7 +719,7 @@
 
 .career-source-choice {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   border: 1px solid var(--career-line);
   border-radius: var(--career-radius-md);
   overflow: hidden;
@@ -2953,9 +2953,8 @@
     border-right: 0;
   }
 
-  .career-source-choice > button:last-child {
-    grid-column: 1 / -1;
-    border-right: 0;
+  .career-source-choice > button:nth-child(3),
+  .career-source-choice > button:nth-child(4) {
     border-bottom: 0;
   }
 

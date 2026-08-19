@@ -47,5 +47,20 @@ describe('CareerIntake', () => {
     expect(html).not.toContain('Создать аккаунт');
     expect(html).not.toContain('Импортировать');
   });
+
+  it('renders all four source buttons proportionally on source step', () => {
+    const html = renderToStaticMarkup(
+      <CareerIntake
+        onComplete={() => undefined}
+        initialStarted
+        initialStep="source"
+      />,
+    );
+
+    expect(html).toContain('Импорт профиля');
+    expect(html).toContain('PDF');
+    expect(html).toContain('Текстом');
+    expect(html).toContain('Без документов');
+  });
 });
 

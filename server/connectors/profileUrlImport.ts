@@ -54,13 +54,29 @@ export async function importProfileUrl(
 }
 
 export function parseProfileUrl(value: string): { url: string; platform: ProfilePlatform } {
-  const url = new URL(value.trim());
+  const trimmed = value.trim();
+  if (!trimmed) throw new Error('profile_url_invalid');
+  const normalized = !/^https?:\/\//i.test(trimmed) ? `https://${trimmed}` : trimmed;
+  let url: URL;
+  try {
+    url = new URL(normalized);
+  } catch {
+    throw new Error('profile_url_invalid');
+  }
   const host = url.hostname.toLowerCase();
   if (url.protocol !== 'https:') throw new Error('profile_url_invalid');
   if ((host === 'linkedin.com' || host.endsWith('.linkedin.com')) && /^\/in\/[^/]+\/?$/u.test(url.pathname)) {
     return { url: url.toString(), platform: 'linkedin' };
   }
-  if ((host === 'hh.ru' || host.endsWith('.hh.ru')) && /^\/resume\/[A-Za-z0-9_-]+\/?$/u.test(url.pathname)) {
+  if (
+    (host === 'hh.ru' ||
+      host.endsWith('.hh.ru') ||
+      host === 'hh.kz' ||
+      host.endsWith('.hh.kz') ||
+      host === 'rabota.by' ||
+      host.endsWith('.rabota.by')) &&
+    /^\/resume\/[A-Za-z0-9_-]+\/?$/u.test(url.pathname)
+  ) {
     return { url: url.toString(), platform: 'hh' };
   }
   throw new Error('profile_url_invalid');
