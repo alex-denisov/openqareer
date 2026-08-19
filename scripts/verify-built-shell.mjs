@@ -543,7 +543,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   );
   await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
   await page.getByText('Вы вошли как', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Источники' }).click();
+  await page.getByRole('button', { name: 'Площадки' }).click();
   await page.getByRole('heading', { name: 'Подключённые площадки' }).waitFor();
   await page.getByRole('button', { name: 'Отключить hh.ru' }).waitFor();
   assert(
