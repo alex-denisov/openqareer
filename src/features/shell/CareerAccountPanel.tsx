@@ -22,7 +22,6 @@ import {
   requestPasswordReset,
   resetPassword,
   revokeOtherSessions,
-  updateAccount,
   type AccountSnapshot,
   type AuthUser,
 } from '../coach/coachApi';
@@ -40,21 +39,23 @@ interface CareerAccountPanelProps {
   initialUser?: AuthUser | null;
   onClose: () => void;
   onIdentityChange: (session: AuthUser | null) => void;
+  onNavigate?: (view: 'today' | 'profile' | 'resume' | 'career' | 'opportunities' | 'tariffs') => void;
 }
 
 type AuthMode = 'choose' | 'login' | 'register' | 'forgot' | 'reset';
-type AccountSection = 'profile' | 'security' | 'connections' | 'data';
+type AccountSection = 'connections' | 'security' | 'data';
 
 export function CareerAccountPanel({
   initialUser,
   onClose,
   onIdentityChange,
+  onNavigate,
 }: CareerAccountPanelProps) {
   const resetToken = resetTokenFromLocation();
   const [user, setUser] = useState<AuthUser | null | undefined>(initialUser);
   const [account, setAccount] = useState<AccountSnapshot>();
   const [mode, setMode] = useState<AuthMode>(() => (resetToken ? 'reset' : 'choose'));
-  const [section, setSection] = useState<AccountSection>('profile');
+  const [section, setSection] = useState<AccountSection>('connections');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -217,36 +218,6 @@ export function CareerAccountPanel({
     }
   }
 
-  async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!user) return;
-    const form = new FormData(event.currentTarget);
-    setBusy(true);
-    setError(undefined);
-    try {
-      const saved = await updateAccount({
-        email: email.trim() || null,
-        displayName: displayName.trim() || null,
-        headline: stringValue(form, 'headline') || null,
-        location: stringValue(form, 'location') || null,
-        workMode: (stringValue(form, 'workMode') || null) as AccountSnapshot['profile']['workMode'],
-      });
-      setAccount(saved);
-      const nextUser = {
-        ...user,
-        email: saved.email,
-        displayName: saved.displayName,
-      };
-      setUser(nextUser);
-      onIdentityChange(nextUser);
-      setNotice('Профиль обновлён. Новые данные уже доступны карьерному кабинету.');
-    } catch (reason) {
-      setError(accountError(reason));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function savePassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -372,18 +343,15 @@ export function CareerAccountPanel({
             user={user}
             account={account}
             section={section}
-            email={email}
-            displayName={displayName}
             busy={busy}
             onSectionChange={setSection}
-            onEmailChange={setEmail}
-            onDisplayNameChange={setDisplayName}
-            onSaveProfile={saveProfile}
             onSavePassword={savePassword}
             onCloseOtherSessions={closeOtherSessions}
             onDownloadExport={downloadExport}
             onDeleteAccount={deleteAccount}
             onSignOut={signOut}
+            onNavigate={onNavigate}
+            onClose={onClose}
           />
         ) : null}
 
@@ -562,34 +530,28 @@ function AuthenticatedAccount({
   user,
   account,
   section,
-  email,
-  displayName,
   busy,
   onSectionChange,
-  onEmailChange,
-  onDisplayNameChange,
-  onSaveProfile,
   onSavePassword,
   onCloseOtherSessions,
   onDownloadExport,
   onDeleteAccount,
   onSignOut,
+  onNavigate,
+  onClose,
 }: {
   user: AuthUser;
   account?: AccountSnapshot;
   section: AccountSection;
-  email: string;
-  displayName: string;
   busy: boolean;
   onSectionChange: (section: AccountSection) => void;
-  onEmailChange: (value: string) => void;
-  onDisplayNameChange: (value: string) => void;
-  onSaveProfile: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
   onSavePassword: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
   onCloseOtherSessions: () => Promise<void>;
   onDownloadExport: () => Promise<void>;
   onDeleteAccount: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
   onSignOut: () => Promise<void>;
+  onNavigate?: (view: 'today' | 'profile' | 'resume' | 'career' | 'opportunities' | 'tariffs') => void;
+  onClose: () => void;
 }) {
   return (
     <>
@@ -603,8 +565,42 @@ function AuthenticatedAccount({
           <small>{account?.email ?? user.email ?? user.username}</small>
         </div>
       </div>
+
+      {onNavigate ? (
+        <div className="career-account-quick-links">
+          <button
+            type="button"
+            className="career-account-link-btn"
+            onClick={() => {
+              onClose();
+              onNavigate('resume');
+            }}
+          >
+            <div>
+              <strong>Resume Studio</strong>
+              <small>Мастер-профиль, навыки и опыт →</small>
+            </div>
+            <ArrowRight size={16} />
+          </button>
+          <button
+            type="button"
+            className="career-account-link-btn"
+            onClick={() => {
+              onClose();
+              onNavigate('today');
+            }}
+          >
+            <div>
+              <strong>Карьерный радар</strong>
+              <small>Диагностика, цели и следующий шаг →</small>
+            </div>
+            <ArrowRight size={16} />
+          </button>
+        </div>
+      ) : null}
+
       <nav className="career-account-tabs" aria-label="Настройки аккаунта">
-        {(['profile', 'security', 'connections', 'data'] as const).map((item) => (
+        {(['connections', 'security', 'data'] as const).map((item) => (
           <button
             key={item}
             type="button"
@@ -613,9 +609,8 @@ function AuthenticatedAccount({
           >
             {
               {
-                profile: 'Профиль',
+                connections: 'Площадки',
                 security: 'Безопасность',
-                connections: 'Источники',
                 data: 'Данные',
               }[item]
             }
@@ -623,65 +618,7 @@ function AuthenticatedAccount({
         ))}
       </nav>
 
-      {section === 'profile' ? (
-        <form className="career-account-form" onSubmit={onSaveProfile}>
-          <label>
-            <span>Имя и фамилия</span>
-            <input
-              value={displayName}
-              onChange={(event) => onDisplayNameChange(event.target.value)}
-              autoComplete="name"
-              minLength={2}
-              maxLength={120}
-              required
-            />
-          </label>
-          <label>
-            <span>Email</span>
-            <input
-              type="email"
-              value={email}
-              onChange={(event) => onEmailChange(event.target.value)}
-              autoComplete="email"
-              maxLength={254}
-              required
-            />
-          </label>
-          <label>
-            <span>Профессиональный заголовок</span>
-            <input
-              name="headline"
-              defaultValue={account?.profile.headline ?? ''}
-              placeholder="Например, руководитель продукта"
-              minLength={2}
-              maxLength={220}
-            />
-          </label>
-          <label>
-            <span>Локация</span>
-            <input
-              name="location"
-              defaultValue={account?.profile.location ?? ''}
-              placeholder="Москва, Россия"
-              minLength={2}
-              maxLength={160}
-            />
-          </label>
-          <label>
-            <span>Формат работы</span>
-            <select name="workMode" defaultValue={account?.profile.workMode ?? ''}>
-              <option value="">Не указан</option>
-              <option value="office">Офис</option>
-              <option value="hybrid">Гибрид</option>
-              <option value="remote">Удалённо</option>
-              <option value="flexible">Гибко</option>
-            </select>
-          </label>
-          <button className="career-primary-button" disabled={busy}>
-            Сохранить профиль
-          </button>
-        </form>
-      ) : null}
+      {section === 'connections' ? <AccountConnectionsManager /> : null}
 
       {section === 'security' ? (
         <div className="career-account-section-stack">
@@ -720,8 +657,6 @@ function AuthenticatedAccount({
           </div>
         </div>
       ) : null}
-
-      {section === 'connections' ? <AccountConnectionsManager /> : null}
 
       {section === 'data' ? (
         <div className="career-account-section-stack">

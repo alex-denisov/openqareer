@@ -64,13 +64,8 @@ describe('CareerIntelligenceSummary', () => {
       <CareerIntelligenceSummary result={result} />,
     );
 
-    expect(html).toContain('Консультант');
-    expect(html).toContain('Стратег');
-    expect(html).toContain('Эксперт');
     expect(html).toContain('Проверить переход в продуктовую роль');
     expect(html).toContain('Пять релевантных вакансий');
-    expect(html).toContain('1 наблюдение hh.ru');
-    expect(html).toContain('12 авг.');
     expect(html).toContain('Требует вашего подтверждения');
     expect(html).not.toContain('Выполнено');
   });

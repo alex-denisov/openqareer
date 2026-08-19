@@ -486,6 +486,10 @@ export function CareerWorkspaceShell({
             initialUser={session}
             onClose={closeAccount}
             onIdentityChange={resetForAccount}
+            onNavigate={(v) => {
+              closeAccount();
+              navigate(v);
+            }}
           />
         </>
       ) : null}

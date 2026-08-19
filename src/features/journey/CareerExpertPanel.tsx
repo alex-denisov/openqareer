@@ -179,8 +179,8 @@ export function CareerExpertPanel({
         <div className="career-expert-identity">
           <span><Sparkle size={18} weight="fill" /></span>
           <div>
-            <strong>Карьерное ядро</strong>
-            <small>{user ? 'Консультант · стратег · эксперт' : 'Защищённый AI-диалог'}</small>
+            <strong>Карьерный советник</strong>
+            <small>{user ? 'Персональный AI-ассистент по стратегии' : 'Защищённый диалог'}</small>
           </div>
         </div>
         <button
@@ -188,7 +188,7 @@ export function CareerExpertPanel({
           className="career-close-button"
           type="button"
           onClick={onClose}
-          aria-label="Закрыть карьерного эксперта"
+          aria-label="Закрыть карьерного советника"
         >
           <X size={20} />
         </button>
@@ -196,11 +196,11 @@ export function CareerExpertPanel({
 
       <div className="career-expert-conversation">
         <div className="career-expert-message">
-          <span>Почему это сейчас</span>
-          <strong>{journey?.nextAction.headline ?? 'Начнём с вашего вопроса'}</strong>
+          <span>AI-сопровождение</span>
+          <strong>{journey?.nextAction.headline ?? 'Задайте вопрос о вашей карьере'}</strong>
           <p>
             {journey?.nextAction.reason ??
-              'Ответы станут предложенной памятью. Вы сможете подтвердить или исправить каждый вывод.'}
+              'Помогу оценить рыночные возможности, разобрать стратегию или адаптировать резюме.'}
           </p>
         </div>
 
@@ -211,7 +211,7 @@ export function CareerExpertPanel({
                 className={`career-dialogue-turn is-${message.role}`}
                 key={message.id}
               >
-                <span>{message.role === 'user' ? 'Вы' : 'Карьерное ядро'}</span>
+                <span>{message.role === 'user' ? 'Вы' : 'Карьерный советник'}</span>
                 {message.content.split('\n').map((paragraph, index) =>
                   paragraph ? <p key={`${message.id}-${index}`}>{paragraph}</p> : null,
                 )}
@@ -242,7 +242,7 @@ export function CareerExpertPanel({
               </p>
             </div>
             <button type="button" onClick={() => setLoginOpen(true)}>
-              Войти в тестовый контур
+              Войти в аккаунт
               <ArrowRight size={16} />
             </button>
           </div>
@@ -278,13 +278,13 @@ export function CareerExpertPanel({
 
       {user ? (
         <form className="career-expert-composer" onSubmit={handleSend}>
-          <label htmlFor="career-expert-input">Сообщение карьерному ядру</label>
+          <label htmlFor="career-expert-input">Сообщение карьерному советнику</label>
           <div>
             <textarea
               id="career-expert-input"
               value={content}
               onChange={(event) => setContent(event.target.value)}
-              placeholder="Например: почему эта роль, а не руководитель поддержки?"
+              placeholder="Например: как лучше усилить позиционирование для целевой роли?"
               rows={3}
             />
             <button type="submit" disabled={!content.trim() || sending} aria-label="Отправить вопрос">
@@ -308,29 +308,6 @@ export function CareerIntelligenceSummary({
 }) {
   return (
     <section className="career-intelligence-summary" aria-label="Карьерный трек и действия">
-      {result.intelligence ? (
-        <div className="career-role-coverage">
-          <span>Проверено ролями</span>
-          <div>
-            {result.intelligence.roleCoverage.map((role) => (
-              <small key={role}>{roleLabel(role)}</small>
-            ))}
-          </div>
-          <p>
-            Привязка выводов к сообщениям: {Math.round(result.intelligence.evidenceCoverage * 100)}%
-          </p>
-          {result.intelligence.marketEvidence ? (
-            <p>
-              Рыночная база: {observationCountLabel(
-                result.intelligence.marketEvidence.observationCount,
-              )} hh.ru · {formatObservedAt(
-                result.intelligence.marketEvidence.observedAt,
-              )}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
       {result.careerTrack ? (
         <div className="career-track-card">
           <span>Измеримый карьерный трек</span>
@@ -357,38 +334,11 @@ export function CareerIntelligenceSummary({
   );
 }
 
-function roleLabel(role: NonNullable<CoachResult['intelligence']>['roleCoverage'][number]) {
-  return {
-    career_consultant: 'Консультант',
-    career_strategist: 'Стратег',
-    career_expert: 'Эксперт',
-  }[role];
-}
-
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('ru-RU', {
     day: 'numeric',
     month: 'short',
   }).format(new Date(`${value}T00:00:00Z`));
-}
-
-function formatObservedAt(value: string) {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-  }).format(new Date(value));
-}
-
-function observationCountLabel(count: number) {
-  const mod100 = count % 100;
-  const mod10 = count % 10;
-  const noun =
-    mod10 === 1 && mod100 !== 11
-      ? 'наблюдение'
-      : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
-        ? 'наблюдения'
-        : 'наблюдений';
-  return `${count} ${noun}`;
 }
 
 function messageFrom(reason: unknown): string {

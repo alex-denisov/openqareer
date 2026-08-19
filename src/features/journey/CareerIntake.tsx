@@ -11,6 +11,7 @@ import {
   Question,
   Sparkle,
   Target,
+  WarningCircle,
 } from '@phosphor-icons/react';
 import {
   getConnections,
@@ -20,7 +21,6 @@ import {
   type ProfileUrlImportResult,
 } from '../coach/coachApi';
 import { PLATFORM_LABELS, type ConnectionPlatform } from '../connections/connectionResult';
-import { accountRequiredNotice } from '../connections/connectionState';
 import {
   ingestProfileSnapshot,
   reviewProfileFact,
@@ -137,6 +137,7 @@ export function CareerIntake({
   const [profileImport, setProfileImport] = useState<ProfileUrlImportResult>();
   const [profileFactDrafts, setProfileFactDrafts] = useState<ProfileFactDraft[]>([]);
   const [importingProfile, setImportingProfile] = useState(false);
+  const [importUnavailable, setImportUnavailable] = useState(false);
   const [currentSituation, setCurrentSituation] = useState('');
   const [targetDirection, setTargetDirection] = useState('');
   const [market, setMarket] = useState<WorkspaceMarket>('ru');
@@ -314,11 +315,13 @@ export function CareerIntake({
     setImportingProfile(true);
     setError(undefined);
     setProfileImport(undefined);
+    setImportUnavailable(false);
     setProfileFactDrafts([]);
     try {
       const result = await importProfileUrl(url);
       setProfileImport(result);
       if (result.status === 'imported') {
+        setImportUnavailable(false);
         if (result.parsedResume) {
           const parsed = result.parsedResume;
           setParsedResume(parsed);
@@ -374,22 +377,14 @@ export function CareerIntake({
           setResumeText(result.facts.map((f) => f.value).join('\n'));
         }
       } else {
-        // Fallback parse if text or URL structure is available
-        const parsed = parseResumeContent(resumeText || url);
-        setParsedResume(parsed);
-        const draft = parsedResumeToDraft(parsed);
-        setParsedDraft(draft);
-        const factDrafts = parsedResumeToFactDrafts(parsed, `${sourceChoice}-resume`);
-        setProfileFactDrafts(factDrafts);
-        if (parsed.targetRole && !targetDirection) {
-          setTargetDirection(parsed.targetRole);
-        }
+        setImportUnavailable(true);
       }
     } catch (reason) {
+      setImportUnavailable(true);
       setError(
         reason instanceof Error
           ? reason.message
-          : 'Не удалось проверить ссылку. Можно загрузить экспорт или PDF.',
+          : 'Не удалось проверить ссылку. Можно войти через браузерную сессию или загрузить PDF.',
       );
     } finally {
       setImportingProfile(false);
@@ -401,6 +396,7 @@ export function CareerIntake({
     setSourceChoice(nextSource);
     setError(undefined);
     setProfileImport(undefined);
+    setImportUnavailable(false);
     setProfileFactDrafts([]);
     setResumeText('');
     setResumeSource('text');
@@ -504,7 +500,7 @@ export function CareerIntake({
     <section className="career-intake" aria-labelledby="intake-title">
       <header className="career-intake-header">
         <div>
-          <p className="career-eyebrow">Бесплатная карьерная картина</p>
+          <p className="career-eyebrow">Карьерная диагностика</p>
           <h1 id="intake-title">
             {step === 'intent'
               ? 'С чем разобраться?'
@@ -705,8 +701,8 @@ export function CareerIntake({
                     background: 'rgba(34, 197, 94, 0.12)',
                     border: '1px solid rgba(34, 197, 94, 0.35)',
                     borderRadius: '12px',
-                    marginTop: '16px',
-                    marginBottom: '16px',
+                    marginTop: '8px',
+                    marginBottom: '8px',
                   }}
                 >
                   <CheckCircle
@@ -723,7 +719,7 @@ export function CareerIntake({
                         marginBottom: '4px',
                       }}
                     >
-                      Резюме {sourceChoice === 'hh' ? 'hh.ru' : 'LinkedIn'} успешно загружено и распарсено в Resume Studio
+                      Резюме {sourceChoice === 'hh' ? 'hh.ru' : 'LinkedIn'} успешно распарсено в Resume Studio
                     </strong>
                     <span
                       style={{
@@ -736,62 +732,48 @@ export function CareerIntake({
                       Найдено: {parsedResume.experience.length} мест работы,{' '}
                       {parsedResume.skills.length} навыков,{' '}
                       {parsedResume.education.length} записей образования,{' '}
-                      {parsedResume.courses.length} курсов, контакты.
+                      {parsedResume.courses.length} курсов.
                     </span>
                   </div>
                 </div>
               ) : null}
 
-              {hasAccount ? (
-                <PlatformConnectionSection
-                  platform={sourceChoice}
-                  connection={connections?.find((c) => c.platform === sourceChoice)}
-                  connecting={connectingPlatform === sourceChoice}
-                  onConnect={() => handleConnectPlatform(sourceChoice)}
-                />
-              ) : null}
+              <PlatformIntegrationCard
+                platform={sourceChoice}
+                url={sourceChoice === 'linkedin' ? linkedinUrl : hhUrl}
+                onUrlChange={(val) => {
+                  if (sourceChoice === 'linkedin') setLinkedinUrl(val);
+                  else setHhUrl(val);
+                  setProfileImport(undefined);
+                  setImportUnavailable(false);
+                }}
+                isConnected={
+                  sourceChoice === 'hh'
+                    ? Boolean(
+                        connections?.some((c) => c.platform === 'hh' && c.status === 'connected') ||
+                          (parsedResume && resumeSource === 'hh-pdf'),
+                      )
+                    : Boolean(
+                        connections?.some((c) => c.platform === 'linkedin' && c.status === 'connected') ||
+                          (parsedResume && (resumeSource === 'linkedin-pdf' || profileImport?.status === 'imported')),
+                      )
+                }
+                isConnecting={connectingPlatform === sourceChoice}
+                onConnect={() => handleConnectPlatform(sourceChoice)}
+                isImporting={importingProfile}
+                onImport={handleProfileUrlImport}
+                importUnavailable={importUnavailable}
+                onOpenAccount={onOpenAccount}
+                hasAccount={hasAccount}
+              />
 
-              <label>
-                <span>
-                  {sourceChoice === 'linkedin'
-                    ? 'Ссылка на профиль'
-                    : 'Ссылка на резюме hh.ru'}
-                </span>
-                <input
-                  value={sourceChoice === 'linkedin' ? linkedinUrl : hhUrl}
-                  onChange={(event) => {
-                    if (sourceChoice === 'linkedin') setLinkedinUrl(event.target.value);
-                    else setHhUrl(event.target.value);
-                    setProfileImport(undefined);
-                  }}
-                  placeholder={
-                    sourceChoice === 'linkedin'
-                      ? 'https://www.linkedin.com/in/...'
-                      : 'https://hh.ru/resume/...'
-                  }
-                  inputMode="url"
-                />
-              </label>
-              {hasAccount ? (
-                <ProfileImportAction
-                  result={profileImport}
+              {profileFactDrafts.length > 0 ? (
+                <ProfileFactReview
                   drafts={profileFactDrafts}
-                  busy={importingProfile}
-                  onImport={handleProfileUrlImport}
                   onDraftChange={setProfileFactDrafts}
                   onError={setError}
-                  platform={sourceChoice}
-                  connection={connections?.find((c) => c.platform === sourceChoice)}
-                  connecting={connectingPlatform === sourceChoice}
-                  onConnect={() => handleConnectPlatform(sourceChoice)}
                 />
-              ) : (
-                <AccountRequiredImport
-                  platform={sourceChoice}
-                  onOpenAccount={onOpenAccount}
-                  onChooseSource={chooseSource}
-                />
-              )}
+              ) : null}
             </div>
           ) : null}
 
@@ -958,115 +940,98 @@ export function CareerIntake({
  * account there is nothing to import into. The wizard says that once and hands
  * over the same account panel the top bar opens, plus 1-click fallback options.
  */
-function AccountRequiredImport({
+function PlatformIntegrationCard({
   platform,
-  onOpenAccount,
-  onChooseSource,
-}: {
-  platform: ConnectionPlatform;
-  onOpenAccount?: () => void;
-  onChooseSource: (choice: SourceChoice) => void;
-}) {
-  return (
-    <div className="career-source-account-required career-field-wide">
-      <p className="career-inline-note">{accountRequiredNotice(platform)}</p>
-      {onOpenAccount ? (
-        <button
-          className="career-primary-button"
-          style={{
-            height: '42px',
-            minWidth: '160px',
-            padding: '0 20px',
-            borderRadius: '8px',
-          }}
-          type="button"
-          onClick={onOpenAccount}
-        >
-          Создать аккаунт
-        </button>
-      ) : null}
-      <div className="career-quick-fallbacks">
-        <button className="career-quiet-button" type="button" onClick={() => onChooseSource('pdf')}>
-          Загрузить PDF
-        </button>
-        <button className="career-quiet-button" type="button" onClick={() => onChooseSource('text')}>
-          Ввести опыт текстом
-        </button>
-        <button className="career-quiet-button" type="button" onClick={() => onChooseSource('none')}>
-          Пропустить файлы
-        </button>
-      </div>
-      <p className="career-account-note">
-        Уже есть аккаунт? Вход открывается в том же окне. Без аккаунта остаются
-        PDF, экспорт площадки, текст и разговор без документов.
-      </p>
-    </div>
-  );
-}
-
-function PlatformConnectionSection({
-  platform,
-  connection,
-  connecting,
+  url,
+  onUrlChange,
+  isConnected,
+  isConnecting,
   onConnect,
+  isImporting,
+  onImport,
+  importUnavailable,
+  onOpenAccount,
+  hasAccount,
 }: {
-  platform: ConnectionPlatform;
-  connection?: CandidateConnection;
-  connecting: boolean;
+  platform: 'linkedin' | 'hh';
+  url: string;
+  onUrlChange: (url: string) => void;
+  isConnected: boolean;
+  isConnecting: boolean;
   onConnect: () => void;
+  isImporting?: boolean;
+  onImport?: () => void;
+  importUnavailable?: boolean;
+  onOpenAccount?: () => void;
+  hasAccount: boolean;
 }) {
-  const platformLabel = PLATFORM_LABELS[platform];
-
-  if (connection?.status === 'connected') {
-    return (
-      <div className="career-connection-panel">
-        <div className="career-connection-headline">
-          <strong>{platformLabel}</strong>
-          <span className="is-connected">Подключено</span>
-        </div>
-        <p>
-          {platform === 'hh'
-            ? 'Доступ hh.ru подключен. Ваши резюме и опыт синхронизированы.'
-            : 'Доступ LinkedIn подключен. Ваш профиль синхронизирован.'}
-        </p>
-      </div>
-    );
-  }
-
-  if (connection?.available) {
-    return (
-      <div className="career-connection-panel">
-        <p>
-          {platform === 'hh'
-            ? 'Подключение hh.ru позволяет импортировать данные вашего резюме напрямую из аккаунта.'
-            : 'Подключение LinkedIn позволяет перенести полную карьерную историю и навыки из аккаунта.'}
-        </p>
-        <button
-          className="career-primary-button"
-          style={{
-            height: '42px',
-            minWidth: '160px',
-            padding: '0 20px',
-            borderRadius: '8px',
-          }}
-          type="button"
-          disabled={connecting}
-          onClick={onConnect}
-        >
-          {connecting ? 'Готовим вход…' : `Войти через браузерную сессию в ${platformLabel}`}
-        </button>
-        <small>
-          Вы подтверждаете доступ на стороне {platformLabel}. Ничего не читается без вашего согласия.
-        </small>
-      </div>
-    );
-  }
+  const isHh = platform === 'hh';
+  const label = isHh ? 'Ссылка на резюме hh.ru' : 'Ссылка на профиль LinkedIn';
+  const placeholder = isHh ? 'https://hh.ru/resume/...' : 'https://www.linkedin.com/in/...';
+  const disclaimer = isHh
+    ? '«Подключить» открывает защищённую браузерную сессию для прямого анализа вашего резюме на hh.ru.'
+    : '«Импортировать» — открытые данные публичного профиля. «Подключить» — защищённый доступ ко всем данным для глубокого анализа.';
 
   return (
-    <div className="career-connection-panel">
-      <p>
-        Для импорта профиля {platformLabel} укажите ссылку на профиль ниже или войдите через браузерную сессию.
-      </p>
+    <div className="career-source-card">
+      <div className="career-source-row">
+        <label className="career-source-url-label">
+          <span>{label}</span>
+          <input
+            value={url}
+            onChange={(e) => onUrlChange(e.target.value)}
+            placeholder={placeholder}
+            inputMode="url"
+          />
+        </label>
+        <div className="career-source-actions">
+          {isConnected ? (
+            <span className="career-source-connected-badge">
+              <CheckCircle size={20} weight="fill" /> Подключено
+            </span>
+          ) : (
+            <>
+              {!isHh && onImport ? (
+                <button
+                  className="career-secondary-button"
+                  type="button"
+                  disabled={isImporting || importUnavailable}
+                  onClick={onImport}
+                >
+                  {isImporting ? 'Импортируем…' : IMPORT_ACTION_LABEL}
+                </button>
+              ) : null}
+              {hasAccount ? (
+                <button
+                  className="career-primary-button"
+                  type="button"
+                  disabled={isConnecting}
+                  onClick={onConnect}
+                >
+                  {isConnecting ? 'Готовим сессию…' : 'Подключить'}
+                </button>
+              ) : (
+                <button
+                  className="career-primary-button"
+                  type="button"
+                  onClick={onOpenAccount}
+                >
+                  Подключить
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      <p className="career-source-disclaimer">{disclaimer}</p>
+      {!isHh && importUnavailable ? (
+        <div className="career-source-notice-warning" role="status">
+          <WarningCircle size={18} weight="fill" />
+          <span>
+            Публичный профиль не найден или закрыт настройками приватности. Воспользуйтесь кнопкой «Подключить» для входа через сессию.
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1162,104 +1127,6 @@ function ProfileFactReview({
           </div>
         </fieldset>
       ))}
-    </div>
-  );
-}
-
-function ProfileImportAction({
-  result,
-  drafts,
-  busy,
-  onImport,
-  onDraftChange,
-  onError,
-  platform,
-  connection,
-  connecting,
-  onConnect,
-}: {
-  result?: ProfileUrlImportResult;
-  drafts: ProfileFactDraft[];
-  busy: boolean;
-  onImport: () => void;
-  onDraftChange: (drafts: ProfileFactDraft[]) => void;
-  onError: (message: string | undefined) => void;
-  platform: ConnectionPlatform;
-  connection?: CandidateConnection;
-  connecting: boolean;
-  onConnect: () => void;
-}) {
-  const platformLabel = PLATFORM_LABELS[platform];
-
-  return (
-    <div className="career-profile-import-result" aria-live="polite">
-      <button
-        className="career-primary-button"
-        style={{
-          height: '42px',
-          minWidth: '160px',
-          padding: '0 20px',
-          borderRadius: '8px',
-        }}
-        type="button"
-        disabled={busy}
-        onClick={onImport}
-      >
-        {busy ? 'Проверяем доступ…' : IMPORT_ACTION_LABEL}
-      </button>
-      {result?.status === 'imported' ? (
-        <>
-          <ProfileFactReview
-            drafts={drafts}
-            onDraftChange={onDraftChange}
-            onError={onError}
-          />
-          <div className="career-connection-panel">
-            <p style={{ margin: 0 }}>
-              <strong>Профиль {platformLabel} частично загружен.</strong> Для полного импорта всех данных (включая скрытые контакты и полную историю) рекомендуем войти в аккаунт через браузерную сессию.
-            </p>
-            {connection?.available ? (
-              <button
-                className="career-primary-button"
-                style={{
-                  height: '42px',
-                  minWidth: '160px',
-                  padding: '0 20px',
-                  borderRadius: '8px',
-                }}
-                type="button"
-                disabled={connecting}
-                onClick={onConnect}
-              >
-                {connecting ? 'Готовим вход…' : `Войти через браузерную сессию в ${platformLabel}`}
-              </button>
-            ) : null}
-          </div>
-        </>
-      ) : null}
-      {result?.status === 'unavailable' ? (
-        <div className="career-connection-panel">
-          <p style={{ margin: 0 }}>
-            <strong>Не удалось получить информацию о профиле.</strong> Вероятно, профиль скрыт настройками приватности или указана неверная ссылка. Для полного импорта всех данных рекомендуем войти в аккаунт через браузерную сессию или загрузить PDF-экспорт профиля.
-          </p>
-          {connection?.available ? (
-            <button
-              className="career-primary-button"
-              style={{
-                height: '42px',
-                minWidth: '160px',
-                padding: '0 20px',
-                borderRadius: '8px',
-              }}
-              type="button"
-              disabled={connecting}
-              onClick={onConnect}
-            >
-              {connecting ? 'Готовим вход…' : `Войти через браузерную сессию в ${platformLabel}`}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }
