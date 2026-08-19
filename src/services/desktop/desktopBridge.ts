@@ -174,3 +174,23 @@ export async function executeLocalAction(req: LocalActionRequest): Promise<Local
     environment_descriptor: 'web_session_direct',
   };
 }
+
+export interface DesktopNativeHttpRequest {
+  url: string;
+  method: string;
+  headers?: Record<string, string>;
+  body?: string;
+}
+
+export interface DesktopNativeHttpResponse {
+  status: number;
+  ok: boolean;
+  headers: Record<string, string>;
+  body: string;
+}
+
+export async function desktopNativeFetch(
+  req: DesktopNativeHttpRequest,
+): Promise<DesktopNativeHttpResponse | null> {
+  return invokeTauri<DesktopNativeHttpResponse>('desktop_native_fetch', { request: req });
+}

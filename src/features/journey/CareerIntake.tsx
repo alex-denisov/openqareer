@@ -7,30 +7,20 @@ import {
   CheckCircle,
   FilePdf,
   GlobeHemisphereWest,
-  LinkedinLogo,
   Question,
   Sparkle,
   Target,
-  WarningCircle,
 } from '@phosphor-icons/react';
 import {
   getConnections,
-  importProfileUrl,
   startConnection,
   type CandidateConnection,
-  type ProfileUrlImportResult,
 } from '../coach/coachApi';
 import { PLATFORM_LABELS, type ConnectionPlatform } from '../connections/connectionResult';
-import {
-  ingestProfileSnapshot,
-  reviewProfileFact,
-  type ProfileFact,
-} from '../workspace/profileIngestion';
 import { extractPdfResume } from '../workspace/pdfResume';
 import {
   parseResumeContent,
   parsedResumeToDraft,
-  parsedResumeToFactDrafts,
   type ParsedResume,
 } from '../workspace/resumeParser';
 import type { ResumeDraft } from '../resume/resumeTypes';
@@ -43,8 +33,11 @@ import {
   type WorkspaceMarket,
 } from '../workspace/workspaceStorage';
 
-type IntakeStep = 'intent' | 'source' | 'context';
-type SourceChoice = 'pdf' | 'linkedin' | 'hh' | 'text' | 'none';
+export type IntakeStep = 'intent' | 'source' | 'context';
+export type SourceChoice = 'profile-import' | 'pdf' | 'text' | 'none';
+
+export const IMPORT_ACTION_LABEL = 'Импортировать';
+export const PRESS_IMPORT_FIRST_MESSAGE = `Сначала нажмите «${IMPORT_ACTION_LABEL}».`;
 
 interface CareerIntakeProps {
   onComplete: (input: WorkspaceInput) => void;
@@ -58,21 +51,10 @@ interface CareerIntakeProps {
    * returning candidate opening their cabinet (B141).
    */
   onStartedChange?: (started: boolean) => void;
-}
-
-/**
- * The wizard's own copy and its button must never drift apart: the owner hit a
- * message pointing at «Импортировать по ссылке» while the button said something
- * else, so both now read the same constant.
- */
-export const IMPORT_ACTION_LABEL = 'Импортировать';
-
-export const PRESS_IMPORT_FIRST_MESSAGE = `Сначала нажмите «${IMPORT_ACTION_LABEL}».`;
-
-interface ProfileFactDraft {
-  fact: ProfileFact;
-  value: string;
-  decision: 'pending' | 'confirmed' | 'corrected' | 'rejected';
+  initialStarted?: boolean;
+  initialStep?: IntakeStep;
+  initialSourceChoice?: SourceChoice;
+  initialConnectorPlatform?: ConnectionPlatform;
 }
 
 const goalOptions: Array<{
@@ -117,13 +99,17 @@ const conditionOptions = [
 export function CareerIntake({
   onComplete,
   hasAccount = false,
-  onOpenAccount,
   onStartedChange,
+  initialStarted = false,
+  initialStep = 'intent',
+  initialSourceChoice = 'none',
+  initialConnectorPlatform = 'hh',
 }: CareerIntakeProps) {
-  const [started, setStarted] = useState(false);
-  const [step, setStep] = useState<IntakeStep>('intent');
+  const [started, setStarted] = useState(initialStarted);
+  const [step, setStep] = useState<IntakeStep>(initialStep);
   const [goal, setGoal] = useState<CareerGoal>();
-  const [sourceChoice, setSourceChoice] = useState<SourceChoice>('none');
+  const [sourceChoice, setSourceChoice] = useState<SourceChoice>(initialSourceChoice);
+  const [connectorPlatform, setConnectorPlatform] = useState<ConnectionPlatform>(initialConnectorPlatform);
   const [resumeText, setResumeText] = useState('');
   const [resumeSource, setResumeSource] = useState<ResumeSource>('text');
   const [resumeFile, setResumeFile] = useState<{
@@ -134,10 +120,6 @@ export function CareerIntake({
   const [hhUrl, setHhUrl] = useState('');
   const [connections, setConnections] = useState<CandidateConnection[]>();
   const [connectingPlatform, setConnectingPlatform] = useState<ConnectionPlatform>();
-  const [profileImport, setProfileImport] = useState<ProfileUrlImportResult>();
-  const [profileFactDrafts, setProfileFactDrafts] = useState<ProfileFactDraft[]>([]);
-  const [importingProfile, setImportingProfile] = useState(false);
-  const [importUnavailable, setImportUnavailable] = useState(false);
   const [currentSituation, setCurrentSituation] = useState('');
   const [targetDirection, setTargetDirection] = useState('');
   const [market, setMarket] = useState<WorkspaceMarket>('ru');
@@ -154,9 +136,7 @@ export function CareerIntake({
    * On a phone the wizard's action bar is sticky, so a refusal rendered above
    * it is painted over: the candidate presses «Продолжить», nothing appears to
    * happen, and the sentence saying why is under the bar. The refusal is
-   * brought to the candidate instead. `scroll-margin-block-end` on the element
-   * is what keeps the bar out of the way; the scroll is instant, because this
-   * is a correction and not an animation.
+   * brought to the candidate instead.
    */
   useEffect(() => {
     if (!error) return;
@@ -182,40 +162,32 @@ export function CareerIntake({
   }, [hasAccount]);
 
   useEffect(() => {
-    if (sourceChoice !== 'linkedin' && sourceChoice !== 'hh') return;
-    const activeConnection = connections?.find((c) => c.platform === sourceChoice);
+    if (sourceChoice !== 'profile-import') return;
+    const activeConnection = connections?.find((c) => c.platform === connectorPlatform);
     if (
       activeConnection?.status === 'connected' &&
       activeConnection.profile.facts.length > 0 &&
-      profileFactDrafts.length === 0
+      !parsedResume
     ) {
-      const snapshot = ingestProfileSnapshot({
-        state: 'available',
-        source: {
-          sourceId: `${sourceChoice}-official`,
-          platform: sourceChoice,
-          accessPath: 'official_api',
-          capturedAt: activeConnection.profile.capturedAt,
-        },
-        snapshot: {
-          headline: activeConnection.profile.facts.find((fact) => fact.kind === 'headline')?.value,
-          summary: activeConnection.profile.facts.find((fact) => fact.kind === 'summary')?.value,
-          positions: [],
-          education: [],
-          skills: [],
-        },
-      });
-      if (snapshot.state === 'ready_for_confirmation') {
-        setProfileFactDrafts(
-          snapshot.facts.map((fact) => ({
-            fact,
-            value: fact.statement,
-            decision: 'confirmed',
-          })),
-        );
+      const headline = activeConnection.profile.facts.find((fact) => fact.kind === 'headline')?.value;
+      const summary = activeConnection.profile.facts.find((fact) => fact.kind === 'summary')?.value;
+      const allText = activeConnection.profile.facts.map((fact) => fact.value).join('\n');
+      const parsed = parseResumeContent(allText);
+      if (headline && !parsed.targetRole) {
+        parsed.targetRole = headline;
+      }
+      if (summary && !parsed.about) {
+        parsed.about = summary;
+      }
+      setParsedResume(parsed);
+      setParsedDraft(parsedResumeToDraft(parsed));
+      setResumeText(allText);
+      setResumeSource(connectorPlatform === 'hh' ? 'hh-pdf' : 'linkedin-pdf');
+      if (parsed.targetRole && !targetDirection) {
+        setTargetDirection(parsed.targetRole);
       }
     }
-  }, [sourceChoice, connections, profileFactDrafts.length]);
+  }, [sourceChoice, connectorPlatform, connections, parsedResume, targetDirection]);
 
   if (!started) {
     return (
@@ -272,7 +244,6 @@ export function CareerIntake({
       setParsedResume(parsed);
       const draft = parsedResumeToDraft(parsed);
       setParsedDraft(draft);
-      setProfileFactDrafts([]);
       setResumeText(result.text);
       setResumeSource('pdf');
       setResumeFile({ name: result.fileName, pages: result.pageCount });
@@ -306,103 +277,17 @@ export function CareerIntake({
     }
   }
 
-  async function handleProfileUrlImport() {
-    const url = sourceChoice === 'linkedin' ? linkedinUrl.trim() : hhUrl.trim();
-    if (!url) {
-      setError('Вставьте ссылку на профиль или резюме.');
-      return;
-    }
-    setImportingProfile(true);
-    setError(undefined);
-    setProfileImport(undefined);
-    setImportUnavailable(false);
-    setProfileFactDrafts([]);
-    try {
-      const result = await importProfileUrl(url);
-      setProfileImport(result);
-      if (result.status === 'imported') {
-        setImportUnavailable(false);
-        if (result.parsedResume) {
-          const parsed = result.parsedResume;
-          setParsedResume(parsed);
-          const draft = parsedResumeToDraft(parsed);
-          setParsedDraft(draft);
-          const factDrafts = parsedResumeToFactDrafts(parsed, profileSourceId(result));
-          setProfileFactDrafts(factDrafts);
-          setResumeText(parsed.rawText || result.facts.map((f) => f.value).join('\n'));
-          setResumeSource(sourceChoice === 'hh' ? 'hh-pdf' : 'linkedin-pdf');
-          if (parsed.targetRole && !targetDirection) {
-            setTargetDirection(parsed.targetRole);
-          }
-        } else {
-          const snapshot = ingestProfileSnapshot({
-            state: 'available',
-            source: {
-              sourceId: profileSourceId(result),
-              platform: result.platform,
-              accessPath: result.accessPath,
-              capturedAt: result.capturedAt,
-            },
-            snapshot: {
-              headline: result.facts.find((fact) => fact.kind === 'headline')?.value,
-              summary: result.facts.find((fact) => fact.kind === 'summary')?.value,
-              positions: [],
-              education: [],
-              skills: [],
-            },
-          });
-          if (snapshot.state === 'ready_for_confirmation') {
-            setProfileFactDrafts(
-              snapshot.facts.map((fact) => {
-                const source = result.facts.find(
-                  (item) => item.kind === fact.kind && item.value === fact.statement,
-                );
-                const factWithSourceLocator = {
-                  ...fact,
-                  provenance: {
-                    ...fact.provenance,
-                    locator: source?.sourceLocator ?? fact.provenance.locator,
-                  },
-                };
-                return {
-                  fact: factWithSourceLocator,
-                  value: factWithSourceLocator.statement,
-                  decision: 'pending' as const,
-                };
-              }),
-            );
-          }
-          const parsed = parseResumeContent(result.facts.map((f) => f.value).join('\n') || url);
-          setParsedResume(parsed);
-          setResumeText(result.facts.map((f) => f.value).join('\n'));
-        }
-      } else {
-        setImportUnavailable(true);
-      }
-    } catch (reason) {
-      setImportUnavailable(true);
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : 'Не удалось проверить ссылку. Можно войти через браузерную сессию или загрузить PDF.',
-      );
-    } finally {
-      setImportingProfile(false);
-    }
-  }
-
   function chooseSource(nextSource: SourceChoice) {
     if (nextSource === sourceChoice) return;
     setSourceChoice(nextSource);
     setError(undefined);
-    setProfileImport(undefined);
-    setImportUnavailable(false);
-    setProfileFactDrafts([]);
     setResumeText('');
     setResumeSource('text');
     if (nextSource !== 'pdf') setResumeFile(undefined);
-    if (nextSource !== 'linkedin') setLinkedinUrl('');
-    if (nextSource !== 'hh') setHhUrl('');
+    if (nextSource !== 'profile-import') {
+      setLinkedinUrl('');
+      setHhUrl('');
+    }
   }
 
   function moveFromIntent() {
@@ -415,24 +300,20 @@ export function CareerIntake({
   }
 
   function moveFromSource() {
-    if (sourceChoice === 'linkedin' || sourceChoice === 'hh') {
-      const platformLabel = PLATFORM_LABELS[sourceChoice];
-      if (profileFactDrafts.some((draft) => draft.decision === 'pending')) {
-        setError('Проверьте каждый найденный факт: подтвердите, исправьте или исключите.');
-        return;
-      }
-      const reviewedFacts = acceptedProfileFacts(profileFactDrafts);
-      if (reviewedFacts.length > 0) {
-        setResumeText(reviewedFacts.map((fact) => fact.statement).join('\n'));
-        setResumeSource(sourceChoice === 'hh' ? 'hh-pdf' : 'linkedin-pdf');
-      } else {
-        const activeConnection = connections?.find((c) => c.platform === sourceChoice);
-        if (activeConnection?.status !== 'connected' && !parsedResume && !resumeText.trim()) {
+    if (sourceChoice === 'profile-import') {
+      const platformLabel = PLATFORM_LABELS[connectorPlatform];
+      const activeConnection = connections?.find((c) => c.platform === connectorPlatform);
+      if (activeConnection?.status !== 'connected' && !parsedResume && !resumeText.trim()) {
+        const enteredUrl = connectorPlatform === 'hh' ? hhUrl.trim() : linkedinUrl.trim();
+        if (!enteredUrl) {
           setError(
-            `Подключите ${platformLabel}, импортируйте резюме по ссылке или выберите другой способ: PDF, текст либо «Без документов».`,
+            `Подключите ${platformLabel} или выберите другой способ: PDF, текст либо «Без документов».`,
           );
           return;
         }
+      }
+      if (parsedResume) {
+        setResumeSource(connectorPlatform === 'hh' ? 'hh-pdf' : 'linkedin-pdf');
       }
     }
     if (sourceChoice === 'text' && resumeText.trim().length > 0 && resumeText.trim().length < 80) {
@@ -450,7 +331,13 @@ export function CareerIntake({
       careerGoal: goal,
       resumeText: sourceChoice === 'none' ? '' : resumeText,
       resumeSource:
-        sourceChoice === 'pdf' && resumeFile ? resumeSource : 'text',
+        sourceChoice === 'pdf' && resumeFile
+          ? resumeSource
+          : sourceChoice === 'profile-import'
+            ? connectorPlatform === 'hh'
+              ? 'hh-pdf'
+              : 'linkedin-pdf'
+            : 'text',
       resumeFileName: sourceChoice === 'pdf' ? resumeFile?.name : undefined,
       resumePageCount: sourceChoice === 'pdf' ? resumeFile?.pages : undefined,
       targetDirection,
@@ -461,11 +348,12 @@ export function CareerIntake({
         .join('. '),
       urgency,
       linkedinUrl:
-        sourceChoice === 'linkedin' ? linkedinUrl.trim() || undefined : undefined,
-      hhUrl: sourceChoice === 'hh' ? hhUrl.trim() || undefined : undefined,
-      profileFacts:
-        profileFactDrafts.length > 0
-          ? acceptedProfileFacts(profileFactDrafts)
+        sourceChoice === 'profile-import' && connectorPlatform === 'linkedin'
+          ? linkedinUrl.trim() || undefined
+          : undefined,
+      hhUrl:
+        sourceChoice === 'profile-import' && connectorPlatform === 'hh'
+          ? hhUrl.trim() || undefined
           : undefined,
       resumeDraft: parsedDraft,
       parsedResume,
@@ -563,16 +451,10 @@ export function CareerIntake({
         <div className="career-source-step">
           <div className="career-source-choice" role="group" aria-label="Источник опыта">
             <SourceButton
-              icon={LinkedinLogo}
-              label="LinkedIn"
-              selected={sourceChoice === 'linkedin'}
-              onClick={() => chooseSource('linkedin')}
-            />
-            <SourceButton
-              icon={Briefcase}
-              label="hh.ru"
-              selected={sourceChoice === 'hh'}
-              onClick={() => chooseSource('hh')}
+              icon={GlobeHemisphereWest}
+              label="Импорт профиля"
+              selected={sourceChoice === 'profile-import'}
+              onClick={() => chooseSource('profile-import')}
             />
             <SourceButton
               icon={FilePdf}
@@ -688,8 +570,29 @@ export function CareerIntake({
             </div>
           ) : null}
 
-          {sourceChoice === 'linkedin' || sourceChoice === 'hh' ? (
+          {sourceChoice === 'profile-import' ? (
             <div className="career-source-fields">
+              <div className="career-source-connector-select-group">
+                <label htmlFor="connector-platform-select" className="career-source-select-label">
+                  Площадка для импорта
+                </label>
+                <div className="career-connector-select-wrapper">
+                  <select
+                    id="connector-platform-select"
+                    className="career-connector-select"
+                    value={connectorPlatform}
+                    onChange={(e) => {
+                      const next = e.target.value as ConnectionPlatform;
+                      setConnectorPlatform(next);
+                      setError(undefined);
+                    }}
+                  >
+                    <option value="hh">hh.ru (HeadHunter)</option>
+                    <option value="linkedin">LinkedIn</option>
+                  </select>
+                </div>
+              </div>
+
               {parsedResume ? (
                 <div
                   className="career-source-parsed-badge"
@@ -719,7 +622,7 @@ export function CareerIntake({
                         marginBottom: '4px',
                       }}
                     >
-                      Резюме {sourceChoice === 'hh' ? 'hh.ru' : 'LinkedIn'} успешно распарсено в Resume Studio
+                      Данные профиля {PLATFORM_LABELS[connectorPlatform]} готовы для Resume Studio
                     </strong>
                     <span
                       style={{
@@ -739,41 +642,26 @@ export function CareerIntake({
               ) : null}
 
               <PlatformIntegrationCard
-                platform={sourceChoice}
-                url={sourceChoice === 'linkedin' ? linkedinUrl : hhUrl}
+                platform={connectorPlatform}
+                url={connectorPlatform === 'linkedin' ? linkedinUrl : hhUrl}
                 onUrlChange={(val) => {
-                  if (sourceChoice === 'linkedin') setLinkedinUrl(val);
+                  if (connectorPlatform === 'linkedin') setLinkedinUrl(val);
                   else setHhUrl(val);
-                  setProfileImport(undefined);
-                  setImportUnavailable(false);
                 }}
                 isConnected={
-                  sourceChoice === 'hh'
+                  connectorPlatform === 'hh'
                     ? Boolean(
                         connections?.some((c) => c.platform === 'hh' && c.status === 'connected') ||
                           (parsedResume && resumeSource === 'hh-pdf'),
                       )
                     : Boolean(
                         connections?.some((c) => c.platform === 'linkedin' && c.status === 'connected') ||
-                          (parsedResume && (resumeSource === 'linkedin-pdf' || profileImport?.status === 'imported')),
+                          (parsedResume && resumeSource === 'linkedin-pdf'),
                       )
                 }
-                isConnecting={connectingPlatform === sourceChoice}
-                onConnect={() => handleConnectPlatform(sourceChoice)}
-                isImporting={importingProfile}
-                onImport={handleProfileUrlImport}
-                importUnavailable={importUnavailable}
-                onOpenAccount={onOpenAccount}
-                hasAccount={hasAccount}
+                isConnecting={connectingPlatform === connectorPlatform}
+                onConnect={() => handleConnectPlatform(connectorPlatform)}
               />
-
-              {profileFactDrafts.length > 0 ? (
-                <ProfileFactReview
-                  drafts={profileFactDrafts}
-                  onDraftChange={setProfileFactDrafts}
-                  onError={setError}
-                />
-              ) : null}
             </div>
           ) : null}
 
@@ -935,11 +823,6 @@ export function CareerIntake({
   );
 }
 
-/**
- * Importing a profile writes into a candidate-scoped store, so without an
- * account there is nothing to import into. The wizard says that once and hands
- * over the same account panel the top bar opens, plus 1-click fallback options.
- */
 function PlatformIntegrationCard({
   platform,
   url,
@@ -947,11 +830,6 @@ function PlatformIntegrationCard({
   isConnected,
   isConnecting,
   onConnect,
-  isImporting,
-  onImport,
-  importUnavailable,
-  onOpenAccount,
-  hasAccount,
 }: {
   platform: 'linkedin' | 'hh';
   url: string;
@@ -959,18 +837,13 @@ function PlatformIntegrationCard({
   isConnected: boolean;
   isConnecting: boolean;
   onConnect: () => void;
-  isImporting?: boolean;
-  onImport?: () => void;
-  importUnavailable?: boolean;
-  onOpenAccount?: () => void;
-  hasAccount: boolean;
 }) {
   const isHh = platform === 'hh';
   const label = isHh ? 'Ссылка на резюме hh.ru' : 'Ссылка на профиль LinkedIn';
   const placeholder = isHh ? 'https://hh.ru/resume/...' : 'https://www.linkedin.com/in/...';
   const disclaimer = isHh
-    ? '«Подключить» открывает защищённую браузерную сессию для прямого анализа вашего резюме на hh.ru.'
-    : '«Импортировать» — открытые данные публичного профиля. «Подключить» — защищённый доступ ко всем данным для глубокого анализа.';
+    ? '«Подключить» открывает защищённую сессию для прямого анализа и синхронизации вашего резюме на hh.ru.'
+    : '«Подключить» открывает защищённый доступ для глубокого анализа и синхронизации профиля LinkedIn.';
 
   return (
     <div className="career-source-card">
@@ -986,162 +859,24 @@ function PlatformIntegrationCard({
         </label>
         <div className="career-source-actions">
           {isConnected ? (
-            <span className="career-source-connected-badge">
-              <CheckCircle size={20} weight="fill" /> Подключено
+            <span className="career-source-connected-badge" role="status">
+              <CheckCircle size={20} weight="fill" /> Подключено к {PLATFORM_LABELS[platform]}
             </span>
           ) : (
-            <>
-              {!isHh && hasAccount && onImport ? (
-                <button
-                  className="career-secondary-button"
-                  type="button"
-                  disabled={isImporting || importUnavailable}
-                  onClick={onImport}
-                >
-                  {isImporting ? 'Импортируем…' : IMPORT_ACTION_LABEL}
-                </button>
-              ) : null}
-              {hasAccount ? (
-                <button
-                  className="career-primary-button"
-                  type="button"
-                  disabled={isConnecting}
-                  onClick={onConnect}
-                >
-                  {isConnecting ? 'Готовим сессию…' : 'Подключить'}
-                </button>
-              ) : (
-                <button
-                  className="career-primary-button"
-                  type="button"
-                  onClick={onOpenAccount}
-                >
-                  Создать аккаунт
-                </button>
-              )}
-            </>
+            <button
+              className="career-primary-button"
+              type="button"
+              disabled={isConnecting}
+              onClick={onConnect}
+            >
+              {isConnecting ? 'Подключение…' : 'Подключить'}
+            </button>
           )}
         </div>
       </div>
       <p className="career-source-disclaimer">{disclaimer}</p>
-      {!isHh && importUnavailable ? (
-        <div className="career-source-notice-warning" role="status">
-          <WarningCircle size={18} weight="fill" />
-          <span>
-            Публичный профиль не найден или закрыт настройками приватности. Воспользуйтесь кнопкой «Подключить» для входа через сессию.
-          </span>
-        </div>
-      ) : null}
     </div>
   );
-}
-
-function ProfileFactReview({
-  drafts,
-  onDraftChange,
-  onError,
-}: {
-  drafts: ProfileFactDraft[];
-  onDraftChange: (drafts: ProfileFactDraft[]) => void;
-  onError: (message: string | undefined) => void;
-}) {
-  function decide(index: number, decision: 'confirmed' | 'rejected') {
-    const draft = drafts[index];
-    try {
-      const nextFact =
-        decision === 'rejected'
-          ? reviewProfileFact(draft.fact, { status: 'rejected' })
-          : reviewProfileFact(draft.fact, {
-              status:
-                draft.value.trim() === draft.fact.statement
-                  ? 'confirmed'
-                  : 'corrected',
-              statement: draft.value,
-            });
-      onDraftChange(
-        drafts.map((item, itemIndex) =>
-          itemIndex === index
-            ? { ...item, fact: nextFact, decision: nextFact.status as ProfileFactDraft['decision'] }
-            : item,
-        ),
-      );
-      onError(undefined);
-    } catch {
-      onError('Исправленный факт не может быть пустым.');
-    }
-  }
-
-  return (
-    <div className="career-profile-fact-review">
-      <p>
-        <strong>Найдено: {drafts.length}</strong> Решите по каждому факту, можно ли использовать его в карьерной картине.
-      </p>
-      {drafts.map((draft, index) => (
-        <fieldset key={draft.fact.id}>
-          <legend>
-            {draft.fact.kind === 'headline'
-              ? 'Заголовок профиля'
-              : draft.fact.kind === 'summary'
-                ? 'Описание профиля'
-                : 'Факт профиля'}
-          </legend>
-          <textarea
-            aria-label={`Факт ${index + 1}`}
-            value={draft.value}
-            onChange={(event) =>
-              onDraftChange(
-                drafts.map((item, itemIndex) =>
-                  itemIndex === index
-                    ? { ...item, value: event.target.value, decision: 'pending' }
-                    : item,
-                ),
-              )
-            }
-            rows={3}
-          />
-          <small>
-            Источник: {draft.fact.provenance.locator ?? 'официальный профиль'} ·{' '}
-            {draft.fact.provenance.capturedAt.slice(0, 10)}
-          </small>
-          <div>
-            <button
-              className="career-quiet-button"
-              type="button"
-              aria-pressed={draft.decision === 'confirmed' || draft.decision === 'corrected'}
-              onClick={() => decide(index, 'confirmed')}
-            >
-              {draft.decision === 'corrected'
-                ? 'Исправлено'
-                : draft.decision === 'confirmed'
-                  ? 'Подтверждено'
-                  : 'Подтвердить'}
-            </button>
-            <button
-              className="career-quiet-button"
-              type="button"
-              aria-pressed={draft.decision === 'rejected'}
-              onClick={() => decide(index, 'rejected')}
-            >
-              Не использовать
-            </button>
-          </div>
-        </fieldset>
-      ))}
-    </div>
-  );
-}
-
-function acceptedProfileFacts(drafts: ProfileFactDraft[]): ProfileFact[] {
-  return drafts.flatMap((draft) =>
-    draft.decision === 'confirmed' || draft.decision === 'corrected'
-      ? [draft.fact]
-      : [],
-  );
-}
-
-function profileSourceId(result: Extract<ProfileUrlImportResult, { status: 'imported' }>): string {
-  const timestamp = result.capturedAt.replace(/\D/gu, '').slice(0, 14);
-  return `${result.platform}-${result.accessPath}-${timestamp || 'unknown'}`;
 }
 
 function SourceButton({

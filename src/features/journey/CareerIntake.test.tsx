@@ -29,8 +29,23 @@ describe('CareerIntake', () => {
     expect(html).toContain('Без аккаунта прогресс хранится только в текущей вкладке.');
   });
 
-  it('exports IMPORT_ACTION_LABEL correctly', () => {
-    expect(IMPORT_ACTION_LABEL).toBe('Импортировать');
+  it('renders unified profile import option on source step with connector dropdown and single connect action', () => {
+    const html = renderToStaticMarkup(
+      <CareerIntake
+        onComplete={() => undefined}
+        initialStarted
+        initialStep="source"
+        initialSourceChoice="profile-import"
+      />,
+    );
+
+    expect(html).toContain('Импорт профиля');
+    expect(html).toContain('Площадка для импорта');
+    expect(html).toContain('hh.ru');
+    expect(html).toContain('LinkedIn');
+    expect(html).toContain('Подключить');
+    expect(html).not.toContain('Создать аккаунт');
+    expect(html).not.toContain('Импортировать');
   });
 });
 

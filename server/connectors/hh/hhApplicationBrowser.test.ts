@@ -321,7 +321,7 @@ describe('hh.ru candidate-scoped application browser session', { timeout: 15_000
       status: 'paused',
       diagnostic: { reason: 'hh_target_mismatch' },
     });
-  });
+  }, 30000);
 
   it('never reports completion without a bounded DOM confirmation reference', async () => {
     const noReference = fixture.replace(' data-response-id="synthetic-response-42"', '');

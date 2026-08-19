@@ -1,6 +1,6 @@
 export type UserRole = 'candidate' | 'admin';
 export type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
-import { apiFetch, readData, throwApiError } from './apiClient';
+import { apiFetch, readData, setStoredSessionToken, throwApiError } from './apiClient';
 export { CoachApiError } from './apiClient';
 import type {
   AccountSnapshot,
@@ -36,6 +36,7 @@ export interface AuthUser {
   role: UserRole;
   isTest: boolean;
   candidateId: string | null;
+  sessionToken?: string;
 }
 
 import type { ParsedResume } from '../workspace/resumeParser';
@@ -426,6 +427,7 @@ export async function register(input: {
 }
 
 export async function logout(): Promise<void> {
+  setStoredSessionToken(null);
   const response = await apiFetch('/api/v1/auth/logout', {
     method: 'POST',
   });

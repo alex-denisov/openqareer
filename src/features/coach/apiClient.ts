@@ -1,3 +1,8 @@
+import {
+  desktopNativeFetch,
+  isTauriEnvironment,
+} from '../../services/desktop/desktopBridge';
+
 /**
  * The shared browser transport for the candidate API.
  *
@@ -31,18 +36,97 @@ export class CoachApiError extends Error {
   }
 }
 
+export const SESSION_TOKEN_STORAGE_KEY = 'openqareer_session_token';
+
+export function getStoredSessionToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(SESSION_TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredSessionToken(token: string | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (token) {
+      window.localStorage.setItem(SESSION_TOKEN_STORAGE_KEY, token);
+    } else {
+      window.localStorage.removeItem(SESSION_TOKEN_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore localStorage access failures
+  }
+}
+
+export function getApiBaseUrl(): string {
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.replace(/\/+$/, '');
+  }
+  if (typeof window !== 'undefined') {
+    const origin = window.location.origin;
+    // Tauri (tauri://), custom asset protocols (asset://), file, or non-http protocols target the remote backend
+    if (
+      !origin ||
+      origin.startsWith('tauri://') ||
+      origin.startsWith('asset://') ||
+      origin.startsWith('file://') ||
+      origin === 'null' ||
+      !origin.startsWith('http')
+    ) {
+      return 'https://openqareer.com';
+    }
+  }
+  return '';
+}
+
 export async function apiFetch(
   input: string,
   init: RequestInit = {},
 ): Promise<Response> {
+  const baseUrl = getApiBaseUrl();
+  const fullUrl = input.startsWith('http') ? input : `${baseUrl}${input}`;
+  const token = getStoredSessionToken();
+
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...(init.headers as Record<string, string>),
+  };
+
+  if (token && !headers.Authorization && !headers.authorization) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  // If in desktop Tauri environment, perform native request via Rust to bypass browser CORS & preflights
+  if (isTauriEnvironment() && typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+    try {
+      const method = init.method ?? 'GET';
+      const body = typeof init.body === 'string' ? init.body : undefined;
+      const nativeRes = await desktopNativeFetch({
+        url: fullUrl,
+        method,
+        headers,
+        body,
+      });
+
+      if (nativeRes) {
+        return new Response(nativeRes.body, {
+          status: nativeRes.status,
+          statusText: nativeRes.ok ? 'OK' : 'Error',
+          headers: new Headers(nativeRes.headers),
+        });
+      }
+    } catch {
+      // Fallback to browser fetch below
+    }
+  }
+
   try {
-    return await fetch(input, {
+    return await fetch(fullUrl, {
       ...init,
       credentials: 'include',
-      headers: {
-        Accept: 'application/json',
-        ...init.headers,
-      },
+      headers,
     });
   } catch {
     throw new CoachApiError(
@@ -58,7 +142,14 @@ export async function readData<T>(response: Response): Promise<T> {
     await throwApiError(response);
   }
   const envelope = (await response.json()) as ApiEnvelope<T>;
-  return envelope.data;
+  const data = envelope.data;
+  if (data && typeof data === 'object' && 'sessionToken' in data) {
+    const token = (data as { sessionToken?: unknown }).sessionToken;
+    if (typeof token === 'string' && token) {
+      setStoredSessionToken(token);
+    }
+  }
+  return data;
 }
 
 export async function throwApiError(response: Response): Promise<never> {

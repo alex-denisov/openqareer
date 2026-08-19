@@ -67,7 +67,7 @@ describe('server configuration', () => {
     );
     expect(config).toMatchObject({
       secureCookies: true,
-      allowedOrigins: ['https://openqareer.com'],
+      allowedOrigins: expect.arrayContaining(['https://openqareer.com', 'tauri://localhost']),
       seedAccounts: [
         { username: 'admin.test', role: 'admin' },
         { username: 'candidate.test', role: 'candidate' },

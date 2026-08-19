@@ -66,6 +66,81 @@ async fn execute_local_action(request: LocalActionRequest) -> Result<LocalAction
     execute_candidate_action_safely(request).await
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NativeHttpRequest {
+    pub url: String,
+    pub method: String,
+    pub headers: Option<std::collections::HashMap<String, String>>,
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NativeHttpResponse {
+    pub status: u16,
+    pub ok: bool,
+    pub headers: std::collections::HashMap<String, String>,
+    pub body: String,
+}
+
+#[tauri::command]
+async fn desktop_native_fetch(request: NativeHttpRequest) -> Result<NativeHttpResponse, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let method = match request.method.to_uppercase().as_str() {
+        "GET" => reqwest::Method::GET,
+        "POST" => reqwest::Method::POST,
+        "PUT" => reqwest::Method::PUT,
+        "PATCH" => reqwest::Method::PATCH,
+        "DELETE" => reqwest::Method::DELETE,
+        "HEAD" => reqwest::Method::HEAD,
+        "OPTIONS" => reqwest::Method::OPTIONS,
+        _ => reqwest::Method::GET,
+    };
+
+    let mut req = client.request(method, &request.url);
+
+    req = req
+        .header("User-Agent", "OpenQareerDesktop/1.0.0 (macOS; Tauri)")
+        .header("Origin", "https://openqareer.com")
+        .header("Referer", "https://openqareer.com/");
+
+    if let Some(headers) = request.headers {
+        for (k, v) in headers {
+            if !k.is_empty() {
+                req = req.header(k, v);
+            }
+        }
+    }
+
+    if let Some(body) = request.body {
+        req = req.body(body);
+    }
+
+    let res = req.send().await.map_err(|e| format!("Network error: {}", e))?;
+
+    let status = res.status().as_u16();
+    let ok = res.status().is_success();
+
+    let mut response_headers = std::collections::HashMap::new();
+    for (name, val) in res.headers().iter() {
+        if let Ok(v_str) = val.to_str() {
+            response_headers.insert(name.as_str().to_lowercase(), v_str.to_string());
+        }
+    }
+
+    let body = res.text().await.unwrap_or_default();
+
+    Ok(NativeHttpResponse {
+        status,
+        ok,
+        headers: response_headers,
+        body,
+    })
+}
+
 #[tauri::command]
 fn get_desktop_environment_info() -> DesktopInfo {
     DesktopInfo {
@@ -91,6 +166,7 @@ fn main() {
             start_tunnel,
             stop_tunnel,
             execute_local_action,
+            desktop_native_fetch,
             get_desktop_environment_info,
         ])
         .run(tauri::generate_context!())

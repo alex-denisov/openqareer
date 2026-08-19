@@ -237,8 +237,21 @@ export function readServerConfig(
     logLevel: parsed.OPENQAREER_LOG_LEVEL,
     secureCookies,
     allowedOrigins: secureCookies
-      ? ['https://openqareer.com']
-      : ['http://127.0.0.1:3000', 'http://localhost:3000'],
+      ? [
+          'https://openqareer.com',
+          'tauri://localhost',
+          'http://tauri.localhost',
+          'https://tauri.localhost',
+        ]
+      : [
+          'http://127.0.0.1:3000',
+          'http://localhost:3000',
+          'http://127.0.0.1:1420',
+          'http://localhost:1420',
+          'tauri://localhost',
+          'http://tauri.localhost',
+          'https://tauri.localhost',
+        ],
     seedAccounts,
     providerCatalogStatus: getProviderCatalogStatus(environment),
     oauthProviders,

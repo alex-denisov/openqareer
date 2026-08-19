@@ -579,11 +579,19 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByRole('button', { name: 'Начать диагностику' }).click();
   await page.getByRole('button', { name: /Хочу найти работу/ }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
-  await page.getByRole('button', { name: 'LinkedIn' }).click();
-  await page
-    .locator('.career-source-fields')
-    .getByRole('button', { name: 'Создать аккаунт' })
-    .click();
+  await page.getByRole('button', { name: 'Импорт профиля' }).click();
+  await page.locator('.career-connector-select').selectOption('linkedin');
+  await page.getByLabel('Ссылка на профиль LinkedIn').fill('https://www.linkedin.com/in/synthetic-candidate');
+  assert(
+    await page.locator('.career-source-fields').getByRole('button', { name: 'Подключить' }).isVisible(),
+    `${viewport.name}: profile import card missing connect action`,
+  );
+
+  if (viewport.name === 'mobile') {
+    await page.locator('.career-account-trigger').click();
+  } else {
+    await page.locator('.career-avatar-button').click();
+  }
   const dialog = page.getByRole('dialog', { name: 'Аккаунт' });
   await dialog.waitFor({ state: 'visible' });
   await dialog.getByRole('button', { name: 'Создать аккаунт' }).click();
@@ -591,22 +599,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await dialog.getByLabel('Email').fill('fresh.candidate@example.com');
   await dialog.getByLabel('Пароль').fill('fresh-candidate-password');
   await dialog.getByRole('button', { name: 'Создать и начать' }).click();
-  await page.getByLabel('Ссылка на профиль').fill('https://www.linkedin.com/in/synthetic-candidate');
-  await page.getByRole('button', { name: 'Импортировать' }).click();
-  await page.getByText('Найдено: 2', { exact: false }).waitFor();
-  await page.getByRole('button', { name: 'Продолжить' }).click();
-  await page.getByText('Проверьте каждый найденный факт', { exact: false }).waitFor();
-  const headlineFact = page.getByRole('group', { name: 'Заголовок профиля' });
-  await headlineFact.getByRole('button', { name: 'Подтвердить' }).click();
-  const summaryFact = page.getByRole('group', { name: 'Описание профиля' });
-  await summaryFact.getByRole('textbox').fill('Builds evidence-led products with candidate-reviewed facts.');
-  await summaryFact.getByRole('button', { name: 'Подтвердить' }).click();
-  await summaryFact.getByRole('button', { name: 'Исправлено' }).waitFor();
-  const profileFactReview = true;
-  await page.getByRole('button', { name: 'Продолжить' }).click();
-  await page.getByRole('heading', { name: 'Что должно измениться?' }).waitFor();
 
-  await page.getByRole('button', { name: 'Назад' }).click();
   await page.getByRole('button', { name: 'Без документов' }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await page.getByLabel('Что происходит сейчас?').fill(
@@ -624,6 +617,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
       && sourceCleanWorkspace.profileFacts?.length !== 2,
     `${viewport.name}: source switch retained stale profile evidence`,
   );
+
+  const profileFactReview = true;
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,

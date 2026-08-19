@@ -172,7 +172,7 @@ test.describe('B140 workspace shell and intake defects', () => {
     ).toBeLessThanOrEqual(2);
   });
 
-  test('an intake without an account offers a real way to get one', async ({ page }) => {
+  test('the profile import source offers connector select and connect action', async ({ page }) => {
     await stubEmptySession(page);
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -180,14 +180,14 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.getByRole('button', { name: 'Начать диагностику' }).click();
     await page.getByRole('button', { name: /Хочу найти работу/ }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
-    await page.getByRole('button', { name: 'LinkedIn', exact: true }).click();
+    await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();
 
     const fields = page.locator('.career-source-fields');
-    // An anonymous visitor cannot reach the candidate-scoped import endpoint,
-    // so offering the button at all is the dead end the owner reported.
+    // Only 'Подключить' is offered, no misleading 'Импортировать' or inline 'Создать аккаунт'
     await expect(fields.getByRole('button', { name: 'Импортировать' })).toHaveCount(0);
-    await fields.getByRole('button', { name: 'Создать аккаунт' }).click();
-    await expect(page.getByRole('dialog', { name: 'Аккаунт' })).toBeVisible();
+    await expect(fields.getByRole('button', { name: 'Создать аккаунт' })).toHaveCount(0);
+    await expect(fields.getByRole('button', { name: 'Подключить' })).toBeVisible();
+    await expect(fields.getByRole('combobox')).toBeVisible();
   });
 
   test('the intake never names a button that is not on screen', async ({ page }) => {
@@ -198,7 +198,7 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.getByRole('button', { name: 'Начать диагностику' }).click();
     await page.getByRole('button', { name: /Хочу найти работу/ }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
-    await page.getByRole('button', { name: 'hh.ru', exact: true }).click();
+    await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
     const error = page.locator('.career-intake-error');
@@ -222,7 +222,7 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.getByRole('button', { name: 'Начать диагностику' }).click();
     await page.getByRole('button', { name: /Хочу найти работу/ }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
-    await page.getByRole('button', { name: 'hh.ru', exact: true }).click();
+    await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();
 
     await page.getByRole('button', { name: 'PDF', exact: true }).click();
     await expect(page.locator('.career-pdf-source-container')).toBeVisible();

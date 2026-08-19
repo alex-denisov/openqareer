@@ -45,20 +45,17 @@ async function waitForLiveApp(page: Page): Promise<void> {
   );
 }
 
-/** Walks the wizard to the source step and asks for the hh.ru import path. */
-async function reachHhSourceStep(page: Page): Promise<void> {
+/** Walks the wizard to the source step and asks for the Profile Import path. */
+async function reachProfileImportSourceStep(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Начать диагностику' }).click();
   await page.getByRole('button', { name: /Хочу найти работу/ }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await expect(page.getByRole('heading', { name: 'Что уже есть?' })).toBeVisible();
-  await page.getByRole('button', { name: 'hh.ru', exact: true }).click();
+  await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();
 }
 
-async function registerFromWizard(page: Page): Promise<void> {
-  await page
-    .locator('.career-source-fields')
-    .getByRole('button', { name: 'Создать аккаунт' })
-    .click();
+async function registerFromTopBar(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Открыть аккаунт' }).first().click();
   const dialog = page.getByRole('dialog', { name: 'Аккаунт' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Создать аккаунт' }).click();
@@ -76,8 +73,8 @@ test.describe('B141 diagnostic survives registration', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
-    await reachHhSourceStep(page);
-    await registerFromWizard(page);
+    await reachProfileImportSourceStep(page);
+    await registerFromTopBar(page);
 
     // The account panel closes itself after a successful registration, and the
     // candidate must be looking at the step they left — not at the cabinet.
@@ -86,24 +83,21 @@ test.describe('B141 diagnostic survives registration', () => {
     await expect(page.getByRole('heading', { name: 'Карьерный кабинет' })).toHaveCount(0);
   });
 
-  test('the account the wizard demanded unlocks the import it was needed for', async ({ page }) => {
+  test('the profile import card has connect action and connector selector', async ({ page }) => {
     await stubAuth(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
-    await reachHhSourceStep(page);
+    await reachProfileImportSourceStep(page);
     const fields = page.locator('.career-source-fields');
-    await expect(fields.getByRole('button', { name: 'Создать аккаунт' })).toBeVisible();
 
-    await registerFromWizard(page);
-
-    // hh.ru stays selected and the field the account exists for is now usable.
-    await expect(page.getByRole('button', { name: 'hh.ru', exact: true })).toHaveAttribute(
+    // Profile import stays selected and connector select & connect button are available
+    await expect(page.getByRole('button', { name: 'Импорт профиля', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
-    // hh.ru uses «Подключить» (browser session); «Импортировать» is LinkedIn-only.
     await expect(fields.getByRole('button', { name: 'Подключить' })).toBeVisible();
+    await expect(fields.getByRole('combobox')).toBeVisible();
     await expect(fields.getByRole('textbox')).toBeVisible();
   });
 
@@ -112,18 +106,14 @@ test.describe('B141 diagnostic survives registration', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
-    await reachHhSourceStep(page);
-    await registerFromWizard(page);
+    await reachProfileImportSourceStep(page);
     // The link is deliberately left empty: the wizard must refuse, and the
     // refusal must be readable. On mobile the action bar is sticky, so an
     // explanation rendered above it is off screen and «Продолжить» looks dead.
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
-    const explanation = page.getByRole('alert');
+    const explanation = page.locator('.career-intake-error');
     await expect(explanation).toBeVisible();
-    // `toBeInViewport` cannot see occlusion, and occlusion is the whole defect:
-    // the sticky bar paints over the sentence that explains the refusal. Only a
-    // hit test at the text's own centre proves the candidate can read it.
     const occluded = await explanation.evaluate((element) => {
       const box = element.getBoundingClientRect();
       const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);

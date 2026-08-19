@@ -1,11 +1,49 @@
 import React, { useState } from 'react';
 import { BrandMark } from '../brand/BrandMark';
 import { login, register, CoachApiError, type AuthUser } from '../coach/coachApi';
+import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 
 interface AuthPageProps {
   onNavigate: (path: string) => void;
   onSessionChange?: (session: AuthUser | null) => void;
   nextPath?: string;
+}
+
+export function generateSecurePassword(length = 16): string {
+  const lowercase = 'abcdefghijkmnopqrstuvwxyz';
+  const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const digits = '23456789';
+  const symbols = '!@#$%^&*()_+-=';
+  const all = lowercase + uppercase + digits + symbols;
+
+  const array = new Uint32Array(length);
+  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(array);
+  } else {
+    for (let i = 0; i < length; i++) {
+      array[i] = Math.floor(Math.random() * 1000000);
+    }
+  }
+
+  const result: string[] = [
+    lowercase[array[0] % lowercase.length],
+    uppercase[array[1] % uppercase.length],
+    digits[array[2] % digits.length],
+    symbols[array[3] % symbols.length],
+  ];
+
+  for (let i = 4; i < length; i++) {
+    result.push(all[array[i] % all.length]);
+  }
+
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = array[i] % (i + 1);
+    const temp = result[i];
+    result[i] = result[j];
+    result[j] = temp;
+  }
+
+  return result.join('');
 }
 
 function AuthCardHeader({
@@ -17,15 +55,17 @@ function AuthCardHeader({
   subtitle: string;
   onNavigate: (path: string) => void;
 }) {
+  const isDesktop = isTauriEnvironment();
   return (
     <div className="auth-card-header">
       <a
         href="/"
+        className="auth-card-logo"
         onClick={(e) => {
           e.preventDefault();
-          onNavigate('/');
+          if (!isDesktop) onNavigate('/');
         }}
-        aria-label="На главную"
+        aria-label="openqareer"
       >
         <BrandMark variant="lockup" size={32} />
       </a>
@@ -37,6 +77,7 @@ function AuthCardHeader({
 
 function AuthInputField({
   id,
+  name,
   label,
   type = 'text',
   autoComplete,
@@ -49,6 +90,7 @@ function AuthInputField({
   action,
 }: {
   id: string;
+  name?: string;
   label: string;
   type?: string;
   autoComplete?: string;
@@ -62,12 +104,13 @@ function AuthInputField({
 }) {
   return (
     <div className="auth-field">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="auth-field-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <label htmlFor={id}>{label}</label>
         {action}
       </div>
       <input
         id={id}
+        name={name || id}
         type={type}
         autoComplete={autoComplete}
         placeholder={placeholder}
@@ -121,6 +164,45 @@ function useLoginForm({
   return { identifier, setIdentifier, password, setPassword, busy, error, fieldErrors, handleSubmit };
 }
 
+function LoginFormFields({
+  form,
+  forgotBtn,
+}: {
+  form: ReturnType<typeof useLoginForm>;
+  forgotBtn: React.ReactNode;
+}) {
+  return (
+    <>
+      <AuthInputField
+        id="login-identifier"
+        name="username"
+        label="Email или логин"
+        autoComplete="username email"
+        placeholder="candidate@example.com"
+        value={form.identifier}
+        onChange={form.setIdentifier}
+        disabled={form.busy}
+        error={form.fieldErrors.username}
+        required
+      />
+      <AuthInputField
+        id="login-password"
+        name="password"
+        label="Пароль"
+        type="password"
+        autoComplete="current-password"
+        placeholder="••••••••"
+        value={form.password}
+        onChange={form.setPassword}
+        disabled={form.busy}
+        error={form.fieldErrors.password}
+        action={forgotBtn}
+        required
+      />
+    </>
+  );
+}
+
 function LoginForm({
   onNavigate,
   onSessionChange,
@@ -141,11 +223,12 @@ function LoginForm({
   return (
     <>
       {form.error ? (
-        <div className="career-cabinet-global-error" role="alert" style={{ marginBottom: '16px' }}>{form.error}</div>
+        <div className="career-cabinet-global-error" role="alert" style={{ marginBottom: '16px' }}>
+          {form.error}
+        </div>
       ) : null}
-      <form className="auth-form" onSubmit={form.handleSubmit}>
-        <AuthInputField id="login-identifier" label="Email или логин" autoComplete="username" placeholder="candidate@example.com" value={form.identifier} onChange={form.setIdentifier} disabled={form.busy} error={form.fieldErrors.username} required />
-        <AuthInputField id="login-password" label="Пароль" type="password" autoComplete="current-password" placeholder="••••••••" value={form.password} onChange={form.setPassword} disabled={form.busy} error={form.fieldErrors.password} action={forgotBtn} required />
+      <form className="auth-form" method="post" action="#" onSubmit={form.handleSubmit}>
+        <LoginFormFields form={form} forgotBtn={forgotBtn} />
         <button type="submit" className="site-btn is-primary auth-submit-btn" disabled={form.busy}>
           {form.busy ? 'Входим...' : 'Войти в кабинет'}
         </button>
@@ -155,6 +238,7 @@ function LoginForm({
 }
 
 export function LoginPage({ onNavigate, onSessionChange, nextPath = '/app' }: AuthPageProps) {
+  const isDesktop = isTauriEnvironment();
   return (
     <div className="auth-page-container">
       <div className="auth-card">
@@ -162,7 +246,9 @@ export function LoginPage({ onNavigate, onSessionChange, nextPath = '/app' }: Au
         <LoginForm onNavigate={onNavigate} onSessionChange={onSessionChange} nextPath={nextPath} />
         <div className="auth-links">
           <span>Ещё нет аккаунта? <button type="button" onClick={() => onNavigate('/signup')}>Зарегистрироваться</button></span>
-          <button type="button" onClick={() => onNavigate('/')}>← Вернуться на главную</button>
+          {!isDesktop ? (
+            <button type="button" onClick={() => onNavigate('/')}>← Вернуться на главную</button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -214,22 +300,115 @@ function useSignupForm({
   return { email, setEmail, displayName, setDisplayName, password, setPassword, busy, error, fieldErrors, handleSubmit };
 }
 
+function SignupPasswordSection({
+  form,
+  generateBtn,
+  pwdNotice,
+}: {
+  form: ReturnType<typeof useSignupForm>;
+  generateBtn: React.ReactNode;
+  pwdNotice: boolean;
+}) {
+  return (
+    <>
+      <AuthInputField
+        id="signup-password"
+        name="password"
+        label="Пароль (от 8 символов)"
+        type="password"
+        autoComplete="new-password"
+        placeholder="Минимум 8 символов"
+        value={form.password}
+        onChange={form.setPassword}
+        disabled={form.busy}
+        error={form.fieldErrors.password}
+        action={generateBtn}
+        required
+      />
+      {pwdNotice ? (
+        <p className="auth-field-notice" role="status" style={{ fontSize: '0.8rem', color: '#38d39f', margin: '-6px 0 0' }}>
+          ✓ Надёжный пароль сгенерирован и готов к сохранению
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+function SignupFields({
+  form,
+  generateBtn,
+  pwdNotice,
+}: {
+  form: ReturnType<typeof useSignupForm>;
+  generateBtn: React.ReactNode;
+  pwdNotice: boolean;
+}) {
+  return (
+    <>
+      <AuthInputField
+        id="signup-email"
+        name="email"
+        label="Email"
+        type="email"
+        autoComplete="email username"
+        placeholder="candidate@example.com"
+        value={form.email}
+        onChange={form.setEmail}
+        disabled={form.busy}
+        error={form.fieldErrors.email}
+        required
+      />
+      <AuthInputField
+        id="signup-name"
+        name="name"
+        label="Как к вам обращаться"
+        autoComplete="name"
+        placeholder="Алексей"
+        value={form.displayName}
+        onChange={form.setDisplayName}
+        disabled={form.busy}
+      />
+      <SignupPasswordSection form={form} generateBtn={generateBtn} pwdNotice={pwdNotice} />
+    </>
+  );
+}
+
 function SignupForm({
   onNavigate,
   onSessionChange,
   nextPath,
 }: AuthPageProps & { nextPath: string }) {
   const form = useSignupForm({ onNavigate, onSessionChange, nextPath });
+  const [pwdGeneratedNotice, setPwdGeneratedNotice] = useState(false);
+
+  const handleGeneratePassword = () => {
+    form.setPassword(generateSecurePassword(16));
+    setPwdGeneratedNotice(true);
+    setTimeout(() => setPwdGeneratedNotice(false), 4000);
+  };
+
+  const generateBtn = (
+    <button
+      type="button"
+      className="career-quiet-button auth-generate-pwd-btn"
+      style={{ fontSize: '0.78rem', padding: '0', color: 'var(--career-accent, #0a70e0)' }}
+      onClick={handleGeneratePassword}
+      title="Сгенерировать надёжный случайный пароль"
+      aria-label="Сгенерировать надёжный пароль"
+    >
+      ⚡ Сгенерировать пароль
+    </button>
+  );
 
   return (
     <>
       {form.error ? (
-        <div className="career-cabinet-global-error" role="alert" style={{ marginBottom: '16px' }}>{form.error}</div>
+        <div className="career-cabinet-global-error" role="alert" style={{ marginBottom: '16px' }}>
+          {form.error}
+        </div>
       ) : null}
-      <form className="auth-form" onSubmit={form.handleSubmit}>
-        <AuthInputField id="signup-email" label="Email" type="email" autoComplete="email" placeholder="candidate@example.com" value={form.email} onChange={form.setEmail} disabled={form.busy} error={form.fieldErrors.email} required />
-        <AuthInputField id="signup-name" label="Как к вам обращаться" autoComplete="name" placeholder="Алексей" value={form.displayName} onChange={form.setDisplayName} disabled={form.busy} />
-        <AuthInputField id="signup-password" label="Пароль (от 8 символов)" type="password" autoComplete="new-password" placeholder="Минимум 8 символов" value={form.password} onChange={form.setPassword} disabled={form.busy} error={form.fieldErrors.password} required />
+      <form className="auth-form" method="post" action="#" onSubmit={form.handleSubmit}>
+        <SignupFields form={form} generateBtn={generateBtn} pwdNotice={pwdGeneratedNotice} />
         <button type="submit" className="site-btn is-primary auth-submit-btn" disabled={form.busy}>
           {form.busy ? 'Создаём...' : 'Создать аккаунт'}
         </button>
@@ -239,6 +418,7 @@ function SignupForm({
 }
 
 export function SignupPage({ onNavigate, onSessionChange, nextPath = '/app' }: AuthPageProps) {
+  const isDesktop = isTauriEnvironment();
   return (
     <div className="auth-page-container">
       <div className="auth-card">
@@ -246,7 +426,9 @@ export function SignupPage({ onNavigate, onSessionChange, nextPath = '/app' }: A
         <SignupForm onNavigate={onNavigate} onSessionChange={onSessionChange} nextPath={nextPath} />
         <div className="auth-links">
           <span>Уже есть аккаунт? <button type="button" onClick={() => onNavigate('/login')}>Войти</button></span>
-          <button type="button" onClick={() => onNavigate('/')}>← Вернуться на главную</button>
+          {!isDesktop ? (
+            <button type="button" onClick={() => onNavigate('/')}>← Вернуться на главную</button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -262,10 +444,10 @@ function ResetForm({ onSent }: { onSent: () => void }) {
   };
 
   return (
-    <form className="auth-form" onSubmit={handleSubmit}>
+    <form className="auth-form" method="post" action="#" onSubmit={handleSubmit}>
       <div className="auth-field">
         <label htmlFor="reset-email">Email аккаунта</label>
-        <input id="reset-email" type="email" placeholder="candidate@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <input id="reset-email" name="email" type="email" autoComplete="email" placeholder="candidate@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
       </div>
       <button type="submit" className="site-btn is-primary auth-submit-btn">Отправить ссылку для сброса</button>
     </form>

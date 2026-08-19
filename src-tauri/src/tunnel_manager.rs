@@ -53,6 +53,7 @@ pub struct TunnelStatusReport {
     pub error_message: Option<String>,
 }
 
+#[allow(dead_code)]
 pub fn generate_singbox_split_config(config: &TunnelConfig) -> serde_json::Value {
     json!({
         "log": {

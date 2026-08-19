@@ -13,9 +13,13 @@ describe('AuthPages', () => {
     expect(html).toContain('Войти в кабинет');
     expect(html).toContain('Зарегистрироваться');
     expect(html).toContain('Забыли пароль?');
+    expect(html).toContain('name="username"');
+    expect(html).toContain('name="password"');
+    expect(html).toContain('autoComplete="username email"');
+    expect(html).toContain('autoComplete="current-password"');
   });
 
-  it('renders SignupPage with email, name, and password requirements', () => {
+  it('renders SignupPage with email, name, password generator and autocomplete attributes', () => {
     const handleNavigate = vi.fn();
     const html = renderToStaticMarkup(<SignupPage onNavigate={handleNavigate} />);
 
@@ -23,6 +27,11 @@ describe('AuthPages', () => {
     expect(html).toContain('Email');
     expect(html).toContain('Как к вам обращаться');
     expect(html).toContain('Пароль (от 8 символов)');
+    expect(html).toContain('Сгенерировать пароль');
+    expect(html).toContain('name="email"');
+    expect(html).toContain('name="name"');
+    expect(html).toContain('name="password"');
+    expect(html).toContain('autoComplete="new-password"');
     expect(html).toContain('Создать аккаунт');
     expect(html).toContain('Войти');
   });
@@ -33,6 +42,8 @@ describe('AuthPages', () => {
 
     expect(html).toContain('Восстановление доступа');
     expect(html).toContain('Email аккаунта');
+    expect(html).toContain('name="email"');
+    expect(html).toContain('autoComplete="email"');
     expect(html).toContain('Отправить ссылку для сброса');
   });
 });

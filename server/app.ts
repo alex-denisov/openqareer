@@ -314,6 +314,22 @@ export async function buildApp({
     keyGenerator: (request) => request.ip,
   });
 
+  app.addHook('onRequest', async (request, reply) => {
+    const origin = request.headers.origin;
+    if (origin && config.allowedOrigins.includes(origin)) {
+      reply.header('Access-Control-Allow-Origin', origin);
+      reply.header('Access-Control-Allow-Credentials', 'true');
+      reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      reply.header(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization, Accept, X-Requested-With',
+      );
+    }
+    if (request.method === 'OPTIONS') {
+      return reply.code(204).send();
+    }
+  });
+
   app.addHook('onSend', async (request, reply) => {
     if (request.url.startsWith('/api/')) {
       reply.header('Cache-Control', 'no-store');
@@ -658,7 +674,10 @@ export async function buildApp({
         );
         setSessionCookie(reply, authenticated.sessionToken, config.secureCookies);
         return reply.code(201).send({
-          data: publicPrincipal(authenticated.principal),
+          data: {
+            ...publicPrincipal(authenticated.principal),
+            sessionToken: authenticated.sessionToken,
+          },
           meta: { requestId: request.id },
         });
       } catch (error) {
@@ -712,7 +731,10 @@ export async function buildApp({
         config.secureCookies,
       );
       return {
-        data: publicPrincipal(authenticated.principal),
+        data: {
+          ...publicPrincipal(authenticated.principal),
+          sessionToken: authenticated.sessionToken,
+        },
         meta: { requestId: request.id },
       };
     },
@@ -733,8 +755,7 @@ export async function buildApp({
   });
 
   app.get('/api/v1/account', async (request, reply) => {
-    const sessionToken =
-      request.cookies[sessionCookieName(config.secureCookies)] ?? '';
+    const sessionToken = extractSessionToken(request, config);
     const account = authService.getAccount?.(sessionToken) ?? null;
     if (!account) {
       return sendError(
@@ -754,8 +775,7 @@ export async function buildApp({
 
   app.patch('/api/v1/account/profile', async (request, reply) => {
     if (!hasAllowedOrigin(request, config)) return csrfError(request, reply);
-    const sessionToken =
-      request.cookies[sessionCookieName(config.secureCookies)] ?? '';
+    const sessionToken = extractSessionToken(request, config);
     const body = accountProfileSchema.parse(request.body);
     try {
       const account = authService.updateAccount?.(sessionToken, body) ?? null;
@@ -790,8 +810,7 @@ export async function buildApp({
 
   app.post('/api/v1/account/password', async (request, reply) => {
     if (!hasAllowedOrigin(request, config)) return csrfError(request, reply);
-    const sessionToken =
-      request.cookies[sessionCookieName(config.secureCookies)] ?? '';
+    const sessionToken = extractSessionToken(request, config);
     const body = passwordChangeSchema.parse(request.body);
     try {
       const authenticated =
@@ -862,8 +881,7 @@ export async function buildApp({
 
   app.delete('/api/v1/account/sessions', async (request, reply) => {
     if (!hasAllowedOrigin(request, config)) return csrfError(request, reply);
-    const sessionToken =
-      request.cookies[sessionCookieName(config.secureCookies)] ?? '';
+    const sessionToken = extractSessionToken(request, config);
     const revoked = authService.revokeOtherSessions?.(sessionToken) ?? null;
     if (revoked === null) {
       return sendError(
@@ -901,7 +919,10 @@ export async function buildApp({
           config.secureCookies,
         );
         return {
-          data: publicPrincipal(authenticated.principal),
+          data: {
+            ...publicPrincipal(authenticated.principal),
+            sessionToken: authenticated.sessionToken,
+          },
           meta: { requestId: request.id },
         };
       } catch (error) {
@@ -957,7 +978,7 @@ export async function buildApp({
     if (!hasAllowedOrigin(request, config)) {
       return csrfError(request, reply);
     }
-    const sessionToken = request.cookies[sessionCookieName(config.secureCookies)];
+    const sessionToken = extractSessionToken(request, config);
     if (sessionToken) {
       authService.logout(sessionToken);
     }
@@ -2579,13 +2600,26 @@ function entryDocumentFor(url: string, staticRoot: string): string {
   return 'index.html';
 }
 
+function extractSessionToken(
+  request: FastifyRequest,
+  config: ServerConfig,
+): string {
+  const authorization = request.headers.authorization;
+  if (authorization?.startsWith('Bearer ')) {
+    const bearer = authorization.slice('Bearer '.length).trim();
+    if (bearer && !bearer.startsWith('oqc_')) {
+      return bearer;
+    }
+  }
+  return request.cookies[sessionCookieName(config.secureCookies)] ?? '';
+}
+
 function authenticateSession(
   request: FastifyRequest,
   authService: SessionAuth,
   config: ServerConfig,
 ): AuthPrincipal | null {
-  const sessionToken =
-    request.cookies[sessionCookieName(config.secureCookies)] ?? '';
+  const sessionToken = extractSessionToken(request, config);
   return authService.authenticate(sessionToken);
 }
 
@@ -2604,10 +2638,15 @@ function hasAllowedOrigin(
   request: FastifyRequest,
   config: ServerConfig,
 ): boolean {
-  return (
-    typeof request.headers.origin === 'string' &&
-    config.allowedOrigins.includes(request.headers.origin)
-  );
+  const origin = request.headers.origin;
+  if (!origin) {
+    // If request carries Bearer authorization, allow desktop/native companion client
+    if (request.headers.authorization?.startsWith('Bearer ')) {
+      return true;
+    }
+    return false;
+  }
+  return config.allowedOrigins.includes(origin);
 }
 
 function hasSafeMutationOrigin(
@@ -2615,7 +2654,7 @@ function hasSafeMutationOrigin(
   config: ServerConfig,
 ): boolean {
   const authorization = request.headers.authorization;
-  if (authorization?.startsWith('Bearer oqc_')) {
+  if (authorization?.startsWith('Bearer ')) {
     return true;
   }
   return hasAllowedOrigin(request, config);

@@ -939,6 +939,45 @@
   margin: 16px auto 0;
 }
 
+.career-source-connector-select-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.career-source-select-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--career-text, #f0f3f6);
+}
+
+.career-connector-select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.career-connector-select {
+  width: 100%;
+  height: 44px;
+  padding: 0 16px;
+  background: var(--career-surface-elevated, oklch(24% 0.02 255));
+  border: 1px solid var(--career-line, oklch(93% 0.015 255 / 0.18));
+  border-radius: var(--career-radius-md, 10px);
+  color: var(--career-text, #f0f3f6);
+  font-size: 0.95rem;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  appearance: auto;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.career-connector-select:focus {
+  border-color: var(--career-accent, #0a70e0);
+  box-shadow: 0 0 0 3px rgba(10, 112, 224, 0.25);
+}
+
 .career-source-card {
   display: flex;
   flex-direction: column;
