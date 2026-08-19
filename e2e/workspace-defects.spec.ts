@@ -224,15 +224,13 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.getByRole('button', { name: 'Продолжить' }).click();
     await page.getByRole('button', { name: 'hh.ru', exact: true }).click();
 
-    await page.getByRole('button', { name: 'Загрузить PDF' }).click();
+    await page.getByRole('button', { name: 'PDF', exact: true }).click();
     await expect(page.locator('.career-pdf-source-container')).toBeVisible();
 
-    await page.getByRole('button', { name: 'LinkedIn', exact: true }).click();
-    await page.getByRole('button', { name: 'Ввести опыт текстом' }).click();
+    await page.getByRole('button', { name: 'Текстом', exact: true }).click();
     await expect(page.locator('.career-source-textarea')).toBeVisible();
 
-    await page.getByRole('button', { name: 'hh.ru', exact: true }).click();
-    await page.getByRole('button', { name: 'Пропустить файлы' }).click();
+    await page.getByRole('button', { name: 'Без документов', exact: true }).click();
     await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Что должно измениться?' })).toBeVisible();
   });

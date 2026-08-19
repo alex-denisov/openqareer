@@ -102,7 +102,8 @@ test.describe('B141 diagnostic survives registration', () => {
       'aria-pressed',
       'true',
     );
-    await expect(fields.getByRole('button', { name: 'Импортировать' })).toBeVisible();
+    // hh.ru uses «Подключить» (browser session); «Импортировать» is LinkedIn-only.
+    await expect(fields.getByRole('button', { name: 'Подключить' })).toBeVisible();
     await expect(fields.getByRole('textbox')).toBeVisible();
   });
 

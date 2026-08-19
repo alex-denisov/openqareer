@@ -991,7 +991,7 @@ function PlatformIntegrationCard({
             </span>
           ) : (
             <>
-              {!isHh && onImport ? (
+              {!isHh && hasAccount && onImport ? (
                 <button
                   className="career-secondary-button"
                   type="button"
@@ -1016,7 +1016,7 @@ function PlatformIntegrationCard({
                   type="button"
                   onClick={onOpenAccount}
                 >
-                  Подключить
+                  Создать аккаунт
                 </button>
               )}
             </>
