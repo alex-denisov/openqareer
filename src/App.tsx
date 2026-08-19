@@ -94,6 +94,18 @@ export default function App() {
   useEffect(() => {
     const result = readConnectionResult(window.location);
     if (!result) return;
+    if (window.opener && window.opener !== window) {
+      try {
+        window.opener.postMessage(
+          { type: 'openqareer_oauth_complete', result },
+          '*',
+        );
+        window.close();
+        return;
+      } catch {
+        // Fall back to in-window navigation
+      }
+    }
     setConnectionNotice(connectionResultMessage(result));
     // The callback lands on a dedicated route; the candidate continues in the
     // canonical shell, so the one-time result is removed from the address bar.

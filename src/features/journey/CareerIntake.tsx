@@ -17,7 +17,11 @@ import {
   startConnection,
   type CandidateConnection,
 } from '../coach/coachApi';
-import { PLATFORM_LABELS, type ConnectionPlatform } from '../connections/connectionResult';
+import {
+  PLATFORM_LABELS,
+  type ConnectionPlatform,
+} from '../connections/connectionResult';
+import { openPlatformAuthPopup } from '../connections/authPopup';
 import { extractPdfResume } from '../workspace/pdfResume';
 import {
   parseResumeContent,
@@ -265,30 +269,46 @@ export function CareerIntake({
   async function handleConnectPlatform(platform: ConnectionPlatform) {
     setConnectingPlatform(platform);
     setError(undefined);
-    const enteredUrl = platform === 'hh' ? hhUrl.trim() : linkedinUrl.trim();
+    const rawUrl = platform === 'hh' ? hhUrl.trim() : linkedinUrl.trim();
+    const enteredUrl =
+      rawUrl && !/^https?:\/\//i.test(rawUrl) ? `https://${rawUrl}` : rawUrl;
 
     if (platform === 'hh') {
       if (!enteredUrl) {
         setConnectingPlatform(undefined);
         setError(
-          'Вставьте ссылку на ваше резюме hh.ru (например, https://hh.ru/resume/...) либо загрузите PDF или введите опыт текстом.',
+          'Вставьте ссылку на ваше резюме hh.ru (например, hh.ru/resume/...) либо загрузите PDF или введите опыт текстом.',
         );
         return;
       }
       try {
         const result = await importProfileUrl(enteredUrl);
-        if (result.status === 'imported' && result.parsedResume) {
-          setParsedResume(result.parsedResume);
-          setParsedDraft(parsedResumeToDraft(result.parsedResume));
-          setResumeText(result.parsedResume.rawText);
-          setResumeSource('hh-pdf');
-          if (result.parsedResume.targetRole && !targetDirection) {
-            setTargetDirection(result.parsedResume.targetRole);
+        if (result.status === 'imported') {
+          if (result.parsedResume) {
+            setParsedResume(result.parsedResume);
+            setParsedDraft(parsedResumeToDraft(result.parsedResume));
+            setResumeText(result.parsedResume.rawText);
+            setResumeSource('hh-pdf');
+            if (result.parsedResume.targetRole && !targetDirection) {
+              setTargetDirection(result.parsedResume.targetRole);
+            }
+            setError(undefined);
+          } else {
+            setError(
+              'Не удалось прочитать структуру резюме. Загрузите PDF или введите опыт текстом.',
+            );
           }
-          setError(undefined);
+        } else if (result.reason === 'authwall') {
+          setError(
+            'hh.ru блокирует доступ через включённый VPN («VPN мешает работе сайта»). Выключите VPN для hh.ru либо загрузите резюме в формате PDF.',
+          );
+        } else if (result.reason === 'insufficient') {
+          setError(
+            'Не удалось извлечь данные резюме с hh.ru. Убедитесь, что резюме открыто для просмотра по ссылке, либо загрузите PDF.',
+          );
         } else {
           setError(
-            'Не удалось загрузить данные резюме с hh.ru. Проверьте ссылку (должна быть https://hh.ru/resume/...) либо загрузите PDF резюме.',
+            'Не удалось загрузить данные резюме с hh.ru. Проверьте ссылку (например, hh.ru/resume/...) либо загрузите PDF резюме.',
           );
         }
       } catch (reason) {
@@ -325,7 +345,16 @@ export function CareerIntake({
 
     try {
       const started = await startConnection(platform);
-      window.location.assign(started.authorizationUrl);
+      openPlatformAuthPopup(started.authorizationUrl, (authResult) => {
+        setConnectingPlatform(undefined);
+        if (authResult?.status === 'connected') {
+          void getConnections()
+            .then((loaded) => setConnections(loaded))
+            .catch(() => undefined);
+        } else if (authResult?.status === 'declined') {
+          setError('Подключение площадки отменено.');
+        }
+      });
     } catch (reason) {
       setConnectingPlatform(undefined);
       setError(
@@ -362,7 +391,9 @@ export function CareerIntake({
     if (sourceChoice === 'profile-import') {
       const platformLabel = PLATFORM_LABELS[connectorPlatform];
       const activeConnection = connections?.find((c) => c.platform === connectorPlatform);
-      const enteredUrl = connectorPlatform === 'hh' ? hhUrl.trim() : linkedinUrl.trim();
+      const rawUrl = connectorPlatform === 'hh' ? hhUrl.trim() : linkedinUrl.trim();
+      const enteredUrl =
+        rawUrl && !/^https?:\/\//i.test(rawUrl) ? `https://${rawUrl}` : rawUrl;
 
       if (activeConnection?.status !== 'connected' && !parsedResume && !resumeText.trim()) {
         if (!enteredUrl) {
@@ -373,14 +404,21 @@ export function CareerIntake({
         }
         try {
           const result = await importProfileUrl(enteredUrl);
-          if (result.status === 'imported' && result.parsedResume) {
-            setParsedResume(result.parsedResume);
-            setParsedDraft(parsedResumeToDraft(result.parsedResume));
-            setResumeText(result.parsedResume.rawText);
-            setResumeSource(connectorPlatform === 'hh' ? 'hh-pdf' : 'linkedin-pdf');
-            if (result.parsedResume.targetRole && !targetDirection) {
-              setTargetDirection(result.parsedResume.targetRole);
+          if (result.status === 'imported') {
+            if (result.parsedResume) {
+              setParsedResume(result.parsedResume);
+              setParsedDraft(parsedResumeToDraft(result.parsedResume));
+              setResumeText(result.parsedResume.rawText);
+              setResumeSource(connectorPlatform === 'hh' ? 'hh-pdf' : 'linkedin-pdf');
+              if (result.parsedResume.targetRole && !targetDirection) {
+                setTargetDirection(result.parsedResume.targetRole);
+              }
             }
+          } else if (result.reason === 'authwall') {
+            setError(
+              'hh.ru блокирует доступ через включённый VPN («VPN мешает работе сайта»). Выключите VPN для hh.ru либо загрузите резюме в формате PDF.',
+            );
+            return;
           } else {
             setError(
               `Не удалось загрузить данные ${platformLabel}. Проверьте ссылку либо загрузите PDF.`,

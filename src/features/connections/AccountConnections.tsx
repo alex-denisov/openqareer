@@ -7,6 +7,7 @@ import {
   type CandidateConnection,
 } from '../coach/coachApi';
 import { PLATFORM_LABELS, type ConnectionPlatform } from './connectionResult';
+import { openPlatformAuthPopup } from './authPopup';
 import {
   applyConnectionDisconnectResult,
   connectionDisconnectNotice,
@@ -33,8 +34,10 @@ export function AccountConnectionsManager() {
       .then((loaded) => {
         if (current) setConnections(loaded);
       })
-      .catch((error: unknown) => {
-        if (current) setNotice(connectionManagementError(error));
+      .catch((error) => {
+        if (!current) return;
+        setNotice(connectionManagementError(error));
+        setConnections([]);
       });
     return () => {
       current = false;
@@ -51,7 +54,15 @@ export function AccountConnectionsManager() {
     setNotice(undefined);
     try {
       const started = await startConnection(platform);
-      window.location.assign(started.authorizationUrl);
+      openPlatformAuthPopup(started.authorizationUrl, (authResult) => {
+        setBusyPlatform(undefined);
+        if (authResult?.status === 'connected') {
+          void getConnections().then((loaded) => setConnections(loaded)).catch(() => undefined);
+          setNotice(`${PLATFORM_LABELS[platform]} успешно подключён.`);
+        } else if (authResult?.status === 'declined') {
+          setNotice(`Подключение ${PLATFORM_LABELS[platform]} отменено.`);
+        }
+      });
     } catch (error) {
       setBusyPlatform(undefined);
       setNotice(connectionStartNotice(error, platform));

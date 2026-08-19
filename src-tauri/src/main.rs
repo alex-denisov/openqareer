@@ -84,8 +84,20 @@ pub struct NativeHttpResponse {
 
 #[tauri::command]
 async fn desktop_native_fetch(request: NativeHttpRequest) -> Result<NativeHttpResponse, String> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(20))
+    let mut builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20));
+
+    let is_linkedin = request.url.contains("linkedin.com")
+        || request.url.contains("licdn.com")
+        || request.url.contains("lnkd.in");
+
+    if is_linkedin {
+        if let Ok(proxy) = reqwest::Proxy::all("http://127.0.0.1:10886") {
+            builder = builder.proxy(proxy);
+        }
+    }
+
+    let client = builder
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 

@@ -2365,8 +2365,10 @@ const profileImportSchema = z.object({
   url: z
     .string()
     .trim()
-    .url()
     .max(2_048)
+    .transform((value) =>
+      !/^https?:\/\//i.test(value) ? `https://${value}` : value,
+    )
     .refine((value) => {
       try {
         parseProfileUrl(value);
