@@ -58,6 +58,7 @@ export default tseslint.config(
       'prototypes/**',
       'test-results/**',
       '.serena/**',
+      'src-tauri/target/**',
       'mcp-server/**',
       'scripts/auth_setup.js',
       'scripts/export_all_connections.js',

@@ -1,0 +1,25 @@
+[package]
+name = "openqareer-desktop"
+version = "1.0.0"
+description = "OpenQareer — Candidate-Owned Career OS Desktop Companion"
+authors = ["OpenQareer Team"]
+edition = "2021"
+default-run = "openqareer-desktop"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-process = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+tokio = { version = "1", features = ["full"] }
+thiserror = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tokio-test = "0.4"

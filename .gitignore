@@ -18,6 +18,8 @@ dist/
 .vite/
 coverage/
 *.tsbuildinfo
+src-tauri/target/
+src-tauri/gen/
 
 # Test and browser artifacts
 test-results/

@@ -24,6 +24,7 @@ import { buildCareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace, WorkspaceInput } from '../workspace/workspaceStorage';
 import { CareerTariffsView } from './CareerTariffsView';
 import { CareerAccountPanel } from './CareerAccountPanel';
+import { DesktopNetworkIndicator } from '../desktop/DesktopNetworkIndicator';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import {
   keepsIntakeAcrossIdentityChange,
@@ -281,6 +282,7 @@ export function CareerWorkspaceShell({
           <BrandMark variant="lockup" size={26} />
         </button>
         <div className="career-topbar-actions">
+          <DesktopNetworkIndicator />
           <button
             className="career-mobile-tariffs"
             type="button"
