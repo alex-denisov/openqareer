@@ -31,11 +31,12 @@ interface AppState {
 
 export default function App() {
   const [isDesktop] = useState(() => isTauriEnvironment());
+  const [isResolvingSession, setIsResolvingSession] = useState(true);
   const [currentPath, setCurrentPath] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
       if (isTauriEnvironment() && (path === '/' || path === '' || path === '/index.html')) {
-        return '/login';
+        return '/app';
       }
       return path;
     }
@@ -75,6 +76,8 @@ export default function App() {
         'Не удалось проверить аккаунт. Локальные карьерные данные скрыты до восстановления связи.',
       );
       setState({ invalidStorage: false });
+    } finally {
+      setIsResolvingSession(false);
     }
   }, [currentPath, isDesktop, navigate]);
 
@@ -255,6 +258,13 @@ export default function App() {
 
   if (isAuthPath(currentPath)) {
     if (isDesktop) {
+      if (isResolvingSession) {
+        return (
+          <AppErrorBoundary>
+            {renderWorkspace(true)}
+          </AppErrorBoundary>
+        );
+      }
       return (
         <AppErrorBoundary>
           <div className="desktop-app-container" style={{ position: 'relative', width: '100%', minHeight: '100vh' }}>
@@ -292,17 +302,17 @@ export default function App() {
   if (isAppPath(currentPath)) {
     return (
       <AppErrorBoundary>
-        {renderWorkspace()}
+        {renderWorkspace(isResolvingSession || state.session === undefined)}
       </AppErrorBoundary>
     );
   }
 
   // In desktop companion mode, landing page is never shown: show workspace if logged in or workspace with login gate
   if (isDesktop) {
-    if (state.session?.candidateId) {
+    if (isResolvingSession || state.session?.candidateId) {
       return (
         <AppErrorBoundary>
-          {renderWorkspace()}
+          {renderWorkspace(isResolvingSession || state.session === undefined)}
         </AppErrorBoundary>
       );
     }

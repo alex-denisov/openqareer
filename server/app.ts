@@ -89,6 +89,7 @@ import {
   parseProfileUrl,
   type ProfileUrlImportResult,
 } from './connectors/profileUrlImport';
+import { parseResumeContent } from '../src/features/workspace/resumeParser';
 import {
   CandidateOAuthService,
   OAuthConnectorError,
@@ -1140,6 +1141,27 @@ export async function buildApp({
       meta: { requestId: request.id },
     };
   });
+
+  app.post(
+    '/api/v1/candidate/parse-resume',
+    {
+      bodyLimit: 4 * 1_024 * 1_024,
+      config: { rateLimit: { max: 30, timeWindow: '15 minutes' } },
+    },
+    async (request) => {
+      const body = z
+        .object({
+          text: z.string().min(10).max(500_000),
+        })
+        .parse(request.body);
+
+      const parsed = parseResumeContent(body.text);
+      return {
+        data: parsed,
+        meta: { requestId: request.id },
+      };
+    },
+  );
 
   app.post(
     '/api/v1/candidate/documents',

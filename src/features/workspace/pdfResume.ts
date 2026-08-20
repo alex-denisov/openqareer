@@ -274,7 +274,7 @@ function assertFallbackImportable(
       inspection,
     );
   }
-  if (inspection.route === 'hybrid_text_ocr') {
+  if (inspection.route === 'hybrid_text_ocr' && text.length < 250) {
     throw new PdfResumeImportError(
       'hybrid_ocr_required',
       ocrRequiredMessage('mixed', inspection.pagesNeedingOcr),
@@ -297,9 +297,93 @@ function assertFallbackImportable(
   }
 }
 
+// eslint-disable-next-line max-lines-per-function
 export function normalizeExtractedPageText(
   items: Array<PdfTextItem | PdfMarkedContent>,
 ): string {
+  const textItems = items.filter(
+    (item): item is PdfTextItem =>
+      'str' in item && typeof item.str === 'string' && item.str.trim().length > 0,
+  );
+
+  if (textItems.length === 0) return '';
+
+  const hasTransforms = textItems.some(
+    (item) =>
+      Array.isArray(item.transform) &&
+      item.transform.length >= 6 &&
+      typeof item.transform[4] === 'number' &&
+      typeof item.transform[5] === 'number',
+  );
+
+  if (hasTransforms) {
+    const leftItems = textItems.filter(
+      (it) => ((it.transform?.[4] as number) ?? 0) < 200,
+    );
+    const rightItems = textItems.filter(
+      (it) => ((it.transform?.[4] as number) ?? 0) >= 200,
+    );
+
+    const isLinkedInSidebarPage =
+      leftItems.length >= 4 &&
+      rightItems.length >= 4 &&
+      leftItems.some((it) =>
+        /Contact|Top Skills|Languages|Certifications/i.test(it.str),
+      );
+
+    if (isLinkedInSidebarPage) {
+      leftItems.sort(
+        (a, b) =>
+          ((b.transform?.[5] as number) ?? 0) -
+          ((a.transform?.[5] as number) ?? 0),
+      );
+      rightItems.sort(
+        (a, b) =>
+          ((b.transform?.[5] as number) ?? 0) -
+          ((a.transform?.[5] as number) ?? 0),
+      );
+
+      const rightText = rightItems.map((it) => it.str.trim()).filter(Boolean).join('\n');
+      const leftText = leftItems.map((it) => it.str.trim()).filter(Boolean).join('\n');
+      return `${rightText}\n\n${leftText}`;
+    }
+
+    const lines: Array<{ y: number; items: PdfTextItem[] }> = [];
+    const sortedByY = [...textItems].sort(
+      (a, b) =>
+        ((b.transform?.[5] as number) ?? 0) -
+        ((a.transform?.[5] as number) ?? 0),
+    );
+
+    for (const item of sortedByY) {
+      const y = (item.transform?.[5] as number) ?? 0;
+      let matchedLine = lines.find((l) => Math.abs(l.y - y) <= 4);
+      if (!matchedLine) {
+        matchedLine = { y, items: [] };
+        lines.push(matchedLine);
+      }
+      matchedLine.items.push(item);
+    }
+
+    lines.sort((a, b) => b.y - a.y);
+
+    return lines
+      .map((line) => {
+        line.items.sort(
+          (a, b) =>
+            ((a.transform?.[4] as number) ?? 0) -
+            ((b.transform?.[4] as number) ?? 0),
+        );
+        return line.items
+          .map((it) => it.str.trim())
+          .filter(Boolean)
+          .join(' ');
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  }
+
   return items
     .flatMap((item) =>
       'str' in item ? [`${item.str}${item.hasEOL ? '\n' : ' '}`] : [],
@@ -344,10 +428,14 @@ function nonNegativeNumber(value: unknown): number {
 }
 
 async function loadDefaultPdfJs(): Promise<PdfJsAdapter> {
-  const { getDocument, GlobalWorkerOptions, OPS, version } = await import(
-    'pdfjs-dist'
-  );
-  GlobalWorkerOptions.workerSrc = workerSrc;
+  const pdfjs =
+    typeof window === 'undefined'
+      ? await import('pdfjs-dist/legacy/build/pdf.mjs')
+      : await import('pdfjs-dist');
+  const { getDocument, GlobalWorkerOptions, OPS, version } = pdfjs;
+  if (GlobalWorkerOptions && workerSrc) {
+    GlobalWorkerOptions.workerSrc = workerSrc;
+  }
   return {
     version,
     imageOperatorCodes: [

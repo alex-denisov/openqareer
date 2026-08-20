@@ -210,3 +210,62 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
     rawText,
   };
 }
+
+// eslint-disable-next-line max-lines-per-function
+export function parseHhResumesList(html: string): Array<{
+  id: string;
+  title: string;
+  url: string;
+  updatedLabel?: string;
+}> {
+  const resumes: Array<{
+    id: string;
+    title: string;
+    url: string;
+    updatedLabel?: string;
+  }> = [];
+
+  // Match /resume/id links with titles
+  const resumeLinkRegex =
+    /href=["'](\/resume\/([A-Za-z0-9_-]+))["'][^>]*data-qa=["'](?:resume-title|applicant-resume-title)["'][^>]*>([\s\S]*?)<\/a>/giu;
+  let match: RegExpExecArray | null;
+  while ((match = resumeLinkRegex.exec(html)) !== null) {
+    const rawUrl = match[1];
+    const resumeId = match[2];
+    const rawTitle = match[3]
+      .replace(/<[^>]+>/gu, ' ')
+      .replace(/\s+/gu, ' ')
+      .trim();
+    if (!resumes.some((r) => r.id === resumeId)) {
+      resumes.push({
+        id: resumeId,
+        title: rawTitle || 'Резюме hh.ru',
+        url: `https://hh.ru${rawUrl}`,
+        updatedLabel: 'Готово к импорту',
+      });
+    }
+  }
+
+  // General fallback for resume list items
+  if (resumes.length === 0) {
+    const fallbackRegex =
+      /href=["']https?:\/\/hh\.ru\/resume\/([A-Za-z0-9_-]+)["'][^>]*>([\s\S]*?)<\/a>/giu;
+    while ((match = fallbackRegex.exec(html)) !== null) {
+      const resumeId = match[1];
+      const rawTitle = match[2]
+        .replace(/<[^>]+>/gu, ' ')
+        .replace(/\s+/gu, ' ')
+        .trim();
+      if (rawTitle && !resumes.some((r) => r.id === resumeId)) {
+        resumes.push({
+          id: resumeId,
+          title: rawTitle,
+          url: `https://hh.ru/resume/${resumeId}`,
+          updatedLabel: 'Готово к импорту',
+        });
+      }
+    }
+  }
+
+  return resumes;
+}

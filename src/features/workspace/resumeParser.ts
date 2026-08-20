@@ -108,9 +108,7 @@ function parseDocumentSections(text: string): Map<string, string> {
       const tLow = trimmed.toLowerCase();
       return (
         tLow === hLow ||
-        tLow.startsWith(`${hLow}:`) ||
-        tLow.startsWith(`${hLow} —`) ||
-        tLow.startsWith(`${hLow} -`)
+        (tLow.startsWith(hLow) && /[\s:—–\d,(]/.test(tLow[hLow.length] || ''))
       );
     });
     if (matchedHeader) {
@@ -150,9 +148,12 @@ export function parseResumeContent(rawText: string): ParsedResume {
   const lines = cleanText.split('\n').map((line) => line.trim()).filter(Boolean);
   const sections = parseDocumentSections(cleanText);
 
+  const preamble = sections.get('__preamble__') ?? '';
+  const preambleLines = preamble.split('\n').map((l) => l.trim()).filter(Boolean);
+
   const contact = extractContacts(cleanText);
-  const fullName = extractFullName(lines, cleanText);
-  const targetRole = extractTargetRole(lines, cleanText, fullName);
+  const fullName = extractFullName(preambleLines.length > 0 ? preambleLines : lines, cleanText);
+  const targetRole = extractTargetRole(preambleLines.length > 0 ? preambleLines : lines, cleanText, fullName);
 
   const aboutRaw =
     sections.get('summary') ||
@@ -168,7 +169,7 @@ export function parseResumeContent(rawText: string): ParsedResume {
     sections.get('опыт работы') ||
     sections.get('work experience') ||
     sections.get('professional experience');
-  const experience = extractExperience(expRaw ?? cleanText);
+  const experience = extractExperience(expRaw ?? (sections.size <= 2 ? cleanText : ''));
 
   const skillsRaw = [
     sections.get('top skills'),
@@ -180,13 +181,13 @@ export function parseResumeContent(rawText: string): ParsedResume {
   ]
     .filter(Boolean)
     .join('\n');
-  const skills = extractSkills(skillsRaw || cleanText);
+  const skills = extractSkills(skillsRaw || (sections.size <= 2 ? cleanText : ''));
 
   const eduRaw =
     sections.get('education') ||
     sections.get('высшее образование') ||
     sections.get('образование');
-  const education = extractEducation(eduRaw ?? cleanText);
+  const education = extractEducation(eduRaw ?? (sections.size <= 2 ? cleanText : ''));
 
   const coursesRaw = [
     sections.get('certifications'),
@@ -194,11 +195,12 @@ export function parseResumeContent(rawText: string): ParsedResume {
     sections.get('электронные сертификаты'),
     sections.get('courses'),
     sections.get('курсы'),
+    sections.get('повышение квалификации, курсы'),
     sections.get('повышение квалификации'),
   ]
     .filter(Boolean)
     .join('\n');
-  const courses = extractCourses(coursesRaw || cleanText);
+  const courses = extractCourses(coursesRaw ?? '');
 
   const testsRaw =
     sections.get('tests') ||
@@ -207,19 +209,19 @@ export function parseResumeContent(rawText: string): ParsedResume {
     sections.get('тесты, экзамены') ||
     sections.get('тестирования') ||
     sections.get('assessments');
-  const tests = extractTests(testsRaw ?? cleanText);
+  const tests = extractTests(testsRaw ?? '');
 
   const recsRaw =
     sections.get('recommendations') ||
     sections.get('references') ||
     sections.get('рекомендации');
-  const recommendations = extractRecommendations(recsRaw ?? cleanText);
+  const recommendations = extractRecommendations(recsRaw ?? '');
 
   const langRaw =
     sections.get('languages') ||
     sections.get('знание языков') ||
     sections.get('языки');
-  const languages = extractLanguages(langRaw ?? cleanText);
+  const languages = extractLanguages(langRaw ?? '');
 
   const additional = extractAdditional(cleanText);
 
@@ -329,10 +331,18 @@ function extractFullName(lines: string[], text: string): string | undefined {
   ]);
 
   for (let i = 0; i < Math.min(lines.length, 30); i++) {
-    const line = lines[i];
+    const line = lines[i]?.trim();
     if (!line) continue;
     const lower = line.toLowerCase();
-    if (lower.includes('linkedin.com') || lower.includes('@') || lower.includes('http')) {
+    if (
+      lower.includes('linkedin.com') ||
+      lower.includes('@') ||
+      lower.includes('http') ||
+      lower.includes('+7') ||
+      lower.startsWith('+') ||
+      lower.includes('∙') ||
+      lower.includes('page ')
+    ) {
       continue;
     }
     const words = line.split(/\s+/u);
@@ -352,24 +362,36 @@ function extractFullName(lines: string[], text: string): string | undefined {
 }
 
 function extractTargetRole(lines: string[], text: string, fullName?: string): string | undefined {
-  const roleLabelMatch = text.match(/(?:Желаемая должность|Должность|Target role|Position|Title):\s*([^\n]+)/iu);
-  if (roleLabelMatch?.[1]) {
-    return roleLabelMatch[1].replace(/\s*·.*$/u, '').replace(/\s*\d+.*$/u, '').trim();
+  const roleLabelMatch = text.match(
+    /(?:Желаемая должность и зарплата|Желаемая должность|Должность|Target role|Position|Title):\s*([^\n]+)|(?:Желаемая должность и зарплата|Желаемая должность)\s*\n+([^\n]+)/iu,
+  );
+  if (roleLabelMatch?.[1] || roleLabelMatch?.[2]) {
+    const matched = (roleLabelMatch[1] || roleLabelMatch[2])
+      .replace(/\s*·.*$/u, '')
+      .replace(/\s*\d+.*$/u, '')
+      .trim();
+    if (matched.length > 2) return matched;
   }
 
-  // If fullName is known, the headline is almost always the line right after fullName
+  // If fullName is known, search the lines right after fullName
   if (fullName) {
     const nameIndex = lines.findIndex((l) => l.trim() === fullName.trim());
     if (nameIndex !== -1 && nameIndex + 1 < lines.length) {
-      const nextLine = lines[nameIndex + 1].trim();
-      const lower = nextLine.toLowerCase();
-      if (
-        !SECTION_DELIMITERS.some((d) => d.toLowerCase() === lower) &&
-        !lower.includes('linkedin.com') &&
-        !lower.includes('@') &&
-        nextLine.length < 150
-      ) {
-        return nextLine;
+      for (let k = nameIndex + 1; k < Math.min(lines.length, nameIndex + 4); k++) {
+        const nextLine = lines[k].trim();
+        const lower = nextLine.toLowerCase();
+        if (
+          !SECTION_DELIMITERS.some((d) => d.toLowerCase() === lower) &&
+          !lower.includes('linkedin.com') &&
+          !lower.includes('@') &&
+          !lower.includes('∙') &&
+          !lower.startsWith('+') &&
+          !/^(?:мужчина|женщина|man|woman)/iu.test(nextLine) &&
+          nextLine.length > 3 &&
+          nextLine.length < 150
+        ) {
+          return nextLine;
+        }
       }
     }
   }
@@ -377,17 +399,20 @@ function extractTargetRole(lines: string[], text: string, fullName?: string): st
   // Look for headline line right after name or before summary
   for (let i = 0; i < Math.min(lines.length, 25); i++) {
     const line = lines[i];
-    if (line.includes('|') && line.length < 120 && !line.includes('@')) {
+    if (line.includes('|') && line.length < 120 && !line.includes('@') && !line.includes('linkedin.com')) {
       return line.trim();
     }
-    if (/^(?:Руководитель|Директор|Lead|Head|VP|Chief|Senior|Middle|Product|Engineering|Software|Analyst|Manager|Specialist|Разработчик|Менеджер|Аналитик)/iu.test(line) && line.length < 100) {
+    if (
+      /^(?:Руководитель|Директор|Lead|Head|VP|Chief|Senior|Middle|Product|Engineering|Software|Analyst|Manager|Specialist|Разработчик|Менеджер|Аналитик)/iu.test(
+        line,
+      ) &&
+      line.length < 100
+    ) {
       return line;
     }
   }
   return undefined;
 }
-
-
 
 function extractAbout(text: string): string | undefined {
   const lookahead = sectionLookahead('О себе');
@@ -400,7 +425,8 @@ function extractAbout(text: string): string | undefined {
   return undefined;
 }
 
-const DATE_LINE_REGEX = /(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|[А-Яа-яЁё]+)\s+)?\d{4}\s*(?:—|-|to|–)\s*(?:по настоящее время|наст\. время|настоящее время|present|current|\d{4}|(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|[А-Яа-яЁё]+)\s+)?\d{4})/iu;
+const SINGLE_DATE_REGEX = /(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|[А-Яа-яЁё]+)\s+)?\d{4}\s*(?:—|-|to|–)\s*(?:по настоящее время|наст\. время|настоящее время|present|current|\d{4}|(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|[А-Яа-яЁё]+)\s+)?\d{4})/iu;
+const HH_START_DATE_REGEX = /^(?:(?:[А-Яа-яЁёA-Za-z]+)\s+)?(?:19\d\d|20\d\d)\s*(?:—|-|–)\s*(.+)$/u;
 
 function cleanPeriodDates(period: string): { start?: string; end?: string; current: boolean } {
   const cleaned = period.replace(/\s*\([^)]*\)/gu, '').replace(/\s*·.*$/gu, '').trim();
@@ -411,75 +437,159 @@ function cleanPeriodDates(period: string): { start?: string; end?: string; curre
   return { start, end, current: isCurrent };
 }
 
+interface DetectedDateEntry {
+  lineIdx: number;
+  startDate?: string;
+  endDate?: string;
+  current: boolean;
+  employer?: string;
+  inlineTitle?: string;
+  skipLines: number;
+}
+
 // eslint-disable-next-line max-lines-per-function
 function extractExperience(text: string): ParsedResumeExperience[] {
-  const lookahead = sectionLookahead('Опыт работы');
-  const regex = new RegExp(
-    `(?:Опыт работы|Experience|Work Experience|Professional Experience)\\s*\\n+([\\s\\S]+?)${lookahead}`,
-    'iu',
-  );
-  const expMatch = text.match(regex);
-  const expText = expMatch?.[1] ? expMatch[1].trim() : text.trim();
-
-  const lines = expText
+  const lines = text
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean);
   const results: ParsedResumeExperience[] = [];
 
-  const dateIndices: number[] = [];
+  const dateEntries: DetectedDateEntry[] = [];
+
   for (let i = 0; i < lines.length; i++) {
-    if (DATE_LINE_REGEX.test(lines[i])) {
-      dateIndices.push(i);
+    const line = lines[i];
+    if (SINGLE_DATE_REGEX.test(line)) {
+      const match = line.match(SINGLE_DATE_REGEX)![0];
+      const dates = cleanPeriodDates(match);
+      const inlineTitle = line.replace(SINGLE_DATE_REGEX, '').replace(/\([^)]*\)/gu, '').trim();
+      dateEntries.push({
+        lineIdx: i,
+        startDate: dates.start,
+        endDate: dates.end,
+        current: dates.current,
+        inlineTitle: inlineTitle.length > 2 ? inlineTitle : undefined,
+        skipLines: 0,
+      });
+      continue;
+    }
+
+    const hhMatch = line.match(HH_START_DATE_REGEX);
+    if (hhMatch && i + 1 < lines.length) {
+      const nextLine = lines[i + 1];
+      const endMatch = nextLine.match(/^(?:по настоящее время|наст\.\s*время|настоящее\s*время|present|current|(?:(?:[А-Яа-яЁёA-Za-z]+)\s+)?(?:19\d\d|20\d\d))/iu);
+      if (endMatch) {
+        const isCurrent = /настоящее|наст\.|present|current/iu.test(endMatch[0]);
+        const startRaw = line.split(/\s*(?:—|-|–)\s*/u)[0];
+        dateEntries.push({
+          lineIdx: i,
+          startDate: normalizeDate(startRaw),
+          endDate: isCurrent ? undefined : normalizeDate(endMatch[0]),
+          current: isCurrent,
+          employer: hhMatch[1].trim(),
+          skipLines: 1,
+        });
+      }
     }
   }
 
-  if (dateIndices.length === 0) return [];
+  if (dateEntries.length === 0) return [];
 
-  for (let d = 0; d < dateIndices.length; d++) {
-    const dateIdx = dateIndices[d];
-    const nextDateIdx = d + 1 < dateIndices.length ? dateIndices[d + 1] : lines.length;
-    const periodLine = lines[dateIdx];
-    const dates = cleanPeriodDates(periodLine);
+  for (let d = 0; d < dateEntries.length; d++) {
+    const entry = dateEntries[d];
+    const nextEntryIdx = d + 1 < dateEntries.length ? dateEntries[d + 1].lineIdx : lines.length;
+    const prevEntryIdx = d > 0 ? dateEntries[d - 1].lineIdx : -1;
 
-    const prevDateIdx = d > 0 ? dateIndices[d - 1] : -1;
-    const headerLines: string[] = [];
-    for (let k = dateIdx - 1; k > prevDateIdx; k--) {
-      const line = lines[k];
-      if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*')) {
-        break;
+    let employer = entry.employer;
+    let title = entry.inlineTitle;
+    let bodyStartIdx = entry.lineIdx + 1 + entry.skipLines;
+
+    if (!employer || !title) {
+      const headerLines: string[] = [];
+      for (let k = entry.lineIdx - 1; k > prevEntryIdx; k--) {
+        const l = lines[k];
+        if (
+          l.startsWith('•') ||
+          l.startsWith('-') ||
+          l.startsWith('*') ||
+          l.startsWith('●') ||
+          l.length > 90 ||
+          l.endsWith('.') ||
+          l.includes(';')
+        ) {
+          break;
+        }
+        if (/^(?:page \d+|\d+\s+yrs?|\d+\s+mos?|full-time|part-time|contract)/iu.test(l) && l.length < 30) {
+          continue;
+        }
+        headerLines.unshift(l);
+        if (headerLines.length >= 2) {
+          break;
+        }
       }
-      if (/^(?:page \d+|\d+\s+yrs?|\d+\s+mos?|full-time|part-time|contract)/iu.test(line) && line.length < 30) {
-        continue;
+
+      if (headerLines.length >= 2) {
+        if (!employer) employer = headerLines[0];
+        if (!title) title = headerLines[1];
+      } else if (headerLines.length === 1) {
+        if (!employer) employer = headerLines[0];
       }
-      headerLines.unshift(line);
     }
 
-    let employer: string | undefined;
-    let title: string | undefined;
-    let bodyStartIdx = dateIdx + 1;
-
-    if (headerLines.length >= 2) {
-      // LinkedIn format: Company on line 1, Title on line 2, Dates on line 3
-      employer = headerLines[0];
-      title = headerLines[1];
-    } else if (headerLines.length === 1) {
-      employer = headerLines[0];
-    } else {
-      // hh.ru format: Dates on line 1, Company on line 2, Title on line 3
-      if (bodyStartIdx < nextDateIdx && !lines[bodyStartIdx].startsWith('•') && !lines[bodyStartIdx].startsWith('-')) {
-        employer = lines[bodyStartIdx];
-        bodyStartIdx++;
+    if (!employer || !title) {
+      const candidates: string[] = [];
+      for (let k = bodyStartIdx; k < Math.min(nextEntryIdx, bodyStartIdx + 4); k++) {
+        const l = lines[k];
+        if (l.startsWith('•') || l.startsWith('-') || l.startsWith('*') || l.startsWith('●')) break;
+        if (/^\d+\s+(?:год|года|лет|месяц|месяца|месяцев)/iu.test(l)) continue;
+        if (/^(?:Информационные технологии|Телекоммуникации|Финансовый сектор)/iu.test(l)) continue;
+        candidates.push(l);
+        if (candidates.length >= 2) break;
       }
-      if (bodyStartIdx < nextDateIdx && !lines[bodyStartIdx].startsWith('•') && !lines[bodyStartIdx].startsWith('-')) {
-        title = lines[bodyStartIdx];
-        bodyStartIdx++;
-      }
-    }
 
-    if (!title && bodyStartIdx < nextDateIdx && !lines[bodyStartIdx].startsWith('•') && !lines[bodyStartIdx].startsWith('-')) {
-      title = lines[bodyStartIdx];
-      bodyStartIdx++;
+      if (candidates.length >= 2) {
+        const c0 = candidates[0];
+        const c1 = candidates[1];
+        const c1IsTitle =
+          /директор|руководитель|менеджер|продакт|продукт|разработчик|инженер|аналитик|лид|дизайнер|head|lead|director|manager|developer|engineer|specialist|officer|vp|founder|consultant/iu.test(
+            c1,
+          );
+        const c0IsTitle =
+          /директор|руководитель|менеджер|продакт|продукт|разработчик|инженер|аналитик|лид|дизайнер|head|lead|director|manager|developer|engineer|specialist|officer|vp|founder|consultant/iu.test(
+            c0,
+          );
+
+        if (!employer && !title) {
+          if (c0IsTitle && !c1IsTitle) {
+            title = c0;
+            employer = c1;
+          } else {
+            employer = c0;
+            title = c1;
+          }
+          bodyStartIdx = lines.indexOf(c1, bodyStartIdx) + 1;
+        } else if (!title) {
+          title = c0IsTitle ? c0 : c1;
+          bodyStartIdx = lines.indexOf(title, bodyStartIdx) + 1;
+        } else if (!employer) {
+          employer = !c0IsTitle ? c0 : c1;
+          bodyStartIdx = lines.indexOf(employer, bodyStartIdx) + 1;
+        }
+      } else if (candidates.length === 1) {
+        const c0 = candidates[0];
+        const c0IsTitle =
+          /директор|руководитель|менеджер|продакт|продукт|разработчик|инженер|аналитик|лид|дизайнер|head|lead|director|manager|developer|engineer|specialist|officer|vp|founder|consultant/iu.test(
+            c0,
+          );
+        if (!title && c0IsTitle) {
+          title = c0;
+        } else if (!employer) {
+          employer = c0;
+        } else if (!title) {
+          title = c0;
+        }
+        bodyStartIdx = lines.indexOf(c0, bodyStartIdx) + 1;
+      }
     }
 
     let location: string | undefined;
@@ -487,29 +597,29 @@ function extractExperience(text: string): ParsedResumeExperience[] {
     const achievements: string[] = [];
 
     let nextHeaderLinesCount = 0;
-    if (d + 1 < dateIndices.length) {
-      for (let k = nextDateIdx - 1; k >= bodyStartIdx; k--) {
+    if (d + 1 < dateEntries.length) {
+      for (let k = nextEntryIdx - 1; k >= bodyStartIdx; k--) {
         const l = lines[k];
-        if (l.startsWith('•') || l.startsWith('-') || l.startsWith('*') || l.length > 100) {
+        if (l.startsWith('•') || l.startsWith('-') || l.startsWith('*') || l.startsWith('●') || l.length > 100) {
           break;
         }
         nextHeaderLinesCount++;
         if (nextHeaderLinesCount >= 2) break;
       }
     }
-    const bodyEnd = nextDateIdx - nextHeaderLinesCount;
+    const bodyEnd = nextEntryIdx - nextHeaderLinesCount;
 
     for (let j = bodyStartIdx; j < bodyEnd; j++) {
       const line = lines[j];
       if (/^(?:page \d+|\d+\s+yrs?|\d+\s+mos?|full-time|part-time|contract)/iu.test(line) && line.length < 30) {
         continue;
       }
-      if (!location && !line.startsWith('•') && !line.startsWith('-') && line.length < 50 && /^[A-Za-zА-Яа-яЁё\s,.-]+$/u.test(line)) {
+      if (!location && !line.startsWith('•') && !line.startsWith('-') && !line.startsWith('●') && line.length < 50 && /^[A-Za-zА-Яа-яЁё\s,.-]+$/u.test(line)) {
         location = line;
         continue;
       }
-      if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*')) {
-        const bulletText = line.replace(/^[•\-*]\s*/u, '').trim();
+      if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*') || line.startsWith('●')) {
+        const bulletText = line.replace(/^[•\-*●]\s*/u, '').trim();
         if (/\d+%|\d+x|вырос|увелич|сократ|запуст|достиг|growth|increas|reduc|built|launched|scaled/iu.test(bulletText)) {
           achievements.push(bulletText);
         } else {
@@ -528,9 +638,9 @@ function extractExperience(text: string): ParsedResumeExperience[] {
       title: title ?? 'Специалист',
       employer: employer ?? 'Компания',
       location,
-      startDate: dates.start,
-      endDate: dates.end,
-      current: dates.current,
+      startDate: entry.startDate,
+      endDate: entry.endDate,
+      current: entry.current,
       responsibilities: bullets,
       achievements,
     });
@@ -615,7 +725,7 @@ function extractEducation(text: string): ParsedResumeEducation[] {
 function extractCourses(text: string): ParsedResumeCourse[] {
   const lookahead = sectionLookahead('Курсы');
   const regex = new RegExp(
-    `(?:Электронные сертификаты|Сертификаты|Certifications|Курсы|Повышение квалификации|Courses)\\s*\\n+([\\s\\S]+?)${lookahead}`,
+    `(?:Электронные сертификаты|Сертификаты|Certifications|Курсы|Повышение квалификации, курсы|Повышение квалификации|Courses)\\s*\\n+([\\s\\S]+?)${lookahead}`,
     'iu',
   );
   const match = text.match(regex);
@@ -635,10 +745,13 @@ function extractCourses(text: string): ParsedResumeCourse[] {
     const year = pendingYear || inlineYear?.[1];
     pendingYear = undefined;
 
-    result.push({
-      name: line.replace(/\b(19\d\d|20\d\d)\b/u, '').replace(/[()]/gu, '').trim(),
-      year,
-    });
+    const cleanedName = line.replace(/\b(19\d\d|20\d\d)\b/u, '').replace(/[()]/gu, '').trim();
+    if (cleanedName.length >= 2 && !/^(?:сертификаты|certifications|курсы)$/iu.test(cleanedName)) {
+      result.push({
+        name: cleanedName,
+        year,
+      });
+    }
   }
   return result;
 }
@@ -689,17 +802,15 @@ function extractRecommendations(text: string): ParsedResumeRecommendation[] {
 
 // eslint-disable-next-line max-lines-per-function
 function extractLanguages(text: string): ParsedResumeLanguage[] {
-  const lookahead = sectionLookahead('Знание языков');
-  const regex = new RegExp(
-    `(?:Знание языков|Языки|Languages)\\s*\\n+([\\s\\S]+?)${lookahead}`,
-    'iu',
-  );
-  const match = text.match(regex);
-  const raw = match?.[1] ? match[1].trim() : text.trim();
-  const lines = raw.split(/\n+/u).map((l) => l.trim()).filter(Boolean);
+  const lines = text.split(/\n+/u).map((l) => l.trim()).filter(Boolean);
   const result: ParsedResumeLanguage[] = [];
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('(') || /^(?:знание языков|языки|languages)$/iu.test(line)) {
+      continue;
+    }
+
     const parenMatch = line.match(/^([A-Za-zА-Яа-яЁё]+)\s*\(([^)]+)\)/u);
     let name: string;
     let levelRaw: string | undefined;
@@ -711,6 +822,10 @@ function extractLanguages(text: string): ParsedResumeLanguage[] {
       const parts = line.split(/—|-|–|:/u).map((p) => p.trim());
       name = parts[0];
       levelRaw = parts[1]?.toLowerCase();
+      if (!levelRaw && i + 1 < lines.length && lines[i + 1].startsWith('(')) {
+        levelRaw = lines[i + 1].replace(/[()]/gu, '').toLowerCase();
+        i++;
+      }
     }
 
     let cefr: CefrLevel | undefined;
@@ -723,7 +838,7 @@ function extractLanguages(text: string): ParsedResumeLanguage[] {
         }
       }
     }
-    if (name) {
+    if (name && name.length >= 2 && !/^(?:знание языков|языки|languages)$/iu.test(name)) {
       const isMetadata = [
         'график',
         'формат',

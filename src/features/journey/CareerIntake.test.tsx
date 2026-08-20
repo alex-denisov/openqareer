@@ -65,8 +65,8 @@ describe('CareerIntake', () => {
 
     expect(html).toContain('career-platform-cards');
     expect(html).toContain('LinkedIn');
-    expect(html).toContain('hh.ru (HeadHunter)');
-    expect(html).toContain('Прямой импорт резюме HeadHunter с динамической проверкой соединения');
+    expect(html).toContain('hh.ru');
+    expect(html).toContain('Прямой импорт резюме hh.ru с динамической проверкой соединения');
     expect(html).toContain('Подключить');
   });
 

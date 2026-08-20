@@ -705,7 +705,7 @@ export function CareerIntake({
                       <div className="career-platform-card-header">
                         <div className="career-platform-card-title">
                           <GlobeHemisphereWest size={22} weight="bold" style={{ color: '#d6001c' }} />
-                          <span>hh.ru (HeadHunter)</span>
+                          <span>hh.ru</span>
                         </div>
                         <span
                           className={`career-platform-card-badge ${isHhConnected || (parsedResume && resumeSource === 'hh-pdf') ? 'is-connected' : ''}`}
@@ -716,7 +716,7 @@ export function CareerIntake({
                         </span>
                       </div>
                       <p className="career-platform-card-desc">
-                        Прямой импорт резюме HeadHunter с динамической проверкой соединения.
+                        Прямой импорт резюме hh.ru с динамической проверкой соединения.
                       </p>
                       <button
                         type="button"

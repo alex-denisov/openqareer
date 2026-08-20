@@ -11,37 +11,33 @@ describe('ProfileImportModals', () => {
     const html = renderToStaticMarkup(<WebDesktopCtaCallout />);
     expect(html).toContain('Импорт профилей LinkedIn и hh.ru доступен в десктопном приложении');
     expect(html).toContain('Скачать OpenQareer Desktop');
-    expect(html).toContain('github.com/alex-denisov/openqareer/releases');
+    expect(html).toContain('openqareer.com');
   });
 
-  it('renders LinkedInConnectModal with fields when open', () => {
+  it('renders LinkedInConnectModal when open', () => {
     const html = renderToStaticMarkup(
       <LinkedInConnectModal
         isOpen={true}
         onClose={() => undefined}
         onImportSuccess={() => undefined}
-        initialUrl="https://www.linkedin.com/in/alexey-denisov"
       />,
     );
 
     expect(html).toContain('Подключение LinkedIn');
-    expect(html).toContain('https://www.linkedin.com/in/alexey-denisov');
-    expect(html).toContain('Подключить и импортировать');
+    expect(html).toContain('Открыть окно входа в LinkedIn');
   });
 
-  it('renders HhConnectModal with fields and real-time status when open', () => {
+  it('renders HhConnectModal when open', () => {
     const html = renderToStaticMarkup(
       <HhConnectModal
         isOpen={true}
         onClose={() => undefined}
         onConnectSuccess={() => undefined}
-        initialUrl="https://hh.ru/resume/test-resume"
       />,
     );
 
-    expect(html).toContain('Подключение HeadHunter (hh.ru)');
-    expect(html).toContain('https://hh.ru/resume/test-resume');
-    expect(html).toContain('Подключить');
+    expect(html).toContain('Подключение hh.ru');
+    expect(html).toContain('Открыть окно входа в hh.ru');
   });
 
   it('returns null when modals are closed', () => {
