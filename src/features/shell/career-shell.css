@@ -50,6 +50,13 @@
   display: contents;
 }
 
+/* The desktop companion never shows the prerendered bootstrap shell: it has no
+   public landing to fall back to. The rule lives here rather than in an inline
+   <style>, which production CSP (`style-src 'self'`) blocks. */
+.is-desktop-companion [data-bootstrap-shell='true'] {
+  display: none !important;
+}
+
 .career-shell button:focus-visible,
 .career-shell input:focus-visible,
 .career-shell textarea:focus-visible,
