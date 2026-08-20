@@ -103,8 +103,8 @@ pub fn generate_singbox_split_config(c: &TunnelConfig) -> Result<serde_json::Val
     Ok(json!({
       "log":{"level":"warn","timestamp":true},
       "inbounds":[
-        {"type":"socks","tag":"socks-in","listen":"127.0.0.1","listen_port":c.local_socks_port,"sniff":true},
-        {"type":"http","tag":"http-in","listen":"127.0.0.1","listen_port":c.local_http_port,"sniff":true}
+        {"type":"socks","tag":"socks-in","listen":"127.0.0.1","listen_port":c.local_socks_port},
+        {"type":"http","tag":"http-in","listen":"127.0.0.1","listen_port":c.local_http_port}
       ],
       "outbounds":[
         {"type":"ssh","tag":"ssh-eu-out","server":c.remote_server,"server_port":c.remote_port,"user":c.ssh_user,
@@ -305,6 +305,8 @@ mod tests {
         assert_eq!(j["outbounds"][1]["type"], "http");
         assert_eq!(j["outbounds"][1]["detour"], "ssh-eu-out");
         assert_eq!(j["route"]["rules"][1]["outbound"], "direct-out");
+        assert!(j["inbounds"][0].get("sniff").is_none());
+        assert!(j["inbounds"][1].get("sniff").is_none());
     }
     #[tokio::test]
     async fn never_reports_running_without_a_live_proxy() {
