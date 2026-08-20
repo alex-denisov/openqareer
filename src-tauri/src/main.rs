@@ -15,7 +15,7 @@ use connector_session::{
 use network_probe::{evaluate_network_environment, NetworkEnvironmentStatus};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::{AppHandle, State, Url};
+use tauri::{AppHandle, Manager, State, Url};
 use tunnel_manager::{TunnelConfig, TunnelManager, TunnelStatusReport};
 
 pub struct AppState {
@@ -214,11 +214,18 @@ fn get_desktop_environment_info() -> DesktopInfo {
     }
 }
 
+fn is_tunnel_cleanup_event(event: &tauri::RunEvent) -> bool {
+    matches!(
+        event,
+        tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
+    )
+}
+
 fn main() {
     let tunnel = TunnelManager::new();
     let app_state = AppState { tunnel };
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .manage(app_state)
@@ -236,6 +243,26 @@ fn main() {
             read_connector_session_page,
             get_desktop_environment_info,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running OpenQareer desktop application");
+        .build(tauri::generate_context!())
+        .expect("error while building OpenQareer desktop application");
+
+    app.run(|app_handle, event| {
+        if !is_tunnel_cleanup_event(&event) {
+            return;
+        }
+        let tunnel = app_handle.state::<AppState>().tunnel.clone();
+        tauri::async_runtime::block_on(async move {
+            let _ = tunnel.stop().await;
+        });
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn application_exit_is_a_tunnel_cleanup_event() {
+        assert!(is_tunnel_cleanup_event(&tauri::RunEvent::Exit));
+    }
 }
