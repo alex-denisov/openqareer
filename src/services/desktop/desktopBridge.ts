@@ -36,6 +36,18 @@ export interface TunnelStatusReport {
   error_message?: string;
 }
 
+export interface TunnelConfig {
+  remoteServer: string;
+  remotePort: number;
+  sshUser: string;
+  sshPrivateKeyBase64: string;
+  sshHostKeyBase64: string;
+  proxyUsername: string;
+  proxyPassword: string;
+  localSocksPort: number;
+  localHttpPort: number;
+}
+
 export interface DesktopInfo {
   app_name: string;
   app_version: string;
@@ -124,24 +136,24 @@ export async function getTunnelStatus(): Promise<TunnelStatusReport> {
     state: 'idle',
     local_socks_endpoint: '127.0.0.1:10885',
     local_http_endpoint: '127.0.0.1:10886',
-    active_protocol: 'VLESS-Reality',
+    active_protocol: 'SSH restricted egress',
     split_proxied_domains: ['linkedin.com', 'licdn.com', 'lnkd.in'],
     split_direct_domains: ['hh.ru', 'openqareer.com'],
   };
 }
 
-export async function startTunnel(): Promise<TunnelStatusReport> {
-  const result = await invokeTauri<TunnelStatusReport>('start_tunnel');
+export async function startTunnel(config: TunnelConfig): Promise<TunnelStatusReport> {
+  const result = await invokeTauri<TunnelStatusReport>('start_tunnel', { config });
   if (result) return result;
 
   return {
-    state: 'running',
+    state: 'failed',
     local_socks_endpoint: '127.0.0.1:10885',
     local_http_endpoint: '127.0.0.1:10886',
-    active_protocol: 'VLESS-Reality',
+    active_protocol: 'SSH restricted egress',
     split_proxied_domains: ['linkedin.com', 'licdn.com', 'lnkd.in'],
     split_direct_domains: ['hh.ru', 'openqareer.com'],
-    started_at: new Date().toISOString(),
+    error_message: 'desktop_runtime_unavailable',
   };
 }
 
@@ -153,7 +165,7 @@ export async function stopTunnel(): Promise<TunnelStatusReport> {
     state: 'stopped',
     local_socks_endpoint: '127.0.0.1:10885',
     local_http_endpoint: '127.0.0.1:10886',
-    active_protocol: 'VLESS-Reality',
+    active_protocol: 'SSH restricted egress',
     split_proxied_domains: ['linkedin.com', 'licdn.com', 'lnkd.in'],
     split_direct_domains: ['hh.ru', 'openqareer.com'],
   };

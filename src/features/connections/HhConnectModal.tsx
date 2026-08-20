@@ -1,24 +1,18 @@
-import { useEffect, useState } from 'react';
-import {
-  ArrowSquareOut,
-  CheckCircle,
-  SpinnerGap,
-  WarningCircle,
-} from '@phosphor-icons/react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowSquareOut, CheckCircle, SpinnerGap, WarningCircle } from '@phosphor-icons/react';
 import { isTauriEnvironment, probeNetworkStatus } from '../../services/desktop/desktopBridge';
-import {
-  parseHhResumeHtml,
-  parseHhResumesList,
-} from '../../services/connectors/hhResumeParser';
+import { parseHhResumeHtml, parseHhResumesList } from '../../services/connectors/hhResumeParser';
 import type { ParsedResume } from '../workspace/resumeParser';
 import { ImportModalShell } from './ImportModalShell';
 import { PlatformLogo } from './PlatformLogo';
 import {
   looksLikeHhLoginPage,
+  closeConnectorSession,
   looksLikeHhVpnBlock,
   openConnectorSession,
   platformRouteNotice,
   readSessionPage,
+  resizeConnectorSession,
   sessionCheckFailure,
   sessionOpenFailureMessage,
   type ConnectorSessionStep,
@@ -47,14 +41,40 @@ export interface HhConnectModalProps {
 
 // One component, one JSX tree: splitting further would scatter the markup.
 // eslint-disable-next-line max-lines-per-function
-export function HhConnectModal({
-  isOpen,
-  onClose,
-  onConnectSuccess,
-}: HhConnectModalProps) {
+export function HhConnectModal({ isOpen, onClose, onConnectSuccess }: HhConnectModalProps) {
   const [step, setStep] = useState<ConnectorSessionStep>('idle');
   const [error, setError] = useState<string>();
   const [probe, setProbe] = useState<{ accessible: boolean }>();
+  const webviewHost = useRef<HTMLDivElement>(null);
+
+  function closeModal() {
+    void closeConnectorSession('hh');
+    onClose();
+  }
+
+  useEffect(() => () => void closeConnectorSession('hh'), []);
+
+  useEffect(() => {
+    if (!isOpen || !isTauriEnvironment() || step === 'idle' || step === 'opening') return;
+    const host = webviewHost.current;
+    if (!host) return;
+    const updateBounds = () => {
+      const rect = host.getBoundingClientRect();
+      void resizeConnectorSession('hh', {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      });
+    };
+    const observer = new ResizeObserver(updateBounds);
+    observer.observe(host);
+    window.addEventListener('resize', updateBounds);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateBounds);
+    };
+  }, [isOpen, step]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -70,13 +90,19 @@ export function HhConnectModal({
   async function startSession() {
     setError(undefined);
     setStep('opening');
-    const result = await openConnectorSession('hh', HH_LOGIN_URL);
+    setStep('session_open');
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const rect = webviewHost.current?.getBoundingClientRect();
+    const result = await openConnectorSession(
+      'hh',
+      HH_LOGIN_URL,
+      rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : undefined,
+    );
     if (!result.opened) {
       setStep('idle');
       setError(sessionOpenFailureMessage('hh', result.reason));
       return;
     }
-    setStep('session_open');
   }
 
   async function checkSession() {
@@ -102,12 +128,8 @@ export function HhConnectModal({
           }
           const resumes = parseHhResumesList(page.body);
           if (resumes.length > 0) {
-            onConnectSuccess(
-              resumes,
-              await readFirstResume(resumes[0].url),
-              resumes[0].url,
-            );
-            onClose();
+            onConnectSuccess(resumes, await readFirstResume(resumes[0].url), resumes[0].url);
+            closeModal();
             return;
           }
         }
@@ -128,10 +150,11 @@ export function HhConnectModal({
   return (
     <ImportModalShell
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={closeModal}
       titleId="hh-modal-title"
       title="Подключение hh.ru"
       icon={<PlatformLogo platform="hh" size={26} />}
+      wide={isTauriEnvironment() && step !== 'idle' && step !== 'opening'}
     >
       <div className="career-modal-body">
         <p className="career-modal-network-status">
@@ -144,8 +167,8 @@ export function HhConnectModal({
         </p>
 
         <p className="career-modal-intro">
-          Подключение читает список ваших резюме через вашу собственную сессию
-          соискателя. Мы ничего не публикуем и не откликаемся от вашего имени.
+          Подключение читает список ваших резюме через вашу собственную сессию соискателя. Мы ничего
+          не публикуем и не откликаемся от вашего имени.
         </p>
 
         {step === 'idle' || step === 'opening' ? (
@@ -180,6 +203,14 @@ export function HhConnectModal({
           </div>
         )}
 
+        {isTauriEnvironment() && step !== 'idle' && step !== 'opening' ? (
+          <div
+            ref={webviewHost}
+            className="career-connector-webview-host"
+            aria-label="Вход в hh.ru"
+          />
+        ) : null}
+
         {error ? (
           <p className="career-modal-error" role="alert">
             <WarningCircle size={18} weight="fill" />
@@ -192,7 +223,7 @@ export function HhConnectModal({
         <button
           type="button"
           className="career-quiet-button"
-          onClick={onClose}
+          onClick={closeModal}
           disabled={step === 'checking'}
         >
           Отмена

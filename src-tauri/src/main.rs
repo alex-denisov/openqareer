@@ -8,8 +8,9 @@ mod tunnel_manager;
 
 use automation_worker::{execute_candidate_action_safely, LocalActionRequest, LocalActionResult};
 use connector_session::{
-    is_session_window_open, open_session_window, read_session_page, should_route_through_tunnel,
-    SessionPageReport, SessionWindowReport, SessionWindowRequest,
+    close_session_window, is_session_window_open, open_session_window, read_session_page,
+    resize_session_window, should_route_through_tunnel, SessionLayout, SessionPageReport,
+    SessionWindowReport, SessionWindowRequest,
 };
 use network_probe::{evaluate_network_environment, NetworkEnvironmentStatus};
 use serde::{Deserialize, Serialize};
@@ -50,20 +51,16 @@ async fn get_tunnel_status(state: State<'_, AppState>) -> Result<TunnelStatusRep
 
 #[tauri::command]
 async fn start_tunnel(
-    config: Option<TunnelConfig>,
+    config: TunnelConfig,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<TunnelStatusReport, String> {
-    if let Some(cfg) = config {
-        state.tunnel.update_config(cfg).await;
-    }
-    state.tunnel.set_running().await;
-    Ok(state.tunnel.get_status().await)
+    state.tunnel.start(&app, config).await
 }
 
 #[tauri::command]
 async fn stop_tunnel(state: State<'_, AppState>) -> Result<TunnelStatusReport, String> {
-    state.tunnel.set_stopped().await;
-    Ok(state.tunnel.get_status().await)
+    state.tunnel.stop().await
 }
 
 #[tauri::command]
@@ -185,6 +182,16 @@ fn is_connector_session_open(app: AppHandle, platform: String) -> bool {
     is_session_window_open(&app, &platform)
 }
 
+#[tauri::command]
+fn close_connector_session(app: AppHandle, platform: String) -> bool {
+    close_session_window(&app, &platform)
+}
+
+#[tauri::command]
+fn resize_connector_session(app: AppHandle, platform: String, layout: SessionLayout) -> bool {
+    resize_session_window(&app, &platform, layout)
+}
+
 /// Reads a page inside the candidate's own signed-in session window.
 #[tauri::command]
 async fn read_connector_session_page(
@@ -222,6 +229,8 @@ fn main() {
             desktop_native_fetch,
             open_connector_session,
             is_connector_session_open,
+            close_connector_session,
+            resize_connector_session,
             read_connector_session_page,
             get_desktop_environment_info,
         ])

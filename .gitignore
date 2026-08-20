@@ -15,6 +15,7 @@ openqareer.env
 # Dependencies and generated output
 node_modules/
 dist/
+src-tauri/binaries/
 .vite/
 coverage/
 *.tsbuildinfo

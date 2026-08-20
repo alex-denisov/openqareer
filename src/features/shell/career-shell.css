@@ -985,7 +985,9 @@
   outline: none;
   cursor: pointer;
   appearance: auto;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .career-connector-select:focus {
@@ -4623,7 +4625,9 @@
   color: var(--career-text, #f0f3f8);
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .career-account-link-btn:hover {
@@ -5450,7 +5454,9 @@
   border: 1px solid var(--career-line, rgba(255, 255, 255, 0.08));
   border-radius: var(--career-radius-md, 8px);
   padding: 12px;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .career-resume-target-item.is-selected {
@@ -5574,7 +5580,6 @@
 }
 
 @media (max-width: 900px) {
-
   .career-resume-studio {
     border-radius: var(--career-radius-md);
   }
@@ -5667,7 +5672,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--career-accent, #0A70E0);
+  color: var(--career-accent, #0a70e0);
   margin-bottom: 4px;
 }
 
@@ -5946,8 +5951,12 @@
 }
 
 @keyframes careerModalFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .career-modal-card {
@@ -5956,10 +5965,25 @@
   border-radius: 18px;
   background: rgba(18, 24, 38, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 24px 48px -12px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.career-modal-card.is-wide {
+  max-width: min(1040px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+}
+
+.career-connector-webview-host {
+  min-height: min(560px, calc(100vh - 280px));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
 }
 
 .career-modal-header {
@@ -6080,10 +6104,6 @@
   pointer-events: none;
 }
 
-
-
-
-
 /* Connector dialogs (B148) --------------------------------------------- */
 
 .career-modal-title {
@@ -6171,8 +6191,7 @@
   border: 1px solid var(--career-line);
   border-radius: var(--career-radius-lg);
   background:
-    linear-gradient(140deg, oklch(25% 0.055 255 / 0.5), transparent 62%),
-    var(--career-surface);
+    linear-gradient(140deg, oklch(25% 0.055 255 / 0.5), transparent 62%), var(--career-surface);
 }
 
 .career-today-action h2 {

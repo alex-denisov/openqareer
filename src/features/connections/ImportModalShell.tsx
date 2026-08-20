@@ -9,6 +9,7 @@ interface ImportModalShellProps {
   readonly icon: ReactNode;
   readonly onClose: () => void;
   readonly children: ReactNode;
+  readonly wide?: boolean;
 }
 
 /**
@@ -33,6 +34,7 @@ export function ImportModalShell({
   icon,
   onClose,
   children,
+  wide = false,
 }: ImportModalShellProps) {
   const card = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -67,7 +69,7 @@ export function ImportModalShell({
       }}
     >
       <div
-        className="career-modal-card"
+        className={`career-modal-card${wide ? ' is-wide' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -95,7 +97,5 @@ export function ImportModalShell({
 
   // Static rendering (the prerender step and the SSR component tests) has no
   // document to portal into; the markup is identical either way.
-  return typeof document === 'undefined'
-    ? dialog
-    : createPortal(dialog, document.body);
+  return typeof document === 'undefined' ? dialog : createPortal(dialog, document.body);
 }

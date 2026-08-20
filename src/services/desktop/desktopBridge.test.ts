@@ -30,14 +30,28 @@ describe('desktopBridge', () => {
 
   it('provides split-tunnel routing metadata in tunnel status report', async () => {
     const tunnel = await getTunnelStatus();
-    expect(tunnel.active_protocol).toBe('VLESS-Reality');
+    expect(tunnel.active_protocol).toContain('SSH');
     expect(tunnel.split_proxied_domains).toContain('linkedin.com');
     expect(tunnel.split_direct_domains).toContain('hh.ru');
   });
 
-  it('simulates safe lifecycle state transitions for start and stop tunnel', async () => {
-    const started = await startTunnel();
-    expect(started.state).toBe('running');
+  it('never simulates a running tunnel outside the native desktop runtime', async () => {
+    const started = await startTunnel({
+      remoteServer: 'openqareer.com',
+      remotePort: 443,
+      sshUser: 'openqareer-tunnel',
+      sshPrivateKeyBase64: Buffer.from(
+        '-----BEGIN OPENSSH PRIVATE KEY-----\ntest\n-----END OPENSSH PRIVATE KEY-----\n',
+      ).toString('base64'),
+      sshHostKeyBase64: Buffer.from(
+        'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAISyntheticHostKeyForTests',
+      ).toString('base64'),
+      proxyUsername: 'synthetic_user',
+      proxyPassword: 'synthetic-password-that-is-long-enough',
+      localSocksPort: 10885,
+      localHttpPort: 10886,
+    });
+    expect(started.state).toBe('failed');
 
     const stopped = await stopTunnel();
     expect(stopped.state).toBe('stopped');

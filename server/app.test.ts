@@ -2,10 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from './app';
 import type { ServerConfig } from './config';
-import {
-  CoachProviderError,
-  type CoachProvider,
-} from './providers/coachProvider';
+import { CoachProviderError, type CoachProvider } from './providers/coachProvider';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import type { SessionAuth } from './auth/authService';
 
@@ -76,10 +73,7 @@ const successProvider: CoachProvider = {
 
 const apps: Awaited<ReturnType<typeof buildApp>>[] = [];
 const stores: SqliteCandidateStore[] = [];
-const candidateTokens = new WeakMap<
-  Awaited<ReturnType<typeof buildApp>>,
-  string
->();
+const candidateTokens = new WeakMap<Awaited<ReturnType<typeof buildApp>>, string>();
 
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
@@ -120,9 +114,7 @@ const validPayload = {
   phase: 'discovery',
 };
 
-function candidateAuthorization(
-  app: Awaited<ReturnType<typeof buildApp>>,
-): string {
+function candidateAuthorization(app: Awaited<ReturnType<typeof buildApp>>): string {
   return `Bearer ${candidateTokens.get(app)}`;
 }
 
@@ -134,7 +126,14 @@ describe('OpenQareer API boundary', () => {
       sourceUrl: url,
       capturedAt: '2026-08-10T00:00:00.000Z',
       accessPath: 'official_api',
-      facts: [{ kind: 'headline', value: 'Synthetic Product Lead', sourceLocator: 'public-meta:1', confidence: 'public-metadata' }],
+      facts: [
+        {
+          kind: 'headline',
+          value: 'Synthetic Product Lead',
+          sourceLocator: 'public-meta:1',
+          confidence: 'public-metadata',
+        },
+      ],
     }));
     const unauthorized = await app.inject({
       method: 'POST',
@@ -154,7 +153,10 @@ describe('OpenQareer API boundary', () => {
       payload: { url: 'https://www.linkedin.com/in/synthetic-candidate' },
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json().data).toMatchObject({ status: 'imported', facts: [{ value: 'Synthetic Product Lead' }] });
+    expect(response.json().data).toMatchObject({
+      status: 'imported',
+      facts: [{ value: 'Synthetic Product Lead' }],
+    });
   });
 
   it('returns a source-labelled public vacancy sample without candidate credentials', async () => {
@@ -339,11 +341,7 @@ describe('OpenQareer API boundary', () => {
   it('returns a stable retryable error without provider payloads', async () => {
     const provider: CoachProvider = {
       async createTurn() {
-        throw new CoachProviderError(
-          'provider_rate_limited',
-          429,
-          true,
-        );
+        throw new CoachProviderError('provider_rate_limited', 429, true);
       },
     };
     const app = await createApp(provider);
@@ -453,9 +451,7 @@ describe('OpenQareer API boundary', () => {
       assessmentId: 'work-preferences-v1',
       result: { kind: 'work-preferences' },
     });
-    expect(firstAssessment.result.roleFamilies[0].id).toBe(
-      'product-discovery',
-    );
+    expect(firstAssessment.result.roleFamilies[0].id).toBe('product-discovery');
 
     const revised = await app.inject({
       method: 'POST',
@@ -516,9 +512,7 @@ describe('OpenQareer API boundary', () => {
       url: '/api/v1/candidate/me',
       headers: { authorization },
     });
-    expect(snapshot.json().data.germanyMarket.result.caveat).toMatch(
-      /не юридическое решение/i,
-    );
+    expect(snapshot.json().data.germanyMarket.result.caveat).toMatch(/не юридическое решение/i);
   });
 });
 
@@ -555,6 +549,7 @@ describe('candidate platform connections', () => {
     options: {
       providers?: ServerConfig['oauthProviders'];
       transport?: Parameters<typeof buildApp>[0]['oauthTransport'];
+      desktopTunnel?: ServerConfig['desktopTunnel'];
     } = {},
   ) {
     const candidateStore = new SqliteCandidateStore({
@@ -569,6 +564,7 @@ describe('candidate platform connections', () => {
       config: {
         ...config,
         oauthProviders: options.providers ?? { hh: connectedProvider },
+        desktopTunnel: options.desktopTunnel,
       },
       coachProvider: successProvider,
       candidateStore,
@@ -591,11 +587,7 @@ describe('candidate platform connections', () => {
       headers: { authorization, origin: 'http://localhost:3000' },
     });
     expect(response.statusCode).toBe(201);
-    return (
-      new URL(response.json().data.authorizationUrl).searchParams.get(
-        'state',
-      ) ?? ''
-    );
+    return new URL(response.json().data.authorizationUrl).searchParams.get('state') ?? '';
   }
 
   it('publishes an honest connection catalog only to the candidate session', async () => {
@@ -630,6 +622,44 @@ describe('candidate platform connections', () => {
         importsCareerHistory: true,
       },
     ]);
+  });
+
+  it('returns tunnel bootstrap only to an authenticated candidate', async () => {
+    const configured = await createConnectionsApp({
+      desktopTunnel: {
+        remoteServer: 'openqareer.com',
+        remotePort: 443,
+        sshUser: 'openqareer-tunnel',
+        sshPrivateKeyBase64: Buffer.from(
+          '-----BEGIN OPENSSH PRIVATE KEY-----\ntest\n-----END OPENSSH PRIVATE KEY-----\n',
+        ).toString('base64'),
+        sshHostKeyBase64: Buffer.from(
+          'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAISyntheticHostKeyForTests',
+        ).toString('base64'),
+        proxyUsername: 'synthetic_user',
+        proxyPassword: 'synthetic-password-that-is-long-enough',
+        localSocksPort: 10885,
+        localHttpPort: 10886,
+      },
+    });
+    const unauthorized = await configured.app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/desktop-tunnel',
+    });
+    expect(unauthorized.statusCode).toBe(401);
+
+    const response = await configured.app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/desktop-tunnel',
+      headers: { authorization: configured.authorization },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.json().data).toMatchObject({
+      remoteServer: 'openqareer.com',
+      remotePort: 443,
+      sshUser: 'openqareer-tunnel',
+    });
   });
 
   it('refuses authorization for an unconfigured provider and an unknown platform', async () => {
@@ -674,19 +704,11 @@ describe('candidate platform connections', () => {
     expect(response.statusCode).toBe(201);
     const authorizationUrl = new URL(response.json().data.authorizationUrl);
     expect(authorizationUrl.origin).toBe('https://hh.ru');
-    expect(authorizationUrl.searchParams.get('client_id')).toBe(
-      connectedProvider.clientId,
-    );
-    expect(authorizationUrl.searchParams.get('redirect_uri')).toBe(
-      connectedProvider.redirectUri,
-    );
-    expect(authorizationUrl.searchParams.get('code_challenge_method')).toBe(
-      'S256',
-    );
+    expect(authorizationUrl.searchParams.get('client_id')).toBe(connectedProvider.clientId);
+    expect(authorizationUrl.searchParams.get('redirect_uri')).toBe(connectedProvider.redirectUri);
+    expect(authorizationUrl.searchParams.get('code_challenge_method')).toBe('S256');
     expect(response.payload).not.toContain(connectedProvider.clientSecret);
-    expect(Date.parse(response.json().data.expiresAt)).toBeGreaterThan(
-      Date.now(),
-    );
+    expect(Date.parse(response.json().data.expiresAt)).toBeGreaterThan(Date.now());
   });
 
   it('stores one connection per callback and never replays a consumed state', async () => {
@@ -704,9 +726,7 @@ describe('candidate platform connections', () => {
       url: `/api/v1/connectors/hh/callback?state=${state}&code=synthetic-code`,
     });
     expect(callback.statusCode).toBe(303);
-    expect(callback.headers.location).toBe(
-      '/connections/result?platform=hh&status=connected',
-    );
+    expect(callback.headers.location).toBe('/connections/result?platform=hh&status=connected');
 
     const connections = await app.inject({
       method: 'GET',
@@ -765,9 +785,7 @@ describe('candidate platform connections', () => {
       )}&error=access_denied`,
     });
     expect(denied.statusCode).toBe(303);
-    expect(denied.headers.location).toBe(
-      '/connections/result?platform=hh&status=declined',
-    );
+    expect(denied.headers.location).toBe('/connections/result?platform=hh&status=declined');
 
     const connections = await app.inject({
       method: 'GET',
@@ -849,4 +867,3 @@ describe('candidate platform connections', () => {
     expect(adminRes.statusCode).toBe(401);
   });
 });
-

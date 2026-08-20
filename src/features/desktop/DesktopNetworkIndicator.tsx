@@ -38,7 +38,7 @@ function IndicatorLabel({
     return (
       <>
         <Lightning size={16} weight="fill" />
-        <span>VLESS-туннель активен</span>
+        <span>Защищённый маршрут активен</span>
       </>
     );
   }
@@ -89,7 +89,8 @@ export function DesktopNetworkIndicator() {
   const { network, tunnel, desktop, loading, checkNetwork } = useDesktopNetwork();
 
   const isDirect = network?.recommendation === 'direct';
-  const isTunnelActive = network?.recommendation === 'tunnel_required' || tunnel?.state === 'running';
+  const isTunnelActive =
+    network?.recommendation === 'tunnel_required' || tunnel?.state === 'running';
   const stateClass = isDirect ? 'is-direct' : isTunnelActive ? 'is-tunnel-active' : 'is-limited';
 
   return (

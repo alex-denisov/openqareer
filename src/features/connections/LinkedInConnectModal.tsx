@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowSquareOut,
   CheckCircle,
@@ -9,15 +9,20 @@ import {
 import {
   isTauriEnvironment,
   probeNetworkStatus,
+  startTunnel,
+  type TunnelConfig,
 } from '../../services/desktop/desktopBridge';
+import { apiFetch } from '../coach/apiClient';
 import { parseResumeContent, type ParsedResume } from '../workspace/resumeParser';
 import { ImportModalShell } from './ImportModalShell';
 import { PlatformLogo } from './PlatformLogo';
 import {
   looksLikeLinkedInLoginPage,
+  closeConnectorSession,
   openConnectorSession,
   platformRouteNotice,
   readSessionPage,
+  resizeConnectorSession,
   sessionCheckFailure,
   sessionOpenFailureMessage,
   type ConnectorSessionStep,
@@ -43,12 +48,44 @@ export function LinkedInConnectModal({
   const [step, setStep] = useState<ConnectorSessionStep>('idle');
   const [error, setError] = useState<string>();
   const [probe, setProbe] = useState<{ accessible: boolean }>();
+  const [tunnelActive, setTunnelActive] = useState(false);
+  const webviewHost = useRef<HTMLDivElement>(null);
+
+  function closeModal() {
+    void closeConnectorSession('linkedin');
+    onClose();
+  }
+
+  useEffect(() => () => void closeConnectorSession('linkedin'), []);
+
+  useEffect(() => {
+    if (!isOpen || !isTauriEnvironment() || step === 'idle' || step === 'opening') return;
+    const host = webviewHost.current;
+    if (!host) return;
+    const updateBounds = () => {
+      const rect = host.getBoundingClientRect();
+      void resizeConnectorSession('linkedin', {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      });
+    };
+    const observer = new ResizeObserver(updateBounds);
+    observer.observe(host);
+    window.addEventListener('resize', updateBounds);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateBounds);
+    };
+  }, [isOpen, step]);
 
   useEffect(() => {
     if (!isOpen) return;
     setStep('idle');
     setError(undefined);
     setProbe(undefined);
+    setTunnelActive(false);
     void probeNetworkStatus()
       .then((status) => setProbe(status.linkedin))
       .catch(() => setProbe({ accessible: false }));
@@ -58,13 +95,43 @@ export function LinkedInConnectModal({
   async function startSession() {
     setError(undefined);
     setStep('opening');
-    const result = await openConnectorSession('linkedin', LINKEDIN_LOGIN_URL);
+    if (isTauriEnvironment()) {
+      try {
+        const currentNetwork = await probeNetworkStatus();
+        setProbe(currentNetwork.linkedin);
+        if (!currentNetwork.linkedin.accessible) {
+          const response = await apiFetch('/api/v1/candidate/desktop-tunnel');
+          if (!response.ok) throw new Error('tunnel_bootstrap_unavailable');
+          const payload = (await response.json()) as { data?: TunnelConfig };
+          if (!payload.data) throw new Error('tunnel_bootstrap_invalid');
+          const tunnel = await startTunnel(payload.data);
+          if (tunnel.state !== 'running') {
+            throw new Error(tunnel.error_message ?? 'tunnel_start_failed');
+          }
+          setTunnelActive(true);
+        }
+      } catch {
+        setStep('idle');
+        setTunnelActive(false);
+        setError(
+          'Защищённый маршрут LinkedIn не запустился. Перезапустите приложение и повторите попытку или загрузите PDF-экспорт.',
+        );
+        return;
+      }
+    }
+    setStep('session_open');
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const rect = webviewHost.current?.getBoundingClientRect();
+    const result = await openConnectorSession(
+      'linkedin',
+      LINKEDIN_LOGIN_URL,
+      rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : undefined,
+    );
     if (!result.opened) {
       setStep('idle');
       setError(sessionOpenFailureMessage('linkedin', result.reason));
       return;
     }
-    setStep('session_open');
   }
 
   async function checkSession() {
@@ -84,7 +151,7 @@ export function LinkedInConnectModal({
           const parsed = parseResumeContent(page.body);
           if (parsed.fullName || parsed.experience.length > 0) {
             onImportSuccess(parsed, LINKEDIN_PROFILE_URL);
-            onClose();
+            closeModal();
             return;
           }
         }
@@ -100,15 +167,18 @@ export function LinkedInConnectModal({
     }
   }
 
-  const route = platformRouteNotice('linkedin', probe);
+  const route = tunnelActive
+    ? { tone: 'ok' as const, text: 'Защищённый EU-маршрут LinkedIn активен' }
+    : platformRouteNotice('linkedin', probe);
 
   return (
     <ImportModalShell
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={closeModal}
       titleId="linkedin-modal-title"
       title="Подключение LinkedIn"
       icon={<PlatformLogo platform="linkedin" size={26} />}
+      wide={isTauriEnvironment() && step !== 'idle' && step !== 'opening'}
     >
       <div className="career-modal-body">
         <p className="career-modal-network-status">
@@ -123,9 +193,8 @@ export function LinkedInConnectModal({
         </p>
 
         <p className="career-modal-intro">
-          Подключение работает через вашу собственную браузерную сессию на этом
-          устройстве. Логин и пароль остаются в окне LinkedIn и не проходят через
-          наши серверы.
+          Подключение работает через вашу собственную браузерную сессию на этом устройстве. Логин и
+          пароль остаются в окне LinkedIn и не проходят через наши серверы.
         </p>
 
         {step === 'idle' || step === 'opening' ? (
@@ -160,6 +229,14 @@ export function LinkedInConnectModal({
           </div>
         )}
 
+        {isTauriEnvironment() && step !== 'idle' && step !== 'opening' ? (
+          <div
+            ref={webviewHost}
+            className="career-connector-webview-host"
+            aria-label="Вход в LinkedIn"
+          />
+        ) : null}
+
         {error ? (
           <p className="career-modal-error" role="alert">
             <WarningCircle size={18} weight="fill" />
@@ -172,7 +249,7 @@ export function LinkedInConnectModal({
         <button
           type="button"
           className="career-quiet-button"
-          onClick={onClose}
+          onClick={closeModal}
           disabled={step === 'checking'}
         >
           Отмена

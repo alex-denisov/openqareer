@@ -6,11 +6,7 @@ import {
 import type { ConnectionPlatform } from './connectionResult';
 
 /** Where the connector flow currently stands, for both platforms. */
-export type ConnectorSessionStep =
-  | 'idle'
-  | 'opening'
-  | 'session_open'
-  | 'checking';
+export type ConnectorSessionStep = 'idle' | 'opening' | 'session_open' | 'checking';
 
 const DESKTOP_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
@@ -23,6 +19,13 @@ const PLATFORM_NAMES: Record<ConnectionPlatform, string> = {
 export interface SessionOpenResult {
   readonly opened: boolean;
   readonly reason?: string;
+}
+
+export interface SessionLayout {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
 }
 
 interface DesktopSessionWindowReport {
@@ -49,6 +52,7 @@ interface DesktopSessionPageReport {
 export async function openConnectorSession(
   platform: ConnectionPlatform,
   url: string,
+  layout?: SessionLayout,
 ): Promise<SessionOpenResult> {
   if (typeof window === 'undefined') {
     return { opened: false, reason: 'no_window_environment' };
@@ -58,7 +62,7 @@ export async function openConnectorSession(
     try {
       const report = await invokeDesktopCommand<DesktopSessionWindowReport>(
         'open_connector_session',
-        { request: { platform, url } },
+        { request: { platform, url, layout } },
       );
       if (!report) return { opened: false, reason: 'desktop_bridge_unavailable' };
       return report.opened
@@ -77,11 +81,21 @@ export async function openConnectorSession(
   return popup ? { opened: true } : { opened: false, reason: 'window_blocked' };
 }
 
-/** Explains, honestly, why no sign-in window is on screen. */
-export function sessionOpenFailureMessage(
+export async function closeConnectorSession(platform: ConnectionPlatform): Promise<void> {
+  if (!isTauriEnvironment()) return;
+  await invokeDesktopCommand<boolean>('close_connector_session', { platform });
+}
+
+export async function resizeConnectorSession(
   platform: ConnectionPlatform,
-  reason?: string,
-): string {
+  layout: SessionLayout,
+): Promise<void> {
+  if (!isTauriEnvironment()) return;
+  await invokeDesktopCommand<boolean>('resize_connector_session', { platform, layout });
+}
+
+/** Explains, honestly, why no sign-in window is on screen. */
+export function sessionOpenFailureMessage(platform: ConnectionPlatform, reason?: string): string {
   const name = PLATFORM_NAMES[platform] ?? platform;
   switch (reason) {
     case 'window_blocked':
@@ -214,9 +228,7 @@ export function looksLikeLinkedInLoginPage(body: string): boolean {
 }
 
 export function looksLikeHhLoginPage(body: string): boolean {
-  return (
-    body.includes('account/login') || body.includes('data-qa="account-login-page"')
-  );
+  return body.includes('account/login') || body.includes('data-qa="account-login-page"');
 }
 
 export function looksLikeHhVpnBlock(body: string): boolean {

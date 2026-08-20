@@ -4,11 +4,7 @@ import { join } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
-import Fastify, {
-  type FastifyInstance,
-  type FastifyReply,
-  type FastifyRequest,
-} from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z, ZodError } from 'zod';
 import type { CoachPhase, MarketObservation } from './domain/coach';
 import { selectCoachPhase } from './orchestration/coachPhaseRouter';
@@ -26,25 +22,15 @@ import {
   workPreferenceSubmissionSchema,
   type AssessmentId,
 } from './domain/assessment';
-import {
-  evaluateGermanyMarket,
-  germanyMarketSubmissionSchema,
-} from './domain/germanyMarket';
+import { evaluateGermanyMarket, germanyMarketSubmissionSchema } from './domain/germanyMarket';
 import {
   buildResumeStudioProjection,
   validateResumeEvidenceFreshness,
   type ResumeEvidenceFreshness,
   type ResumeStudioProjection,
 } from './domain/resumeStudio';
-import {
-  resumeDraftSchema,
-  EMPTY_RESUME_DRAFT,
-  type ResumeDraft,
-} from './domain/resumeDraft';
-import type {
-  CandidateIdentity,
-  CandidateStore,
-} from './data/candidateStore';
+import { resumeDraftSchema, EMPTY_RESUME_DRAFT, type ResumeDraft } from './domain/resumeDraft';
+import type { CandidateIdentity, CandidateStore } from './data/candidateStore';
 import {
   CandidateDocumentRetentionError,
   CandidateNotFoundError,
@@ -59,10 +45,7 @@ import {
   CareerCommandConflictError,
   CareerCommandNotFoundError,
 } from './data/sqliteCareerCommandRepository';
-import {
-  CoachProviderError,
-  type CoachProvider,
-} from './providers/coachProvider';
+import { CoachProviderError, type CoachProvider } from './providers/coachProvider';
 import type { ServerConfig } from './config';
 import {
   deriveUsernameFromEmail,
@@ -79,10 +62,7 @@ import {
   type SessionAuth,
 } from './auth/authService';
 import { CAREER_SUPER_PROMPT_REVISION } from './prompts/careerSuperPrompt';
-import {
-  searchHhVacancies,
-  type HhVacancySample,
-} from './connectors/hhVacancySearch';
+import { searchHhVacancies, type HhVacancySample } from './connectors/hhVacancySearch';
 import { searchRemotiveVacancies } from './connectors/remotiveVacancySearch';
 import {
   importProfileUrl as importPublicProfileUrl,
@@ -90,10 +70,7 @@ import {
   type ProfileUrlImportResult,
 } from './connectors/profileUrlImport';
 import { parseResumeContent } from '../src/features/workspace/resumeParser';
-import {
-  carriesProfileSubstance,
-  planResumeImport,
-} from './domain/resumeImport';
+import { carriesProfileSubstance, planResumeImport } from './domain/resumeImport';
 import { preferStructuredResume } from './domain/resumeStructuring';
 import type { ResumeStructurer } from './providers/resumeStructurer';
 import {
@@ -103,18 +80,12 @@ import {
 } from './connectors/oauthConnector';
 import { OfficialOAuthTransport } from './connectors/officialOAuthTransport';
 import { OAUTH_PLATFORMS, type OAuthPlatform } from './connectors/oauthTypes';
-import {
-  vacancySubscriptionInputSchema,
-  type VacancySample,
-} from './domain/vacancy';
-import {
-  VacancyIntelligenceService,
-} from './vacancies/vacancyIntelligenceService';
+import { vacancySubscriptionInputSchema, type VacancySample } from './domain/vacancy';
+import { VacancyIntelligenceService } from './vacancies/vacancyIntelligenceService';
 import { vacancySourceRegistryView } from './vacancies/vacancySourceRegistry';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
 import { parseTelegramChannelHtml } from './connectors/telegramChannelParser';
 import { parseRssJobFeed } from './connectors/rssFeedParser';
-
 
 interface BuildAppOptions {
   config: ServerConfig;
@@ -122,14 +93,8 @@ interface BuildAppOptions {
   candidateStore: CandidateStore;
   authService: SessionAuth;
   serveStatic?: boolean;
-  searchVacancies?: (input: {
-    text: string;
-    perPage?: number;
-  }) => Promise<HhVacancySample>;
-  searchRemotive?: (input: {
-    text: string;
-    perPage?: number;
-  }) => Promise<VacancySample>;
+  searchVacancies?: (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
+  searchRemotive?: (input: { text: string; perPage?: number }) => Promise<VacancySample>;
   importProfile?: (url: string) => Promise<ProfileUrlImportResult>;
   oauthTransport?: OAuthTransport;
   careerCommandExecutor?: ConnectorExecutor;
@@ -190,7 +155,9 @@ export async function buildApp({
       },
     });
   if (authService && 'setCandidateStore' in authService) {
-    (authService as { setCandidateStore(s: CandidateStore): void }).setCandidateStore(candidateStore);
+    (authService as { setCandidateStore(s: CandidateStore): void }).setCandidateStore(
+      candidateStore,
+    );
   }
   const multiSourceEngine =
     multiSourceVacancyEngine ??
@@ -368,7 +335,14 @@ export async function buildApp({
       return null;
     }
     if (principal.role !== 'admin') {
-      void sendError(reply, request, 403, 'forbidden', 'Раздел доступен только администратору.', false);
+      void sendError(
+        reply,
+        request,
+        403,
+        'forbidden',
+        'Раздел доступен только администратору.',
+        false,
+      );
       return null;
     }
     return principal;
@@ -487,7 +461,8 @@ export async function buildApp({
         meta: { requestId: request.id },
       };
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Не удалось войти от имени пользователя.';
+      const message =
+        err instanceof Error ? err.message : 'Не удалось войти от имени пользователя.';
       return sendError(reply, request, 400, 'bad_request', message, false);
     }
   });
@@ -523,7 +498,10 @@ export async function buildApp({
     sourceId: z.string().optional(),
     type: z.string().optional(),
     query: z.string().optional(),
-    isRemote: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+    isRemote: z
+      .enum(['true', 'false'])
+      .transform((v) => v === 'true')
+      .optional(),
     limit: z.coerce.number().int().min(1).max(100).default(20),
     offset: z.coerce.number().int().min(0).default(0),
   });
@@ -601,23 +579,14 @@ export async function buildApp({
     };
   });
 
-  app.get(
-    '/api/v1/provider/status',
-    async (request, reply) => {
-      if (
-        !hasPreviewAccess(request, config.previewToken) &&
-        authenticateSession(request, authService, config)?.role !== 'admin'
-      ) {
-        return sendError(
-          reply,
-          request,
-          401,
-          'unauthorized',
-          'Нужна сессия администратора.',
-          false,
-        );
-      }
-      return {
+  app.get('/api/v1/provider/status', async (request, reply) => {
+    if (
+      !hasPreviewAccess(request, config.previewToken) &&
+      authenticateSession(request, authService, config)?.role !== 'admin'
+    ) {
+      return sendError(reply, request, 401, 'unauthorized', 'Нужна сессия администратора.', false);
+    }
+    return {
       data: {
         personalDataRoute: {
           provider: config.personalProvider ?? 'openai',
@@ -625,16 +594,13 @@ export async function buildApp({
         },
         syntheticDataRoute: {
           provider: config.syntheticProvider ?? 'openrouter',
-          model:
-            config.syntheticModel ??
-            'nvidia/nemotron-3-ultra-550b-a55b:free',
+          model: config.syntheticModel ?? 'nvidia/nemotron-3-ultra-550b-a55b:free',
           fallbackProviders: (config.providerCatalogStatus ?? [])
             .filter(
               (provider) =>
                 provider.configured &&
                 provider.eligible &&
-                provider.id !==
-                  (config.syntheticProvider ?? 'openrouter'),
+                provider.id !== (config.syntheticProvider ?? 'openrouter'),
             )
             .map((provider) => provider.id),
           outputValidation: 'server-side-strict-schema',
@@ -645,9 +611,8 @@ export async function buildApp({
         ready: true,
       },
       meta: { requestId: request.id },
-      };
-    },
-  );
+    };
+  });
 
   app.post(
     '/api/v1/auth/register',
@@ -721,10 +686,7 @@ export async function buildApp({
         return csrfError(request, reply);
       }
       const body = loginSchema.parse(request.body);
-      const authenticated = await authService.login(
-        body.username,
-        body.password,
-      );
+      const authenticated = await authService.login(body.username, body.password);
       if (!authenticated) {
         return sendError(
           reply,
@@ -735,11 +697,7 @@ export async function buildApp({
           false,
         );
       }
-      setSessionCookie(
-        reply,
-        authenticated.sessionToken,
-        config.secureCookies,
-      );
+      setSessionCookie(reply, authenticated.sessionToken, config.secureCookies);
       return {
         data: {
           ...publicPrincipal(authenticated.principal),
@@ -768,14 +726,7 @@ export async function buildApp({
     const sessionToken = extractSessionToken(request, config);
     const account = authService.getAccount?.(sessionToken) ?? null;
     if (!account) {
-      return sendError(
-        reply,
-        request,
-        401,
-        'unauthorized',
-        'Нужна действующая сессия.',
-        false,
-      );
+      return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
     return {
       data: account,
@@ -790,14 +741,7 @@ export async function buildApp({
     try {
       const account = authService.updateAccount?.(sessionToken, body) ?? null;
       if (!account) {
-        return sendError(
-          reply,
-          request,
-          401,
-          'unauthorized',
-          'Нужна действующая сессия.',
-          false,
-        );
+        return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
       }
       return {
         data: account,
@@ -830,20 +774,9 @@ export async function buildApp({
           body.newPassword,
         )) ?? null;
       if (!authenticated) {
-        return sendError(
-          reply,
-          request,
-          401,
-          'unauthorized',
-          'Нужна действующая сессия.',
-          false,
-        );
+        return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
       }
-      setSessionCookie(
-        reply,
-        authenticated.sessionToken,
-        config.secureCookies,
-      );
+      setSessionCookie(reply, authenticated.sessionToken, config.secureCookies);
       return {
         data: publicPrincipal(authenticated.principal),
         meta: { requestId: request.id },
@@ -894,14 +827,7 @@ export async function buildApp({
     const sessionToken = extractSessionToken(request, config);
     const revoked = authService.revokeOtherSessions?.(sessionToken) ?? null;
     if (revoked === null) {
-      return sendError(
-        reply,
-        request,
-        401,
-        'unauthorized',
-        'Нужна действующая сессия.',
-        false,
-      );
+      return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
     return {
       data: { revoked },
@@ -918,16 +844,9 @@ export async function buildApp({
       if (!hasAllowedOrigin(request, config)) return csrfError(request, reply);
       const body = passwordResetSchema.parse(request.body);
       try {
-        const authenticated = await authService.resetPassword?.(
-          body.token,
-          body.newPassword,
-        );
+        const authenticated = await authService.resetPassword?.(body.token, body.newPassword);
         if (!authenticated) throw new AuthInvalidResetTokenError();
-        setSessionCookie(
-          reply,
-          authenticated.sessionToken,
-          config.secureCookies,
-        );
+        setSessionCookie(reply, authenticated.sessionToken, config.secureCookies);
         return {
           data: {
             ...publicPrincipal(authenticated.principal),
@@ -1012,13 +931,7 @@ export async function buildApp({
   );
 
   app.get('/api/v1/candidate/connections', async (request, reply) => {
-    const candidate = authenticateCandidate(
-      request,
-      reply,
-      candidateStore,
-      authService,
-      config,
-    );
+    const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
     if (!candidate) return;
     return {
       data: oauthService.listConnections(candidate.id),
@@ -1026,18 +939,32 @@ export async function buildApp({
     };
   });
 
+  app.get(
+    '/api/v1/candidate/desktop-tunnel',
+    { config: { rateLimit: { max: 20, timeWindow: '15 minutes' } } },
+    async (request, reply) => {
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+      if (!candidate) return;
+      if (!config.desktopTunnel) {
+        return sendError(
+          reply,
+          request,
+          503,
+          'desktop_tunnel_unavailable',
+          'Защищённый маршрут LinkedIn сейчас не настроен.',
+          true,
+        );
+      }
+      return { data: config.desktopTunnel, meta: { requestId: request.id } };
+    },
+  );
+
   app.post<{ Params: { platform: string } }>(
     '/api/v1/candidate/connections/:platform/authorizations',
     { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } },
     async (request, reply) => {
       if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
       const platform = parsePlatform(request.params.platform);
       if (!platform) return connectorNotFound(request, reply);
@@ -1072,10 +999,7 @@ export async function buildApp({
         request.log.warn(
           {
             platform,
-            errorCode:
-              error instanceof OAuthConnectorError
-                ? error.code
-                : 'internal_error',
+            errorCode: error instanceof OAuthConnectorError ? error.code : 'internal_error',
           },
           'connector-callback-failed',
         );
@@ -1083,9 +1007,7 @@ export async function buildApp({
           reply,
           platform,
           'failed',
-          error instanceof OAuthConnectorError
-            ? error.code
-            : 'provider_oauth_failed',
+          error instanceof OAuthConnectorError ? error.code : 'provider_oauth_failed',
         );
       }
       return connectionResultRedirect(reply, platform, 'connected');
@@ -1096,13 +1018,7 @@ export async function buildApp({
     '/api/v1/candidate/connections/:platform',
     async (request, reply) => {
       if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
       const platform = parsePlatform(request.params.platform);
       if (!platform) return connectorNotFound(request, reply);
@@ -1135,13 +1051,7 @@ export async function buildApp({
   );
 
   app.get('/api/v1/candidate/me', async (request, reply) => {
-    const candidate = authenticateCandidate(
-      request,
-      reply,
-      candidateStore,
-      authService,
-      config,
-    );
+    const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
     if (!candidate) {
       return;
     }
@@ -1189,13 +1099,7 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
       const body = resumeImportSchema.parse(request.body);
       const read = await readResume(body.text, resumeStructurer);
@@ -1224,11 +1128,7 @@ export async function buildApp({
         ...plan.draft,
         evidence: candidateStore.getSnapshot(candidate.id).memory,
       });
-      candidateStore.saveResumeDraft(
-        candidate.id,
-        plan.draft,
-        projection.evidenceSnapshot,
-      );
+      candidateStore.saveResumeDraft(candidate.id, plan.draft, projection.evidenceSnapshot);
       return {
         data: {
           parsed: read.resume,
@@ -1251,13 +1151,7 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
       const body = candidateDocumentSchema.parse(request.body);
       try {
@@ -1295,25 +1189,12 @@ export async function buildApp({
   app.get<{ Params: { documentId: string } }>(
     '/api/v1/candidate/documents/:documentId',
     async (request, reply) => {
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
       const documentId = z.string().uuid().parse(request.params.documentId);
       const document = candidateStore.getDocument(candidate.id, documentId);
       if (!document) {
-        return sendError(
-          reply,
-          request,
-          404,
-          'document_not_found',
-          'Документ не найден.',
-          false,
-        );
+        return sendError(reply, request, 404, 'document_not_found', 'Документ не найден.', false);
       }
       return {
         data: document,
@@ -1326,25 +1207,12 @@ export async function buildApp({
     '/api/v1/candidate/documents/:documentId/download',
     { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
     async (request, reply) => {
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
       const documentId = z.string().uuid().parse(request.params.documentId);
       const document = candidateStore.getDocument(candidate.id, documentId);
       if (!document) {
-        return sendError(
-          reply,
-          request,
-          404,
-          'document_not_found',
-          'Документ не найден.',
-          false,
-        );
+        return sendError(reply, request, 404, 'document_not_found', 'Документ не найден.', false);
       }
       reply.header('Cache-Control', 'private, no-store');
       reply.header('X-Content-Type-Options', 'nosniff');
@@ -1352,9 +1220,7 @@ export async function buildApp({
         'Content-Disposition',
         `attachment; filename="openqareer-document"; filename*=UTF-8''${encodeHeaderFileName(document.fileName)}`,
       );
-      return reply
-        .type(document.mimeType)
-        .send(Buffer.from(document.contentBase64, 'base64'));
+      return reply.type(document.mimeType).send(Buffer.from(document.contentBase64, 'base64'));
     },
   );
 
@@ -1365,13 +1231,7 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
       const documentId = z.string().uuid().parse(request.params.documentId);
       const body = documentRetentionSchema.parse(request.body);
@@ -1383,14 +1243,7 @@ export async function buildApp({
           new Date().toISOString(),
         );
         if (!document) {
-          return sendError(
-            reply,
-            request,
-            404,
-            'document_not_found',
-            'Документ не найден.',
-            false,
-          );
+          return sendError(reply, request, 404, 'document_not_found', 'Документ не найден.', false);
         }
         return { data: document, meta: { requestId: request.id } };
       } catch (error) {
@@ -1415,67 +1268,55 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
       const documentId = z.string().uuid().parse(request.params.documentId);
       if (!candidateStore.deleteDocument(candidate.id, documentId)) {
-        return sendError(
-          reply,
-          request,
-          404,
-          'document_not_found',
-          'Документ не найден.',
-          false,
-        );
+        return sendError(reply, request, 404, 'document_not_found', 'Документ не найден.', false);
       }
       return reply.code(204).send();
     },
   );
 
   app.get('/api/v1/candidate/matched-vacancies', async (request, reply) => {
-    const candidate = authenticateCandidate(
-      request,
-      reply,
-      candidateStore,
-      authService,
-      config,
-    );
+    const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
     if (!candidate) return;
 
     const snapshot = candidateStore.getSnapshot(candidate.id);
     const memory = snapshot?.memory ?? [];
     const confirmedSkills = memory
-      .filter((m) => m.kind === 'fact' && (m.domain === 'skill' || m.confidence === 'candidate-confirmed'))
+      .filter(
+        (m) =>
+          m.kind === 'fact' && (m.domain === 'skill' || m.confidence === 'candidate-confirmed'),
+      )
       .map((m) => m.statement);
 
     const roleHypotheses = memory
       .filter((m) => m.domain === 'role-evidence' || m.kind === 'hypothesis')
       .map((m) => m.statement);
 
-    const subscriptionQueries = (snapshot?.vacancySubscriptions ?? [])
-      .map((s) => s.query);
+    const subscriptionQueries = (snapshot?.vacancySubscriptions ?? []).map((s) => s.query);
 
     const resumeTitle = snapshot?.resume?.draft?.targetRole;
 
     const targetRoles = Array.from(
-      new Set([
-        ...roleHypotheses,
-        ...subscriptionQueries,
-        ...(resumeTitle ? [resumeTitle] : []),
-      ].filter(Boolean)),
+      new Set(
+        [...roleHypotheses, ...subscriptionQueries, ...(resumeTitle ? [resumeTitle] : [])].filter(
+          Boolean,
+        ),
+      ),
     );
-
 
     const matched = multiSourceEngine.getMatchedVacancies({
       candidateId: candidate.id,
-      targetRoles: targetRoles.length > 0 ? targetRoles : ['Разработчик', 'Engineer', 'Руководитель разработки'],
-      confirmedSkills: confirmedSkills.length > 0 ? confirmedSkills : ['TypeScript', 'React', 'Node.js', 'PostgreSQL', 'Python'],
+      targetRoles:
+        targetRoles.length > 0
+          ? targetRoles
+          : ['Разработчик', 'Engineer', 'Руководитель разработки'],
+      confirmedSkills:
+        confirmedSkills.length > 0
+          ? confirmedSkills
+          : ['TypeScript', 'React', 'Node.js', 'PostgreSQL', 'Python'],
       confirmedFacts: confirmedSkills,
       preferredRemote: true,
     });
@@ -1487,13 +1328,7 @@ export async function buildApp({
   });
 
   app.get('/api/v1/candidate/vacancy-sources', async (request, reply) => {
-    const candidate = authenticateCandidate(
-      request,
-      reply,
-      candidateStore,
-      authService,
-      config,
-    );
+    const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
     if (!candidate) return;
     return {
       data: vacancySourceRegistryView(candidateStore.listVacancySourceHealth()),
@@ -1502,13 +1337,7 @@ export async function buildApp({
   });
 
   app.get('/api/v1/candidate/vacancy-subscriptions', async (request, reply) => {
-    const candidate = authenticateCandidate(
-      request,
-      reply,
-      candidateStore,
-      authService,
-      config,
-    );
+    const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
     if (!candidate) return;
     return {
       data: candidateStore.listVacancySubscriptions(candidate.id),
@@ -1523,19 +1352,10 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
       const body = vacancySubscriptionInputSchema.parse(request.body);
-      const data = await vacancyIntelligence.createAndRefresh(
-        candidate.id,
-        body,
-      );
+      const data = await vacancyIntelligence.createAndRefresh(candidate.id, body);
       return reply.code(201).send({
         data,
         meta: { requestId: request.id },
@@ -1546,22 +1366,10 @@ export async function buildApp({
   app.get<{ Params: { subscriptionId: string } }>(
     '/api/v1/candidate/vacancy-subscriptions/:subscriptionId/vacancies',
     async (request, reply) => {
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
-      const subscriptionId = z
-        .string()
-        .uuid()
-        .parse(request.params.subscriptionId);
-      const subscription = candidateStore.getVacancySubscription(
-        candidate.id,
-        subscriptionId,
-      );
+      const subscriptionId = z.string().uuid().parse(request.params.subscriptionId);
+      const subscription = candidateStore.getVacancySubscription(candidate.id, subscriptionId);
       if (!subscription) {
         return sendError(
           reply,
@@ -1575,10 +1383,7 @@ export async function buildApp({
       return {
         data: {
           subscription,
-          vacancies: candidateStore.listSubscriptionVacancies(
-            candidate.id,
-            subscriptionId,
-          ),
+          vacancies: candidateStore.listSubscriptionVacancies(candidate.id, subscriptionId),
         },
         meta: { requestId: request.id },
       };
@@ -1591,21 +1396,10 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
-      const subscriptionId = z
-        .string()
-        .uuid()
-        .parse(request.params.subscriptionId);
-      const body = z
-        .object({ status: z.enum(['active', 'paused']) })
-        .parse(request.body);
+      const subscriptionId = z.string().uuid().parse(request.params.subscriptionId);
+      const body = z.object({ status: z.enum(['active', 'paused']) }).parse(request.body);
       const subscription = candidateStore.setVacancySubscriptionStatus(
         candidate.id,
         subscriptionId,
@@ -1636,21 +1430,10 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
-      const subscriptionId = z
-        .string()
-        .uuid()
-        .parse(request.params.subscriptionId);
-      if (
-        !candidateStore.getVacancySubscription(candidate.id, subscriptionId)
-      ) {
+      const subscriptionId = z.string().uuid().parse(request.params.subscriptionId);
+      if (!candidateStore.getVacancySubscription(candidate.id, subscriptionId)) {
         return sendError(
           reply,
           request,
@@ -1661,10 +1444,7 @@ export async function buildApp({
         );
       }
       return {
-        data: await vacancyIntelligence.refreshCandidateSubscription(
-          candidate.id,
-          subscriptionId,
-        ),
+        data: await vacancyIntelligence.refreshCandidateSubscription(candidate.id, subscriptionId),
         meta: { requestId: request.id },
       };
     },
@@ -1676,24 +1456,10 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
-      const subscriptionId = z
-        .string()
-        .uuid()
-        .parse(request.params.subscriptionId);
-      if (
-        !candidateStore.deleteVacancySubscription(
-          candidate.id,
-          subscriptionId,
-        )
-      ) {
+      const subscriptionId = z.string().uuid().parse(request.params.subscriptionId);
+      if (!candidateStore.deleteVacancySubscription(candidate.id, subscriptionId)) {
         return sendError(
           reply,
           request,
@@ -1708,20 +1474,11 @@ export async function buildApp({
   );
 
   app.get('/api/v1/candidate/export', async (request, reply) => {
-    const candidate = authenticateCandidate(
-      request,
-      reply,
-      candidateStore,
-      authService,
-      config,
-    );
+    const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
     if (!candidate) {
       return;
     }
-    reply.header(
-      'Content-Disposition',
-      'attachment; filename="openqareer-candidate-export.json"',
-    );
+    reply.header('Content-Disposition', 'attachment; filename="openqareer-candidate-export.json"');
     return {
       data: candidateStore.exportCandidate(candidate.id),
       meta: {
@@ -1735,13 +1492,7 @@ export async function buildApp({
     if (!hasSafeMutationOrigin(request, config)) {
       return csrfError(request, reply);
     }
-    const candidate = authenticateCandidate(
-      request,
-      reply,
-      candidateStore,
-      authService,
-      config,
-    );
+    const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
     if (!candidate) {
       return;
     }
@@ -1755,23 +1506,13 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) {
         return;
       }
       const memoryId = z.string().uuid().parse(request.params.memoryId);
       const change = memoryChangeSchema.parse(request.body);
-      const memory = candidateStore.changeMemory(
-        candidate.id,
-        memoryId,
-        change,
-      );
+      const memory = candidateStore.changeMemory(candidate.id, memoryId, change);
       if (!memory && change.action !== 'delete') {
         return sendError(
           reply,
@@ -1803,19 +1544,11 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) {
         return;
       }
-      const assessmentId = assessmentIdSchema.parse(
-        request.params.assessmentId,
-      );
+      const assessmentId = assessmentIdSchema.parse(request.params.assessmentId);
       const evaluated = evaluateAssessment(assessmentId, request.body);
       const assessment = candidateStore.saveAssessment(
         candidate.id,
@@ -1831,13 +1564,7 @@ export async function buildApp({
   );
 
   app.get('/api/v1/candidate/resume', async (request, reply) => {
-    const candidate = authenticateCandidate(
-      request,
-      reply,
-      candidateStore,
-      authService,
-      config,
-    );
+    const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
     if (!candidate) return;
     return {
       data: resumeStudioView(candidateStore, candidate.id),
@@ -1854,24 +1581,14 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
       const draft = resumeDraftSchema.parse(request.body);
       const projection = buildResumeStudioProjection({
         ...draft,
         evidence: candidateStore.getSnapshot(candidate.id).memory,
       });
-      candidateStore.saveResumeDraft(
-        candidate.id,
-        draft,
-        projection.evidenceSnapshot,
-      );
+      candidateStore.saveResumeDraft(candidate.id, draft, projection.evidenceSnapshot);
       return {
         data: resumeStudioView(candidateStore, candidate.id),
         meta: { requestId: request.id },
@@ -1890,13 +1607,7 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
       const submission = germanyMarketSubmissionSchema.parse(request.body);
       const profile = candidateStore.saveGermanyMarket(
@@ -1926,13 +1637,7 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) {
         return;
       }
@@ -1950,15 +1655,11 @@ export async function buildApp({
       }
 
       const body = coachTurnRequestSchema.parse(request.body);
-      const phase = nextCoachPhase(
-        candidateStore.getSnapshot(candidate.id),
-        body.content,
-      );
-      const started = candidateStore.startTurn(
-        candidate.id,
-        parsedIdempotencyKey.data,
-        { ...body, phase },
-      );
+      const phase = nextCoachPhase(candidateStore.getSnapshot(candidate.id), body.content);
+      const started = candidateStore.startTurn(candidate.id, parsedIdempotencyKey.data, {
+        ...body,
+        phase,
+      });
       if (started.state === 'completed') {
         return providerResponse(request, started.output);
       }
@@ -1992,18 +1693,12 @@ export async function buildApp({
           { ...started.input, marketObservations },
           parsedIdempotencyKey.data,
         );
-        candidateStore.completeTurn(
-          candidate.id,
-          parsedIdempotencyKey.data,
-          output,
-        );
+        candidateStore.completeTurn(candidate.id, parsedIdempotencyKey.data, output);
       } catch (error) {
         candidateStore.failTurn(
           candidate.id,
           parsedIdempotencyKey.data,
-          error instanceof CoachProviderError
-            ? error.code
-            : 'internal_error',
+          error instanceof CoachProviderError ? error.code : 'internal_error',
         );
         throw error;
       }
@@ -2012,13 +1707,7 @@ export async function buildApp({
   );
 
   app.get('/api/v1/candidate/career-commands', async (request, reply) => {
-    const candidate = authenticateCandidate(
-      request,
-      reply,
-      candidateStore,
-      authService,
-      config,
-    );
+    const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
     if (!candidate) return;
     return {
       data: candidateStore.listCareerCommands(candidate.id),
@@ -2035,18 +1724,9 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
-      const idempotencyKey = z
-        .string()
-        .uuid()
-        .parse(request.headers['idempotency-key']);
+      const idempotencyKey = z.string().uuid().parse(request.headers['idempotency-key']);
       const body = careerCommandRequestSchema.parse(request.body);
       const snapshot = candidateStore.getSnapshot(candidate.id);
       const turn = snapshot.turns.find(
@@ -2079,9 +1759,7 @@ export async function buildApp({
               .map((message) => message.id),
           ),
           strategyDecisionId: turn.idempotencyKey,
-          modelInvocationIds: turn.provenance
-            ? [turn.provenance.responseId]
-            : [],
+          modelInvocationIds: turn.provenance ? [turn.provenance.responseId] : [],
           idempotencyKey,
           approval: null,
           executionTarget: body.executionTarget ?? null,
@@ -2094,23 +1772,14 @@ export async function buildApp({
     },
   );
 
-  app.get(
-    '/api/v1/candidate/career-commands/:commandId',
-    async (request, reply) => {
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
-      if (!candidate) return;
-      const { commandId } = careerCommandParamsSchema.parse(request.params);
-      const command = candidateStore.getCareerCommand(candidate.id, commandId);
-      if (!command) throw new CareerCommandNotFoundError();
-      return { data: command, meta: { requestId: request.id } };
-    },
-  );
+  app.get('/api/v1/candidate/career-commands/:commandId', async (request, reply) => {
+    const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+    if (!candidate) return;
+    const { commandId } = careerCommandParamsSchema.parse(request.params);
+    const command = candidateStore.getCareerCommand(candidate.id, commandId);
+    if (!command) throw new CareerCommandNotFoundError();
+    return { data: command, meta: { requestId: request.id } };
+  });
 
   app.post(
     '/api/v1/candidate/career-commands/:commandId/approvals',
@@ -2121,19 +1790,10 @@ export async function buildApp({
       if (!hasSafeMutationOrigin(request, config)) {
         return csrfError(request, reply);
       }
-      const candidate = authenticateCandidate(
-        request,
-        reply,
-        candidateStore,
-        authService,
-        config,
-      );
+      const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
       if (!candidate) return;
       const { commandId } = careerCommandParamsSchema.parse(request.params);
-      const approvalId = z
-        .string()
-        .uuid()
-        .parse(request.headers['idempotency-key']);
+      const approvalId = z.string().uuid().parse(request.headers['idempotency-key']);
       const command = candidateStore.getCareerCommand(candidate.id, commandId);
       if (!command) throw new CareerCommandNotFoundError();
       const consumedAt = new Date();
@@ -2150,10 +1810,7 @@ export async function buildApp({
         consumedAt: consumedAt.toISOString(),
       });
       if (careerCommandDispatcher && approved.status === 'queued') {
-        approved = await careerCommandDispatcher.dispatch(
-          candidate.id,
-          commandId,
-        );
+        approved = await careerCommandDispatcher.dispatch(candidate.id, commandId);
       }
       return {
         data: approved,
@@ -2288,20 +1945,12 @@ export async function buildApp({
             : 'public, max-age=31536000, immutable',
         );
       },
-      allowedPath: (pathName) =>
-        pathName !== '/server.mjs' && pathName !== '/health',
+      allowedPath: (pathName) => pathName !== '/server.mjs' && pathName !== '/health',
     });
 
     app.setNotFoundHandler(async (request, reply) => {
       if (request.url.startsWith('/api/')) {
-        return sendError(
-          reply,
-          request,
-          404,
-          'route_not_found',
-          'Такого API-маршрута нет.',
-          false,
-        );
+        return sendError(reply, request, 404, 'route_not_found', 'Такого API-маршрута нет.', false);
       }
       if (request.method === 'GET') {
         // Each surface has its own prerendered first paint. Serving the
@@ -2311,25 +1960,11 @@ export async function buildApp({
           .header('Cache-Control', 'no-store, max-age=0')
           .sendFile(entryDocumentFor(request.url, config.staticRoot));
       }
-      return sendError(
-        reply,
-        request,
-        404,
-        'route_not_found',
-        'Такого маршрута нет.',
-        false,
-      );
+      return sendError(reply, request, 404, 'route_not_found', 'Такого маршрута нет.', false);
     });
   } else {
     app.setNotFoundHandler((request, reply) =>
-      sendError(
-        reply,
-        request,
-        404,
-        'route_not_found',
-        'Такого API-маршрута нет.',
-        false,
-      ),
+      sendError(reply, request, 404, 'route_not_found', 'Такого API-маршрута нет.', false),
     );
   }
 
@@ -2342,14 +1977,7 @@ const candidateCreateSchema = z.object({
 });
 
 const candidateDocumentSchema = z.object({
-  kind: z.enum([
-    'resume',
-    'cover_letter',
-    'certificate',
-    'portfolio',
-    'profile_export',
-    'other',
-  ]),
+  kind: z.enum(['resume', 'cover_letter', 'certificate', 'portfolio', 'profile_export', 'other']),
   source: z.enum(['upload', 'generated', 'import']),
   fileName: z
     .string()
@@ -2392,8 +2020,7 @@ const hhMarketQuerySchema = z.object({
 
 function hasUnsafeFileNameCharacter(value: string): boolean {
   return [...value].some(
-    (character) =>
-      character === '/' || character === '\\' || character.charCodeAt(0) < 32,
+    (character) => character === '/' || character === '\\' || character.charCodeAt(0) < 32,
   );
 }
 
@@ -2433,10 +2060,7 @@ const accountProfileSchema = z
     displayName: z.string().trim().min(2).max(120).nullable().optional(),
     headline: z.string().trim().min(2).max(220).nullable().optional(),
     location: z.string().trim().min(2).max(160).nullable().optional(),
-    workMode: z
-      .enum(['office', 'hybrid', 'remote', 'flexible'])
-      .nullable()
-      .optional(),
+    workMode: z.enum(['office', 'hybrid', 'remote', 'flexible']).nullable().optional(),
   })
   .refine((value) => Object.values(value).some((item) => item !== undefined), {
     message: 'at least one profile field is required',
@@ -2466,9 +2090,7 @@ const profileImportSchema = z.object({
     .string()
     .trim()
     .max(2_048)
-    .transform((value) =>
-      !/^https?:\/\//i.test(value) ? `https://${value}` : value,
-    )
+    .transform((value) => (!/^https?:\/\//i.test(value) ? `https://${value}` : value))
     .refine((value) => {
       try {
         parseProfileUrl(value);
@@ -2481,24 +2103,17 @@ const profileImportSchema = z.object({
 
 const oauthCallbackQuerySchema = z
   .object({
-    state: z
-      .string()
-      .regex(/^[A-Za-z0-9_-]{32,256}$/),
+    state: z.string().regex(/^[A-Za-z0-9_-]{32,256}$/),
     code: z.string().min(8).max(2_048).optional(),
     error: z.string().max(200).optional(),
   })
   .refine((value) => Boolean(value.code) !== Boolean(value.error));
 
 function parsePlatform(value: string): OAuthPlatform | null {
-  return (OAUTH_PLATFORMS as readonly string[]).includes(value)
-    ? (value as OAuthPlatform)
-    : null;
+  return (OAUTH_PLATFORMS as readonly string[]).includes(value) ? (value as OAuthPlatform) : null;
 }
 
-function connectorNotFound(
-  request: FastifyRequest,
-  reply: FastifyReply,
-): FastifyReply {
+function connectorNotFound(request: FastifyRequest, reply: FastifyReply): FastifyReply {
   return sendError(
     reply,
     request,
@@ -2610,10 +2225,7 @@ const memoryChangeSchema = z
     }
   });
 
-const assessmentIdSchema = z.enum([
-  'work-preferences-v1',
-  'product-case-v1',
-]);
+const assessmentIdSchema = z.enum(['work-preferences-v1', 'product-case-v1']);
 
 function evaluateAssessment(assessmentId: AssessmentId, body: unknown) {
   if (assessmentId === 'work-preferences-v1') {
@@ -2666,25 +2278,17 @@ async function readResume(
   };
 }
 
-function resumeImportLabel(
-  source: 'pdf' | 'linkedin' | 'hh' | 'text',
-  fileName?: string,
-): string {
+function resumeImportLabel(source: 'pdf' | 'linkedin' | 'hh' | 'text', fileName?: string): string {
   const origin = {
     pdf: 'PDF-резюме',
     linkedin: 'профиль LinkedIn',
     hh: 'резюме hh.ru',
     text: 'текст резюме',
   }[source];
-  return fileName
-    ? `Импорт: ${origin} «${fileName}»`
-    : `Импорт: ${origin}`;
+  return fileName ? `Импорт: ${origin} «${fileName}»` : `Импорт: ${origin}`;
 }
 
-function resumeStudioView(
-  candidateStore: CandidateStore,
-  candidateId: string,
-): ResumeStudioView {
+function resumeStudioView(candidateStore: CandidateStore, candidateId: string): ResumeStudioView {
   const snapshot = candidateStore.getSnapshot(candidateId);
   const stored = snapshot.resume;
   const projection = buildResumeStudioProjection({
@@ -2693,9 +2297,7 @@ function resumeStudioView(
   });
   return {
     draft: stored?.draft ?? null,
-    savedAt: stored
-      ? { createdAt: stored.createdAt, updatedAt: stored.updatedAt }
-      : null,
+    savedAt: stored ? { createdAt: stored.createdAt, updatedAt: stored.updatedAt } : null,
     projection,
     evidenceFreshness: validateResumeEvidenceFreshness(
       stored?.evidenceSnapshot ?? projection.evidenceSnapshot,
@@ -2716,18 +2318,10 @@ function authenticateCandidate(
     ? authorization.slice('Bearer '.length)
     : '';
   const bearerCandidate = candidateStore.authenticate(accessToken);
-  const sessionCandidate =
-    authenticateSession(request, authService, config)?.candidate ?? null;
+  const sessionCandidate = authenticateSession(request, authService, config)?.candidate ?? null;
   const candidate = bearerCandidate ?? sessionCandidate;
   if (!candidate) {
-    sendError(
-      reply,
-      request,
-      401,
-      'unauthorized',
-      'Нужна действующая сессия кандидата.',
-      false,
-    );
+    sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия кандидата.', false);
     return null;
   }
   return candidate;
@@ -2747,10 +2341,7 @@ function entryDocumentFor(url: string, staticRoot: string): string {
   return 'index.html';
 }
 
-function extractSessionToken(
-  request: FastifyRequest,
-  config: ServerConfig,
-): string {
+function extractSessionToken(request: FastifyRequest, config: ServerConfig): string {
   const authorization = request.headers.authorization;
   if (authorization?.startsWith('Bearer ')) {
     const bearer = authorization.slice('Bearer '.length).trim();
@@ -2770,10 +2361,7 @@ function authenticateSession(
   return authService.authenticate(sessionToken);
 }
 
-function hasPreviewAccess(
-  request: FastifyRequest,
-  expectedToken: string,
-): boolean {
+function hasPreviewAccess(request: FastifyRequest, expectedToken: string): boolean {
   const authorization = request.headers.authorization;
   const suppliedToken = authorization?.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
@@ -2781,10 +2369,7 @@ function hasPreviewAccess(
   return secureEqual(suppliedToken, expectedToken);
 }
 
-function hasAllowedOrigin(
-  request: FastifyRequest,
-  config: ServerConfig,
-): boolean {
+function hasAllowedOrigin(request: FastifyRequest, config: ServerConfig): boolean {
   const origin = request.headers.origin;
   if (!origin) {
     // If request carries Bearer authorization, allow desktop/native companion client
@@ -2796,10 +2381,7 @@ function hasAllowedOrigin(
   return config.allowedOrigins.includes(origin);
 }
 
-function hasSafeMutationOrigin(
-  request: FastifyRequest,
-  config: ServerConfig,
-): boolean {
+function hasSafeMutationOrigin(request: FastifyRequest, config: ServerConfig): boolean {
   const authorization = request.headers.authorization;
   if (authorization?.startsWith('Bearer ')) {
     return true;
@@ -2807,10 +2389,7 @@ function hasSafeMutationOrigin(
   return hasAllowedOrigin(request, config);
 }
 
-function csrfError(
-  request: FastifyRequest,
-  reply: FastifyReply,
-): FastifyReply {
+function csrfError(request: FastifyRequest, reply: FastifyReply): FastifyReply {
   return sendError(
     reply,
     request,
@@ -2821,11 +2400,7 @@ function csrfError(
   );
 }
 
-function setSessionCookie(
-  reply: FastifyReply,
-  sessionToken: string,
-  secure: boolean,
-): void {
+function setSessionCookie(reply: FastifyReply, sessionToken: string, secure: boolean): void {
   reply.setCookie(sessionCookieName(secure), sessionToken, {
     path: '/',
     httpOnly: true,
@@ -2845,9 +2420,7 @@ function clearSessionCookie(reply: FastifyReply, secure: boolean): void {
 }
 
 function sessionCookieName(secure: boolean): string {
-  return secure
-    ? '__Host-openqareer_session'
-    : 'openqareer_session';
+  return secure ? '__Host-openqareer_session' : 'openqareer_session';
 }
 
 function publicPrincipal(principal: AuthPrincipal) {
@@ -2878,9 +2451,7 @@ function providerResponse(
   };
 }
 
-function hasValidation(
-  error: unknown,
-): error is { validation: unknown[] } {
+function hasValidation(error: unknown): error is { validation: unknown[] } {
   return (
     typeof error === 'object' &&
     error !== null &&
@@ -2914,23 +2485,13 @@ function getErrorStatusCode(error: unknown): number | undefined {
 }
 
 function previewAuth(expectedToken: string) {
-  return async (
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<void> => {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const authorization = request.headers.authorization;
     const suppliedToken = authorization?.startsWith('Bearer ')
       ? authorization.slice('Bearer '.length)
       : '';
     if (!secureEqual(suppliedToken, expectedToken)) {
-      sendError(
-        reply,
-        request,
-        401,
-        'unauthorized',
-        'Нужна действующая сессия.',
-        false,
-      );
+      sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
   };
 }
@@ -2938,15 +2499,13 @@ function previewAuth(expectedToken: string) {
 function secureEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
-  return (
-    leftBuffer.length === rightBuffer.length &&
-    timingSafeEqual(leftBuffer, rightBuffer)
-  );
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 function encodeHeaderFileName(fileName: string): string {
-  return encodeURIComponent(fileName).replace(/[!'()*]/gu, (character) =>
-    `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  return encodeURIComponent(fileName).replace(
+    /[!'()*]/gu,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 }
 

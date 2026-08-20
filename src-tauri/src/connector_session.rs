@@ -9,7 +9,9 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewBuilder, WebviewUrl,
+};
 
 /// Desktop Chrome signature. Platforms serve a stripped page to unknown agents.
 const SESSION_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
@@ -22,9 +24,19 @@ const PAGE_SETTLE_DELAY: Duration = Duration::from_millis(900);
 const EVAL_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionWindowRequest {
     pub platform: String,
     pub url: String,
+    pub layout: Option<SessionLayout>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionLayout {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,13 +60,6 @@ pub fn session_window_label(platform: &str) -> Option<&'static str> {
         "linkedin" => Some("connector-linkedin"),
         "hh" => Some("connector-hh"),
         _ => None,
-    }
-}
-
-fn session_window_title(platform: &str) -> &'static str {
-    match platform {
-        "linkedin" => "Вход в LinkedIn — OpenQareer",
-        _ => "Вход в hh.ru — OpenQareer",
     }
 }
 
@@ -129,12 +134,27 @@ pub fn open_session_window(
 
     // A window that drifted elsewhere during a previous attempt must come back
     // to the page the candidate just asked for, not merely to the front.
-    if let Some(existing) = app.get_webview_window(label) {
+    let layout = request.layout.clone().unwrap_or(SessionLayout {
+        x: 180.0,
+        y: 140.0,
+        width: 920.0,
+        height: 620.0,
+    });
+    if layout.width < 320.0 || layout.height < 320.0 || layout.x < 0.0 || layout.y < 0.0 {
+        return SessionWindowReport {
+            opened: false,
+            label: label.to_string(),
+            reason: Some("session_layout_invalid".to_string()),
+        };
+    }
+
+    if let Some(existing) = app.get_webview(label) {
         if !existing.url().is_ok_and(|current| current == url) {
             let _ = existing.navigate(url);
         }
+        let _ = existing.set_position(LogicalPosition::new(layout.x, layout.y));
+        let _ = existing.set_size(LogicalSize::new(layout.width, layout.height));
         let _ = existing.show();
-        let _ = existing.unminimize();
         let _ = existing.set_focus();
         return SessionWindowReport {
             opened: true,
@@ -143,20 +163,27 @@ pub fn open_session_window(
         };
     }
 
-    let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
-        .title(session_window_title(&request.platform))
-        .inner_size(1024.0, 820.0)
-        .min_inner_size(620.0, 560.0)
+    let Some(main_window) = app.get_window("main") else {
+        return SessionWindowReport {
+            opened: false,
+            label: label.to_string(),
+            reason: Some("main_window_missing".to_string()),
+        };
+    };
+    let platform = request.platform.clone();
+    let mut builder = WebviewBuilder::new(label, WebviewUrl::External(url))
         .user_agent(SESSION_USER_AGENT)
-        .center()
-        .resizable(true)
-        .focused(true);
+        .on_navigation(move |next_url| is_allowed_session_url(&platform, next_url.as_str()));
 
     if let Some(proxy) = proxy_url {
         builder = builder.proxy_url(proxy);
     }
 
-    match builder.build() {
+    match main_window.add_child(
+        builder,
+        LogicalPosition::new(layout.x, layout.y),
+        LogicalSize::new(layout.width, layout.height),
+    ) {
         Ok(_) => SessionWindowReport {
             opened: true,
             label: label.to_string(),
@@ -175,8 +202,28 @@ pub fn open_session_window(
 /// signal that an external sign-in flow is still running.
 pub fn is_session_window_open(app: &AppHandle, platform: &str) -> bool {
     session_window_label(platform)
-        .and_then(|label| app.get_webview_window(label))
+        .and_then(|label| app.get_webview(label))
         .is_some()
+}
+
+pub fn close_session_window(app: &AppHandle, platform: &str) -> bool {
+    session_window_label(platform)
+        .and_then(|label| app.get_webview(label))
+        .is_some_and(|webview| webview.close().is_ok())
+}
+
+pub fn resize_session_window(app: &AppHandle, platform: &str, layout: SessionLayout) -> bool {
+    if layout.width < 320.0 || layout.height < 320.0 || layout.x < 0.0 || layout.y < 0.0 {
+        return false;
+    }
+    session_window_label(platform)
+        .and_then(|label| app.get_webview(label))
+        .is_some_and(|webview| {
+            webview
+                .set_position(LogicalPosition::new(layout.x, layout.y))
+                .and_then(|_| webview.set_size(LogicalSize::new(layout.width, layout.height)))
+                .is_ok()
+        })
 }
 
 #[derive(Deserialize)]
@@ -187,7 +234,7 @@ struct DocumentState {
 
 /// `eval_with_callback` hands the JSON-encoded result to a `Fn` callback; the
 /// oneshot sender has to survive being borrowed, hence the mutex.
-async fn eval_json(window: &WebviewWindow, js: &str) -> Result<String, String> {
+async fn eval_json(window: &Webview, js: &str) -> Result<String, String> {
     let (sender, receiver) = tokio::sync::oneshot::channel::<String>();
     let slot = Mutex::new(Some(sender));
     window
@@ -206,7 +253,7 @@ async fn eval_json(window: &WebviewWindow, js: &str) -> Result<String, String> {
         .map_err(|_| "eval_cancelled".to_string())
 }
 
-async fn read_document_state(window: &WebviewWindow) -> Result<DocumentState, String> {
+async fn read_document_state(window: &Webview) -> Result<DocumentState, String> {
     let raw = eval_json(
         window,
         "(function(){try{return {ready: document.readyState, href: location.href};}\
@@ -224,7 +271,7 @@ pub async fn read_session_page(
 ) -> Result<SessionPageReport, String> {
     let (label, url) = validate(request)?;
     let window = app
-        .get_webview_window(label)
+        .get_webview(label)
         .ok_or_else(|| "session_window_missing".to_string())?;
 
     let already_there = window.url().is_ok_and(|current| current == url);

@@ -2203,6 +2203,7 @@ dependencies = [
 name = "openqareer-desktop"
 version = "1.0.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "reqwest 0.12.28",
  "serde",

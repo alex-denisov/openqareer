@@ -10,7 +10,7 @@ default-run = "openqareer-desktop"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["unstable", "macos-proxy"] }
 tauri-plugin-shell = "2"
 tauri-plugin-process = "2"
 serde = { version = "1.0", features = ["derive"] }
@@ -20,6 +20,7 @@ tokio = { version = "1", features = ["full"] }
 thiserror = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }
+base64 = "0.22"
 
 [dev-dependencies]
 tokio-test = "0.4"

@@ -36,14 +36,10 @@ const configSchema = z.object({
   OPENQAREER_AI_MODEL: z.enum(supportedModels).default('gpt-5.6-sol'),
   OPENQAREER_PERSONAL_AI_PROVIDER: z.enum(PROVIDER_IDS).default('openai'),
   OPENQAREER_PERSONAL_AI_MODEL: z.string().min(1).optional(),
-  OPENQAREER_SYNTHETIC_AI_PROVIDER: z
-    .enum(PROVIDER_IDS)
-    .default('openrouter'),
+  OPENQAREER_SYNTHETIC_AI_PROVIDER: z.enum(PROVIDER_IDS).default('openrouter'),
   OPENQAREER_SYNTHETIC_AI_MODEL: z.string().min(1).optional(),
   OPENQAREER_STATIC_ROOT: z.string().min(1).optional(),
-  OPENQAREER_LOG_LEVEL: z
-    .enum(['fatal', 'error', 'warn', 'info'])
-    .default('info'),
+  OPENQAREER_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info']).default('info'),
   OPENQAREER_ADMIN_USERNAME: z
     .string()
     .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$/)
@@ -55,18 +51,44 @@ const configSchema = z.object({
     .optional(),
   OPENQAREER_TEST_CANDIDATE_PASSWORD: z.string().min(16).max(256).optional(),
   OPENQAREER_LINKEDIN_CLIENT_ID: blankAsUnset(z.string().min(5).max(512)),
-  OPENQAREER_LINKEDIN_CLIENT_SECRET: blankAsUnset(
-    z.string().min(16).max(2_048),
-  ),
+  OPENQAREER_LINKEDIN_CLIENT_SECRET: blankAsUnset(z.string().min(16).max(2_048)),
   OPENQAREER_LINKEDIN_REDIRECT_URI: blankAsUnset(z.string().url().max(2_048)),
   OPENQAREER_HH_CLIENT_ID: blankAsUnset(z.string().min(5).max(512)),
   OPENQAREER_HH_CLIENT_SECRET: blankAsUnset(z.string().min(16).max(2_048)),
   OPENQAREER_HH_REDIRECT_URI: blankAsUnset(z.string().url().max(2_048)),
   OPENQAREER_RESEND_API_KEY: blankAsUnset(z.string().min(10).max(2_048)),
-  OPENQAREER_ACCOUNT_EMAIL_FROM: blankAsUnset(
-    z.string().min(3).max(320),
-  ),
+  OPENQAREER_ACCOUNT_EMAIL_FROM: blankAsUnset(z.string().min(3).max(320)),
   OPENQAREER_PUBLIC_URL: blankAsUnset(z.string().url().max(2_048)),
+  OPENQAREER_DESKTOP_TUNNEL_SERVER: blankAsUnset(
+    z
+      .string()
+      .min(1)
+      .max(253)
+      .regex(/^[A-Za-z0-9.-]+$/),
+  ),
+  OPENQAREER_DESKTOP_TUNNEL_PORT: z.preprocess(
+    (value) => (value === '' || value === undefined ? undefined : value),
+    z.coerce.number().int().min(1).max(65_535).optional(),
+  ),
+  OPENQAREER_DESKTOP_TUNNEL_SSH_USER: blankAsUnset(z.string().regex(/^[a-z_][a-z0-9_-]{2,31}$/)),
+  OPENQAREER_DESKTOP_TUNNEL_SSH_PRIVATE_KEY_BASE64: blankAsUnset(
+    z
+      .string()
+      .min(80)
+      .max(16_384)
+      .regex(/^[A-Za-z0-9+/=]+$/),
+  ),
+  OPENQAREER_DESKTOP_TUNNEL_SSH_HOST_KEY_BASE64: blankAsUnset(
+    z
+      .string()
+      .min(40)
+      .max(4_096)
+      .regex(/^[A-Za-z0-9+/=]+$/),
+  ),
+  OPENQAREER_DESKTOP_TUNNEL_PROXY_USERNAME: blankAsUnset(
+    z.string().regex(/^[A-Za-z0-9_-]{12,64}$/),
+  ),
+  OPENQAREER_DESKTOP_TUNNEL_PROXY_PASSWORD: blankAsUnset(z.string().min(32).max(128)),
 });
 
 /**
@@ -76,8 +98,7 @@ const configSchema = z.object({
  */
 function blankAsUnset(schema: z.ZodString) {
   return z.preprocess(
-    (value) =>
-      typeof value === 'string' && value.trim() === '' ? undefined : value,
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     schema.optional(),
   );
 }
@@ -119,6 +140,19 @@ export interface ServerConfig {
     from: string;
     publicBaseUrl: string;
   };
+  desktopTunnel?: DesktopTunnelConfig;
+}
+
+export interface DesktopTunnelConfig {
+  remoteServer: string;
+  remotePort: number;
+  sshUser: string;
+  sshPrivateKeyBase64: string;
+  sshHostKeyBase64: string;
+  proxyUsername: string;
+  proxyPassword: string;
+  localSocksPort: number;
+  localHttpPort: number;
 }
 
 export function readServerConfig(
@@ -146,16 +180,10 @@ export function readServerConfig(
     providerCredentials,
   });
   const builtRelease =
-    typeof __OPENQAREER_RELEASE__ === 'undefined'
-      ? 'local'
-      : __OPENQAREER_RELEASE__;
+    typeof __OPENQAREER_RELEASE__ === 'undefined' ? 'local' : __OPENQAREER_RELEASE__;
   const secureCookies = environment.NODE_ENV === 'production';
   const seedAccounts = [
-    seedAccount(
-      parsed.OPENQAREER_ADMIN_USERNAME,
-      parsed.OPENQAREER_ADMIN_PASSWORD,
-      'admin',
-    ),
+    seedAccount(parsed.OPENQAREER_ADMIN_USERNAME, parsed.OPENQAREER_ADMIN_PASSWORD, 'admin'),
     seedAccount(
       parsed.OPENQAREER_TEST_CANDIDATE_USERNAME,
       parsed.OPENQAREER_TEST_CANDIDATE_PASSWORD,
@@ -163,8 +191,8 @@ export function readServerConfig(
     ),
   ].filter((account) => account !== null);
   if (
-    new Set(seedAccounts.map((account) => account.username.toLowerCase()))
-      .size !== seedAccounts.length
+    new Set(seedAccounts.map((account) => account.username.toLowerCase())).size !==
+    seedAccounts.length
   ) {
     throw new Error('seed account usernames must be unique');
   }
@@ -200,9 +228,7 @@ export function readServerConfig(
     parsed.OPENQAREER_ACCOUNT_EMAIL_FROM,
     parsed.OPENQAREER_PUBLIC_URL,
   ];
-  const accountEmail = accountEmailValues.every(
-    (value) => value === undefined,
-  )
+  const accountEmail = accountEmailValues.every((value) => value === undefined)
     ? undefined
     : accountEmailValues.every((value) => value !== undefined)
       ? {
@@ -211,9 +237,33 @@ export function readServerConfig(
           publicBaseUrl: parsed.OPENQAREER_PUBLIC_URL!,
         }
       : (() => {
-          throw new Error(
-            'complete account email configuration is required',
-          );
+          throw new Error('complete account email configuration is required');
+        })();
+  const desktopTunnelValues = [
+    parsed.OPENQAREER_DESKTOP_TUNNEL_SERVER,
+    parsed.OPENQAREER_DESKTOP_TUNNEL_PORT,
+    parsed.OPENQAREER_DESKTOP_TUNNEL_SSH_USER,
+    parsed.OPENQAREER_DESKTOP_TUNNEL_SSH_PRIVATE_KEY_BASE64,
+    parsed.OPENQAREER_DESKTOP_TUNNEL_SSH_HOST_KEY_BASE64,
+    parsed.OPENQAREER_DESKTOP_TUNNEL_PROXY_USERNAME,
+    parsed.OPENQAREER_DESKTOP_TUNNEL_PROXY_PASSWORD,
+  ];
+  const desktopTunnel = desktopTunnelValues.every((value) => value === undefined)
+    ? undefined
+    : desktopTunnelValues.every((value) => value !== undefined)
+      ? {
+          remoteServer: parsed.OPENQAREER_DESKTOP_TUNNEL_SERVER!,
+          remotePort: parsed.OPENQAREER_DESKTOP_TUNNEL_PORT!,
+          sshUser: parsed.OPENQAREER_DESKTOP_TUNNEL_SSH_USER!,
+          sshPrivateKeyBase64: parsed.OPENQAREER_DESKTOP_TUNNEL_SSH_PRIVATE_KEY_BASE64!,
+          sshHostKeyBase64: parsed.OPENQAREER_DESKTOP_TUNNEL_SSH_HOST_KEY_BASE64!,
+          proxyUsername: parsed.OPENQAREER_DESKTOP_TUNNEL_PROXY_USERNAME!,
+          proxyPassword: parsed.OPENQAREER_DESKTOP_TUNNEL_PROXY_PASSWORD!,
+          localSocksPort: 10_885,
+          localHttpPort: 10_886,
+        }
+      : (() => {
+          throw new Error('complete desktop tunnel configuration is required');
         })();
 
   return {
@@ -230,9 +280,7 @@ export function readServerConfig(
     syntheticModel: syntheticRoute.model,
     providerCredentials,
     yandexFolderId: environment.OPENQAREER_YANDEX_FOLDER_ID?.trim(),
-    staticRoot:
-      parsed.OPENQAREER_STATIC_ROOT ??
-      dirname(fileURLToPath(moduleUrl)),
+    staticRoot: parsed.OPENQAREER_STATIC_ROOT ?? dirname(fileURLToPath(moduleUrl)),
     release: builtRelease,
     logLevel: parsed.OPENQAREER_LOG_LEVEL,
     secureCookies,
@@ -256,13 +304,11 @@ export function readServerConfig(
     providerCatalogStatus: getProviderCatalogStatus(environment),
     oauthProviders,
     accountEmail,
+    desktopTunnel,
   };
 }
 
-function validateOAuthRedirect(
-  platform: OAuthPlatform,
-  redirectUri: string,
-): void {
+function validateOAuthRedirect(platform: OAuthPlatform, redirectUri: string): void {
   const callback = new URL(redirectUri);
   if (
     callback.protocol !== 'https:' ||
