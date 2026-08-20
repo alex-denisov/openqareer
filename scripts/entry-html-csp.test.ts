@@ -25,9 +25,11 @@ describe('entry HTML under the production CSP', () => {
     expect(INLINE_STYLE.test(html)).toBe(false);
   });
 
+  // INC-018 rewrites every root-level production path to index.html, so the
+  // bootstrap must live under `/assets/` to be served as JavaScript at all.
   it('still marks the desktop companion before first paint, from a same-origin file', () => {
-    expect(html).toContain('<script src="/desktop-bootstrap.js"></script>');
-    const bootstrap = readFileSync('public/desktop-bootstrap.js', 'utf8');
+    expect(html).toContain('<script src="/assets/desktop-bootstrap.js"></script>');
+    const bootstrap = readFileSync('public/assets/desktop-bootstrap.js', 'utf8');
     expect(bootstrap).toContain('is-desktop-companion');
     expect(bootstrap).toContain('__TAURI_INTERNALS__');
   });
