@@ -16,12 +16,16 @@ import { PlatformLogo } from './PlatformLogo';
 import {
   looksLikeHhLoginPage,
   looksLikeHhVpnBlock,
-  openPlatformSession,
+  openConnectorSession,
+  platformRouteNotice,
   readSessionPage,
+  sessionCheckFailure,
+  sessionOpenFailureMessage,
   type ConnectorSessionStep,
 } from './connectorSession';
 
 const HH_RESUME_LIST_URL = 'https://hh.ru/applicant/resumes';
+const HH_LOGIN_URL = 'https://hh.ru/account/login';
 
 export interface HhResumeItem {
   id: string;
@@ -50,26 +54,37 @@ export function HhConnectModal({
 }: HhConnectModalProps) {
   const [step, setStep] = useState<ConnectorSessionStep>('idle');
   const [error, setError] = useState<string>();
-  const [probing, setProbing] = useState(false);
-  const [reachable, setReachable] = useState(true);
+  const [probe, setProbe] = useState<{ accessible: boolean }>();
 
   useEffect(() => {
     if (!isOpen) return;
     setStep('idle');
     setError(undefined);
-    setProbing(true);
+    setProbe(undefined);
     void probeNetworkStatus()
-      .then((status) => setReachable(status.hh.accessible))
-      .catch(() => setReachable(true))
-      .finally(() => setProbing(false));
+      .then((status) => setProbe(status.hh))
+      .catch(() => setProbe({ accessible: false }));
   }, [isOpen]);
+
+  /** The step only advances once a window is really on screen (B149). */
+  async function startSession() {
+    setError(undefined);
+    setStep('opening');
+    const result = await openConnectorSession('hh', HH_LOGIN_URL);
+    if (!result.opened) {
+      setStep('idle');
+      setError(sessionOpenFailureMessage('hh', result.reason));
+      return;
+    }
+    setStep('session_open');
+  }
 
   async function checkSession() {
     setStep('checking');
     setError(undefined);
     try {
       if (isTauriEnvironment()) {
-        const page = await readSessionPage(HH_RESUME_LIST_URL);
+        const page = await readSessionPage('hh', HH_RESUME_LIST_URL);
         if (page.body) {
           if (looksLikeHhVpnBlock(page.body)) {
             setError(
@@ -102,14 +117,13 @@ export function HhConnectModal({
       );
       setStep('session_open');
     } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : 'Подключить hh.ru не удалось. Загрузите PDF резюме или повторите попытку.',
-      );
-      setStep('session_open');
+      const failure = sessionCheckFailure('hh', reason);
+      setError(failure.message);
+      setStep(failure.step);
     }
   }
+
+  const route = platformRouteNotice('hh', probe);
 
   return (
     <ImportModalShell
@@ -121,19 +135,12 @@ export function HhConnectModal({
     >
       <div className="career-modal-body">
         <p className="career-modal-network-status">
-          {probing ? (
-            <span>Проверяем доступность hh.ru…</span>
-          ) : reachable ? (
-            <>
-              <CheckCircle size={18} weight="fill" />
-              <span>Прямой доступ к hh.ru сейчас работает</span>
-            </>
-          ) : (
-            <>
-              <WarningCircle size={18} weight="fill" />
-              <span>hh.ru может ограничивать доступ с текущего маршрута</span>
-            </>
-          )}
+          {route.tone === 'ok' ? (
+            <CheckCircle size={18} weight="fill" />
+          ) : route.tone === 'blocked' ? (
+            <WarningCircle size={18} weight="fill" />
+          ) : null}
+          <span>{route.text}</span>
         </p>
 
         <p className="career-modal-intro">
@@ -141,21 +148,24 @@ export function HhConnectModal({
           соискателя. Мы ничего не публикуем и не откликаемся от вашего имени.
         </p>
 
-        {step === 'idle' ? (
+        {step === 'idle' || step === 'opening' ? (
           <button
             type="button"
             className="career-primary-button career-modal-wide-action"
-            onClick={() => {
-              setError(undefined);
-              setStep('session_open');
-              openPlatformSession(
-                'https://hh.ru/account/login',
-                'OpenQareer_hh_Session',
-              );
-            }}
+            onClick={() => void startSession()}
+            disabled={step === 'opening'}
           >
-            <ArrowSquareOut size={18} weight="bold" />
-            <span>Открыть окно входа в hh.ru</span>
+            {step === 'opening' ? (
+              <>
+                <SpinnerGap size={18} className="spin" />
+                <span>Открываем окно входа…</span>
+              </>
+            ) : (
+              <>
+                <ArrowSquareOut size={18} weight="bold" />
+                <span>Открыть окно входа в hh.ru</span>
+              </>
+            )}
           </button>
         ) : (
           <div className="career-modal-steps">
@@ -187,7 +197,7 @@ export function HhConnectModal({
         >
           Отмена
         </button>
-        {step === 'idle' ? null : (
+        {step === 'idle' || step === 'opening' ? null : (
           <button
             type="button"
             className="career-primary-button"
@@ -211,7 +221,7 @@ export function HhConnectModal({
 
 async function readFirstResume(url: string): Promise<ParsedResume | undefined> {
   try {
-    const page = await readSessionPage(url);
+    const page = await readSessionPage('hh', url);
     return page.body ? parseHhResumeHtml(page.body, url) : undefined;
   } catch {
     // The list alone is already useful; the candidate picks a resume next.

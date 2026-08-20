@@ -201,6 +201,12 @@ impl TunnelManager {
         *started = None;
     }
 
+    /// Whether a local proxy is actually accepting traffic right now. Callers
+    /// must not route through the tunnel endpoints on any other state.
+    pub async fn is_running(&self) -> bool {
+        *self.state.lock().await == TunnelState::Running
+    }
+
     pub async fn set_error(&self, error: String) {
         let mut state = self.state.lock().await;
         *state = TunnelState::Failed;

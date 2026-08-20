@@ -54,10 +54,12 @@ export function AccountConnectionsManager() {
     setNotice(undefined);
     try {
       const started = await startConnection(platform);
-      openPlatformAuthPopup(started.authorizationUrl, (authResult) => {
+      openPlatformAuthPopup(platform, started.authorizationUrl, (authResult) => {
         setBusyPlatform(undefined);
+        // The desktop shell has no opener channel, so the authorisation window
+        // closing is all we get — re-read the truth from the server (B149).
+        void getConnections().then((loaded) => setConnections(loaded)).catch(() => undefined);
         if (authResult?.status === 'connected') {
-          void getConnections().then((loaded) => setConnections(loaded)).catch(() => undefined);
           setNotice(`${PLATFORM_LABELS[platform]} успешно подключён.`);
         } else if (authResult?.status === 'declined') {
           setNotice(`Подключение ${PLATFORM_LABELS[platform]} отменено.`);

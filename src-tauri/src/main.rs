@@ -2,14 +2,19 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod automation_worker;
+mod connector_session;
 mod network_probe;
 mod tunnel_manager;
 
 use automation_worker::{execute_candidate_action_safely, LocalActionRequest, LocalActionResult};
+use connector_session::{
+    is_session_window_open, open_session_window, read_session_page, should_route_through_tunnel,
+    SessionPageReport, SessionWindowReport, SessionWindowRequest,
+};
 use network_probe::{evaluate_network_environment, NetworkEnvironmentStatus};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, State, Url};
 use tunnel_manager::{TunnelConfig, TunnelManager, TunnelStatusReport};
 
 pub struct AppState {
@@ -83,16 +88,19 @@ pub struct NativeHttpResponse {
 }
 
 #[tauri::command]
-async fn desktop_native_fetch(request: NativeHttpRequest) -> Result<NativeHttpResponse, String> {
+async fn desktop_native_fetch(
+    request: NativeHttpRequest,
+    state: State<'_, AppState>,
+) -> Result<NativeHttpResponse, String> {
     let mut builder = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20));
 
-    let is_linkedin = request.url.contains("linkedin.com")
-        || request.url.contains("licdn.com")
-        || request.url.contains("lnkd.in");
-
-    if is_linkedin {
-        if let Ok(proxy) = reqwest::Proxy::all("http://127.0.0.1:10886") {
+    // Routing through a proxy port nothing listens on turns every LinkedIn call
+    // into a connect error, so ask the tunnel whether it is really up (B149).
+    if should_route_through_tunnel(&request.url, state.tunnel.is_running().await) {
+        let status = state.tunnel.get_status().await;
+        let endpoint = format!("http://{}", status.local_http_endpoint);
+        if let Ok(proxy) = reqwest::Proxy::all(&endpoint) {
             builder = builder.proxy(proxy);
         }
     }
@@ -153,6 +161,39 @@ async fn desktop_native_fetch(request: NativeHttpRequest) -> Result<NativeHttpRe
     })
 }
 
+/// Opens the platform's own sign-in page in a window this application owns.
+/// `window.open` is a silent no-op inside the Tauri webview, which is why the
+/// previous flow claimed a window was open while nothing appeared (B149).
+#[tauri::command]
+async fn open_connector_session(
+    app: AppHandle,
+    request: SessionWindowRequest,
+    state: State<'_, AppState>,
+) -> Result<SessionWindowReport, String> {
+    let proxy = if should_route_through_tunnel(&request.url, state.tunnel.is_running().await) {
+        let status = state.tunnel.get_status().await;
+        Url::parse(&format!("http://{}", status.local_http_endpoint)).ok()
+    } else {
+        None
+    };
+    Ok(open_session_window(&app, &request, proxy))
+}
+
+/// Whether the platform's window is still on screen.
+#[tauri::command]
+fn is_connector_session_open(app: AppHandle, platform: String) -> bool {
+    is_session_window_open(&app, &platform)
+}
+
+/// Reads a page inside the candidate's own signed-in session window.
+#[tauri::command]
+async fn read_connector_session_page(
+    app: AppHandle,
+    request: SessionWindowRequest,
+) -> Result<SessionPageReport, String> {
+    read_session_page(&app, &request).await
+}
+
 #[tauri::command]
 fn get_desktop_environment_info() -> DesktopInfo {
     DesktopInfo {
@@ -179,6 +220,9 @@ fn main() {
             stop_tunnel,
             execute_local_action,
             desktop_native_fetch,
+            open_connector_session,
+            is_connector_session_open,
+            read_connector_session_page,
             get_desktop_environment_info,
         ])
         .run(tauri::generate_context!())

@@ -29,6 +29,7 @@ export default defineConfig({
         'src/features/workspace/profileIngestion.ts',
         'src/features/workspace/resumeSourceText.ts',
         'src/features/connections/connectionResult.ts',
+        'src/features/connections/connectorSession.ts',
         'src/features/connections/connectionState.ts',
         'src/features/resume/resumeStudioModel.ts',
         'src/features/resume/resumeDocumentRows.ts',

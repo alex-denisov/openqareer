@@ -77,6 +77,19 @@ async function invokeTauri<T>(cmd: string, args?: Record<string, unknown>): Prom
   }
 }
 
+/**
+ * Same bridge, but the failure is visible to the caller. Commands whose whole
+ * point is a user-visible side effect must not be allowed to fail silently.
+ */
+export async function invokeDesktopCommand<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): Promise<T | null> {
+  if (!isTauriEnvironment()) return null;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<T>(cmd, args);
+}
+
 export async function probeNetworkStatus(): Promise<NetworkEnvironmentStatus> {
   const result = await invokeTauri<NetworkEnvironmentStatus>('probe_network_status');
   if (result) return result;
