@@ -139,7 +139,12 @@ jobs:
           curl --compressed -fsS --max-time 30 \
             -H 'Cache-Control: no-cache' \
             "https://openqareer.com/?release=$GITHUB_SHA" > "$release_index"
-          entry_asset="$(sed -nE 's#.*src="(/assets/[^"]+\.js)".*#\1#p' \
+          # The entry is the module script, not merely the first /assets/*.js in
+          # the document: the head also loads a plain desktop-bootstrap script,
+          # and picking that one made the release-stamp check below fail on a
+          # perfectly good deployment (B148).
+          entry_asset="$(sed -nE \
+            's#.*<script[^>]*type="module"[^>]*src="(/assets/[^"]+\.js)".*#\1#p' \
             "$release_index" | head -n 1)"
           case "$entry_asset" in
             /assets/*.js) ;;
