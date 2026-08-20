@@ -10,6 +10,7 @@ import { CareerWorkspaceShell } from './features/shell/CareerWorkspaceShell';
 import { AppErrorBoundary } from './features/shell/AppErrorBoundary';
 import { LandingPage } from './features/site/LandingPage';
 import { LoginPage, SignupPage, ResetPasswordPage } from './features/site/AuthPages';
+import { resolvedDesktopSessionPath } from './features/site/desktopSessionRouting';
 import { isTauriEnvironment } from './services/desktop/desktopBridge';
 import {
   clearWorkspace,
@@ -77,8 +78,9 @@ export default function App() {
         workspace: result.status === 'ready' ? result.workspace : undefined,
         invalidStorage: result.status === 'invalid',
       });
-      if (isDesktop && session?.candidateId && (currentPath === '/login' || currentPath === '/')) {
-        navigate('/app');
+      if (isDesktop) {
+        const resolvedPath = resolvedDesktopSessionPath(currentPath, Boolean(session?.candidateId));
+        if (resolvedPath) navigate(resolvedPath);
       }
     } catch {
       setSessionError(

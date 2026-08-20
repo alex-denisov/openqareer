@@ -35,7 +35,11 @@ pub async fn execute_candidate_action_safely(
     let pacing_ms = 750 + (Uuid::new_v4().as_u128() % 450) as u64;
     tokio::time::sleep(Duration::from_millis(pacing_ms)).await;
 
-    let receipt_id = format!("receipt-loc-{}-{}", request.platform, &Uuid::new_v4().to_string()[..8]);
+    let receipt_id = format!(
+        "receipt-loc-{}-{}",
+        request.platform,
+        &Uuid::new_v4().to_string()[..8]
+    );
     let env_desc = if cfg!(target_os = "macos") {
         "desktop_macos_wkwebview_arm64".to_string()
     } else if cfg!(target_os = "windows") {
@@ -70,12 +74,16 @@ mod tests {
             candidate_id: Some("cand-001".to_string()),
         };
 
-        let result = execute_candidate_action_safely(request).await.expect("execution succeeds");
+        let result = execute_candidate_action_safely(request)
+            .await
+            .expect("execution succeeds");
         assert_eq!(result.action_id, "act-test-101");
         assert_eq!(result.capability, "application.submit");
         assert_eq!(result.platform, "linkedin");
         assert_eq!(result.status, "completed_with_receipt");
-        assert!(result.provider_reference.starts_with("receipt-loc-linkedin-"));
+        assert!(result
+            .provider_reference
+            .starts_with("receipt-loc-linkedin-"));
         assert!(result.pacing_duration_ms >= 750);
     }
 }

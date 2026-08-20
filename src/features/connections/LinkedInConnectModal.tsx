@@ -9,10 +9,8 @@ import {
 import {
   isTauriEnvironment,
   probeNetworkStatus,
-  startTunnel,
-  type TunnelConfig,
 } from '../../services/desktop/desktopBridge';
-import { apiFetch } from '../coach/apiClient';
+import { setStoredSessionToken } from '../coach/apiClient';
 import { parseResumeContent, type ParsedResume } from '../workspace/resumeParser';
 import { ImportModalShell } from './ImportModalShell';
 import { PlatformLogo } from './PlatformLogo';
@@ -27,6 +25,10 @@ import {
   sessionOpenFailureMessage,
   type ConnectorSessionStep,
 } from './connectorSession';
+import {
+  ProtectedRouteError,
+  startLinkedInProtectedRoute,
+} from './linkedinProtectedRoute';
 
 const LINKEDIN_PROFILE_URL = 'https://www.linkedin.com/in/me/';
 const LINKEDIN_LOGIN_URL = 'https://www.linkedin.com/login';
@@ -97,20 +99,18 @@ export function LinkedInConnectModal({
     setStep('opening');
     if (isTauriEnvironment()) {
       try {
-        const currentNetwork = await probeNetworkStatus();
-        setProbe(currentNetwork.linkedin);
-        if (!currentNetwork.linkedin.accessible) {
-          const response = await apiFetch('/api/v1/candidate/desktop-tunnel');
-          if (!response.ok) throw new Error('tunnel_bootstrap_unavailable');
-          const payload = (await response.json()) as { data?: TunnelConfig };
-          if (!payload.data) throw new Error('tunnel_bootstrap_invalid');
-          const tunnel = await startTunnel(payload.data);
-          if (tunnel.state !== 'running') {
-            throw new Error(tunnel.error_message ?? 'tunnel_start_failed');
-          }
-          setTunnelActive(true);
+        const route = await startLinkedInProtectedRoute();
+        setProbe(route.probe);
+        setTunnelActive(route.tunnelActive);
+      } catch (reason) {
+        if (reason instanceof ProtectedRouteError && reason.code === 'session_expired') {
+          setStoredSessionToken(null);
+          void closeConnectorSession('linkedin');
+          onClose();
+          window.history.pushState(null, '', '/login');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+          return;
         }
-      } catch {
         setStep('idle');
         setTunnelActive(false);
         setError(
@@ -169,7 +169,12 @@ export function LinkedInConnectModal({
 
   const route = tunnelActive
     ? { tone: 'ok' as const, text: 'Защищённый EU-маршрут LinkedIn активен' }
-    : platformRouteNotice('linkedin', probe);
+    : isTauriEnvironment() && probe?.accessible === false
+      ? {
+          tone: 'pending' as const,
+          text: 'Прямой маршрут недоступен — при открытии входа запустим защищённый EU-маршрут',
+        }
+      : platformRouteNotice('linkedin', probe);
 
   return (
     <ImportModalShell

@@ -106,6 +106,13 @@ test.describe('B141 diagnostic survives registration', () => {
         {};
     });
     await stubAuth(page);
+    // The native companion is a protected workspace. Its platform connectors
+    // must be exercised from an authenticated desktop session; an anonymous
+    // `/app` now correctly returns to `/login` instead of exposing a dead
+    // connector whose bootstrap can only answer 401 (B147).
+    await page.route('**/api/v1/auth/me', async (route) => {
+      await route.fulfill({ json: { data: REGISTERED_CANDIDATE } });
+    });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
@@ -118,6 +125,23 @@ test.describe('B141 diagnostic survives registration', () => {
     );
     await expect(fields.locator('.career-platform-cards')).toBeVisible();
     await expect(fields.getByRole('button', { name: 'Подключить' })).toHaveCount(2);
+  });
+
+  test('an expired desktop session returns to login before a connector can start', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      (window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }).__TAURI_INTERNALS__ =
+        {};
+    });
+    await stubAuth(page);
+
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await waitForLiveApp(page);
+
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByRole('heading', { name: 'Вход в кабинет' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Подключить' })).toHaveCount(0);
   });
 
   test('a refused step shows why on screen instead of below the action bar', async ({ page }) => {

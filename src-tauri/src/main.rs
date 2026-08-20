@@ -89,8 +89,7 @@ async fn desktop_native_fetch(
     request: NativeHttpRequest,
     state: State<'_, AppState>,
 ) -> Result<NativeHttpResponse, String> {
-    let mut builder = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(20));
+    let mut builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(20));
 
     // Routing through a proxy port nothing listens on turns every LinkedIn call
     // into a connect error, so ask the tunnel whether it is really up (B149).
@@ -136,7 +135,10 @@ async fn desktop_native_fetch(
         req = req.body(body);
     }
 
-    let res = req.send().await.map_err(|e| format!("Network error: {}", e))?;
+    let res = req
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
 
     let status = res.status().as_u16();
     let ok = res.status().is_success();
