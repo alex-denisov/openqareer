@@ -119,6 +119,63 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
+  // The cabinet reads the resume alongside the account and the dossier, so the
+  // walk must answer it too; an unstubbed 401 would surface as a console error.
+  await page.route('**/api/v1/candidate/resume', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          draft: null,
+          savedAt: null,
+          projection: {
+            master: {
+              kind: 'master',
+              targetRole: null,
+              contact: { fullName: null, email: null, phone: null, location: null, links: [] },
+              experience: [],
+              education: [],
+              languages: [],
+              unknowns: [],
+              conventions: {
+                country: null,
+                packVersion: null,
+                reverseChronological: true,
+                maxPages: null,
+                recommendedBulletsPerRole: null,
+                photo: 'omitted',
+                discriminatoryPii: 'omitted',
+              },
+              length: { lines: 0, pages: 1, linesPerPage: 45 },
+            },
+            germanyVariant: {
+              kind: 'country-role',
+              targetRole: null,
+              contact: { fullName: null, email: null, phone: null, location: null, links: [] },
+              experience: [],
+              education: [],
+              languages: [],
+              unknowns: [],
+              conventions: {
+                country: 'DE',
+                packVersion: 'DE-CV-2026.1',
+                reverseChronological: true,
+                maxPages: 2,
+                recommendedBulletsPerRole: { min: 3, max: 5 },
+                photo: 'omitted',
+                discriminatoryPii: 'omitted',
+              },
+              length: { lines: 0, pages: 1, linesPerPage: 45 },
+            },
+            evidenceSnapshot: [],
+            excludedEvidenceIds: [],
+          },
+          evidenceFreshness: { stale: [], approvedCount: 0 },
+        },
+      }),
+    });
+  });
   await page.route('**/api/v1/candidate/vacancy-sources', async (route) => {
     await route.fulfill({
       status: 200,
@@ -401,18 +458,30 @@ async function verifyViewport(browser, baseUrl, viewport) {
     (await page.getByText('Посмотреть демо', { exact: true }).count()) === 0,
     `${viewport.name}: separate demo entry is still present`,
   );
-  await page.getByRole('heading', { name: 'Карьерный кабинет' }).waitFor();
-  await page.getByRole('heading', { name: 'Диалог со стратегом' }).waitFor();
+  // Since B148 §9 each section owns one subject: «Сегодня» recommends, the
+  // strategist dialogue lives in the «Эксперт» drawer and the market lives in
+  // «Возможности». The gate walks them in that order instead of expecting one
+  // screen to carry all three.
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Следующий шаг' }).waitFor().catch(() => undefined);
+  await page.getByText('Следующий шаг', { exact: true }).waitFor();
+  await page.locator('.career-today-loop button').first().waitFor();
+
+  await page.locator('button[aria-label="Возможности"]:visible').click();
   await page.getByRole('heading', { name: 'Рынок и следующие шаги' }).waitFor();
   await page.getByText('Что изменится', { exact: true }).waitFor();
   await page.getByText('Другой путь', { exact: true }).waitFor();
   await page.getByText('Исправить исходные данные', { exact: true }).waitFor();
   await page.getByText(/только после согласования кандидата/iu).waitFor();
+
+  await page.locator('.career-expert-trigger').click();
+  const expert = page.getByRole('dialog', { name: 'Карьерный эксперт' });
+  await expert.waitFor({ state: 'visible' });
   const dialogueContainment = await page
-    .locator('.career-coach-history')
+    .locator('.career-dialogue-history')
     .evaluate((history) => {
       const boundary = history
-        .closest('.career-coach-desk')
+        .closest('.career-expert-panel')
         .getBoundingClientRect();
       const paragraphs = [...history.querySelectorAll('p')].map((paragraph) => {
         const rect = paragraph.getBoundingClientRect();
@@ -439,25 +508,14 @@ async function verifyViewport(browser, baseUrl, viewport) {
     });
   assert(
     dialogueContainment.contained,
-    `${viewport.name}: long dialogue text escaped its cabinet column ${JSON.stringify(dialogueContainment)}`,
+    `${viewport.name}: long dialogue text escaped the expert drawer ${JSON.stringify(dialogueContainment)}`,
   );
-  const coachHeaderContained = await page
-    .locator('.career-coach-desk .career-cabinet-panel-heading')
-    .evaluate((header) => {
-      const boundary = header
-        .closest('.career-coach-desk')
-        .getBoundingClientRect();
-      return [...header.children].every((child) => {
-        const rect = child.getBoundingClientRect();
-        return rect.left >= boundary.left - 1 && rect.right <= boundary.right + 1;
-      });
-    });
-  assert(
-    coachHeaderContained,
-    `${viewport.name}: coach status escaped its cabinet header`,
-  );
+  await expert.getByRole('button', { name: 'Закрыть карьерного советника' }).click();
+  await expert.waitFor({ state: 'hidden' });
+
   await page.locator('button[aria-label="Карьера"]:visible').click();
-  await page.getByRole('heading', { name: 'Карьерный трек' }).waitFor();
+  await page.getByRole('heading', { name: 'Карьера', exact: true }).waitFor();
+  await page.locator('.career-track-board').waitFor();
   const roleCards = page.locator('.career-role-hypotheses article');
   assert(
     (await roleCards.count()) >= 1 && (await roleCards.count()) <= 3,
@@ -472,14 +530,17 @@ async function verifyViewport(browser, baseUrl, viewport) {
     .filter({ hasText: 'Роль и рынок' })
     .getByText('В работе', { exact: true })
     .waitFor();
-  const confirmedRoleMap = true;
-  const adaptiveTrack = true;
+  // INC-019: these used to be literal `true`s reported as verification. They
+  // now record what the walk actually observed.
+  const confirmedRoleMap = (await roleCards.count()) >= 1;
+  const adaptiveTrack =
+    (await page.locator('.career-track-timeline article').count()) >= 1;
   await page.screenshot({
     path: `output/playwright/b104-b105-b119-decision-${viewport.name}.png`,
     fullPage: true,
   });
-  await page.locator('button[aria-label="Сегодня"]:visible').click();
-  await page.getByRole('heading', { name: 'Карьерный кабинет' }).waitFor();
+  await page.locator('button[aria-label="Возможности"]:visible').click();
+  await page.getByRole('heading', { name: 'Возможности', exact: true }).waitFor();
   await page.getByRole('combobox', { name: 'Источник вакансий' }).waitFor();
   // The source registry loads asynchronously, so wait for the honest health
   // line instead of counting a DOM that may not have rendered yet.
@@ -518,12 +579,15 @@ async function verifyViewport(browser, baseUrl, viewport) {
     vacancyCreateSource === 'remotive',
     `${viewport.name}: selected vacancy source was not sent to the API`,
   );
-  const reasonedAction = true;
   await page.getByRole('link', { name: /Product Manager/ }).waitFor();
   await page.locator('button[aria-label="Профиль"]:visible').click();
-  await page.getByRole('heading', { name: 'Профессиональный профиль' }).waitFor();
+  await page.getByRole('heading', { name: 'Профиль', exact: true }).waitFor();
+  const profileFactReview =
+    (await page.locator('.career-profile-surface').count()) === 1;
   await page.locator('button[aria-label="Сегодня"]:visible').click();
-  await page.getByRole('heading', { name: 'Карьерный кабинет' }).waitFor();
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
+  const reasonedAction =
+    (await page.locator('.career-today-action p').count()) >= 1;
 
   const tariffsButton = page
     .locator(
@@ -543,7 +607,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   );
   await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
   await page.getByText('Вы вошли как', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Площадки' }).click();
+  await page.getByRole('button', { name: 'Подключения' }).click();
   await page.getByRole('heading', { name: 'Подключённые площадки' }).waitFor();
   await page.getByRole('button', { name: 'Отключить hh.ru' }).waitFor();
   assert(
@@ -574,7 +638,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
   );
   await page.goto(`${baseUrl}app?built-shell=${viewport.name}`);
   await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).waitFor();
-  const accountRestart = true;
+  const accountRestart =
+    (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) === null;
 
   await page.getByRole('button', { name: 'Начать диагностику' }).click();
   await page.getByRole('button', { name: /Хочу найти работу/ }).click();
@@ -608,7 +673,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     'Проверяю, что смена источника удаляет факты и ссылки от ранее выбранного профиля.',
   );
   await page.getByRole('button', { name: 'Собрать карьерную картину' }).click();
-  await page.getByRole('heading', { name: 'Карьерный кабинет' }).waitFor();
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
   const sourceCleanWorkspace = JSON.parse(
     await page.evaluate(() => localStorage.getItem('candidate-workspace')),
   );
@@ -619,8 +684,6 @@ async function verifyViewport(browser, baseUrl, viewport) {
       && sourceCleanWorkspace.profileFacts?.length !== 2,
     `${viewport.name}: source switch retained stale profile evidence`,
   );
-
-  const profileFactReview = true;
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
@@ -742,7 +805,7 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
   await page.getByLabel('Логин').fill('returning.candidate');
   await page.getByLabel('Пароль').fill('returning-candidate-password');
   await page.getByRole('button', { name: 'Войти' }).click();
-  await page.getByRole('heading', { name: 'Карьерный кабинет' }).waitFor();
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
   assert(
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) !== null,
     'expired session: matching candidate workspace was deleted during login',

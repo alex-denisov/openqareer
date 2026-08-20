@@ -118,6 +118,8 @@ export interface CandidateMemory {
   sourceMessageIds: string[];
   sensitive: boolean;
   status: 'proposed' | 'confirmed' | 'corrected';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type WorkDimension =

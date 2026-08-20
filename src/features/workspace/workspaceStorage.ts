@@ -52,6 +52,12 @@ export interface WorkspaceInput {
   profileFacts?: ProfileFact[];
   resumeDraft?: import('../resume/resumeTypes').ResumeDraft;
   parsedResume?: import('./resumeParser').ParsedResume;
+  /**
+   * True once the document has already reached the candidate-scoped resume API.
+   * Without it a signed-in wizard would import the same document twice — once
+   * at upload, once on completion (B148).
+   */
+  resumeImported?: boolean;
 }
 
 export interface MarketVacancySampleItem {
@@ -108,6 +114,12 @@ export function validateWorkspaceInput(
 ): WorkspaceInputErrors {
   const errors: WorkspaceInputErrors = {};
   const canStartFromCareerQuestion = input.currentSituation.trim().length >= 20;
+  // A resume the candidate actually brought already answers "what is your
+  // situation" better than two sentences would, so the wizard's third step is
+  // optional exactly when a document exists — and required when it does not,
+  // because otherwise there would be nothing at all to reason from (B148).
+  const hasDocument =
+    input.resumeText.trim().length >= 80 || Boolean(input.parsedResume);
 
   if (
     input.resumeText.trim().length > 0 &&
@@ -124,7 +136,7 @@ export function validateWorkspaceInput(
     errors.targetDirection = 'Укажите роль или направление.';
   }
 
-  if (input.currentSituation.trim().length < 20) {
+  if (!hasDocument && input.currentSituation.trim().length < 20) {
     errors.currentSituation = 'Коротко опишите, где вы находитесь сейчас.';
   }
 
@@ -466,6 +478,15 @@ function isWorkspaceRecord(
     return false;
   }
 
+  // A stored record has to accept whatever the wizard is allowed to produce.
+  // Since an imported resume now stands in for the situation description
+  // (B148 §3a), requiring that description here would mark every
+  // document-only diagnostic «invalid» and throw the candidate back to the
+  // first question on the next reload.
+  const carriesDocument =
+    (typeof value.resumeText === 'string' && value.resumeText.trim().length >= 80) ||
+    isRecord(value.parsedResume);
+
   return (
     value.version === version &&
     (value.careerGoal === undefined || isCareerGoal(value.careerGoal)) &&
@@ -477,11 +498,12 @@ function isWorkspaceRecord(
     isOptionalNumber(value.resumePageCount) &&
     typeof value.targetDirection === 'string' &&
     (value.targetDirection.trim().length >= 2 ||
+      carriesDocument ||
       (typeof value.currentSituation === 'string' &&
         value.currentSituation.trim().length >= 20)) &&
     (value.market === 'ru' || value.market === 'international') &&
     typeof value.currentSituation === 'string' &&
-    value.currentSituation.trim().length >= 20 &&
+    (carriesDocument || value.currentSituation.trim().length >= 20) &&
     typeof value.constraints === 'string' &&
     isSearchUrgency(value.urgency) &&
     isOptionalString(value.linkedinUrl) &&

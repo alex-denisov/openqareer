@@ -1,6 +1,7 @@
 import { buildApp } from './app';
 import { readServerConfig } from './config';
 import { buildCoachProvider } from './providers/coachProviderFactory';
+import { buildResumeStructurer } from './providers/resumeStructurer';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
 import { CareerOrchestrator } from './orchestration/careerOrchestrator';
 import { CoachProviderRoleAgent } from './orchestration/coachProviderRoleAgent';
@@ -81,6 +82,11 @@ const app = await buildApp({
   authService,
   vacancyIntelligenceService,
   careerCommandExecutor,
+  resumeStructurer: buildResumeStructurer({
+    personalProvider: personalProviderId,
+    model: config.model,
+    providerCredentials: config.providerCredentials,
+  }),
   serveStatic: process.env.NODE_ENV === 'production',
 });
 

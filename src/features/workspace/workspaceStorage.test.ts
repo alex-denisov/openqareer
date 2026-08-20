@@ -52,6 +52,20 @@ const validInput = {
   hhUrl: 'https://hh.ru/resume/example',
 };
 
+describe('workspace persistence after a document-only diagnostic', () => {
+  it('reads back a workspace whose situation was left to the imported resume', () => {
+    const storage = createMemoryStorage();
+    const workspace = createWorkspace(
+      { ...validInput, currentSituation: '', targetDirection: '' },
+      '2026-08-20T09:00:00.000Z',
+    );
+
+    saveWorkspace(storage, workspace, 'candidate-1');
+
+    expect(loadWorkspace(storage, 'candidate-1').status).toBe('ready');
+  });
+});
+
 describe('workspace validation', () => {
   it('allows a candidate to start from a career question without a resume or target title', () => {
     expect(
@@ -88,6 +102,29 @@ describe('workspace validation', () => {
       linkedinUrl: 'Укажите ссылку на профиль linkedin.com.',
       hhUrl: 'Укажите ссылку на резюме hh.ru.',
     });
+  });
+
+  it('lets an imported resume stand in for the situation description', () => {
+    expect(
+      validateWorkspaceInput({
+        ...validInput,
+        currentSituation: '',
+      }),
+    ).toEqual({});
+  });
+
+  it('still asks for a situation when the candidate brought no document', () => {
+    expect(
+      validateWorkspaceInput({
+        resumeText: '',
+        resumeSource: 'text',
+        targetDirection: '',
+        market: 'ru',
+        currentSituation: '',
+        constraints: '',
+        urgency: 'exploring',
+      }).currentSituation,
+    ).toBe('Коротко опишите, где вы находитесь сейчас.');
   });
 
   it('accepts a sufficiently complete local input', () => {

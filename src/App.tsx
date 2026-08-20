@@ -20,8 +20,17 @@ import {
   type CandidateWorkspace,
   type WorkspaceInput,
 } from './features/workspace/workspaceStorage';
-import { saveResumeStudioDraft } from './features/resume/resumeApi';
-import { toSavePayload } from './features/resume/resumeStudioModel';
+import {
+  importCandidateResume,
+  type ResumeImportSource,
+} from './features/resume/resumeApi';
+
+function importSourceOf(source: WorkspaceInput['resumeSource']): ResumeImportSource {
+  if (source === 'linkedin-pdf') return 'linkedin';
+  if (source === 'hh-pdf') return 'hh';
+  if (source === 'pdf') return 'pdf';
+  return 'text';
+}
 
 interface AppState {
   workspace?: CandidateWorkspace;
@@ -166,9 +175,25 @@ export default function App() {
   function handleSave(input: WorkspaceInput) {
     const workspace = prepareCareerWorkspace(input, undefined, state.workspace);
     persist(workspace);
-    if (input.resumeDraft && state.session?.candidateId) {
-      void saveResumeStudioDraft(toSavePayload(input.resumeDraft)).catch(() => {
-        // Ignored; local workspace holds the parsed draft fallback
+    // The wizard imports as soon as it reads a document; this is the retry for
+    // the case where the candidate registered only after uploading. A failure
+    // is shown, never swallowed — a silent 422 is what left Resume Studio empty
+    // after a successful-looking import (B148 §3b).
+    if (
+      input.resumeText.trim().length > 0 &&
+      input.resumeImported !== true &&
+      state.session?.candidateId
+    ) {
+      void importCandidateResume({
+        text: input.resumeText,
+        source: importSourceOf(input.resumeSource),
+        fileName: input.resumeFileName,
+      }).catch((reason: unknown) => {
+        setStorageError(
+          reason instanceof Error
+            ? `Резюме не удалось сохранить в профиль: ${reason.message}`
+            : 'Резюме не удалось сохранить в профиль. Откройте «Резюме» и повторите импорт.',
+        );
       });
     }
   }

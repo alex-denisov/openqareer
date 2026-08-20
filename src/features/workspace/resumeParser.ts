@@ -7,6 +7,7 @@ import {
   SECTION_DELIMITERS,
   sectionLookahead,
 } from './resumeParserConstants';
+import { normalizeResumeSourceText } from './resumeSourceText';
 
 export interface ParsedResumeExperience {
   title: string;
@@ -140,8 +141,8 @@ function parseDocumentSections(text: string): Map<string, string> {
 
 // eslint-disable-next-line max-lines-per-function
 export function parseResumeContent(rawText: string): ParsedResume {
-  const cleanText = rawText
-    .replace(/\r\n/gu, '\n')
+  // The extractor hands over Markdown; every heuristic below assumes flat text.
+  const cleanText = normalizeResumeSourceText(rawText)
     .replace(/Page \d+ of \d+/giu, '')
     .replace(/Страница \d+ из \d+/giu, '')
     .trim();

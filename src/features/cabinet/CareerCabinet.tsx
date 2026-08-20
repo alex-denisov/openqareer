@@ -1,24 +1,21 @@
 import { useMemo } from 'react';
-import { ArrowRight, CheckCircle, Circle, Compass, TrendUp } from '@phosphor-icons/react';
-import type { AccountSnapshot, AuthUser } from '../coach/coachApi';
+import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
+import type { AuthUser } from '../coach/coachApi';
 import {
   buildCanonicalProfileJourney,
   type CareerJourney,
 } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
-import { CareerCoachDesk } from './CareerCoachDesk';
 import { CareerIntelligencePanel } from './CareerIntelligencePanel';
 import { CareerProfileSurface } from './CareerProfileSurface';
+import { CareerTodayBriefing } from './CareerTodayBriefing';
+import { CareerTrackBoard } from './CareerTrackBoard';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { useCareerCabinetData } from './useCareerCabinetData';
+import type { CareerCabinetView } from './cabinetViews';
 
-export type CareerCabinetView =
-  | 'today'
-  | 'profile'
-  | 'resume'
-  | 'career'
-  | 'opportunities';
+export type { CareerCabinetView } from './cabinetViews';
 
 interface CareerCabinetProps {
   view: CareerCabinetView;
@@ -28,8 +25,17 @@ interface CareerCabinetProps {
   onNavigate: (view: CareerCabinetView) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
   onOpenAccount: () => void;
+  onOpenExpert: () => void;
 }
 
+/**
+ * One section, one subject (B148 §9):
+ * «Сегодня» recommends, «Профиль» holds evidence, «Резюме» holds the document,
+ * «Карьера» holds the route, «Возможности» holds the market. The strategist
+ * dialogue lives only in the «Эксперт» drawer, so no screen duplicates it.
+ */
+// One component, one JSX tree: splitting further would scatter the markup.
+// eslint-disable-next-line max-lines-per-function
 export function CareerCabinet({
   view,
   session,
@@ -38,6 +44,7 @@ export function CareerCabinet({
   onNavigate,
   onUpdateWorkspace,
   onOpenAccount,
+  onOpenExpert,
 }: CareerCabinetProps) {
   const data = useCareerCabinetData(session.candidateId);
   const name = data.account?.displayName ?? session.displayName ?? session.username;
@@ -54,13 +61,9 @@ export function CareerCabinet({
             workspace?.constraints ?? '',
           )
         : journey,
-    [
-      data.snapshot,
-      journey,
-      targetDirection,
-      workspace?.constraints,
-    ],
+    [data.snapshot, journey, targetDirection, workspace?.constraints],
   );
+
   return (
     <AppErrorBoundary
       fallbackTitle="Не удалось отобразить кабинет"
@@ -68,243 +71,186 @@ export function CareerCabinet({
       onReset={() => void data.refresh()}
     >
       <div className={`career-cabinet career-cabinet-view-${view}`}>
-        <CabinetHeader view={view} name={name} data={data} />
-        {data.error ? <p className="career-cabinet-global-error" role="alert">{data.error}</p> : null}
-        <CabinetView {...{ view, session, workspace, onNavigate, onUpdateWorkspace, onOpenAccount, data }} journey={canonicalJourney} />
+        <CabinetHeader
+          view={view}
+          loading={data.loading}
+          error={data.error}
+          onRetry={() => void data.refresh()}
+        />
+        <CabinetSection
+          view={view}
+          name={name}
+          session={session}
+          workspace={workspace}
+          journey={canonicalJourney}
+          targetDirection={targetDirection}
+          data={data}
+          onNavigate={onNavigate}
+          onUpdateWorkspace={onUpdateWorkspace}
+          onOpenAccount={onOpenAccount}
+          onOpenExpert={onOpenExpert}
+        />
       </div>
     </AppErrorBoundary>
   );
 }
 
-type CabinetData = ReturnType<typeof useCareerCabinetData>;
-
-function CabinetHeader({ view, name, data }: { view: CareerCabinetView; name: string; data: CabinetData }) {
-  const description = view === 'today'
-    ? `${firstName(name)}, здесь собраны разговор, профиль и реальные сигналы рынка.`
-    : viewDescription(view);
+// One component, one JSX tree: splitting further would scatter the markup.
+// eslint-disable-next-line max-lines-per-function
+function CabinetSection({
+  view,
+  name,
+  session,
+  workspace,
+  journey,
+  targetDirection,
+  data,
+  onNavigate,
+  onUpdateWorkspace,
+  onOpenAccount,
+  onOpenExpert,
+}: {
+  view: CareerCabinetView;
+  name: string;
+  session: AuthUser & { candidateId: string };
+  workspace?: CandidateWorkspace;
+  journey?: CareerJourney;
+  targetDirection: string;
+  data: ReturnType<typeof useCareerCabinetData>;
+  onNavigate: (view: CareerCabinetView) => void;
+  onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
+  onOpenAccount: () => void;
+  onOpenExpert: () => void;
+}) {
+  if (view === 'today') {
+    return (
+      <CareerTodayBriefing
+        name={name}
+        journey={journey}
+        snapshot={data.snapshot}
+        resume={data.resume}
+        account={data.account}
+        workspace={workspace}
+        loading={data.loading}
+        onNavigate={onNavigate}
+        onOpenExpert={onOpenExpert}
+      />
+    );
+  }
+  if (view === 'profile') {
+    return (
+      <CareerProfileSurface
+        account={data.account}
+        session={session}
+        snapshot={data.snapshot}
+        workspace={workspace}
+        loading={data.loading}
+        expanded
+        onRefresh={data.refresh}
+        onUpdateWorkspace={onUpdateWorkspace}
+        onOpenAccount={onOpenAccount}
+      />
+    );
+  }
+  if (view === 'resume') {
+    return (
+      <ResumeStudio
+        memory={data.snapshot?.memory ?? []}
+        onRefreshDossier={() => void data.refresh()}
+      />
+    );
+  }
+  if (view === 'career') {
+    return (
+      <CareerTrackBoard
+        journey={journey}
+        snapshot={data.snapshot}
+        account={data.account}
+        targetDirection={targetDirection}
+        onNavigate={onNavigate}
+        onEditPremises={onOpenAccount}
+      />
+    );
+  }
   return (
-    <header className="career-cabinet-header"><div>
-      <span className="career-cabinet-kicker">{todayLabel()}</span><h1>{viewTitle(view)}</h1><p>{description}</p>
-    </div><div className="career-cabinet-header-state">
-      <span className={data.error ? 'is-error' : 'is-ready'}>
-        {data.error ? <Circle size={14} weight="fill" /> : <CheckCircle size={16} />}
-        {data.loading ? 'Обновляем' : data.error ? 'Нужна связь' : 'Данные актуальны'}
-      </span>
-      {data.error ? <button type="button" onClick={() => void data.refresh()}>Повторить</button> : null}
-    </div></header>
-  );
-}
-
-function CabinetView(props: CareerCabinetProps & { data: CabinetData }) {
-  if (props.view === 'today') return <TodayView {...props} />;
-  if (props.view === 'profile') return <ProfileView {...props} />;
-  if (props.view === 'resume') return <ResumeView {...props} />;
-  if (props.view === 'career') return <TrackView {...props} />;
-  return <MarketView {...props} />;
-}
-
-function TodayView(props: CareerCabinetProps & { data: CabinetData }) {
-  const shared = cabinetPanelProps(props);
-  return (
-    <div className="career-command-center">
-      <CareerCoachDesk {...shared.coach} />
-      <CareerProfileSurface {...shared.profile} />
-      <CareerIntelligencePanel {...shared.market} />
-    </div>
-  );
-}
-
-function ProfileView(props: CareerCabinetProps & { data: CabinetData }) {
-  const shared = cabinetPanelProps(props);
-  return <div className="career-cabinet-focus-layout"><CareerProfileSurface {...shared.profile} expanded /><CareerIntelligencePanel {...shared.market} /></div>;
-}
-
-function ResumeView(props: CareerCabinetProps & { data: CabinetData }) {
-  return (
-    <ResumeStudio
-      memory={props.data.snapshot?.memory ?? []}
-      onRefreshDossier={() => void props.data.refresh()}
+    <CareerIntelligencePanel
+      snapshot={data.snapshot}
+      journey={journey}
+      defaultQuery={targetDirection || undefined}
+      loading={data.loading}
+      onRefresh={data.refresh}
+      onNavigate={onNavigate}
+      expanded
     />
   );
 }
 
-function TrackView(props: CareerCabinetProps & { data: CabinetData }) {
-  const shared = cabinetPanelProps(props);
-  return <div className="career-cabinet-focus-layout is-track"><CareerTrackBoard journey={props.journey} snapshot={props.data.snapshot} account={props.data.account} targetDirection={shared.targetDirection} onNavigate={props.onNavigate} onEditPremises={props.onOpenAccount} /><CareerCoachDesk {...shared.coach} /></div>;
-}
-
-function MarketView(props: CareerCabinetProps & { data: CabinetData }) {
-  const shared = cabinetPanelProps(props);
-  return <div className="career-cabinet-focus-layout is-market"><CareerIntelligencePanel {...shared.market} expanded /><CareerCoachDesk {...shared.coach} /></div>;
-}
-
-function cabinetPanelProps(props: CareerCabinetProps & { data: CabinetData }) {
-  const { data, workspace, journey, session } = props;
-  const query =
-    data.account?.profile.headline?.trim() ||
-    workspace?.targetDirection ||
-    undefined;
-  return {
-    targetDirection: query ?? '',
-    coach: { snapshot: data.snapshot, journey, marketQuery: query, loading: data.loading, onRefresh: data.refresh },
-    profile: { account: data.account, session, snapshot: data.snapshot, workspace, loading: data.loading, onRefresh: data.refresh, onUpdateWorkspace: props.onUpdateWorkspace, onOpenAccount: props.onOpenAccount },
-    market: { snapshot: data.snapshot, journey, defaultQuery: query, loading: data.loading, onRefresh: data.refresh, onNavigate: props.onNavigate },
-  };
-}
-
-function CareerTrackBoard({
-  journey,
-  snapshot,
-  account,
-  targetDirection,
-  onNavigate,
-  onEditPremises,
+/**
+ * The header states only what can actually be false. A permanent «Данные
+ * актуальны» chip was a claim that could never fail, so it carried no
+ * information and quietly implied a sync that does not exist (B148 §5).
+ */
+function CabinetHeader({
+  view,
+  loading,
+  error,
+  onRetry,
 }: {
-  journey?: CareerJourney;
-  snapshot?: ReturnType<typeof useCareerCabinetData>['snapshot'];
-  account?: AccountSnapshot;
-  targetDirection: string;
-  onNavigate: (view: CareerCabinetView) => void;
-  onEditPremises: () => void;
+  view: CareerCabinetView;
+  loading: boolean;
+  error?: string;
+  onRetry: () => void;
 }) {
-  const latestTrack = [...(snapshot?.turns ?? [])]
-    .reverse()
-    .find((turn) => turn.status === 'completed' && turn.result?.careerTrack)?.result?.careerTrack;
   return (
-    <section className="career-track-board" aria-labelledby="career-track-board-title">
-      <header>
-        <div>
-          <span className="career-cabinet-kicker">Измеримый маршрут</span>
-          <h2 id="career-track-board-title">
-            {latestTrack?.objective ?? 'Карьерная гипотеза формируется'}
-          </h2>
+    <header className="career-cabinet-header">
+      <div>
+        <span className="career-cabinet-kicker">{todayLabel()}</span>
+        <h1>{VIEW_TITLE[view]}</h1>
+        <p>{VIEW_DESCRIPTION[view]}</p>
+      </div>
+      {loading || error ? (
+        <div className="career-cabinet-header-state">
+          {error ? (
+            <>
+              <span className="is-error" role="alert">
+                <WarningCircle size={16} weight="fill" />
+                {error}
+              </span>
+              <button type="button" onClick={onRetry}>
+                <ArrowClockwise size={15} />
+                Повторить
+              </button>
+            </>
+          ) : (
+            <span className="is-loading">Обновляем…</span>
+          )}
         </div>
-        <TrendUp size={24} />
-      </header>
-
-      <TrackTimeline items={latestTrack?.milestones ?? journey?.track ?? []} empty={!latestTrack && !journey} />
-      <CareerRoutePremises
-        targetRole={targetDirection}
-        location={account?.profile.location ?? undefined}
-        workMode={account?.profile.workMode ?? undefined}
-        onEdit={onEditPremises}
-      />
-      <RoleHypotheses journey={journey} />
-
-      <button className="career-primary-button" type="button" onClick={() => onNavigate('profile')}>
-        Укрепить профиль <ArrowRight size={17} />
-      </button>
-    </section>
+      ) : null}
+    </header>
   );
 }
 
-export function CareerRoutePremises({
-  targetRole,
-  location,
-  workMode,
-  onEdit,
-}: {
-  targetRole?: string;
-  location?: string;
-  workMode?: AccountSnapshot['profile']['workMode'];
-  onEdit: () => void;
-}) {
-  return (
-    <section className="career-route-premises" aria-labelledby="career-route-premises-title">
-      <header>
-        <div>
-          <span className="career-cabinet-kicker">Изменяемые предпосылки</span>
-          <h3 id="career-route-premises-title">Роль и условия маршрута</h3>
-        </div>
-        <button type="button" onClick={onEdit}>Изменить роль и условия</button>
-      </header>
-      <dl>
-        <div><dt>Роль и уровень</dt><dd>{targetRole?.trim() || 'Уточняются'}</dd></div>
-        <div><dt>География</dt><dd>{location?.trim() || 'Не указана'}</dd></div>
-        <div><dt>Формат работы</dt><dd>{routeWorkModeLabel(workMode)}</dd></div>
-      </dl>
-      <p>После сохранения гипотезы и поисковый запрос пересчитываются; прошлые варианты остаются обратимыми.</p>
-    </section>
-  );
-}
-
-type CareerTrackItem = CareerJourney['track'][number] | {
-  label: string;
-  successCriterion: string;
-  measureAfter: string;
-  expectedSignal: string;
+const VIEW_TITLE: Record<CareerCabinetView, string> = {
+  today: 'Сегодня',
+  profile: 'Профиль',
+  resume: 'Резюме',
+  career: 'Карьера',
+  opportunities: 'Возможности',
 };
 
-function TrackTimeline({ items, empty }: { items: CareerTrackItem[]; empty: boolean }) {
-  return <div className="career-track-timeline">{items.map((item, index) => {
-    const milestone = 'expectedSignal' in item;
-    return <article key={milestone ? `${item.label}-${item.measureAfter}` : item.id}><span>{index + 1}</span><div>
-      <strong>{item.label}</strong><p>{milestone ? item.successCriterion : item.reason}</p>
-      <small>{milestone ? `Проверка ${formatDate(item.measureAfter)} · ${item.expectedSignal}` : trackStatus(item.status)}</small>
-    </div></article>;
-  })}{empty ? <article><span>1</span><div><strong>Подтвердить профиль</strong><p>Нужны опыт, результат и карьерное ограничение.</p><small>Ожидает данных</small></div></article> : null}</div>;
-}
+const VIEW_DESCRIPTION: Record<CareerCabinetView, string> = {
+  today: 'Одно следующее действие, его причина и состояние карьерного цикла.',
+  profile: 'Кто вы по фактам: опыт, навыки, образование и документы.',
+  resume:
+    'Мастер-резюме и вариант под страну — только из подтверждённых фактов, с видимыми пробелами.',
+  career: 'Гипотезы ролей, маршрут и наблюдаемые критерии проверки.',
+  opportunities: 'Рынок, регулярные выборки вакансий и воронка откликов.',
+};
 
-function RoleHypotheses({ journey }: { journey?: CareerJourney }) {
-  return <section className="career-role-hypotheses"><header><h3>Рабочие роли</h3><span>{journey?.roles.length ?? 0}</span></header>
-    {journey?.roles.length ? journey.roles.map((role) => <article key={role.id}><Compass size={18} /><div><strong>{role.title}</strong><p>{role.basis}</p><small>{role.evidenceCount} подтверждённых опор · {role.gaps.length} пробелов</small></div></article>) : <p>Роли появятся после подтверждения минимум одного карьерного эпизода.</p>}
-  </section>;
-}
-
-function todayLabel() {
+function todayLabel(): string {
   return new Intl.DateTimeFormat('ru-RU', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
   }).format(new Date());
-}
-
-function viewTitle(view: CareerCabinetView) {
-  return {
-    today: 'Карьерный кабинет',
-    profile: 'Профессиональный профиль',
-    resume: 'Резюме',
-    career: 'Карьерный трек',
-    opportunities: 'Вакансии и рынок',
-  }[view];
-}
-
-function viewDescription(view: CareerCabinetView) {
-  return {
-    today: '',
-    profile: 'Компактная карьерная история, документы и проверяемые факты.',
-    resume:
-      'Мастер-резюме и вариант под страну — только из подтверждённых фактов, с видимыми пробелами.',
-    career: 'Гипотезы ролей, milestones и наблюдаемые критерии успеха.',
-    opportunities: 'Регулярные выборки, сохранённые вакансии и рыночные сигналы.',
-  }[view];
-}
-
-function firstName(name: string) {
-  return name.trim().split(/\s+/u)[0] || name;
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-  }).format(new Date(`${value}T00:00:00Z`));
-}
-
-function trackStatus(status: CareerJourney['track'][number]['status']) {
-  return {
-    complete: 'Готово',
-    active: 'В работе',
-    waiting: 'Ожидает',
-  }[status];
-}
-
-function routeWorkModeLabel(mode?: AccountSnapshot['profile']['workMode']) {
-  if (!mode) return 'Не указан';
-  return {
-    remote: 'Удалённо',
-    hybrid: 'Гибрид',
-    office: 'Офис',
-    flexible: 'Гибко',
-  }[mode];
 }

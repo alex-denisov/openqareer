@@ -224,7 +224,7 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();
 
     await page.getByRole('button', { name: 'PDF', exact: true }).click();
-    await expect(page.locator('.career-pdf-source-container')).toBeVisible();
+    await expect(page.locator('.career-pdf-source')).toBeVisible();
 
     await page.getByRole('button', { name: 'Текстом', exact: true }).click();
     await expect(page.locator('.career-source-textarea')).toBeVisible();

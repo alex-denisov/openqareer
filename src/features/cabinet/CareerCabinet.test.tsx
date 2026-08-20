@@ -1,6 +1,46 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { CareerCabinet, CareerRoutePremises } from './CareerCabinet';
+import { CareerCabinet } from './CareerCabinet';
+import { CareerRoutePremises } from './CareerTrackBoard';
+import type { CareerCabinetView } from './cabinetViews';
+
+const session = {
+  username: 'test.candidate',
+  email: 'test@example.com',
+  displayName: 'Тестовый Кандидат',
+  role: 'candidate' as const,
+  isTest: false,
+  candidateId: 'cand-1',
+};
+
+const workspace = {
+  version: 6 as const,
+  createdAt: '2026-08-18T12:00:00.000Z',
+  updatedAt: '2026-08-18T12:00:00.000Z',
+  resumeText:
+    'Senior Software Engineer with 8+ years experience in TypeScript, React, Node.js and distributed systems architecture.',
+  resumeSource: 'text' as const,
+  targetDirection: 'Senior Software Engineer',
+  market: 'ru' as const,
+  currentSituation: 'Ищу работу ведущим инженером в технологической компании.',
+  constraints: 'Remote / Hybrid',
+  urgency: 'active' as const,
+  outcomes: [],
+};
+
+function renderCabinet(view: CareerCabinetView) {
+  return renderToStaticMarkup(
+    <CareerCabinet
+      view={view}
+      session={session}
+      workspace={workspace}
+      onNavigate={() => undefined}
+      onUpdateWorkspace={() => undefined}
+      onOpenAccount={() => undefined}
+      onOpenExpert={() => undefined}
+    />,
+  );
+}
 
 describe('CareerCabinet route premises', () => {
   it('shows independently reviewable role, geography and work-mode premises', () => {
@@ -21,41 +61,38 @@ describe('CareerCabinet route premises', () => {
     expect(html).toContain('Удалённо');
     expect(html).toContain('Изменить роль и условия');
   });
+});
 
-  it('renders TodayView with CareerIntelligencePanel without errors', () => {
-    const html = renderToStaticMarkup(
-      <CareerCabinet
-        view="today"
-        session={{
-          username: 'test.candidate',
-          email: 'test@example.com',
-          displayName: 'Тестовый Кандидат',
-          role: 'candidate',
-          isTest: false,
-          candidateId: 'cand-1',
-        }}
-        workspace={{
-          version: 6,
-          createdAt: '2026-08-18T12:00:00.000Z',
-          updatedAt: '2026-08-18T12:00:00.000Z',
-          resumeText:
-            'Senior Software Engineer with 8+ years experience in TypeScript, React, Node.js and distributed systems architecture.',
-          resumeSource: 'text',
-          targetDirection: 'Senior Software Engineer',
-          market: 'ru',
-          currentSituation: 'Ищу работу ведущим инженером в технологической компании.',
-          constraints: 'Remote / Hybrid',
-          urgency: 'active',
-          outcomes: [],
-        }}
-        onNavigate={() => undefined}
-        onUpdateWorkspace={() => undefined}
-        onOpenAccount={() => undefined}
-      />,
-    );
+describe('CareerCabinet composition', () => {
+  it('gives «Сегодня» a next action instead of a copy of the profile', () => {
+    const html = renderCabinet('today');
 
-    expect(html).toContain('Рынок и следующие шаги');
-    expect(html).toContain('Авто-поднятие резюме');
-    expect(html).toContain('Job-Fit');
+    expect(html).toContain('Следующий шаг');
+    expect(html).toContain('Состояние карьерного цикла');
+    expect(html).not.toContain('Профиль и документы');
+    expect(html).not.toContain('Рынок и следующие шаги');
+  });
+
+  it('keeps the strategist dialogue out of every section, it lives in «Эксперт»', () => {
+    for (const view of ['today', 'profile', 'career', 'opportunities'] as const) {
+      expect(renderCabinet(view)).not.toContain('Диалог со стратегом');
+    }
+  });
+
+  it('gives «Профиль» the evidence surface and nothing from the market panel', () => {
+    const html = renderCabinet('profile');
+
+    expect(html).toContain('Профиль и документы');
+    expect(html).not.toContain('Рынок и следующие шаги');
+  });
+
+  it('gives «Возможности» the market panel', () => {
+    expect(renderCabinet('opportunities')).toContain('Рынок и следующие шаги');
+  });
+
+  it('never claims data is current, because that claim can never be false', () => {
+    for (const view of ['today', 'profile', 'career', 'opportunities'] as const) {
+      expect(renderCabinet(view)).not.toContain('Данные актуальны');
+    }
   });
 });

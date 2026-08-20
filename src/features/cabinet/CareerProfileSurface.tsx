@@ -233,10 +233,8 @@ export function CareerProfileSurface({
           </div>
         </div>
         <div className="career-profile-update-state">
-          <span>
-            <Check size={14} /> Профиль синхронизирован
-          </span>
-          <small>{profileUpdatedAt(account, snapshot)}</small>
+          <span>{evidenceSummary(snapshot)}</span>
+          <small>{lastChangeLabel(account, snapshot)}</small>
           <button type="button" onClick={onOpenAccount}>
             Изменить данные
           </button>
@@ -606,15 +604,46 @@ function readFileBase64(file: File): Promise<string> {
   });
 }
 
-function profileUpdatedAt(account?: AccountSnapshot, snapshot?: CandidateSnapshot) {
-  const value = account?.profile.updatedAt ?? snapshot?.candidate.createdAt;
-  if (!value) return 'обновление загружается';
-  return new Intl.DateTimeFormat('ru-RU', {
+/**
+ * The header used to claim «Профиль синхронизирован» next to a date that was
+ * really the account's last edit — a sync that does not exist, dated two days
+ * before an import that had just happened (B148 §6). It now states what the
+ * profile actually holds and when it last changed.
+ */
+function evidenceSummary(snapshot?: CandidateSnapshot): string {
+  const confirmed = snapshot?.dossier.confirmedCount ?? 0;
+  const proposed = snapshot?.dossier.proposedCount ?? 0;
+  if (confirmed === 0 && proposed === 0) return 'Фактов пока нет';
+  const parts = [`${confirmed} подтверждено`];
+  if (proposed > 0) parts.push(`${proposed} на проверке`);
+  return parts.join(' · ');
+}
+
+function lastChangeLabel(
+  account?: AccountSnapshot,
+  snapshot?: CandidateSnapshot,
+): string {
+  const value = latestChange(account, snapshot);
+  if (!value) return '';
+  return `Изменён ${new Intl.DateTimeFormat('ru-RU', {
     day: 'numeric',
     month: 'long',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(new Date(value));
+  }).format(new Date(value))}`;
+}
+
+function latestChange(
+  account?: AccountSnapshot,
+  snapshot?: CandidateSnapshot,
+): string | undefined {
+  const stamps = [
+    account?.profile.updatedAt,
+    ...(snapshot?.memory ?? []).map((item) => item.updatedAt),
+    ...(snapshot?.documents ?? []).map((item) => item.updatedAt),
+  ].filter((value): value is string => Boolean(value));
+  if (stamps.length === 0) return undefined;
+  return stamps.reduce((latest, value) => (value > latest ? value : latest));
 }
 
 function initials(name: string) {

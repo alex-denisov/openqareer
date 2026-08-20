@@ -3,12 +3,22 @@ import type { CandidateMemory } from '../coach/coachApi';
 import type { ResumeUnknown } from './resumeTypes';
 
 /** Provenance is never optional: a claim without its memory id is unverifiable. */
+/**
+ * A candidate reading their own resume should see *where* a claim came from,
+ * not the dossier's internal key. The raw id stays in the tooltip so support
+ * and the engine can still trace it (B148 §7).
+ */
 export function EvidenceChip({ memoryId }: { memoryId: string }) {
   return (
-    <span className="career-resume-evidence" title={`Источник: память ${memoryId}`}>
-      Источник: <code>{memoryId}</code>
+    <span className="career-resume-evidence" title={`Запись досье: ${memoryId}`}>
+      Источник: {evidenceOriginLabel(memoryId)}
     </span>
   );
+}
+
+function evidenceOriginLabel(memoryId: string): string {
+  if (/^imp[A-Za-z0-9]*-/u.test(memoryId)) return 'импортированное резюме';
+  return 'разговор со стратегом';
 }
 
 export function EntryUnknowns({ unknowns }: { unknowns: readonly ResumeUnknown[] }) {

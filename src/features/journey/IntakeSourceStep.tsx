@@ -1,0 +1,355 @@
+import type { ChangeEvent } from 'react';
+import {
+  ArrowRight,
+  CheckCircle,
+  FilePdf,
+  PlugsConnected,
+  Sparkle,
+  type Icon,
+} from '@phosphor-icons/react';
+import {
+  HhConnectModal,
+  LinkedInConnectModal,
+  WebDesktopCtaCallout,
+  type HhResumeItem,
+} from '../connections/ProfileImportModals';
+import { PlatformLogo } from '../connections/PlatformLogo';
+import type { ParsedResume } from '../workspace/resumeParser';
+import type { IngestedResume } from './useResumeIngestion';
+
+export type SourceChoice = 'profile-import' | 'pdf' | 'text' | 'none';
+
+export interface IntakeSourceStepProps {
+  readonly isDesktop: boolean;
+  readonly sourceChoice: SourceChoice;
+  readonly onChooseSource: (choice: SourceChoice) => void;
+  readonly locked: boolean;
+  readonly ingested?: IngestedResume;
+  readonly busy: boolean;
+  readonly notice?: string;
+  readonly resumeText: string;
+  readonly onResumeText: (value: string) => void;
+  readonly onPickPdf: (event: ChangeEvent<HTMLInputElement>) => void;
+  readonly linkedinOpen: boolean;
+  readonly hhOpen: boolean;
+  readonly onLinkedinOpen: (open: boolean) => void;
+  readonly onHhOpen: (open: boolean) => void;
+  readonly onLinkedinImported: (parsed: ParsedResume, url: string) => void;
+  readonly onHhConnected: (
+    resumes: HhResumeItem[],
+    parsed?: ParsedResume,
+    url?: string,
+  ) => void;
+  readonly hhResumes: readonly HhResumeItem[];
+  readonly selectedHhResumeId: string;
+  readonly onSelectHhResume: (id: string) => void;
+  readonly onImportHhResume: () => void;
+  readonly hhConnected: boolean;
+  readonly linkedinConnected: boolean;
+}
+
+// One component, one JSX tree: splitting further would scatter the markup.
+// eslint-disable-next-line max-lines-per-function
+export function IntakeSourceStep(props: IntakeSourceStepProps) {
+  const { sourceChoice, locked } = props;
+  return (
+    <div className="career-source-step">
+      <div className="career-source-choice" role="group" aria-label="Источник опыта">
+        <SourceButton
+          icon={PlugsConnected}
+          label="Импорт профиля"
+          selected={sourceChoice === 'profile-import'}
+          disabled={locked && sourceChoice !== 'profile-import'}
+          onClick={() => props.onChooseSource('profile-import')}
+        />
+        <SourceButton
+          icon={FilePdf}
+          label="PDF"
+          selected={sourceChoice === 'pdf'}
+          disabled={locked && sourceChoice !== 'pdf'}
+          onClick={() => props.onChooseSource('pdf')}
+        />
+        <SourceButton
+          icon={Sparkle}
+          label="Текстом"
+          selected={sourceChoice === 'text'}
+          disabled={locked && sourceChoice !== 'text'}
+          onClick={() => props.onChooseSource('text')}
+        />
+        <SourceButton
+          icon={ArrowRight}
+          label="Без документов"
+          selected={sourceChoice === 'none'}
+          disabled={locked && sourceChoice !== 'none'}
+          onClick={() => props.onChooseSource('none')}
+        />
+      </div>
+
+      {sourceChoice === 'pdf' ? <PdfSource {...props} /> : null}
+      {sourceChoice === 'profile-import' ? <ProfileImportSource {...props} /> : null}
+
+      {sourceChoice === 'text' ? (
+        <label className="career-source-textarea">
+          <span>Опыт, проекты или фрагмент резюме</span>
+          <textarea
+            value={props.resumeText}
+            onChange={(event) => props.onResumeText(event.target.value)}
+            placeholder="Например: чем вы управляли, что изменили, с кем работали и за какой результат отвечали."
+            rows={8}
+          />
+        </label>
+      ) : null}
+
+      {sourceChoice === 'none' ? (
+        <p className="career-inline-note">
+          Это нормальный старт. Сначала зададим один вопрос об опыте и не будем
+          оценивать резюме, которого нет.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function PdfSource({ ingested, busy, locked, onPickPdf, notice }: IntakeSourceStepProps) {
+  return (
+    <div className="career-pdf-source">
+      <div className="career-pdf-source-row">
+        <label className="career-primary-button career-file-button" data-locked={locked}>
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={onPickPdf}
+            disabled={locked || busy}
+          />
+          <FilePdf size={20} />
+          <span>
+            {busy ? 'Разбираем резюме…' : (ingested?.file?.name ?? 'Выбрать PDF')}
+          </span>
+        </label>
+        <small>
+          {busy
+            ? 'Разбор занимает до минуты: читаем структуру, а не ключевые слова.'
+            : ingested?.file
+              ? `${ingested.file.pages} стр.`
+              : 'PDF до 20 МБ · разбор идёт на нашем сервере, файл не хранится'}
+        </small>
+      </div>
+      {ingested ? <ImportSummary ingested={ingested} notice={notice} /> : null}
+    </div>
+  );
+}
+
+// One component, one JSX tree: splitting further would scatter the markup.
+// eslint-disable-next-line max-lines-per-function
+function ProfileImportSource(props: IntakeSourceStepProps) {
+  if (!props.isDesktop) {
+    return (
+      <div className="career-source-fields">
+        <WebDesktopCtaCallout />
+      </div>
+    );
+  }
+  const linkedinReady =
+    props.linkedinConnected || props.ingested?.source === 'linkedin-pdf';
+  const hhReady = props.hhConnected || props.ingested?.source === 'hh-pdf';
+  return (
+    <div className="career-source-fields">
+      <div className="career-platform-cards">
+        <PlatformCard
+          platform="linkedin"
+          name="LinkedIn"
+          description="Импорт структуры опыта, ключевых навыков и образования в Resume Studio."
+          connected={linkedinReady}
+          disabled={props.locked && !linkedinReady}
+          onConnect={() => props.onLinkedinOpen(true)}
+        />
+        <PlatformCard
+          platform="hh"
+          name="hh.ru"
+          description="Прямой импорт резюме hh.ru с динамической проверкой соединения."
+          connected={hhReady}
+          disabled={props.locked && !hhReady}
+          onConnect={() => props.onHhOpen(true)}
+        />
+      </div>
+
+      {props.hhConnected && props.hhResumes.length > 0 ? (
+        <div className="career-hh-resumes-selector">
+          <label htmlFor="hh-resume-dropdown">Выберите резюме для импорта</label>
+          <div className="career-hh-resumes-row">
+            <select
+              id="hh-resume-dropdown"
+              className="career-hh-resumes-select"
+              value={props.selectedHhResumeId}
+              onChange={(event) => props.onSelectHhResume(event.target.value)}
+              disabled={props.locked}
+            >
+              {props.hhResumes.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+            {hhReady ? null : (
+              <button
+                type="button"
+                className="career-primary-button"
+                onClick={props.onImportHhResume}
+                disabled={props.busy}
+              >
+                {props.busy ? 'Импортируем…' : 'Импортировать'}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : props.hhConnected ? (
+        <p className="career-inline-note">
+          В профиле hh.ru не нашлось резюме. Можно загрузить PDF или описать опыт
+          текстом.
+        </p>
+      ) : null}
+
+      {props.ingested ? (
+        <ImportSummary ingested={props.ingested} notice={props.notice} />
+      ) : null}
+
+      <LinkedInConnectModal
+        isOpen={props.linkedinOpen}
+        onClose={() => props.onLinkedinOpen(false)}
+        onImportSuccess={props.onLinkedinImported}
+      />
+      <HhConnectModal
+        isOpen={props.hhOpen}
+        onClose={() => props.onHhOpen(false)}
+        onConnectSuccess={props.onHhConnected}
+      />
+    </div>
+  );
+}
+
+function PlatformCard({
+  platform,
+  name,
+  description,
+  connected,
+  disabled,
+  onConnect,
+}: {
+  platform: 'linkedin' | 'hh';
+  name: string;
+  description: string;
+  connected: boolean;
+  disabled: boolean;
+  onConnect: () => void;
+}) {
+  return (
+    <div className={`career-platform-card ${connected ? 'is-connected' : ''}`}>
+      <div className="career-platform-card-header">
+        <div className="career-platform-card-title">
+          <PlatformLogo platform={platform} size={26} />
+          <span>{name}</span>
+        </div>
+        <span
+          className={`career-platform-card-badge ${connected ? 'is-connected' : ''}`}
+        >
+          {connected ? 'Подключено' : 'Не подключено'}
+        </span>
+      </div>
+      <p className="career-platform-card-desc">{description}</p>
+      <button
+        type="button"
+        className="career-primary-button career-platform-card-action"
+        disabled={disabled}
+        onClick={onConnect}
+      >
+        {connected ? 'Изменить' : 'Подключить'}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * States what the import actually produced. When the server stored the facts it
+ * says so; when it did not, it says that instead of showing a green tick over
+ * nothing.
+ */
+function ImportSummary({
+  ingested,
+  notice,
+}: {
+  ingested: IngestedResume;
+  notice?: string;
+}) {
+  const { parsed } = ingested;
+  return (
+    <div
+      className={`career-import-summary ${ingested.imported ? 'is-stored' : 'is-local'}`}
+      role="status"
+    >
+      <CheckCircle size={26} weight="fill" />
+      <div>
+        <strong>
+          {ingested.imported
+            ? 'Резюме разобрано и сохранено в профиль'
+            : 'Резюме разобрано'}
+        </strong>
+        <span>
+          {ingested.file ? `«${ingested.file.name}» · ` : ''}
+          {countLine(parsed)}
+        </span>
+        {notice ? <em>{notice}</em> : null}
+      </div>
+    </div>
+  );
+}
+
+function countLine(parsed: ParsedResume): string {
+  const parts = [
+    plural(parsed.experience.length, ['место работы', 'места работы', 'мест работы']),
+    plural(parsed.skills.length, ['навык', 'навыка', 'навыков']),
+    plural(parsed.education.length, ['запись об учёбе', 'записи об учёбе', 'записей об учёбе']),
+    plural(parsed.courses.length, ['курс', 'курса', 'курсов']),
+    plural(parsed.languages.length, ['язык', 'языка', 'языков']),
+  ].filter((part) => part !== null);
+  return parts.length > 0
+    ? `найдено: ${parts.join(', ')}`
+    : 'структурированных разделов не нашлось — можно дополнить профиль вручную';
+}
+
+function plural(count: number, forms: [string, string, string]): string | null {
+  if (count === 0) return null;
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${count} ${forms[0]}`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return `${count} ${forms[1]}`;
+  }
+  return `${count} ${forms[2]}`;
+}
+
+function SourceButton({
+  icon: ItemIcon,
+  label,
+  selected,
+  disabled,
+  onClick,
+}: {
+  icon: Icon;
+  label: string;
+  selected: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={selected ? 'is-selected' : ''}
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <ItemIcon size={20} weight={selected ? 'fill' : 'regular'} />
+      <span>{label}</span>
+    </button>
+  );
+}

@@ -13,7 +13,7 @@ import { CareerWorkspaceShell } from './CareerWorkspaceShell';
 import { CareerTariffsView } from './CareerTariffsView';
 
 describe('CareerWorkspaceShell', () => {
-  it('opens the authenticated candidate with a workspace inside one working command center', () => {
+  it('opens the authenticated candidate on a briefing that recommends one next step', () => {
     const html = renderToStaticMarkup(
       <CareerWorkspaceShell
         session={{
@@ -38,11 +38,36 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    expect(html).toContain('Карьерный кабинет');
-    expect(html).toContain('Диалог со стратегом');
-    expect(html).toContain('Профиль и документы');
-    expect(html).toContain('Рынок и следующие шаги');
+    expect(html).toContain('Следующий шаг');
+    expect(html).toContain('Состояние карьерного цикла');
+    // «Сегодня» must not repeat what «Профиль», «Возможности» and the «Эксперт»
+    // drawer already own (B148 §9).
+    expect(html).not.toContain('Диалог со стратегом');
+    expect(html).not.toContain('Профиль и документы');
+    expect(html).not.toContain('Рынок и следующие шаги');
     expect(html).not.toContain('Начните с карьерного вопроса');
+  });
+
+  it('locks every workspace section until the diagnostic produced a career picture', () => {
+    const html = renderToStaticMarkup(
+      <CareerWorkspaceShell
+        session={{
+          username: 'new_candidate',
+          email: 'new@example.com',
+          displayName: 'Новый Кандидат',
+          role: 'candidate',
+          isTest: false,
+          candidateId: 'candidate-new',
+        }}
+      />,
+    );
+
+    for (const label of ['Профиль', 'Резюме', 'Карьера', 'Возможности']) {
+      expect(html).toContain(
+        `aria-label="${label}. Завершите карьерную диагностику, чтобы открыть раздел"`,
+      );
+    }
+    expect(html).toContain('aria-label="Сегодня"');
   });
 
   it('opens the diagnostic wizard for a newly signed-in candidate without a workspace', () => {

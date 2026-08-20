@@ -39,17 +39,32 @@ interface CareerAccountPanelProps {
   initialUser?: AuthUser | null;
   onClose: () => void;
   onIdentityChange: (session: AuthUser | null) => void;
-  onNavigate?: (view: 'today' | 'profile' | 'resume' | 'career' | 'opportunities' | 'tariffs') => void;
 }
 
 type AuthMode = 'choose' | 'login' | 'register' | 'forgot' | 'reset';
 type AccountSection = 'connections' | 'security' | 'data';
 
+/**
+ * The drawer holds account settings only. It used to also carry shortcuts into
+ * «Resume Studio» and «Карьерный радар» — sections the left rail already owns —
+ * which made it look like a second, competing navigation (B148 §10).
+ */
+const ACCOUNT_SECTION_LABELS: Record<AccountSection, string> = {
+  connections: 'Подключения',
+  security: 'Безопасность',
+  data: 'Мои данные',
+};
+
+const ACCOUNT_SECTION_LEADS: Record<AccountSection, string> = {
+  connections: 'Площадки, из которых OpenQareer читает ваш профиль и резюме.',
+  security: 'Пароль и активные входы на других устройствах.',
+  data: 'Выгрузка всего, что мы храним, и удаление аккаунта.',
+};
+
 export function CareerAccountPanel({
   initialUser,
   onClose,
   onIdentityChange,
-  onNavigate,
 }: CareerAccountPanelProps) {
   const resetToken = resetTokenFromLocation();
   const [user, setUser] = useState<AuthUser | null | undefined>(initialUser);
@@ -327,12 +342,20 @@ export function CareerAccountPanel({
           <div>
             <strong>Аккаунт</strong>
             <small>
-              {user ? 'Профиль, безопасность и данные' : 'Защищённый карьерный профиль'}
+              {user
+                ? 'Подключения, безопасность и ваши данные'
+                : 'Защищённый карьерный профиль'}
             </small>
           </div>
         </div>
-        <button ref={closeButton} type="button" onClick={onClose} aria-label="Закрыть аккаунт">
-          <X size={20} />
+        <button
+          ref={closeButton}
+          type="button"
+          className="career-account-close"
+          onClick={onClose}
+          aria-label="Закрыть аккаунт"
+        >
+          <X size={16} weight="bold" />
         </button>
       </header>
 
@@ -350,8 +373,6 @@ export function CareerAccountPanel({
             onDownloadExport={downloadExport}
             onDeleteAccount={deleteAccount}
             onSignOut={signOut}
-            onNavigate={onNavigate}
-            onClose={onClose}
           />
         ) : null}
 
@@ -537,8 +558,6 @@ function AuthenticatedAccount({
   onDownloadExport,
   onDeleteAccount,
   onSignOut,
-  onNavigate,
-  onClose,
 }: {
   user: AuthUser;
   account?: AccountSnapshot;
@@ -550,8 +569,6 @@ function AuthenticatedAccount({
   onDownloadExport: () => Promise<void>;
   onDeleteAccount: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
   onSignOut: () => Promise<void>;
-  onNavigate?: (view: 'today' | 'profile' | 'resume' | 'career' | 'opportunities' | 'tariffs') => void;
-  onClose: () => void;
 }) {
   return (
     <>
@@ -566,57 +583,22 @@ function AuthenticatedAccount({
         </div>
       </div>
 
-      {onNavigate ? (
-        <div className="career-account-quick-links">
-          <button
-            type="button"
-            className="career-account-link-btn"
-            onClick={() => {
-              onClose();
-              onNavigate('resume');
-            }}
-          >
-            <div>
-              <strong>Resume Studio</strong>
-              <small>Мастер-профиль, навыки и опыт →</small>
-            </div>
-            <ArrowRight size={16} />
-          </button>
-          <button
-            type="button"
-            className="career-account-link-btn"
-            onClick={() => {
-              onClose();
-              onNavigate('today');
-            }}
-          >
-            <div>
-              <strong>Карьерный радар</strong>
-              <small>Диагностика, цели и следующий шаг →</small>
-            </div>
-            <ArrowRight size={16} />
-          </button>
-        </div>
-      ) : null}
-
       <nav className="career-account-tabs" aria-label="Настройки аккаунта">
         {(['connections', 'security', 'data'] as const).map((item) => (
           <button
             key={item}
             type="button"
             className={section === item ? 'is-active' : ''}
+            aria-current={section === item ? 'page' : undefined}
             onClick={() => onSectionChange(item)}
           >
-            {
-              {
-                connections: 'Площадки',
-                security: 'Безопасность',
-                data: 'Данные',
-              }[item]
-            }
+            {ACCOUNT_SECTION_LABELS[item]}
           </button>
         ))}
       </nav>
+      <p className="career-account-section-lead">
+        {ACCOUNT_SECTION_LEADS[section]}
+      </p>
 
       {section === 'connections' ? <AccountConnectionsManager /> : null}
 

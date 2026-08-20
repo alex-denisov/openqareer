@@ -132,6 +132,10 @@ export function CareerWorkspaceShell({
   // workspace without an account has nothing to show and must not pretend to.
   const resumeAvailable = Boolean(cabinetSession);
 
+  // The wizard owns the screen until it produces a workspace, so "the picture
+  // exists" and "the wizard is done" are the same fact.
+  const careerPictureReady = Boolean(visibleWorkspace);
+
   const intakeVisible = shouldShowIntake({
     sessionPending,
     hasWorkspace: Boolean(visibleWorkspace),
@@ -155,9 +159,24 @@ export function CareerWorkspaceShell({
     document.title = `${pageNames[activeView]} · openqareer`;
   }, [activeView]);
 
+  /**
+   * «Сегодня» and «Тарифы» are always reachable. Everything else stays closed
+   * until the diagnostic has produced a career picture: a freshly registered
+   * candidate used to find every section unlocked and empty, which promised
+   * work the product had not done yet (B148 §4).
+   */
   function isNavigable(view: ShellView) {
+    if (view === 'today' || view === 'tariffs') return true;
+    if (!careerPictureReady) return false;
     if (view === 'resume') return resumeAvailable;
-    return canUseWorkspaceViews || view === 'today' || view === 'tariffs';
+    return canUseWorkspaceViews;
+  }
+
+  function lockedReason(view: ShellView): string {
+    if (!careerPictureReady) return 'Завершите карьерную диагностику, чтобы открыть раздел';
+    return view === 'resume'
+      ? 'Резюме доступно после входа в аккаунт'
+      : 'Сначала соберите карьерную картину';
   }
 
   function navigate(view: ShellView) {
@@ -242,6 +261,7 @@ export function CareerWorkspaceShell({
               item={item}
               active={activeView === item.id}
               disabled={!isNavigable(item.id)}
+              lockedReason={lockedReason(item.id)}
               onClick={() => navigate(item.id)}
             />
           ))}
@@ -394,6 +414,7 @@ export function CareerWorkspaceShell({
               onNavigate={navigate}
               onUpdateWorkspace={onUpdateWorkspace}
               onOpenAccount={() => setAccountOpen(true)}
+              onOpenExpert={openExpert}
             />
           ) : null}
           {!cabinetSession && visibleWorkspace && journey && activeView === 'today' ? (
@@ -447,6 +468,7 @@ export function CareerWorkspaceShell({
             item={item}
             active={activeView === item.id}
             disabled={!isNavigable(item.id)}
+            lockedReason={lockedReason(item.id)}
             mobile
             onClick={() => navigate(item.id)}
           />
@@ -486,10 +508,6 @@ export function CareerWorkspaceShell({
             initialUser={session}
             onClose={closeAccount}
             onIdentityChange={resetForAccount}
-            onNavigate={(v) => {
-              closeAccount();
-              navigate(v);
-            }}
           />
         </>
       ) : null}
@@ -501,6 +519,7 @@ function NavigationButton({
   item,
   active,
   disabled = false,
+  lockedReason,
   mobile = false,
   onClick,
 }: {
@@ -512,6 +531,7 @@ function NavigationButton({
   };
   active: boolean;
   disabled?: boolean;
+  lockedReason?: string;
   mobile?: boolean;
   onClick: () => void;
 }) {
@@ -523,14 +543,10 @@ function NavigationButton({
       disabled={disabled}
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      aria-label={item.label}
-      title={
-        disabled
-          ? item.id === 'resume'
-            ? 'Резюме доступно после входа в аккаунт'
-            : 'Сначала соберите карьерную картину'
-          : item.label
+      aria-label={
+        disabled && lockedReason ? `${item.label}. ${lockedReason}` : item.label
       }
+      title={disabled ? (lockedReason ?? item.label) : item.label}
     >
       <ItemIcon size={22} weight={active ? 'fill' : 'regular'} />
       <span>{mobile ? item.shortLabel : item.label}</span>

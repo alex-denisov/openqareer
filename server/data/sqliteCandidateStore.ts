@@ -32,6 +32,8 @@ import type {
   StoredAssessment,
   StoredGermanyMarket,
   StoredMemory,
+  ResumeEvidenceImport,
+  ImportedResumeEvidence,
   StoredResumeDraft,
   StoredTurn,
   TurnRequest,
@@ -726,6 +728,57 @@ export class SqliteCandidateStore implements CandidateStore {
         )
         .run(candidateId, platform).changes === 1
     );
+  }
+  importResumeEvidence(
+    candidateId: string,
+    input: ResumeEvidenceImport,
+  ): ImportedResumeEvidence {
+    this.requireCandidate(candidateId);
+    const conversationId = this.conversationId(candidateId);
+    const messageId = randomUUID();
+    const now = new Date().toISOString();
+    const memoryIds: string[] = [];
+    this.transaction(() => {
+      this.insertMessage(
+        candidateId,
+        conversationId,
+        messageId,
+        'user',
+        input.sourceLabel,
+        now,
+      );
+      for (const entry of input.entries) {
+        // An import is replayable: re-importing the same document must refresh
+        // the fact, never leave two copies of it in the dossier.
+        this.database
+          .prepare('DELETE FROM memory WHERE id = ? AND candidate_id = ?')
+          .run(entry.memoryId, candidateId);
+        this.database
+          .prepare(
+            `INSERT INTO memory
+              (id, candidate_id, conversation_id, kind, domain, statement_cipher,
+               confidence, source_message_ids, sensitive, status,
+               created_at, updated_at)
+             VALUES (?, ?, ?, 'fact', ?, ?, 'candidate-reported', ?, 0, 'confirmed', ?, ?)`,
+          )
+          .run(
+            entry.memoryId,
+            candidateId,
+            conversationId,
+            entry.domain,
+            this.sealedText.seal(
+              entry.statement,
+              memoryAssociatedData(candidateId, entry.memoryId),
+            ),
+            JSON.stringify([messageId]),
+            now,
+            now,
+          );
+        memoryIds.push(entry.memoryId);
+      }
+      this.touchConversation(conversationId, now);
+    });
+    return { messageId, memoryIds };
   }
   changeMemory(
     candidateId: string,

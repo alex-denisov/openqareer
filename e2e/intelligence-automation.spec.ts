@@ -157,6 +157,13 @@ async function seedWorkspace(page: Page): Promise<void> {
   );
 }
 
+async function openOpportunities(page: Page): Promise<void> {
+  // The rail is hidden on a phone, where the same navigation lives in the
+  // bottom bar; `:visible` picks whichever one this viewport shows.
+  await page.locator('button[aria-label="Возможности"]:visible').first().click();
+  await expect(page.locator('.career-intelligence-panel')).toBeVisible();
+}
+
 test.describe('B145 & B146 Intelligence Panel, Auto-Bumper, Job-Fit and Skill Quizzes', () => {
   test('candidate can interact with auto-bumper, CRM funnel, and view job-fit screening', async ({
     page,
@@ -165,6 +172,9 @@ test.describe('B145 & B146 Intelligence Panel, Auto-Bumper, Job-Fit and Skill Qu
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
+    // Market intelligence lives in «Возможности» since B148 §9; «Сегодня» only
+    // recommends the next step.
+    await openOpportunities(page);
 
     // 1. Check Auto-Bumper (B145)
     const bumperSection = page.getByRole('heading', { name: /Авто-поднятие резюме/ });
@@ -207,6 +217,7 @@ test.describe('B145 & B146 Intelligence Panel, Auto-Bumper, Job-Fit and Skill Qu
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
+    await openOpportunities(page);
 
     // Launch Skill Verification Quiz
     const launchQuizBtn = page.getByRole('button', {

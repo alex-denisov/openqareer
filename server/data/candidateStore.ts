@@ -221,6 +221,21 @@ export interface StoredOAuthConnection extends OAuthConnectionInput {
   updatedAt: string;
 }
 
+export interface ResumeEvidenceImport {
+  /** Shown in the conversation so the candidate sees where the facts came from. */
+  readonly sourceLabel: string;
+  readonly entries: ReadonlyArray<{
+    readonly memoryId: string;
+    readonly domain: StoredMemory['domain'];
+    readonly statement: string;
+  }>;
+}
+
+export interface ImportedResumeEvidence {
+  readonly messageId: string;
+  readonly memoryIds: readonly string[];
+}
+
 export interface CandidateStore {
   createCandidate(input: {
     dataClass: CandidateIdentity['dataClass'];
@@ -248,6 +263,16 @@ export interface CandidateStore {
     memoryId: string,
     change: MemoryChange,
   ): StoredMemory | null;
+  /**
+   * Writes the facts an imported resume stated as confirmed dossier memories
+   * under caller-chosen ids, so the resume draft that cites them resolves. The
+   * whole import is one transaction: a partially written dossier would leave
+   * Resume Studio citing sources that do not exist (B148).
+   */
+  importResumeEvidence(
+    candidateId: string,
+    input: ResumeEvidenceImport,
+  ): ImportedResumeEvidence;
   saveDocument(
     candidateId: string,
     input: CandidateDocumentInput,

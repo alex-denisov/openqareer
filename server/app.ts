@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import cookie from '@fastify/cookie';
@@ -91,6 +91,12 @@ import {
 } from './connectors/profileUrlImport';
 import { parseResumeContent } from '../src/features/workspace/resumeParser';
 import {
+  carriesProfileSubstance,
+  planResumeImport,
+} from './domain/resumeImport';
+import { preferStructuredResume } from './domain/resumeStructuring';
+import type { ResumeStructurer } from './providers/resumeStructurer';
+import {
   CandidateOAuthService,
   OAuthConnectorError,
   type OAuthTransport,
@@ -129,6 +135,8 @@ interface BuildAppOptions {
   careerCommandExecutor?: ConnectorExecutor;
   vacancyIntelligenceService?: VacancyIntelligenceService;
   multiSourceVacancyEngine?: MultiSourceVacancyEngine;
+  /** Absent when no provider credential is configured; the rules parser runs alone. */
+  resumeStructurer?: ResumeStructurer;
 }
 
 interface ErrorBody {
@@ -159,6 +167,7 @@ export async function buildApp({
   careerCommandExecutor,
   vacancyIntelligenceService,
   multiSourceVacancyEngine,
+  resumeStructurer,
 }: BuildAppOptions): Promise<FastifyInstance> {
   const oauthService = new CandidateOAuthService({
     store: candidateStore,
@@ -1155,9 +1164,78 @@ export async function buildApp({
         })
         .parse(request.body);
 
-      const parsed = parseResumeContent(body.text);
+      const parsed = await readResume(body.text, resumeStructurer);
       return {
-        data: parsed,
+        data: parsed.resume,
+        meta: { requestId: request.id, structuredBy: parsed.structuredBy },
+      };
+    },
+  );
+
+  /**
+   * The one door an imported resume walks through. It reads the document, writes
+   * what the document stated into the dossier as confirmed evidence, and saves a
+   * draft that cites exactly those facts — the three steps have to happen
+   * together, or Resume Studio opens empty on a draft whose sources do not
+   * exist (B148).
+   */
+  app.post(
+    '/api/v1/candidate/resume/import',
+    {
+      bodyLimit: 4 * 1_024 * 1_024,
+      config: { rateLimit: { max: 20, timeWindow: '15 minutes' } },
+    },
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, config)) {
+        return csrfError(request, reply);
+      }
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        candidateStore,
+        authService,
+        config,
+      );
+      if (!candidate) return;
+      const body = resumeImportSchema.parse(request.body);
+      const read = await readResume(body.text, resumeStructurer);
+      const plan = planResumeImport(read.resume, {
+        idPrefix: `imp${randomUUID().replace(/-/gu, '').slice(0, 10)}`,
+      });
+      if (plan.evidence.length === 0 || !carriesProfileSubstance(read.resume)) {
+        return sendError(
+          reply,
+          request,
+          422,
+          'resume_without_facts',
+          'В документе не нашлось ни одного факта для профиля. Проверьте файл или добавьте опыт вручную.',
+          false,
+        );
+      }
+      candidateStore.importResumeEvidence(candidate.id, {
+        sourceLabel: resumeImportLabel(body.source, body.fileName),
+        entries: plan.evidence.map((item) => ({
+          memoryId: item.memoryId,
+          domain: item.domain,
+          statement: item.statement,
+        })),
+      });
+      const projection = buildResumeStudioProjection({
+        ...plan.draft,
+        evidence: candidateStore.getSnapshot(candidate.id).memory,
+      });
+      candidateStore.saveResumeDraft(
+        candidate.id,
+        plan.draft,
+        projection.evidenceSnapshot,
+      );
+      return {
+        data: {
+          parsed: read.resume,
+          resume: resumeStudioView(candidateStore, candidate.id),
+          structuredBy: read.structuredBy,
+          factCount: plan.evidence.length,
+        },
         meta: { requestId: request.id },
       };
     },
@@ -2558,6 +2636,51 @@ interface ResumeStudioView {
  * it with the evidence the candidate approved when the draft was saved, so a
  * revoked fact surfaces instead of surviving inside a generated document.
  */
+const resumeImportSchema = z
+  .object({
+    text: z.string().min(10).max(500_000),
+    source: z.enum(['pdf', 'linkedin', 'hh', 'text']),
+    fileName: z.string().trim().max(200).optional(),
+  })
+  .strict();
+
+/**
+ * Reading is delegated to the configured model when one is available, because
+ * heuristics alone mis-read real exports; the deterministic parser stays the
+ * floor, so a provider outage degrades the result instead of losing it.
+ */
+async function readResume(
+  text: string,
+  structurer?: ResumeStructurer,
+): Promise<{
+  resume: ReturnType<typeof parseResumeContent>;
+  structuredBy: 'model' | 'rules';
+}> {
+  const deterministic = parseResumeContent(text);
+  if (!structurer) return { resume: deterministic, structuredBy: 'rules' };
+  const structured = await structurer.structure(text);
+  if (!structured) return { resume: deterministic, structuredBy: 'rules' };
+  return {
+    resume: preferStructuredResume(structured, deterministic),
+    structuredBy: 'model',
+  };
+}
+
+function resumeImportLabel(
+  source: 'pdf' | 'linkedin' | 'hh' | 'text',
+  fileName?: string,
+): string {
+  const origin = {
+    pdf: 'PDF-резюме',
+    linkedin: 'профиль LinkedIn',
+    hh: 'резюме hh.ru',
+    text: 'текст резюме',
+  }[source];
+  return fileName
+    ? `Импорт: ${origin} «${fileName}»`
+    : `Импорт: ${origin}`;
+}
+
 function resumeStudioView(
   candidateStore: CandidateStore,
   candidateId: string,
