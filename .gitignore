@@ -21,6 +21,12 @@ coverage/
 src-tauri/target/
 src-tauri/gen/
 
+# Ad-hoc verification screenshots. These capture a signed-in candidate's real
+# screen — file names, counts, sometimes a third party's document — so they must
+# never reach the repository.
+shot-*.png
+screenshot-*.png
+
 # Test and browser artifacts
 test-results/
 playwright-report/
