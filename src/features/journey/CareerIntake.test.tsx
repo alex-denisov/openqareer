@@ -1,14 +1,16 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CareerIntake, IMPORT_ACTION_LABEL, PRESS_IMPORT_FIRST_MESSAGE } from './CareerIntake';
 
-/**
- * B140 — the wizard must never send a candidate to a button that is not on the
- * screen in front of them. The reachable flow is asserted in the browser
- * (`e2e/workspace-defects.spec.ts`); here the two strings are pinned to one
- * source so a rename cannot split them again.
- */
 describe('CareerIntake', () => {
+  beforeEach(() => {
+    // Clean environment
+  });
+
+  afterEach(() => {
+    delete (globalThis as { window?: unknown }).window;
+  });
+
   it('opens on the start screen without a wizard step behind it', () => {
     const html = renderToStaticMarkup(<CareerIntake onComplete={() => undefined} />);
 
@@ -29,7 +31,29 @@ describe('CareerIntake', () => {
     expect(html).toContain('Без аккаунта прогресс хранится только в текущей вкладке.');
   });
 
-  it('renders unified profile import option on source step with connector dropdown and single connect action', () => {
+  it('selects option 1 "Импорт профиля" by default on step 2', () => {
+    const html = renderToStaticMarkup(
+      <CareerIntake
+        onComplete={() => undefined}
+        initialStarted
+        initialStep="source"
+      />,
+    );
+
+    // Assert that "Импорт профиля" is rendered and selected by default
+    expect(html).toContain('Импорт профиля');
+    expect(html).toContain('is-selected');
+    // In web mode, shows web desktop CTA callout for profile import
+    expect(html).toContain('Импорт профилей LinkedIn и hh.ru доступен в десктопном приложении');
+    expect(html).toContain('Скачать OpenQareer Desktop');
+  });
+
+  it('renders two platform cards for LinkedIn and hh.ru in desktop mode', () => {
+    // Mock Tauri desktop companion environment
+    (globalThis as { window?: unknown }).window = {
+      __TAURI_INTERNALS__: {},
+    };
+
     const html = renderToStaticMarkup(
       <CareerIntake
         onComplete={() => undefined}
@@ -39,13 +63,11 @@ describe('CareerIntake', () => {
       />,
     );
 
-    expect(html).toContain('Импорт профиля');
-    expect(html).toContain('Площадка для импорта');
-    expect(html).toContain('hh.ru');
+    expect(html).toContain('career-platform-cards');
     expect(html).toContain('LinkedIn');
+    expect(html).toContain('hh.ru (HeadHunter)');
+    expect(html).toContain('Прямой импорт резюме HeadHunter с динамической проверкой соединения');
     expect(html).toContain('Подключить');
-    expect(html).not.toContain('Создать аккаунт');
-    expect(html).not.toContain('Импортировать');
   });
 
   it('renders all four source buttons proportionally on source step', () => {
@@ -63,4 +85,3 @@ describe('CareerIntake', () => {
     expect(html).toContain('Без документов');
   });
 });
-

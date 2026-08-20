@@ -172,7 +172,9 @@ test.describe('B140 workspace shell and intake defects', () => {
     ).toBeLessThanOrEqual(2);
   });
 
-  test('the profile import source offers connector select and connect action', async ({ page }) => {
+  test('the profile import source offers desktop companion CTA in web mode and cards in desktop mode', async ({
+    page,
+  }) => {
     await stubEmptySession(page);
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -180,14 +182,11 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.getByRole('button', { name: 'Начать диагностику' }).click();
     await page.getByRole('button', { name: /Хочу найти работу/ }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
-    await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();
 
     const fields = page.locator('.career-source-fields');
-    // Only 'Подключить' is offered, no misleading 'Импортировать' or inline 'Создать аккаунт'
-    await expect(fields.getByRole('button', { name: 'Импортировать' })).toHaveCount(0);
-    await expect(fields.getByRole('button', { name: 'Создать аккаунт' })).toHaveCount(0);
-    await expect(fields.getByRole('button', { name: 'Подключить' })).toBeVisible();
-    await expect(fields.getByRole('combobox')).toBeVisible();
+    // In web mode, offers desktop companion CTA
+    await expect(fields.locator('.career-web-desktop-cta')).toBeVisible();
+    await expect(fields.getByRole('link', { name: 'Скачать OpenQareer Desktop' })).toBeVisible();
   });
 
   test('the intake never names a button that is not on screen', async ({ page }) => {

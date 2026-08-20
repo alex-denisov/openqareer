@@ -14,14 +14,20 @@ import {
 import {
   getConnections,
   importProfileUrl,
-  startConnection,
   type CandidateConnection,
 } from '../coach/coachApi';
+import type { ConnectionPlatform } from '../connections/connectionResult';
 import {
-  PLATFORM_LABELS,
-  type ConnectionPlatform,
-} from '../connections/connectionResult';
-import { openPlatformAuthPopup } from '../connections/authPopup';
+  LinkedInConnectModal,
+  HhConnectModal,
+  WebDesktopCtaCallout,
+  type HhResumeItem,
+} from '../connections/ProfileImportModals';
+import {
+  desktopNativeFetch,
+  isTauriEnvironment,
+} from '../../services/desktop/desktopBridge';
+import { parseHhResumeHtml } from '../../services/connectors/hhResumeParser';
 import { extractPdfResume } from '../workspace/pdfResume';
 import {
   parseResumeContent,
@@ -107,14 +113,13 @@ export function CareerIntake({
   onStartedChange,
   initialStarted = false,
   initialStep = 'intent',
-  initialSourceChoice = 'none',
-  initialConnectorPlatform = 'hh',
+  initialSourceChoice = 'profile-import',
 }: CareerIntakeProps) {
+  const isDesktop = isTauriEnvironment();
   const [started, setStarted] = useState(initialStarted);
   const [step, setStep] = useState<IntakeStep>(initialStep);
   const [goal, setGoal] = useState<CareerGoal>();
   const [sourceChoice, setSourceChoice] = useState<SourceChoice>(initialSourceChoice);
-  const [connectorPlatform, setConnectorPlatform] = useState<ConnectionPlatform>(initialConnectorPlatform);
   const [resumeText, setResumeText] = useState('');
   const [resumeSource, setResumeSource] = useState<ResumeSource>('text');
   const [resumeFile, setResumeFile] = useState<{
@@ -124,7 +129,12 @@ export function CareerIntake({
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [hhUrl, setHhUrl] = useState('');
   const [connections, setConnections] = useState<CandidateConnection[]>();
-  const [connectingPlatform, setConnectingPlatform] = useState<ConnectionPlatform>();
+  const [isLinkedinModalOpen, setIsLinkedinModalOpen] = useState(false);
+  const [isHhModalOpen, setIsHhModalOpen] = useState(false);
+  const [hhResumes, setHhResumes] = useState<HhResumeItem[]>([]);
+  const [selectedHhResumeId, setSelectedHhResumeId] = useState<string>('');
+  const [isHhConnected, setIsHhConnected] = useState(false);
+  const [isLinkedinConnected, setIsLinkedinConnected] = useState(false);
   const [currentSituation, setCurrentSituation] = useState('');
   const [targetDirection, setTargetDirection] = useState('');
   const [market, setMarket] = useState<WorkspaceMarket>('ru');
@@ -136,6 +146,10 @@ export function CareerIntake({
   const [parsedResume, setParsedResume] = useState<ParsedResume>();
   const [parsedDraft, setParsedDraft] = useState<ResumeDraft>();
   const errorRef = useRef<HTMLParagraphElement>(null);
+
+  const isSourceLocked = Boolean(
+    parsedResume && (resumeSource === 'hh-pdf' || resumeSource === 'linkedin-pdf'),
+  );
 
   /**
    * On a phone the wizard's action bar is sticky, so a refusal rendered above
@@ -168,7 +182,9 @@ export function CareerIntake({
 
   useEffect(() => {
     if (sourceChoice !== 'profile-import') return;
-    const activeConnection = connections?.find((c) => c.platform === connectorPlatform);
+    const activeConnection = connections?.find(
+      (c) => (c.platform === 'hh' || c.platform === 'linkedin') && c.status === 'connected',
+    );
     if (
       activeConnection?.status === 'connected' &&
       activeConnection.profile.facts.length > 0 &&
@@ -187,12 +203,12 @@ export function CareerIntake({
       setParsedResume(parsed);
       setParsedDraft(parsedResumeToDraft(parsed));
       setResumeText(allText);
-      setResumeSource(connectorPlatform === 'hh' ? 'hh-pdf' : 'linkedin-pdf');
+      setResumeSource(activeConnection.platform === 'hh' ? 'hh-pdf' : 'linkedin-pdf');
       if (parsed.targetRole && !targetDirection) {
         setTargetDirection(parsed.targetRole);
       }
     }
-  }, [sourceChoice, connectorPlatform, connections, parsedResume, targetDirection]);
+  }, [sourceChoice, connections, parsedResume, targetDirection]);
 
   if (!started) {
     return (
@@ -266,106 +282,86 @@ export function CareerIntake({
     }
   }
 
-  async function handleConnectPlatform(platform: ConnectionPlatform) {
-    setConnectingPlatform(platform);
+  function handleLinkedInSuccess(parsed: ParsedResume, rawUrl: string) {
+    setParsedResume(parsed);
+    setParsedDraft(parsedResumeToDraft(parsed));
+    setResumeText(parsed.rawText);
+    setResumeSource('linkedin-pdf');
+    setLinkedinUrl(rawUrl);
+    setIsLinkedinConnected(true);
+    if (parsed.targetRole && !targetDirection) {
+      setTargetDirection(parsed.targetRole);
+    }
     setError(undefined);
-    const rawUrl = platform === 'hh' ? hhUrl.trim() : linkedinUrl.trim();
-    const enteredUrl =
-      rawUrl && !/^https?:\/\//i.test(rawUrl) ? `https://${rawUrl}` : rawUrl;
+  }
 
-    if (platform === 'hh') {
-      if (!enteredUrl) {
-        setConnectingPlatform(undefined);
-        setError(
-          'Вставьте ссылку на ваше резюме hh.ru (например, hh.ru/resume/...) либо загрузите PDF или введите опыт текстом.',
-        );
-        return;
+  function handleHhSuccess(resumes: HhResumeItem[], defaultParsed?: ParsedResume, rawUrl?: string) {
+    setHhResumes(resumes);
+    setIsHhConnected(true);
+    if (rawUrl) setHhUrl(rawUrl);
+    if (resumes.length > 0) {
+      setSelectedHhResumeId(resumes[0].id);
+    }
+    if (defaultParsed) {
+      setParsedResume(defaultParsed);
+      setParsedDraft(parsedResumeToDraft(defaultParsed));
+      setResumeText(defaultParsed.rawText);
+      setResumeSource('hh-pdf');
+      if (defaultParsed.targetRole && !targetDirection) {
+        setTargetDirection(defaultParsed.targetRole);
       }
-      try {
-        const result = await importProfileUrl(enteredUrl);
-        if (result.status === 'imported') {
-          if (result.parsedResume) {
-            setParsedResume(result.parsedResume);
-            setParsedDraft(parsedResumeToDraft(result.parsedResume));
-            setResumeText(result.parsedResume.rawText);
-            setResumeSource('hh-pdf');
-            if (result.parsedResume.targetRole && !targetDirection) {
-              setTargetDirection(result.parsedResume.targetRole);
-            }
-            setError(undefined);
-          } else {
-            setError(
-              'Не удалось прочитать структуру резюме. Загрузите PDF или введите опыт текстом.',
-            );
-          }
-        } else if (result.reason === 'authwall') {
-          setError(
-            'hh.ru блокирует доступ через включённый VPN («VPN мешает работе сайта»). Выключите VPN для hh.ru либо загрузите резюме в формате PDF.',
-          );
-        } else if (result.reason === 'insufficient') {
-          setError(
-            'Не удалось извлечь данные резюме с hh.ru. Убедитесь, что резюме открыто для просмотра по ссылке, либо загрузите PDF.',
-          );
-        } else {
-          setError(
-            'Не удалось загрузить данные резюме с hh.ru. Проверьте ссылку (например, hh.ru/resume/...) либо загрузите PDF резюме.',
-          );
-        }
-      } catch (reason) {
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : 'Не удалось прочитать резюме по ссылке. Можно загрузить PDF или ввести опыт текстом.',
-        );
-      } finally {
-        setConnectingPlatform(undefined);
-      }
+    }
+    setError(undefined);
+  }
+
+  async function handleImportSelectedHhResume() {
+    const selected = hhResumes.find((r) => r.id === selectedHhResumeId) || hhResumes[0];
+    if (!selected) {
+      setError('Выберите резюме для импорта.');
       return;
     }
-
-    if (enteredUrl) {
-      try {
-        const result = await importProfileUrl(enteredUrl);
-        if (result.status === 'imported' && result.parsedResume) {
-          setParsedResume(result.parsedResume);
-          setParsedDraft(parsedResumeToDraft(result.parsedResume));
-          setResumeText(result.parsedResume.rawText);
-          setResumeSource('linkedin-pdf');
-          if (result.parsedResume.targetRole && !targetDirection) {
-            setTargetDirection(result.parsedResume.targetRole);
+    setError(undefined);
+    try {
+      if (isTauriEnvironment()) {
+        const nativeRes = await desktopNativeFetch({
+          url: selected.url,
+          method: 'GET',
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          },
+        });
+        if (nativeRes && nativeRes.body) {
+          const parsed = parseHhResumeHtml(nativeRes.body, selected.url);
+          setParsedResume(parsed);
+          setParsedDraft(parsedResumeToDraft(parsed));
+          setResumeText(parsed.rawText);
+          setResumeSource('hh-pdf');
+          if (parsed.targetRole && !targetDirection) {
+            setTargetDirection(parsed.targetRole);
           }
-          setError(undefined);
-          setConnectingPlatform(undefined);
           return;
         }
-      } catch {
-        // Fallback to official OAuth below
       }
-    }
-
-    try {
-      const started = await startConnection(platform);
-      openPlatformAuthPopup(started.authorizationUrl, (authResult) => {
-        setConnectingPlatform(undefined);
-        if (authResult?.status === 'connected') {
-          void getConnections()
-            .then((loaded) => setConnections(loaded))
-            .catch(() => undefined);
-        } else if (authResult?.status === 'declined') {
-          setError('Подключение площадки отменено.');
+      const result = await importProfileUrl(selected.url);
+      if (result.status === 'imported' && result.parsedResume) {
+        setParsedResume(result.parsedResume);
+        setParsedDraft(parsedResumeToDraft(result.parsedResume));
+        setResumeText(result.parsedResume.rawText);
+        setResumeSource('hh-pdf');
+        if (result.parsedResume.targetRole && !targetDirection) {
+          setTargetDirection(result.parsedResume.targetRole);
         }
-      });
-    } catch (reason) {
-      setConnectingPlatform(undefined);
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : `Не удалось начать подключение ${PLATFORM_LABELS[platform]}. Можно загрузить PDF или ввести опыт текстом.`,
-      );
+      } else {
+        setError('Не удалось импортировать выбранное резюме.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось импортировать выбранное резюме.');
     }
   }
 
   function chooseSource(nextSource: SourceChoice) {
+    if (isSourceLocked) return;
     if (nextSource === sourceChoice) return;
     setSourceChoice(nextSource);
     setError(undefined);
@@ -389,53 +385,20 @@ export function CareerIntake({
 
   async function moveFromSource() {
     if (sourceChoice === 'profile-import') {
-      const platformLabel = PLATFORM_LABELS[connectorPlatform];
-      const activeConnection = connections?.find((c) => c.platform === connectorPlatform);
-      const rawUrl = connectorPlatform === 'hh' ? hhUrl.trim() : linkedinUrl.trim();
-      const enteredUrl =
-        rawUrl && !/^https?:\/\//i.test(rawUrl) ? `https://${rawUrl}` : rawUrl;
-
-      if (activeConnection?.status !== 'connected' && !parsedResume && !resumeText.trim()) {
-        if (!enteredUrl) {
+      if (!parsedResume && !resumeText.trim()) {
+        if (!isDesktop) {
           setError(
-            `Подключите ${platformLabel} или выберите другой способ: PDF, текст либо «Без документов».`,
+            'В веб-версии скачайте десктопное приложение для импорта профилей либо выберите PDF, текст или «Без документов».',
           );
-          return;
-        }
-        try {
-          const result = await importProfileUrl(enteredUrl);
-          if (result.status === 'imported') {
-            if (result.parsedResume) {
-              setParsedResume(result.parsedResume);
-              setParsedDraft(parsedResumeToDraft(result.parsedResume));
-              setResumeText(result.parsedResume.rawText);
-              setResumeSource(connectorPlatform === 'hh' ? 'hh-pdf' : 'linkedin-pdf');
-              if (result.parsedResume.targetRole && !targetDirection) {
-                setTargetDirection(result.parsedResume.targetRole);
-              }
-            }
-          } else if (result.reason === 'authwall') {
-            setError(
-              'hh.ru блокирует доступ через включённый VPN («VPN мешает работе сайта»). Выключите VPN для hh.ru либо загрузите резюме в формате PDF.',
-            );
-            return;
-          } else {
-            setError(
-              `Не удалось загрузить данные ${platformLabel}. Проверьте ссылку либо загрузите PDF.`,
-            );
-            return;
-          }
-        } catch (reason) {
+        } else {
           setError(
-            reason instanceof Error
-              ? reason.message
-              : `Не удалось прочитать ${platformLabel}. Нажмите «Подключить» или загрузите PDF.`,
+            'Подключите LinkedIn или hh.ru либо выберите другой способ: PDF, текст или «Без документов».',
           );
-          return;
         }
+        return;
       }
       if (parsedResume) {
-        setResumeSource(connectorPlatform === 'hh' ? 'hh-pdf' : 'linkedin-pdf');
+        setResumeSource(resumeSource === 'hh-pdf' ? 'hh-pdf' : 'linkedin-pdf');
       }
     }
     if (sourceChoice === 'text' && resumeText.trim().length > 0 && resumeText.trim().length < 80) {
@@ -456,7 +419,7 @@ export function CareerIntake({
         sourceChoice === 'pdf' && resumeFile
           ? resumeSource
           : sourceChoice === 'profile-import'
-            ? connectorPlatform === 'hh'
+            ? resumeSource === 'hh-pdf'
               ? 'hh-pdf'
               : 'linkedin-pdf'
             : 'text',
@@ -470,11 +433,11 @@ export function CareerIntake({
         .join('. '),
       urgency,
       linkedinUrl:
-        sourceChoice === 'profile-import' && connectorPlatform === 'linkedin'
+        sourceChoice === 'profile-import' && (resumeSource === 'linkedin-pdf' || Boolean(linkedinUrl.trim()))
           ? linkedinUrl.trim() || undefined
           : undefined,
       hhUrl:
-        sourceChoice === 'profile-import' && connectorPlatform === 'hh'
+        sourceChoice === 'profile-import' && (resumeSource === 'hh-pdf' || Boolean(hhUrl.trim()))
           ? hhUrl.trim() || undefined
           : undefined,
       resumeDraft: parsedDraft,
@@ -576,24 +539,28 @@ export function CareerIntake({
               icon={GlobeHemisphereWest}
               label="Импорт профиля"
               selected={sourceChoice === 'profile-import'}
+              disabled={isSourceLocked && sourceChoice !== 'profile-import'}
               onClick={() => chooseSource('profile-import')}
             />
             <SourceButton
               icon={FilePdf}
               label="PDF"
               selected={sourceChoice === 'pdf'}
+              disabled={isSourceLocked && sourceChoice !== 'pdf'}
               onClick={() => chooseSource('pdf')}
             />
             <SourceButton
               icon={Sparkle}
               label="Текстом"
               selected={sourceChoice === 'text'}
+              disabled={isSourceLocked && sourceChoice !== 'text'}
               onClick={() => chooseSource('text')}
             />
             <SourceButton
               icon={ArrowRight}
               label="Без документов"
               selected={sourceChoice === 'none'}
+              disabled={isSourceLocked && sourceChoice !== 'none'}
               onClick={() => chooseSource('none')}
             />
           </div>
@@ -605,7 +572,7 @@ export function CareerIntake({
                   className="career-primary-button career-file-button"
                   style={{
                     position: 'relative',
-                    cursor: 'pointer',
+                    cursor: isSourceLocked ? 'not-allowed' : 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -615,19 +582,21 @@ export function CareerIntake({
                     padding: '0 20px',
                     borderRadius: '8px',
                     overflow: 'hidden',
+                    opacity: isSourceLocked ? 0.6 : 1,
                   }}
                 >
                   <input
                     type="file"
                     accept="application/pdf,.pdf"
                     onChange={handlePdf}
+                    disabled={isSourceLocked}
                     style={{
                       position: 'absolute',
                       inset: 0,
                       opacity: 0,
                       width: '100%',
                       height: '100%',
-                      cursor: 'pointer',
+                      cursor: isSourceLocked ? 'not-allowed' : 'pointer',
                       zIndex: 2,
                     }}
                   />
@@ -694,96 +663,172 @@ export function CareerIntake({
 
           {sourceChoice === 'profile-import' ? (
             <div className="career-source-fields">
-              <div className="career-source-connector-select-group">
-                <label htmlFor="connector-platform-select" className="career-source-select-label">
-                  Площадка для импорта
-                </label>
-                <div className="career-connector-select-wrapper">
-                  <select
-                    id="connector-platform-select"
-                    className="career-connector-select"
-                    value={connectorPlatform}
-                    onChange={(e) => {
-                      const next = e.target.value as ConnectionPlatform;
-                      setConnectorPlatform(next);
-                      setError(undefined);
-                    }}
-                  >
-                    <option value="hh">hh.ru (HeadHunter)</option>
-                    <option value="linkedin">LinkedIn</option>
-                  </select>
-                </div>
-              </div>
+              {!isDesktop ? (
+                <WebDesktopCtaCallout />
+              ) : (
+                <>
+                  <div className="career-platform-cards">
+                    <div
+                      className={`career-platform-card ${isLinkedinConnected || (parsedResume && resumeSource === 'linkedin-pdf') ? 'is-connected' : ''}`}
+                    >
+                      <div className="career-platform-card-header">
+                        <div className="career-platform-card-title">
+                          <GlobeHemisphereWest size={22} weight="bold" style={{ color: '#0077b5' }} />
+                          <span>LinkedIn</span>
+                        </div>
+                        <span
+                          className={`career-platform-card-badge ${isLinkedinConnected || (parsedResume && resumeSource === 'linkedin-pdf') ? 'is-connected' : ''}`}
+                        >
+                          {isLinkedinConnected || (parsedResume && resumeSource === 'linkedin-pdf')
+                            ? 'Подключено'
+                            : 'Не подключено'}
+                        </span>
+                      </div>
+                      <p className="career-platform-card-desc">
+                        Импорт структуры опыта, ключевых навыков и образования в Resume Studio.
+                      </p>
+                      <button
+                        type="button"
+                        className="career-primary-button career-platform-card-action"
+                        disabled={isSourceLocked && !(parsedResume && resumeSource === 'linkedin-pdf')}
+                        onClick={() => setIsLinkedinModalOpen(true)}
+                      >
+                        {isLinkedinConnected || (parsedResume && resumeSource === 'linkedin-pdf')
+                          ? 'Изменить'
+                          : 'Подключить'}
+                      </button>
+                    </div>
 
-              {parsedResume ? (
-                <div
-                  className="career-source-parsed-badge"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '14px',
-                    padding: '16px',
-                    background: 'rgba(34, 197, 94, 0.12)',
-                    border: '1px solid rgba(34, 197, 94, 0.35)',
-                    borderRadius: '12px',
-                    marginTop: '8px',
-                    marginBottom: '8px',
-                  }}
-                >
-                  <CheckCircle
-                    size={28}
-                    weight="fill"
-                    style={{ color: '#22c55e', flexShrink: 0, marginTop: '2px' }}
-                  />
-                  <div>
-                    <strong
-                      style={{
-                        fontSize: '15px',
-                        color: '#22c55e',
-                        display: 'block',
-                        marginBottom: '4px',
-                      }}
+                    <div
+                      className={`career-platform-card ${isHhConnected || (parsedResume && resumeSource === 'hh-pdf') ? 'is-connected' : ''}`}
                     >
-                      Данные профиля {PLATFORM_LABELS[connectorPlatform]} готовы для Resume Studio
-                    </strong>
-                    <span
-                      style={{
-                        fontSize: '13px',
-                        opacity: 0.9,
-                        lineHeight: '1.4',
-                        display: 'block',
-                      }}
-                    >
-                      Найдено: {parsedResume.experience.length} мест работы,{' '}
-                      {parsedResume.skills.length} навыков,{' '}
-                      {parsedResume.education.length} записей образования,{' '}
-                      {parsedResume.courses.length} курсов.
-                    </span>
+                      <div className="career-platform-card-header">
+                        <div className="career-platform-card-title">
+                          <GlobeHemisphereWest size={22} weight="bold" style={{ color: '#d6001c' }} />
+                          <span>hh.ru (HeadHunter)</span>
+                        </div>
+                        <span
+                          className={`career-platform-card-badge ${isHhConnected || (parsedResume && resumeSource === 'hh-pdf') ? 'is-connected' : ''}`}
+                        >
+                          {isHhConnected || (parsedResume && resumeSource === 'hh-pdf')
+                            ? 'Подключено'
+                            : 'Не подключено'}
+                        </span>
+                      </div>
+                      <p className="career-platform-card-desc">
+                        Прямой импорт резюме HeadHunter с динамической проверкой соединения.
+                      </p>
+                      <button
+                        type="button"
+                        className="career-primary-button career-platform-card-action"
+                        disabled={isSourceLocked && !(parsedResume && resumeSource === 'hh-pdf')}
+                        onClick={() => setIsHhModalOpen(true)}
+                      >
+                        {isHhConnected || (parsedResume && resumeSource === 'hh-pdf')
+                          ? 'Изменить'
+                          : 'Подключить'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ) : null}
 
-              <PlatformIntegrationCard
-                platform={connectorPlatform}
-                url={connectorPlatform === 'linkedin' ? linkedinUrl : hhUrl}
-                onUrlChange={(val) => {
-                  if (connectorPlatform === 'linkedin') setLinkedinUrl(val);
-                  else setHhUrl(val);
-                }}
-                isConnected={
-                  connectorPlatform === 'hh'
-                    ? Boolean(
-                        connections?.some((c) => c.platform === 'hh' && c.status === 'connected') ||
-                          (parsedResume && resumeSource === 'hh-pdf'),
-                      )
-                    : Boolean(
-                        connections?.some((c) => c.platform === 'linkedin' && c.status === 'connected') ||
-                          (parsedResume && resumeSource === 'linkedin-pdf'),
-                      )
-                }
-                isConnecting={connectingPlatform === connectorPlatform}
-                onConnect={() => handleConnectPlatform(connectorPlatform)}
-              />
+                  {isHhConnected && hhResumes.length > 0 ? (
+                    <div className="career-hh-resumes-selector">
+                      <label htmlFor="hh-resume-dropdown">Выберите резюме для импорта</label>
+                      <div className="career-hh-resumes-row">
+                        <select
+                          id="hh-resume-dropdown"
+                          className="career-hh-resumes-select"
+                          value={selectedHhResumeId}
+                          onChange={(e) => setSelectedHhResumeId(e.target.value)}
+                          disabled={isSourceLocked}
+                        >
+                          {hhResumes.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.title}
+                            </option>
+                          ))}
+                        </select>
+                        {!(parsedResume && resumeSource === 'hh-pdf') ? (
+                          <button
+                            type="button"
+                            className="career-primary-button"
+                            onClick={() => void handleImportSelectedHhResume()}
+                          >
+                            Импортировать
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : isHhConnected && hhResumes.length === 0 ? (
+                    <p className="career-inline-note">
+                      Резюме не найдены в профиле hh.ru. Можно загрузить PDF или ввести опыт текстом.
+                    </p>
+                  ) : null}
+
+                  {parsedResume &&
+                  (resumeSource === 'hh-pdf' || resumeSource === 'linkedin-pdf') ? (
+                    <div
+                      className="career-source-parsed-badge"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '14px',
+                        padding: '16px',
+                        background: 'rgba(34, 197, 94, 0.12)',
+                        border: '1px solid rgba(34, 197, 94, 0.35)',
+                        borderRadius: '12px',
+                        marginTop: '8px',
+                        marginBottom: '8px',
+                      }}
+                    >
+                      <CheckCircle
+                        size={28}
+                        weight="fill"
+                        style={{ color: '#22c55e', flexShrink: 0, marginTop: '2px' }}
+                      />
+                      <div>
+                        <strong
+                          style={{
+                            fontSize: '15px',
+                            color: '#22c55e',
+                            display: 'block',
+                            marginBottom: '4px',
+                          }}
+                        >
+                          Данные профиля {resumeSource === 'hh-pdf' ? 'HeadHunter (hh.ru)' : 'LinkedIn'} загружены в Resume Studio
+                        </strong>
+                        <span
+                          style={{
+                            fontSize: '13px',
+                            opacity: 0.9,
+                            lineHeight: '1.4',
+                            display: 'block',
+                          }}
+                        >
+                          Найдено: {parsedResume.experience.length} мест работы,{' '}
+                          {parsedResume.skills.length} навыков,{' '}
+                          {parsedResume.education.length} записей образования,{' '}
+                          {parsedResume.languages.length} языков. Опции заблокированы для защиты данных.
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <LinkedInConnectModal
+                    isOpen={isLinkedinModalOpen}
+                    onClose={() => setIsLinkedinModalOpen(false)}
+                    onImportSuccess={handleLinkedInSuccess}
+                    initialUrl={linkedinUrl}
+                  />
+
+                  <HhConnectModal
+                    isOpen={isHhModalOpen}
+                    onClose={() => setIsHhModalOpen(false)}
+                    onConnectSuccess={handleHhSuccess}
+                    initialUrl={hhUrl}
+                  />
+                </>
+              )}
             </div>
           ) : null}
 
@@ -945,71 +990,17 @@ export function CareerIntake({
   );
 }
 
-function PlatformIntegrationCard({
-  platform,
-  url,
-  onUrlChange,
-  isConnected,
-  isConnecting,
-  onConnect,
-}: {
-  platform: 'linkedin' | 'hh';
-  url: string;
-  onUrlChange: (url: string) => void;
-  isConnected: boolean;
-  isConnecting: boolean;
-  onConnect: () => void;
-}) {
-  const isHh = platform === 'hh';
-  const label = isHh ? 'Ссылка на резюме hh.ru' : 'Ссылка на профиль LinkedIn';
-  const placeholder = isHh ? 'https://hh.ru/resume/...' : 'https://www.linkedin.com/in/...';
-  const disclaimer = isHh
-    ? '«Подключить» открывает защищённую сессию для прямого анализа и синхронизации вашего резюме на hh.ru.'
-    : '«Подключить» открывает защищённый доступ для глубокого анализа и синхронизации профиля LinkedIn.';
-
-  return (
-    <div className="career-source-card">
-      <div className="career-source-row">
-        <label className="career-source-url-label">
-          <span>{label}</span>
-          <input
-            value={url}
-            onChange={(e) => onUrlChange(e.target.value)}
-            placeholder={placeholder}
-            inputMode="url"
-          />
-        </label>
-        <div className="career-source-actions">
-          {isConnected ? (
-            <span className="career-source-connected-badge" role="status">
-              <CheckCircle size={20} weight="fill" /> Подключено к {PLATFORM_LABELS[platform]}
-            </span>
-          ) : (
-            <button
-              className="career-primary-button"
-              type="button"
-              disabled={isConnecting}
-              onClick={onConnect}
-            >
-              {isConnecting ? 'Подключение…' : 'Подключить'}
-            </button>
-          )}
-        </div>
-      </div>
-      <p className="career-source-disclaimer">{disclaimer}</p>
-    </div>
-  );
-}
-
 function SourceButton({
   icon: Icon,
   label,
   selected,
+  disabled,
   onClick,
 }: {
   icon: typeof FilePdf;
   label: string;
   selected: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -1017,6 +1008,7 @@ function SourceButton({
       type="button"
       className={selected ? 'is-selected' : ''}
       aria-pressed={selected}
+      disabled={disabled}
       onClick={onClick}
     >
       <Icon size={20} weight={selected ? 'fill' : 'regular'} />

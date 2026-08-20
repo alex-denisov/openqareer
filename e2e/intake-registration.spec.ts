@@ -83,7 +83,7 @@ test.describe('B141 diagnostic survives registration', () => {
     await expect(page.getByRole('heading', { name: 'Карьерный кабинет' })).toHaveCount(0);
   });
 
-  test('the profile import card has connect action and connector selector', async ({ page }) => {
+  test('the profile import option shows desktop companion CTA in web mode', async ({ page }) => {
     await stubAuth(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
@@ -91,14 +91,33 @@ test.describe('B141 diagnostic survives registration', () => {
     await reachProfileImportSourceStep(page);
     const fields = page.locator('.career-source-fields');
 
-    // Profile import stays selected and connector select & connect button are available
+    // Profile import stays selected and web desktop CTA is shown
     await expect(page.getByRole('button', { name: 'Импорт профиля', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
-    await expect(fields.getByRole('button', { name: 'Подключить' })).toBeVisible();
-    await expect(fields.getByRole('combobox')).toBeVisible();
-    await expect(fields.getByRole('textbox')).toBeVisible();
+    await expect(fields.locator('.career-web-desktop-cta')).toBeVisible();
+    await expect(fields.getByRole('link', { name: 'Скачать OpenQareer Desktop' })).toBeVisible();
+  });
+
+  test('the profile import option shows platform cards in desktop mode', async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }).__TAURI_INTERNALS__ =
+        {};
+    });
+    await stubAuth(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await waitForLiveApp(page);
+
+    await reachProfileImportSourceStep(page);
+    const fields = page.locator('.career-source-fields');
+
+    await expect(page.getByRole('button', { name: 'Импорт профиля', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(fields.locator('.career-platform-cards')).toBeVisible();
+    await expect(fields.getByRole('button', { name: 'Подключить' })).toHaveCount(2);
   });
 
   test('a refused step shows why on screen instead of below the action bar', async ({ page }) => {

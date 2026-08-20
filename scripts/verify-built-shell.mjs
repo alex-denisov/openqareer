@@ -580,11 +580,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByRole('button', { name: /Хочу найти работу/ }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await page.getByRole('button', { name: 'Импорт профиля' }).click();
-  await page.locator('.career-connector-select').selectOption('linkedin');
-  await page.getByLabel('Ссылка на профиль LinkedIn').fill('https://www.linkedin.com/in/synthetic-candidate');
   assert(
-    await page.locator('.career-source-fields').getByRole('button', { name: 'Подключить' }).isVisible(),
-    `${viewport.name}: profile import card missing connect action`,
+    await page.locator('.career-web-desktop-cta').isVisible(),
+    `${viewport.name}: profile import web CTA missing`,
+  );
+  assert(
+    await page.locator('.career-web-desktop-cta').getByRole('link', { name: 'Скачать OpenQareer Desktop' }).isVisible(),
+    `${viewport.name}: profile import web CTA link missing`,
   );
 
   if (viewport.name === 'mobile') {
