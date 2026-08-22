@@ -24,10 +24,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out exact commit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Use Node.js 24
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
@@ -68,10 +68,10 @@ jobs:
     environment: production
     steps:
       - name: Check out exact commit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Use Node.js 24
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
@@ -141,14 +141,17 @@ jobs:
           while IFS='|' read -r root_path root_type; do
             [ -n "$root_path" ] || continue
             probe="$(mktemp)"
-            probe_status="$(curl -sS --compressed --max-time 20 \
+            # One request carries both facts; `|| true` keeps a transport
+            # failure inside the diagnosis below instead of dying under
+            # pipefail before the printf explains which file broke.
+            response="$(curl -sS --compressed --max-time 60 \
               -H 'Cache-Control: no-cache' \
-              -o "$probe" -w '%{http_code}' \
-              "https://openqareer.com${root_path}")"
+              -o "$probe" -w '%{http_code}|%{content_type}' \
+              "https://openqareer.com${root_path}" || true)"
             bytes="$(wc -c < "$probe")"
-            ctype="$(curl -fsSI --max-time 10 "https://openqareer.com${root_path}" |
-              grep -Ei '^content-type:' | head -n 1 | tr -d '\r')"
             rm -f "$probe"
+            probe_status="${response%%|*}"
+            ctype="${response#*|}"
             case "$ctype" in
               *"${root_type}"*) ;;
               *)
