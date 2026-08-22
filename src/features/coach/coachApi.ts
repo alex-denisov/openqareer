@@ -559,7 +559,7 @@ export async function uploadCandidateDocument(input: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...input, source: 'upload' }),
   });
-  return readData(response);
+  return readDataObject(response);
 }
 
 export async function deleteCandidateDocument(documentId: string): Promise<void> {
@@ -590,7 +590,7 @@ export async function setCandidateDocumentRetention(
       body: JSON.stringify({ retentionUntil }),
     },
   );
-  return readData(response);
+  return readDataObject(response);
 }
 
 export async function createVacancySubscription(input: {
@@ -603,12 +603,12 @@ export async function createVacancySubscription(input: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  return readData(response);
+  return readDataObject(response);
 }
 
 export async function getVacancySources(): Promise<VacancySourceRegistryEntry[]> {
   const response = await apiFetch('/api/v1/candidate/vacancy-sources');
-  return readData(response);
+  return readDataArray<VacancySourceRegistryEntry>(response);
 }
 
 export async function getVacancySubscription(
@@ -617,7 +617,7 @@ export async function getVacancySubscription(
   const response = await apiFetch(
     `/api/v1/candidate/vacancy-subscriptions/${encodeURIComponent(subscriptionId)}/vacancies`,
   );
-  return readData(response);
+  return readDataObject(response);
 }
 
 export async function refreshVacancySubscription(
@@ -627,7 +627,7 @@ export async function refreshVacancySubscription(
     `/api/v1/candidate/vacancy-subscriptions/${encodeURIComponent(subscriptionId)}/refresh`,
     { method: 'POST' },
   );
-  return readData(response);
+  return readDataObject(response);
 }
 
 export async function updateVacancySubscription(
@@ -642,7 +642,7 @@ export async function updateVacancySubscription(
       body: JSON.stringify({ status }),
     },
   );
-  return readData(response);
+  return readDataObject(response);
 }
 
 export async function deleteVacancySubscription(subscriptionId: string): Promise<void> {
@@ -702,7 +702,7 @@ export async function prepareCareerCommand(input: {
       proposalIndex: input.proposalIndex,
     }),
   });
-  return readData(response);
+  return readDataObject(response);
 }
 
 export async function approveCareerCommand(
@@ -718,19 +718,19 @@ export async function approveCareerCommand(
       },
     },
   );
-  return readData(response);
+  return readDataObject(response);
 }
 
 export async function getCareerCommand(commandId: string): Promise<CareerCommand> {
   const response = await apiFetch(
     `/api/v1/candidate/career-commands/${encodeURIComponent(commandId)}`,
   );
-  return readData(response);
+  return readDataObject(response);
 }
 
 export async function getCareerCommands(): Promise<CareerCommand[]> {
   const response = await apiFetch('/api/v1/candidate/career-commands');
-  return readData(response);
+  return readDataArray<CareerCommand>(response);
 }
 
 export async function changeMemory(
@@ -789,7 +789,7 @@ export async function getProviderStatus(): Promise<{
   ready: boolean;
 }> {
   const response = await apiFetch('/api/v1/provider/status');
-  return readData(response);
+  return readDataObject(response);
 }
 
 export async function getMatchedVacancies(signal?: AbortSignal): Promise<MatchedVacancyItem[]> {

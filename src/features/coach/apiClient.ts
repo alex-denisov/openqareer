@@ -152,6 +152,13 @@ export async function readData<T>(response: Response): Promise<T> {
   return data;
 }
 
+const MALFORMED_RESPONSE_MESSAGE =
+  'Сервис вернул ответ неожиданной формы. Повторите запрос.';
+
+function malformedResponseError(): CoachApiError {
+  return new CoachApiError(MALFORMED_RESPONSE_MESSAGE, 'malformed_response', true);
+}
+
 /**
  * INC-020: an endpoint whose contract is a non-null object or array must not
  * hand `null` to render code typed as `T`. Unexpected shapes become a typed,
@@ -159,12 +166,8 @@ export async function readData<T>(response: Response): Promise<T> {
  */
 export async function readDataObject<T extends object>(response: Response): Promise<T> {
   const data = await readData<T>(response);
-  if (!data || typeof data !== 'object') {
-    throw new CoachApiError(
-      'Сервис вернул ответ неожиданной формы. Повторите запрос.',
-      'malformed_response',
-      true,
-    );
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw malformedResponseError();
   }
   return data;
 }
@@ -172,11 +175,7 @@ export async function readDataObject<T extends object>(response: Response): Prom
 export async function readDataArray<T>(response: Response): Promise<T[]> {
   const data = await readData<unknown>(response);
   if (!Array.isArray(data)) {
-    throw new CoachApiError(
-      'Сервис вернул ответ неожиданной формы. Повторите запрос.',
-      'malformed_response',
-      true,
-    );
+    throw malformedResponseError();
   }
   return data as T[];
 }
