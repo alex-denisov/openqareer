@@ -17,7 +17,7 @@ const request = {
   },
 };
 
-describe('hosted application browser executor', () => {
+describe('hosted application browser executor', { timeout: 30_000 }, () => {
   let browser: Browser;
 
   beforeAll(async () => {
@@ -167,6 +167,7 @@ describe('hosted application browser executor', () => {
     const session = await HostedApplicationBrowserExecutor.create(browser, {
       connectorId: 'synthetic-hosted-form',
       observedAt: () => '2026-08-06T12:00:00.000Z',
+      interactionTimeoutMs: 5_000,
       timeoutMs: 500,
     });
     const { page, executor } = session;

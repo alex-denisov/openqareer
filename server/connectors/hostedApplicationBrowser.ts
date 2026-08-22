@@ -22,6 +22,7 @@ interface HostedApplicationOptions {
   connectorId: string;
   observedAt?: () => string;
   timeoutMs?: number;
+  interactionTimeoutMs?: number;
 }
 
 export interface HostedApplicationBrowserSession {
@@ -36,6 +37,7 @@ export class HostedApplicationBrowserExecutor implements ConnectorExecutor {
   readonly connectorId: string;
   private readonly observedAt: () => string;
   private readonly timeoutMs: number;
+  private readonly interactionTimeoutMs: number;
 
   private constructor(
     private readonly page: Page,
@@ -44,6 +46,7 @@ export class HostedApplicationBrowserExecutor implements ConnectorExecutor {
     this.connectorId = options.connectorId;
     this.observedAt = options.observedAt ?? (() => new Date().toISOString());
     this.timeoutMs = options.timeoutMs ?? 3_000;
+    this.interactionTimeoutMs = options.interactionTimeoutMs ?? this.timeoutMs;
   }
 
   static async create(
@@ -95,12 +98,12 @@ export class HostedApplicationBrowserExecutor implements ConnectorExecutor {
     }
 
     try {
-      await fullName.fill(payload.data.fullName, { timeout: this.timeoutMs });
-      await email.fill(payload.data.email, { timeout: this.timeoutMs });
+      await fullName.fill(payload.data.fullName, { timeout: this.interactionTimeoutMs });
+      await email.fill(payload.data.email, { timeout: this.interactionTimeoutMs });
       if (payload.data.coverNote && (await coverNote.count()) === 1) {
-        await coverNote.fill(payload.data.coverNote, { timeout: this.timeoutMs });
+        await coverNote.fill(payload.data.coverNote, { timeout: this.interactionTimeoutMs });
       }
-      await submit.click({ timeout: this.timeoutMs });
+      await submit.click({ timeout: this.interactionTimeoutMs });
     } catch {
       return this.paused(
         request,
