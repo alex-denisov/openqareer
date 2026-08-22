@@ -531,10 +531,19 @@ async function verifyViewport(browser, baseUrl, viewport) {
     .getByText('В работе', { exact: true })
     .waitFor();
   // INC-019: these used to be literal `true`s reported as verification. They
-  // now record what the walk actually observed.
+  // now record what the walk actually observed, and a false value fails the
+  // gate instead of being printed next to `"status":"pass"`.
   const confirmedRoleMap = (await roleCards.count()) >= 1;
+  assert(
+    confirmedRoleMap,
+    `${viewport.name}: confirmed role map did not render any role card`,
+  );
   const adaptiveTrack =
     (await page.locator('.career-track-timeline article').count()) >= 1;
+  assert(
+    adaptiveTrack,
+    `${viewport.name}: adaptive track timeline did not render`,
+  );
   await page.screenshot({
     path: `output/playwright/b104-b105-b119-decision-${viewport.name}.png`,
     fullPage: true,
@@ -584,10 +593,18 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByRole('heading', { name: 'Профиль', exact: true }).waitFor();
   const profileFactReview =
     (await page.locator('.career-profile-surface').count()) === 1;
+  assert(
+    profileFactReview,
+    `${viewport.name}: profile fact review surface missing on «Профиль»`,
+  );
   await page.locator('button[aria-label="Сегодня"]:visible').click();
   await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
   const reasonedAction =
     (await page.locator('.career-today-action p').count()) >= 1;
+  assert(
+    reasonedAction,
+    `${viewport.name}: reasoned next action is empty on «Сегодня»`,
+  );
 
   const tariffsButton = page
     .locator(
@@ -640,6 +657,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).waitFor();
   const accountRestart =
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) === null;
+  assert(
+    accountRestart,
+    `${viewport.name}: logout/re-registration retained candidate workspace`,
+  );
 
   await page.getByRole('button', { name: 'Начать диагностику' }).click();
   await page.getByRole('button', { name: /Хочу найти работу/ }).click();
@@ -806,12 +827,14 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
   await page.getByLabel('Пароль').fill('returning-candidate-password');
   await page.getByRole('button', { name: 'Войти' }).click();
   await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
+  const matchingOwnerRestored =
+    (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) !== null;
   assert(
-    (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) !== null,
+    matchingOwnerRestored,
     'expired session: matching candidate workspace was deleted during login',
   );
   await context.close();
-  return { matchingOwnerRestored: true };
+  return { matchingOwnerRestored };
 }
 
 const server = await preview({
