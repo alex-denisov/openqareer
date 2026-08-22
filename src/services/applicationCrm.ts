@@ -1,6 +1,6 @@
 export type ApplicationStatus = 'sent' | 'viewed' | 'invited' | 'rejected';
 
-export interface ApplicationHistoryEntry {
+interface ApplicationHistoryEntry {
   status: ApplicationStatus;
   timestamp: string;
   note?: string;

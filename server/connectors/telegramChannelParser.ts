@@ -134,7 +134,7 @@ function hasPromoSignals(clean: string): boolean {
   return promoPatterns.some((rx) => rx.test(clean));
 }
 
-export function isCandidateResumeOrNonVacancy(text: string): boolean {
+function isCandidateResumeOrNonVacancy(text: string): boolean {
   const clean = text.toLowerCase();
   if (hasPromoSignals(clean)) return true;
   const hasResume = hasResumeSignals(clean);

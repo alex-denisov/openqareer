@@ -24,7 +24,7 @@ import {
   type WorkspaceInput,
 } from '../workspace/workspaceStorage';
 
-export const CAREER_JOURNEY_REVISION =
+const CAREER_JOURNEY_REVISION =
   'career-journey-v1-2026-08-07' as const;
 
 export type CareerJourneyDestination =
@@ -33,7 +33,7 @@ export type CareerJourneyDestination =
   | 'career'
   | 'opportunities';
 
-export interface CareerJourneyProfile {
+interface CareerJourneyProfile {
   state: 'forming' | 'needs-review' | 'grounded';
   confirmedEvidence: number;
   proposedEvidence: number;
@@ -41,7 +41,7 @@ export interface CareerJourneyProfile {
   sourceLabel: string;
 }
 
-export interface CareerJourneyRole {
+interface CareerJourneyRole {
   id: string;
   title: string;
   fitState: RoleFitState;
@@ -50,21 +50,21 @@ export interface CareerJourneyRole {
   gaps: string[];
 }
 
-export interface CareerJourneyMarket {
+interface CareerJourneyMarket {
   id: string;
   label: string;
   state: 'needs-sample' | 'sample-ready';
   explanation: string;
 }
 
-export interface CareerTrackItem {
+interface CareerTrackItem {
   id: 'career-picture' | 'role-market' | 'positioning' | 'campaign';
   label: string;
   status: 'complete' | 'active' | 'waiting';
   reason: string;
 }
 
-export interface CareerJourneyAction {
+interface CareerJourneyAction {
   id: string;
   label: string;
   headline: string;
@@ -73,7 +73,7 @@ export interface CareerJourneyAction {
   destination: CareerJourneyDestination;
 }
 
-export interface CareerCommercialBoundary {
+interface CareerCommercialBoundary {
   state: 'free-route-incomplete' | 'assisted-setup-eligible';
   eligiblePlan: 'free' | 'setup';
   headline: string;

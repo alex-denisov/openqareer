@@ -7,7 +7,7 @@ import type { CandidateIdentity, CandidateStore } from '../data/candidateStore';
 import { OAUTH_PLATFORMS, type OAuthPlatform } from '../connectors/oauthTypes';
 import { OAuthConnectorError } from '../connectors/oauthConnector';
 
-export interface ErrorBody {
+interface ErrorBody {
   error: {
     code: string;
     message: string;
@@ -98,7 +98,7 @@ export function csrfError(request: FastifyRequest, reply: FastifyReply): Fastify
   );
 }
 
-export function sessionCookieName(secure: boolean): string {
+function sessionCookieName(secure: boolean): string {
   return secure ? '__Host-openqareer_session' : 'openqareer_session';
 }
 
@@ -193,7 +193,7 @@ export function previewAuth(expectedToken: string) {
   };
 }
 
-export function secureEqual(left: string, right: string): boolean {
+function secureEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);

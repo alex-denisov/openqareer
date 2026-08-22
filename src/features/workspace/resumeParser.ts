@@ -27,21 +27,21 @@ export interface ParsedResumeEducation {
   endDate?: string;
 }
 
-export interface ParsedResumeCourse {
+interface ParsedResumeCourse {
   name: string;
   institution?: string;
   year?: string;
   certificateUrl?: string;
 }
 
-export interface ParsedResumeTest {
+interface ParsedResumeTest {
   name: string;
   provider?: string;
   score?: string;
   year?: string;
 }
 
-export interface ParsedResumeRecommendation {
+interface ParsedResumeRecommendation {
   recommender?: string;
   organization?: string;
   position?: string;
@@ -54,7 +54,7 @@ export interface ParsedResumeLanguage {
   cefr?: CefrLevel;
 }
 
-export interface ParsedResumeContact {
+interface ParsedResumeContact {
   email?: string;
   phone?: string;
   telegram?: string;
@@ -62,7 +62,7 @@ export interface ParsedResumeContact {
   links: string[];
 }
 
-export interface ParsedResumeAdditional {
+interface ParsedResumeAdditional {
   citizenship?: string;
   workSchedule?: string;
   relocation?: string;

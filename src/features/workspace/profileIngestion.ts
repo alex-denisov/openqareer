@@ -116,7 +116,7 @@ export function isProfileFact(value: unknown): value is ProfileFact {
   return profileFactSchema.safeParse(value).success;
 }
 
-export interface ProfileInstructionSignal {
+interface ProfileInstructionSignal {
   locator: string;
   kind: 'instruction_override' | 'system_prompt_reference';
 }

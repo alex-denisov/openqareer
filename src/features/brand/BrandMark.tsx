@@ -1,7 +1,7 @@
 import { useId } from 'react';
 
-export type BrandTone = 'brand' | 'mono';
-export type BrandVariant = 'mark' | 'lockup';
+type BrandTone = 'brand' | 'mono';
+type BrandVariant = 'mark' | 'lockup';
 
 interface BrandMarkProps {
   /** `mark` draws the sign alone; `lockup` sets it beside the wordmark. */

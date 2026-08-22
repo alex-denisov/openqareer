@@ -13,7 +13,7 @@ export interface PlatformProbeResult {
   error_reason?: string;
 }
 
-export type TunnelRecommendation = 'direct' | 'tunnel_required';
+type TunnelRecommendation = 'direct' | 'tunnel_required';
 
 export interface NetworkEnvironmentStatus {
   linkedin: PlatformProbeResult;
@@ -23,7 +23,7 @@ export interface NetworkEnvironmentStatus {
   probed_at: string;
 }
 
-export type TunnelState = 'idle' | 'starting' | 'running' | 'stopped' | 'failed';
+type TunnelState = 'idle' | 'starting' | 'running' | 'stopped' | 'failed';
 
 export interface TunnelStatusReport {
   state: TunnelState;

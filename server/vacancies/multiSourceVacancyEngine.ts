@@ -33,7 +33,7 @@ export interface VacancyQueryResult {
   statsBySource: Array<{ sourceId: string; sourceName: string; count: number }>;
 }
 
-export const DEFAULT_SOURCES: VacancySourceConfig[] = [
+const DEFAULT_SOURCES: VacancySourceConfig[] = [
   {
     id: 'hh',
     name: 'hh.ru (Россия & СНГ)',
@@ -325,9 +325,9 @@ export const DEFAULT_SOURCES: VacancySourceConfig[] = [
 ];
 
 
-export const MAX_VACANCY_AGE_DAYS = 30;
+const MAX_VACANCY_AGE_DAYS = 30;
 
-export function isVacancyFresh(
+function isVacancyFresh(
   publishedAt: string,
   nowMs: number = Date.now(),
   maxAgeDays: number = MAX_VACANCY_AGE_DAYS,

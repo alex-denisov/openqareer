@@ -143,7 +143,7 @@ export interface ServerConfig {
   desktopTunnel?: DesktopTunnelConfig;
 }
 
-export interface DesktopTunnelConfig {
+interface DesktopTunnelConfig {
   remoteServer: string;
   remotePort: number;
   sshUser: string;

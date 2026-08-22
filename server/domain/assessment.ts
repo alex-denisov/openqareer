@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const WORK_DIMENSIONS = [
+const WORK_DIMENSIONS = [
   'ambiguity',
   'evidence',
   'collaboration',
@@ -50,12 +50,7 @@ export type ProductCaseSubmission = z.infer<
   typeof productCaseSubmissionSchema
 >;
 
-export const ASSESSMENT_IDS = [
-  'work-preferences-v1',
-  'product-case-v1',
-] as const;
-
-export type AssessmentId = (typeof ASSESSMENT_IDS)[number];
+export type AssessmentId = 'work-preferences-v1' | 'product-case-v1';
 
 type WorkDimension = (typeof WORK_DIMENSIONS)[number];
 

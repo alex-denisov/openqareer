@@ -40,7 +40,6 @@ import type {
   CareerGoal,
 } from '../workspace/workspaceStorage';
 import {
-  buildCareerJourney,
   type CareerJourney,
   type CareerJourneyDestination,
 } from './careerJourneyEngine';
@@ -1356,8 +1355,4 @@ function RoleState({ state }: { state: CareerJourney['roles'][number]['fitState'
           : 'Нужны факты'}
     </span>
   );
-}
-
-export function rebuildJourney(workspace: CandidateWorkspace): CareerJourney {
-  return buildCareerJourney(workspace);
 }

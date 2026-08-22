@@ -4,7 +4,7 @@ import type {
   WorkspaceMarket,
 } from '../workspace/workspaceStorage';
 
-export const CONDITION_OPTIONS = [
+const CONDITION_OPTIONS = [
   'Только удалённо',
   'Готов к гибриду',
   'Рассматриваю релокацию',

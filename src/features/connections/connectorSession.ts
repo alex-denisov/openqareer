@@ -154,7 +154,7 @@ export function sessionCheckFailure(
   }
 }
 
-export type RouteTone = 'pending' | 'ok' | 'blocked';
+type RouteTone = 'pending' | 'ok' | 'blocked';
 
 export interface RouteNotice {
   readonly tone: RouteTone;

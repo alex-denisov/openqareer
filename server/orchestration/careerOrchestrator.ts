@@ -7,18 +7,12 @@ import type {
 } from '../providers/coachProvider';
 import { CAREER_ROLE_PROMPT_REVISIONS } from '../prompts/careerRolePrompts';
 
-export const CAREER_ORCHESTRATION_REVISION =
+const CAREER_ORCHESTRATION_REVISION =
   'career-orchestration-v1.0-2026-08-12' as const;
 
-export const CAREER_ROLES = [
-  'career_consultant',
-  'career_strategist',
-  'career_expert',
-] as const;
+export type CareerRole = 'career_consultant' | 'career_strategist' | 'career_expert';
 
-export type CareerRole = (typeof CAREER_ROLES)[number];
-
-export interface CareerRoleRunInput {
+interface CareerRoleRunInput {
   role: CareerRole;
   input: CoachTurnInput;
   priorContributions: ReadonlyArray<{

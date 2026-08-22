@@ -165,7 +165,7 @@ function respondKnownError(
   return null;
 }
 
-export function handleRouteError(
+function handleRouteError(
   error: unknown,
   request: FastifyRequest,
   reply: FastifyReply,

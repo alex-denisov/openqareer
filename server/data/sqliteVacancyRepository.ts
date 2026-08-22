@@ -574,8 +574,8 @@ export class SqliteVacancyRepository {
   }
 }
 
-export class VacancySubscriptionNotFoundError extends Error {}
-export class VacancyRefreshConflictError extends Error {}
+class VacancySubscriptionNotFoundError extends Error {}
+class VacancyRefreshConflictError extends Error {}
 
 const SUBSCRIPTION_SELECT = `
   SELECT id, candidate_id, source, query_cipher, cadence_minutes, status,

@@ -144,11 +144,6 @@ export async function listAdminUsers(input: {
   return readData<AdminUserPage>(response);
 }
 
-export async function getAdminUser(userId: string): Promise<AdminUser> {
-  const response = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(userId)}`);
-  return readData<AdminUser>(response);
-}
-
 export async function updateAdminUser(
   userId: string,
   input: {
@@ -269,18 +264,6 @@ export async function syncAdminVacancySource(sourceId: string): Promise<void> {
   await apiFetch(`/api/v1/admin/vacancy-sources/${encodeURIComponent(sourceId)}/sync`, {
     method: 'POST',
   });
-}
-
-export async function toggleAdminVacancySource(
-  sourceId: string,
-  enabled: boolean,
-): Promise<AdminVacancySource> {
-  const response = await apiFetch(`/api/v1/admin/vacancy-sources/${encodeURIComponent(sourceId)}/toggle`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled }),
-  });
-  return readData<AdminVacancySource>(response);
 }
 
 export async function testAdminVacancySource(

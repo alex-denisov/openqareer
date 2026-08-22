@@ -23,7 +23,7 @@ import type {
 const MAX_BULLETS_PER_ROLE = 12;
 const MAX_LINKS = 10;
 
-export const EMPTY_DRAFT: ResumeDraft = {
+const EMPTY_DRAFT: ResumeDraft = {
   candidate: {},
   experience: [],
   skills: [],
@@ -173,16 +173,6 @@ export function updateCandidate(
 
 export function setTargetRole(draft: ResumeDraft, targetRole: string): ResumeDraft {
   return { ...draft, targetRole };
-}
-
-export function setAbout(draft: ResumeDraft, about: string): ResumeDraft {
-  return {
-    ...draft,
-    candidate: {
-      ...draft.candidate,
-      about,
-    },
-  };
 }
 
 export function addExperience(

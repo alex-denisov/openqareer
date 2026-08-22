@@ -13,7 +13,7 @@ export interface VacancySalary {
   gross?: boolean;
 }
 
-export interface VacancyProvenance {
+interface VacancyProvenance {
   sourceType: VacancySourceType;
   sourceId: string;
   sourceUrl: string;

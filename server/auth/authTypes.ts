@@ -91,7 +91,7 @@ export interface AdminUserQuery {
   offset: number;
 }
 
-export interface AdminAuditRecord {
+interface AdminAuditRecord {
   id: string;
   actorUserId: string;
   actorUsername: string;

@@ -1,4 +1,4 @@
-export interface QuizQuestion {
+interface QuizQuestion {
   id: string;
   question: string;
   options: string[];

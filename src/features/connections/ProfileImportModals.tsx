@@ -6,9 +6,8 @@ import { LockSimple } from '@phosphor-icons/react';
  * be read in full to change one line of either (B148 §11).
  */
 export { LinkedInConnectModal } from './LinkedInConnectModal';
-export type { LinkedInConnectModalProps } from './LinkedInConnectModal';
 export { HhConnectModal } from './HhConnectModal';
-export type { HhConnectModalProps, HhResumeItem } from './HhConnectModal';
+export type { HhResumeItem } from './HhConnectModal';
 
 /** Shown on the web, where a platform session cannot be read from the page. */
 export function WebDesktopCtaCallout() {

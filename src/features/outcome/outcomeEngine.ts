@@ -34,7 +34,7 @@ export interface OutcomeInputErrors {
   followUpAt?: string;
 }
 
-export type NextActionCode =
+type NextActionCode =
   | 'perform-action'
   | 'set-follow-up'
   | 'wait-until-follow-up'

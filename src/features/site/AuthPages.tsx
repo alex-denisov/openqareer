@@ -9,7 +9,7 @@ interface AuthPageProps {
   nextPath?: string;
 }
 
-export function generateSecurePassword(length = 16): string {
+function generateSecurePassword(length = 16): string {
   const lowercase = 'abcdefghijkmnopqrstuvwxyz';
   const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   const digits = '23456789';

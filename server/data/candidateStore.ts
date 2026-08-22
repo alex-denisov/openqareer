@@ -62,7 +62,7 @@ export interface CandidateExport extends CandidateSnapshot {
   documentContents: CandidateDocumentWithContent[];
 }
 
-export type CandidateDocumentKind =
+type CandidateDocumentKind =
   | 'resume'
   | 'cover_letter'
   | 'certificate'
@@ -194,7 +194,7 @@ export type OAuthCapability =
   | 'profile_read'
   | 'resume_read';
 
-export interface OAuthProfileFact {
+interface OAuthProfileFact {
   kind: 'headline' | 'summary';
   value: string;
   sourceLocator: string;

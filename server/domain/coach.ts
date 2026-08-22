@@ -1,7 +1,6 @@
 import { z } from 'zod';
-import { CAREER_SUPER_PROMPT } from '../prompts/careerSuperPrompt';
 
-export const COACH_PHASES = [
+const COACH_PHASES = [
   'discovery',
   'evidence',
   'role',
@@ -10,14 +9,14 @@ export const COACH_PHASES = [
   'targeting',
 ] as const;
 
-export const MEMORY_KINDS = [
+const MEMORY_KINDS = [
   'fact',
   'preference',
   'hypothesis',
   'open-question',
 ] as const;
 
-export const MEMORY_CONFIDENCE = [
+const MEMORY_CONFIDENCE = [
   'candidate-confirmed',
   'candidate-reported',
   'coach-hypothesis',
@@ -34,13 +33,13 @@ export const DOSSIER_DOMAINS = [
   'other',
 ] as const;
 
-export const CAREER_ROLES = [
+const CAREER_ROLES = [
   'career_consultant',
   'career_strategist',
   'career_expert',
 ] as const;
 
-export const CAREER_ACTION_KINDS = [
+const CAREER_ACTION_KINDS = [
   'resume.draft',
   'resume.revise',
   'vacancies.search',
@@ -65,7 +64,7 @@ export const careerActionProposalSchema = z.object({
   risk: z.enum(['read_only', 'candidate_data_write', 'external_side_effect']),
 });
 
-export const careerTrackSchema = z.object({
+const careerTrackSchema = z.object({
   objective: z.string().trim().min(1).max(1_000),
   alternatives: z.array(
     z.object({
@@ -85,13 +84,13 @@ export const careerTrackSchema = z.object({
   ).min(1).max(12),
 });
 
-export const coachMessageSchema = z.object({
+const coachMessageSchema = z.object({
   id: z.string().min(1).max(80),
   role: z.enum(['user', 'assistant']),
   content: z.string().trim().min(1).max(8_000),
 });
 
-export const marketObservationSchema = z.object({
+const marketObservationSchema = z.object({
   ref: z.string().regex(/^market:hh:[A-Za-z0-9_-]{1,128}$/u),
   source: z.literal('hh'),
   title: z.string().trim().min(1).max(500),
@@ -101,7 +100,7 @@ export const marketObservationSchema = z.object({
   observedAt: z.string().datetime(),
 });
 
-export const knowledgeContextSchema = z.object({
+const knowledgeContextSchema = z.object({
   confirmedFacts: z
     .array(
       z.object({
@@ -163,7 +162,7 @@ export const coachTurnInputSchema = z.object({
   ).max(2).optional(),
 });
 
-export const memoryCandidateSchema = z.object({
+const memoryCandidateSchema = z.object({
   kind: z.enum(MEMORY_KINDS),
   domain: z.enum(DOSSIER_DOMAINS).default('other'),
   statement: z.string().trim().min(1).max(1_000),
@@ -238,7 +237,6 @@ export type MemoryCandidate = z.infer<typeof memoryCandidateSchema>;
 export type CoachPhase = (typeof COACH_PHASES)[number];
 export type CareerRole = (typeof CAREER_ROLES)[number];
 export type CareerActionProposal = z.infer<typeof careerActionProposalSchema>;
-export type CareerTrack = z.infer<typeof careerTrackSchema>;
 export type MarketObservation = z.infer<typeof marketObservationSchema>;
 
 export const COACH_TURN_JSON_SCHEMA = {
@@ -422,8 +420,6 @@ export const COACH_TURN_JSON_SCHEMA = {
   ],
   additionalProperties: false,
 } as const;
-
-export const CAREER_COACH_INSTRUCTIONS = CAREER_SUPER_PROMPT;
 
 export function serializeCoachInput(input: CoachTurnInput): string {
   return JSON.stringify({

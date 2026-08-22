@@ -40,7 +40,7 @@ export type GermanyMarketSubmission = z.infer<
   typeof germanyMarketSubmissionSchema
 >;
 
-export type GermanyRouteId =
+type GermanyRouteId =
   | 'existing-work-authorisation'
   | 'eu-blue-card'
   | 'opportunity-card'

@@ -15,14 +15,14 @@ const HH_LOGIN_URL = 'https://hh.ru/account/login';
 const HH_RESUMES_PATH = '/applicant/resumes';
 const HH_HOSTS = new Set(['hh.ru', 'www.hh.ru']);
 
-export type HhBrowserLoginStatus =
+type HhBrowserLoginStatus =
   | 'ready'
   | 'challenge'
   | 'mfa'
   | 'invalid'
   | 'surface_changed';
 
-export type HhBrowserLoginReason =
+type HhBrowserLoginReason =
   | 'candidate_resume_identity_verified'
   | 'candidate_session_confirmed'
   | 'credential_environment_missing'
@@ -49,7 +49,7 @@ export type HhBrowserLoginReason =
  *   was confirmed, but hh.ru exposed no account email and no expected resume id
  *   was configured. Enough to read; not proof of which account.
  */
-export type HhIdentityMarker =
+type HhIdentityMarker =
   | 'declared_resume_owner_match'
   | 'candidate_resume_owner_match'
   | 'signed_in_applicant_session';

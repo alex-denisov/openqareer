@@ -1,18 +1,23 @@
 /* eslint-disable max-lines */
 import type {
   CefrLevel,
+  ResumeAdditionalInput,
   ResumeCandidateInput,
+  ResumeCourseInput,
   ResumeDraft,
   ResumeEducationInput,
   ResumeExperienceInput,
   ResumeLanguageInput,
+  ResumeRecommendationInput,
+  ResumeSkillInput,
+  ResumeTestInput,
 } from './resumeDraft';
 import { isResumeEvidenceEligible } from './resumeEvidenceEligibility';
 
 export type { CefrLevel, ResumeDraft } from './resumeDraft';
 
-export type ResumeMemoryStatus = 'proposed' | 'confirmed' | 'corrected';
-export type ResumeMemoryKind =
+type ResumeMemoryStatus = 'proposed' | 'confirmed' | 'corrected';
+type ResumeMemoryKind =
   | 'fact'
   | 'preference'
   | 'hypothesis'
@@ -66,7 +71,7 @@ export interface ResumeLanguage {
   readonly cefr: ResumeAssertion<CefrLevel> | null;
 }
 
-export type ResumeUnknownCode =
+type ResumeUnknownCode =
   | 'missing-full-name'
   | 'missing-contact'
   | 'missing-target-role'
@@ -105,7 +110,7 @@ export interface ResumeConventions {
   readonly discriminatoryPii: 'omitted';
 }
 
-export interface ResumeContact {
+interface ResumeContact {
   readonly fullName: string | null;
   readonly email: string | null;
   readonly phone: string | null;
@@ -114,7 +119,7 @@ export interface ResumeContact {
   readonly links: readonly string[];
 }
 
-export interface ResumeLengthEstimate {
+interface ResumeLengthEstimate {
   readonly lines: number;
   readonly pages: number;
   readonly linesPerPage: number;
@@ -127,13 +132,13 @@ export interface ResumeDocument {
   readonly about?: string | null;
   readonly photoUrl?: string | null;
   readonly experience: readonly ResumeExperience[];
-  readonly skills?: readonly import('./resumeDraft').ResumeSkillInput[];
+  readonly skills?: readonly ResumeSkillInput[];
   readonly education: readonly ResumeEducation[];
-  readonly courses?: readonly import('./resumeDraft').ResumeCourseInput[];
-  readonly tests?: readonly import('./resumeDraft').ResumeTestInput[];
-  readonly recommendations?: readonly import('./resumeDraft').ResumeRecommendationInput[];
+  readonly courses?: readonly ResumeCourseInput[];
+  readonly tests?: readonly ResumeTestInput[];
+  readonly recommendations?: readonly ResumeRecommendationInput[];
   readonly languages: readonly ResumeLanguage[];
-  readonly additional?: import('./resumeDraft').ResumeAdditionalInput | null;
+  readonly additional?: ResumeAdditionalInput | null;
   readonly unknowns: readonly ResumeUnknown[];
   readonly conventions: ResumeConventions;
   readonly length: ResumeLengthEstimate;
@@ -282,13 +287,13 @@ interface GermanySections {
   readonly about?: string | null;
   readonly photoUrl?: string | null;
   readonly experience: readonly ResumeExperience[];
-  readonly skills?: readonly import('./resumeDraft').ResumeSkillInput[];
+  readonly skills?: readonly ResumeSkillInput[];
   readonly education: readonly ResumeEducation[];
-  readonly courses?: readonly import('./resumeDraft').ResumeCourseInput[];
-  readonly tests?: readonly import('./resumeDraft').ResumeTestInput[];
-  readonly recommendations?: readonly import('./resumeDraft').ResumeRecommendationInput[];
+  readonly courses?: readonly ResumeCourseInput[];
+  readonly tests?: readonly ResumeTestInput[];
+  readonly recommendations?: readonly ResumeRecommendationInput[];
   readonly languages: readonly ResumeLanguage[];
-  readonly additional?: import('./resumeDraft').ResumeAdditionalInput | null;
+  readonly additional?: ResumeAdditionalInput | null;
   readonly commonUnknowns: readonly ResumeUnknown[];
 }
 
@@ -680,13 +685,13 @@ function document(
   about: string | null | undefined,
   photoUrl: string | null | undefined,
   experience: readonly ResumeExperience[],
-  skills: readonly import('./resumeDraft').ResumeSkillInput[] | undefined,
+  skills: readonly ResumeSkillInput[] | undefined,
   education: readonly ResumeEducation[],
-  courses: readonly import('./resumeDraft').ResumeCourseInput[] | undefined,
-  tests: readonly import('./resumeDraft').ResumeTestInput[] | undefined,
-  recommendations: readonly import('./resumeDraft').ResumeRecommendationInput[] | undefined,
+  courses: readonly ResumeCourseInput[] | undefined,
+  tests: readonly ResumeTestInput[] | undefined,
+  recommendations: readonly ResumeRecommendationInput[] | undefined,
   languages: readonly ResumeLanguage[],
-  additional: import('./resumeDraft').ResumeAdditionalInput | null | undefined,
+  additional: ResumeAdditionalInput | null | undefined,
   unknowns: readonly ResumeUnknown[],
   length: ResumeLengthEstimate,
 ): ResumeDocument {

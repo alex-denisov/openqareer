@@ -11,7 +11,7 @@ export interface VacancyTarget {
   domain?: string;
 }
 
-export interface MatchFactor {
+interface MatchFactor {
   score: number; // 0 - 100
   matched: string[];
   missing: string[];

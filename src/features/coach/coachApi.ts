@@ -1,5 +1,5 @@
-export type UserRole = 'candidate' | 'admin';
-export type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
+type UserRole = 'candidate' | 'admin';
+type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
 import {
   apiFetch,
   readData,
@@ -24,10 +24,6 @@ export type {
   CandidateDocument,
   CandidateDocumentKind,
   MatchedVacancyItem,
-  StoredVacancy,
-  VacancyAnalytics,
-  VacancyCluster,
-  VacancyMatchExplanation,
   VacancySubscription,
   VacancySubscriptionView,
   VacancySourceId,
@@ -102,7 +98,7 @@ export type CandidateConnection = {
     }
 );
 
-export interface CoachMessage {
+interface CoachMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
@@ -129,7 +125,7 @@ export interface CandidateMemory {
   updatedAt?: string;
 }
 
-export type WorkDimension =
+type WorkDimension =
   | 'ambiguity'
   | 'evidence'
   | 'collaboration'
@@ -139,9 +135,9 @@ export type WorkDimension =
   | 'leadership'
   | 'craft';
 
-export type WorkPreferenceSubmission = Record<WorkDimension, number>;
+type WorkPreferenceSubmission = Record<WorkDimension, number>;
 
-export interface WorkPreferenceResult {
+interface WorkPreferenceResult {
   kind: 'work-preferences';
   version: 1;
   roleFamilies: Array<{
@@ -157,7 +153,7 @@ export interface WorkPreferenceResult {
   caveat: string;
 }
 
-export interface ProductCaseSubmission {
+interface ProductCaseSubmission {
   firstMove: 'segment-funnel-and-interviews' | 'review-funnel-only' | 'ship-largest-client-request';
   priorityRule:
     'reversible-test-biggest-uncertainty' | 'revenue-weighted-request' | 'loudest-stakeholder';
@@ -165,7 +161,7 @@ export interface ProductCaseSubmission {
   rationale: string;
 }
 
-export interface ProductCaseResult {
+interface ProductCaseResult {
   kind: 'product-case';
   version: 1;
   rubric: Array<{
@@ -181,7 +177,7 @@ export interface ProductCaseResult {
   caveat: string;
 }
 
-export type StoredAssessment =
+type StoredAssessment =
   | {
       assessmentId: 'work-preferences-v1';
       submission: WorkPreferenceSubmission;
@@ -197,7 +193,7 @@ export type StoredAssessment =
       updatedAt: string;
     };
 
-export interface GermanyMarketSubmission {
+interface GermanyMarketSubmission {
   workAuthorization: 'eu-eea-swiss' | 'german-permit' | 'none' | 'unknown';
   jobOffer: 'yes' | 'no' | 'in-progress';
   grossAnnualSalaryEur: number | null;
@@ -213,7 +209,7 @@ export interface GermanyMarketSubmission {
   targetWorkMode: 'onsite' | 'hybrid' | 'remote-from-germany';
 }
 
-export interface StoredGermanyMarket {
+interface StoredGermanyMarket {
   country: 'DE';
   submission: GermanyMarketSubmission;
   result: {
@@ -315,7 +311,7 @@ export interface CoachResult {
   };
 }
 
-export type CareerCommandStatus =
+type CareerCommandStatus =
   | 'awaiting_approval'
   | 'prepared'
   | 'queued'
@@ -492,21 +488,6 @@ export async function getAccount(): Promise<AccountSnapshot> {
   return readDataObject<AccountSnapshot>(response);
 }
 
-export async function updateAccount(input: {
-  email?: string | null;
-  displayName?: string | null;
-  headline?: string | null;
-  location?: string | null;
-  workMode?: AccountSnapshot['profile']['workMode'];
-}): Promise<AccountSnapshot> {
-  const response = await apiFetch('/api/v1/account/profile', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-  return readDataObject<AccountSnapshot>(response);
-}
-
 export async function changePassword(input: {
   currentPassword: string;
   newPassword: string;
@@ -576,21 +557,6 @@ export async function downloadCandidateDocument(documentId: string): Promise<Blo
   );
   if (!response.ok) await throwApiError(response);
   return response.blob();
-}
-
-export async function setCandidateDocumentRetention(
-  documentId: string,
-  retentionUntil: string | null,
-): Promise<CandidateDocument> {
-  const response = await apiFetch(
-    `/api/v1/candidate/documents/${encodeURIComponent(documentId)}/retention`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ retentionUntil }),
-    },
-  );
-  return readDataObject(response);
 }
 
 export async function createVacancySubscription(input: {
@@ -747,50 +713,6 @@ export async function changeMemory(
   }
 }
 
-export async function submitAssessment(
-  assessmentId: 'work-preferences-v1',
-  input: WorkPreferenceSubmission,
-): Promise<StoredAssessment>;
-export async function submitAssessment(
-  assessmentId: 'product-case-v1',
-  input: ProductCaseSubmission,
-): Promise<StoredAssessment>;
-export async function submitAssessment(
-  assessmentId: StoredAssessment['assessmentId'],
-  input: WorkPreferenceSubmission | ProductCaseSubmission,
-): Promise<StoredAssessment> {
-  const response = await apiFetch(`/api/v1/candidate/assessments/${assessmentId}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-  return readDataObject<StoredAssessment>(response);
-}
-
-export async function saveGermanyMarket(
-  input: GermanyMarketSubmission,
-): Promise<StoredGermanyMarket> {
-  const response = await apiFetch('/api/v1/candidate/markets/DE', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-  return readDataObject<StoredGermanyMarket>(response);
-}
-
-export async function getProviderStatus(): Promise<{
-  personalDataRoute: { provider: string; model: string };
-  syntheticDataRoute: {
-    provider: string;
-    model: string;
-    fallbackProviders?: string[];
-    outputValidation?: string;
-  };
-  ready: boolean;
-}> {
-  const response = await apiFetch('/api/v1/provider/status');
-  return readDataObject(response);
-}
 
 export async function getMatchedVacancies(signal?: AbortSignal): Promise<MatchedVacancyItem[]> {
   const response = await apiFetch('/api/v1/candidate/matched-vacancies', { signal });

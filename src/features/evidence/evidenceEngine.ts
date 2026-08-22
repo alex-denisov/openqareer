@@ -1,12 +1,12 @@
 export const EVIDENCE_METHOD_VERSION = 'evidence-local-v1';
 export const ROLE_METHOD_VERSION = 'role-hypotheses-local-v1';
 
-export type EvidenceKind =
+type EvidenceKind =
   | 'result'
   | 'responsibility'
   | 'scope'
   | 'expertise';
-export type EvidenceStatus = 'pending' | 'confirmed' | 'rejected';
+type EvidenceStatus = 'pending' | 'confirmed' | 'rejected';
 
 export interface EvidenceItem {
   id: string;

@@ -157,4 +157,4 @@ function parseAssessment(
   };
 }
 
-export class AssessmentStateConflictError extends Error {}
+class AssessmentStateConflictError extends Error {}

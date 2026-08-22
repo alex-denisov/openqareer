@@ -12,13 +12,13 @@ export type JobPlatformId =
   | 'glassdoor'
   | 'company_site';
 
-export type PlatformCapabilityAction =
+type PlatformCapabilityAction =
   | 'import_profile'
   | 'discover_jobs'
   | 'update_profile'
   | ConnectorAction;
 
-export type PlatformCapabilityReadiness =
+type PlatformCapabilityReadiness =
   | 'available_without_account'
   | 'credentials_required'
   | 'ready_for_test'

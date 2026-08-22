@@ -4,7 +4,7 @@ import type {
   DiagnosticDimension,
 } from '../diagnostic/careerDiagnostic';
 
-export const CAREER_ACTION_POLICY_REVISION =
+const CAREER_ACTION_POLICY_REVISION =
   'career-action-policy-v1-2026-08-07' as const;
 
 export interface ReasonedCareerAction {

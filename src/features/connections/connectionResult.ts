@@ -1,6 +1,6 @@
-export const CONNECTION_RESULT_PATH = '/connections/result';
+const CONNECTION_RESULT_PATH = '/connections/result';
 
-export const CONNECTION_PLATFORMS = ['linkedin', 'hh'] as const;
+const CONNECTION_PLATFORMS = ['linkedin', 'hh'] as const;
 
 export type ConnectionPlatform = (typeof CONNECTION_PLATFORMS)[number];
 

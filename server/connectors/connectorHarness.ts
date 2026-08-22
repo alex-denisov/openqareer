@@ -8,7 +8,7 @@ export const connectorActionSchema = z.enum([
 ]);
 
 export type ConnectorAction = z.infer<typeof connectorActionSchema>;
-export const connectorTransportSchema = z.enum([
+const connectorTransportSchema = z.enum([
   'official_api',
   'public_feed',
   'public_http_parser',
@@ -33,7 +33,7 @@ const connectorRequestSchema = z.object({
 
 export type ConnectorRequest = z.infer<typeof connectorRequestSchema>;
 
-export const connectorDiagnosticSchema = z
+const connectorDiagnosticSchema = z
   .object({
     reason: z
       .string()

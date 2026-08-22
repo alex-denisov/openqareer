@@ -72,7 +72,6 @@ export {
   AuthEmailTakenError,
   AuthInvalidPasswordError,
   AuthInvalidResetTokenError,
-  AuthUserBlockedError,
 } from './authErrors';
 
 interface AuthServiceOptions {

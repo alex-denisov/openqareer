@@ -11,10 +11,10 @@
  * form and on the server, so the two can never disagree about what is valid.
  */
 
-export const MAX_NAME_LENGTH = 50;
-export const MAX_EMAIL_LENGTH = 254;
+const MAX_NAME_LENGTH = 50;
+const MAX_EMAIL_LENGTH = 254;
 export const MIN_PASSWORD_LENGTH = 8;
-export const MAX_PASSWORD_LENGTH = 256;
+const MAX_PASSWORD_LENGTH = 256;
 
 const NAME_ALLOWED = /^[a-zA-Zа-яА-ЯёЁ\s-]+$/u;
 const EMAIL_SHAPE = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/u;

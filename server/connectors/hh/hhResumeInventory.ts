@@ -6,7 +6,7 @@ import { HH_SELECTORS } from './hhSelectors';
  * printed. `count` stays `null` when the card shows a label without a parseable
  * number, so a missing figure never becomes a zero.
  */
-export interface HhResumeCounter {
+interface HhResumeCounter {
   readonly label: string;
   readonly count: number | null;
 }

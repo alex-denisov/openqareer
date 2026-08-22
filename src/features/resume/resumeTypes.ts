@@ -10,31 +10,22 @@ export type {
   CefrLevel,
   ResumeAssertion,
   ResumeConventions,
-  ResumeContact,
   ResumeDocument,
   ResumeDraft,
   ResumeEducation,
   ResumeEvidenceFreshness,
   ResumeExperience,
   ResumeLanguage,
-  ResumeLengthEstimate,
   ResumeReviewFlag,
   ResumeStudioProjection,
   ResumeUnknown,
-  ResumeUnknownCode,
   StaleEvidenceReason,
 } from '../../../server/domain/resumeStudio';
 
 export type {
-  ResumeAdditionalInput,
-  ResumeCandidateInput,
-  ResumeCourseInput,
   ResumeEducationInput,
   ResumeExperienceInput,
   ResumeLanguageInput,
-  ResumeRecommendationInput,
-  ResumeSkillInput,
-  ResumeTestInput,
 } from '../../../server/domain/resumeDraft';
 
 import type { ResumeDraft } from '../../../server/domain/resumeDraft';

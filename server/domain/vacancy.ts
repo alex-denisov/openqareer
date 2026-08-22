@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const VACANCY_SOURCES = ['hh', 'remotive'] as const;
+const VACANCY_SOURCES = ['hh', 'remotive'] as const;
 export type VacancySource = (typeof VACANCY_SOURCES)[number] | string;
 
 export interface VacancySample {

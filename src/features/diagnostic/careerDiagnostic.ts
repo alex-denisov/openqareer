@@ -1,6 +1,6 @@
 import type { CandidateAnalysis } from '../evidence/evidenceEngine';
 
-export const CAREER_DIAGNOSTIC_REVISION =
+const CAREER_DIAGNOSTIC_REVISION =
   'career-diagnostic-v1-2026-08-07' as const;
 
 export type DiagnosticDimension =
@@ -10,10 +10,10 @@ export type DiagnosticDimension =
   | 'freshness'
   | 'contradictions'
   | 'market';
-export type DiagnosticCertainty = 'fact' | 'hypothesis' | 'unknown';
-export type DiagnosticStatus = 'strength' | 'issue' | 'unknown';
+type DiagnosticCertainty = 'fact' | 'hypothesis' | 'unknown';
+type DiagnosticStatus = 'strength' | 'issue' | 'unknown';
 
-export interface DiagnosticFinding {
+interface DiagnosticFinding {
   id: string;
   dimension: DiagnosticDimension;
   certainty: DiagnosticCertainty;

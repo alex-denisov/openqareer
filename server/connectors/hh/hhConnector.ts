@@ -17,8 +17,6 @@ export const hhExecutionPayloadSchema = z
   })
   .strict();
 
-export type HhExecutionPayload = z.infer<typeof hhExecutionPayloadSchema>;
-
 export interface HhCandidateSessionResolver {
   get(candidateId: string): ConnectorExecutor | null;
 }

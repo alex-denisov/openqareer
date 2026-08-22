@@ -1,13 +1,6 @@
 import type { VacancySourceHealth } from '../domain/vacancy';
 
-export type VacancySourceHealthStatus =
-  | 'not_checked'
-  | 'healthy'
-  | 'degraded'
-  | 'unavailable'
-  | 'official_access_required';
-
-export const SOURCE_REGISTRY = [
+const SOURCE_REGISTRY = [
   {
     id: 'hh',
     name: 'hh.ru',

@@ -1,4 +1,4 @@
-export type RiskLevel = 'Low' | 'Medium' | 'High';
+type RiskLevel = 'Low' | 'Medium' | 'High';
 
 export interface GhostAnalysisResult {
   jobId: string;

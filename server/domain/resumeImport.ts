@@ -32,7 +32,7 @@ const MAX_RECOMMENDATIONS = 50;
 const MAX_LANGUAGES = 30;
 const MAX_LINKS = 20;
 
-export interface ResumeImportEvidence {
+interface ResumeImportEvidence {
   readonly memoryId: string;
   readonly domain: (typeof DOSSIER_DOMAINS)[number];
   readonly statement: string;

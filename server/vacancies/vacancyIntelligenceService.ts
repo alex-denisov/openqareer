@@ -124,7 +124,7 @@ export class VacancyIntelligenceService {
   }
 }
 
-export class VacancySubscriptionAccessError extends Error {}
+class VacancySubscriptionAccessError extends Error {}
 
 function vacancyErrorCode(error: unknown): string {
   const message = error instanceof Error ? error.message : '';

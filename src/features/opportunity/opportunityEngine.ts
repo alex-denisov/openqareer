@@ -2,7 +2,7 @@ import type { EvidenceItem } from '../evidence/evidenceEngine';
 
 export const OPPORTUNITY_METHOD_VERSION = 'opportunity-local-v1';
 
-export type OpportunityItemKind = 'task' | 'requirement' | 'condition';
+type OpportunityItemKind = 'task' | 'requirement' | 'condition';
 export type HardConstraintAssessment = 'clear' | 'conflict' | 'unknown';
 export type OpportunityChoice = 'apply' | 'network' | 'watch' | 'skip';
 
@@ -26,7 +26,7 @@ export interface ParsedOpportunity {
   unknowns: string[];
 }
 
-export interface OpportunityMatch {
+interface OpportunityMatch {
   opportunityItemId: string;
   evidenceIds: string[];
   sharedSignals: string[];

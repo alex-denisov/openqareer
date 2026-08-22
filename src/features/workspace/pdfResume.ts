@@ -69,7 +69,7 @@ interface PdfJsPage {
   getViewport(options: { scale: number }): { width: number; height: number };
 }
 
-export interface PdfJsAdapter {
+interface PdfJsAdapter {
   version: string;
   imageOperatorCodes: number[];
   open(bytes: Uint8Array): Promise<{

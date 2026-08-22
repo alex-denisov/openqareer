@@ -4,16 +4,16 @@ import type {
   RoleHypothesis,
 } from '../evidence/evidenceEngine';
 
-export const ROLE_MARKET_MAP_REVISION = 'role-market-map-v1-2026-08-07' as const;
+const ROLE_MARKET_MAP_REVISION = 'role-market-map-v1-2026-08-07' as const;
 
-export type MarketGeography =
+type MarketGeography =
   | 'russia'
   | 'relocation'
   | 'worldwide-remote';
-export type WorkMode = 'onsite' | 'hybrid' | 'remote';
-export type MarketSampleStatus = 'fresh' | 'stale' | 'insufficient';
+type WorkMode = 'onsite' | 'hybrid' | 'remote';
+type MarketSampleStatus = 'fresh' | 'stale' | 'insufficient';
 
-export interface MarketObservation {
+interface MarketObservation {
   id: string;
   roleTitle: string;
   observedAt: string;
@@ -21,7 +21,7 @@ export interface MarketObservation {
   requirements: string[];
 }
 
-export interface RequestedMarket {
+interface RequestedMarket {
   id: string;
   geography: MarketGeography;
   label: string;
@@ -36,7 +36,7 @@ export interface RoleMarketMapInput {
   markets: RequestedMarket[];
 }
 
-export interface MappedRole {
+interface MappedRole {
   id: string;
   title: string;
   level: 'executive' | 'lead' | 'senior' | 'manager' | 'unknown';
@@ -47,7 +47,7 @@ export interface MappedRole {
   nextExperiment: string;
 }
 
-export interface MappedMarket {
+interface MappedMarket {
   id: string;
   geography: MarketGeography;
   label: string;

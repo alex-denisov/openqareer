@@ -29,7 +29,7 @@ import {
 
 export const WORKSPACE_STORAGE_KEY = 'candidate-workspace';
 export const WORKSPACE_OWNER_KEY = 'candidate-workspace-owner';
-export const WORKSPACE_VERSION = 6;
+const WORKSPACE_VERSION = 6;
 
 export type WorkspaceMarket = 'ru' | 'international';
 export type ResumeSource = 'pdf' | 'linkedin-pdf' | 'hh-pdf' | 'text';
@@ -60,7 +60,7 @@ export interface WorkspaceInput {
   resumeImported?: boolean;
 }
 
-export interface MarketVacancySampleItem {
+interface MarketVacancySampleItem {
   id: string;
   title: string;
   company: string;

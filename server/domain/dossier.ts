@@ -10,7 +10,7 @@ interface DossierMemory extends MemoryCandidate {
   status: MemoryStatus;
 }
 
-export interface DossierItem {
+interface DossierItem {
   memoryId: string;
   statement: string;
   status: MemoryStatus;

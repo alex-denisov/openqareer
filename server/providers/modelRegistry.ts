@@ -21,7 +21,7 @@ export const PROVIDER_IDS = [
 ] as const;
 
 export type ProviderId = (typeof PROVIDER_IDS)[number];
-export type ProviderTransport =
+type ProviderTransport =
   | 'openai-responses'
   | 'openai-compatible-chat'
   | 'anthropic-messages'

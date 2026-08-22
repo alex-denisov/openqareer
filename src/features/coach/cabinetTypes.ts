@@ -42,7 +42,7 @@ export interface CandidateDocument {
   updatedAt: string;
 }
 
-export interface VacancyAnalytics {
+interface VacancyAnalytics {
   sampleSize: number;
   sourceFound: number | null;
   salaryKnown: number;
@@ -73,7 +73,7 @@ export interface VacancySubscription {
   analytics: VacancyAnalytics;
 }
 
-export interface StoredVacancy {
+interface StoredVacancy {
   id: string;
   source: VacancySourceId;
   externalId: string;
@@ -126,7 +126,7 @@ export interface VacancySubscriptionView {
   vacancies: StoredVacancy[];
 }
 
-export interface VacancyCluster {
+interface VacancyCluster {
   id: string;
   canonicalTitle: string;
   canonicalCompany: string;
@@ -154,7 +154,7 @@ export interface VacancyCluster {
   vacanciesCount: number;
 }
 
-export interface VacancyMatchExplanation {
+interface VacancyMatchExplanation {
   clusterId: string;
   matchScore: number;
   fitLevel: 'strong' | 'good' | 'potential' | 'low';

@@ -68,7 +68,7 @@ export const passwordResetSchema = z.object({
   newPassword: passwordField,
 });
 
-export function hasUnsafeFileNameCharacter(value: string): boolean {
+function hasUnsafeFileNameCharacter(value: string): boolean {
   return [...value].some(
     (character) => character === '/' || character === '\\' || character.charCodeAt(0) < 32,
   );
