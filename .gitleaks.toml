@@ -30,9 +30,16 @@ entropy = 3.5
     '''must-never-appear-in-receipt''',
   ]
 
-[allowlist]
+[[allowlists]]
 description = "Публичные значения, которые по своей природе не секрет"
 regexTarget = "line"
 # Отпечаток публичного GPG-ключа Caddy — проверяется при установке пакета,
 # поэтому обязан быть публичным.
 regexes = ['''CADDY_KEY_FINGERPRINT''']
+
+[[allowlists]]
+description = "Явные синтетические фикстуры тестов: значения-заглушки, не секреты"
+paths = [
+  '''server/config\.test\.ts''',
+  '''server/connectors/hh/hhTestAccountEnvironment\.test\.ts''',
+]
