@@ -135,6 +135,42 @@ jobs:
             fi
             sleep 5
           done
+          # INC-018: a gate that only proves /health cannot notice a
+          # half-published release. Root-level published files must come back
+          # as themselves; the SPA fallback answers with text/html.
+          while IFS='|' read -r root_path root_type; do
+            [ -n "$root_path" ] || continue
+            probe="$(mktemp)"
+            probe_status="$(curl -sS --compressed --max-time 20 \
+              -H 'Cache-Control: no-cache' \
+              -o "$probe" -w '%{http_code}' \
+              "https://openqareer.com${root_path}")"
+            bytes="$(wc -c < "$probe")"
+            ctype="$(curl -fsSI --max-time 10 "https://openqareer.com${root_path}" |
+              grep -Ei '^content-type:' | head -n 1 | tr -d '\r')"
+            rm -f "$probe"
+            case "$ctype" in
+              *"${root_type}"*) ;;
+              *)
+                printf 'root file %s answered %s (%s), expected %s\n' \
+                  "$root_path" "$probe_status" "${ctype:-none}" "$root_type" >&2
+                exit 1
+                ;;
+            esac
+            if [ "$probe_status" != "200" ] || [ "$bytes" -lt 1 ]; then
+              printf 'root file %s answered %s with %s bytes\n' \
+                "$root_path" "$probe_status" "$bytes" >&2
+              exit 1
+            fi
+            printf 'root_file=%s type=%s bytes=%s ok\n' "$root_path" "$root_type" "$bytes"
+          done <<'ROOT_FILES'
+/favicon.svg|image/svg+xml
+/apple-touch-icon.png|image/png
+/og-cover.png|image/png
+/robots.txt|text/plain
+/llms.txt|text/plain
+/admin.html|text/html
+ROOT_FILES
           release_index="$(mktemp)"
           curl --compressed -fsS --max-time 30 \
             -H 'Cache-Control: no-cache' \
