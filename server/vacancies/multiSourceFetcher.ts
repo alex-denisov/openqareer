@@ -1,0 +1,125 @@
+import { parseRssJobFeed } from '../connectors/rssFeedParser';
+import { parseTelegramChannelHtml } from '../connectors/telegramChannelParser';
+import type { HhVacancySample } from '../connectors/hhVacancySearch';
+import type { VacancySample } from '../domain/vacancy';
+import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
+import type { SourceFetcher } from './multiSourceVacancyEngine';
+
+type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
+type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
+
+const FETCH_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)',
+} as const;
+
+function hhSampleToUnified(sample: HhVacancySample, sourceId: string): UnifiedVacancy[] {
+  return sample.items.map((v) => ({
+    id: v.id,
+    fingerprint: v.id,
+    title: v.title,
+    company: v.company,
+    location: v.location,
+    salary: v.salary
+      ? {
+          from: v.salary.from ?? undefined,
+          to: v.salary.to ?? undefined,
+          currency: v.salary.currency,
+        }
+      : undefined,
+    description: v.title,
+    requiredSkills: v.requirements ?? [],
+    url: v.sourceUrl,
+    provenance: {
+      sourceType: 'hh' as const,
+      sourceId,
+      sourceUrl: v.sourceUrl,
+      observedAt: new Date().toISOString(),
+    },
+    publishedAt: v.publishedAt ?? new Date().toISOString(),
+    status: 'active' as const,
+  }));
+}
+
+function remotiveSampleToUnified(sample: VacancySample, sourceId: string): UnifiedVacancy[] {
+  return sample.items.map((v) => ({
+    id: v.id,
+    fingerprint: v.id,
+    title: v.title,
+    company: v.company,
+    location: v.location,
+    isRemote: true,
+    description: v.title,
+    requiredSkills: v.requirements ?? [],
+    url: v.sourceUrl,
+    provenance: {
+      sourceType: 'remotive' as const,
+      sourceId,
+      sourceUrl: v.sourceUrl,
+      observedAt: new Date().toISOString(),
+    },
+    publishedAt: v.publishedAt ?? new Date().toISOString(),
+    status: 'active' as const,
+  }));
+}
+
+async function fetchTelegramChannel(source: VacancySourceConfig): Promise<UnifiedVacancy[]> {
+  const channelMatch = source.targetUrl.match(/t\.me\/(?:s\/)?([a-zA-Z0-9_]+)/i);
+  const channelName = channelMatch ? channelMatch[1] : source.id.replace(/^src-tg-/, '');
+  try {
+    const res = await fetch(`https://t.me/s/${channelName}`, {
+      headers: { ...FETCH_HEADERS, Accept: 'text/html,application/xhtml+xml' },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return [];
+    const html = await res.text();
+    const vacancies = parseTelegramChannelHtml(html, {
+      channelName,
+      observedAt: new Date().toISOString(),
+    });
+    return vacancies.length > 0 ? vacancies : [];
+  } catch {
+    // fallback to curated
+    return [];
+  }
+}
+
+async function fetchRssFeed(source: VacancySourceConfig): Promise<UnifiedVacancy[]> {
+  try {
+    const res = await fetch(source.targetUrl, {
+      headers: { ...FETCH_HEADERS, Accept: 'application/rss+xml, application/xml, text/xml' },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return [];
+    const xml = await res.text();
+    const vacancies = parseRssJobFeed(xml, {
+      sourceId: source.id,
+      sourceUrl: source.targetUrl,
+      companyName: source.name,
+      observedAt: new Date().toISOString(),
+    });
+    return vacancies.length > 0 ? vacancies : [];
+  } catch {
+    // fallback to curated
+    return [];
+  }
+}
+
+export function buildMultiSourceFetcher(hh: HhSearch, remotive: RemotiveSearch): SourceFetcher {
+  return async (source, options) => {
+    if (source.type === 'hh') {
+      const sample = await hh({ text: options?.query || 'Developer', perPage: 20 });
+      return hhSampleToUnified(sample, source.id);
+    }
+    if (source.type === 'remotive') {
+      const sample = await remotive({ text: options?.query || 'Engineer', perPage: 20 });
+      return remotiveSampleToUnified(sample, source.id);
+    }
+    if (source.type === 'telegram') {
+      return fetchTelegramChannel(source);
+    }
+    if (source.type === 'rss') {
+      return fetchRssFeed(source);
+    }
+    return [];
+  };
+}

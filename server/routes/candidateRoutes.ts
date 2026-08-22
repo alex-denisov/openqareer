@@ -1,0 +1,509 @@
+import { randomUUID } from 'node:crypto';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
+import {
+  evaluateProductCase,
+  evaluateWorkPreferences,
+  productCaseSubmissionSchema,
+  workPreferenceSubmissionSchema,
+  type AssessmentId,
+} from '../domain/assessment';
+import { evaluateGermanyMarket, germanyMarketSubmissionSchema } from '../domain/germanyMarket';
+import {
+  buildResumeStudioProjection,
+  validateResumeEvidenceFreshness,
+  type ResumeEvidenceFreshness,
+  type ResumeStudioProjection,
+} from '../domain/resumeStudio';
+import { resumeDraftSchema, EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
+import { carriesProfileSubstance, planResumeImport } from '../domain/resumeImport';
+import { preferStructuredResume } from '../domain/resumeStructuring';
+import { parseResumeContent } from '../../src/features/workspace/resumeParser';
+import type { CandidateStore } from '../data/candidateStore';
+import { CandidateDocumentRetentionError } from '../data/sqliteCandidateStore';
+import {
+  CandidateDocumentValidationError,
+  CandidateDocumentVersionError,
+} from '../data/sqliteDocumentRepository';
+import type { RouteDeps } from './deps';
+import {
+  authenticateCandidate,
+  csrfError,
+  encodeHeaderFileName,
+  hasSafeMutationOrigin,
+  previewAuth,
+  sendError,
+  withDeps,
+} from './helpers';
+import {
+  assessmentIdSchema,
+  candidateCreateSchema,
+  candidateDocumentSchema,
+  documentRetentionSchema,
+  memoryChangeSchema,
+  resumeImportSchema,
+} from './schemas';
+
+type Handler = (
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) => Promise<unknown>;
+
+interface ResumeStudioView {
+  draft: ResumeDraft | null;
+  savedAt: { createdAt: string; updatedAt: string } | null;
+  projection: ResumeStudioProjection;
+  evidenceFreshness: ResumeEvidenceFreshness;
+}
+
+/**
+ * Rebuilds both resume variants from the dossier as it stands now and compares
+ * it with the evidence the candidate approved when the draft was saved, so a
+ * revoked fact surfaces instead of surviving inside a generated document.
+ */
+function resumeStudioView(candidateStore: CandidateStore, candidateId: string): ResumeStudioView {
+  const snapshot = candidateStore.getSnapshot(candidateId);
+  const stored = snapshot.resume;
+  const projection = buildResumeStudioProjection({
+    ...(stored?.draft ?? EMPTY_RESUME_DRAFT),
+    evidence: snapshot.memory,
+  });
+  return {
+    draft: stored?.draft ?? null,
+    savedAt: stored ? { createdAt: stored.createdAt, updatedAt: stored.updatedAt } : null,
+    projection,
+    evidenceFreshness: validateResumeEvidenceFreshness(
+      stored?.evidenceSnapshot ?? projection.evidenceSnapshot,
+      snapshot.memory,
+    ),
+  };
+}
+
+/**
+ * Reading is delegated to the configured model when one is available, because
+ * heuristics alone mis-read real exports; the deterministic parser stays the
+ * floor, so a provider outage degrades the result instead of losing it.
+ */
+async function readResume(
+  text: string,
+  structurer?: RouteDeps['resumeStructurer'],
+): Promise<{
+  resume: ReturnType<typeof parseResumeContent>;
+  structuredBy: 'model' | 'rules';
+}> {
+  const deterministic = parseResumeContent(text);
+  if (!structurer) return { resume: deterministic, structuredBy: 'rules' };
+  const structured = await structurer.structure(text);
+  if (!structured) return { resume: deterministic, structuredBy: 'rules' };
+  return {
+    resume: preferStructuredResume(structured, deterministic),
+    structuredBy: 'model',
+  };
+}
+
+function evaluateAssessment(assessmentId: AssessmentId, body: unknown) {
+  if (assessmentId === 'work-preferences-v1') {
+    const submission = workPreferenceSubmissionSchema.parse(body);
+    return { submission, result: evaluateWorkPreferences(submission) };
+  }
+  const submission = productCaseSubmissionSchema.parse(body);
+  return { submission, result: evaluateProductCase(submission) };
+}
+
+const handleCreateCandidate: Handler = async (deps, request, reply) => {
+  const body = candidateCreateSchema.parse(request.body);
+  const credentials = deps.candidateStore.createCandidate(body);
+  return reply.code(201).send({
+    data: credentials,
+    meta: { requestId: request.id },
+  });
+};
+
+const handleGetSnapshot: Handler = async ({ authService, candidateStore, config }, request, reply) => {
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  return { data: candidateStore.getSnapshot(candidate.id), meta: { requestId: request.id } };
+};
+
+const handleDeleteCandidate: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  candidateStore.deleteCandidate(candidate.id);
+  return reply.code(204).send();
+};
+
+const handleExportCandidate: Handler = async (
+  { authService, candidateStore, config },
+  request,
+  reply,
+) => {
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  reply.header('Content-Disposition', 'attachment; filename="openqareer-candidate-export.json"');
+  return {
+    data: candidateStore.exportCandidate(candidate.id),
+    meta: { requestId: request.id, exportedAt: new Date().toISOString() },
+  };
+};
+
+const handleChangeMemory: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const memoryId = z.string().uuid().parse((request.params as { memoryId: string }).memoryId);
+  const change = memoryChangeSchema.parse(request.body);
+  const memory = candidateStore.changeMemory(candidate.id, memoryId, change);
+  if (!memory && change.action !== 'delete') {
+    return sendError(reply, request, 404, 'memory_not_found', 'Элемент памяти не найден.', false);
+  }
+  return {
+    data: { memory, deleted: change.action === 'delete' },
+    meta: { requestId: request.id },
+  };
+};
+
+const handleSaveAssessment: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const assessmentId = assessmentIdSchema.parse(
+    (request.params as { assessmentId: string }).assessmentId,
+  );
+  const evaluated = evaluateAssessment(assessmentId, request.body);
+  const assessment = candidateStore.saveAssessment(
+    candidate.id,
+    assessmentId,
+    evaluated.submission,
+    evaluated.result,
+  );
+  return { data: assessment, meta: { requestId: request.id } };
+};
+
+const handleParseResume: Handler = async (deps, request) => {
+  const body = z
+    .object({
+      text: z.string().min(10).max(500_000),
+    })
+    .parse(request.body);
+
+  const parsed = await readResume(body.text, deps.resumeStructurer);
+  return {
+    data: parsed.resume,
+    meta: { requestId: request.id, structuredBy: parsed.structuredBy },
+  };
+};
+
+/**
+ * The one door an imported resume walks through. It reads the document, writes
+ * what the document stated into the dossier as confirmed evidence, and saves a
+ * draft that cites exactly those facts — the three steps have to happen
+ * together, or Resume Studio opens empty on a draft whose sources do not
+ * exist (B148).
+ */
+async function importResumeIntoDossier(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  body: { text: string; source: 'pdf' | 'linkedin' | 'hh' | 'text'; fileName?: string },
+) {
+  const { authService, candidateStore, config } = deps;
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const read = await readResume(body.text, deps.resumeStructurer);
+  const plan = planResumeImport(read.resume, {
+    idPrefix: `imp${randomUUID().replace(/-/gu, '').slice(0, 10)}`,
+  });
+  if (plan.evidence.length === 0 || !carriesProfileSubstance(read.resume)) {
+    return sendError(
+      reply,
+      request,
+      422,
+      'resume_without_facts',
+      'В документе не нашлось ни одного факта для профиля. Проверьте файл или добавьте опыт вручную.',
+      false,
+    );
+  }
+  candidateStore.importResumeEvidence(candidate.id, {
+    sourceLabel: resumeImportLabel(body.source, body.fileName),
+    entries: plan.evidence.map((item) => ({
+      memoryId: item.memoryId,
+      domain: item.domain,
+      statement: item.statement,
+    })),
+  });
+  const projection = buildResumeStudioProjection({
+    ...plan.draft,
+    evidence: candidateStore.getSnapshot(candidate.id).memory,
+  });
+  candidateStore.saveResumeDraft(candidate.id, plan.draft, projection.evidenceSnapshot);
+  return {
+    data: {
+      parsed: read.resume,
+      resume: resumeStudioView(candidateStore, candidate.id),
+      structuredBy: read.structuredBy,
+      factCount: plan.evidence.length,
+    },
+    meta: { requestId: request.id },
+  };
+}
+
+function resumeImportLabel(source: 'pdf' | 'linkedin' | 'hh' | 'text', fileName?: string): string {
+  const origin = {
+    pdf: 'PDF-резюме',
+    linkedin: 'профиль LinkedIn',
+    hh: 'резюме hh.ru',
+    text: 'текст резюме',
+  }[source];
+  return fileName ? `Импорт: ${origin} «${fileName}»` : `Импорт: ${origin}`;
+}
+
+const handleImportResume: Handler = async (deps, request, reply) => {
+  if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
+  const body = resumeImportSchema.parse(request.body);
+  return importResumeIntoDossier(deps, request, reply, body);
+};
+
+const handleGetResume: Handler = async (
+  { authService, candidateStore, config },
+  request,
+  reply,
+) => {
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  return { data: resumeStudioView(candidateStore, candidate.id), meta: { requestId: request.id } };
+};
+
+const handlePutResume: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const draft = resumeDraftSchema.parse(request.body);
+  const projection = buildResumeStudioProjection({
+    ...draft,
+    evidence: candidateStore.getSnapshot(candidate.id).memory,
+  });
+  candidateStore.saveResumeDraft(candidate.id, draft, projection.evidenceSnapshot);
+  return { data: resumeStudioView(candidateStore, candidate.id), meta: { requestId: request.id } };
+};
+
+const handleSaveGermanyMarket: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const submission = germanyMarketSubmissionSchema.parse(request.body);
+  const profile = candidateStore.saveGermanyMarket(
+    candidate.id,
+    submission,
+    evaluateGermanyMarket(submission),
+  );
+  return { data: profile, meta: { requestId: request.id } };
+};
+
+const handleSaveDocument: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const body = candidateDocumentSchema.parse(request.body);
+  try {
+    const stored = candidateStore.saveDocument(candidate.id, body);
+    return reply.code(stored.created ? 201 : 200).send({
+      data: stored,
+      meta: { requestId: request.id },
+    });
+  } catch (error) {
+    if (error instanceof CandidateDocumentValidationError) {
+      return sendError(
+        reply,
+        request,
+        400,
+        'document_invalid',
+        'Файл не прошёл проверку формата или размера.',
+        false,
+      );
+    }
+    if (error instanceof CandidateDocumentVersionError) {
+      return sendError(
+        reply,
+        request,
+        409,
+        'document_version_conflict',
+        'Предыдущая версия документа недоступна.',
+        false,
+      );
+    }
+    throw error;
+  }
+};
+
+function loadCandidateDocument(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const { authService, candidateStore, config } = deps;
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return null;
+  const documentId = z.string().uuid().parse((request.params as { documentId: string }).documentId);
+  const document = candidateStore.getDocument(candidate.id, documentId);
+  if (!document) {
+    sendError(reply, request, 404, 'document_not_found', 'Документ не найден.', false);
+    return null;
+  }
+  return document;
+}
+
+const handleGetDocument: Handler = async (deps, request, _reply) => {
+  const document = loadCandidateDocument(deps, request, _reply);
+  if (!document) return undefined;
+  return { data: document, meta: { requestId: request.id } };
+};
+
+const handleDownloadDocument: Handler = async (deps, request, reply) => {
+  const document = loadCandidateDocument(deps, request, reply);
+  if (!document) return undefined;
+  reply.header('Cache-Control', 'private, no-store');
+  reply.header('X-Content-Type-Options', 'nosniff');
+  reply.header(
+    'Content-Disposition',
+    `attachment; filename="openqareer-document"; filename*=UTF-8''${encodeHeaderFileName(document.fileName)}`,
+  );
+  return reply.type(document.mimeType).send(Buffer.from(document.contentBase64, 'base64'));
+};
+
+const handleSetRetention: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const documentId = z.string().uuid().parse((request.params as { documentId: string }).documentId);
+  const body = documentRetentionSchema.parse(request.body);
+  try {
+    const document = candidateStore.setDocumentRetention(
+      candidate.id,
+      documentId,
+      body.retentionUntil,
+      new Date().toISOString(),
+    );
+    if (!document) {
+      return sendError(reply, request, 404, 'document_not_found', 'Документ не найден.', false);
+    }
+    return { data: document, meta: { requestId: request.id } };
+  } catch (error) {
+    if (error instanceof CandidateDocumentRetentionError) {
+      return sendError(
+        reply,
+        request,
+        422,
+        'document_retention_invalid',
+        'Срок хранения должен быть в будущем и не дальше десяти лет.',
+        false,
+      );
+    }
+    throw error;
+  }
+};
+
+const handleDeleteDocument: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const documentId = z.string().uuid().parse((request.params as { documentId: string }).documentId);
+  if (!candidateStore.deleteDocument(candidate.id, documentId)) {
+    return sendError(reply, request, 404, 'document_not_found', 'Документ не найден.', false);
+  }
+  return reply.code(204).send();
+};
+
+async function registerCandidateLifecycle(
+  app: FastifyInstance,
+  deps: RouteDeps,
+): Promise<void> {
+  app.post(
+    '/api/v1/candidates',
+    {
+      preHandler: previewAuth(deps.config.previewToken),
+      config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+    },
+    withDeps(deps, handleCreateCandidate),
+  );
+  app.get('/api/v1/candidate/me', withDeps(deps, handleGetSnapshot));
+  app.delete('/api/v1/candidate/me', withDeps(deps, handleDeleteCandidate));
+  app.get('/api/v1/candidate/export', withDeps(deps, handleExportCandidate));
+  app.patch('/api/v1/candidate/memory/:memoryId', withDeps(deps, handleChangeMemory));
+  app.post(
+    '/api/v1/candidate/assessments/:assessmentId',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    withDeps(deps, handleSaveAssessment),
+  );
+}
+
+async function registerResumeEndpoints(app: FastifyInstance, deps: RouteDeps): Promise<void> {
+  app.post(
+    '/api/v1/candidate/parse-resume',
+    {
+      bodyLimit: 4 * 1_024 * 1_024,
+      config: { rateLimit: { max: 30, timeWindow: '15 minutes' } },
+    },
+    withDeps(deps, handleParseResume),
+  );
+  app.post(
+    '/api/v1/candidate/resume/import',
+    {
+      bodyLimit: 4 * 1_024 * 1_024,
+      config: { rateLimit: { max: 20, timeWindow: '15 minutes' } },
+    },
+    withDeps(deps, handleImportResume),
+  );
+  app.get('/api/v1/candidate/resume', withDeps(deps, handleGetResume));
+  app.put(
+    '/api/v1/candidate/resume',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    withDeps(deps, handlePutResume),
+  );
+  app.post(
+    '/api/v1/candidate/markets/DE',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    withDeps(deps, handleSaveGermanyMarket),
+  );
+}
+
+async function registerDocumentEndpoints(app: FastifyInstance, deps: RouteDeps): Promise<void> {
+  app.post(
+    '/api/v1/candidate/documents',
+    {
+      bodyLimit: 8 * 1_024 * 1_024,
+      config: { rateLimit: { max: 20, timeWindow: '1 hour' } },
+    },
+    withDeps(deps, handleSaveDocument),
+  );
+  app.get('/api/v1/candidate/documents/:documentId', withDeps(deps, handleGetDocument));
+  app.get(
+    '/api/v1/candidate/documents/:documentId/download',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    withDeps(deps, handleDownloadDocument),
+  );
+  app.patch(
+    '/api/v1/candidate/documents/:documentId/retention',
+    { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
+    withDeps(deps, handleSetRetention),
+  );
+  app.delete('/api/v1/candidate/documents/:documentId', withDeps(deps, handleDeleteDocument));
+}
+
+export async function registerCandidateRoutes(
+  app: FastifyInstance,
+  deps: RouteDeps,
+): Promise<void> {
+  await registerCandidateLifecycle(app, deps);
+  await registerResumeEndpoints(app, deps);
+  await registerDocumentEndpoints(app, deps);
+}

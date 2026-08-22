@@ -11,7 +11,6 @@ import tseslint from 'typescript-eslint';
 const legacyComplexityFiles = [
   'scripts/split-browser-entry.mjs',
   'scripts/verify-built-shell.mjs',
-  'server/app.ts',
   'server/config.ts',
   'server/connectors/connectorHarness.ts',
   'server/connectors/hhVacancySearch.ts',
