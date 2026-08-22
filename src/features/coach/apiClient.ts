@@ -152,6 +152,35 @@ export async function readData<T>(response: Response): Promise<T> {
   return data;
 }
 
+/**
+ * INC-020: an endpoint whose contract is a non-null object or array must not
+ * hand `null` to render code typed as `T`. Unexpected shapes become a typed,
+ * retryable API error at the boundary instead of an exception in a component.
+ */
+export async function readDataObject<T extends object>(response: Response): Promise<T> {
+  const data = await readData<T>(response);
+  if (!data || typeof data !== 'object') {
+    throw new CoachApiError(
+      'Сервис вернул ответ неожиданной формы. Повторите запрос.',
+      'malformed_response',
+      true,
+    );
+  }
+  return data;
+}
+
+export async function readDataArray<T>(response: Response): Promise<T[]> {
+  const data = await readData<unknown>(response);
+  if (!Array.isArray(data)) {
+    throw new CoachApiError(
+      'Сервис вернул ответ неожиданной формы. Повторите запрос.',
+      'malformed_response',
+      true,
+    );
+  }
+  return data as T[];
+}
+
 export async function throwApiError(response: Response): Promise<never> {
   let envelope: ApiErrorEnvelope = {};
   try {

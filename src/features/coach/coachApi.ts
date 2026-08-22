@@ -1,6 +1,13 @@
 export type UserRole = 'candidate' | 'admin';
 export type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
-import { apiFetch, readData, setStoredSessionToken, throwApiError } from './apiClient';
+import {
+  apiFetch,
+  readData,
+  readDataArray,
+  readDataObject,
+  setStoredSessionToken,
+  throwApiError,
+} from './apiClient';
 export { CoachApiError } from './apiClient';
 import type {
   AccountSnapshot,
@@ -412,7 +419,7 @@ export async function login(username: string, password: string): Promise<AuthUse
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   });
-  return readData<AuthUser>(response);
+  return readDataObject<AuthUser>(response);
 }
 
 export async function register(input: {
@@ -425,7 +432,7 @@ export async function register(input: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  return readData<AuthUser>(response);
+  return readDataObject<AuthUser>(response);
 }
 
 export async function logout(): Promise<void> {
@@ -444,19 +451,19 @@ export async function importProfileUrl(url: string): Promise<ProfileUrlImportRes
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
   });
-  return readData<ProfileUrlImportResult>(response);
+  return readDataObject<ProfileUrlImportResult>(response);
 }
 
 export async function startConnection(platform: 'linkedin' | 'hh'): Promise<StartedConnection> {
   const response = await apiFetch(`/api/v1/candidate/connections/${platform}/authorizations`, {
     method: 'POST',
   });
-  return readData<StartedConnection>(response);
+  return readDataObject<StartedConnection>(response);
 }
 
 export async function getConnections(): Promise<CandidateConnection[]> {
   const response = await apiFetch('/api/v1/candidate/connections');
-  return readData<CandidateConnection[]>(response);
+  return readDataArray<CandidateConnection>(response);
 }
 
 export interface DisconnectedConnection {
@@ -472,17 +479,17 @@ export async function disconnectConnection(
   const response = await apiFetch(`/api/v1/candidate/connections/${platform}`, {
     method: 'DELETE',
   });
-  return readData<DisconnectedConnection>(response);
+  return readDataObject<DisconnectedConnection>(response);
 }
 
 export async function getCandidate(): Promise<CandidateSnapshot> {
   const response = await apiFetch('/api/v1/candidate/me');
-  return readData<CandidateSnapshot>(response);
+  return readDataObject<CandidateSnapshot>(response);
 }
 
 export async function getAccount(): Promise<AccountSnapshot> {
   const response = await apiFetch('/api/v1/account');
-  return readData<AccountSnapshot>(response);
+  return readDataObject<AccountSnapshot>(response);
 }
 
 export async function updateAccount(input: {
@@ -497,7 +504,7 @@ export async function updateAccount(input: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  return readData<AccountSnapshot>(response);
+  return readDataObject<AccountSnapshot>(response);
 }
 
 export async function changePassword(input: {
@@ -509,7 +516,7 @@ export async function changePassword(input: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  return readData<AuthUser>(response);
+  return readDataObject<AuthUser>(response);
 }
 
 export async function requestPasswordReset(identifier: string): Promise<boolean> {
@@ -518,7 +525,7 @@ export async function requestPasswordReset(identifier: string): Promise<boolean>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ identifier }),
   });
-  const result = await readData<{ accepted: true; deliveryConfigured: boolean }>(response);
+  const result = await readDataObject<{ accepted: true; deliveryConfigured: boolean }>(response);
   return result.deliveryConfigured;
 }
 
@@ -528,14 +535,14 @@ export async function resetPassword(token: string, newPassword: string): Promise
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, newPassword }),
   });
-  return readData<AuthUser>(response);
+  return readDataObject<AuthUser>(response);
 }
 
 export async function revokeOtherSessions(): Promise<number> {
   const response = await apiFetch('/api/v1/account/sessions', {
     method: 'DELETE',
   });
-  return (await readData<{ revoked: number }>(response)).revoked;
+  return (await readDataObject<{ revoked: number }>(response)).revoked;
 }
 
 export async function uploadCandidateDocument(input: {
@@ -676,7 +683,7 @@ export async function sendCoachTurn(input: {
       marketQuery: input.marketQuery,
     }),
   });
-  return readData<CoachResult>(response);
+  return readDataObject<CoachResult>(response);
 }
 
 export async function prepareCareerCommand(input: {
@@ -757,7 +764,7 @@ export async function submitAssessment(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  return readData<StoredAssessment>(response);
+  return readDataObject<StoredAssessment>(response);
 }
 
 export async function saveGermanyMarket(
@@ -768,7 +775,7 @@ export async function saveGermanyMarket(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  return readData<StoredGermanyMarket>(response);
+  return readDataObject<StoredGermanyMarket>(response);
 }
 
 export async function getProviderStatus(): Promise<{
@@ -790,7 +797,7 @@ export async function getMatchedVacancies(signal?: AbortSignal): Promise<Matched
   if (!response.ok) {
     await throwApiError(response);
   }
-  return readData<MatchedVacancyItem[]>(response);
+  return readDataArray<MatchedVacancyItem>(response);
 }
 
 
