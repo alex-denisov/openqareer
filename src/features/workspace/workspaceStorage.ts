@@ -155,84 +155,66 @@ export function loadWorkspace(
   ownerCandidateId?: string | null,
 ): WorkspaceLoadResult {
   try {
-    if (ownerCandidateId !== undefined) {
-      const storedOwner = storage.getItem(WORKSPACE_OWNER_KEY);
-      if (
-        ownerCandidateId === null ||
-        storedOwner === null ||
-        storedOwner !== ownerCandidateId
-      ) {
-        return { status: 'empty' };
-      }
+    if (ownerCandidateId !== undefined && !ownerOwnsStorage(storage, ownerCandidateId)) {
+      return { status: 'empty' };
     }
     const raw = storage.getItem(WORKSPACE_STORAGE_KEY);
     if (raw === null) {
       return { status: 'empty' };
     }
-
-    const parsed: unknown = JSON.parse(raw);
-    if (isCandidateWorkspace(parsed)) {
-      return { status: 'ready', workspace: normalizeLoadedWorkspace(parsed) };
-    }
-
-    if (isLegacyWorkspace(parsed)) {
-      return {
-        status: 'ready',
-        workspace: {
-          ...parsed,
-          version: WORKSPACE_VERSION,
-          outcomes: [],
-        },
-      };
-    }
-
-    if (isVersionTwoWorkspace(parsed)) {
-      return {
-        status: 'ready',
-        workspace: {
-          ...parsed,
-          version: WORKSPACE_VERSION,
-          outcomes: [],
-        },
-      };
-    }
-
-    if (isVersionThreeWorkspace(parsed)) {
-      return {
-        status: 'ready',
-        workspace: {
-          ...parsed,
-          version: WORKSPACE_VERSION,
-          outcomes: [],
-        },
-      };
-    }
-
-    if (isVersionFourWorkspace(parsed)) {
-      return {
-        status: 'ready',
-        workspace: {
-          ...parsed,
-          version: WORKSPACE_VERSION,
-          outcomes: [],
-        },
-      };
-    }
-
-    if (isVersionFiveWorkspace(parsed)) {
-      return {
-        status: 'ready',
-        workspace: {
-          ...parsed,
-          version: WORKSPACE_VERSION,
-        },
-      };
-    }
-
-    return { status: 'invalid' };
+    return parseStoredWorkspace(raw);
   } catch {
     return { status: 'invalid' };
   }
+}
+
+function ownerOwnsStorage(
+  storage: StorageLike,
+  ownerCandidateId: string | null,
+): boolean {
+  const storedOwner = storage.getItem(WORKSPACE_OWNER_KEY);
+  return !(
+    ownerCandidateId === null ||
+    storedOwner === null ||
+    storedOwner !== ownerCandidateId
+  );
+}
+
+function parseStoredWorkspace(raw: string): WorkspaceLoadResult {
+  const parsed: unknown = JSON.parse(raw);
+  if (isCurrentWorkspace(parsed)) {
+    return { status: 'ready', workspace: normalizeLoadedWorkspace(parsed) };
+  }
+  return migrateLegacyWorkspace(parsed);
+}
+
+function isCurrentWorkspace(value: unknown): value is CandidateWorkspace {
+  return isCandidateWorkspace(value);
+}
+
+function migrateLegacyWorkspace(parsed: unknown): WorkspaceLoadResult {
+  const upgraded = (): { version: typeof WORKSPACE_VERSION; outcomes: [] } => ({
+    version: WORKSPACE_VERSION,
+    outcomes: [],
+  });
+  if (isLegacyWorkspace(parsed)) {
+    return { status: 'ready', workspace: { ...parsed, ...upgraded() } };
+  }
+  if (
+    isVersionTwoWorkspace(parsed) ||
+    isVersionThreeWorkspace(parsed) ||
+    isVersionFourWorkspace(parsed)
+  ) {
+    return { status: 'ready', workspace: { ...parsed, ...upgraded() } };
+  }
+  if (isVersionFiveWorkspace(parsed)) {
+    // v5 already carries outcomes; only the schema version moves forward.
+    return {
+      status: 'ready',
+      workspace: { ...parsed, version: WORKSPACE_VERSION },
+    };
+  }
+  return { status: 'invalid' };
 }
 
 function normalizeLoadedWorkspace(

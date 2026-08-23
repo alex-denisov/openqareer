@@ -28,7 +28,7 @@ const HEADER_BASE_LINES = 2;
 const ENTRY_HEADER_LINES = 2;
 const SECTION_HEADING_LINES = 1;
 
-export const CEFR_LEVELS = new Set<CefrLevel>(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
+const CEFR_LEVELS = new Set<CefrLevel>(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
 
 /**
  * Compares the evidence the candidate approved when the resume was saved with
@@ -74,7 +74,7 @@ export function buildEvidenceCatalog(evidence: readonly ResumeEvidence[]): Evide
   return { eligible, duplicateIds };
 }
 
-export function groupCurrentEvidence(
+function groupCurrentEvidence(
   evidence: readonly ResumeEvidence[],
 ): Map<string, ResumeEvidence[]> {
   const grouped = new Map<string, ResumeEvidence[]>();
@@ -86,7 +86,7 @@ export function groupCurrentEvidence(
   return grouped;
 }
 
-export function normalizeEvidence(evidence: ResumeEvidence): NormalizedEvidence {
+function normalizeEvidence(evidence: ResumeEvidence): NormalizedEvidence {
   return {
     id: clean(evidence.id) ?? '',
     statement: clean(evidence.statement) ?? '',
@@ -97,7 +97,7 @@ export function normalizeEvidence(evidence: ResumeEvidence): NormalizedEvidence 
   };
 }
 
-export function isEligible(evidence: NormalizedEvidence): boolean {
+function isEligible(evidence: NormalizedEvidence): boolean {
   return isResumeEvidenceEligible(evidence);
 }
 
@@ -163,7 +163,7 @@ export function estimateLength(
   };
 }
 
-export function wrappedLines(value: string): number {
+function wrappedLines(value: string): number {
   return Math.max(1, Math.ceil(value.length / CHARACTERS_PER_LINE));
 }
 
@@ -215,7 +215,7 @@ export function evidenceSnapshot(context: ProjectionContext): ResumeEvidenceSnap
     });
 }
 
-export function freshnessReasons(
+function freshnessReasons(
   snapshot: ResumeEvidenceSnapshot,
   current: NormalizedEvidence,
 ): StaleEvidenceReason[] {
@@ -244,7 +244,7 @@ export function compareExperienceReverseChronologically(
   return startDifference || left.id.localeCompare(right.id);
 }
 
-export function experienceEndRank(role: ResumeExperience): number {
+function experienceEndRank(role: ResumeExperience): number {
   if (role.current.value) return Number.MAX_SAFE_INTEGER;
   return dateRank(role.endDate?.value) ?? dateRank(role.startDate?.value) ?? -1;
 }
@@ -267,17 +267,17 @@ export function clean(value: string | undefined): string | null {
   return normalized ? normalized : null;
 }
 
-export function normalizedSourceIds(values: readonly string[]): string[] {
+function normalizedSourceIds(values: readonly string[]): string[] {
   return [...new Set(values.flatMap((value) => (clean(value) ? [value.trim()] : [])))].sort();
 }
 
-export function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
   return (
     left.length === right.length && left.every((value, index) => value === right[index])
   );
 }
 
-export function containsQuantity(value: string): boolean {
+function containsQuantity(value: string): boolean {
   return /(?:\d|[$€£])/u.test(value);
 }
 

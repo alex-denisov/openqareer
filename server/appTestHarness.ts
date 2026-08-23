@@ -72,7 +72,7 @@ export const successProvider: CoachProvider = {
 
 export const apps: Awaited<ReturnType<typeof buildApp>>[] = [];
 export const stores: SqliteCandidateStore[] = [];
-export const candidateTokens = new WeakMap<Awaited<ReturnType<typeof buildApp>>, string>();
+const candidateTokens = new WeakMap<Awaited<ReturnType<typeof buildApp>>, string>();
 
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));

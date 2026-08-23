@@ -3,12 +3,7 @@ import {
   Sparkle,
   WarningCircle,
 } from '@phosphor-icons/react';
-import {
-  type EvidenceItem,
-} from '../../evidence/evidenceEngine';
-import type {
-  CandidateWorkspace,
-} from '../../workspace/workspaceStorage';
+import type { CandidateWorkspace } from '../../workspace/workspaceStorage';
 import {
   type CareerJourney,
   type CareerJourneyDestination,
@@ -70,29 +65,6 @@ export function ViewHeader({
       </button>
     </header>
   );
-}
-
-
-export function ProfileState({ state }: { state: CareerJourney['profile']['state'] }) {
-  return (
-    <span className={`career-profile-state is-${state}`}>
-      {state === 'grounded'
-        ? 'Есть опорные факты'
-        : state === 'needs-review'
-          ? 'Нужно подтвердить'
-          : 'Формируется'}
-    </span>
-  );
-}
-
-export function EvidenceKind({ kind }: { kind: EvidenceItem['kind'] }) {
-  const labels: Record<EvidenceItem['kind'], string> = {
-    result: 'Результат',
-    responsibility: 'Ответственность',
-    scope: 'Масштаб',
-    expertise: 'Экспертиза',
-  };
-  return <span className={`career-evidence-kind is-${kind}`}>{labels[kind]}</span>;
 }
 
 export function RoleState({ state }: { state: CareerJourney['roles'][number]['fitState'] }) {

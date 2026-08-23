@@ -5,7 +5,6 @@ import {
 import { normalizeResumeSourceText } from './resumeSourceText';
 import type {
   ParsedResume,
-  ParsedResumeContact,
   ParsedResumeExperience,
 } from './resumeParserTypes';
 import {
@@ -29,12 +28,7 @@ export type {
   ParsedResume,
   ParsedResumeExperience,
   ParsedResumeEducation,
-  ParsedResumeCourse,
-  ParsedResumeTest,
-  ParsedResumeRecommendation,
   ParsedResumeLanguage,
-  ParsedResumeContact,
-  ParsedResumeAdditional,
   ProfileFactDraft,
 } from './resumeParserTypes';
 
@@ -189,7 +183,7 @@ export function parseResumeContent(rawText: string): ParsedResume {
   };
 }
 
-function extractContacts(text: string): ParsedResumeContact {
+function extractContacts(text: string): ParsedResume['contact'] {
   const emailMatch = text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/u);
   const phoneMatch = text.match(/(?:\+7|\+?8|\+?\d{1,3})[\s(-]*\d{3}[\s)-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}/u);
   const tgMatch = text.match(/(?:telegram|телеграм|tg):\s*@?([a-zA-Z0-9_]{4,32})|t\.me\/([a-zA-Z0-9_]{4,32})|(?:\s|^)@([a-zA-Z0-9_]{4,32})\b(?!\.[a-z])/iu);

@@ -101,30 +101,14 @@ export class SqliteCandidateStore implements CandidateStore {
       defensive: true,
     });
     this.sealedText = new SealedText(options.encryptionKey);
-    this.assessmentsRepository = new SqliteAssessmentRepository(
-      this.database,
-      this.sealedText,
-    );
-    this.marketRepository = new SqliteMarketRepository(
-      this.database,
-      this.sealedText,
-    );
-    this.resumeRepository = new SqliteResumeRepository(
-      this.database,
-      this.sealedText,
-    );
-    this.careerCommandRepository = new SqliteCareerCommandRepository(
-      this.database,
-      this.sealedText,
-    );
-    this.documentRepository = new SqliteDocumentRepository(
-      this.database,
-      this.sealedText,
-    );
-    this.vacancyRepository = new SqliteVacancyRepository(
-      this.database,
-      this.sealedText,
-    );
+    ({
+      assessmentsRepository: this.assessmentsRepository,
+      marketRepository: this.marketRepository,
+      resumeRepository: this.resumeRepository,
+      careerCommandRepository: this.careerCommandRepository,
+      documentRepository: this.documentRepository,
+      vacancyRepository: this.vacancyRepository,
+    } = createRepositories(this.database, this.sealedText));
     this.conversations = new ConversationController({
       database: this.database,
       sealedText: this.sealedText,
@@ -645,4 +629,30 @@ function normalizeRetentionUntil(
     throw new CandidateDocumentRetentionError();
   }
   return new Date(retentionTime).toISOString();
+}
+
+interface StoreRepositories {
+  assessmentsRepository: SqliteAssessmentRepository;
+  marketRepository: SqliteMarketRepository;
+  resumeRepository: SqliteResumeRepository;
+  careerCommandRepository: SqliteCareerCommandRepository;
+  documentRepository: SqliteDocumentRepository;
+  vacancyRepository: SqliteVacancyRepository;
+}
+
+function createRepositories(
+  database: DatabaseSync,
+  sealedText: SealedText,
+): StoreRepositories {
+  return {
+    assessmentsRepository: new SqliteAssessmentRepository(database, sealedText),
+    marketRepository: new SqliteMarketRepository(database, sealedText),
+    resumeRepository: new SqliteResumeRepository(database, sealedText),
+    careerCommandRepository: new SqliteCareerCommandRepository(
+      database,
+      sealedText,
+    ),
+    documentRepository: new SqliteDocumentRepository(database, sealedText),
+    vacancyRepository: new SqliteVacancyRepository(database, sealedText),
+  };
 }

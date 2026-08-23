@@ -170,7 +170,7 @@ export function isVersionFiveWorkspace(
   );
 }
 
-export function isWorkspaceRecord(
+function isWorkspaceRecord(
   value: unknown,
   version: number,
 ): value is Record<string, unknown> &
@@ -218,7 +218,7 @@ export function isWorkspaceRecord(
   );
 }
 
-export function isCareerGoal(value: unknown): value is CareerGoal {
+function isCareerGoal(value: unknown): value is CareerGoal {
   return (
     value === 'find-job' ||
     value === 'choose-role' ||
@@ -227,7 +227,7 @@ export function isCareerGoal(value: unknown): value is CareerGoal {
   );
 }
 
-export function isMarketSample(value: unknown): value is MarketVacancySample {
+function isMarketSample(value: unknown): value is MarketVacancySample {
   return (
     isRecord(value) &&
     value.source === 'hh' &&
@@ -256,7 +256,7 @@ export function isMarketSample(value: unknown): value is MarketVacancySample {
   );
 }
 
-export function isCandidateAnalysis(value: unknown): value is CandidateAnalysis {
+function isCandidateAnalysis(value: unknown): value is CandidateAnalysis {
   if (!isRecord(value)) {
     return false;
   }
@@ -274,7 +274,7 @@ export function isCandidateAnalysis(value: unknown): value is CandidateAnalysis 
   );
 }
 
-export function isEvidenceItem(value: unknown): value is EvidenceItem {
+function isEvidenceItem(value: unknown): value is EvidenceItem {
   if (!isRecord(value)) {
     return false;
   }
@@ -294,7 +294,7 @@ export function isEvidenceItem(value: unknown): value is EvidenceItem {
   );
 }
 
-export function isRoleHypothesis(value: unknown): value is RoleHypothesis {
+function isRoleHypothesis(value: unknown): value is RoleHypothesis {
   if (!isRecord(value)) {
     return false;
   }
@@ -313,7 +313,7 @@ export function isRoleHypothesis(value: unknown): value is RoleHypothesis {
   );
 }
 
-export function isOpportunityRecord(value: unknown): value is OpportunityRecord {
+function isOpportunityRecord(value: unknown): value is OpportunityRecord {
   if (!isRecord(value)) {
     return false;
   }
@@ -338,7 +338,7 @@ export function isOpportunityRecord(value: unknown): value is OpportunityRecord 
   );
 }
 
-export function isOpportunityItem(value: unknown): value is OpportunityItem {
+function isOpportunityItem(value: unknown): value is OpportunityItem {
   if (!isRecord(value)) {
     return false;
   }
@@ -351,7 +351,7 @@ export function isOpportunityItem(value: unknown): value is OpportunityItem {
   );
 }
 
-export function isOpportunityAnalysis(value: unknown): value is OpportunityAnalysis {
+function isOpportunityAnalysis(value: unknown): value is OpportunityAnalysis {
   if (!isRecord(value)) {
     return false;
   }
@@ -374,7 +374,7 @@ export function isOpportunityAnalysis(value: unknown): value is OpportunityAnaly
   );
 }
 
-export function isOpportunityDecision(value: unknown): value is OpportunityDecision {
+function isOpportunityDecision(value: unknown): value is OpportunityDecision {
   if (!isRecord(value)) {
     return false;
   }
@@ -386,7 +386,7 @@ export function isOpportunityDecision(value: unknown): value is OpportunityDecis
   );
 }
 
-export function isOpportunityChoice(
+function isOpportunityChoice(
   value: unknown,
 ): value is OpportunityDecision['choice'] {
   return (
@@ -397,7 +397,7 @@ export function isOpportunityChoice(
   );
 }
 
-export function isActionPackage(value: unknown): value is ActionPackage {
+function isActionPackage(value: unknown): value is ActionPackage {
   if (!isRecord(value)) {
     return false;
   }
@@ -445,7 +445,7 @@ export function isActionPackage(value: unknown): value is ActionPackage {
   );
 }
 
-export function isActionPackageCitation(
+function isActionPackageCitation(
   value: unknown,
 ): value is ActionPackageCitation {
   return (
@@ -457,7 +457,7 @@ export function isActionPackageCitation(
   );
 }
 
-export function isOutcomeEvent(value: unknown): value is OutcomeEvent {
+function isOutcomeEvent(value: unknown): value is OutcomeEvent {
   return (
     isRecord(value) &&
     typeof value.id === 'string' &&
@@ -475,7 +475,7 @@ export function isOutcomeEvent(value: unknown): value is OutcomeEvent {
   );
 }
 
-export function isOutcomeType(value: unknown): value is OutcomeEvent['type'] {
+function isOutcomeType(value: unknown): value is OutcomeEvent['type'] {
   return (
     value === 'applied' ||
     value === 'contacted' ||
@@ -487,7 +487,7 @@ export function isOutcomeType(value: unknown): value is OutcomeEvent['type'] {
   );
 }
 
-export function isStringArray(value: unknown): value is string[] {
+function isStringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
     value.every((item) => typeof item === 'string')
@@ -505,7 +505,7 @@ export function isAllowedProfileUrl(value: string, source: 'linkedin' | 'hh'): b
   }
 }
 
-export function isAllowedHhVacancyUrl(value: string): boolean {
+function isAllowedHhVacancyUrl(value: string): boolean {
   try {
     const url = new URL(value);
     const hostname = url.hostname.toLowerCase();
@@ -519,7 +519,7 @@ export function isAllowedHhVacancyUrl(value: string): boolean {
   }
 }
 
-export function isResumeSource(value: unknown): value is ResumeSource {
+function isResumeSource(value: unknown): value is ResumeSource {
   return (
     value === 'pdf' ||
     value === 'linkedin-pdf' ||
@@ -528,19 +528,19 @@ export function isResumeSource(value: unknown): value is ResumeSource {
   );
 }
 
-export function isSearchUrgency(value: unknown): value is SearchUrgency {
+function isSearchUrgency(value: unknown): value is SearchUrgency {
   return value === 'exploring' || value === 'active' || value === 'urgent';
 }
 
-export function isOptionalString(value: unknown): value is string | undefined {
+function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
 }
 
-export function isOptionalDateString(value: unknown): value is string | undefined {
+function isOptionalDateString(value: unknown): value is string | undefined {
   return value === undefined || isValidDateString(value);
 }
 
-export function isValidDateString(value: unknown): value is string {
+function isValidDateString(value: unknown): value is string {
   return (
     typeof value === 'string' &&
     value.length > 0 &&
@@ -548,11 +548,11 @@ export function isValidDateString(value: unknown): value is string {
   );
 }
 
-export function isOptionalNumber(value: unknown): value is number | undefined {
+function isOptionalNumber(value: unknown): value is number | undefined {
   return value === undefined || typeof value === 'number';
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 

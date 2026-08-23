@@ -47,7 +47,7 @@ export interface ParsedResumeLanguage {
   cefr?: CefrLevel;
 }
 
-export interface ParsedResumeContact {
+interface ParsedResumeContact {
   email?: string;
   phone?: string;
   telegram?: string;

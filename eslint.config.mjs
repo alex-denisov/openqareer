@@ -16,7 +16,6 @@ const legacyComplexityFiles = [
   'server/connectors/hhVacancySearch.ts',
   'server/connectors/hostedApplicationBrowser.ts',
   'server/connectors/officialOAuthTransport.ts',
-  'server/data/sqliteCandidateStore.ts',
   'server/providers/openAICoachProvider.ts',
   'server/providers/openAICompatibleCoachProvider.ts',
   'server/providers/openRouterCoachProvider.ts',
@@ -41,7 +40,6 @@ const legacyComplexityFiles = [
   'src/features/shell/CareerAccountPanel.tsx',
   'src/features/shell/CareerTariffsView.tsx',
   'src/features/shell/CareerWorkspaceShell.tsx',
-  'src/features/workspace/workspaceStorage.ts',
   'src/services/coverLetter.ts',
 ];
 

@@ -8,8 +8,6 @@ import type {
   ResumeTestInput,
 } from './resumeDraft';
 
-export type { CefrLevel, ResumeDraft } from './resumeDraft';
-
 type ResumeMemoryStatus = 'proposed' | 'confirmed' | 'corrected';
 type ResumeMemoryKind =
   | 'fact'

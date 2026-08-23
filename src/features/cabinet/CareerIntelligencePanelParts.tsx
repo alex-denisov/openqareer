@@ -99,7 +99,7 @@ export function AtsReadability({
   );
 }
 
-export function DiagnosticAction({
+function DiagnosticAction({
   journey,
   onNavigate,
 }: {
@@ -193,7 +193,7 @@ export function NextAction({
   );
 }
 
-export function ReasonedActionDetails({
+function ReasonedActionDetails({
   action,
   onNavigate,
 }: {
@@ -225,7 +225,7 @@ export function ReasonedActionDetails({
   );
 }
 
-export function reasonedDestination(
+function reasonedDestination(
   destination: ReasonedCareerAction['destination'],
 ): IntelligenceDestination {
   return ({
@@ -239,7 +239,7 @@ export function reasonedDestination(
   ];
 }
 
-export function salaryMedian(currency: VacancySubscription['analytics']['currencies'][number]) {
+function salaryMedian(currency: VacancySubscription['analytics']['currencies'][number]) {
   const value = currency.medianFrom ?? currency.medianTo;
   if (value === null) return 'Нет данных';
   return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(value)} ${currency.currency}`;
@@ -251,7 +251,7 @@ export function cadenceLabel(minutes: number) {
   return `${minutes} мин.`;
 }
 
-export function dateLabel(value: string | null) {
+function dateLabel(value: string | null) {
   if (!value) return '—';
   return new Intl.DateTimeFormat('ru-RU', {
     day: '2-digit',
@@ -262,7 +262,7 @@ export function dateLabel(value: string | null) {
   }).format(new Date(value));
 }
 
-export function findingLabel(dimension: CareerJourney['diagnostic']['findings'][number]['dimension']) {
+function findingLabel(dimension: CareerJourney['diagnostic']['findings'][number]['dimension']) {
   return {
     readability: 'Извлечение текста',
     ats: 'Структура и формат',
