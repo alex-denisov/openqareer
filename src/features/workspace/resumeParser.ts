@@ -1,96 +1,42 @@
-import type { CefrLevel } from '../resume/resumeTypes';
-import type { ProfileFact } from './profileIngestion';
 import {
-  CEFR_MAP,
-  MONTHS_EN,
-  MONTHS_RU,
   SECTION_DELIMITERS,
   sectionLookahead,
 } from './resumeParserConstants';
 import { normalizeResumeSourceText } from './resumeSourceText';
+import type {
+  ParsedResume,
+  ParsedResumeContact,
+  ParsedResumeExperience,
+} from './resumeParserTypes';
+import {
+  cleanPeriodDates,
+  HH_START_DATE_REGEX,
+  normalizeDate,
+  SINGLE_DATE_REGEX,
+  type DetectedDateEntry,
+} from './resumeParserDates';
+import {
+  extractAdditional,
+  extractCourses,
+  extractEducation,
+  extractLanguages,
+  extractRecommendations,
+  extractSkills,
+  extractTests,
+} from './resumeParserSections';
 
-export interface ParsedResumeExperience {
-  title: string;
-  employer: string;
-  location?: string;
-  startDate?: string;
-  endDate?: string;
-  current: boolean;
-  responsibilities: string[];
-  achievements: string[];
-}
-
-export interface ParsedResumeEducation {
-  institution: string;
-  qualification?: string;
-  startDate?: string;
-  endDate?: string;
-}
-
-interface ParsedResumeCourse {
-  name: string;
-  institution?: string;
-  year?: string;
-  certificateUrl?: string;
-}
-
-interface ParsedResumeTest {
-  name: string;
-  provider?: string;
-  score?: string;
-  year?: string;
-}
-
-interface ParsedResumeRecommendation {
-  recommender?: string;
-  organization?: string;
-  position?: string;
-  text?: string;
-  contact?: string;
-}
-
-export interface ParsedResumeLanguage {
-  name: string;
-  cefr?: CefrLevel;
-}
-
-interface ParsedResumeContact {
-  email?: string;
-  phone?: string;
-  telegram?: string;
-  location?: string;
-  links: string[];
-}
-
-interface ParsedResumeAdditional {
-  citizenship?: string;
-  workSchedule?: string;
-  relocation?: string;
-  driversLicense?: string;
-}
-
-export interface ParsedResume {
-  fullName?: string;
-  targetRole?: string;
-  photoUrl?: string;
-  about?: string;
-  contact: ParsedResumeContact;
-  experience: ParsedResumeExperience[];
-  skills: string[];
-  education: ParsedResumeEducation[];
-  courses: ParsedResumeCourse[];
-  tests: ParsedResumeTest[];
-  recommendations: ParsedResumeRecommendation[];
-  languages: ParsedResumeLanguage[];
-  additional?: ParsedResumeAdditional;
-  rawText: string;
-}
-
-export interface ProfileFactDraft {
-  fact: ProfileFact;
-  value: string;
-  decision: 'pending' | 'confirmed' | 'corrected' | 'rejected';
-}
+export type {
+  ParsedResume,
+  ParsedResumeExperience,
+  ParsedResumeEducation,
+  ParsedResumeCourse,
+  ParsedResumeTest,
+  ParsedResumeRecommendation,
+  ParsedResumeLanguage,
+  ParsedResumeContact,
+  ParsedResumeAdditional,
+  ProfileFactDraft,
+} from './resumeParserTypes';
 
 function parseDocumentSections(text: string): Map<string, string> {
   const sections = new Map<string, string>();
@@ -426,27 +372,6 @@ function extractAbout(text: string): string | undefined {
   return undefined;
 }
 
-const SINGLE_DATE_REGEX = /(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|[А-Яа-яЁё]+)\s+)?\d{4}\s*(?:—|-|to|–)\s*(?:по настоящее время|наст\. время|настоящее время|present|current|\d{4}|(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|[А-Яа-яЁё]+)\s+)?\d{4})/iu;
-const HH_START_DATE_REGEX = /^(?:(?:[А-Яа-яЁёA-Za-z]+)\s+)?(?:19\d\d|20\d\d)\s*(?:—|-|–)\s*(.+)$/u;
-
-function cleanPeriodDates(period: string): { start?: string; end?: string; current: boolean } {
-  const cleaned = period.replace(/\s*\([^)]*\)/gu, '').replace(/\s*·.*$/gu, '').trim();
-  const isCurrent = /настоящее|наст\.|present|current/iu.test(cleaned);
-  const parts = cleaned.split(/\s*(?:—|-|to|–)\s*/u);
-  const start = parts[0] ? normalizeDate(parts[0].trim()) : undefined;
-  const end = isCurrent ? undefined : parts[1] ? normalizeDate(parts[1].trim()) : undefined;
-  return { start, end, current: isCurrent };
-}
-
-interface DetectedDateEntry {
-  lineIdx: number;
-  startDate?: string;
-  endDate?: string;
-  current: boolean;
-  employer?: string;
-  inlineTitle?: string;
-  skipLines: number;
-}
 
 // eslint-disable-next-line max-lines-per-function
 function extractExperience(text: string): ParsedResumeExperience[] {
@@ -650,245 +575,5 @@ function extractExperience(text: string): ParsedResumeExperience[] {
   return results;
 }
 
-function extractSkills(text: string): string[] {
-  const lookahead = sectionLookahead('Ключевые навыки');
-  const regex = new RegExp(
-    `(?:Ключевые навыки|Навыки|Top Skills|Skills|Технические навыки|Стек технологий)\\s*\\n+([\\s\\S]+?)${lookahead}`,
-    'iu',
-  );
-  const match = text.match(regex);
-  const raw = match?.[1] ? match[1].trim() : text.trim();
-  const items = raw
-    .split(/[\n,;•·]+/u)
-    .map((s) => s.trim())
-    .filter((s) => s.length >= 2 && s.length <= 60);
-  return [...new Set(items)].slice(0, 50);
-}
-
-function extractEducation(text: string): ParsedResumeEducation[] {
-  const lookahead = sectionLookahead('Образование');
-  const regex = new RegExp(
-    `(?:Высшее образование|Образование|Education)\\s*\\n+([\\s\\S]+?)${lookahead}`,
-    'iu',
-  );
-  const match = text.match(regex);
-  const raw = match?.[1] ? match[1].trim() : text.trim();
-  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
-  const result: ParsedResumeEducation[] = [];
-
-  let pendingYear: string | undefined;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^\b(19\d\d|20\d\d)\b$/u.test(line)) {
-      pendingYear = line;
-      continue;
-    }
-    const inlineYearMatches = [...line.matchAll(/\b(19\d\d|20\d\d)\b/gu)];
-    const inlineEndYear = inlineYearMatches.length > 0 ? inlineYearMatches[inlineYearMatches.length - 1][0] : undefined;
-
-    const next = lines[i + 1];
-    const nextYearMatches = next ? [...next.matchAll(/\b(19\d\d|20\d\d)\b/gu)] : [];
-    const nextEndYear = nextYearMatches.length > 0 ? nextYearMatches[nextYearMatches.length - 1][0] : undefined;
-
-    let institution = line;
-    let qualification: string | undefined;
-    let endDate: string | undefined;
-
-    if (inlineEndYear && !next) {
-      endDate = inlineEndYear;
-      institution = line.replace(/\s*·?\s*\([^)]*\d{4}[^)]*\)/u, '').replace(/\b(19\d\d|20\d\d)\b/u, '').trim();
-    } else if (next && nextEndYear) {
-      // University on line i, Degree with dates on line i+1 (LinkedIn style)
-      institution = line;
-      qualification = next.replace(/\s*·?\s*\([^)]*\d{4}[^)]*\)/u, '').trim();
-      endDate = nextEndYear;
-      i++;
-    } else if (next && !nextEndYear) {
-      institution = line;
-      qualification = next;
-      endDate = pendingYear || inlineEndYear;
-      i++;
-    } else {
-      endDate = pendingYear || inlineEndYear;
-    }
-    pendingYear = undefined;
-
-    result.push({
-      institution: institution || 'Учебное заведение',
-      qualification,
-      endDate,
-    });
-  }
-  return result;
-}
-
-function extractCourses(text: string): ParsedResumeCourse[] {
-  const lookahead = sectionLookahead('Курсы');
-  const regex = new RegExp(
-    `(?:Электронные сертификаты|Сертификаты|Certifications|Курсы|Повышение квалификации, курсы|Повышение квалификации|Courses)\\s*\\n+([\\s\\S]+?)${lookahead}`,
-    'iu',
-  );
-  const match = text.match(regex);
-  const raw = match?.[1] ? match[1].trim() : text.trim();
-  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
-  const result: ParsedResumeCourse[] = [];
-
-  let pendingYear: string | undefined;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^\b(19\d\d|20\d\d)\b$/u.test(line)) {
-      pendingYear = line;
-      continue;
-    }
-    const inlineYear = line.match(/\b(19\d\d|20\d\d)\b/u);
-    const year = pendingYear || inlineYear?.[1];
-    pendingYear = undefined;
-
-    const cleanedName = line.replace(/\b(19\d\d|20\d\d)\b/u, '').replace(/[()]/gu, '').trim();
-    if (cleanedName.length >= 2 && !/^(?:сертификаты|certifications|курсы)$/iu.test(cleanedName)) {
-      result.push({
-        name: cleanedName,
-        year,
-      });
-    }
-  }
-  return result;
-}
-
-function extractTests(text: string): ParsedResumeTest[] {
-  const lookahead = sectionLookahead('Тесты');
-  const regex = new RegExp(
-    `(?:Тесты, экзамены|Тестирования|Тесты|Tests & Exams|Assessments)\\s*\\n+([\\s\\S]+?)${lookahead}`,
-    'iu',
-  );
-  const match = text.match(regex);
-  const raw = match?.[1] ? match[1].trim() : text.trim();
-  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
-  const result: ParsedResumeTest[] = [];
-
-  let pendingYear: string | undefined;
-
-  for (const line of lines) {
-    if (/^\b(19\d\d|20\d\d)\b$/u.test(line)) {
-      pendingYear = line;
-      continue;
-    }
-    const inlineYear = line.match(/\b(19\d\d|20\d\d)\b/u);
-    const year = pendingYear || inlineYear?.[1];
-    pendingYear = undefined;
-
-    result.push({
-      name: line.replace(/\b(19\d\d|20\d\d)\b/u, '').trim(),
-      year,
-    });
-  }
-  return result;
-}
-
-function extractRecommendations(text: string): ParsedResumeRecommendation[] {
-  const lookahead = sectionLookahead('Рекомендации');
-  const regex = new RegExp(
-    `(?:Рекомендации|References|Recommendations)\\s*\\n+([\\s\\S]+?)${lookahead}`,
-    'iu',
-  );
-  const match = text.match(regex);
-  const raw = match?.[1] ? match[1].trim() : text.trim();
-  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
-  return lines.map((line) => ({
-    recommender: line,
-  }));
-}
-
-// eslint-disable-next-line max-lines-per-function
-function extractLanguages(text: string): ParsedResumeLanguage[] {
-  const lines = text.split(/\n+/u).map((l) => l.trim()).filter(Boolean);
-  const result: ParsedResumeLanguage[] = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.startsWith('(') || /^(?:знание языков|языки|languages)$/iu.test(line)) {
-      continue;
-    }
-
-    const parenMatch = line.match(/^([A-Za-zА-Яа-яЁё]+)\s*\(([^)]+)\)/u);
-    let name: string;
-    let levelRaw: string | undefined;
-
-    if (parenMatch) {
-      name = parenMatch[1];
-      levelRaw = parenMatch[2].toLowerCase();
-    } else {
-      const parts = line.split(/—|-|–|:/u).map((p) => p.trim());
-      name = parts[0];
-      levelRaw = parts[1]?.toLowerCase();
-      if (!levelRaw && i + 1 < lines.length && lines[i + 1].startsWith('(')) {
-        levelRaw = lines[i + 1].replace(/[()]/gu, '').toLowerCase();
-        i++;
-      }
-    }
-
-    let cefr: CefrLevel | undefined;
-    if (levelRaw) {
-      const normalizedLevel = levelRaw.replace(/\s+/gu, '_');
-      for (const [key, val] of Object.entries(CEFR_MAP)) {
-        if (normalizedLevel.includes(key) || levelRaw.includes(key)) {
-          cefr = val;
-          break;
-        }
-      }
-    }
-    if (name && name.length >= 2 && !/^(?:знание языков|языки|languages)$/iu.test(name)) {
-      const isMetadata = [
-        'график',
-        'формат',
-        'гражданство',
-        'переезд',
-        'релокация',
-        'проживание',
-        'schedule',
-        'citizenship',
-        'relocation',
-        'format',
-        'location',
-      ].some((kw) => name.toLowerCase().includes(kw));
-      if (!isMetadata) {
-        result.push({ name, cefr });
-      }
-    }
-  }
-  return result;
-}
-
-function extractAdditional(text: string): ParsedResumeAdditional | undefined {
-  const schedMatch = text.match(/(?:График работы|Формат работы|Work format):\s*([^\n]+)/iu);
-  const relocMatch = text.match(/(?:Готов к переезду|Релокация|Relocation):\s*([^\n]+)/iu);
-  const citMatch = text.match(/(?:Гражданство|Citizenship):\s*([^\n]+)/iu);
-  if (schedMatch || relocMatch || citMatch) {
-    return {
-      workSchedule: schedMatch?.[1]?.trim(),
-      relocation: relocMatch?.[1]?.trim(),
-      citizenship: citMatch?.[1]?.trim(),
-    };
-  }
-  return undefined;
-}
-
-function normalizeDate(raw: string): string {
-  if (!raw) return '';
-  const cleanStr = raw.toLowerCase().trim();
-  const yearMatch = cleanStr.match(/\b(19\d\d|20\d\d)\b/u);
-  const year = yearMatch?.[1];
-  if (!year) return raw;
-
-  for (const [month, num] of Object.entries(MONTHS_RU)) {
-    if (cleanStr.includes(month)) return `${year}-${num}`;
-  }
-  for (const [month, num] of Object.entries(MONTHS_EN)) {
-    if (cleanStr.includes(month)) return `${year}-${num}`;
-  }
-  return year;
-}
 
 export { parsedResumeToDraft, parsedResumeToFactDrafts } from './resumeDraftMapper';
