@@ -9,7 +9,7 @@ describe('AccountConnections', () => {
         connections={[
           {
             platform: 'linkedin',
-            available: true,
+            available: false,
             status: 'connected',
             capabilities: ['lite_identity'],
             importsCareerHistory: false,
@@ -23,7 +23,6 @@ describe('AccountConnections', () => {
             },
           },
         ]}
-        onConnect={() => undefined}
         onDisconnect={() => undefined}
       />,
     );
@@ -31,33 +30,31 @@ describe('AccountConnections', () => {
     expect(html).toContain('Подключённые площадки');
     expect(html).toContain('LinkedIn');
     expect(html).toContain('Подключено');
-    expect(html).toContain('не переносит карьерную историю');
     expect(html).toContain('Отключить LinkedIn');
-    expect(html).toContain('может потребовать отдельного отзыва');
   });
 
-  it('starts an available connection where the account lives, not in a step the candidate cannot reach', () => {
+  it('offers a plain «Подключить» control for hh.ru in the desktop app', () => {
     const html = renderToStaticMarkup(
       <AccountConnections
+        isDesktop
         connections={[
           {
             platform: 'hh',
-            available: true,
+            available: false,
             status: 'disconnected',
-            capabilities: ['profile_read', 'resume_read'],
+            capabilities: [],
             importsCareerHistory: true,
           },
         ]}
-        onConnect={() => undefined}
         onDisconnect={() => undefined}
+        onSessionImport={() => undefined}
       />,
     );
 
     expect(html).toContain('Подключить hh.ru');
-    expect(html).not.toContain('на шаге добавления источников');
   });
 
-  it('does not offer a connection the platform has not enabled', () => {
+  it('tells web candidates the connection lives in the desktop app', () => {
     const html = renderToStaticMarkup(
       <AccountConnections
         connections={[
@@ -69,12 +66,11 @@ describe('AccountConnections', () => {
             importsCareerHistory: false,
           },
         ]}
-        onConnect={() => undefined}
         onDisconnect={() => undefined}
       />,
     );
 
-    expect(html).toContain('Официальное подключение пока не настроено');
+    expect(html).toContain('десктопном приложении OpenQareer');
     expect(html).not.toContain('Подключить LinkedIn');
   });
 });

@@ -3,30 +3,37 @@ import {
   CoachApiError,
   disconnectConnection,
   getConnections,
-  startConnection,
   type CandidateConnection,
 } from '../coach/coachApi';
+import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import { PLATFORM_LABELS, type ConnectionPlatform } from './connectionResult';
-import { openPlatformAuthPopup } from './authPopup';
+import { HhConnectModal } from './HhConnectModal';
+import { LinkedInConnectModal } from './LinkedInConnectModal';
 import {
   applyConnectionDisconnectResult,
   connectionDisconnectNotice,
-  connectionStartNotice,
 } from './connectionState';
-import { PlatformConnectionPanel } from './PlatformConnectionPanel';
 
 interface AccountConnectionsProps {
   connections: CandidateConnection[];
   busyPlatform?: ConnectionPlatform;
   notice?: string;
-  onConnect: (platform: ConnectionPlatform) => void;
+  isDesktop?: boolean;
   onDisconnect: (platform: ConnectionPlatform) => void;
+  onSessionImport?: (platform: ConnectionPlatform) => void;
 }
 
+/**
+ * The product has no platform OAuth: hh.ru and LinkedIn are read through the
+ * candidate's own session in the desktop companion (owner decision, B156).
+ * This panel therefore offers session import, never an official-connect
+ * button that could only end in "not configured".
+ */
 export function AccountConnectionsManager() {
   const [connections, setConnections] = useState<CandidateConnection[]>();
   const [busyPlatform, setBusyPlatform] = useState<ConnectionPlatform>();
   const [notice, setNotice] = useState<string>();
+  const [importPlatform, setImportPlatform] = useState<ConnectionPlatform>();
 
   useEffect(() => {
     let current = true;
@@ -44,30 +51,12 @@ export function AccountConnectionsManager() {
     };
   }, []);
 
-  /**
-   * The connection starts where the account is. The wizard used to own this
-   * button while it only ever ran for anonymous visitors, so no candidate could
-   * reach it and this panel pointed at a step that could not deliver.
-   */
-  async function handleConnect(platform: ConnectionPlatform) {
-    setBusyPlatform(platform);
-    setNotice(undefined);
+  async function refreshAfterSessionImport(platformLabel: string) {
     try {
-      const started = await startConnection(platform);
-      openPlatformAuthPopup(platform, started.authorizationUrl, (authResult) => {
-        setBusyPlatform(undefined);
-        // The desktop shell has no opener channel, so the authorisation window
-        // closing is all we get — re-read the truth from the server (B149).
-        void getConnections().then((loaded) => setConnections(loaded)).catch(() => undefined);
-        if (authResult?.status === 'connected') {
-          setNotice(`${PLATFORM_LABELS[platform]} успешно подключён.`);
-        } else if (authResult?.status === 'declined') {
-          setNotice(`Подключение ${PLATFORM_LABELS[platform]} отменено.`);
-        }
-      });
-    } catch (error) {
-      setBusyPlatform(undefined);
-      setNotice(connectionStartNotice(error, platform));
+      setConnections(await getConnections());
+      setNotice(`Профиль ${platformLabel} импортирован в ваш кабинет.`);
+    } catch {
+      // The import itself already succeeded; the list catches up on next load.
     }
   }
 
@@ -97,13 +86,26 @@ export function AccountConnectionsManager() {
   }
 
   return (
-    <AccountConnections
-      connections={connections}
-      busyPlatform={busyPlatform}
-      notice={notice}
-      onConnect={(platform) => void handleConnect(platform)}
-      onDisconnect={(platform) => void handleDisconnect(platform)}
-    />
+    <>
+      <AccountConnections
+        connections={connections}
+        busyPlatform={busyPlatform}
+        notice={notice}
+        isDesktop={isTauriEnvironment()}
+        onDisconnect={(platform) => void handleDisconnect(platform)}
+        onSessionImport={setImportPlatform}
+      />
+      <HhConnectModal
+        isOpen={importPlatform === 'hh'}
+        onClose={() => setImportPlatform(undefined)}
+        onConnectSuccess={() => void refreshAfterSessionImport('hh.ru')}
+      />
+      <LinkedInConnectModal
+        isOpen={importPlatform === 'linkedin'}
+        onClose={() => setImportPlatform(undefined)}
+        onImportSuccess={() => void refreshAfterSessionImport('LinkedIn')}
+      />
+    </>
   );
 }
 
@@ -111,8 +113,9 @@ export function AccountConnections({
   connections,
   busyPlatform,
   notice,
-  onConnect,
+  isDesktop = false,
   onDisconnect,
+  onSessionImport,
 }: AccountConnectionsProps) {
   return (
     <section className="career-account-connections" aria-labelledby="career-account-connections-title">
@@ -149,14 +152,20 @@ export function AccountConnections({
                     на стороне площадки может потребовать отдельного отзыва.
                   </small>
                 </>
-              ) : connection.available ? (
-                <PlatformConnectionPanel
-                  platform={connection.platform}
-                  busy={busyPlatform === connection.platform}
-                  onConnect={() => onConnect(connection.platform)}
-                />
+              ) : isDesktop ? (
+                <div className="career-connection-panel">
+                  <button
+                    className="career-primary-button"
+                    type="button"
+                    onClick={() => onSessionImport?.(connection.platform)}
+                  >
+                    {busyPlatform === connection.platform
+                      ? 'Подключаем…'
+                      : `Подключить ${label}`}
+                  </button>
+                </div>
               ) : (
-                <p>Официальное подключение пока не настроено.</p>
+                <p>Профиль {label} подключается в десктопном приложении OpenQareer.</p>
               )}
             </article>
           );
@@ -169,8 +178,8 @@ export function AccountConnections({
 
 function connectionCopy(platform: ConnectionPlatform): string {
   return platform === 'linkedin'
-    ? 'Официальный доступ даёт базовые поля профиля и не переносит карьерную историю.'
-    : 'Официальный доступ читает профиль и резюме; действий от вашего имени нет.';
+    ? 'Профиль прочитан из вашей сессии LinkedIn; карьерная история живёт в Resume Studio.'
+    : 'Резюме прочитаны из вашей сессии hh.ru; действий от вашего имени нет.';
 }
 
 function connectionManagementError(error: unknown): string {

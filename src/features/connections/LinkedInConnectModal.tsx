@@ -25,6 +25,9 @@ import {
   sessionOpenFailureMessage,
   type ConnectorSessionStep,
 } from './connectorSession';
+import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
+
+const SESSION_POLL_INTERVAL_MS = 4000;
 import {
   ProtectedRouteError,
   startLinkedInProtectedRoute,
@@ -64,22 +67,9 @@ export function LinkedInConnectModal({
     if (!isOpen || !isTauriEnvironment() || step === 'idle' || step === 'opening') return;
     const host = webviewHost.current;
     if (!host) return;
-    const updateBounds = () => {
-      const rect = host.getBoundingClientRect();
-      void resizeConnectorSession('linkedin', {
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
-      });
-    };
-    const observer = new ResizeObserver(updateBounds);
-    observer.observe(host);
-    window.addEventListener('resize', updateBounds);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', updateBounds);
-    };
+    return watchConnectorHost('linkedin', host, (layout) => {
+      void resizeConnectorSession('linkedin', layout);
+    });
   }, [isOpen, step]);
 
   useEffect(() => {
@@ -121,18 +111,50 @@ export function LinkedInConnectModal({
     }
     setStep('session_open');
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const rect = webviewHost.current?.getBoundingClientRect();
-    const result = await openConnectorSession(
-      'linkedin',
-      LINKEDIN_LOGIN_URL,
-      rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : undefined,
+    const layout = sessionLayoutForHost(
+      webviewHost.current,
+      window.innerWidth,
+      window.innerHeight,
     );
+    const result = await openConnectorSession('linkedin', LINKEDIN_LOGIN_URL, layout);
     if (!result.opened) {
       setStep('idle');
       setError(sessionOpenFailureMessage('linkedin', result.reason));
       return;
     }
   }
+
+  /**
+   * Same quiet poll as the hh.ru dialog: once the candidate is signed in, the
+   * profile import starts on its own instead of waiting for a manual button
+   * the candidate may never find (owner report, B156).
+   */
+  useEffect(() => {
+    if (!isOpen || step !== 'session_open' || !isTauriEnvironment()) return;
+    let cancelled = false;
+    const timer = setInterval(() => {
+      void (async () => {
+        try {
+          if (cancelled) return;
+          const page = await readSessionPage('linkedin', LINKEDIN_PROFILE_URL);
+          if (!page.ok || !page.body || cancelled) return;
+          if (looksLikeLinkedInLoginPage(page.body)) return;
+          const parsed = parseResumeContent(page.body);
+          if ((parsed.fullName || parsed.experience.length > 0) && !cancelled) {
+            onImportSuccess(parsed, LINKEDIN_PROFILE_URL);
+            closeModal();
+          }
+        } catch {
+          // Quiet by design: the manual check reports failures honestly.
+        }
+      })();
+    }, SESSION_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, step]);
 
   async function checkSession() {
     setStep('checking');
@@ -229,7 +251,10 @@ export function LinkedInConnectModal({
             </strong>
             <ol>
               <li>Войдите в свой аккаунт LinkedIn в открывшемся окне.</li>
-              <li>Вернитесь сюда и нажмите «Проверить сессию».</li>
+              <li>
+                Как только вход завершится, профиль импортируется сам — или
+                нажмите «Проверить сессию».
+              </li>
             </ol>
           </div>
         )}

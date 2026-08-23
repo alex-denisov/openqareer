@@ -17,6 +17,9 @@ import {
   sessionOpenFailureMessage,
   type ConnectorSessionStep,
 } from './connectorSession';
+import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
+
+const SESSION_POLL_INTERVAL_MS = 4000;
 
 const HH_RESUME_LIST_URL = 'https://hh.ru/applicant/resumes';
 const HH_LOGIN_URL = 'https://hh.ru/account/login';
@@ -58,22 +61,9 @@ export function HhConnectModal({ isOpen, onClose, onConnectSuccess }: HhConnectM
     if (!isOpen || !isTauriEnvironment() || step === 'idle' || step === 'opening') return;
     const host = webviewHost.current;
     if (!host) return;
-    const updateBounds = () => {
-      const rect = host.getBoundingClientRect();
-      void resizeConnectorSession('hh', {
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
-      });
-    };
-    const observer = new ResizeObserver(updateBounds);
-    observer.observe(host);
-    window.addEventListener('resize', updateBounds);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', updateBounds);
-    };
+    return watchConnectorHost('hh', host, (layout) => {
+      void resizeConnectorSession('hh', layout);
+    });
   }, [isOpen, step]);
 
   useEffect(() => {
@@ -92,18 +82,51 @@ export function HhConnectModal({ isOpen, onClose, onConnectSuccess }: HhConnectM
     setStep('opening');
     setStep('session_open');
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const rect = webviewHost.current?.getBoundingClientRect();
-    const result = await openConnectorSession(
-      'hh',
-      HH_LOGIN_URL,
-      rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : undefined,
+    const layout = sessionLayoutForHost(
+      webviewHost.current,
+      window.innerWidth,
+      window.innerHeight,
     );
+    const result = await openConnectorSession('hh', HH_LOGIN_URL, layout);
     if (!result.opened) {
       setStep('idle');
       setError(sessionOpenFailureMessage('hh', result.reason));
       return;
     }
   }
+
+  /**
+   * Once the candidate signs in, the product reacts on its own: the poll picks
+   * up the resume list inside the live session window and imports it without
+   * anyone having to find the manual check button (owner report, B156). The
+   * button stays for the cases the quiet poll cannot name.
+   */
+  useEffect(() => {
+    if (!isOpen || step !== 'session_open' || !isTauriEnvironment()) return;
+    let cancelled = false;
+    const timer = setInterval(() => {
+      void (async () => {
+        try {
+          if (cancelled) return;
+          const page = await readSessionPage('hh', HH_RESUME_LIST_URL);
+          if (!page.body || cancelled) return;
+          if (looksLikeHhVpnBlock(page.body) || looksLikeHhLoginPage(page.body)) return;
+          const resumes = parseHhResumesList(page.body);
+          if (resumes.length > 0 && !cancelled) {
+            onConnectSuccess(resumes, await readFirstResume(resumes[0].url), resumes[0].url);
+            closeModal();
+          }
+        } catch {
+          // Quiet by design: the manual check reports failures honestly.
+        }
+      })();
+    }, SESSION_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, step]);
 
   async function checkSession() {
     setStep('checking');
@@ -198,7 +221,10 @@ export function HhConnectModal({ isOpen, onClose, onConnectSuccess }: HhConnectM
             </strong>
             <ol>
               <li>Войдите в аккаунт соискателя в открывшемся окне.</li>
-              <li>Вернитесь сюда и нажмите «Проверить сессию».</li>
+              <li>
+                Как только вход завершится, резюме подхватятся сами — или
+                нажмите «Проверить сессию».
+              </li>
             </ol>
           </div>
         )}

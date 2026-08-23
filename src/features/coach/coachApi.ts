@@ -67,12 +67,6 @@ export type ProfileUrlImportResult =
       nextAction: 'upload_export_or_pdf' | 'oauth_or_export';
     };
 
-export interface StartedConnection {
-  platform: 'linkedin' | 'hh';
-  authorizationUrl: string;
-  expiresAt: string;
-}
-
 export type CandidateConnection = {
   platform: 'linkedin' | 'hh';
   available: boolean;
@@ -448,13 +442,6 @@ export async function importProfileUrl(url: string): Promise<ProfileUrlImportRes
     body: JSON.stringify({ url }),
   });
   return readDataObject<ProfileUrlImportResult>(response);
-}
-
-export async function startConnection(platform: 'linkedin' | 'hh'): Promise<StartedConnection> {
-  const response = await apiFetch(`/api/v1/candidate/connections/${platform}/authorizations`, {
-    method: 'POST',
-  });
-  return readDataObject<StartedConnection>(response);
 }
 
 export async function getConnections(): Promise<CandidateConnection[]> {

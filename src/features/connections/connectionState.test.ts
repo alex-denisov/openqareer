@@ -1,47 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { CoachApiError, type CandidateConnection } from '../coach/coachApi';
+import { type CandidateConnection } from '../coach/coachApi';
 import {
-  accountRequiredNotice,
   applyConnectionDisconnectResult,
   connectionDisconnectNotice,
-  connectionStartNotice,
 } from './connectionState';
-
-describe('connection start failures', () => {
-  it('explains that a connection needs an account instead of reporting a fault', () => {
-    expect(
-      connectionStartNotice(
-        new CoachApiError('Нужна действующая сессия кандидата.', 'unauthorized', false),
-        'hh',
-      ),
-    ).toBe(accountRequiredNotice('hh'));
-  });
-
-  it('states plainly that an unconfigured platform is not configured in this environment', () => {
-    expect(
-      connectionStartNotice(
-        new CoachApiError('Не настроено.', 'connector_not_configured', false),
-        'linkedin',
-      ),
-    ).toMatch(/ещё не настроено/i);
-  });
-
-  it('keeps document import available when the platform refuses', () => {
-    expect(connectionStartNotice(new Error('offline'), 'linkedin')).toMatch(
-      /экспорт|PDF/i,
-    );
-  });
-
-  it('offers a retry for an unexpected platform code instead of inventing a cause', () => {
-    const notice = connectionStartNotice(
-      new CoachApiError('Служба недоступна.', 'upstream_unavailable', true),
-      'hh',
-    );
-
-    expect(notice).toMatch(/Повторите позже/i);
-    expect(notice).not.toMatch(/не настроено|аккаунт/i);
-  });
-});
 
 describe('connection disconnect result', () => {
   it('keeps the connection active when local deletion was not confirmed', () => {
