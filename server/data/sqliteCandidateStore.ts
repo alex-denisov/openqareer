@@ -1,18 +1,7 @@
-import {
-  createHash,
-  randomBytes,
-  randomUUID,
-} from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import {
-  coachTurnResultSchema,
-  type CoachMessage,
-  type CoachTurnInput,
-  type CoachTurnResult,
-} from '../domain/coach';
-import { buildExperienceDossier } from '../domain/dossier';
 import type {
   AssessmentId,
   AssessmentResult,
@@ -20,7 +9,6 @@ import type {
 } from '../domain/assessment';
 import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
 import type { ResumeDraft } from '../domain/resumeDraft';
-import type { CoachProviderResult } from '../providers/coachProvider';
 import type {
   CandidateCredentials,
   CandidateExport,
@@ -35,7 +23,6 @@ import type {
   ResumeEvidenceImport,
   ImportedResumeEvidence,
   StoredResumeDraft,
-  StoredTurn,
   TurnRequest,
   ConsumedOAuthAuthorization,
   OAuthAuthorizationInput,
@@ -67,74 +54,28 @@ import type {
   GermanyMarketResult,
   GermanyMarketSubmission,
 } from '../domain/germanyMarket';
-import {
-  MIGRATION_1,
-  MIGRATION_2,
-  MIGRATION_3,
-  MIGRATION_4,
-  MIGRATION_5,
-  MIGRATION_6,
-  MIGRATION_7,
-  MIGRATION_8,
-  MIGRATION_9,
-  MIGRATION_10,
-  MIGRATION_11,
-  MIGRATION_12,
-  MIGRATION_13,
-  MIGRATION_14,
-  MIGRATION_15,
-  MIGRATION_16,
-  MIGRATION_17,
-  MIGRATION_18,
-} from './sqliteSchema';
 import type {
   CareerCommandRecord,
   VerifiedCareerApproval,
 } from '../orchestration/careerCommandPlanner';
-interface SqliteCandidateStoreOptions {
-  databasePath: string;
-  encryptionKey: Buffer;
-}
-interface CandidateRow {
-  id: string;
-  data_class: CandidateIdentity['dataClass'];
-  locale: CandidateIdentity['locale'];
-  created_at: string;
-}
-interface MessageRow {
-  id: string;
-  role: CoachMessage['role'];
-  body_cipher: string;
-  created_at: string;
-}
-interface MemoryRow {
-  id: string;
-  kind: StoredMemory['kind'];
-  domain: StoredMemory['domain'];
-  statement_cipher: string;
-  confidence: StoredMemory['confidence'];
-  source_message_ids: string;
-  sensitive: number;
-  status: StoredMemory['status'] | 'deleted';
-  created_at: string;
-  updated_at: string;
-}
-interface TurnRow {
-  idempotency_key: string;
-  status: 'pending' | 'failed' | 'completed';
-  phase: TurnRequest['phase'];
-  user_message_id: string;
-  request_digest: string | null;
-  result_cipher: string | null;
-  provider: CoachProviderResult['provider'] | null;
-  model: string | null;
-  response_id: string | null;
-  input_tokens: number | null;
-  output_tokens: number | null;
-  total_tokens: number | null;
-  created_at: string;
-  updated_at: string;
-}
+import type { CoachProviderResult } from '../providers/coachProvider';
+import { applyMigrations } from './store/applyMigrations';
+import { ConversationController } from './store/conversationController';
+import { OAuthController } from './store/oauthController';
+import {
+  CandidateDocumentRetentionError,
+  CandidateNotFoundError,
+  CandidateStoreConflictError,
+} from './store/errors';
+import {
+  candidateFromRow,
+  hashToken,
+  type CandidateRow,
+  type SqliteStoreOptions,
+} from './store/shared';
+
+export { CandidateNotFoundError, CandidateStoreConflictError, CandidateDocumentRetentionError };
+
 export class SqliteCandidateStore implements CandidateStore {
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
@@ -144,8 +85,10 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly careerCommandRepository: SqliteCareerCommandRepository;
   private readonly documentRepository: SqliteDocumentRepository;
   private readonly vacancyRepository: SqliteVacancyRepository;
+  private readonly conversations: ConversationController;
+  private readonly oauth: OAuthController;
 
-  constructor(options: SqliteCandidateStoreOptions) {
+  constructor(options: SqliteStoreOptions) {
     if (options.databasePath !== ':memory:') {
       mkdirSync(dirname(options.databasePath), {
         recursive: true,
@@ -182,17 +125,27 @@ export class SqliteCandidateStore implements CandidateStore {
       this.database,
       this.sealedText,
     );
+    this.conversations = new ConversationController({
+      database: this.database,
+      sealedText: this.sealedText,
+      documentRepository: this.documentRepository,
+    });
+    this.oauth = new OAuthController({
+      database: this.database,
+      sealedText: this.sealedText,
+    });
     this.database.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = FULL;
       PRAGMA secure_delete = ON;
       PRAGMA trusted_schema = OFF;
     `);
-    this.migrate();
+    applyMigrations(this.database, (operation) => this.transaction(operation));
     this.careerCommandRepository.recoverInterruptedProcessing(
       new Date().toISOString(),
     );
   }
+
   createCandidate(input: {
     dataClass: CandidateIdentity['dataClass'];
     locale: CandidateIdentity['locale'];
@@ -225,6 +178,7 @@ export class SqliteCandidateStore implements CandidateStore {
       createdAt: now,
     };
   }
+
   authenticate(accessToken: string): CandidateIdentity | null {
     if (!/^oqc_[A-Za-z0-9_-]{40,}$/.test(accessToken)) {
       return null;
@@ -237,154 +191,42 @@ export class SqliteCandidateStore implements CandidateStore {
       .get(hashToken(accessToken)) as CandidateRow | undefined;
     return row ? candidateFromRow(row) : null;
   }
+
   startTurn(
     candidateId: string,
     idempotencyKey: string,
     request: TurnRequest,
   ): StartedTurn {
-    const candidate = this.requireCandidate(candidateId);
-    const existing = this.getTurn(candidateId, idempotencyKey);
-    if (existing) {
-      const storedMessage = this.getMessage(candidateId, existing.user_message_id);
-      if (
-        !storedMessage ||
-        storedMessage.id !== request.messageId ||
-        storedMessage.content !== request.content ||
-        (existing.request_digest === null
-          ? request.marketQuery !== undefined
-          : existing.request_digest !== turnRequestDigest(request))
-      ) {
-        throw new CandidateStoreConflictError();
-      }
-      if (existing.status === 'completed') {
-        return {
-          state: 'completed',
-          output: this.outputFromTurn(candidateId, idempotencyKey, existing),
-        };
-      }
-      this.database
-        .prepare(
-          `UPDATE turns
-           SET status = 'pending', last_error = NULL, updated_at = ?
-           WHERE candidate_id = ? AND idempotency_key = ?`,
-        )
-        .run(new Date().toISOString(), candidateId, idempotencyKey);
-    } else {
-      if (this.getMessage(candidateId, request.messageId)) {
-        throw new CandidateStoreConflictError();
-      }
-      this.insertPendingTurn(candidateId, idempotencyKey, request);
-    }
-
-    return {
-      state: 'ready',
-      input: {
-        candidateReference: candidate.id,
-        dataClass: candidate.dataClass,
-        locale: candidate.locale,
-        phase: request.phase,
-        messages: this.messages(candidateId).slice(-30),
-        knowledgeContext: this.knowledgeContext(candidateId),
-      },
-    };
+    return this.conversations.startTurn(
+      this.requireCandidate(candidateId),
+      candidateId,
+      idempotencyKey,
+      request,
+    );
   }
+
   completeTurn(
     candidateId: string,
     idempotencyKey: string,
     output: CoachProviderResult,
   ): void {
-    const turn = this.getTurn(candidateId, idempotencyKey);
-    if (!turn || turn.status !== 'pending') {
-      throw new CandidateStoreConflictError();
-    }
-    const conversationId = this.conversationId(candidateId);
-    const assistantMessageId = randomUUID();
-    const now = new Date().toISOString();
-    this.transaction(() => {
-      this.insertMessage(
-        candidateId,
-        conversationId,
-        assistantMessageId,
-        'assistant',
-        output.result.message,
-        now,
-      );
-      for (const memory of output.result.memoryCandidates) {
-        const memoryId = randomUUID();
-        this.database
-          .prepare(
-            `INSERT INTO memory
-              (id, candidate_id, conversation_id, kind, domain, statement_cipher,
-               confidence, source_message_ids, sensitive, status,
-               created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?)`,
-          )
-          .run(
-            memoryId,
-            candidateId,
-            conversationId,
-            memory.kind,
-            memory.domain,
-            this.sealedText.seal(
-              memory.statement,
-              memoryAssociatedData(candidateId, memoryId),
-            ),
-            memory.confidence,
-            JSON.stringify(memory.sourceMessageIds),
-            memory.sensitive ? 1 : 0,
-            now,
-            now,
-          );
-      }
-      this.database
-        .prepare(
-          `UPDATE turns SET
-            assistant_message_id = ?, status = 'completed',
-            result_cipher = ?, provider = ?, model = ?, response_id = ?,
-            input_tokens = ?, output_tokens = ?, total_tokens = ?,
-            updated_at = ?
-           WHERE candidate_id = ? AND idempotency_key = ?`,
-        )
-        .run(
-          assistantMessageId,
-          this.sealedText.seal(
-            JSON.stringify(output.result),
-            turnAssociatedData(candidateId, idempotencyKey),
-          ),
-          output.provider,
-          output.model,
-          output.responseId,
-          output.usage.inputTokens,
-          output.usage.outputTokens,
-          output.usage.totalTokens,
-          now,
-          candidateId,
-          idempotencyKey,
-        );
-      this.touchConversation(conversationId, now);
-    });
+    this.requireCandidate(candidateId);
+    this.conversations.completeTurn(candidateId, idempotencyKey, output);
   }
+
   failTurn(
     candidateId: string,
     idempotencyKey: string,
     errorCode: string,
   ): void {
-    this.database
-      .prepare(
-        `UPDATE turns SET status = 'failed', last_error = ?, updated_at = ?
-         WHERE candidate_id = ? AND idempotency_key = ? AND status = 'pending'`,
-      )
-      .run(errorCode, new Date().toISOString(), candidateId, idempotencyKey);
+    this.conversations.failTurn(candidateId, idempotencyKey, errorCode);
   }
+
   getSnapshot(candidateId: string): CandidateSnapshot {
     const candidate = this.requireCandidate(candidateId);
-    const memory = this.memory(candidateId);
     return {
       candidate,
-      messages: this.messages(candidateId),
-      memory,
-      turns: this.turns(candidateId),
-      dossier: buildExperienceDossier(memory),
+      ...this.conversations.snapshotParts(candidateId),
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
       resume: this.resumeRepository.get(candidateId),
@@ -392,6 +234,7 @@ export class SqliteCandidateStore implements CandidateStore {
       vacancySubscriptions: this.vacancyRepository.list(candidateId),
     };
   }
+
   saveDocument(
     candidateId: string,
     input: CandidateDocumentInput,
@@ -399,6 +242,7 @@ export class SqliteCandidateStore implements CandidateStore {
     this.requireCandidate(candidateId);
     return this.documentRepository.save(candidateId, input);
   }
+
   getDocument(
     candidateId: string,
     documentId: string,
@@ -406,6 +250,7 @@ export class SqliteCandidateStore implements CandidateStore {
     this.requireCandidate(candidateId);
     return this.documentRepository.get(candidateId, documentId);
   }
+
   deleteDocument(candidateId: string, documentId: string): boolean {
     this.requireCandidate(candidateId);
     return this.transaction(() => {
@@ -414,6 +259,7 @@ export class SqliteCandidateStore implements CandidateStore {
       return deleted;
     });
   }
+
   setDocumentRetention(
     candidateId: string,
     documentId: string,
@@ -431,6 +277,7 @@ export class SqliteCandidateStore implements CandidateStore {
       normalizedRetentionUntil,
     );
   }
+
   purgeExpiredDocuments(now: string, limit: number): number {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new CandidateStoreConflictError();
@@ -457,6 +304,7 @@ export class SqliteCandidateStore implements CandidateStore {
       return purged;
     });
   }
+
   createVacancySubscription(
     candidateId: string,
     input: VacancySubscriptionInput,
@@ -465,10 +313,12 @@ export class SqliteCandidateStore implements CandidateStore {
     this.requireCandidate(candidateId);
     return this.vacancyRepository.create(candidateId, input, now);
   }
+
   listVacancySubscriptions(candidateId: string): StoredVacancySubscription[] {
     this.requireCandidate(candidateId);
     return this.vacancyRepository.list(candidateId);
   }
+
   getVacancySubscription(
     candidateId: string,
     subscriptionId: string,
@@ -476,12 +326,14 @@ export class SqliteCandidateStore implements CandidateStore {
     this.requireCandidate(candidateId);
     return this.vacancyRepository.get(candidateId, subscriptionId);
   }
+
   recordVacancyRefresh(
     subscriptionId: string,
     sample: VacancySample,
   ): VacancyRefreshResult {
     return this.vacancyRepository.recordRefresh(subscriptionId, sample);
   }
+
   listSubscriptionVacancies(
     candidateId: string,
     subscriptionId: string,
@@ -489,6 +341,7 @@ export class SqliteCandidateStore implements CandidateStore {
     this.requireCandidate(candidateId);
     return this.vacancyRepository.listVacancies(candidateId, subscriptionId);
   }
+
   claimDueVacancySubscriptions(
     now: string,
     leaseUntil: string,
@@ -496,6 +349,7 @@ export class SqliteCandidateStore implements CandidateStore {
   ): ClaimedVacancySubscription[] {
     return this.vacancyRepository.claimDue(now, leaseUntil, limit);
   }
+
   recordVacancyFailure(
     subscriptionId: string,
     errorCode: string,
@@ -509,9 +363,11 @@ export class SqliteCandidateStore implements CandidateStore {
       retryAfterAt,
     );
   }
+
   listVacancySourceHealth(): VacancySourceHealth[] {
     return this.vacancyRepository.listSourceHealth();
   }
+
   setVacancySubscriptionStatus(
     candidateId: string,
     subscriptionId: string,
@@ -526,6 +382,7 @@ export class SqliteCandidateStore implements CandidateStore {
       now,
     );
   }
+
   deleteVacancySubscription(
     candidateId: string,
     subscriptionId: string,
@@ -533,6 +390,7 @@ export class SqliteCandidateStore implements CandidateStore {
     this.requireCandidate(candidateId);
     return this.vacancyRepository.delete(candidateId, subscriptionId);
   }
+
   saveAssessment(
     candidateId: string,
     assessmentId: AssessmentId,
@@ -547,6 +405,7 @@ export class SqliteCandidateStore implements CandidateStore {
       result,
     );
   }
+
   saveGermanyMarket(
     candidateId: string,
     submission: GermanyMarketSubmission,
@@ -555,6 +414,7 @@ export class SqliteCandidateStore implements CandidateStore {
     this.requireCandidate(candidateId);
     return this.marketRepository.save(candidateId, submission, result);
   }
+
   saveResumeDraft(
     candidateId: string,
     draft: ResumeDraft,
@@ -563,315 +423,68 @@ export class SqliteCandidateStore implements CandidateStore {
     this.requireCandidate(candidateId);
     return this.resumeRepository.save(candidateId, draft, evidenceSnapshot);
   }
+
   createOAuthAuthorization(
     candidateId: string,
     authorization: OAuthAuthorizationInput,
   ): void {
     this.requireCandidate(candidateId);
-    if (!/^[a-f0-9]{64}$/.test(authorization.stateDigest)) {
-      throw new Error('OAuth state digest must be lowercase SHA-256 hex');
-    }
-    const now = new Date().toISOString();
-    this.transaction(() => {
-      this.database
-        .prepare(
-          `DELETE FROM oauth_authorizations
-           WHERE expires_at <= ? OR (candidate_id = ? AND platform = ?)`,
-        )
-        .run(now, candidateId, authorization.platform);
-      this.database
-        .prepare(
-          `INSERT INTO oauth_authorizations
-            (state_digest, candidate_id, platform, code_verifier_cipher,
-             expires_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          authorization.stateDigest,
-          candidateId,
-          authorization.platform,
-          this.sealedText.seal(
-            authorization.codeVerifier,
-            oauthAuthorizationAssociatedData(
-              candidateId,
-              authorization.platform,
-              authorization.stateDigest,
-            ),
-          ),
-          authorization.expiresAt,
-          now,
-        );
-    });
+    this.oauth.createOAuthAuthorization(candidateId, authorization);
   }
+
   consumeOAuthAuthorization(
     platform: OAuthPlatform,
     stateDigest: string,
     consumedAt: string,
   ): ConsumedOAuthAuthorization | null {
-    let consumed: ConsumedOAuthAuthorization | null = null;
-    this.transaction(() => {
-      const row = this.database
-        .prepare(
-          `SELECT candidate_id, code_verifier_cipher, expires_at
-           FROM oauth_authorizations
-           WHERE state_digest = ? AND platform = ?`,
-        )
-        .get(stateDigest, platform) as
-        | {
-            candidate_id: string;
-            code_verifier_cipher: string;
-            expires_at: string;
-          }
-        | undefined;
-      this.database
-        .prepare('DELETE FROM oauth_authorizations WHERE state_digest = ?')
-        .run(stateDigest);
-      if (!row || row.expires_at <= consumedAt) return;
-      consumed = {
-        candidateId: row.candidate_id,
-        codeVerifier: this.sealedText.open(
-          row.code_verifier_cipher,
-          oauthAuthorizationAssociatedData(
-            row.candidate_id,
-            platform,
-            stateDigest,
-          ),
-        ),
-      };
-    });
-    return consumed;
+    return this.oauth.consumeOAuthAuthorization(platform, stateDigest, consumedAt);
   }
+
   saveOAuthConnection(
     candidateId: string,
     connection: OAuthConnectionInput,
   ): StoredOAuthConnection {
     this.requireCandidate(candidateId);
-    const existing = this.getOAuthConnection(candidateId, connection.platform);
-    const now = new Date().toISOString();
-    const stored: StoredOAuthConnection = {
-      ...connection,
-      capabilities: [...connection.capabilities],
-      connectedAt: existing?.connectedAt ?? now,
-      updatedAt: now,
-    };
-    const cipher = this.sealedText.seal(
-      JSON.stringify(stored),
-      oauthConnectionAssociatedData(candidateId, connection.platform),
-    );
-    this.database
-      .prepare(
-        `INSERT INTO oauth_connections
-          (candidate_id, platform, connection_cipher, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(candidate_id, platform) DO UPDATE SET
-           connection_cipher = excluded.connection_cipher,
-           updated_at = excluded.updated_at`,
-      )
-      .run(
-        candidateId,
-        connection.platform,
-        cipher,
-        stored.connectedAt,
-        stored.updatedAt,
-      );
-    return stored;
+    return this.oauth.saveOAuthConnection(candidateId, connection);
   }
+
   getOAuthConnection(
     candidateId: string,
     platform: OAuthPlatform,
   ): StoredOAuthConnection | null {
     this.requireCandidate(candidateId);
-    const row = this.database
-      .prepare(
-        `SELECT connection_cipher FROM oauth_connections
-         WHERE candidate_id = ? AND platform = ?`,
-      )
-      .get(candidateId, platform) as { connection_cipher: string } | undefined;
-    if (!row) return null;
-    return JSON.parse(
-      this.sealedText.open(
-        row.connection_cipher,
-        oauthConnectionAssociatedData(candidateId, platform),
-      ),
-    ) as StoredOAuthConnection;
+    return this.oauth.getOAuthConnection(candidateId, platform);
   }
+
   listOAuthConnections(candidateId: string): StoredOAuthConnection[] {
     this.requireCandidate(candidateId);
-    const rows = this.database
-      .prepare(
-        `SELECT platform, connection_cipher FROM oauth_connections
-         WHERE candidate_id = ? ORDER BY platform`,
-      )
-      .all(candidateId) as Array<{
-      platform: OAuthPlatform;
-      connection_cipher: string;
-    }>;
-    return rows.map((row) =>
-      JSON.parse(
-        this.sealedText.open(
-          row.connection_cipher,
-          oauthConnectionAssociatedData(candidateId, row.platform),
-        ),
-      ) as StoredOAuthConnection,
-    );
+    return this.oauth.listOAuthConnections(candidateId);
   }
+
   deleteOAuthConnection(
     candidateId: string,
     platform: OAuthPlatform,
   ): boolean {
     this.requireCandidate(candidateId);
-    return (
-      this.database
-        .prepare(
-          `DELETE FROM oauth_connections
-           WHERE candidate_id = ? AND platform = ?`,
-        )
-        .run(candidateId, platform).changes === 1
-    );
+    return this.oauth.deleteOAuthConnection(candidateId, platform);
   }
+
   importResumeEvidence(
     candidateId: string,
     input: ResumeEvidenceImport,
   ): ImportedResumeEvidence {
     this.requireCandidate(candidateId);
-    const conversationId = this.conversationId(candidateId);
-    const messageId = randomUUID();
-    const now = new Date().toISOString();
-    const memoryIds: string[] = [];
-    this.transaction(() => {
-      this.insertMessage(
-        candidateId,
-        conversationId,
-        messageId,
-        'user',
-        input.sourceLabel,
-        now,
-      );
-      for (const entry of input.entries) {
-        // An import is replayable: re-importing the same document must refresh
-        // the fact, never leave two copies of it in the dossier.
-        this.database
-          .prepare('DELETE FROM memory WHERE id = ? AND candidate_id = ?')
-          .run(entry.memoryId, candidateId);
-        this.database
-          .prepare(
-            `INSERT INTO memory
-              (id, candidate_id, conversation_id, kind, domain, statement_cipher,
-               confidence, source_message_ids, sensitive, status,
-               created_at, updated_at)
-             VALUES (?, ?, ?, 'fact', ?, ?, 'candidate-reported', ?, 0, 'confirmed', ?, ?)`,
-          )
-          .run(
-            entry.memoryId,
-            candidateId,
-            conversationId,
-            entry.domain,
-            this.sealedText.seal(
-              entry.statement,
-              memoryAssociatedData(candidateId, entry.memoryId),
-            ),
-            JSON.stringify([messageId]),
-            now,
-            now,
-          );
-        memoryIds.push(entry.memoryId);
-      }
-      this.touchConversation(conversationId, now);
-    });
-    return { messageId, memoryIds };
+    return this.conversations.importResumeEvidence(candidateId, input);
   }
+
   changeMemory(
     candidateId: string,
     memoryId: string,
     change: MemoryChange,
   ): StoredMemory | null {
-    const row = this.database
-      .prepare(
-        `SELECT id, kind, domain, statement_cipher, confidence, source_message_ids,
-                sensitive, status, created_at, updated_at
-         FROM memory
-         WHERE id = ? AND candidate_id = ? AND status != 'deleted'`,
-      )
-      .get(memoryId, candidateId) as MemoryRow | undefined;
-    if (!row) {
-      return null;
-    }
-    if (change.action === 'correct' && !change.statement?.trim()) {
-      throw new CandidateStoreConflictError();
-    }
-
-    const currentStatement = this.openMemoryStatement(candidateId, row);
-    const now = new Date().toISOString();
-    const nextStatus =
-      change.action === 'confirm'
-        ? 'confirmed'
-        : change.action === 'correct'
-          ? 'corrected'
-          : 'deleted';
-    const nextStatement =
-      change.action === 'correct'
-        ? change.statement!.trim()
-        : change.action === 'delete'
-          ? '[deleted]'
-          : currentStatement;
-    const currentSourceRefs = JSON.parse(row.source_message_ids) as string[];
-    const activeSourceRefs = currentSourceRefs.filter(
-      (ref) => !ref.startsWith('deleted-document:'),
-    );
-    const nextSourceRefs =
-      change.action !== 'delete' && activeSourceRefs.length === 0
-        ? [`candidate-review:${now}`]
-        : activeSourceRefs;
-
-    this.transaction(() => {
-      this.database
-        .prepare(
-          `INSERT INTO memory_revisions
-            (id, memory_id, candidate_id, action, previous_digest, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          randomUUID(),
-          memoryId,
-          candidateId,
-          change.action,
-          createHash('sha256').update(currentStatement).digest('hex'),
-          now,
-        );
-      this.database
-        .prepare(
-          `UPDATE memory
-           SET statement_cipher = ?, source_message_ids = ?, status = ?, updated_at = ?
-           WHERE id = ? AND candidate_id = ?`,
-        )
-        .run(
-          this.sealedText.seal(
-            nextStatement,
-            memoryAssociatedData(candidateId, memoryId),
-          ),
-          JSON.stringify(nextSourceRefs),
-          nextStatus,
-          now,
-          memoryId,
-          candidateId,
-        );
-    });
-    if (nextStatus === 'deleted') {
-      return null;
-    }
-    return {
-      id: row.id,
-      kind: row.kind,
-      domain: row.domain,
-      statement: nextStatement,
-      confidence: row.confidence,
-      sourceMessageIds: nextSourceRefs,
-      sensitive: row.sensitive === 1,
-      status: nextStatus,
-      createdAt: row.created_at,
-      updatedAt: now,
-    };
+    return this.conversations.changeMemory(candidateId, memoryId, change);
   }
+
   exportCandidate(candidateId: string): CandidateExport {
     const snapshot = this.getSnapshot(candidateId);
     return {
@@ -882,6 +495,7 @@ export class SqliteCandidateStore implements CandidateStore {
       }),
     };
   }
+
   deleteCandidate(candidateId: string): boolean {
     const result = this.database
       .prepare('DELETE FROM candidates WHERE id = ?')
@@ -891,20 +505,24 @@ export class SqliteCandidateStore implements CandidateStore {
     }
     return result.changes === 1;
   }
+
   saveCareerCommand(command: CareerCommandRecord): CareerCommandRecord {
     this.requireCandidate(command.candidateId);
     return this.careerCommandRepository.save(command);
   }
+
   getCareerCommand(
     candidateId: string,
     commandId: string,
   ): CareerCommandRecord | null {
     return this.careerCommandRepository.get(candidateId, commandId);
   }
+
   listCareerCommands(candidateId: string): CareerCommandRecord[] {
     this.requireCandidate(candidateId);
     return this.careerCommandRepository.list(candidateId);
   }
+
   approveCareerCommand(input: {
     candidateId: string;
     commandId: string;
@@ -913,6 +531,7 @@ export class SqliteCandidateStore implements CandidateStore {
   }): CareerCommandRecord {
     return this.careerCommandRepository.approve(input);
   }
+
   claimCareerCommand(
     candidateId: string,
     commandId: string,
@@ -926,6 +545,7 @@ export class SqliteCandidateStore implements CandidateStore {
       claimedAt,
     );
   }
+
   finishCareerCommand(
     candidateId: string,
     commandId: string,
@@ -937,327 +557,11 @@ export class SqliteCandidateStore implements CandidateStore {
       command,
     );
   }
+
   close(): void {
     this.database.close();
   }
-  private migrate(): void {
-    this.database.exec(`
-      CREATE TABLE IF NOT EXISTS schema_migrations (
-        version INTEGER PRIMARY KEY,
-        applied_at TEXT NOT NULL
-      ) STRICT;
-    `);
-    const row = this.database
-      .prepare('SELECT MAX(version) AS version FROM schema_migrations')
-      .get() as { version: number | null };
-    if ((row.version ?? 0) < 1) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_1);
-        this.database
-          .prepare(
-            'INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?)',
-          )
-          .run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 2) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_2);
-        this.database
-          .prepare(
-            'INSERT INTO schema_migrations (version, applied_at) VALUES (2, ?)',
-          )
-          .run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 3) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_3);
-        this.database
-          .prepare(
-            'INSERT INTO schema_migrations (version, applied_at) VALUES (3, ?)',
-          )
-          .run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 4) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_4);
-        this.database
-          .prepare(
-            'INSERT INTO schema_migrations (version, applied_at) VALUES (4, ?)',
-          )
-          .run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 5) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_5);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (5, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 6) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_6);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (6, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 7) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_7);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (7, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 8) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_8);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (8, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 9) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_9);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (9, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 10) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_10);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (10, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 11) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_11);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (11, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 12) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_12);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (12, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 13) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_13);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (13, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 14) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_14);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (14, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 15) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_15);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (15, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 16) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_16);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (16, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 17) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_17);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (17, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-    if ((row.version ?? 0) < 18) {
-      this.transaction(() => {
-        this.database.exec(MIGRATION_18);
-        this.database.prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (18, ?)',
-        ).run(new Date().toISOString());
-      });
-    }
-  }
-  private insertPendingTurn(
-    candidateId: string,
-    idempotencyKey: string,
-    request: TurnRequest,
-  ): void {
-    const conversationId = this.conversationId(candidateId);
-    const now = new Date().toISOString();
-    this.transaction(() => {
-      this.insertMessage(
-        candidateId,
-        conversationId,
-        request.messageId,
-        'user',
-        request.content,
-        now,
-      );
-      this.database
-        .prepare(
-          `INSERT INTO turns
-            (candidate_id, idempotency_key, conversation_id, user_message_id,
-             request_digest, phase, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
-        )
-        .run(
-          candidateId,
-          idempotencyKey,
-          conversationId,
-          request.messageId,
-          turnRequestDigest(request),
-          request.phase,
-          now,
-          now,
-        );
-      this.touchConversation(conversationId, now);
-    });
-  }
-  private insertMessage(
-    candidateId: string,
-    conversationId: string,
-    messageId: string,
-    role: CoachMessage['role'],
-    content: string,
-    createdAt: string,
-  ): void {
-    this.database
-      .prepare(
-        `INSERT INTO messages
-          (id, candidate_id, conversation_id, role, body_cipher, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        messageId,
-        candidateId,
-        conversationId,
-        role,
-        this.sealedText.seal(
-          content,
-          messageAssociatedData(candidateId, messageId),
-        ),
-        createdAt,
-      );
-  }
-  private messages(candidateId: string): CoachMessage[] {
-    const rows = this.database
-      .prepare(
-        `SELECT id, role, body_cipher, created_at
-         FROM messages WHERE candidate_id = ?
-         ORDER BY created_at, id`,
-      )
-      .all(candidateId) as unknown as MessageRow[];
-    return rows.map((row) => ({
-      id: row.id,
-      role: row.role,
-      content: this.sealedText.open(
-        row.body_cipher,
-        messageAssociatedData(candidateId, row.id),
-      ),
-    }));
-  }
-  private getMessage(
-    candidateId: string,
-    messageId: string,
-  ): CoachMessage | null {
-    const row = this.database
-      .prepare(
-        `SELECT id, role, body_cipher, created_at
-         FROM messages WHERE candidate_id = ? AND id = ?`,
-      )
-      .get(candidateId, messageId) as MessageRow | undefined;
-    if (!row) {
-      return null;
-    }
-    return {
-      id: row.id,
-      role: row.role,
-      content: this.sealedText.open(
-        row.body_cipher,
-        messageAssociatedData(candidateId, row.id),
-      ),
-    };
-  }
-  private knowledgeContext(
-    candidateId: string,
-  ): NonNullable<CoachTurnInput['knowledgeContext']> {
-    const memory = this.memory(candidateId);
-    const confirmedFacts = memory
-      .filter(
-        (item) =>
-          item.status === 'confirmed' || item.status === 'corrected',
-      )
-      .slice(-12)
-      .map((item) => ({
-        ref: `memory:${item.id}`,
-        kind: item.kind,
-        domain: item.domain,
-        statement: item.statement,
-        sourceRefs: item.sourceMessageIds,
-        sensitive: item.sensitive,
-      }));
-    const openQuestions = memory
-      .filter(
-        (item) => item.kind === 'open-question' && item.status === 'proposed',
-      )
-      .slice(-12)
-      .map((item) => ({
-        ref: `memory:${item.id}`,
-        statement: item.statement,
-        sourceRefs: item.sourceMessageIds,
-      }));
-    const documents = this.documentRepository
-      .list(candidateId)
-      .filter(
-        (document) =>
-          document.parseStatus === 'ready' &&
-          (document.kind === 'resume' || document.kind === 'profile_export'),
-      )
-      .flatMap((document) => {
-        const stored = this.documentRepository.get(candidateId, document.id);
-        const excerpt = stored?.extractedText?.trim();
-        return excerpt
-          ? [
-              {
-                ref: `document:${document.id}`,
-                kind: document.kind,
-                fileName: document.fileName,
-                version: document.version,
-                sha256: document.sha256,
-                excerpt: excerpt.slice(0, 6_000),
-              },
-            ]
-          : [];
-      })
-      .slice(0, 2);
-    return { confirmedFacts, documents, openQuestions };
-  }
+
   private invalidateDocumentKnowledge(
     candidateId: string,
     documentId: string,
@@ -1297,118 +601,7 @@ export class SqliteCandidateStore implements CandidateStore {
         );
     }
   }
-  private memory(candidateId: string): StoredMemory[] {
-    const rows = this.database
-      .prepare(
-        `SELECT id, kind, domain, statement_cipher, confidence, source_message_ids,
-                sensitive, status, created_at, updated_at
-         FROM memory
-         WHERE candidate_id = ? AND status != 'deleted'
-         ORDER BY created_at, id`,
-      )
-      .all(candidateId) as unknown as MemoryRow[];
-    return rows.map((row) => this.memoryFromRow(candidateId, row));
-  }
-  private turns(candidateId: string): StoredTurn[] {
-    const rows = this.database
-      .prepare(
-        `SELECT idempotency_key, status, phase, user_message_id, request_digest,
-                result_cipher, provider, model, response_id,
-                input_tokens, output_tokens, total_tokens,
-                created_at, updated_at
-         FROM turns WHERE candidate_id = ?
-         ORDER BY created_at, idempotency_key`,
-      )
-      .all(candidateId) as unknown as TurnRow[];
-    return rows.map((row) => {
-      const output =
-        row.status === 'completed'
-          ? this.outputFromTurn(
-              candidateId,
-              row.idempotency_key,
-              row,
-            )
-          : null;
-      return {
-        idempotencyKey: row.idempotency_key,
-        phase: row.phase,
-        status: row.status,
-        result: output?.result ?? null,
-        provenance: output
-          ? {
-              provider: output.provider,
-              model: output.model,
-              responseId: output.responseId,
-              usage: output.usage,
-            }
-          : null,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      };
-    });
-  }
-  private memoryFromRow(
-    candidateId: string,
-    row: MemoryRow,
-  ): StoredMemory {
-    if (row.status === 'deleted') {
-      throw new Error('deleted memory cannot be materialized');
-    }
-    return {
-      id: row.id,
-      kind: row.kind,
-      domain: row.domain,
-      statement: this.openMemoryStatement(candidateId, row),
-      confidence: row.confidence,
-      sourceMessageIds: JSON.parse(row.source_message_ids) as string[],
-      sensitive: row.sensitive === 1,
-      status: row.status,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
-  }
-  private openMemoryStatement(
-    candidateId: string,
-    row: MemoryRow,
-  ): string {
-    return this.sealedText.open(
-      row.statement_cipher,
-      memoryAssociatedData(candidateId, row.id),
-    );
-  }
-  private outputFromTurn(
-    candidateId: string,
-    idempotencyKey: string,
-    turn: TurnRow,
-  ): CoachProviderResult {
-    if (
-      !turn.result_cipher ||
-      !turn.provider ||
-      !turn.model ||
-      !turn.response_id
-    ) {
-      throw new Error('completed turn is incomplete');
-    }
-    const parsed = coachTurnResultSchema.parse(
-      JSON.parse(
-        this.sealedText.open(
-          turn.result_cipher,
-          turnAssociatedData(candidateId, idempotencyKey),
-        ),
-      ),
-    ) as CoachTurnResult;
-    return {
-      result: parsed,
-      provider: turn.provider,
-      model: turn.model,
-      responseId: turn.response_id,
-      usage: {
-        inputTokens: turn.input_tokens ?? 0,
-        outputTokens: turn.output_tokens ?? 0,
-        totalTokens: turn.total_tokens ?? 0,
-      },
-    };
-  }
+
   private requireCandidate(candidateId: string): CandidateIdentity {
     const row = this.database
       .prepare(
@@ -1421,36 +614,7 @@ export class SqliteCandidateStore implements CandidateStore {
     }
     return candidateFromRow(row);
   }
-  private conversationId(candidateId: string): string {
-    const row = this.database
-      .prepare('SELECT id FROM conversations WHERE candidate_id = ?')
-      .get(candidateId) as { id: string } | undefined;
-    if (!row) {
-      throw new CandidateNotFoundError();
-    }
-    return row.id;
-  }
-  private touchConversation(conversationId: string, now: string): void {
-    this.database
-      .prepare('UPDATE conversations SET updated_at = ? WHERE id = ?')
-      .run(now, conversationId);
-  }
-  private getTurn(
-    candidateId: string,
-    idempotencyKey: string,
-  ): TurnRow | null {
-    return (
-      (this.database
-        .prepare(
-          `SELECT idempotency_key, status, phase, user_message_id, request_digest,
-                  result_cipher, provider, model, response_id,
-                  input_tokens, output_tokens, total_tokens,
-                  created_at, updated_at
-           FROM turns WHERE candidate_id = ? AND idempotency_key = ?`,
-        )
-        .get(candidateId, idempotencyKey) as TurnRow | undefined) ?? null
-    );
-  }
+
   private transaction<T>(operation: () => T): T {
     this.database.exec('BEGIN IMMEDIATE');
     try {
@@ -1463,9 +627,6 @@ export class SqliteCandidateStore implements CandidateStore {
     }
   }
 }
-export class CandidateNotFoundError extends Error {}
-export class CandidateStoreConflictError extends Error {}
-export class CandidateDocumentRetentionError extends Error {}
 
 function normalizeRetentionUntil(
   retentionUntil: string | null,
@@ -1484,58 +645,4 @@ function normalizeRetentionUntil(
     throw new CandidateDocumentRetentionError();
   }
   return new Date(retentionTime).toISOString();
-}
-
-function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
-}
-function turnRequestDigest(request: TurnRequest): string {
-  return createHash('sha256')
-    .update(
-      JSON.stringify([
-        request.messageId,
-        request.content,
-        request.marketQuery ?? null,
-      ]),
-    )
-    .digest('hex');
-}
-function candidateFromRow(row: CandidateRow): CandidateIdentity {
-  return {
-    id: row.id,
-    dataClass: row.data_class,
-    locale: row.locale,
-    createdAt: row.created_at,
-  };
-}
-function messageAssociatedData(
-  candidateId: string,
-  messageId: string,
-): string {
-  return `candidate:${candidateId}:message:${messageId}`;
-}
-function memoryAssociatedData(
-  candidateId: string,
-  memoryId: string,
-): string {
-  return `candidate:${candidateId}:memory:${memoryId}`;
-}
-function turnAssociatedData(
-  candidateId: string,
-  idempotencyKey: string,
-): string {
-  return `candidate:${candidateId}:turn:${idempotencyKey}`;
-}
-function oauthAuthorizationAssociatedData(
-  candidateId: string,
-  platform: OAuthPlatform,
-  stateDigest: string,
-): string {
-  return `candidate:${candidateId}:oauth:${platform}:authorization:${stateDigest}`;
-}
-function oauthConnectionAssociatedData(
-  candidateId: string,
-  platform: OAuthPlatform,
-): string {
-  return `candidate:${candidateId}:oauth:${platform}:connection`;
 }
