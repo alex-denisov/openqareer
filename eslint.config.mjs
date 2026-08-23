@@ -27,7 +27,13 @@ const legacyComplexityFiles = [
   'src/features/evidence/evidenceEngine.ts',
   'src/features/journey/CareerExpertPanel.tsx',
   'src/features/journey/CareerIntake.tsx',
-  'src/features/journey/CareerJourneyViews.tsx',
+  // B154: CareerJourneyViews.tsx (1358 lines) was split into journeyViews/*;
+  // the >50-line screen components moved verbatim and stay baselined until
+  // their owning UI tickets decompose them further.
+  'src/features/journey/journeyViews/TodayJourneyView.tsx',
+  'src/features/journey/journeyViews/ProfileJourneyView.tsx',
+  'src/features/journey/journeyViews/CareerMapView.tsx',
+  'src/features/journey/journeyViews/OpportunitiesView.tsx',
   'src/features/journey/careerJourneyEngine.ts',
   'src/features/next-action/careerActionPolicy.ts',
   'src/features/opportunity/opportunityEngine.ts',
