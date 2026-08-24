@@ -24,14 +24,9 @@ import {
   type WorkspaceInput,
 } from '../workspace/workspaceStorage';
 
-const CAREER_JOURNEY_REVISION =
-  'career-journey-v1-2026-08-07' as const;
+const CAREER_JOURNEY_REVISION = 'career-journey-v1-2026-08-07' as const;
 
-export type CareerJourneyDestination =
-  | 'today'
-  | 'profile'
-  | 'career'
-  | 'opportunities';
+export type CareerJourneyDestination = 'today' | 'profile' | 'career' | 'opportunities';
 
 interface CareerJourneyProfile {
   state: 'forming' | 'needs-review' | 'grounded';
@@ -99,9 +94,7 @@ export function prepareCareerWorkspace(
   previous?: CandidateWorkspace,
 ): CandidateWorkspace {
   const workspace = createWorkspace(input, now, previous);
-  const analysis = workspace.resumeText
-    ? createCandidateAnalysis(workspace.resumeText)
-    : undefined;
+  const analysis = workspace.resumeText ? createCandidateAnalysis(workspace.resumeText) : undefined;
 
   return {
     ...workspace,
@@ -112,25 +105,45 @@ export function prepareCareerWorkspace(
   };
 }
 
+/**
+ * Two next actions the wizard's analysis and the canonical profile both reach
+ * for. They live here so the canonical layer can tell a stale "review the
+ * facts" apart from a live one instead of repeating its wording (B166).
+ */
+const COMPARE_MARKETS_ACTION = {
+  id: 'compare-markets',
+  label: 'Сравнить рынки',
+  headline: 'Проверим роль на выбранных рынках',
+  reason:
+    'Опыт уже даёт рабочую гипотезу, но спрос и ограничения ещё не подтверждены свежей выборкой.',
+  expectedChange: 'Появится основной рынок и условия для первой кампании.',
+  destination: 'career',
+} as const;
+
+const ADD_RESULT_EVIDENCE_ACTION = {
+  id: 'add-result-evidence',
+  label: 'Добавить результат',
+  headline: 'Добавим измеримый результат',
+  reason:
+    'Все найденные факты уже подтверждены, но для выбора уровня роли не хватает результата или масштаба ответственности.',
+  expectedChange: 'Рабочие гипотезы ролей получат более надёжное основание.',
+  destination: 'profile',
+} as const;
+
 export function buildCareerJourney(
   workspace: CandidateWorkspace,
   now: string = new Date().toISOString(),
 ): CareerJourney {
   const evidence = workspace.analysis?.evidenceItems ?? [];
-  const confirmedEvidence = evidence.filter(
-    (item) => item.status === 'confirmed',
-  );
-  const proposedEvidence = evidence.filter(
-    (item) => item.status === 'pending',
-  );
+  const confirmedEvidence = evidence.filter((item) => item.status === 'confirmed');
+  const proposedEvidence = evidence.filter((item) => item.status === 'pending');
   const roles = (workspace.analysis?.roleHypotheses ?? []).map((role) => ({
     id: role.id,
     title: role.title,
     fitState: role.fitState,
     basis: role.basis,
-    evidenceCount: role.evidenceIds.filter((id) =>
-      confirmedEvidence.some((item) => item.id === id),
-    ).length,
+    evidenceCount: role.evidenceIds.filter((id) => confirmedEvidence.some((item) => item.id === id))
+      .length,
     gaps: role.gaps,
   }));
   const hasSource = workspace.resumeText.trim().length > 0;
@@ -140,11 +153,9 @@ export function buildCareerJourney(
   const hasFreshMarketSample = isFreshMarketSample(workspace.marketSample, now);
   const hasActiveOutcome = Boolean(
     workspace.opportunity &&
-      workspace.outcomes.some(
-        (event) =>
-          event.opportunityId === workspace.opportunity?.id &&
-          event.undoneAt === undefined,
-      ),
+    workspace.outcomes.some(
+      (event) => event.opportunityId === workspace.opportunity?.id && event.undoneAt === undefined,
+    ),
   );
   const outcomeNextAction =
     workspace.opportunity && hasActiveOutcome
@@ -219,64 +230,43 @@ export function buildCareerJourney(
           destination: 'opportunities',
         }
       : workspace.actionPackage
-      ? {
-          id: 'execute-action-package',
-          label: 'Открыть пакет действия',
-          headline: 'Сделаем первый контакт по выбранной вакансии',
-          reason:
-            workspace.actionPackage.decisionChoice === 'apply'
-              ? 'Решение откликнуться сохранено. Проверьте сообщение, факты и условия перед отправкой в официальном интерфейсе.'
-              : 'Решение сначала найти контакт сохранено. Проверьте адресата, сообщение и подтверждённые факты перед отправкой.',
-          expectedChange:
-            'Подготовленное действие станет отправленным только после вашего явного шага на площадке; openqareer не отправляет его автоматически.',
-          destination: 'opportunities',
-        }
-      : hasGroundedRole
-      ? hasFreshMarketSample
         ? {
-            id: 'review-opportunities',
-            label: 'Сравнить вакансии',
-            headline: 'Проверим рабочую роль на вакансиях',
+            id: 'execute-action-package',
+            label: 'Открыть пакет действия',
+            headline: 'Сделаем первый контакт по выбранной вакансии',
             reason:
-              'Свежая выборка уже собрана. Теперь важно проверить повторяющиеся требования и выбрать первую реальную возможность.',
+              workspace.actionPackage.decisionChoice === 'apply'
+                ? 'Решение откликнуться сохранено. Проверьте сообщение, факты и условия перед отправкой в официальном интерфейсе.'
+                : 'Решение сначала найти контакт сохранено. Проверьте адресата, сообщение и подтверждённые факты перед отправкой.',
             expectedChange:
-              'Появится проверяемый маршрут: отклик, контакт, наблюдение или пропуск.',
+              'Подготовленное действие станет отправленным только после вашего явного шага на площадке; openqareer не отправляет его автоматически.',
             destination: 'opportunities',
           }
-        : {
-          id: 'compare-markets',
-          label: 'Сравнить рынки',
-          headline: 'Проверим роль на выбранных рынках',
-          reason:
-            'Опыт уже даёт рабочую гипотезу, но спрос и ограничения ещё не подтверждены свежей выборкой.',
-          expectedChange:
-            'Появится основной рынок и условия для первой кампании.',
-          destination: 'career',
-          }
-      : proposedEvidence.length > 0
-        ? {
-          id: 'review-evidence',
-          label: 'Проверить факты',
-          headline: 'Подтвердите опорные факты',
-          reason:
-            'Из источника извлечены утверждения, но кандидат ещё не подтвердил их точность.',
-          expectedChange:
-            'Подтверждённые факты станут основанием для сравнения ролей.',
-          destination: 'profile',
-          }
-        : {
-            id: 'add-result-evidence',
-            label: 'Добавить результат',
-            headline: 'Добавим измеримый результат',
-            reason:
-              'Все найденные факты уже подтверждены, но для выбора уровня роли не хватает результата или масштаба ответственности.',
-            expectedChange:
-              'Рабочие гипотезы ролей получат более надёжное основание.',
-            destination: 'profile',
-          },
-    commercialBoundary: commercialBoundaryFor(
-      hasGroundedRole && hasFreshMarketSample,
-    ),
+        : hasGroundedRole
+          ? hasFreshMarketSample
+            ? {
+                id: 'review-opportunities',
+                label: 'Сравнить вакансии',
+                headline: 'Проверим рабочую роль на вакансиях',
+                reason:
+                  'Свежая выборка уже собрана. Теперь важно проверить повторяющиеся требования и выбрать первую реальную возможность.',
+                expectedChange:
+                  'Появится проверяемый маршрут: отклик, контакт, наблюдение или пропуск.',
+                destination: 'opportunities',
+              }
+            : COMPARE_MARKETS_ACTION
+          : proposedEvidence.length > 0
+            ? {
+                id: 'review-evidence',
+                label: 'Проверить факты',
+                headline: 'Подтвердите опорные факты',
+                reason:
+                  'Из источника извлечены утверждения, но кандидат ещё не подтвердил их точность.',
+                expectedChange: 'Подтверждённые факты станут основанием для сравнения ролей.',
+                destination: 'profile',
+              }
+            : ADD_RESULT_EVIDENCE_ACTION,
+    commercialBoundary: commercialBoundaryFor(hasGroundedRole && hasFreshMarketSample),
   };
 }
 
@@ -288,24 +278,13 @@ export function applyCanonicalProfileToJourney(
   constraints: string = '',
 ): CareerJourney {
   const profileEvidence = memory.filter((item) => item.kind !== 'open-question');
-  const confirmedEvidence = profileEvidence.filter(
-    (item) => item.status !== 'proposed',
-  );
-  const proposedEvidence = profileEvidence.filter(
-    (item) => item.status === 'proposed',
-  );
+  const confirmedEvidence = profileEvidence.filter((item) => item.status !== 'proposed');
+  const proposedEvidence = profileEvidence.filter((item) => item.status === 'proposed');
   const openQuestions = memory
     .filter((item) => item.kind === 'open-question' && item.status === 'proposed')
     .flatMap((item) => (item.statement?.trim() ? [item.statement.trim()] : []));
-  const confirmedOutcomes = confirmedEvidence.filter(
-    (item) => item.domain === 'outcome',
-  );
-  const roleMarketMap = buildCanonicalRoleMarketMap(
-    journey,
-    memory,
-    targetDirection,
-    now,
-  );
+  const confirmedOutcomes = confirmedEvidence.filter((item) => item.domain === 'outcome');
+  const roleMarketMap = buildCanonicalRoleMarketMap(journey, memory, targetDirection, now);
   const roles = roleMarketMap.roles.map((role) => ({
     id: role.id,
     title: role.title,
@@ -315,9 +294,7 @@ export function applyCanonicalProfileToJourney(
     gaps: role.gaps,
   }));
   const roleGrounded = roles.some((role) => role.evidenceCount > 0);
-  const marketGrounded = journey.markets.some(
-    (market) => market.state === 'sample-ready',
-  );
+  const marketGrounded = journey.markets.some((market) => market.state === 'sample-ready');
   const actionPackageReady = journey.track.some(
     (item) => item.id === 'campaign' && item.status === 'active',
   );
@@ -358,8 +335,7 @@ export function applyCanonicalProfileToJourney(
             id: 'review-evidence',
             label: 'Проверить выводы',
             headline: 'Подтвердите опорные факты',
-            reason:
-              'Диалог добавил выводы в профиль, но кандидат ещё не подтвердил их точность.',
+            reason: 'Диалог добавил выводы в профиль, но кандидат ещё не подтвердил их точность.',
             expectedChange:
               'Подтверждённые факты станут основанием для диагностики и сравнения ролей.',
             destination: 'profile',
@@ -375,8 +351,21 @@ export function applyCanonicalProfileToJourney(
                 'Следующий ответ станет предложенным фактом с источником и потребует проверки.',
               destination: 'today',
             }
-          : journey.nextAction,
+          : staleReviewFreeAction(journey.nextAction, roleGrounded),
   };
+}
+
+/**
+ * The wizard's own analysis keeps calling its evidence pending forever, so once
+ * the candidate has reviewed the dossier its "confirm the facts" step is a lie
+ * the cabinet must not repeat (B166).
+ */
+function staleReviewFreeAction(
+  action: CareerJourney['nextAction'],
+  roleGrounded: boolean,
+): CareerJourney['nextAction'] {
+  if (action.id !== 'review-evidence') return action;
+  return roleGrounded ? COMPARE_MARKETS_ACTION : ADD_RESULT_EVIDENCE_ACTION;
 }
 
 export function buildCanonicalProfileJourney(
@@ -403,13 +392,7 @@ export function buildCanonicalProfileJourney(
       ),
       now,
     );
-  return applyCanonicalProfileToJourney(
-    baseJourney,
-    memory,
-    targetDirection,
-    now,
-    constraints,
-  );
+  return applyCanonicalProfileToJourney(baseJourney, memory, targetDirection, now, constraints);
 }
 
 function buildCanonicalRoleMarketMap(
@@ -460,9 +443,7 @@ function buildCanonicalRoleMarketMap(
   );
 }
 
-function commercialBoundaryFor(
-  routeGrounded: boolean,
-): CareerCommercialBoundary {
+function commercialBoundaryFor(routeGrounded: boolean): CareerCommercialBoundary {
   return routeGrounded
     ? {
         state: 'assisted-setup-eligible',
@@ -486,8 +467,7 @@ function firstActionFor(goal: CareerGoal | undefined): CareerJourneyAction {
       id: 'inspect-job-search',
       label: 'Добавить резюме',
       headline: 'Сначала проверим основу поиска',
-      reason:
-        'Первый шаг — отделить проблемы резюме и позиционирования от проблем роли и рынка.',
+      reason: 'Первый шаг — отделить проблемы резюме и позиционирования от проблем роли и рынка.',
       expectedChange:
         'Резюме покажет проверяемые проблемы подачи; затем их можно будет сопоставить со свежими вакансиями.',
       destination: 'profile',
@@ -498,10 +478,8 @@ function firstActionFor(goal: CareerGoal | undefined): CareerJourneyAction {
       id: 'inspect-positioning',
       label: 'Добавить резюме',
       headline: 'Сначала проверим позиционирование',
-      reason:
-        'Без текста резюме нельзя отличить слабую подачу от нехватки доказательств опыта.',
-      expectedChange:
-        'Появятся проверяемые проблемы документа и факты, которые нужно усилить.',
+      reason: 'Без текста резюме нельзя отличить слабую подачу от нехватки доказательств опыта.',
+      expectedChange: 'Появятся проверяемые проблемы документа и факты, которые нужно усилить.',
       destination: 'profile',
     };
   }
@@ -521,10 +499,8 @@ function firstActionFor(goal: CareerGoal | undefined): CareerJourneyAction {
     id: 'clarify-experience',
     label: 'Рассказать об опыте',
     headline: 'Сначала найдём опорные задачи',
-    reason:
-      'Без примеров работы платформа не будет придумывать подходящие роли.',
-    expectedChange:
-      'После ответа появятся первые проверяемые гипотезы о направлении.',
+    reason: 'Без примеров работы платформа не будет придумывать подходящие роли.',
+    expectedChange: 'После ответа появятся первые проверяемые гипотезы о направлении.',
     destination: 'profile',
   };
 }
@@ -558,11 +534,7 @@ function buildTrack(
     {
       id: 'positioning',
       label: 'Позиционирование',
-      status: routeGrounded
-        ? actionPackageReady
-          ? 'complete'
-          : 'active'
-        : 'waiting',
+      status: routeGrounded ? (actionPackageReady ? 'complete' : 'active') : 'waiting',
       reason: actionPackageReady
         ? 'Позиционирование собрано из подтверждённых фактов для выбранной вакансии.'
         : 'Создаётся только после выбора рабочей роли и рынка.',
@@ -578,10 +550,7 @@ function buildTrack(
   ];
 }
 
-function marketRoutesFor(
-  workspace: CandidateWorkspace,
-  now: string,
-): CareerJourneyMarket[] {
+function marketRoutesFor(workspace: CandidateWorkspace, now: string): CareerJourneyMarket[] {
   const sample = workspace.marketSample;
   const sampleIsFresh = isFreshMarketSample(sample, now);
   const sampleIsRecent = isRecentMarketSample(sample, now);
@@ -591,35 +560,29 @@ function marketRoutesFor(
           id: 'russia',
           label: 'Россия',
           state: sampleIsFresh ? 'sample-ready' : 'needs-sample',
-          explanation: sampleIsFresh && sample
-            ? `hh.ru: ${sample.items.length} вакансий из ${sample.found} найденных, с датой наблюдения.`
-            : sample && !sampleIsRecent
-              ? `Выборка hh.ru от ${sample.fetchedAt.slice(0, 10)} устарела. Нужна новая датированная проверка.`
-              : sample
-                ? `В выборке только ${sample.items.length} релевантных вакансий. Для проверки маршрута нужно не менее 5.`
-            : 'Нужна свежая выборка вакансий по рабочей гипотезе роли.',
+          explanation:
+            sampleIsFresh && sample
+              ? `hh.ru: ${sample.items.length} вакансий из ${sample.found} найденных, с датой наблюдения.`
+              : sample && !sampleIsRecent
+                ? `Выборка hh.ru от ${sample.fetchedAt.slice(0, 10)} устарела. Нужна новая датированная проверка.`
+                : sample
+                  ? `В выборке только ${sample.items.length} релевантных вакансий. Для проверки маршрута нужно не менее 5.`
+                  : 'Нужна свежая выборка вакансий по рабочей гипотезе роли.',
         }
       : {
           id: 'international',
           label: 'Международный рынок',
           state: 'needs-sample',
-          explanation:
-            'Нужно выбрать страны, формат работы и проверить право на работу.',
+          explanation: 'Нужно выбрать страны, формат работы и проверить право на работу.',
         },
   ];
 }
 
-function isFreshMarketSample(
-  sample: CandidateWorkspace['marketSample'],
-  now: string,
-): boolean {
+function isFreshMarketSample(sample: CandidateWorkspace['marketSample'], now: string): boolean {
   return Boolean(sample && sample.items.length >= 5 && isRecentMarketSample(sample, now));
 }
 
-function isRecentMarketSample(
-  sample: CandidateWorkspace['marketSample'],
-  now: string,
-): boolean {
+function isRecentMarketSample(sample: CandidateWorkspace['marketSample'], now: string): boolean {
   if (!sample) return false;
   const fetchedAt = new Date(sample.fetchedAt).valueOf();
   const generatedAt = new Date(now).valueOf();
