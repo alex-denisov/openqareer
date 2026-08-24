@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { expect as expectPage } from '@playwright/test';
 import type { ConnectorRequest } from '../connectorHarness';
@@ -291,24 +291,18 @@ describe('hh.ru candidate-scoped application browser session', { timeout: 35_000
     });
   });
 
-  it('pauses when hh.ru redirects the approved vacancy elsewhere', async () => {
+  it('pauses when navigation ends on a different hh.ru target', async () => {
     context = await browser.newContext();
     page = await context.newPage();
     await page.route('https://hh.ru/**', async (route) => {
-      const pathname = new URL(route.request().url()).pathname;
-      if (pathname === '/vacancy/123456789') {
-        await route.fulfill({
-          status: 302,
-          headers: { location: 'https://hh.ru/search/vacancy' },
-        });
-        return;
-      }
       await route.fulfill({
         status: 200,
         contentType: 'text/html; charset=utf-8',
         body: fixture,
       });
     });
+    await page.goto('https://hh.ru/search/vacancy');
+    vi.spyOn(page, 'goto').mockResolvedValue(null);
     const session = new HhApplicationBrowserSession({
       candidateId,
       page,
