@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseHhResumeHtml } from './hhResumeParser';
+import { parseHhResumeHtml, parseHhResumesList } from './hhResumeParser';
 
 describe('hhResumeParser', () => {
   it('parses full structured resume html correctly', () => {
@@ -53,5 +53,20 @@ describe('hhResumeParser', () => {
     expect(result.languages).toHaveLength(2);
     expect(result.languages[1].name).toBe('Английский');
     expect(result.languages[1].cefr).toBe('C1');
+  });
+
+  it('parses a sanitised resume link regardless of safe attribute order', () => {
+    expect(
+      parseHhResumesList(
+        '<a data-qa="resume-title" class="resume-link" href="/resume/live-token-731">Product Director</a>',
+      ),
+    ).toEqual([
+      {
+        id: 'live-token-731',
+        title: 'Product Director',
+        url: 'https://hh.ru/resume/live-token-731',
+        updatedLabel: 'Готово к импорту',
+      },
+    ]);
   });
 });

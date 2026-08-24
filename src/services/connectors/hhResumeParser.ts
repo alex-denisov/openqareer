@@ -225,14 +225,21 @@ export function parseHhResumesList(html: string): Array<{
     updatedLabel?: string;
   }> = [];
 
-  // Match /resume/id links with titles
-  const resumeLinkRegex =
-    /href=["'](\/resume\/([A-Za-z0-9_-]+))["'][^>]*data-qa=["'](?:resume-title|applicant-resume-title)["'][^>]*>([\s\S]*?)<\/a>/giu;
+  // Sanitisation deliberately rebuilds safe attributes, so their order is not
+  // a provider contract. Read each anchor's attributes independently.
+  const resumeLinkRegex = /<a\b([^>]*)>([\s\S]*?)<\/a>/giu;
   let match: RegExpExecArray | null;
   while ((match = resumeLinkRegex.exec(html)) !== null) {
-    const rawUrl = match[1];
-    const resumeId = match[2];
-    const rawTitle = match[3]
+    const attributes = match[1];
+    const qa = /(?:^|\s)data-qa=["']([^"']+)["']/iu.exec(attributes)?.[1];
+    const rawUrl = /(?:^|\s)href=["'](\/resume\/([A-Za-z0-9_-]+))["']/iu.exec(
+      attributes,
+    );
+    if (!rawUrl || (qa !== 'resume-title' && qa !== 'applicant-resume-title')) {
+      continue;
+    }
+    const resumeId = rawUrl[2];
+    const rawTitle = match[2]
       .replace(/<[^>]+>/gu, ' ')
       .replace(/\s+/gu, ' ')
       .trim();
@@ -240,7 +247,7 @@ export function parseHhResumesList(html: string): Array<{
       resumes.push({
         id: resumeId,
         title: rawTitle || 'Резюме hh.ru',
-        url: `https://hh.ru${rawUrl}`,
+        url: `https://hh.ru${rawUrl[1]}`,
         updatedLabel: 'Готово к импорту',
       });
     }
