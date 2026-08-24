@@ -10,18 +10,18 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{
-    AppHandle, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewBuilder, WebviewUrl,
+    AppHandle, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl,
+    WebviewWindowBuilder,
 };
-
-/// Desktop Chrome signature. Platforms serve a stripped page to unknown agents.
-const SESSION_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
-AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
 const PAGE_READY_TIMEOUT: Duration = Duration::from_secs(25);
 const PAGE_POLL_INTERVAL: Duration = Duration::from_millis(350);
 /// Single-page platforms keep painting after `readyState` flips to complete.
 const PAGE_SETTLE_DELAY: Duration = Duration::from_millis(900);
 const EVAL_TIMEOUT: Duration = Duration::from_secs(15);
+const HH_SIGNED_IN_SELECTOR: &str = r#"[data-qa^="mainmenu_applicantProfile"], [data-qa^="mainmenu_profileAndResumes"], [data-qa^="profile-activator"]"#;
+/// Full provider DOM must never cross IPC without a hard upper bound.
+const MAX_SESSION_PAGE_BODY_CHARS: usize = 2_000_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,6 +51,17 @@ pub struct SessionPageReport {
     pub ok: bool,
     pub url: String,
     pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionInspectionReport {
+    pub ready: bool,
+    pub url: String,
+    pub signed_in_applicant: bool,
+    pub login: bool,
+    pub otp: bool,
+    pub captcha: bool,
 }
 
 /// One long-lived window per platform, so a second click focuses the window the
@@ -152,10 +163,14 @@ pub fn open_session_window(
         if !existing.url().is_ok_and(|current| current == url) {
             let _ = existing.navigate(url);
         }
-        let _ = existing.set_position(LogicalPosition::new(layout.x, layout.y));
-        let _ = existing.set_size(LogicalSize::new(layout.width, layout.height));
-        let _ = existing.show();
-        let _ = existing.set_focus();
+        resize_session_window(app, &request.platform, layout.clone());
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.show();
+            let _ = window.set_focus();
+        } else {
+            let _ = existing.show();
+            let _ = existing.set_focus();
+        }
         return SessionWindowReport {
             opened: true,
             label: label.to_string(),
@@ -163,27 +178,40 @@ pub fn open_session_window(
         };
     }
 
-    let Some(main_window) = app.get_window("main") else {
+    let Some(main_window) = app.get_webview_window("main") else {
         return SessionWindowReport {
             opened: false,
             label: label.to_string(),
             reason: Some("main_window_missing".to_string()),
         };
     };
+    let screen_layout = screen_layout(&layout, &main_window);
     let platform = request.platform.clone();
-    let mut builder = WebviewBuilder::new(label, WebviewUrl::External(url))
-        .user_agent(SESSION_USER_AGENT)
+    let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
+        .title(format!("OpenQareer · {}", platform_name(&request.platform)))
+        .position(screen_layout.x, screen_layout.y)
+        .inner_size(screen_layout.width, screen_layout.height)
+        .decorations(false)
+        .resizable(false)
+        .skip_taskbar(true)
         .on_navigation(move |next_url| is_allowed_session_url(&platform, next_url.as_str()));
+
+    builder = match builder.parent(&main_window) {
+        Ok(parented) => parented,
+        Err(error) => {
+            return SessionWindowReport {
+                opened: false,
+                label: label.to_string(),
+                reason: Some(format!("window_parent_failed: {error}")),
+            }
+        }
+    };
 
     if let Some(proxy) = proxy_url {
         builder = builder.proxy_url(proxy);
     }
 
-    match main_window.add_child(
-        builder,
-        LogicalPosition::new(layout.x, layout.y),
-        LogicalSize::new(layout.width, layout.height),
-    ) {
+    match builder.build() {
         Ok(_) => SessionWindowReport {
             opened: true,
             label: label.to_string(),
@@ -207,23 +235,81 @@ pub fn is_session_window_open(app: &AppHandle, platform: &str) -> bool {
 }
 
 pub fn close_session_window(app: &AppHandle, platform: &str) -> bool {
-    session_window_label(platform)
-        .and_then(|label| app.get_webview(label))
-        .is_some_and(|webview| webview.close().is_ok())
+    session_window_label(platform).is_some_and(|label| {
+        app.get_webview_window(label)
+            .is_some_and(|window| window.close().is_ok())
+            || app
+                .get_webview(label)
+                .is_some_and(|webview| webview.close().is_ok())
+    })
+}
+
+/// Parks a signed-in session while the wizard asks which resume to import.
+pub fn hide_session_window(app: &AppHandle, platform: &str) -> bool {
+    session_window_label(platform).is_some_and(|label| {
+        app.get_webview_window(label)
+            .is_some_and(|window| window.hide().is_ok())
+            || app
+                .get_webview(label)
+                .is_some_and(|webview| webview.hide().is_ok())
+    })
+}
+
+pub async fn reset_session_window(app: &AppHandle, platform: &str) -> bool {
+    let Some(label) = session_window_label(platform) else {
+        return false;
+    };
+    let Some(webview) = app.get_webview(label) else {
+        return false;
+    };
+    if webview.clear_all_browsing_data().is_err() {
+        return false;
+    }
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    close_session_window(app, platform)
 }
 
 pub fn resize_session_window(app: &AppHandle, platform: &str, layout: SessionLayout) -> bool {
     if layout.width < 320.0 || layout.height < 320.0 || layout.x < 0.0 || layout.y < 0.0 {
         return false;
     }
-    session_window_label(platform)
-        .and_then(|label| app.get_webview(label))
-        .is_some_and(|webview| {
+    session_window_label(platform).is_some_and(|label| {
+        if let Some(window) = app.get_webview_window(label) {
+            let Some(main) = app.get_webview_window("main") else {
+                return false;
+            };
+            let screen = screen_layout(&layout, &main);
+            return window
+                .set_position(LogicalPosition::new(screen.x, screen.y))
+                .and_then(|_| window.set_size(LogicalSize::new(screen.width, screen.height)))
+                .is_ok();
+        }
+        app.get_webview(label).is_some_and(|webview| {
             webview
                 .set_position(LogicalPosition::new(layout.x, layout.y))
                 .and_then(|_| webview.set_size(LogicalSize::new(layout.width, layout.height)))
                 .is_ok()
         })
+    })
+}
+
+fn platform_name(platform: &str) -> &'static str {
+    if platform == "linkedin" {
+        "LinkedIn"
+    } else {
+        "hh.ru"
+    }
+}
+
+fn screen_layout(layout: &SessionLayout, main: &tauri::WebviewWindow) -> SessionLayout {
+    let scale = main.scale_factor().unwrap_or(1.0);
+    let origin = main.inner_position().unwrap_or_default();
+    SessionLayout {
+        x: f64::from(origin.x) / scale + layout.x,
+        y: f64::from(origin.y) / scale + layout.y,
+        width: layout.width,
+        height: layout.height,
+    }
 }
 
 #[derive(Deserialize)]
@@ -263,6 +349,51 @@ catch(e){return {ready: 'error', href: ''};}})()",
     serde_json::from_str::<DocumentState>(&raw).map_err(|error| format!("eval_shape: {error}"))
 }
 
+fn validate_page_body(body: String) -> Result<String, String> {
+    if body == "__OPENQAREER_PAGE_TOO_LARGE__" || body.chars().count() > MAX_SESSION_PAGE_BODY_CHARS
+    {
+        return Err("page_body_too_large".to_string());
+    }
+    Ok(body)
+}
+
+/// Returns the document currently shown to the candidate without navigating it.
+/// This is the only safe operation while login, MFA or CAPTCHA may be active.
+pub async fn inspect_session_page(
+    app: &AppHandle,
+    platform: &str,
+) -> Result<SessionInspectionReport, String> {
+    let label = session_window_label(platform).ok_or("unsupported_platform")?;
+    let window = app
+        .get_webview(label)
+        .ok_or_else(|| "session_window_missing".to_string())?;
+    let platform_json = serde_json::to_string(platform)
+        .map_err(|error| format!("inspection_platform_shape: {error}"))?;
+    let hh_marker_json = serde_json::to_string(HH_SIGNED_IN_SELECTOR)
+        .map_err(|error| format!("inspection_selector_shape: {error}"))?;
+    let script = format!(
+        "(function(){{try{{\
+const platform={platform_json};\
+const hhMarkerSelector={hh_marker_json};\
+const q=function(selector){{return Boolean(document.querySelector(selector));}};\
+const path=location.pathname;\
+const text=(document.body&&document.body.innerText)||'';\
+const linkedinLogin=path.indexOf('/login')===0||path.indexOf('/uas/login')===0||q('input[name=\"session_password\"],#join-form');\
+const hhLogin=path.indexOf('/account/login')===0||q('[data-qa=\"account-login-page\"]');\
+const login=platform==='linkedin'?linkedinLogin:hhLogin;\
+const otp=q('[data-qa=\"otp-code-input\"],input[name=\"otpCode\"],input[autocomplete=\"one-time-code\"]')||(platform==='linkedin'&&path.indexOf('/checkpoint/challenge')===0);\
+const captcha=q('[data-qa=\"captcha\"],#captcha,.captcha-container')||/(captcha|robot|робот|проверка)/i.test(document.title)||/(подтвердите[^.]{{0,80}}(?:робот|человек)|captcha)/i.test(text.slice(0,2000));\
+const hhMarker=q(hhMarkerSelector)||path==='/applicant/resumes';\
+const linkedinMarker=q('a[href*=\"/logout\"],a[href*=\"/m/logout\"],[data-view-name=\"navigation-profile\"],.global-nav__me-photo,button[aria-label=\"Me\"],button[aria-label=\"Вы\"]');\
+const marker=platform==='linkedin'?linkedinMarker:hhMarker;\
+return {{ready:document.readyState==='complete',url:location.href,signedInApplicant:marker&&!login&&!otp&&!captcha,login:login,otp:otp,captcha:captcha}};\
+}}catch(e){{return {{ready:false,url:'',signedInApplicant:false,login:false,otp:false,captcha:false}};}}}})()"
+    );
+    let raw = eval_json(&window, &script).await?;
+    serde_json::from_str::<SessionInspectionReport>(&raw)
+        .map_err(|error| format!("inspection_shape: {error}"))
+}
+
 /// Reads a page **inside the session the candidate signed in to**. A separate
 /// HTTP client cannot do this: it does not share the webview's cookie jar.
 pub async fn read_session_page(
@@ -297,11 +428,28 @@ pub async fn read_session_page(
 
     let body_json = eval_json(
         &window,
-        "(function(){try{return document.documentElement.outerHTML;}catch(e){return '';}})()",
+        "(function(){try{\
+const source=document.querySelector('main')||document.body||document.documentElement;\
+const root=source.cloneNode(true);\
+root.querySelectorAll('script,style,noscript,iframe,object,embed,input,textarea,select,meta,link').forEach(function(node){node.remove();});\
+root.querySelectorAll('*').forEach(function(node){\
+const qa=node.getAttribute('data-qa');\
+const className=node.getAttribute('class');\
+const href=node.getAttribute('href');\
+Array.from(node.attributes).forEach(function(attribute){node.removeAttribute(attribute.name);});\
+if(qa&&qa.length<=160){node.setAttribute('data-qa',qa);}\
+if(className&&className.length<=500){node.setAttribute('class',className);}\
+if(href){try{const parsed=new URL(href,location.origin);if(/^\\/resume\\/[A-Za-z0-9_-]+$/u.test(parsed.pathname)){node.setAttribute('href',parsed.pathname);}}catch(e){}}\
+});\
+const body=root.outerHTML;\
+return body.length>2000000?'__OPENQAREER_PAGE_TOO_LARGE__':body;\
+}catch(e){return '';}})()",
     )
     .await?;
-    let body = serde_json::from_str::<String>(&body_json)
-        .map_err(|error| format!("body_shape: {error}"))?;
+    let body = validate_page_body(
+        serde_json::from_str::<String>(&body_json)
+            .map_err(|error| format!("body_shape: {error}"))?,
+    )?;
     let final_state = read_document_state(&window).await?;
 
     Ok(SessionPageReport {
@@ -393,5 +541,28 @@ mod tests {
             "https://static.licdn.com/x.js",
             true
         ));
+    }
+
+    #[test]
+    fn rejects_provider_dom_larger_than_the_ipc_boundary() {
+        assert_eq!(
+            validate_page_body("__OPENQAREER_PAGE_TOO_LARGE__".to_string()),
+            Err("page_body_too_large".to_string())
+        );
+        assert_eq!(
+            validate_page_body("x".repeat(MAX_SESSION_PAGE_BODY_CHARS + 1)),
+            Err("page_body_too_large".to_string())
+        );
+        assert_eq!(
+            validate_page_body("profile".to_string()).unwrap(),
+            "profile"
+        );
+    }
+
+    #[test]
+    fn recognises_every_live_hh_applicant_menu_variant() {
+        assert!(HH_SIGNED_IN_SELECTOR.contains("mainmenu_applicantProfile"));
+        assert!(HH_SIGNED_IN_SELECTOR.contains("mainmenu_profileAndResumes"));
+        assert!(HH_SIGNED_IN_SELECTOR.contains("profile-activator"));
     }
 }

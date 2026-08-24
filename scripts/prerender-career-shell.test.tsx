@@ -34,9 +34,10 @@ describe('production career shell prerender', () => {
       'class="career-bootstrap-shell" data-bootstrap-shell="true" inert',
     );
     expect(html).toContain('Карьерная операционная система кандидата');
-    expect(html).toContain('Доказательный профиль');
-    expect(html).toContain('Честная ATS-диагностика');
-    expect(html).toContain('Тарифы');
+    expect(html).toContain('Ранний бесплатный пилот');
+    expect(html).toContain('Профиль по фактам');
+    expect(html).toContain('Один следующий шаг');
+    expect(html).toContain('Условия текущего пилота');
     expect(html).toContain('FAQ');
     expect(html).toContain('application/ld+json');
   });

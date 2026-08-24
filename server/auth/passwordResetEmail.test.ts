@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isAuthPath } from '../../src/App';
 import { buildPasswordResetNotifier } from './passwordResetEmail';
 
 describe('password reset email delivery', () => {
@@ -37,8 +38,12 @@ describe('password reset email delivery', () => {
       subject: 'Сброс пароля — openqareer',
     });
     expect(body.html).toContain('&lt;Алексей &amp; команда&gt;');
-    expect(body.html).toContain(
-      'https://openqareer.com/auth/reset-password?token=oqr_test_token_for_password_reset_12345678901234567890',
+    const link = /href="([^"]+)"/u.exec(body.html);
+    expect(link).not.toBeNull();
+    const resetUrl = new URL(link![1]!.replaceAll('&amp;', '&'));
+    expect(resetUrl.toString()).toBe(
+      'https://openqareer.com/reset-password?token=oqr_test_token_for_password_reset_12345678901234567890',
     );
+    expect(isAuthPath(resetUrl.pathname)).toBe(true);
   });
 });

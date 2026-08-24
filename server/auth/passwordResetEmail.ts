@@ -17,7 +17,7 @@ export function buildPasswordResetNotifier({
   input: PasswordResetDelivery,
 ) => Promise<void> {
   return async (input) => {
-    const resetUrl = new URL('/auth/reset-password', publicBaseUrl);
+    const resetUrl = new URL('/reset-password', publicBaseUrl);
     resetUrl.searchParams.set('token', input.token);
     const greeting = input.displayName
       ? `Здравствуйте, ${escapeHtml(input.displayName)}!`

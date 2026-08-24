@@ -60,6 +60,7 @@ export interface CandidateSnapshot {
 
 export interface CandidateExport extends CandidateSnapshot {
   documentContents: CandidateDocumentWithContent[];
+  sourceConnections: ExportedNativeSourceConnection[];
 }
 
 type CandidateDocumentKind =
@@ -236,6 +237,51 @@ export interface ImportedResumeEvidence {
   readonly memoryIds: readonly string[];
 }
 
+export interface NativeSourceReceiptInput {
+  readonly platform: 'hh' | 'linkedin';
+  readonly accessMode: 'native_session_snapshot';
+  readonly sourceUrl: string;
+  readonly capturedAt: string;
+  readonly importDigest: string;
+}
+
+export interface StoredNativeSourceConnection {
+  readonly id: string;
+  readonly candidateId: string;
+  readonly platform: NativeSourceReceiptInput['platform'];
+  readonly accessMode: NativeSourceReceiptInput['accessMode'];
+  readonly connectedAt: string;
+  readonly lastImportedAt: string;
+  readonly receipt: {
+    readonly sourceUrl: string;
+    readonly capturedAt: string;
+    readonly sourceMessageId: string;
+    readonly memoryIds: readonly string[];
+    readonly factCount: number;
+  };
+}
+
+type ExportedNativeSourceConnection = Pick<
+  StoredNativeSourceConnection,
+  'id' | 'platform' | 'accessMode' | 'connectedAt' | 'lastImportedAt'
+> & {
+  readonly capturedAt: string;
+  readonly factCount: number;
+};
+
+export interface ResumeImportCommit {
+  readonly evidence: ResumeEvidenceImport;
+  readonly draft: ResumeDraft;
+  readonly sourceReceipt?: NativeSourceReceiptInput;
+}
+
+export interface CommittedResumeImport {
+  readonly evidence: ImportedResumeEvidence;
+  readonly resume: StoredResumeDraft;
+  readonly sourceConnection?: StoredNativeSourceConnection;
+  readonly idempotentReplay: boolean;
+}
+
 export interface CandidateStore {
   createCandidate(input: {
     dataClass: CandidateIdentity['dataClass'];
@@ -273,6 +319,20 @@ export interface CandidateStore {
     candidateId: string,
     input: ResumeEvidenceImport,
   ): ImportedResumeEvidence;
+  commitResumeImport(
+    candidateId: string,
+    input: ResumeImportCommit,
+  ): CommittedResumeImport;
+  listNativeSourceConnections(candidateId: string): StoredNativeSourceConnection[];
+  findNativeSourceConnectionByDigest(
+    candidateId: string,
+    platform: NativeSourceReceiptInput['platform'],
+    importDigest: string,
+  ): StoredNativeSourceConnection | null;
+  deleteNativeSourceConnection(
+    candidateId: string,
+    platform: NativeSourceReceiptInput['platform'],
+  ): boolean;
   saveDocument(
     candidateId: string,
     input: CandidateDocumentInput,

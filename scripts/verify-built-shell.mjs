@@ -671,8 +671,15 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: profile import web CTA missing`,
   );
   assert(
-    await page.locator('.career-web-desktop-cta').getByRole('link', { name: 'Скачать OpenQareer Desktop' }).isVisible(),
-    `${viewport.name}: profile import web CTA link missing`,
+    await page
+      .locator('.career-web-desktop-cta')
+      .getByText('Публичной загрузки приложения пока нет', { exact: false })
+      .isVisible(),
+    `${viewport.name}: profile import web CTA hides the manual install boundary`,
+  );
+  assert(
+    (await page.locator('.career-web-desktop-cta').getByRole('link').count()) === 0,
+    `${viewport.name}: profile import web CTA advertises a public download`,
   );
 
   if (viewport.name === 'mobile') {

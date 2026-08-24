@@ -40,6 +40,15 @@ interface DesktopSessionPageReport {
   readonly body: string;
 }
 
+interface DesktopSessionInspectionReport {
+  readonly ready: boolean;
+  readonly url: string;
+  readonly signedInApplicant: boolean;
+  readonly login: boolean;
+  readonly otp: boolean;
+  readonly captcha: boolean;
+}
+
 /**
  * Opens the platform's own sign-in window. The candidate authenticates on the
  * platform, in their own session — credentials never pass through OpenQareer,
@@ -84,6 +93,20 @@ export async function openConnectorSession(
 export async function closeConnectorSession(platform: ConnectionPlatform): Promise<void> {
   if (!isTauriEnvironment()) return;
   await invokeDesktopCommand<boolean>('close_connector_session', { platform });
+}
+
+export async function hideConnectorSession(platform: ConnectionPlatform): Promise<boolean> {
+  if (!isTauriEnvironment()) return false;
+  return (
+    (await invokeDesktopCommand<boolean>('hide_connector_session', { platform })) === true
+  );
+}
+
+export async function resetConnectorSession(platform: ConnectionPlatform): Promise<boolean> {
+  if (!isTauriEnvironment()) return false;
+  return (
+    (await invokeDesktopCommand<boolean>('reset_connector_session', { platform })) === true
+  );
 }
 
 export async function resizeConnectorSession(
@@ -186,6 +209,46 @@ export interface SessionPageResult {
   readonly ok: boolean;
   readonly body?: string;
   readonly url?: string;
+}
+
+export interface SessionInspectionResult {
+  readonly ready: boolean;
+  readonly url: string;
+  readonly signedInApplicant: boolean;
+  readonly login: boolean;
+  readonly otp: boolean;
+  readonly captcha: boolean;
+}
+
+/**
+ * Inspects the page the candidate is currently using without changing its URL.
+ * Login, MFA and CAPTCHA forms must stay entirely under the candidate's control.
+ */
+export async function inspectSessionPage(
+  platform: ConnectionPlatform,
+): Promise<SessionInspectionResult> {
+  if (!isTauriEnvironment()) {
+    return {
+      ready: false,
+      url: '',
+      signedInApplicant: false,
+      login: false,
+      otp: false,
+      captcha: false,
+    };
+  }
+  const report = await invokeDesktopCommand<DesktopSessionInspectionReport>(
+    'inspect_connector_session_page',
+    { platform },
+  );
+  return report ?? {
+    ready: false,
+    url: '',
+    signedInApplicant: false,
+    login: false,
+    otp: false,
+    captcha: false,
+  };
 }
 
 /**

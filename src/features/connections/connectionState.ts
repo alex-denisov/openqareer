@@ -9,6 +9,23 @@ export function connectionDisconnectNotice(
   result: DisconnectedConnection,
 ): string {
   const label = PLATFORM_LABELS[result.platform];
+  if (result.accessMode === 'native_session_snapshot') {
+    if (!result.connectionRemoved) {
+      return `Не удалось отключить ${label}. Сохранённый снимок подключения не изменён; повторите позже.`;
+    }
+    const retained =
+      'Импортированные данные остаются в вашем профиле; удалить их можно отдельно в разделе данных.';
+    if (result.oauthCleanup?.upstreamRevocation === 'failed') {
+      return `${label} отключён в OpenQareer, но площадка не подтвердила отзыв прежнего OAuth-доступа. Проверьте доступы в ${label}. ${retained}`;
+    }
+    if (
+      result.oauthCleanup?.localDataRemoved &&
+      result.oauthCleanup.upstreamRevocation === 'unsupported'
+    ) {
+      return `${label} отключён; прежние локальные OAuth-токены удалены. Автоматический отзыв на площадке не поддерживается — проверьте доступы в ${label}. ${retained}`;
+    }
+    return `${label} отключён. OpenQareer сессию ${label} не хранит. ${retained}`;
+  }
   if (!result.localDataRemoved) {
     return `Не удалось удалить локальные данные ${label}. Подключение не изменено; повторите позже.`;
   }
@@ -25,7 +42,11 @@ export function applyConnectionDisconnectResult(
   connections: CandidateConnection[],
   result: DisconnectedConnection,
 ): CandidateConnection[] {
-  if (!result.localDataRemoved) return connections;
+  const removed =
+    result.accessMode === 'native_session_snapshot'
+      ? result.connectionRemoved
+      : result.localDataRemoved;
+  if (!removed) return connections;
   return connections.map((connection) =>
     connection.platform === result.platform
       ? {

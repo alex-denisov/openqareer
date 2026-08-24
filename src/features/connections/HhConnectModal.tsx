@@ -1,35 +1,33 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowSquareOut, CheckCircle, SpinnerGap, WarningCircle } from '@phosphor-icons/react';
 import { isTauriEnvironment, probeNetworkStatus } from '../../services/desktop/desktopBridge';
-import { parseHhResumeHtml, parseHhResumesList } from '../../services/connectors/hhResumeParser';
 import type { ParsedResume } from '../workspace/resumeParser';
 import { ImportModalShell } from './ImportModalShell';
 import { PlatformLogo } from './PlatformLogo';
 import {
-  looksLikeHhLoginPage,
   closeConnectorSession,
-  looksLikeHhVpnBlock,
+  hideConnectorSession,
+  inspectSessionPage,
   openConnectorSession,
   platformRouteNotice,
   readSessionPage,
+  resetConnectorSession,
   resizeConnectorSession,
-  sessionCheckFailure,
   sessionOpenFailureMessage,
   type ConnectorSessionStep,
 } from './connectorSession';
 import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
+import {
+  createHhSessionImportFlow,
+  type HhSessionImportFlow,
+  type HhResumeItem,
+} from './hhSessionPoll';
 
-const SESSION_POLL_INTERVAL_MS = 4000;
+export type { HhResumeItem } from './hhSessionPoll';
 
-const HH_RESUME_LIST_URL = 'https://hh.ru/applicant/resumes';
+const SESSION_POLL_INTERVAL_MS = 750;
+
 const HH_LOGIN_URL = 'https://hh.ru/account/login';
-
-export interface HhResumeItem {
-  id: string;
-  title: string;
-  url: string;
-  updatedLabel?: string;
-}
 
 export interface HhConnectModalProps {
   readonly isOpen: boolean;
@@ -38,24 +36,42 @@ export interface HhConnectModalProps {
     resumes: HhResumeItem[],
     defaultParsed?: ParsedResume,
     rawUrl?: string,
-  ) => void;
+  ) => void | Promise<void>;
+  readonly onAuthenticatedEmpty: () => void;
+  readonly onConnectionFailure: (message: string) => void;
   readonly initialUrl?: string;
 }
 
 // One component, one JSX tree: splitting further would scatter the markup.
 // eslint-disable-next-line max-lines-per-function
-export function HhConnectModal({ isOpen, onClose, onConnectSuccess }: HhConnectModalProps) {
+export function HhConnectModal({
+  isOpen,
+  onClose,
+  onConnectSuccess,
+  onAuthenticatedEmpty,
+  onConnectionFailure,
+}: HhConnectModalProps) {
   const [step, setStep] = useState<ConnectorSessionStep>('idle');
   const [error, setError] = useState<string>();
   const [probe, setProbe] = useState<{ accessible: boolean }>();
+  const [emptyAccount, setEmptyAccount] = useState(false);
+  const [autoPollPaused, setAutoPollPaused] = useState(false);
   const webviewHost = useRef<HTMLDivElement>(null);
+  const sessionFlow = useRef<HhSessionImportFlow>();
+  const backgroundCapture = useRef(false);
 
   function closeModal() {
+    sessionFlow.current = undefined;
     void closeConnectorSession('hh');
     onClose();
   }
 
-  useEffect(() => () => void closeConnectorSession('hh'), []);
+  useEffect(
+    () => () => {
+      if (!backgroundCapture.current) void closeConnectorSession('hh');
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!isOpen || !isTauriEnvironment() || step === 'idle' || step === 'opening') return;
@@ -71,6 +87,10 @@ export function HhConnectModal({ isOpen, onClose, onConnectSuccess }: HhConnectM
     setStep('idle');
     setError(undefined);
     setProbe(undefined);
+    setEmptyAccount(false);
+    setAutoPollPaused(false);
+    backgroundCapture.current = false;
+    sessionFlow.current = undefined;
     void probeNetworkStatus()
       .then((status) => setProbe(status.hh))
       .catch(() => setProbe({ accessible: false }));
@@ -95,6 +115,43 @@ export function HhConnectModal({ isOpen, onClose, onConnectSuccess }: HhConnectM
     }
   }
 
+  function getSessionFlow(): HhSessionImportFlow {
+    if (sessionFlow.current) return sessionFlow.current;
+    sessionFlow.current = createHhSessionImportFlow({
+      inspectCurrentPage: () => inspectSessionPage('hh'),
+      readSessionPage: (url) => readSessionPage('hh', url),
+      onAuthenticated: async () => {
+        backgroundCapture.current = true;
+        const hidden = await hideConnectorSession('hh').catch(() => false);
+        if (!hidden) {
+          backgroundCapture.current = false;
+          throw new Error('hh_session_hide_failed');
+        }
+        onClose();
+      },
+      onProviderDataCaptured: async (result) => {
+        if (result.status !== 'ready' || result.defaultParsed) {
+          await closeConnectorSession('hh');
+          backgroundCapture.current = false;
+        }
+      },
+      onReady: (result) =>
+        onConnectSuccess(result.resumes, result.defaultParsed, result.rawUrl),
+      onAuthenticatedEmpty: () => {
+        setEmptyAccount(true);
+        onAuthenticatedEmpty();
+      },
+    });
+    return sessionFlow.current;
+  }
+
+  async function resetSession() {
+    sessionFlow.current = undefined;
+    backgroundCapture.current = false;
+    await resetConnectorSession('hh').catch(() => false);
+    onClose();
+  }
+
   /**
    * Once the candidate signs in, the product reacts on its own: the poll picks
    * up the resume list inside the live session window and imports it without
@@ -102,73 +159,63 @@ export function HhConnectModal({ isOpen, onClose, onConnectSuccess }: HhConnectM
    * button stays for the cases the quiet poll cannot name.
    */
   useEffect(() => {
-    if (!isOpen || step !== 'session_open' || !isTauriEnvironment()) return;
+    if (
+      !isOpen ||
+      step !== 'session_open' ||
+      emptyAccount ||
+      autoPollPaused ||
+      !isTauriEnvironment()
+    ) return;
     let cancelled = false;
-    const timer = setInterval(() => {
+    const run = () => {
       void (async () => {
         try {
           if (cancelled) return;
-          const page = await readSessionPage('hh', HH_RESUME_LIST_URL);
-          if (!page.body || cancelled) return;
-          if (looksLikeHhVpnBlock(page.body) || looksLikeHhLoginPage(page.body)) return;
-          const resumes = parseHhResumesList(page.body);
-          if (resumes.length > 0 && !cancelled) {
-            onConnectSuccess(resumes, await readFirstResume(resumes[0].url), resumes[0].url);
-            closeModal();
-          }
+          await getSessionFlow().run();
         } catch {
-          // Quiet by design: the manual check reports failures honestly.
+          await closeConnectorSession('hh').catch(() => undefined);
+          backgroundCapture.current = false;
+          onConnectionFailure(
+            'Вход в hh.ru выполнен, но получить данные профиля не удалось. Повторите подключение или загрузите PDF.',
+          );
         }
       })();
-    }, SESSION_POLL_INTERVAL_MS);
+    };
+    run();
+    const timer = setInterval(run, SESSION_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, step]);
+  }, [isOpen, step, emptyAccount, autoPollPaused]);
 
   async function checkSession() {
+    setAutoPollPaused(false);
     setStep('checking');
     setError(undefined);
     try {
       if (isTauriEnvironment()) {
-        const page = await readSessionPage('hh', HH_RESUME_LIST_URL);
-        if (page.body) {
-          if (looksLikeHhVpnBlock(page.body)) {
-            setError(
-              'hh.ru закрывает доступ при включённом VPN. Отключите VPN для hh.ru или загрузите резюме PDF-файлом.',
-            );
-            setStep('session_open');
-            return;
-          }
-          if (looksLikeHhLoginPage(page.body)) {
-            setError(
-              'Вход на hh.ru ещё не завершён. Войдите в открывшемся окне и повторите проверку.',
-            );
-            setStep('session_open');
-            return;
-          }
-          const resumes = parseHhResumesList(page.body);
-          if (resumes.length > 0) {
-            onConnectSuccess(resumes, await readFirstResume(resumes[0].url), resumes[0].url);
-            closeModal();
-            return;
-          }
+        const result = await getSessionFlow().run();
+        if (result.status !== 'waiting_for_sign_in') {
+          return;
         }
       }
       setError(
         'Активную сессию hh.ru найти не удалось. Войдите в аккаунт соискателя в окне hh.ru или загрузите PDF резюме.',
       );
       setStep('session_open');
-    } catch (reason) {
-      const failure = sessionCheckFailure('hh', reason);
-      setError(failure.message);
-      setStep(failure.step);
+    } catch {
+      setAutoPollPaused(true);
+      setError(
+        'Данные hh.ru прочитаны, но OpenQareer не подтвердил сохранение. Повторите подключение или загрузите PDF.',
+      );
+      setStep('session_open');
     }
   }
 
   const route = platformRouteNotice('hh', probe);
+  const sessionActive = step !== 'idle' && step !== 'opening';
 
   return (
     <ImportModalShell
@@ -177,22 +224,52 @@ export function HhConnectModal({ isOpen, onClose, onConnectSuccess }: HhConnectM
       titleId="hh-modal-title"
       title="Подключение hh.ru"
       icon={<PlatformLogo platform="hh" size={26} />}
-      wide={isTauriEnvironment() && step !== 'idle' && step !== 'opening'}
+      wide={isTauriEnvironment() && sessionActive}
     >
-      <div className="career-modal-body">
-        <p className="career-modal-network-status">
-          {route.tone === 'ok' ? (
-            <CheckCircle size={18} weight="fill" />
-          ) : route.tone === 'blocked' ? (
-            <WarningCircle size={18} weight="fill" />
-          ) : null}
-          <span>{route.text}</span>
-        </p>
-
-        <p className="career-modal-intro">
-          Подключение читает список ваших резюме через вашу собственную сессию соискателя. Мы ничего
-          не публикуем и не откликаемся от вашего имени.
-        </p>
+      <div className={`career-modal-body${sessionActive ? ' is-connector-session' : ''}`}>
+        {sessionActive ? (
+          <div className="career-connector-session-toolbar">
+            <p className="career-modal-network-status is-compact">
+              {route.tone === 'ok' ? (
+                <CheckCircle size={16} weight="fill" />
+              ) : route.tone === 'blocked' ? (
+                <WarningCircle size={16} weight="fill" />
+              ) : null}
+              <span>{route.text}</span>
+            </p>
+            <div className="career-connector-session-actions">
+              <button
+                type="button"
+                className="career-quiet-button career-connector-check"
+                onClick={() => void resetSession()}
+              >
+                Выйти из сессии
+              </button>
+              <button
+                type="button"
+                className="career-primary-button career-connector-check"
+                onClick={() => void checkSession()}
+                disabled={step === 'checking'}
+              >
+                {step === 'checking' ? 'Проверяем…' : 'Подтвердить вход'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="career-modal-network-status">
+              {route.tone === 'ok' ? (
+                <CheckCircle size={18} weight="fill" />
+              ) : route.tone === 'blocked' ? (
+                <WarningCircle size={18} weight="fill" />
+              ) : null}
+              <span>{route.text}</span>
+            </p>
+            <p className="career-modal-intro">
+              Войдите в hh.ru. После входа OpenQareer сам загрузит резюме и закроет окно.
+            </p>
+          </>
+        )}
 
         {step === 'idle' || step === 'opening' ? (
           <button
@@ -213,21 +290,7 @@ export function HhConnectModal({ isOpen, onClose, onConnectSuccess }: HhConnectM
               </>
             )}
           </button>
-        ) : (
-          <div className="career-modal-steps">
-            <strong>
-              <PlatformLogo platform="hh" size={20} />
-              Окно сессии hh.ru открыто
-            </strong>
-            <ol>
-              <li>Войдите в аккаунт соискателя в открывшемся окне.</li>
-              <li>
-                Как только вход завершится, резюме подхватятся сами — или
-                нажмите «Проверить сессию».
-              </li>
-            </ol>
-          </div>
-        )}
+        ) : null}
 
         {isTauriEnvironment() && step !== 'idle' && step !== 'opening' ? (
           <div
@@ -245,43 +308,13 @@ export function HhConnectModal({ isOpen, onClose, onConnectSuccess }: HhConnectM
         ) : null}
       </div>
 
-      <div className="career-modal-footer">
-        <button
-          type="button"
-          className="career-quiet-button"
-          onClick={closeModal}
-          disabled={step === 'checking'}
-        >
-          Отмена
-        </button>
-        {step === 'idle' || step === 'opening' ? null : (
-          <button
-            type="button"
-            className="career-primary-button"
-            onClick={() => void checkSession()}
-            disabled={step === 'checking'}
-          >
-            {step === 'checking' ? (
-              <>
-                <SpinnerGap size={18} className="spin" />
-                <span>Проверяем сессию…</span>
-              </>
-            ) : (
-              <span>Проверить сессию и загрузить резюме</span>
-            )}
+      {sessionActive ? null : (
+        <div className="career-modal-footer is-compact">
+          <button type="button" className="career-quiet-button" onClick={closeModal}>
+            Отмена
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </ImportModalShell>
   );
-}
-
-async function readFirstResume(url: string): Promise<ParsedResume | undefined> {
-  try {
-    const page = await readSessionPage('hh', url);
-    return page.body ? parseHhResumeHtml(page.body, url) : undefined;
-  } catch {
-    // The list alone is already useful; the candidate picks a resume next.
-    return undefined;
-  }
 }

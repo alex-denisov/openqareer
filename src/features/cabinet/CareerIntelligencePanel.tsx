@@ -3,12 +3,9 @@ import {
   ArrowClockwise,
   ArrowRight,
   Briefcase,
-  CheckCircle,
   Pause,
   Play,
   Plus,
-  Sparkle,
-  Target,
   Trash,
 } from '@phosphor-icons/react';
 import {
@@ -25,26 +22,6 @@ import {
   type VacancySourceRegistryEntry,
 } from '../coach/coachApi';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
-import {
-  getInitialAutoBumperState,
-  triggerInstantBump,
-  toggleAutoBumper,
-  type AutoBumperState,
-} from '../../services/autoBumper';
-import type { CandidateApplication } from '../../services/applicationCrm';
-import {
-  analyzeJobFit,
-  type VacancyTarget,
-} from '../../services/jobFitAnalyzer';
-import {
-  diagnoseSkillGaps,
-  generateXyzBulletRecommendation,
-} from '../../services/skillGapDiagnoser';
-import type { ResumeDraft } from '../resume/resumeTypes';
-import { HhSkillQuizSimulator } from '../skills/HhSkillQuizSimulator';
-import { JobFitScreeningSection } from './JobFitScreeningSection';
-import { AutoBumperSection } from './AutoBumperSection';
-import { CrmFunnelSection } from './CrmFunnelSection';
 
 interface CareerIntelligencePanelProps {
   snapshot?: CandidateSnapshot;
@@ -78,26 +55,6 @@ export function CareerIntelligencePanel({
   const [sources, setSources] = useState<VacancySourceRegistryEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [bumperState, setBumperState] = useState<AutoBumperState>(getInitialAutoBumperState);
-  const [showQuizModal, setShowQuizModal] = useState(false);
-  const [earnedBadges, setEarnedBadges] = useState<string[]>([]);
-  const [applications] = useState<CandidateApplication[]>([
-    {
-      id: 'app-hh-1',
-      vacancyId: 'hh-101',
-      vacancyTitle: query || 'Senior / Lead Software Engineer',
-      company: 'Технологическая компания',
-      platform: 'hh',
-      sourceUrl: 'https://hh.ru/vacancy/101',
-      status: 'viewed',
-      createdAt: new Date(Date.now() - 3600 * 1000 * 4).toISOString(),
-      updatedAt: new Date(Date.now() - 3600 * 1000 * 2).toISOString(),
-      history: [
-        { status: 'sent', timestamp: new Date(Date.now() - 3600 * 1000 * 4).toISOString() },
-        { status: 'viewed', timestamp: new Date(Date.now() - 3600 * 1000 * 2).toISOString(), note: 'Резюме просмотрено работодателем' },
-      ],
-    },
-  ]);
 
   useEffect(() => {
     if (!query && defaultQuery) setQuery(defaultQuery);
@@ -213,72 +170,6 @@ export function CareerIntelligencePanel({
     view?.subscription.id === activeSubscription?.id ? view : undefined;
   const activeSource = (sources ?? []).find((item) => item.id === activeSubscription?.source);
   const selectedSource = (sources ?? []).find((item) => item.id === source);
-
-  const candidateDraft = useMemo<ResumeDraft>(() => {
-    const targetRole = query || journey?.roles[0]?.title || 'Senior Software Engineer / Tech Lead';
-    return {
-      candidate: {
-        fullName: snapshot?.candidate.id || 'Кандидат OpenQareer',
-        about: 'Опытный технический специалист с подтвержденным опытом реализации масштабных сервисов и управления архитектурой.',
-        contact: {
-          location: 'Россия / Remote',
-          links: [],
-        },
-      },
-      targetRole,
-      experience: [
-        {
-          id: 'exp-primary',
-          chronologyMemoryId: 'mem-1',
-          title: targetRole,
-          employer: 'Tech Enterprise',
-          current: true,
-          startDate: '2022-01',
-          bulletMemoryIds: [],
-        },
-      ],
-      skills: [
-        { id: 's-1', name: 'TypeScript' },
-        { id: 's-2', name: 'React' },
-        { id: 's-3', name: 'Node.js' },
-        { id: 's-4', name: 'System Architecture' },
-        { id: 's-5', name: 'Team Leadership' },
-      ],
-      education: [],
-      languages: [{ id: 'l-1', evidenceMemoryId: 'mem-l-1', name: 'Русский' }],
-    };
-  }, [journey?.roles, query, snapshot?.candidate.id]);
-
-  const vacancyTarget = useMemo<VacancyTarget>(() => {
-    const title = activeSubscription?.query || query || 'Senior Software Engineer / Tech Lead';
-    return {
-      id: activeSubscription?.id || 'vac-active',
-      title,
-      company: activeSource?.name || 'ИТ Компания',
-      description: `Позиция ${title}. Требуются навыки TypeScript, Node.js, React, системная архитектура, опыт в Agile и менторинге.`,
-      requiredSkills: ['TypeScript', 'Node.js', 'React', 'Team Leadership', 'PostgreSQL'],
-      seniority: 'Senior / Lead',
-      domain: 'Fintech / Tech',
-    };
-  }, [activeSource?.name, activeSubscription?.id, activeSubscription?.query, query]);
-
-  const jobFitResult = useMemo(
-    () => analyzeJobFit(candidateDraft, vacancyTarget),
-    [candidateDraft, vacancyTarget],
-  );
-
-  const skillGaps = useMemo(
-    () => diagnoseSkillGaps(candidateDraft, vacancyTarget.title),
-    [candidateDraft, vacancyTarget.title],
-  );
-
-  const xyzBullet = useMemo(
-    () =>
-      generateXyzBulletRecommendation(
-        `Отвечал за разработку ключевых сервисов и повышение надежности платформы на позиции ${vacancyTarget.title}`,
-      ),
-    [vacancyTarget.title],
-  );
 
   return (
     <aside
@@ -458,79 +349,7 @@ export function CareerIntelligencePanel({
         )}
       </section>
 
-      <JobFitScreeningSection
-        jobFitResult={jobFitResult}
-        skillGaps={skillGaps}
-        xyzBullet={xyzBullet}
-      />
-
-      <AutoBumperSection
-        bumperState={bumperState}
-        onInstantBump={() => setBumperState(triggerInstantBump(bumperState))}
-        onToggle={() => setBumperState(toggleAutoBumper(bumperState))}
-      />
-
-      <CrmFunnelSection applications={applications} />
-
-      <section className="career-market-watch" aria-labelledby="career-quizzes-title">
-        <header>
-          <div>
-            <span>Верификация навыков (hh.ru)</span>
-            <h3 id="career-quizzes-title">Подтверждение ключевых навыков</h3>
-          </div>
-          <Sparkle size={20} weight="fill" style={{ color: '#38bdf8' }} />
-        </header>
-
-        <p style={{ fontSize: '13px', color: 'var(--career-text-dim, #9ca3af)', margin: '8px 0 14px' }}>
-          Пройдите симуляцию официальных тестов hh.ru, подтвердите уровень Senior и получите Verified Badge.
-        </p>
-
-        {earnedBadges.length > 0 ? (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
-            {earnedBadges.map((badge, idx) => (
-              <span
-                key={idx}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '4px 10px',
-                  background: 'rgba(34, 197, 94, 0.15)',
-                  border: '1px solid rgba(34, 197, 94, 0.3)',
-                  borderRadius: '16px',
-                  fontSize: '12px',
-                  color: '#22c55e',
-                  fontWeight: 600,
-                }}
-              >
-                <CheckCircle size={14} weight="fill" /> {badge}
-              </span>
-            ))}
-          </div>
-        ) : null}
-
-        <button
-          type="button"
-          className="career-primary-button"
-          style={{ width: '100%', justifyContent: 'center', padding: '10px', borderRadius: '8px', fontSize: '14px' }}
-          onClick={() => setShowQuizModal(true)}
-        >
-          <Target size={18} weight="bold" /> Начать верификацию навыков hh.ru
-        </button>
-      </section>
-
       <NextAction journey={journey} onNavigate={onNavigate} />
-
-      {showQuizModal ? (
-        <HhSkillQuizSimulator
-          onClose={() => setShowQuizModal(false)}
-          onBadgeEarned={(badgeTitle) => {
-            if (!earnedBadges.includes(badgeTitle)) {
-              setEarnedBadges((prev) => [...prev, badgeTitle]);
-            }
-          }}
-        />
-      ) : null}
 
       {loading && !snapshot ? <p className="career-cabinet-loading">Обновляем рынок…</p> : null}
       {error ? (

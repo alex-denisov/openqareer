@@ -31,13 +31,47 @@ export async function saveResumeStudioDraft(
 
 export type ResumeImportSource = 'pdf' | 'linkedin' | 'hh' | 'text';
 
+export interface NativeSourceReceipt {
+  readonly platform: 'hh' | 'linkedin';
+  readonly accessMode: 'native_session_snapshot';
+  readonly sourceUrl: string;
+  readonly capturedAt: string;
+}
+
+export interface NativeSourceConnection {
+  readonly platform: NativeSourceReceipt['platform'];
+  readonly available: true;
+  readonly status: 'connected';
+  readonly accessMode: 'native_session_snapshot';
+  readonly capabilities: ['resume_read'];
+  readonly importsCareerHistory: true;
+  readonly connectedAt: string;
+  readonly lastImportedAt: string;
+  readonly factCount: number;
+}
+
 export interface ResumeImportResult {
   readonly parsed: ParsedResume;
   readonly resume: ResumeStudioView;
   /** `model` when the provider structured the document, `rules` on the fallback. */
   readonly structuredBy: 'model' | 'rules';
   readonly factCount: number;
+  readonly connection?: NativeSourceConnection;
 }
+
+type ResumeImportInput = {
+  readonly text: string;
+  readonly fileName?: string;
+} & (
+  | {
+      readonly source: 'hh' | 'linkedin';
+      readonly sourceReceipt?: NativeSourceReceipt;
+    }
+  | {
+      readonly source: Exclude<ResumeImportSource, 'hh' | 'linkedin'>;
+      readonly sourceReceipt?: never;
+    }
+);
 
 /**
  * Hands one extracted document to the server, which reads it, records what it
@@ -45,11 +79,7 @@ export interface ResumeImportResult {
  * those facts. Doing all three server-side is what makes an import visible in
  * Resume Studio instead of silently dropped (B148).
  */
-export async function importCandidateResume(input: {
-  text: string;
-  source: ResumeImportSource;
-  fileName?: string;
-}): Promise<ResumeImportResult> {
+export async function importCandidateResume(input: ResumeImportInput): Promise<ResumeImportResult> {
   const response = await apiFetch('/api/v1/candidate/resume/import', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -57,6 +87,7 @@ export async function importCandidateResume(input: {
       text: input.text,
       source: input.source,
       ...(input.fileName ? { fileName: input.fileName } : {}),
+      ...(input.sourceReceipt ? { sourceReceipt: input.sourceReceipt } : {}),
     }),
   });
   return readData<ResumeImportResult>(response);

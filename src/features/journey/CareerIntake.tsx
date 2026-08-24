@@ -10,13 +10,14 @@ import {
   Target,
   type Icon,
 } from '@phosphor-icons/react';
-import { getConnections, importProfileUrl } from '../coach/coachApi';
+import { getConnections } from '../coach/coachApi';
 import type { HhResumeItem } from '../connections/ProfileImportModals';
+import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import {
-  desktopNativeFetch,
-  isTauriEnvironment,
-} from '../../services/desktop/desktopBridge';
-import { parseHhResumeHtml } from '../../services/connectors/hhResumeParser';
+  closeConnectorSession,
+  readSessionPage,
+} from '../connections/connectorSession';
+import { readHhResumeFromSession } from '../connections/hhSessionPoll';
 import { parseResumeContent, type ParsedResume } from '../workspace/resumeParser';
 import {
   validateWorkspaceInput,
@@ -100,14 +101,16 @@ export function CareerIntake({
   onStartedChange,
   initialStarted = false,
   initialStep = 'intent',
-  initialSourceChoice = 'profile-import',
+  initialSourceChoice,
 }: CareerIntakeProps) {
   const isDesktop = isTauriEnvironment();
   const ingestion = useResumeIngestion(hasAccount);
   const [started, setStarted] = useState(initialStarted);
   const [step, setStep] = useState<IntakeStep>(initialStep);
   const [goal, setGoal] = useState<CareerGoal>();
-  const [sourceChoice, setSourceChoice] = useState<SourceChoice>(initialSourceChoice);
+  const [sourceChoice, setSourceChoice] = useState<SourceChoice>(
+    () => initialSourceChoice ?? (isDesktop ? 'profile-import' : 'pdf'),
+  );
   const [typedResume, setTypedResume] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [hhUrl, setHhUrl] = useState('');
@@ -123,7 +126,8 @@ export function CareerIntake({
 
   const ingested = ingestion.result;
   const isSourceLocked = Boolean(
-    ingested && (ingested.source === 'hh-pdf' || ingested.source === 'linkedin-pdf'),
+    ingested?.imported &&
+      (ingested.source === 'hh-pdf' || ingested.source === 'linkedin-pdf'),
   );
 
   /**
@@ -148,9 +152,14 @@ export function CareerIntake({
           (item) =>
             (item.platform === 'hh' || item.platform === 'linkedin') &&
             item.status === 'connected' &&
+            item.accessMode !== 'native_session_snapshot' &&
             item.profile.facts.length > 0,
         );
-        if (!live || live.status !== 'connected') return;
+        if (
+          !live ||
+          live.status !== 'connected' ||
+          live.accessMode === 'native_session_snapshot'
+        ) return;
         const parsed = parseResumeContent(
           live.profile.facts.map((fact) => fact.value).join('\n'),
         );
@@ -189,6 +198,10 @@ export function CareerIntake({
     if (next !== 'profile-import') {
       setLinkedinUrl('');
       setHhUrl('');
+      setLinkedinModalOpen(false);
+      setHhModalOpen(false);
+      void closeConnectorSession('linkedin');
+      void closeConnectorSession('hh');
     }
     ingestion.clear();
   }
@@ -208,7 +221,20 @@ export function CareerIntake({
         return;
       }
       setHhUrl(selected.url);
-      await ingestion.acceptParsed(parsed, 'hh-pdf');
+      const stored = await ingestion.acceptParsed(parsed, 'hh-pdf', {
+        platform: 'hh',
+        accessMode: 'native_session_snapshot',
+        sourceUrl: selected.url,
+        capturedAt: new Date().toISOString(),
+      });
+      if (!stored.imported || !stored.connection) {
+        setError(
+          'Резюме прочитано, но сервер не подтвердил сохранение. Повторите импорт или загрузите PDF.',
+        );
+        return;
+      }
+      setHhConnected(true);
+      await closeConnectorSession('hh');
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -319,17 +345,40 @@ export function CareerIntake({
           hhOpen={isHhModalOpen}
           onLinkedinOpen={setLinkedinModalOpen}
           onHhOpen={setHhModalOpen}
-          onLinkedinImported={(parsed, url) => {
+          onLinkedinImported={async (parsed, url) => {
             setLinkedinUrl(url);
+            const stored = await ingestion.acceptParsed(parsed, 'linkedin-pdf', {
+              platform: 'linkedin',
+              accessMode: 'native_session_snapshot',
+              sourceUrl: url,
+              capturedAt: new Date().toISOString(),
+            });
+            if (!stored.imported || !stored.connection) {
+              throw new Error('linkedin_native_connection_not_persisted');
+            }
             setLinkedinConnected(true);
-            void ingestion.acceptParsed(parsed, 'linkedin-pdf');
           }}
-          onHhConnected={(resumes, parsed, url) => {
+          onProviderConnectionFailure={setError}
+          onHhConnected={async (resumes, parsed, url) => {
             setHhResumes(resumes);
             setHhConnected(true);
             if (resumes.length > 0) setSelectedHhResumeId(resumes[0].id);
             if (url) setHhUrl(url);
-            if (parsed) void ingestion.acceptParsed(parsed, 'hh-pdf');
+            if (!parsed || !url) return;
+            const stored = await ingestion.acceptParsed(parsed, 'hh-pdf', {
+              platform: 'hh',
+              accessMode: 'native_session_snapshot',
+              sourceUrl: url,
+              capturedAt: new Date().toISOString(),
+            });
+            if (!stored.imported || !stored.connection) {
+              throw new Error('hh_native_connection_not_persisted');
+            }
+          }}
+          onHhAuthenticatedEmpty={() => {
+            setHhResumes([]);
+            setSelectedHhResumeId('');
+            setHhConnected(true);
           }}
           hhResumes={hhResumes}
           selectedHhResumeId={selectedHhResumeId}
@@ -438,7 +487,7 @@ function IntakeStartScreen({ onStart }: { onStart: () => void }) {
         </div>
       </div>
 
-      <div className="career-start-benefit">
+      <div className="career-start-note">
         <Sparkle size={20} weight="fill" />
         <div>
           <strong>Можно начать без документов</strong>
@@ -533,17 +582,8 @@ function buildWorkspaceInput(state: {
 }
 
 async function readHhResume(url: string): Promise<ParsedResume | undefined> {
-  if (isTauriEnvironment()) {
-    const native = await desktopNativeFetch({
-      url,
-      method: 'GET',
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-    });
-    if (native?.body) return parseHhResumeHtml(native.body, url);
-  }
-  const result = await importProfileUrl(url);
-  return result.status === 'imported' ? result.parsedResume : undefined;
+  if (!isTauriEnvironment()) return undefined;
+  return readHhResumeFromSession(url, (selectedUrl) =>
+    readSessionPage('hh', selectedUrl),
+  );
 }

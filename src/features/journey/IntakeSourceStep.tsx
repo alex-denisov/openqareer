@@ -34,12 +34,17 @@ export interface IntakeSourceStepProps {
   readonly hhOpen: boolean;
   readonly onLinkedinOpen: (open: boolean) => void;
   readonly onHhOpen: (open: boolean) => void;
-  readonly onLinkedinImported: (parsed: ParsedResume, url: string) => void;
+  readonly onLinkedinImported: (
+    parsed: ParsedResume,
+    url: string,
+  ) => void | Promise<void>;
+  readonly onProviderConnectionFailure: (message: string) => void;
   readonly onHhConnected: (
     resumes: HhResumeItem[],
     parsed?: ParsedResume,
     url?: string,
-  ) => void;
+  ) => void | Promise<void>;
+  readonly onHhAuthenticatedEmpty: () => void;
   readonly hhResumes: readonly HhResumeItem[];
   readonly selectedHhResumeId: string;
   readonly onSelectHhResume: (id: string) => void;
@@ -131,7 +136,7 @@ function PdfSource({ ingested, busy, locked, onPickPdf, notice }: IntakeSourceSt
             ? 'Разбор занимает до минуты: читаем структуру, а не ключевые слова.'
             : ingested?.file
               ? `${ingested.file.pages} стр.`
-              : 'PDF до 20 МБ · разбор идёт на нашем сервере, файл не хранится'}
+              : 'PDF до 20 МБ · файл читается в браузере; в профиль отправляется извлечённый текст, исходный файл не сохраняется'}
         </small>
       </div>
       {ingested ? <ImportSummary ingested={ingested} notice={notice} /> : null}
@@ -149,16 +154,26 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
       </div>
     );
   }
-  const linkedinReady =
-    props.linkedinConnected || props.ingested?.source === 'linkedin-pdf';
-  const hhReady = props.hhConnected || props.ingested?.source === 'hh-pdf';
+  const linkedinReady = Boolean(
+    props.linkedinConnected &&
+      props.ingested?.source === 'linkedin-pdf' &&
+      props.ingested.imported &&
+      props.ingested.connection,
+  );
+  // Finding a signed-in account/list is not the same outcome as importing one
+  // selected resume into the candidate profile.
+  const hhReady = Boolean(
+    props.ingested?.source === 'hh-pdf' &&
+      props.ingested.imported &&
+      props.ingested.connection,
+  );
   return (
     <div className="career-source-fields">
       <div className="career-platform-cards">
         <PlatformCard
           platform="linkedin"
           name="LinkedIn"
-          description="Импорт структуры опыта, ключевых навыков и образования в Resume Studio."
+          description="Импорт опыта и навыков из вашего собственного профиля."
           connected={linkedinReady}
           disabled={props.locked && !linkedinReady}
           onConnect={() => props.onLinkedinOpen(true)}
@@ -190,16 +205,14 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
                 </option>
               ))}
             </select>
-            {hhReady ? null : (
-              <button
-                type="button"
-                className="career-primary-button"
-                onClick={props.onImportHhResume}
-                disabled={props.busy}
-              >
-                {props.busy ? 'Импортируем…' : 'Импортировать'}
-              </button>
-            )}
+            <button
+              type="button"
+              className="career-primary-button"
+              onClick={props.onImportHhResume}
+              disabled={props.locked || props.busy}
+            >
+              {props.busy ? 'Импортируем…' : 'Импортировать выбранное резюме'}
+            </button>
           </div>
         </div>
       ) : props.hhConnected ? (
@@ -217,11 +230,14 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
         isOpen={props.linkedinOpen}
         onClose={() => props.onLinkedinOpen(false)}
         onImportSuccess={props.onLinkedinImported}
+        onConnectionFailure={props.onProviderConnectionFailure}
       />
       <HhConnectModal
         isOpen={props.hhOpen}
         onClose={() => props.onHhOpen(false)}
         onConnectSuccess={props.onHhConnected}
+        onAuthenticatedEmpty={props.onHhAuthenticatedEmpty}
+        onConnectionFailure={props.onProviderConnectionFailure}
       />
     </div>
   );
@@ -233,6 +249,7 @@ function PlatformCard({
   description,
   connected,
   disabled,
+  actionLabel,
   onConnect,
 }: {
   platform: 'linkedin' | 'hh';
@@ -240,6 +257,7 @@ function PlatformCard({
   description: string;
   connected: boolean;
   disabled: boolean;
+  actionLabel?: string;
   onConnect: () => void;
 }) {
   return (
@@ -262,7 +280,7 @@ function PlatformCard({
         disabled={disabled}
         onClick={onConnect}
       >
-        {connected ? 'Изменить' : 'Подключить'}
+        {actionLabel ?? (connected ? 'Изменить' : 'Подключить')}
       </button>
     </div>
   );

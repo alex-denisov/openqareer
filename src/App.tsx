@@ -382,7 +382,7 @@ export default function App() {
   );
 }
 
-function isAuthPath(path: string): boolean {
+export function isAuthPath(path: string): boolean {
   return path === '/login' || path === '/signup' || path === '/reset-password';
 }
 

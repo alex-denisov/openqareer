@@ -90,6 +90,19 @@ describe('CareerCabinet composition', () => {
     expect(renderCabinet('opportunities')).toContain('Рынок и следующие шаги');
   });
 
+  it('does not fabricate candidate or provider outcomes when server data is absent', () => {
+    const html = renderCabinet('opportunities');
+
+    expect(html).toContain('Настройте направление');
+    expect(html).toContain('Роль или поисковый запрос');
+    expect(html).not.toContain('Индекс соответствия');
+    expect(html).not.toContain('Авто-поднятие резюме');
+    expect(html).not.toContain('откликов отправлено');
+    expect(html).not.toContain('Verified Badge');
+    expect(html).not.toContain('Tech Enterprise');
+    expect(html).not.toContain('Технологическая компания');
+  });
+
   it('never claims data is current, because that claim can never be false', () => {
     for (const view of ['today', 'profile', 'career', 'opportunities'] as const) {
       expect(renderCabinet(view)).not.toContain('Данные актуальны');

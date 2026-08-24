@@ -1,6 +1,12 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { LoginPage, SignupPage, ResetPasswordPage } from './AuthPages';
+import {
+  LoginPage,
+  SignupPage,
+  ResetPasswordPage,
+  ResetForm,
+  requestPublicPasswordReset,
+} from './AuthPages';
 
 describe('AuthPages', () => {
   it('renders LoginPage with email/password fields and navigation links', () => {
@@ -45,5 +51,56 @@ describe('AuthPages', () => {
     expect(html).toContain('name="email"');
     expect(html).toContain('autoComplete="email"');
     expect(html).toContain('Отправить ссылку для сброса');
+  });
+
+  it('programmatically associates a reset failure with the email field', () => {
+    const html = renderToStaticMarkup(
+      <ResetForm
+        onResult={() => undefined}
+        onEdit={() => undefined}
+        errorMessage="Не удалось запросить восстановление доступа."
+      />,
+    );
+
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain('aria-describedby="reset-email-error"');
+    expect(html).toContain('id="reset-email-error"');
+    expect(html).toContain('role="alert"');
+  });
+
+  it('reports an accepted reset request without revealing whether the account exists', async () => {
+    const requestReset = vi.fn().mockResolvedValue(true);
+
+    const result = await requestPublicPasswordReset(' candidate@example.com ', requestReset);
+
+    expect(requestReset).toHaveBeenCalledWith('candidate@example.com');
+    expect(result).toEqual({
+      status: 'delivery-configured',
+      message:
+        'Если аккаунт существует, письмо со ссылкой отправлено на указанный email.',
+    });
+  });
+
+  it('states plainly when password-reset email delivery is not configured', async () => {
+    const requestReset = vi.fn().mockResolvedValue(false);
+
+    const result = await requestPublicPasswordReset('candidate@example.com', requestReset);
+
+    expect(result).toEqual({
+      status: 'delivery-unconfigured',
+      message:
+        'Отправка писем пока не подключена. Доступ не изменён; восстановление станет доступно после настройки почтового домена.',
+    });
+  });
+
+  it('returns an actionable error instead of treating a failed request as sent', async () => {
+    const requestReset = vi.fn().mockRejectedValue(new Error('socket closed'));
+
+    const result = await requestPublicPasswordReset('candidate@example.com', requestReset);
+
+    expect(result).toEqual({
+      status: 'error',
+      message: 'Не удалось запросить восстановление доступа. Попробуйте ещё раз.',
+    });
   });
 });

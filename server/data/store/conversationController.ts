@@ -224,51 +224,75 @@ export class ConversationController {
     candidateId: string,
     input: ResumeEvidenceImport,
   ): ImportedResumeEvidence {
+    return this.inTransaction(() =>
+      this.importResumeEvidenceInTransaction(candidateId, input),
+    );
+  }
+
+  importResumeEvidenceInTransaction(
+    candidateId: string,
+    input: ResumeEvidenceImport,
+  ): ImportedResumeEvidence {
     const conversationId = this.conversationId(candidateId);
     const messageId = randomUUID();
     const now = new Date().toISOString();
     const memoryIds: string[] = [];
-    this.inTransaction(() => {
-      this.insertMessage(
-        candidateId,
-        conversationId,
-        messageId,
-        'user',
-        input.sourceLabel,
-        now,
-      );
-      for (const entry of input.entries) {
-        // An import is replayable: re-importing the same document must refresh
-        // the fact, never leave two copies of it in the dossier.
-        this.database
-          .prepare('DELETE FROM memory WHERE id = ? AND candidate_id = ?')
-          .run(entry.memoryId, candidateId);
-        this.database
-          .prepare(
-            `INSERT INTO memory
-              (id, candidate_id, conversation_id, kind, domain, statement_cipher,
-               confidence, source_message_ids, sensitive, status,
-               created_at, updated_at)
-             VALUES (?, ?, ?, 'fact', ?, ?, 'candidate-reported', ?, 0, 'confirmed', ?, ?)`,
-          )
-          .run(
-            entry.memoryId,
-            candidateId,
-            conversationId,
-            entry.domain,
-            this.sealedText.seal(
-              entry.statement,
-              memoryAssociatedData(candidateId, entry.memoryId),
-            ),
-            JSON.stringify([messageId]),
-            now,
-            now,
-          );
-        memoryIds.push(entry.memoryId);
-      }
-      this.touchConversation(conversationId, now);
-    });
+    this.insertMessage(
+      candidateId,
+      conversationId,
+      messageId,
+      'user',
+      input.sourceLabel,
+      now,
+    );
+    for (const entry of input.entries) {
+      // An import is replayable: re-importing the same document must refresh
+      // the fact, never leave two copies of it in the dossier.
+      this.database
+        .prepare('DELETE FROM memory WHERE id = ? AND candidate_id = ?')
+        .run(entry.memoryId, candidateId);
+      this.database
+        .prepare(
+          `INSERT INTO memory
+            (id, candidate_id, conversation_id, kind, domain, statement_cipher,
+             confidence, source_message_ids, sensitive, status,
+             created_at, updated_at)
+           VALUES (?, ?, ?, 'fact', ?, ?, 'candidate-reported', ?, 0, 'confirmed', ?, ?)`,
+        )
+        .run(
+          entry.memoryId,
+          candidateId,
+          conversationId,
+          entry.domain,
+          this.sealedText.seal(
+            entry.statement,
+            memoryAssociatedData(candidateId, entry.memoryId),
+          ),
+          JSON.stringify([messageId]),
+          now,
+          now,
+        );
+      memoryIds.push(entry.memoryId);
+    }
+    this.touchConversation(conversationId, now);
     return { messageId, memoryIds };
+  }
+
+  /** Removes only unchanged confirmed facts whose sole source was the replaced snapshot. */
+  purgeReplacedImportedFacts(
+    candidateId: string,
+    sourceMessageId: string,
+    memoryIds: readonly string[],
+  ): void {
+    const soleSource = JSON.stringify([sourceMessageId]);
+    const statement = this.database.prepare(
+      `DELETE FROM memory
+       WHERE candidate_id = ? AND id = ? AND status = 'confirmed'
+         AND source_message_ids = ?`,
+    );
+    for (const memoryId of memoryIds) {
+      statement.run(candidateId, memoryId, soleSource);
+    }
   }
 
   changeMemory(

@@ -113,7 +113,285 @@ function importBody(text = LINKEDIN_MARKDOWN) {
   return { text, source: 'linkedin' as const, fileName: 'linkedin.pdf' };
 }
 
+function nativeHhImportBody(text = LINKEDIN_MARKDOWN) {
+  return {
+    text,
+    source: 'hh' as const,
+    sourceReceipt: {
+      platform: 'hh' as const,
+      accessMode: 'native_session_snapshot' as const,
+      sourceUrl: 'https://hh.ru/resume/synthetic-resume-731',
+      capturedAt: '2026-08-23T12:00:00.000Z',
+    },
+  };
+}
+
+function nativeLinkedInImportBody(text = LINKEDIN_MARKDOWN) {
+  return {
+    text,
+    source: 'linkedin' as const,
+    sourceReceipt: {
+      platform: 'linkedin' as const,
+      accessMode: 'native_session_snapshot' as const,
+      sourceUrl: 'https://www.linkedin.com/in/synthetic-candidate-731/',
+      capturedAt: '2026-08-24T12:00:00.000Z',
+    },
+  };
+}
+
 describe('POST /api/v1/candidate/resume/import', () => {
+  it('commits a native hh snapshot and exposes a reload-visible non-OAuth connection', async () => {
+    const { app, authorization } = await createApp();
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: nativeHhImportBody(),
+    });
+
+    expect(imported.statusCode).toBe(200);
+    expect(imported.json().data.connection).toMatchObject({
+      platform: 'hh',
+      status: 'connected',
+      accessMode: 'native_session_snapshot',
+      factCount: expect.any(Number),
+    });
+
+    const connections = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/connections',
+      headers: { authorization },
+    });
+    const hh = connections
+      .json()
+      .data.find((connection: { platform: string }) => connection.platform === 'hh');
+    expect(hh).toMatchObject({
+      platform: 'hh',
+      status: 'connected',
+      accessMode: 'native_session_snapshot',
+      factCount: expect.any(Number),
+    });
+    expect(hh).not.toHaveProperty('scopes');
+    expect(hh).not.toHaveProperty('accessTokenExpiresAt');
+    expect(hh).not.toHaveProperty('profile');
+  });
+
+  it('commits a bounded native LinkedIn profile with the same persisted receipt contract', async () => {
+    const { app, authorization } = await createApp();
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: nativeLinkedInImportBody(),
+    });
+
+    expect(imported.statusCode).toBe(200);
+    expect(imported.json().data.connection).toMatchObject({
+      platform: 'linkedin',
+      status: 'connected',
+      accessMode: 'native_session_snapshot',
+      factCount: expect.any(Number),
+    });
+    const connections = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/connections',
+      headers: { authorization },
+    });
+    expect(connections.json().data[0]).toMatchObject({
+      platform: 'linkedin',
+      status: 'connected',
+      accessMode: 'native_session_snapshot',
+    });
+    expect(connections.json().data[0]).not.toHaveProperty('profile');
+    expect(connections.json().data[0]).not.toHaveProperty('scopes');
+  });
+
+  it('deduplicates a retried native hh import and keeps the receipt tenant-scoped', async () => {
+    const { app, store, candidateId, authorization } = await createApp();
+    const body = nativeHhImportBody();
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: body,
+    });
+    const memoryAfterFirst = store.getSnapshot(candidateId).memory.length;
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: body,
+    });
+
+    expect(store.getSnapshot(candidateId).memory).toHaveLength(memoryAfterFirst);
+    const other = store.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+    const foreignConnections = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/connections',
+      headers: { authorization: `Bearer ${other.accessToken}` },
+    });
+    expect(
+      foreignConnections
+        .json()
+        .data.find((connection: { platform: string }) => connection.platform === 'hh'),
+    ).toMatchObject({ platform: 'hh', status: 'disconnected' });
+  });
+
+  it('deduplicates an exact native retry before paying for model structuring again', async () => {
+    let structureCalls = 0;
+    const { app, authorization } = await createApp({
+      async structure() {
+        structureCalls += 1;
+        return null;
+      },
+    });
+    const body = nativeHhImportBody();
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: body,
+    });
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: body,
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(200);
+    expect(structureCalls).toBe(1);
+    expect(replay.json().data.connection).toMatchObject({
+      platform: 'hh',
+      status: 'connected',
+      accessMode: 'native_session_snapshot',
+    });
+  });
+
+  it('disconnects only the native receipt and retains imported candidate data', async () => {
+    const { app, store, candidateId, authorization } = await createApp();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: nativeHhImportBody(),
+    });
+    const before = store.getSnapshot(candidateId);
+
+    const disconnected = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/candidate/connections/hh',
+      headers: { authorization, origin: 'http://localhost:3000' },
+    });
+
+    expect(disconnected.statusCode).toBe(200);
+    expect(disconnected.json().data).toEqual({
+      platform: 'hh',
+      status: 'disconnected',
+      accessMode: 'native_session_snapshot',
+      connectionRemoved: true,
+      providerSession: 'not_managed',
+      importedData: 'retained',
+      oauthCleanup: {
+        localDataRemoved: false,
+        upstreamRevocation: 'unsupported',
+      },
+    });
+    expect(store.getSnapshot(candidateId)).toMatchObject({
+      memory: before.memory,
+      resume: before.resume,
+    });
+    const connections = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/connections',
+      headers: { authorization },
+    });
+    expect(
+      connections
+        .json()
+        .data.find((connection: { platform: string }) => connection.platform === 'hh'),
+    ).toMatchObject({ platform: 'hh', status: 'disconnected' });
+  });
+
+  it('exports safe native receipt metadata without its private storage payload', async () => {
+    const { app, authorization } = await createApp();
+    const body = nativeHhImportBody();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: body,
+    });
+
+    const exported = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/export',
+      headers: { authorization },
+    });
+
+    expect(exported.statusCode).toBe(200);
+    expect(exported.json().data.sourceConnections).toMatchObject([
+      {
+        platform: 'hh',
+        accessMode: 'native_session_snapshot',
+        capturedAt: body.sourceReceipt.capturedAt,
+        factCount: expect.any(Number),
+      },
+    ]);
+    expect(JSON.stringify(exported.json().data.sourceConnections)).not.toContain(
+      body.sourceReceipt.sourceUrl,
+    );
+    expect(exported.json().data.sourceConnections[0]).not.toHaveProperty('receipt');
+    expect(exported.json().data.sourceConnections[0]).not.toHaveProperty('importDigest');
+    expect(exported.json().data.sourceConnections[0]).not.toHaveProperty('receiptCipher');
+  });
+
+  it('accepts ordinary imports without creating a native connection and rejects forged receipts', async () => {
+    const { app, authorization } = await createApp();
+
+    const ordinary = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: { ...importBody(), source: 'hh' },
+    });
+    expect(ordinary.statusCode).toBe(200);
+    expect(ordinary.json().data).not.toHaveProperty('connection');
+
+    const forged = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: {
+        ...nativeHhImportBody(),
+        sourceReceipt: {
+          ...nativeHhImportBody().sourceReceipt,
+          sourceUrl: 'https://attacker.example/resume/731',
+        },
+      },
+    });
+    expect(forged.statusCode).toBe(422);
+
+    const crossPlatform = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: {
+        ...nativeHhImportBody(),
+        sourceReceipt: {
+          ...nativeHhImportBody().sourceReceipt,
+          sourceUrl: 'https://www.linkedin.com/in/wrong-provider/',
+        },
+      },
+    });
+    expect(crossPlatform.statusCode).toBe(422);
+  });
+
   it('puts the imported roles and schools into the projected resume', async () => {
     const { app, authorization } = await createApp();
 

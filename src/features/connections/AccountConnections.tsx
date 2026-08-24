@@ -9,6 +9,14 @@ import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import { PLATFORM_LABELS, type ConnectionPlatform } from './connectionResult';
 import { HhConnectModal } from './HhConnectModal';
 import { LinkedInConnectModal } from './LinkedInConnectModal';
+import type { HhResumeItem } from './HhConnectModal';
+import { closeConnectorSession, readSessionPage } from './connectorSession';
+import { readHhResumeFromSession } from './hhSessionPoll';
+import {
+  importCandidateResume,
+  type ResumeImportResult,
+} from '../resume/resumeApi';
+import type { ParsedResume } from '../workspace/resumeParser';
 import {
   applyConnectionDisconnectResult,
   connectionDisconnectNotice,
@@ -34,6 +42,8 @@ export function AccountConnectionsManager() {
   const [busyPlatform, setBusyPlatform] = useState<ConnectionPlatform>();
   const [notice, setNotice] = useState<string>();
   const [importPlatform, setImportPlatform] = useState<ConnectionPlatform>();
+  const [pendingHhResumes, setPendingHhResumes] = useState<HhResumeItem[]>([]);
+  const [selectedHhResumeId, setSelectedHhResumeId] = useState('');
 
   useEffect(() => {
     let current = true;
@@ -51,12 +61,82 @@ export function AccountConnectionsManager() {
     };
   }, []);
 
-  async function refreshAfterSessionImport(platformLabel: string) {
+  async function handleHhSessionImport(
+    resumes: HhResumeItem[],
+    parsed?: ParsedResume,
+    sourceUrl?: string,
+  ) {
+    if (!parsed || !sourceUrl) {
+      setPendingHhResumes(resumes);
+      setSelectedHhResumeId(resumes[0]?.id ?? '');
+      setNotice('Выберите резюме hh.ru, которое нужно сохранить в профиль.');
+      return;
+    }
+    setBusyPlatform('hh');
+    setNotice(undefined);
     try {
-      setConnections(await getConnections());
-      setNotice(`Профиль ${platformLabel} импортирован в ваш кабинет.`);
-    } catch {
-      // The import itself already succeeded; the list catches up on next load.
+      const persisted = await persistHhSessionImport({
+        parsed,
+        sourceUrl,
+        capturedAt: new Date().toISOString(),
+      });
+      setConnections(persisted.connections);
+      setNotice(
+        `Резюме hh.ru сохранено в профиль: ${persisted.connection.factCount} фактов.`,
+      );
+      setPendingHhResumes([]);
+      setSelectedHhResumeId('');
+    } catch (error) {
+      setNotice(hhSessionImportError(error));
+      throw error;
+    } finally {
+      setBusyPlatform(undefined);
+    }
+  }
+
+  async function importSelectedHhResume() {
+    const selected = pendingHhResumes.find(
+      (resume) => resume.id === selectedHhResumeId,
+    );
+    if (!selected) {
+      setNotice('Выберите резюме hh.ru для импорта.');
+      return;
+    }
+    setBusyPlatform('hh');
+    setNotice(undefined);
+    try {
+      const parsed = await readHhResumeFromSession(selected.url, (url) =>
+        readSessionPage('hh', url),
+      );
+      if (!parsed) throw new Error('hh_resume_not_read');
+      await handleHhSessionImport([selected], parsed, selected.url);
+      await closeConnectorSession('hh');
+    } catch (error) {
+      setNotice(hhSessionImportError(error));
+    } finally {
+      setBusyPlatform(undefined);
+    }
+  }
+
+  async function handleLinkedInSessionImport(parsed: ParsedResume, sourceUrl: string) {
+    setBusyPlatform('linkedin');
+    setNotice(undefined);
+    try {
+      const persisted = await persistNativeSessionImport({
+        platform: 'linkedin',
+        parsed,
+        sourceUrl,
+        capturedAt: new Date().toISOString(),
+      });
+      setConnections(persisted.connections);
+      setNotice(
+        `Профиль LinkedIn сохранён: ${persisted.connection.factCount} фактов.`,
+      );
+    } catch (error) {
+      setNotice(nativeSessionImportError('linkedin', error));
+      throw error;
+    } finally {
+      setBusyPlatform(undefined);
     }
   }
 
@@ -95,18 +175,127 @@ export function AccountConnectionsManager() {
         onDisconnect={(platform) => void handleDisconnect(platform)}
         onSessionImport={setImportPlatform}
       />
+      {pendingHhResumes.length > 0 ? (
+        <section className="career-hh-resumes-selector" aria-labelledby="settings-hh-resume-title">
+          <label id="settings-hh-resume-title" htmlFor="settings-hh-resume-select">
+            Выберите резюме hh.ru для импорта
+          </label>
+          <div className="career-hh-resumes-row">
+            <select
+              id="settings-hh-resume-select"
+              value={selectedHhResumeId}
+              onChange={(event) => setSelectedHhResumeId(event.target.value)}
+            >
+              {pendingHhResumes.map((resume) => (
+                <option key={resume.id} value={resume.id}>{resume.title}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="career-primary-button"
+              disabled={busyPlatform === 'hh'}
+              onClick={() => void importSelectedHhResume()}
+            >
+              {busyPlatform === 'hh' ? 'Импортируем…' : 'Импортировать выбранное резюме'}
+            </button>
+          </div>
+        </section>
+      ) : null}
       <HhConnectModal
         isOpen={importPlatform === 'hh'}
         onClose={() => setImportPlatform(undefined)}
-        onConnectSuccess={() => void refreshAfterSessionImport('hh.ru')}
+        onConnectSuccess={handleHhSessionImport}
+        onAuthenticatedEmpty={() => {
+          setNotice('Вход в hh.ru выполнен, но в аккаунте пока нет резюме.');
+        }}
+        onConnectionFailure={setNotice}
       />
       <LinkedInConnectModal
         isOpen={importPlatform === 'linkedin'}
         onClose={() => setImportPlatform(undefined)}
-        onImportSuccess={() => void refreshAfterSessionImport('LinkedIn')}
+        onImportSuccess={handleLinkedInSessionImport}
+        onConnectionFailure={setNotice}
       />
     </>
   );
+}
+
+interface PersistHhSessionInput {
+  readonly platform?: 'hh';
+  readonly parsed: ParsedResume;
+  readonly sourceUrl: string;
+  readonly capturedAt: string;
+}
+
+interface PersistNativeSessionInput {
+  readonly platform: 'hh' | 'linkedin';
+  readonly parsed: ParsedResume;
+  readonly sourceUrl: string;
+  readonly capturedAt: string;
+}
+
+interface PersistHhSessionDependencies {
+  readonly importResume: typeof importCandidateResume;
+  readonly loadConnections: typeof getConnections;
+}
+
+export async function persistHhSessionImport(
+  input: PersistHhSessionInput,
+  dependencies: PersistHhSessionDependencies = {
+    importResume: importCandidateResume,
+    loadConnections: getConnections,
+  },
+): Promise<{
+  readonly connection: Extract<
+    CandidateConnection,
+    { status: 'connected'; accessMode: 'native_session_snapshot' }
+  >;
+  readonly connections: CandidateConnection[];
+}> {
+  return persistNativeSessionImport({ ...input, platform: 'hh' }, dependencies);
+}
+
+async function persistNativeSessionImport(
+  input: PersistNativeSessionInput,
+  dependencies: PersistHhSessionDependencies = {
+    importResume: importCandidateResume,
+    loadConnections: getConnections,
+  },
+): Promise<{
+  readonly connection: Extract<
+    CandidateConnection,
+    { status: 'connected'; accessMode: 'native_session_snapshot' }
+  >;
+  readonly connections: CandidateConnection[];
+}> {
+  const imported: ResumeImportResult = await dependencies.importResume({
+    text: input.parsed.rawText,
+    source: input.platform,
+    sourceReceipt: {
+      platform: input.platform,
+      accessMode: 'native_session_snapshot',
+      sourceUrl: input.sourceUrl,
+      capturedAt: input.capturedAt,
+    },
+  });
+  if (
+    imported.connection?.status !== 'connected' ||
+    imported.connection.accessMode !== 'native_session_snapshot'
+  ) {
+    throw new Error('native_connection_receipt_missing');
+  }
+  const connections = await dependencies.loadConnections();
+  const connection = connections.find(
+    (candidate): candidate is Extract<
+      CandidateConnection,
+      { status: 'connected'; accessMode: 'native_session_snapshot' }
+    > =>
+      candidate.platform === input.platform &&
+      candidate.status === 'connected' &&
+      candidate.accessMode === 'native_session_snapshot',
+  );
+  if (!connection) throw new Error('native_connection_not_persisted');
+  return { connection, connections };
 }
 
 export function AccountConnections({
@@ -136,7 +325,7 @@ export function AccountConnections({
               </div>
               {connection.status === 'connected' ? (
                 <>
-                  <p>{connectionCopy(connection.platform)}</p>
+                  <p>{connectionCopy(connection)}</p>
                   <button
                     className="career-quiet-button"
                     type="button"
@@ -147,10 +336,7 @@ export function AccountConnections({
                       ? 'Отключаем…'
                       : `Отключить ${label}`}
                   </button>
-                  <small>
-                    Локальные токены и снимок профиля будут удалены. Отзыв доступа
-                    на стороне площадки может потребовать отдельного отзыва.
-                  </small>
+                  <small>{disconnectBoundaryCopy(connection)}</small>
                 </>
               ) : isDesktop ? (
                 <div className="career-connection-panel">
@@ -176,10 +362,23 @@ export function AccountConnections({
   );
 }
 
-function connectionCopy(platform: ConnectionPlatform): string {
-  return platform === 'linkedin'
+function connectionCopy(connection: Extract<CandidateConnection, { status: 'connected' }>): string {
+  if (connection.accessMode === 'native_session_snapshot') {
+    const label = PLATFORM_LABELS[connection.platform];
+    const source = connection.platform === 'hh' ? `резюме ${label}` : `профиля ${label}`;
+    return `Снимок ${source} сохранён: ${connection.factCount} фактов. Сессия ${label} не хранится.`;
+  }
+  return connection.platform === 'linkedin'
     ? 'Профиль прочитан из вашей сессии LinkedIn; карьерная история живёт в Resume Studio.'
     : 'Резюме прочитаны из вашей сессии hh.ru; действий от вашего имени нет.';
+}
+
+function disconnectBoundaryCopy(
+  connection: Extract<CandidateConnection, { status: 'connected' }>,
+): string {
+  return connection.accessMode === 'native_session_snapshot'
+    ? 'Отключится только сохранённый статус площадки. Импортированные данные останутся в профиле.'
+    : 'Локальные токены и снимок профиля будут удалены. Отзыв доступа на стороне площадки может потребовать отдельного отзыва.';
 }
 
 function connectionManagementError(error: unknown): string {
@@ -187,4 +386,24 @@ function connectionManagementError(error: unknown): string {
     return 'Сессия закончилась. Войдите снова, чтобы проверить подключения.';
   }
   return 'Не удалось проверить подключения. Повторите после восстановления соединения.';
+}
+
+function hhSessionImportError(error: unknown): string {
+  if (error instanceof CoachApiError && error.code === 'unauthorized') {
+    return 'Сессия OpenQareer закончилась. Войдите снова и повторите импорт hh.ru.';
+  }
+  if (error instanceof Error && error.message === 'hh_resume_not_read') {
+    return 'Вход в hh.ru выполнен, но выбранное резюме прочитать не удалось. Повторите проверку или загрузите PDF.';
+  }
+  return 'Резюме hh.ru прочитано, но сервер не подтвердил сохранение. Повторите импорт; статус подключения не изменён.';
+}
+
+function nativeSessionImportError(
+  platform: ConnectionPlatform,
+  error: unknown,
+): string {
+  if (error instanceof CoachApiError && error.code === 'unauthorized') {
+    return `Сессия OpenQareer закончилась. Войдите снова и повторите импорт ${PLATFORM_LABELS[platform]}.`;
+  }
+  return `Данные ${PLATFORM_LABELS[platform]} прочитаны, но сервер не подтвердил сохранение. Повторите импорт.`;
 }

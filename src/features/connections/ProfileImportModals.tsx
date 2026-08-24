@@ -5,9 +5,9 @@ import { LockSimple } from '@phosphor-icons/react';
  * combined module had grown past the file-size budget and both dialogs had to
  * be read in full to change one line of either (B148 §11).
  */
-export { LinkedInConnectModal } from './LinkedInConnectModal';
 export { HhConnectModal } from './HhConnectModal';
 export type { HhResumeItem } from './HhConnectModal';
+export { LinkedInConnectModal } from './LinkedInConnectModal';
 
 /** Shown on the web, where a platform session cannot be read from the page. */
 export function WebDesktopCtaCallout() {
@@ -18,22 +18,14 @@ export function WebDesktopCtaCallout() {
       </div>
       <div className="career-web-desktop-content">
         <strong>
-          Импорт профилей LinkedIn и hh.ru доступен в десктопном приложении
+          Импорт LinkedIn и hh.ru доступен только в установленном десктопном приложении
         </strong>
         <p>
-          Для безопасного прямого подключения к hh.ru и защищённого
-          туннелирования LinkedIn без риска блокировок используйте OpenQareer
-          Desktop для macOS и Windows.
+          Публичной загрузки приложения пока нет. Получите установочную сборку и
+          инструкцию у владельца пилота.
         </p>
         <div className="career-web-desktop-actions">
-          <a
-            href="https://openqareer.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="career-primary-button career-web-desktop-link"
-          >
-            Скачать OpenQareer Desktop
-          </a>
+          <span>Если приложение уже установлено, откройте его и выберите «Импорт профиля».</span>
         </div>
       </div>
     </div>

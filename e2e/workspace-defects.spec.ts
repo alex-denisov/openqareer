@@ -172,7 +172,7 @@ test.describe('B140 workspace shell and intake defects', () => {
     ).toBeLessThanOrEqual(2);
   });
 
-  test('the profile import source offers desktop companion CTA in web mode and cards in desktop mode', async ({
+  test('web defaults to PDF and profile import explains the manual desktop install boundary', async ({
     page,
   }) => {
     await stubEmptySession(page);
@@ -183,10 +183,19 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.getByRole('button', { name: /Хочу найти работу/ }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
+    await expect(page.getByRole('button', { name: 'PDF', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.getByText('Выбрать PDF')).toBeVisible();
+    await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();
+
     const fields = page.locator('.career-source-fields');
-    // In web mode, offers desktop companion CTA
     await expect(fields.locator('.career-web-desktop-cta')).toBeVisible();
-    await expect(fields.getByRole('link', { name: 'Скачать OpenQareer Desktop' })).toBeVisible();
+    await expect(
+      fields.getByText('Публичной загрузки приложения пока нет', { exact: false }),
+    ).toBeVisible();
+    await expect(fields.getByRole('link')).toHaveCount(0);
   });
 
   test('the intake never names a button that is not on screen', async ({ page }) => {

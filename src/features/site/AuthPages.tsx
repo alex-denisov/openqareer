@@ -1,6 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { BrandMark } from '../brand/BrandMark';
-import { login, register, CoachApiError, type AuthUser } from '../coach/coachApi';
+import {
+  login,
+  register,
+  requestPasswordReset,
+  CoachApiError,
+  type AuthUser,
+} from '../coach/coachApi';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 
 interface AuthPageProps {
@@ -435,40 +441,147 @@ export function SignupPage({ onNavigate, onSessionChange, nextPath = '/app' }: A
   );
 }
 
-function ResetForm({ onSent }: { onSent: () => void }) {
-  const [email, setEmail] = useState('');
+type PasswordResetRequester = (identifier: string) => Promise<boolean>;
 
-  const handleSubmit = (e: React.FormEvent) => {
+export interface PublicPasswordResetResult {
+  status: 'delivery-configured' | 'delivery-unconfigured' | 'error';
+  message: string;
+}
+
+export async function requestPublicPasswordReset(
+  identifier: string,
+  requestReset: PasswordResetRequester = requestPasswordReset,
+): Promise<PublicPasswordResetResult> {
+  try {
+    const deliveryConfigured = await requestReset(identifier.trim());
+    return deliveryConfigured
+      ? {
+          status: 'delivery-configured',
+          message:
+            'Если аккаунт существует, письмо со ссылкой отправлено на указанный email.',
+        }
+      : {
+          status: 'delivery-unconfigured',
+          message:
+            'Отправка писем пока не подключена. Доступ не изменён; восстановление станет доступно после настройки почтового домена.',
+        };
+  } catch (reason) {
+    return {
+      status: 'error',
+      message:
+        reason instanceof CoachApiError
+          ? reason.message
+          : 'Не удалось запросить восстановление доступа. Попробуйте ещё раз.',
+    };
+  }
+}
+
+function ResetEmailField({
+  value,
+  errorMessage,
+  inputRef,
+  onChange,
+}: {
+  value: string;
+  errorMessage?: string;
+  inputRef: React.RefObject<HTMLInputElement>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="auth-field">
+      <label htmlFor="reset-email">Email аккаунта</label>
+      <input
+        ref={inputRef}
+        id="reset-email"
+        name="email"
+        type="email"
+        autoComplete="email"
+        placeholder="candidate@example.com"
+        value={value}
+        aria-invalid={errorMessage ? true : undefined}
+        aria-describedby={errorMessage ? 'reset-email-error' : undefined}
+        onChange={(event) => onChange(event.target.value)}
+        required
+      />
+    </div>
+  );
+}
+
+export function ResetForm({
+  onResult,
+  onEdit,
+  errorMessage,
+}: {
+  onResult: (result: PublicPasswordResetResult) => void;
+  onEdit: () => void;
+  errorMessage?: string;
+}) {
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (errorMessage) emailRef.current?.focus();
+  }, [errorMessage]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSent();
+    setBusy(true);
+    try {
+      onResult(await requestPublicPasswordReset(email));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <form className="auth-form" method="post" action="#" onSubmit={handleSubmit}>
-      <div className="auth-field">
-        <label htmlFor="reset-email">Email аккаунта</label>
-        <input id="reset-email" name="email" type="email" autoComplete="email" placeholder="candidate@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
-      </div>
-      <button type="submit" className="site-btn is-primary auth-submit-btn">Отправить ссылку для сброса</button>
+      <ResetEmailField
+        value={email}
+        errorMessage={errorMessage}
+        inputRef={emailRef}
+        onChange={(value) => {
+          setEmail(value);
+          if (errorMessage) onEdit();
+        }}
+      />
+      {errorMessage ? (
+        <p id="reset-email-error" className="auth-field-error" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
+      <button type="submit" className="site-btn is-primary auth-submit-btn" disabled={busy}>
+        {busy ? 'Отправляем…' : 'Отправить ссылку для сброса'}
+      </button>
     </form>
   );
 }
 
 export function ResetPasswordPage({ onNavigate }: AuthPageProps) {
-  const [sent, setSent] = useState(false);
+  const [result, setResult] = useState<PublicPasswordResetResult>();
+  const requestCompleted = result && result.status !== 'error';
 
   return (
     <div className="auth-page-container">
       <div className="auth-card">
         <AuthCardHeader
           title="Восстановление доступа"
-          subtitle={sent ? 'Если аккаунт существует, инструкция по сбросу отправлена на указанный email' : 'Укажите email, привязанный к вашему аккаунту'}
+          subtitle="Укажите email, привязанный к вашему аккаунту"
           onNavigate={onNavigate}
         />
-        {!sent ? <ResetForm onSent={() => setSent(true)} /> : (
-          <button type="button" className="site-btn is-secondary auth-submit-btn" onClick={() => onNavigate('/login')}>
-            Вернуться к форме входа
-          </button>
+        {requestCompleted ? (
+          <div className="auth-form">
+            <p className="auth-field-notice" role="status">{result.message}</p>
+            <button type="button" className="site-btn is-secondary auth-submit-btn" onClick={() => onNavigate('/login')}>
+              Вернуться к форме входа
+            </button>
+          </div>
+        ) : (
+          <ResetForm
+            onResult={setResult}
+            onEdit={() => setResult(undefined)}
+            errorMessage={result?.status === 'error' ? result.message : undefined}
+          />
         )}
         <div className="auth-links">
           <button type="button" onClick={() => onNavigate('/login')}>← Назад ко входу</button>

@@ -76,13 +76,13 @@ async function stubSession(page: Page): Promise<void> {
     if (pathname === '/api/v1/candidate/me') {
       return route.fulfill({ json: { data: TEST_SNAPSHOT } });
     }
-    if (pathname === '/api/v1/candidate/account') {
+    if (pathname === '/api/v1/account') {
       return route.fulfill({ json: { data: TEST_ACCOUNT } });
     }
     if (pathname === '/api/v1/candidate/connections') {
       return route.fulfill({ json: { data: [] } });
     }
-    if (pathname === '/api/v1/vacancies/sources') {
+    if (pathname === '/api/v1/candidate/vacancy-sources') {
       return route.fulfill({
         json: {
           data: [
@@ -164,8 +164,8 @@ async function openOpportunities(page: Page): Promise<void> {
   await expect(page.locator('.career-intelligence-panel')).toBeVisible();
 }
 
-test.describe('B145 & B146 Intelligence Panel, Auto-Bumper, Job-Fit and Skill Quizzes', () => {
-  test('candidate can interact with auto-bumper, CRM funnel, and view job-fit screening', async ({
+test.describe('B156 truthful market intelligence boundary', () => {
+  test('candidate sees the source-backed vacancy search without fabricated outcomes', async ({
     page,
   }) => {
     await stubSession(page);
@@ -176,95 +176,39 @@ test.describe('B145 & B146 Intelligence Panel, Auto-Bumper, Job-Fit and Skill Qu
     // recommends the next step.
     await openOpportunities(page);
 
-    // 1. Check Auto-Bumper (B145)
-    const bumperSection = page.getByRole('heading', { name: /Авто-поднятие резюме/ });
-    await expect(bumperSection).toBeVisible();
-    await expect(page.getByText('Активен', { exact: true }).first()).toBeVisible();
+    const marketSearch = page.locator('.career-market-watch').filter({
+      has: page.getByRole('heading', { name: '12 вакансий в выборке' }),
+    });
+    await expect(marketSearch).toBeVisible();
+    await expect(marketSearch.getByText('Senior Software Engineer', { exact: true })).toBeVisible();
+    const vacancy = marketSearch.getByRole('link', { name: /Senior \/ Lead Engineer/ });
+    await expect(vacancy).toBeVisible();
+    await expect(vacancy).toHaveAttribute('href', 'https://hh.ru/vacancy/1');
+    await expect(marketSearch.getByRole('link', { name: 'Источник: hh.ru' })).toBeVisible();
+    await expect(marketSearch.getByRole('button', { name: 'Обновить выборку' })).toBeVisible();
+    await expect(
+      marketSearch.getByRole('button', { name: 'Поставить поиск на паузу' }),
+    ).toBeVisible();
+    await expect(
+      marketSearch.getByRole('button', { name: 'Удалить поисковое направление' }),
+    ).toBeVisible();
 
-    const instantBumpButton = page.getByRole('button', { name: /Поднять сейчас/ });
-    await expect(instantBumpButton).toBeVisible();
-    await instantBumpButton.click();
-    await expect(page.getByText(/Сегодня: 19/)).toBeVisible();
-    await expect(page.getByText(/Статус: Успешно/)).toBeVisible();
+    for (const fabricatedOutcome of [
+      'Авто-поднятие резюме',
+      'Поднять сейчас',
+      'Воронка откликов (CRM)',
+      'Job-Fit & Скрининг вакансии',
+      'Индекс соответствия',
+      'Начать верификацию навыков hh.ru',
+      'Подтвержденный навык TypeScript (hh.ru)',
+    ]) {
+      await expect(page.getByText(fabricatedOutcome, { exact: false })).toHaveCount(0);
+    }
 
-    // 2. Check CRM Funnel (B145)
-    await expect(page.getByText('Воронка откликов (CRM)')).toBeVisible();
-    await expect(page.getByRole('heading', { name: /откликов отправлено/ })).toBeVisible();
-    await expect(page.getByText('Просмотрено', { exact: true })).toBeVisible();
-    await expect(page.getByText('Интервью', { exact: true })).toBeVisible();
-    await expect(page.getByText('Конверсия', { exact: true })).toBeVisible();
-
-    // 3. Check Job-Fit & Skill Gaps Matrix (B146)
-    await expect(page.getByText('Job-Fit & Скрининг вакансии')).toBeVisible();
-    await expect(page.getByRole('heading', { name: /Индекс соответствия/ })).toBeVisible();
-    await expect(page.getByText('Hard Skills')).toBeVisible();
-    await expect(page.getByText('Soft Skills')).toBeVisible();
-    await expect(page.getByText('ATS Скоринг')).toBeVisible();
-    await expect(page.getByText(/Рекомендация Google XYZ:/)).toBeVisible();
-
-    // 4. Accessibility check
     const accessibility = await new AxeBuilder({ page })
       .include('.career-intelligence-panel')
       .analyze();
     const criticalViolations = accessibility.violations.filter((v) => v.impact === 'critical');
     expect(criticalViolations).toEqual([]);
-  });
-
-  test('candidate can launch skill quiz simulator, pass TypeScript quiz and earn verified badge (B146)', async ({
-    page,
-  }) => {
-    await stubSession(page);
-    await seedWorkspace(page);
-    await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await waitForLiveApp(page);
-    await openOpportunities(page);
-
-    // Launch Skill Verification Quiz
-    const launchQuizBtn = page.getByRole('button', {
-      name: 'Начать верификацию навыков hh.ru',
-    });
-    await expect(launchQuizBtn).toBeVisible();
-    await launchQuizBtn.click();
-
-    // Verify Quiz Modal opens
-    const modal = page.getByRole('dialog');
-    await expect(modal).toBeVisible();
-    await expect(modal.getByRole('heading', { name: 'Верификация навыков hh.ru' })).toBeVisible();
-    await expect(modal.getByText('TypeScript')).toBeVisible();
-
-    // Start TypeScript Quiz
-    await modal.getByRole('button', { name: 'Начать тест' }).first().click();
-
-    // Answer Question 1
-    await expect(modal.getByText(/Вопрос 1 из 4/)).toBeVisible();
-    await modal.getByRole('button', { name: /объявить переменную типа/ }).click();
-    await modal.getByRole('button', { name: 'Далее' }).click();
-
-    // Answer Question 2
-    await expect(modal.getByText(/Вопрос 2 из 4/)).toBeVisible();
-    await modal.getByRole('button', { name: /типобезопасным аналогом/ }).click();
-    await modal.getByRole('button', { name: 'Далее' }).click();
-
-    // Answer Question 3
-    await expect(modal.getByText(/Вопрос 3 из 4/)).toBeVisible();
-    await modal.getByRole('button', { name: /Опциональные свойства/ }).click();
-    await modal.getByRole('button', { name: 'Далее' }).click();
-
-    // Answer Question 4 & Complete
-    await expect(modal.getByText(/Вопрос 4 из 4/)).toBeVisible();
-    await modal.getByRole('button', { name: /keyof A \| keyof B/ }).click();
-    await modal.getByRole('button', { name: 'Завершить тест' }).click();
-
-    // Result & Badge Check
-    await expect(modal.getByText('Тест успешно пройден!')).toBeVisible();
-    await expect(modal.getByText('Подтвержденный навык TypeScript (hh.ru)')).toBeVisible();
-    await expect(modal.getByText('Разбор ответов:')).toBeVisible();
-
-    // Complete / Close Modal
-    await modal.getByRole('button', { name: 'Готово' }).click();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-
-    // Assert Badge is displayed in the Career Intelligence Panel
-    await expect(page.getByText('Подтвержденный навык TypeScript (hh.ru)')).toBeVisible();
   });
 });

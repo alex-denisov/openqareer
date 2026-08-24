@@ -91,13 +91,16 @@ test.describe('B141 diagnostic survives registration', () => {
     await reachProfileImportSourceStep(page);
     const fields = page.locator('.career-source-fields');
 
-    // Profile import stays selected and web desktop CTA is shown
+    // Explicit profile import stays selected and names the manual desktop boundary.
     await expect(page.getByRole('button', { name: 'Импорт профиля', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
     await expect(fields.locator('.career-web-desktop-cta')).toBeVisible();
-    await expect(fields.getByRole('link', { name: 'Скачать OpenQareer Desktop' })).toBeVisible();
+    await expect(
+      fields.getByText('Публичной загрузки приложения пока нет', { exact: false }),
+    ).toBeVisible();
+    await expect(fields.getByRole('link')).toHaveCount(0);
   });
 
   test('the profile import option shows platform cards in desktop mode', async ({ page }) => {

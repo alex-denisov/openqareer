@@ -31,7 +31,7 @@ describe('CareerIntake', () => {
     expect(html).toContain('Без аккаунта прогресс хранится только в текущей вкладке.');
   });
 
-  it('selects option 1 "Импорт профиля" by default on step 2', () => {
+  it('selects PDF by default on the web source step', () => {
     const html = renderToStaticMarkup(
       <CareerIntake
         onComplete={() => undefined}
@@ -40,12 +40,14 @@ describe('CareerIntake', () => {
       />,
     );
 
-    // Assert that "Импорт профиля" is rendered and selected by default
     expect(html).toContain('Импорт профиля');
-    expect(html).toContain('is-selected');
-    // In web mode, shows web desktop CTA callout for profile import
-    expect(html).toContain('Импорт профилей LinkedIn и hh.ru доступен в десктопном приложении');
-    expect(html).toContain('Скачать OpenQareer Desktop');
+    expect(html).toContain('career-pdf-source');
+    expect(html).toContain('Выбрать PDF');
+    expect(html).toContain('файл читается в браузере');
+    expect(html).toContain('в профиль отправляется извлечённый текст');
+    expect(html).toContain('исходный файл не сохраняется');
+    expect(html).not.toContain('разбор идёт на нашем сервере');
+    expect(html).not.toContain('career-web-desktop-cta');
   });
 
   it('renders two platform cards for LinkedIn and hh.ru in desktop mode', () => {

@@ -580,3 +580,23 @@ ALTER TABLE users ADD COLUMN subscription_expires_at TEXT;
 ALTER TABLE users ADD COLUMN subscription_notes TEXT;
 `;
 
+export const MIGRATION_19 = `
+CREATE TABLE candidate_source_connections (
+  id TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('hh', 'linkedin')),
+  access_mode TEXT NOT NULL CHECK (access_mode = 'native_session_snapshot'),
+  source_message_id TEXT NOT NULL,
+  receipt_cipher TEXT NOT NULL,
+  import_digest TEXT NOT NULL,
+  connected_at TEXT NOT NULL,
+  last_imported_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (candidate_id, platform),
+  FOREIGN KEY (candidate_id, source_message_id)
+    REFERENCES messages(candidate_id, id) ON DELETE RESTRICT
+) STRICT;
+
+CREATE UNIQUE INDEX candidate_source_connections_import
+  ON candidate_source_connections(candidate_id, platform, import_digest);
+`;

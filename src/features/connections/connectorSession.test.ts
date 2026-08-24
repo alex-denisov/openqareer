@@ -3,9 +3,11 @@ import {
   looksLikeHhLoginPage,
   looksLikeHhVpnBlock,
   looksLikeLinkedInLoginPage,
+  inspectSessionPage,
   openConnectorSession,
   platformRouteNotice,
   readSessionPage,
+  resetConnectorSession,
   sessionCheckFailure,
   sessionOpenFailureMessage,
 } from './connectorSession';
@@ -209,6 +211,50 @@ describe('readSessionPage', () => {
 
     expect(page.ok).toBe(false);
     expect(page.body).toBeUndefined();
+  });
+});
+
+describe('inspectSessionPage', () => {
+  it('reads the current desktop document without supplying a navigation target', async () => {
+    useWindow({
+      __TAURI_INTERNALS__: {
+        invoke: async (cmd: string, args: unknown) => {
+          expect(cmd).toBe('inspect_connector_session_page');
+          expect(args).toEqual({ platform: 'hh' });
+          return {
+            ready: true,
+            url: 'https://hh.ru/account/login?step=otp',
+            signedInApplicant: false,
+            login: true,
+            otp: true,
+            captcha: false,
+          };
+        },
+      },
+    });
+
+    await expect(inspectSessionPage('hh')).resolves.toMatchObject({
+      ready: true,
+      url: 'https://hh.ru/account/login?step=otp',
+      otp: true,
+    });
+    await expect(inspectSessionPage('hh')).resolves.not.toHaveProperty('body');
+  });
+});
+
+describe('resetConnectorSession', () => {
+  it('clears the exact provider runtime session through the desktop boundary', async () => {
+    useWindow({
+      __TAURI_INTERNALS__: {
+        invoke: async (cmd: string, args: unknown) => {
+          expect(cmd).toBe('reset_connector_session');
+          expect(args).toEqual({ platform: 'hh' });
+          return true;
+        },
+      },
+    });
+
+    await expect(resetConnectorSession('hh')).resolves.toBe(true);
   });
 });
 

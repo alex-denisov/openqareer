@@ -42,31 +42,6 @@ export interface AuthUser {
   sessionToken?: string;
 }
 
-import type { ParsedResume } from '../workspace/resumeParser';
-
-export type ProfileUrlImportResult =
-  | {
-      status: 'imported';
-      platform: 'linkedin' | 'hh';
-      sourceUrl: string;
-      capturedAt: string;
-      accessPath: 'official_api' | 'permitted_public_page';
-      facts: Array<{
-        kind: 'headline' | 'summary';
-        value: string;
-        sourceLocator: string;
-        confidence: 'public-metadata';
-      }>;
-      parsedResume?: ParsedResume;
-    }
-  | {
-      status: 'unavailable';
-      platform: 'linkedin' | 'hh';
-      sourceUrl: string;
-      reason: 'authwall' | 'not-public' | 'network' | 'insufficient' | 'official-access-required';
-      nextAction: 'upload_export_or_pdf' | 'oauth_or_export';
-    };
-
 export type CandidateConnection = {
   platform: 'linkedin' | 'hh';
   available: boolean;
@@ -76,6 +51,7 @@ export type CandidateConnection = {
   | { status: 'disconnected' }
   | {
       status: 'connected';
+      accessMode?: never;
       scopes: string[];
       accessTokenExpiresAt: string | null;
       connectedAt: string;
@@ -89,6 +65,16 @@ export type CandidateConnection = {
           confidence: 'official-api';
         }>;
       };
+    }
+  | {
+      status: 'connected';
+      accessMode: 'native_session_snapshot';
+      connectedAt: string;
+      lastImportedAt: string;
+      factCount: number;
+      scopes?: never;
+      accessTokenExpiresAt?: never;
+      profile?: never;
     }
 );
 
@@ -435,26 +421,33 @@ export async function logout(): Promise<void> {
   }
 }
 
-export async function importProfileUrl(url: string): Promise<ProfileUrlImportResult> {
-  const response = await apiFetch('/api/v1/candidate/profile-imports', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
-  });
-  return readDataObject<ProfileUrlImportResult>(response);
-}
-
 export async function getConnections(): Promise<CandidateConnection[]> {
   const response = await apiFetch('/api/v1/candidate/connections');
   return readDataArray<CandidateConnection>(response);
 }
 
-export interface DisconnectedConnection {
+export type DisconnectedConnection = {
   platform: 'linkedin' | 'hh';
   status: 'disconnected';
-  localDataRemoved: boolean;
-  upstreamRevocation: 'revoked' | 'failed' | 'unsupported';
-}
+} & (
+  | {
+      localDataRemoved: boolean;
+      upstreamRevocation: 'revoked' | 'failed' | 'unsupported';
+      accessMode?: never;
+    }
+  | {
+      accessMode: 'native_session_snapshot';
+      connectionRemoved: boolean;
+      providerSession: 'not_managed';
+      importedData: 'retained';
+      oauthCleanup?: {
+        localDataRemoved: boolean;
+        upstreamRevocation: 'revoked' | 'failed' | 'unsupported';
+      };
+      localDataRemoved?: never;
+      upstreamRevocation?: never;
+    }
+);
 
 export async function disconnectConnection(
   platform: 'linkedin' | 'hh',
@@ -708,5 +701,3 @@ export async function getMatchedVacancies(signal?: AbortSignal): Promise<Matched
   }
   return readDataArray<MatchedVacancyItem>(response);
 }
-
-

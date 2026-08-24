@@ -13,6 +13,7 @@ import {
 } from './helpers';
 import { oauthCallbackQuerySchema, profileImportSchema } from './schemas';
 import { OAuthConnectorError } from '../connectors/oauthConnector';
+import { mergeCandidateConnectionViews } from '../connectors/nativeSourceConnection';
 
 async function handleProfileImport(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
@@ -41,7 +42,10 @@ async function handleListConnections(deps: RouteDeps, request: FastifyRequest, r
   );
   if (!candidate) return;
   return {
-    data: deps.oauthService.listConnections(candidate.id),
+    data: mergeCandidateConnectionViews(
+      deps.oauthService.listConnections(candidate.id),
+      deps.candidateStore.listNativeSourceConnections(candidate.id),
+    ),
     meta: { requestId: request.id },
   };
 }
@@ -133,6 +137,30 @@ async function handleDisconnect(deps: RouteDeps, request: FastifyRequest, reply:
   if (!candidate) return;
   const platform = parsePlatform((request.params as { platform: string }).platform);
   if (!platform) return connectorNotFound(request, reply);
+  const nativeConnection = deps.candidateStore
+    .listNativeSourceConnections(candidate.id)
+    .find((connection) => connection.platform === platform);
+  if (nativeConnection) {
+    const oauthCleanup = await deps.oauthService.disconnect(candidate.id, platform);
+    return {
+      data: {
+        platform,
+        status: 'disconnected',
+        accessMode: 'native_session_snapshot',
+        connectionRemoved: deps.candidateStore.deleteNativeSourceConnection(
+          candidate.id,
+          platform,
+        ),
+        providerSession: 'not_managed',
+        importedData: 'retained',
+        oauthCleanup: {
+          localDataRemoved: oauthCleanup.localDataRemoved,
+          upstreamRevocation: oauthCleanup.upstreamRevocation,
+        },
+      },
+      meta: { requestId: request.id },
+    };
+  }
   return {
     data: await deps.oauthService.disconnect(candidate.id, platform),
     meta: { requestId: request.id },

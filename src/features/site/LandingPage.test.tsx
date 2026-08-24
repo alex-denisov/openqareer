@@ -3,21 +3,50 @@ import { describe, expect, it, vi } from 'vitest';
 import { LandingPage } from './LandingPage';
 
 describe('LandingPage', () => {
-  it('renders H1, value proposition, navigation, and key CTAs', () => {
+  it('states the early free H1 pilot without inventing an invite gate', () => {
     const handleNavigate = vi.fn();
     const html = renderToStaticMarkup(<LandingPage onNavigate={handleNavigate} />);
 
     expect(html).toContain('Карьерная операционная система кандидата');
-    expect(html).toContain('Доказательный профиль');
-    expect(html).toContain('Честная ATS-диагностика');
-    expect(html).toContain('Smart Radar');
-    expect(html).toContain('Resume Studio');
-    expect(html).toContain('Экосистема');
-    expect(html).toContain('Тарифы');
+    expect(html).toContain('Ранний бесплатный пилот');
+    expect(html).toContain('Загрузите резюме в PDF');
+    expect(html).toContain('подключите LinkedIn либо hh.ru в десктопном приложении');
+    expect(html).toContain('профиль по фактам');
+    expect(html).toContain('карьерную диагностику');
+    expect(html).toContain('один следующий шаг');
     expect(html).toContain('Часто задаваемые вопросы');
     expect(html).toContain('Войти');
     expect(html).toContain('Начать');
     expect(html).toContain('application/ld+json');
+    for (const unprovenClaim of [
+      'Никаких галлюцинаций',
+      'полная безопасность аккаунтов',
+      'в реальном времени',
+      '10+ источников',
+      'Telegram-канал',
+      'профильные сообщества',
+      'форматах PDF и DOCX',
+      'Подключить тариф',
+      'Пилот по приглашениям',
+      'Закрытый H1-пилот',
+      'приглашённых участников',
+      'Приглашённый пилот',
+    ]) {
+      expect(html).not.toContain(unprovenClaim);
+    }
+  });
+
+  it('publishes the same H1 pilot boundary in structured data and FAQ semantics', () => {
+    const html = renderToStaticMarkup(<LandingPage onNavigate={vi.fn()} />);
+
+    expect(html).toContain('"@type":"SoftwareApplication"');
+    expect(html).toContain('"inLanguage":"ru-RU"');
+    expect(html).toContain('"isAccessibleForFree":true');
+    expect(html).toContain('"description":"Ранний бесплатный пилот');
+    expect(html).toContain('"@type":"FAQPage"');
+    expect(html).toContain('Что я получу после карьерной диагностики?');
+    expect(html).toContain('Как добавить профиль LinkedIn или резюме hh.ru?');
+    expect(html).not.toContain('"offers"');
   });
 
   it('renders "В кабинет" CTA and user badge when candidate session is present', () => {

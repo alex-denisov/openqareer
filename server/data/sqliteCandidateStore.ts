@@ -7,7 +7,10 @@ import type {
   AssessmentResult,
   AssessmentSubmission,
 } from '../domain/assessment';
-import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
+import {
+  buildResumeStudioProjection,
+  type ResumeEvidenceSnapshot,
+} from '../domain/resumeStudio';
 import type { ResumeDraft } from '../domain/resumeDraft';
 import type {
   CandidateCredentials,
@@ -31,6 +34,10 @@ import type {
   CandidateDocumentInput,
   CandidateDocumentWithContent,
   StoredCandidateDocument,
+  ResumeImportCommit,
+  CommittedResumeImport,
+  StoredNativeSourceConnection,
+  NativeSourceReceiptInput,
 } from './candidateStore';
 import type { OAuthPlatform } from '../connectors/oauthTypes';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
@@ -62,6 +69,7 @@ import type { CoachProviderResult } from '../providers/coachProvider';
 import { applyMigrations } from './store/applyMigrations';
 import { ConversationController } from './store/conversationController';
 import { OAuthController } from './store/oauthController';
+import { SourceConnectionController } from './store/sourceConnectionController';
 import {
   CandidateDocumentRetentionError,
   CandidateNotFoundError,
@@ -87,6 +95,7 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly vacancyRepository: SqliteVacancyRepository;
   private readonly conversations: ConversationController;
   private readonly oauth: OAuthController;
+  private readonly sourceConnections: SourceConnectionController;
 
   constructor(options: SqliteStoreOptions) {
     if (options.databasePath !== ':memory:') {
@@ -115,6 +124,10 @@ export class SqliteCandidateStore implements CandidateStore {
       documentRepository: this.documentRepository,
     });
     this.oauth = new OAuthController({
+      database: this.database,
+      sealedText: this.sealedText,
+    });
+    this.sourceConnections = new SourceConnectionController({
       database: this.database,
       sealedText: this.sealedText,
     });
@@ -461,6 +474,96 @@ export class SqliteCandidateStore implements CandidateStore {
     return this.conversations.importResumeEvidence(candidateId, input);
   }
 
+  commitResumeImport(
+    candidateId: string,
+    input: ResumeImportCommit,
+  ): CommittedResumeImport {
+    this.requireCandidate(candidateId);
+    const replay = this.resumeImportReplay(candidateId, input);
+    return replay ?? this.transaction(() => this.commitNewResumeImport(candidateId, input));
+  }
+
+  private resumeImportReplay(
+    candidateId: string,
+    input: ResumeImportCommit,
+  ): CommittedResumeImport | null {
+    if (!input.sourceReceipt) return null;
+    const replay = this.sourceConnections.findByDigest(
+      candidateId,
+      input.sourceReceipt.platform,
+      input.sourceReceipt.importDigest,
+    );
+    if (!replay) return null;
+    const resume = this.resumeRepository.get(candidateId);
+    if (!resume) throw new CandidateStoreConflictError();
+    return {
+      evidence: {
+        messageId: replay.receipt.sourceMessageId,
+        memoryIds: [...replay.receipt.memoryIds],
+      },
+      resume,
+      sourceConnection: replay,
+      idempotentReplay: true,
+    };
+  }
+
+  private commitNewResumeImport(
+    candidateId: string,
+    input: ResumeImportCommit,
+  ): CommittedResumeImport {
+    const replaced = input.sourceReceipt
+      ? this.sourceConnections
+          .list(candidateId)
+          .find((connection) => connection.platform === input.sourceReceipt?.platform)
+      : undefined;
+    const evidence = this.conversations.importResumeEvidenceInTransaction(
+      candidateId,
+      input.evidence,
+    );
+    if (replaced) {
+      this.conversations.purgeReplacedImportedFacts(
+        candidateId,
+        replaced.receipt.sourceMessageId,
+        replaced.receipt.memoryIds,
+      );
+    }
+    const projection = buildResumeStudioProjection({
+      ...input.draft,
+      evidence: this.conversations.snapshotParts(candidateId).memory,
+    });
+    const resume = this.resumeRepository.save(
+      candidateId,
+      input.draft,
+      projection.evidenceSnapshot,
+    );
+    const sourceConnection = input.sourceReceipt
+      ? this.sourceConnections.upsert(candidateId, input.sourceReceipt, evidence)
+      : undefined;
+    return { evidence, resume, sourceConnection, idempotentReplay: false };
+  }
+
+  listNativeSourceConnections(candidateId: string): StoredNativeSourceConnection[] {
+    this.requireCandidate(candidateId);
+    return this.sourceConnections.list(candidateId);
+  }
+
+  findNativeSourceConnectionByDigest(
+    candidateId: string,
+    platform: NativeSourceReceiptInput['platform'],
+    importDigest: string,
+  ): StoredNativeSourceConnection | null {
+    this.requireCandidate(candidateId);
+    return this.sourceConnections.findByDigest(candidateId, platform, importDigest);
+  }
+
+  deleteNativeSourceConnection(
+    candidateId: string,
+    platform: StoredNativeSourceConnection['platform'],
+  ): boolean {
+    this.requireCandidate(candidateId);
+    return this.sourceConnections.delete(candidateId, platform);
+  }
+
   changeMemory(
     candidateId: string,
     memoryId: string,
@@ -473,6 +576,15 @@ export class SqliteCandidateStore implements CandidateStore {
     const snapshot = this.getSnapshot(candidateId);
     return {
       ...snapshot,
+      sourceConnections: this.sourceConnections.list(candidateId).map((connection) => ({
+        id: connection.id,
+        platform: connection.platform,
+        accessMode: connection.accessMode,
+        connectedAt: connection.connectedAt,
+        lastImportedAt: connection.lastImportedAt,
+        capturedAt: connection.receipt.capturedAt,
+        factCount: connection.receipt.factCount,
+      })),
       documentContents: snapshot.documents.flatMap((document) => {
         const stored = this.documentRepository.get(candidateId, document.id);
         return stored ? [stored] : [];

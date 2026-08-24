@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -26,6 +26,7 @@ import {
   CandidateDocumentVersionError,
 } from '../data/sqliteDocumentRepository';
 import type { RouteDeps } from './deps';
+import { nativeSourceConnectionView } from '../connectors/nativeSourceConnection';
 import {
   authenticateCandidate,
   csrfError,
@@ -209,11 +210,15 @@ async function importResumeIntoDossier(
   deps: RouteDeps,
   request: FastifyRequest,
   reply: FastifyReply,
-  body: { text: string; source: 'pdf' | 'linkedin' | 'hh' | 'text'; fileName?: string },
+  body: z.infer<typeof resumeImportSchema>,
 ) {
   const { authService, candidateStore, config } = deps;
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
+  const replay = nativeResumeImportReplay(candidateStore, candidate.id, body);
+  if (replay) {
+    return { data: replay, meta: { requestId: request.id, idempotentReplay: true } };
+  }
   const read = await readResume(body.text, deps.resumeStructurer);
   const plan = planResumeImport(read.resume, {
     idPrefix: `imp${randomUUID().replace(/-/gu, '').slice(0, 10)}`,
@@ -228,27 +233,42 @@ async function importResumeIntoDossier(
       false,
     );
   }
-  candidateStore.importResumeEvidence(candidate.id, {
-    sourceLabel: resumeImportLabel(body.source, body.fileName),
-    entries: plan.evidence.map((item) => ({
-      memoryId: item.memoryId,
-      domain: item.domain,
-      statement: item.statement,
-    })),
-  });
-  const projection = buildResumeStudioProjection({
-    ...plan.draft,
-    evidence: candidateStore.getSnapshot(candidate.id).memory,
-  });
-  candidateStore.saveResumeDraft(candidate.id, plan.draft, projection.evidenceSnapshot);
+  const committed = candidateStore.commitResumeImport(
+    candidate.id,
+    resumeImportCommit(candidate.id, body, plan),
+  );
   return {
     data: {
       parsed: read.resume,
       resume: resumeStudioView(candidateStore, candidate.id),
       structuredBy: read.structuredBy,
-      factCount: plan.evidence.length,
+      factCount: committed.evidence.memoryIds.length,
+      ...(committed.sourceConnection
+        ? { connection: nativeSourceConnectionView(committed.sourceConnection) }
+        : {}),
     },
     meta: { requestId: request.id },
+  };
+}
+
+function nativeResumeImportReplay(
+  candidateStore: CandidateStore,
+  candidateId: string,
+  body: z.infer<typeof resumeImportSchema>,
+) {
+  if (!body.sourceReceipt) return undefined;
+  const replay = candidateStore.findNativeSourceConnectionByDigest(
+    candidateId,
+    body.sourceReceipt.platform,
+    nativeImportDigest(candidateId, body.sourceReceipt, body.text),
+  );
+  if (!replay) return undefined;
+  return {
+    parsed: parseResumeContent(body.text),
+    resume: resumeStudioView(candidateStore, candidateId),
+    structuredBy: 'rules' as const,
+    factCount: replay.receipt.factCount,
+    connection: nativeSourceConnectionView(replay),
   };
 }
 
@@ -260,6 +280,46 @@ function resumeImportLabel(source: 'pdf' | 'linkedin' | 'hh' | 'text', fileName?
     text: 'текст резюме',
   }[source];
   return fileName ? `Импорт: ${origin} «${fileName}»` : `Импорт: ${origin}`;
+}
+
+function resumeImportCommit(
+  candidateId: string,
+  body: z.infer<typeof resumeImportSchema>,
+  plan: ReturnType<typeof planResumeImport>,
+) {
+  return {
+    evidence: {
+      sourceLabel: resumeImportLabel(body.source, body.fileName),
+      entries: plan.evidence.map((item) => ({
+        memoryId: item.memoryId,
+        domain: item.domain,
+        statement: item.statement,
+      })),
+    },
+    draft: plan.draft,
+    sourceReceipt: body.sourceReceipt
+      ? {
+          ...body.sourceReceipt,
+          importDigest: nativeImportDigest(candidateId, body.sourceReceipt, body.text),
+        }
+      : undefined,
+  };
+}
+
+function nativeImportDigest(
+  candidateId: string,
+  receipt: NonNullable<z.infer<typeof resumeImportSchema>['sourceReceipt']>,
+  text: string,
+): string {
+  return createHash('sha256')
+    .update(candidateId)
+    .update('\0')
+    .update(receipt.platform)
+    .update('\0')
+    .update(receipt.sourceUrl)
+    .update('\0')
+    .update(text)
+    .digest('hex');
 }
 
 const handleImportResume: Handler = async (deps, request, reply) => {

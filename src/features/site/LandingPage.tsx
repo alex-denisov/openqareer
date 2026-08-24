@@ -20,6 +20,34 @@ interface LandingPageProps {
   onNavigate: (path: string) => void;
 }
 
+const FAQ_ITEMS = [
+  {
+    question: 'Что я получу после карьерной диагностики?',
+    answer:
+      'Профиль по фактам, рабочую гипотезу целевой роли, видимые пробелы и один следующий шаг с объяснением причины.',
+  },
+  {
+    question: 'Как добавить профиль LinkedIn или резюме hh.ru?',
+    answer:
+      'Прямой импорт LinkedIn и hh.ru работает в десктопном приложении через вашу собственную сессию. На сайте можно загрузить резюме в PDF.',
+  },
+  {
+    question: 'Сколько стоит участие в пилоте?',
+    answer:
+      'Ранний пилот бесплатен. Покупка подписки и автоматизация внешних аккаунтов в продукте не подключены.',
+  },
+  {
+    question: 'OpenQareer гарантирует интервью или оффер?',
+    answer:
+      'Нет. Платформа помогает проверить карьерное решение и подготовить следующий шаг, но не принимает решение за работодателя.',
+  },
+  {
+    question: 'Могу ли я удалить или выгрузить свои данные?',
+    answer:
+      'Да. В настройках аккаунта доступны экспорт данных и удаление аккаунта вместе с сохранёнными данными.',
+  },
+] as const;
+
 const STRUCTURED_DATA = {
   '@context': 'https://schema.org',
   '@graph': [
@@ -29,18 +57,45 @@ const STRUCTURED_DATA = {
       name: 'OpenQareer',
       url: 'https://openqareer.com',
       logo: 'https://openqareer.com/favicon.svg',
-      description: 'Candidate-owned career operating system and intelligence platform.',
+      description:
+        'Карьерная операционная система кандидата: профиль по фактам, диагностика и один следующий шаг.',
     },
     {
       '@type': 'SoftwareApplication',
-      name: 'OpenQareer Career OS',
-      operatingSystem: 'Any',
+      '@id': 'https://openqareer.com/#application',
+      name: 'OpenQareer',
+      url: 'https://openqareer.com',
+      description:
+        'Ранний бесплатный пилот для загрузки резюме, проверки карьерных фактов, диагностики и выбора следующего действия.',
+      operatingSystem: 'Web, desktop companion',
       applicationCategory: 'BusinessApplication',
-      offers: {
-        '@type': 'Offer',
-        price: '0',
-        priceCurrency: 'RUB',
+      inLanguage: 'ru-RU',
+      isAccessibleForFree: true,
+      audience: {
+        '@type': 'Audience',
+        audienceType: 'Кандидаты, которые ищут работу или проверяют карьерное направление',
       },
+      featureList: [
+        'Загрузка резюме в PDF',
+        'Импорт профиля LinkedIn через десктопное приложение',
+        'Импорт резюме hh.ru через десктопное приложение',
+        'Профиль по фактам',
+        'Карьерная диагностика',
+        'Один следующий шаг',
+      ],
+    },
+    {
+      '@type': 'FAQPage',
+      '@id': 'https://openqareer.com/#faq',
+      inLanguage: 'ru-RU',
+      mainEntity: FAQ_ITEMS.map((item) => ({
+        '@type': 'Question',
+        name: item.question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: item.answer,
+        },
+      })),
     },
   ],
 };
@@ -48,91 +103,91 @@ const STRUCTURED_DATA = {
 const PILLARS = [
   {
     icon: ShieldCheck,
-    title: 'Доказательный профиль (Evidence Vault)',
-    desc: 'Факты карьеры с подтверждёнными метриками и артефактами. Никаких шаблонных клише или вымышленных достижений.',
+    title: 'Профиль по фактам',
+    desc: 'Опыт, результаты, навыки и образование из вашего резюме. Каждый импортированный вывод можно проверить.',
   },
   {
     icon: Target,
-    title: 'Честная ATS-диагностика',
-    desc: 'Многофакторный аудит резюме под требования реальных ATS-систем (РФ и International) с подсветкой критических стоп-факторов.',
+    title: 'Карьерная диагностика',
+    desc: 'Показывает, на какие роли уже есть опора в опыте и каких данных пока не хватает для решения.',
   },
   {
     icon: MagnifyingGlass,
-    title: 'Мультиисточниковый Smart Radar',
-    desc: 'Агрегация и умная дедупликация вакансий с hh.ru, Remotive, Telegram-каналов и карьерных хабов в единую умную ленту.',
+    title: 'Проверка роли на рынке',
+    desc: 'Рабочую гипотезу можно сравнить с датированной выборкой вакансий из доступного источника.',
   },
   {
     icon: FileText,
-    title: 'Resume Studio и точечные отклики',
-    desc: 'Генерация резюме и сопроводительных писем под каждую целевую роль на базе исключительно вашего доказанного опыта.',
+    title: 'Один следующий шаг',
+    desc: 'Платформа предлагает одно действие, объясняет его причину и показывает, что изменится после выполнения.',
   },
 ];
 
 const SERVICES = [
   {
     icon: Compass,
-    tag: 'Аудит & Стратегия',
-    title: 'Карьерная диагностика и аудит резюме',
-    desc: 'Глубокий анализ вашего опыта, выявление сильных сторон, скрытых пробелов и оценка рыночной привлекательности профиля.',
-    points: ['ATS-грейдер с объяснением скоринга', 'Анализ пробелов в ключевых навыках', 'Рекомендации по усилению позиционирования'],
+    tag: 'Старт',
+    title: 'Импорт опыта',
+    desc: 'Загрузите резюме в PDF на сайте или подключите LinkedIn либо hh.ru в десктопном приложении.',
+    points: ['Разбор структуры резюме', 'Импорт опыта и образования', 'Видимый результат загрузки'],
   },
   {
     icon: Path,
-    tag: 'Целеполагание',
-    title: 'Карьерная карта и ролевые гипотезы',
-    desc: 'Построение дерева карьерных траекторий, проверка гипотез смежных ролей (Lateral Move, Step-up, Relocation) и оценка требований рынка.',
-    points: ['Оценка реалистичности целевых грейдов', 'Анализ зарплатных вилок и динамики спроса', 'Формирование плана закрытия квалификационных разрывов'],
+    tag: 'Профиль',
+    title: 'Проверка карьерных фактов',
+    desc: 'Просмотрите, подтвердите или исключите выводы, собранные из резюме и диалога.',
+    points: ['Опыт и результаты', 'Навыки и образование', 'Неизвестные данные отмечены отдельно'],
   },
   {
     icon: MagnifyingGlass,
-    tag: 'Сбор вакансий',
-    title: 'Мультиисточниковый радар возможностей',
-    desc: 'Мониторинг рынка труда в реальном времени с автоматической очисткой от дубликатов, компаний-призраков и нерелевантного шума.',
-    points: ['Поиск по hh.ru, Telegram-каналам и Remote-хабам', 'Детектор компаний-призраков (Ghost Detector)', 'Умный расчет Match Score с объяснением каждого балла'],
+    tag: 'Диагностика',
+    title: 'Рабочая гипотеза роли',
+    desc: 'Диагностика связывает целевую роль с подтверждённым опытом и отдельно называет пробелы.',
+    points: ['Основание для роли', 'Ограничения поиска', 'Вопросы, которые меняют решение'],
   },
   {
     icon: FileText,
-    tag: 'Материалы',
-    title: 'Resume Studio & Мастер-профиль',
-    desc: 'Управление единым банком подтвержденных карьерных фактов и сборка точечных вариантов резюме в форматах PDF и DOCX.',
-    points: ['Master Resume с версионированием фактов', 'Генерация вариантов под РФ и Германию/ЕС', 'Умный конструктор сопроводительных писем'],
+    tag: 'Резюме',
+    title: 'Резюме из подтверждённых данных',
+    desc: 'Раздел резюме собирает документ из фактов профиля и показывает, что ещё нужно уточнить.',
+    points: ['Опыт и результаты из профиля', 'Видимые пробелы', 'Факты можно исправить до сохранения'],
   },
   {
     icon: ChartLineUp,
-    tag: 'Сопровождение',
-    title: 'Воронка откликов и трекинг процессов',
-    desc: 'Единый центр управления пайплайном поиска работы: от первого касания до оффера и согласования компенсационного пакета.',
-    points: ['Статусы и напоминания о фоллоу-апах', 'Аналитика конверсии по источникам', 'Подготовка к техническим и поведенческим интервью'],
+    tag: 'Рынок',
+    title: 'Датированная выборка вакансий',
+    desc: 'Сохранённое направление поиска показывает источник, дату наблюдения и найденные вакансии.',
+    points: ['Один поисковый запрос', 'Состояние источника', 'Вакансии с прямыми ссылками'],
   },
   {
     icon: LockKey,
-    tag: 'Безопасность',
-    title: 'Защищённый контур и Zero-Surveillance',
-    desc: 'Ваши данные принадлежат только вам. Локальное шифрование, отсутствие слежки работодателей и защита от спам-блокировок.',
-    points: ['Anti-ban логика при работе с площадками', 'Полный контроль за экспортом и удалением', 'Соответствие стандартам защиты персональных данных'],
+    tag: 'Контроль',
+    title: 'Решение остаётся у кандидата',
+    desc: 'OpenQareer готовит следующий шаг, но не отправляет отклики и сообщения без вашего явного действия.',
+    points: ['Проверка перед внешним действием', 'Экспорт данных из аккаунта', 'Удаление аккаунта и данных'],
   },
 ];
 
 const STEPS = [
   {
     num: '01',
-    title: 'Импорт или аудит опыта',
-    desc: 'Загрузите резюме в PDF или подключите профиль — система выделит доказанные факты, роли и метрики.',
+    title: 'Добавьте резюме',
+    desc: 'Загрузите PDF на сайте или импортируйте LinkedIn либо hh.ru через десктопное приложение.',
   },
   {
     num: '02',
-    title: 'Выбор вектора и роли',
-    desc: 'Определите целевую роль и рынок (РФ, Релокация, Remote) для формирования персональной карьерной карты.',
+    title: 'Проверьте профиль',
+    desc: 'OpenQareer соберёт профиль по фактам. Вы подтвердите данные и увидите, что осталось неизвестным.',
   },
   {
     num: '03',
-    title: 'Умный поиск вакансий',
-    desc: 'Радар агрегирует проверенные вакансии и ранжирует их по степени совпадения с вашим профилем.',
+    title: 'Получите диагностику',
+    desc: 'Диагностика свяжет опыт, целевую роль, рынок и ограничения без обещаний интервью или оффера.',
   },
   {
     num: '04',
-    title: 'Точечные отклики и трекинг',
-    desc: 'Формируйте адаптированные материалы в Resume Studio и ведите прозрачную воронку откликов до оффера.',
+    title: 'Сделайте следующий шаг',
+    desc: 'В кабинете появится один следующий шаг с причиной и ожидаемым изменением.',
   },
 ];
 
@@ -173,10 +228,10 @@ function LandingHeader({ session, onNavigate }: LandingPageProps) {
         <BrandMark variant="lockup" size={28} />
       </a>
       <nav className="site-nav" aria-label="Разделы сайта">
-        <a href="#features">Возможности</a>
-        <a href="#services">Экосистема услуг</a>
+        <a href="#features">Что внутри</a>
+        <a href="#services">Возможности</a>
         <a href="#how-it-works">Как это работает</a>
-        <a href="#tariffs">Тарифы</a>
+        <a href="#tariffs">Условия пилота</a>
         <a href="#faq">FAQ</a>
       </nav>
       <div className="site-header-actions">
@@ -246,15 +301,15 @@ function LandingHero({ session, onNavigate }: LandingPageProps) {
   return (
     <section className="site-hero" aria-labelledby="hero-heading">
       <div className="site-badge">
-        <ShieldCheck size={16} weight="fill" /> Кандидат-центричная карьерная операционная система
+        <ShieldCheck size={16} weight="fill" /> Ранний бесплатный пилот
       </div>
       <h1 id="hero-heading" className="site-hero-title">
         Карьерная операционная система кандидата
       </h1>
       <p className="site-hero-lead">
-        Управляйте карьерой на основе подтверждённых фактов, честной
-        ATS-диагностики резюме, мультиисточникового радара вакансий и умной Resume Studio.
-        Никаких галлюцинаций AI, спам-автооткликов или продажи ваших данных работодателям.
+        Загрузите резюме в PDF или подключите hh.ru в десктопном приложении.
+        OpenQareer соберёт профиль по фактам, проведёт карьерную диагностику и
+        предложит один следующий шаг с объяснением причины.
       </p>
       <div className="site-hero-actions">
         <HeroActionButtons session={session} isAdmin={isAdmin} onNavigate={onNavigate} />
@@ -265,15 +320,15 @@ function LandingHero({ session, onNavigate }: LandingPageProps) {
 
 function LandingGuarantees() {
   return (
-    <section className="site-guarantees" aria-label="Гарантии платформы">
+    <section className="site-guarantees" aria-label="Границы пилота">
       <div className="site-guarantee-pill">
-        <span className="dot" /> Zero-Surveillance: данные не видны работодателям
+        <span className="dot" /> Ранняя версия: регистрация доступна без приглашения
       </div>
       <div className="site-guarantee-pill">
-        <span className="dot" /> Anti-Ban: полная безопасность аккаунтов на hh.ru и LinkedIn
+        <span className="dot" /> Внешние действия — только после вашего подтверждения
       </div>
       <div className="site-guarantee-pill">
-        <span className="dot" /> Explainable AI: каждое заключение обосновано фактами
+        <span className="dot" /> Выводы показывают факты и неизвестные данные
       </div>
     </section>
   );
@@ -283,9 +338,9 @@ function LandingPillars() {
   return (
     <section id="features" className="site-section" aria-labelledby="pillars-heading">
       <header className="site-section-header">
-        <span className="site-section-eyebrow">Архитектура платформы</span>
-        <h2 id="pillars-heading" className="site-section-title">Четыре столпа надежной карьеры</h2>
-        <p className="site-section-lead">Инструменты, которые возвращают кандидату контроль над карьерным треком.</p>
+        <span className="site-section-eyebrow">Результат для кандидата</span>
+        <h2 id="pillars-heading" className="site-section-title">От резюме к следующему действию</h2>
+        <p className="site-section-lead">Четыре части одного проверяемого карьерного решения.</p>
       </header>
       <div className="site-pillars-grid">
         {PILLARS.map((pillar) => {
@@ -307,9 +362,9 @@ function LandingServices() {
   return (
     <section id="services" className="site-section is-services" aria-labelledby="services-heading">
       <header className="site-section-header">
-        <span className="site-section-eyebrow">Комплекс решений</span>
-        <h2 id="services-heading" className="site-section-title">Полная экосистема карьерных сервисов</h2>
-        <p className="site-section-lead">Всё необходимое для аудита, поиска, адаптации материалов и управления развитием.</p>
+        <span className="site-section-eyebrow">Что работает в пилоте</span>
+        <h2 id="services-heading" className="site-section-title">Функции текущей версии</h2>
+        <p className="site-section-lead">Только доступные сейчас действия и результаты.</p>
       </header>
       <div className="site-services-grid">
         {SERVICES.map((srv) => {
@@ -339,9 +394,9 @@ function LandingHowItWorks() {
   return (
     <section id="how-it-works" className="site-section" aria-labelledby="how-heading">
       <header className="site-section-header">
-        <span className="site-section-eyebrow">Методология</span>
+        <span className="site-section-eyebrow">Путь кандидата</span>
         <h2 id="how-heading" className="site-section-title">Как работает OpenQareer</h2>
-        <p className="site-section-lead">Прозрачный путь от хаотичных записей к управляемой карьерной стратегии.</p>
+        <p className="site-section-lead">Каждый этап даёт видимый результат и следующий переход.</p>
       </header>
       <div className="site-steps-grid">
         {STEPS.map((step) => (
@@ -366,16 +421,16 @@ function FreeTariffCard({
   return (
     <article className="site-tariff-card">
       <div className="site-tariff-header">
-        <h3>Самостоятельный</h3>
-        <p className="site-tariff-price">0 ₽ <span>/ навсегда</span></p>
-        <p className="site-tariff-desc">Базовые инструменты для структурирования опыта, аудита и поиска.</p>
+        <h3>Самостоятельный пилот</h3>
+        <p className="site-tariff-price">0 ₽ <span>/ ранний пилот</span></p>
+        <p className="site-tariff-desc">Основной путь кандидата доступен участникам текущего пилота.</p>
       </div>
       <ul className="site-tariff-features">
-        <li><CheckCircle size={18} weight="fill" /> Карьерная диагностика и аудит профиля</li>
-        <li><CheckCircle size={18} weight="fill" /> Доказательный профиль кандидата</li>
-        <li><CheckCircle size={18} weight="fill" /> 1 поисковая подписка на вакансии</li>
-        <li><CheckCircle size={18} weight="fill" /> Базовая проверка соответствия резюме</li>
-        <li><CheckCircle size={18} weight="fill" /> Локальное и защищённое хранилище данных</li>
+        <li><CheckCircle size={18} weight="fill" /> Загрузка резюме в PDF</li>
+        <li><CheckCircle size={18} weight="fill" /> Импорт hh.ru в десктопном приложении</li>
+        <li><CheckCircle size={18} weight="fill" /> Профиль с проверкой фактов</li>
+        <li><CheckCircle size={18} weight="fill" /> Карьерная диагностика</li>
+        <li><CheckCircle size={18} weight="fill" /> Один объяснимый следующий шаг</li>
       </ul>
       <button className="site-btn is-secondary is-full" type="button" onClick={onAction}>
         {buttonLabel}
@@ -393,19 +448,17 @@ function FeaturedTariffCard({
 }) {
   return (
     <article className="site-tariff-card is-featured">
-      <div className="site-tariff-badge">Рекомендуемый</div>
+      <div className="site-tariff-badge">После диагностики</div>
       <div className="site-tariff-header">
         <h3>Сопровождение</h3>
-        <p className="site-tariff-price">4 900 ₽ <span>/ месяц</span></p>
-        <p className="site-tariff-desc">Полный стек аналитики, агрегатор вакансий, Resume Studio и трек развития.</p>
+        <p className="site-tariff-price">Не подключено <span>/ в продукте</span></p>
+        <p className="site-tariff-desc">Ручное сопровождение обсуждается отдельно после проверки основного пути.</p>
       </div>
       <ul className="site-tariff-features">
-        <li><CheckCircle size={18} weight="fill" /> Всё из базового тарифа</li>
-        <li><CheckCircle size={18} weight="fill" /> Безлимитный радар вакансий из 10+ источников</li>
-        <li><CheckCircle size={18} weight="fill" /> Полная ATS-диагностика под РФ и International</li>
-        <li><CheckCircle size={18} weight="fill" /> Resume Studio и адаптивные сопроводительные письма</li>
-        <li><CheckCircle size={18} weight="fill" /> Приоритетный расчёт соответствия и анализ пробелов</li>
-        <li><CheckCircle size={18} weight="fill" /> Персональные рекомендации по прохождению интервью</li>
+        <li><CheckCircle size={18} weight="fill" /> Ручной разбор результатов диагностики</li>
+        <li><CheckCircle size={18} weight="fill" /> Уточнение роли и ограничений поиска</li>
+        <li><CheckCircle size={18} weight="fill" /> Подготовка плана следующего шага</li>
+        <li><CheckCircle size={18} weight="fill" /> Без автоматических действий во внешних аккаунтах</li>
       </ul>
       <button className="site-btn is-primary is-full" type="button" onClick={onAction}>
         {buttonLabel}
@@ -416,15 +469,15 @@ function FeaturedTariffCard({
 
 function LandingTariffs({ session, onNavigate }: LandingPageProps) {
   const targetAction = session ? () => onNavigate('/app') : () => onNavigate('/signup');
-  const primaryButtonLabel = session ? 'Управлять тарифом в кабинете' : 'Подключить тариф';
-  const freeButtonLabel = session ? 'Перейти в кабинет' : 'Начать бесплатно';
+  const primaryButtonLabel = session ? 'Вернуться к диагностике' : 'Сначала пройти диагностику';
+  const freeButtonLabel = session ? 'Перейти в кабинет' : 'Начать пилот';
 
   return (
     <section id="tariffs" className="site-section" aria-labelledby="tariffs-heading">
       <header className="site-section-header">
-        <span className="site-section-eyebrow">Тарифные планы</span>
-        <h2 id="tariffs-heading" className="site-section-title">Тарифы и прозрачные условия</h2>
-        <p className="site-section-lead">Начните бесплатно и выбирайте уровень аналитики и сопровождения под ваши цели.</p>
+        <span className="site-section-eyebrow">Доступ</span>
+        <h2 id="tariffs-heading" className="site-section-title">Условия текущего пилота</h2>
+        <p className="site-section-lead">Ранний пилот бесплатен. Регистрация доступна без приглашения. Покупка подписки в продукте не подключена.</p>
       </header>
       <div className="site-tariffs-grid">
         <FreeTariffCard buttonLabel={freeButtonLabel} onAction={targetAction} />
@@ -442,37 +495,12 @@ function LandingFaq() {
         <h2 id="faq-heading" className="site-section-title">Часто задаваемые вопросы</h2>
       </header>
       <div className="site-faq-list">
-        <details className="site-faq-item" open>
-          <summary>Чем OpenQareer отличается от обычных сервисов и ботов с AI?</summary>
-          <div className="site-faq-answer">
-            OpenQareer строит доказательный профиль только на базе ваших реальных
-            фактов, цифр и артефактов без галлюцинаций. Мы не генерируем бессмысленный
-            спам, не рассылаем автоотклики, способные заблокировать ваш аккаунт на hh.ru или LinkedIn,
-            и не передаём ваши данные работодателям без вашего явного согласия.
-          </div>
-        </details>
-        <details className="site-faq-item">
-          <summary>Как работает мультиисточниковый радар вакансий?</summary>
-          <div className="site-faq-answer">
-            Система регулярно опрашивает открытые API, RSS-фиды, Telegram-каналы с вакансиями
-            и профильные сообщества, дедуплицирует повторяющиеся предложения и оценивает каждое по
-            соответствию вашему доказательному профилю.
-          </div>
-        </details>
-        <details className="site-faq-item">
-          <summary>Могу ли я использовать OpenQareer бесплатно?</summary>
-          <div className="site-faq-answer">
-            Да! Базовый тариф &laquo;Самостоятельный&raquo; бесплатен навсегда. Вы получаете карьерную
-            диагностику, создание доказательного профиля и базовый поиск вакансий.
-          </div>
-        </details>
-        <details className="site-faq-item">
-          <summary>Где хранятся мои личные данные и резюме?</summary>
-          <div className="site-faq-answer">
-            Ваши данные шифруются на сервере в вашем личном изолированном контуре. Мы придерживаемся
-            строгой политики нулевой слежки (Zero-Surveillance): мы никогда не продаем данные рекрутерам.
-          </div>
-        </details>
+        {FAQ_ITEMS.map((item, index) => (
+          <details className="site-faq-item" open={index === 0} key={item.question}>
+            <summary>{item.question}</summary>
+            <div className="site-faq-answer">{item.answer}</div>
+          </details>
+        ))}
       </div>
     </section>
   );
@@ -482,17 +510,17 @@ function LandingCta({ session, onNavigate }: LandingPageProps) {
   return (
     <section className="site-cta" aria-labelledby="cta-heading">
       <div className="site-cta-inner">
-        <h2 id="cta-heading">Готовы взять карьеру под собственный контроль?</h2>
+        <h2 id="cta-heading">Начните с резюме и одного карьерного вопроса</h2>
         <p>
-          Пройдите карьерную диагностику за 3 минуты и получите доказательный аудит
-          вашего профессионального опыта уже сегодня.
+          Соберите профиль по фактам, проверьте рабочую роль и получите следующий
+          шаг, который можно выполнить и оценить.
         </p>
         <button
           className="site-btn is-primary is-large"
           type="button"
           onClick={() => (session ? onNavigate('/app') : onNavigate('/signup'))}
         >
-          {session ? 'Перейти в кабинет' : 'Начать бесплатно'} <ArrowRight size={18} weight="bold" />
+          {session ? 'Перейти в кабинет' : 'Начать пилот'} <ArrowRight size={18} weight="bold" />
         </button>
       </div>
     </section>
@@ -511,7 +539,7 @@ function LandingFooter({
       <div className="site-footer-inner">
         <div className="site-footer-brand">
           <BrandMark variant="lockup" size={24} />
-          <p>Кандидат-центричная карьерная операционная система.</p>
+          <p>Профиль по фактам, диагностика и один следующий шаг.</p>
           <span className="site-copyright">
             &copy; {new Date().getFullYear()} OpenQareer. Все права защищены.
           </span>
@@ -519,9 +547,9 @@ function LandingFooter({
         <div className="site-footer-links">
           <div className="link-group">
             <strong>Продукт</strong>
-            <a href="#features">Возможности</a>
-            <a href="#services">Экосистема услуг</a>
-            <a href="#tariffs">Тарифы</a>
+            <a href="#features">Что внутри</a>
+            <a href="#services">Возможности</a>
+            <a href="#tariffs">Условия пилота</a>
             <a href="#faq">FAQ</a>
           </div>
           <div className="link-group">

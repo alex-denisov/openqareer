@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildApp } from './app';
 import type { ServerConfig } from './config';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
+import { EMPTY_RESUME_DRAFT } from './domain/resumeDraft';
 import {
   apps,
   candidateAuthorization,
@@ -70,7 +71,12 @@ describe('candidate platform connections', () => {
     });
     apps.push(app);
     stores.push(candidateStore);
-    return { app, authorization: `Bearer ${candidate.accessToken}` };
+    return {
+      app,
+      candidateStore,
+      candidateId: candidate.id,
+      authorization: `Bearer ${candidate.accessToken}`,
+    };
   }
 
   async function startAuthorization(
@@ -339,6 +345,111 @@ describe('candidate platform connections', () => {
       headers: { authorization },
     });
     expect(connections.json().data[1].status).toBe('disconnected');
+  });
+
+  it('does not call OAuth revoke when disconnecting a native-only receipt', async () => {
+    let revokeCalls = 0;
+    const { app, candidateStore, candidateId, authorization } = await createConnectionsApp({
+      transport: {
+        async connect() {
+          return hhConnection;
+        },
+        async revoke() {
+          revokeCalls += 1;
+        },
+      },
+    });
+    candidateStore.commitResumeImport(candidateId, {
+      evidence: {
+        sourceLabel: 'Импорт: резюме hh.ru',
+        entries: [
+          {
+            memoryId: 'native-hh-connection-result',
+            domain: 'outcome',
+            statement: 'Сократил срок релиза.',
+          },
+        ],
+      },
+      draft: EMPTY_RESUME_DRAFT,
+      sourceReceipt: {
+        platform: 'hh',
+        accessMode: 'native_session_snapshot',
+        sourceUrl: 'https://hh.ru/resume/native-only-731',
+        capturedAt: '2026-08-23T12:00:00.000Z',
+        importDigest: 'b'.repeat(64),
+      },
+    });
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/candidate/connections/hh',
+      headers: { authorization, origin: 'http://localhost:3000' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({
+      accessMode: 'native_session_snapshot',
+      providerSession: 'not_managed',
+    });
+    expect(revokeCalls).toBe(0);
+  });
+
+  it('revokes and deletes legacy OAuth when a native receipt exists for the same platform', async () => {
+    let revokeCalls = 0;
+    const { app, candidateStore, candidateId, authorization } = await createConnectionsApp({
+      transport: {
+        async connect() {
+          return hhConnection;
+        },
+        async revoke() {
+          revokeCalls += 1;
+        },
+      },
+    });
+    await app.inject({
+      method: 'GET',
+      url: `/api/v1/connectors/hh/callback?state=${await startAuthorization(
+        app,
+        authorization,
+      )}&code=synthetic-code`,
+    });
+    candidateStore.commitResumeImport(candidateId, {
+      evidence: {
+        sourceLabel: 'Импорт: резюме hh.ru',
+        entries: [
+          {
+            memoryId: 'native-hh-coexisting-result',
+            domain: 'outcome',
+            statement: 'Сократил срок релиза.',
+          },
+        ],
+      },
+      draft: EMPTY_RESUME_DRAFT,
+      sourceReceipt: {
+        platform: 'hh',
+        accessMode: 'native_session_snapshot',
+        sourceUrl: 'https://hh.ru/resume/native-coexisting-731',
+        capturedAt: '2026-08-23T12:00:00.000Z',
+        importDigest: 'c'.repeat(64),
+      },
+    });
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/candidate/connections/hh',
+      headers: { authorization, origin: 'http://localhost:3000' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({
+      connectionRemoved: true,
+      oauthCleanup: {
+        localDataRemoved: true,
+        upstreamRevocation: 'revoked',
+      },
+    });
+    expect(revokeCalls).toBe(1);
+    expect(candidateStore.getOAuthConnection(candidateId, 'hh')).toBeNull();
   });
 
   it('serves matched vacancies for candidate and manages vacancy sources for admin', async () => {

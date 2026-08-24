@@ -5974,12 +5974,14 @@
 }
 
 .career-modal-card.is-wide {
-  max-width: min(1040px, calc(100vw - 40px));
-  max-height: calc(100vh - 40px);
+  width: calc(100vw - 16px);
+  height: calc(100vh - 16px);
+  max-width: 1180px;
+  max-height: 900px;
 }
 
 .career-connector-webview-host {
-  min-height: min(560px, calc(100vh - 280px));
+  min-height: min(560px, calc(100vh - 160px));
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
   background: #fff;
@@ -5992,6 +5994,11 @@
   justify-content: space-between;
   padding: 20px 24px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.career-modal-card.is-wide .career-modal-header {
+  min-height: 54px;
+  padding: 10px 14px;
 }
 
 .career-modal-header h2 {
@@ -6097,6 +6104,10 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.career-modal-footer.is-compact {
+  padding: 10px 16px;
+}
+
 /* Disabled/locked source button state */
 .career-source-choice > button:disabled {
   opacity: 0.45;
@@ -6134,30 +6145,52 @@
   padding: 12px 20px;
 }
 
-.career-modal-steps {
-  padding: 14px 16px;
-  border-radius: var(--career-radius-sm);
-  border: 1px solid var(--career-line);
-  background: var(--career-surface);
+.career-modal-body.is-connector-session {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 12px 12px;
+  gap: 8px;
 }
 
-.career-modal-steps strong {
+.career-modal-body.is-connector-session .career-connector-webview-host {
+  flex: 1;
+  min-height: 0;
+  border-radius: 8px;
+}
+
+.career-connector-session-toolbar {
+  min-height: 36px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-  font-size: 0.94rem;
-  color: var(--career-text);
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.career-modal-steps ol {
-  margin: 0;
-  padding-left: 20px;
-  display: grid;
-  gap: 4px;
-  font-size: 0.86rem;
-  line-height: 1.45;
-  color: var(--career-text-soft);
+.career-modal-network-status.is-compact {
+  min-width: 0;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.career-modal-network-status.is-compact span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.career-connector-check {
+  min-height: 36px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
+.career-connector-session-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .career-modal-error svg {

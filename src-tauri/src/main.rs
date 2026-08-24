@@ -8,8 +8,9 @@ mod tunnel_manager;
 
 use automation_worker::{execute_candidate_action_safely, LocalActionRequest, LocalActionResult};
 use connector_session::{
-    close_session_window, is_session_window_open, open_session_window, read_session_page,
-    resize_session_window, should_route_through_tunnel, SessionLayout, SessionPageReport,
+    close_session_window, hide_session_window, inspect_session_page, is_session_window_open,
+    open_session_window, read_session_page, reset_session_window, resize_session_window,
+    should_route_through_tunnel, SessionInspectionReport, SessionLayout, SessionPageReport,
     SessionWindowReport, SessionWindowRequest,
 };
 use network_probe::{evaluate_network_environment, NetworkEnvironmentStatus};
@@ -190,6 +191,16 @@ fn close_connector_session(app: AppHandle, platform: String) -> bool {
 }
 
 #[tauri::command]
+fn hide_connector_session(app: AppHandle, platform: String) -> bool {
+    hide_session_window(&app, &platform)
+}
+
+#[tauri::command]
+async fn reset_connector_session(app: AppHandle, platform: String) -> bool {
+    reset_session_window(&app, &platform).await
+}
+
+#[tauri::command]
 fn resize_connector_session(app: AppHandle, platform: String, layout: SessionLayout) -> bool {
     resize_session_window(&app, &platform, layout)
 }
@@ -201,6 +212,15 @@ async fn read_connector_session_page(
     request: SessionWindowRequest,
 ) -> Result<SessionPageReport, String> {
     read_session_page(&app, &request).await
+}
+
+/// Inspects the current page without redirecting an in-progress login flow.
+#[tauri::command]
+async fn inspect_connector_session_page(
+    app: AppHandle,
+    platform: String,
+) -> Result<SessionInspectionReport, String> {
+    inspect_session_page(&app, &platform).await
 }
 
 #[tauri::command]
@@ -239,8 +259,11 @@ fn main() {
             open_connector_session,
             is_connector_session_open,
             close_connector_session,
+            hide_connector_session,
+            reset_connector_session,
             resize_connector_session,
             read_connector_session_page,
+            inspect_connector_session_page,
             get_desktop_environment_info,
         ])
         .build(tauri::generate_context!())

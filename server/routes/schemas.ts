@@ -222,5 +222,68 @@ export const resumeImportSchema = z
     text: z.string().min(10).max(500_000),
     source: z.enum(['pdf', 'linkedin', 'hh', 'text']),
     fileName: z.string().trim().max(200).optional(),
+    sourceReceipt: z
+      .object({
+        platform: z.enum(['hh', 'linkedin']),
+        accessMode: z.literal('native_session_snapshot'),
+        sourceUrl: z
+          .string()
+          .url()
+          .max(2_048)
+          .refine((value) => {
+            const url = new URL(value);
+            if (url.protocol !== 'https:') return false;
+            if (url.hostname === 'hh.ru') {
+              return /^\/resume\/[A-Za-z0-9_-]{3,200}$/u.test(url.pathname);
+            }
+            return (
+              (url.hostname === 'linkedin.com' ||
+                url.hostname.endsWith('.linkedin.com') ||
+                url.hostname === 'linkedin.cn' ||
+                url.hostname.endsWith('.linkedin.cn')) &&
+              /^\/in\/[^/]{2,200}\/?$/u.test(url.pathname)
+            );
+          }),
+        capturedAt: z.string().datetime({ offset: true }),
+      })
+      .strict()
+      .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.sourceReceipt && value.source !== value.sourceReceipt.platform) {
+      context.addIssue({
+        code: 'custom',
+        path: ['sourceReceipt'],
+        message: 'sourceReceipt platform must match the native import source',
+      });
+    }
+    if (value.sourceReceipt) {
+      const url = new URL(value.sourceReceipt.sourceUrl);
+      const matchesPlatform =
+        value.sourceReceipt.platform === 'hh'
+          ? url.hostname === 'hh.ru' && url.pathname.startsWith('/resume/')
+          : (url.hostname === 'linkedin.com' ||
+                url.hostname.endsWith('.linkedin.com') ||
+                url.hostname === 'linkedin.cn' ||
+                url.hostname.endsWith('.linkedin.cn')) &&
+              url.pathname.startsWith('/in/');
+      if (!matchesPlatform) {
+        context.addIssue({
+          code: 'custom',
+          path: ['sourceReceipt', 'sourceUrl'],
+          message: 'sourceReceipt URL must match its platform',
+        });
+      }
+    }
+    if (
+      value.sourceReceipt &&
+      Date.parse(value.sourceReceipt.capturedAt) > Date.now() + 5 * 60 * 1_000
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['sourceReceipt', 'capturedAt'],
+        message: 'capturedAt cannot be in the future',
+      });
+    }
+  });
