@@ -63,6 +63,25 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
+  // The candidate's stored wizard answers (INC-024). A fresh walk has none, so
+  // the diagnostic is expected to open.
+  await page.route('**/api/v1/candidate/workspace', async (route) => {
+    const request = route.request();
+    if (request.method() === 'PUT') {
+      const body = JSON.parse(request.postData() ?? '{}');
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: body.workspace ?? null }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: null }),
+    });
+  });
   await page.route('**/api/v1/candidate/me', async (route) => {
     await route.fulfill({
       status: 200,
@@ -776,6 +795,25 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
           sessions: [],
         },
       }),
+    });
+  });
+  // The candidate's stored wizard answers (INC-024). A fresh walk has none, so
+  // the diagnostic is expected to open.
+  await page.route('**/api/v1/candidate/workspace', async (route) => {
+    const request = route.request();
+    if (request.method() === 'PUT') {
+      const body = JSON.parse(request.postData() ?? '{}');
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: body.workspace ?? null }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: null }),
     });
   });
   await page.route('**/api/v1/candidate/me', async (route) => {

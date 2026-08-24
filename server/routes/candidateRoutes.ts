@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
 import {
   evaluateProductCase,
   evaluateWorkPreferences,
@@ -147,6 +148,39 @@ const handleExportCandidate: Handler = async (
   return {
     data: candidateStore.exportCandidate(candidate.id),
     meta: { requestId: request.id, exportedAt: new Date().toISOString() },
+  };
+};
+
+const handleGetWorkspace: Handler = async (
+  { authService, candidateStore, config },
+  request,
+  reply,
+) => {
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  return {
+    data: candidateStore.getCandidateWorkspace(candidate.id),
+    meta: { requestId: request.id },
+  };
+};
+
+/**
+ * The wizard's answers are the candidate's own words; no engine can recompute
+ * them. Keeping them only in browser storage meant signing out erased the
+ * candidate's career context (INC-024).
+ */
+const handlePutWorkspace: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const body = z
+    .object({ workspace: candidateWorkspaceSchema })
+    .strict()
+    .parse(request.body);
+  return {
+    data: candidateStore.saveCandidateWorkspace(candidate.id, body.workspace),
+    meta: { requestId: request.id },
   };
 };
 
@@ -498,6 +532,15 @@ async function registerCandidateLifecycle(
   app.get('/api/v1/candidate/me', withDeps(deps, handleGetSnapshot));
   app.delete('/api/v1/candidate/me', withDeps(deps, handleDeleteCandidate));
   app.get('/api/v1/candidate/export', withDeps(deps, handleExportCandidate));
+  app.get('/api/v1/candidate/workspace', withDeps(deps, handleGetWorkspace));
+  app.put(
+    '/api/v1/candidate/workspace',
+    {
+      bodyLimit: 4 * 1_024 * 1_024,
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    },
+    withDeps(deps, handlePutWorkspace),
+  );
   app.patch('/api/v1/candidate/memory/:memoryId', withDeps(deps, handleChangeMemory));
   app.post(
     '/api/v1/candidate/assessments/:assessmentId',

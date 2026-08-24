@@ -45,6 +45,8 @@ import { SealedText } from './sealedText';
 import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
 import { SqliteMarketRepository } from './sqliteMarketRepository';
 import { SqliteResumeRepository } from './sqliteResumeRepository';
+import { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
+import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
 import { SqliteDocumentRepository } from './sqliteDocumentRepository';
 import { SqliteVacancyRepository } from './sqliteVacancyRepository';
@@ -90,6 +92,7 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly assessmentsRepository: SqliteAssessmentRepository;
   private readonly marketRepository: SqliteMarketRepository;
   private readonly resumeRepository: SqliteResumeRepository;
+  private readonly workspaceRepository: SqliteWorkspaceRepository;
   private readonly careerCommandRepository: SqliteCareerCommandRepository;
   private readonly documentRepository: SqliteDocumentRepository;
   private readonly vacancyRepository: SqliteVacancyRepository;
@@ -114,6 +117,7 @@ export class SqliteCandidateStore implements CandidateStore {
       assessmentsRepository: this.assessmentsRepository,
       marketRepository: this.marketRepository,
       resumeRepository: this.resumeRepository,
+      workspaceRepository: this.workspaceRepository,
       careerCommandRepository: this.careerCommandRepository,
       documentRepository: this.documentRepository,
       vacancyRepository: this.vacancyRepository,
@@ -419,6 +423,19 @@ export class SqliteCandidateStore implements CandidateStore {
   ): StoredResumeDraft {
     this.requireCandidate(candidateId);
     return this.resumeRepository.save(candidateId, draft, evidenceSnapshot);
+  }
+
+  getCandidateWorkspace(candidateId: string): CandidateWorkspaceState | null {
+    this.requireCandidate(candidateId);
+    return this.workspaceRepository.get(candidateId);
+  }
+
+  saveCandidateWorkspace(
+    candidateId: string,
+    workspace: CandidateWorkspaceState,
+  ): CandidateWorkspaceState {
+    this.requireCandidate(candidateId);
+    return this.workspaceRepository.save(candidateId, workspace);
   }
 
   createOAuthAuthorization(
@@ -747,6 +764,7 @@ interface StoreRepositories {
   assessmentsRepository: SqliteAssessmentRepository;
   marketRepository: SqliteMarketRepository;
   resumeRepository: SqliteResumeRepository;
+  workspaceRepository: SqliteWorkspaceRepository;
   careerCommandRepository: SqliteCareerCommandRepository;
   documentRepository: SqliteDocumentRepository;
   vacancyRepository: SqliteVacancyRepository;
@@ -760,6 +778,7 @@ function createRepositories(
     assessmentsRepository: new SqliteAssessmentRepository(database, sealedText),
     marketRepository: new SqliteMarketRepository(database, sealedText),
     resumeRepository: new SqliteResumeRepository(database, sealedText),
+    workspaceRepository: new SqliteWorkspaceRepository(database, sealedText),
     careerCommandRepository: new SqliteCareerCommandRepository(
       database,
       sealedText,

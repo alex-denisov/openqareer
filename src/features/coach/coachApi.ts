@@ -1,3 +1,4 @@
+import type { WorkspaceInput } from '../workspace/workspaceStorage';
 type UserRole = 'candidate' | 'admin';
 type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
 import {
@@ -456,6 +457,26 @@ export async function disconnectConnection(
     method: 'DELETE',
   });
   return readDataObject<DisconnectedConnection>(response);
+}
+
+/**
+ * The candidate's wizard answers as the server holds them. Browser storage is
+ * a cache of this — sign-out clears the cache, not the record (INC-024).
+ */
+export async function getCandidateWorkspace(): Promise<WorkspaceInput | null> {
+  const response = await apiFetch('/api/v1/candidate/workspace');
+  return readData<WorkspaceInput | null>(response);
+}
+
+export async function putCandidateWorkspace(
+  workspace: WorkspaceInput,
+): Promise<WorkspaceInput> {
+  const response = await apiFetch('/api/v1/candidate/workspace', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace }),
+  });
+  return readDataObject<WorkspaceInput>(response);
 }
 
 export async function getCandidate(): Promise<CandidateSnapshot> {

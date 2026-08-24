@@ -1,3 +1,4 @@
+import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type {
   CoachMessage,
   CoachPhase,
@@ -400,6 +401,17 @@ export interface CandidateStore {
     submission: GermanyMarketSubmission,
     result: GermanyMarketResult,
   ): StoredGermanyMarket;
+  /**
+   * The candidate's own wizard answers. Browser storage is a cache of this,
+   * not the record — signing out must not erase a career context (INC-024).
+   */
+  getCandidateWorkspace(candidateId: string): CandidateWorkspaceState | null;
+
+  saveCandidateWorkspace(
+    candidateId: string,
+    workspace: CandidateWorkspaceState,
+  ): CandidateWorkspaceState;
+
   saveResumeDraft(
     candidateId: string,
     draft: ResumeDraft,

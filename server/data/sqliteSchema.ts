@@ -600,3 +600,12 @@ CREATE TABLE candidate_source_connections (
 CREATE UNIQUE INDEX candidate_source_connections_import
   ON candidate_source_connections(candidate_id, platform, import_digest);
 `;
+
+export const MIGRATION_20 = `
+CREATE TABLE candidate_workspaces (
+  candidate_id TEXT PRIMARY KEY REFERENCES candidates(id) ON DELETE CASCADE,
+  workspace_cipher TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
+`;

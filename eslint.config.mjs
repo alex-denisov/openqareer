@@ -53,6 +53,9 @@ export default tseslint.config(
       '.gemini/**',
       '.opencode/**',
       '.qwen/**',
+      // Agent-runtime scratch state, git-ignored and not product code.
+      '.remember/**',
+      '.zcode/**',
       'coverage/**',
       'dist/**',
       'node_modules/**',

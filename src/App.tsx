@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AdminConsole } from './features/admin/AdminConsole';
-import { getSession, type AuthUser } from './features/coach/coachApi';
+import {
+  getCandidateWorkspace,
+  getSession,
+  putCandidateWorkspace,
+  type AuthUser,
+} from './features/coach/coachApi';
+import { resolveCandidateWorkspace } from './features/workspace/workspaceHydration';
 import {
   connectionResultMessage,
   readConnectionResult,
@@ -73,10 +79,19 @@ export default function App() {
         window.localStorage,
         session?.candidateId ?? null,
       );
+      // Browser storage is a cache. Sign-out clears it and a different browser
+      // never had it, so a signed-in candidate whose cache is empty is read
+      // back from the server instead of being treated as brand new with every
+      // section locked (INC-024).
+      const remote =
+        session?.candidateId && result.status !== 'ready'
+          ? await getCandidateWorkspace().catch(() => null)
+          : null;
+      const workspace = resolveCandidateWorkspace({ local: result, remote });
       setState({
         session,
-        workspace: result.status === 'ready' ? result.workspace : undefined,
-        invalidStorage: result.status === 'invalid',
+        workspace,
+        invalidStorage: result.status === 'invalid' && !workspace,
       });
       if (isDesktop) {
         const resolvedPath = resolvedDesktopSessionPath(currentPath, Boolean(session?.candidateId));
@@ -158,6 +173,12 @@ export default function App() {
           workspace,
           state.session.candidateId,
         );
+        // Write through, so the answers survive this browser.
+        void putCandidateWorkspace(workspaceInputOf(workspace)).catch(() => {
+          setStorageError(
+            'Ответы сохранены в этом браузере, но не на сервере. Они могут не открыться на другом устройстве.',
+          );
+        });
       } else {
         clearWorkspace(window.localStorage);
       }
@@ -406,4 +427,27 @@ function isAppPath(path: string): boolean {
     return true;
   }
   return path === '/app' || path.startsWith('/app/');
+}
+
+/**
+ * Only the candidate's own answers travel to the server; the derived analysis
+ * is rebuilt from them and the dossier, so storing it twice would let the two
+ * copies disagree.
+ */
+function workspaceInputOf(workspace: CandidateWorkspace): WorkspaceInput {
+  return {
+    careerGoal: workspace.careerGoal,
+    resumeText: workspace.resumeText,
+    resumeSource: workspace.resumeSource,
+    resumeFileName: workspace.resumeFileName,
+    resumePageCount: workspace.resumePageCount,
+    targetDirection: workspace.targetDirection,
+    market: workspace.market,
+    currentSituation: workspace.currentSituation,
+    constraints: workspace.constraints,
+    urgency: workspace.urgency,
+    linkedinUrl: workspace.linkedinUrl,
+    hhUrl: workspace.hhUrl,
+    resumeImported: workspace.resumeImported,
+  };
 }
