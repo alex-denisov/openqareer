@@ -44,7 +44,6 @@ import {
   deleteUserByAdmin as adminDeleteUser,
   listAudit as adminListAudit,
   recordAdminAudit,
-  ensureSystemAdmins,
 } from './adminUserManager';
 
 const scrypt = promisify(scryptCallback);
@@ -688,7 +687,12 @@ export class AuthService implements SessionAuth {
     } catch {
       // schema migration fail-open
     }
-    ensureSystemAdmins(this.database);
+    // Administrators are provisioned only from configured seed accounts
+    // (OPENQAREER_ADMIN_USERNAME/PASSWORD), and `seedAccounts` refuses to
+    // change an existing user's role. A previous hardcoded handle list granted
+    // `admin` to whoever happened to own the username — and registration is
+    // public, so choosing that username was a privilege escalation that fired
+    // on the next deploy (INC-025).
   }
 
   private findUser(username: string): UserRow | null {

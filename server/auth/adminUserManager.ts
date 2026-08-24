@@ -411,19 +411,3 @@ export function listAudit(database: DatabaseSync, query?: { limit: number; offse
     })),
   };
 }
-
-export function ensureSystemAdmins(database: DatabaseSync): void {
-  const adminHandles = ['admin.test', 'alexey.admin'];
-  const now = new Date().toISOString();
-  for (const username of adminHandles) {
-    const existing = database
-      .prepare('SELECT id, role, candidate_id FROM users WHERE username = ?')
-      .get(username) as { id: string; role: string; candidate_id: string | null } | undefined;
-
-    if (existing && existing.role !== 'admin') {
-      database
-        .prepare(`UPDATE users SET role = 'admin', candidate_id = NULL, updated_at = ? WHERE id = ?`)
-        .run(now, existing.id);
-    }
-  }
-}
