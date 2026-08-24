@@ -154,8 +154,7 @@ function LoopStateGrid({
       label: 'Возможности',
       icon: Compass,
       value: String(subscriptions),
-      detail:
-        subscriptions === 0 ? 'регулярный поиск не настроен' : 'регулярных выборок',
+      detail: subscriptions === 0 ? 'регулярный поиск не настроен' : 'регулярных выборок',
     },
   ];
   return (
@@ -171,10 +170,8 @@ function LoopStateGrid({
           </button>
         );
       })}
-      {proposed > 0 ? (
-        <p className="career-today-loop-note">
-          {proposed} факт(ов) ждут вашей проверки в разделе «Профиль».
-        </p>
+      {reviewQueueNote(proposed) ? (
+        <p className="career-today-loop-note">{reviewQueueNote(proposed)}</p>
       ) : null}
     </section>
   );
@@ -218,6 +215,13 @@ function destinationView(
   destination?: CareerJourney['nextAction']['destination'],
 ): CareerCabinetView {
   return destination && destination !== 'today' ? destination : 'profile';
+}
+
+/** Facts wait for the candidate, so the sentence has to count them in Russian. */
+export function reviewQueueNote(proposed: number): string | undefined {
+  if (proposed <= 0) return undefined;
+  const counted = plural(proposed, ['факт ждёт', 'факта ждут', 'фактов ждут']);
+  return `${counted} вашей проверки в разделе «Профиль».`;
 }
 
 /** Russian needs three forms; a bare "2 пробелов" reads as a bug. */
