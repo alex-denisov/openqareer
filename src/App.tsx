@@ -174,7 +174,13 @@ export default function App() {
     }));
   }
 
-  function handleSave(input: WorkspaceInput) {
+  /**
+   * Returns a promise while the import is still running, so the shell knows
+   * when the cabinet may finally read a server that holds the facts. Without
+   * it the cabinet's single reading raced the import and always lost
+   * (INC-024).
+   */
+  function handleSave(input: WorkspaceInput): void | Promise<void> {
     const workspace = prepareCareerWorkspace(input, undefined, state.workspace);
     persist(workspace);
     // The wizard imports as soon as it reads a document; this is the retry for
@@ -182,22 +188,25 @@ export default function App() {
     // is shown, never swallowed — a silent 422 is what left Resume Studio empty
     // after a successful-looking import (B148 §3b).
     if (
-      input.resumeText.trim().length > 0 &&
-      input.resumeImported !== true &&
-      state.session?.candidateId
+      input.resumeText.trim().length === 0 ||
+      input.resumeImported === true ||
+      !state.session?.candidateId
     ) {
-      void importCandidateResume({
-        text: input.resumeText,
-        source: importSourceOf(input.resumeSource),
-        fileName: input.resumeFileName,
-      }).catch((reason: unknown) => {
+      return undefined;
+    }
+    return importCandidateResume({
+      text: input.resumeText,
+      source: importSourceOf(input.resumeSource),
+      fileName: input.resumeFileName,
+    })
+      .then(() => undefined)
+      .catch((reason: unknown) => {
         setStorageError(
           reason instanceof Error
             ? `Резюме не удалось сохранить в профиль: ${reason.message}`
             : 'Резюме не удалось сохранить в профиль. Откройте «Резюме» и повторите импорт.',
         );
       });
-    }
   }
 
   function handleClear() {

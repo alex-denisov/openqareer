@@ -23,6 +23,7 @@ import {
 import { buildCareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace, WorkspaceInput } from '../workspace/workspaceStorage';
 import { CareerTariffsView } from './CareerTariffsView';
+import { createIntakeCompletion } from './intakeCompletion';
 import { CareerAccountPanel } from './CareerAccountPanel';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import {
@@ -44,7 +45,7 @@ interface CareerWorkspaceShellProps {
   storageError?: string;
   connectionNotice?: string;
   onDismissConnectionNotice?: () => void;
-  onSaveWorkspace?: (input: WorkspaceInput) => void;
+  onSaveWorkspace?: (input: WorkspaceInput) => void | Promise<void>;
   onUpdateWorkspace?: (workspace: CandidateWorkspace) => void;
   onClearWorkspace?: () => void;
   session?: AuthUser | null;
@@ -222,13 +223,19 @@ export function CareerWorkspaceShell({
 
   // A finished diagnostic hands the screen to the cabinet and leaves a clean
   // wizard behind, so clearing the workspace later starts from the first
-  // question instead of from someone's half-filled answers.
-  const completeIntake = useCallback(
-    (input: WorkspaceInput) => {
-      setIntakeStarted(false);
-      setIntakeSeed((seed) => seed + 1);
-      onSaveWorkspace(input);
-    },
+  // question instead of from someone's half-filled answers. The cabinet is
+  // re-read once the import behind the save has settled, because mounting it
+  // is what issues its single server reading (INC-024).
+  const completeIntake = useMemo(
+    () =>
+      createIntakeCompletion({
+        save: onSaveWorkspace,
+        closeIntake: () => {
+          setIntakeStarted(false);
+          setIntakeSeed((seed) => seed + 1);
+        },
+        refreshCabinet: () => setCabinetRevision((revision) => revision + 1),
+      }),
     [onSaveWorkspace],
   );
 
