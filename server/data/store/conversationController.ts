@@ -257,7 +257,7 @@ export class ConversationController {
             (id, candidate_id, conversation_id, kind, domain, statement_cipher,
              confidence, source_message_ids, sensitive, status,
              created_at, updated_at)
-           VALUES (?, ?, ?, 'fact', ?, ?, 'candidate-reported', ?, 0, 'confirmed', ?, ?)`,
+           VALUES (?, ?, ?, 'fact', ?, ?, 'candidate-reported', ?, 0, 'proposed', ?, ?)`,
         )
         .run(
           entry.memoryId,
@@ -278,7 +278,11 @@ export class ConversationController {
     return { messageId, memoryIds };
   }
 
-  /** Removes only unchanged confirmed facts whose sole source was the replaced snapshot. */
+  /**
+   * Removes only facts the candidate never touched — awaiting review or
+   * confirmed as imported — whose sole source was the replaced snapshot. A
+   * corrected or deleted fact carries a candidate decision and stays (B166).
+   */
   purgeReplacedImportedFacts(
     candidateId: string,
     sourceMessageId: string,
@@ -287,7 +291,7 @@ export class ConversationController {
     const soleSource = JSON.stringify([sourceMessageId]);
     const statement = this.database.prepare(
       `DELETE FROM memory
-       WHERE candidate_id = ? AND id = ? AND status = 'confirmed'
+       WHERE candidate_id = ? AND id = ? AND status IN ('proposed', 'confirmed')
          AND source_message_ids = ?`,
     );
     for (const memoryId of memoryIds) {
@@ -735,6 +739,10 @@ export class ConversationController {
   }
 
   private inTransaction<T>(operation: () => T): T {
+    // SQLite has no nested BEGIN. A batch review runs several dossier writes
+    // that each know how to be atomic on their own, so an outer transaction
+    // joins them instead of crashing on the second BEGIN (B166).
+    if (this.database.isTransaction) return operation();
     this.database.exec('BEGIN IMMEDIATE');
     try {
       const result = operation();

@@ -311,6 +311,17 @@ export interface CandidateStore {
     change: MemoryChange,
   ): StoredMemory | null;
   /**
+   * One candidate decision over a whole imported batch. An import can state
+   * dozens of facts, and reviewing them one request at a time is not a review
+   * the candidate would ever finish (B166). Returns `null` when any id is not
+   * in this dossier — the batch is then applied to nothing at all.
+   */
+  reviewMemories(
+    candidateId: string,
+    memoryIds: readonly string[],
+    action: 'confirm' | 'delete',
+  ): number | null;
+  /**
    * Writes the facts an imported resume stated as confirmed dossier memories
    * under caller-chosen ids, so the resume draft that cites them resolves. The
    * whole import is one transaction: a partially written dossier would leave

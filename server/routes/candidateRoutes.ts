@@ -43,6 +43,8 @@ import {
   candidateDocumentSchema,
   documentRetentionSchema,
   memoryChangeSchema,
+  memoryIdSchema,
+  memoryReviewSchema,
   resumeImportSchema,
 } from './schemas';
 
@@ -189,7 +191,7 @@ const handleChangeMemory: Handler = async (deps, request, reply) => {
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  const memoryId = z.string().uuid().parse((request.params as { memoryId: string }).memoryId);
+  const memoryId = memoryIdSchema.parse((request.params as { memoryId: string }).memoryId);
   const change = memoryChangeSchema.parse(request.body);
   const memory = candidateStore.changeMemory(candidate.id, memoryId, change);
   if (!memory && change.action !== 'delete') {
@@ -197,6 +199,29 @@ const handleChangeMemory: Handler = async (deps, request, reply) => {
   }
   return {
     data: { memory, deleted: change.action === 'delete' },
+    meta: { requestId: request.id },
+  };
+};
+
+const handleReviewMemories: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const review = memoryReviewSchema.parse(request.body);
+  const reviewed = candidateStore.reviewMemories(candidate.id, review.memoryIds, review.action);
+  if (reviewed === null) {
+    return sendError(
+      reply,
+      request,
+      404,
+      'memory_not_found',
+      'Один из фактов не найден в досье — обновите страницу и повторите.',
+      false,
+    );
+  }
+  return {
+    data: { reviewed, action: review.action },
     meta: { requestId: request.id },
   };
 };
@@ -542,6 +567,11 @@ async function registerCandidateLifecycle(
     withDeps(deps, handlePutWorkspace),
   );
   app.patch('/api/v1/candidate/memory/:memoryId', withDeps(deps, handleChangeMemory));
+  app.post(
+    '/api/v1/candidate/memory/review',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    withDeps(deps, handleReviewMemories),
+  );
   app.post(
     '/api/v1/candidate/assessments/:assessmentId',
     { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },

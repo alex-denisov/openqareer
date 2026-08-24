@@ -589,6 +589,29 @@ export class SqliteCandidateStore implements CandidateStore {
     return this.conversations.changeMemory(candidateId, memoryId, change);
   }
 
+  reviewMemories(
+    candidateId: string,
+    memoryIds: readonly string[],
+    action: 'confirm' | 'delete',
+  ): number | null {
+    this.requireCandidate(candidateId);
+    return this.transaction(() => {
+      const known = new Set(
+        this.conversations.snapshotParts(candidateId).memory.map((item) => item.id),
+      );
+      // A stale client must not half-review a dossier: either the whole batch
+      // is a decision the candidate could actually see, or none of it applies.
+      if (memoryIds.some((memoryId) => !known.has(memoryId))) return null;
+      // The count is what the candidate is told they decided, so a repeated id
+      // must not inflate it.
+      const distinct = [...new Set(memoryIds)];
+      for (const memoryId of distinct) {
+        this.conversations.changeMemory(candidateId, memoryId, { action });
+      }
+      return distinct.length;
+    });
+  }
+
   exportCandidate(candidateId: string): CandidateExport {
     const snapshot = this.getSnapshot(candidateId);
     return {
@@ -729,6 +752,10 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   private transaction<T>(operation: () => T): T {
+    // SQLite has no nested BEGIN. A batch review runs several dossier writes
+    // that each know how to be atomic on their own, so an outer transaction
+    // joins them instead of crashing on the second BEGIN (B166).
+    if (this.database.isTransaction) return operation();
     this.database.exec('BEGIN IMMEDIATE');
     try {
       const result = operation();

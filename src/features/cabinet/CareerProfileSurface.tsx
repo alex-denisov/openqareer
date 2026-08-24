@@ -12,6 +12,7 @@ import {
 } from '@phosphor-icons/react';
 import {
   changeMemory,
+  reviewMemories,
   CoachApiError,
   deleteCandidateDocument,
   downloadCandidateDocument,
@@ -74,6 +75,25 @@ export function CareerProfileSurface({
     setError(undefined);
     try {
       await changeMemory(memoryId, { action });
+      await onRefresh();
+    } catch (reason) {
+      setError(profileError(reason));
+    } finally {
+      setBusyId(undefined);
+    }
+  }
+
+  /**
+   * An import states dozens of facts at once. Reviewing them one by one is a
+   * review nobody finishes, so the queue offers the batch decision the
+   * candidate actually wants to make (B166).
+   */
+  async function reviewAllMemories(memoryIds: readonly string[]) {
+    setBusyId(REVIEW_ALL);
+    setError(undefined);
+    try {
+      const reviewed = await reviewMemories(memoryIds, 'confirm');
+      setNotice(`Подтверждено ${reviewed} ${factNoun(reviewed)}.`);
       await onRefresh();
     } catch (reason) {
       setError(profileError(reason));
@@ -263,7 +283,12 @@ export function CareerProfileSurface({
           <p className="career-cabinet-loading">Собираем подтверждённые данные…</p>
         ) : null}
         {activeTab === 'summary' ? (
-          <ProfileSummary snapshot={snapshot} busyId={busyId} onReview={reviewMemory} />
+          <ProfileSummary
+            snapshot={snapshot}
+            busyId={busyId}
+            onReview={reviewMemory}
+            onReviewAll={reviewAllMemories}
+          />
         ) : null}
         {activeTab === 'experience' ? (
           <ProfileFacts
@@ -289,11 +314,12 @@ export function CareerProfileSurface({
           <ProfileFacts
             title="Образование, курсы и сертификаты"
             empty="Сведения об образовании и курсах появятся после импорта резюме или разговора."
-            facts={facts.filter((item) =>
-              ['role-evidence', 'other'].includes(item.domain) ||
-              /образован|университет|институт|диплом|курс|сертификат|степень|бакалавр|магистр|ielts|toefl|gmat|mba/iu.test(
-                item.statement,
-              ),
+            facts={facts.filter(
+              (item) =>
+                ['role-evidence', 'other'].includes(item.domain) ||
+                /образован|университет|институт|диплом|курс|сертификат|степень|бакалавр|магистр|ielts|toefl|gmat|mba/iu.test(
+                  item.statement,
+                ),
             )}
             busyId={busyId}
             onReview={reviewMemory}
@@ -325,35 +351,47 @@ export function CareerProfileSurface({
   );
 }
 
+/**
+ * Everything an import left for the candidate to decide. It is exported so the
+ * queue can be proven on its own: a queue that shows four of thirty-two facts
+ * is not a review the candidate can finish (B166).
+ */
 // eslint-disable-next-line max-lines-per-function
-function ProfileSummary({
-  snapshot,
+export function ProfileReviewQueue({
+  proposedFacts,
+  openQuestions,
   busyId,
   onReview,
+  onReviewAll,
 }: {
-  snapshot?: CandidateSnapshot;
+  proposedFacts: CandidateSnapshot['memory'];
+  openQuestions: CandidateSnapshot['memory'];
   busyId?: string;
   onReview: (memoryId: string, action: 'confirm' | 'delete') => Promise<void>;
+  onReviewAll: (memoryIds: readonly string[]) => Promise<void>;
 }) {
-  const facts = snapshot?.memory ?? [];
-  const { confirmedFacts, proposedFacts, openQuestions } =
-    partitionProfileMemory(facts);
   return (
-    <div className="career-profile-summary-grid">
-      <ProfileFacts
-        title="Опорные факты"
-        empty="Пока нет подтверждённых фактов. Стратег начнёт с одного карьерного эпизода."
-        facts={confirmedFacts.slice(0, 8)}
-        busyId={busyId}
-        onReview={onReview}
-      />
-      <aside className="career-profile-review-queue">
-        <header>
-          <span>Нужно проверить</span>
-          <strong>{proposedFacts.length}</strong>
-        </header>
-        {proposedFacts.length ? (
-          proposedFacts.slice(0, 4).map((item) => (
+    <aside className="career-profile-review-queue">
+      <header>
+        <span>Нужно проверить</span>
+        <strong>{proposedFacts.length}</strong>
+      </header>
+      {proposedFacts.length > 1 ? (
+        <button
+          type="button"
+          className="career-profile-review-all"
+          disabled={busyId === REVIEW_ALL}
+          onClick={() => void onReviewAll(proposedFacts.map((item) => item.id))}
+        >
+          <Check size={15} />
+          {busyId === REVIEW_ALL
+            ? 'Подтверждаем…'
+            : `Подтвердить все — ${proposedFacts.length} ${factNoun(proposedFacts.length)}`}
+        </button>
+      ) : null}
+      {proposedFacts.length ? (
+        <div className="career-profile-review-list">
+          {proposedFacts.map((item) => (
             <article key={item.id}>
               <p>{item.statement}</p>
               <small>{memorySourceLabel(item.sourceMessageIds)}</small>
@@ -375,29 +413,64 @@ function ProfileSummary({
                 </button>
               </div>
             </article>
-          ))
-        ) : (
-          <p>
-            {openQuestions.length
-              ? 'Фактических выводов на проверке нет.'
-              : 'Все текущие выводы уже проверены кандидатом.'}
-          </p>
-        )}
-        {openQuestions.length ? (
-          <section className="career-profile-open-questions">
-            <strong>Открытые вопросы</strong>
-            {openQuestions.slice(0, 3).map((item) => (
-              <article key={item.id}>
-                <p>{item.statement}</p>
-                <small>Уточнение из диалога · {memorySourceLabel(item.sourceMessageIds)}</small>
-              </article>
-            ))}
-          </section>
-        ) : null}
-      </aside>
+          ))}
+        </div>
+      ) : (
+        <p>
+          {openQuestions.length
+            ? 'Фактических выводов на проверке нет.'
+            : 'Все текущие выводы уже проверены кандидатом.'}
+        </p>
+      )}
+      {openQuestions.length ? (
+        <section className="career-profile-open-questions">
+          <strong>Открытые вопросы</strong>
+          {openQuestions.slice(0, 3).map((item) => (
+            <article key={item.id}>
+              <p>{item.statement}</p>
+              <small>Уточнение из диалога · {memorySourceLabel(item.sourceMessageIds)}</small>
+            </article>
+          ))}
+        </section>
+      ) : null}
+    </aside>
+  );
+}
+
+function ProfileSummary({
+  snapshot,
+  busyId,
+  onReview,
+  onReviewAll,
+}: {
+  snapshot?: CandidateSnapshot;
+  busyId?: string;
+  onReview: (memoryId: string, action: 'confirm' | 'delete') => Promise<void>;
+  onReviewAll: (memoryIds: readonly string[]) => Promise<void>;
+}) {
+  const facts = snapshot?.memory ?? [];
+  const { confirmedFacts, proposedFacts, openQuestions } = partitionProfileMemory(facts);
+  return (
+    <div className="career-profile-summary-grid">
+      <ProfileFacts
+        title="Опорные факты"
+        empty="Пока нет подтверждённых фактов. Стратег начнёт с одного карьерного эпизода."
+        facts={confirmedFacts.slice(0, 8)}
+        busyId={busyId}
+        onReview={onReview}
+      />
+      <ProfileReviewQueue
+        proposedFacts={proposedFacts}
+        openQuestions={openQuestions}
+        busyId={busyId}
+        onReview={onReview}
+        onReviewAll={onReviewAll}
+      />
     </div>
   );
 }
+
+const REVIEW_ALL = 'review-all';
 
 export function partitionProfileMemory(memory: CandidateSnapshot['memory']) {
   const factual = memory.filter((item) => item.kind !== 'open-question');
@@ -619,10 +692,7 @@ function evidenceSummary(snapshot?: CandidateSnapshot): string {
   return parts.join(' · ');
 }
 
-function lastChangeLabel(
-  account?: AccountSnapshot,
-  snapshot?: CandidateSnapshot,
-): string {
+function lastChangeLabel(account?: AccountSnapshot, snapshot?: CandidateSnapshot): string {
   const value = latestChange(account, snapshot);
   if (!value) return '';
   return `Изменён ${new Intl.DateTimeFormat('ru-RU', {
@@ -633,10 +703,7 @@ function lastChangeLabel(
   }).format(new Date(value))}`;
 }
 
-function latestChange(
-  account?: AccountSnapshot,
-  snapshot?: CandidateSnapshot,
-): string | undefined {
+function latestChange(account?: AccountSnapshot, snapshot?: CandidateSnapshot): string | undefined {
   const stamps = [
     account?.profile.updatedAt,
     ...(snapshot?.memory ?? []).map((item) => item.updatedAt),

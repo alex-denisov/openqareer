@@ -715,6 +715,27 @@ export async function changeMemory(
 }
 
 
+/**
+ * One decision over a whole imported batch. Confirming thirty-odd facts one
+ * request at a time is a review no candidate finishes, so the queue sends the
+ * batch (B166).
+ */
+export async function reviewMemories(
+  memoryIds: readonly string[],
+  action: 'confirm' | 'delete',
+): Promise<number> {
+  const response = await apiFetch('/api/v1/candidate/memory/review', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, memoryIds }),
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return ((await response.json()) as { data: { reviewed: number } }).data.reviewed;
+}
+
+
 export async function getMatchedVacancies(signal?: AbortSignal): Promise<MatchedVacancyItem[]> {
   const response = await apiFetch('/api/v1/candidate/matched-vacancies', { signal });
   if (!response.ok) {

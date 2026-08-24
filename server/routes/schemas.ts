@@ -200,6 +200,24 @@ export const careerCommandParamsSchema = z.object({
   commandId: z.string().uuid(),
 });
 
+/**
+ * Dossier facts are not all UUIDs: an import mints readable ids such as
+ * `imp7f3a91-exp-2`, so a UUID-only parameter rejected every attempt to
+ * confirm an imported fact (B166).
+ */
+export const memoryIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(120)
+  .regex(/^[A-Za-z0-9._:-]+$/u);
+
+/** One candidate decision over a whole imported batch, not one request per fact. */
+export const memoryReviewSchema = z.object({
+  action: z.enum(['confirm', 'delete']),
+  memoryIds: z.array(memoryIdSchema).min(1).max(200),
+});
+
 export const memoryChangeSchema = z
   .object({
     action: z.enum(['confirm', 'correct', 'delete']),

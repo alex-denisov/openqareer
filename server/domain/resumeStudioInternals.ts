@@ -1,7 +1,10 @@
 import type {
   CefrLevel,
 } from './resumeDraft';
-import { isResumeEvidenceEligible } from './resumeEvidenceEligibility';
+import {
+  resumeEvidenceIneligibilityReason,
+  type ResumeEvidenceIneligibilityReason,
+} from './resumeEvidenceEligibility';
 import type {
   EvidenceCatalog,
   NormalizedEvidence,
@@ -63,15 +66,18 @@ export function buildEvidenceCatalog(evidence: readonly ResumeEvidence[]): Evide
   const grouped = groupCurrentEvidence(evidence);
   const eligible = new Map<string, NormalizedEvidence>();
   const duplicateIds = new Set<string>();
+  const ineligible = new Map<string, ResumeEvidenceIneligibilityReason>();
   for (const [id, items] of grouped) {
     if (items.length !== 1) {
       duplicateIds.add(id);
       continue;
     }
     const normalized = normalizeEvidence(items[0]!);
-    if (isEligible(normalized)) eligible.set(id, normalized);
+    const reason = resumeEvidenceIneligibilityReason(normalized);
+    if (reason === null) eligible.set(id, normalized);
+    else ineligible.set(id, reason);
   }
-  return { eligible, duplicateIds };
+  return { eligible, duplicateIds, ineligible };
 }
 
 function groupCurrentEvidence(
@@ -97,10 +103,6 @@ function normalizeEvidence(evidence: ResumeEvidence): NormalizedEvidence {
   };
 }
 
-function isEligible(evidence: NormalizedEvidence): boolean {
-  return isResumeEvidenceEligible(evidence);
-}
-
 export function resolveEvidence(
   memoryId: string,
   context: ProjectionContext,
@@ -115,14 +117,32 @@ export function resolveEvidence(
   if (id) context.excludedEvidenceIds.add(id);
   context.unknowns.push({
     code: 'ineligible-evidence',
-    message:
-      'Факт отсутствует, не подтверждён, помечен чувствительным или не имеет источника.',
+    message: ineligibleEvidenceMessage(context.catalog.ineligible.get(id)),
     scope: 'both',
     blocking: true,
     entryId,
     memoryId: id || undefined,
   });
   return null;
+}
+
+function ineligibleEvidenceMessage(
+  reason: ResumeEvidenceIneligibilityReason | undefined,
+): string {
+  switch (reason) {
+    case 'not-confirmed':
+      return 'Факт ещё не подтверждён кандидатом — подтвердите его в разделе «Профиль».';
+    case 'sensitive':
+      return 'Факт помечен чувствительным и не попадает в документ.';
+    case 'no-provenance':
+      return 'У факта нет источника, на который мог бы сослаться документ.';
+    case 'not-a-fact':
+      return 'Это открытый вопрос, а не факт: документ не может на него сослаться.';
+    case 'empty':
+      return 'Факт пуст и не может стать утверждением в документе.';
+    default:
+      return 'Факт отсутствует в досье или дублируется — документ не может на него сослаться.';
+  }
 }
 
 /**

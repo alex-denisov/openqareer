@@ -1,3 +1,4 @@
+import type { ResumeEvidenceIneligibilityReason } from './resumeEvidenceEligibility';
 import type {
   CefrLevel,
   ResumeAdditionalInput,
@@ -178,6 +179,12 @@ export interface NormalizedEvidence {
 export interface EvidenceCatalog {
   readonly eligible: ReadonlyMap<string, NormalizedEvidence>;
   readonly duplicateIds: ReadonlySet<string>;
+  /**
+   * Why a known fact could not be used. Since an import states facts the
+   * candidate has not reviewed yet, "not confirmed" is the ordinary case and
+   * the document has to say so in words the candidate can act on (B166).
+   */
+  readonly ineligible: ReadonlyMap<string, ResumeEvidenceIneligibilityReason>;
 }
 
 export interface ProjectionContext {

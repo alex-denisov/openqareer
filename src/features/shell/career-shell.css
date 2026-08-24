@@ -3835,6 +3835,38 @@
   gap: 6px;
 }
 
+/* An import can state dozens of facts: the queue stays a panel, not a page. */
+.career-profile-review-list {
+  max-height: 26rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.career-profile-review-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 9px 12px;
+  border: 1px solid var(--career-line);
+  border-radius: 10px;
+  background: var(--career-bg);
+  color: var(--career-success);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.career-profile-review-all:hover:not(:disabled) {
+  border-color: var(--career-success);
+}
+
+.career-profile-review-all:disabled {
+  cursor: progress;
+  color: var(--career-text-dim);
+}
+
 .career-profile-open-questions {
   margin-top: 14px;
   padding-top: 12px;

@@ -392,8 +392,8 @@ describe('POST /api/v1/candidate/resume/import', () => {
     expect(crossPlatform.statusCode).toBe(422);
   });
 
-  it('puts the imported roles and schools into the projected resume', async () => {
-    const { app, authorization } = await createApp();
+  it('holds the projected resume back until the candidate confirms the facts', async () => {
+    const { app, store, candidateId, authorization } = await createApp();
 
     const response = await app.inject({
       method: 'POST',
@@ -403,15 +403,42 @@ describe('POST /api/v1/candidate/resume/import', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const projection = response.json().data.resume
-      .projection as ResumeStudioProjection;
+    // A resume claim is something the candidate stands behind, so nothing the
+    // machine merely read may appear in it before review (B166).
+    const onImport = response.json().data.resume.projection as ResumeStudioProjection;
+    expect(onImport.master.experience).toEqual([]);
+    expect(onImport.master.education).toEqual([]);
+    expect(onImport.master.unknowns).toContainEqual(
+      expect.objectContaining({
+        code: 'ineligible-evidence',
+        message: 'Факт ещё не подтверждён кандидатом — подтвердите его в разделе «Профиль».',
+      }),
+    );
+
+    const reviewed = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/memory/review',
+      headers: { authorization, origin: 'http://localhost:3000' },
+      payload: {
+        action: 'confirm',
+        memoryIds: store.getSnapshot(candidateId).memory.map((item) => item.id),
+      },
+    });
+    expect(reviewed.statusCode).toBe(200);
+
+    const read = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/resume',
+      headers: { authorization },
+    });
+    const projection = read.json().data.projection as ResumeStudioProjection;
     expect(projection.master.experience.length).toBeGreaterThan(0);
     expect(projection.master.education.length).toBeGreaterThan(0);
     // Nothing may be silently thrown away for want of a resolvable source.
     expect(projection.excludedEvidenceIds).toEqual([]);
   });
 
-  it('records what the document stated as confirmed dossier evidence', async () => {
+  it('records what the document stated as dossier evidence awaiting the candidate', async () => {
     const { app, store, candidateId, authorization } = await createApp();
 
     await app.inject({
@@ -423,7 +450,8 @@ describe('POST /api/v1/candidate/resume/import', () => {
 
     const memory = store.getSnapshot(candidateId).memory;
     expect(memory.length).toBeGreaterThan(0);
-    expect(memory.every((item) => item.status === 'confirmed')).toBe(true);
+    // The machine read the document; only the candidate can confirm it (B166).
+    expect(memory.every((item) => item.status === 'proposed')).toBe(true);
     expect(memory.every((item) => item.sourceMessageIds.length > 0)).toBe(true);
   });
 
