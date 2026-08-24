@@ -235,7 +235,14 @@ export function parseHhResumesList(html: string): Array<{
     const rawUrl = /(?:^|\s)href=["'](\/resume\/([A-Za-z0-9_-]+))["']/iu.exec(
       attributes,
     );
-    if (!rawUrl || (qa !== 'resume-title' && qa !== 'applicant-resume-title')) {
+    if (
+      !rawUrl ||
+      !(
+        qa === 'resume-title' ||
+        qa === 'applicant-resume-title' ||
+        qa?.startsWith('resume-card-link-')
+      )
+    ) {
       continue;
     }
     const resumeId = rawUrl[2];

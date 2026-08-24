@@ -55,10 +55,25 @@ describe('hhResumeParser', () => {
     expect(result.languages[1].cefr).toBe('C1');
   });
 
+  it('parses the classic resume-title link regardless of safe attribute order', () => {
+    expect(
+      parseHhResumesList(
+        '<a data-qa="resume-title" class="resume-link" href="/resume/live-token-542">Head of Product</a>',
+      ),
+    ).toEqual([
+      {
+        id: 'live-token-542',
+        title: 'Head of Product',
+        url: 'https://hh.ru/resume/live-token-542',
+        updatedLabel: 'Готово к импорту',
+      },
+    ]);
+  });
+
   it('parses a sanitised resume link regardless of safe attribute order', () => {
     expect(
       parseHhResumesList(
-        '<a data-qa="resume-title" class="resume-link" href="/resume/live-token-731">Product Director</a>',
+        '<a data-qa="resume-card-link-731" class="resume-link" href="/resume/live-token-731">Product Director</a>',
       ),
     ).toEqual([
       {
