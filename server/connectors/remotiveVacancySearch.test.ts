@@ -152,3 +152,117 @@ describe('Remotive vacancy search', () => {
     ).rejects.toThrow('vacancy_source_response_too_large');
   });
 });
+
+describe('Remotive relevance (B161)', () => {
+  const corpus = () =>
+    new Response(
+      JSON.stringify({
+        'job-count': 3,
+        jobs: [
+          {
+            id: 201,
+            url: 'https://remotive.com/remote-jobs/product/group-product-lead-201',
+            title: 'Group Product Lead',
+            company_name: 'Synthetic Remote Co',
+            category: 'Product',
+            job_type: 'full_time',
+            publication_date: '2026-08-20T06:40:00Z',
+            candidate_required_location: 'Worldwide',
+          },
+          {
+            id: 202,
+            url: 'https://remotive.com/remote-jobs/software/golang-engineer-202',
+            title: 'Senior Golang Engineer',
+            company_name: 'Synthetic Backend',
+            category: 'Software Development',
+            job_type: 'full_time',
+            publication_date: '2026-08-20T07:40:00Z',
+            candidate_required_location: 'Europe',
+          },
+          {
+            id: 203,
+            url: 'https://remotive.com/remote-jobs/product/product-manager-203',
+            title: 'Product Manager, Payments',
+            company_name: 'Synthetic Fintech',
+            category: 'Product',
+            job_type: 'full_time',
+            publication_date: '2026-08-20T08:40:00Z',
+            candidate_required_location: 'Worldwide',
+          },
+        ],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+
+  /**
+   * Requiring every search term to appear verbatim returned nothing for an
+   * ordinary two-word search, so the honest source looked empty while the
+   * fabricated one looked full (B161). Relevance is ranked, not gated.
+   */
+  it('returns partially matching roles ranked ahead of unrelated ones', async () => {
+    const sample = await searchRemotiveVacancies(
+      { text: 'product manager', perPage: 5 },
+      {
+        fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(corpus()),
+        now: () => '2026-08-24T12:00:00.000Z',
+        cache: createRemotiveSourceCache(),
+      },
+    );
+
+    expect(sample.found).toBeGreaterThan(0);
+    expect(sample.items[0]?.title).toBe('Product Manager, Payments');
+    expect(sample.items.map((item) => item.title)).toContain('Group Product Lead');
+  });
+
+  it('excludes a posting that shares no term with the query', async () => {
+    const sample = await searchRemotiveVacancies(
+      { text: 'product manager', perPage: 5 },
+      {
+        fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(corpus()),
+        now: () => '2026-08-24T12:00:00.000Z',
+        cache: createRemotiveSourceCache(),
+      },
+    );
+
+    expect(sample.items.map((item) => item.title)).not.toContain(
+      'Senior Golang Engineer',
+    );
+  });
+});
+
+describe('Remotive query with no usable terms (B161)', () => {
+  it('claims nothing when the query carries no term longer than one character', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          'job-count': 1,
+          jobs: [
+            {
+              id: 301,
+              url: 'https://remotive.com/remote-jobs/software/backend-engineer-301',
+              title: 'Backend Engineer',
+              company_name: 'Synthetic Backend',
+              category: 'Software Development',
+              job_type: 'full_time',
+              publication_date: '2026-08-20T07:40:00Z',
+              candidate_required_location: 'Europe',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const sample = await searchRemotiveVacancies(
+      { text: 'R&D', perPage: 5 },
+      {
+        fetchImpl,
+        now: () => '2026-08-24T12:00:00.000Z',
+        cache: createRemotiveSourceCache(),
+      },
+    );
+
+    expect(sample.items).toEqual([]);
+    expect(sample.found).toBe(0);
+  });
+});

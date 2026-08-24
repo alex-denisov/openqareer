@@ -70,16 +70,17 @@ async function fetchTelegramChannel(source: VacancySourceConfig): Promise<Unifie
       headers: { ...FETCH_HEADERS, Accept: 'text/html,application/xhtml+xml' },
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) return [];
+    if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
     const html = await res.text();
     const vacancies = parseTelegramChannelHtml(html, {
       channelName,
       observedAt: new Date().toISOString(),
     });
-    return vacancies.length > 0 ? vacancies : [];
-  } catch {
-    // fallback to curated
-    return [];
+    return vacancies;
+  } catch (reason) {
+    // An unreachable channel is not an empty channel. Returning [] here made
+    // syncSource take its success path and paint the source «Активен» (B161).
+    throw reason instanceof Error ? reason : new Error('vacancy_source_unreachable');
   }
 }
 
@@ -89,7 +90,7 @@ async function fetchRssFeed(source: VacancySourceConfig): Promise<UnifiedVacancy
       headers: { ...FETCH_HEADERS, Accept: 'application/rss+xml, application/xml, text/xml' },
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) return [];
+    if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
     const xml = await res.text();
     const vacancies = parseRssJobFeed(xml, {
       sourceId: source.id,
@@ -97,10 +98,9 @@ async function fetchRssFeed(source: VacancySourceConfig): Promise<UnifiedVacancy
       companyName: source.name,
       observedAt: new Date().toISOString(),
     });
-    return vacancies.length > 0 ? vacancies : [];
-  } catch {
-    // fallback to curated
-    return [];
+    return vacancies;
+  } catch (reason) {
+    throw reason instanceof Error ? reason : new Error('vacancy_source_unreachable');
   }
 }
 
@@ -120,6 +120,8 @@ export function buildMultiSourceFetcher(hh: HhSearch, remotive: RemotiveSearch):
     if (source.type === 'rss') {
       return fetchRssFeed(source);
     }
-    return [];
+    // An unimplemented source type has not been measured, so it must not report
+    // a successful empty reading (B161).
+    throw new Error(`vacancy_source_type_unsupported: ${source.type}`);
   };
 }

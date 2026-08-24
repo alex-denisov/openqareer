@@ -74,14 +74,17 @@ const handleMatchedVacancies: Handler = async (
     ),
   );
 
+  // Matching an invented profile produced «Подтверждённый навык: TypeScript»
+  // for a candidate who confirmed nothing, and a match percentage computed
+  // from it. No confirmed profile means no match claim (B161).
+  if (confirmedSkills.length === 0 && targetRoles.length === 0) {
+    return { data: [], meta: { requestId: request.id, reason: 'candidate_profile_unconfirmed' } };
+  }
+
   const matched = multiSourceEngine.getMatchedVacancies({
     candidateId: candidate.id,
-    targetRoles:
-      targetRoles.length > 0 ? targetRoles : ['Разработчик', 'Engineer', 'Руководитель разработки'],
-    confirmedSkills:
-      confirmedSkills.length > 0
-        ? confirmedSkills
-        : ['TypeScript', 'React', 'Node.js', 'PostgreSQL', 'Python'],
+    targetRoles,
+    confirmedSkills,
     confirmedFacts: confirmedSkills,
     preferredRemote: true,
   });

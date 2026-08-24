@@ -119,6 +119,7 @@ function TargetVacancyCard({
 function useMatchedVacancies() {
   const [matched, setMatched] = useState<MatchedVacancyItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -127,7 +128,9 @@ function useMatchedVacancies() {
         if (active) setMatched(data);
       })
       .catch(() => {
-        // silent fallback
+        // A failed reading is not an empty market; saying nothing at all is how
+        // «источник недоступен» became indistinguishable from «ничего нет».
+        if (active) setFailed(true);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -137,7 +140,7 @@ function useMatchedVacancies() {
     };
   }, []);
 
-  return { matched, loading };
+  return { matched, loading, failed };
 }
 
 function TargetVacanciesLoading() {
@@ -155,9 +158,22 @@ export function ResumeTargetVacanciesBlock({
   selectedClusterId,
   onSelectTargetVacancy,
 }: ResumeTargetVacanciesBlockProps) {
-  const { matched, loading } = useMatchedVacancies();
+  const { matched, loading, failed } = useMatchedVacancies();
 
   if (loading) return <TargetVacanciesLoading />;
+  if (failed) {
+    return (
+      <section className="career-resume-rail-block" role="status">
+        <h3>
+          <Sparkle size={16} /> Целевые вакансии
+        </h3>
+        <p>
+          Подбор вакансий сейчас недоступен — источник не ответил. Данные профиля
+          не затронуты, повторите позже.
+        </p>
+      </section>
+    );
+  }
   if (matched.length === 0) return null;
 
   return (

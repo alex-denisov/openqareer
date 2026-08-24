@@ -6,7 +6,6 @@ import type {
 } from '../domain/unifiedVacancy';
 import { clusterVacancies } from './vacancyDeduplicator';
 import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancyMatcher';
-import { CURATED_SOURCE_VACANCIES } from './curatedVacancyData';
 
 export type SourceFetcher = (
   source: VacancySourceConfig,
@@ -33,6 +32,11 @@ export interface VacancyQueryResult {
   statsBySource: Array<{ sourceId: string; sourceName: string; count: number }>;
 }
 
+/**
+ * Sources the product knows how to contact. Counts and status stay empty
+ * until a real fetch happens: a configured source is not an observed one
+ * (B161).
+ */
 const DEFAULT_SOURCES: VacancySourceConfig[] = [
   {
     id: 'hh',
@@ -41,10 +45,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://api.hh.ru/vacancies',
     refreshIntervalMinutes: 60,
-    itemsFoundTotal: 3,
-    itemsActiveTotal: 3,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'remotive',
@@ -53,10 +55,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://remotive.com/api/remote-jobs',
     refreshIntervalMinutes: 120,
-    itemsFoundTotal: 2,
-    itemsActiveTotal: 2,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-habr-career',
@@ -65,10 +65,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://career.habr.com/vacancies/rss',
     refreshIntervalMinutes: 60,
-    itemsFoundTotal: 2,
-    itemsActiveTotal: 2,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-superjob',
@@ -77,10 +75,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://superjob.ru/export/it.xml',
     refreshIntervalMinutes: 120,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-zarplata',
@@ -89,10 +85,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://zarplata.ru/export/vacancies.xml',
     refreshIntervalMinutes: 120,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-trudvsem',
@@ -101,10 +95,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://opendata.trudvsem.ru/vacancies.xml',
     refreshIntervalMinutes: 180,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-weworkremotely',
@@ -113,10 +105,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://weworkremotely.com/categories/remote-programming-jobs.rss',
     refreshIntervalMinutes: 60,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-remoteok',
@@ -125,10 +115,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://remoteok.com/api',
     refreshIntervalMinutes: 60,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-itjobs',
@@ -137,10 +125,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/it_jobs',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 2,
-    itemsActiveTotal: 2,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-tproger',
@@ -149,10 +135,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/tproger_jobs',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-react',
@@ -161,10 +145,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/job_react',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-backend',
@@ -173,10 +155,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/forphptut',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-devops',
@@ -185,10 +165,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/devops_jobs',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-qa',
@@ -197,10 +175,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/qa_jobs',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-product',
@@ -209,10 +185,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/product_jobs',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-datascience',
@@ -221,10 +195,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/datasciencejobs',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-relocate',
@@ -233,10 +205,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/relocate_today',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-gamedev',
@@ -245,10 +215,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/gamedevjob',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-uiux',
@@ -257,10 +225,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/uiuxjobs',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-ios',
@@ -269,10 +235,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/ios_jobs',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-marketing',
@@ -281,10 +245,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/marketing_jobs',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-golang',
@@ -293,10 +255,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/golang_jobs',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-python',
@@ -305,10 +265,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/python_jobs_feed',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
   {
     id: 'src-tg-java',
@@ -317,10 +275,8 @@ const DEFAULT_SOURCES: VacancySourceConfig[] = [
     enabled: true,
     targetUrl: 'https://t.me/s/javajob',
     refreshIntervalMinutes: 30,
-    itemsFoundTotal: 1,
-    itemsActiveTotal: 1,
-    lastSyncAt: new Date().toISOString(),
-    lastStatus: 'healthy',
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
   },
 ];
 
@@ -353,26 +309,6 @@ export class MultiSourceVacancyEngine {
       this.sources.set(src.id, { ...src });
     }
     this.fetcher = options?.fetcher;
-    this.loadCuratedVacancies();
-  }
-
-  private loadCuratedVacancies(): void {
-    for (const [sourceId, items] of Object.entries(CURATED_SOURCE_VACANCIES)) {
-      if (!this.sources.has(sourceId)) continue;
-      for (const item of items) {
-        if (isVacancyFresh(item.publishedAt)) {
-          this.rawVacancies.set(item.id, item);
-        }
-      }
-      const source = this.sources.get(sourceId);
-      if (source) {
-        const freshItems = items.filter((v) => isVacancyFresh(v.publishedAt));
-        source.itemsFoundTotal = freshItems.length;
-        source.itemsActiveTotal = freshItems.filter((v) => v.status === 'active').length;
-        source.lastStatus = 'healthy';
-      }
-    }
-    this.recluster();
   }
 
   public getSources(): VacancySourceConfig[] {
@@ -458,13 +394,12 @@ export class MultiSourceVacancyEngine {
     if (!source || !source.enabled) return;
 
     try {
-      let fetched: UnifiedVacancy[] = [];
-      if (this.fetcher) {
-        fetched = await this.fetcher(source);
+      // No transport means the source was never contacted. Reporting that as a
+      // healthy empty result would be a measurement we never took (B161).
+      if (!this.fetcher) {
+        throw new Error('vacancy_source_transport_unavailable');
       }
-      if (fetched.length === 0 && CURATED_SOURCE_VACANCIES[source.id]) {
-        fetched = CURATED_SOURCE_VACANCIES[source.id];
-      }
+      const fetched: UnifiedVacancy[] = await this.fetcher(source);
 
       const freshFetched = fetched.filter((v) => isVacancyFresh(v.publishedAt));
 
@@ -530,13 +465,10 @@ export class MultiSourceVacancyEngine {
     }
     const start = Date.now();
     try {
-      let fetched: UnifiedVacancy[] = [];
-      if (this.fetcher) {
-        fetched = await this.fetcher(source, { query });
+      if (!this.fetcher) {
+        throw new Error('vacancy_source_transport_unavailable');
       }
-      if (fetched.length === 0 && CURATED_SOURCE_VACANCIES[source.id]) {
-        fetched = CURATED_SOURCE_VACANCIES[source.id];
-      }
+      const fetched: UnifiedVacancy[] = await this.fetcher(source, { query });
       const latencyMs = Date.now() - start;
       return {
         sourceId: source.id,
