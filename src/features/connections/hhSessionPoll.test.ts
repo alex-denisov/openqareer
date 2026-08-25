@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createHhSessionImportFlow,
   createHhSessionPoller,
+  hhWaitingNotice,
   readHhResumeFromSession,
 } from './hhSessionPoll';
 
@@ -46,7 +47,88 @@ describe('hh.ru session polling', () => {
       captcha: false,
     });
 
-    await expect(first).resolves.toEqual({ status: 'waiting_for_sign_in' });
+    await expect(first).resolves.toEqual({
+      status: 'waiting_for_sign_in',
+      stage: 'otp',
+    });
+    expect(readSessionPage).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A single opaque `waiting_for_sign_in` made "the page is still loading",
+   * "hh.ru is asking for a code" and "the candidate is signed in but we do not
+   * recognise the page" look identical on screen — nothing changed, ever. The
+   * last of those is the owner-reported symptom, and it was the invisible one
+   * (B157).
+   */
+  it.each([
+    {
+      name: 'the page has not finished loading',
+      page: {
+        ready: false,
+        url: 'https://hh.ru/account/login',
+        signedInApplicant: false,
+        login: false,
+        otp: false,
+        captcha: false,
+      },
+      stage: 'loading',
+    },
+    {
+      name: 'hh.ru is showing its own sign-in form',
+      page: {
+        ready: true,
+        url: 'https://hh.ru/account/login',
+        signedInApplicant: false,
+        login: true,
+        otp: false,
+        captcha: false,
+      },
+      stage: 'login',
+    },
+    {
+      name: 'hh.ru is asking for a one-time code',
+      page: {
+        ready: true,
+        url: 'https://hh.ru/account/login',
+        signedInApplicant: false,
+        login: false,
+        otp: true,
+        captcha: false,
+      },
+      stage: 'otp',
+    },
+    {
+      name: 'hh.ru is showing a captcha',
+      page: {
+        ready: true,
+        url: 'https://hh.ru/account/login',
+        signedInApplicant: false,
+        login: false,
+        otp: false,
+        captcha: true,
+      },
+      stage: 'captcha',
+    },
+    {
+      name: 'the page is ready, is not a challenge, and carries no signed-in marker',
+      page: {
+        ready: true,
+        url: 'https://hh.ru/',
+        signedInApplicant: false,
+        login: false,
+        otp: false,
+        captcha: false,
+      },
+      stage: 'unrecognised',
+    },
+  ])('names the waiting stage when $name', async ({ page, stage }) => {
+    const inspectCurrentPage = vi.fn(async () => page);
+    const readSessionPage = vi.fn();
+
+    await expect(
+      createHhSessionPoller({ inspectCurrentPage, readSessionPage }).poll(),
+    ).resolves.toEqual({ status: 'waiting_for_sign_in', stage });
     expect(readSessionPage).not.toHaveBeenCalled();
   });
 
@@ -215,5 +297,40 @@ describe('hh.ru session polling', () => {
 
     releaseImport?.();
     await first;
+  });
+
+  /**
+   * The step must say where it stands at every moment. Silence is what the
+   * owner reported, and silence is also what an undetected sign-in looks like,
+   * so the unrecognised stage has to stop being patient at some point and offer
+   * the candidate another way through (B157).
+   */
+  describe('waiting notice', () => {
+    it.each([
+      { stage: 'loading' as const, fragment: 'Загружаем страницу hh.ru' },
+      { stage: 'login' as const, fragment: 'войдёте в hh.ru' },
+      { stage: 'otp' as const, fragment: 'одноразовый код' },
+      { stage: 'captcha' as const, fragment: 'проверку' },
+      { stage: 'unrecognised' as const, fragment: 'Проверяем' },
+    ])('explains the $stage stage', ({ stage, fragment }) => {
+      const notice = hhWaitingNotice(stage, 1);
+
+      expect(notice.text).toContain(fragment);
+      expect(notice.stuck).toBe(false);
+    });
+
+    it('stops claiming progress once an unrecognised page outlasts the wait', () => {
+      const notice = hhWaitingNotice('unrecognised', 200);
+
+      expect(notice.stuck).toBe(true);
+      expect(notice.text).toContain('не узнаёт страницу hh.ru');
+      expect(notice.text).toContain('PDF');
+    });
+
+    it('keeps waiting on a challenge hh.ru itself is showing, however long it takes', () => {
+      for (const stage of ['loading', 'login', 'otp', 'captcha'] as const) {
+        expect(hhWaitingNotice(stage, 200).stuck).toBe(false);
+      }
+    });
   });
 });

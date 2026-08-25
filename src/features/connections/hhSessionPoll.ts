@@ -14,8 +14,74 @@ export interface HhResumeItem {
   readonly updatedLabel?: string;
 }
 
-type HhSessionPollResult =
-  | { readonly status: 'waiting_for_sign_in' }
+/**
+ * Why the flow is still waiting. One opaque "waiting" state made a loading
+ * page, a one-time-code prompt and an unrecognised signed-in page look
+ * identical on screen — nothing ever changed — and the last of those is the
+ * failure the candidate can neither see nor act on (B157).
+ */
+export type HhWaitingStage =
+  | 'loading'
+  | 'login'
+  | 'otp'
+  | 'captcha'
+  | 'unrecognised';
+
+/**
+ * How long an already-loaded, unchallenged hh.ru page may stay unrecognised
+ * before the step admits it and offers the candidate the PDF route instead.
+ * ~18 s at the 750 ms poll interval: long enough for a slow single-page
+ * transition, short enough that nobody sits in front of a still screen.
+ */
+const UNRECOGNISED_PATIENCE_POLLS = 24;
+
+export interface HhWaitingNotice {
+  readonly text: string;
+  /** The step has stopped making progress and must offer another route. */
+  readonly stuck: boolean;
+}
+
+/**
+ * What the candidate is told while the flow waits. A challenge hh.ru itself is
+ * showing (code, captcha, its own sign-in form) is not a stall — the candidate
+ * is the one being asked to act, so the flow waits as long as it takes. A page
+ * that is loaded, unchallenged and still carries no signed-in marker is the
+ * failure the owner reported, and it must eventually say so out loud (B157).
+ */
+export function hhWaitingNotice(
+  stage: HhWaitingStage,
+  unrecognisedPolls: number,
+): HhWaitingNotice {
+  switch (stage) {
+    case 'loading':
+      return { text: 'Загружаем страницу hh.ru…', stuck: false };
+    case 'login':
+      return {
+        text: 'Ждём, пока вы войдёте в hh.ru в открывшемся окне.',
+        stuck: false,
+      };
+    case 'otp':
+      return {
+        text: 'hh.ru запросил одноразовый код — введите его в окне входа.',
+        stuck: false,
+      };
+    case 'captcha':
+      return {
+        text: 'hh.ru показывает проверку — пройдите её в окне входа.',
+        stuck: false,
+      };
+    default:
+      return unrecognisedPolls >= UNRECOGNISED_PATIENCE_POLLS
+        ? {
+            text: 'Вход выполнен, но OpenQareer не узнаёт страницу hh.ru. Откройте на hh.ru раздел «Мои резюме» или загрузите PDF-резюме.',
+            stuck: true,
+          }
+        : { text: 'Проверяем, завершён ли вход…', stuck: false };
+  }
+}
+
+export type HhSessionPollResult =
+  | { readonly status: 'waiting_for_sign_in'; readonly stage: HhWaitingStage }
   | { readonly status: 'authenticated_empty' }
   | {
       readonly status: 'ready';
@@ -112,7 +178,7 @@ async function pollOnce(
 ): Promise<HhSessionPollResult> {
   const current = await dependencies.inspectCurrentPage();
   if (!isSignedInApplicantPage(current)) {
-    return { status: 'waiting_for_sign_in' };
+    return { status: 'waiting_for_sign_in', stage: waitingStage(current) };
   }
   await dependencies.onAuthenticated?.();
 
@@ -168,6 +234,18 @@ function sameResumeUrl(actual: string | undefined, expected: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * A page hh.ru itself is challenging outranks readiness: a captcha or a code
+ * prompt is what the candidate must act on, whatever `readyState` says.
+ */
+function waitingStage(page: SessionInspectionResult): HhWaitingStage {
+  if (page.captcha) return 'captcha';
+  if (page.otp) return 'otp';
+  if (page.login) return 'login';
+  if (!page.ready) return 'loading';
+  return 'unrecognised';
 }
 
 function isSignedInApplicantPage(page: SessionInspectionResult): boolean {

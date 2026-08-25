@@ -156,6 +156,37 @@ const foreignResumeFixture = resumeFixture.replace(
   'someone-else@example.test</span>',
 );
 
+/**
+ * Live hh.ru does not land a signed-in applicant on the resume list — it lands
+ * them on its own start page, which is the page the desktop recogniser has to
+ * decide on. The fixture therefore redirects there, exactly like the real site.
+ */
+const startPageLoginFixture = loginFixture.replace(
+  "window.location.assign('/applicant/resumes');",
+  "window.location.assign('/');",
+);
+
+function startPage(header: string): string {
+  return `
+  <!doctype html>
+  <html lang="ru">
+    <head><meta charset="utf-8" /><title>Работа в Москве — hh.ru</title></head>
+    <body>
+      <header>${header}</header>
+      <main><h1>Работа найдётся для каждого</h1></main>
+    </body>
+  </html>
+`;
+}
+
+const signedInStartFixture = startPage(
+  '<a data-qa="mainmenu_applicantProfileDesktopDrop" href="/applicant/profile">Профиль</a>',
+);
+
+const unrecognisedStartFixture = startPage(
+  '<a data-qa="mainmenu_renamedProfileEntry" href="/applicant/profile">Профиль</a>',
+);
+
 const captchaLoginFixture = `
   <!doctype html>
   <html lang="ru">
@@ -225,6 +256,60 @@ describe('hh.ru read-only test-account verifier', () => {
       syntheticEnvironment.OPENQAREER_HH_TEST_PASSWORD,
     );
     expect(browser.contexts()).toHaveLength(0);
+  });
+
+  /**
+   * The desktop connector is the only way a candidate connects hh.ru, and it
+   * decides "signed in" from the page hh.ru lands on after sign-in — not from
+   * the resume list this gate then requests. Checking only the resume list left
+   * the desktop's own decision unproven against the live site, which is exactly
+   * where the owner's "nothing happens after signing in" could hide (B157).
+   */
+  it('proves the desktop recogniser sees the sign-in on the page hh.ru lands on', async () => {
+    const requests: string[] = [];
+
+    const result = await verifyHhTestAccount(
+      withHhRoutes(browser, requests, {
+        login: startPageLoginFixture,
+        resumes: resumeFixture,
+        start: signedInStartFixture,
+      }),
+      {
+        environment: syntheticEnvironment,
+        observedAt: () => '2026-08-25T00:00:00.000Z',
+        timeoutMs: 2_000,
+      },
+    );
+
+    expect(result.status).toBe('ready');
+    expect(requests).toEqual([
+      'GET /account/login',
+      'GET /',
+      'GET /applicant/resumes',
+    ]);
+  });
+
+  it('stops when the landing page carries no marker the desktop can recognise', async () => {
+    const result = await verifyHhTestAccount(
+      withHhRoutes(browser, [], {
+        login: startPageLoginFixture,
+        resumes: resumeFixture,
+        start: unrecognisedStartFixture,
+      }),
+      {
+        environment: syntheticEnvironment,
+        observedAt: () => '2026-08-25T00:00:00.000Z',
+        timeoutMs: 2_000,
+      },
+    );
+
+    expect(result).toEqual({
+      status: 'surface_changed',
+      reason: 'desktop_sign_in_marker_missing',
+      identityMarker: null,
+      observedAt: '2026-08-25T00:00:00.000Z',
+      resumes: [],
+    });
   });
 
   it('lists every resume on the account rather than a single hard-coded one', async () => {
@@ -499,7 +584,7 @@ describe('hh.ru read-only test-account verifier', () => {
 function withHhRoutes(
   browser: Browser,
   requests: string[],
-  fixtures: { login: string; resumes: string },
+  fixtures: { login: string; resumes: string; start?: string },
 ): HhBrowserFactory {
   return {
     async newContext(options): Promise<BrowserContext> {
@@ -519,6 +604,13 @@ function withHhRoutes(
           await route.fulfill({
             contentType: 'text/html; charset=utf-8',
             body: fixtures.resumes,
+          });
+          return;
+        }
+        if (pathname === '/' && fixtures.start) {
+          await route.fulfill({
+            contentType: 'text/html; charset=utf-8',
+            body: fixtures.start,
           });
           return;
         }

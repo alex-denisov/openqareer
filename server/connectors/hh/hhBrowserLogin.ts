@@ -4,6 +4,10 @@ import type {
   Locator,
   Page,
 } from 'playwright';
+import {
+  connectorInspectionScript,
+  type ConnectorInspectionReport,
+} from './connectorInspectionScript';
 import { HH_SELECTORS } from './hhSelectors';
 import {
   hasResumeId,
@@ -14,6 +18,8 @@ import {
 const HH_LOGIN_URL = 'https://hh.ru/account/login';
 const HH_RESUMES_PATH = '/applicant/resumes';
 const HH_HOSTS = new Set(['hh.ru', 'www.hh.ru']);
+/** The desktop poller keeps looking while a page settles; so does this gate. */
+const RECOGNITION_INTERVAL_MS = 500;
 
 type HhBrowserLoginStatus =
   | 'ready'
@@ -34,6 +40,7 @@ type HhBrowserLoginReason =
   | 'identity_marker_missing'
   | 'identity_marker_mismatch'
   | 'resume_marker_missing'
+  | 'desktop_sign_in_marker_missing'
   | 'declared_resume_missing'
   | 'browser_navigation_failed'
   | 'context_close_failed';
@@ -270,6 +277,17 @@ async function settleAfterSubmit(
   if (await isVisible(loginError(page), 0)) {
     return result('invalid', 'login_rejected', observedAt());
   }
+  // The desktop connector never sees this gate's resume-list request: it decides
+  // "signed in" from the page hh.ru lands on, using the script it ships. Prove
+  // that decision against the live surface here, or the desktop can stop
+  // recognising a completed sign-in with every gate still green (B157).
+  if (!(await desktopRecognisesSignIn(page, timeoutMs))) {
+    return result(
+      'surface_changed',
+      'desktop_sign_in_marker_missing',
+      observedAt(),
+    );
+  }
   if (!isCandidateResumesUrl(page.url())) {
     try {
       await page.goto(`https://hh.ru${HH_RESUMES_PATH}`, {
@@ -353,6 +371,27 @@ async function verifyCandidateIdentity(
     'candidate_resume_owner_match',
     resumes,
   );
+}
+
+/**
+ * Evaluates the desktop shell's own recogniser on the current page. A
+ * single-page surface keeps painting after `readyState` flips, so this retries
+ * on the same schedule the desktop poller uses instead of judging one frame.
+ */
+async function desktopRecognisesSignIn(
+  page: Page,
+  timeoutMs: number,
+): Promise<boolean> {
+  const script = connectorInspectionScript('hh');
+  const attempts = Math.max(1, Math.ceil(timeoutMs / RECOGNITION_INTERVAL_MS));
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const report = (await page
+      .evaluate(script)
+      .catch(() => null)) as ConnectorInspectionReport | null;
+    if (report?.signedInApplicant) return true;
+    if (attempt + 1 < attempts) await page.waitForTimeout(RECOGNITION_INTERVAL_MS);
+  }
+  return false;
 }
 
 function oneTimeCodeField(page: Page): Locator {

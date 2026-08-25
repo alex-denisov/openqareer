@@ -6225,6 +6225,37 @@
   gap: 8px;
 }
 
+.career-connector-waiting {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--career-text-soft);
+  background: var(--career-surface);
+}
+
+.career-connector-waiting svg {
+  flex: none;
+}
+
+.career-connector-waiting.is-stuck {
+  color: var(--career-warning);
+  background: var(--career-warning-soft);
+}
+
+.career-connector-webview-placeholder {
+  margin: 0;
+  padding: 24px;
+  max-width: 42ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #4a5568;
+}
+
 .career-modal-error svg {
   flex: none;
 }

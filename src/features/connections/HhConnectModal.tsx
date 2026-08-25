@@ -13,14 +13,18 @@ import {
   readSessionPage,
   resetConnectorSession,
   resizeConnectorSession,
+  sessionCheckFailure,
   sessionOpenFailureMessage,
   type ConnectorSessionStep,
 } from './connectorSession';
 import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
 import {
   createHhSessionImportFlow,
+  hhWaitingNotice,
   type HhSessionImportFlow,
   type HhResumeItem,
+  type HhSessionPollResult,
+  type HhWaitingNotice,
 } from './hhSessionPoll';
 
 export type { HhResumeItem } from './hhSessionPoll';
@@ -56,9 +60,12 @@ export function HhConnectModal({
   const [probe, setProbe] = useState<{ accessible: boolean }>();
   const [emptyAccount, setEmptyAccount] = useState(false);
   const [autoPollPaused, setAutoPollPaused] = useState(false);
+  const [waiting, setWaiting] = useState<HhWaitingNotice>();
   const webviewHost = useRef<HTMLDivElement>(null);
   const sessionFlow = useRef<HhSessionImportFlow>();
   const backgroundCapture = useRef(false);
+  /** Consecutive polls on a loaded, unchallenged page with no signed-in marker. */
+  const unrecognisedPolls = useRef(0);
 
   function closeModal() {
     sessionFlow.current = undefined;
@@ -89,7 +96,9 @@ export function HhConnectModal({
     setProbe(undefined);
     setEmptyAccount(false);
     setAutoPollPaused(false);
+    setWaiting(undefined);
     backgroundCapture.current = false;
+    unrecognisedPolls.current = 0;
     sessionFlow.current = undefined;
     void probeNetworkStatus()
       .then((status) => setProbe(status.hh))
@@ -99,6 +108,8 @@ export function HhConnectModal({
   /** The step only advances once a window is really on screen (B149). */
   async function startSession() {
     setError(undefined);
+    setWaiting(undefined);
+    unrecognisedPolls.current = 0;
     setStep('opening');
     setStep('session_open');
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -145,6 +156,17 @@ export function HhConnectModal({
     return sessionFlow.current;
   }
 
+  /** Keeps the step audibly alive: every poll says where the flow stands. */
+  function noticeFor(result: HhSessionPollResult): HhWaitingNotice | undefined {
+    if (result.status !== 'waiting_for_sign_in') {
+      unrecognisedPolls.current = 0;
+      return undefined;
+    }
+    unrecognisedPolls.current =
+      result.stage === 'unrecognised' ? unrecognisedPolls.current + 1 : 0;
+    return hhWaitingNotice(result.stage, unrecognisedPolls.current);
+  }
+
   async function resetSession() {
     sessionFlow.current = undefined;
     backgroundCapture.current = false;
@@ -171,8 +193,21 @@ export function HhConnectModal({
       void (async () => {
         try {
           if (cancelled) return;
-          await getSessionFlow().run();
-        } catch {
+          const result = await getSessionFlow().run();
+          if (cancelled) return;
+          setWaiting(noticeFor(result));
+        } catch (failure) {
+          // A window the candidate closed is not a failed capture, and saying
+          // so was the flow's own way of hiding what actually happened (B157).
+          if (!backgroundCapture.current) {
+            const explained = sessionCheckFailure('hh', failure);
+            if (explained.step === 'idle') {
+              setWaiting(undefined);
+              setStep('idle');
+              setError(explained.message);
+              return;
+            }
+          }
           await closeConnectorSession('hh').catch(() => undefined);
           backgroundCapture.current = false;
           onConnectionFailure(
@@ -200,6 +235,11 @@ export function HhConnectModal({
         if (result.status !== 'waiting_for_sign_in') {
           return;
         }
+        // The manual check knows exactly what the page is doing, so it says
+        // that instead of one sentence that fits every outcome (B157).
+        setWaiting(noticeFor(result));
+        setStep('session_open');
+        return;
       }
       setError(
         'Активную сессию hh.ru найти не удалось. Войдите в аккаунт соискателя в окне hh.ru или загрузите PDF резюме.',
@@ -292,12 +332,35 @@ export function HhConnectModal({
           </button>
         ) : null}
 
+        {waiting ? (
+          <p
+            className={`career-connector-waiting${waiting.stuck ? ' is-stuck' : ''}`}
+            role="status"
+          >
+            {waiting.stuck ? (
+              <WarningCircle size={16} weight="fill" />
+            ) : (
+              <SpinnerGap size={16} className="spin" />
+            )}
+            <span>{waiting.text}</span>
+          </p>
+        ) : null}
+
         {isTauriEnvironment() && step !== 'idle' && step !== 'opening' ? (
           <div
             ref={webviewHost}
             className="career-connector-webview-host"
+            role="group"
             aria-label="Вход в hh.ru"
-          />
+          >
+            {/* Visible only when the native window is not covering this area —
+                a blank white rectangle is what the owner saw instead (B157). */}
+            <p className="career-connector-webview-placeholder">
+              Окно входа hh.ru открывается поверх этой области. Если его не
+              видно, оно может быть свёрнуто или за другим окном — найдите его и
+              завершите вход.
+            </p>
+          </div>
         ) : null}
 
         {error ? (

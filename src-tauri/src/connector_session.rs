@@ -20,6 +20,11 @@ const PAGE_POLL_INTERVAL: Duration = Duration::from_millis(350);
 const PAGE_SETTLE_DELAY: Duration = Duration::from_millis(900);
 const EVAL_TIMEOUT: Duration = Duration::from_secs(15);
 const HH_SIGNED_IN_SELECTOR: &str = r#"[data-qa^="mainmenu_applicantProfile"], [data-qa^="mainmenu_profileAndResumes"], [data-qa^="profile-activator"]"#;
+/// Shared with the live hh.ru evidence gate, so a drifted recogniser cannot
+/// pass in Chromium while failing in the desktop webview (B157).
+const INSPECTION_SCRIPT: &str = include_str!("connector_inspection.js");
+const PLATFORM_PLACEHOLDER: &str = "__OPENQAREER_PLATFORM__";
+const HH_MARKER_PLACEHOLDER: &str = "__OPENQAREER_HH_MARKER__";
 /// Full provider DOM must never cross IPC without a hard upper bound.
 const MAX_SESSION_PAGE_BODY_CHARS: usize = 2_000_000;
 
@@ -357,6 +362,17 @@ fn validate_page_body(body: String) -> Result<String, String> {
     Ok(body)
 }
 
+/// Fills the shared recogniser with the values this run is asking about.
+fn inspection_script(platform: &str) -> Result<String, String> {
+    let platform_json = serde_json::to_string(platform)
+        .map_err(|error| format!("inspection_platform_shape: {error}"))?;
+    let marker_json = serde_json::to_string(HH_SIGNED_IN_SELECTOR)
+        .map_err(|error| format!("inspection_selector_shape: {error}"))?;
+    Ok(INSPECTION_SCRIPT
+        .replace(PLATFORM_PLACEHOLDER, &platform_json)
+        .replace(HH_MARKER_PLACEHOLDER, &marker_json))
+}
+
 /// Returns the document currently shown to the candidate without navigating it.
 /// This is the only safe operation while login, MFA or CAPTCHA may be active.
 pub async fn inspect_session_page(
@@ -367,28 +383,7 @@ pub async fn inspect_session_page(
     let window = app
         .get_webview(label)
         .ok_or_else(|| "session_window_missing".to_string())?;
-    let platform_json = serde_json::to_string(platform)
-        .map_err(|error| format!("inspection_platform_shape: {error}"))?;
-    let hh_marker_json = serde_json::to_string(HH_SIGNED_IN_SELECTOR)
-        .map_err(|error| format!("inspection_selector_shape: {error}"))?;
-    let script = format!(
-        "(function(){{try{{\
-const platform={platform_json};\
-const hhMarkerSelector={hh_marker_json};\
-const q=function(selector){{return Boolean(document.querySelector(selector));}};\
-const path=location.pathname;\
-const text=(document.body&&document.body.innerText)||'';\
-const linkedinLogin=path.indexOf('/login')===0||path.indexOf('/uas/login')===0||q('input[name=\"session_password\"],#join-form');\
-const hhLogin=path.indexOf('/account/login')===0||q('[data-qa=\"account-login-page\"]');\
-const login=platform==='linkedin'?linkedinLogin:hhLogin;\
-const otp=q('[data-qa=\"otp-code-input\"],input[name=\"otpCode\"],input[autocomplete=\"one-time-code\"]')||(platform==='linkedin'&&path.indexOf('/checkpoint/challenge')===0);\
-const captcha=q('[data-qa=\"captcha\"],#captcha,.captcha-container')||/(captcha|robot|робот|проверка)/i.test(document.title)||/(подтвердите[^.]{{0,80}}(?:робот|человек)|captcha)/i.test(text.slice(0,2000));\
-const hhMarker=q(hhMarkerSelector)||path==='/applicant/resumes';\
-const linkedinMarker=q('a[href*=\"/logout\"],a[href*=\"/m/logout\"],[data-view-name=\"navigation-profile\"],.global-nav__me-photo,button[aria-label=\"Me\"],button[aria-label=\"Вы\"]');\
-const marker=platform==='linkedin'?linkedinMarker:hhMarker;\
-return {{ready:document.readyState==='complete',url:location.href,signedInApplicant:marker&&!login&&!otp&&!captcha,login:login,otp:otp,captcha:captcha}};\
-}}catch(e){{return {{ready:false,url:'',signedInApplicant:false,login:false,otp:false,captcha:false}};}}}})()"
-    );
+    let script = inspection_script(platform)?;
     let raw = eval_json(&window, &script).await?;
     serde_json::from_str::<SessionInspectionReport>(&raw)
         .map_err(|error| format!("inspection_shape: {error}"))

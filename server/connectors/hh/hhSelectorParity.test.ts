@@ -43,4 +43,20 @@ describe('hh signed-in selector parity between Rust and TypeScript', () => {
       expect(HH_SELECTORS.security.applicantProfile).toContain(marker);
     }
   });
+
+  /**
+   * The recogniser itself is one shipped file. If a future change inlines a
+   * copy back into Rust, the live evidence gate would keep exercising the file
+   * while the desktop ran something else — the exact split this guard exists to
+   * prevent (B157).
+   */
+  it('keeps the desktop recogniser loaded from the one shipped script', () => {
+    const rust = readFileSync(
+      join(REPOSITORY_ROOT, 'src-tauri', 'src', 'connector_session.rs'),
+      'utf8',
+    );
+
+    expect(rust).toContain('include_str!("connector_inspection.js")');
+    expect(rust).not.toContain('signedInApplicant:');
+  });
 });

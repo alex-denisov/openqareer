@@ -65,6 +65,10 @@ export default tseslint.config(
       'test-results/**',
       '.serena/**',
       'src-tauri/target/**',
+      // A recogniser template, not runnable JavaScript: its two placeholders
+      // are substituted by Rust and by the live hh.ru gate before evaluation.
+      // Its syntax is checked in connectorInspectionScript.test.ts instead.
+      'src-tauri/src/connector_inspection.js',
       'mcp-server/**',
       'scripts/auth_setup.js',
       'scripts/export_all_connections.js',
