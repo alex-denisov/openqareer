@@ -88,6 +88,56 @@ describe('favicon.svg', () => {
     },
   );
 
+  /**
+   * B168 — the owner reported the favicon looked wrong. It was: measured on
+   * the 64-unit grid the mark reaches y=65.615, so a `0 0 64 64` viewBox cut
+   * 1.6 units off the tail's round cap in every rendered size. Pinning the
+   * numbers alone never caught it, because each number was right and only the
+   * frame around them was wrong.
+   */
+  it('frames the whole mark with even air and clips nothing', () => {
+    const ring = { cx: 31.87, cy: 32, radius: 25.2, weight: 11.59 };
+    const tail = { x1: 37.34, y1: 41.9, x2: 57.3, y2: 60.45, weight: 10.33 };
+    const outer = ring.radius + ring.weight / 2;
+    const cap = tail.weight / 2;
+    const bounds = {
+      minX: Math.min(ring.cx - outer, tail.x1 - cap, tail.x2 - cap),
+      maxX: Math.max(ring.cx + outer, tail.x1 + cap, tail.x2 + cap),
+      minY: Math.min(ring.cy - outer, tail.y1 - cap, tail.y2 - cap),
+      maxY: Math.max(ring.cy + outer, tail.y1 + cap, tail.y2 + cap),
+    };
+
+    for (const [name, markup] of [
+      ['favicon', favicon],
+      ['component', component],
+    ] as const) {
+      const declared = /viewBox="([^"]+)"/u.exec(markup)?.[1];
+      expect(declared, `${name} declares a viewBox`).toBeDefined();
+      const [x, y, width, height] = declared!.trim().split(/\s+/u).map(Number);
+
+      expect(width, `${name} viewBox is square`).toBeCloseTo(height, 3);
+      expect(bounds.minX, `${name} clips the mark on the left`).toBeGreaterThanOrEqual(x);
+      expect(bounds.minY, `${name} clips the mark on the top`).toBeGreaterThanOrEqual(y);
+      expect(bounds.maxX, `${name} clips the mark on the right`).toBeLessThanOrEqual(
+        x + width,
+      );
+      expect(bounds.maxY, `${name} clips the mark on the bottom`).toBeLessThanOrEqual(
+        y + height,
+      );
+
+      // Even air: the mark must sit in the middle of its frame, not merely
+      // inside it. Off-centre by a unit is what reads as a crooked icon.
+      expect((bounds.minX + bounds.maxX) / 2, `${name} centres the mark across`).toBeCloseTo(
+        x + width / 2,
+        3,
+      );
+      expect((bounds.minY + bounds.maxY) / 2, `${name} centres the mark down`).toBeCloseTo(
+        y + height / 2,
+        3,
+      );
+    }
+  });
+
   it('uses the same brand gradient stops', () => {
     for (const stop of ['#0488F4', '#0A70E0', '#0F43A2']) {
       expect(favicon).toContain(stop);

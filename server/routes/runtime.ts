@@ -33,6 +33,18 @@ function entryDocumentFor(url: string, staticRoot: string): string {
   return 'index.html';
 }
 
+/**
+ * Build output is not a route. `/assets/*` names a file this release either
+ * published or did not, so a miss must say `404` and stop. Answering it with
+ * the entry document handed the split-bundle loader an HTML page where a
+ * bundle part belonged, and it dead-ended on `bad part length` (B168); the
+ * same substitution broke root static files as INC-018.
+ */
+function isBuildAssetPath(url: string): boolean {
+  const path = url.split('?')[0] ?? '';
+  return path.startsWith('/assets/');
+}
+
 function hasValidation(error: unknown): error is { validation: unknown[] } {
   return (
     typeof error === 'object' &&
@@ -232,6 +244,16 @@ export async function registerStaticDelivery(
     app.setNotFoundHandler(async (request, reply) => {
       if (request.url.startsWith('/api/')) {
         return sendError(reply, request, 404, 'route_not_found', 'Такого API-маршрута нет.', false);
+      }
+      if (isBuildAssetPath(request.url)) {
+        return sendError(
+          reply,
+          request,
+          404,
+          'asset_not_found',
+          'Такого файла в этом релизе нет.',
+          false,
+        );
       }
       if (request.method === 'GET') {
         // Each surface has its own prerendered first paint. Serving the

@@ -215,6 +215,45 @@ jobs:
               "$first_part_bytes" >&2
             exit 1
           fi
+          # INC-026 / B168 — the public route drops any single response past
+          # ~20 KB, and the render-blocking stylesheet used to be 138 KB, so
+          # the site did not open at all on that route while /health stayed
+          # green. No first-paint response may exceed one delivery part.
+          sheet_list="$(mktemp)"
+          tr '<' '\n' < "$release_index" |
+            sed -nE 's#^link[^>]*rel="stylesheet"[^>]*href="(/assets/[^"]+\.css)".*#\1#p' \
+            > "$sheet_list"
+          sheet_count=0
+          while IFS= read -r sheet_path; do
+            [ -n "$sheet_path" ] || continue
+            sheet_count=$((sheet_count + 1))
+            sheet="$(mktemp)"
+            curl -fsS --max-time 20 "https://openqareer.com$sheet_path" > "$sheet"
+            sheet_bytes="$(wc -c < "$sheet")"
+            rm -f "$sheet"
+            if [ "$sheet_bytes" -gt 12288 ]; then
+              printf 'first-paint stylesheet %s is %s bytes, over one 12 KiB part\n' \
+                "$sheet_path" "$sheet_bytes" >&2
+              exit 1
+            fi
+          done < "$sheet_list"
+          rm -f "$sheet_list"
+          if [ "$sheet_count" -lt 1 ]; then
+            printf 'production index declares no stylesheet\n' >&2
+            exit 1
+          fi
+          printf 'first_paint_stylesheets=%s all_under_12KiB=ok\n' "$sheet_count"
+          # A build asset that this release did not publish must say 404. When
+          # it answered with the entry document instead, the split-bundle
+          # loader read an HTML page as a bundle part and dead-ended on
+          # "bad part length" (B168, and INC-018 before it).
+          missing_status="$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' \
+            "https://openqareer.com${part_prefix}999.js")"
+          if [ "$missing_status" != "404" ]; then
+            printf 'missing build asset answered %s, expected 404\n' \
+              "$missing_status" >&2
+            exit 1
+          fi
           curl -fsSI --max-time 10 https://openqareer.com/ |
             grep -Eiq '^content-security-policy:'
           curl -fsSI --max-time 10 https://openqareer.com/ |

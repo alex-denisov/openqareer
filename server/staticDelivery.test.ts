@@ -133,6 +133,29 @@ describe('static release delivery', () => {
     }
   });
 
+  /**
+   * B168 / INC-026 — a build-output path either exists in this release or it
+   * does not. Answering a missing `/assets/*` with the entry document made the
+   * split-bundle loader read an HTML page as a bundle part and dead-end on
+   * "bad part length", which is what the owner saw on `/admin`. The same
+   * substitution is the archived INC-018 defect.
+   */
+  it('answers a missing build asset with 404 instead of the entry document', async () => {
+    const app = await createStaticApp();
+
+    for (const url of [
+      '/assets/index-Cl6oP_Oi.js.split.js.oqpart-999.js',
+      '/assets/index-DEADBEEF.js',
+      '/assets/index-DEADBEEF.css',
+      '/assets/nested/thing.js?v=2',
+    ]) {
+      const response = await app.inject({ method: 'GET', url });
+      expect(response.statusCode, url).toBe(404);
+      expect(response.body, url).not.toContain('current release');
+      expect(response.body, url).not.toContain('administrator console');
+    }
+  });
+
   it('falls back to the workspace document when the release has no admin one', async () => {
     const app = await createStaticApp({ adminDocument: false });
 

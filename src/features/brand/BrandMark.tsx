@@ -41,6 +41,16 @@ const TAIL_Y2 = 60.45;
 const TAIL_WEIGHT = 10.33;
 // Reproduces the two ~8° hairlines the original leaves where tail crosses ring.
 const TAIL_CUT_WEIGHT = 17.5;
+/**
+ * The frame, not the drawing. Measured on this grid the mark spans
+ * x 0.875–62.865 and y 1.005–65.615, so a `0 0 64 64` viewBox sliced 1.6 units
+ * off the tail's round cap in every rendered size and hung the sign 1.3 units
+ * low (B168). This square box is the mark's own bounding box plus two units of
+ * air on each side; every measured constant above is untouched.
+ */
+const VIEW_BOX = '-2.435 -0.995 68.61 68.61';
+/** The mask ground has to cover the frame, which now starts left of zero. */
+const MASK_GROUND = { x: -8, y: -8, size: 80 };
 
 export function BrandMark({
   variant = 'mark',
@@ -100,7 +110,7 @@ function BrandSign({
       className={className}
       width={size}
       height={size}
-      viewBox="0 0 64 64"
+      viewBox={VIEW_BOX}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       role={decorative ? undefined : 'img'}
@@ -151,8 +161,21 @@ function BrandSignDefs({
       ) : null}
       {/* Keeps a hairline of background between tail and ring, so the two
           strokes read as one drawn letter instead of two stacked shapes. */}
-      <mask id={cutId} maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
-        <rect x="0" y="0" width="64" height="64" fill="#fff" />
+      <mask
+        id={cutId}
+        maskUnits="userSpaceOnUse"
+        x={MASK_GROUND.x}
+        y={MASK_GROUND.y}
+        width={MASK_GROUND.size}
+        height={MASK_GROUND.size}
+      >
+        <rect
+          x={MASK_GROUND.x}
+          y={MASK_GROUND.y}
+          width={MASK_GROUND.size}
+          height={MASK_GROUND.size}
+          fill="#fff"
+        />
         <line
           x1={TAIL_X1}
           y1={TAIL_Y1}
