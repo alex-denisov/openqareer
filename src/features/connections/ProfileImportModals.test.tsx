@@ -7,12 +7,12 @@ import {
 } from './ProfileImportModals';
 
 describe('ProfileImportModals', () => {
-  it('states the manual pilot-install boundary without advertising a public download', () => {
+  it('states the manual install boundary without advertising a public download', () => {
     const html = renderToStaticMarkup(<WebDesktopCtaCallout />);
 
     expect(html).toContain('Импорт LinkedIn и hh.ru доступен только в установленном десктопном приложении');
     expect(html).toContain('Публичной загрузки приложения пока нет');
-    expect(html).toContain('у владельца пилота');
+    expect(html).toContain('у команды OpenQareer');
     for (const unsupportedDownloadClaim of [
       '<a',
       'href=',

@@ -11,12 +11,18 @@ describe('CareerIntake', () => {
     delete (globalThis as { window?: unknown }).window;
   });
 
-  it('opens on the start screen without a wizard step behind it', () => {
+  /**
+   * B169 §4 — the wizard used to open on a welcome screen whose only action
+   * was «Начать диагностику». It restated the first question without asking
+   * it, and the owner could not tell what it was for. The first paint is now
+   * the first question.
+   */
+  it('opens on the first question, with no screen in front of it', () => {
     const html = renderToStaticMarkup(<CareerIntake onComplete={() => undefined} />);
 
-    expect(html).toContain('Начните с карьерного вопроса');
-    expect(html).toContain('Начать диагностику');
-    expect(html).not.toContain('С чем разобраться?');
+    expect(html).toContain('С чем разобраться?');
+    expect(html).not.toContain('Начать диагностику');
+    expect(html).not.toContain('Начните с карьерного вопроса');
   });
 
   it('asks for the import action by the name the button actually carries', () => {
@@ -24,18 +30,18 @@ describe('CareerIntake', () => {
     expect(PRESS_IMPORT_FIRST_MESSAGE).not.toContain('Импортировать по ссылке');
   });
 
-  it('renders start screen note explaining documents are optional', () => {
-    const html = renderToStaticMarkup(<CareerIntake onComplete={() => undefined} />);
+  it('offers the no-document route from the source step itself', () => {
+    const html = renderToStaticMarkup(
+      <CareerIntake onComplete={() => undefined} initialStep="source" />,
+    );
 
-    expect(html).toContain('Можно начать без документов');
-    expect(html).toContain('Без аккаунта прогресс хранится только в текущей вкладке.');
+    expect(html).toContain('Без документов');
   });
 
   it('selects PDF by default on the web source step', () => {
     const html = renderToStaticMarkup(
       <CareerIntake
         onComplete={() => undefined}
-        initialStarted
         initialStep="source"
       />,
     );
@@ -59,7 +65,6 @@ describe('CareerIntake', () => {
     const html = renderToStaticMarkup(
       <CareerIntake
         onComplete={() => undefined}
-        initialStarted
         initialStep="source"
         initialSourceChoice="profile-import"
       />,
@@ -80,7 +85,6 @@ describe('CareerIntake', () => {
     const html = renderToStaticMarkup(
       <CareerIntake
         onComplete={() => undefined}
-        initialStarted
         initialStep="source"
       />,
     );

@@ -22,7 +22,7 @@ export function WebDesktopCtaCallout() {
         </strong>
         <p>
           Публичной загрузки приложения пока нет. Получите установочную сборку и
-          инструкцию у владельца пилота.
+          инструкцию у команды OpenQareer.
         </p>
         <div className="career-web-desktop-actions">
           <span>Если приложение уже установлено, откройте его и выберите «Импорт профиля».</span>

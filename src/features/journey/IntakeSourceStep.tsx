@@ -16,6 +16,7 @@ import {
 import { PlatformLogo } from '../connections/PlatformLogo';
 import type { ParsedResume } from '../workspace/resumeParser';
 import type { IngestedResume } from './useResumeIngestion';
+import type { IntakeSourceLockState } from './intakeSourceLock';
 import {
   connectedProfileSourceNotice,
   type ConnectedProfileSource,
@@ -27,7 +28,10 @@ export interface IntakeSourceStepProps {
   readonly isDesktop: boolean;
   readonly sourceChoice: SourceChoice;
   readonly onChooseSource: (choice: SourceChoice) => void;
-  readonly locked: boolean;
+  /** Which source the picture is being built from, and why the rest are shut. */
+  readonly lock: IntakeSourceLockState;
+  /** Releases that source so another one can be chosen. */
+  readonly onReleaseSource: () => void;
   readonly ingested?: IngestedResume;
   readonly busy: boolean;
   readonly notice?: string;
@@ -62,39 +66,40 @@ export interface IntakeSourceStepProps {
 // One component, one JSX tree: splitting further would scatter the markup.
 // eslint-disable-next-line max-lines-per-function
 export function IntakeSourceStep(props: IntakeSourceStepProps) {
-  const { sourceChoice, locked } = props;
+  const { sourceChoice, lock } = props;
+  const closed = (choice: SourceChoice) =>
+    lock.lockedTo !== undefined && lock.lockedTo !== choice;
   return (
     <div className="career-source-step">
       <div className="career-source-choice" role="group" aria-label="Источник опыта">
-        <SourceButton
-          icon={PlugsConnected}
-          label="Импорт профиля"
-          selected={sourceChoice === 'profile-import'}
-          disabled={locked && sourceChoice !== 'profile-import'}
-          onClick={() => props.onChooseSource('profile-import')}
-        />
-        <SourceButton
-          icon={FilePdf}
-          label="PDF"
-          selected={sourceChoice === 'pdf'}
-          disabled={locked && sourceChoice !== 'pdf'}
-          onClick={() => props.onChooseSource('pdf')}
-        />
-        <SourceButton
-          icon={Sparkle}
-          label="Текстом"
-          selected={sourceChoice === 'text'}
-          disabled={locked && sourceChoice !== 'text'}
-          onClick={() => props.onChooseSource('text')}
-        />
-        <SourceButton
-          icon={ArrowRight}
-          label="Без документов"
-          selected={sourceChoice === 'none'}
-          disabled={locked && sourceChoice !== 'none'}
-          onClick={() => props.onChooseSource('none')}
-        />
+        {(
+          [
+            ['profile-import', 'Импорт профиля', PlugsConnected],
+            ['pdf', 'PDF', FilePdf],
+            ['text', 'Текстом', Sparkle],
+            ['none', 'Без документов', ArrowRight],
+          ] as Array<[SourceChoice, string, Icon]>
+        ).map(([choice, label, icon]) => (
+          <SourceButton
+            key={choice}
+            icon={icon}
+            label={label}
+            selected={sourceChoice === choice}
+            disabled={closed(choice)}
+            closedReason={closed(choice) ? lock.reason : undefined}
+            onClick={() => props.onChooseSource(choice)}
+          />
+        ))}
       </div>
+
+      {lock.reason ? (
+        <p className="career-source-lock" role="status">
+          <span>{lock.reason}</span>
+          <button type="button" className="career-quiet-button" onClick={props.onReleaseSource}>
+            Сменить источник
+          </button>
+        </p>
+      ) : null}
 
       {sourceChoice === 'pdf' ? <PdfSource {...props} /> : null}
       {sourceChoice === 'profile-import' ? <ProfileImportSource {...props} /> : null}
@@ -121,7 +126,10 @@ export function IntakeSourceStep(props: IntakeSourceStepProps) {
   );
 }
 
-function PdfSource({ ingested, busy, locked, onPickPdf, notice }: IntakeSourceStepProps) {
+function PdfSource({ ingested, busy, lock, onPickPdf, notice }: IntakeSourceStepProps) {
+  // Once a file has been read, picking another one is a source change, not a
+  // second document: the release control above is the way back.
+  const locked = lock.lockedTo === 'pdf';
   return (
     <div className="career-pdf-source">
       <div className="career-pdf-source-row">
@@ -184,7 +192,7 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
           name="LinkedIn"
           description="Импорт опыта и навыков из вашего профиля LinkedIn."
           connected={linkedinReady}
-          disabled={props.locked && !linkedinReady}
+          disabled={props.lock.lockedTo !== undefined && props.lock.lockedTo !== 'profile-import'}
           onConnect={() => props.onLinkedinOpen(true)}
         />
         <PlatformCard
@@ -192,7 +200,7 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
           name="hh.ru"
           description="Импорт вашего резюме с hh.ru: вход проходит на странице hh.ru, в вашей сессии."
           connected={hhReady}
-          disabled={props.locked && !hhReady}
+          disabled={props.lock.lockedTo !== undefined && props.lock.lockedTo !== 'profile-import'}
           onConnect={() => props.onHhOpen(true)}
         />
       </div>
@@ -212,7 +220,7 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
               className="career-hh-resumes-select"
               value={props.selectedHhResumeId}
               onChange={(event) => props.onSelectHhResume(event.target.value)}
-              disabled={props.locked}
+              disabled={props.busy}
             >
               {props.hhResumes.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -224,7 +232,7 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
               type="button"
               className="career-primary-button"
               onClick={props.onImportHhResume}
-              disabled={props.locked || props.busy}
+              disabled={props.busy}
             >
               {props.busy ? 'Импортируем…' : 'Импортировать выбранное резюме'}
             </button>
@@ -365,12 +373,14 @@ function SourceButton({
   label,
   selected,
   disabled,
+  closedReason,
   onClick,
 }: {
   icon: Icon;
   label: string;
   selected: boolean;
   disabled?: boolean;
+  closedReason?: string;
   onClick: () => void;
 }) {
   return (
@@ -379,6 +389,8 @@ function SourceButton({
       className={selected ? 'is-selected' : ''}
       aria-pressed={selected}
       disabled={disabled}
+      aria-label={closedReason ? `${label}. ${closedReason}` : undefined}
+      title={closedReason ?? label}
       onClick={onClick}
     >
       <ItemIcon size={20} weight={selected ? 'fill' : 'regular'} />

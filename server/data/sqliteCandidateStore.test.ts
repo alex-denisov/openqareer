@@ -176,7 +176,7 @@ describe('SQLite candidate memory', () => {
     const input = {
       kind: 'resume' as const,
       source: 'upload' as const,
-      fileName: 'Алексей Денисов CV.pdf',
+      fileName: 'Мария Иванова CV.pdf',
       mimeType: 'application/pdf',
       contentBase64,
       extractedText: 'Уникальный текст резюме 482',
@@ -189,7 +189,7 @@ describe('SQLite candidate memory', () => {
       document: {
         kind: 'resume',
         source: 'upload',
-        fileName: 'Алексей Денисов CV.pdf',
+        fileName: 'Мария Иванова CV.pdf',
         mimeType: 'application/pdf',
         version: 1,
         parseStatus: 'ready',
@@ -213,7 +213,7 @@ describe('SQLite candidate memory', () => {
     store.close();
     stores.splice(stores.indexOf(store), 1);
     const rawDatabase = readFileSync(databasePath).toString('utf8');
-    expect(rawDatabase).not.toContain('Алексей Денисов CV.pdf');
+    expect(rawDatabase).not.toContain('Мария Иванова CV.pdf');
     expect(rawDatabase).not.toContain('Уникальный текст резюме 482');
     expect(rawDatabase).not.toContain('%PDF synthetic private document bytes 482');
 

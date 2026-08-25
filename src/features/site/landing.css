@@ -852,6 +852,56 @@
   box-shadow: 0 0 0 3px oklch(60% 0.15 255 / 0.25);
 }
 
+/* B170 — the header carries the label and, on some fields, a secondary action
+   («Забыли пароль?»). It used to be laid out with a style attribute, which
+   production CSP drops outright (PRB-012). */
+.auth-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.auth-field-action {
+  padding: 0;
+  font-size: 0.78rem;
+}
+
+.auth-field-input {
+  position: relative;
+  display: grid;
+}
+
+/* Room for the reveal control, so a long password never runs under it. */
+.auth-field-input.has-reveal input {
+  padding-right: 46px;
+}
+
+.auth-reveal-button {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: var(--career-text-soft, oklch(82% 0.02 255));
+  background: transparent;
+  cursor: pointer;
+}
+
+.auth-reveal-button:hover,
+.auth-reveal-button[aria-pressed='true'] {
+  color: var(--career-accent, #0a70e0);
+}
+
+.auth-form-error {
+  margin-bottom: 16px;
+}
+
 .auth-field-error {
   font-size: 0.8rem;
   color: oklch(75% 0.18 28);

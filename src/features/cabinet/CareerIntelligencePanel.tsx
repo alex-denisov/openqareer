@@ -31,6 +31,8 @@ interface CareerIntelligencePanelProps {
   expanded?: boolean;
   onRefresh: () => Promise<void>;
   onNavigate: (view: IntelligenceDestination) => void;
+  /** Opens the strategist with this screen as the reason for the visit. */
+  onOpenExpert: () => void;
 }
 
 // The market panel keeps its state transitions beside the conditional UI they govern.
@@ -43,6 +45,7 @@ export function CareerIntelligencePanel({
   expanded = false,
   onRefresh,
   onNavigate,
+  onOpenExpert,
 }: CareerIntelligencePanelProps) {
   const subscriptions = useMemo(
     () => snapshot?.vacancySubscriptions ?? [],
@@ -181,6 +184,11 @@ export function CareerIntelligencePanel({
           <span className="career-cabinet-kicker">Аналитика</span>
           <h2 id="career-intelligence-title">Рынок и следующие шаги</h2>
         </div>
+        {/* B169 §8 — every screen that can use the strategist offers it here,
+            with a reason attached. The contextless top-bar button is gone. */}
+        <button className="career-quiet-button" type="button" onClick={onOpenExpert}>
+          Настроить со стратегом
+        </button>
       </header>
 
       <AtsReadability journey={journey} onNavigate={onNavigate} />

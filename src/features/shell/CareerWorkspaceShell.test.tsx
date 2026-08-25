@@ -19,7 +19,7 @@ describe('CareerWorkspaceShell', () => {
         session={{
           username: 'alexey',
           email: 'alexey@example.com',
-          displayName: 'Алексей Денисов',
+          displayName: 'Мария Иванова',
           role: 'candidate',
           isTest: false,
           candidateId: 'candidate-1',
@@ -45,7 +45,7 @@ describe('CareerWorkspaceShell', () => {
     expect(html).not.toContain('Диалог со стратегом');
     expect(html).not.toContain('Профиль и документы');
     expect(html).not.toContain('Рынок и следующие шаги');
-    expect(html).not.toContain('Начните с карьерного вопроса');
+    expect(html).not.toContain('С чем разобраться?');
   });
 
   it('locks every workspace section until the diagnostic produced a career picture', () => {
@@ -84,8 +84,8 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    expect(html).toContain('Начните с карьерного вопроса');
-    expect(html).toContain('Начать диагностику');
+    expect(html).toContain('С чем разобраться?');
+    expect(html).not.toContain('Начать диагностику');
     expect(html).not.toContain('Карьерный кабинет');
   });
 
@@ -111,7 +111,7 @@ describe('CareerWorkspaceShell', () => {
     // silent; the explanation appears only once the wait becomes real.
     expect(html).not.toContain('Проверяем защищённую сессию');
     expect(html).not.toContain('Синтетический профиль кандидата');
-    expect(html).not.toContain('Начните с карьерного вопроса');
+    expect(html).not.toContain('С чем разобраться?');
   });
 
   it('explains a session check that failed instead of waiting silently', () => {
@@ -149,7 +149,7 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('data-testid="career-shell"');
     expect(html).toContain('career-connection-notice');
     expect(html).toContain('hh.ru подключён');
-    expect(html).toContain('Начните с карьерного вопроса');
+    expect(html).toContain('С чем разобраться?');
   });
 
   it('keeps a first-time candidate inside the canonical career shell', () => {
@@ -162,14 +162,15 @@ describe('CareerWorkspaceShell', () => {
     );
 
     expect(html).toContain('data-testid="career-shell"');
-    expect(html).toContain('Начните с карьерного вопроса');
-    expect(html).toContain('Начать диагностику');
-    expect(html).toContain('Можно начать без документов');
+    // The diagnostic opens on its first question: the welcome screen that used
+    // to stand in front of it, and its «Не заполнен» status board, are gone
+    // (B169 §4). Nothing else about the first-time shell changed.
+    expect(html).toContain('С чем разобраться?');
+    expect(html).not.toContain('Начать диагностику');
+    expect(html).not.toContain('Профиль</span><strong>Не заполнен</strong>');
     expect(html).not.toContain('Посмотреть демо');
     expect(html).not.toContain('Выйти из демо');
     expect(html).not.toContain('Демо · синтетические данные');
-    expect(html).toContain('Профиль</span><strong>Не заполнен</strong>');
-    expect(html).not.toContain('С чем разобраться?');
     expect(html).toContain('Сегодня');
     expect(html).toContain('Профиль');
     expect(html).toContain('Карьера');
@@ -255,11 +256,11 @@ describe('CareerWorkspaceShell', () => {
     expect(html).not.toContain('Посмотреть объём работы');
   });
 
-  it('separates available work, assisted pilot and unavailable automation', () => {
+  it('separates available work, assisted setup and unavailable automation', () => {
     const html = renderToStaticMarkup(<CareerTariffsView onOpenCoach={() => undefined} />);
 
     expect(html).toContain('Доступно сейчас');
-    expect(html).toContain('Сопровождаемый пилот');
+    expect(html).toContain('Ручное сопровождение');
     expect(html).toContain('Автопилот пока недоступен');
   });
 
@@ -464,5 +465,81 @@ describe('CareerWorkspaceShell brand chrome', () => {
     // `style-src 'self'` on openqareer.com blocks style attributes outright, so
     // anything styled that way is styled only in development.
     expect(renderToStaticMarkup(<CareerWorkspaceShell />)).not.toContain('style="');
+  });
+
+  /**
+   * B169 §5–§8 — the owner's reading of the built app: a top bar that repeats
+   * the logo and offers a contextless «Эксперт» door, an account symbol in two
+   * places, and «Тарифы» reachable in the middle of an unfinished diagnostic.
+   */
+  describe('shell chrome', () => {
+    const firstTime = (
+      <CareerWorkspaceShell
+        onClearWorkspace={() => undefined}
+        onSaveWorkspace={() => undefined}
+        onUpdateWorkspace={() => undefined}
+      />
+    );
+
+    it('closes «Тарифы» while the diagnostic is unfinished', () => {
+      const html = renderToStaticMarkup(firstTime);
+      const tariffs = /<button[^>]*aria-label="Тарифы\.[^"]*"[^>]*>/u.exec(html)?.[0];
+
+      expect(tariffs, 'the rail renders a Тарифы button').toBeDefined();
+      expect(tariffs).toContain('disabled');
+      expect(tariffs).toContain('Завершите карьерную диагностику');
+    });
+
+    it('drops the contextless global expert door', () => {
+      expect(renderToStaticMarkup(firstTime)).not.toContain('career-expert-trigger');
+    });
+
+    it('keeps the account control on the rail and nowhere else on desktop', () => {
+      const html = renderToStaticMarkup(firstTime);
+      const accountControls = html.match(/aria-label="Открыть аккаунт"/gu) ?? [];
+
+      expect(html).toContain('career-account-button');
+      // The second one is the narrow-screen bar, which is display:none on
+      // desktop and is the only place those controls exist on a phone.
+      expect(accountControls.length).toBe(2);
+    });
+
+    it('collapses the rail by default and offers a handle to open it', () => {
+      const html = renderToStaticMarkup(firstTime);
+
+      expect(html).toContain('data-rail="collapsed"');
+      expect(html).toContain('career-rail-toggle');
+      expect(html).toContain('aria-controls="career-rail"');
+      expect(html).toContain('aria-label="Развернуть панель"');
+      // Collapsed the rail shows the sign alone; the wordmark arrives with the
+      // section labels when the handle opens it.
+      const rail = html.slice(html.indexOf('<aside id="career-rail"'), html.indexOf('</aside>'));
+      expect(rail).toContain('career-brand-mark');
+      expect(rail).not.toContain('brand-lockup-qareer');
+    });
+
+    /**
+     * Production serves `style-src 'self'`, which drops the style attribute
+     * outright, so a link styled that way is unstyled for every real visitor
+     * (PRB-012). The admin entry point used to carry seven such declarations.
+     */
+    it('styles the administrator link with a class, not a blocked attribute', () => {
+      const html = renderToStaticMarkup(
+        <CareerWorkspaceShell
+          session={{
+            username: 'root',
+            role: 'admin',
+            candidateId: 'candidate-1',
+          } as never}
+          onClearWorkspace={() => undefined}
+          onSaveWorkspace={() => undefined}
+          onUpdateWorkspace={() => undefined}
+        />,
+      );
+
+      expect(html).toContain('Админка');
+      expect(html).toContain('career-rail-admin');
+      expect(html).not.toContain('style="');
+    });
   });
 });

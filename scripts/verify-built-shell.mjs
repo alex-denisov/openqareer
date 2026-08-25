@@ -493,7 +493,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByText('Исправить исходные данные', { exact: true }).waitFor();
   await page.getByText(/только после согласования кандидата/iu).waitFor();
 
-  await page.locator('.career-expert-trigger').click();
+  // B169 §8 — the strategist opens from the screen that has a reason to open
+  // it. The contextless top-bar trigger this used to click is gone.
+  await page.getByRole('button', { name: 'Настроить со стратегом' }).click();
   const expert = page.getByRole('dialog', { name: 'Карьерный эксперт' });
   await expert.waitFor({ state: 'visible' });
   const dialogueContainment = await page
@@ -673,7 +675,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: logout retained candidate workspace`,
   );
   await page.goto(`${baseUrl}app?built-shell=${viewport.name}`);
-  await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).waitFor();
+  await page.getByRole('heading', { name: 'С чем разобраться?' }).waitFor();
   const accountRestart =
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) === null;
   assert(
@@ -681,7 +683,6 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: logout/re-registration retained candidate workspace`,
   );
 
-  await page.getByRole('button', { name: 'Начать диагностику' }).click();
   await page.getByRole('button', { name: /Хочу найти работу/ }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await page.getByRole('button', { name: 'Импорт профиля' }).click();
@@ -701,11 +702,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: profile import web CTA advertises a public download`,
   );
 
-  if (viewport.name === 'mobile') {
-    await page.locator('.career-account-trigger').click();
-  } else {
-    await page.locator('.career-avatar-button').click();
-  }
+  // The account lives on the rail on desktop and in the narrow-screen bar on
+  // mobile; both carry the same accessible name (B169 §6).
+  await page.locator('button[aria-label="Открыть аккаунт"]:visible').first().click();
   const dialog = page.getByRole('dialog', { name: 'Аккаунт' });
   await dialog.waitFor({ state: 'visible' });
   await dialog.getByRole('button', { name: 'Создать аккаунт' }).click();
@@ -865,7 +864,7 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
   await page.goto(`${baseUrl}app?expired-session-restore`, {
     waitUntil: 'networkidle',
   });
-  await page.getByRole('heading', { name: 'Начните с карьерного вопроса' }).waitFor();
+  await page.getByRole('heading', { name: 'С чем разобраться?' }).waitFor();
   await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
   await page.getByRole('button', { name: 'Войти' }).click();
   await page.getByLabel('Логин').fill('returning.candidate');

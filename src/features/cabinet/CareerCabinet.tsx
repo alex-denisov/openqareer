@@ -1,10 +1,7 @@
 import { useMemo } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import type { AuthUser } from '../coach/coachApi';
-import {
-  buildCanonicalProfileJourney,
-  type CareerJourney,
-} from '../journey/careerJourneyEngine';
+import { buildCanonicalProfileJourney, type CareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { CareerIntelligencePanel } from './CareerIntelligencePanel';
 import { CareerProfileSurface } from './CareerProfileSurface';
@@ -181,6 +178,7 @@ function CabinetSection({
       onRefresh={data.refresh}
       onNavigate={onNavigate}
       expanded
+      onOpenExpert={onOpenExpert}
     />
   );
 }

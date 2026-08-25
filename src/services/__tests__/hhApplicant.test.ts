@@ -9,7 +9,7 @@ import type { ResumeDraft } from '../../features/resume/resumeTypes';
 describe('hhApplicant', () => {
   const sampleDraft: ResumeDraft = {
     candidate: {
-      fullName: 'Алексей Денисов',
+      fullName: 'Мария Иванова',
       contact: {
         email: 'alexey@example.com',
         phone: '+7 999 123-45-67',

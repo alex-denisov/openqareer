@@ -125,7 +125,7 @@ function ProfileTabForm({
   return (
     <form onSubmit={handleSubmit} className="admin-form">
       <div className="admin-form-grid">
-        <ProfileTextInput id="adm-name" label="Отображаемое имя" value={displayName} onChange={setDisplayName} placeholder="Алексей Денисов" />
+        <ProfileTextInput id="adm-name" label="Отображаемое имя" value={displayName} onChange={setDisplayName} placeholder="Например, Мария Иванова" />
         <ProfileTextInput id="adm-email" label="Email" value={email} onChange={setEmail} placeholder="alex@example.com" type="email" />
         <ProfileSelectInput id="adm-role" label="Роль в системе" value={role} onChange={(v) => setRole(v as UserRole)} options={[['candidate', 'Кандидат (candidate)'], ['admin', 'Администратор (admin)']]} />
         <ProfileSelectInput id="adm-work" label="Формат работы" value={workMode} onChange={(v) => setWorkMode(v as WorkMode)} options={[['remote', 'Удаленно (remote)'], ['hybrid', 'Гибрид (hybrid)'], ['office', 'Офис (office)'], ['flexible', 'Гибкий график (flexible)']]} />

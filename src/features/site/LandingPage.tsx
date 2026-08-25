@@ -32,9 +32,9 @@ const FAQ_ITEMS = [
       'Прямой импорт LinkedIn и hh.ru работает в десктопном приложении через вашу собственную сессию. На сайте можно загрузить резюме в PDF.',
   },
   {
-    question: 'Сколько стоит участие в пилоте?',
+    question: 'Сколько это стоит?',
     answer:
-      'Ранний пилот бесплатен. Покупка подписки и автоматизация внешних аккаунтов в продукте не подключены.',
+      'Базовый тариф бесплатен и не ограничен по сроку. Покупка подписки и автоматизация внешних аккаунтов в продукте пока не подключены.',
   },
   {
     question: 'OpenQareer гарантирует интервью или оффер?',
@@ -66,7 +66,7 @@ const STRUCTURED_DATA = {
       name: 'OpenQareer',
       url: 'https://openqareer.com',
       description:
-        'Ранний бесплатный пилот для загрузки резюме, проверки карьерных фактов, диагностики и выбора следующего действия.',
+        'Бесплатный доступ к загрузке резюме, проверке карьерных фактов, диагностике и выбору следующего действия.',
       operatingSystem: 'Web, desktop companion',
       applicationCategory: 'BusinessApplication',
       inLanguage: 'ru-RU',
@@ -231,7 +231,7 @@ function LandingHeader({ session, onNavigate }: LandingPageProps) {
         <a href="#features">Что внутри</a>
         <a href="#services">Возможности</a>
         <a href="#how-it-works">Как это работает</a>
-        <a href="#tariffs">Условия пилота</a>
+        <a href="#tariffs">Тарифы</a>
         <a href="#faq">FAQ</a>
       </nav>
       <div className="site-header-actions">
@@ -301,7 +301,7 @@ function LandingHero({ session, onNavigate }: LandingPageProps) {
   return (
     <section className="site-hero" aria-labelledby="hero-heading">
       <div className="site-badge">
-        <ShieldCheck size={16} weight="fill" /> Ранний бесплатный пилот
+        <ShieldCheck size={16} weight="fill" /> Бесплатный доступ
       </div>
       <h1 id="hero-heading" className="site-hero-title">
         Карьерная операционная система кандидата
@@ -320,7 +320,7 @@ function LandingHero({ session, onNavigate }: LandingPageProps) {
 
 function LandingGuarantees() {
   return (
-    <section className="site-guarantees" aria-label="Границы пилота">
+    <section className="site-guarantees" aria-label="Границы продукта">
       <div className="site-guarantee-pill">
         <span className="dot" /> Ранняя версия: регистрация доступна без приглашения
       </div>
@@ -362,7 +362,7 @@ function LandingServices() {
   return (
     <section id="services" className="site-section is-services" aria-labelledby="services-heading">
       <header className="site-section-header">
-        <span className="site-section-eyebrow">Что работает в пилоте</span>
+        <span className="site-section-eyebrow">Что уже работает</span>
         <h2 id="services-heading" className="site-section-title">Функции текущей версии</h2>
         <p className="site-section-lead">Только доступные сейчас действия и результаты.</p>
       </header>
@@ -421,9 +421,9 @@ function FreeTariffCard({
   return (
     <article className="site-tariff-card">
       <div className="site-tariff-header">
-        <h3>Самостоятельный пилот</h3>
-        <p className="site-tariff-price">0 ₽ <span>/ ранний пилот</span></p>
-        <p className="site-tariff-desc">Основной путь кандидата доступен участникам текущего пилота.</p>
+        <h3>Самостоятельный</h3>
+        <p className="site-tariff-price">0 ₽ <span>/ без срока</span></p>
+        <p className="site-tariff-desc">Основной путь кандидата открыт каждому, кто завёл аккаунт.</p>
       </div>
       <ul className="site-tariff-features">
         <li><CheckCircle size={18} weight="fill" /> Загрузка резюме в PDF</li>
@@ -448,7 +448,6 @@ function FeaturedTariffCard({
 }) {
   return (
     <article className="site-tariff-card is-featured">
-      <div className="site-tariff-badge">После диагностики</div>
       <div className="site-tariff-header">
         <h3>Сопровождение</h3>
         <p className="site-tariff-price">Не подключено <span>/ в продукте</span></p>
@@ -470,14 +469,14 @@ function FeaturedTariffCard({
 function LandingTariffs({ session, onNavigate }: LandingPageProps) {
   const targetAction = session ? () => onNavigate('/app') : () => onNavigate('/signup');
   const primaryButtonLabel = session ? 'Вернуться к диагностике' : 'Сначала пройти диагностику';
-  const freeButtonLabel = session ? 'Перейти в кабинет' : 'Начать пилот';
+  const freeButtonLabel = session ? 'Перейти в кабинет' : 'Создать аккаунт';
 
   return (
     <section id="tariffs" className="site-section" aria-labelledby="tariffs-heading">
       <header className="site-section-header">
-        <span className="site-section-eyebrow">Доступ</span>
-        <h2 id="tariffs-heading" className="site-section-title">Условия текущего пилота</h2>
-        <p className="site-section-lead">Ранний пилот бесплатен. Регистрация доступна без приглашения. Покупка подписки в продукте не подключена.</p>
+        <span className="site-section-eyebrow">Тарифы</span>
+        <h2 id="tariffs-heading" className="site-section-title">Тарифы</h2>
+        <p className="site-section-lead">Базовый тариф бесплатен и не ограничен по сроку. Регистрация доступна без приглашения. Покупка подписки в продукте пока не подключена.</p>
       </header>
       <div className="site-tariffs-grid">
         <FreeTariffCard buttonLabel={freeButtonLabel} onAction={targetAction} />
@@ -520,7 +519,7 @@ function LandingCta({ session, onNavigate }: LandingPageProps) {
           type="button"
           onClick={() => (session ? onNavigate('/app') : onNavigate('/signup'))}
         >
-          {session ? 'Перейти в кабинет' : 'Начать пилот'} <ArrowRight size={18} weight="bold" />
+          {session ? 'Перейти в кабинет' : 'Создать аккаунт'} <ArrowRight size={18} weight="bold" />
         </button>
       </div>
     </section>
@@ -549,7 +548,7 @@ function LandingFooter({
             <strong>Продукт</strong>
             <a href="#features">Что внутри</a>
             <a href="#services">Возможности</a>
-            <a href="#tariffs">Условия пилота</a>
+            <a href="#tariffs">Тарифы</a>
             <a href="#faq">FAQ</a>
           </div>
           <div className="link-group">

@@ -47,7 +47,6 @@ async function waitForLiveApp(page: Page): Promise<void> {
 
 /** Walks the wizard to the source step and asks for the Profile Import path. */
 async function reachProfileImportSourceStep(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Начать диагностику' }).click();
   await page.getByRole('button', { name: /Хочу найти работу/ }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await expect(page.getByRole('heading', { name: 'Что уже есть?' })).toBeVisible();
@@ -178,8 +177,8 @@ test.describe('B141 diagnostic survives registration', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
-    await expect(page.getByRole('heading', { name: 'Начните с карьерного вопроса' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Начать диагностику' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'С чем разобраться?' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Хочу найти работу' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Карьерный кабинет' })).toHaveCount(0);
   });
 });

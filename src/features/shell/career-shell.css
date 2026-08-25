@@ -20,10 +20,14 @@
   --career-radius-sm: 10px;
   --career-radius-md: 16px;
   --career-radius-lg: 24px;
+  /* B169 §7 — the rail is the only chrome on desktop, and it opens to show
+     what its icons mean. Width is a token so the grid and the rail cannot
+     disagree about it mid-transition. */
+  --career-rail-width: 76px;
   min-height: 100dvh;
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
-  grid-template-rows: 64px minmax(0, 1fr);
+  grid-template-columns: var(--career-rail-width) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   color: var(--career-text);
   background:
     radial-gradient(circle at 90% 0%, oklch(33% 0.055 255 / 0.22), transparent 30rem),
@@ -94,6 +98,10 @@
    the full grid height and `position: sticky` has nothing left to travel: the
    menu scrolled away with the page (B148 §8). Pinning it to one viewport height
    is what makes sticky mean anything here. */
+.career-shell[data-rail='expanded'] {
+  --career-rail-width: 236px;
+}
+
 .career-rail {
   grid-row: 1 / -1;
   position: sticky;
@@ -113,7 +121,7 @@
 }
 
 .career-brand-mark,
-.career-avatar-button {
+.career-account-button {
   display: grid;
   place-items: center;
   border: 0;
@@ -353,20 +361,130 @@
   background: var(--career-accent-soft);
 }
 
-.career-avatar-button {
-  width: 42px;
-  height: 42px;
+
+/* ---- B169 §7 · the rail opens to name its own sections ---------------- */
+
+/* Fixed, not absolute: the rail scrolls its own overflow, and a handle inside
+   that scroller would be clipped by it and would drift as the list moves. */
+.career-rail-toggle {
+  position: fixed;
+  top: 96px;
+  left: calc(var(--career-rail-width) - 13px);
+  z-index: 25;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--career-line-strong);
   border-radius: 50%;
-  color: var(--career-accent-ink);
-  background: var(--career-accent);
-  font-weight: 800;
+  color: var(--career-text-soft);
+  background: var(--career-surface-raised);
+  transition:
+    left 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.career-rail-toggle:hover {
+  color: var(--career-text);
+  border-color: var(--career-accent);
+}
+
+.career-account-button,
+.career-rail-admin {
+  width: 52px;
+  min-height: 52px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: var(--career-text-dim);
+  background: transparent;
+  text-decoration: none;
+  font: inherit;
+}
+
+.career-account-button:not(:disabled):hover,
+.career-rail-admin:hover {
+  color: var(--career-text);
+  background: var(--career-surface);
+}
+
+.career-rail-admin {
+  color: var(--career-accent);
+}
+
+/* Collapsed, the labels are the accessible name only. */
+.career-shell[data-rail='collapsed'] .career-account-button > span,
+.career-shell[data-rail='collapsed'] .career-rail-admin > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.career-shell[data-rail='expanded'] .career-rail {
+  align-items: stretch;
+  padding: 10px 12px 18px;
+}
+
+.career-shell[data-rail='expanded'] .career-brand-mark {
+  width: auto;
+  justify-content: start;
+  padding-inline: 8px;
+}
+
+.career-shell[data-rail='expanded'] .career-nav-button,
+.career-shell[data-rail='expanded'] .career-account-button,
+.career-shell[data-rail='expanded'] .career-rail-admin {
+  width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding-inline: 14px;
+  text-align: left;
+}
+
+.career-shell[data-rail='expanded'] .career-nav-button > span,
+.career-shell[data-rail='expanded'] .career-account-button > span,
+.career-shell[data-rail='expanded'] .career-rail-admin > span {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: hidden;
+  clip: auto;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+/* The bar exists for narrow screens, where the rail is not rendered. On
+   desktop the rail carries the brand, the sections, the tariffs and the
+   account, and a second copy of any of them is chrome that does nothing. */
+.career-topbar {
+  display: none;
+}
+
+.career-topbar-admin {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid var(--career-accent);
+  border-radius: 6px;
+  color: var(--career-accent);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .career-topbar {
   grid-column: 2;
   z-index: 12;
   min-width: 0;
-  display: flex;
   align-items: center;
   gap: 18px;
   padding: 0 26px;
@@ -443,7 +561,6 @@
   font-weight: 700;
 }
 
-.career-expert-trigger,
 .career-account-trigger,
 .career-quiet-button,
 .career-icon-text-button {
@@ -463,16 +580,12 @@
     border-color 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.career-expert-trigger {
-  color: var(--career-accent);
-}
 
 .career-account-trigger {
   width: 44px;
   padding: 0;
 }
 
-.career-expert-trigger:hover,
 .career-quiet-button:not(:disabled):hover,
 .career-icon-text-button:hover {
   color: var(--career-text);
@@ -2820,9 +2933,14 @@
 
   .career-topbar {
     grid-column: 1;
+    display: flex;
     position: sticky;
     top: 0;
     padding: 0 14px;
+  }
+
+  .career-rail-toggle {
+    display: none;
   }
 
   /* The lockup is wider than the plain wordmark it replaced and pushed the
@@ -2836,12 +2954,6 @@
     display: block;
     min-height: 44px;
     padding: 0 6px;
-  }
-
-  .career-expert-trigger {
-    min-height: 44px;
-    padding: 0 10px;
-    font-size: 0.76rem;
   }
 
   .career-main {

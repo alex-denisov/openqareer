@@ -6,7 +6,7 @@ describe('hhResumeParser', () => {
     <!DOCTYPE html>
     <html>
     <body>
-      <div data-qa="resume-personal-name">Алексей Денисов</div>
+      <div data-qa="resume-personal-name">Мария Иванова</div>
       <div data-qa="resume-block-title-position">VP of Technology & Operations</div>
       <div data-qa="resume-block-salary">350 000 руб. на руки</div>
       <div data-qa="resume-block-address">Москва</div>
@@ -51,7 +51,7 @@ describe('hhResumeParser', () => {
   it('extracts structured candidate profile and facts from hh.ru HTML page', () => {
     const parsed = parseHhResumeHtml(sampleHhHtml, 'https://hh.ru/resume/test-token-123');
 
-    expect(parsed.fullName).toBe('Алексей Денисов');
+    expect(parsed.fullName).toBe('Мария Иванова');
     expect(parsed.targetRole).toBe('VP of Technology & Operations');
     expect(parsed.skills).toContain('TypeScript');
     expect(parsed.skills).toContain('React');

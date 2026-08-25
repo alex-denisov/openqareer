@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  CaretLeft,
+  CaretRight,
   Compass,
   FileText,
   House,
   Path,
-  Sparkle,
+  ShieldCheck,
   UserCircle,
   Wallet,
   type Icon,
@@ -30,14 +32,13 @@ import {
   keepsIntakeAcrossIdentityChange,
   shouldShowIntake,
 } from './intakeContinuity';
+import {
+  isSectionNavigable,
+  sectionLockReason,
+  type ShellSection,
+} from './shellNavigation';
 
-type ShellView =
-  | 'today'
-  | 'profile'
-  | 'resume'
-  | 'career'
-  | 'opportunities'
-  | 'tariffs';
+type ShellView = ShellSection;
 
 interface CareerWorkspaceShellProps {
   workspace?: CandidateWorkspace;
@@ -89,6 +90,17 @@ const pageNames: Record<ShellView, string> = {
  */
 const SESSION_GATE_DELAY_MS = 400;
 
+/** Remembers whether the rail is open, so the choice survives a reload. */
+const RAIL_EXPANDED_KEY = 'openqareer.rail.expanded';
+
+function readRailPreference(): boolean {
+  try {
+    return window.localStorage.getItem(RAIL_EXPANDED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 export function CareerWorkspaceShell({
   workspace,
   invalidStorage = false,
@@ -111,6 +123,9 @@ export function CareerWorkspaceShell({
     () => typeof window !== 'undefined' && window.location.pathname === '/auth/reset-password',
   );
   const [sessionWaitIsLong, setSessionWaitIsLong] = useState(false);
+  const [railExpanded, setRailExpanded] = useState(
+    () => typeof window !== 'undefined' && readRailPreference(),
+  );
   // A diagnostic that is under way owns the «Сегодня» screen even after the
   // account its own source step demanded arrives (B141).
   const [intakeStarted, setIntakeStarted] = useState(false);
@@ -160,24 +175,30 @@ export function CareerWorkspaceShell({
     document.title = `${pageNames[activeView]} · openqareer`;
   }, [activeView]);
 
-  /**
-   * «Сегодня» and «Тарифы» are always reachable. Everything else stays closed
-   * until the diagnostic has produced a career picture: a freshly registered
-   * candidate used to find every section unlocked and empty, which promised
-   * work the product had not done yet (B148 §4).
-   */
+  const navigationState = {
+    careerPictureReady,
+    resumeAvailable,
+    canUseWorkspaceViews,
+  };
+
   function isNavigable(view: ShellView) {
-    if (view === 'today' || view === 'tariffs') return true;
-    if (!careerPictureReady) return false;
-    if (view === 'resume') return resumeAvailable;
-    return canUseWorkspaceViews;
+    return isSectionNavigable(view, navigationState);
   }
 
   function lockedReason(view: ShellView): string {
-    if (!careerPictureReady) return 'Завершите карьерную диагностику, чтобы открыть раздел';
-    return view === 'resume'
-      ? 'Резюме доступно после входа в аккаунт'
-      : 'Сначала соберите карьерную картину';
+    return sectionLockReason(view, navigationState);
+  }
+
+  function toggleRail() {
+    setRailExpanded((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(RAIL_EXPANDED_KEY, String(next));
+      } catch {
+        // A browser refusing storage still gets the toggle for this session.
+      }
+      return next;
+    });
   }
 
   function navigate(view: ShellView) {
@@ -242,6 +263,7 @@ export function CareerWorkspaceShell({
   return (
     <div
       className={`career-shell ${expertOpen ? 'expert-is-open' : ''}`}
+      data-rail={railExpanded ? 'expanded' : 'collapsed'}
       data-testid="career-shell"
     >
       <a className="career-skip-link" href="#career-main">
@@ -249,6 +271,7 @@ export function CareerWorkspaceShell({
       </a>
 
       <aside
+        id="career-rail"
         className="career-rail"
         aria-label="Основная навигация"
         aria-hidden={expertOpen || accountOpen ? true : undefined}
@@ -259,7 +282,7 @@ export function CareerWorkspaceShell({
           onClick={() => navigate('today')}
           aria-label="openqareer, сегодня"
         >
-          <BrandMark size={30} />
+          <BrandMark variant={railExpanded ? 'lockup' : 'mark'} size={30} />
         </button>
         <nav>
           {primaryNavigation.map((item) => (
@@ -282,22 +305,47 @@ export function CareerWorkspaceShell({
               icon: Wallet,
             }}
             active={activeView === 'tariffs'}
+            disabled={!isNavigable('tariffs')}
+            lockedReason={lockedReason('tariffs')}
             onClick={() => navigate('tariffs')}
           />
+          {session?.role === 'admin' ? (
+            <a className="career-rail-admin" href="/admin">
+              <ShieldCheck size={22} />
+              <span>Админка</span>
+            </a>
+          ) : null}
           <button
-            className="career-avatar-button"
+            className="career-account-button"
             type="button"
             disabled={sessionPending}
             onClick={() => setAccountOpen(true)}
             aria-label="Открыть аккаунт"
           >
-            {session?.username.slice(0, 1).toUpperCase() ||
-              visibleWorkspace?.targetDirection.slice(0, 1).toUpperCase() ||
-              '?'}
+            <UserCircle size={24} />
+            <span>{session?.username ?? 'Аккаунт'}</span>
           </button>
         </div>
+        {/* The handle sits on the rail's own border, which is the edge the
+            candidate is already looking at when they wonder what the icons
+            mean. Expanding is the only way to read the section names. */}
+        <button
+          className="career-rail-toggle"
+          type="button"
+          onClick={toggleRail}
+          aria-expanded={railExpanded}
+          aria-controls="career-rail"
+          aria-label={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
+          title={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
+        >
+          {railExpanded ? <CaretLeft size={14} weight="bold" /> : <CaretRight size={14} weight="bold" />}
+        </button>
       </aside>
 
+      {/* Narrow screens hide the rail, so this bar carries the two controls
+          that live on it and nowhere else. On desktop it is not rendered at
+          all: repeating the logo and offering a second, contextless «Эксперт»
+          door was chrome that did nothing (B169 §6, §8). */}
       <header className="career-topbar" aria-hidden={expertOpen || accountOpen ? true : undefined}>
         <button
           className="career-wordmark"
@@ -308,36 +356,17 @@ export function CareerWorkspaceShell({
           <BrandMark variant="lockup" size={26} />
         </button>
         <div className="career-topbar-actions">
-          <button
-            className="career-mobile-tariffs"
-            type="button"
-            onClick={() => navigate('tariffs')}
-          >
-            Тарифы
-          </button>
-          <button
-            className="career-expert-trigger"
-            type="button"
-            onClick={() => setExpertOpen((current) => !current)}
-            aria-expanded={expertOpen}
-          >
-            <Sparkle size={18} weight="fill" />
-            Эксперт
-          </button>
-          {session?.role === 'admin' ? (
-            <a
-              href="/admin"
-              className="career-quiet-button"
-              style={{
-                fontSize: '0.82rem',
-                fontWeight: 600,
-                color: 'var(--career-accent)',
-                textDecoration: 'none',
-                padding: '6px 12px',
-                borderRadius: '6px',
-                border: '1px solid var(--career-accent)',
-              }}
+          {isNavigable('tariffs') ? (
+            <button
+              className="career-mobile-tariffs"
+              type="button"
+              onClick={() => navigate('tariffs')}
             >
+              Тарифы
+            </button>
+          ) : null}
+          {session?.role === 'admin' ? (
+            <a href="/admin" className="career-topbar-admin">
               Админка
             </a>
           ) : null}

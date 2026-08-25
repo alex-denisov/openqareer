@@ -6,7 +6,6 @@ import {
   Check,
   GlobeHemisphereWest,
   Question,
-  Sparkle,
   Target,
   type Icon,
 } from '@phosphor-icons/react';
@@ -33,6 +32,7 @@ import {
 } from '../workspace/workspaceStorage';
 import { IntakeContextStep, type IntakeContextValues } from './IntakeContextStep';
 import { IntakeSourceStep, type SourceChoice } from './IntakeSourceStep';
+import { intakeSourceLock } from './intakeSourceLock';
 import { useResumeIngestion } from './useResumeIngestion';
 
 export type IntakeStep = 'intent' | 'source' | 'context';
@@ -49,10 +49,10 @@ interface CareerIntakeProps {
   /**
    * Tells the shell a diagnostic is under way, so the session arriving next is
    * recognised as an unfinished diagnostic rather than a returning candidate
-   * opening their cabinet (B141).
+   * opening their cabinet (B141). The wizard is under way from its first
+   * paint, because it no longer has a screen in front of its first question.
    */
   onStartedChange?: (started: boolean) => void;
-  initialStarted?: boolean;
   initialStep?: IntakeStep;
   initialSourceChoice?: SourceChoice;
 }
@@ -103,13 +103,11 @@ export function CareerIntake({
   onComplete,
   hasAccount = false,
   onStartedChange,
-  initialStarted = false,
   initialStep = 'intent',
   initialSourceChoice,
 }: CareerIntakeProps) {
   const isDesktop = isTauriEnvironment();
   const ingestion = useResumeIngestion(hasAccount);
-  const [started, setStarted] = useState(initialStarted);
   const [step, setStep] = useState<IntakeStep>(initialStep);
   const [goal, setGoal] = useState<CareerGoal>();
   const [sourceChoice, setSourceChoice] = useState<SourceChoice>(
@@ -130,10 +128,29 @@ export function CareerIntake({
   const errorRef = useRef<HTMLParagraphElement>(null);
 
   const ingested = ingestion.result;
-  const isSourceLocked = Boolean(
-    ingested?.imported &&
-      (ingested.source === 'hh-pdf' || ingested.source === 'linkedin-pdf'),
-  );
+  /**
+   * One capture fixes the source the career picture is built from; the rest
+   * close until it is released. Stacking a profile, a PDF and typed text left
+   * nothing to say which account of the career wins (B169 §8).
+   */
+  const sourceLock = intakeSourceLock({
+    ingestedSource: ingested?.source,
+    ingestedImported: ingested?.imported,
+    connectedPlatform:
+      connectedSource?.platform ??
+      (isHhConnected ? 'hh' : isLinkedinConnected ? 'linkedin' : undefined),
+    typedLength: typedResume.trim().length,
+  });
+
+  /**
+   * The wizard used to sit behind a welcome screen whose only action was
+   * «Начать диагностику». It restated the first question without asking it,
+   * and the owner could not tell what it was for, so it is gone and the
+   * diagnostic is under way from the first paint (B169 §4).
+   */
+  useEffect(() => {
+    onStartedChange?.(true);
+  }, [onStartedChange]);
 
   /**
    * On a phone the action bar is sticky, so a refusal rendered above it is
@@ -193,15 +210,9 @@ export function CareerIntake({
     );
   }, [ingested, context.targetDirection]);
 
-  if (!started) {
-    return <IntakeStartScreen onStart={() => {
-      setStarted(true);
-      onStartedChange?.(true);
-    }} />;
-  }
-
   function chooseSource(next: SourceChoice) {
-    if (isSourceLocked || next === sourceChoice) return;
+    if (next === sourceChoice) return;
+    if (sourceLock.lockedTo && sourceLock.lockedTo !== next) return;
     setSourceChoice(next);
     setError(undefined);
     if (next !== 'text') setTypedResume('');
@@ -213,6 +224,28 @@ export function CareerIntake({
       void closeConnectorSession('linkedin');
       void closeConnectorSession('hh');
     }
+    ingestion.clear();
+  }
+
+  /**
+   * Releases the fixed source deliberately. Without this the first capture
+   * would be a trap: a candidate who picked the wrong file could never reach
+   * any other source again.
+   */
+  function releaseSource() {
+    setError(undefined);
+    setTypedResume('');
+    setLinkedinUrl('');
+    setHhUrl('');
+    setHhResumes([]);
+    setSelectedHhResumeId('');
+    setHhConnected(false);
+    setLinkedinConnected(false);
+    setConnectedSource(undefined);
+    setLinkedinModalOpen(false);
+    setHhModalOpen(false);
+    void closeConnectorSession('linkedin');
+    void closeConnectorSession('hh');
     ingestion.clear();
   }
 
@@ -342,7 +375,8 @@ export function CareerIntake({
           isDesktop={isDesktop}
           sourceChoice={sourceChoice}
           onChooseSource={chooseSource}
-          locked={isSourceLocked}
+          lock={sourceLock}
+          onReleaseSource={releaseSource}
           ingested={ingested}
           busy={ingestion.busy}
           notice={ingestion.notice}
@@ -462,52 +496,6 @@ export function CareerIntake({
           <ArrowRight size={18} weight="bold" />
         </button>
       </footer>
-    </section>
-  );
-}
-
-function IntakeStartScreen({ onStart }: { onStart: () => void }) {
-  return (
-    <section className="career-start" aria-labelledby="career-start-title">
-      <div className="career-start-stage">
-        <p className="career-eyebrow">Сегодня</p>
-        <h1 id="career-start-title">Начните с карьерного вопроса</h1>
-        <p className="career-lead">
-          Опишите ситуацию своими словами. Резюме можно добавить позже.
-        </p>
-        <div className="career-primary-actions">
-          <button className="career-primary-button" type="button" onClick={onStart}>
-            Начать диагностику
-            <ArrowRight size={18} weight="bold" />
-          </button>
-        </div>
-        <p className="career-start-footnote">
-          2–3 минуты на первичную диагностику. Без обязательной регистрации.
-        </p>
-      </div>
-
-      <div className="career-start-status" aria-label="Состояние карьерной картины">
-        <div>
-          <span>Профиль</span>
-          <strong>Не заполнен</strong>
-        </div>
-        <div>
-          <span>Карьера</span>
-          <strong>Нет гипотез</strong>
-        </div>
-        <div>
-          <span>Возможности</span>
-          <strong>Не добавлены</strong>
-        </div>
-      </div>
-
-      <div className="career-start-note">
-        <Sparkle size={20} weight="fill" />
-        <div>
-          <strong>Можно начать без документов</strong>
-          <span>Без аккаунта прогресс хранится только в текущей вкладке.</span>
-        </div>
-      </div>
     </section>
   );
 }

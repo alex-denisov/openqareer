@@ -144,7 +144,7 @@ describe('cookie auth routes', () => {
       headers: { origin: 'http://localhost:3000' },
       payload: {
         email: 'Owner@Example.com',
-        displayName: 'Алексей Денисов',
+        displayName: 'Мария Иванова',
         password: 'candidate-password-for-tests',
       },
     });
@@ -153,7 +153,7 @@ describe('cookie auth routes', () => {
     expect(registered.json().data).toMatchObject({
       username: 'owner',
       email: 'owner@example.com',
-      displayName: 'Алексей Денисов',
+      displayName: 'Мария Иванова',
     });
     const cookie = String(registered.headers['set-cookie']).split(';')[0];
     const account = await app.inject({
@@ -166,7 +166,7 @@ describe('cookie auth routes', () => {
     expect(account.json().data).toMatchObject({
       username: 'owner',
       email: 'owner@example.com',
-      displayName: 'Алексей Денисов',
+      displayName: 'Мария Иванова',
       profile: {
         headline: null,
         location: null,
@@ -629,7 +629,7 @@ describe('registration without a login field (B139)', () => {
   it('creates the account the owner tried to create and could not', async () => {
     const app = await createApp();
     const response = await register(app, {
-      displayName: 'Алексей Денисов',
+      displayName: 'Мария Иванова',
       email: 'alexey@example.com',
       password: 'parol123',
     });

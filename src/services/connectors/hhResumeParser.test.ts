@@ -4,7 +4,7 @@ import { parseHhResumeHtml, parseHhResumesList } from './hhResumeParser';
 describe('hhResumeParser', () => {
   it('parses full structured resume html correctly', () => {
     const html = `
-      <div data-qa="resume-personal-name">Алексей Денисов</div>
+      <div data-qa="resume-personal-name">Мария Иванова</div>
       <div data-qa="resume-block-title-position">VP of Technology & Operations</div>
       <div data-qa="resume-block-about">Руководитель технологических продуктов и масштабирования.</div>
       <div data-qa="resume-block-address">Москва</div>
@@ -37,7 +37,7 @@ describe('hhResumeParser', () => {
 
     const result = parseHhResumeHtml(html, 'https://hh.ru/resume/test-token');
 
-    expect(result.fullName).toBe('Алексей Денисов');
+    expect(result.fullName).toBe('Мария Иванова');
     expect(result.targetRole).toBe('VP of Technology & Operations');
     expect(result.about).toBe('Руководитель технологических продуктов и масштабирования.');
     expect(result.contact.location).toBe('Москва');

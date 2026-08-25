@@ -16,7 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test && node scripts/verify-built-shell.mjs",
+    "test:e2e": "playwright test && node scripts/verify-built-shell.mjs && node scripts/verify-intake-fits.mjs",
     "test:e2e:smoke": "playwright test",
     "test:e2e:built-shell": "node scripts/verify-built-shell.mjs",
     "lint": "eslint . --max-warnings=0 && npm run format:check",
@@ -28,7 +28,8 @@
     "security:history": "gitleaks detect --no-banner --redact -c .gitleaks.toml -s .",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "test:e2e:intake-fits": "node scripts/verify-intake-fits.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

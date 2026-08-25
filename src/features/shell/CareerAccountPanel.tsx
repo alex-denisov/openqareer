@@ -414,7 +414,7 @@ export function CareerAccountPanel({
                       setDisplayName(sanitizeName(event.target.value));
                       clearFieldError('displayName');
                     }}
-                    placeholder="Алексей"
+                    placeholder="Например, Мария"
                     autoComplete="given-name"
                     aria-invalid={fieldErrors.displayName ? true : undefined}
                   />

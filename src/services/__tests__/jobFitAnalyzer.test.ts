@@ -5,7 +5,7 @@ import type { ResumeDraft } from '../../features/resume/resumeTypes';
 describe('jobFitAnalyzer', () => {
   const candidateDraft: ResumeDraft = {
     candidate: {
-      fullName: 'Алексей Денисов',
+      fullName: 'Мария Иванова',
       about: 'Технический лидер с опытом руководства распределенными командами 40+ инженеров.',
       contact: {
         location: 'Москва',

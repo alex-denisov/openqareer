@@ -18,7 +18,7 @@ describe('password reset email delivery', () => {
 
     await notify({
       email: 'owner@example.com',
-      displayName: '<Алексей & команда>',
+      displayName: '<Мария & команда>',
       token: 'oqr_test_token_for_password_reset_12345678901234567890',
     });
 
@@ -37,7 +37,7 @@ describe('password reset email delivery', () => {
       to: ['owner@example.com'],
       subject: 'Сброс пароля — openqareer',
     });
-    expect(body.html).toContain('&lt;Алексей &amp; команда&gt;');
+    expect(body.html).toContain('&lt;Мария &amp; команда&gt;');
     const link = /href="([^"]+)"/u.exec(body.html);
     expect(link).not.toBeNull();
     const resetUrl = new URL(link![1]!.replaceAll('&amp;', '&'));

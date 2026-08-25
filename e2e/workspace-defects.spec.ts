@@ -57,7 +57,6 @@ async function waitForLiveApp(page: Page): Promise<void> {
 }
 
 async function openContextStep(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Начать диагностику' }).click();
   await page.getByRole('button', { name: /Хочу найти работу/ }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await page.getByRole('button', { name: 'Без документов' }).click();
@@ -76,7 +75,7 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await sessionResolved;
     await waitForLiveApp(page);
-    await expect(page.getByRole('heading', { name: 'Начните с карьерного вопроса' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'С чем разобраться?' })).toBeVisible();
 
     expect(await sessionGateWasSeen(page)).toBe(false);
   });
@@ -179,7 +178,6 @@ test.describe('B140 workspace shell and intake defects', () => {
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
-    await page.getByRole('button', { name: 'Начать диагностику' }).click();
     await page.getByRole('button', { name: /Хочу найти работу/ }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
 
@@ -203,7 +201,6 @@ test.describe('B140 workspace shell and intake defects', () => {
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
-    await page.getByRole('button', { name: 'Начать диагностику' }).click();
     await page.getByRole('button', { name: /Хочу найти работу/ }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
     await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();
@@ -227,7 +224,6 @@ test.describe('B140 workspace shell and intake defects', () => {
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
-    await page.getByRole('button', { name: 'Начать диагностику' }).click();
     await page.getByRole('button', { name: /Хочу найти работу/ }).click();
     await page.getByRole('button', { name: 'Продолжить' }).click();
     await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();

@@ -22,7 +22,7 @@ describe('bounded profile URL import', () => {
 
   it('imports hh.ru resume content when public resume page is available', async () => {
     const sampleHtml = `
-      <div data-qa="resume-personal-name">Алексей Денисов</div>
+      <div data-qa="resume-personal-name">Мария Иванова</div>
       <div data-qa="resume-block-title-position">Engineering Lead</div>
       <div data-qa="resume-block-skills-content">
         <span data-qa="bloko-tag__text">TypeScript</span>

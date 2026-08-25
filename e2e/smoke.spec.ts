@@ -60,9 +60,9 @@ test('built career workspace is ready, operable and free of critical accessibili
   const shell = page.getByTestId('career-shell');
   await expect(shell).toBeVisible();
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy');
-  await expect(page.getByRole('heading', { name: 'Начните с карьерного вопроса' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'С чем разобраться?' })).toBeVisible();
   await expect(page.getByText('Загружаем рабочее пространство')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Начать диагностику' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Хочу найти работу' })).toBeEnabled();
 
   const accountButton = page.locator('button[aria-label="Открыть аккаунт"]:visible').last();
   await expect(accountButton).toBeEnabled();
@@ -109,6 +109,13 @@ test('candidate confirms one saved command and sees an honest queued state', asy
     if (pathname === '/api/v1/candidate/me') {
       return route.fulfill({ json: { data: candidateSnapshot } });
     }
+    // The strategist is opened from the cabinet, which exists only once the
+    // diagnostic has produced a career picture. Before B169 a contextless
+    // «Эксперт» button in the top bar opened it from anywhere, including from
+    // inside an unfinished wizard.
+    if (pathname === '/api/v1/candidate/workspace' && request.method() === 'GET') {
+      return route.fulfill({ json: { data: candidateWorkspace } });
+    }
     if (pathname === '/api/v1/candidate/career-commands' && request.method() === 'GET') {
       return route.fulfill({ json: { data: [command] } });
     }
@@ -121,7 +128,9 @@ test('candidate confirms one saved command and sees an honest queued state', asy
   });
 
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Эксперт' }).click();
+  // B169 §8 — the strategist is opened from the place that has a reason to
+  // open it. The contextless «Эксперт» button in the top bar is gone.
+  await page.getByRole('button', { name: /Обсудить (со стратегом|с экспертом)/u }).click();
   const dialog = page.getByRole('dialog', { name: 'Карьерный эксперт' });
   await expect(dialog.getByText('Ничего не отправлено')).toBeVisible();
 
@@ -172,6 +181,17 @@ const coachResult = {
   careerTrack: null,
   actionProposals: [actionProposal],
 };
+
+const candidateWorkspace = {
+  careerGoal: 'find-job',
+  resumeText: 'Руководитель продукта с опытом в финтехе и маркетплейсах.',
+  resumeSource: 'text',
+  targetDirection: 'Руководитель продукта',
+  market: 'ru',
+  currentSituation: 'Ищу новую роль и хочу проверить позиционирование.',
+  constraints: 'Готов к гибриду',
+  urgency: 'active',
+} as const;
 
 const candidateSnapshot = {
   candidate: {

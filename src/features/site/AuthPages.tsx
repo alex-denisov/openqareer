@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Eye, EyeSlash } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import {
   login,
@@ -13,43 +14,6 @@ interface AuthPageProps {
   onNavigate: (path: string) => void;
   onSessionChange?: (session: AuthUser | null) => void;
   nextPath?: string;
-}
-
-function generateSecurePassword(length = 16): string {
-  const lowercase = 'abcdefghijkmnopqrstuvwxyz';
-  const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const digits = '23456789';
-  const symbols = '!@#$%^&*()_+-=';
-  const all = lowercase + uppercase + digits + symbols;
-
-  const array = new Uint32Array(length);
-  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
-    window.crypto.getRandomValues(array);
-  } else {
-    for (let i = 0; i < length; i++) {
-      array[i] = Math.floor(Math.random() * 1000000);
-    }
-  }
-
-  const result: string[] = [
-    lowercase[array[0] % lowercase.length],
-    uppercase[array[1] % uppercase.length],
-    digits[array[2] % digits.length],
-    symbols[array[3] % symbols.length],
-  ];
-
-  for (let i = 4; i < length; i++) {
-    result.push(all[array[i] % all.length]);
-  }
-
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = array[i] % (i + 1);
-    const temp = result[i];
-    result[i] = result[j];
-    result[j] = temp;
-  }
-
-  return result.join('');
 }
 
 function AuthCardHeader({
@@ -81,6 +45,52 @@ function AuthCardHeader({
   );
 }
 
+/**
+ * Typing a password you cannot read is how a typo becomes a locked account.
+ * The control is a toggle rather than a mode switch, so a field never reveals
+ * itself without being asked to.
+ */
+function PasswordRevealButton({
+  controls,
+  revealed,
+  onToggle,
+}: {
+  controls: string;
+  revealed: boolean;
+  onToggle: () => void;
+}) {
+  const label = revealed ? 'Скрыть пароль' : 'Показать пароль';
+  return (
+    <button
+      type="button"
+      className="auth-reveal-button"
+      onClick={onToggle}
+      aria-pressed={revealed}
+      aria-controls={controls}
+      aria-label={label}
+      title={label}
+    >
+      {revealed ? <EyeSlash size={18} /> : <Eye size={18} />}
+    </button>
+  );
+}
+
+interface AuthInputFieldProps {
+  id: string;
+  name?: string;
+  label: string;
+  type?: string;
+  autoComplete?: string;
+  placeholder?: string;
+  value: string;
+  onChange: (val: string) => void;
+  disabled?: boolean;
+  required?: boolean;
+  error?: string;
+  /** A secondary control rendered beside the label, e.g. «Забыли пароль?». */
+  action?: React.ReactNode;
+}
+
 function AuthInputField({
   id,
   name,
@@ -94,37 +104,35 @@ function AuthInputField({
   required,
   error,
   action,
-}: {
-  id: string;
-  name?: string;
-  label: string;
-  type?: string;
-  autoComplete?: string;
-  placeholder?: string;
-  value: string;
-  onChange: (val: string) => void;
-  disabled?: boolean;
-  required?: boolean;
-  error?: string;
-  action?: React.ReactNode;
-}) {
+}: AuthInputFieldProps) {
+  const [revealed, setRevealed] = useState(false);
+  const isPassword = type === 'password';
   return (
     <div className="auth-field">
-      <div className="auth-field-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="auth-field-header">
         <label htmlFor={id}>{label}</label>
         {action}
       </div>
-      <input
-        id={id}
-        name={name || id}
-        type={type}
-        autoComplete={autoComplete}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        required={required}
-      />
+      <div className={isPassword ? 'auth-field-input has-reveal' : 'auth-field-input'}>
+        <input
+          id={id}
+          name={name || id}
+          type={isPassword && revealed ? 'text' : type}
+          autoComplete={autoComplete}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          required={required}
+        />
+        {isPassword ? (
+          <PasswordRevealButton
+            controls={id}
+            revealed={revealed}
+            onToggle={() => setRevealed((current) => !current)}
+          />
+        ) : null}
+      </div>
       {error ? <p className="auth-field-error" role="alert">{error}</p> : null}
     </div>
   );
@@ -218,8 +226,7 @@ function LoginForm({
   const forgotBtn = (
     <button
       type="button"
-      className="career-quiet-button"
-      style={{ fontSize: '0.78rem', padding: '0' }}
+      className="career-quiet-button auth-field-action"
       onClick={() => onNavigate('/reset-password')}
     >
       Забыли пароль?
@@ -229,7 +236,7 @@ function LoginForm({
   return (
     <>
       {form.error ? (
-        <div className="career-cabinet-global-error" role="alert" style={{ marginBottom: '16px' }}>
+        <div className="career-cabinet-global-error auth-form-error" role="alert">
           {form.error}
         </div>
       ) : null}
@@ -306,49 +313,25 @@ function useSignupForm({
   return { email, setEmail, displayName, setDisplayName, password, setPassword, busy, error, fieldErrors, handleSubmit };
 }
 
-function SignupPasswordSection({
-  form,
-  generateBtn,
-  pwdNotice,
-}: {
-  form: ReturnType<typeof useSignupForm>;
-  generateBtn: React.ReactNode;
-  pwdNotice: boolean;
-}) {
+function SignupPasswordSection({ form }: { form: ReturnType<typeof useSignupForm> }) {
   return (
-    <>
-      <AuthInputField
-        id="signup-password"
-        name="password"
-        label="Пароль (от 8 символов)"
-        type="password"
-        autoComplete="new-password"
-        placeholder="Минимум 8 символов"
-        value={form.password}
-        onChange={form.setPassword}
-        disabled={form.busy}
-        error={form.fieldErrors.password}
-        action={generateBtn}
-        required
-      />
-      {pwdNotice ? (
-        <p className="auth-field-notice" role="status" style={{ fontSize: '0.8rem', color: '#38d39f', margin: '-6px 0 0' }}>
-          ✓ Надёжный пароль сгенерирован и готов к сохранению
-        </p>
-      ) : null}
-    </>
+    <AuthInputField
+      id="signup-password"
+      name="password"
+      label="Пароль (от 8 символов)"
+      type="password"
+      autoComplete="new-password"
+      placeholder="Минимум 8 символов"
+      value={form.password}
+      onChange={form.setPassword}
+      disabled={form.busy}
+      error={form.fieldErrors.password}
+      required
+    />
   );
 }
 
-function SignupFields({
-  form,
-  generateBtn,
-  pwdNotice,
-}: {
-  form: ReturnType<typeof useSignupForm>;
-  generateBtn: React.ReactNode;
-  pwdNotice: boolean;
-}) {
+function SignupFields({ form }: { form: ReturnType<typeof useSignupForm> }) {
   return (
     <>
       <AuthInputField
@@ -369,12 +352,12 @@ function SignupFields({
         name="name"
         label="Как к вам обращаться"
         autoComplete="name"
-        placeholder="Алексей"
+        placeholder="Например, Мария"
         value={form.displayName}
         onChange={form.setDisplayName}
         disabled={form.busy}
       />
-      <SignupPasswordSection form={form} generateBtn={generateBtn} pwdNotice={pwdNotice} />
+      <SignupPasswordSection form={form} />
     </>
   );
 }
@@ -385,36 +368,16 @@ function SignupForm({
   nextPath,
 }: AuthPageProps & { nextPath: string }) {
   const form = useSignupForm({ onNavigate, onSessionChange, nextPath });
-  const [pwdGeneratedNotice, setPwdGeneratedNotice] = useState(false);
-
-  const handleGeneratePassword = () => {
-    form.setPassword(generateSecurePassword(16));
-    setPwdGeneratedNotice(true);
-    setTimeout(() => setPwdGeneratedNotice(false), 4000);
-  };
-
-  const generateBtn = (
-    <button
-      type="button"
-      className="career-quiet-button auth-generate-pwd-btn"
-      style={{ fontSize: '0.78rem', padding: '0', color: 'var(--career-accent, #0a70e0)' }}
-      onClick={handleGeneratePassword}
-      title="Сгенерировать надёжный случайный пароль"
-      aria-label="Сгенерировать надёжный пароль"
-    >
-      ⚡ Сгенерировать пароль
-    </button>
-  );
 
   return (
     <>
       {form.error ? (
-        <div className="career-cabinet-global-error" role="alert" style={{ marginBottom: '16px' }}>
+        <div className="career-cabinet-global-error auth-form-error" role="alert">
           {form.error}
         </div>
       ) : null}
       <form className="auth-form" method="post" action="#" onSubmit={form.handleSubmit}>
-        <SignupFields form={form} generateBtn={generateBtn} pwdNotice={pwdGeneratedNotice} />
+        <SignupFields form={form} />
         <button type="submit" className="site-btn is-primary auth-submit-btn" disabled={form.busy}>
           {form.busy ? 'Создаём...' : 'Создать аккаунт'}
         </button>
