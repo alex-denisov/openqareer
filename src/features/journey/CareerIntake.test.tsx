@@ -68,7 +68,11 @@ describe('CareerIntake', () => {
     expect(html).toContain('career-platform-cards');
     expect(html).toContain('LinkedIn');
     expect(html).toContain('hh.ru');
-    expect(html).toContain('Прямой импорт резюме hh.ru с динамической проверкой соединения');
+    // The card explains where the sign-in happens, not how the connection is
+    // measured: "динамическая проверка соединения" told the candidate nothing
+    // they could act on (owner wording review, B157).
+    expect(html).toContain('вход проходит на странице hh.ru, в вашей сессии');
+    expect(html).not.toContain('динамической проверкой соединения');
     expect(html).toContain('Подключить');
   });
 

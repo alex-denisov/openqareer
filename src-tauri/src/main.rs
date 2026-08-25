@@ -8,10 +8,10 @@ mod tunnel_manager;
 
 use automation_worker::{execute_candidate_action_safely, LocalActionRequest, LocalActionResult};
 use connector_session::{
-    close_session_window, hide_session_window, inspect_session_page, is_session_window_open,
-    open_session_window, read_session_page, reset_session_window, resize_session_window,
-    should_route_through_tunnel, SessionInspectionReport, SessionLayout, SessionPageReport,
-    SessionWindowReport, SessionWindowRequest,
+    close_session_window, inspect_session_page, is_session_window_open, open_session_window,
+    read_session_page, reset_session_window, resize_session_window, should_route_through_tunnel,
+    SessionInspectionReport, SessionLayout, SessionPageReport, SessionWindowReport,
+    SessionWindowRequest,
 };
 use network_probe::{evaluate_network_environment, NetworkEnvironmentStatus};
 use serde::{Deserialize, Serialize};
@@ -176,7 +176,7 @@ async fn open_connector_session(
     } else {
         None
     };
-    Ok(open_session_window(&app, &request, proxy))
+    Ok(open_session_window(&app, &request, proxy).await)
 }
 
 /// Whether the platform's window is still on screen.
@@ -188,11 +188,6 @@ fn is_connector_session_open(app: AppHandle, platform: String) -> bool {
 #[tauri::command]
 fn close_connector_session(app: AppHandle, platform: String) -> bool {
     close_session_window(&app, &platform)
-}
-
-#[tauri::command]
-fn hide_connector_session(app: AppHandle, platform: String) -> bool {
-    hide_session_window(&app, &platform)
 }
 
 #[tauri::command]
@@ -259,7 +254,6 @@ fn main() {
             open_connector_session,
             is_connector_session_open,
             close_connector_session,
-            hide_connector_session,
             reset_connector_session,
             resize_connector_session,
             read_connector_session_page,

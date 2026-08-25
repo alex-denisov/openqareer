@@ -16,6 +16,10 @@ import {
 import { PlatformLogo } from '../connections/PlatformLogo';
 import type { ParsedResume } from '../workspace/resumeParser';
 import type { IngestedResume } from './useResumeIngestion';
+import {
+  connectedProfileSourceNotice,
+  type ConnectedProfileSource,
+} from './connectedProfileSource';
 
 export type SourceChoice = 'profile-import' | 'pdf' | 'text' | 'none';
 
@@ -51,6 +55,8 @@ export interface IntakeSourceStepProps {
   readonly onImportHhResume: () => void;
   readonly hhConnected: boolean;
   readonly linkedinConnected: boolean;
+  /** A platform this account already imported from, as the server holds it. */
+  readonly connectedSource?: ConnectedProfileSource;
 }
 
 // One component, one JSX tree: splitting further would scatter the markup.
@@ -154,18 +160,21 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
       </div>
     );
   }
+  const restored = props.connectedSource;
   const linkedinReady = Boolean(
-    props.linkedinConnected &&
-      props.ingested?.source === 'linkedin-pdf' &&
-      props.ingested.imported &&
-      props.ingested.connection,
+    restored?.platform === 'linkedin' ||
+      (props.linkedinConnected &&
+        props.ingested?.source === 'linkedin-pdf' &&
+        props.ingested.imported &&
+        props.ingested.connection),
   );
   // Finding a signed-in account/list is not the same outcome as importing one
   // selected resume into the candidate profile.
   const hhReady = Boolean(
-    props.ingested?.source === 'hh-pdf' &&
-      props.ingested.imported &&
-      props.ingested.connection,
+    restored?.platform === 'hh' ||
+      (props.ingested?.source === 'hh-pdf' &&
+        props.ingested.imported &&
+        props.ingested.connection),
   );
   return (
     <div className="career-source-fields">
@@ -173,7 +182,7 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
         <PlatformCard
           platform="linkedin"
           name="LinkedIn"
-          description="Импорт опыта и навыков из вашего собственного профиля."
+          description="Импорт опыта и навыков из вашего профиля LinkedIn."
           connected={linkedinReady}
           disabled={props.locked && !linkedinReady}
           onConnect={() => props.onLinkedinOpen(true)}
@@ -181,12 +190,18 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
         <PlatformCard
           platform="hh"
           name="hh.ru"
-          description="Прямой импорт резюме hh.ru с динамической проверкой соединения."
+          description="Импорт вашего резюме с hh.ru: вход проходит на странице hh.ru, в вашей сессии."
           connected={hhReady}
           disabled={props.locked && !hhReady}
           onConnect={() => props.onHhOpen(true)}
         />
       </div>
+
+      {restored ? (
+        <p className="career-inline-note" role="status">
+          {connectedProfileSourceNotice(restored)}
+        </p>
+      ) : null}
 
       {props.hhConnected && props.hhResumes.length > 0 ? (
         <div className="career-hh-resumes-selector">
@@ -215,7 +230,7 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
             </button>
           </div>
         </div>
-      ) : props.hhConnected ? (
+      ) : props.hhConnected && !restored ? (
         <p className="career-inline-note">
           В профиле hh.ru не нашлось резюме. Можно загрузить PDF или описать опыт
           текстом.
@@ -280,7 +295,7 @@ function PlatformCard({
         disabled={disabled}
         onClick={onConnect}
       >
-        {actionLabel ?? (connected ? 'Изменить' : 'Подключить')}
+        {actionLabel ?? (connected ? 'Обновить импорт' : 'Подключить')}
       </button>
     </div>
   );

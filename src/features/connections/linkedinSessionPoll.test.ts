@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLinkedInSessionImportFlow } from './linkedinSessionPoll';
+import {
+  createLinkedInSessionImportFlow,
+  linkedinWaitingNotice,
+} from './linkedinSessionPoll';
 
 describe('LinkedIn session import flow', () => {
   it('waits through login and MFA without navigating the provider webview', async () => {
@@ -19,8 +22,36 @@ describe('LinkedIn session import flow', () => {
       onReady: vi.fn(),
     });
 
-    await expect(flow.run()).resolves.toEqual({ status: 'waiting_for_sign_in' });
+    // The step has to name the stage: a candidate looking at a one-time-code
+    // prompt must not be shown the same silence as a page that never loaded
+    // (owner report, B157).
+    await expect(flow.run()).resolves.toEqual({
+      status: 'waiting_for_sign_in',
+      stage: 'otp',
+    });
     expect(readSessionPage).not.toHaveBeenCalled();
+  });
+
+  describe('waiting notice', () => {
+    it.each([
+      { stage: 'loading' as const, fragment: 'Загружаем страницу LinkedIn' },
+      { stage: 'login' as const, fragment: 'войдёте в LinkedIn' },
+      { stage: 'otp' as const, fragment: 'одноразовый код' },
+      { stage: 'captcha' as const, fragment: 'проверку' },
+      { stage: 'unrecognised' as const, fragment: 'Проверяем' },
+    ])('explains the $stage stage', ({ stage, fragment }) => {
+      const notice = linkedinWaitingNotice(stage, 1);
+
+      expect(notice.text).toContain(fragment);
+      expect(notice.stuck).toBe(false);
+    });
+
+    it('stops claiming progress once an unrecognised page outlasts the wait', () => {
+      const notice = linkedinWaitingNotice('unrecognised', 200);
+
+      expect(notice.stuck).toBe(true);
+      expect(notice.text).toMatch(/PDF-экспорт/u);
+    });
   });
 
   it('captures the own profile, closes provider UI, then persists exactly once', async () => {

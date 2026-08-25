@@ -305,6 +305,61 @@ describe('hh.ru session polling', () => {
    * so the unrecognised stage has to stop being patient at some point and offer
    * the candidate another way through (B157).
    */
+  describe('the page hh.ru really serves for the resume list', () => {
+    const signedIn = {
+      ready: true,
+      url: 'https://hh.ru/applicant/profile/me',
+      signedInApplicant: true,
+      login: false,
+      otp: false,
+      captcha: false,
+    };
+    const resumeCard =
+      '<a data-qa="resume-card-link-live-token-1" href="/resume/live-token-1">Менеджер по продукту</a>';
+
+    it('accepts the redirect hh.ru answers /applicant/resumes with', async () => {
+      // hh.ru redirects the resume list to /applicant/profile/me. Rejecting it
+      // made the capture fail on the page it had just asked for (B157).
+      const flow = createHhSessionImportFlow({
+        inspectCurrentPage: async () => signedIn,
+        readSessionPage: async () => ({
+          ok: true,
+          url: 'https://hh.ru/applicant/profile/me',
+          body: `<main>${resumeCard}</main>`,
+        }),
+        onAuthenticated: () => undefined,
+        onProviderDataCaptured: () => undefined,
+        onReady: () => undefined,
+        onAuthenticatedEmpty: () => undefined,
+        waitBeforeRetry: async () => undefined,
+      });
+
+      const result = await flow.run();
+
+      expect(result.status).toBe('ready');
+      if (result.status !== 'ready') return;
+      expect(result.resumes.map((resume) => resume.id)).toEqual(['live-token-1']);
+    });
+
+    it('still refuses a look-alike host serving the same path', async () => {
+      const flow = createHhSessionImportFlow({
+        inspectCurrentPage: async () => signedIn,
+        readSessionPage: async () => ({
+          ok: true,
+          url: 'https://hh.ru.example.invalid/applicant/profile/me',
+          body: `<main>${resumeCard}</main>`,
+        }),
+        onAuthenticated: () => undefined,
+        onProviderDataCaptured: () => undefined,
+        onReady: () => undefined,
+        onAuthenticatedEmpty: () => undefined,
+        waitBeforeRetry: async () => undefined,
+      });
+
+      await expect(flow.run()).rejects.toThrow('hh_authenticated_capture_failed');
+    });
+  });
+
   describe('waiting notice', () => {
     it.each([
       { stage: 'loading' as const, fragment: 'Загружаем страницу hh.ru' },

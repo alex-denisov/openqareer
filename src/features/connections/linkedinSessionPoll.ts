@@ -1,11 +1,41 @@
 import { parseResumeContent, type ParsedResume } from '../workspace/resumeParser';
 import type { SessionInspectionResult, SessionPageResult } from './connectorSession';
 import { captureSignedInPage } from './sessionCapture';
+import {
+  sessionWaitingNotice,
+  sessionWaitingStage,
+  type SessionWaitingNotice,
+  type SessionWaitingStage,
+} from './sessionWaitingStage';
 
 const LINKEDIN_PROFILE_URL = 'https://www.linkedin.com/in/me/';
 
-type LinkedInSessionPollResult =
-  | { readonly status: 'waiting_for_sign_in' }
+export type LinkedInWaitingStage = SessionWaitingStage;
+export type LinkedInWaitingNotice = SessionWaitingNotice;
+
+const LINKEDIN_WAITING_COPY = {
+  loading: 'Загружаем страницу LinkedIn…',
+  login: 'Ждём, пока вы войдёте в LinkedIn в открывшемся окне.',
+  otp: 'LinkedIn запросил одноразовый код — введите его в окне входа.',
+  captcha: 'LinkedIn показывает проверку — пройдите её в окне входа.',
+  checking: 'Проверяем, завершён ли вход…',
+  unrecognised:
+    'Вход выполнен, но OpenQareer не узнаёт страницу LinkedIn. Откройте свой профиль в окне LinkedIn или загрузите PDF-экспорт профиля.',
+} as const;
+
+/** What the candidate is told while the LinkedIn sign-in is still running. */
+export function linkedinWaitingNotice(
+  stage: LinkedInWaitingStage,
+  unrecognisedPolls: number,
+): LinkedInWaitingNotice {
+  return sessionWaitingNotice(stage, unrecognisedPolls, LINKEDIN_WAITING_COPY);
+}
+
+export type LinkedInSessionPollResult =
+  | {
+      readonly status: 'waiting_for_sign_in';
+      readonly stage: LinkedInWaitingStage;
+    }
   | {
       readonly status: 'ready';
       readonly parsed: ParsedResume;
@@ -52,7 +82,7 @@ async function runOnce(
 ): Promise<LinkedInSessionPollResult> {
   const current = await dependencies.inspectCurrentPage();
   if (!isSignedInLinkedInPage(current)) {
-    return { status: 'waiting_for_sign_in' };
+    return { status: 'waiting_for_sign_in', stage: sessionWaitingStage(current) };
   }
   await dependencies.onAuthenticated();
   const page = await captureSignedInPage({

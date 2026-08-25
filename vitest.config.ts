@@ -4,6 +4,10 @@ export default defineConfig({
   test: {
     exclude: [
       '**/e2e/**',
+      // Agent worktrees hold a second checkout of this repo; running their
+      // copy of the suite doubles every count and reports on code that is not
+      // in this tree.
+      '**/.claude/worktrees/**',
       '**/prototypes/**',
       '**/node_modules/**',
       '**/dist/**',
@@ -32,6 +36,12 @@ export default defineConfig({
         'src/features/connections/connectorSession.ts',
         'src/features/connections/connectionState.ts',
         'src/features/connections/hhSessionPoll.ts',
+        'src/features/connections/linkedinSessionPoll.ts',
+        'src/features/connections/sessionCapture.ts',
+        'src/features/connections/sessionWaitingStage.ts',
+        'src/features/connections/connectorSessionStart.ts',
+        'src/features/connections/linkedinProtectedRoute.ts',
+        'src/features/journey/connectedProfileSource.ts',
         'src/features/resume/resumeStudioModel.ts',
         'src/features/resume/resumeDocumentRows.ts',
         'src/features/resume/resumeLabels.ts',

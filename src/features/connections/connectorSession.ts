@@ -95,13 +95,6 @@ export async function closeConnectorSession(platform: ConnectionPlatform): Promi
   await invokeDesktopCommand<boolean>('close_connector_session', { platform });
 }
 
-export async function hideConnectorSession(platform: ConnectionPlatform): Promise<boolean> {
-  if (!isTauriEnvironment()) return false;
-  return (
-    (await invokeDesktopCommand<boolean>('hide_connector_session', { platform })) === true
-  );
-}
-
 export async function resetConnectorSession(platform: ConnectionPlatform): Promise<boolean> {
   if (!isTauriEnvironment()) return false;
   return (
@@ -130,6 +123,8 @@ export function sessionOpenFailureMessage(platform: ConnectionPlatform, reason?:
       return `Адрес входа ${name} не прошёл проверку безопасности. Обновите приложение до свежей версии.`;
     case 'no_window_environment':
       return `Окно входа ${name} можно открыть только в приложении или браузере.`;
+    case 'window_not_registered':
+      return `Окно входа ${name} создалось, но приложение не получило к нему доступ. Перезапустите OpenQareer и повторите попытку или загрузите PDF-резюме.`;
     default:
       return `Открыть окно входа ${name} не удалось. Повторите попытку или загрузите PDF-резюме.`;
   }
@@ -184,25 +179,51 @@ export interface RouteNotice {
   readonly text: string;
 }
 
+export interface RouteCapability {
+  /**
+   * Whether this build can route the platform around a closed direct path.
+   * Only LinkedIn has such a route; hh.ru is deliberately kept direct.
+   */
+  readonly protectedRouteAvailable?: boolean;
+  /** Whether that route is up **now**, proven by its own live probe. */
+  readonly protectedRouteActive?: boolean;
+}
+
 /**
  * States the measured route, and nothing else. Promising a tunnel that is not
  * running, or a "verified" route that timed out, is exactly the kind of claim
  * this flow was reported for (B149).
+ *
+ * A closed direct path is only a dead end where nothing can route around it.
+ * Announcing "окно входа останется пустым" in a build that starts the protected
+ * route on the very next click is a refusal the app immediately contradicts —
+ * the owner read it as being turned away before trying (B157).
  */
 export function platformRouteNotice(
   platform: ConnectionPlatform,
   probe?: { readonly accessible: boolean },
+  capability: RouteCapability = {},
 ): RouteNotice {
   const name = PLATFORM_NAMES[platform] ?? platform;
+  if (capability.protectedRouteActive) {
+    return { tone: 'ok', text: `Защищённый EU-маршрут ${name} активен` };
+  }
   if (!probe) {
     return { tone: 'pending', text: `Проверяем доступность ${name}…` };
   }
-  return probe.accessible
-    ? { tone: 'ok', text: `Прямой маршрут до ${name} сейчас работает` }
-    : {
-        tone: 'blocked',
-        text: `${name} недоступен с текущего сетевого маршрута — окно входа останется пустым. Загрузите PDF-резюме или смените сеть.`,
-      };
+  if (probe.accessible) {
+    return { tone: 'ok', text: `Прямой маршрут до ${name} сейчас работает` };
+  }
+  if (capability.protectedRouteAvailable) {
+    return {
+      tone: 'pending',
+      text: `Прямой маршрут до ${name} закрыт. Окно входа откроется через защищённый EU-маршрут.`,
+    };
+  }
+  return {
+    tone: 'blocked',
+    text: `${name} недоступен с текущего сетевого маршрута — окно входа останется пустым. Загрузите PDF-резюме или смените сеть.`,
+  };
 }
 
 export interface SessionPageResult {

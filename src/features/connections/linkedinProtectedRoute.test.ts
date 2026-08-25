@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   ProtectedRouteError,
+  protectedRouteFailureMessage,
   startLinkedInProtectedRoute,
 } from './linkedinProtectedRoute';
 
@@ -60,5 +61,104 @@ describe('startLinkedInProtectedRoute', () => {
     ).resolves.toMatchObject({ tunnelActive: true, probe: blockedProbe.linkedin });
 
     expect(startTunnel).toHaveBeenCalledWith(config);
+  });
+});
+
+describe('protected route failure boundaries', () => {
+  const directProbe = {
+    ...blockedProbe,
+    linkedin: { ...blockedProbe.linkedin, accessible: true },
+    recommendation: 'direct' as const,
+  };
+
+  it('keeps a working direct route off the tunnel entirely', async () => {
+    const startTunnel = vi.fn();
+    const fetchBootstrap = vi.fn();
+
+    const result = await startLinkedInProtectedRoute({
+      probeNetwork: vi.fn().mockResolvedValue(directProbe),
+      fetchBootstrap,
+      startTunnel,
+    });
+
+    expect(result).toEqual({ probe: directProbe.linkedin, tunnelActive: false });
+    expect(fetchBootstrap).not.toHaveBeenCalled();
+    expect(startTunnel).not.toHaveBeenCalled();
+  });
+
+  it('separates an unavailable bootstrap from an invalid one', async () => {
+    await expect(
+      startLinkedInProtectedRoute({
+        probeNetwork: vi.fn().mockResolvedValue(blockedProbe),
+        fetchBootstrap: vi.fn().mockResolvedValue(new Response('', { status: 503 })),
+        startTunnel: vi.fn(),
+      }),
+    ).rejects.toEqual(new ProtectedRouteError('bootstrap_unavailable'));
+
+    await expect(
+      startLinkedInProtectedRoute({
+        probeNetwork: vi.fn().mockResolvedValue(blockedProbe),
+        fetchBootstrap: vi.fn().mockResolvedValue(new Response('not json', { status: 200 })),
+        startTunnel: vi.fn(),
+      }),
+    ).rejects.toEqual(new ProtectedRouteError('bootstrap_invalid'));
+
+    await expect(
+      startLinkedInProtectedRoute({
+        probeNetwork: vi.fn().mockResolvedValue(blockedProbe),
+        fetchBootstrap: vi
+          .fn()
+          .mockResolvedValue(new Response(JSON.stringify({}), { status: 200 })),
+        startTunnel: vi.fn(),
+      }),
+    ).rejects.toEqual(new ProtectedRouteError('bootstrap_invalid'));
+  });
+
+  it('refuses to call a tunnel active when it did not reach running', async () => {
+    const bootstrap = () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ data: { remoteServer: 'openqareer.com' } }), {
+          status: 200,
+        }),
+      );
+
+    await expect(
+      startLinkedInProtectedRoute({
+        probeNetwork: vi.fn().mockResolvedValue(blockedProbe),
+        fetchBootstrap: bootstrap,
+        startTunnel: vi.fn().mockResolvedValue({ state: 'failed' }),
+      }),
+    ).rejects.toEqual(new ProtectedRouteError('tunnel_start_failed'));
+
+    await expect(
+      startLinkedInProtectedRoute({
+        probeNetwork: vi.fn().mockResolvedValue(blockedProbe),
+        fetchBootstrap: bootstrap,
+        startTunnel: vi.fn().mockRejectedValue(new Error('sidecar_missing')),
+      }),
+    ).rejects.toEqual(new ProtectedRouteError('tunnel_start_failed'));
+  });
+});
+
+describe('protectedRouteFailureMessage', () => {
+  it('names the boundary that refused instead of blaming the app', () => {
+    expect(
+      protectedRouteFailureMessage(new ProtectedRouteError('bootstrap_unavailable')),
+    ).toContain('Сервер OpenQareer');
+    expect(
+      protectedRouteFailureMessage(new ProtectedRouteError('bootstrap_invalid')),
+    ).toContain('не распознан');
+    expect(
+      protectedRouteFailureMessage(new ProtectedRouteError('tunnel_start_failed')),
+    ).toContain('не поднялся на этом компьютере');
+    expect(protectedRouteFailureMessage(new Error('boom'))).toContain(
+      'до открытия окна входа',
+    );
+    for (const message of [
+      protectedRouteFailureMessage(new ProtectedRouteError('bootstrap_unavailable')),
+      protectedRouteFailureMessage(new Error('boom')),
+    ]) {
+      expect(message).toContain('PDF-экспорт профиля');
+    }
   });
 });

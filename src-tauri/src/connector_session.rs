@@ -129,8 +129,29 @@ fn validate(request: &SessionWindowRequest) -> Result<(&'static str, Url), Strin
     Ok((label, url))
 }
 
+/// How long a freshly built window may take to appear in the manager before the
+/// report stops calling it opened. The window is created on the main thread
+/// while this command runs on a worker, so "build returned Ok" is not yet
+/// "there is a window the session poller can inspect" (B157).
+const WINDOW_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(5);
+const WINDOW_REGISTRATION_POLL: Duration = Duration::from_millis(100);
+
+/// Waits for the built window to become inspectable, or gives up honestly.
+async fn await_registered_window(app: &AppHandle, label: &str) -> bool {
+    let deadline = tokio::time::Instant::now() + WINDOW_REGISTRATION_TIMEOUT;
+    loop {
+        if app.get_webview(label).is_some() {
+            return true;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(WINDOW_REGISTRATION_POLL).await;
+    }
+}
+
 /// Opens (or refocuses) the platform's own sign-in window.
-pub fn open_session_window(
+pub async fn open_session_window(
     app: &AppHandle,
     request: &SessionWindowRequest,
     proxy_url: Option<Url>,
@@ -217,11 +238,23 @@ pub fn open_session_window(
     }
 
     match builder.build() {
-        Ok(_) => SessionWindowReport {
-            opened: true,
-            label: label.to_string(),
-            reason: None,
-        },
+        Ok(_) => {
+            // Reporting "opened" before the window is inspectable is what threw
+            // the whole step back to idle on the very first poll (B157).
+            if await_registered_window(app, label).await {
+                SessionWindowReport {
+                    opened: true,
+                    label: label.to_string(),
+                    reason: None,
+                }
+            } else {
+                SessionWindowReport {
+                    opened: false,
+                    label: label.to_string(),
+                    reason: Some("window_not_registered".to_string()),
+                }
+            }
+        }
         Err(error) => SessionWindowReport {
             opened: false,
             label: label.to_string(),
@@ -246,17 +279,6 @@ pub fn close_session_window(app: &AppHandle, platform: &str) -> bool {
             || app
                 .get_webview(label)
                 .is_some_and(|webview| webview.close().is_ok())
-    })
-}
-
-/// Parks a signed-in session while the wizard asks which resume to import.
-pub fn hide_session_window(app: &AppHandle, platform: &str) -> bool {
-    session_window_label(platform).is_some_and(|label| {
-        app.get_webview_window(label)
-            .is_some_and(|window| window.hide().is_ok())
-            || app
-                .get_webview(label)
-                .is_some_and(|webview| webview.hide().is_ok())
     })
 }
 

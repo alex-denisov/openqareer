@@ -6,7 +6,6 @@ import { ImportModalShell } from './ImportModalShell';
 import { PlatformLogo } from './PlatformLogo';
 import {
   closeConnectorSession,
-  hideConnectorSession,
   inspectSessionPage,
   openConnectorSession,
   platformRouteNotice,
@@ -14,10 +13,14 @@ import {
   resetConnectorSession,
   resizeConnectorSession,
   sessionCheckFailure,
-  sessionOpenFailureMessage,
   type ConnectorSessionStep,
 } from './connectorSession';
+import {
+  nextAnimationFrame,
+  startConnectorSession,
+} from './connectorSessionStart';
 import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
+import { sessionUnreadableNotice } from './sessionWaitingStage';
 import {
   createHhSessionImportFlow,
   hhWaitingNotice,
@@ -63,9 +66,14 @@ export function HhConnectModal({
   const [waiting, setWaiting] = useState<HhWaitingNotice>();
   const webviewHost = useRef<HTMLDivElement>(null);
   const sessionFlow = useRef<HhSessionImportFlow>();
-  const backgroundCapture = useRef(false);
+  /** The page itself proved the candidate is signed in. */
+  const signedIn = useRef(false);
+  /** The candidate still has to pick a resume out of this live session. */
+  const keepSessionOpen = useRef(false);
   /** Consecutive polls on a loaded, unchallenged page with no signed-in marker. */
   const unrecognisedPolls = useRef(0);
+  /** Consecutive polls that could not read the page at all. */
+  const unreadablePolls = useRef(0);
 
   function closeModal() {
     sessionFlow.current = undefined;
@@ -75,13 +83,13 @@ export function HhConnectModal({
 
   useEffect(
     () => () => {
-      if (!backgroundCapture.current) void closeConnectorSession('hh');
+      if (!keepSessionOpen.current) void closeConnectorSession('hh');
     },
     [],
   );
 
   useEffect(() => {
-    if (!isOpen || !isTauriEnvironment() || step === 'idle' || step === 'opening') return;
+    if (!isOpen || !isTauriEnvironment() || step === 'idle') return;
     const host = webviewHost.current;
     if (!host) return;
     return watchConnectorHost('hh', host, (layout) => {
@@ -97,33 +105,32 @@ export function HhConnectModal({
     setEmptyAccount(false);
     setAutoPollPaused(false);
     setWaiting(undefined);
-    backgroundCapture.current = false;
+    signedIn.current = false;
+    keepSessionOpen.current = false;
     unrecognisedPolls.current = 0;
+    unreadablePolls.current = 0;
     sessionFlow.current = undefined;
     void probeNetworkStatus()
       .then((status) => setProbe(status.hh))
       .catch(() => setProbe({ accessible: false }));
   }, [isOpen]);
 
-  /** The step only advances once a window is really on screen (B149). */
+  /** The step only advances once a window is really on screen (B149, B157). */
   async function startSession() {
     setError(undefined);
     setWaiting(undefined);
     unrecognisedPolls.current = 0;
-    setStep('opening');
-    setStep('session_open');
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const layout = sessionLayoutForHost(
-      webviewHost.current,
-      window.innerWidth,
-      window.innerHeight,
-    );
-    const result = await openConnectorSession('hh', HH_LOGIN_URL, layout);
-    if (!result.opened) {
-      setStep('idle');
-      setError(sessionOpenFailureMessage('hh', result.reason));
-      return;
-    }
+    unreadablePolls.current = 0;
+    const started = await startConnectorSession({
+      platform: 'hh',
+      url: HH_LOGIN_URL,
+      measureLayout: () =>
+        sessionLayoutForHost(webviewHost.current, window.innerWidth, window.innerHeight),
+      waitForFrame: nextAnimationFrame,
+      onStep: setStep,
+      openSession: openConnectorSession,
+    });
+    if (!started.opened) setError(started.error);
   }
 
   function getSessionFlow(): HhSessionImportFlow {
@@ -131,25 +138,30 @@ export function HhConnectModal({
     sessionFlow.current = createHhSessionImportFlow({
       inspectCurrentPage: () => inspectSessionPage('hh'),
       readSessionPage: (url) => readSessionPage('hh', url),
-      onAuthenticated: async () => {
-        backgroundCapture.current = true;
-        const hidden = await hideConnectorSession('hh').catch(() => false);
-        if (!hidden) {
-          backgroundCapture.current = false;
-          throw new Error('hh_session_hide_failed');
-        }
-        onClose();
+      onAuthenticated: () => {
+        // The sign-in window stays on screen while the resume list is read. A
+        // hidden WKWebView stops running the script that read depends on, so
+        // parking it here failed every capture that followed a perfectly good
+        // sign-in — and the step then reported the import as failed (B157).
+        signedIn.current = true;
+        setWaiting({ text: 'Вход выполнен — читаем список ваших резюме…', stuck: false });
       },
       onProviderDataCaptured: async (result) => {
+        // The session is only kept alive while the candidate still has to pick
+        // a resume out of it: that read happens in this same window.
         if (result.status !== 'ready' || result.defaultParsed) {
           await closeConnectorSession('hh');
-          backgroundCapture.current = false;
+        } else {
+          keepSessionOpen.current = true;
         }
       },
-      onReady: (result) =>
-        onConnectSuccess(result.resumes, result.defaultParsed, result.rawUrl),
+      onReady: (result) => {
+        onClose();
+        return onConnectSuccess(result.resumes, result.defaultParsed, result.rawUrl);
+      },
       onAuthenticatedEmpty: () => {
         setEmptyAccount(true);
+        onClose();
         onAuthenticatedEmpty();
       },
     });
@@ -158,6 +170,8 @@ export function HhConnectModal({
 
   /** Keeps the step audibly alive: every poll says where the flow stands. */
   function noticeFor(result: HhSessionPollResult): HhWaitingNotice | undefined {
+    // Any answer at all means the page was readable this time round.
+    unreadablePolls.current = 0;
     if (result.status !== 'waiting_for_sign_in') {
       unrecognisedPolls.current = 0;
       return undefined;
@@ -169,9 +183,48 @@ export function HhConnectModal({
 
   async function resetSession() {
     sessionFlow.current = undefined;
-    backgroundCapture.current = false;
+    signedIn.current = false;
+    keepSessionOpen.current = false;
     await resetConnectorSession('hh').catch(() => false);
     onClose();
+  }
+
+  /**
+   * Turns one failed poll into the right outcome.
+   *
+   * Before the sign-in is recognised nothing has been captured, so a page that
+   * cannot be read yet is something to wait through; only a window that is
+   * really gone ends the step. After it is recognised, a failed capture ends
+   * the attempt once — letting the poll retry hammered the platform and closed
+   * the window under the candidate once per second (B157).
+   */
+  async function handlePollFailure(failure: unknown): Promise<void> {
+    const explained = sessionCheckFailure('hh', failure);
+    if (!signedIn.current) {
+      if (explained.step === 'idle') {
+        setWaiting(undefined);
+        setStep('idle');
+        setError(explained.message);
+        return;
+      }
+      unreadablePolls.current += 1;
+      setWaiting(
+        sessionUnreadableNotice(
+          explained.message,
+          unreadablePolls.current,
+          'Загружаем страницу hh.ru…',
+        ),
+      );
+      return;
+    }
+    setAutoPollPaused(true);
+    setWaiting(undefined);
+    setStep('idle');
+    await closeConnectorSession('hh').catch(() => undefined);
+    signedIn.current = false;
+    onConnectionFailure(
+      'Вход в hh.ru выполнен, но получить данные профиля не удалось. Повторите подключение или загрузите PDF.',
+    );
   }
 
   /**
@@ -197,22 +250,7 @@ export function HhConnectModal({
           if (cancelled) return;
           setWaiting(noticeFor(result));
         } catch (failure) {
-          // A window the candidate closed is not a failed capture, and saying
-          // so was the flow's own way of hiding what actually happened (B157).
-          if (!backgroundCapture.current) {
-            const explained = sessionCheckFailure('hh', failure);
-            if (explained.step === 'idle') {
-              setWaiting(undefined);
-              setStep('idle');
-              setError(explained.message);
-              return;
-            }
-          }
-          await closeConnectorSession('hh').catch(() => undefined);
-          backgroundCapture.current = false;
-          onConnectionFailure(
-            'Вход в hh.ru выполнен, но получить данные профиля не удалось. Повторите подключение или загрузите PDF.',
-          );
+          await handlePollFailure(failure);
         }
       })();
     };
@@ -255,7 +293,16 @@ export function HhConnectModal({
   }
 
   const route = platformRouteNotice('hh', probe);
-  const sessionActive = step !== 'idle' && step !== 'opening';
+  // The step is never silent: while the window is being built there is nothing
+  // to poll yet, and silence is exactly what an undetected sign-in looks like.
+  const status: HhWaitingNotice | undefined =
+    step === 'opening'
+      ? { text: 'Открываем окно входа hh.ru…', stuck: false }
+      : waiting;
+  // The frame is part of the step from the moment the window is being opened:
+  // it is what the native window is measured against, and it is where the
+  // candidate's own controls live.
+  const sessionActive = step !== 'idle';
 
   return (
     <ImportModalShell
@@ -282,16 +329,17 @@ export function HhConnectModal({
                 type="button"
                 className="career-quiet-button career-connector-check"
                 onClick={() => void resetSession()}
+                title="Очистит вход в hh.ru внутри OpenQareer и закроет окно"
               >
-                Выйти из сессии
+                Выйти из hh.ru
               </button>
               <button
                 type="button"
                 className="career-primary-button career-connector-check"
                 onClick={() => void checkSession()}
-                disabled={step === 'checking'}
+                disabled={step !== 'session_open'}
               >
-                {step === 'checking' ? 'Проверяем…' : 'Подтвердить вход'}
+                {step === 'checking' ? 'Проверяем…' : 'Проверить вход'}
               </button>
             </div>
           </div>
@@ -306,47 +354,39 @@ export function HhConnectModal({
               <span>{route.text}</span>
             </p>
             <p className="career-modal-intro">
-              Войдите в hh.ru. После входа OpenQareer сам загрузит резюме и закроет окно.
+              Вход проходит на странице самой hh.ru, в вашей собственной сессии.
+              После входа OpenQareer сам загрузит резюме и закроет окно. Если
+              резюме несколько, вы выберете нужное.
             </p>
           </>
         )}
 
-        {step === 'idle' || step === 'opening' ? (
+        {step === 'idle' ? (
           <button
             type="button"
             className="career-primary-button career-modal-wide-action"
             onClick={() => void startSession()}
-            disabled={step === 'opening'}
           >
-            {step === 'opening' ? (
-              <>
-                <SpinnerGap size={18} className="spin" />
-                <span>Открываем окно входа…</span>
-              </>
-            ) : (
-              <>
-                <ArrowSquareOut size={18} weight="bold" />
-                <span>Открыть окно входа в hh.ru</span>
-              </>
-            )}
+            <ArrowSquareOut size={18} weight="bold" />
+            <span>Открыть окно входа в hh.ru</span>
           </button>
         ) : null}
 
-        {waiting ? (
+        {status ? (
           <p
-            className={`career-connector-waiting${waiting.stuck ? ' is-stuck' : ''}`}
+            className={`career-connector-waiting${status.stuck ? ' is-stuck' : ''}`}
             role="status"
           >
-            {waiting.stuck ? (
+            {status.stuck ? (
               <WarningCircle size={16} weight="fill" />
             ) : (
               <SpinnerGap size={16} className="spin" />
             )}
-            <span>{waiting.text}</span>
+            <span>{status.text}</span>
           </p>
         ) : null}
 
-        {isTauriEnvironment() && step !== 'idle' && step !== 'opening' ? (
+        {isTauriEnvironment() && step !== 'idle' ? (
           <div
             ref={webviewHost}
             className="career-connector-webview-host"

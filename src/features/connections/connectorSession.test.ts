@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  closeConnectorSession,
   looksLikeHhLoginPage,
   looksLikeHhVpnBlock,
   looksLikeLinkedInLoginPage,
@@ -8,6 +9,7 @@ import {
   platformRouteNotice,
   readSessionPage,
   resetConnectorSession,
+  resizeConnectorSession,
   sessionCheckFailure,
   sessionOpenFailureMessage,
 } from './connectorSession';
@@ -142,6 +144,54 @@ describe('sessionCheckFailure', () => {
   });
 });
 
+describe('session window commands in the desktop shell', () => {
+  function useDesktop(handler: (cmd: string, args: unknown) => unknown) {
+    const calls: Array<{ cmd: string; args: unknown }> = [];
+    useWindow({
+      __TAURI_INTERNALS__: {
+        invoke: async (cmd: string, args: unknown) => {
+          calls.push({ cmd, args });
+          return handler(cmd, args);
+        },
+      },
+    });
+    return calls;
+  }
+
+  it('closes, resets and resizes through the desktop bridge', async () => {
+    const calls = useDesktop(() => true);
+
+    await closeConnectorSession('hh');
+    await expect(resetConnectorSession('linkedin')).resolves.toBe(true);
+    await resizeConnectorSession('hh', { x: 1, y: 2, width: 400, height: 400 });
+
+    expect(calls.map((call) => call.cmd)).toEqual([
+      'close_connector_session',
+      'reset_connector_session',
+      'resize_connector_session',
+    ]);
+  });
+
+  it('treats anything but a confirmed true as a command that did not happen', async () => {
+    useDesktop(() => null);
+
+    await expect(resetConnectorSession('hh')).resolves.toBe(false);
+  });
+
+  it('reports an unreadable inspection as "nothing recognised", never as ready', async () => {
+    useDesktop(() => null);
+
+    await expect(inspectSessionPage('hh')).resolves.toEqual({
+      ready: false,
+      url: '',
+      signedInApplicant: false,
+      login: false,
+      otp: false,
+      captcha: false,
+    });
+  });
+});
+
 describe('platformRouteNotice', () => {
   it('says it is still checking while the probe is in flight', () => {
     expect(platformRouteNotice('linkedin', undefined).tone).toBe('pending');
@@ -162,6 +212,40 @@ describe('platformRouteNotice', () => {
     expect(notice.tone).toBe('blocked');
     expect(notice.text).toMatch(/недоступен/i);
     expect(notice.text).not.toMatch(/туннель/i);
+  });
+
+  it('does not refuse a blocked direct route the app is about to route around', () => {
+    const notice = platformRouteNotice(
+      'linkedin',
+      { accessible: false },
+      { protectedRouteAvailable: true },
+    );
+
+    // Saying "окно входа останется пустым" while the protected route starts on
+    // the very next click is a refusal the app then contradicts (B157).
+    expect(notice.tone).not.toBe('blocked');
+    expect(notice.text).not.toMatch(/останется пустым/i);
+    expect(notice.text).toMatch(/защищённый/i);
+  });
+
+  it('states the protected route only once it is really carrying traffic', () => {
+    const notice = platformRouteNotice(
+      'linkedin',
+      { accessible: false },
+      { protectedRouteAvailable: true, protectedRouteActive: true },
+    );
+
+    expect(notice.tone).toBe('ok');
+    expect(notice.text).toMatch(/защищённый eu-маршрут/i);
+    expect(notice.text).toMatch(/активен/i);
+  });
+
+  it('keeps hh.ru honest: no protected route exists for it', () => {
+    const notice = platformRouteNotice('hh', { accessible: false });
+
+    expect(notice.tone).toBe('blocked');
+    expect(notice.text).toMatch(/hh\.ru/);
+    expect(notice.text).not.toMatch(/защищённый/i);
   });
 });
 
@@ -332,5 +416,25 @@ describe('failure mapping edge cases', () => {
       'session_open',
     );
     expect(sessionCheckFailure('linkedin', {}).message).toMatch(/не удалось/i);
+  });
+});
+
+describe('sessionOpenFailureMessage', () => {
+  it('separates a window that never appeared from one the app cannot reach', () => {
+    expect(sessionOpenFailureMessage('hh', 'window_not_registered')).toContain(
+      'приложение не получило к нему доступ',
+    );
+    expect(sessionOpenFailureMessage('hh', 'window_blocked')).toContain(
+      'Браузер заблокировал',
+    );
+    expect(sessionOpenFailureMessage('linkedin', 'unsupported_platform')).toContain(
+      'проверку безопасности',
+    );
+    expect(sessionOpenFailureMessage('linkedin', 'no_window_environment')).toContain(
+      'только в приложении или браузере',
+    );
+    expect(sessionOpenFailureMessage('hh', 'something_new')).toContain(
+      'Повторите попытку',
+    );
   });
 });

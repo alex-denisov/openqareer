@@ -32,6 +32,7 @@ function extractAllTagContents(html: string, tagAttrPattern: RegExp): string[] {
   return results;
 }
 
+// One parser, one document shape: splitting it would scatter the field map.
 // eslint-disable-next-line max-lines-per-function
 export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume {
   const fullName =
@@ -211,7 +212,28 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
   };
 }
 
-// eslint-disable-next-line max-lines-per-function
+/**
+ * The candidate's own resume id, or nothing when this is not a resume link.
+ *
+ * An absolute link has to name hh.ru itself: a look-alike host serving
+ * `/resume/<id>` must never be read as the candidate's resume.
+ */
+function resumeIdFromHref(href: string): string | undefined {
+  try {
+    const url = new URL(href, 'https://hh.ru');
+    const host = url.hostname.toLowerCase();
+    const ownHost =
+      host === 'hh.ru' ||
+      host.endsWith('.hh.ru') ||
+      host === 'headhunter.ru' ||
+      host.endsWith('.headhunter.ru');
+    if (!ownHost) return undefined;
+    return /^\/resume\/([A-Za-z0-9_-]+)\/?$/u.exec(url.pathname)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
 export function parseHhResumesList(html: string): Array<{
   id: string;
   title: string;
@@ -225,59 +247,40 @@ export function parseHhResumesList(html: string): Array<{
     updatedLabel?: string;
   }> = [];
 
-  // Sanitisation deliberately rebuilds safe attributes, so their order is not
-  // a provider contract. Read each anchor's attributes independently.
+  // The link is the contract, not the attribute name next to it.
+  //
+  // Gating on `data-qa` meant every hh.ru markup revision silently emptied the
+  // candidate's resume list — the flow then reported "вход выполнен, но данные
+  // получить не удалось" on a page that plainly showed their resumes
+  // (B156, and again B157). A `/resume/<id>` link on the candidate's own
+  // resume list, read inside their own signed-in session, already identifies a
+  // resume; the caller has verified both the host and that the page really is
+  // that list.
   const resumeLinkRegex = /<a\b([^>]*)>([\s\S]*?)<\/a>/giu;
   let match: RegExpExecArray | null;
   while ((match = resumeLinkRegex.exec(html)) !== null) {
     const attributes = match[1];
-    const qa = /(?:^|\s)data-qa=["']([^"']+)["']/iu.exec(attributes)?.[1];
-    const rawUrl = /(?:^|\s)href=["'](\/resume\/([A-Za-z0-9_-]+))["']/iu.exec(
-      attributes,
-    );
-    if (
-      !rawUrl ||
-      !(
-        qa === 'resume-title' ||
-        qa === 'applicant-resume-title' ||
-        qa?.startsWith('resume-card-link-')
-      )
-    ) {
-      continue;
-    }
-    const resumeId = rawUrl[2];
-    const rawTitle = match[2]
+    const href = /(?:^|\s)href=["']([^"']+)["']/iu.exec(attributes)?.[1];
+    const resumeId = href ? resumeIdFromHref(href) : undefined;
+    if (!resumeId) continue;
+    const title = match[2]
       .replace(/<[^>]+>/gu, ' ')
       .replace(/\s+/gu, ' ')
       .trim();
-    if (!resumes.some((r) => r.id === resumeId)) {
+    const existing = resumes.find((resume) => resume.id === resumeId);
+    if (!existing) {
       resumes.push({
         id: resumeId,
-        title: rawTitle || 'Резюме hh.ru',
-        url: `https://hh.ru${rawUrl[1]}`,
+        title: title || 'Резюме hh.ru',
+        url: `https://hh.ru/resume/${resumeId}`,
         updatedLabel: 'Готово к импорту',
       });
+      continue;
     }
-  }
-
-  // General fallback for resume list items
-  if (resumes.length === 0) {
-    const fallbackRegex =
-      /href=["']https?:\/\/hh\.ru\/resume\/([A-Za-z0-9_-]+)["'][^>]*>([\s\S]*?)<\/a>/giu;
-    while ((match = fallbackRegex.exec(html)) !== null) {
-      const resumeId = match[1];
-      const rawTitle = match[2]
-        .replace(/<[^>]+>/gu, ' ')
-        .replace(/\s+/gu, ' ')
-        .trim();
-      if (rawTitle && !resumes.some((r) => r.id === resumeId)) {
-        resumes.push({
-          id: resumeId,
-          title: rawTitle,
-          url: `https://hh.ru/resume/${resumeId}`,
-          updatedLabel: 'Готово к импорту',
-        });
-      }
+    // One card links the same resume more than once — from its title and from
+    // an icon with no text. Keep the label a human can recognise.
+    if (title.length > existing.title.length || existing.title === 'Резюме hh.ru') {
+      if (title) existing.title = title;
     }
   }
 

@@ -12,6 +12,10 @@ import {
 } from '@phosphor-icons/react';
 import { getConnections } from '../coach/coachApi';
 import type { HhResumeItem } from '../connections/ProfileImportModals';
+import {
+  connectedProfileSource,
+  type ConnectedProfileSource,
+} from './connectedProfileSource';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import {
   closeConnectorSession,
@@ -120,6 +124,7 @@ export function CareerIntake({
   const [selectedHhResumeId, setSelectedHhResumeId] = useState('');
   const [isHhConnected, setHhConnected] = useState(false);
   const [isLinkedinConnected, setLinkedinConnected] = useState(false);
+  const [connectedSource, setConnectedSource] = useState<ConnectedProfileSource>();
   const [context, setContext] = useState<IntakeContextValues>(emptyContext);
   const [error, setError] = useState<string>();
   const errorRef = useRef<HTMLParagraphElement>(null);
@@ -140,26 +145,31 @@ export function CareerIntake({
     errorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
   }, [error]);
 
-  // A platform already connected on this account carries a profile the wizard
-  // should not ask for a second time.
+  /**
+   * A platform already connected on this account carries a profile the wizard
+   * must not ask for a second time. Two shapes reach this point: an
+   * official-API connection, whose facts travel with it and can be re-ingested,
+   * and a native session snapshot, whose facts are already in the candidate's
+   * profile and only need to be acknowledged (B157).
+   */
   useEffect(() => {
     if (!hasAccount || sourceChoice !== 'profile-import' || ingested) return;
     let active = true;
     void getConnections()
       .then((connections) => {
         if (!active) return;
+        const snapshot = connectedProfileSource(connections);
+        if (snapshot) {
+          setConnectedSource(snapshot);
+          return;
+        }
         const live = connections.find(
           (item) =>
-            (item.platform === 'hh' || item.platform === 'linkedin') &&
             item.status === 'connected' &&
             item.accessMode !== 'native_session_snapshot' &&
             item.profile.facts.length > 0,
         );
-        if (
-          !live ||
-          live.status !== 'connected' ||
-          live.accessMode === 'native_session_snapshot'
-        ) return;
+        if (!live || live.status !== 'connected' || live.accessMode !== undefined) return;
         const parsed = parseResumeContent(
           live.profile.facts.map((fact) => fact.value).join('\n'),
         );
@@ -245,7 +255,7 @@ export function CareerIntake({
   }
 
   function moveFromSource() {
-    if (sourceChoice === 'profile-import' && !ingested) {
+    if (sourceChoice === 'profile-import' && !ingested && !connectedSource) {
       setError(
         isDesktop
           ? 'Подключите LinkedIn или hh.ru либо выберите другой источник: «PDF», «Текстом» или «Без документов».'
@@ -292,7 +302,8 @@ export function CareerIntake({
     onComplete(input);
   }
 
-  const hasDocument = Boolean(ingested) || typedResume.trim().length >= 80;
+  const hasDocument =
+    Boolean(ingested) || Boolean(connectedSource) || typedResume.trim().length >= 80;
 
   return (
     <section className="career-intake" aria-labelledby="intake-title">
@@ -384,8 +395,11 @@ export function CareerIntake({
           selectedHhResumeId={selectedHhResumeId}
           onSelectHhResume={setSelectedHhResumeId}
           onImportHhResume={() => void importSelectedHhResume()}
-          hhConnected={isHhConnected}
-          linkedinConnected={isLinkedinConnected}
+          hhConnected={isHhConnected || connectedSource?.platform === 'hh'}
+          linkedinConnected={
+            isLinkedinConnected || connectedSource?.platform === 'linkedin'
+          }
+          connectedSource={connectedSource}
         />
       ) : null}
 

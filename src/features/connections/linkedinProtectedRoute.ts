@@ -14,6 +14,25 @@ export type ProtectedRouteErrorCode =
   | 'bootstrap_invalid'
   | 'tunnel_start_failed';
 
+/**
+ * Says which boundary refused, in the candidate's words. One sentence for four
+ * different failures ("маршрут не запустился") sent the owner restarting the
+ * app for a problem that was never in the app (B157).
+ */
+export function protectedRouteFailureMessage(reason: unknown): string {
+  const code = reason instanceof ProtectedRouteError ? reason.code : undefined;
+  switch (code) {
+    case 'bootstrap_unavailable':
+      return 'Сервер OpenQareer сейчас не выдаёт доступ к защищённому маршруту LinkedIn. Повторите через минуту или загрузите PDF-экспорт профиля.';
+    case 'bootstrap_invalid':
+      return 'Ответ сервера о защищённом маршруте LinkedIn не распознан. Обновите приложение до свежей версии или загрузите PDF-экспорт профиля.';
+    case 'tunnel_start_failed':
+      return 'Защищённый EU-маршрут LinkedIn не поднялся на этом компьютере. Проверьте сеть и повторите попытку или загрузите PDF-экспорт профиля.';
+    default:
+      return 'Подключиться к LinkedIn не удалось до открытия окна входа. Повторите попытку или загрузите PDF-экспорт профиля.';
+  }
+}
+
 export class ProtectedRouteError extends Error {
   constructor(readonly code: ProtectedRouteErrorCode) {
     super(code);

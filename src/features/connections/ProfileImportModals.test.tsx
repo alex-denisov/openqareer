@@ -39,6 +39,10 @@ describe('ProfileImportModals', () => {
 
     expect(html).toContain('Подключение hh.ru');
     expect(html).toContain('Открыть окно входа в hh.ru');
+    // Where the sign-in happens, and what follows it, are the two things the
+    // owner could not tell from the old copy (B157).
+    expect(html).toContain('на странице самой hh.ru, в вашей собственной');
+    expect(html).toContain('Если резюме несколько, вы выберете нужное');
   });
 
   it('returns null when the hh.ru modal is closed', () => {
@@ -67,6 +71,11 @@ describe('ProfileImportModals', () => {
     expect(html).toContain('Подключение LinkedIn');
     expect(html).toContain('Открыть окно входа в LinkedIn');
     expect(html).toContain('сам загрузит профиль и закроет окно');
+    expect(html).toContain('на странице самого LinkedIn, в вашей собственной');
     expect(html).not.toContain('Логин и пароль остаются');
+    // Before any probe has answered, the step says it is measuring — it must
+    // not refuse a route it has not measured and is about to route around.
+    expect(html).toContain('Проверяем доступность LinkedIn');
+    expect(html).not.toContain('окно входа останется пустым');
   });
 });
