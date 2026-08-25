@@ -474,7 +474,7 @@ function LandingTariffs({ session, onNavigate }: LandingPageProps) {
   return (
     <section id="tariffs" className="site-section" aria-labelledby="tariffs-heading">
       <header className="site-section-header">
-        <span className="site-section-eyebrow">Тарифы</span>
+        <span className="site-section-eyebrow">Доступ и цены</span>
         <h2 id="tariffs-heading" className="site-section-title">Тарифы</h2>
         <p className="site-section-lead">Базовый тариф бесплатен и не ограничен по сроку. Регистрация доступна без приглашения. Покупка подписки в продукте пока не подключена.</p>
       </header>
