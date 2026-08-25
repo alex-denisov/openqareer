@@ -36,7 +36,11 @@ export function IntakeContextStep(props: IntakeContextStepProps) {
       <label className="career-field-wide">
         <span>
           Что происходит сейчас?
-          {props.optional ? <em> — по желанию</em> : null}
+          {props.optional ? (
+            <em> — по желанию: резюме уже прочитано, добавьте то, чего в нём нет</em>
+          ) : (
+            <em> — первый контекст для карьерного эксперта</em>
+          )}
         </span>
         <textarea
           value={props.currentSituation}
@@ -44,11 +48,6 @@ export function IntakeContextStep(props: IntakeContextStepProps) {
           placeholder="Например: давно не получаю приглашений, хочу сменить рынок, возвращаюсь после перерыва или не понимаю свой уровень."
           rows={2}
         />
-        <small>
-          {props.optional
-            ? 'Резюме уже прочитано — здесь можно добавить то, чего в нём нет.'
-            : 'Это станет первым контекстом для карьерного эксперта.'}
-        </small>
       </label>
 
       <label>

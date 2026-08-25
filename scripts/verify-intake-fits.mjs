@@ -19,6 +19,12 @@ const VIEWPORTS = [
   // pass locally at 1280x800 and spill 30px on CI. Holding a viewport nobody
   // actually uses is what turns "it fits" into "it fits with room".
   { name: 'short-1280', width: 1280, height: 720 },
+  // Shorter still, and for a different reason. `short-1280` proves the step
+  // fits; this one proves it fits *with slack*. B158 passed `short-1280` on
+  // macOS with 16px to spare and spilled 14px on CI's Linux Chromium, because
+  // the two disagree about font metrics by more than that. Holding 40px of
+  // headroom locally is what makes a local pass mean a CI pass.
+  { name: 'metrics-1280', width: 1280, height: 680 },
 ];
 
 /** Anonymous candidate: no session, no workspace, so the wizard owns the screen. */
