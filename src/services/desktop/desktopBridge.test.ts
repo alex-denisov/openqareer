@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   executeLocalAction,
-  getDesktopInfo,
-  getTunnelStatus,
   isTauriEnvironment,
   probeNetworkStatus,
   startTunnel,
@@ -14,25 +13,17 @@ describe('desktopBridge', () => {
     expect(isTauriEnvironment()).toBe(false);
   });
 
-  it('provides reliable fallback desktop info in web environment', async () => {
-    const info = await getDesktopInfo();
-    expect(info.is_desktop_companion).toBe(false);
-    expect(info.app_name).toBe('OpenQareer Web');
+  it('reports no network measurement at all when the native probe is absent', async () => {
+    expect(await probeNetworkStatus()).toBeNull();
   });
 
-  it('probes network status and returns structured platform diagnostics', async () => {
-    const status = await probeNetworkStatus();
-    expect(status.linkedin.platform).toBe('linkedin');
-    expect(status.hh.platform).toBe('hh');
-    expect(['direct', 'tunnel_required']).toContain(status.recommendation);
-    expect(status.probed_at).toBeDefined();
-  });
+  it('carries no invented latency, status code or route recommendation', () => {
+    const source = readFileSync(new URL('./desktopBridge.ts', import.meta.url), 'utf8');
 
-  it('provides split-tunnel routing metadata in tunnel status report', async () => {
-    const tunnel = await getTunnelStatus();
-    expect(tunnel.active_protocol).toContain('SSH');
-    expect(tunnel.split_proxied_domains).toContain('linkedin.com');
-    expect(tunnel.split_direct_domains).toContain('hh.ru');
+    expect(source).not.toContain('latency_ms:');
+    expect(source).not.toContain('status_code:');
+    expect(source).not.toContain('WEB_FALLBACK_MODE');
+    expect(source).not.toContain("recommendation: 'direct'");
   });
 
   it('never simulates a running tunnel outside the native desktop runtime', async () => {

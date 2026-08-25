@@ -197,6 +197,33 @@ describe('platformRouteNotice', () => {
     expect(platformRouteNotice('linkedin', undefined).tone).toBe('pending');
   });
 
+  it('says the route is unmeasured rather than inventing one', () => {
+    const notice = platformRouteNotice('linkedin', null);
+
+    expect(notice.tone).toBe('unknown');
+    expect(notice.text).toContain('LinkedIn');
+    expect(notice.text).not.toMatch(/работает|активен|недоступен/i);
+  });
+
+  it('names the protected route for an unmeasured one without claiming it works', () => {
+    const notice = platformRouteNotice('linkedin', null, { protectedRouteAvailable: true });
+
+    // No measurement is not a refusal either: the window still opens, through
+    // the protected route this build carries (B167 on top of B157).
+    expect(notice.tone).toBe('unknown');
+    expect(notice.text).toMatch(/не удалось/i);
+    expect(notice.text).toMatch(/защищённый eu-маршрут/i);
+    expect(notice.text).not.toMatch(/работает|активен|останется пустым/i);
+  });
+
+  it('does not promise a protected route to hh.ru, which has none', () => {
+    const notice = platformRouteNotice('hh', null);
+
+    expect(notice.tone).toBe('unknown');
+    expect(notice.text).toMatch(/pdf-резюме/i);
+    expect(notice.text).not.toMatch(/защищённый/i);
+  });
+
   it('confirms a route only when the platform really answered', () => {
     const notice = platformRouteNotice('linkedin', {
       accessible: true,

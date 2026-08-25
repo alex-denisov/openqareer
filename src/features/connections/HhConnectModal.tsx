@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowSquareOut, CheckCircle, SpinnerGap, WarningCircle } from '@phosphor-icons/react';
+import { ArrowSquareOut, SpinnerGap, WarningCircle } from '@phosphor-icons/react';
 import { isTauriEnvironment, probeNetworkStatus } from '../../services/desktop/desktopBridge';
 import type { ParsedResume } from '../workspace/resumeParser';
 import { ImportModalShell } from './ImportModalShell';
 import { PlatformLogo } from './PlatformLogo';
+import { RouteNoticeLine } from './RouteNoticeLine';
 import {
   closeConnectorSession,
   inspectSessionPage,
@@ -60,7 +61,9 @@ export function HhConnectModal({
 }: HhConnectModalProps) {
   const [step, setStep] = useState<ConnectorSessionStep>('idle');
   const [error, setError] = useState<string>();
-  const [probe, setProbe] = useState<{ accessible: boolean }>();
+  // `undefined` while the probe is in flight, `null` when there is no
+  // measurement to report at all (B167).
+  const [probe, setProbe] = useState<{ accessible: boolean } | null>();
   const [emptyAccount, setEmptyAccount] = useState(false);
   const [autoPollPaused, setAutoPollPaused] = useState(false);
   const [waiting, setWaiting] = useState<HhWaitingNotice>();
@@ -111,8 +114,8 @@ export function HhConnectModal({
     unreadablePolls.current = 0;
     sessionFlow.current = undefined;
     void probeNetworkStatus()
-      .then((status) => setProbe(status.hh))
-      .catch(() => setProbe({ accessible: false }));
+      .then((status) => setProbe(status ? status.hh : null))
+      .catch(() => setProbe(null));
   }, [isOpen]);
 
   /** The step only advances once a window is really on screen (B149, B157). */
@@ -316,14 +319,7 @@ export function HhConnectModal({
       <div className={`career-modal-body${sessionActive ? ' is-connector-session' : ''}`}>
         {sessionActive ? (
           <div className="career-connector-session-toolbar">
-            <p className="career-modal-network-status is-compact">
-              {route.tone === 'ok' ? (
-                <CheckCircle size={16} weight="fill" />
-              ) : route.tone === 'blocked' ? (
-                <WarningCircle size={16} weight="fill" />
-              ) : null}
-              <span>{route.text}</span>
-            </p>
+            <RouteNoticeLine notice={route} compact />
             <div className="career-connector-session-actions">
               <button
                 type="button"
@@ -345,14 +341,7 @@ export function HhConnectModal({
           </div>
         ) : (
           <>
-            <p className="career-modal-network-status">
-              {route.tone === 'ok' ? (
-                <CheckCircle size={18} weight="fill" />
-              ) : route.tone === 'blocked' ? (
-                <WarningCircle size={18} weight="fill" />
-              ) : null}
-              <span>{route.text}</span>
-            </p>
+            <RouteNoticeLine notice={route} />
             <p className="career-modal-intro">
               Вход проходит на странице самой hh.ru, в вашей собственной сессии.
               После входа OpenQareer сам загрузит резюме и закроет окно. Если

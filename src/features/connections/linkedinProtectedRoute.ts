@@ -41,13 +41,14 @@ export class ProtectedRouteError extends Error {
 }
 
 interface ProtectedRouteDependencies {
-  readonly probeNetwork?: () => Promise<NetworkEnvironmentStatus>;
+  readonly probeNetwork?: () => Promise<NetworkEnvironmentStatus | null>;
   readonly fetchBootstrap?: () => Promise<Response>;
   readonly startTunnel?: (config: TunnelConfig) => Promise<TunnelStatusReport>;
 }
 
 export interface ProtectedRouteResult {
-  readonly probe: PlatformProbeResult;
+  /** `null` when the route was never measured — unknown, not reachable. */
+  readonly probe: PlatformProbeResult | null;
   readonly tunnelActive: boolean;
 }
 
@@ -56,12 +57,15 @@ export interface ProtectedRouteResult {
  * an authenticated candidate-scoped bootstrap, and a sidecar status that was
  * earned by its live proxy probe. A 401 is an account-session failure, not a
  * tunnel failure, and callers must never collapse those two states again.
+ *
+ * An absent measurement is not a working direct route: when the probe reports
+ * nothing, the protected route is raised instead of shortcutting past it (B167).
  */
 export async function startLinkedInProtectedRoute(
   dependencies: ProtectedRouteDependencies = {},
 ): Promise<ProtectedRouteResult> {
   const probe = await (dependencies.probeNetwork ?? probeNetworkStatus)();
-  if (probe.linkedin.accessible) {
+  if (probe?.linkedin.accessible) {
     return { probe: probe.linkedin, tunnelActive: false };
   }
 
@@ -94,5 +98,5 @@ export async function startLinkedInProtectedRoute(
   if (tunnel.state !== 'running') {
     throw new ProtectedRouteError('tunnel_start_failed');
   }
-  return { probe: probe.linkedin, tunnelActive: true };
+  return { probe: probe?.linkedin ?? null, tunnelActive: true };
 }

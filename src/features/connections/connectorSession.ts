@@ -172,7 +172,7 @@ export function sessionCheckFailure(
   }
 }
 
-type RouteTone = 'pending' | 'ok' | 'blocked';
+export type RouteTone = 'pending' | 'unknown' | 'ok' | 'blocked';
 
 export interface RouteNotice {
   readonly tone: RouteTone;
@@ -198,15 +198,33 @@ export interface RouteCapability {
  * Announcing "окно входа останется пустым" in a build that starts the protected
  * route on the very next click is a refusal the app immediately contradicts —
  * the owner read it as being turned away before trying (B157).
+ *
+ * `undefined` means a measurement is still in flight; `null` means there is no
+ * measurement to report at all. The second one used to be dressed up as a
+ * working direct route by the web fallback of `probeNetworkStatus` (B167).
  */
 export function platformRouteNotice(
   platform: ConnectionPlatform,
-  probe?: { readonly accessible: boolean },
+  probe?: { readonly accessible: boolean } | null,
   capability: RouteCapability = {},
 ): RouteNotice {
   const name = PLATFORM_NAMES[platform] ?? platform;
   if (capability.protectedRouteActive) {
     return { tone: 'ok', text: `Защищённый EU-маршрут ${name} активен` };
+  }
+  if (probe === null) {
+    // No measurement at all. The window still opens — through the protected
+    // route where this build has one — so the line says that instead of
+    // refusing, and never claims a direct path it did not measure.
+    return capability.protectedRouteAvailable
+      ? {
+          tone: 'unknown',
+          text: `Проверить маршрут до ${name} не удалось. Окно входа откроется через защищённый EU-маршрут.`,
+        }
+      : {
+          tone: 'unknown',
+          text: `Проверить маршрут до ${name} не удалось. Окно входа всё равно откроется — если оно останется пустым, загрузите PDF-резюме.`,
+        };
   }
   if (!probe) {
     return { tone: 'pending', text: `Проверяем доступность ${name}…` };

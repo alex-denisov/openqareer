@@ -36,6 +36,33 @@ describe('startLinkedInProtectedRoute', () => {
     expect(startTunnel).not.toHaveBeenCalled();
   });
 
+  it('refuses the direct shortcut when the route was never measured', async () => {
+    const config = {
+      remoteServer: 'openqareer.com',
+      remotePort: 443,
+      sshUser: 'openqareer-tunnel',
+      sshPrivateKeyBase64: 'private-key',
+      sshHostKeyBase64: 'host-key',
+      proxyUsername: 'candidate-bound-user',
+      proxyPassword: 'synthetic-password-that-is-long-enough',
+      localSocksPort: 10_885,
+      localHttpPort: 10_886,
+    };
+    const startTunnel = vi.fn().mockResolvedValue({ state: 'running' });
+
+    await expect(
+      startLinkedInProtectedRoute({
+        probeNetwork: vi.fn().mockResolvedValue(null),
+        fetchBootstrap: vi
+          .fn()
+          .mockResolvedValue(new Response(JSON.stringify({ data: config }), { status: 200 })),
+        startTunnel,
+      }),
+    ).resolves.toEqual({ tunnelActive: true, probe: null });
+
+    expect(startTunnel).toHaveBeenCalledWith(config);
+  });
+
   it('starts and verifies the sidecar after an authenticated bootstrap', async () => {
     const config = {
       remoteServer: 'openqareer.com',

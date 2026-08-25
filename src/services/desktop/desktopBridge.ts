@@ -48,14 +48,6 @@ export interface TunnelConfig {
   localHttpPort: number;
 }
 
-export interface DesktopInfo {
-  app_name: string;
-  app_version: string;
-  os: string;
-  arch: string;
-  is_desktop_companion: boolean;
-}
-
 export interface LocalActionRequest {
   action_id: string;
   capability: string;
@@ -102,44 +94,16 @@ export async function invokeDesktopCommand<T>(
   return invoke<T>(cmd, args);
 }
 
-export async function probeNetworkStatus(): Promise<NetworkEnvironmentStatus> {
-  const result = await invokeTauri<NetworkEnvironmentStatus>('probe_network_status');
-  if (result) return result;
-
-  // Web fallback simulation / estimation
-  return {
-    linkedin: {
-      platform: 'linkedin',
-      target_url: 'https://www.linkedin.com',
-      accessible: true,
-      latency_ms: 85,
-      status_code: 200,
-    },
-    hh: {
-      platform: 'hh',
-      target_url: 'https://api.hh.ru',
-      accessible: true,
-      latency_ms: 30,
-      status_code: 200,
-    },
-    recommendation: 'direct',
-    local_ip_region_hint: 'WEB_FALLBACK_MODE',
-    probed_at: new Date().toISOString(),
-  };
-}
-
-export async function getTunnelStatus(): Promise<TunnelStatusReport> {
-  const result = await invokeTauri<TunnelStatusReport>('get_tunnel_status');
-  if (result) return result;
-
-  return {
-    state: 'idle',
-    local_socks_endpoint: '127.0.0.1:10885',
-    local_http_endpoint: '127.0.0.1:10886',
-    active_protocol: 'SSH restricted egress',
-    split_proxied_domains: ['linkedin.com', 'licdn.com', 'lnkd.in'],
-    split_direct_domains: ['hh.ru', 'openqareer.com'],
-  };
+/**
+ * The measured network environment, or `null` when nothing was measured: no
+ * native probe outside the desktop runtime, and the probe command itself may
+ * fail inside it. There is no honest browser equivalent of this measurement,
+ * so the bridge reports "not measured" rather than inventing a reachable route
+ * (docs/agents/design-system.md §7). Callers must treat `null` as unknown,
+ * never as reachable.
+ */
+export async function probeNetworkStatus(): Promise<NetworkEnvironmentStatus | null> {
+  return invokeTauri<NetworkEnvironmentStatus>('probe_network_status');
 }
 
 export async function startTunnel(config: TunnelConfig): Promise<TunnelStatusReport> {
@@ -168,19 +132,6 @@ export async function stopTunnel(): Promise<TunnelStatusReport> {
     active_protocol: 'SSH restricted egress',
     split_proxied_domains: ['linkedin.com', 'licdn.com', 'lnkd.in'],
     split_direct_domains: ['hh.ru', 'openqareer.com'],
-  };
-}
-
-export async function getDesktopInfo(): Promise<DesktopInfo> {
-  const result = await invokeTauri<DesktopInfo>('get_desktop_environment_info');
-  if (result) return result;
-
-  return {
-    app_name: 'OpenQareer Web',
-    app_version: '1.0.0',
-    os: 'browser',
-    arch: 'web',
-    is_desktop_companion: false,
   };
 }
 
