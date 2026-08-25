@@ -1,5 +1,6 @@
 import { parseResumeContent, type ParsedResume } from '../workspace/resumeParser';
 import type { SessionInspectionResult, SessionPageResult } from './connectorSession';
+import { captureSignedInPage } from './sessionCapture';
 
 const LINKEDIN_PROFILE_URL = 'https://www.linkedin.com/in/me/';
 
@@ -19,6 +20,8 @@ interface LinkedInSessionImportFlowDependencies {
   readonly onReady: (
     result: Extract<LinkedInSessionPollResult, { status: 'ready' }>,
   ) => void | Promise<void>;
+  /** Injected so tests do not sit through the real capture backoff. */
+  readonly waitBeforeRetry?: (attempt: number) => Promise<void>;
 }
 
 export interface LinkedInSessionImportFlow {
@@ -52,10 +55,15 @@ async function runOnce(
     return { status: 'waiting_for_sign_in' };
   }
   await dependencies.onAuthenticated();
-  const page = await dependencies.readSessionPage(LINKEDIN_PROFILE_URL);
-  if (!page.ok || !page.body || !isOwnProfileUrl(page.url)) {
-    throw new Error('linkedin_authenticated_capture_failed');
-  }
+  const page = await captureSignedInPage({
+    read: () => dependencies.readSessionPage(LINKEDIN_PROFILE_URL),
+    interpret: (candidate) =>
+      isOwnProfileUrl(candidate.url)
+        ? { body: candidate.body, url: candidate.url }
+        : undefined,
+    failureCode: 'linkedin_authenticated_capture_failed',
+    waitBeforeRetry: dependencies.waitBeforeRetry,
+  });
   const profileText = htmlToProfileText(page.body);
   const parsedBase = parseResumeContent(profileText);
   const parsed = {

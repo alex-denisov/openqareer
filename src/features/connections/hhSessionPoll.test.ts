@@ -334,3 +334,141 @@ describe('hh.ru session polling', () => {
     });
   });
 });
+
+/**
+ * The candidate has already signed in: the window is hidden and the modal is
+ * closed, so nothing polls again. One transient read of the resume list used
+ * to throw the finished sign-in away and send the candidate back to the login
+ * window from scratch (B157).
+ */
+describe('hh.ru capture after the sign-in is already recognised', () => {
+  const signedIn = {
+    ready: true,
+    url: 'https://hh.ru/applicant/resumes',
+    signedInApplicant: true,
+    login: false,
+    otp: false,
+    captcha: false,
+  };
+  const listBody =
+    '<a href="/resume/resume-selected" data-qa="resume-title">Product Director</a>';
+  const noWait = vi.fn(async () => {});
+
+  it('retries a resume list read that came back empty instead of losing the session', async () => {
+    const readSessionPage = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, url: 'https://hh.ru/applicant/resumes' })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://hh.ru/applicant/resumes',
+        body: listBody,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://hh.ru/resume/resume-selected',
+        body: '<div data-qa="resume-block-title-position">Product Director</div>',
+      });
+
+    await expect(
+      createHhSessionPoller({
+        inspectCurrentPage: async () => signedIn,
+        readSessionPage,
+        waitBeforeRetry: noWait,
+      }).poll(),
+    ).resolves.toMatchObject({
+      status: 'ready',
+      resumes: [{ id: 'resume-selected' }],
+    });
+  });
+
+  it('retries a resume list read that failed with a transient desktop error', async () => {
+    const readSessionPage = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('page_load_timeout: hh.ru'))
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://hh.ru/applicant/resumes',
+        body: listBody,
+      })
+      .mockResolvedValue({ ok: false });
+
+    await expect(
+      createHhSessionPoller({
+        inspectCurrentPage: async () => signedIn,
+        readSessionPage,
+        waitBeforeRetry: noWait,
+      }).poll(),
+    ).resolves.toMatchObject({ status: 'ready' });
+  });
+
+  it('signals the candidate only once every retry of the resume list is spent', async () => {
+    const readSessionPage = vi.fn(async () => ({ ok: false, url: 'https://hh.ru/' }));
+
+    await expect(
+      createHhSessionPoller({
+        inspectCurrentPage: async () => signedIn,
+        readSessionPage,
+        waitBeforeRetry: noWait,
+      }).poll(),
+    ).rejects.toThrow('hh_authenticated_capture_failed');
+    expect(readSessionPage.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('hides the sign-in window once, not once per retry', async () => {
+    const onAuthenticated = vi.fn();
+    const readSessionPage = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://hh.ru/applicant/resumes',
+        body: listBody,
+      })
+      .mockResolvedValue({ ok: false });
+
+    await createHhSessionPoller({
+      inspectCurrentPage: async () => signedIn,
+      readSessionPage,
+      onAuthenticated,
+      waitBeforeRetry: noWait,
+    }).poll();
+
+    expect(onAuthenticated).toHaveBeenCalledOnce();
+  });
+
+  it('does not retry a page hh.ru is challenging — that needs the candidate, not another read', async () => {
+    const readSessionPage = vi.fn(async () => ({
+      ok: true,
+      url: 'https://hh.ru/applicant/resumes',
+      body: '<div data-qa="account-login-page">account/login</div>',
+    }));
+
+    await expect(
+      createHhSessionPoller({
+        inspectCurrentPage: async () => signedIn,
+        readSessionPage,
+        waitBeforeRetry: noWait,
+      }).poll(),
+    ).rejects.toThrow('hh_authenticated_capture_failed');
+    expect(readSessionPage).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { name: 'a look-alike host', url: 'https://hh.ru.evil.example/applicant/resumes' },
+    { name: 'plain http', url: 'http://hh.ru/applicant/resumes' },
+  ])('never parses $name as the candidate own resume list', async ({ url }) => {
+    const readSessionPage = vi.fn(async () => ({
+      ok: true,
+      url,
+      body: listBody,
+    }));
+
+    await expect(
+      createHhSessionPoller({
+        inspectCurrentPage: async () => signedIn,
+        readSessionPage,
+        waitBeforeRetry: noWait,
+      }).poll(),
+    ).rejects.toThrow('hh_authenticated_capture_failed');
+  });
+});

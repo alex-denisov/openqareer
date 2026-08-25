@@ -4,6 +4,7 @@ import type {
   SessionInspectionResult,
   SessionPageResult,
 } from './connectorSession';
+import { captureSignedInPage } from './sessionCapture';
 
 const HH_RESUME_LIST_URL = 'https://hh.ru/applicant/resumes';
 
@@ -94,6 +95,8 @@ interface HhSessionPollDependencies {
   readonly inspectCurrentPage: () => Promise<SessionInspectionResult>;
   readonly readSessionPage: (url: string) => Promise<SessionPageResult>;
   readonly onAuthenticated?: () => void | Promise<void>;
+  /** Injected so tests do not sit through the real backoff. */
+  readonly waitBeforeRetry?: (attempt: number) => Promise<void>;
 }
 
 export interface HhSessionPoller {
@@ -182,18 +185,16 @@ async function pollOnce(
   }
   await dependencies.onAuthenticated?.();
 
-  const listPage = await dependencies.readSessionPage(HH_RESUME_LIST_URL);
-  if (
-    !listPage.ok ||
-    !listPage.body ||
-    !isResumeListUrl(listPage.url) ||
-    looksLikeAuthenticationChallenge(listPage.body)
-  ) {
-    throw new Error('hh_authenticated_capture_failed');
-  }
-  const resumes = parseHhResumesList(listPage.body);
+  const listBody = await captureSignedInPage({
+    read: () => dependencies.readSessionPage(HH_RESUME_LIST_URL),
+    interpret: (page) => (isResumeListUrl(page.url) ? page.body : undefined),
+    isChallenge: looksLikeAuthenticationChallenge,
+    failureCode: 'hh_authenticated_capture_failed',
+    waitBeforeRetry: dependencies.waitBeforeRetry,
+  });
+  const resumes = parseHhResumesList(listBody);
   if (resumes.length === 0) {
-    if (looksLikeEmptyResumeList(listPage.body)) {
+    if (looksLikeEmptyResumeList(listBody)) {
       return { status: 'authenticated_empty' };
     }
     throw new Error('hh_authenticated_capture_unclassified');
@@ -259,8 +260,13 @@ function isSignedInApplicantPage(page: SessionInspectionResult): boolean {
   );
 }
 
+/**
+ * The path alone is not enough: a redirect to any host that happens to serve
+ * `/applicant/resumes` would otherwise be parsed as the candidate's own hh.ru
+ * resume list.
+ */
 function isResumeListUrl(rawUrl?: string): boolean {
-  if (!rawUrl) return false;
+  if (!rawUrl || !isAllowedHhUrl(rawUrl)) return false;
   try {
     return new URL(rawUrl).pathname === '/applicant/resumes';
   } catch {
