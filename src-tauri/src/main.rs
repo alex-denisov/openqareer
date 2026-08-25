@@ -4,6 +4,7 @@
 mod automation_worker;
 mod connector_session;
 mod network_probe;
+mod sidecar_lifecycle;
 mod tunnel_manager;
 
 use automation_worker::{execute_candidate_action_safely, LocalActionRequest, LocalActionResult};
@@ -15,6 +16,7 @@ use connector_session::{
 };
 use network_probe::{evaluate_network_environment, NetworkEnvironmentStatus};
 use serde::{Deserialize, Serialize};
+use sidecar_lifecycle::sweep_leftover_runtimes;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, State, Url};
 use tunnel_manager::{TunnelConfig, TunnelManager, TunnelStatusReport};
@@ -236,6 +238,41 @@ fn is_tunnel_cleanup_event(event: &tauri::RunEvent) -> bool {
     )
 }
 
+/// Signals that must take the tunnel down with the application.
+///
+/// None of these produce a `RunEvent`, so without this the sidecar outlives an
+/// installer replacing the running `.app`, a `killall`, or a logout that times
+/// out — leaving a proxy listening on a route the candidate thinks is closed
+/// (PRB-011). `SIGKILL` cannot be caught here; the startup sweep covers it.
+#[cfg(unix)]
+fn install_signal_shutdown(app: &tauri::App) {
+    use tokio::signal::unix::{signal, SignalKind};
+
+    let handle = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        let listen = |kind: SignalKind| {
+            signal(kind).inspect_err(|error| {
+                eprintln!("tunnel_signal_handler_unavailable: {error}");
+            })
+        };
+        let (Ok(mut term), Ok(mut interrupt), Ok(mut hangup)) = (
+            listen(SignalKind::terminate()),
+            listen(SignalKind::interrupt()),
+            listen(SignalKind::hangup()),
+        ) else {
+            return;
+        };
+        tokio::select! {
+            _ = term.recv() => {},
+            _ = interrupt.recv() => {},
+            _ = hangup.recv() => {},
+        }
+        let tunnel = handle.state::<AppState>().tunnel.clone();
+        let _ = tunnel.stop().await;
+        handle.exit(0);
+    });
+}
+
 fn main() {
     let tunnel = TunnelManager::new();
     let app_state = AppState { tunnel };
@@ -262,6 +299,20 @@ fn main() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building OpenQareer desktop application");
+
+    #[cfg(unix)]
+    install_signal_shutdown(&app);
+
+    // Whatever the previous instance could not clean up after an uncatchable
+    // kill: an orphaned sing-box still serving a route, and its runtime config
+    // holding the SSH private key (PRB-011).
+    if let Ok(dir) = app.path().app_config_dir() {
+        tauri::async_runtime::block_on(async move {
+            for action in sweep_leftover_runtimes(&dir).await {
+                eprintln!("tunnel_startup_sweep: {action}");
+            }
+        });
+    }
 
     app.run(|app_handle, event| {
         if !is_tunnel_cleanup_event(&event) {

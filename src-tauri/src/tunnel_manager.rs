@@ -1,3 +1,4 @@
+use crate::sidecar_lifecycle::pid_path_for;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -173,13 +174,21 @@ impl TunnelManager {
         }
     }
 
-    async fn fail(&self, reason: String) -> Result<TunnelStatusReport, String> {
+    /// Kills the sidecar and removes both files that describe it: the runtime
+    /// config (which carries the SSH private key) and the record naming the
+    /// process that serves it.
+    async fn tear_down_sidecar(&self) {
         if let Some(child) = self.child.lock().await.take() {
             let _ = child.kill();
         }
         if let Some(path) = self.runtime_config_path.lock().await.take() {
+            let _ = tokio::fs::remove_file(pid_path_for(&path)).await;
             let _ = tokio::fs::remove_file(path).await;
         }
+    }
+
+    async fn fail(&self, reason: String) -> Result<TunnelStatusReport, String> {
+        self.tear_down_sidecar().await;
         *self.state.lock().await = TunnelState::Failed;
         *self.started_at.lock().await = None;
         *self.last_error.lock().await = Some(reason.clone());
@@ -224,6 +233,9 @@ impl TunnelManager {
             .args(["run", "-c", path.to_string_lossy().as_ref()])
             .spawn()
             .map_err(|e| format!("tunnel_sidecar_start_failed: {e}"))?;
+        // A record of which process serves this runtime, so a launch that
+        // follows an uncatchable kill can identify and reap it (PRB-011).
+        let _ = tokio::fs::write(pid_path_for(&path), child.pid().to_string()).await;
         *self.child.lock().await = Some(child);
         let deadline = tokio::time::Instant::now() + START_TIMEOUT;
         while TcpStream::connect(("127.0.0.1", config.local_http_port))
@@ -253,12 +265,7 @@ impl TunnelManager {
     }
 
     pub async fn stop(&self) -> Result<TunnelStatusReport, String> {
-        if let Some(child) = self.child.lock().await.take() {
-            let _ = child.kill();
-        }
-        if let Some(path) = self.runtime_config_path.lock().await.take() {
-            let _ = tokio::fs::remove_file(path).await;
-        }
+        self.tear_down_sidecar().await;
         *self.state.lock().await = TunnelState::Stopped;
         *self.started_at.lock().await = None;
         Ok(self.get_status().await)
