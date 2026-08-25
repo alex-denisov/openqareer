@@ -70,3 +70,34 @@ export function nextAnimationFrame(): Promise<void> {
     requestAnimationFrame(() => resolve());
   });
 }
+
+export interface AutomaticSessionOpenInput {
+  /** The dialog is on screen. */
+  readonly isOpen: boolean;
+  /** Only the desktop app can open a platform session at all. */
+  readonly isDesktop: boolean;
+  /** Where the session currently stands. */
+  readonly step: ConnectorSessionStep;
+  /** An open has already been attempted for this dialog. */
+  readonly attempted: boolean;
+}
+
+/**
+ * Whether the dialog should open the sign-in window by itself.
+ *
+ * «Подключить» used to open a dialog that explained what was about to happen
+ * and offered a second button to make it happen. The explanation was the same
+ * every time and the candidate had no decision to make there, so the owner
+ * asked for the dialog to open the browser session outright (B169 §3).
+ *
+ * It stays a one-shot: after a failed attempt the dialog shows the error and
+ * the manual button, because retrying on its own would reopen a window the
+ * candidate may have deliberately dismissed.
+ */
+export function shouldOpenSessionAutomatically(
+  input: AutomaticSessionOpenInput,
+): boolean {
+  if (!input.isOpen || !input.isDesktop) return false;
+  if (input.attempted) return false;
+  return input.step === 'idle';
+}

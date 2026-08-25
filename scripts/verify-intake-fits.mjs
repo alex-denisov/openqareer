@@ -14,6 +14,11 @@ import { chromium } from 'playwright';
 const VIEWPORTS = [
   { name: 'desktop-1440', width: 1440, height: 900 },
   { name: 'laptop-1280', width: 1280, height: 800 },
+  // Deliberately shorter than either real target. Font metrics differ between
+  // the developer's macOS Chromium and CI's Linux one, and step three used to
+  // pass locally at 1280x800 and spill 30px on CI. Holding a viewport nobody
+  // actually uses is what turns "it fits" into "it fits with room".
+  { name: 'short-1280', width: 1280, height: 720 },
 ];
 
 /** Anonymous candidate: no session, no workspace, so the wizard owns the screen. */

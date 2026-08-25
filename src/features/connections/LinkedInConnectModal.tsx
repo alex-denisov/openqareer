@@ -20,6 +20,7 @@ import {
 } from './connectorSession';
 import {
   nextAnimationFrame,
+  shouldOpenSessionAutomatically,
   startConnectorSession,
 } from './connectorSessionStart';
 import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
@@ -59,6 +60,7 @@ export function LinkedInConnectModal({
   onConnectionFailure,
 }: LinkedInConnectModalProps) {
   const [step, setStep] = useState<ConnectorSessionStep>('idle');
+  const autoOpenAttempted = useRef(false);
   const [error, setError] = useState<string>();
   // `undefined` while the probe is in flight, `null` when there is no
   // measurement to report at all (B167).
@@ -99,7 +101,10 @@ export function LinkedInConnectModal({
   }, [isOpen, step]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      autoOpenAttempted.current = false;
+      return;
+    }
     setStep('idle');
     setError(undefined);
     setProbe(undefined);
@@ -115,6 +120,30 @@ export function LinkedInConnectModal({
       .then((status) => setProbe(status ? status.linkedin : null))
       .catch(() => setProbe(null));
   }, [isOpen]);
+
+  /**
+   * B169 §3 — «Подключить» opens the sign-in window, not a page describing it.
+   * The dialog used to explain the flow and ask for a second click that had no
+   * decision attached to it. The rule is shared and tested so both connectors
+   * behave the same, and so a failed open stays manual.
+   */
+  useEffect(() => {
+    if (
+      !shouldOpenSessionAutomatically({
+        isOpen,
+        isDesktop: isTauriEnvironment(),
+        step,
+        attempted: autoOpenAttempted.current,
+      })
+    ) {
+      return;
+    }
+    autoOpenAttempted.current = true;
+    void startSession();
+    // `startSession` is stable for the life of one dialog opening, and the
+    // ref above is what keeps this to a single attempt.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, step]);
 
   /**
    * The route comes up first, then the window, and only then the step that

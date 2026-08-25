@@ -98,6 +98,19 @@
    the full grid height and `position: sticky` has nothing left to travel: the
    menu scrolled away with the page (B148 §8). Pinning it to one viewport height
    is what makes sticky mean anything here. */
+
+/* B169 §2 — the owner asked for a wizard with no scroll, "с привязкой
+   элементов и кнопок к границам экрана". `min-height` let the content push the
+   document taller instead; the shell is now exactly one viewport and the main
+   area is the only thing that may scroll. Narrow screens keep the ordinary
+   page scroll, where a bottom nav and a top bar already bound the layout. */
+@media (min-width: 761px) {
+  .career-shell {
+    height: 100dvh;
+    overflow: hidden;
+  }
+}
+
 .career-shell[data-rail='expanded'] {
   --career-rail-width: 236px;
 }
@@ -600,6 +613,12 @@
   padding: 48px clamp(28px, 5vw, 72px) 72px;
 }
 
+/* The wizard is a one-screen surface, so it gets the generous reading padding
+   of a scrolling view back as usable height (B169 §2). */
+.career-main:has(.career-intake) {
+  padding: 28px clamp(24px, 4vw, 56px) 28px;
+}
+
 .career-view,
 .career-intake,
 .career-start {
@@ -764,7 +783,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 40px;
   align-items: start;
-  padding-bottom: 32px;
+  padding-bottom: 22px;
   border-bottom: 1px solid var(--career-line);
 }
 
@@ -1186,7 +1205,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
-  gap: 20px;
+  gap: 16px;
 }
 
 .career-source-fields label,
@@ -1253,7 +1272,7 @@
 }
 
 .career-context-form {
-  margin-top: 28px;
+  margin-top: 20px;
 }
 
 .career-context-form fieldset {
@@ -1309,8 +1328,8 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 28px;
-  padding-top: 24px;
+  margin-top: 20px;
+  padding-top: 18px;
   border-top: 1px solid var(--career-line);
 }
 
