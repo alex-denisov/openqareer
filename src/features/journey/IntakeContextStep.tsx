@@ -46,7 +46,7 @@ export function IntakeContextStep(props: IntakeContextStepProps) {
           value={props.currentSituation}
           onChange={(event) => onChange({ currentSituation: event.target.value })}
           placeholder="Например: давно не получаю приглашений, хочу сменить рынок, возвращаюсь после перерыва или не понимаю свой уровень."
-          rows={2}
+          rows={3}
         />
       </label>
 

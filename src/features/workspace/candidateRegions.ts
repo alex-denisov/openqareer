@@ -6,6 +6,11 @@
  * (`EU`, `MENA`, `US`, …), not by country and not by a single flag (B158).
  * A candidate may look in several regions at once, or in none yet.
  *
+ * The set is the one the owner named — `EU`, `MENA`, `US` — plus Russia. Their
+ * «и тд» invites more, and adding one is a line in the catalogue below, but a
+ * region the product cannot yet source vacancies for would be an offer it
+ * cannot keep; APAC and Latin America wait on B164.
+ *
  * The catalogue deliberately carries only the region's name. Resume language,
  * photo expectations, work-authorisation rules and the platform that serves
  * each region are still open items on B158 — the first two wait on the career
@@ -13,15 +18,7 @@
  * here now would ship a guess as career advice.
  */
 
-export const CANDIDATE_REGIONS = [
-  'ru',
-  'eu',
-  'uk',
-  'us',
-  'mena',
-  'apac',
-  'latam',
-] as const;
+export const CANDIDATE_REGIONS = ['ru', 'eu', 'us', 'mena'] as const;
 
 export type CandidateRegion = (typeof CANDIDATE_REGIONS)[number];
 
@@ -33,11 +30,8 @@ export interface CandidateRegionProfile {
 export const CANDIDATE_REGION_CATALOGUE: readonly CandidateRegionProfile[] = [
   { id: 'ru', label: 'Россия' },
   { id: 'eu', label: 'Европа' },
-  { id: 'uk', label: 'Великобритания' },
   { id: 'us', label: 'США и Канада' },
   { id: 'mena', label: 'Ближний Восток' },
-  { id: 'apac', label: 'Азия и Океания' },
-  { id: 'latam', label: 'Латинская Америка' },
 ];
 
 export function isCandidateRegion(value: unknown): value is CandidateRegion {

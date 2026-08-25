@@ -9,15 +9,7 @@ import {
 
 describe('candidate regions replace the binary market', () => {
   it('offers the regions the owner named and nothing pretending to be one', () => {
-    expect([...CANDIDATE_REGIONS]).toEqual([
-      'ru',
-      'eu',
-      'uk',
-      'us',
-      'mena',
-      'apac',
-      'latam',
-    ]);
+    expect([...CANDIDATE_REGIONS]).toEqual(['ru', 'eu', 'us', 'mena']);
     expect(isCandidateRegion('international')).toBe(false);
     expect(isCandidateRegion('eu')).toBe(true);
   });
