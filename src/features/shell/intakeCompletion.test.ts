@@ -5,7 +5,7 @@ const input = {
   resumeText: 'Синтетический текст резюме кандидата для проверки завершения мастера.',
   resumeSource: 'text' as const,
   targetDirection: 'Руководитель продукта',
-  market: 'ru' as const,
+  regions: ['ru'] as const,
   currentSituation: 'Проверяю завершение диагностики.',
   constraints: '',
   urgency: 'active' as const,

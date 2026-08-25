@@ -7,6 +7,10 @@ import {
 } from '../evidence/evidenceEngine';
 import { buildRoleMarketMap } from '../career-map/roleMarketMap';
 import {
+  candidateRegionLabel,
+  normalizeCandidateRegions,
+} from '../workspace/candidateRegions';
+import {
   buildReasonedCareerAction,
   type ReasonedCareerAction,
 } from '../next-action/careerActionPolicy';
@@ -383,7 +387,7 @@ export function buildCanonicalProfileJourney(
           resumeText: '',
           resumeSource: 'text',
           targetDirection,
-          market: 'ru',
+          regions: ['ru'],
           currentSituation: 'Канонический профиль собран из защищённого диалога.',
           constraints: '',
           urgency: 'exploring',
@@ -550,15 +554,24 @@ function buildTrack(
   ];
 }
 
+/**
+ * One route per region the candidate actually named.
+ *
+ * The wizard used to answer this with one flag, so the map always showed
+ * exactly one route — «Россия» or «Международный рынок» — no matter where the
+ * candidate was really looking (B158). An empty list is the honest state for a
+ * candidate who has not chosen a region yet: inventing a default here would
+ * put a market on the map that nobody asked for.
+ */
 function marketRoutesFor(workspace: CandidateWorkspace, now: string): CareerJourneyMarket[] {
   const sample = workspace.marketSample;
   const sampleIsFresh = isFreshMarketSample(sample, now);
   const sampleIsRecent = isRecentMarketSample(sample, now);
-  return [
-    workspace.market === 'ru'
+  return normalizeCandidateRegions(workspace.regions).map((region) =>
+    region === 'ru'
       ? {
-          id: 'russia',
-          label: 'Россия',
+          id: region,
+          label: candidateRegionLabel(region),
           state: sampleIsFresh ? 'sample-ready' : 'needs-sample',
           explanation:
             sampleIsFresh && sample
@@ -570,12 +583,12 @@ function marketRoutesFor(workspace: CandidateWorkspace, now: string): CareerJour
                   : 'Нужна свежая выборка вакансий по рабочей гипотезе роли.',
         }
       : {
-          id: 'international',
-          label: 'Международный рынок',
+          id: region,
+          label: candidateRegionLabel(region),
           state: 'needs-sample',
-          explanation: 'Нужно выбрать страны, формат работы и проверить право на работу.',
+          explanation: 'Нужно выбрать формат работы и проверить право на работу в регионе.',
         },
-  ];
+  );
 }
 
 function isFreshMarketSample(sample: CandidateWorkspace['marketSample'], now: string): boolean {

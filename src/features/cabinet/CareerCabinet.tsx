@@ -153,6 +153,7 @@ function CabinetSection({
     return (
       <ResumeStudio
         memory={data.snapshot?.memory ?? []}
+        regions={workspace?.regions ?? []}
         onRefreshDossier={() => void data.refresh()}
       />
     );
@@ -164,6 +165,7 @@ function CabinetSection({
         snapshot={data.snapshot}
         account={data.account}
         targetDirection={targetDirection}
+        regions={workspace?.regions ?? []}
         onNavigate={onNavigate}
         onEditPremises={onOpenAccount}
       />

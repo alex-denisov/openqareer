@@ -198,7 +198,9 @@ export function CareerProfileSurface({
                   resumeFileName: file.name,
                   resumePageCount: pageCount,
                   targetDirection: account?.profile.headline ?? '',
-                  market: 'ru',
+                  // The candidate has not been asked yet; assuming a region
+                  // would answer for them (B158).
+                  regions: [],
                   currentSituation:
                     'Собираю подтверждённый профиль и проверяю следующий карьерный шаг.',
                   constraints: '',

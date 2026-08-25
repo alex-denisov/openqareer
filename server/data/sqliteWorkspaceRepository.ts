@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { SealedText } from './sealedText';
 import {
   candidateWorkspaceSchema,
+  readStoredCandidateWorkspace,
   type CandidateWorkspaceState,
 } from '../domain/candidateWorkspace';
 
@@ -52,7 +53,7 @@ export class SqliteWorkspaceRepository {
       )
       .get(candidateId) as WorkspaceRow | undefined;
     if (!row) return null;
-    return candidateWorkspaceSchema.parse(
+    return readStoredCandidateWorkspace(
       JSON.parse(
         this.sealedText.open(row.workspace_cipher, associatedData(candidateId)),
       ) as unknown,

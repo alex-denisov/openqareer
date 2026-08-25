@@ -7,11 +7,18 @@ const workspace = {
     'Синтетический кандидат: руководила продуктом в финтехе, отвечала за активацию и монетизацию.',
   resumeSource: 'text' as const,
   targetDirection: 'Senior Product Manager',
-  market: 'international' as const,
+  regions: ['eu', 'us'] as const,
   currentSituation: 'Ищу работу за рубежом и рассматриваю релокацию.',
   constraints: 'Только удалённо или с релокацией.',
   urgency: 'active' as const,
 };
+
+/** A payload written by a client from before B158 replaced `market`. */
+function withoutRegions(value: object): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== 'regions'),
+  );
+}
 
 /**
  * The wizard's own answers lived only in `localStorage`, so signing out erased
@@ -55,7 +62,7 @@ describe('candidate workspace persistence', () => {
 
     expect(read.json().data).toMatchObject({
       targetDirection: 'Senior Product Manager',
-      market: 'international',
+      regions: ['eu', 'us'],
       urgency: 'active',
       currentSituation: 'Ищу работу за рубежом и рассматриваю релокацию.',
     });
@@ -87,6 +94,23 @@ describe('candidate workspace persistence', () => {
       headers: { authorization: candidateAuthorization(app) },
     });
     expect(read.json().data.targetDirection).toBe('Head of Product');
+  });
+
+  it('refuses the pre-B158 market flag instead of storing two answers', async () => {
+    const app = await createApp();
+    const legacy = withoutRegions(workspace);
+
+    const saved = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/workspace',
+      headers: {
+        authorization: candidateAuthorization(app),
+        origin: 'http://localhost:3000',
+      },
+      payload: { workspace: { ...legacy, market: 'international' } },
+    });
+
+    expect(saved.statusCode).toBe(422);
   });
 
   it('refuses an unauthenticated reading', async () => {

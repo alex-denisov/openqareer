@@ -14,14 +14,14 @@ const session = {
 };
 
 const workspace = {
-  version: 6 as const,
+  version: 7 as const,
   createdAt: '2026-08-18T12:00:00.000Z',
   updatedAt: '2026-08-18T12:00:00.000Z',
   resumeText:
     'Senior Software Engineer with 8+ years experience in TypeScript, React, Node.js and distributed systems architecture.',
   resumeSource: 'text' as const,
   targetDirection: 'Senior Software Engineer',
-  market: 'ru' as const,
+  regions: ['ru'] as const,
   currentSituation: 'Ищу работу ведущим инженером в технологической компании.',
   constraints: 'Remote / Hybrid',
   urgency: 'active' as const,
@@ -47,7 +47,7 @@ describe('CareerCabinet route premises', () => {
     const html = renderToStaticMarkup(
       <CareerRoutePremises
         targetRole="Руководитель продукта"
-        location="Берлин"
+        regions={['eu', 'ru']}
         workMode="remote"
         onEdit={vi.fn()}
       />,
@@ -56,7 +56,8 @@ describe('CareerCabinet route premises', () => {
     expect(html).toContain('Роль и уровень');
     expect(html).toContain('Руководитель продукта');
     expect(html).toContain('География');
-    expect(html).toContain('Берлин');
+    expect(html).toContain('Россия');
+    expect(html).toContain('Европа');
     expect(html).toContain('Формат работы');
     expect(html).toContain('Удалённо');
     expect(html).toContain('Изменить роль и условия');
@@ -64,6 +65,27 @@ describe('CareerCabinet route premises', () => {
 });
 
 describe('CareerCabinet composition', () => {
+  it('projects the regions the candidate chose instead of an empty geography (B158, B160)', () => {
+    const html = renderCabinet('career');
+
+    expect(html).toContain('География');
+    expect(html).toContain('Россия');
+    expect(html).not.toContain('Не указана');
+  });
+
+  it('says plainly that no region was chosen rather than guessing one', () => {
+    const html = renderToStaticMarkup(
+      <CareerRoutePremises
+        targetRole="Руководитель продукта"
+        regions={[]}
+        workMode="remote"
+        onEdit={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('Регионы не выбраны');
+  });
+
   it('gives «Сегодня» a next action instead of a copy of the profile', () => {
     const html = renderCabinet('today');
 

@@ -3,10 +3,9 @@ import { VARIANT_LABELS, VARIANT_SHORT_LABELS } from './resumeLabels';
 import type { ResumeStatusSummary } from './resumeStudioModel';
 import type { ResumeStudioView, ResumeVariantId } from './resumeTypes';
 
-const VARIANTS: readonly ResumeVariantId[] = ['master', 'germany'];
-
 interface ResumeStudioHeadProps {
   readonly variant: ResumeVariantId;
+  readonly variants: readonly ResumeVariantId[];
   readonly summary: ResumeStatusSummary;
   readonly savedAt: ResumeStudioView['savedAt'];
   readonly saving: boolean;
@@ -24,6 +23,7 @@ interface ResumeStudioHeadProps {
  */
 export function ResumeStudioHead({
   variant,
+  variants,
   summary,
   savedAt,
   saving,
@@ -44,7 +44,7 @@ export function ResumeStudioHead({
       <StatusStrip summary={summary} />
 
       <div className="career-resume-actions">
-        <VariantSwitch variant={variant} onVariant={onVariant} />
+        <VariantSwitch variant={variant} variants={variants} onVariant={onVariant} />
         {onSave ? (
           <button
             className="career-primary-button"
@@ -76,14 +76,19 @@ export function ResumeStudioHead({
 
 function VariantSwitch({
   variant,
+  variants,
   onVariant,
 }: {
   variant: ResumeVariantId;
+  variants: readonly ResumeVariantId[];
   onVariant: (variant: ResumeVariantId) => void;
 }) {
+  // One variant is not a choice; a switch with a single button would imply
+  // there is somewhere else to go.
+  if (variants.length < 2) return null;
   return (
     <div className="career-resume-variants" role="group" aria-label="Вариант резюме">
-      {VARIANTS.map((id) => (
+      {variants.map((id) => (
         <button
           key={id}
           type="button"

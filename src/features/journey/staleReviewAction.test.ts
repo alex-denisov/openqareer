@@ -15,7 +15,7 @@ function baseJourneyStuckOnReview() {
       resumeText: '',
       resumeSource: 'text',
       targetDirection: 'Head of Platform',
-      market: 'international',
+      regions: ['eu'],
       currentSituation: 'Ищу роль руководителя платформы.',
       constraints: '',
       urgency: 'active',

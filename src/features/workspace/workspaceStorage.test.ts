@@ -35,6 +35,21 @@ function createMemoryStorage(initial: Record<string, string> = {}): StorageLike 
   };
 }
 
+
+/**
+ * Every record written before version 7 answered «where are you looking?» with
+ * one `market` flag instead of a region list (B158).
+ */
+function marketEra(workspace: object): Record<string, unknown> {
+  return { ...withoutRegions(workspace), market: 'ru' };
+}
+
+function withoutRegions(value: object): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== 'regions'),
+  );
+}
+
 const validInput = {
   careerGoal: 'find-job' as const,
   resumeText:
@@ -43,7 +58,7 @@ const validInput = {
   resumeFileName: 'synthetic-resume.pdf',
   resumePageCount: 2,
   targetDirection: 'Руководитель продукта',
-  market: 'ru' as const,
+  regions: ['ru'] as const,
   currentSituation:
     'Завершил предыдущий проект и выбираю следующий осмысленный переход.',
   constraints: 'Не рассматриваю роли без влияния на продуктовые решения.',
@@ -73,7 +88,7 @@ describe('workspace validation', () => {
         resumeText: '',
         resumeSource: 'text',
         targetDirection: '',
-        market: 'ru',
+        regions: ['ru'],
         currentSituation:
           'Я давно не получаю приглашений и не понимаю, какую роль искать.',
         constraints: '',
@@ -88,7 +103,7 @@ describe('workspace validation', () => {
         resumeText: 'Слишком коротко',
         resumeSource: 'text',
         targetDirection: '',
-        market: 'ru',
+        regions: ['ru'],
         currentSituation: '',
         constraints: '',
         urgency: 'exploring',
@@ -119,7 +134,7 @@ describe('workspace validation', () => {
         resumeText: '',
         resumeSource: 'text',
         targetDirection: '',
-        market: 'ru',
+        regions: ['ru'],
         currentSituation: '',
         constraints: '',
         urgency: 'exploring',
@@ -285,7 +300,7 @@ describe('workspace persistence', () => {
 
   it('migrates a valid version-one workspace without losing user input', () => {
     const legacyWorkspace = {
-      ...createWorkspace(validInput, '2026-07-30T16:00:00.000Z'),
+      ...marketEra(createWorkspace(validInput, '2026-07-30T16:00:00.000Z')),
       version: 1,
       outcomes: undefined,
     };
@@ -296,7 +311,7 @@ describe('workspace persistence', () => {
 
     expect(result.status).toBe('ready');
     if (result.status === 'ready') {
-      expect(result.workspace.version).toBe(6);
+      expect(result.workspace.version).toBe(7);
       expect(result.workspace.resumeText).toBe(validInput.resumeText);
       expect(result.workspace.analysis).toBeUndefined();
     }
@@ -305,7 +320,7 @@ describe('workspace persistence', () => {
   it('migrates a version-five workspace without inventing a career goal', () => {
     const storage = createMemoryStorage({
       'candidate-workspace': JSON.stringify({
-        ...createWorkspace(validInput, '2026-07-30T16:00:00.000Z'),
+        ...marketEra(createWorkspace(validInput, '2026-07-30T16:00:00.000Z')),
         version: 5,
         careerGoal: undefined,
       }),
@@ -315,7 +330,7 @@ describe('workspace persistence', () => {
 
     expect(result.status).toBe('ready');
     if (result.status === 'ready') {
-      expect(result.workspace.version).toBe(6);
+      expect(result.workspace.version).toBe(7);
       expect(result.workspace.careerGoal).toBeUndefined();
     }
   });
@@ -503,7 +518,7 @@ describe('workspace persistence', () => {
     });
 
     const versionThree = {
-      ...complete,
+      ...marketEra(complete),
       version: 3,
       actionPackage: undefined,
       outcomes: undefined,
@@ -515,7 +530,7 @@ describe('workspace persistence', () => {
 
     expect(migrated.status).toBe('ready');
     if (migrated.status === 'ready') {
-      expect(migrated.workspace.version).toBe(6);
+      expect(migrated.workspace.version).toBe(7);
       expect(migrated.workspace.opportunity).toEqual(decided);
       expect(migrated.workspace.actionPackage).toBeUndefined();
       expect(migrated.workspace.outcomes).toEqual([]);
@@ -523,7 +538,7 @@ describe('workspace persistence', () => {
 
     const versionFourStorage = createMemoryStorage({
       'candidate-workspace': JSON.stringify({
-        ...complete,
+        ...marketEra(complete),
         version: 4,
         outcomes: undefined,
       }),
@@ -532,7 +547,7 @@ describe('workspace persistence', () => {
 
     expect(migratedVersionFour.status).toBe('ready');
     if (migratedVersionFour.status === 'ready') {
-      expect(migratedVersionFour.workspace.version).toBe(6);
+      expect(migratedVersionFour.workspace.version).toBe(7);
       expect(migratedVersionFour.workspace.actionPackage).toEqual(
         actionPackage,
       );
@@ -789,5 +804,58 @@ describe('workspace persistence', () => {
     clearWorkspace(storage);
 
     expect(loadWorkspace(storage)).toEqual({ status: 'empty' });
+  });
+});
+
+describe('candidate regions replace the stored binary market (B158)', () => {
+  function legacyRecord(market: 'ru' | 'international') {
+    const current = createWorkspace(
+      { ...validInput, regions: ['eu'] },
+      '2026-08-20T09:00:00.000Z',
+    );
+    return { ...withoutRegions(current), version: 6, market };
+  }
+
+  it('loads a version 6 record as regions and stops carrying the market flag', () => {
+    const storage = createMemoryStorage({
+      [WORKSPACE_STORAGE_KEY]: JSON.stringify(legacyRecord('ru')),
+      [WORKSPACE_OWNER_KEY]: 'candidate-1',
+    });
+
+    const result = loadWorkspace(storage, 'candidate-1');
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.workspace.version).toBe(7);
+    expect(result.workspace.regions).toEqual(['ru']);
+    expect('market' in result.workspace).toBe(false);
+  });
+
+  it('does not invent a region for a candidate who only said «international»', () => {
+    const storage = createMemoryStorage({
+      [WORKSPACE_STORAGE_KEY]: JSON.stringify(legacyRecord('international')),
+      [WORKSPACE_OWNER_KEY]: 'candidate-1',
+    });
+
+    const result = loadWorkspace(storage, 'candidate-1');
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.workspace.regions).toEqual([]);
+  });
+
+  it('keeps the saved regions across a save and load round trip', () => {
+    const storage = createMemoryStorage();
+    const workspace = createWorkspace(
+      { ...validInput, regions: ['us', 'eu'] },
+      '2026-08-20T09:00:00.000Z',
+    );
+
+    saveWorkspace(storage, workspace, 'candidate-1');
+    const result = loadWorkspace(storage, 'candidate-1');
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.workspace.regions).toEqual(['eu', 'us']);
   });
 });

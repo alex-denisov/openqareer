@@ -97,7 +97,7 @@ describe('buildCareerJourney', () => {
         resumeText: '',
         resumeSource: 'text',
         targetDirection: 'Руководитель продукта',
-        market: 'ru',
+        regions: ['ru'],
         currentSituation: 'Хочу проверить следующий карьерный шаг.',
         constraints: '',
         urgency: 'exploring',
@@ -168,7 +168,7 @@ describe('buildCareerJourney', () => {
         resumeText: '',
         resumeSource: 'text',
         targetDirection: 'Synthetic Product Operations Lead',
-        market: 'international',
+        regions: ['eu'],
         currentSituation:
           'Синтетическая проверка: мало приглашений после смены позиционирования.',
         constraints: 'Только удалённо.',
@@ -203,7 +203,7 @@ describe('buildCareerJourney', () => {
         resumeText: '',
         resumeSource: 'text',
         targetDirection: '',
-        market: 'ru',
+        regions: ['ru'],
         currentSituation:
           'Я давно не получаю приглашений и не понимаю, какую роль искать.',
         constraints: 'Хочу работать удалённо, но пока не знаю в какой стране.',
@@ -236,7 +236,7 @@ describe('buildCareerJourney', () => {
           'Руководил операционной командой из 18 человек. Сократил время ответа поддержки на 35 процентов. Отвечал за бюджет, процессы и качество сервиса в трёх регионах.',
         resumeSource: 'pdf',
         targetDirection: 'Руководитель операций',
-        market: 'international',
+        regions: ['eu'],
         currentSituation:
           'Ищу следующую управленческую роль и рассматриваю удалённую работу.',
         constraints: 'Удалённо или релокация при наличии понятного пакета.',
@@ -272,7 +272,7 @@ describe('buildCareerJourney', () => {
       fitState: 'plausible',
     });
     expect(journey.markets[0]).toMatchObject({
-      id: 'international',
+      id: 'eu',
       state: 'needs-sample',
     });
     expect(journey.nextAction.id).toBe('compare-markets');
@@ -289,7 +289,7 @@ describe('buildCareerJourney', () => {
     const insufficient = buildCareerJourney(
       {
         ...withAnalysis,
-        market: 'ru',
+        regions: ['ru'],
         marketSample: {
           source: 'hh',
           query: 'Руководитель операций',
@@ -306,7 +306,7 @@ describe('buildCareerJourney', () => {
     const sampled = buildCareerJourney(
       {
         ...withAnalysis,
-        market: 'ru',
+        regions: ['ru'],
         marketSample: {
           source: 'hh',
           query: 'Руководитель операций',
@@ -343,7 +343,7 @@ describe('buildCareerJourney', () => {
     const stale = buildCareerJourney(
       {
         ...withAnalysis,
-        market: 'ru',
+        regions: ['ru'],
         marketSample: {
           source: 'hh',
           query: 'Руководитель операций',
@@ -366,7 +366,7 @@ describe('buildCareerJourney', () => {
           'Управлял операционной командой и отвечал за ежедневную работу поддержки клиентов.',
         resumeSource: 'text',
         targetDirection: 'Руководитель операций',
-        market: 'ru',
+        regions: ['ru'],
         currentSituation:
           'Хочу понять, достаточно ли моего опыта для следующей управленческой роли.',
         constraints: 'Рассматриваю гибридный или удалённый формат.',
@@ -411,7 +411,7 @@ describe('buildCareerJourney', () => {
           'Руководил продуктовой командой из восьми человек. Сократил срок проверки продуктовых гипотез на 30 процентов. Отвечал за планирование, метрики и взаимодействие с коммерческой командой.',
         resumeSource: 'text',
         targetDirection: 'Руководитель продукта',
-        market: 'ru',
+        regions: ['ru'],
         currentSituation: 'Проверяю следующую продуктовую роль.',
         constraints: 'Гибридный формат.',
         urgency: 'active',
@@ -518,5 +518,41 @@ describe('buildCareerJourney', () => {
       headline: 'Назначить дату проверки ответа',
       destination: 'opportunities',
     });
+  });
+});
+
+describe('market routes follow the regions the candidate chose (B158)', () => {
+  const base = {
+    resumeText: '',
+    resumeSource: 'text' as const,
+    targetDirection: 'Руководитель продукта',
+    currentSituation: 'Хочу проверить следующий карьерный шаг.',
+    constraints: '',
+    urgency: 'exploring' as const,
+  };
+
+  it('shows one route per chosen region instead of a single binary market', () => {
+    const journey = buildCareerJourney(
+      createWorkspace(
+        { ...base, regions: ['ru', 'mena'] },
+        '2026-08-26T00:00:00.000Z',
+      ),
+      '2026-08-26T00:01:00.000Z',
+    );
+
+    expect(journey.markets.map((market) => market.id)).toEqual(['ru', 'mena']);
+    expect(journey.markets.map((market) => market.label)).toEqual([
+      'Россия',
+      'Ближний Восток',
+    ]);
+  });
+
+  it('shows no route at all while the candidate has named no region', () => {
+    const journey = buildCareerJourney(
+      createWorkspace({ ...base, regions: [] }, '2026-08-26T00:00:00.000Z'),
+      '2026-08-26T00:01:00.000Z',
+    );
+
+    expect(journey.markets).toEqual([]);
   });
 });

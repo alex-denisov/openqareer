@@ -4,12 +4,14 @@ import type { CandidateMemory } from '../coach/coachApi';
 import { ResumeControlRail } from './ResumeControlRail';
 import { ResumeDocumentView } from './ResumeDocumentView';
 import { ResumeStudioHead } from './ResumeStudioHead';
+import type { CandidateRegion } from '../workspace/candidateRegions';
 import { buildResumeEditor } from './resumeEditor';
 import {
   defaultMobilePane,
   draftOf,
   eligibleEvidence,
   previewProjection,
+  resumeVariantsFor,
   selectDocument,
   summarizeResumeStudio,
 } from './resumeStudioModel';
@@ -23,17 +25,19 @@ import type {
 
 interface ResumeStudioProps {
   readonly memory: readonly CandidateMemory[];
+  readonly regions: readonly CandidateRegion[];
   readonly onRefreshDossier?: () => void;
 }
 
 /** Connects the candidate-scoped resume API to the surface. */
-export function ResumeStudio({ memory, onRefreshDossier }: ResumeStudioProps) {
+export function ResumeStudio({ memory, regions, onRefreshDossier }: ResumeStudioProps) {
   const state = useResumeStudio(onRefreshDossier);
   return (
     <ResumeStudioSurface
       view={state.view}
       draft={state.draft}
       memory={memory}
+      regions={regions}
       loading={state.loading}
       saving={state.saving}
       error={state.error}
@@ -49,6 +53,7 @@ interface ResumeStudioSurfaceProps {
   readonly view?: ResumeStudioView;
   readonly draft?: ResumeDraft;
   readonly memory?: readonly CandidateMemory[];
+  readonly regions?: readonly CandidateRegion[];
   readonly loading?: boolean;
   readonly saving?: boolean;
   readonly error?: string;
@@ -60,14 +65,33 @@ interface ResumeStudioSurfaceProps {
 }
 
 /**
+ * The offered variants follow the regions the candidate chose, so a variant
+ * that is no longer offered falls back to the master document instead of
+ * rendering a country pack nobody asked for (B158).
+ */
+function useResumeVariant(
+  regions: readonly CandidateRegion[],
+  initial: ResumeVariantId | undefined,
+) {
+  const [chosen, setVariant] = useState<ResumeVariantId>(initial ?? 'master');
+  const variants = useMemo(() => resumeVariantsFor(regions), [regions]);
+  return {
+    variants,
+    variant: variants.includes(chosen) ? chosen : 'master',
+    setVariant,
+  };
+}
+
+/**
  * Presentational surface, separated so every state can be asserted without a
  * network. Editing turns on only when a draft owner supplies `onDraftChange`.
  */
 export function ResumeStudioSurface(props: ResumeStudioSurfaceProps) {
-  const { view, draft, memory = [], error, onRetry, onDraftChange } = props;
+  const { view, draft, memory = [], regions = [], error, onRetry, onDraftChange } = props;
   const { loading = false, saving = false, saveError, onSave } = props;
-  const [variant, setVariant] = useState<ResumeVariantId>(
-    props.initialVariant ?? 'master',
+  const { variant, variants, setVariant } = useResumeVariant(
+    regions,
+    props.initialVariant,
   );
   const [pane, setPane] = useState<'unknowns' | 'document'>();
   const available = useMemo(() => eligibleEvidence(memory), [memory]);
@@ -91,6 +115,7 @@ export function ResumeStudioSurface(props: ResumeStudioSurfaceProps) {
   const editor = onDraftChange ? buildResumeEditor(activeDraft, onDraftChange) : undefined;
   const head = {
     variant,
+    variants,
     summary,
     savedAt: view.savedAt,
     saving,

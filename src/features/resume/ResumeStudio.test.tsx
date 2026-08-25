@@ -145,6 +145,7 @@ describe('ResumeStudioSurface', () => {
         view={viewOf()}
         draft={populatedDraft}
         memory={populatedMemory}
+        regions={['eu']}
         initialVariant="germany"
       />,
     );
@@ -153,6 +154,22 @@ describe('ResumeStudioSurface', () => {
     expect(html).toMatch(/2 страниц/u);
     expect(html).toMatch(/без фото/iu);
     expect(html).toMatch(/DE-CV-2026\.1/u);
+  });
+
+  it('does not offer a country pack to a candidate who never chose that region (B158)', () => {
+    const html = render(
+      <ResumeStudioSurface
+        view={viewOf()}
+        draft={populatedDraft}
+        memory={populatedMemory}
+        regions={['ru']}
+        initialVariant="germany"
+      />,
+    );
+
+    expect(html).not.toMatch(/Германия/u);
+    expect(html).not.toMatch(/DE-CV-2026\.1/u);
+    expect(html).toMatch(/Мастер-резюме/u);
   });
 
   it('warns when approved evidence stopped being confirmed', () => {
@@ -220,9 +237,14 @@ describe('ResumeStudioSurface', () => {
     expect(html).toMatch(/Повторить/u);
   });
 
-  it('offers both variants as an explicit switch', () => {
+  it('offers both variants as an explicit switch once the candidate chose the EU region', () => {
     const html = render(
-      <ResumeStudioSurface view={viewOf()} draft={emptyDraft} memory={[]} />,
+      <ResumeStudioSurface
+        view={viewOf()}
+        draft={emptyDraft}
+        memory={[]}
+        regions={['eu']}
+      />,
     );
     expect(html).toMatch(/Мастер/u);
     expect(html).toMatch(/Германия/u);

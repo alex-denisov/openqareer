@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  CANDIDATE_REGIONS,
+  normalizeCandidateRegions,
+  regionsFromLegacyMarket,
+} from '../../src/features/workspace/candidateRegions';
 
 /**
  * The candidate's own answers to the diagnostic wizard — the part of the
@@ -16,7 +21,11 @@ export const candidateWorkspaceSchema = z
     resumeFileName: z.string().max(300).optional(),
     resumePageCount: z.number().int().min(0).max(1_000).optional(),
     targetDirection: z.string().max(500),
-    market: z.enum(['ru', 'international']),
+    /**
+     * Where the candidate looks for work. Several regions at once are normal
+     * and an empty list is honest — it means they have not said yet (B158).
+     */
+    regions: z.array(z.enum(CANDIDATE_REGIONS)).max(CANDIDATE_REGIONS.length),
     currentSituation: z.string().max(20_000),
     constraints: z.string().max(20_000),
     urgency: z.enum(['exploring', 'active', 'urgent']),
@@ -27,3 +36,31 @@ export const candidateWorkspaceSchema = z
   .strict();
 
 export type CandidateWorkspaceState = z.infer<typeof candidateWorkspaceSchema>;
+
+/**
+ * Reads a row that an earlier release may have written.
+ *
+ * Before B158 the answer to «where are you looking?» was one `market` flag.
+ * The write path no longer accepts it, but rows written under it still exist,
+ * and a strict parse of those rows would answer every returning candidate with
+ * a 500 instead of their own career context. `ru` named exactly one region;
+ * `international` named none, so expanding it would invent an answer.
+ */
+export function readStoredCandidateWorkspace(
+  raw: unknown,
+): CandidateWorkspaceState {
+  return candidateWorkspaceSchema.parse(withRegions(raw));
+}
+
+function withRegions(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null) return raw;
+  const record = raw as Record<string, unknown>;
+  if (!('market' in record)) return record;
+  const { market, regions, ...rest } = record;
+  return {
+    ...rest,
+    regions: Array.isArray(regions)
+      ? normalizeCandidateRegions(regions)
+      : regionsFromLegacyMarket(market),
+  };
+}

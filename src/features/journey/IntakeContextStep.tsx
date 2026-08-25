@@ -1,8 +1,9 @@
 import { Check } from '@phosphor-icons/react';
-import type {
-  SearchUrgency,
-  WorkspaceMarket,
-} from '../workspace/workspaceStorage';
+import type { SearchUrgency } from '../workspace/workspaceStorage';
+import {
+  CANDIDATE_REGION_CATALOGUE,
+  type CandidateRegion,
+} from '../workspace/candidateRegions';
 
 const CONDITION_OPTIONS = [
   'Только удалённо',
@@ -14,7 +15,7 @@ const CONDITION_OPTIONS = [
 export interface IntakeContextValues {
   readonly currentSituation: string;
   readonly targetDirection: string;
-  readonly market: WorkspaceMarket;
+  readonly regions: readonly CandidateRegion[];
   readonly urgency: SearchUrgency;
   readonly conditions: readonly string[];
   readonly otherConstraint: string;
@@ -41,7 +42,7 @@ export function IntakeContextStep(props: IntakeContextStepProps) {
           value={props.currentSituation}
           onChange={(event) => onChange({ currentSituation: event.target.value })}
           placeholder="Например: давно не получаю приглашений, хочу сменить рынок, возвращаюсь после перерыва или не понимаю свой уровень."
-          rows={3}
+          rows={2}
         />
         <small>
           {props.optional
@@ -60,24 +61,29 @@ export function IntakeContextStep(props: IntakeContextStepProps) {
       </label>
 
       <fieldset>
-        <legend>Где рассматриваете работу?</legend>
-        <div className="career-segmented-control">
-          {(
-            [
-              ['ru', 'Россия'],
-              ['international', 'Международный рынок'],
-            ] as Array<[WorkspaceMarket, string]>
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className={props.market === value ? 'is-selected' : ''}
-              aria-pressed={props.market === value}
-              onClick={() => onChange({ market: value })}
-            >
-              {label}
-            </button>
-          ))}
+        <legend>Где рассматриваете работу? — можно несколько</legend>
+        <div className="career-chip-picker">
+          {CANDIDATE_REGION_CATALOGUE.map((region) => {
+            const selected = props.regions.includes(region.id);
+            return (
+              <button
+                key={region.id}
+                type="button"
+                className={selected ? 'is-selected' : ''}
+                aria-pressed={selected}
+                onClick={() =>
+                  onChange({
+                    regions: selected
+                      ? props.regions.filter((item) => item !== region.id)
+                      : [...props.regions, region.id],
+                  })
+                }
+              >
+                {selected ? <Check size={15} weight="bold" /> : null}
+                {region.label}
+              </button>
+            );
+          })}
         </div>
       </fieldset>
 

@@ -7,12 +7,12 @@ import type {
 import type { ActionPackage } from '../action/actionPackageEngine';
 import type { OutcomeEvent } from '../outcome/outcomeEngine';
 import type { ProfileFact } from './profileIngestion';
+import type { CandidateRegion } from './candidateRegions';
 
 export const WORKSPACE_STORAGE_KEY = 'candidate-workspace';
 export const WORKSPACE_OWNER_KEY = 'candidate-workspace-owner';
-export const WORKSPACE_VERSION = 6;
+export const WORKSPACE_VERSION = 7;
 
-export type WorkspaceMarket = 'ru' | 'international';
 export type ResumeSource = 'pdf' | 'linkedin-pdf' | 'hh-pdf' | 'text';
 export type SearchUrgency = 'exploring' | 'active' | 'urgent';
 export type CareerGoal = 'find-job' | 'choose-role' | 'positioning' | 'market';
@@ -24,7 +24,11 @@ export interface WorkspaceInput {
   resumeFileName?: string;
   resumePageCount?: number;
   targetDirection: string;
-  market: WorkspaceMarket;
+  /**
+   * Where the candidate is looking for work. Several regions at once are
+   * normal and an empty list is honest: it means they have not said yet.
+   */
+  regions: readonly CandidateRegion[];
   currentSituation: string;
   constraints: string;
   urgency: SearchUrgency;

@@ -7,6 +7,7 @@ import type {
   SearchUrgency,
 } from './workspaceStorageSchema';
 import { isProfileFact } from './profileIngestion';
+import { isCandidateRegionList } from './candidateRegions';
 import {
   ACTION_PACKAGE_METHOD_VERSION,
   getActionChecklist,
@@ -67,9 +68,10 @@ export function isCandidateWorkspace(value: unknown): value is CandidateWorkspac
 
 export function isLegacyWorkspace(
   value: unknown,
-): value is Omit<CandidateWorkspace, 'version' | 'analysis' | 'outcomes'> & {
-  version: 1;
-} {
+): value is Omit<
+  CandidateWorkspace,
+  'version' | 'analysis' | 'outcomes' | 'regions'
+> & { version: 1; market: 'ru' | 'international' } {
   return (
     isWorkspaceRecord(value, 1) &&
     value.analysis === undefined &&
@@ -83,10 +85,8 @@ export function isVersionTwoWorkspace(
   value: unknown,
 ): value is Omit<
   CandidateWorkspace,
-  'version' | 'opportunity' | 'outcomes'
-> & {
-  version: 2;
-} {
+  'version' | 'opportunity' | 'outcomes' | 'regions'
+> & { version: 2; market: 'ru' | 'international' } {
   return (
     isWorkspaceRecord(value, 2) &&
     (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
@@ -100,10 +100,8 @@ export function isVersionThreeWorkspace(
   value: unknown,
 ): value is Omit<
   CandidateWorkspace,
-  'version' | 'actionPackage' | 'outcomes'
-> & {
-  version: 3;
-} {
+  'version' | 'actionPackage' | 'outcomes' | 'regions'
+> & { version: 3; market: 'ru' | 'international' } {
   return (
     isWorkspaceRecord(value, 3) &&
     (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
@@ -116,8 +114,9 @@ export function isVersionThreeWorkspace(
 
 export function isVersionFourWorkspace(
   value: unknown,
-): value is Omit<CandidateWorkspace, 'version' | 'outcomes'> & {
+): value is Omit<CandidateWorkspace, 'version' | 'outcomes' | 'regions'> & {
   version: 4;
+  market: 'ru' | 'international';
 } {
   if (
     !(
@@ -144,10 +143,31 @@ export function isVersionFourWorkspace(
 
 export function isVersionFiveWorkspace(
   value: unknown,
-): value is Omit<CandidateWorkspace, 'version'> & { version: 5 } {
+): value is Omit<CandidateWorkspace, 'version' | 'regions'> & {
+  version: 5;
+  market: 'ru' | 'international';
+} {
+  return isMarketEraWorkspace(value, 5);
+}
+
+/**
+ * The last version that still answered «where are you looking?» with one flag.
+ * Version 7 asks for regions instead, so a v6 record migrates rather than
+ * failing to load (B158).
+ */
+export function isVersionSixWorkspace(
+  value: unknown,
+): value is Omit<CandidateWorkspace, 'version' | 'regions'> & {
+  version: 6;
+  market: 'ru' | 'international';
+} {
+  return isMarketEraWorkspace(value, 6);
+}
+
+function isMarketEraWorkspace(value: unknown, version: 5 | 6): boolean {
   if (
     !(
-      isWorkspaceRecord(value, 5) &&
+      isWorkspaceRecord(value, version) &&
       (value.analysis === undefined || isCandidateAnalysis(value.analysis)) &&
       (value.marketSample === undefined || isMarketSample(value.marketSample)) &&
       (value.opportunity === undefined ||
@@ -168,6 +188,19 @@ export function isVersionFiveWorkspace(
       value.actionPackage.opportunityId === value.opportunity.id &&
       value.actionPackage.decisionChoice === value.opportunity.decision.choice)
   );
+}
+
+/**
+ * Version 7 replaced the binary `market` answer with a list of regions (B158).
+ * Every earlier record still carries the flag, so a stored record is judged
+ * against the shape its own version actually had.
+ */
+function carriesMarketAnswer(
+  value: Record<string, unknown>,
+  version: number,
+): boolean {
+  if (version >= 7) return isCandidateRegionList(value.regions);
+  return value.market === 'ru' || value.market === 'international';
 }
 
 function isWorkspaceRecord(
@@ -205,7 +238,7 @@ function isWorkspaceRecord(
       carriesDocument ||
       (typeof value.currentSituation === 'string' &&
         value.currentSituation.trim().length >= 20)) &&
-    (value.market === 'ru' || value.market === 'international') &&
+    carriesMarketAnswer(value, version) &&
     typeof value.currentSituation === 'string' &&
     (carriesDocument || value.currentSituation.trim().length >= 20) &&
     typeof value.constraints === 'string' &&

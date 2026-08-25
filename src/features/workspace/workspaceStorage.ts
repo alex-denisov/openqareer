@@ -25,12 +25,17 @@ import {
   isVersionThreeWorkspace,
   isVersionFourWorkspace,
   isVersionFiveWorkspace,
+  isVersionSixWorkspace,
   isAllowedProfileUrl,
 } from './workspaceStorageGuards';
+import {
+  normalizeCandidateRegions,
+  regionsFromLegacyMarket,
+  type CandidateRegion,
+} from './candidateRegions';
 
 export { WORKSPACE_STORAGE_KEY, WORKSPACE_OWNER_KEY } from './workspaceStorageSchema';
 export type {
-  WorkspaceMarket,
   ResumeSource,
   SearchUrgency,
   CareerGoal,
@@ -105,7 +110,7 @@ export function createWorkspace(
     previous.targetDirection === targetDirection;
   const canKeepOpportunity =
     canKeepAnalysis &&
-    previous?.market === input.market &&
+    sameRegions(previous?.regions, input.regions) &&
     previous.constraints === input.constraints.trim();
 
   return {
@@ -116,7 +121,7 @@ export function createWorkspace(
     resumeFileName: input.resumeFileName?.trim() || undefined,
     resumePageCount: input.resumePageCount,
     targetDirection,
-    market: input.market,
+    regions: normalizeCandidateRegions(input.regions),
     currentSituation: input.currentSituation.trim(),
     constraints: input.constraints.trim(),
     urgency: input.urgency,
@@ -193,28 +198,62 @@ function isCurrentWorkspace(value: unknown): value is CandidateWorkspace {
 }
 
 function migrateLegacyWorkspace(parsed: unknown): WorkspaceLoadResult {
-  const upgraded = (): { version: typeof WORKSPACE_VERSION; outcomes: [] } => ({
-    version: WORKSPACE_VERSION,
-    outcomes: [],
-  });
   if (isLegacyWorkspace(parsed)) {
-    return { status: 'ready', workspace: { ...parsed, ...upgraded() } };
+    return ready({ ...parsed, outcomes: [] });
   }
   if (
     isVersionTwoWorkspace(parsed) ||
     isVersionThreeWorkspace(parsed) ||
     isVersionFourWorkspace(parsed)
   ) {
-    return { status: 'ready', workspace: { ...parsed, ...upgraded() } };
+    return ready({ ...parsed, outcomes: [] });
   }
-  if (isVersionFiveWorkspace(parsed)) {
-    // v5 already carries outcomes; only the schema version moves forward.
-    return {
-      status: 'ready',
-      workspace: { ...parsed, version: WORKSPACE_VERSION },
-    };
+  if (isVersionFiveWorkspace(parsed) || isVersionSixWorkspace(parsed)) {
+    // v5 and v6 already carry outcomes; only the answer about where the
+    // candidate looks for work changes shape.
+    return ready(parsed);
   }
   return { status: 'invalid' };
+}
+
+/**
+ * Every record written before version 7 answered «where are you looking?» with
+ * one `market` flag. It becomes a region list, and the flag stops travelling —
+ * leaving it in place would keep two answers to the same question (B158).
+ */
+function ready(
+  legacy: Omit<CandidateWorkspace, 'version' | 'regions'> & {
+    market: 'ru' | 'international';
+  },
+): WorkspaceLoadResult {
+  const { market, ...rest } = legacy;
+  return {
+    status: 'ready',
+    workspace: {
+      ...rest,
+      version: WORKSPACE_VERSION,
+      regions: regionsFromLegacyMarket(market),
+    },
+  };
+}
+
+/**
+ * The candidate picks regions in whatever order they click them, while a stored
+ * workspace holds them in catalogue order, so both sides are normalised before
+ * comparison — otherwise re-picking the same regions would throw away analysis
+ * that is still current.
+ */
+function sameRegions(
+  previous: readonly CandidateRegion[] | undefined,
+  next: readonly CandidateRegion[],
+): boolean {
+  if (!previous) return false;
+  const before = normalizeCandidateRegions(previous);
+  const after = normalizeCandidateRegions(next);
+  return (
+    before.length === after.length &&
+    before.every((region, index) => region === after[index])
+  );
 }
 
 function normalizeLoadedWorkspace(

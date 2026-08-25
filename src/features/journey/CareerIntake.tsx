@@ -28,8 +28,8 @@ import {
   type ResumeSource,
   type SearchUrgency,
   type WorkspaceInput,
-  type WorkspaceMarket,
 } from '../workspace/workspaceStorage';
+import type { CandidateRegion } from '../workspace/candidateRegions';
 import { IntakeContextStep, type IntakeContextValues } from './IntakeContextStep';
 import { IntakeSourceStep, type SourceChoice } from './IntakeSourceStep';
 import { intakeSourceLock } from './intakeSourceLock';
@@ -92,7 +92,7 @@ const goalOptions: Array<{
 const emptyContext: IntakeContextValues = {
   currentSituation: '',
   targetDirection: '',
-  market: 'ru',
+  regions: [],
   urgency: 'active',
   conditions: [],
   otherConstraint: '',
@@ -563,7 +563,7 @@ function buildWorkspaceInput(state: {
     resumeFileName: ingested?.file?.name,
     resumePageCount: ingested?.file?.pages,
     targetDirection: context.targetDirection,
-    market: context.market as WorkspaceMarket,
+    regions: context.regions as readonly CandidateRegion[],
     currentSituation: context.currentSituation.trim(),
     constraints: [...context.conditions, context.otherConstraint.trim()]
       .filter(Boolean)

@@ -156,7 +156,7 @@ test.describe('B140 workspace shell and intake defects', () => {
     });
     const marketControl = page
       .locator('.career-context-form fieldset', { hasText: 'Где рассматриваете работу?' })
-      .locator('.career-segmented-control');
+      .locator('.career-chip-picker');
     const inputBox = await roleInput.locator('input').boundingBox();
     const controlBox = await marketControl.boundingBox();
     expect(inputBox).not.toBeNull();

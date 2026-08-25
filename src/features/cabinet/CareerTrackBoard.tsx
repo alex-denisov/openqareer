@@ -2,6 +2,10 @@ import { ArrowRight, Compass, TrendUp } from '@phosphor-icons/react';
 import type { AccountSnapshot, CandidateSnapshot } from '../coach/coachApi';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { CareerCabinetView } from './cabinetViews';
+import {
+  candidateRegionLabels,
+  type CandidateRegion,
+} from '../workspace/candidateRegions';
 
 /**
  * «Карьера» — where the candidate is going and how they will know they arrived.
@@ -13,6 +17,7 @@ interface CareerTrackBoardProps {
   readonly snapshot?: CandidateSnapshot;
   readonly account?: AccountSnapshot;
   readonly targetDirection: string;
+  readonly regions: readonly CandidateRegion[];
   readonly onNavigate: (view: CareerCabinetView) => void;
   readonly onEditPremises: () => void;
 }
@@ -22,6 +27,7 @@ export function CareerTrackBoard({
   snapshot,
   account,
   targetDirection,
+  regions,
   onNavigate,
   onEditPremises,
 }: CareerTrackBoardProps) {
@@ -47,7 +53,7 @@ export function CareerTrackBoard({
       />
       <CareerRoutePremises
         targetRole={targetDirection}
-        location={account?.profile.location ?? undefined}
+        regions={regions}
         workMode={account?.profile.workMode ?? undefined}
         onEdit={onEditPremises}
       />
@@ -60,14 +66,19 @@ export function CareerTrackBoard({
   );
 }
 
+/**
+ * The route's geography is where the candidate said they are looking, not
+ * where they live. This row used to read the account's residence and so wrote
+ * «Не указана» while the server held the wizard's own answer (B158, B160).
+ */
 export function CareerRoutePremises({
   targetRole,
-  location,
+  regions,
   workMode,
   onEdit,
 }: {
   targetRole?: string;
-  location?: string;
+  regions: readonly CandidateRegion[];
   workMode?: AccountSnapshot['profile']['workMode'];
   onEdit: () => void;
 }) {
@@ -89,7 +100,9 @@ export function CareerRoutePremises({
         </div>
         <div>
           <dt>География</dt>
-          <dd>{location?.trim() || 'Не указана'}</dd>
+          <dd>
+            {candidateRegionLabels(regions).join(', ') || 'Регионы не выбраны'}
+          </dd>
         </div>
         <div>
           <dt>Формат работы</dt>

@@ -143,6 +143,12 @@ export function CareerMapView({
             <h2 id="market-title">Маршруты рынка</h2>
           </div>
         </div>
+        {journey.markets.length === 0 ? (
+          <p className="career-market-empty">
+            Регионы поиска не выбраны — укажите их в мастере, и маршруты
+            появятся здесь.
+          </p>
+        ) : null}
         {journey.markets.map((market) => (
           <article key={market.id}>
             <MapPin size={21} />
@@ -157,7 +163,7 @@ export function CareerMapView({
             </span>
           </article>
         ))}
-        {workspace.market === 'ru' && !workspace.marketSample ? (
+        {workspace.regions.includes('ru') && !workspace.marketSample ? (
           <button
             className="career-primary-button career-market-collect"
             type="button"
@@ -168,7 +174,7 @@ export function CareerMapView({
             <ArrowRight size={17} />
           </button>
         ) : null}
-        {workspace.market === 'international' ? (
+        {workspace.regions.some((region) => region !== 'ru') ? (
           <button
             className="career-quiet-button career-market-collect"
             type="button"

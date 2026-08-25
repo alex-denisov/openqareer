@@ -7,7 +7,7 @@ const input = {
     'Синтетический кандидат: руководила продуктом в финтехе и отвечала за активацию.',
   resumeSource: 'text' as const,
   targetDirection: 'Senior Product Manager',
-  market: 'international' as const,
+  regions: ['eu'] as const,
   currentSituation: 'Ищу работу за рубежом.',
   constraints: '',
   urgency: 'active' as const,
@@ -26,7 +26,7 @@ describe('resolveCandidateWorkspace', () => {
     });
 
     expect(resolved?.targetDirection).toBe('Senior Product Manager');
-    expect(resolved?.market).toBe('international');
+    expect(resolved?.regions).toEqual(['eu']);
   });
 
   it('keeps the local workspace, which may hold edits the server has not seen', () => {

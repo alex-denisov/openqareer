@@ -442,7 +442,7 @@ function workspaceInputOf(workspace: CandidateWorkspace): WorkspaceInput {
     resumeFileName: workspace.resumeFileName,
     resumePageCount: workspace.resumePageCount,
     targetDirection: workspace.targetDirection,
-    market: workspace.market,
+    regions: workspace.regions,
     currentSituation: workspace.currentSituation,
     constraints: workspace.constraints,
     urgency: workspace.urgency,

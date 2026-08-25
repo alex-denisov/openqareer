@@ -6,6 +6,7 @@ import {
   buildResumeStudioProjection,
   type ResumeEvidence,
 } from '../../../server/domain/resumeStudio';
+import type { CandidateRegion } from '../workspace/candidateRegions';
 import type { CandidateMemory } from '../coach/coachApi';
 import type {
   ResumeDocument,
@@ -468,4 +469,15 @@ function entryId(): string {
   const random = globalThis.crypto?.randomUUID?.();
   if (random) return `e${random}`;
   return `e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * A country pack is only honest for a candidate who said they are looking in
+ * that region. Before B158 every candidate saw «Мастер / Германия», including
+ * one searching only in Russia — the pack was hard-wired, not chosen.
+ */
+export function resumeVariantsFor(
+  regions: readonly CandidateRegion[],
+): readonly ResumeVariantId[] {
+  return regions.includes('eu') ? ['master', 'germany'] : ['master'];
 }
