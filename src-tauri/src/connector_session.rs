@@ -311,10 +311,34 @@ pub fn close_session_window(app: &AppHandle, platform: &str) -> bool {
     })
 }
 
+/// The page a reset-only window loads. Nothing is ever read from it: it exists
+/// solely to give us a webview handle on the platform's browsing data.
+pub fn platform_root_url(platform: &str) -> Option<&'static str> {
+    match platform {
+        "linkedin" => Some("https://www.linkedin.com/"),
+        "hh" => Some("https://hh.ru/"),
+        _ => None,
+    }
+}
+
+/// Clears the candidate's sign-in to a platform, with or without its window on
+/// screen.
+///
+/// The sign-out used to live in the session dialog's toolbar, where a window
+/// was open by definition. The owner moved it onto the platform card, where
+/// there is usually no window at all — and a reset that gave up in that case
+/// released the account's connection while leaving the candidate still signed
+/// in to the platform inside the app (owner report, 2026-08-26). So the reset
+/// builds a hidden window purely to reach the browsing data, then closes it.
 pub async fn reset_session_window(app: &AppHandle, platform: &str) -> bool {
     let Some(label) = session_window_label(platform) else {
         return false;
     };
+    if app.get_webview(label).is_none()
+        && !open_hidden_session_window(app, platform, label).await
+    {
+        return false;
+    }
     let Some(webview) = app.get_webview(label) else {
         return false;
     };
@@ -323,6 +347,23 @@ pub async fn reset_session_window(app: &AppHandle, platform: &str) -> bool {
     }
     tokio::time::sleep(Duration::from_millis(500)).await;
     close_session_window(app, platform)
+}
+
+/// Builds an invisible session window, kept to the same origin allow-list as
+/// the visible one.
+async fn open_hidden_session_window(app: &AppHandle, platform: &str, label: &str) -> bool {
+    let Some(url) = platform_root_url(platform).and_then(|raw| Url::parse(raw).ok()) else {
+        return false;
+    };
+    let allowed = platform.to_string();
+    let built = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
+        .title(format!("OpenQareer · {}", platform_name(platform)))
+        .inner_size(480.0, 360.0)
+        .visible(false)
+        .skip_taskbar(true)
+        .on_navigation(move |next| is_allowed_session_url(&allowed, next.as_str()))
+        .build();
+    built.is_ok() && await_registered_window(app, label).await
 }
 
 pub fn resize_session_window(app: &AppHandle, platform: &str, layout: SessionLayout) -> bool {
@@ -508,6 +549,15 @@ return body.length>2000000?'__OPENQAREER_PAGE_TOO_LARGE__':body;\
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_reset_only_window_stays_inside_the_platforms_own_origins() {
+        for platform in ["linkedin", "hh"] {
+            let url = platform_root_url(platform).expect("a root url per platform");
+            assert!(is_allowed_session_url(platform, url));
+        }
+        assert_eq!(platform_root_url("facebook"), None);
+    }
 
     #[test]
     fn a_reload_of_the_application_page_orphans_both_sign_in_windows() {
