@@ -9,7 +9,7 @@ import {
   Target,
   type Icon,
 } from '@phosphor-icons/react';
-import { getConnections } from '../coach/coachApi';
+import { disconnectConnection, getConnections } from '../coach/coachApi';
 import type { HhResumeItem } from '../connections/ProfileImportModals';
 import {
   connectedProfileSource,
@@ -19,6 +19,7 @@ import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import {
   closeConnectorSession,
   readSessionPage,
+  resetConnectorSession,
 } from '../connections/connectorSession';
 import { readHhResumeFromSession } from '../connections/hhSessionPoll';
 import { parseResumeContent, type ParsedResume } from '../workspace/resumeParser';
@@ -124,6 +125,13 @@ export function CareerIntake({
   const [isLinkedinConnected, setLinkedinConnected] = useState(false);
   const [connectedSource, setConnectedSource] = useState<ConnectedProfileSource>();
   const [context, setContext] = useState<IntakeContextValues>(emptyContext);
+  /**
+   * A release is in flight. The wizard restores a connected source from the
+   * server on every render pass that has none; without this gate that read
+   * races the release and puts the connection straight back
+   * (owner report, 2026-08-26).
+   */
+  const [isReleasing, setReleasing] = useState(false);
   const [error, setError] = useState<string>();
   const errorRef = useRef<HTMLParagraphElement>(null);
 
@@ -170,7 +178,9 @@ export function CareerIntake({
    * profile and only need to be acknowledged (B157).
    */
   useEffect(() => {
-    if (!hasAccount || sourceChoice !== 'profile-import' || ingested) return;
+    if (!hasAccount || isReleasing || sourceChoice !== 'profile-import' || ingested) {
+      return;
+    }
     let active = true;
     void getConnections()
       .then((connections) => {
@@ -199,7 +209,7 @@ export function CareerIntake({
     return () => {
       active = false;
     };
-  }, [hasAccount, sourceChoice, ingested, ingestion]);
+  }, [hasAccount, isReleasing, sourceChoice, ingested, ingestion]);
 
   useEffect(() => {
     if (!ingested?.parsed.targetRole || context.targetDirection) return;
@@ -221,18 +231,14 @@ export function CareerIntake({
       setHhUrl('');
       setLinkedinModalOpen(false);
       setHhModalOpen(false);
-      void closeConnectorSession('linkedin');
-      void closeConnectorSession('hh');
+      void closeConnectorSession('linkedin').catch(() => undefined);
+      void closeConnectorSession('hh').catch(() => undefined);
     }
     ingestion.clear();
   }
 
-  /**
-   * Releases the fixed source deliberately. Without this the first capture
-   * would be a trap: a candidate who picked the wrong file could never reach
-   * any other source again.
-   */
-  function releaseSource() {
+  /** Forgets everything this wizard is holding about a captured source. */
+  function clearLocalSource() {
     setError(undefined);
     setTypedResume('');
     setLinkedinUrl('');
@@ -244,9 +250,65 @@ export function CareerIntake({
     setConnectedSource(undefined);
     setLinkedinModalOpen(false);
     setHhModalOpen(false);
-    void closeConnectorSession('linkedin');
-    void closeConnectorSession('hh');
+    void closeConnectorSession('linkedin').catch(() => undefined);
+    void closeConnectorSession('hh').catch(() => undefined);
     ingestion.clear();
+  }
+
+  /**
+   * Releases the fixed source deliberately. Without this the first capture
+   * would be a trap: a candidate who picked the wrong file could never reach
+   * any other source again.
+   *
+   * Clearing local state alone was that trap wearing a button: the account's
+   * own connection stayed on the server, the wizard's very next read restored
+   * it, and «Сменить источник» looked like it did nothing at all (owner
+   * report, 2026-08-26). A source the server is holding has to be released
+   * there too.
+   */
+  async function releaseSource() {
+    const platform = connectedSourcePlatform();
+    if (!platform) {
+      clearLocalSource();
+      return;
+    }
+    await disconnectPlatform(platform);
+  }
+
+  /** The platform whose connection this account is actually holding, if any. */
+  function connectedSourcePlatform(): 'hh' | 'linkedin' | undefined {
+    if (connectedSource) return connectedSource.platform;
+    if (isHhConnected) return 'hh';
+    if (isLinkedinConnected) return 'linkedin';
+    return undefined;
+  }
+
+  /**
+   * Signs this account out of a platform: the stored connection goes, and the
+   * sign-in the desktop shell is holding in its own window goes with it. This
+   * is the sign-out the owner asked to live on the platform card rather than
+   * inside the session dialog's toolbar.
+   */
+  async function forgetPlatform(platform: 'hh' | 'linkedin') {
+    try {
+      await disconnectConnection(platform);
+    } catch {
+      setError(
+        `Отключить ${platform === 'hh' ? 'hh.ru' : 'LinkedIn'} не удалось. Проверьте соединение и повторите попытку.`,
+      );
+      return;
+    }
+    await resetConnectorSession(platform).catch(() => false);
+  }
+
+  async function disconnectPlatform(platform: 'hh' | 'linkedin') {
+    setReleasing(true);
+    clearLocalSource();
+    try {
+      await forgetPlatform(platform);
+    } finally {
+      setReleasing(false);
+    }
   }
 
   async function importSelectedHhResume() {
@@ -376,9 +438,10 @@ export function CareerIntake({
           sourceChoice={sourceChoice}
           onChooseSource={chooseSource}
           lock={sourceLock}
-          onReleaseSource={releaseSource}
+          onReleaseSource={() => void releaseSource()}
+          onDisconnectPlatform={(platform) => void disconnectPlatform(platform)}
           ingested={ingested}
-          busy={ingestion.busy}
+          busy={ingestion.busy || isReleasing}
           notice={ingestion.notice}
           resumeText={typedResume}
           onResumeText={setTypedResume}

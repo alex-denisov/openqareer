@@ -900,6 +900,33 @@
   margin-top: 22px;
 }
 
+/* The source-release notice carried no rules at all, so it sat flush against
+   the source buttons it was explaining and read as part of them (B169). */
+.career-source-lock {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.career-source-lock > span {
+  flex: 1 1 260px;
+  min-width: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--career-text-soft);
+}
+
+.career-source-lock > button {
+  flex: none;
+}
+
 .career-source-account-required {
   display: grid;
   justify-items: start;
@@ -6293,18 +6320,6 @@
 .career-modal-network-status.is-compact span {
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.career-connector-check {
-  min-height: 36px;
-  padding: 6px 12px;
-  white-space: nowrap;
-}
-
-.career-connector-session-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .career-connector-waiting {

@@ -9,7 +9,8 @@ mod tunnel_manager;
 
 use automation_worker::{execute_candidate_action_safely, LocalActionRequest, LocalActionResult};
 use connector_session::{
-    close_session_window, inspect_session_page, is_session_window_open, open_session_window,
+    close_orphaned_session_windows, close_session_window, inspect_session_page,
+    is_session_window_open, open_session_window,
     read_session_page, reset_session_window, resize_session_window, should_route_through_tunnel,
     SessionInspectionReport, SessionLayout, SessionPageReport, SessionWindowReport,
     SessionWindowRequest,
@@ -280,6 +281,12 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
+        // A reload of our own page destroys the interface that owned the
+        // platform sign-in window, but not the window: it stayed on screen with
+        // no control left that could close it (owner report, 2026-08-26).
+        .on_page_load(|webview, _payload| {
+            close_orphaned_session_windows(&webview.app_handle().clone(), webview.label());
+        })
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             probe_network_status,

@@ -57,7 +57,7 @@ describe('CareerCabinet route premises', () => {
     expect(html).toContain('Руководитель продукта');
     expect(html).toContain('География');
     expect(html).toContain('Россия');
-    expect(html).toContain('Европа');
+    expect(html).toContain('EU');
     expect(html).toContain('Формат работы');
     expect(html).toContain('Удалённо');
     expect(html).toContain('Изменить роль и условия');

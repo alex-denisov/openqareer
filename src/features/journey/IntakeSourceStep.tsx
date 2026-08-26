@@ -17,10 +17,7 @@ import { PlatformLogo } from '../connections/PlatformLogo';
 import type { ParsedResume } from '../workspace/resumeParser';
 import type { IngestedResume } from './useResumeIngestion';
 import type { IntakeSourceLockState } from './intakeSourceLock';
-import {
-  connectedProfileSourceNotice,
-  type ConnectedProfileSource,
-} from './connectedProfileSource';
+import type { ConnectedProfileSource } from './connectedProfileSource';
 
 export type SourceChoice = 'profile-import' | 'pdf' | 'text' | 'none';
 
@@ -32,6 +29,11 @@ export interface IntakeSourceStepProps {
   readonly lock: IntakeSourceLockState;
   /** Releases that source so another one can be chosen. */
   readonly onReleaseSource: () => void;
+  /**
+   * Signs this account out of the platform: the stored connection goes, and so
+   * does the sign-in the desktop shell is holding for it.
+   */
+  readonly onDisconnectPlatform: (platform: 'hh' | 'linkedin') => void;
   readonly ingested?: IngestedResume;
   readonly busy: boolean;
   readonly notice?: string;
@@ -63,8 +65,6 @@ export interface IntakeSourceStepProps {
   readonly connectedSource?: ConnectedProfileSource;
 }
 
-// One component, one JSX tree: splitting further would scatter the markup.
-// eslint-disable-next-line max-lines-per-function
 export function IntakeSourceStep(props: IntakeSourceStepProps) {
   const { sourceChoice, lock } = props;
   const closed = (choice: SourceChoice) =>
@@ -92,15 +92,6 @@ export function IntakeSourceStep(props: IntakeSourceStepProps) {
         ))}
       </div>
 
-      {lock.reason ? (
-        <p className="career-source-lock" role="status">
-          <span>{lock.reason}</span>
-          <button type="button" className="career-quiet-button" onClick={props.onReleaseSource}>
-            Сменить источник
-          </button>
-        </p>
-      ) : null}
-
       {sourceChoice === 'pdf' ? <PdfSource {...props} /> : null}
       {sourceChoice === 'profile-import' ? <ProfileImportSource {...props} /> : null}
 
@@ -122,6 +113,37 @@ export function IntakeSourceStep(props: IntakeSourceStepProps) {
           оценивать резюме, которого нет.
         </p>
       ) : null}
+
+      <SourceLockNotice reason={lock.reason} onRelease={props.onReleaseSource} />
+    </div>
+  );
+}
+
+/**
+ * Says which source the career picture is being built from, and offers the one
+ * way back out of it.
+ *
+ * It sits **after** the source it describes, not between the source buttons and
+ * the source itself: wedged in above, the sentence ran into the buttons it was
+ * explaining, and the owner read the two as one broken control
+ * (owner report, 2026-08-26). In the profile-import step this lands directly
+ * under the LinkedIn and hh.ru cards, and it takes the place the resume picker
+ * occupied once that picker has done its job.
+ */
+function SourceLockNotice({
+  reason,
+  onRelease,
+}: {
+  reason?: string;
+  onRelease: () => void;
+}) {
+  if (!reason) return null;
+  return (
+    <div className="career-source-lock" role="status">
+      <span>{reason}</span>
+      <button type="button" className="career-quiet-button" onClick={onRelease}>
+        Сменить источник
+      </button>
     </div>
   );
 }
@@ -184,6 +206,8 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
         props.ingested.imported &&
         props.ingested.connection),
   );
+  // A list is only worth showing while something is still unimported.
+  const showResumePicker = props.hhConnected && props.hhResumes.length > 0 && !hhReady;
   return (
     <div className="career-source-fields">
       <div className="career-platform-cards">
@@ -192,26 +216,33 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
           name="LinkedIn"
           description="Импорт опыта и навыков из вашего профиля LinkedIn."
           connected={linkedinReady}
-          disabled={props.lock.lockedTo !== undefined && props.lock.lockedTo !== 'profile-import'}
+          disabled={
+            props.busy ||
+            (props.lock.lockedTo !== undefined && props.lock.lockedTo !== 'profile-import')
+          }
           onConnect={() => props.onLinkedinOpen(true)}
+          onDisconnect={() => props.onDisconnectPlatform('linkedin')}
         />
         <PlatformCard
           platform="hh"
           name="hh.ru"
           description="Импорт вашего резюме с hh.ru: вход проходит на странице hh.ru, в вашей сессии."
           connected={hhReady}
-          disabled={props.lock.lockedTo !== undefined && props.lock.lockedTo !== 'profile-import'}
+          disabled={
+            props.busy ||
+            (props.lock.lockedTo !== undefined && props.lock.lockedTo !== 'profile-import')
+          }
           onConnect={() => props.onHhOpen(true)}
+          onDisconnect={() => props.onDisconnectPlatform('hh')}
         />
       </div>
 
-      {restored ? (
-        <p className="career-inline-note" role="status">
-          {connectedProfileSourceNotice(restored)}
-        </p>
-      ) : null}
-
-      {props.hhConnected && props.hhResumes.length > 0 ? (
+      {/* One slot under the two cards. While a signed-in hh.ru account still
+          owes the wizard a choice it holds the picker; the moment the chosen
+          resume is in the profile the release control takes the same place,
+          instead of stacking a green banner on top of a picker that has
+          nothing left to pick (owner report, 2026-08-26). */}
+      {showResumePicker ? (
         <div className="career-hh-resumes-selector">
           <label htmlFor="hh-resume-dropdown">Выберите резюме для импорта</label>
           <div className="career-hh-resumes-row">
@@ -238,15 +269,11 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
             </button>
           </div>
         </div>
-      ) : props.hhConnected && !restored ? (
+      ) : props.hhConnected && !hhReady && props.hhResumes.length === 0 ? (
         <p className="career-inline-note">
           В профиле hh.ru не нашлось резюме. Можно загрузить PDF или описать опыт
           текстом.
         </p>
-      ) : null}
-
-      {props.ingested ? (
-        <ImportSummary ingested={props.ingested} notice={props.notice} />
       ) : null}
 
       <LinkedInConnectModal
@@ -266,22 +293,31 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
   );
 }
 
+/**
+ * A platform, its real state, and the one action that state allows.
+ *
+ * A connected card offers «Отключить» in the place «Подключить» occupied. The
+ * card used to offer «Обновить импорт» there, and signing out was buried in the
+ * session dialog's toolbar as «Выйти из hh.ru» — the owner asked for the sign
+ * out to live here, on the card, where the connection itself is shown
+ * (owner report, 2026-08-26). Re-importing is disconnect, then connect.
+ */
 function PlatformCard({
   platform,
   name,
   description,
   connected,
   disabled,
-  actionLabel,
   onConnect,
+  onDisconnect,
 }: {
   platform: 'linkedin' | 'hh';
   name: string;
   description: string;
   connected: boolean;
   disabled: boolean;
-  actionLabel?: string;
   onConnect: () => void;
+  onDisconnect: () => void;
 }) {
   return (
     <div className={`career-platform-card ${connected ? 'is-connected' : ''}`}>
@@ -299,11 +335,13 @@ function PlatformCard({
       <p className="career-platform-card-desc">{description}</p>
       <button
         type="button"
-        className="career-primary-button career-platform-card-action"
+        className={`career-platform-card-action ${
+          connected ? 'career-quiet-button' : 'career-primary-button'
+        }`}
         disabled={disabled}
-        onClick={onConnect}
+        onClick={connected ? onDisconnect : onConnect}
       >
-        {actionLabel ?? (connected ? 'Обновить импорт' : 'Подключить')}
+        {connected ? 'Отключить' : 'Подключить'}
       </button>
     </div>
   );

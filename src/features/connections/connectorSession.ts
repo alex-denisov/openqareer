@@ -5,8 +5,14 @@ import {
 } from '../../services/desktop/desktopBridge';
 import type { ConnectionPlatform } from './connectionResult';
 
-/** Where the connector flow currently stands, for both platforms. */
-export type ConnectorSessionStep = 'idle' | 'opening' | 'session_open' | 'checking';
+/**
+ * Where the connector flow currently stands, for both platforms.
+ *
+ * There is no `checking` step any more: the manual «Проверить вход» button it
+ * belonged to duplicated the poll that already runs every 750 ms, and the owner
+ * asked for it to go (2026-08-26).
+ */
+export type ConnectorSessionStep = 'idle' | 'opening' | 'session_open';
 
 const DESKTOP_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';

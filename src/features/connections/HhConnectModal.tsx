@@ -11,7 +11,6 @@ import {
   openConnectorSession,
   platformRouteNotice,
   readSessionPage,
-  resetConnectorSession,
   resizeConnectorSession,
   sessionCheckFailure,
   type ConnectorSessionStep,
@@ -19,6 +18,7 @@ import {
 import {
   nextAnimationFrame,
   shouldOpenSessionAutomatically,
+  shouldPollConnectorSession,
   startConnectorSession,
 } from './connectorSessionStart';
 import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
@@ -71,6 +71,8 @@ export function HhConnectModal({
   const [waiting, setWaiting] = useState<HhWaitingNotice>();
   const webviewHost = useRef<HTMLDivElement>(null);
   const sessionFlow = useRef<HhSessionImportFlow>();
+  /** This opening of the dialog really did put a sign-in window on screen. */
+  const sessionOpened = useRef(false);
   /** The page itself proved the candidate is signed in. */
   const signedIn = useRef(false);
   /** The candidate still has to pick a resume out of this live session. */
@@ -81,14 +83,15 @@ export function HhConnectModal({
   const unreadablePolls = useRef(0);
 
   function closeModal() {
+    sessionOpened.current = false;
     sessionFlow.current = undefined;
-    void closeConnectorSession('hh');
+    void closeConnectorSession('hh').catch(() => undefined);
     onClose();
   }
 
   useEffect(
     () => () => {
-      if (!keepSessionOpen.current) void closeConnectorSession('hh');
+      if (!keepSessionOpen.current) void closeConnectorSession('hh').catch(() => undefined);
     },
     [],
   );
@@ -105,6 +108,8 @@ export function HhConnectModal({
   useEffect(() => {
     if (!isOpen) {
       autoOpenAttempted.current = false;
+      sessionOpened.current = false;
+      setStep('idle');
       return;
     }
     setStep('idle');
@@ -118,6 +123,7 @@ export function HhConnectModal({
     unrecognisedPolls.current = 0;
     unreadablePolls.current = 0;
     sessionFlow.current = undefined;
+    sessionOpened.current = false;
     void probeNetworkStatus()
       .then((status) => setProbe(status ? status.hh : null))
       .catch(() => setProbe(null));
@@ -160,6 +166,7 @@ export function HhConnectModal({
       onStep: setStep,
       openSession: openConnectorSession,
     });
+    sessionOpened.current = started.opened;
     if (!started.opened) setError(started.error);
   }
 
@@ -211,14 +218,6 @@ export function HhConnectModal({
     return hhWaitingNotice(result.stage, unrecognisedPolls.current);
   }
 
-  async function resetSession() {
-    sessionFlow.current = undefined;
-    signedIn.current = false;
-    keepSessionOpen.current = false;
-    await resetConnectorSession('hh').catch(() => false);
-    onClose();
-  }
-
   /**
    * Turns one failed poll into the right outcome.
    *
@@ -265,11 +264,14 @@ export function HhConnectModal({
    */
   useEffect(() => {
     if (
-      !isOpen ||
-      step !== 'session_open' ||
       emptyAccount ||
-      autoPollPaused ||
-      !isTauriEnvironment()
+      !shouldPollConnectorSession({
+        isOpen,
+        isDesktop: isTauriEnvironment(),
+        step,
+        sessionOpened: sessionOpened.current,
+        paused: autoPollPaused,
+      })
     ) return;
     let cancelled = false;
     const run = () => {
@@ -292,35 +294,6 @@ export function HhConnectModal({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, step, emptyAccount, autoPollPaused]);
-
-  async function checkSession() {
-    setAutoPollPaused(false);
-    setStep('checking');
-    setError(undefined);
-    try {
-      if (isTauriEnvironment()) {
-        const result = await getSessionFlow().run();
-        if (result.status !== 'waiting_for_sign_in') {
-          return;
-        }
-        // The manual check knows exactly what the page is doing, so it says
-        // that instead of one sentence that fits every outcome (B157).
-        setWaiting(noticeFor(result));
-        setStep('session_open');
-        return;
-      }
-      setError(
-        'Активную сессию hh.ru найти не удалось. Войдите в аккаунт соискателя в окне hh.ru или загрузите PDF резюме.',
-      );
-      setStep('session_open');
-    } catch {
-      setAutoPollPaused(true);
-      setError(
-        'Данные hh.ru прочитаны, но OpenQareer не подтвердил сохранение. Повторите подключение или загрузите PDF.',
-      );
-      setStep('session_open');
-    }
-  }
 
   const route = platformRouteNotice('hh', probe);
   // The step is never silent: while the window is being built there is nothing
@@ -345,26 +318,13 @@ export function HhConnectModal({
     >
       <div className={`career-modal-body${sessionActive ? ' is-connector-session' : ''}`}>
         {sessionActive ? (
+          /* The toolbar states the route and nothing else. «Проверить вход»
+             duplicated the poll that already runs every 750 ms, and «Выйти из
+             hh.ru» hid the sign-out inside a dialog the candidate opens to sign
+             *in*; it now lives on the platform card, next to the connection it
+             ends (owner report, 2026-08-26). */
           <div className="career-connector-session-toolbar">
             <RouteNoticeLine notice={route} compact />
-            <div className="career-connector-session-actions">
-              <button
-                type="button"
-                className="career-quiet-button career-connector-check"
-                onClick={() => void resetSession()}
-                title="Очистит вход в hh.ru внутри OpenQareer и закроет окно"
-              >
-                Выйти из hh.ru
-              </button>
-              <button
-                type="button"
-                className="career-primary-button career-connector-check"
-                onClick={() => void checkSession()}
-                disabled={step !== 'session_open'}
-              >
-                {step === 'checking' ? 'Проверяем…' : 'Проверить вход'}
-              </button>
-            </div>
           </div>
         ) : (
           <>

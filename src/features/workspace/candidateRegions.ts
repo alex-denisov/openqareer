@@ -2,14 +2,20 @@
  * Where the candidate is actually looking for work.
  *
  * The wizard used to ask this as one binary — «Россия» or «Международный
- * рынок» — and the owner rejected that model: relocation splits by region
- * (`EU`, `MENA`, `US`, …), not by country and not by a single flag (B158).
- * A candidate may look in several regions at once, or in none yet.
+ * рынок» — and the owner rejected that model: relocation splits by region, not
+ * by country and not by a single flag (B158). A candidate may look in several
+ * regions at once, or in none yet.
  *
- * The set is the one the owner named — `EU`, `MENA`, `US` — plus Russia. Their
- * «и тд» invites more, and adding one is a line in the catalogue below, but a
- * region the product cannot yet source vacancies for would be an offer it
- * cannot keep; APAC and Latin America wait on B164.
+ * The set and its wording are the owner's, named in full on 2026-08-26:
+ * Россия, СНГ, US, EU, MENA, APAC, LATAM. An earlier slice shipped four of
+ * them because no vacancy source covered the rest; the owner has since said
+ * the wizard asks where the candidate looks, which is not the same claim as
+ * "we already search there". Sourcing per region stays B164's job.
+ *
+ * A single country is deliberately not a choice here. The owner's second pilot
+ * candidate targets Germany and answers `EU`; pin-pointing countries, states or
+ * cities belongs to Resume Studio's own search selectors, not to the intake
+ * wizard.
  *
  * The catalogue deliberately carries only the region's name. Resume language,
  * photo expectations, work-authorisation rules and the platform that serves
@@ -18,7 +24,15 @@
  * here now would ship a guess as career advice.
  */
 
-export const CANDIDATE_REGIONS = ['ru', 'eu', 'us', 'mena'] as const;
+export const CANDIDATE_REGIONS = [
+  'ru',
+  'cis',
+  'us',
+  'eu',
+  'mena',
+  'apac',
+  'latam',
+] as const;
 
 export type CandidateRegion = (typeof CANDIDATE_REGIONS)[number];
 
@@ -29,9 +43,12 @@ export interface CandidateRegionProfile {
 
 export const CANDIDATE_REGION_CATALOGUE: readonly CandidateRegionProfile[] = [
   { id: 'ru', label: 'Россия' },
-  { id: 'eu', label: 'Европа' },
-  { id: 'us', label: 'США и Канада' },
-  { id: 'mena', label: 'Ближний Восток' },
+  { id: 'cis', label: 'СНГ' },
+  { id: 'us', label: 'US' },
+  { id: 'eu', label: 'EU' },
+  { id: 'mena', label: 'MENA' },
+  { id: 'apac', label: 'APAC' },
+  { id: 'latam', label: 'LATAM' },
 ];
 
 export function isCandidateRegion(value: unknown): value is CandidateRegion {

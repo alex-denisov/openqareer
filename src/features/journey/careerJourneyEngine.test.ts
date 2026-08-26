@@ -543,7 +543,7 @@ describe('market routes follow the regions the candidate chose (B158)', () => {
     expect(journey.markets.map((market) => market.id)).toEqual(['ru', 'mena']);
     expect(journey.markets.map((market) => market.label)).toEqual([
       'Россия',
-      'Ближний Восток',
+      'MENA',
     ]);
   });
 

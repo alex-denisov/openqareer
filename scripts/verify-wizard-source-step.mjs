@@ -1,0 +1,301 @@
+/**
+ * Walks the changed wizard flows in real Chromium against the built bundle.
+ *
+ * Covers, at 1440x900 and 390x844:
+ *  - step 3 with the seven regions the owner named (B158);
+ *  - step 2 on the web, which must offer the desktop CTA and no platform login;
+ *  - step 2 in the desktop shell with hh.ru already connected: the release
+ *    notice under the cards, «Отключить» in place of «Подключить», and the
+ *    DELETE the button must actually issue (B169).
+ */
+import { mkdir } from 'node:fs/promises';
+import { chromium } from 'playwright';
+import { preview } from 'vite';
+
+const VIEWPORTS = [
+  { name: 'desktop-1440', width: 1440, height: 900 },
+  { name: 'mobile-390', width: 390, height: 844 },
+];
+
+const OUT = 'output/playwright';
+
+const CONNECTED_HH = {
+  platform: 'hh',
+  available: true,
+  capabilities: ['resume_read'],
+  importsCareerHistory: true,
+  status: 'connected',
+  accessMode: 'native_session_snapshot',
+  connectedAt: '2026-08-26T00:00:00.000Z',
+  lastImportedAt: '2026-08-26T00:00:00.000Z',
+  factCount: 14,
+};
+
+const DISCONNECTED_LINKEDIN = {
+  platform: 'linkedin',
+  available: true,
+  capabilities: ['profile_read'],
+  importsCareerHistory: true,
+  status: 'disconnected',
+};
+
+const problems = [];
+const deletes = [];
+
+function watch(page, label) {
+  page.on('console', (message) => {
+    if (message.type() === 'error') problems.push(`${label} console: ${message.text()}`);
+  });
+  page.on('pageerror', (error) => problems.push(`${label} pageerror: ${error.message}`));
+  page.on('requestfailed', (request) => {
+    problems.push(`${label} requestfailed: ${request.url()}`);
+  });
+}
+
+const JSON_HEADERS = { status: 200, contentType: 'application/json' };
+
+function json(data) {
+  return { ...JSON_HEADERS, body: JSON.stringify({ data }) };
+}
+
+/** The row the connections endpoint returns once a platform is released. */
+function asDisconnected(connection) {
+  return {
+    platform: connection.platform,
+    available: connection.available,
+    capabilities: connection.capabilities,
+    importsCareerHistory: connection.importsCareerHistory,
+    status: 'disconnected',
+  };
+}
+
+const RELEASED_RECEIPT = {
+  platform: 'hh',
+  status: 'disconnected',
+  accessMode: 'native_session_snapshot',
+  connectionRemoved: true,
+  providerSession: 'not_managed',
+  importedData: 'retained',
+};
+
+function isDisconnectRequest(request, pathname) {
+  return request.method() === 'DELETE' && pathname.includes('/candidate/connections/');
+}
+
+/**
+ * The candidate API, as far as this walk needs it: a session, a connection list
+ * that really changes when a platform is released, and nothing else.
+ */
+async function stubApi(page, { signedIn, connections }) {
+  let live = connections ?? [];
+  const session = signedIn
+    ? { username: 'candidate.test', role: 'candidate', candidateId: 'candidate-wizard-check' }
+    : null;
+  await page.route(
+    (url) => url.pathname.startsWith('/api/'),
+    async (route) => {
+      const request = route.request();
+      const { pathname } = new URL(request.url());
+      if (isDisconnectRequest(request, pathname)) {
+        deletes.push(pathname);
+        live = live.map((item) =>
+          pathname.endsWith(`/${item.platform}`) ? asDisconnected(item) : item,
+        );
+        return route.fulfill(json(RELEASED_RECEIPT));
+      }
+      if (pathname.startsWith('/api/v1/auth')) return route.fulfill(json(session));
+      if (pathname.endsWith('/candidate/connections')) return route.fulfill(json(live));
+      return route.fulfill(json(null));
+    },
+  );
+}
+
+async function overflow(page) {
+  return page.evaluate(() => {
+    const doc = document.documentElement;
+    return { horizontal: doc.scrollWidth - doc.clientWidth };
+  });
+}
+
+async function assertVisible(page, locator, what) {
+  if (!(await locator.first().isVisible().catch(() => false))) {
+    problems.push(`missing: ${what}`);
+  }
+}
+
+/** Opens the wizard and stops on its second step. */
+async function reachSourceStep(page, baseUrl) {
+  await page.goto(`${baseUrl}app`, { waitUntil: 'load' });
+  await page.getByRole('heading', { name: 'С чем разобраться?' }).waitFor({ timeout: 20000 });
+  await page.getByRole('button', { name: /Хочу найти работу/u }).click();
+  await page.getByRole('button', { name: /Продолжить/u }).click();
+  await page.getByRole('heading', { name: 'Что уже есть?' }).waitFor({ timeout: 10000 });
+}
+
+async function isBelow(page, selector, anchorSelector) {
+  const box = await page.locator(selector).boundingBox();
+  const anchor = await page.locator(anchorSelector).boundingBox();
+  if (!box || !anchor) return false;
+  return box.y > anchor.y + anchor.height - 1;
+}
+
+/** 5) Automation runs from the candidate's own machine, so the web offers no login. */
+async function checkWebOffersNoPlatformLogin(page, viewport) {
+  await page.getByRole('button', { name: 'Импорт профиля' }).click();
+  await assertVisible(
+    page,
+    page.getByText('Импорт LinkedIn и hh.ru доступен только в установленном'),
+    `web ${viewport.name}: desktop CTA on the profile-import source`,
+  );
+  for (const name of ['Подключить', 'Отключить', 'Обновить импорт']) {
+    if ((await page.getByRole('button', { name, exact: true }).count()) > 0) {
+      problems.push(`web ${viewport.name}: platform action «${name}» offered on the web`);
+    }
+  }
+  await page.screenshot({ path: `${OUT}/web-${viewport.name}-step2.png` });
+}
+
+/** The release notice renders under the source it describes, not against the buttons. */
+async function checkSourceLockSitsUnderItsSource(page, viewport) {
+  await page.getByRole('button', { name: 'Текстом' }).click();
+  await page
+    .getByRole('textbox')
+    .fill(
+      'Руководил продуктовой командой из восьми человек, отвечал за выручку направления и запустил три новых продукта за два года подряд.',
+    );
+  await assertVisible(
+    page,
+    page.getByRole('button', { name: 'Сменить источник' }),
+    `web ${viewport.name}: release control under the locked source`,
+  );
+  if (!(await isBelow(page, '.career-source-lock', '.career-source-choice'))) {
+    problems.push(`web ${viewport.name}: release notice still sits against the source buttons`);
+  }
+  await page.screenshot({ path: `${OUT}/web-${viewport.name}-step2-lock.png` });
+}
+
+const EXPECTED_REGIONS = ['Россия', 'СНГ', 'US', 'EU', 'MENA', 'APAC', 'LATAM'];
+
+/** 2) Step three offers exactly the seven regions the owner named. */
+async function checkRegionsOnStepThree(page, viewport) {
+  await page.getByRole('button', { name: 'Сменить источник' }).click();
+  await page.getByRole('button', { name: 'Без документов' }).click();
+  await page.getByRole('button', { name: /Продолжить/u }).click();
+  await page.getByRole('heading', { name: 'Что должно измениться?' }).waitFor({ timeout: 10000 });
+  const regions = await page
+    .locator('fieldset', { has: page.getByText('Где рассматриваете работу?') })
+    .getByRole('button')
+    .allInnerTexts();
+  if (JSON.stringify(regions.map((item) => item.trim())) !== JSON.stringify(EXPECTED_REGIONS)) {
+    problems.push(`${viewport.name}: regions are ${JSON.stringify(regions)}`);
+  }
+  const eu = page.getByRole('button', { name: 'EU', exact: true });
+  await eu.click();
+  if ((await eu.getAttribute('aria-pressed')) !== 'true') {
+    problems.push(`${viewport.name}: EU does not select`);
+  }
+  const wide = await overflow(page);
+  if (wide.horizontal > 1) {
+    problems.push(`${viewport.name}: step 3 overflows by ${wide.horizontal}px`);
+  }
+  await page.screenshot({ path: `${OUT}/web-${viewport.name}-step3.png` });
+}
+
+/** 3) A connected platform shows its sign-out where «Подключить» used to be. */
+async function checkConnectedCardState(page, viewport) {
+  await page.getByRole('button', { name: 'Отключить', exact: true }).waitFor({ timeout: 10000 });
+  if ((await page.getByText('Обновить импорт').count()) > 0) {
+    problems.push(`desktop ${viewport.name}: «Обновить импорт» survived`);
+  }
+  if ((await page.getByText('Резюме разобрано').count()) > 0) {
+    problems.push(`desktop ${viewport.name}: parsed-resume banner survived`);
+  }
+  await assertVisible(
+    page,
+    page.getByRole('button', { name: 'Сменить источник' }),
+    `desktop ${viewport.name}: release control shown as soon as hh.ru is connected`,
+  );
+  if (!(await isBelow(page, '.career-source-lock', '.career-platform-cards'))) {
+    problems.push(`desktop ${viewport.name}: release notice is not below the platform cards`);
+  }
+  const wide = await overflow(page);
+  if (wide.horizontal > 1) {
+    problems.push(`desktop ${viewport.name}: step 2 overflows by ${wide.horizontal}px`);
+  }
+  await page.screenshot({ path: `${OUT}/desktop-${viewport.name}-step2.png` });
+}
+
+/** «Отключить» releases the connection the account really holds — one DELETE. */
+async function checkSignOutReleasesTheConnection(page, viewport) {
+  const before = deletes.length;
+  await page.getByRole('button', { name: 'Отключить', exact: true }).click();
+  await page
+    .locator('.career-platform-card', { hasText: 'hh.ru' })
+    .getByRole('button', { name: 'Подключить', exact: true })
+    .waitFor({ timeout: 10000 });
+  await page.waitForTimeout(1500);
+  const fired = deletes.length - before;
+  if (fired !== 1) {
+    problems.push(`desktop ${viewport.name}: «Отключить» issued ${fired} DELETE(s), expected 1`);
+  }
+  await page.screenshot({ path: `${OUT}/desktop-${viewport.name}-step2-released.png` });
+}
+
+async function webWalk(browser, baseUrl, viewport) {
+  const context = await browser.newContext({
+    viewport: { width: viewport.width, height: viewport.height },
+  });
+  const page = await context.newPage();
+  watch(page, `web/${viewport.name}`);
+  await stubApi(page, { signedIn: false });
+  await reachSourceStep(page, baseUrl);
+  await checkWebOffersNoPlatformLogin(page, viewport);
+  await checkSourceLockSitsUnderItsSource(page, viewport);
+  await checkRegionsOnStepThree(page, viewport);
+  await context.close();
+}
+
+async function desktopWalk(browser, baseUrl, viewport) {
+  const context = await browser.newContext({
+    viewport: { width: viewport.width, height: viewport.height },
+  });
+  const page = await context.newPage();
+  watch(page, `desktop/${viewport.name}`);
+  await page.addInitScript(() => {
+    // What `isTauriEnvironment()` reads to decide it is inside the app.
+    window.__TAURI_INTERNALS__ = { invoke: async () => null };
+  });
+  await stubApi(page, {
+    signedIn: true,
+    connections: [DISCONNECTED_LINKEDIN, CONNECTED_HH],
+  });
+  await reachSourceStep(page, baseUrl);
+  await checkConnectedCardState(page, viewport);
+  await checkSignOutReleasesTheConnection(page, viewport);
+  await context.close();
+}
+
+await mkdir(OUT, { recursive: true });
+
+const server = await preview({
+  logLevel: 'silent',
+  preview: { host: '127.0.0.1', port: 0 },
+});
+const address = server.httpServer.address();
+const baseUrl = `http://127.0.0.1:${address.port}/`;
+const browser = await chromium.launch();
+try {
+  for (const viewport of VIEWPORTS) {
+    await webWalk(browser, baseUrl, viewport);
+    await desktopWalk(browser, baseUrl, viewport);
+  }
+} finally {
+  await browser.close();
+  await server.close();
+}
+
+process.stdout.write(`${JSON.stringify({ deletes, problems }, null, 2)}\n`);
+process.stdout.write(
+  problems.length === 0 ? 'wizard-source-step: pass\n' : 'wizard-source-step: FAIL\n',
+);
+process.exit(problems.length === 0 ? 0 : 1);

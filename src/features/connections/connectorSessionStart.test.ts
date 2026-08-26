@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { nextAnimationFrame, startConnectorSession } from './connectorSessionStart';
+import {
+  nextAnimationFrame,
+  shouldPollConnectorSession,
+  startConnectorSession,
+} from './connectorSessionStart';
 import type { SessionLayout, SessionOpenResult } from './connectorSession';
 
 const LAYOUT: SessionLayout = { x: 33, y: 114, width: 1156, height: 640 };
@@ -157,5 +161,35 @@ describe('nextAnimationFrame', () => {
         value: original,
       });
     }
+  });
+});
+
+describe('shouldPollConnectorSession', () => {
+  const open = {
+    isOpen: true,
+    isDesktop: true,
+    step: 'session_open' as const,
+    sessionOpened: true,
+    paused: false,
+  };
+
+  it('polls the live session the dialog itself opened', () => {
+    expect(shouldPollConnectorSession(open)).toBe(true);
+  });
+
+  it('refuses to poll a step left over from the previous opening', () => {
+    // Reopening the dialog re-renders with the step the last flow ended on
+    // before the reset lands. That first poll asked the shell to inspect a
+    // window nobody had opened yet, and the candidate was told «Окно входа
+    // закрыто» over a session that was opening right then
+    // (owner report, 2026-08-26).
+    expect(shouldPollConnectorSession({ ...open, sessionOpened: false })).toBe(false);
+  });
+
+  it('stays quiet while closed, off-desktop, paused or between steps', () => {
+    expect(shouldPollConnectorSession({ ...open, isOpen: false })).toBe(false);
+    expect(shouldPollConnectorSession({ ...open, isDesktop: false })).toBe(false);
+    expect(shouldPollConnectorSession({ ...open, paused: true })).toBe(false);
+    expect(shouldPollConnectorSession({ ...open, step: 'opening' })).toBe(false);
   });
 });

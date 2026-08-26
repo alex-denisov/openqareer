@@ -31,7 +31,7 @@ describe('automatic connector session open', () => {
   });
 
   it('never reopens a window that is already on its way or on screen', () => {
-    for (const step of ['opening', 'session_open', 'checking'] as const) {
+    for (const step of ['opening', 'session_open'] as const) {
       expect(shouldOpenSessionAutomatically({ ...desktopDialogJustOpened, step })).toBe(
         false,
       );

@@ -9,16 +9,23 @@ import {
 
 describe('candidate regions replace the binary market', () => {
   it('offers the regions the owner named and nothing pretending to be one', () => {
-    expect([...CANDIDATE_REGIONS]).toEqual(['ru', 'eu', 'us', 'mena']);
+    expect([...CANDIDATE_REGIONS]).toEqual([
+      'ru',
+      'cis',
+      'us',
+      'eu',
+      'mena',
+      'apac',
+      'latam',
+    ]);
     expect(isCandidateRegion('international')).toBe(false);
     expect(isCandidateRegion('eu')).toBe(true);
   });
 
   it('keeps a stored list in catalogue order without duplicates or invented members', () => {
-    expect(normalizeCandidateRegions(['us', 'ru', 'us', 'atlantis'])).toEqual([
-      'ru',
-      'us',
-    ]);
+    expect(
+      normalizeCandidateRegions(['latam', 'us', 'ru', 'us', 'atlantis']),
+    ).toEqual(['ru', 'us', 'latam']);
   });
 
   it('migrates the legacy answer without inventing a region the candidate never named', () => {
@@ -30,7 +37,12 @@ describe('candidate regions replace the binary market', () => {
   });
 
   it('says the regions in the candidate’s own language', () => {
-    expect(candidateRegionLabels(['ru', 'eu'])).toEqual(['Россия', 'Европа']);
+    expect(candidateRegionLabels(['ru', 'eu', 'cis', 'apac'])).toEqual([
+      'Россия',
+      'СНГ',
+      'EU',
+      'APAC',
+    ]);
     expect(candidateRegionLabels([])).toEqual([]);
   });
 });

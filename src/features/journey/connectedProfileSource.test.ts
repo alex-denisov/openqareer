@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { CandidateConnection } from '../coach/coachApi';
 import {
   connectedProfileSource,
-  connectedProfileSourceNotice,
 } from './connectedProfileSource';
 
 const disconnected: CandidateConnection = {
@@ -77,40 +76,5 @@ describe('connectedProfileSource', () => {
     };
 
     expect(connectedProfileSource([official])).toBeUndefined();
-  });
-});
-
-describe('connectedProfileSourceNotice', () => {
-  it('counts the facts in Russian and does not ask for a second import', () => {
-    expect(
-      connectedProfileSourceNotice({
-        platform: 'hh',
-        factCount: 1,
-        lastImportedAt: '2026-08-24T10:00:05.000Z',
-      }),
-    ).toBe(
-      'hh.ru уже подключён: в профиле 1 факт из этого источника. Можно продолжить — повторный импорт не нужен.',
-    );
-    expect(
-      connectedProfileSourceNotice({
-        platform: 'linkedin',
-        factCount: 3,
-        lastImportedAt: '2026-08-24T10:00:05.000Z',
-      }),
-    ).toContain('3 факта');
-    expect(
-      connectedProfileSourceNotice({
-        platform: 'hh',
-        factCount: 11,
-        lastImportedAt: '2026-08-24T10:00:05.000Z',
-      }),
-    ).toContain('11 фактов');
-    expect(
-      connectedProfileSourceNotice({
-        platform: 'hh',
-        factCount: 24,
-        lastImportedAt: '2026-08-24T10:00:05.000Z',
-      }),
-    ).toContain('24 факта');
   });
 });

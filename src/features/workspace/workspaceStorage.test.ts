@@ -856,6 +856,6 @@ describe('candidate regions replace the stored binary market (B158)', () => {
 
     expect(result.status).toBe('ready');
     if (result.status !== 'ready') return;
-    expect(result.workspace.regions).toEqual(['eu', 'us']);
+    expect(result.workspace.regions).toEqual(['us', 'eu']);
   });
 });

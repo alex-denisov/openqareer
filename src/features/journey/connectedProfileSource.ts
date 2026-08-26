@@ -38,18 +38,3 @@ export function connectedProfileSource(
   }
   return undefined;
 }
-
-/** The candidate-facing sentence for a source the account already carries. */
-export function connectedProfileSourceNotice(source: ConnectedProfileSource): string {
-  const name = source.platform === 'hh' ? 'hh.ru' : 'LinkedIn';
-  return `${name} уже подключён: в профиле ${source.factCount} ${factNoun(source.factCount)} из этого источника. Можно продолжить — повторный импорт не нужен.`;
-}
-
-function factNoun(count: number): string {
-  const lastTwo = count % 100;
-  const last = count % 10;
-  if (lastTwo >= 11 && lastTwo <= 14) return 'фактов';
-  if (last === 1) return 'факт';
-  if (last >= 2 && last <= 4) return 'факта';
-  return 'фактов';
-}

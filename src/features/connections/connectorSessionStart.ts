@@ -101,3 +101,32 @@ export function shouldOpenSessionAutomatically(
   if (input.attempted) return false;
   return input.step === 'idle';
 }
+
+export interface SessionPollInput {
+  /** The dialog is on screen. */
+  readonly isOpen: boolean;
+  /** Only the desktop app can inspect a platform session at all. */
+  readonly isDesktop: boolean;
+  /** Where the session currently stands. */
+  readonly step: ConnectorSessionStep;
+  /** This opening of the dialog really did put a window on screen. */
+  readonly sessionOpened: boolean;
+  /** The flow stopped polling on purpose after a failure it already reported. */
+  readonly paused: boolean;
+}
+
+/**
+ * Whether the dialog may inspect the platform's session window right now.
+ *
+ * `step` alone was not enough. A dialog that closed on `session_open` reopens
+ * still holding that step for one render, and the poll effect fires before the
+ * reset does — asking the shell to inspect a window that no longer exists. The
+ * candidate saw «Окно входа закрыто. Откройте его снова» printed over a session
+ * that was opening at that very moment (owner report, 2026-08-26). Only the
+ * window this opening actually opened may be polled.
+ */
+export function shouldPollConnectorSession(input: SessionPollInput): boolean {
+  if (!input.isOpen || !input.isDesktop) return false;
+  if (!input.sessionOpened || input.paused) return false;
+  return input.step === 'session_open';
+}

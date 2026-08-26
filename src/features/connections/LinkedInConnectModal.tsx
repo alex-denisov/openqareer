@@ -12,7 +12,6 @@ import {
   openConnectorSession,
   platformRouteNotice,
   readSessionPage,
-  resetConnectorSession,
   resizeConnectorSession,
   sessionCheckFailure,
   type ConnectorSessionStep,
@@ -21,6 +20,7 @@ import {
 import {
   nextAnimationFrame,
   shouldOpenSessionAutomatically,
+  shouldPollConnectorSession,
   startConnectorSession,
 } from './connectorSessionStart';
 import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
@@ -71,6 +71,8 @@ export function LinkedInConnectModal({
   const [waiting, setWaiting] = useState<LinkedInWaitingNotice>();
   const webviewHost = useRef<HTMLDivElement>(null);
   const sessionFlow = useRef<LinkedInSessionImportFlow>();
+  /** This opening of the dialog really did put a sign-in window on screen. */
+  const sessionOpened = useRef(false);
   /** The page itself proved the candidate is signed in. */
   const signedIn = useRef(false);
   /** Consecutive polls on a loaded, unchallenged page with no signed-in marker. */
@@ -79,14 +81,15 @@ export function LinkedInConnectModal({
   const unreadablePolls = useRef(0);
 
   function closeModal() {
+    sessionOpened.current = false;
     sessionFlow.current = undefined;
-    void closeConnectorSession('linkedin');
+    void closeConnectorSession('linkedin').catch(() => undefined);
     onClose();
   }
 
   useEffect(
     () => () => {
-      void closeConnectorSession('linkedin');
+      void closeConnectorSession('linkedin').catch(() => undefined);
     },
     [],
   );
@@ -103,6 +106,8 @@ export function LinkedInConnectModal({
   useEffect(() => {
     if (!isOpen) {
       autoOpenAttempted.current = false;
+      sessionOpened.current = false;
+      setStep('idle');
       return;
     }
     setStep('idle');
@@ -187,6 +192,7 @@ export function LinkedInConnectModal({
       onStep: setStep,
       openSession: openConnectorSession,
     });
+    sessionOpened.current = started.opened;
     if (!started.opened) setError(started.error);
   }
 
@@ -229,13 +235,6 @@ export function LinkedInConnectModal({
     return linkedinWaitingNotice(result.stage, unrecognisedPolls.current);
   }
 
-  async function resetSession() {
-    sessionFlow.current = undefined;
-    signedIn.current = false;
-    await resetConnectorSession('linkedin').catch(() => false);
-    onClose();
-  }
-
   /**
    * Turns one failed poll into the right outcome.
    *
@@ -276,10 +275,13 @@ export function LinkedInConnectModal({
 
   useEffect(() => {
     if (
-      !isOpen ||
-      step !== 'session_open' ||
-      autoPollPaused ||
-      !isTauriEnvironment()
+      !shouldPollConnectorSession({
+        isOpen,
+        isDesktop: isTauriEnvironment(),
+        step,
+        sessionOpened: sessionOpened.current,
+        paused: autoPollPaused,
+      })
     ) return;
     let cancelled = false;
     const run = () => {
@@ -302,27 +304,6 @@ export function LinkedInConnectModal({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, step, autoPollPaused]);
-
-  async function checkSession() {
-    setAutoPollPaused(false);
-    setStep('checking');
-    setError(undefined);
-    try {
-      const result = await getSessionFlow().run();
-      if (result.status === 'ready') return;
-      // The manual check knows exactly what the page is doing, so it says that
-      // instead of one sentence that fits every outcome (B157).
-      setWaiting(noticeFor(result));
-      setStep('session_open');
-      return;
-    } catch {
-      setAutoPollPaused(true);
-      setError(
-        'Профиль LinkedIn прочитан, но OpenQareer не подтвердил сохранение. Повторите подключение или загрузите PDF-экспорт.',
-      );
-      setStep('session_open');
-    }
-  }
 
   const route: RouteNotice = routeStarting
     ? { tone: 'pending', text: 'Поднимаем защищённый EU-маршрут LinkedIn…' }
@@ -356,26 +337,13 @@ export function LinkedInConnectModal({
     >
       <div className={`career-modal-body${sessionActive ? ' is-connector-session' : ''}`}>
         {sessionActive ? (
+          /* The toolbar states the route and nothing else. «Проверить вход»
+             duplicated the poll that already runs every 750 ms, and «Выйти из
+             LinkedIn» hid the sign-out inside a dialog the candidate opens to
+             sign *in*; it now lives on the platform card, next to the connection
+             it ends (owner report, 2026-08-26). */
           <div className="career-connector-session-toolbar">
             <RouteNoticeLine notice={route} compact />
-            <div className="career-connector-session-actions">
-              <button
-                type="button"
-                className="career-quiet-button career-connector-check"
-                onClick={() => void resetSession()}
-                title="Очистит вход в LinkedIn внутри OpenQareer и закроет окно"
-              >
-                Выйти из LinkedIn
-              </button>
-              <button
-                type="button"
-                className="career-primary-button career-connector-check"
-                onClick={() => void checkSession()}
-                disabled={step !== 'session_open'}
-              >
-                {step === 'checking' ? 'Проверяем…' : 'Проверить вход'}
-              </button>
-            </div>
           </div>
         ) : (
           <>

@@ -272,6 +272,35 @@ pub fn is_session_window_open(app: &AppHandle, platform: &str) -> bool {
         .is_some()
 }
 
+/// The application's own webview. Everything else with a label is a session
+/// window this module opened.
+pub const MAIN_WINDOW_LABEL: &str = "main";
+
+/// Which sign-in windows a page load in `webview_label` has just orphaned.
+///
+/// Reloading the application's own page — the WebKit context menu offers
+/// «Reload» on any blank area — destroys the React tree that owned the sign-in
+/// window. The window itself is a native child window and survives, now with
+/// nothing left that can close it: the owner had to quit the whole application
+/// to get rid of it (owner report, 2026-08-26).
+///
+/// A page load **inside** a session window is the candidate signing in, which
+/// is the entire point of that window; it orphans nothing.
+pub fn sessions_orphaned_by_page_load(webview_label: &str) -> &'static [&'static str] {
+    if webview_label == MAIN_WINDOW_LABEL {
+        &["linkedin", "hh"]
+    } else {
+        &[]
+    }
+}
+
+/// Closes every sign-in window a page load in `webview_label` has orphaned.
+pub fn close_orphaned_session_windows(app: &AppHandle, webview_label: &str) {
+    for platform in sessions_orphaned_by_page_load(webview_label) {
+        close_session_window(app, platform);
+    }
+}
+
 pub fn close_session_window(app: &AppHandle, platform: &str) -> bool {
     session_window_label(platform).is_some_and(|label| {
         app.get_webview_window(label)
@@ -479,6 +508,20 @@ return body.length>2000000?'__OPENQAREER_PAGE_TOO_LARGE__':body;\
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_reload_of_the_application_page_orphans_both_sign_in_windows() {
+        assert_eq!(
+            sessions_orphaned_by_page_load(MAIN_WINDOW_LABEL),
+            &["linkedin", "hh"]
+        );
+    }
+
+    #[test]
+    fn signing_in_inside_a_session_window_orphans_nothing() {
+        assert!(sessions_orphaned_by_page_load("connector-hh").is_empty());
+        assert!(sessions_orphaned_by_page_load("connector-linkedin").is_empty());
+    }
 
     #[test]
     fn maps_only_the_two_supported_platforms_to_a_window() {
