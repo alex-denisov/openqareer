@@ -21,7 +21,7 @@ const HTML_ENTITIES: Readonly<Record<string, string>> = {
   '&gt;': '>',
 };
 
-export function decodeHtmlText(value: string): string {
+function decodeHtmlText(value: string): string {
   return value
     .replace(/&(?:nbsp|amp|quot|#39|apos|lt|gt);/gu, (entity) => HTML_ENTITIES[entity] ?? entity)
     .replace(/&#(\d+);/gu, (_match, code: string) => String.fromCodePoint(Number(code)));
