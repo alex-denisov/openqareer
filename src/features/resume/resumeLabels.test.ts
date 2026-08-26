@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { unknownGroupLabel } from './resumeLabels';
+import { evidenceStatementLabel, unknownGroupLabel } from './resumeLabels';
 import type { ResumeUnknownCode } from './resumeTypes';
 
 const EVERY_CODE: ResumeUnknownCode[] = [
@@ -38,3 +38,35 @@ describe('what the candidate is told instead of the internal code', () => {
     expect(unknownGroupLabel('ineligible-evidence')).not.toContain('evidence');
   });
 });
+
+describe('what the candidate reads instead of an internal record number', () => {
+  const memory = [
+    { id: 'memory-42', statement: 'Сократила цикл поставки на 30%.' },
+    { id: 'memory-77', statement: 'А'.repeat(120) },
+  ];
+
+  it('says the fact itself', () => {
+    expect(evidenceStatementLabel(memory, 'memory-42', 'stale')).toBe(
+      'Сократила цикл поставки на 30%.',
+    );
+  });
+
+  it('shortens a long fact to 80 characters and marks the cut', () => {
+    const label = evidenceStatementLabel(memory, 'memory-77', 'stale');
+    expect(label).toHaveLength(81);
+    expect(label.endsWith('…')).toBe(true);
+  });
+
+  it('never falls back to the internal number', () => {
+    expect(evidenceStatementLabel(memory, 'memory-404', 'stale')).toBe(
+      'Факт удалён из досье',
+    );
+    expect(evidenceStatementLabel(memory, 'memory-404', 'excluded')).toBe(
+      'Запись без текста',
+    );
+    expect(evidenceStatementLabel(memory, 'memory-404', 'stale')).not.toContain(
+      'memory',
+    );
+  });
+});
+

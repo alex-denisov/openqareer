@@ -5628,6 +5628,12 @@
   color: var(--career-text-soft);
 }
 
+.career-resume-evidence-line {
+  font-size: 0.82rem;
+  color: var(--career-text-soft);
+  overflow-wrap: anywhere;
+}
+
 .career-resume-conventions > li {
   color: var(--career-text-soft);
   font-size: 0.83rem;
