@@ -97,4 +97,24 @@ describe('hh.ru in the intake wizard', () => {
   it('never claims the profile import produced a parsed document banner', () => {
     expect(renderImportedHhProfile()).not.toContain('Резюме разобрано');
   });
+
+  /**
+   * «В профиле hh.ru не нашлось резюме» is a statement only hh.ru can make. It
+   * used to appear whenever a connection had not completed — including under a
+   * resume the candidate had just chosen and the server had just refused
+   * (owner report, 2026-08-26).
+   */
+  it('says the account is empty only when hh.ru said so', () => {
+    expect(renderSignedInWithoutImportedResume()).not.toContain('не нашлось резюме');
+
+    const html = renderToStaticMarkup(
+      <IntakeSourceStep
+        {...baseProps()}
+        lock={intakeSourceLock({ connectedPlatform: 'hh', typedLength: 0 })}
+        hhConnected
+        hhEmptyAccount
+      />,
+    );
+    expect(html).toContain('не нашлось резюме');
+  });
 });

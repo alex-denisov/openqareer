@@ -1,4 +1,7 @@
-import { parseHhResumeHtml, parseHhResumesList } from '../../services/connectors/hhResumeParser';
+import {
+  parseHhResumeHtml,
+  parseHhResumesList,
+} from '../../services/connectors/hhResumeParser';
 import type { ParsedResume } from '../workspace/resumeParser';
 import type {
   SessionInspectionResult,
@@ -164,7 +167,14 @@ export function hhResumeImportFailure(reason: unknown): string {
     case 'native_connection_receipt_missing':
       return 'Резюме прочитано, но сервер не подтвердил сохранение в профиль. Повторите импорт или загрузите PDF-резюме.';
     default:
-      return 'Импортировать выбранное резюме не удалось. Повторите попытку или загрузите PDF-резюме.';
+      // Anything else is the server's own sentence about its own refusal —
+      // «в документе не нашлось ни одного факта», a rate limit, an expired
+      // session. It is always more useful than a house-brand apology, and
+      // hiding it is what left the owner with an unexplained dead end
+      // (owner report, 2026-08-26).
+      return raw.trim().length > 24
+        ? `Резюме прочитано, но импорт отклонён: ${raw.trim()}`
+        : 'Импортировать выбранное резюме не удалось. Повторите попытку или загрузите PDF-резюме.';
   }
 }
 
@@ -228,20 +238,26 @@ async function pollOnce(
   }
   await dependencies.onAuthenticated?.();
 
-  const listBody = await captureSignedInPage({
+  /**
+   * The list is only "read" once it says something: a page that parsed to zero
+   * resumes and does not declare itself empty is a page that has not finished
+   * rendering. Deciding that outside the retry turned one early read into
+   * «вход выполнен, но список резюме прочитать не удалось», and the very next
+   * attempt succeeded (owner report, 2026-08-26).
+   */
+  const resumes = await captureSignedInPage({
     read: () => dependencies.readSessionPage(HH_RESUME_LIST_URL),
-    interpret: (page) => (isResumeListUrl(page.url) ? page.body : undefined),
+    interpret: (page) => {
+      if (!isResumeListUrl(page.url)) return undefined;
+      const listed = parseHhResumesList(page.body);
+      if (listed.length > 0) return listed;
+      return looksLikeEmptyResumeList(page.body) ? [] : undefined;
+    },
     isChallenge: looksLikeAuthenticationChallenge,
     failureCode: 'hh_authenticated_capture_failed',
     waitBeforeRetry: dependencies.waitBeforeRetry,
   });
-  const resumes = parseHhResumesList(listBody);
-  if (resumes.length === 0) {
-    if (looksLikeEmptyResumeList(listBody)) {
-      return { status: 'authenticated_empty' };
-    }
-    throw new Error('hh_authenticated_capture_unclassified');
-  }
+  if (resumes.length === 0) return { status: 'authenticated_empty' };
 
   if (resumes.length > 1) {
     return {

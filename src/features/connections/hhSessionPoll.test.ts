@@ -730,3 +730,80 @@ describe('failures the chosen-resume read must not disguise', () => {
     expect(reopenSession).toHaveBeenCalledOnce();
   });
 });
+
+describe('a resume list that has not finished rendering', () => {
+  const signedIn = {
+    ready: true,
+    url: 'https://hh.ru/applicant/profile/me',
+    signedInApplicant: true,
+    login: false,
+    otp: false,
+    captcha: false,
+  };
+
+  /**
+   * The owner's very first attempt reported «вход выполнен, но список резюме
+   * прочитать не удалось» and the next one worked: the empty parse was decided
+   * outside the retry, so one early read ended the whole attempt (2026-08-26).
+   */
+  it('reads again instead of calling a still-empty page a failure', async () => {
+    let reads = 0;
+    const flow = createHhSessionImportFlow({
+      inspectCurrentPage: async () => signedIn,
+      readSessionPage: async (url: string) => {
+        if (!url.includes('/applicant/resumes')) {
+          return { ok: true, url, body: '<main>nothing</main>' };
+        }
+        reads += 1;
+        return {
+          ok: true,
+          url: 'https://hh.ru/applicant/profile/me',
+          body:
+            reads === 1
+              ? '<main></main>'
+              : '<main><a data-qa="resume-card-link-1" href="/resume/live-one">Аналитик</a></main>',
+        };
+      },
+      onAuthenticated: vi.fn(),
+      onChoiceRequired: vi.fn(),
+      onReady: vi.fn(),
+      onAuthenticatedEmpty: vi.fn(),
+      waitBeforeRetry: async () => undefined,
+    });
+
+    const result = await flow.run();
+
+    expect(reads).toBe(2);
+    expect(result.status).toBe('ready');
+  });
+
+  it('still reports an account that says it has no resumes', async () => {
+    const onAuthenticatedEmpty = vi.fn();
+    const flow = createHhSessionImportFlow({
+      inspectCurrentPage: async () => signedIn,
+      readSessionPage: async () => ({
+        ok: true,
+        url: 'https://hh.ru/applicant/profile/me',
+        body: '<main data-qa="applicant-resumes-empty">Резюме пока нет</main>',
+      }),
+      onAuthenticated: vi.fn(),
+      onChoiceRequired: vi.fn(),
+      onReady: vi.fn(),
+      onAuthenticatedEmpty,
+      waitBeforeRetry: async () => undefined,
+    });
+
+    await expect(flow.run()).resolves.toEqual({ status: 'authenticated_empty' });
+    expect(onAuthenticatedEmpty).toHaveBeenCalledOnce();
+  });
+});
+
+describe('a refusal that came from the server', () => {
+  it('repeats what the server said instead of an apology of its own', () => {
+    expect(
+      hhResumeImportFailure(
+        new Error('В документе не нашлось ни одного факта для профиля.'),
+      ),
+    ).toContain('В документе не нашлось ни одного факта');
+  });
+});

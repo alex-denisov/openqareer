@@ -117,6 +117,8 @@ export function CareerIntake({
   const [isLinkedinModalOpen, setLinkedinModalOpen] = useState(false);
   const [isHhModalOpen, setHhModalOpen] = useState(false);
   const [isHhConnected, setHhConnected] = useState(false);
+  /** hh.ru itself said this account holds no resume. Only hh.ru can say that. */
+  const [isHhEmptyAccount, setHhEmptyAccount] = useState(false);
   const [isLinkedinConnected, setLinkedinConnected] = useState(false);
   const [connectedSource, setConnectedSource] = useState<ConnectedProfileSource>();
   const [context, setContext] = useState<IntakeContextValues>(emptyContext);
@@ -252,6 +254,7 @@ export function CareerIntake({
     setLinkedinUrl('');
     setHhUrl('');
     setHhConnected(false);
+    setHhEmptyAccount(false);
     setLinkedinConnected(false);
     setConnectedSource(undefined);
     setLinkedinModalOpen(false);
@@ -295,23 +298,32 @@ export function CareerIntake({
    * is the sign-out the owner asked to live on the platform card rather than
    * inside the session dialog's toolbar.
    */
-  async function forgetPlatform(platform: 'hh' | 'linkedin') {
+  /**
+   * The release is local first: what the wizard is holding is always let go.
+   * The server is told too, but a failed `DELETE` is only worth a sentence when
+   * the server was the one holding the connection — «Сменить источник» on a
+   * source the server never stored used to end in «Отключить hh.ru не удалось»
+   * over a release that had in fact happened (owner report, 2026-08-26).
+   */
+  async function forgetPlatform(platform: 'hh' | 'linkedin', serverHeld: boolean) {
     try {
       await disconnectConnection(platform);
     } catch {
-      setError(
-        `Отключить ${platform === 'hh' ? 'hh.ru' : 'LinkedIn'} не удалось. Проверьте соединение и повторите попытку.`,
-      );
-      return;
+      if (serverHeld) {
+        setError(
+          `Отключить ${platform === 'hh' ? 'hh.ru' : 'LinkedIn'} не удалось. Проверьте соединение и повторите попытку.`,
+        );
+      }
     }
     await resetConnectorSession(platform).catch(() => false);
   }
 
   async function disconnectPlatform(platform: 'hh' | 'linkedin') {
+    const serverHeld = connectedSource?.platform === platform;
     setReleasing(true);
     clearLocalSource();
     try {
-      await forgetPlatform(platform);
+      await forgetPlatform(platform, serverHeld);
     } finally {
       setReleasing(false);
     }
@@ -436,8 +448,7 @@ export function CareerIntake({
           }}
           onProviderConnectionFailure={setError}
           onHhConnected={async (_resumes, parsed, url) => {
-            setHhConnected(true);
-            setHhUrl(url);
+            setHhEmptyAccount(false);
             const stored = await ingestion.acceptParsed(parsed, 'hh-pdf', {
               platform: 'hh',
               accessMode: 'native_session_snapshot',
@@ -445,14 +456,25 @@ export function CareerIntake({
               capturedAt: new Date().toISOString(),
             });
             if (!stored.imported || !stored.connection) {
-              throw new Error('hh_native_connection_not_persisted');
+              // The server's own sentence, so the dialog can say what really
+              // happened rather than «не подтвердил сохранение» over anything.
+              throw new Error(
+                stored.storeFailure ?? 'hh_native_connection_not_persisted',
+              );
             }
+            // Only a stored import is a connection. Claiming one before the
+            // server agreed is what put «Не подключено» next to «в профиле
+            // hh.ru не нашлось резюме» (owner report, 2026-08-26).
+            setHhConnected(true);
+            setHhUrl(url);
           }}
           onHhAuthenticatedEmpty={() => {
             setError(undefined);
             setHhConnected(true);
+            setHhEmptyAccount(true);
           }}
           hhConnected={isHhConnected || connectedSource?.platform === 'hh'}
+          hhEmptyAccount={isHhEmptyAccount}
           linkedinConnected={
             isLinkedinConnected || connectedSource?.platform === 'linkedin'
           }

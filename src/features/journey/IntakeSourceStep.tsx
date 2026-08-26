@@ -57,6 +57,8 @@ export interface IntakeSourceStepProps {
   ) => void | Promise<void>;
   readonly onHhAuthenticatedEmpty: () => void;
   readonly hhConnected: boolean;
+  /** hh.ru itself reported an account with no resume. Nothing else may claim it. */
+  readonly hhEmptyAccount?: boolean;
   readonly linkedinConnected: boolean;
   /** A platform this account already imported from, as the server holds it. */
   readonly connectedSource?: ConnectedProfileSource;
@@ -236,7 +238,7 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
           window that answers it. Standing here it outlived both, and the import
           it triggered read through a window that was already gone
           (owner report, 2026-08-26). */}
-      {props.hhConnected && !hhReady ? (
+      {props.hhEmptyAccount && !hhReady ? (
         <p className="career-inline-note">
           В профиле hh.ru не нашлось резюме. Можно загрузить PDF или описать опыт
           текстом.

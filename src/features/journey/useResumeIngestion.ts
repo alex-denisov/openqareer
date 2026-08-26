@@ -25,6 +25,13 @@ export interface IngestedResume {
   readonly factCount?: number;
   readonly sourceReceipt?: NativeSourceReceipt;
   readonly connection?: NativeSourceConnection;
+  /**
+   * Why the server refused to store this document, in the server's own words.
+   * Without it the caller can only say "не подтвердил сохранение", which is
+   * what left the owner with an unexplained dead end (owner report,
+   * 2026-08-26).
+   */
+  readonly storeFailure?: string;
 }
 
 export interface ResumeIngestionState {
@@ -132,6 +139,7 @@ export function useResumeIngestion(hasAccount: boolean): ResumeIngestionState {
           file,
           imported: false,
           sourceReceipt,
+          storeFailure: message(reason),
         } satisfies IngestedResume;
         setResult(local);
         setNotice(

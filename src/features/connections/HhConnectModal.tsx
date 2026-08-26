@@ -392,16 +392,11 @@ export function HhConnectModal({
       wide={isTauriEnvironment() && sessionActive}
     >
       <div className={`career-modal-body${sessionActive ? ' is-connector-session' : ''}`}>
-        {sessionActive ? (
-          /* The toolbar states the route and nothing else. «Проверить вход»
-             duplicated the poll that already runs every 750 ms, and «Выйти из
-             hh.ru» hid the sign-out inside a dialog the candidate opens to sign
-             *in*; it now lives on the platform card, next to the connection it
-             ends (owner report, 2026-08-26). */
-          <div className="career-connector-session-toolbar">
-            <RouteNoticeLine notice={route} compact />
-          </div>
-        ) : (
+        {sessionActive ? null : (
+          /* The route line belongs to the step that has no window yet, where it
+             answers «why is nothing happening». Once the window is on screen it
+             is answered, and the owner asked for the line back
+             (owner report, 2026-08-26). */
           <>
             <RouteNoticeLine notice={route} />
             <p className="career-modal-intro">

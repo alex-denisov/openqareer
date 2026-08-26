@@ -6,11 +6,37 @@ import type {
 } from '../../features/workspace/resumeParser';
 import type { CefrLevel } from '../../features/resume/resumeTypes';
 
+/**
+ * hh.ru writes `&nbsp;` between every number and its unit, and inside the
+ * resume-card titles. Left encoded, it reaches the profile as literal
+ * `&nbsp;` text (owner report, 2026-08-26).
+ */
+const HTML_ENTITIES: Readonly<Record<string, string>> = {
+  '&nbsp;': ' ',
+  '&amp;': '&',
+  '&quot;': '"',
+  '&#39;': "'",
+  '&apos;': "'",
+  '&lt;': '<',
+  '&gt;': '>',
+};
+
+export function decodeHtmlText(value: string): string {
+  return value
+    .replace(/&(?:nbsp|amp|quot|#39|apos|lt|gt);/gu, (entity) => HTML_ENTITIES[entity] ?? entity)
+    .replace(/&#(\d+);/gu, (_match, code: string) => String.fromCodePoint(Number(code)));
+}
+
+function plainText(html: string): string {
+  return decodeHtmlText(html.replace(/<[^>]+>/gu, ' '))
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
 function extractTagContent(html: string, tagAttrPattern: RegExp): string | null {
   const match = tagAttrPattern.exec(html);
   if (!match) return null;
-  const content = match[1] ?? match[2] ?? '';
-  return content.replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ').trim() || null;
+  return plainText(match[1] ?? match[2] ?? '') || null;
 }
 
 function extractAllTagContents(html: string, tagAttrPattern: RegExp): string[] {
@@ -21,10 +47,7 @@ function extractAllTagContents(html: string, tagAttrPattern: RegExp): string[] {
   );
   let match: RegExpExecArray | null;
   while ((match = regex.exec(html)) !== null) {
-    const text = (match[1] ?? match[2] ?? '')
-      .replace(/<[^>]+>/gu, ' ')
-      .replace(/\s+/gu, ' ')
-      .trim();
+    const text = plainText(match[1] ?? match[2] ?? '');
     if (text && !results.includes(text)) {
       results.push(text);
     }
@@ -68,9 +91,31 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
     ) ??
     undefined;
 
-  const skills = extractAllTagContents(
+  // hh.ru's Magritte profile renders every skill as `skill-tag-<id>` grouped
+  // under a level heading; the old `bloko-tag__text` / `skills-element` hooks
+  // are gone from that surface but still serve the legacy resume view.
+  const skills = [
+    ...extractAllTagContents(
+      html,
+      /data-qa=["'](?:bloko-tag__text|skills-element)["'][^>]*>([\s\S]*?)<\/span>/iu,
+    ),
+    ...extractAllTagContents(
+      html,
+      /data-qa=["']skill-tag-[A-Za-z0-9_-]+["'][^>]*>[\s\S]*?<span>([\s\S]*?)<\/span>/iu,
+    ),
+  ].filter((skill, index, all) => all.indexOf(skill) === index);
+
+  const salary =
+    extractTagContent(
+      html,
+      /data-qa=["']resume-block-salary["'][^>]*>([\s\S]*?)<\/div>/iu,
+    ) ?? undefined;
+
+  // «Тип занятости: Постоянная работа», «Формат работы: …» and the rest of the
+  // position card. They are conditions the candidate stated, not decoration.
+  const positionTerms = extractAllTagContents(
     html,
-    /data-qa=["'](?:bloko-tag__text|skills-element)["'][^>]*>([\s\S]*?)<\/span>/iu,
+    /data-qa=["']resume-position-field-[A-Za-z0-9_-]+["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>/iu,
   );
 
   // Extract Experience items
@@ -145,6 +190,18 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
     }
   }
 
+  // The Magritte profile states education as its own cards
+  // (`resume-list-card-education-item-<field>`), label first, value last.
+  const educationCardRegex =
+    /data-qa=["']resume-list-card-education-item-[A-Za-z0-9_-]+["'][^>]*>([\s\S]*?)(?=<div[^>]*data-qa=["']resume-list-card-education-item|<div[^>]*class=["'][^"']*magritte-border-element|$)/giu;
+  let educationMatch: RegExpExecArray | null;
+  while ((educationMatch = educationCardRegex.exec(html)) !== null) {
+    const value = educationValue(educationMatch[1]);
+    if (value && !education.some((item) => item.institution === value)) {
+      education.push({ institution: value });
+    }
+  }
+
   // Extract Languages
   const languages: ParsedResumeLanguage[] = [];
   const langBlockMatch =
@@ -177,14 +234,54 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
     }
   }
 
+  const contact = {
+    email:
+      extractTagContent(
+        html,
+        /data-qa=["']resume-contact-email-value-text["'][^>]*>([\s\S]*?)<\/span>/iu,
+      ) ?? undefined,
+    phone:
+      extractTagContent(
+        html,
+        /data-qa=["']resume-contact-phone-value-preferred-text["'][^>]*>([\s\S]*?)<\/span>/iu,
+      ) ?? undefined,
+    location:
+      extractTagContent(
+        html,
+        /data-qa=["']resume-block-address["'][^>]*>([\s\S]*?)<\/div>/iu,
+      ) ?? undefined,
+    links: [sourceUrl],
+  };
+
+  /**
+   * `rawText` is the entire message to the candidate API: the server re-reads
+   * it and stores what it finds. Everything the parser found and leaves out
+   * here is a fact the profile never receives, and a thin enough `rawText` is
+   * refused outright as `resume_without_facts` (owner report, 2026-08-26).
+   */
   const rawText = [
     fullName,
     targetRole,
     about,
+    salary && salary !== about ? salary : '',
+    positionTerms.join('\n'),
+    contact.location,
+    contact.email,
+    contact.phone,
     skills.length ? `Навыки: ${skills.join(', ')}` : '',
     ...experience.map(
       (e) => `${e.title} в ${e.employer}\n${e.responsibilities.join('\n')}`,
     ),
+    education.length
+      ? `Образование: ${education
+          .map((item) => [item.institution, item.qualification].filter(Boolean).join(', '))
+          .join('; ')}`
+      : '',
+    languages.length
+      ? `Языки: ${languages
+          .map((item) => [item.name, item.cefr].filter(Boolean).join(' '))
+          .join(', ')}`
+      : '',
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -192,15 +289,8 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
   return {
     fullName,
     targetRole,
-    about,
-    contact: {
-      location:
-        extractTagContent(
-          html,
-          /data-qa=["']resume-block-address["'][^>]*>([\s\S]*?)<\/div>/iu,
-        ) ?? undefined,
-      links: [sourceUrl],
-    },
+    about: about ?? salary,
+    contact,
     experience,
     skills,
     education,
@@ -208,8 +298,26 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
     tests: [],
     recommendations: [],
     languages,
+    additional: positionTerms.length
+      ? { workSchedule: positionTerms.join('; ') }
+      : undefined,
     rawText,
   };
+}
+
+/**
+ * The value of one education card. hh.ru renders the card as a labelled cell —
+ * «Уровень», then «Среднее» — so the last cell is the answer and the first is
+ * the question. Storing «Уровень Среднее» as an institution would be the kind
+ * of not-quite-true display the design contract forbids.
+ */
+function educationValue(cardHtml: string): string | undefined {
+  const cells = extractAllTagContents(
+    cardHtml,
+    /data-qa=["']cell-text-content["'][^>]*>([\s\S]*?)<\/div>/iu,
+  );
+  const text = cells.length > 0 ? cells[cells.length - 1] : plainText(cardHtml);
+  return text || undefined;
 }
 
 /**
@@ -232,6 +340,18 @@ function resumeIdFromHref(href: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The label on one resume card. hh.ru puts the update stamp inside the same
+ * link as the name and writes `&nbsp;` through it, so the raw link text reads
+ * «Менеджер по продукту Обновлено 9&nbsp;августа&nbsp;2026&nbsp;в&nbsp;16:09»
+ * — which is what the candidate saw in the picker (owner report, 2026-08-26).
+ */
+function resumeCardTitle(linkHtml: string): string {
+  const text = plainText(linkHtml);
+  const name = text.split(/\s+Обновлено\s+/u)[0].trim();
+  return name || text;
 }
 
 export function parseHhResumesList(html: string): Array<{
@@ -263,10 +383,7 @@ export function parseHhResumesList(html: string): Array<{
     const href = /(?:^|\s)href=["']([^"']+)["']/iu.exec(attributes)?.[1];
     const resumeId = href ? resumeIdFromHref(href) : undefined;
     if (!resumeId) continue;
-    const title = match[2]
-      .replace(/<[^>]+>/gu, ' ')
-      .replace(/\s+/gu, ' ')
-      .trim();
+    const title = resumeCardTitle(match[2]);
     const existing = resumes.find((resume) => resume.id === resumeId);
     if (!existing) {
       resumes.push({
