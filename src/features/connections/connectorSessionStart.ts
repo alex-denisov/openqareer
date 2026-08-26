@@ -1,4 +1,4 @@
-import type { ConnectionPlatform } from './connectionResult';
+import type { ConnectionPlatform } from './platformLabels';
 import {
   openConnectorSession,
   sessionOpenFailureMessage,

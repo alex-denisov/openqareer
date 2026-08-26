@@ -2,7 +2,7 @@ import {
   type CandidateConnection,
   type DisconnectedConnection,
 } from '../coach/coachApi';
-import { PLATFORM_LABELS } from './connectionResult';
+import { PLATFORM_LABELS } from './platformLabels';
 
 /** Every refusal is reported as what the candidate can do next. */
 export function connectionDisconnectNotice(

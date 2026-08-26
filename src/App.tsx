@@ -7,10 +7,6 @@ import {
   type AuthUser,
 } from './features/coach/coachApi';
 import { resolveCandidateWorkspace } from './features/workspace/workspaceHydration';
-import {
-  connectionResultMessage,
-  readConnectionResult,
-} from './features/connections/connectionResult';
 import { prepareCareerWorkspace } from './features/journey/careerJourneyEngine';
 import { CareerWorkspaceShell } from './features/shell/CareerWorkspaceShell';
 import { AppErrorBoundary } from './features/shell/AppErrorBoundary';
@@ -61,7 +57,6 @@ export default function App() {
   const [state, setState] = useState<AppState>({ invalidStorage: false });
   const [storageError, setStorageError] = useState<string>();
   const [sessionError, setSessionError] = useState<string>();
-  const [connectionNotice, setConnectionNotice] = useState<string>();
 
   const navigate = useCallback((path: string) => {
     if (typeof window !== 'undefined') {
@@ -118,28 +113,6 @@ export default function App() {
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  useEffect(() => {
-    const result = readConnectionResult(window.location);
-    if (!result) return;
-    if (window.opener && window.opener !== window) {
-      try {
-        window.opener.postMessage(
-          { type: 'openqareer_connection_complete', result },
-          '*',
-        );
-        window.close();
-        return;
-      } catch {
-        // Fall back to in-window navigation
-      }
-    }
-    setConnectionNotice(connectionResultMessage(result));
-    // The callback lands on a dedicated route; the candidate continues in the
-    // canonical shell, so the one-time result is removed from the address bar.
-    window.history.replaceState(null, '', '/app');
-    setCurrentPath('/app');
   }, []);
 
   useEffect(() => {
@@ -291,8 +264,6 @@ export default function App() {
       workspace={state.workspace}
       invalidStorage={state.invalidStorage}
       storageError={storageError}
-      connectionNotice={connectionNotice}
-      onDismissConnectionNotice={() => setConnectionNotice(undefined)}
       onSaveWorkspace={handleSave}
       onUpdateWorkspace={persist}
       onClearWorkspace={handleClear}

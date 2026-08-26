@@ -19,7 +19,7 @@ import {
   closeConnectorSession,
   resetConnectorSession,
 } from '../connections/connectorSession';
-import { parseResumeContent } from '../workspace/resumeParser';
+
 import {
   validateWorkspaceInput,
   type CareerGoal,
@@ -192,22 +192,7 @@ export function CareerIntake({
         const snapshot = connectedProfileSource(connections);
         if (snapshot) {
           setConnectedSource(snapshot);
-          return;
         }
-        const live = connections.find(
-          (item) =>
-            item.status === 'connected' &&
-            item.accessMode !== 'native_session_snapshot' &&
-            item.profile.facts.length > 0,
-        );
-        if (!live || live.status !== 'connected' || live.accessMode !== undefined) return;
-        const parsed = parseResumeContent(
-          live.profile.facts.map((fact) => fact.value).join('\n'),
-        );
-        void ingestion.acceptParsed(
-          parsed,
-          live.platform === 'hh' ? 'hh-pdf' : 'linkedin-pdf',
-        );
       })
       .catch(() => undefined);
     return () => {

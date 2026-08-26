@@ -1,4 +1,4 @@
-import type { ConnectionPlatform } from './connectionResult';
+import type { ConnectionPlatform } from './platformLabels';
 
 /**
  * The connector cards name a specific company, so they carry that company's
