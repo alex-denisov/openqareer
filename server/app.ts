@@ -3,9 +3,6 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { ServerConfig } from './config';
 import type { CandidateStore } from './data/candidateStore';
-import { CandidateOAuthService } from './connectors/oauthConnector';
-import { OfficialOAuthTransport } from './connectors/officialOAuthTransport';
-import type { OAuthTransport } from './connectors/oauthConnector';
 import type { HhVacancySample } from './connectors/hhVacancySearch';
 import { searchHhVacancies } from './connectors/hhVacancySearch';
 import { searchRemotiveVacancies } from './connectors/remotiveVacancySearch';
@@ -44,7 +41,6 @@ interface BuildAppOptions {
   searchVacancies?: (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
   searchRemotive?: (input: { text: string; perPage?: number }) => Promise<VacancySample>;
   importProfile?: (url: string) => Promise<ProfileUrlImportResult>;
-  oauthTransport?: OAuthTransport;
   careerCommandExecutor?: ConnectorExecutor;
   vacancyIntelligenceService?: VacancyIntelligenceService;
   multiSourceVacancyEngine?: MultiSourceVacancyEngine;
@@ -53,7 +49,6 @@ interface BuildAppOptions {
 }
 
 interface AppServices {
-  oauthService: CandidateOAuthService;
   careerCommandDispatcher: CareerCommandDispatcher | null;
   vacancyIntelligence: VacancyIntelligenceService;
   multiSourceEngine: MultiSourceVacancyEngine;
@@ -64,7 +59,6 @@ function createServices(
     BuildAppOptions,
     | 'config'
     | 'candidateStore'
-    | 'oauthTransport'
     | 'careerCommandExecutor'
     | 'vacancyIntelligenceService'
     | 'multiSourceVacancyEngine'
@@ -72,12 +66,7 @@ function createServices(
     | 'searchRemotive'
   >,
 ): AppServices {
-  const { config, candidateStore } = options;
-  const oauthService = new CandidateOAuthService({
-    store: candidateStore,
-    providers: config.oauthProviders,
-    transport: options.oauthTransport ?? new OfficialOAuthTransport(),
-  });
+  const { candidateStore } = options;
   const careerCommandDispatcher = options.careerCommandExecutor
     ? new CareerCommandDispatcher({
         store: candidateStore,
@@ -94,7 +83,6 @@ function createServices(
       },
     });
   return {
-    oauthService,
     careerCommandDispatcher,
     vacancyIntelligence,
     multiSourceEngine:
@@ -184,7 +172,6 @@ export async function buildApp({
   searchVacancies = searchHhVacancies,
   searchRemotive = searchRemotiveVacancies,
   importProfile = importPublicProfileUrl,
-  oauthTransport,
   careerCommandExecutor,
   vacancyIntelligenceService,
   multiSourceVacancyEngine,
@@ -198,7 +185,6 @@ export async function buildApp({
   const services = createServices({
     config,
     candidateStore,
-    oauthTransport,
     careerCommandExecutor,
     vacancyIntelligenceService,
     multiSourceVacancyEngine,

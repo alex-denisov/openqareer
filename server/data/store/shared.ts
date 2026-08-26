@@ -8,7 +8,6 @@ import type {
 } from '../candidateStore';
 import type { CoachProviderResult } from '../../providers/coachProvider';
 import type { SealedText } from '../sealedText';
-import type { OAuthPlatform } from '../../connectors/oauthTypes';
 
 export interface StoreContext {
   database: DatabaseSync;
@@ -110,17 +109,3 @@ export function turnAssociatedData(
   return `candidate:${candidateId}:turn:${idempotencyKey}`;
 }
 
-export function oauthAuthorizationAssociatedData(
-  candidateId: string,
-  platform: OAuthPlatform,
-  stateDigest: string,
-): string {
-  return `candidate:${candidateId}:oauth:${platform}:authorization:${stateDigest}`;
-}
-
-export function oauthConnectionAssociatedData(
-  candidateId: string,
-  platform: OAuthPlatform,
-): string {
-  return `candidate:${candidateId}:oauth:${platform}:connection`;
-}

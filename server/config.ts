@@ -9,7 +9,6 @@ import {
   type ProviderCatalogStatus,
   type ProviderId,
 } from './providers/modelRegistry';
-import type { OAuthPlatform } from './connectors/oauthTypes';
 
 declare const __OPENQAREER_RELEASE__: string;
 
@@ -50,12 +49,6 @@ const configSchema = z.object({
     .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$/)
     .optional(),
   OPENQAREER_TEST_CANDIDATE_PASSWORD: z.string().min(16).max(256).optional(),
-  OPENQAREER_LINKEDIN_CLIENT_ID: blankAsUnset(z.string().min(5).max(512)),
-  OPENQAREER_LINKEDIN_CLIENT_SECRET: blankAsUnset(z.string().min(16).max(2_048)),
-  OPENQAREER_LINKEDIN_REDIRECT_URI: blankAsUnset(z.string().url().max(2_048)),
-  OPENQAREER_HH_CLIENT_ID: blankAsUnset(z.string().min(5).max(512)),
-  OPENQAREER_HH_CLIENT_SECRET: blankAsUnset(z.string().min(16).max(2_048)),
-  OPENQAREER_HH_REDIRECT_URI: blankAsUnset(z.string().url().max(2_048)),
   OPENQAREER_RESEND_API_KEY: blankAsUnset(z.string().min(10).max(2_048)),
   OPENQAREER_ACCOUNT_EMAIL_FROM: blankAsUnset(z.string().min(3).max(320)),
   OPENQAREER_PUBLIC_URL: blankAsUnset(z.string().url().max(2_048)),
@@ -103,12 +96,6 @@ function blankAsUnset(schema: z.ZodString) {
   );
 }
 
-export interface OAuthProviderConfig {
-  clientId: string;
-  clientSecret: string;
-  redirectUri: string;
-}
-
 export interface ServerConfig {
   host: '127.0.0.1';
   port: number;
@@ -134,7 +121,6 @@ export interface ServerConfig {
     role: 'candidate' | 'admin';
   }>;
   providerCatalogStatus?: ProviderCatalogStatus[];
-  oauthProviders: Partial<Record<OAuthPlatform, OAuthProviderConfig>>;
   accountEmail?: {
     apiKey: string;
     from: string;
@@ -196,32 +182,6 @@ export function readServerConfig(
   ) {
     throw new Error('seed account usernames must be unique');
   }
-  const oauthProviders = Object.fromEntries(
-    (
-      [
-        [
-          'linkedin',
-          parsed.OPENQAREER_LINKEDIN_CLIENT_ID,
-          parsed.OPENQAREER_LINKEDIN_CLIENT_SECRET,
-          parsed.OPENQAREER_LINKEDIN_REDIRECT_URI,
-        ],
-        [
-          'hh',
-          parsed.OPENQAREER_HH_CLIENT_ID,
-          parsed.OPENQAREER_HH_CLIENT_SECRET,
-          parsed.OPENQAREER_HH_REDIRECT_URI,
-        ],
-      ] as const
-    ).flatMap(([platform, clientId, clientSecret, redirectUri]) => {
-      const values = [clientId, clientSecret, redirectUri];
-      if (values.every((value) => value === undefined)) return [];
-      if (!clientId || !clientSecret || !redirectUri) {
-        throw new Error(`complete OAuth configuration is required for ${platform}`);
-      }
-      validateOAuthRedirect(platform, redirectUri);
-      return [[platform, { clientId, clientSecret, redirectUri }]];
-    }),
-  ) as Partial<Record<OAuthPlatform, OAuthProviderConfig>>;
   const resendApiKey = parsed.OPENQAREER_RESEND_API_KEY;
   const accountEmailValues = [
     resendApiKey,
@@ -302,24 +262,9 @@ export function readServerConfig(
         ],
     seedAccounts,
     providerCatalogStatus: getProviderCatalogStatus(environment),
-    oauthProviders,
     accountEmail,
     desktopTunnel,
   };
-}
-
-function validateOAuthRedirect(platform: OAuthPlatform, redirectUri: string): void {
-  const callback = new URL(redirectUri);
-  if (
-    callback.protocol !== 'https:' ||
-    callback.username ||
-    callback.password ||
-    callback.search ||
-    callback.hash ||
-    callback.pathname !== `/api/v1/connectors/${platform}/callback`
-  ) {
-    throw new Error(`invalid OAuth redirect URI for ${platform}`);
-  }
 }
 
 function readProviderCredentials(

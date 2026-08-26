@@ -1,6 +1,7 @@
 import type { StoredNativeSourceConnection } from '../data/candidateStore';
-import type { CandidateConnectionView } from './oauthConnector';
-import { OAUTH_PLATFORMS } from './oauthTypes';
+
+export const SUPPORTED_PLATFORMS = ['linkedin', 'hh'] as const;
+export type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number];
 
 export interface NativeSourceConnectionView {
   platform: StoredNativeSourceConnection['platform'];
@@ -13,6 +14,16 @@ export interface NativeSourceConnectionView {
   lastImportedAt: string;
   factCount: number;
 }
+
+export interface DisconnectedConnectionView {
+  platform: SupportedPlatform;
+  available: boolean;
+  status: 'disconnected';
+  capabilities: ['resume_read'];
+  importsCareerHistory: true;
+}
+
+export type CandidateConnectionView = NativeSourceConnectionView | DisconnectedConnectionView;
 
 export function nativeSourceConnectionView(
   stored: StoredNativeSourceConnection,
@@ -30,15 +41,20 @@ export function nativeSourceConnectionView(
   };
 }
 
-export function mergeCandidateConnectionViews(
-  oauth: CandidateConnectionView[],
+export function listCandidateConnectionViews(
   native: StoredNativeSourceConnection[],
-): Array<CandidateConnectionView | NativeSourceConnectionView> {
+): CandidateConnectionView[] {
   const nativeByPlatform = new Map(
     native.map((connection) => [connection.platform, nativeSourceConnectionView(connection)]),
   );
-  const oauthByPlatform = new Map(oauth.map((connection) => [connection.platform, connection]));
-  return OAUTH_PLATFORMS.map(
-    (platform) => nativeByPlatform.get(platform) ?? oauthByPlatform.get(platform)!,
+  return SUPPORTED_PLATFORMS.map(
+    (platform) =>
+      nativeByPlatform.get(platform) ?? {
+        platform,
+        available: true,
+        status: 'disconnected',
+        capabilities: ['resume_read'],
+        importsCareerHistory: true,
+      },
   );
 }

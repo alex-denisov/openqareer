@@ -254,27 +254,18 @@ function SkillsSection({ draft, editor }: SectionProps) {
       {skills.length === 0 ? (
         <p className="career-resume-empty">Навыки не указаны.</p>
       ) : (
-        <div className="career-resume-skills-grid" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+        <div className="career-resume-skills-grid">
           {skills.map((skill) => (
             <span
               key={skill.id}
               className="career-chip"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '4px 10px',
-                background: 'rgba(255,255,255,0.06)',
-                borderRadius: '6px',
-                border: '1px solid rgba(255,255,255,0.12)',
-              }}
             >
               <span>{skill.name}</span>
               {editor ? (
                 <button
                   type="button"
                   onClick={() => editor.onRemoveSkill(skill.id)}
-                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', opacity: 0.7 }}
+                  className="career-chip-remove"
                   title="Удалить навык"
                 >
                   ×
@@ -285,9 +276,10 @@ function SkillsSection({ draft, editor }: SectionProps) {
         </div>
       )}
       {editor ? (
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div className="career-resume-inline-add">
           <input
             type="text"
+            className="career-resume-inline-input"
             value={newSkill}
             placeholder="Новый навык (например, Product Management)"
             onChange={(e) => setNewSkill(e.target.value)}
@@ -296,14 +288,6 @@ function SkillsSection({ draft, editor }: SectionProps) {
                 e.preventDefault();
                 handleAdd();
               }
-            }}
-            style={{
-              flex: 1,
-              padding: '6px 10px',
-              borderRadius: '6px',
-              border: '1px solid rgba(255,255,255,0.12)',
-              background: 'rgba(0,0,0,0.2)',
-              color: 'inherit',
             }}
           />
           <button
@@ -434,7 +418,7 @@ function CoursesSection({ draft, editor }: SectionProps) {
         <p className="career-resume-empty">Курсы и сертификаты не указаны.</p>
       ) : null}
       {courses.map((course) => (
-        <div key={course.id} className="career-resume-entry is-compact" style={{ marginBottom: '8px' }}>
+        <div key={course.id} className="career-resume-entry is-compact">
           <div className="career-resume-entry-grid">
             <Field
               label="Название курса / сертификата"
@@ -468,27 +452,27 @@ function CoursesSection({ draft, editor }: SectionProps) {
         </div>
       ))}
       {editor ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 80px auto', gap: '8px', marginTop: '8px' }}>
+        <div className="career-resume-grid-4col">
           <input
             type="text"
+            className="career-resume-grid-input"
             value={courseName}
             placeholder="Название курса"
             onChange={(e) => setCourseName(e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
           />
           <input
             type="text"
+            className="career-resume-grid-input"
             value={institution}
             placeholder="Платформа / Вуз"
             onChange={(e) => setInstitution(e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
           />
           <input
             type="text"
+            className="career-resume-grid-input"
             value={year}
             placeholder="Год"
             onChange={(e) => setYear(e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
           />
           <button
             type="button"
@@ -521,7 +505,7 @@ function TestsSection({ draft, editor }: SectionProps) {
       <h3 id="career-resume-tests">Тесты и оценки</h3>
       {tests.length === 0 ? <p className="career-resume-empty">Тесты не указаны.</p> : null}
       {tests.map((test) => (
-        <div key={test.id} className="career-resume-entry is-compact" style={{ marginBottom: '8px' }}>
+        <div key={test.id} className="career-resume-entry is-compact">
           <div className="career-resume-entry-grid">
             <Field label="Тест / Экзамен" value={test.name} placeholder="GMAT, IELTS..." readOnly={true} onChange={() => {}} />
             <Field label="Организация" value={test.provider ?? ''} placeholder="Не указана" readOnly={true} onChange={() => {}} />
@@ -531,20 +515,20 @@ function TestsSection({ draft, editor }: SectionProps) {
         </div>
       ))}
       {editor ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '8px', marginTop: '8px' }}>
+        <div className="career-resume-grid-3col">
           <input
             type="text"
+            className="career-resume-grid-input"
             value={testName}
             placeholder="Тест / Экзамен (напр. GMAT, IELTS)"
             onChange={(e) => setTestName(e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
           />
           <input
             type="text"
+            className="career-resume-grid-input"
             value={score}
             placeholder="Балл / Результат"
             onChange={(e) => setScore(e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
           />
           <button type="button" className="career-button is-compact" onClick={handleAdd} disabled={!testName.trim()}>
             <Plus size={14} /> Добавить
@@ -573,13 +557,13 @@ function RecommendationsSection({ draft, editor }: SectionProps) {
       <h3 id="career-resume-recommendations">Рекомендации</h3>
       {recommendations.length === 0 ? <p className="career-resume-empty">Рекомендации не указаны.</p> : null}
       {recommendations.map((rec) => (
-        <div key={rec.id} className="career-resume-entry is-compact" style={{ marginBottom: '8px' }}>
+        <div key={rec.id} className="career-resume-entry is-compact">
           <div className="career-resume-entry-grid">
             <Field label="Рекомендатель" value={rec.recommender ?? rec.author ?? ''} placeholder="ФИО" readOnly={true} onChange={() => {}} />
             <Field label="Организация / Роль" value={rec.organization ?? rec.role ?? ''} placeholder="CTO в TechCorp" readOnly={true} onChange={() => {}} />
           </div>
           {rec.text ? (
-            <p style={{ margin: '6px 0 0 0', fontStyle: 'italic', fontSize: '13px', opacity: 0.85 }}>
+            <p className="career-resume-quote">
               «{rec.text}»
             </p>
           ) : null}
@@ -587,20 +571,20 @@ function RecommendationsSection({ draft, editor }: SectionProps) {
         </div>
       ))}
       {editor ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px', marginTop: '8px' }}>
+        <div className="career-resume-grid-recommendation">
           <input
             type="text"
+            className="career-resume-grid-input"
             value={recommender}
             placeholder="ФИО рекомендателя"
             onChange={(e) => setRecommender(e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
           />
           <input
             type="text"
+            className="career-resume-grid-input"
             value={organization}
             placeholder="Компания и должность"
             onChange={(e) => setOrganization(e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
           />
           <button type="button" className="career-button is-compact" onClick={handleAdd} disabled={!recommender.trim()}>
             <Plus size={14} /> Добавить

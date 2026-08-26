@@ -21,7 +21,6 @@ const config: ServerConfig = {
   secureCookies: false,
   allowedOrigins: ['http://localhost:3000'],
   seedAccounts: [],
-  oauthProviders: {},
 };
 
 const noSessions: SessionAuth = {

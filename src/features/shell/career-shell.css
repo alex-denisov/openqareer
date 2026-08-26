@@ -5613,6 +5613,7 @@
   color: var(--career-warning);
 }
 
+.career-resume-unknown-group,
 .career-resume-unknowns > li > code,
 .career-resume-excluded > li > code {
   font-size: 0.7rem;
@@ -6686,4 +6687,471 @@
   font-style: normal;
   font-weight: 500;
   color: var(--career-text-dim);
+}
+
+/* --- AG-01 styles migrated from inline style attributes --- */
+
+/* Admin console styles */
+.admin-head-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.admin-table-row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.admin-quiet-button.is-hidden {
+  visibility: hidden;
+}
+
+.admin-badge--blocked {
+  margin-left: 4px;
+}
+
+.admin-frame-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.admin-frame-header .admin-brand {
+  margin: 0;
+}
+
+.admin-frame-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Admin Vacancy Sources styles */
+.admin-source-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.admin-test-vacancy-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.admin-test-vacancy-meta {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  margin: 4px 0;
+}
+
+.admin-test-skills-list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.admin-test-link-wrap {
+  margin-top: 8px;
+}
+
+.admin-test-link-wrap .admin-primary-link {
+  font-size: 0.8rem;
+}
+
+.admin-note.is-empty-note {
+  margin-top: 16px;
+}
+
+.admin-test-form-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-test-query-input {
+  flex: 1 1 240px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-soft);
+  color: var(--text);
+}
+
+.admin-badge.is-error.admin-test-error {
+  margin: 14px 0;
+  padding: 8px 12px;
+}
+
+/* Resume Document View styles */
+.career-resume-skills-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.career-resume-skills-grid .career-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.career-chip-remove {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.career-resume-inline-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.career-resume-inline-input {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+}
+
+.career-resume-entry.is-compact {
+  margin-bottom: 8px;
+}
+
+.career-resume-grid-4col {
+  display: grid;
+  grid-template-columns: 2fr 1fr 80px auto;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.career-resume-grid-3col {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.career-resume-grid-recommendation {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.career-resume-grid-input {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+}
+
+.career-resume-quote {
+  margin: 6px 0 0 0;
+  font-style: italic;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+/* HhSkillQuizSimulator styles */
+.career-quiz-modal-card {
+  background: var(--surface-raised, oklch(22% 0.02 255 / 0.96));
+  color: var(--text-main, #f3f4f6);
+  border: 1px solid var(--line-strong, rgba(255, 255, 255, 0.16));
+  border-radius: 20px;
+  max-width: 720px;
+  width: 100%;
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: clamp(20px, 4vw, 32px);
+  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.65);
+  position: relative;
+}
+
+.career-quiz-modal-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  color: var(--text-muted, #9ca3af);
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.career-quiz-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.career-quiz-icon-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: oklch(79% 0.14 255 / 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-accent, #38bdf8);
+}
+
+.career-quiz-dialog-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+
+.career-quiz-intro-text {
+  color: var(--text-muted, #9ca3af);
+  font-size: 0.88rem;
+  margin-bottom: 24px;
+  line-height: 1.55;
+}
+
+.career-quiz-list {
+  display: grid;
+  gap: 12px;
+}
+
+.career-quiz-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  background: var(--surface-soft, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.1));
+  border-radius: 14px;
+}
+
+.career-quiz-item-info {
+  min-width: 240px;
+  flex: 1;
+}
+
+.career-quiz-item-title {
+  display: block;
+  font-size: 0.98rem;
+  margin-bottom: 4px;
+}
+
+.career-quiz-item-meta {
+  font-size: 0.8rem;
+  color: var(--text-dim, #9ca3af);
+}
+
+.career-quiz-start-btn {
+  padding: 8px 18px;
+  font-size: 0.85rem;
+  border-radius: 10px;
+}
+
+.career-quiz-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.career-quiz-back-btn {
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.career-quiz-counter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-muted, #9ca3af);
+}
+
+.career-quiz-question-box {
+  margin-bottom: 24px;
+}
+
+.career-quiz-question-title {
+  font-size: 1.08rem;
+  font-weight: 600;
+  margin-bottom: 18px;
+  line-height: 1.45;
+}
+
+.career-quiz-options {
+  display: grid;
+  gap: 10px;
+}
+
+.career-quiz-option {
+  text-align: left;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.1));
+  color: var(--text-main, #f3f4f6);
+  cursor: pointer;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  transition: all 0.15s ease;
+}
+
+.career-quiz-option.is-selected {
+  background: oklch(79% 0.14 255 / 0.18);
+  border: 1px solid var(--primary-accent, #38bdf8);
+}
+
+.career-quiz-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 24px;
+}
+
+.career-quiz-submit-btn {
+  background: var(--primary-success, #22c55e);
+  border-color: var(--primary-success, #22c55e);
+}
+
+.career-quiz-result-box {
+  text-align: center;
+  padding: 24px;
+  border-radius: 16px;
+  margin-bottom: 24px;
+}
+
+.career-quiz-result-box.is-passed {
+  background: oklch(75% 0.14 154 / 0.12);
+  border: 1px solid oklch(75% 0.14 154 / 0.35);
+}
+
+.career-quiz-result-box.is-failed {
+  background: oklch(68% 0.18 28 / 0.12);
+  border: 1px solid oklch(68% 0.18 28 / 0.35);
+}
+
+.career-quiz-result-icon.is-passed {
+  color: var(--primary-success, #22c55e);
+  margin: 0 auto 12px;
+}
+
+.career-quiz-result-icon.is-failed {
+  color: var(--danger-red, #ef4444);
+  margin: 0 auto 12px;
+}
+
+.career-quiz-result-title {
+  font-size: 1.2rem;
+  margin: 0 0 8px;
+}
+
+.career-quiz-result-title.is-passed {
+  color: var(--primary-success, #22c55e);
+}
+
+.career-quiz-result-title.is-failed {
+  color: var(--danger-red, #ef4444);
+}
+
+.career-quiz-result-text {
+  margin: 0;
+  font-size: 0.94rem;
+}
+
+.career-quiz-badge-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  background: oklch(75% 0.14 154 / 0.22);
+  border: 1px solid oklch(75% 0.14 154 / 0.4);
+  border-radius: 24px;
+  margin-top: 16px;
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--primary-success, #22c55e);
+}
+
+.career-quiz-review-heading {
+  font-size: 0.96rem;
+  margin-bottom: 14px;
+  font-weight: 650;
+}
+
+.career-quiz-review-list {
+  display: grid;
+  gap: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+  margin-bottom: 24px;
+}
+
+.career-quiz-review-item {
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  font-size: 0.82rem;
+}
+
+.career-quiz-review-question {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.career-quiz-review-status {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.career-quiz-review-status.is-correct {
+  color: var(--primary-success, #22c55e);
+}
+
+.career-quiz-review-status.is-incorrect {
+  color: var(--danger-red, #ef4444);
+}
+
+.career-quiz-review-explanation {
+  color: var(--text-muted, #9ca3af);
+  line-height: 1.45;
+  display: block;
+}
+
+.career-quiz-result-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.career-account-version {
+  margin: 18px 0 0;
+  color: var(--career-text-dim);
+  font-size: 0.75rem;
 }

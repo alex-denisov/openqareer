@@ -16,7 +16,7 @@ describe('bounded profile URL import', () => {
       status: 'unavailable',
       platform: 'linkedin',
       reason: 'official-access-required',
-      nextAction: 'oauth_or_export',
+      nextAction: 'upload_export_or_pdf',
     });
   });
 

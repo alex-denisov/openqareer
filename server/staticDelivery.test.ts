@@ -75,7 +75,6 @@ async function createStaticApp(options: { adminDocument?: boolean } = {}) {
     secureCookies: false,
     allowedOrigins: ['http://localhost:3000'],
     seedAccounts: [],
-    oauthProviders: {},
   };
   const app = await buildApp({
     config,

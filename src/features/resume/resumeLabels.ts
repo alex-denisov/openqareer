@@ -1,5 +1,6 @@
 import type {
   ResumeReviewFlag,
+  ResumeUnknownCode,
   ResumeVariantId,
   StaleEvidenceReason,
 } from './resumeTypes';
@@ -29,12 +30,37 @@ const STALE_REASON_LABELS: Record<StaleEvidenceReason, string> = {
   'provenance-changed': 'источник изменился',
 };
 
+const UNKNOWN_GROUP_LABELS: Record<ResumeUnknownCode, string> = {
+  'missing-full-name': 'Имя',
+  'missing-contact': 'Контакты',
+  'missing-target-role': 'Целевая роль',
+  'missing-role-chronology': 'Даты работы',
+  'missing-role-title': 'Должность',
+  'missing-employer': 'Работодатель',
+  'missing-role-start-date': 'Дата начала',
+  'missing-role-end-date': 'Дата окончания',
+  'missing-role-claims': 'Что сделано в роли',
+  'missing-education': 'Образование',
+  'missing-education-details': 'Детали образования',
+  'missing-language-name': 'Язык',
+  'missing-language-level': 'Уровень языка',
+  'chronology-conflict': 'Пересечение периодов',
+  'invalid-chronology-date': 'Формат даты',
+  'ineligible-evidence': 'Неподтверждённый факт',
+  'germany-bullet-count': 'Количество пунктов',
+  'germany-length-exceeds-two-pages': 'Объём документа',
+};
+
 export function reviewFlagLabel(flag: ResumeReviewFlag): string {
   return REVIEW_FLAG_LABELS[flag];
 }
 
 export function staleReasonLabel(reason: StaleEvidenceReason): string {
   return STALE_REASON_LABELS[reason];
+}
+
+export function unknownGroupLabel(code: ResumeUnknownCode): string {
+  return UNKNOWN_GROUP_LABELS[code];
 }
 
 /**

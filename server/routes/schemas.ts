@@ -176,14 +176,6 @@ export const profileImportSchema = z.object({
     }),
 });
 
-export const oauthCallbackQuerySchema = z
-  .object({
-    state: z.string().regex(/^[A-Za-z0-9_-]{32,256}$/),
-    code: z.string().min(8).max(2_048).optional(),
-    error: z.string().max(200).optional(),
-  })
-  .refine((value) => Boolean(value.code) !== Boolean(value.error));
-
 export const coachTurnRequestSchema = z.object({
   messageId: z.string().uuid(),
   content: z.string().trim().min(1).max(8_000),

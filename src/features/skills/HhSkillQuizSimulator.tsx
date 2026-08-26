@@ -70,18 +70,6 @@ export function HhSkillQuizSimulator({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        backgroundColor: 'rgba(5, 8, 16, 0.75)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        zIndex: 9999,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '16px',
-      }}
     >
       <div
         ref={dialogRef}
@@ -89,97 +77,47 @@ export function HhSkillQuizSimulator({
         aria-modal="true"
         aria-labelledby="quiz-dialog-title"
         className="career-quiz-modal-card"
-        style={{
-          background: 'var(--surface-raised, oklch(22% 0.02 255 / 0.96))',
-          color: 'var(--text-main, #f3f4f6)',
-          border: '1px solid var(--line-strong, rgba(255, 255, 255, 0.16))',
-          borderRadius: '20px',
-          maxWidth: '720px',
-          width: '100%',
-          maxHeight: '92vh',
-          overflowY: 'auto',
-          padding: 'clamp(20px, 4vw, 32px)',
-          boxShadow: '0 28px 64px rgba(0, 0, 0, 0.65)',
-          position: 'relative',
-        }}
       >
         <button
           type="button"
           onClick={onClose}
           aria-label="Закрыть симулятор тестов"
-          style={{
-            position: 'absolute',
-            top: '18px',
-            right: '18px',
-            background: 'rgba(255, 255, 255, 0.06)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '50%',
-            color: 'var(--text-muted, #9ca3af)',
-            cursor: 'pointer',
-            padding: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minWidth: '36px',
-            minHeight: '36px',
-          }}
+          className="career-quiz-modal-close"
         >
           <X size={20} />
         </button>
 
         {!selectedQuiz && !result ? (
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-              <div
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '12px',
-                  background: 'oklch(79% 0.14 255 / 0.18)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--primary-accent, #38bdf8)',
-                }}
-              >
+            <div className="career-quiz-header-row">
+              <div className="career-quiz-icon-badge">
                 <Sparkle size={24} weight="fill" />
               </div>
-              <h2 id="quiz-dialog-title" style={{ margin: 0, fontSize: '1.25rem', fontWeight: 650 }}>
+              <h2 id="quiz-dialog-title" className="career-quiz-dialog-title">
                 Верификация навыков hh.ru
               </h2>
             </div>
-            <p style={{ color: 'var(--text-muted, #9ca3af)', fontSize: '0.88rem', marginBottom: '24px', lineHeight: 1.55 }}>
+            <p className="career-quiz-intro-text">
               Подготовьтесь и пройдите симуляцию официальных тестов подтверждения навыков hh.ru. Успешное прохождение дает проверенный бейдж в резюме и поднимает профиль в выдаче рекрутеров.
             </p>
 
-            <div style={{ display: 'grid', gap: '12px' }}>
+            <div className="career-quiz-list">
               {quizzes.map((quiz) => (
                 <div
                   key={quiz.id}
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '12px',
-                    padding: '16px 20px',
-                    background: 'var(--surface-soft, rgba(255, 255, 255, 0.04))',
-                    border: '1px solid var(--line, rgba(255, 255, 255, 0.1))',
-                    borderRadius: '14px',
-                  }}
+                  className="career-quiz-item"
                 >
-                  <div style={{ minWidth: '240px', flex: 1 }}>
-                    <strong style={{ display: 'block', fontSize: '0.98rem', marginBottom: '4px' }}>
+                  <div className="career-quiz-item-info">
+                    <strong className="career-quiz-item-title">
                       {quiz.title}
                     </strong>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-dim, #9ca3af)' }}>
+                    <span className="career-quiz-item-meta">
                       {quiz.category} · {quiz.questions.length} вопросов · Порог {quiz.passingScorePercent}%
                     </span>
                   </div>
                   <button
                     type="button"
-                    className="career-primary-button"
-                    style={{ padding: '8px 18px', fontSize: '0.85rem', borderRadius: '10px' }}
+                    className="career-primary-button career-quiz-start-btn"
                     onClick={() => startQuiz(quiz)}
                   >
                     Начать тест
@@ -192,26 +130,25 @@ export function HhSkillQuizSimulator({
 
         {selectedQuiz && !result ? (
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+            <div className="career-quiz-topbar">
               <button
                 type="button"
-                className="career-quiet-button"
-                style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
+                className="career-quiet-button career-quiz-back-btn"
                 onClick={() => setSelectedQuiz(null)}
               >
                 <ArrowLeft size={16} /> К списку тестов
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', color: 'var(--text-muted, #9ca3af)' }}>
+              <div className="career-quiz-counter">
                 <Clock size={16} /> Вопрос {currentQuestionIndex + 1} из {selectedQuiz.questions.length}
               </div>
             </div>
 
-            <div style={{ marginBottom: '24px' }}>
-              <h3 id="quiz-dialog-title" style={{ fontSize: '1.08rem', fontWeight: 600, marginBottom: '18px', lineHeight: 1.45 }}>
+            <div className="career-quiz-question-box">
+              <h3 id="quiz-dialog-title" className="career-quiz-question-title">
                 {selectedQuiz.questions[currentQuestionIndex].question}
               </h3>
 
-              <div style={{ display: 'grid', gap: '10px' }}>
+              <div className="career-quiz-options">
                 {selectedQuiz.questions[currentQuestionIndex].options.map((opt, optIndex) => {
                   const qId = selectedQuiz.questions[currentQuestionIndex].id;
                   const isSelected = answers[qId] === optIndex;
@@ -220,18 +157,7 @@ export function HhSkillQuizSimulator({
                       key={optIndex}
                       type="button"
                       onClick={() => handleSelectOption(qId, optIndex)}
-                      style={{
-                        textAlign: 'left',
-                        padding: '14px 18px',
-                        borderRadius: '12px',
-                        background: isSelected ? 'oklch(79% 0.14 255 / 0.18)' : 'rgba(255, 255, 255, 0.03)',
-                        border: isSelected ? '1px solid var(--primary-accent, #38bdf8)' : '1px solid var(--line, rgba(255, 255, 255, 0.1))',
-                        color: 'var(--text-main, #f3f4f6)',
-                        cursor: 'pointer',
-                        fontSize: '0.88rem',
-                        lineHeight: 1.45,
-                        transition: 'all 0.15s ease',
-                      }}
+                      className={`career-quiz-option ${isSelected ? 'is-selected' : ''}`}
                     >
                       {opt}
                     </button>
@@ -240,7 +166,7 @@ export function HhSkillQuizSimulator({
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px' }}>
+            <div className="career-quiz-footer">
               <button
                 type="button"
                 className="career-quiet-button"
@@ -261,8 +187,7 @@ export function HhSkillQuizSimulator({
               ) : (
                 <button
                   type="button"
-                  className="career-primary-button"
-                  style={{ background: 'var(--primary-success, #22c55e)', borderColor: 'var(--primary-success, #22c55e)' }}
+                  className="career-primary-button career-quiz-submit-btn"
                   onClick={submitQuiz}
                 >
                   Завершить тест <CheckCircle size={16} weight="bold" />
@@ -275,74 +200,49 @@ export function HhSkillQuizSimulator({
         {result && selectedQuiz ? (
           <div>
             <div
-              style={{
-                textAlign: 'center',
-                padding: '24px',
-                borderRadius: '16px',
-                background: result.passed ? 'oklch(75% 0.14 154 / 0.12)' : 'oklch(68% 0.18 28 / 0.12)',
-                border: `1px solid ${result.passed ? 'oklch(75% 0.14 154 / 0.35)' : 'oklch(68% 0.18 28 / 0.35)'}`,
-                marginBottom: '24px',
-              }}
+              className={`career-quiz-result-box ${result.passed ? 'is-passed' : 'is-failed'}`}
             >
               {result.passed ? (
-                <CheckCircle size={48} weight="fill" style={{ color: 'var(--primary-success, #22c55e)', margin: '0 auto 12px' }} />
+                <CheckCircle size={48} weight="fill" className="career-quiz-result-icon is-passed" />
               ) : (
-                <Target size={48} weight="fill" style={{ color: 'var(--danger-red, #ef4444)', margin: '0 auto 12px' }} />
+                <Target size={48} weight="fill" className="career-quiz-result-icon is-failed" />
               )}
-              <h3 id="quiz-dialog-title" style={{ fontSize: '1.2rem', margin: '0 0 8px', color: result.passed ? 'var(--primary-success, #22c55e)' : 'var(--danger-red, #ef4444)' }}>
+              <h3 id="quiz-dialog-title" className={`career-quiz-result-title ${result.passed ? 'is-passed' : 'is-failed'}`}>
                 {result.passed ? 'Тест успешно пройден!' : 'Тест не пройден'}
               </h3>
-              <p style={{ margin: 0, fontSize: '0.94rem' }}>
+              <p className="career-quiz-result-text">
                 Результат: <strong>{result.scorePercent}%</strong> ({result.correctAnswersCount} из {result.totalQuestions} правильно)
               </p>
               {result.verifiedBadgeAwarded && result.badge ? (
                 <div
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '8px 18px',
-                    background: 'oklch(75% 0.14 154 / 0.22)',
-                    border: '1px solid oklch(75% 0.14 154 / 0.4)',
-                    borderRadius: '24px',
-                    marginTop: '16px',
-                    fontSize: '0.85rem',
-                    fontWeight: 650,
-                    color: 'var(--primary-success, #22c55e)',
-                  }}
+                  className="career-quiz-badge-wrap"
                 >
                   <Sparkle size={16} weight="fill" /> {result.badge.title}
                 </div>
               ) : null}
             </div>
 
-            <h4 style={{ fontSize: '0.96rem', marginBottom: '14px', fontWeight: 650 }}>Разбор ответов:</h4>
-            <div style={{ display: 'grid', gap: '10px', maxHeight: '280px', overflowY: 'auto', marginBottom: '24px' }}>
+            <h4 className="career-quiz-review-heading">Разбор ответов:</h4>
+            <div className="career-quiz-review-list">
               {result.review.map((item, index) => (
                 <div
                   key={index}
-                  style={{
-                    padding: '14px',
-                    borderRadius: '10px',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    border: '1px solid var(--line, rgba(255, 255, 255, 0.08))',
-                    fontSize: '0.82rem',
-                  }}
+                  className="career-quiz-review-item"
                 >
-                  <strong style={{ display: 'block', marginBottom: '6px' }}>
+                  <strong className="career-quiz-review-question">
                     {index + 1}. {item.question}
                   </strong>
-                  <span style={{ color: item.isCorrect ? 'var(--primary-success, #22c55e)' : 'var(--danger-red, #ef4444)', display: 'block', marginBottom: '4px', fontWeight: 600 }}>
+                  <span className={`career-quiz-review-status ${item.isCorrect ? 'is-correct' : 'is-incorrect'}`}>
                     {item.isCorrect ? '✓ Правильно' : '✗ Ошибка в ответе'}
                   </span>
-                  <small style={{ color: 'var(--text-muted, #9ca3af)', lineHeight: 1.45, display: 'block' }}>
+                  <small className="career-quiz-review-explanation">
                     {item.explanation}
                   </small>
                 </div>
               ))}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <div className="career-quiz-result-footer">
               <button
                 type="button"
                 className="career-quiet-button"

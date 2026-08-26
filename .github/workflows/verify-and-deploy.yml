@@ -78,6 +78,8 @@ jobs:
 
       - name: Build immutable release
         id: release
+        env:
+          OPENQAREER_COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           npm ci

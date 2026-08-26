@@ -28,7 +28,7 @@ export type ProfileUrlImportResult =
         | 'network'
         | 'insufficient'
         | 'official-access-required';
-      nextAction: 'upload_export_or_pdf' | 'oauth_or_export';
+      nextAction: 'upload_export_or_pdf';
     };
 
 export async function importProfileUrl(
@@ -49,7 +49,7 @@ export async function importProfileUrl(
     platform,
     sourceUrl: url,
     reason: 'official-access-required',
-    nextAction: 'oauth_or_export',
+    nextAction: 'upload_export_or_pdf',
   };
 }
 

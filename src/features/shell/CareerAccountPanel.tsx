@@ -34,6 +34,7 @@ import {
   sanitizeEmail,
   sanitizeName,
 } from '../../../shared/accountValidation';
+import { appVersionLine } from './appVersion';
 
 interface CareerAccountPanelProps {
   initialUser?: AuthUser | null;
@@ -542,6 +543,9 @@ export function CareerAccountPanel({
             {error}
           </p>
         ) : null}
+        <p className="career-account-version">
+          {appVersionLine(__APP_VERSION__, __APP_COMMIT__)}
+        </p>
       </div>
     </aside>
   );

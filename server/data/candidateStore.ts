@@ -19,7 +19,6 @@ import type {
 import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
 import type { ResumeDraft } from '../domain/resumeDraft';
 import type { CoachProviderResult } from '../providers/coachProvider';
-import type { OAuthPlatform } from '../connectors/oauthTypes';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import type {
   CareerCommandRecord,
@@ -177,50 +176,6 @@ export type StartedTurn =
 export interface MemoryChange {
   action: 'confirm' | 'correct' | 'delete';
   statement?: string;
-}
-
-export interface OAuthAuthorizationInput {
-  platform: OAuthPlatform;
-  stateDigest: string;
-  codeVerifier: string;
-  expiresAt: string;
-}
-
-export interface ConsumedOAuthAuthorization {
-  candidateId: string;
-  codeVerifier: string;
-}
-
-export type OAuthCapability =
-  | 'lite_identity'
-  | 'profile_read'
-  | 'resume_read';
-
-interface OAuthProfileFact {
-  kind: 'headline' | 'summary';
-  value: string;
-  sourceLocator: string;
-  confidence: 'official-api';
-}
-
-export interface OAuthConnectionInput {
-  platform: OAuthPlatform;
-  externalAccountId: string;
-  scopes: string[];
-  capabilities: ReadonlyArray<OAuthCapability>;
-  accessToken: string;
-  refreshToken: string | null;
-  accessTokenExpiresAt: string | null;
-  profile: {
-    capturedAt: string;
-    sourceUrl: string | null;
-    facts: OAuthProfileFact[];
-  };
-}
-
-export interface StoredOAuthConnection extends OAuthConnectionInput {
-  connectedAt: string;
-  updatedAt: string;
 }
 
 export interface ResumeEvidenceImport {
@@ -428,28 +383,6 @@ export interface CandidateStore {
     draft: ResumeDraft,
     evidenceSnapshot: readonly ResumeEvidenceSnapshot[],
   ): StoredResumeDraft;
-  createOAuthAuthorization(
-    candidateId: string,
-    authorization: OAuthAuthorizationInput,
-  ): void;
-  consumeOAuthAuthorization(
-    platform: OAuthPlatform,
-    stateDigest: string,
-    consumedAt: string,
-  ): ConsumedOAuthAuthorization | null;
-  saveOAuthConnection(
-    candidateId: string,
-    connection: OAuthConnectionInput,
-  ): StoredOAuthConnection;
-  getOAuthConnection(
-    candidateId: string,
-    platform: OAuthPlatform,
-  ): StoredOAuthConnection | null;
-  listOAuthConnections(candidateId: string): StoredOAuthConnection[];
-  deleteOAuthConnection(
-    candidateId: string,
-    platform: OAuthPlatform,
-  ): boolean;
   saveCareerCommand(command: CareerCommandRecord): CareerCommandRecord;
   getCareerCommand(
     candidateId: string,

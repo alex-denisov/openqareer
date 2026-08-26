@@ -126,7 +126,7 @@ export default function App() {
     if (window.opener && window.opener !== window) {
       try {
         window.opener.postMessage(
-          { type: 'openqareer_oauth_complete', result },
+          { type: 'openqareer_connection_complete', result },
           '*',
         );
         window.close();
@@ -324,24 +324,9 @@ export default function App() {
       }
       return (
         <AppErrorBoundary>
-          <div className="desktop-app-container" style={{ position: 'relative', width: '100%', minHeight: '100vh' }}>
+          <div className="desktop-app-container">
             {renderWorkspace(true)}
-            <div
-              className="desktop-auth-overlay"
-              style={{
-                position: 'fixed',
-                inset: 0,
-                zIndex: 1000,
-                background: 'rgba(9, 13, 18, 0.76)',
-                backdropFilter: 'blur(20px)',
-                WebkitBackdropFilter: 'blur(20px)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '24px',
-                overflowY: 'auto',
-              }}
-            >
+            <div className="desktop-auth-overlay">
               {renderAuthContent()}
             </div>
           </div>
@@ -375,24 +360,9 @@ export default function App() {
     }
     return (
       <AppErrorBoundary>
-        <div className="desktop-app-container" style={{ position: 'relative', width: '100%', minHeight: '100vh' }}>
+        <div className="desktop-app-container">
           {renderWorkspace(true)}
-          <div
-            className="desktop-auth-overlay"
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 1000,
-              background: 'rgba(9, 13, 18, 0.76)',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '24px',
-              overflowY: 'auto',
-            }}
-          >
+          <div className="desktop-auth-overlay">
             <LoginPage
               onNavigate={navigate}
               onSessionChange={handleSessionChange}

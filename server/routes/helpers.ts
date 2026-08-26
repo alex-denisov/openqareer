@@ -4,8 +4,6 @@ import { ZodError } from 'zod';
 import type { AuthPrincipal, SessionAuth } from '../auth/authService';
 import type { ServerConfig } from '../config';
 import type { CandidateIdentity, CandidateStore } from '../data/candidateStore';
-import { OAUTH_PLATFORMS, type OAuthPlatform } from '../connectors/oauthTypes';
-import { OAuthConnectorError } from '../connectors/oauthConnector';
 
 interface ErrorBody {
   error: {
@@ -204,64 +202,4 @@ export function encodeHeaderFileName(fileName: string): string {
     /[!'()*]/gu,
     (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
   );
-}
-
-export function parsePlatform(value: string): OAuthPlatform | null {
-  return (OAUTH_PLATFORMS as readonly string[]).includes(value) ? (value as OAuthPlatform) : null;
-}
-
-export function connectorNotFound(request: FastifyRequest, reply: FastifyReply): FastifyReply {
-  return sendError(
-    reply,
-    request,
-    404,
-    'connector_not_found',
-    'Такая площадка не подключается.',
-    false,
-  );
-}
-
-export function sendConnectorError(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  error: unknown,
-): FastifyReply {
-  if (!(error instanceof OAuthConnectorError)) throw error;
-  return sendError(
-    reply,
-    request,
-    error.statusCode,
-    error.code,
-    connectorMessage(error.code),
-    error.retryable,
-  );
-}
-
-function connectorMessage(code: OAuthConnectorError['code']): string {
-  switch (code) {
-    case 'connector_not_configured':
-      return 'Подключение этой площадки ещё не настроено администратором.';
-    case 'oauth_state_invalid':
-      return 'Ссылка подключения истекла или уже использована. Начните подключение заново.';
-    case 'provider_oauth_failed':
-      return 'Площадка не подтвердила доступ. Повторите подключение позже.';
-    case 'provider_profile_unavailable':
-      return 'Площадка не вернула профиль по выданному доступу.';
-  }
-}
-
-/**
- * The callback is opened by the platform authorization server in the
- * candidate's browser, so the outcome is always handed to a fixed same-origin
- * route. A caller-provided return URL is never accepted.
- */
-export function connectionResultRedirect(
-  reply: FastifyReply,
-  platform: OAuthPlatform,
-  status: 'connected' | 'declined' | 'failed',
-  reason?: OAuthConnectorError['code'],
-): FastifyReply {
-  const query = new URLSearchParams({ platform, status });
-  if (reason) query.set('reason', reason);
-  return reply.redirect(`/connections/result?${query.toString()}`, 303);
 }

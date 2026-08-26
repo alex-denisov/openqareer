@@ -16,12 +16,12 @@ describe('connection callback landing', () => {
     expect(
       readConnectionResult({
         pathname: '/connections/result',
-        search: '?platform=linkedin&status=failed&reason=oauth_state_invalid',
+        search: '?platform=linkedin&status=failed&reason=link_expired',
       }),
     ).toEqual({
       platform: 'linkedin',
       status: 'failed',
-      reason: 'oauth_state_invalid',
+      reason: 'link_expired',
     });
 
     expect(
@@ -64,7 +64,7 @@ describe('connection callback landing', () => {
       connectionResultMessage({
         platform: 'hh',
         status: 'failed',
-        reason: 'oauth_state_invalid',
+        reason: 'link_expired',
       }),
     ).toMatch(/истекла|заново/i);
     expect(

@@ -1,7 +1,6 @@
 import type { SessionAuth } from '../auth/authService';
 import type { ServerConfig } from '../config';
 import type { CandidateStore } from '../data/candidateStore';
-import type { CandidateOAuthService } from '../connectors/oauthConnector';
 import type { HhVacancySample } from '../connectors/hhVacancySearch';
 import type { ProfileUrlImportResult } from '../connectors/profileUrlImport';
 import type { CareerCommandDispatcher } from '../orchestration/careerCommandDispatcher';
@@ -16,7 +15,6 @@ export interface RouteDeps {
   authService: SessionAuth;
   candidateStore: CandidateStore;
   coachProvider: CoachProvider;
-  oauthService: CandidateOAuthService;
   careerCommandDispatcher: CareerCommandDispatcher | null;
   vacancyIntelligence: VacancyIntelligenceService;
   multiSourceEngine: MultiSourceVacancyEngine;

@@ -21,6 +21,7 @@ export type {
   ResumeUnknown,
   StaleEvidenceReason,
 } from '../../../server/domain/resumeStudio';
+export type { ResumeUnknownCode } from '../../../server/domain/resumeStudioTypes';
 
 export type {
   ResumeEducationInput,

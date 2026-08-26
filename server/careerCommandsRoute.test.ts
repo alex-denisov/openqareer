@@ -493,5 +493,5 @@ const config: ServerConfig = {
   dataEncryptionKey: Buffer.alloc(32, 7), databasePath: ':memory:',
   model: 'gpt-5.6-sol', staticRoot: '/tmp/not-used', release: 'test',
   logLevel: 'fatal', secureCookies: false,
-  allowedOrigins: ['http://localhost:3000'], seedAccounts: [], oauthProviders: {},
+  allowedOrigins: ['http://localhost:3000'], seedAccounts: [],
 };

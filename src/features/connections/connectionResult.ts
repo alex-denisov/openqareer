@@ -8,8 +8,8 @@ const RESULT_STATUSES = ['connected', 'declined', 'failed'] as const;
 
 const RESULT_REASONS = [
   'connector_not_configured',
-  'oauth_state_invalid',
-  'provider_oauth_failed',
+  'link_expired',
+  'provider_access_failed',
   'provider_profile_unavailable',
 ] as const;
 
@@ -57,7 +57,7 @@ export function connectionResultMessage(result: ConnectionResult): string {
     return `Доступ не выдан: вы отменили подключение ${platform}. Ничего не сохранено, можно продолжить без подключения.`;
   }
   switch (result.reason) {
-    case 'oauth_state_invalid':
+    case 'link_expired':
       return `Ссылка подключения ${platform} истекла или уже использована. Начните подключение заново.`;
     case 'connector_not_configured':
       return `Подключение ${platform} ещё не настроено на сервере. Загрузите свой экспорт или PDF.`;

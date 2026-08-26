@@ -27,10 +27,6 @@ import type {
   ImportedResumeEvidence,
   StoredResumeDraft,
   TurnRequest,
-  ConsumedOAuthAuthorization,
-  OAuthAuthorizationInput,
-  OAuthConnectionInput,
-  StoredOAuthConnection,
   CandidateDocumentInput,
   CandidateDocumentWithContent,
   StoredCandidateDocument,
@@ -39,7 +35,6 @@ import type {
   StoredNativeSourceConnection,
   NativeSourceReceiptInput,
 } from './candidateStore';
-import type { OAuthPlatform } from '../connectors/oauthTypes';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import { SealedText } from './sealedText';
 import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
@@ -70,7 +65,6 @@ import type {
 import type { CoachProviderResult } from '../providers/coachProvider';
 import { applyMigrations } from './store/applyMigrations';
 import { ConversationController } from './store/conversationController';
-import { OAuthController } from './store/oauthController';
 import { SourceConnectionController } from './store/sourceConnectionController';
 import {
   CandidateDocumentRetentionError,
@@ -97,7 +91,6 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly documentRepository: SqliteDocumentRepository;
   private readonly vacancyRepository: SqliteVacancyRepository;
   private readonly conversations: ConversationController;
-  private readonly oauth: OAuthController;
   private readonly sourceConnections: SourceConnectionController;
 
   constructor(options: SqliteStoreOptions) {
@@ -126,10 +119,6 @@ export class SqliteCandidateStore implements CandidateStore {
       database: this.database,
       sealedText: this.sealedText,
       documentRepository: this.documentRepository,
-    });
-    this.oauth = new OAuthController({
-      database: this.database,
-      sealedText: this.sealedText,
     });
     this.sourceConnections = new SourceConnectionController({
       database: this.database,
@@ -436,51 +425,6 @@ export class SqliteCandidateStore implements CandidateStore {
   ): CandidateWorkspaceState {
     this.requireCandidate(candidateId);
     return this.workspaceRepository.save(candidateId, workspace);
-  }
-
-  createOAuthAuthorization(
-    candidateId: string,
-    authorization: OAuthAuthorizationInput,
-  ): void {
-    this.requireCandidate(candidateId);
-    this.oauth.createOAuthAuthorization(candidateId, authorization);
-  }
-
-  consumeOAuthAuthorization(
-    platform: OAuthPlatform,
-    stateDigest: string,
-    consumedAt: string,
-  ): ConsumedOAuthAuthorization | null {
-    return this.oauth.consumeOAuthAuthorization(platform, stateDigest, consumedAt);
-  }
-
-  saveOAuthConnection(
-    candidateId: string,
-    connection: OAuthConnectionInput,
-  ): StoredOAuthConnection {
-    this.requireCandidate(candidateId);
-    return this.oauth.saveOAuthConnection(candidateId, connection);
-  }
-
-  getOAuthConnection(
-    candidateId: string,
-    platform: OAuthPlatform,
-  ): StoredOAuthConnection | null {
-    this.requireCandidate(candidateId);
-    return this.oauth.getOAuthConnection(candidateId, platform);
-  }
-
-  listOAuthConnections(candidateId: string): StoredOAuthConnection[] {
-    this.requireCandidate(candidateId);
-    return this.oauth.listOAuthConnections(candidateId);
-  }
-
-  deleteOAuthConnection(
-    candidateId: string,
-    platform: OAuthPlatform,
-  ): boolean {
-    this.requireCandidate(candidateId);
-    return this.oauth.deleteOAuthConnection(candidateId, platform);
   }
 
   importResumeEvidence(

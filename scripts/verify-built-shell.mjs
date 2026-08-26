@@ -374,8 +374,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
     }
     if (request.method() === 'DELETE' && pathname.endsWith('/hh')) {
       hhDisconnectAttempts += 1;
-      const localDataRemoved = hhDisconnectAttempts > 1;
-      hhConnected = !localDataRemoved;
+      const connectionRemoved = hhDisconnectAttempts > 1;
+      hhConnected = !connectionRemoved;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -383,8 +383,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
           data: {
             platform: 'hh',
             status: 'disconnected',
-            localDataRemoved,
-            upstreamRevocation: 'unsupported',
+            accessMode: 'native_session_snapshot',
+            connectionRemoved,
+            providerSession: 'not_managed',
+            importedData: 'retained',
           },
         }),
       });
@@ -653,7 +655,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: account settings did not load one connection catalog`,
   );
   await page.getByRole('button', { name: 'Отключить hh.ru' }).click();
-  await page.getByText('Не удалось удалить локальные данные hh.ru', { exact: false }).waitFor();
+  await page.getByText('Не удалось отключить hh.ru', { exact: false }).waitFor();
   await page.getByRole('button', { name: 'Отключить hh.ru' }).waitFor();
   await page
     .locator('.career-account-connection-list article')

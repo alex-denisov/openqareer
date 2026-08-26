@@ -6,123 +6,84 @@ import {
 } from './connectionState';
 
 describe('connection disconnect result', () => {
-  it('keeps the connection active when local deletion was not confirmed', () => {
+  it('keeps the connection active when receipt removal was not confirmed', () => {
     const connections: CandidateConnection[] = [
       {
-        platform: 'linkedin' as const,
+        platform: 'hh',
         available: true,
-        status: 'connected' as const,
-        capabilities: ['lite_identity'],
-        importsCareerHistory: false,
-        scopes: ['openid', 'profile'],
-        accessTokenExpiresAt: null,
-        connectedAt: '2026-08-10T12:00:00.000Z',
-        profile: {
-          capturedAt: '2026-08-10T12:00:00.000Z',
-          sourceUrl: null,
-          facts: [],
-        },
+        status: 'connected',
+        accessMode: 'native_session_snapshot',
+        capabilities: ['resume_read'],
+        importsCareerHistory: true,
+        connectedAt: '2026-08-24T08:00:00.000Z',
+        lastImportedAt: '2026-08-24T08:00:00.000Z',
+        factCount: 7,
       },
     ];
 
     expect(
       applyConnectionDisconnectResult(connections, {
-        platform: 'linkedin',
+        platform: 'hh',
         status: 'disconnected',
-        localDataRemoved: false,
-        upstreamRevocation: 'unsupported',
+        accessMode: 'native_session_snapshot',
+        connectionRemoved: false,
+        providerSession: 'not_managed',
+        importedData: 'retained',
       }),
     ).toEqual(connections);
   });
 
-  it('does not claim local deletion when the server did not remove local data', () => {
+  it('does not claim disconnection when the server did not remove connection', () => {
     const notice = connectionDisconnectNotice({
       platform: 'linkedin',
       status: 'disconnected',
-      localDataRemoved: false,
-      upstreamRevocation: 'unsupported',
+      accessMode: 'native_session_snapshot',
+      connectionRemoved: false,
+      providerSession: 'not_managed',
+      importedData: 'retained',
     });
 
-    expect(notice).toMatch(/не удалось удалить|не подтверждено/i);
-    expect(notice).not.toMatch(/данные удалены|токены и снимок профиля удалены/i);
-  });
-
-  it('does not claim that unsupported upstream revocation happened', () => {
-    expect(
-      connectionDisconnectNotice({
-        platform: 'linkedin',
-        status: 'disconnected',
-        localDataRemoved: true,
-        upstreamRevocation: 'unsupported',
-      }),
-    ).toContain('удалены из OpenQareer');
-    expect(
-      connectionDisconnectNotice({
-        platform: 'linkedin',
-        status: 'disconnected',
-        localDataRemoved: true,
-        upstreamRevocation: 'unsupported',
-      }),
-    ).toContain('проверьте доступы в LinkedIn');
-  });
-
-  it('reports a confirmed upstream revocation and a failed one differently', () => {
-    expect(
-      connectionDisconnectNotice({
-        platform: 'hh',
-        status: 'disconnected',
-        localDataRemoved: true,
-        upstreamRevocation: 'revoked',
-      }),
-    ).toContain('доступ на площадке отозван');
-    expect(
-      connectionDisconnectNotice({
-        platform: 'hh',
-        status: 'disconnected',
-        localDataRemoved: true,
-        upstreamRevocation: 'failed',
-      }),
-    ).toMatch(/не подтвердила отзыв доступа/i);
+    expect(notice).toMatch(/не удалось отключить/i);
+    expect(notice).not.toContain('отключён');
+    expect(notice).not.toMatch(/данные удалены|снимок.*удал/i);
   });
 
   it('marks only the disconnected platform and keeps the others untouched', () => {
     const connections: CandidateConnection[] = [
       {
-        platform: 'linkedin',
+        platform: 'hh',
         available: true,
         status: 'connected',
-        capabilities: ['lite_identity'],
-        importsCareerHistory: false,
-        scopes: ['openid', 'profile'],
-        accessTokenExpiresAt: null,
-        connectedAt: '2026-08-10T12:00:00.000Z',
-        profile: {
-          capturedAt: '2026-08-10T12:00:00.000Z',
-          sourceUrl: null,
-          facts: [],
-        },
+        accessMode: 'native_session_snapshot',
+        capabilities: ['resume_read'],
+        importsCareerHistory: true,
+        connectedAt: '2026-08-24T08:00:00.000Z',
+        lastImportedAt: '2026-08-24T08:00:00.000Z',
+        factCount: 7,
       },
       {
-        platform: 'hh',
+        platform: 'linkedin',
         available: true,
         status: 'disconnected',
         capabilities: ['profile_read'],
-        importsCareerHistory: true,
+        importsCareerHistory: false,
       },
     ];
 
     const updated = applyConnectionDisconnectResult(connections, {
-      platform: 'linkedin',
+      platform: 'hh',
       status: 'disconnected',
-      localDataRemoved: true,
-      upstreamRevocation: 'revoked',
+      accessMode: 'native_session_snapshot',
+      connectionRemoved: true,
+      providerSession: 'not_managed',
+      importedData: 'retained',
     });
 
     expect(updated[0]).toEqual({
-      platform: 'linkedin',
+      platform: 'hh',
       available: true,
-      capabilities: ['lite_identity'],
-      importsCareerHistory: false,
+      capabilities: ['resume_read'],
+      importsCareerHistory: true,
       status: 'disconnected',
     });
     expect(updated[1]).toBe(connections[1]);
@@ -177,23 +138,5 @@ describe('connection disconnect result', () => {
         status: 'disconnected',
       },
     ]);
-  });
-
-  it('does not hide a failed legacy OAuth revocation behind the native-session copy', () => {
-    const notice = connectionDisconnectNotice({
-      platform: 'hh',
-      status: 'disconnected',
-      accessMode: 'native_session_snapshot',
-      connectionRemoved: true,
-      providerSession: 'not_managed',
-      importedData: 'retained',
-      oauthCleanup: {
-        localDataRemoved: true,
-        upstreamRevocation: 'failed',
-      },
-    });
-
-    expect(notice).toMatch(/не подтвердила отзыв|проверьте доступы/i);
-    expect(notice).toContain('Импортированные данные остаются');
   });
 });

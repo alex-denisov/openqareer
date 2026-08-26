@@ -236,7 +236,7 @@ function AdminDirectoryHeader() {
         <p className="admin-eyebrow">Администрирование</p>
         <h1>Учётные записи</h1>
       </div>
-      <div style={{ display: 'flex', gap: '10px' }}>
+      <div className="admin-head-actions">
         <a className="admin-quiet-link" href="/app">
           В кабинет
         </a>
@@ -316,7 +316,7 @@ function AdminTableRowActions({
   onImpersonate: (user: AdminUser) => void;
 }) {
   return (
-    <div style={{ display: 'flex', gap: '6px' }}>
+    <div className="admin-table-row-actions">
       <button
         className="admin-btn is-secondary"
         type="button"
@@ -401,11 +401,10 @@ function AdminPagination({
   return (
     <nav className="admin-pagination" aria-label="Страницы справочника">
       <button
-        className="admin-quiet-button"
+        className={`admin-quiet-button ${hasMultiplePages ? '' : 'is-hidden'}`}
         type="button"
         disabled={offset === 0}
         onClick={() => onOffset((current) => Math.max(0, current - ADMIN_PAGE_SIZE))}
-        style={{ visibility: hasMultiplePages ? 'visible' : 'hidden' }}
       >
         <ArrowLeft size={16} />
         Назад
@@ -414,11 +413,10 @@ function AdminPagination({
         Показано {shown} из {total}
       </span>
       <button
-        className="admin-quiet-button"
+        className={`admin-quiet-button ${hasMultiplePages ? '' : 'is-hidden'}`}
         type="button"
         disabled={offset + shown >= total}
         onClick={() => onOffset((current) => current + ADMIN_PAGE_SIZE)}
-        style={{ visibility: hasMultiplePages ? 'visible' : 'hidden' }}
       >
         Далее
         <ArrowRight size={16} />
@@ -454,7 +452,7 @@ function AdminTableRow({
           {(user.subscriptionTier || 'free').toUpperCase()}
         </span>
         {user.blockedAt && (
-          <span className="admin-badge admin-badge--blocked" style={{ marginLeft: '4px' }}>
+          <span className="admin-badge admin-badge--blocked">
             Блок
           </span>
         )}
@@ -516,11 +514,11 @@ function AdminTable({
 function AdminFrame({ children }: { children: ReactNode }) {
   return (
     <div className="admin-console">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-        <a className="admin-brand" href="/" aria-label="openqareer" style={{ margin: 0 }}>
+      <header className="admin-frame-header">
+        <a className="admin-brand" href="/" aria-label="openqareer">
           <BrandMark variant="lockup" size={26} />
         </a>
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div className="admin-frame-actions">
           <a href="/app" className="admin-btn is-secondary">
             В кабинет
           </a>

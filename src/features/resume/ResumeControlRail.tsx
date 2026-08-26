@@ -1,5 +1,5 @@
 import { CheckCircle, Info, WarningCircle } from '@phosphor-icons/react';
-import { conventionLines, staleReasonLabel } from './resumeLabels';
+import { conventionLines, staleReasonLabel, unknownGroupLabel } from './resumeLabels';
 import { orderUnknowns } from './resumeStudioModel';
 import { ResumeTargetVacanciesBlock } from './ResumeTargetVacanciesBlock';
 import type {
@@ -25,28 +25,35 @@ export function ResumeControlRail({
   excludedEvidenceIds,
   document,
 }: ResumeControlRailProps) {
+  const unknowns = orderUnknowns(document.unknowns);
+
   return (
-    <aside className="career-resume-rail" aria-label="Что уточнить">
+    <aside
+      className="career-resume-rail"
+      aria-label="Контроль резюме: соответствие правилам, свежесть и пробелы"
+    >
       <ResumeTargetVacanciesBlock />
-      <StaleEvidenceBlock freshness={freshness} />
-      <UnknownsBlock unknowns={orderUnknowns(document.unknowns)} />
+      <FreshnessBlock freshness={freshness} />
+      <UnknownsBlock unknowns={unknowns} />
       <ExcludedBlock memoryIds={excludedEvidenceIds} />
       <ConventionsBlock conventions={document.conventions} />
     </aside>
   );
 }
 
-
-function StaleEvidenceBlock({ freshness }: { freshness: ResumeEvidenceFreshness }) {
+function FreshnessBlock({
+  freshness,
+}: {
+  freshness: ResumeEvidenceFreshness;
+}) {
   if (freshness.stale.length === 0) return null;
   return (
     <section className="career-resume-rail-block is-alert" role="alert">
       <h3>
-        <WarningCircle size={16} weight="fill" /> Доказательство больше не
-        подтверждено
+        <WarningCircle size={16} weight="fill" /> Требует обновления ({freshness.stale.length})
       </h3>
       <p>
-        Эти факты были одобрены при сохранении, но в досье они изменились или
+        Факты, на которых построено резюме, изменились в вашем профиле или были
         отозваны. Сохраните резюме заново, чтобы зафиксировать актуальные.
       </p>
       <ul className="career-resume-stale">
@@ -80,7 +87,7 @@ function UnknownsBlock({ unknowns }: { unknowns: readonly ResumeUnknown[] }) {
                 {item.blocking ? 'блокирует' : 'уточнить'}
               </span>
               <span>{item.message}</span>
-              <code>{item.code}</code>
+              <span className="career-resume-unknown-group">{unknownGroupLabel(item.code)}</span>
             </li>
           ))}
         </ul>

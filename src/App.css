@@ -76,3 +76,23 @@ textarea:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
+
+.desktop-app-container {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+}
+
+.desktop-auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(9, 13, 18, 0.76);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow-y: auto;
+}

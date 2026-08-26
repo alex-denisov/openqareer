@@ -56,7 +56,7 @@ function SourceCardActions({
   onOpenTest: () => void;
 }) {
   return (
-    <div className="admin-source-actions" style={{ display: 'flex', gap: '8px' }}>
+    <div className="admin-source-actions">
       <button
         className="admin-btn is-secondary"
         type="button"
@@ -130,7 +130,7 @@ function SourceCard({
 function VacancyTestItemCard({ v }: { v: VacancySourceTestItem }) {
   return (
     <article className="admin-test-vacancy-item">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+      <div className="admin-test-vacancy-item-header">
         <strong>{v.title}</strong>
         {v.salary ? (
           <span className="admin-badge is-success">
@@ -140,18 +140,18 @@ function VacancyTestItemCard({ v }: { v: VacancySourceTestItem }) {
           </span>
         ) : null}
       </div>
-      <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: '4px 0' }}>
+      <div className="admin-test-vacancy-meta">
         <span>{v.company}</span> • <span>{v.location || 'Удаленно'}</span>
       </div>
       {v.requiredSkills && v.requiredSkills.length > 0 ? (
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+        <div className="admin-test-skills-list">
           {v.requiredSkills.map((s) => (
             <span key={s} className="admin-badge is-muted">{s}</span>
           ))}
         </div>
       ) : null}
-      <div style={{ marginTop: '8px' }}>
-        <a href={v.url} target="_blank" rel="noreferrer" className="admin-primary-link" style={{ fontSize: '0.8rem' }}>
+      <div className="admin-test-link-wrap">
+        <a href={v.url} target="_blank" rel="noreferrer" className="admin-primary-link">
           Открыть вакансию в источнике →
         </a>
       </div>
@@ -177,7 +177,7 @@ function VacancyTestResultsView({ result }: { result: VacancySourceTestResult })
           ))}
         </div>
       ) : (
-        <p className="admin-note" style={{ marginTop: '16px' }}>По запросу ничего не найдено.</p>
+        <p className="admin-note is-empty-note">По запросу ничего не найдено.</p>
       )}
     </div>
   );
@@ -220,14 +220,13 @@ function VacancySourceTestSearchForm({
 }) {
   return (
     <form className="admin-test-form" onSubmit={onSubmit}>
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+      <div className="admin-test-form-row">
         <input
           type="text"
-          className="admin-input"
+          className="admin-input admin-test-query-input"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Поисковый запрос (например: React, QA, Team Lead)"
-          style={{ flex: '1 1 240px', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--line-strong)', background: 'var(--surface-soft)', color: 'var(--text)' }}
         />
         <button className="admin-btn is-secondary" type="submit" disabled={busy}>
           <MagnifyingGlass size={14} />
@@ -270,7 +269,7 @@ function VacancySourceTestModal({
         <VacancySourceTestHeader name={source.name} targetUrl={source.targetUrl} onClose={onClose} />
         <VacancySourceTestSearchForm query={query} busy={busy} onQueryChange={setQuery} onSubmit={runTest} />
         {error ? (
-          <div className="admin-badge is-error" style={{ margin: '14px 0', padding: '8px 12px' }} role="alert">
+          <div className="admin-badge is-error admin-test-error" role="alert">
             {error}
           </div>
         ) : null}

@@ -427,28 +427,15 @@ export async function getConnections(): Promise<CandidateConnection[]> {
   return readDataArray<CandidateConnection>(response);
 }
 
-export type DisconnectedConnection = {
+export interface DisconnectedConnection {
   platform: 'linkedin' | 'hh';
   status: 'disconnected';
-} & (
-  | {
-      localDataRemoved: boolean;
-      upstreamRevocation: 'revoked' | 'failed' | 'unsupported';
-      accessMode?: never;
-    }
-  | {
-      accessMode: 'native_session_snapshot';
-      connectionRemoved: boolean;
-      providerSession: 'not_managed';
-      importedData: 'retained';
-      oauthCleanup?: {
-        localDataRemoved: boolean;
-        upstreamRevocation: 'revoked' | 'failed' | 'unsupported';
-      };
-      localDataRemoved?: never;
-      upstreamRevocation?: never;
-    }
-);
+  accessMode: 'native_session_snapshot';
+  connectionRemoved: boolean;
+  providerSession: 'not_managed';
+  importedData: 'retained';
+}
+
 
 export async function disconnectConnection(
   platform: 'linkedin' | 'hh',

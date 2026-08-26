@@ -92,7 +92,6 @@ async function createApp(
     secureCookies: false,
     allowedOrigins: ['http://localhost:3000'],
     seedAccounts: [],
-    oauthProviders: {},
     ...(onPasswordReset
       ? {
           accountEmail: {

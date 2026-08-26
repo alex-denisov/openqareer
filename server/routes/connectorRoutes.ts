@@ -2,18 +2,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
-  connectionResultRedirect,
-  connectorNotFound,
   csrfError,
   hasSafeMutationOrigin,
-  parsePlatform,
-  sendConnectorError,
   sendError,
   withDeps,
 } from './helpers';
-import { oauthCallbackQuerySchema, profileImportSchema } from './schemas';
-import { OAuthConnectorError } from '../connectors/oauthConnector';
-import { mergeCandidateConnectionViews } from '../connectors/nativeSourceConnection';
+import { profileImportSchema } from './schemas';
+import { listCandidateConnectionViews } from '../connectors/nativeSourceConnection';
 
 async function handleProfileImport(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
@@ -42,8 +37,7 @@ async function handleListConnections(deps: RouteDeps, request: FastifyRequest, r
   );
   if (!candidate) return;
   return {
-    data: mergeCandidateConnectionViews(
-      deps.oauthService.listConnections(candidate.id),
+    data: listCandidateConnectionViews(
       deps.candidateStore.listNativeSourceConnections(candidate.id),
     ),
     meta: { requestId: request.id },
@@ -72,59 +66,6 @@ async function handleDesktopTunnel(deps: RouteDeps, request: FastifyRequest, rep
   return { data: deps.config.desktopTunnel, meta: { requestId: request.id } };
 }
 
-async function handleStartAuthorization(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
-  if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
-  const candidate = authenticateCandidate(
-    request,
-    reply,
-    deps.candidateStore,
-    deps.authService,
-    deps.config,
-  );
-  if (!candidate) return;
-  const platform = parsePlatform((request.params as { platform: string }).platform);
-  if (!platform) return connectorNotFound(request, reply);
-  try {
-    return reply.code(201).send({
-      data: deps.oauthService.startAuthorization(candidate.id, platform),
-      meta: { requestId: request.id },
-    });
-  } catch (error) {
-    return sendConnectorError(request, reply, error);
-  }
-}
-
-async function handleOAuthCallback(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
-  const platform = parsePlatform((request.params as { platform: string }).platform);
-  if (!platform) return connectorNotFound(request, reply);
-  const callback = oauthCallbackQuerySchema.parse(request.query);
-  if (callback.error) {
-    deps.oauthService.declineAuthorization(platform, callback.state);
-    return connectionResultRedirect(reply, platform, 'declined');
-  }
-  try {
-    await deps.oauthService.completeAuthorization(platform, {
-      state: callback.state,
-      code: callback.code ?? '',
-    });
-  } catch (error) {
-    request.log.warn(
-      {
-        platform,
-        errorCode: error instanceof OAuthConnectorError ? error.code : 'internal_error',
-      },
-      'connector-callback-failed',
-    );
-    return connectionResultRedirect(
-      reply,
-      platform,
-      'failed',
-      error instanceof OAuthConnectorError ? error.code : 'provider_oauth_failed',
-    );
-  }
-  return connectionResultRedirect(reply, platform, 'connected');
-}
-
 async function handleDisconnect(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(
@@ -135,34 +76,19 @@ async function handleDisconnect(deps: RouteDeps, request: FastifyRequest, reply:
     deps.config,
   );
   if (!candidate) return;
-  const platform = parsePlatform((request.params as { platform: string }).platform);
-  if (!platform) return connectorNotFound(request, reply);
-  const nativeConnection = deps.candidateStore
-    .listNativeSourceConnections(candidate.id)
-    .find((connection) => connection.platform === platform);
-  if (nativeConnection) {
-    const oauthCleanup = await deps.oauthService.disconnect(candidate.id, platform);
-    return {
-      data: {
-        platform,
-        status: 'disconnected',
-        accessMode: 'native_session_snapshot',
-        connectionRemoved: deps.candidateStore.deleteNativeSourceConnection(
-          candidate.id,
-          platform,
-        ),
-        providerSession: 'not_managed',
-        importedData: 'retained',
-        oauthCleanup: {
-          localDataRemoved: oauthCleanup.localDataRemoved,
-          upstreamRevocation: oauthCleanup.upstreamRevocation,
-        },
-      },
-      meta: { requestId: request.id },
-    };
-  }
+  const platform = (request.params as { platform: string }).platform;
   return {
-    data: await deps.oauthService.disconnect(candidate.id, platform),
+    data: {
+      platform,
+      status: 'disconnected',
+      accessMode: 'native_session_snapshot',
+      connectionRemoved: deps.candidateStore.deleteNativeSourceConnection(
+        candidate.id,
+        platform as 'hh' | 'linkedin',
+      ),
+      providerSession: 'not_managed',
+      importedData: 'retained',
+    },
     meta: { requestId: request.id },
   };
 }
@@ -181,16 +107,6 @@ export async function registerConnectorRoutes(
     '/api/v1/candidate/desktop-tunnel',
     { config: { rateLimit: { max: 20, timeWindow: '15 minutes' } } },
     withDeps(deps, handleDesktopTunnel),
-  );
-  app.post<{ Params: { platform: string } }>(
-    '/api/v1/candidate/connections/:platform/authorizations',
-    { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } },
-    withDeps(deps, handleStartAuthorization),
-  );
-  app.get<{ Params: { platform: string } }>(
-    '/api/v1/connectors/:platform/callback',
-    { config: { rateLimit: { max: 20, timeWindow: '15 minutes' } } },
-    withDeps(deps, handleOAuthCallback),
   );
   app.delete<{ Params: { platform: string } }>(
     '/api/v1/candidate/connections/:platform',
