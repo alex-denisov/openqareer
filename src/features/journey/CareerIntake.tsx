@@ -143,7 +143,14 @@ export function CareerIntake({
     ingestedImported: ingested?.imported,
     connectedPlatform:
       connectedSource?.platform ??
-      (isHhConnected ? 'hh' : isLinkedinConnected ? 'linkedin' : undefined),
+      // An hh.ru account with no resume fixes nothing: locking the wizard to
+      // profile-import there shut the PDF the note was recommending in the
+      // same breath (owner report, 2026-08-26).
+      (isHhConnected && !isHhEmptyAccount
+        ? 'hh'
+        : isLinkedinConnected
+          ? 'linkedin'
+          : undefined),
     typedLength: typedResume.trim().length,
   });
 

@@ -118,3 +118,26 @@ describe('hh.ru in the intake wizard', () => {
     expect(html).toContain('не нашлось резюме');
   });
 });
+
+/**
+ * An hh.ru account with no resume gives the wizard nothing to build on. It used
+ * to fix the source anyway: «PDF» went dark next to a note recommending a PDF,
+ * and «Сменить источник» appeared over a source that was never captured
+ * (owner report, 2026-08-26).
+ */
+describe('an hh.ru account with no resume', () => {
+  it('leaves every other source open', () => {
+    const html = renderToStaticMarkup(
+      <IntakeSourceStep
+        {...baseProps()}
+        lock={intakeSourceLock({ connectedPlatform: undefined, typedLength: 0 })}
+        hhConnected
+        hhEmptyAccount
+      />,
+    );
+
+    expect(html).toContain('не нашлось резюме');
+    expect(html).not.toContain('Сменить источник');
+    expect(html).not.toContain('disabled=""');
+  });
+});
