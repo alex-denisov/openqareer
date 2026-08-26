@@ -17,7 +17,7 @@
  *   npm run verify:hh-session-import -- --headed --api=http://127.0.0.1:3210
  */
 import { readFile } from 'node:fs/promises';
-import { chromium, type Page } from 'playwright';
+import { chromium, webkit, type Page } from 'playwright';
 import { parseHhResumeHtml, parseHhResumesList } from '../src/services/connectors/hhResumeParser';
 import { HH_SELECTORS } from '../server/connectors/hh/hhSelectors';
 import {
@@ -27,6 +27,13 @@ import {
 import { resolveLocalEnvironmentFilePath } from '../server/localEnvironmentFile';
 
 const headed = process.argv.includes('--headed');
+/**
+ * The desktop shell reads the page inside a WKWebView, so `--webkit` is the
+ * engine that actually matters; Chromium is the faster everyday check. A
+ * platform that serves different markup to the two would break the product
+ * while the gate stayed green.
+ */
+const engine = process.argv.includes('--webkit') ? webkit : chromium;
 const apiBase =
   process.argv.find((arg) => arg.startsWith('--api='))?.slice('--api='.length) ??
   'https://openqareer.com';
@@ -116,7 +123,7 @@ if (!hhUser || !hhPassword || !candidateUser || !candidatePassword) {
   process.exit(2);
 }
 
-const browser = await chromium.launch({ headless: !headed });
+const browser = await engine.launch({ headless: !headed });
 const context = await browser.newContext({ acceptDownloads: false, serviceWorkers: 'block' });
 const page = await context.newPage();
 let exitCode = 0;
