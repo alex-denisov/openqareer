@@ -1,4 +1,3 @@
-import { Check } from '@phosphor-icons/react';
 import type { SearchUrgency } from '../workspace/workspaceStorage';
 import {
   CANDIDATE_REGION_CATALOGUE,
@@ -78,7 +77,6 @@ export function IntakeContextStep(props: IntakeContextStepProps) {
                   })
                 }
               >
-                {selected ? <Check size={15} weight="bold" /> : null}
                 {region.label}
               </button>
             );
@@ -105,7 +103,6 @@ export function IntakeContextStep(props: IntakeContextStepProps) {
                   })
                 }
               >
-                {selected ? <Check size={15} weight="bold" /> : null}
                 {condition}
               </button>
             );

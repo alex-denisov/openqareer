@@ -2,6 +2,11 @@ import {
   parseHhResumeHtml,
   parseHhResumesList,
 } from '../../services/connectors/hhResumeParser';
+import {
+  parseHhProfilePage,
+  withHhProfileIdentity,
+  type HhProfileIdentity,
+} from '../../services/connectors/hhProfileParser';
 import type { ParsedResume } from '../workspace/resumeParser';
 import type {
   SessionInspectionResult,
@@ -52,6 +57,11 @@ export type HhSessionPollResult =
       readonly resumes: HhResumeItem[];
       readonly defaultParsed?: ParsedResume;
       readonly rawUrl?: string;
+      /**
+       * What the account's own profile page states — the name above all, which
+       * hh.ru no longer renders on the resume page at all (B172).
+       */
+      readonly profile: HhProfileIdentity;
     };
 
 interface HhSessionPollDependencies {
@@ -75,7 +85,7 @@ interface HhSessionImportFlowDependencies extends HhSessionPollDependencies {
    * screen — the chosen resume is read inside it.
    */
   readonly onChoiceRequired: (
-    resumes: readonly HhResumeItem[],
+    result: Extract<HhSessionPollResult, { status: 'ready' }>,
   ) => void | Promise<void>;
   /** Exactly one resume, already read: nothing is left to ask. */
   readonly onReady: (
@@ -109,7 +119,7 @@ export function createHhSessionImportFlow(
         // (owner report, 2026-08-26). An unfinished capture is a question, and
         // a question keeps its window.
         if (!result.defaultParsed || !result.rawUrl || result.resumes.length > 1) {
-          await dependencies.onChoiceRequired(result.resumes);
+          await dependencies.onChoiceRequired(result);
           return result;
         }
         await dependencies.onReady(result);
@@ -142,6 +152,8 @@ export interface ChosenHhResumeDependencies {
 export async function readChosenHhResume(
   url: string,
   dependencies: ChosenHhResumeDependencies,
+  /** What the account's profile page stated, when the poll already read it. */
+  profile?: HhProfileIdentity,
 ): Promise<ParsedResume> {
   let parsed = await readResumeOrMissingWindow(url, dependencies.readSessionPage);
   if (parsed === WINDOW_MISSING) {
@@ -152,7 +164,7 @@ export async function readChosenHhResume(
     if (parsed === WINDOW_MISSING) throw new Error('hh_session_window_gone');
   }
   if (!parsed) throw new Error('hh_resume_not_read');
-  return parsed;
+  return profile ? withHhProfileIdentity(parsed, profile) : parsed;
 }
 
 /** Says which of the two things went wrong, in words the candidate can act on. */
@@ -245,18 +257,23 @@ async function pollOnce(
    * «вход выполнен, но список резюме прочитать не удалось», and the very next
    * attempt succeeded (owner report, 2026-08-26).
    */
-  const resumes = await captureSignedInPage({
+  // hh.ru serves the resume list on the account's profile page, so the same
+  // capture already carries the name, the city and the languages the resume
+  // page itself no longer renders (B172).
+  const captured = await captureSignedInPage({
     read: () => dependencies.readSessionPage(HH_RESUME_LIST_URL),
     interpret: (page) => {
       if (!isResumeListUrl(page.url)) return undefined;
       const listed = parseHhResumesList(page.body);
-      if (listed.length > 0) return listed;
-      return looksLikeEmptyResumeList(page.body) ? [] : undefined;
+      const profile = parseHhProfilePage(page.body);
+      if (listed.length > 0) return { resumes: listed, profile };
+      return looksLikeEmptyResumeList(page.body) ? { resumes: [], profile } : undefined;
     },
     isChallenge: looksLikeAuthenticationChallenge,
     failureCode: 'hh_authenticated_capture_failed',
     waitBeforeRetry: dependencies.waitBeforeRetry,
   });
+  const { resumes, profile } = captured;
   if (resumes.length === 0) return { status: 'authenticated_empty' };
 
   if (resumes.length > 1) {
@@ -265,19 +282,21 @@ async function pollOnce(
       resumes,
       defaultParsed: undefined,
       rawUrl: undefined,
+      profile,
     };
   }
 
   const first = resumes[0];
-  const defaultParsed = await readHhResumeFromSession(
+  const read = await readHhResumeFromSession(
     first.url,
     dependencies.readSessionPage,
   ).catch(() => undefined);
   return {
     status: 'ready',
     resumes,
-    defaultParsed,
+    defaultParsed: read ? withHhProfileIdentity(read, profile) : undefined,
     rawUrl: first.url,
+    profile,
   };
 }
 

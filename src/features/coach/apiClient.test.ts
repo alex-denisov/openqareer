@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   apiFetch,
+  CoachApiError,
   getApiBaseUrl,
   getStoredSessionToken,
   readData,
@@ -93,5 +94,36 @@ describe('apiClient', () => {
 
     const data = await readData(response);
     expect(data).toEqual({ status: 'ok' });
+  });
+
+  /**
+   * WKWebView — the engine the desktop app runs on — rejects a non-JSON body
+   * with `SyntaxError: The string did not match the expected pattern.`
+   * Unguarded, that engine string travelled all the way into the cabinet
+   * header and was shown to the owner as the product's own message
+   * (INC-027, owner report 2026-08-26).
+   */
+  describe('a response that is not JSON', () => {
+    it('becomes a typed API error instead of the engine\'s own words', async () => {
+      const response = new Response('<!doctype html><title>502</title>', {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' },
+      });
+
+      await expect(readData(response)).rejects.toMatchObject({
+        name: 'CoachApiError',
+        code: 'malformed_response',
+        retryable: true,
+      });
+    });
+
+    it('never repeats the engine sentence the owner saw', async () => {
+      const response = new Response('not json at all', { status: 200 });
+
+      const reason = await readData(response).catch((error: unknown) => error);
+
+      expect(reason).toBeInstanceOf(CoachApiError);
+      expect((reason as CoachApiError).message).not.toContain('did not match');
+    });
   });
 });

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { HhProfileIdentity } from '../../services/connectors/hhProfileParser';
 import { ArrowSquareOut, SpinnerGap, WarningCircle } from '@phosphor-icons/react';
 import { isTauriEnvironment, probeNetworkStatus } from '../../services/desktop/desktopBridge';
 import type { ParsedResume } from '../workspace/resumeParser';
@@ -81,6 +82,8 @@ export function HhConnectModal({
   const [importing, setImporting] = useState(false);
   const webviewHost = useRef<HTMLDivElement>(null);
   const sessionFlow = useRef<HhSessionImportFlow>();
+  /** What the profile page stated, kept for the resume the candidate picks. */
+  const hhProfile = useRef<HhProfileIdentity>();
   /** This opening of the dialog really did put a sign-in window on screen. */
   const sessionOpened = useRef(false);
   /** The page itself proved the candidate is signed in. */
@@ -200,13 +203,14 @@ export function HhConnectModal({
         signedIn.current = true;
         setWaiting({ text: 'Вход выполнен — читаем список ваших резюме…', stuck: false });
       },
-      onChoiceRequired: (resumes) => {
+      onChoiceRequired: (result) => {
         // Nothing left for the poll to detect, and the window stays: the
         // chosen resume is read inside it, a step away.
         setAutoPollPaused(true);
         setWaiting(undefined);
-        setChoice(resumes);
-        setSelectedResumeId(resumes[0]?.id ?? '');
+        hhProfile.current = result.profile;
+        setChoice(result.resumes);
+        setSelectedResumeId(result.resumes[0]?.id ?? '');
       },
       onReady: async (result) => {
         if (!result.defaultParsed || !result.rawUrl) return;
@@ -311,17 +315,25 @@ export function HhConnectModal({
     setImporting(true);
     setError(undefined);
     try {
-      const parsed = await readChosenHhResume(selected.url, {
-        readSessionPage: (url) => readSessionPage('hh', url),
-        reopenSession: async (url) =>
-          (
-            await openConnectorSession(
-              'hh',
-              url,
-              sessionLayoutForHost(webviewHost.current, window.innerWidth, window.innerHeight),
-            )
-          ).opened,
-      });
+      const parsed = await readChosenHhResume(
+        selected.url,
+        {
+          readSessionPage: (url) => readSessionPage('hh', url),
+          reopenSession: async (url) =>
+            (
+              await openConnectorSession(
+                'hh',
+                url,
+                sessionLayoutForHost(
+                  webviewHost.current,
+                  window.innerWidth,
+                  window.innerHeight,
+                ),
+              )
+            ).opened,
+        },
+        hhProfile.current,
+      );
       // The dialog only closes once the profile really holds the resume.
       await finishWithResume(choice ?? [], parsed, selected.url);
     } catch (reason) {

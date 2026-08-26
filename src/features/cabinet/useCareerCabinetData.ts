@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { apiErrorMessage } from '../coach/apiClient';
 import {
   CoachApiError,
   getAccount,
@@ -87,8 +88,8 @@ export function useCareerCabinetData(candidateId: string): CareerCabinetData {
 }
 
 function cabinetError(reason: unknown): string {
-  if (reason instanceof CoachApiError || reason instanceof Error) {
-    return reason.message;
-  }
-  return 'Не удалось загрузить карьерный кабинет. Повторите запрос.';
+  return apiErrorMessage(
+    reason,
+    'Не удалось загрузить карьерный кабинет. Повторите запрос.',
+  );
 }

@@ -19,6 +19,10 @@
 import { readFile } from 'node:fs/promises';
 import { chromium, webkit, type Page } from 'playwright';
 import { parseHhResumeHtml, parseHhResumesList } from '../src/services/connectors/hhResumeParser';
+import {
+  parseHhProfilePage,
+  withHhProfileIdentity,
+} from '../src/services/connectors/hhProfileParser';
 import { HH_SELECTORS } from '../server/connectors/hh/hhSelectors';
 import {
   parseEnvironmentFile,
@@ -108,6 +112,16 @@ async function capture(page: Page, url: string): Promise<{ url: string; body: st
   return { url: page.url(), body };
 }
 
+/**
+ * Writes one capture to disk when the operator asked for it. Captures carry the
+ * test account's own resume, so they stay outside the repository.
+ */
+async function dumpCapture(target: string | undefined, body: string): Promise<void> {
+  if (!target) return;
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(target, body, 'utf8');
+}
+
 const environmentFile = resolveLocalEnvironmentFilePath();
 const fileContents = await readFile(environmentFile, 'utf8').catch(() => null);
 const environment = resolveHhTestAccountEnvironment(process.env, fileContents);
@@ -132,22 +146,24 @@ try {
   report('hh-sign-in', { signedIn: true, url: page.url() });
 
   const list = await capture(page, 'https://hh.ru/applicant/resumes');
+  await dumpCapture(process.env.OPENQAREER_DUMP_LIST_CAPTURE, list.body);
   const resumes = parseHhResumesList(list.body);
+  // hh.ru serves the list on the profile page, which is the only place the
+  // candidate's own name is rendered — the product merges it the same way.
+  const profile = parseHhProfilePage(list.body);
   report('resume-list', { url: list.url, bodyChars: list.body.length, resumes });
   if (resumes.length === 0) throw new Error('hh_resume_list_empty');
 
   const chosen = resumes[0];
   const detail = await capture(page, chosen.url);
-  if (process.env.OPENQAREER_DUMP_CAPTURE) {
-    await (
-      await import('node:fs/promises')
-    ).writeFile(process.env.OPENQAREER_DUMP_CAPTURE, detail.body, 'utf8');
-  }
-  const parsed = parseHhResumeHtml(detail.body, chosen.url);
+  await dumpCapture(process.env.OPENQAREER_DUMP_CAPTURE, detail.body);
+  const parsed = withHhProfileIdentity(parseHhResumeHtml(detail.body, chosen.url), profile);
   report('parsed-resume', {
     url: detail.url,
     bodyChars: detail.body.length,
     fullName: Boolean(parsed.fullName),
+    location: Boolean(parsed.contact.location),
+    experienceDeclaredEmptyBySource: profile.experienceDeclaredEmpty,
     targetRole: parsed.targetRole,
     experience: parsed.experience.length,
     skills: parsed.skills.length,

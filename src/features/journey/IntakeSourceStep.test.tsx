@@ -78,11 +78,43 @@ describe('hh.ru in the intake wizard', () => {
     expect(html).toContain('>Подключить</button>');
   });
 
-  it('offers the release control as soon as a platform is connected', () => {
+  /**
+   * «Отключить» on the connected card already releases the source, so the
+   * separate «Сменить источник» plate was a second door to the same room —
+   * the owner read the two as duplicated controls (owner report, 2026-08-26).
+   * The plate goes; the reason stays where the closed controls are.
+   */
+  it('does not repeat the release control it already offers on the card', () => {
     const html = renderSignedInWithoutImportedResume();
 
-    expect(html).toContain('Сменить источник');
+    expect(html).not.toContain('Сменить источник');
     expect(html).toContain('уже подключён');
+  });
+
+  /**
+   * One connected platform is the account's source of truth. Offering
+   * «Подключить» on the other one promises a second career picture nothing
+   * downstream can merge (owner report, 2026-08-26).
+   */
+  it('closes the other platform and says which one to disconnect first', () => {
+    const html = renderImportedHhProfile();
+
+    expect(html).toContain('Профиль hh.ru уже подключён');
+    expect(html).toContain('сначала отключите hh.ru');
+    // A natively disabled button never fires the hover that shows its title.
+    expect(html).toContain('aria-disabled="true"');
+  });
+
+  it('keeps the PDF release control, which has no card to release it from', () => {
+    const html = renderToStaticMarkup(
+      <IntakeSourceStep
+        {...baseProps()}
+        sourceChoice="pdf"
+        lock={intakeSourceLock({ ingestedSource: 'pdf', typedLength: 0 })}
+      />,
+    );
+
+    expect(html).toContain('Сменить источник');
   });
 
   it('lets the candidate sign out of a connected platform from its own card', () => {

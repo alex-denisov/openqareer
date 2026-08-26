@@ -64,32 +64,46 @@ export interface IntakeSourceStepProps {
   readonly connectedSource?: ConnectedProfileSource;
 }
 
-export function IntakeSourceStep(props: IntakeSourceStepProps) {
-  const { sourceChoice, lock } = props;
+const SOURCE_CHOICES: ReadonlyArray<[SourceChoice, string, Icon]> = [
+  ['profile-import', 'Импорт профиля', PlugsConnected],
+  ['pdf', 'PDF', FilePdf],
+  ['text', 'Текстом', Sparkle],
+  ['none', 'Без документов', ArrowRight],
+];
+
+function SourceChoiceRow({
+  sourceChoice,
+  lock,
+  onChooseSource,
+}: Pick<IntakeSourceStepProps, 'sourceChoice' | 'lock' | 'onChooseSource'>) {
   const closed = (choice: SourceChoice) =>
     lock.lockedTo !== undefined && lock.lockedTo !== choice;
   return (
+    <div className="career-source-choice" role="group" aria-label="Источник опыта">
+      {SOURCE_CHOICES.map(([choice, label, icon]) => (
+        <SourceButton
+          key={choice}
+          icon={icon}
+          label={label}
+          selected={sourceChoice === choice}
+          disabled={closed(choice)}
+          closedReason={closed(choice) ? lock.reason : undefined}
+          onClick={() => onChooseSource(choice)}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function IntakeSourceStep(props: IntakeSourceStepProps) {
+  const { sourceChoice, lock } = props;
+  return (
     <div className="career-source-step">
-      <div className="career-source-choice" role="group" aria-label="Источник опыта">
-        {(
-          [
-            ['profile-import', 'Импорт профиля', PlugsConnected],
-            ['pdf', 'PDF', FilePdf],
-            ['text', 'Текстом', Sparkle],
-            ['none', 'Без документов', ArrowRight],
-          ] as Array<[SourceChoice, string, Icon]>
-        ).map(([choice, label, icon]) => (
-          <SourceButton
-            key={choice}
-            icon={icon}
-            label={label}
-            selected={sourceChoice === choice}
-            disabled={closed(choice)}
-            closedReason={closed(choice) ? lock.reason : undefined}
-            onClick={() => props.onChooseSource(choice)}
-          />
-        ))}
-      </div>
+      <SourceChoiceRow
+        sourceChoice={sourceChoice}
+        lock={lock}
+        onChooseSource={props.onChooseSource}
+      />
 
       {sourceChoice === 'pdf' ? <PdfSource {...props} /> : null}
       {sourceChoice === 'profile-import' ? <ProfileImportSource {...props} /> : null}
@@ -113,7 +127,12 @@ export function IntakeSourceStep(props: IntakeSourceStepProps) {
         </p>
       ) : null}
 
-      <SourceLockNotice reason={lock.reason} onRelease={props.onReleaseSource} />
+      {/* A connected platform card already carries «Отключить», so the plate
+          would be a second door to the same room (owner report, 2026-08-26).
+          PDF and typed text have no such card — there the plate stays. */}
+      {lock.lockedTo === 'profile-import' ? null : (
+        <SourceLockNotice reason={lock.reason} onRelease={props.onReleaseSource} />
+      )}
     </div>
   );
 }
@@ -205,6 +224,8 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
         props.ingested.imported &&
         props.ingested.connection),
   );
+  const otherSourceHolds =
+    props.lock.lockedTo !== undefined && props.lock.lockedTo !== 'profile-import';
   return (
     <div className="career-source-fields">
       <div className="career-platform-cards">
@@ -213,10 +234,8 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
           name="LinkedIn"
           description="Импорт опыта и навыков из вашего профиля LinkedIn."
           connected={linkedinReady}
-          disabled={
-            props.busy ||
-            (props.lock.lockedTo !== undefined && props.lock.lockedTo !== 'profile-import')
-          }
+          disabled={props.busy || otherSourceHolds}
+          blockedReason={hhReady ? occupiedBy('hh.ru', 'LinkedIn') : undefined}
           onConnect={() => props.onLinkedinOpen(true)}
           onDisconnect={() => props.onDisconnectPlatform('linkedin')}
         />
@@ -225,10 +244,8 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
           name="hh.ru"
           description="Импорт вашего резюме с hh.ru: вход проходит на странице hh.ru, в вашей сессии."
           connected={hhReady}
-          disabled={
-            props.busy ||
-            (props.lock.lockedTo !== undefined && props.lock.lockedTo !== 'profile-import')
-          }
+          disabled={props.busy || otherSourceHolds}
+          blockedReason={linkedinReady ? occupiedBy('LinkedIn', 'hh.ru') : undefined}
           onConnect={() => props.onHhOpen(true)}
           onDisconnect={() => props.onDisconnectPlatform('hh')}
         />
@@ -262,6 +279,15 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
 }
 
 /**
+ * Why the second platform is shut, naming both sides. One connected profile is
+ * the account's source of truth; a second one would be a different account of
+ * the same career with nothing downstream to merge them.
+ */
+function occupiedBy(connected: string, blocked: string): string {
+  return `Профиль ${connected} уже подключён. Чтобы подключить ${blocked}, сначала отключите ${connected}.`;
+}
+
+/**
  * A platform, its real state, and the one action that state allows.
  *
  * A connected card offers «Отключить» in the place «Подключить» occupied. The
@@ -270,47 +296,101 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
  * out to live here, on the card, where the connection itself is shown
  * (owner report, 2026-08-26). Re-importing is disconnect, then connect.
  */
+/** The one action a platform's real state allows, and why it may be shut. */
+function PlatformCardAction({
+  name,
+  connected,
+  disabled,
+  blocked,
+  blockedReason,
+  onConnect,
+  onDisconnect,
+}: {
+  name: string;
+  connected: boolean;
+  disabled: boolean;
+  blocked: boolean;
+  blockedReason?: string;
+  onConnect: () => void;
+  onDisconnect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`career-platform-card-action ${
+        connected ? 'career-quiet-button' : 'career-primary-button'
+      }`}
+      disabled={disabled}
+      aria-disabled={blocked ? true : undefined}
+      title={blockedReason}
+      aria-label={blocked ? `Подключить ${name}. ${blockedReason}` : undefined}
+      onClick={blocked ? undefined : connected ? onDisconnect : onConnect}
+    >
+      {connected ? 'Отключить' : 'Подключить'}
+    </button>
+  );
+}
+
+interface PlatformCardProps {
+  readonly platform: 'linkedin' | 'hh';
+  readonly name: string;
+  readonly description: string;
+  readonly connected: boolean;
+  readonly disabled: boolean;
+  /** Set when the other platform holds the account, and says which one. */
+  readonly blockedReason?: string;
+  readonly onConnect: () => void;
+  readonly onDisconnect: () => void;
+}
+
+function PlatformCardHeader({
+  platform,
+  name,
+  connected,
+}: Pick<PlatformCardProps, 'platform' | 'name' | 'connected'>) {
+  return (
+    <div className="career-platform-card-header">
+      <div className="career-platform-card-title">
+        <PlatformLogo platform={platform} size={26} />
+        <span>{name}</span>
+      </div>
+      <span className={`career-platform-card-badge ${connected ? 'is-connected' : ''}`}>
+        {connected ? 'Подключено' : 'Не подключено'}
+      </span>
+    </div>
+  );
+}
+
 function PlatformCard({
   platform,
   name,
   description,
   connected,
   disabled,
+  blockedReason,
   onConnect,
   onDisconnect,
-}: {
-  platform: 'linkedin' | 'hh';
-  name: string;
-  description: string;
-  connected: boolean;
-  disabled: boolean;
-  onConnect: () => void;
-  onDisconnect: () => void;
-}) {
+}: PlatformCardProps) {
+  const blocked = !connected && blockedReason !== undefined;
   return (
-    <div className={`career-platform-card ${connected ? 'is-connected' : ''}`}>
-      <div className="career-platform-card-header">
-        <div className="career-platform-card-title">
-          <PlatformLogo platform={platform} size={26} />
-          <span>{name}</span>
-        </div>
-        <span
-          className={`career-platform-card-badge ${connected ? 'is-connected' : ''}`}
-        >
-          {connected ? 'Подключено' : 'Не подключено'}
-        </span>
-      </div>
+    <div
+      className={`career-platform-card ${connected ? 'is-connected' : ''}`}
+      data-blocked={blocked ? 'true' : undefined}
+    >
+      <PlatformCardHeader platform={platform} name={name} connected={connected} />
       <p className="career-platform-card-desc">{description}</p>
-      <button
-        type="button"
-        className={`career-platform-card-action ${
-          connected ? 'career-quiet-button' : 'career-primary-button'
-        }`}
+      {/* A natively disabled button never fires the hover that would show its
+          reason, so a blocked card stays reachable and inert instead
+          (owner report, 2026-08-26). `busy` is still a real `disabled`. */}
+      <PlatformCardAction
+        name={name}
+        connected={connected}
         disabled={disabled}
-        onClick={connected ? onDisconnect : onConnect}
-      >
-        {connected ? 'Отключить' : 'Подключить'}
-      </button>
+        blocked={blocked}
+        blockedReason={blockedReason}
+        onConnect={onConnect}
+        onDisconnect={onDisconnect}
+      />
     </div>
   );
 }
@@ -394,10 +474,11 @@ function SourceButton({
       type="button"
       className={selected ? 'is-selected' : ''}
       aria-pressed={selected}
-      disabled={disabled}
+      aria-disabled={disabled ? true : undefined}
+      data-blocked={disabled ? 'true' : undefined}
       aria-label={closedReason ? `${label}. ${closedReason}` : undefined}
       title={closedReason ?? label}
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
     >
       <ItemIcon size={20} weight={selected ? 'fill' : 'regular'} />
       <span>{label}</span>

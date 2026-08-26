@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CoachApiError } from '../coach/apiClient';
+import { apiErrorMessage } from '../coach/apiClient';
 import { getResumeStudio, saveResumeStudioDraft } from './resumeApi';
 import { draftOf, toSavePayload } from './resumeStudioModel';
 import type { ResumeDraft, ResumeStudioView } from './resumeTypes';
@@ -87,6 +87,5 @@ function useResumeLoader() {
 }
 
 function errorMessage(reason: unknown): string {
-  if (reason instanceof CoachApiError || reason instanceof Error) return reason.message;
-  return 'Не удалось загрузить резюме. Повторите запрос.';
+  return apiErrorMessage(reason, 'Не удалось загрузить резюме. Повторите запрос.');
 }

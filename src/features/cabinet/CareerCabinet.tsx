@@ -9,6 +9,7 @@ import { CareerTodayBriefing } from './CareerTodayBriefing';
 import { CareerTrackBoard } from './CareerTrackBoard';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
+import { cabinetDisplayName } from './cabinetIdentity';
 import { useCareerCabinetData } from './useCareerCabinetData';
 import type { CareerCabinetView } from './cabinetViews';
 
@@ -44,7 +45,12 @@ export function CareerCabinet({
   onOpenExpert,
 }: CareerCabinetProps) {
   const data = useCareerCabinetData(session.candidateId);
-  const name = data.account?.displayName ?? session.displayName ?? session.username;
+  const name = cabinetDisplayName({
+    account: data.account,
+    resume: data.resume,
+    sessionDisplayName: session.displayName,
+    username: session.username,
+  });
   const targetDirection =
     data.account?.profile.headline?.trim() || workspace?.targetDirection || '';
   const canonicalJourney = useMemo(

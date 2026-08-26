@@ -519,6 +519,23 @@ describe('CareerWorkspaceShell brand chrome', () => {
     });
 
     /**
+     * The handle used to float over the workspace on the rail's outer border,
+     * where it covered whatever the candidate was reading (owner report,
+     * 2026-08-26). It belongs in the rail's own bottom group, with the account
+     * control it sits beside.
+     */
+    it('keeps the handle inside the rail rather than floating over the page', () => {
+      const html = renderToStaticMarkup(firstTime);
+      const bottom = html.slice(
+        html.indexOf('career-rail-bottom'),
+        html.indexOf('</aside>'),
+      );
+
+      expect(bottom).toContain('career-rail-toggle');
+      expect(bottom).toContain('career-account-button');
+    });
+
+    /**
      * Production serves `style-src 'self'`, which drops the style attribute
      * outright, so a link styled that way is unstyled for every real visitor
      * (PRB-012). The admin entry point used to carry seven such declarations.

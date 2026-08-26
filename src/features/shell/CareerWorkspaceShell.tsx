@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  CaretLeft,
-  CaretRight,
+  CaretLineLeft,
+  CaretLineRight,
   Compass,
   FileText,
   House,
@@ -325,21 +325,26 @@ export function CareerWorkspaceShell({
             <UserCircle size={24} />
             <span>{session?.username ?? 'Аккаунт'}</span>
           </button>
+          {/* The handle belongs with the rail's own controls. Floating on the
+              outer border it covered the workspace the candidate was reading
+              (owner report, 2026-08-26). */}
+          <button
+            className="career-rail-toggle"
+            type="button"
+            onClick={toggleRail}
+            aria-expanded={railExpanded}
+            aria-controls="career-rail"
+            aria-label={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
+            title={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
+          >
+            {railExpanded ? (
+              <CaretLineLeft size={22} />
+            ) : (
+              <CaretLineRight size={22} />
+            )}
+            <span>{railExpanded ? 'Свернуть' : 'Развернуть'}</span>
+          </button>
         </div>
-        {/* The handle sits on the rail's own border, which is the edge the
-            candidate is already looking at when they wonder what the icons
-            mean. Expanding is the only way to read the section names. */}
-        <button
-          className="career-rail-toggle"
-          type="button"
-          onClick={toggleRail}
-          aria-expanded={railExpanded}
-          aria-controls="career-rail"
-          aria-label={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
-          title={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
-        >
-          {railExpanded ? <CaretLeft size={14} weight="bold" /> : <CaretRight size={14} weight="bold" />}
-        </button>
       </aside>
 
       {/* Narrow screens hide the rail, so this bar carries the two controls

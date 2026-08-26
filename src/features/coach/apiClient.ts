@@ -141,7 +141,7 @@ export async function readData<T>(response: Response): Promise<T> {
   if (!response.ok) {
     await throwApiError(response);
   }
-  const envelope = (await response.json()) as ApiEnvelope<T>;
+  const envelope = await readEnvelope<T>(response);
   const data = envelope.data;
   if (data && typeof data === 'object' && 'sessionToken' in data) {
     const token = (data as { sessionToken?: unknown }).sessionToken;
@@ -150,6 +150,33 @@ export async function readData<T>(response: Response): Promise<T> {
     }
   }
   return data;
+}
+
+/**
+ * A body that is not JSON is a malformed response, not a defect the candidate
+ * can read about. WebKit — the engine the desktop app runs on — rejects one
+ * with `SyntaxError: The string did not match the expected pattern.`, and that
+ * sentence used to be printed in the cabinet header verbatim (INC-027).
+ */
+async function readEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> {
+  try {
+    return (await response.json()) as ApiEnvelope<T>;
+  } catch {
+    throw malformedResponseError();
+  }
+}
+
+/**
+ * The one sentence a surface may show for a failed reading.
+ *
+ * Only a `CoachApiError` carries a message written for a candidate. Anything
+ * else is an engine or programming failure whose text is English, technical
+ * and untranslatable — printing it verbatim is how
+ * `The string did not match the expected pattern.` reached the cabinet header
+ * (INC-027). The original is kept on the returned error for diagnosis.
+ */
+export function apiErrorMessage(reason: unknown, fallback: string): string {
+  return reason instanceof CoachApiError ? reason.message : fallback;
 }
 
 const MALFORMED_RESPONSE_MESSAGE =

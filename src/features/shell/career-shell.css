@@ -379,28 +379,26 @@
 
 /* Fixed, not absolute: the rail scrolls its own overflow, and a handle inside
    that scroller would be clipped by it and would drift as the list moves. */
+/* The handle is a rail control, not an overlay: it lines up with the account
+   button below the navigation and never covers the workspace. */
 .career-rail-toggle {
-  position: fixed;
-  top: 96px;
-  left: calc(var(--career-rail-width) - 13px);
-  z-index: 25;
-  width: 26px;
-  height: 26px;
+  width: 52px;
+  min-height: 44px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--career-line-strong);
-  border-radius: 50%;
-  color: var(--career-text-soft);
-  background: var(--career-surface-raised);
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: var(--career-text-dim);
+  background: transparent;
+  font: inherit;
   transition:
-    left 200ms cubic-bezier(0.16, 1, 0.3, 1),
     color 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    background-color 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .career-rail-toggle:hover {
   color: var(--career-text);
-  border-color: var(--career-accent);
+  background: var(--career-surface);
 }
 
 .career-account-button,
@@ -428,6 +426,7 @@
 }
 
 /* Collapsed, the labels are the accessible name only. */
+.career-shell[data-rail='collapsed'] .career-rail-toggle > span,
 .career-shell[data-rail='collapsed'] .career-account-button > span,
 .career-shell[data-rail='collapsed'] .career-rail-admin > span {
   position: absolute;
@@ -449,6 +448,7 @@
 }
 
 .career-shell[data-rail='expanded'] .career-nav-button,
+.career-shell[data-rail='expanded'] .career-rail-toggle,
 .career-shell[data-rail='expanded'] .career-account-button,
 .career-shell[data-rail='expanded'] .career-rail-admin {
   width: auto;
@@ -6249,11 +6249,18 @@
   padding: 10px 16px;
 }
 
-/* Disabled/locked source button state */
-.career-source-choice > button:disabled {
+/* Disabled/locked source button state.
+   `pointer-events: none` would also suppress the hover that shows the reason,
+   so a closed control stays hoverable and simply does nothing when pressed. */
+.career-source-choice > button:disabled,
+.career-source-choice > button[data-blocked='true'],
+.career-platform-card-action[aria-disabled='true'] {
   opacity: 0.45;
   cursor: not-allowed;
-  pointer-events: none;
+}
+
+.career-platform-card[data-blocked='true'] {
+  opacity: 0.72;
 }
 
 /* Connector dialogs (B148) --------------------------------------------- */

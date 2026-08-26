@@ -210,13 +210,22 @@ async function checkConnectedCardState(page, viewport) {
   if ((await page.getByText('Резюме разобрано').count()) > 0) {
     problems.push(`desktop ${viewport.name}: parsed-resume banner survived`);
   }
-  await assertVisible(
-    page,
-    page.getByRole('button', { name: 'Сменить источник' }),
-    `desktop ${viewport.name}: release control shown as soon as hh.ru is connected`,
-  );
-  if (!(await isBelow(page, '.career-source-lock', '.career-platform-cards'))) {
-    problems.push(`desktop ${viewport.name}: release notice is not below the platform cards`);
+  // «Отключить» on the card is the release control. The separate plate was a
+  // second door to the same room and the owner read them as duplicates
+  // (owner report, 2026-08-26; B171).
+  if ((await page.locator('.career-source-lock').count()) > 0) {
+    problems.push(`desktop ${viewport.name}: the duplicated «Сменить источник» plate survived`);
+  }
+  // The other platform is shut, and says which connection to release first.
+  const otherConnect = page
+    .locator('.career-platform-card', { hasText: 'LinkedIn' })
+    .getByRole('button', { name: /Подключить/u });
+  if ((await otherConnect.getAttribute('aria-disabled')) !== 'true') {
+    problems.push(`desktop ${viewport.name}: LinkedIn stayed connectable under a connected hh.ru`);
+  }
+  const reason = (await otherConnect.getAttribute('title')) ?? '';
+  if (!reason.includes('сначала отключите hh.ru')) {
+    problems.push(`desktop ${viewport.name}: the closed LinkedIn card gives no reason on hover`);
   }
   const wide = await overflow(page);
   if (wide.horizontal > 1) {

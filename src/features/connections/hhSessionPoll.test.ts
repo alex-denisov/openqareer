@@ -185,6 +185,7 @@ describe('hh.ru session polling', () => {
       ],
       defaultParsed: undefined,
       rawUrl: 'https://hh.ru/resume/resume-selected',
+      profile: { languages: [], experienceDeclaredEmpty: false },
     });
   });
 
@@ -565,7 +566,9 @@ describe('hh.ru session import with more than one resume', () => {
 
     expect(onReady).not.toHaveBeenCalled();
     expect(onChoiceRequired).toHaveBeenCalledOnce();
-    expect(onChoiceRequired.mock.calls[0][0].map((item: { id: string }) => item.id)).toEqual([
+    expect(
+      onChoiceRequired.mock.calls[0][0].resumes.map((item: { id: string }) => item.id),
+    ).toEqual([
       'resume-one',
       'resume-two',
     ]);
