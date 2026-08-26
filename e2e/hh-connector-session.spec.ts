@@ -48,58 +48,57 @@ async function stubDesktopBridge(page: Page, options: BridgeOptions = {}): Promi
       let sessionOpen = false;
       let missingLeft = missingWindowReads;
       (window as unknown as { __connectorCalls: string[] }).__connectorCalls = calls;
-      (
-        window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }
-      ).__TAURI_INTERNALS__ = {
-        invoke: (command: string, args: Record<string, unknown>) => {
-          calls.push(command);
-          if (command === 'probe_network_status') {
-            return Promise.resolve({
-              linkedin: { platform: 'linkedin', target_url: '', accessible: true },
-              hh: { platform: 'hh', target_url: '', accessible: true },
-              recommendation: 'direct',
-              local_ip_region_hint: 'test',
-              probed_at: new Date().toISOString(),
-            });
-          }
-          if (command === 'open_connector_session') {
-            sessionOpen = true;
-            return Promise.resolve({ opened: true, label: 'connector-hh', reason: null });
-          }
-          if (command === 'close_connector_session' || command === 'reset_connector_session') {
-            sessionOpen = false;
-            return Promise.resolve(true);
-          }
-          if (command === 'resize_connector_session') return Promise.resolve(true);
-          if (command === 'inspect_connector_session_page') {
-            if (!sessionOpen) return Promise.reject('session_window_missing');
-            return Promise.resolve({
-              ready: true,
-              url: 'https://hh.ru/applicant/resumes',
-              signedInApplicant: true,
-              login: false,
-              otp: false,
-              captcha: false,
-            });
-          }
-          if (command === 'read_connector_session_page') {
-            const request = args.request as { url: string };
-            const list = request.url.includes('/applicant/resumes');
-            if (!list && missingLeft > 0) {
-              missingLeft -= 1;
-              sessionOpen = false;
-              return Promise.reject('session_window_missing');
+      (window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }).__TAURI_INTERNALS__ =
+        {
+          invoke: (command: string, args: Record<string, unknown>) => {
+            calls.push(command);
+            if (command === 'probe_network_status') {
+              return Promise.resolve({
+                linkedin: { platform: 'linkedin', target_url: '', accessible: true },
+                hh: { platform: 'hh', target_url: '', accessible: true },
+                recommendation: 'direct',
+                local_ip_region_hint: 'test',
+                probed_at: new Date().toISOString(),
+              });
             }
-            if (!sessionOpen) return Promise.reject('session_window_missing');
-            return Promise.resolve({
-              ok: true,
-              url: request.url,
-              body: list ? listBody : detailBody,
-            });
-          }
-          return Promise.resolve(null);
-        },
-      };
+            if (command === 'open_connector_session') {
+              sessionOpen = true;
+              return Promise.resolve({ opened: true, label: 'connector-hh', reason: null });
+            }
+            if (command === 'close_connector_session' || command === 'reset_connector_session') {
+              sessionOpen = false;
+              return Promise.resolve(true);
+            }
+            if (command === 'resize_connector_session') return Promise.resolve(true);
+            if (command === 'inspect_connector_session_page') {
+              if (!sessionOpen) return Promise.reject('session_window_missing');
+              return Promise.resolve({
+                ready: true,
+                url: 'https://hh.ru/applicant/resumes',
+                signedInApplicant: true,
+                login: false,
+                otp: false,
+                captcha: false,
+              });
+            }
+            if (command === 'read_connector_session_page') {
+              const request = args.request as { url: string };
+              const list = request.url.includes('/applicant/resumes');
+              if (!list && missingLeft > 0) {
+                missingLeft -= 1;
+                sessionOpen = false;
+                return Promise.reject('session_window_missing');
+              }
+              if (!sessionOpen) return Promise.reject('session_window_missing');
+              return Promise.resolve({
+                ok: true,
+                url: request.url,
+                body: list ? listBody : detailBody,
+              });
+            }
+            return Promise.resolve(null);
+          },
+        };
     },
     {
       listBody: RESUME_LIST_BODY,
@@ -110,7 +109,6 @@ async function stubDesktopBridge(page: Page, options: BridgeOptions = {}): Promi
 }
 
 async function stubCandidateApi(page: Page): Promise<void> {
-  let connected = false;
   await page.route('**/api/v1/auth/me', async (route) => {
     await route.fulfill({ json: { data: CANDIDATE } });
   });
@@ -118,7 +116,6 @@ async function stubCandidateApi(page: Page): Promise<void> {
     await route.fulfill({ json: { data: [] } });
   });
   await page.route('**/api/v1/candidate/resume/import', async (route) => {
-    connected = true;
     const now = new Date().toISOString();
     await route.fulfill({
       json: {
@@ -154,7 +151,7 @@ async function stubCandidateApi(page: Page): Promise<void> {
     });
   });
   await page.route('**/api/v1/candidate/workspace', async (route) => {
-    await route.fulfill({ json: { data: null }, status: connected ? 200 : 200 });
+    await route.fulfill({ json: { data: null } });
   });
 }
 
