@@ -10,7 +10,6 @@ import {
   type Icon,
 } from '@phosphor-icons/react';
 import { disconnectConnection, getConnections } from '../coach/coachApi';
-import type { HhResumeItem } from '../connections/ProfileImportModals';
 import {
   connectedProfileSource,
   type ConnectedProfileSource,
@@ -18,11 +17,9 @@ import {
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import {
   closeConnectorSession,
-  readSessionPage,
   resetConnectorSession,
 } from '../connections/connectorSession';
-import { readHhResumeFromSession } from '../connections/hhSessionPoll';
-import { parseResumeContent, type ParsedResume } from '../workspace/resumeParser';
+import { parseResumeContent } from '../workspace/resumeParser';
 import {
   validateWorkspaceInput,
   type CareerGoal,
@@ -119,8 +116,6 @@ export function CareerIntake({
   const [hhUrl, setHhUrl] = useState('');
   const [isLinkedinModalOpen, setLinkedinModalOpen] = useState(false);
   const [isHhModalOpen, setHhModalOpen] = useState(false);
-  const [hhResumes, setHhResumes] = useState<HhResumeItem[]>([]);
-  const [selectedHhResumeId, setSelectedHhResumeId] = useState('');
   const [isHhConnected, setHhConnected] = useState(false);
   const [isLinkedinConnected, setLinkedinConnected] = useState(false);
   const [connectedSource, setConnectedSource] = useState<ConnectedProfileSource>();
@@ -237,14 +232,25 @@ export function CareerIntake({
     ingestion.clear();
   }
 
+  /**
+   * Opening a connector dialog drops whatever the last attempt left on screen.
+   * A refusal from a previous try used to sit under the wizard through the
+   * next, successful one — «получить данные профиля не удалось» next to a
+   * resume the candidate had just picked (owner report, 2026-08-26).
+   */
+  function openConnectorModal(setOpen: (open: boolean) => void) {
+    return (open: boolean) => {
+      if (open) setError(undefined);
+      setOpen(open);
+    };
+  }
+
   /** Forgets everything this wizard is holding about a captured source. */
   function clearLocalSource() {
     setError(undefined);
     setTypedResume('');
     setLinkedinUrl('');
     setHhUrl('');
-    setHhResumes([]);
-    setSelectedHhResumeId('');
     setHhConnected(false);
     setLinkedinConnected(false);
     setConnectedSource(undefined);
@@ -308,44 +314,6 @@ export function CareerIntake({
       await forgetPlatform(platform);
     } finally {
       setReleasing(false);
-    }
-  }
-
-  async function importSelectedHhResume() {
-    const selected =
-      hhResumes.find((item) => item.id === selectedHhResumeId) ?? hhResumes[0];
-    if (!selected) {
-      setError('Выберите резюме для импорта.');
-      return;
-    }
-    setError(undefined);
-    try {
-      const parsed = await readHhResume(selected.url);
-      if (!parsed) {
-        setError('Импортировать выбранное резюме не удалось.');
-        return;
-      }
-      setHhUrl(selected.url);
-      const stored = await ingestion.acceptParsed(parsed, 'hh-pdf', {
-        platform: 'hh',
-        accessMode: 'native_session_snapshot',
-        sourceUrl: selected.url,
-        capturedAt: new Date().toISOString(),
-      });
-      if (!stored.imported || !stored.connection) {
-        setError(
-          'Резюме прочитано, но сервер не подтвердил сохранение. Повторите импорт или загрузите PDF.',
-        );
-        return;
-      }
-      setHhConnected(true);
-      await closeConnectorSession('hh');
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : 'Импортировать выбранное резюме не удалось.',
-      );
     }
   }
 
@@ -451,8 +419,8 @@ export function CareerIntake({
           }}
           linkedinOpen={isLinkedinModalOpen}
           hhOpen={isHhModalOpen}
-          onLinkedinOpen={setLinkedinModalOpen}
-          onHhOpen={setHhModalOpen}
+          onLinkedinOpen={openConnectorModal(setLinkedinModalOpen)}
+          onHhOpen={openConnectorModal(setHhModalOpen)}
           onLinkedinImported={async (parsed, url) => {
             setLinkedinUrl(url);
             const stored = await ingestion.acceptParsed(parsed, 'linkedin-pdf', {
@@ -467,12 +435,9 @@ export function CareerIntake({
             setLinkedinConnected(true);
           }}
           onProviderConnectionFailure={setError}
-          onHhConnected={async (resumes, parsed, url) => {
-            setHhResumes(resumes);
+          onHhConnected={async (_resumes, parsed, url) => {
             setHhConnected(true);
-            if (resumes.length > 0) setSelectedHhResumeId(resumes[0].id);
-            if (url) setHhUrl(url);
-            if (!parsed || !url) return;
+            setHhUrl(url);
             const stored = await ingestion.acceptParsed(parsed, 'hh-pdf', {
               platform: 'hh',
               accessMode: 'native_session_snapshot',
@@ -484,14 +449,9 @@ export function CareerIntake({
             }
           }}
           onHhAuthenticatedEmpty={() => {
-            setHhResumes([]);
-            setSelectedHhResumeId('');
+            setError(undefined);
             setHhConnected(true);
           }}
-          hhResumes={hhResumes}
-          selectedHhResumeId={selectedHhResumeId}
-          onSelectHhResume={setSelectedHhResumeId}
-          onImportHhResume={() => void importSelectedHhResume()}
           hhConnected={isHhConnected || connectedSource?.platform === 'hh'}
           linkedinConnected={
             isLinkedinConnected || connectedSource?.platform === 'linkedin'
@@ -646,9 +606,3 @@ function buildWorkspaceInput(state: {
   };
 }
 
-async function readHhResume(url: string): Promise<ParsedResume | undefined> {
-  if (!isTauriEnvironment()) return undefined;
-  return readHhResumeFromSession(url, (selectedUrl) =>
-    readSessionPage('hh', selectedUrl),
-  );
-}

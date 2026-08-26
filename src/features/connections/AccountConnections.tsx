@@ -10,8 +10,6 @@ import { PLATFORM_LABELS, type ConnectionPlatform } from './connectionResult';
 import { HhConnectModal } from './HhConnectModal';
 import { LinkedInConnectModal } from './LinkedInConnectModal';
 import type { HhResumeItem } from './HhConnectModal';
-import { closeConnectorSession, readSessionPage } from './connectorSession';
-import { readHhResumeFromSession } from './hhSessionPoll';
 import {
   importCandidateResume,
   type ResumeImportResult,
@@ -42,8 +40,6 @@ export function AccountConnectionsManager() {
   const [busyPlatform, setBusyPlatform] = useState<ConnectionPlatform>();
   const [notice, setNotice] = useState<string>();
   const [importPlatform, setImportPlatform] = useState<ConnectionPlatform>();
-  const [pendingHhResumes, setPendingHhResumes] = useState<HhResumeItem[]>([]);
-  const [selectedHhResumeId, setSelectedHhResumeId] = useState('');
 
   useEffect(() => {
     let current = true;
@@ -61,17 +57,17 @@ export function AccountConnectionsManager() {
     };
   }, []);
 
+  /**
+   * The dialog hands over one resume it has already read inside the
+   * candidate's own session. The panel used to receive a bare list and read the
+   * chosen resume through a window the dialog had already closed
+   * (owner report, 2026-08-26).
+   */
   async function handleHhSessionImport(
-    resumes: HhResumeItem[],
-    parsed?: ParsedResume,
-    sourceUrl?: string,
+    _resumes: readonly HhResumeItem[],
+    parsed: ParsedResume,
+    sourceUrl: string,
   ) {
-    if (!parsed || !sourceUrl) {
-      setPendingHhResumes(resumes);
-      setSelectedHhResumeId(resumes[0]?.id ?? '');
-      setNotice('Выберите резюме hh.ru, которое нужно сохранить в профиль.');
-      return;
-    }
     setBusyPlatform('hh');
     setNotice(undefined);
     try {
@@ -84,35 +80,9 @@ export function AccountConnectionsManager() {
       setNotice(
         `Резюме hh.ru сохранено в профиль: ${persisted.connection.factCount} фактов.`,
       );
-      setPendingHhResumes([]);
-      setSelectedHhResumeId('');
     } catch (error) {
       setNotice(hhSessionImportError(error));
       throw error;
-    } finally {
-      setBusyPlatform(undefined);
-    }
-  }
-
-  async function importSelectedHhResume() {
-    const selected = pendingHhResumes.find(
-      (resume) => resume.id === selectedHhResumeId,
-    );
-    if (!selected) {
-      setNotice('Выберите резюме hh.ru для импорта.');
-      return;
-    }
-    setBusyPlatform('hh');
-    setNotice(undefined);
-    try {
-      const parsed = await readHhResumeFromSession(selected.url, (url) =>
-        readSessionPage('hh', url),
-      );
-      if (!parsed) throw new Error('hh_resume_not_read');
-      await handleHhSessionImport([selected], parsed, selected.url);
-      await closeConnectorSession('hh');
-    } catch (error) {
-      setNotice(hhSessionImportError(error));
     } finally {
       setBusyPlatform(undefined);
     }
@@ -175,32 +145,6 @@ export function AccountConnectionsManager() {
         onDisconnect={(platform) => void handleDisconnect(platform)}
         onSessionImport={setImportPlatform}
       />
-      {pendingHhResumes.length > 0 ? (
-        <section className="career-hh-resumes-selector" aria-labelledby="settings-hh-resume-title">
-          <label id="settings-hh-resume-title" htmlFor="settings-hh-resume-select">
-            Выберите резюме hh.ru для импорта
-          </label>
-          <div className="career-hh-resumes-row">
-            <select
-              id="settings-hh-resume-select"
-              value={selectedHhResumeId}
-              onChange={(event) => setSelectedHhResumeId(event.target.value)}
-            >
-              {pendingHhResumes.map((resume) => (
-                <option key={resume.id} value={resume.id}>{resume.title}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="career-primary-button"
-              disabled={busyPlatform === 'hh'}
-              onClick={() => void importSelectedHhResume()}
-            >
-              {busyPlatform === 'hh' ? 'Импортируем…' : 'Импортировать выбранное резюме'}
-            </button>
-          </div>
-        </section>
-      ) : null}
       <HhConnectModal
         isOpen={importPlatform === 'hh'}
         onClose={() => setImportPlatform(undefined)}
@@ -208,7 +152,6 @@ export function AccountConnectionsManager() {
         onAuthenticatedEmpty={() => {
           setNotice('Вход в hh.ru выполнен, но в аккаунте пока нет резюме.');
         }}
-        onConnectionFailure={setNotice}
       />
       <LinkedInConnectModal
         isOpen={importPlatform === 'linkedin'}

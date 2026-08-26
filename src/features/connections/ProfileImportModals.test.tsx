@@ -33,7 +33,6 @@ describe('ProfileImportModals', () => {
         onClose={() => undefined}
         onConnectSuccess={() => undefined}
         onAuthenticatedEmpty={() => undefined}
-        onConnectionFailure={() => undefined}
       />,
     );
 
@@ -52,7 +51,6 @@ describe('ProfileImportModals', () => {
         onClose={() => undefined}
         onConnectSuccess={() => undefined}
         onAuthenticatedEmpty={() => undefined}
-        onConnectionFailure={() => undefined}
       />,
     );
     expect(hhHtml).toBe('');

@@ -66,9 +66,15 @@ export interface HhSessionPoller {
 
 interface HhSessionImportFlowDependencies extends HhSessionPollDependencies {
   readonly onAuthenticated: () => void | Promise<void>;
-  readonly onProviderDataCaptured: (
-    result: Exclude<HhSessionPollResult, { status: 'waiting_for_sign_in' }>,
+  /**
+   * The account owes the wizard a choice: several resumes, or a single one
+   * whose page did not read on the first pass. The sign-in window stays on
+   * screen — the chosen resume is read inside it.
+   */
+  readonly onChoiceRequired: (
+    resumes: readonly HhResumeItem[],
   ) => void | Promise<void>;
+  /** Exactly one resume, already read: nothing is left to ask. */
   readonly onReady: (
     result: Extract<HhSessionPollResult, { status: 'ready' }>,
   ) => void | Promise<void>;
@@ -91,12 +97,19 @@ export function createHhSessionImportFlow(
       inFlight = (async () => {
         const result = await poller.poll();
         if (result.status === 'waiting_for_sign_in') return result;
-        await dependencies.onProviderDataCaptured(result);
         if (result.status === 'authenticated_empty') {
           await dependencies.onAuthenticatedEmpty();
-        } else {
-          await dependencies.onReady(result);
+          return result;
         }
+        // Announcing a finished import here is what closed the dialog while
+        // its sign-in window stayed on screen with nothing left to own it
+        // (owner report, 2026-08-26). An unfinished capture is a question, and
+        // a question keeps its window.
+        if (!result.defaultParsed || !result.rawUrl || result.resumes.length > 1) {
+          await dependencies.onChoiceRequired(result.resumes);
+          return result;
+        }
+        await dependencies.onReady(result);
         return result;
       })().finally(() => {
         inFlight = undefined;
@@ -104,6 +117,76 @@ export function createHhSessionImportFlow(
       return inFlight;
     },
   };
+}
+
+export interface ChosenHhResumeDependencies {
+  readonly readSessionPage: (url: string) => Promise<SessionPageResult>;
+  /**
+   * Puts the candidate's own sign-in window back when it is gone. The cookie
+   * jar outlives the window, so a reopened window is still signed in.
+   */
+  readonly reopenSession: (url: string) => Promise<boolean>;
+}
+
+/**
+ * Reads the resume the candidate picked, and survives a window they closed.
+ *
+ * The picker used to read through a window the dialog had already orphaned:
+ * `read_session_page` answered `session_window_missing`, and the candidate was
+ * told «Импортировать выбранное резюме не удалось» with no cause and no way
+ * out (owner report, 2026-08-26).
+ */
+export async function readChosenHhResume(
+  url: string,
+  dependencies: ChosenHhResumeDependencies,
+): Promise<ParsedResume> {
+  let parsed = await readResumeOrMissingWindow(url, dependencies.readSessionPage);
+  if (parsed === WINDOW_MISSING) {
+    if (!(await dependencies.reopenSession(url))) {
+      throw new Error('hh_session_window_gone');
+    }
+    parsed = await readResumeOrMissingWindow(url, dependencies.readSessionPage);
+    if (parsed === WINDOW_MISSING) throw new Error('hh_session_window_gone');
+  }
+  if (!parsed) throw new Error('hh_resume_not_read');
+  return parsed;
+}
+
+/** Says which of the two things went wrong, in words the candidate can act on. */
+export function hhResumeImportFailure(reason: unknown): string {
+  const raw = reason instanceof Error ? reason.message : String(reason ?? '');
+  switch (raw.split(':')[0].trim()) {
+    case 'hh_session_window_gone':
+      return 'Окно hh.ru закрылось, и открыть его заново не удалось. Повторите импорт или закройте это окно и подключите hh.ru ещё раз.';
+    case 'hh_resume_not_read':
+      return 'Страница выбранного резюме не прочиталась. Выберите другое резюме, повторите попытку или загрузите PDF-резюме.';
+    case 'hh_native_connection_not_persisted':
+    case 'native_connection_receipt_missing':
+      return 'Резюме прочитано, но сервер не подтвердил сохранение в профиль. Повторите импорт или загрузите PDF-резюме.';
+    default:
+      return 'Импортировать выбранное резюме не удалось. Повторите попытку или загрузите PDF-резюме.';
+  }
+}
+
+/** Distinguishes "no window" from "no readable resume" without a second type. */
+const WINDOW_MISSING = Symbol('hh_session_window_missing');
+
+async function readResumeOrMissingWindow(
+  url: string,
+  readSessionPage: (url: string) => Promise<SessionPageResult>,
+): Promise<ParsedResume | undefined | typeof WINDOW_MISSING> {
+  try {
+    return await readHhResumeFromSession(url, readSessionPage);
+  } catch (reason) {
+    if (isSessionWindowMissing(reason)) return WINDOW_MISSING;
+    throw reason;
+  }
+}
+
+/** The desktop bridge rejects with a bare code string, not with an `Error`. */
+function isSessionWindowMissing(reason: unknown): boolean {
+  const raw = reason instanceof Error ? reason.message : String(reason ?? '');
+  return raw.split(':')[0].trim() === 'session_window_missing';
 }
 
 /** Reads one explicitly selected resume inside the already signed-in webview. */

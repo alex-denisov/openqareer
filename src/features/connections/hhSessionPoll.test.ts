@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createHhSessionImportFlow,
   createHhSessionPoller,
+  hhResumeImportFailure,
   hhWaitingNotice,
+  readChosenHhResume,
   readHhResumeFromSession,
 } from './hhSessionPoll';
 
@@ -240,7 +242,7 @@ describe('hh.ru session polling', () => {
     expect(readSessionPage).toHaveBeenCalledOnce();
   });
 
-  it('keeps capture plus slow server import single-flight and closes provider UI before import', async () => {
+  it('keeps capture plus slow server import single-flight for a lone resume', async () => {
     const events: string[] = [];
     let releaseImport: (() => void) | undefined;
     const onReady = vi.fn(
@@ -276,8 +278,8 @@ describe('hh.ru session polling', () => {
       onAuthenticated: async () => {
         events.push('closed');
       },
-      onProviderDataCaptured: async () => {
-        events.push('captured');
+      onChoiceRequired: () => {
+        events.push('asked');
       },
       onReady,
       onAuthenticatedEmpty: vi.fn(),
@@ -287,13 +289,7 @@ describe('hh.ru session polling', () => {
     const overlapping = flow.run();
     expect(overlapping).toBe(first);
     await vi.waitFor(() => expect(onReady).toHaveBeenCalledOnce());
-    expect(events).toEqual([
-      'closed',
-      'read-list',
-      'read-detail',
-      'captured',
-      'import',
-    ]);
+    expect(events).toEqual(['closed', 'read-list', 'read-detail', 'import']);
 
     releaseImport?.();
     await first;
@@ -328,7 +324,7 @@ describe('hh.ru session polling', () => {
           body: `<main>${resumeCard}</main>`,
         }),
         onAuthenticated: () => undefined,
-        onProviderDataCaptured: () => undefined,
+        onChoiceRequired: () => undefined,
         onReady: () => undefined,
         onAuthenticatedEmpty: () => undefined,
         waitBeforeRetry: async () => undefined,
@@ -350,7 +346,7 @@ describe('hh.ru session polling', () => {
           body: `<main>${resumeCard}</main>`,
         }),
         onAuthenticated: () => undefined,
-        onProviderDataCaptured: () => undefined,
+        onChoiceRequired: () => undefined,
         onReady: () => undefined,
         onAuthenticatedEmpty: () => undefined,
         waitBeforeRetry: async () => undefined,
@@ -525,5 +521,212 @@ describe('hh.ru capture after the sign-in is already recognised', () => {
         waitBeforeRetry: noWait,
       }).poll(),
     ).rejects.toThrow('hh_authenticated_capture_failed');
+  });
+});
+
+/**
+ * B157, отчёт владельца 2026-08-26. Аккаунт с несколькими резюме закрывал
+ * диалог и оставлял нативное окно жить одно; выбор резюме стоял в мастере и
+ * читал через окно, которое кандидат к тому моменту закрыл руками.
+ */
+describe('hh.ru session import with more than one resume', () => {
+  const twoResumes =
+    '<a href="/resume/resume-one" data-qa="resume-title">Product Director</a>' +
+    '<a href="/resume/resume-two" data-qa="resume-title">Head of Product</a>';
+
+  function signedInPage() {
+    return {
+      ready: true,
+      url: 'https://hh.ru/applicant/resumes',
+      signedInApplicant: true,
+      login: false,
+      otp: false,
+      captcha: false,
+    };
+  }
+
+  it('asks the candidate to choose instead of reporting a finished import', async () => {
+    const onChoiceRequired = vi.fn();
+    const onReady = vi.fn();
+    const flow = createHhSessionImportFlow({
+      inspectCurrentPage: async () => signedInPage(),
+      readSessionPage: async () => ({
+        ok: true,
+        url: 'https://hh.ru/applicant/resumes',
+        body: twoResumes,
+      }),
+      onAuthenticated: vi.fn(),
+      onChoiceRequired,
+      onReady,
+      onAuthenticatedEmpty: vi.fn(),
+    });
+
+    await flow.run();
+
+    expect(onReady).not.toHaveBeenCalled();
+    expect(onChoiceRequired).toHaveBeenCalledOnce();
+    expect(onChoiceRequired.mock.calls[0][0].map((item: { id: string }) => item.id)).toEqual([
+      'resume-one',
+      'resume-two',
+    ]);
+  });
+
+  it('sends a lone resume whose page could not be read to the picker, not to the profile', async () => {
+    const onChoiceRequired = vi.fn();
+    const onReady = vi.fn();
+    const flow = createHhSessionImportFlow({
+      inspectCurrentPage: async () => signedInPage(),
+      readSessionPage: async (url: string) =>
+        url.includes('/applicant/resumes')
+          ? {
+              ok: true,
+              url: 'https://hh.ru/applicant/resumes',
+              body: '<a href="/resume/resume-one" data-qa="resume-title">Product Director</a>',
+            }
+          : { ok: false, url, body: '' },
+      onAuthenticated: vi.fn(),
+      onChoiceRequired,
+      onReady,
+      onAuthenticatedEmpty: vi.fn(),
+    });
+
+    await flow.run();
+
+    expect(onReady).not.toHaveBeenCalled();
+    expect(onChoiceRequired).toHaveBeenCalledOnce();
+  });
+});
+
+describe('reading the resume the candidate chose', () => {
+  const resumeUrl = 'https://hh.ru/resume/resume-one';
+  const resumeBody = '<div data-qa="resume-block-title-position">Product Director</div>';
+
+  it('reopens the sign-in window the candidate closed and reads the resume there', async () => {
+    let windowOpen = false;
+    const readSessionPage = vi.fn(async (url: string) => {
+      if (!windowOpen) throw new Error('session_window_missing');
+      return { ok: true, url, body: resumeBody };
+    });
+    const reopenSession = vi.fn(async () => {
+      windowOpen = true;
+      return true;
+    });
+
+    const parsed = await readChosenHhResume(resumeUrl, {
+      readSessionPage,
+      reopenSession,
+    });
+
+    expect(reopenSession).toHaveBeenCalledWith(resumeUrl);
+    expect(readSessionPage).toHaveBeenCalledTimes(2);
+    expect(parsed.rawText.trim()).not.toHaveLength(0);
+  });
+
+  it('says the window is gone rather than blaming the resume when it cannot be reopened', async () => {
+    const readSessionPage = vi.fn(async () => {
+      throw new Error('session_window_missing');
+    });
+
+    await expect(
+      readChosenHhResume(resumeUrl, {
+        readSessionPage,
+        reopenSession: async () => false,
+      }),
+    ).rejects.toThrow('hh_session_window_gone');
+  });
+
+  it('reports an unreadable resume page as exactly that', async () => {
+    await expect(
+      readChosenHhResume(resumeUrl, {
+        readSessionPage: async (url: string) => ({ ok: false, url, body: '' }),
+        reopenSession: async () => true,
+      }),
+    ).rejects.toThrow('hh_resume_not_read');
+  });
+});
+
+describe('an hh.ru account with no resumes at all', () => {
+  it('reports the empty account instead of asking for a choice', async () => {
+    const onChoiceRequired = vi.fn();
+    const onReady = vi.fn();
+    const onAuthenticatedEmpty = vi.fn();
+    const flow = createHhSessionImportFlow({
+      inspectCurrentPage: async () => ({
+        ready: true,
+        url: 'https://hh.ru/applicant/resumes',
+        signedInApplicant: true,
+        login: false,
+        otp: false,
+        captcha: false,
+      }),
+      readSessionPage: async () => ({
+        ok: true,
+        url: 'https://hh.ru/applicant/resumes',
+        body: '<main data-qa="applicant-resumes-empty">Резюме пока нет</main>',
+      }),
+      onAuthenticated: vi.fn(),
+      onChoiceRequired,
+      onReady,
+      onAuthenticatedEmpty,
+    });
+
+    await expect(flow.run()).resolves.toEqual({ status: 'authenticated_empty' });
+    expect(onAuthenticatedEmpty).toHaveBeenCalledOnce();
+    expect(onChoiceRequired).not.toHaveBeenCalled();
+    expect(onReady).not.toHaveBeenCalled();
+  });
+});
+
+describe('what the candidate is told when the chosen resume does not arrive', () => {
+  it('names the closed window, the unreadable page and the unsaved profile apart', () => {
+    expect(hhResumeImportFailure(new Error('hh_session_window_gone'))).toContain(
+      'Окно hh.ru закрылось',
+    );
+    expect(hhResumeImportFailure(new Error('hh_resume_not_read'))).toContain(
+      'Страница выбранного резюме не прочиталась',
+    );
+    expect(
+      hhResumeImportFailure(new Error('hh_native_connection_not_persisted')),
+    ).toContain('сервер не подтвердил сохранение');
+    expect(hhResumeImportFailure(new Error('native_connection_receipt_missing'))).toContain(
+      'сервер не подтвердил сохранение',
+    );
+  });
+
+  /** The desktop bridge rejects with a bare code string, never with an `Error`. */
+  it('falls back to one honest sentence for a code it does not know', () => {
+    expect(hhResumeImportFailure('navigate_failed: EPIPE')).toBe(
+      'Импортировать выбранное резюме не удалось. Повторите попытку или загрузите PDF-резюме.',
+    );
+    expect(hhResumeImportFailure(undefined)).toContain('Повторите попытку');
+  });
+});
+
+describe('failures the chosen-resume read must not disguise', () => {
+  const resumeUrl = 'https://hh.ru/resume/resume-one';
+
+  it('lets an unrelated failure through untouched', async () => {
+    await expect(
+      readChosenHhResume(resumeUrl, {
+        readSessionPage: async () => {
+          throw new Error('page_load_timeout');
+        },
+        reopenSession: async () => true,
+      }),
+    ).rejects.toThrow('page_load_timeout');
+  });
+
+  it('gives up on a window that is gone again right after it was reopened', async () => {
+    const reopenSession = vi.fn(async () => true);
+
+    await expect(
+      readChosenHhResume(resumeUrl, {
+        readSessionPage: async () => {
+          throw 'session_window_missing';
+        },
+        reopenSession,
+      }),
+    ).rejects.toThrow('hh_session_window_gone');
+    expect(reopenSession).toHaveBeenCalledOnce();
   });
 });

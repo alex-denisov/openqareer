@@ -25,7 +25,9 @@ import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
 import { sessionUnreadableNotice } from './sessionWaitingStage';
 import {
   createHhSessionImportFlow,
+  hhResumeImportFailure,
   hhWaitingNotice,
+  readChosenHhResume,
   type HhSessionImportFlow,
   type HhResumeItem,
   type HhSessionPollResult,
@@ -41,13 +43,18 @@ const HH_LOGIN_URL = 'https://hh.ru/account/login';
 export interface HhConnectModalProps {
   readonly isOpen: boolean;
   readonly onClose: () => void;
+  /**
+   * The resume the candidate settled on, already read inside their own
+   * session. The dialog never reports a connection it has not finished: the
+   * old "here is a list, import it somewhere else" hand-off is what left a
+   * sign-in window with no owner (owner report, 2026-08-26).
+   */
   readonly onConnectSuccess: (
-    resumes: HhResumeItem[],
-    defaultParsed?: ParsedResume,
-    rawUrl?: string,
+    resumes: readonly HhResumeItem[],
+    parsed: ParsedResume,
+    rawUrl: string,
   ) => void | Promise<void>;
   readonly onAuthenticatedEmpty: () => void;
-  readonly onConnectionFailure: (message: string) => void;
   readonly initialUrl?: string;
 }
 
@@ -58,7 +65,6 @@ export function HhConnectModal({
   onClose,
   onConnectSuccess,
   onAuthenticatedEmpty,
-  onConnectionFailure,
 }: HhConnectModalProps) {
   const [step, setStep] = useState<ConnectorSessionStep>('idle');
   const autoOpenAttempted = useRef(false);
@@ -69,14 +75,16 @@ export function HhConnectModal({
   const [emptyAccount, setEmptyAccount] = useState(false);
   const [autoPollPaused, setAutoPollPaused] = useState(false);
   const [waiting, setWaiting] = useState<HhWaitingNotice>();
+  /** The account owes a choice; the sign-in window stays up while it is made. */
+  const [choice, setChoice] = useState<readonly HhResumeItem[]>();
+  const [selectedResumeId, setSelectedResumeId] = useState('');
+  const [importing, setImporting] = useState(false);
   const webviewHost = useRef<HTMLDivElement>(null);
   const sessionFlow = useRef<HhSessionImportFlow>();
   /** This opening of the dialog really did put a sign-in window on screen. */
   const sessionOpened = useRef(false);
   /** The page itself proved the candidate is signed in. */
   const signedIn = useRef(false);
-  /** The candidate still has to pick a resume out of this live session. */
-  const keepSessionOpen = useRef(false);
   /** Consecutive polls on a loaded, unchallenged page with no signed-in marker. */
   const unrecognisedPolls = useRef(0);
   /** Consecutive polls that could not read the page at all. */
@@ -89,9 +97,12 @@ export function HhConnectModal({
     onClose();
   }
 
+  // The window belongs to this dialog for its whole life. Letting it outlive
+  // the dialog is what put an unowned hh.ru window over the wizard, with the
+  // candidate closing it by hand (owner report, 2026-08-26).
   useEffect(
     () => () => {
-      if (!keepSessionOpen.current) void closeConnectorSession('hh').catch(() => undefined);
+      void closeConnectorSession('hh').catch(() => undefined);
     },
     [],
   );
@@ -118,8 +129,10 @@ export function HhConnectModal({
     setEmptyAccount(false);
     setAutoPollPaused(false);
     setWaiting(undefined);
+    setChoice(undefined);
+    setSelectedResumeId('');
+    setImporting(false);
     signedIn.current = false;
-    keepSessionOpen.current = false;
     unrecognisedPolls.current = 0;
     unreadablePolls.current = 0;
     sessionFlow.current = undefined;
@@ -155,6 +168,10 @@ export function HhConnectModal({
   async function startSession() {
     setError(undefined);
     setWaiting(undefined);
+    // A retry that reopens the window without restarting the poll is a button
+    // that does nothing: the step sat at «Открыть окно входа в hh.ru» forever
+    // (owner report, 2026-08-26).
+    setAutoPollPaused(false);
     unrecognisedPolls.current = 0;
     unreadablePolls.current = 0;
     const started = await startConnectorSession({
@@ -183,21 +200,21 @@ export function HhConnectModal({
         signedIn.current = true;
         setWaiting({ text: 'Вход выполнен — читаем список ваших резюме…', stuck: false });
       },
-      onProviderDataCaptured: async (result) => {
-        // The session is only kept alive while the candidate still has to pick
-        // a resume out of it: that read happens in this same window.
-        if (result.status !== 'ready' || result.defaultParsed) {
-          await closeConnectorSession('hh');
-        } else {
-          keepSessionOpen.current = true;
-        }
+      onChoiceRequired: (resumes) => {
+        // Nothing left for the poll to detect, and the window stays: the
+        // chosen resume is read inside it, a step away.
+        setAutoPollPaused(true);
+        setWaiting(undefined);
+        setChoice(resumes);
+        setSelectedResumeId(resumes[0]?.id ?? '');
       },
-      onReady: (result) => {
-        onClose();
-        return onConnectSuccess(result.resumes, result.defaultParsed, result.rawUrl);
+      onReady: async (result) => {
+        if (!result.defaultParsed || !result.rawUrl) return;
+        await finishWithResume(result.resumes, result.defaultParsed, result.rawUrl);
       },
-      onAuthenticatedEmpty: () => {
+      onAuthenticatedEmpty: async () => {
         setEmptyAccount(true);
+        await closeConnectorSession('hh').catch(() => undefined);
         onClose();
         onAuthenticatedEmpty();
       },
@@ -251,9 +268,67 @@ export function HhConnectModal({
     setStep('idle');
     await closeConnectorSession('hh').catch(() => undefined);
     signedIn.current = false;
-    onConnectionFailure(
-      'Вход в hh.ru выполнен, но получить данные профиля не удалось. Повторите подключение или загрузите PDF.',
+    // Shown here, next to the retry that fixes it. Handing it to the wizard put
+    // the sentence behind the dialog that was still on screen, and left it
+    // there through the next, successful attempt (owner report, 2026-08-26).
+    setError(
+      'Вход в hh.ru выполнен, но список резюме прочитать не удалось. Откройте окно входа ещё раз или загрузите PDF-резюме.',
     );
+  }
+
+  /**
+   * Hands the read resume to the account and closes down — but only if the
+   * account really took it. A server that refused the import used to surface as
+   * «список резюме прочитать не удалось» through the poll's failure path, and
+   * the poll then tried the same import again every 750 ms.
+   */
+  async function finishWithResume(
+    resumes: readonly HhResumeItem[],
+    parsed: ParsedResume,
+    rawUrl: string,
+  ): Promise<void> {
+    try {
+      await onConnectSuccess(resumes, parsed, rawUrl);
+    } catch (reason) {
+      setAutoPollPaused(true);
+      setWaiting(undefined);
+      setChoice(resumes);
+      setSelectedResumeId(
+        resumes.find((item) => item.url === rawUrl)?.id ?? resumes[0]?.id ?? '',
+      );
+      setError(hhResumeImportFailure(reason));
+      return;
+    }
+    await closeConnectorSession('hh').catch(() => undefined);
+    onClose();
+  }
+
+  /** Reads the resume the candidate chose, in the window they chose it from. */
+  async function importChoice() {
+    const selected =
+      choice?.find((item) => item.id === selectedResumeId) ?? choice?.[0];
+    if (!selected) return;
+    setImporting(true);
+    setError(undefined);
+    try {
+      const parsed = await readChosenHhResume(selected.url, {
+        readSessionPage: (url) => readSessionPage('hh', url),
+        reopenSession: async (url) =>
+          (
+            await openConnectorSession(
+              'hh',
+              url,
+              sessionLayoutForHost(webviewHost.current, window.innerWidth, window.innerHeight),
+            )
+          ).opened,
+      });
+      // The dialog only closes once the profile really holds the resume.
+      await finishWithResume(choice ?? [], parsed, selected.url);
+    } catch (reason) {
+      setError(hhResumeImportFailure(reason));
+    } finally {
+      setImporting(false);
+    }
   }
 
   /**
@@ -376,6 +451,42 @@ export function HhConnectModal({
               видно, оно может быть свёрнуто или за другим окном — найдите его и
               завершите вход.
             </p>
+          </div>
+        ) : null}
+
+        {choice && choice.length > 0 ? (
+          /* The choice is made here, where the session that answers it is still
+             on screen. It used to be handed to the wizard while this dialog and
+             its window went away separately (owner report, 2026-08-26). */
+          <div className="career-hh-resumes-selector">
+            <label htmlFor="hh-modal-resume-dropdown">
+              {choice.length > 1
+                ? 'Выберите резюме для импорта'
+                : 'Импортируйте резюме в профиль'}
+            </label>
+            <div className="career-hh-resumes-row">
+              <select
+                id="hh-modal-resume-dropdown"
+                className="career-hh-resumes-select"
+                value={selectedResumeId}
+                onChange={(event) => setSelectedResumeId(event.target.value)}
+                disabled={importing}
+              >
+                {choice.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.title}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="career-primary-button"
+                onClick={() => void importChoice()}
+                disabled={importing}
+              >
+                {importing ? 'Импортируем…' : 'Импортировать выбранное резюме'}
+              </button>
+            </div>
           </div>
         ) : null}
 

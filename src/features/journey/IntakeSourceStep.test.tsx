@@ -5,12 +5,6 @@ import { intakeSourceLock } from './intakeSourceLock';
 
 const noop = () => undefined;
 
-const HH_RESUME = {
-  id: 'resume-selected',
-  title: 'Руководитель продукта',
-  url: 'https://hh.ru/resume/resume-selected',
-};
-
 function baseProps(): IntakeSourceStepProps {
   return {
     isDesktop: true,
@@ -31,23 +25,17 @@ function baseProps(): IntakeSourceStepProps {
     onProviderConnectionFailure: noop,
     onHhConnected: noop,
     onHhAuthenticatedEmpty: noop,
-    hhResumes: [],
-    selectedHhResumeId: '',
-    onSelectHhResume: noop,
-    onImportHhResume: noop,
     hhConnected: false,
     linkedinConnected: false,
   };
 }
 
-/** Signed in to hh.ru, resume list read, nothing imported into the profile yet. */
-function renderHhListWithoutImportedResume(): string {
+/** Signed in to hh.ru, nothing imported into the profile yet. */
+function renderSignedInWithoutImportedResume(): string {
   return renderToStaticMarkup(
     <IntakeSourceStep
       {...baseProps()}
       lock={intakeSourceLock({ connectedPlatform: 'hh', typedLength: 0 })}
-      hhResumes={[HH_RESUME]}
-      selectedHhResumeId={HH_RESUME.id}
       hhConnected
     />,
   );
@@ -59,8 +47,6 @@ function renderImportedHhProfile(): string {
     <IntakeSourceStep
       {...baseProps()}
       lock={intakeSourceLock({ connectedPlatform: 'hh', typedLength: 0 })}
-      hhResumes={[HH_RESUME]}
-      selectedHhResumeId={HH_RESUME.id}
       hhConnected
       connectedSource={{
         platform: 'hh',
@@ -71,33 +57,32 @@ function renderImportedHhProfile(): string {
   );
 }
 
-describe('hh.ru resume selection in the intake wizard', () => {
-  it('offers an import action after the list is found but before a resume is imported', () => {
-    const html = renderHhListWithoutImportedResume();
-
-    expect(html).toContain('Импортировать выбранное резюме');
-    expect(html).toContain('Руководитель продукта');
+describe('hh.ru in the intake wizard', () => {
+  /**
+   * The picker used to stand here, outliving both the dialog and the sign-in
+   * window it read through; pressing it after the candidate closed that window
+   * produced «Импортировать выбранное резюме не удалось» with no cause
+   * (owner report, 2026-08-26). The choice now belongs to the dialog.
+   */
+  it('never offers a resume import outside the dialog that owns the session', () => {
+    expect(renderSignedInWithoutImportedResume()).not.toContain(
+      'Импортировать выбранное резюме',
+    );
+    expect(renderImportedHhProfile()).not.toContain('Импортировать выбранное резюме');
   });
 
   it('offers the restored LinkedIn connector under the same session-import contract', () => {
-    const html = renderHhListWithoutImportedResume();
+    const html = renderSignedInWithoutImportedResume();
 
     expect(html).toContain('Импорт опыта и навыков');
     expect(html).toContain('>Подключить</button>');
   });
 
   it('offers the release control as soon as a platform is connected', () => {
-    const html = renderHhListWithoutImportedResume();
+    const html = renderSignedInWithoutImportedResume();
 
     expect(html).toContain('Сменить источник');
     expect(html).toContain('уже подключён');
-  });
-
-  it('replaces the resume picker with the release control once the import is stored', () => {
-    const html = renderImportedHhProfile();
-
-    expect(html).not.toContain('Импортировать выбранное резюме');
-    expect(html).toContain('Сменить источник');
   });
 
   it('lets the candidate sign out of a connected platform from its own card', () => {
@@ -110,8 +95,6 @@ describe('hh.ru resume selection in the intake wizard', () => {
   });
 
   it('never claims the profile import produced a parsed document banner', () => {
-    const html = renderImportedHhProfile();
-
-    expect(html).not.toContain('Резюме разобрано');
+    expect(renderImportedHhProfile()).not.toContain('Резюме разобрано');
   });
 });

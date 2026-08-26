@@ -49,16 +49,13 @@ export interface IntakeSourceStepProps {
     url: string,
   ) => void | Promise<void>;
   readonly onProviderConnectionFailure: (message: string) => void;
+  /** One resume, already read inside the candidate's own hh.ru session. */
   readonly onHhConnected: (
-    resumes: HhResumeItem[],
-    parsed?: ParsedResume,
-    url?: string,
+    resumes: readonly HhResumeItem[],
+    parsed: ParsedResume,
+    url: string,
   ) => void | Promise<void>;
   readonly onHhAuthenticatedEmpty: () => void;
-  readonly hhResumes: readonly HhResumeItem[];
-  readonly selectedHhResumeId: string;
-  readonly onSelectHhResume: (id: string) => void;
-  readonly onImportHhResume: () => void;
   readonly hhConnected: boolean;
   readonly linkedinConnected: boolean;
   /** A platform this account already imported from, as the server holds it. */
@@ -206,8 +203,6 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
         props.ingested.imported &&
         props.ingested.connection),
   );
-  // A list is only worth showing while something is still unimported.
-  const showResumePicker = props.hhConnected && props.hhResumes.length > 0 && !hhReady;
   return (
     <div className="career-source-fields">
       <div className="career-platform-cards">
@@ -237,39 +232,11 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
         />
       </div>
 
-      {/* One slot under the two cards. While a signed-in hh.ru account still
-          owes the wizard a choice it holds the picker; the moment the chosen
-          resume is in the profile the release control takes the same place,
-          instead of stacking a green banner on top of a picker that has
-          nothing left to pick (owner report, 2026-08-26). */}
-      {showResumePicker ? (
-        <div className="career-hh-resumes-selector">
-          <label htmlFor="hh-resume-dropdown">Выберите резюме для импорта</label>
-          <div className="career-hh-resumes-row">
-            <select
-              id="hh-resume-dropdown"
-              className="career-hh-resumes-select"
-              value={props.selectedHhResumeId}
-              onChange={(event) => props.onSelectHhResume(event.target.value)}
-              disabled={props.busy}
-            >
-              {props.hhResumes.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="career-primary-button"
-              onClick={props.onImportHhResume}
-              disabled={props.busy}
-            >
-              {props.busy ? 'Импортируем…' : 'Импортировать выбранное резюме'}
-            </button>
-          </div>
-        </div>
-      ) : props.hhConnected && !hhReady && props.hhResumes.length === 0 ? (
+      {/* The resume picker lives inside the hh.ru dialog, next to the session
+          window that answers it. Standing here it outlived both, and the import
+          it triggered read through a window that was already gone
+          (owner report, 2026-08-26). */}
+      {props.hhConnected && !hhReady ? (
         <p className="career-inline-note">
           В профиле hh.ru не нашлось резюме. Можно загрузить PDF или описать опыт
           текстом.
@@ -287,7 +254,6 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
         onClose={() => props.onHhOpen(false)}
         onConnectSuccess={props.onHhConnected}
         onAuthenticatedEmpty={props.onHhAuthenticatedEmpty}
-        onConnectionFailure={props.onProviderConnectionFailure}
       />
     </div>
   );
