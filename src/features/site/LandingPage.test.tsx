@@ -110,4 +110,30 @@ describe('LandingPage', () => {
     expect(html).toContain('Панель администратора');
     expect(html).toContain('В кабинет');
   });
+
+  it('renders landing actions as semantic anchor links without button site-btn or link-btn elements', () => {
+    const guestHtml = renderToStaticMarkup(<LandingPage onNavigate={vi.fn()} />);
+    const adminHtml = renderToStaticMarkup(
+      <LandingPage
+        session={{
+          username: 'admin.test',
+          email: 'admin@openqareer.com',
+          displayName: 'Администратор',
+          role: 'admin',
+          isTest: true,
+          candidateId: null,
+        }}
+        onNavigate={vi.fn()}
+      />,
+    );
+
+    expect(guestHtml).toContain('href="/signup"');
+    expect(guestHtml).toContain('href="/login"');
+    expect(adminHtml).toContain('href="/app"');
+    expect(adminHtml).toContain('href="/admin"');
+
+    for (const html of [guestHtml, adminHtml]) {
+      expect(html).not.toMatch(/<button[^>]*class="[^"]*(site-btn|link-btn)[^"]*"/u);
+    }
+  });
 });
