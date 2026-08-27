@@ -467,10 +467,41 @@ describe('POST /api/v1/candidate/resume/import', () => {
       payload: importBody(),
     });
 
-    expect(store.getSnapshot(candidateId).memory.length).toBe(first * 2);
+    // Every import mints fresh ids, so the second upload used to leave the
+    // first one's facts behind and the dossier doubled — the test asserted the
+    // defect it was named after (B162).
+    expect(store.getSnapshot(candidateId).memory.length).toBe(first);
     expect(
       new Set(store.getSnapshot(candidateId).memory.map((item) => item.id)).size,
-    ).toBe(first * 2);
+    ).toBe(first);
+  });
+
+  it('keeps a corrected fact when a later upload replaces the import', async () => {
+    const { app, store, candidateId, authorization } = await createApp();
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: importBody(),
+    });
+    const [firstFact] = store.getSnapshot(candidateId).memory;
+    store.changeMemory(candidateId, firstFact.id, {
+      action: 'correct',
+      statement: 'Кандидат уточнил эту формулировку сам.',
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: importBody(),
+    });
+
+    const kept = store
+      .getSnapshot(candidateId)
+      .memory.find((item) => item.id === firstFact.id);
+    expect(kept?.statement).toBe('Кандидат уточнил эту формулировку сам.');
   });
 
   it('prefers the model reading when a structurer is configured', async () => {

@@ -1,4 +1,4 @@
-import { CheckCircle, Info, WarningCircle } from '@phosphor-icons/react';
+import { CheckCircle, Info, Plugs, WarningCircle } from '@phosphor-icons/react';
 import type { CandidateMemory } from '../coach/coachApi';
 import {
   conventionLines,
@@ -7,10 +7,12 @@ import {
   unknownGroupLabel,
 } from './resumeLabels';
 import { orderUnknowns } from './resumeStudioModel';
+import { resumeSourceCoverage, type ImportedSource } from './resumeSourceCoverage';
 import { ResumeTargetVacanciesBlock } from './ResumeTargetVacanciesBlock';
 import type {
   ResumeConventions,
   ResumeDocument,
+  ResumeDraft,
   ResumeEvidenceFreshness,
   ResumeUnknown,
 } from './resumeTypes';
@@ -19,7 +21,11 @@ interface ResumeControlRailProps {
   readonly freshness: ResumeEvidenceFreshness;
   readonly excludedEvidenceIds: readonly string[];
   readonly document: ResumeDocument;
+  readonly draft: ResumeDraft;
   readonly memory?: readonly CandidateMemory[];
+  readonly importedSource?: ImportedSource;
+  /** The candidate has saved the document at least once since the import. */
+  readonly documentEdited?: boolean;
 }
 
 /**
@@ -31,7 +37,10 @@ export function ResumeControlRail({
   freshness,
   excludedEvidenceIds,
   document,
+  draft,
   memory = [],
+  importedSource,
+  documentEdited = false,
 }: ResumeControlRailProps) {
   const unknowns = orderUnknowns(document.unknowns);
 
@@ -41,12 +50,82 @@ export function ResumeControlRail({
       aria-label="Контроль резюме: соответствие правилам, свежесть и пробелы"
     >
       <ResumeTargetVacanciesBlock />
+      <ImportedSourceBlock
+        source={importedSource}
+        draft={draft}
+        edited={documentEdited}
+      />
       <FreshnessBlock freshness={freshness} memory={memory} />
       <UnknownsBlock unknowns={unknowns} />
       <ExcludedBlock memoryIds={excludedEvidenceIds} memory={memory} />
       <ConventionsBlock conventions={document.conventions} />
     </aside>
   );
+}
+
+/**
+ * What the connected platform actually gave the document.
+ *
+ * The owner connected a real hh.ru account and saw an empty Resume Studio with
+ * no explanation. Half of the emptiness was ours (B172 slices 1–2); the rest is
+ * the source itself — that account has no work history on hh.ru at all. An
+ * empty section with no source named reads as a broken product, so the block
+ * names both halves and points at the manual way out (B172 slice 3).
+ */
+function ImportedSourceBlock({
+  source,
+  draft,
+  edited,
+}: {
+  source?: ImportedSource;
+  draft: ResumeDraft;
+  edited: boolean;
+}) {
+  if (!source) return null;
+  const { filled, empty } = resumeSourceCoverage(draft);
+  return (
+    <section className="career-resume-rail-block">
+      <h3>
+        <Plugs size={15} /> Что дал источник
+      </h3>
+      <p>
+        Импорт из {source.label} от {importDate(source.importedAt)} · Фактов в досье:{' '}
+        {source.factCount}
+      </p>
+      {filled.length > 0 ? (
+        <ul className="career-resume-conventions" aria-label="Заполненные разделы">
+          {filled.map((section) => (
+            <li key={section.id}>
+              {section.label}
+              {section.count === null ? '' : ` — ${section.count}`}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {empty.length > 0 ? (
+        <>
+          <p>
+            {edited ? 'Пусто' : 'В источнике не было'}:{' '}
+            {empty.map((section) => section.label).join(', ')}.
+          </p>
+          <p>
+            Добавьте их вручную — резюме не придумывает того, чего в источнике
+            нет.
+          </p>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+function importDate(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return 'последнего импорта';
+  return parsed.toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
 function FreshnessBlock({

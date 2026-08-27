@@ -338,6 +338,27 @@ function rolePeriodStatement(role: ParsedResume['experience'][number]): string {
   return `${role.title.trim() || 'Роль не названа'}${employer}${period}`;
 }
 
+/**
+ * Every fact an import mints carries this prefix, and a fresh random tail per
+ * import. The tail is what makes a second upload of the same document produce
+ * new ids — which is why a later import has to be able to recognise the facts
+ * an earlier one left behind (B162).
+ */
+export const IMPORT_MEMORY_ID_PREFIX = 'imp';
+
+export function newImportMemoryIdPrefix(randomId: string): string {
+  return `${IMPORT_MEMORY_ID_PREFIX}${randomId.replace(/-/gu, '').slice(0, 10)}`;
+}
+
+const IMPORTED_MEMORY_ID = new RegExp(
+  `^${IMPORT_MEMORY_ID_PREFIX}[0-9a-f]{10}-`,
+  'u',
+);
+
+export function isImportedMemoryId(memoryId: string): boolean {
+  return IMPORTED_MEMORY_ID.test(memoryId);
+}
+
 function safePrefix(value: string): string {
   const sanitized = value.replace(/[^A-Za-z0-9_-]/gu, '').slice(0, 24);
   return /^[A-Za-z0-9]/u.test(sanitized) ? sanitized : `imp${sanitized}`;

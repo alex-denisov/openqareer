@@ -45,8 +45,23 @@ export interface CandidateCredentials extends CandidateIdentity {
   accessToken: string;
 }
 
+/**
+ * Safe metadata about a platform import, carried by the snapshot the cabinet
+ * already reads. Resume Studio needs to name the source of the document it
+ * shows (B172), and the connection catalogue is deliberately not loaded until
+ * the candidate opens account settings — so the fact travels with the dossier,
+ * not as a second request.
+ */
+export interface ImportedSourceSummary {
+  readonly platform: NativeSourceReceiptInput['platform'];
+  readonly connectedAt: string;
+  readonly lastImportedAt: string;
+  readonly factCount: number;
+}
+
 export interface CandidateSnapshot {
   candidate: CandidateIdentity;
+  importedSources: ImportedSourceSummary[];
   messages: CoachMessage[];
   memory: StoredMemory[];
   turns: StoredTurn[];

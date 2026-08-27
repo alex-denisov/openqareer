@@ -159,6 +159,7 @@ function CabinetSection({
     return (
       <ResumeStudio
         memory={data.snapshot?.memory ?? []}
+        importedSources={data.snapshot?.importedSources}
         regions={workspace?.regions ?? []}
         onRefreshDossier={() => void data.refresh()}
       />

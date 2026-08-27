@@ -216,6 +216,12 @@ export class SqliteCandidateStore implements CandidateStore {
     const candidate = this.requireCandidate(candidateId);
     return {
       candidate,
+      importedSources: this.sourceConnections.list(candidateId).map((connection) => ({
+        platform: connection.platform,
+        connectedAt: connection.connectedAt,
+        lastImportedAt: connection.lastImportedAt,
+        factCount: connection.receipt.factCount,
+      })),
       ...this.conversations.snapshotParts(candidateId),
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
@@ -486,6 +492,16 @@ export class SqliteCandidateStore implements CandidateStore {
         candidateId,
         replaced.receipt.sourceMessageId,
         replaced.receipt.memoryIds,
+      );
+    } else if (!input.sourceReceipt) {
+      // A file upload carries no receipt to displace its predecessor, so the
+      // dossier used to keep both readings of the same career (B162).
+      this.conversations.purgeSupersededFileImportFacts(
+        candidateId,
+        evidence.messageId,
+        this.sourceConnections
+          .list(candidateId)
+          .map((connection) => connection.receipt.sourceMessageId),
       );
     }
     const projection = buildResumeStudioProjection({

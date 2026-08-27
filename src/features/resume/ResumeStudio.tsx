@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ArrowClockwise } from '@phosphor-icons/react';
-import type { CandidateMemory } from '../coach/coachApi';
+import type { CandidateMemory, ImportedSourceSummary } from '../coach/coachApi';
 import { ResumeControlRail } from './ResumeControlRail';
 import { ResumeDocumentView } from './ResumeDocumentView';
 import { ResumeStudioHead } from './ResumeStudioHead';
@@ -15,6 +15,7 @@ import {
   selectDocument,
   summarizeResumeStudio,
 } from './resumeStudioModel';
+import { importedSourceOf, type ImportedSource } from './resumeSourceCoverage';
 import { useResumeStudio } from './useResumeStudio';
 import type {
   ResumeDraft,
@@ -25,15 +26,22 @@ import type {
 
 interface ResumeStudioProps {
   readonly memory: readonly CandidateMemory[];
+  readonly importedSources?: readonly ImportedSourceSummary[];
   readonly regions: readonly CandidateRegion[];
   readonly onRefreshDossier?: () => void;
 }
 
 /** Connects the candidate-scoped resume API to the surface. */
-export function ResumeStudio({ memory, regions, onRefreshDossier }: ResumeStudioProps) {
+export function ResumeStudio({
+  memory,
+  regions,
+  importedSources,
+  onRefreshDossier,
+}: ResumeStudioProps) {
   const state = useResumeStudio(onRefreshDossier);
   return (
     <ResumeStudioSurface
+      importedSource={importedSourceOf(importedSources)}
       view={state.view}
       draft={state.draft}
       memory={memory}
@@ -59,6 +67,7 @@ interface ResumeStudioSurfaceProps {
   readonly error?: string;
   readonly saveError?: string;
   readonly initialVariant?: ResumeVariantId;
+  readonly importedSource?: ImportedSource;
   readonly onRetry?: () => void;
   readonly onDraftChange?: (draft: ResumeDraft) => void;
   readonly onSave?: () => void;
@@ -134,6 +143,8 @@ export function ResumeStudioSurface(props: ResumeStudioSurfaceProps) {
         evidence={available}
         memory={memory}
         editor={editor}
+        importedSource={props.importedSource}
+        documentEdited={Boolean(view.savedAt)}
       />
     </section>
   );
@@ -148,6 +159,8 @@ function ResumeStudioBody({
   evidence,
   memory,
   editor,
+  importedSource,
+  documentEdited,
 }: {
   view: ResumeStudioView;
   projection: ResumeStudioProjection;
@@ -156,6 +169,8 @@ function ResumeStudioBody({
   evidence: readonly CandidateMemory[];
   memory: readonly CandidateMemory[];
   editor?: ReturnType<typeof buildResumeEditor>;
+  importedSource?: ImportedSource;
+  documentEdited: boolean;
 }) {
   return (
     <div className="career-resume-body">
@@ -169,7 +184,10 @@ function ResumeStudioBody({
         freshness={view.evidenceFreshness}
         excludedEvidenceIds={projection.excludedEvidenceIds}
         document={document}
+        draft={draft}
         memory={memory}
+        importedSource={importedSource}
+        documentEdited={documentEdited}
       />
     </div>
   );

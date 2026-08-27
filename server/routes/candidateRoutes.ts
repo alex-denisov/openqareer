@@ -17,7 +17,11 @@ import {
   type ResumeStudioProjection,
 } from '../domain/resumeStudio';
 import { resumeDraftSchema, EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
-import { carriesProfileSubstance, planResumeImport } from '../domain/resumeImport';
+import {
+  carriesProfileSubstance,
+  newImportMemoryIdPrefix,
+  planResumeImport,
+} from '../domain/resumeImport';
 import { preferStructuredResume } from '../domain/resumeStructuring';
 import { parseResumeContent } from '../../src/features/workspace/resumeParser';
 import type { CandidateStore } from '../data/candidateStore';
@@ -280,7 +284,7 @@ async function importResumeIntoDossier(
   }
   const read = await readResume(body.text, deps.resumeStructurer);
   const plan = planResumeImport(read.resume, {
-    idPrefix: `imp${randomUUID().replace(/-/gu, '').slice(0, 10)}`,
+    idPrefix: newImportMemoryIdPrefix(randomUUID()),
   });
   if (plan.evidence.length === 0 || !carriesProfileSubstance(read.resume)) {
     return sendError(

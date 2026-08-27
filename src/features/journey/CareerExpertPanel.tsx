@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
-  Check,
   PaperPlaneTilt,
   ShieldCheck,
   Sparkle,
+  Spinner,
   X,
 } from '@phosphor-icons/react';
 import {
@@ -48,6 +48,7 @@ export function CareerExpertPanel({
   const [password, setPassword] = useState('');
   const [content, setContent] = useState('');
   const [sending, setSending] = useState(false);
+  const [pendingQuestion, setPendingQuestion] = useState<string>();
   const [error, setError] = useState<string>();
   const panel = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -136,6 +137,7 @@ export function CareerExpertPanel({
     const clean = content.trim();
     if (!clean || !user) return;
     setSending(true);
+    setPendingQuestion(clean);
     setError(undefined);
     try {
       const idempotencyKey = crypto.randomUUID();
@@ -156,6 +158,7 @@ export function CareerExpertPanel({
       setError(messageFrom(reason));
     } finally {
       setSending(false);
+      setPendingQuestion(undefined);
     }
   }
 
@@ -219,6 +222,8 @@ export function CareerExpertPanel({
             ))}
           </div>
         ) : null}
+
+        {pendingQuestion ? <ExpertWaitingRow question={pendingQuestion} /> : null}
 
         {latestResult ? (
           <CareerIntelligenceSummary
@@ -288,7 +293,7 @@ export function CareerExpertPanel({
               rows={3}
             />
             <button type="submit" disabled={!content.trim() || sending} aria-label="Отправить вопрос">
-              {sending ? <Check size={18} /> : <PaperPlaneTilt size={18} weight="fill" />}
+              {sending ? <Spinner size={18} /> : <PaperPlaneTilt size={18} weight="fill" />}
             </button>
           </div>
         </form>
@@ -296,6 +301,29 @@ export function CareerExpertPanel({
 
       {error ? <p className="career-expert-error" role="alert">{error}</p> : null}
     </aside>
+  );
+}
+
+/**
+ * The answer takes up to ~95 seconds. Until it arrives the only sign the
+ * question left the browser was the send button swapping its icon for a tick —
+ * which reads as «done», not «waiting», so the candidate either leaves or asks
+ * the same question twice (B162, P1-3).
+ */
+export function ExpertWaitingRow({ question }: { question: string }) {
+  return (
+    <article
+      className="career-dialogue-turn is-user"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <span>Вы</span>
+      <p>{question}</p>
+      <p>
+        <Spinner size={16} /> Советник читает ваше досье и рынок — ответ занимает
+        до полутора минут. Не закрывайте панель.
+      </p>
+    </article>
   );
 }
 
@@ -334,10 +362,15 @@ export function CareerIntelligenceSummary({
   );
 }
 
+/**
+ * A check date without a year cannot be read: «Проверка 31 дек.» leaves the
+ * candidate guessing whether the deadline has already passed (B162).
+ */
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('ru-RU', {
     day: 'numeric',
-    month: 'short',
+    month: 'long',
+    year: 'numeric',
   }).format(new Date(`${value}T00:00:00Z`));
 }
 

@@ -94,6 +94,14 @@ async function verifyViewport(browser, baseUrl, viewport) {
             locale: 'ru-RU',
             createdAt: '2026-08-13T08:00:00.000Z',
           },
+          importedSources: [
+            {
+              platform: 'hh',
+              connectedAt: '2026-08-10T12:00:00.000Z',
+              lastImportedAt: '2026-08-10T12:00:00.000Z',
+              factCount: 9,
+            },
+          ],
           messages: [
             {
               id: 'message-long-user',
@@ -193,6 +201,15 @@ async function verifyViewport(browser, baseUrl, viewport) {
           evidenceFreshness: { stale: [], approvedCount: 0 },
         },
       }),
+    });
+  });
+  // Resume Studio asks for the matched pool as soon as it opens; without an
+  // answer the walk records a 502 the candidate would also see.
+  await page.route('**/api/v1/candidate/matched-vacancies', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [] }),
     });
   });
   await page.route('**/api/v1/candidate/vacancy-sources', async (route) => {
@@ -620,6 +637,27 @@ async function verifyViewport(browser, baseUrl, viewport) {
     profileFactReview,
     `${viewport.name}: profile fact review surface missing on «Профиль»`,
   );
+  await page.locator('button[aria-label="Резюме"]:visible').click();
+  await page.getByRole('heading', { name: 'Resume Studio' }).waitFor().catch(() => undefined);
+  // The candidate must read what the connected platform gave the document and
+  // what it never held — an empty section with no source named reads as our
+  // failure instead of an empty source (B172 slice 3).
+  const sourceBlock = page.getByText('Что дал источник');
+  await sourceBlock.first().waitFor({ timeout: 10000 }).catch(() => undefined);
+  assert(
+    (await sourceBlock.count()) === 1,
+    `${viewport.name}: Resume Studio never names the source of the import`,
+  );
+  assert(
+    (await page.getByText('В источнике не было').count()) === 1,
+    `${viewport.name}: Resume Studio never names what the source did not hold`,
+  );
+  assert(
+    (await page.getByText(/Импорт из hh\.ru от 10 августа 2026/u).count()) === 1,
+    `${viewport.name}: the import date is missing or undated`,
+  );
+  await mkdir('output/playwright', { recursive: true });
+  await page.screenshot({ path: `output/playwright/resume-source-${viewport.name}.png` });
   await page.locator('button[aria-label="Сегодня"]:visible').click();
   await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
   const reasonedAction =

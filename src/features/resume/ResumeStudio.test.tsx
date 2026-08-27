@@ -326,4 +326,72 @@ describe('ResumeStudioSurface', () => {
     expect(html).toMatch(/Александр Смирнов/u);
     expect(html).toMatch(/CTO Example Corp/u);
   });
+  /**
+   * The owner connected a real hh.ru account and read an empty document
+   * without a word about why: hh.ru holds no work history for that account and
+   * draws its own «add your experience» card. An empty section with no source
+   * named reads as a broken product (B172 slice 3).
+   */
+  it('names the source of the import and what the source never held', () => {
+    const html = render(
+      <ResumeStudioSurface
+        view={viewOf()}
+        draft={{
+          ...emptyDraft,
+          candidate: { fullName: 'Елена Тарасова', contact: { location: 'Белград', links: [] } },
+          languages: [{ id: 'lang-1', evidenceMemoryId: 'memory-1', name: 'Русский', cefr: 'C2' }],
+        }}
+        memory={[]}
+        importedSource={{
+          platform: 'hh',
+          label: 'hh.ru',
+          importedAt: '2026-08-27T09:30:00.000Z',
+          factCount: 10,
+        }}
+      />,
+    );
+
+    expect(html).toMatch(/Что дал источник/u);
+    expect(html).toMatch(/hh\.ru/u);
+    expect(html).toMatch(/27 августа 2026/u);
+    expect(html).toMatch(/В источнике не было/u);
+    expect(html).toMatch(/Опыт работы/u);
+    expect(html).toMatch(/Добавьте их вручную/u);
+  });
+
+  /**
+   * Once the candidate has saved the document themselves, an empty section is
+   * no longer proof of what the source held — they could have removed the entry
+   * — so the block drops the claim instead of guessing.
+   */
+  it('stops speaking for the source once the candidate has saved the document', () => {
+    const html = render(
+      <ResumeStudioSurface
+        view={viewOf({
+          savedAt: { createdAt: '2026-08-27T09:00:00.000Z', updatedAt: '2026-08-27T10:00:00.000Z' },
+        })}
+        draft={emptyDraft}
+        memory={[]}
+        importedSource={{
+          platform: 'hh',
+          label: 'hh.ru',
+          importedAt: '2026-08-27T09:30:00.000Z',
+          factCount: 10,
+        }}
+      />,
+    );
+
+    expect(html).toMatch(/Что дал источник/u);
+    expect(html).not.toMatch(/В источнике не было/u);
+    expect(html).toMatch(/Пусто:/u);
+  });
+
+  it('says nothing about a source when no platform is connected', () => {
+    const html = render(
+      <ResumeStudioSurface view={viewOf()} draft={emptyDraft} memory={[]} />,
+    );
+
+    expect(html).not.toMatch(/Что дал источник/u);
+    expect(html).not.toMatch(/В источнике не было/u);
+  });
 });

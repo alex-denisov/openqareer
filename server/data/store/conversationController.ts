@@ -6,6 +6,7 @@ import {
   type CoachTurnResult,
 } from '../../domain/coach';
 import { buildExperienceDossier } from '../../domain/dossier';
+import { isImportedMemoryId } from '../../domain/resumeImport';
 import type { CoachProviderResult } from '../../providers/coachProvider';
 import type {
   CandidateIdentity,
@@ -296,6 +297,39 @@ export class ConversationController {
     );
     for (const memoryId of memoryIds) {
       statement.run(candidateId, memoryId, soleSource);
+    }
+  }
+
+  /**
+   * A plain file upload mints a fresh id for every fact, so the previous
+   * upload's facts stayed in the dossier and it doubled with every re-upload
+   * (B162). The platform path already displaces its predecessor through the
+   * receipt; this is the same rule for a document that arrives without one.
+   *
+   * Only untouched facts of an earlier **file** import go. A corrected or
+   * deleted fact carries a candidate decision, and a fact a platform snapshot
+   * owns belongs to that connection's receipt.
+   */
+  purgeSupersededFileImportFacts(
+    candidateId: string,
+    keptMessageId: string,
+    connectionMessageIds: readonly string[],
+  ): void {
+    const protectedMessages = new Set([keptMessageId, ...connectionMessageIds]);
+    const rows = this.database
+      .prepare(
+        `SELECT id, source_message_ids FROM memory
+         WHERE candidate_id = ? AND status IN ('proposed', 'confirmed')`,
+      )
+      .all(candidateId) as { id: string; source_message_ids: string }[];
+    const remove = this.database.prepare(
+      'DELETE FROM memory WHERE candidate_id = ? AND id = ?',
+    );
+    for (const row of rows) {
+      if (!isImportedMemoryId(row.id)) continue;
+      const sources = JSON.parse(row.source_message_ids) as string[];
+      if (sources.length !== 1 || protectedMessages.has(sources[0])) continue;
+      remove.run(candidateId, row.id);
     }
   }
 

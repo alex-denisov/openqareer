@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CoachResult } from '../coach/coachApi';
-import { CareerIntelligenceSummary } from './CareerExpertPanel';
+import { CareerIntelligenceSummary, ExpertWaitingRow } from './CareerExpertPanel';
 import { CareerActionProposalCard } from './CareerCommandActions';
 
 describe('CareerIntelligenceSummary', () => {
@@ -68,6 +68,38 @@ describe('CareerIntelligenceSummary', () => {
     expect(html).toContain('Пять релевантных вакансий');
     expect(html).toContain('Требует вашего подтверждения');
     expect(html).not.toContain('Выполнено');
+  });
+
+  /**
+   * «Проверка 31 дек.» без года — дата, по которой нельзя понять, прошёл срок
+   * или ещё нет (B162).
+   */
+  it('dates every milestone check with its year', () => {
+    const html = renderToStaticMarkup(
+      <CareerIntelligenceSummary result={resultWithMilestone('2026-12-31')} />,
+    );
+
+    expect(html).toContain('31 декабря 2026');
+    expect(html).not.toMatch(/Проверка 31 дек\.\s*·/u);
+  });
+});
+
+/**
+ * Ответ советника занимает до полутора минут. Пока он идёт, единственным
+ * признаком отправки была галочка на кнопке — она читается как «готово», а не
+ * «ждём», и кандидат уходит со страницы или отправляет вопрос второй раз
+ * (B162, P1-3).
+ */
+describe('ExpertWaitingRow', () => {
+  it('keeps the asked question visible and says how long the answer takes', () => {
+    const html = renderToStaticMarkup(
+      <ExpertWaitingRow question="Как усилить позиционирование?" />,
+    );
+
+    expect(html).toContain('Как усилить позиционирование?');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toMatch(/до полутора минут/u);
   });
 });
 
@@ -139,3 +171,34 @@ describe('CareerActionProposalCard', () => {
     expect(html).not.toContain('Подтвердить отправку');
   });
 });
+
+function resultWithMilestone(measureAfter: string): CoachResult {
+  return {
+    message: 'Проверим срок.',
+    phase: 'market',
+    nextQuestion: null,
+    completeness: { known: [], unknown: [] },
+    safety: { needsHuman: false, reason: null },
+    careerTrack: {
+      objective: 'Проверить переход',
+      alternatives: [],
+      milestones: [
+        {
+          label: 'Собрать выборку рынка',
+          expectedSignal: 'Пять релевантных вакансий',
+          measureAfter,
+          successCriterion: 'Не менее пяти совпадений',
+        },
+      ],
+    },
+    actionProposals: [],
+    intelligence: {
+      orchestrationRevision: 'test',
+      roleCoverage: [],
+      roleContributions: [],
+      evidenceCoverage: 1,
+      unsupportedClaimCount: 0,
+      marketEvidence: null,
+    },
+  };
+}

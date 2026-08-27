@@ -311,7 +311,16 @@ export interface CareerCommand {
   } | null;
 }
 
+/** Safe metadata about the platform import behind the document (B172). */
+export interface ImportedSourceSummary {
+  platform: 'linkedin' | 'hh';
+  connectedAt: string;
+  lastImportedAt: string;
+  factCount: number;
+}
+
 export interface CandidateSnapshot {
+  importedSources?: ImportedSourceSummary[];
   candidate: {
     id: string;
     dataClass: 'synthetic' | 'personal';
