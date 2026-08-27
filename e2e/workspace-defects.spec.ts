@@ -81,13 +81,17 @@ test.describe('B140 workspace shell and intake defects', () => {
   });
 
   test('a slow session check still explains why the workspace is empty', async ({ page }) => {
+    // The gate appears 400 ms into a pending check and leaves the moment the
+    // answer lands. A 1.5 s stub left barely a second to catch it, and the test
+    // failed whenever the machine was busy — the window is now wide enough that
+    // a failure means the gate is really missing.
     await page.route('**/api/v1/auth/**', async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      await new Promise((resolve) => setTimeout(resolve, 8_000));
       await route.fulfill({ json: { data: null } });
     });
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByText(SESSION_GATE_TEXT)).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByText(SESSION_GATE_TEXT)).toBeVisible({ timeout: 6_000 });
   });
 
   test('the topbar does not repeat the active navigation item', async ({ page }) => {
