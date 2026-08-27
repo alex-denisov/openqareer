@@ -14,6 +14,7 @@ import {
 } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
+import { SiteLink } from './SiteLink.tsx';
 
 interface LandingPageProps {
   session?: AuthUser | null;
@@ -203,17 +204,17 @@ function HeaderSessionActions({
   return (
     <>
       {isAdmin ? (
-        <button className="site-btn is-admin is-small" type="button" onClick={() => onNavigate('/admin')}>
+        <SiteLink to="/admin" className="site-btn is-admin is-small" onNavigate={onNavigate}>
           Админка
-        </button>
+        </SiteLink>
       ) : null}
       <div className="site-user-badge">
         <UserCircle size={18} weight="bold" />
         <span className="user-name">{userName}</span>
       </div>
-      <button className="site-btn is-primary is-small" type="button" onClick={() => onNavigate('/app')}>
+      <SiteLink to="/app" className="site-btn is-primary is-small" onNavigate={onNavigate}>
         В кабинет
-      </button>
+      </SiteLink>
     </>
   );
 }
@@ -243,12 +244,12 @@ function LandingHeader({ session, onNavigate }: LandingPageProps) {
           />
         ) : (
           <>
-            <button className="site-btn is-ghost is-small" type="button" onClick={() => onNavigate('/login')}>
+            <SiteLink to="/login" className="site-btn is-ghost is-small" onNavigate={onNavigate}>
               Войти
-            </button>
-            <button className="site-btn is-primary is-small" type="button" onClick={() => onNavigate('/signup')}>
+            </SiteLink>
+            <SiteLink to="/signup" className="site-btn is-primary is-small" onNavigate={onNavigate}>
               Начать
-            </button>
+            </SiteLink>
           </>
         )}
       </div>
@@ -268,29 +269,29 @@ function HeroActionButtons({
   if (session) {
     return (
       <>
-        <button className="site-btn is-primary is-large" type="button" onClick={() => onNavigate('/app')}>
+        <SiteLink to="/app" className="site-btn is-primary is-large" onNavigate={onNavigate}>
           Перейти в рабочий кабинет <ArrowRight size={18} weight="bold" />
-        </button>
+        </SiteLink>
         {isAdmin ? (
-          <button className="site-btn is-admin is-large" type="button" onClick={() => onNavigate('/admin')}>
+          <SiteLink to="/admin" className="site-btn is-admin is-large" onNavigate={onNavigate}>
             Панель администратора
-          </button>
+          </SiteLink>
         ) : (
-          <button className="site-btn is-secondary is-large" type="button" onClick={() => onNavigate('/app')}>
+          <SiteLink to="/app" className="site-btn is-secondary is-large" onNavigate={onNavigate}>
             Мой профиль и аналитика
-          </button>
+          </SiteLink>
         )}
       </>
     );
   }
   return (
     <>
-      <button className="site-btn is-primary is-large" type="button" onClick={() => onNavigate('/signup')}>
+      <SiteLink to="/signup" className="site-btn is-primary is-large" onNavigate={onNavigate}>
         Пройти карьерную диагностику <ArrowRight size={18} weight="bold" />
-      </button>
-      <button className="site-btn is-secondary is-large" type="button" onClick={() => onNavigate('/login')}>
+      </SiteLink>
+      <SiteLink to="/login" className="site-btn is-secondary is-large" onNavigate={onNavigate}>
         Войти в существующий аккаунт
-      </button>
+      </SiteLink>
     </>
   );
 }
@@ -413,10 +414,12 @@ function LandingHowItWorks() {
 
 function FreeTariffCard({
   buttonLabel,
-  onAction,
+  to,
+  onNavigate,
 }: {
   buttonLabel: string;
-  onAction: () => void;
+  to: string;
+  onNavigate: (path: string) => void;
 }) {
   return (
     <article className="site-tariff-card">
@@ -432,19 +435,21 @@ function FreeTariffCard({
         <li><CheckCircle size={18} weight="fill" /> Карьерная диагностика</li>
         <li><CheckCircle size={18} weight="fill" /> Один объяснимый следующий шаг</li>
       </ul>
-      <button className="site-btn is-secondary is-full" type="button" onClick={onAction}>
+      <SiteLink to={to} className="site-btn is-secondary is-full" onNavigate={onNavigate}>
         {buttonLabel}
-      </button>
+      </SiteLink>
     </article>
   );
 }
 
 function FeaturedTariffCard({
   buttonLabel,
-  onAction,
+  to,
+  onNavigate,
 }: {
   buttonLabel: string;
-  onAction: () => void;
+  to: string;
+  onNavigate: (path: string) => void;
 }) {
   return (
     <article className="site-tariff-card is-featured">
@@ -459,15 +464,15 @@ function FeaturedTariffCard({
         <li><CheckCircle size={18} weight="fill" /> Подготовка плана следующего шага</li>
         <li><CheckCircle size={18} weight="fill" /> Без автоматических действий во внешних аккаунтах</li>
       </ul>
-      <button className="site-btn is-primary is-full" type="button" onClick={onAction}>
+      <SiteLink to={to} className="site-btn is-primary is-full" onNavigate={onNavigate}>
         {buttonLabel}
-      </button>
+      </SiteLink>
     </article>
   );
 }
 
 function LandingTariffs({ session, onNavigate }: LandingPageProps) {
-  const targetAction = session ? () => onNavigate('/app') : () => onNavigate('/signup');
+  const targetPath = session ? '/app' : '/signup';
   const primaryButtonLabel = session ? 'Вернуться к диагностике' : 'Сначала пройти диагностику';
   const freeButtonLabel = session ? 'Перейти в кабинет' : 'Создать аккаунт';
 
@@ -479,8 +484,8 @@ function LandingTariffs({ session, onNavigate }: LandingPageProps) {
         <p className="site-section-lead">Базовый тариф бесплатен и не ограничен по сроку. Регистрация доступна без приглашения. Покупка подписки в продукте пока не подключена.</p>
       </header>
       <div className="site-tariffs-grid">
-        <FreeTariffCard buttonLabel={freeButtonLabel} onAction={targetAction} />
-        <FeaturedTariffCard buttonLabel={primaryButtonLabel} onAction={targetAction} />
+        <FreeTariffCard buttonLabel={freeButtonLabel} to={targetPath} onNavigate={onNavigate} />
+        <FeaturedTariffCard buttonLabel={primaryButtonLabel} to={targetPath} onNavigate={onNavigate} />
       </div>
     </section>
   );
@@ -514,13 +519,13 @@ function LandingCta({ session, onNavigate }: LandingPageProps) {
           Соберите профиль по фактам, проверьте рабочую роль и получите следующий
           шаг, который можно выполнить и оценить.
         </p>
-        <button
+        <SiteLink
+          to={session ? '/app' : '/signup'}
           className="site-btn is-primary is-large"
-          type="button"
-          onClick={() => (session ? onNavigate('/app') : onNavigate('/signup'))}
+          onNavigate={onNavigate}
         >
           {session ? 'Перейти в кабинет' : 'Создать аккаунт'} <ArrowRight size={18} weight="bold" />
-        </button>
+        </SiteLink>
       </div>
     </section>
   );
@@ -553,10 +558,10 @@ function LandingFooter({
           </div>
           <div className="link-group">
             <strong>Доступ</strong>
-            <button className="link-btn" type="button" onClick={() => onNavigate('/login')}>Вход</button>
-            <button className="link-btn" type="button" onClick={() => onNavigate('/signup')}>Регистрация</button>
+            <SiteLink to="/login" className="link-btn" onNavigate={onNavigate}>Вход</SiteLink>
+            <SiteLink to="/signup" className="link-btn" onNavigate={onNavigate}>Регистрация</SiteLink>
             {session?.role === 'admin' ? (
-              <button className="link-btn" type="button" onClick={() => onNavigate('/admin')}>Админка</button>
+              <SiteLink to="/admin" className="link-btn" onNavigate={onNavigate}>Админка</SiteLink>
             ) : null}
           </div>
         </div>

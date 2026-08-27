@@ -748,7 +748,7 @@
 }
 
 .link-group a,
-.link-group button.link-btn {
+.link-group .link-btn {
   background: none;
   border: none;
   color: var(--career-text-soft, oklch(75% 0.02 255));
@@ -761,7 +761,7 @@
 }
 
 .link-group a:hover,
-.link-group button.link-btn:hover {
+.link-group .link-btn:hover {
   color: var(--career-accent, #0a70e0);
 }
 

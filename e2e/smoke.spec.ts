@@ -28,8 +28,8 @@ test('public landing page is ready, indexed and free of critical accessibility v
   await expect(
     page.getByRole('heading', { name: 'Карьерная операционная система кандидата' }),
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Пройти карьерную диагностику' })).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'Войти' }).first()).toBeEnabled();
+  await expect(page.getByRole('link', { name: 'Пройти карьерную диагностику' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Войти' }).first()).toBeVisible();
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
