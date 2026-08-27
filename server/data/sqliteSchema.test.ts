@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import { MIGRATION_12, MIGRATION_14, MIGRATION_15 } from './sqliteSchema';
+import { MIGRATION_6, MIGRATION_12, MIGRATION_14, MIGRATION_15, MIGRATION_21 } from './sqliteSchema';
+import { applyMigrations } from './store/applyMigrations';
 
 describe('vacancy source schema migration', () => {
   it('preserves existing hh subscriptions, observations and health', () => {
@@ -136,3 +137,42 @@ describe('vacancy source schema migration', () => {
     database.close();
   });
 });
+
+describe('oauth table cleanup migration', () => {
+  it('leaves no oauth_% tables in a freshly migrated database', () => {
+    const database = new DatabaseSync(':memory:', {
+      enableForeignKeyConstraints: true,
+    });
+    applyMigrations(database, (op) => op());
+
+    const oauthTables = database
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'oauth_%'")
+      .all();
+    expect(oauthTables).toEqual([]);
+    database.close();
+  });
+
+  it('drops oauth_% tables that existed before MIGRATION_21', () => {
+    const database = new DatabaseSync(':memory:', {
+      enableForeignKeyConstraints: true,
+    });
+    database.exec(`
+      CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;
+      ${MIGRATION_6}
+    `);
+
+    const tablesBefore = database
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'oauth_%'")
+      .all();
+    expect(tablesBefore.length).toBeGreaterThan(0);
+
+    database.exec(MIGRATION_21);
+
+    const tablesAfter = database
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'oauth_%'")
+      .all();
+    expect(tablesAfter).toEqual([]);
+    database.close();
+  });
+});
+

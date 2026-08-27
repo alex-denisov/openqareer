@@ -394,7 +394,8 @@ export class AuthService implements SessionAuth {
     targetUserId: string,
     actorPrincipal?: AuthPrincipal,
   ): void {
-    adminDeleteUser(this.database, targetUserId, actorPrincipal);
+    if (!this.candidateStore) throw new Error('CandidateStore не инициализирован.');
+    adminDeleteUser(this.database, this.candidateStore, targetUserId, actorPrincipal);
   }
 
   listAudit(query?: { limit: number; offset: number }): AdminAuditPage {

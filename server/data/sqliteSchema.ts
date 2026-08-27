@@ -609,3 +609,9 @@ CREATE TABLE candidate_workspaces (
   updated_at TEXT NOT NULL
 ) STRICT;
 `;
+
+export const MIGRATION_21 = `
+DROP TABLE IF EXISTS oauth_authorizations;
+DROP TABLE IF EXISTS oauth_connections;
+`;
+
