@@ -1,5 +1,11 @@
 import { CheckCircle, Info, WarningCircle } from '@phosphor-icons/react';
-import { conventionLines, staleReasonLabel, unknownGroupLabel } from './resumeLabels';
+import type { CandidateMemory } from '../coach/coachApi';
+import {
+  conventionLines,
+  evidenceStatementLabel,
+  staleReasonLabel,
+  unknownGroupLabel,
+} from './resumeLabels';
 import { orderUnknowns } from './resumeStudioModel';
 import { ResumeTargetVacanciesBlock } from './ResumeTargetVacanciesBlock';
 import type {
@@ -13,6 +19,7 @@ interface ResumeControlRailProps {
   readonly freshness: ResumeEvidenceFreshness;
   readonly excludedEvidenceIds: readonly string[];
   readonly document: ResumeDocument;
+  readonly memory?: readonly CandidateMemory[];
 }
 
 /**
@@ -24,6 +31,7 @@ export function ResumeControlRail({
   freshness,
   excludedEvidenceIds,
   document,
+  memory = [],
 }: ResumeControlRailProps) {
   const unknowns = orderUnknowns(document.unknowns);
 
@@ -33,9 +41,9 @@ export function ResumeControlRail({
       aria-label="Контроль резюме: соответствие правилам, свежесть и пробелы"
     >
       <ResumeTargetVacanciesBlock />
-      <FreshnessBlock freshness={freshness} />
+      <FreshnessBlock freshness={freshness} memory={memory} />
       <UnknownsBlock unknowns={unknowns} />
-      <ExcludedBlock memoryIds={excludedEvidenceIds} />
+      <ExcludedBlock memoryIds={excludedEvidenceIds} memory={memory} />
       <ConventionsBlock conventions={document.conventions} />
     </aside>
   );
@@ -43,8 +51,10 @@ export function ResumeControlRail({
 
 function FreshnessBlock({
   freshness,
+  memory,
 }: {
   freshness: ResumeEvidenceFreshness;
+  memory: readonly CandidateMemory[];
 }) {
   if (freshness.stale.length === 0) return null;
   return (
@@ -58,8 +68,10 @@ function FreshnessBlock({
       </p>
       <ul className="career-resume-stale">
         {freshness.stale.map((item) => (
-          <li key={item.memoryId}>
-            <code>{item.memoryId}</code>
+          <li key={item.memoryId} data-memory-id={item.memoryId}>
+            <span className="career-resume-evidence-line">
+              {evidenceStatementLabel(memory, item.memoryId, 'stale')}
+            </span>
             <span>{item.reasons.map(staleReasonLabel).join(' · ')}</span>
           </li>
         ))}
@@ -96,7 +108,13 @@ function UnknownsBlock({ unknowns }: { unknowns: readonly ResumeUnknown[] }) {
   );
 }
 
-function ExcludedBlock({ memoryIds }: { memoryIds: readonly string[] }) {
+function ExcludedBlock({
+  memoryIds,
+  memory,
+}: {
+  memoryIds: readonly string[];
+  memory: readonly CandidateMemory[];
+}) {
   if (memoryIds.length === 0) return null;
   return (
     <section className="career-resume-rail-block">
@@ -107,8 +125,10 @@ function ExcludedBlock({ memoryIds }: { memoryIds: readonly string[] }) {
       </p>
       <ul className="career-resume-excluded">
         {memoryIds.map((memoryId) => (
-          <li key={memoryId}>
-            <code>{memoryId}</code>
+          <li key={memoryId} data-memory-id={memoryId}>
+            <span className="career-resume-evidence-line">
+              {evidenceStatementLabel(memory, memoryId, 'excluded')}
+            </span>
           </li>
         ))}
       </ul>

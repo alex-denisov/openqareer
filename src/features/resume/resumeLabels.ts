@@ -86,3 +86,20 @@ export function conventionLines(
   }
   return lines;
 }
+
+export function evidenceStatementLabel(
+  memory: readonly Pick<import('../coach/coachApi').CandidateMemory, 'id' | 'statement'>[],
+  memoryId: string,
+  kind: 'stale' | 'excluded',
+): string {
+  const item = memory.find((m) => m.id === memoryId);
+  const statement = item?.statement?.trim();
+  if (!statement) {
+    return kind === 'stale' ? 'Факт удалён из досье' : 'Запись без текста';
+  }
+  if (statement.length > 80) {
+    return `${statement.slice(0, 80)}…`;
+  }
+  return statement;
+}
+

@@ -87,12 +87,8 @@ function useResumeVariant(
  * network. Editing turns on only when a draft owner supplies `onDraftChange`.
  */
 export function ResumeStudioSurface(props: ResumeStudioSurfaceProps) {
-  const { view, draft, memory = [], regions = [], error, onRetry, onDraftChange } = props;
-  const { loading = false, saving = false, saveError, onSave } = props;
-  const { variant, variants, setVariant } = useResumeVariant(
-    regions,
-    props.initialVariant,
-  );
+  const { view, draft, memory = [], regions = [], error, onRetry, onDraftChange, loading = false, saving = false, saveError, onSave } = props;
+  const { variant, variants, setVariant } = useResumeVariant(regions, props.initialVariant);
   const [pane, setPane] = useState<'unknowns' | 'document'>();
   const available = useMemo(() => eligibleEvidence(memory), [memory]);
   const activeDraft = draft ?? (view ? draftOf(view) : undefined);
@@ -135,6 +131,7 @@ export function ResumeStudioSurface(props: ResumeStudioSurfaceProps) {
         draft={activeDraft}
         document={document}
         evidence={available}
+        memory={memory}
         editor={editor}
       />
     </section>
@@ -148,6 +145,7 @@ function ResumeStudioBody({
   draft,
   document,
   evidence,
+  memory,
   editor,
 }: {
   view: ResumeStudioView;
@@ -155,6 +153,7 @@ function ResumeStudioBody({
   draft: ResumeDraft;
   document: ReturnType<typeof selectDocument>;
   evidence: readonly CandidateMemory[];
+  memory: readonly CandidateMemory[];
   editor?: ReturnType<typeof buildResumeEditor>;
 }) {
   return (
@@ -169,6 +168,7 @@ function ResumeStudioBody({
         freshness={view.evidenceFreshness}
         excludedEvidenceIds={projection.excludedEvidenceIds}
         document={document}
+        memory={memory}
       />
     </div>
   );
