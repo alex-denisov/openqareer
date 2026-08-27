@@ -140,20 +140,6 @@
   border: 0;
 }
 
-.career-account-panel {
-  position: fixed;
-  z-index: 60;
-  top: 0;
-  right: 0;
-  width: min(430px, 100%);
-  height: 100dvh;
-  overflow-y: auto;
-  padding: 22px;
-  border-left: 1px solid var(--career-line);
-  background: var(--career-bg);
-  box-shadow: -24px 0 70px rgb(0 0 0 / 0.32);
-}
-
 .career-account-panel > header,
 .career-account-panel > header > div {
   display: flex;
@@ -195,13 +181,6 @@
 
 .career-account-body {
   margin-top: 52px;
-}
-
-.career-account-current {
-  padding: 20px;
-  border: 1px solid var(--career-line);
-  border-radius: 16px;
-  background: var(--career-surface);
 }
 
 .career-account-connections {
@@ -374,7 +353,6 @@
   background: var(--career-accent-soft);
 }
 
-
 /* ---- B169 §7 · the rail opens to name its own sections ---------------- */
 
 /* Fixed, not absolute: the rail scrolls its own overflow, and a handle inside
@@ -474,13 +452,6 @@
   font-weight: 600;
 }
 
-/* The bar exists for narrow screens, where the rail is not rendered. On
-   desktop the rail carries the brand, the sections, the tariffs and the
-   account, and a second copy of any of them is chrome that does nothing. */
-.career-topbar {
-  display: none;
-}
-
 .career-topbar-admin {
   min-height: 40px;
   display: inline-flex;
@@ -495,6 +466,7 @@
 }
 
 .career-topbar {
+  display: none;
   grid-column: 2;
   z-index: 12;
   min-width: 0;
@@ -592,7 +564,6 @@
     background 180ms cubic-bezier(0.16, 1, 0.3, 1),
     border-color 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-
 
 .career-account-trigger {
   width: 44px;
@@ -1198,16 +1169,6 @@
   line-height: 1.4;
 }
 
-.career-context-form {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  /* Rows are tighter than columns. The third step carries the most fields of
-     any step, and CI's Chromium renders them ~29px taller than macOS, so the
-     step has to fit with room rather than exactly (B158). */
-  gap: 12px 16px;
-}
-
 .career-source-fields label,
 .career-source-textarea,
 .career-context-form label,
@@ -1216,14 +1177,6 @@
 .career-expert-login label {
   display: grid;
   gap: 8px;
-}
-
-/* A <legend> is placed by the browser outside its fieldset's own formatting
-   context, so a grid fieldset never applied the 8px gap and the heading landed
-   flush on the chips. Block layout with an explicit margin puts the legend back
-   on the same rhythm as the labels beside it. */
-.career-context-form fieldset {
-  display: block;
 }
 
 .career-context-form legend {
@@ -1272,10 +1225,18 @@
 }
 
 .career-context-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  /* Rows are tighter than columns. The third step carries the most fields of
+  any step, and CI's Chromium renders them ~29px taller than macOS, so the
+  step has to fit with room rather than exactly (B158). */
+  gap: 12px 16px;
   margin-top: 14px;
 }
 
 .career-context-form fieldset {
+  display: block;
   min-width: 0;
   margin: 0;
   border: 0;
@@ -4737,6 +4698,14 @@
 /* Complete account lifecycle */
 
 .career-account-panel {
+  position: fixed;
+  z-index: 60;
+  top: 0;
+  right: 0;
+  padding: 22px;
+  border-left: 1px solid var(--career-line);
+  background: var(--career-bg);
+  box-shadow: -24px 0 70px rgb(0 0 0 / 0.32);
   width: min(480px, 100vw);
   max-height: 100dvh;
   height: 100dvh;
@@ -6151,18 +6120,6 @@
   gap: 16px;
 }
 
-.career-modal-network-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 0.82rem;
-  color: var(--career-text-dim, #94a3b8);
-}
-
 .career-modal-intro {
   font-size: 0.9rem;
   color: var(--career-text-dim, #94a3b8);
@@ -6256,6 +6213,15 @@
 }
 
 .career-modal-network-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.82rem;
+  color: var(--career-text-dim, #94a3b8);
   margin: 0;
 }
 
