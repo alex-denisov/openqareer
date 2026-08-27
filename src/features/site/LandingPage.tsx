@@ -14,7 +14,7 @@ import {
 } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
-import { SiteLink } from './SiteLink.tsx';
+import { SiteLink } from './SiteLink';
 
 interface LandingPageProps {
   session?: AuthUser | null;

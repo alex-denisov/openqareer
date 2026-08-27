@@ -1,5 +1,5 @@
 import React from 'react';
-import { shouldHandleInApp } from './siteLink';
+import { shouldHandleInApp } from './siteLinkClick';
 
 export interface SiteLinkProps {
   to: string;
@@ -29,5 +29,3 @@ export function SiteLink({
     </a>
   );
 }
-
-export default SiteLink;

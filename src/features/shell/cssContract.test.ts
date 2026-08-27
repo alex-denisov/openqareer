@@ -45,10 +45,57 @@ interface TopLevelRule {
   readonly selectors: readonly string[];
 }
 
+/** Index just past the comment that starts at `from`. */
+function skipComment(css: string, from: number): number {
+  const end = css.indexOf('*/', from + 2);
+  return end === -1 ? css.length : end + 2;
+}
+
+/** Index just past a whole at-rule: a `@media` override is not a duplicate. */
+function skipAtRule(css: string, from: number): number {
+  let index = from;
+  let depth = 0;
+  while (index < css.length) {
+    if (css.startsWith('/*', index)) {
+      index = skipComment(css, index);
+      continue;
+    }
+    const char = css[index];
+    index += 1;
+    if (char === '{') depth += 1;
+    else if (char === '}' && (depth -= 1) === 0) break;
+    else if (char === ';' && depth === 0) break;
+  }
+  return index;
+}
+
+/** Index just past the block whose `{` sits at `from`. */
+function skipBlock(css: string, from: number): number {
+  let index = from + 1;
+  let depth = 1;
+  while (index < css.length && depth > 0) {
+    if (css.startsWith('/*', index)) {
+      index = skipComment(css, index);
+      continue;
+    }
+    if (css[index] === '{') depth += 1;
+    else if (css[index] === '}') depth -= 1;
+    index += 1;
+  }
+  return index;
+}
+
+function selectorsOf(selectorText: string): string[] {
+  return selectorText
+    .replace(/\/\*[\s\S]*?\*\//gu, '')
+    .split(',')
+    .map((selector) => selector.trim())
+    .filter(Boolean);
+}
+
 /**
- * Top-level rules only. Comments are stripped, at-rules are skipped whole (a
- * `@media` override is a deliberate second declaration, not a duplicate), and a
- * grouped selector list stays one rule.
+ * Top-level rules only, with a grouped selector list kept as one rule. Reading
+ * the file line by line is what made the first version of this guard wrong.
  */
 function topLevelRules(css: string): TopLevelRule[] {
   const rules: TopLevelRule[] = [];
@@ -56,55 +103,17 @@ function topLevelRules(css: string): TopLevelRule[] {
   let selectorStart = 0;
   while (index < css.length) {
     if (css.startsWith('/*', index)) {
-      const end = css.indexOf('*/', index + 2);
-      index = end === -1 ? css.length : end + 2;
-      continue;
-    }
-    if (css[index] === '@') {
-      let depth = 0;
-      while (index < css.length) {
-        if (css.startsWith('/*', index)) {
-          const end = css.indexOf('*/', index + 2);
-          index = end === -1 ? css.length : end + 2;
-          continue;
-        }
-        if (css[index] === '{') depth += 1;
-        else if (css[index] === '}') {
-          depth -= 1;
-          if (depth === 0) { index += 1; break; }
-        } else if (css[index] === ';' && depth === 0) { index += 1; break; }
-        index += 1;
-      }
+      index = skipComment(css, index);
+    } else if (css[index] === '@') {
+      index = skipAtRule(css, index);
       selectorStart = index;
-      continue;
+    } else if (css[index] === '{') {
+      rules.push({ selectors: selectorsOf(css.slice(selectorStart, index)) });
+      index = skipBlock(css, index);
+      selectorStart = index;
+    } else {
+      index += 1;
     }
-    if (css[index] === '{') {
-      const selectorText = css
-        .slice(selectorStart, index)
-        .replace(/\/\*[\s\S]*?\*\//gu, '');
-      let depth = 1;
-      let cursor = index + 1;
-      while (cursor < css.length && depth > 0) {
-        if (css.startsWith('/*', cursor)) {
-          const end = css.indexOf('*/', cursor + 2);
-          cursor = end === -1 ? css.length : end + 2;
-          continue;
-        }
-        if (css[cursor] === '{') depth += 1;
-        else if (css[cursor] === '}') depth -= 1;
-        cursor += 1;
-      }
-      rules.push({
-        selectors: selectorText
-          .split(',')
-          .map((selector) => selector.trim())
-          .filter(Boolean),
-      });
-      index = cursor;
-      selectorStart = cursor;
-      continue;
-    }
-    index += 1;
   }
   return rules;
 }

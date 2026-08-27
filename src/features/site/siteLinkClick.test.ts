@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldHandleInApp, type ClickLike } from './siteLink';
+import { shouldHandleInApp, type ClickLike } from './siteLinkClick';
 
 describe('shouldHandleInApp', () => {
   const baseEvent: ClickLike = {
