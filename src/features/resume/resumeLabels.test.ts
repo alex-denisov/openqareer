@@ -69,4 +69,3 @@ describe('what the candidate reads instead of an internal record number', () => 
     );
   });
 });
-

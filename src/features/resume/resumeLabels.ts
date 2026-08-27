@@ -1,3 +1,4 @@
+import type { CandidateMemory } from '../coach/coachApi';
 import type {
   ResumeReviewFlag,
   ResumeUnknownCode,
@@ -88,7 +89,7 @@ export function conventionLines(
 }
 
 export function evidenceStatementLabel(
-  memory: readonly Pick<import('../coach/coachApi').CandidateMemory, 'id' | 'statement'>[],
+  memory: readonly Pick<CandidateMemory, 'id' | 'statement'>[],
   memoryId: string,
   kind: 'stale' | 'excluded',
 ): string {
@@ -102,4 +103,3 @@ export function evidenceStatementLabel(
   }
   return statement;
 }
-

@@ -59,7 +59,6 @@ export type CandidateConnection = {
     }
 );
 
-
 interface CoachMessage {
   id: string;
   role: 'user' | 'assistant';

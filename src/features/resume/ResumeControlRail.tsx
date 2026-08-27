@@ -68,7 +68,7 @@ function FreshnessBlock({
       </p>
       <ul className="career-resume-stale">
         {freshness.stale.map((item) => (
-          <li key={item.memoryId} data-memory-id={item.memoryId}>
+          <li key={item.memoryId}>
             <span className="career-resume-evidence-line">
               {evidenceStatementLabel(memory, item.memoryId, 'stale')}
             </span>
@@ -125,7 +125,7 @@ function ExcludedBlock({
       </p>
       <ul className="career-resume-excluded">
         {memoryIds.map((memoryId) => (
-          <li key={memoryId} data-memory-id={memoryId}>
+          <li key={memoryId}>
             <span className="career-resume-evidence-line">
               {evidenceStatementLabel(memory, memoryId, 'excluded')}
             </span>

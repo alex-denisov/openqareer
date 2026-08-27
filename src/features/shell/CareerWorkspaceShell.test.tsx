@@ -136,22 +136,6 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('career-topbar');
   });
 
-  it('reports a platform connection outcome inside the shell', () => {
-    const html = renderToStaticMarkup(
-      <CareerWorkspaceShell
-        connectionNotice="hh.ru подключён. Мы читаем ваш профиль и резюме и ничего не делаем от вашего имени."
-        onClearWorkspace={() => undefined}
-        onSaveWorkspace={() => undefined}
-        onUpdateWorkspace={() => undefined}
-      />,
-    );
-
-    expect(html).toContain('data-testid="career-shell"');
-    expect(html).toContain('career-connection-notice');
-    expect(html).toContain('hh.ru подключён');
-    expect(html).toContain('С чем разобраться?');
-  });
-
   it('keeps a first-time candidate inside the canonical career shell', () => {
     const html = renderToStaticMarkup(
       <CareerWorkspaceShell

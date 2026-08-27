@@ -1000,36 +1000,6 @@
   margin-top: 4px;
 }
 
-.career-connection-notice {
-  width: min(100%, 1120px);
-  margin: 0 auto 22px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  border: 1px solid var(--career-line);
-  border-radius: var(--career-radius-md);
-  padding: 14px 16px;
-  background: var(--career-surface);
-}
-
-.career-connection-notice p {
-  margin: 0;
-  min-width: 0;
-  color: var(--career-text-soft);
-  line-height: 1.6;
-}
-
-.career-connection-notice button {
-  min-height: 44px;
-  border: 1px solid var(--career-line);
-  border-radius: 10px;
-  padding: 0 14px;
-  background: transparent;
-  color: inherit;
-}
-
 .career-profile-fact-review {
   grid-column: 1 / -1;
   display: grid;

@@ -51,4 +51,3 @@ describe('connectedProfileSource', () => {
     expect(connectedProfileSource([snapshot('linkedin', 0)])).toBeUndefined();
   });
 });
-

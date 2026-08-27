@@ -87,7 +87,8 @@ function useResumeVariant(
  * network. Editing turns on only when a draft owner supplies `onDraftChange`.
  */
 export function ResumeStudioSurface(props: ResumeStudioSurfaceProps) {
-  const { view, draft, memory = [], regions = [], error, onRetry, onDraftChange, loading = false, saving = false, saveError, onSave } = props;
+  const { view, draft, memory = [], regions = [], error, onRetry, onDraftChange } = props;
+  const { loading = false, saving = false, saveError, onSave } = props;
   const { variant, variants, setVariant } = useResumeVariant(regions, props.initialVariant);
   const [pane, setPane] = useState<'unknowns' | 'document'>();
   const available = useMemo(() => eligibleEvidence(memory), [memory]);

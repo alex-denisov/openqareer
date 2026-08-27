@@ -180,9 +180,16 @@ describe('ResumeStudioSurface', () => {
       },
     });
     const html = render(
-      <ResumeStudioSurface view={view} draft={emptyDraft} memory={[]} />,
+      <ResumeStudioSurface
+        view={view}
+        draft={emptyDraft}
+        memory={[memory({ id: 'memory-42', statement: 'Сократила цикл поставки на 30%.' })]}
+      />,
     );
-    expect(html).toMatch(/memory-42/u);
+    // B162: the candidate is told which fact went stale, in their own words —
+    // the record number stays a React key and never reaches the screen.
+    expect(html).toMatch(/Сократила цикл поставки на 30%/u);
+    expect(html).not.toMatch(/memory-42/u);
     expect(html).toMatch(/отозван/iu);
   });
 
@@ -199,11 +206,16 @@ describe('ResumeStudioSurface', () => {
         draft={draft}
         memory={[
           memory(),
-          memory({ id: 'memory-unconfirmed', status: 'proposed' }),
+          memory({
+            id: 'memory-unconfirmed',
+            status: 'proposed',
+            statement: 'Непринятый результат за 2025 год.',
+          }),
         ]}
       />,
     );
-    expect(html).toMatch(/memory-unconfirmed/u);
+    expect(html).toMatch(/Непринятый результат за 2025 год/u);
+    expect(html).not.toMatch(/memory-unconfirmed/u);
     expect(html).toMatch(/не попал/iu);
   });
 
