@@ -362,6 +362,7 @@ export async function adminSetUserPassword(
 
 export function deleteUserByAdmin(
   database: DatabaseSync,
+  candidateStore: CandidateStore,
   targetUserId: string,
   actorPrincipal?: AuthPrincipal,
 ): void {
@@ -369,6 +370,10 @@ export function deleteUserByAdmin(
   if (!user) throw new Error('Пользователь не найден.');
   if (actorPrincipal && actorPrincipal.userId === targetUserId) {
     throw new Error('Администратор не может удалить собственный аккаунт.');
+  }
+
+  if (user.candidateId) {
+    candidateStore.deleteCandidate(user.candidateId);
   }
 
   database.prepare(`DELETE FROM users WHERE id = ?`).run(targetUserId);
@@ -380,7 +385,7 @@ export function deleteUserByAdmin(
       action: 'delete_user',
       subjectUserId: user.id,
       subjectUsername: user.username,
-      detail: `User account deleted`,
+      detail: 'User account and candidate dossier deleted',
     });
   }
 }

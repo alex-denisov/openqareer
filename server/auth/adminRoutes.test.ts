@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app';
 import type { ServerConfig } from '../config';
@@ -328,4 +329,145 @@ describe('POST /api/v1/admin/vacancy-sources/:sourceId/test', () => {
     expect(Array.isArray(body.vacancies)).toBe(true);
   });
 });
+
+describe('DELETE /api/v1/admin/users/:userId', () => {
+  it('deletes candidate dossier along with the user account', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+    await register(app, 'Мария Удаляемая', 'maria.delete@example.com');
+    const directory = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/users?query=maria.delete@example.com',
+      headers: { cookie: adminCookie },
+    });
+    const candidateUser = directory.json().data.users[0];
+    expect(candidateUser.candidateId).toBeTruthy();
+
+    const resource = resources[resources.length - 1];
+    resource.candidates.startTurn(
+      candidateUser.candidateId,
+      '51df5f57-df61-4ac2-98af-202608270101',
+      {
+        messageId: '85512ddf-962c-4a7c-a4cc-30a35d1e5847',
+        content: 'Тестовое сообщение кандидата для проверки удаления досье.',
+        phase: 'discovery',
+      },
+    );
+
+    // Direct DB check before deletion: candidate row and message row exist
+    const db = (resource.candidates as unknown as { database: DatabaseSync }).database;
+    const candBefore = db
+      .prepare('SELECT COUNT(*) AS c FROM candidates WHERE id = ?')
+      .get(candidateUser.candidateId) as { c: number };
+    expect(candBefore.c).toBe(1);
+
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/admin/users/${candidateUser.id}`,
+      headers: { cookie: adminCookie },
+    });
+
+    expect(deleteResponse.statusCode).toBe(200);
+    expect(deleteResponse.json()).toEqual({ data: { success: true }, meta: expect.any(Object) });
+
+    // Direct DB check after deletion: candidate and user are gone, and audit record describes dossier deletion
+    const candAfter = db
+      .prepare('SELECT COUNT(*) AS c FROM candidates WHERE id = ?')
+      .get(candidateUser.candidateId) as { c: number };
+    expect(candAfter.c).toBe(0);
+
+    const userAfter = db
+      .prepare('SELECT COUNT(*) AS c FROM users WHERE id = ?')
+      .get(candidateUser.id) as { c: number };
+    expect(userAfter.c).toBe(0);
+
+    const msgAfter = db
+      .prepare('SELECT COUNT(*) AS c FROM messages WHERE candidate_id = ?')
+      .get(candidateUser.candidateId) as { c: number };
+    expect(msgAfter.c).toBe(0);
+
+    const audit = db
+      .prepare(
+        'SELECT action, detail FROM admin_audit WHERE subject_user_id = ? ORDER BY created_at DESC LIMIT 1',
+      )
+      .get(candidateUser.id) as { action: string; detail: string };
+    expect(audit.action).toBe('delete_user');
+    expect(audit.detail).toBe('User account and candidate dossier deleted');
+  });
+
+  it('keeps other candidate dossiers untouched', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+    await register(app, 'Мария Первая', 'maria1@example.com');
+    await register(app, 'Мария Вторая', 'maria2@example.com');
+
+    const directory = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/users?query=maria',
+      headers: { cookie: adminCookie },
+    });
+    const users = directory.json().data.users;
+    const user1 = users.find((u: { email: string }) => u.email === 'maria1@example.com');
+    const user2 = users.find((u: { email: string }) => u.email === 'maria2@example.com');
+
+    const resource = resources[resources.length - 1];
+    resource.candidates.startTurn(
+      user2.candidateId,
+      '51df5f57-df61-4ac2-98af-202608270102',
+      {
+        messageId: '85512ddf-962c-4a7c-a4cc-30a35d1e5848',
+        content: 'Сообщение второго кандидата, которое должно остаться.',
+        phase: 'discovery',
+      },
+    );
+
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/admin/users/${user1.id}`,
+      headers: { cookie: adminCookie },
+    });
+    expect(deleteResponse.statusCode).toBe(200);
+
+    const db = (resource.candidates as unknown as { database: DatabaseSync }).database;
+    const cand2 = db
+      .prepare('SELECT COUNT(*) AS c FROM candidates WHERE id = ?')
+      .get(user2.candidateId) as { c: number };
+    expect(cand2.c).toBe(1);
+
+    const msg2 = db
+      .prepare('SELECT COUNT(*) AS c FROM messages WHERE candidate_id = ?')
+      .get(user2.candidateId) as { c: number };
+    expect(msg2.c).toBe(1);
+  });
+
+  it('refuses to let administrator delete themselves and preserves data', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+    const directory = await app.inject({
+      method: 'GET',
+      url: `/api/v1/admin/users?query=${ADMIN.username}`,
+      headers: { cookie: adminCookie },
+    });
+    const adminUser = directory.json().data.users[0];
+
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/admin/users/${adminUser.id}`,
+      headers: { cookie: adminCookie },
+    });
+
+    expect(deleteResponse.statusCode).toBe(400);
+    expect(deleteResponse.json().error.message).toBe(
+      'Администратор не может удалить собственный аккаунт.',
+    );
+
+    const resource = resources[resources.length - 1];
+    const db = (resource.candidates as unknown as { database: DatabaseSync }).database;
+    const adminInDb = db
+      .prepare('SELECT COUNT(*) AS c FROM users WHERE id = ?')
+      .get(adminUser.id) as { c: number };
+    expect(adminInDb.c).toBe(1);
+  });
+});
+
 
