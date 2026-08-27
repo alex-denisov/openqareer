@@ -50,31 +50,5 @@ describe('connectedProfileSource', () => {
   it('refuses to call an empty snapshot an imported source', () => {
     expect(connectedProfileSource([snapshot('linkedin', 0)])).toBeUndefined();
   });
-
-  it('leaves an official-API connection to its own restore path', () => {
-    const official: CandidateConnection = {
-      platform: 'linkedin',
-      available: true,
-      capabilities: ['lite_identity'],
-      importsCareerHistory: false,
-      status: 'connected',
-      scopes: ['r_liteprofile'],
-      accessTokenExpiresAt: null,
-      connectedAt: '2026-08-24T10:00:00.000Z',
-      profile: {
-        capturedAt: '2026-08-24T10:00:00.000Z',
-        sourceUrl: null,
-        facts: [
-          {
-            kind: 'headline',
-            value: 'Head of Product',
-            sourceLocator: 'linkedin:headline',
-            confidence: 'official-api',
-          },
-        ],
-      },
-    };
-
-    expect(connectedProfileSource([official])).toBeUndefined();
-  });
 });
+

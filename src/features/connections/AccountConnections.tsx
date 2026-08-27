@@ -6,7 +6,7 @@ import {
   type CandidateConnection,
 } from '../coach/coachApi';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
-import { PLATFORM_LABELS, type ConnectionPlatform } from './connectionResult';
+import { PLATFORM_LABELS, type ConnectionPlatform } from './platformLabels';
 import { HhConnectModal } from './HhConnectModal';
 import { LinkedInConnectModal } from './LinkedInConnectModal';
 import type { HhResumeItem } from './HhConnectModal';

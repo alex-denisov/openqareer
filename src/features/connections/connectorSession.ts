@@ -3,7 +3,7 @@ import {
   invokeDesktopCommand,
   isTauriEnvironment,
 } from '../../services/desktop/desktopBridge';
-import type { ConnectionPlatform } from './connectionResult';
+import type { ConnectionPlatform } from './platformLabels';
 
 /**
  * Where the connector flow currently stands, for both platforms.

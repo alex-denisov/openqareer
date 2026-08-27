@@ -52,32 +52,13 @@ export type CandidateConnection = {
   | { status: 'disconnected' }
   | {
       status: 'connected';
-      accessMode?: never;
-      scopes: string[];
-      accessTokenExpiresAt: string | null;
-      connectedAt: string;
-      profile: {
-        capturedAt: string;
-        sourceUrl: string | null;
-        facts: Array<{
-          kind: 'headline' | 'summary';
-          value: string;
-          sourceLocator: string;
-          confidence: 'official-api';
-        }>;
-      };
-    }
-  | {
-      status: 'connected';
       accessMode: 'native_session_snapshot';
       connectedAt: string;
       lastImportedAt: string;
       factCount: number;
-      scopes?: never;
-      accessTokenExpiresAt?: never;
-      profile?: never;
     }
 );
+
 
 interface CoachMessage {
   id: string;

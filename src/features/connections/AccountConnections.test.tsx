@@ -15,16 +15,12 @@ describe('AccountConnections', () => {
             platform: 'linkedin',
             available: false,
             status: 'connected',
+            accessMode: 'native_session_snapshot',
             capabilities: ['lite_identity'],
             importsCareerHistory: false,
-            scopes: ['openid', 'profile'],
-            accessTokenExpiresAt: null,
             connectedAt: '2026-08-10T12:00:00.000Z',
-            profile: {
-              capturedAt: '2026-08-10T12:00:00.000Z',
-              sourceUrl: null,
-              facts: [],
-            },
+            lastImportedAt: '2026-08-10T12:00:00.000Z',
+            factCount: 0,
           },
         ]}
         onDisconnect={() => undefined}
