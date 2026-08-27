@@ -5,8 +5,9 @@ import {
 } from './pdfDocumentClassifier';
 import type { PdfInspection } from './pdfInspector';
 import { inspectPdfOffMainThread } from './pdfInspectorClient';
+import { LOCAL_PDF_MAX_BYTES, megabytes } from '../../../shared/fileLimits';
 
-const MAX_PDF_BYTES = 20 * 1024 * 1024;
+const MAX_PDF_BYTES = LOCAL_PDF_MAX_BYTES;
 const MAX_PDF_PAGES = 40;
 
 interface PdfTextItem {
@@ -92,7 +93,9 @@ export async function extractPdfResume(
   }
 
   if (file.size > MAX_PDF_BYTES) {
-    throw new Error('PDF больше 20 МБ. Сохраните более компактную копию.');
+    throw new Error(
+      `PDF больше ${megabytes(LOCAL_PDF_MAX_BYTES)} МБ. Сохраните более компактную копию.`,
+    );
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());

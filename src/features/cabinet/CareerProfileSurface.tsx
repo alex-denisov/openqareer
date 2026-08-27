@@ -26,6 +26,7 @@ import { prepareCareerWorkspace } from '../journey/careerJourneyEngine';
 import { extractTextDocument } from '../workspace/documentText';
 import { extractPdfResume } from '../workspace/pdfResume';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
+import { DOCUMENT_MAX_BYTES, megabytes } from '../../../shared/fileLimits';
 
 type ProfileTab = 'summary' | 'experience' | 'skills' | 'education' | 'documents';
 
@@ -144,8 +145,10 @@ export function CareerProfileSurface({
     setError(undefined);
     setNotice(undefined);
     try {
-      if (file.size > 5 * 1_024 * 1_024) {
-        throw new Error('Файл больше 5 МБ. Сохраните более компактную копию.');
+      if (file.size > DOCUMENT_MAX_BYTES) {
+        throw new Error(
+          `Файл больше ${megabytes(DOCUMENT_MAX_BYTES)} МБ. Сохраните более компактную копию.`,
+        );
       }
       const mimeType = normalizedMimeType(file);
       let extractedText: string | undefined;
@@ -638,7 +641,9 @@ function DocumentVault({
           <FileArrowUp size={24} />
           <span>
             <strong>Добавьте CV или экспорт профиля</strong>
-            <small>PDF, DOCX, TXT или JSON · до 5 МБ</small>
+            <small>
+              PDF, DOCX, TXT или JSON · до {megabytes(DOCUMENT_MAX_BYTES)} МБ
+            </small>
           </span>
         </button>
       )}
