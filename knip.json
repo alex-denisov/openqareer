@@ -3,7 +3,6 @@
   "ignoreBinaries": ["gitleaks"],
   "ignore": [
     "public/assets/desktop-bootstrap.js",
-    "scripts/capture_live_shot.js",
     "scripts/ci_monitor.cjs",
     "scripts/sync-local-provider-secrets.mjs"
   ]

@@ -13,6 +13,7 @@ import type { ResumeStudioView } from '../resume/resumeTypes';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import type { CareerCabinetView } from './cabinetViews';
+import { pluralRu } from '../../../shared/pluralRu';
 
 /**
  * «Сегодня» answers one question — *what do I do now* — and nothing else.
@@ -139,7 +140,7 @@ function LoopStateGrid({
         resumeRoles === 0
           ? 'резюме ещё не собрано'
           : resumeGaps > 0
-            ? `ролей в документе · ${plural(resumeGaps, ['пробел', 'пробела', 'пробелов'])}`
+            ? `ролей в документе · ${pluralRu(resumeGaps, ['пробел', 'пробела', 'пробелов'])}`
             : 'ролей в документе',
     },
     {
@@ -220,19 +221,8 @@ function destinationView(
 /** Facts wait for the candidate, so the sentence has to count them in Russian. */
 export function reviewQueueNote(proposed: number): string | undefined {
   if (proposed <= 0) return undefined;
-  const counted = plural(proposed, ['факт ждёт', 'факта ждут', 'фактов ждут']);
+  const counted = pluralRu(proposed, ['факт ждёт', 'факта ждут', 'фактов ждут']);
   return `${counted} вашей проверки в разделе «Профиль».`;
-}
-
-/** Russian needs three forms; a bare "2 пробелов" reads as a bug. */
-function plural(count: number, forms: [string, string, string]): string {
-  const mod10 = count % 10;
-  const mod100 = count % 100;
-  if (mod10 === 1 && mod100 !== 11) return `${count} ${forms[0]}`;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
-    return `${count} ${forms[1]}`;
-  }
-  return `${count} ${forms[2]}`;
 }
 
 function firstName(name: string): string {

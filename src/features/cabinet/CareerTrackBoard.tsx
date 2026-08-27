@@ -6,6 +6,7 @@ import {
   candidateRegionLabels,
   type CandidateRegion,
 } from '../workspace/candidateRegions';
+import { pluralRu } from '../../../shared/pluralRu';
 
 /**
  * «Карьера» — where the candidate is going and how they will know they arrived.
@@ -175,7 +176,12 @@ function RoleHypotheses({ journey }: { journey?: CareerJourney }) {
               <strong>{role.title}</strong>
               <p>{role.basis}</p>
               <small>
-                {role.evidenceCount} подтверждённых опор · {role.gaps.length} пробелов
+                {pluralRu(role.evidenceCount, [
+                  'подтверждённая опора',
+                  'подтверждённые опоры',
+                  'подтверждённых опор',
+                ])}{' '}
+                · {pluralRu(role.gaps.length, ['пробел', 'пробела', 'пробелов'])}
               </small>
             </div>
           </article>

@@ -57,17 +57,15 @@ interface CareerWorkspaceShellProps {
 const primaryNavigation: Array<{
   id: Exclude<ShellView, 'tariffs'>;
   label: string;
-  shortLabel: string;
   icon: Icon;
 }> = [
-  { id: 'today', label: 'Сегодня', shortLabel: 'Сегодня', icon: House },
-  { id: 'profile', label: 'Профиль', shortLabel: 'Профиль', icon: UserCircle },
-  { id: 'resume', label: 'Резюме', shortLabel: 'Резюме', icon: FileText },
-  { id: 'career', label: 'Карьера', shortLabel: 'Карьера', icon: Path },
+  { id: 'today', label: 'Сегодня', icon: House },
+  { id: 'profile', label: 'Профиль', icon: UserCircle },
+  { id: 'resume', label: 'Резюме', icon: FileText },
+  { id: 'career', label: 'Карьера', icon: Path },
   {
     id: 'opportunities',
     label: 'Возможности',
-    shortLabel: 'Шансы',
     icon: Compass,
   },
 ];
@@ -297,7 +295,6 @@ export function CareerWorkspaceShell({
             item={{
               id: 'tariffs',
               label: 'Тарифы',
-              shortLabel: 'Тарифы',
               icon: Wallet,
             }}
             active={activeView === 'tariffs'}
@@ -547,13 +544,11 @@ function NavigationButton({
   active,
   disabled = false,
   lockedReason,
-  mobile = false,
   onClick,
 }: {
   item: {
     id: ShellView;
     label: string;
-    shortLabel: string;
     icon: Icon;
   };
   active: boolean;
@@ -576,7 +571,7 @@ function NavigationButton({
       title={disabled ? (lockedReason ?? item.label) : item.label}
     >
       <ItemIcon size={22} weight={active ? 'fill' : 'regular'} />
-      <span>{mobile ? item.shortLabel : item.label}</span>
+      <span>{item.label}</span>
     </button>
   );
 }

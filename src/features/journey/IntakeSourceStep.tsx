@@ -18,6 +18,8 @@ import type { ParsedResume } from '../workspace/resumeParser';
 import type { IngestedResume } from './useResumeIngestion';
 import type { IntakeSourceLockState } from './intakeSourceLock';
 import type { ConnectedProfileSource } from './connectedProfileSource';
+import { pluralRu } from '../../../shared/pluralRu';
+import { LOCAL_PDF_MAX_BYTES, megabytes } from '../../../shared/fileLimits';
 
 export type SourceChoice = 'profile-import' | 'pdf' | 'text' | 'none';
 
@@ -190,7 +192,7 @@ function PdfSource({ ingested, busy, lock, onPickPdf, notice }: IntakeSourceStep
             ? 'Разбор занимает до минуты: читаем структуру, а не ключевые слова.'
             : ingested?.file
               ? `${ingested.file.pages} стр.`
-              : 'PDF до 20 МБ · файл читается в браузере; в профиль отправляется извлечённый текст, исходный файл не сохраняется'}
+              : `PDF до ${megabytes(LOCAL_PDF_MAX_BYTES)} МБ · файл читается в браузере; в профиль отправляется извлечённый текст, исходный файл не сохраняется`}
         </small>
       </div>
       {ingested ? <ImportSummary ingested={ingested} notice={notice} /> : null}
@@ -432,26 +434,25 @@ function ImportSummary({
 
 function countLine(parsed: ParsedResume): string {
   const parts = [
-    plural(parsed.experience.length, ['место работы', 'места работы', 'мест работы']),
-    plural(parsed.skills.length, ['навык', 'навыка', 'навыков']),
-    plural(parsed.education.length, ['запись об учёбе', 'записи об учёбе', 'записей об учёбе']),
-    plural(parsed.courses.length, ['курс', 'курса', 'курсов']),
-    plural(parsed.languages.length, ['язык', 'языка', 'языков']),
-  ].filter((part) => part !== null);
+    parsed.experience.length === 0
+      ? null
+      : pluralRu(parsed.experience.length, ['место работы', 'места работы', 'мест работы']),
+    parsed.skills.length === 0
+      ? null
+      : pluralRu(parsed.skills.length, ['навык', 'навыка', 'навыков']),
+    parsed.education.length === 0
+      ? null
+      : pluralRu(parsed.education.length, ['запись об учёбе', 'записи об учёбе', 'записей об учёбе']),
+    parsed.courses.length === 0
+      ? null
+      : pluralRu(parsed.courses.length, ['курс', 'курса', 'курсов']),
+    parsed.languages.length === 0
+      ? null
+      : pluralRu(parsed.languages.length, ['язык', 'языка', 'языков']),
+  ].filter((part): part is string => part !== null);
   return parts.length > 0
     ? `найдено: ${parts.join(', ')}`
     : 'структурированных разделов не нашлось — можно дополнить профиль вручную';
-}
-
-function plural(count: number, forms: [string, string, string]): string | null {
-  if (count === 0) return null;
-  const mod10 = count % 10;
-  const mod100 = count % 100;
-  if (mod10 === 1 && mod100 !== 11) return `${count} ${forms[0]}`;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
-    return `${count} ${forms[1]}`;
-  }
-  return `${count} ${forms[2]}`;
 }
 
 function SourceButton({

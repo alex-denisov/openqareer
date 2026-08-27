@@ -542,5 +542,11 @@ describe('CareerWorkspaceShell brand chrome', () => {
       expect(html).toContain('career-rail-admin');
       expect(html).not.toContain('style="');
     });
+
+    it('names the opportunities section consistently without using Шансы', () => {
+      const html = renderToStaticMarkup(firstTime);
+      expect(html).toContain('Возможности');
+      expect(html).not.toContain('Шансы');
+    });
   });
 });
