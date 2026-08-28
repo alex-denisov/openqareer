@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { LANDING_TITLE } from '../src/features/site/siteTitles';
 
 describe('public discovery metadata', () => {
   it('describes the candidate product truthfully in the entry document', () => {
@@ -36,5 +37,11 @@ describe('public discovery metadata', () => {
     expect(llms).toMatch(/^# openqareer\n/u);
     expect(llms).toContain('https://openqareer.com');
     expect(llms).not.toMatch(/гарантирует (работу|оффер|интервью)/iu);
+  });
+
+  it('keeps the entry document title in exact sync with the hydrated landing title (B162)', () => {
+    const html = readFileSync('index.html', 'utf8');
+    const match = /<title>([^<]+)<\/title>/u.exec(html);
+    expect(match?.[1]).toBe(LANDING_TITLE);
   });
 });

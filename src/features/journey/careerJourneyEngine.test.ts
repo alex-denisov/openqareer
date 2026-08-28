@@ -556,3 +556,85 @@ describe('market routes follow the regions the candidate chose (B158)', () => {
     expect(journey.markets).toEqual([]);
   });
 });
+
+describe('review-evidence next action source attribution (B162)', () => {
+  it('attributes proposed evidence to resume import when all proposed facts are from import', () => {
+    const journey = buildCanonicalProfileJourney(
+      undefined,
+      [
+        {
+          id: 'imp0123456789-fact-1',
+          statement: 'Руководил командой разработки из 10 человек.',
+          kind: 'fact',
+          domain: 'responsibility',
+          status: 'proposed',
+          sourceMessageIds: [],
+        },
+      ],
+      'Руководитель разработки',
+      '2026-08-28T00:00:00.000Z',
+    );
+
+    expect(journey.nextAction).toMatchObject({
+      id: 'review-evidence',
+      reason:
+        'Импорт резюме добавил выводы в профиль, но вы ещё не подтвердили их точность.',
+    });
+  });
+
+  it('attributes proposed evidence to dialogue when no proposed facts are from import', () => {
+    const journey = buildCanonicalProfileJourney(
+      undefined,
+      [
+        {
+          id: 'dialogue-fact-1',
+          statement: 'Запустил B2B-направление с нуля.',
+          kind: 'fact',
+          domain: 'outcome',
+          status: 'proposed',
+          sourceMessageIds: ['msg-1'],
+        },
+      ],
+      'Руководитель продукта',
+      '2026-08-28T00:00:00.000Z',
+    );
+
+    expect(journey.nextAction).toMatchObject({
+      id: 'review-evidence',
+      reason:
+        'Диалог добавил выводы в профиль, но вы ещё не подтвердили их точность.',
+    });
+  });
+
+  it('attributes proposed evidence to both import and dialogue when proposed facts are mixed', () => {
+    const journey = buildCanonicalProfileJourney(
+      undefined,
+      [
+        {
+          id: 'imp0123456789-fact-1',
+          statement: 'Руководил продуктовой командой.',
+          kind: 'fact',
+          domain: 'responsibility',
+          status: 'proposed',
+          sourceMessageIds: [],
+        },
+        {
+          id: 'dialogue-fact-1',
+          statement: 'Увеличил конверсию на 25 процентов.',
+          kind: 'fact',
+          domain: 'outcome',
+          status: 'proposed',
+          sourceMessageIds: ['msg-1'],
+        },
+      ],
+      'Руководитель продукта',
+      '2026-08-28T00:00:00.000Z',
+    );
+
+    expect(journey.nextAction).toMatchObject({
+      id: 'review-evidence',
+      reason:
+        'Импорт резюме и диалог добавили выводы в профиль, но вы ещё не подтвердили их точность.',
+    });
+  });
+});

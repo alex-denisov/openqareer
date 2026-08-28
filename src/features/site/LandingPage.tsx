@@ -15,6 +15,7 @@ import {
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
 import { SiteLink } from './SiteLink';
+import { LANDING_TITLE } from './siteTitles';
 
 interface LandingPageProps {
   session?: AuthUser | null;
@@ -572,7 +573,7 @@ function LandingFooter({
 
 export function LandingPage({ session, onNavigate }: LandingPageProps) {
   React.useEffect(() => {
-    document.title = 'OpenQareer · Карьерная операционная система кандидата';
+    document.title = LANDING_TITLE;
   }, []);
 
   return (

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app';
 import type { ServerConfig } from '../config';
@@ -731,5 +732,34 @@ describe('registration without a login field (B139)', () => {
     const app = await createApp();
     const seeded = await login(app, 'candidate.test', 'candidate-password-for-tests');
     expect(seeded.response.statusCode).toBe(200);
+  });
+
+  it('refuses registration for reserved handles and creates no user or candidate rows (B162)', async () => {
+    const app = await createApp();
+    const resource = resources.find((r) => r.app === app)!;
+    const db = new DatabaseSync(join(resource.directory, 'app.db'), { readOnly: true });
+
+    const countUsers = () =>
+      (db.prepare('SELECT COUNT(*) AS count FROM users').get() as { count: number }).count;
+    const countCandidates = () =>
+      (db.prepare('SELECT COUNT(*) AS count FROM candidates').get() as { count: number }).count;
+
+    const usersBefore = countUsers();
+    const candidatesBefore = countCandidates();
+
+    const response = await register(app, {
+      displayName: 'Администратор',
+      email: 'admin.test@example.com',
+      password: 'candidate-password-for-tests',
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.code).toBe('email_taken');
+    expect(response.json().error.message).toBe('Этот email уже связан с другим аккаунтом.');
+
+    expect(countUsers()).toBe(usersBefore);
+    expect(countCandidates()).toBe(candidatesBefore);
+
+    db.close();
   });
 });

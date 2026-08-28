@@ -27,6 +27,7 @@ import {
   type CandidateWorkspace,
   type WorkspaceInput,
 } from '../workspace/workspaceStorage';
+import { isImportedMemoryId } from '../../../server/domain/resumeImport';
 
 const CAREER_JOURNEY_REVISION = 'career-journey-v1-2026-08-07' as const;
 
@@ -339,7 +340,7 @@ export function applyCanonicalProfileToJourney(
             id: 'review-evidence',
             label: 'Проверить выводы',
             headline: 'Подтвердите опорные факты',
-            reason: 'Диалог добавил выводы в профиль, но кандидат ещё не подтвердил их точность.',
+            reason: reviewEvidenceReason(proposedEvidence),
             expectedChange:
               'Подтверждённые факты станут основанием для диагностики и сравнения ролей.',
             destination: 'profile',
@@ -357,6 +358,17 @@ export function applyCanonicalProfileToJourney(
             }
           : staleReviewFreeAction(journey.nextAction, roleGrounded),
   };
+}
+
+function reviewEvidenceReason(proposedEvidence: CanonicalProfileMemory[]): string {
+  const importedCount = proposedEvidence.filter((item) => isImportedMemoryId(item.id)).length;
+  if (importedCount === proposedEvidence.length) {
+    return 'Импорт резюме добавил выводы в профиль, но вы ещё не подтвердили их точность.';
+  }
+  if (importedCount === 0) {
+    return 'Диалог добавил выводы в профиль, но вы ещё не подтвердили их точность.';
+  }
+  return 'Импорт резюме и диалог добавили выводы в профиль, но вы ещё не подтвердили их точность.';
 }
 
 /**

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { AuthService } from './authService';
+import { AuthUsernameTakenError } from './authErrors';
 
 const directories: string[] = [];
 const services: AuthService[] = [];
@@ -42,7 +43,7 @@ function openService(path: string): AuthService {
  * grant fires on every process start, so a deploy is enough to trigger it.
  */
 describe('system administrator provisioning', () => {
-  it.each(['admin.test', 'alexey.admin'])(
+  it.each(['alexey.admin', 'administrator2'])(
     'does not promote a self-registered %s to administrator on restart',
     async (username) => {
       const { path, store } = openStore();
@@ -59,6 +60,29 @@ describe('system administrator provisioning', () => {
       const session = await restarted.login(username, 'a-candidate-chosen-password');
 
       expect(session?.principal.role).toBe('candidate');
+    },
+  );
+
+  /**
+   * The names that used to buy the role are no longer registrable at all
+   * (B162): the invariant above proves the grant is gone, this one proves the
+   * squat is gone with it. Both halves are needed — dropping either one brings
+   * INC-025 back through the other door.
+   */
+  it.each(['admin.test', 'admin', 'support.qa'])(
+    'refuses to register the reserved handle %s and stores nothing',
+    async (username) => {
+      const { path, store } = openStore();
+      const service = openService(path);
+
+      await expect(
+        service.register(username, 'a-candidate-chosen-password', store, {
+          displayName: 'Кандидат',
+          email: `${username.replace('.', '-')}@example.test`,
+        }),
+      ).rejects.toBeInstanceOf(AuthUsernameTakenError);
+
+      expect(await service.login(username, 'a-candidate-chosen-password')).toBeNull();
     },
   );
 });

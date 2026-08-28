@@ -34,6 +34,7 @@ import {
   AuthInvalidResetTokenError,
   AuthUserBlockedError,
 } from './authErrors';
+import { isReservedUsername } from '../../shared/reservedUsernames';
 import {
   listUsers as adminListUsers,
   getUser as adminGetUser,
@@ -141,7 +142,9 @@ export class AuthService implements SessionAuth {
     const username = normalizeUsername(usernameInput);
     const email = profile.email ? normalizeEmail(profile.email) : null;
     const displayName = profile.displayName?.trim() || null;
-    if (this.findUser(username)) throw new AuthUsernameTakenError();
+    if (isReservedUsername(username) || this.findUser(username)) {
+      throw new AuthUsernameTakenError();
+    }
     const salt = randomBytes(16);
     const passwordHash = await derivePassword(password, salt);
     const candidate = candidateStore.createCandidate({
@@ -150,26 +153,15 @@ export class AuthService implements SessionAuth {
     });
     const now = new Date().toISOString();
     try {
-      this.database
-        .prepare(
-          `INSERT INTO users
-            (id, username, email, display_name, role, password_salt,
-             password_hash, candidate_id, is_test, created_at, updated_at,
-             profile_updated_at)
-           VALUES (?, ?, ?, ?, 'candidate', ?, ?, ?, 0, ?, ?, ?)`,
-        )
-        .run(
-          randomUUID(),
-          username,
-          email,
-          displayName,
-          salt.toString('base64'),
-          passwordHash.toString('base64'),
-          candidate.id,
-          now,
-          now,
-          now,
-        );
+      this.insertRegisteredUser(
+        username,
+        email,
+        displayName,
+        salt,
+        passwordHash,
+        candidate.id,
+        now,
+      );
     } catch (error) {
       candidateStore.deleteCandidate(candidate.id);
       if (this.findUser(username)) throw new AuthUsernameTakenError();
@@ -181,6 +173,37 @@ export class AuthService implements SessionAuth {
     const authenticated = await this.login(username, password);
     if (!authenticated) throw new Error('registered account cannot authenticate');
     return authenticated;
+  }
+
+  private insertRegisteredUser(
+    username: string,
+    email: string | null,
+    displayName: string | null,
+    salt: Buffer,
+    passwordHash: Buffer,
+    candidateId: string,
+    now: string,
+  ): void {
+    this.database
+      .prepare(
+        `INSERT INTO users
+          (id, username, email, display_name, role, password_salt,
+           password_hash, candidate_id, is_test, created_at, updated_at,
+           profile_updated_at)
+         VALUES (?, ?, ?, ?, 'candidate', ?, ?, ?, 0, ?, ?, ?)`,
+      )
+      .run(
+        randomUUID(),
+        username,
+        email,
+        displayName,
+        salt.toString('base64'),
+        passwordHash.toString('base64'),
+        candidateId,
+        now,
+        now,
+        now,
+      );
   }
 
   async seedAccounts(
@@ -232,7 +255,8 @@ export class AuthService implements SessionAuth {
   }
 
   isUsernameTaken(username: string): boolean {
-    return this.findUser(normalizeUsername(username)) !== null;
+    const normalized = normalizeUsername(username);
+    return isReservedUsername(normalized) || this.findUser(normalized) !== null;
   }
 
   async login(
