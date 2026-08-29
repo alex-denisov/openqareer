@@ -465,6 +465,23 @@ export async function getAccount(): Promise<AccountSnapshot> {
   return readDataObject<AccountSnapshot>(response);
 }
 
+/**
+ * The route premises editor writes the role and the work mode here, because
+ * «Карьера» reads both from the account profile. Only changed fields are sent
+ * (B160).
+ */
+export async function updateAccountProfile(input: {
+  headline?: string;
+  workMode?: 'office' | 'hybrid' | 'remote' | 'flexible' | null;
+}): Promise<AccountSnapshot> {
+  const response = await apiFetch('/api/v1/account/profile', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return readDataObject<AccountSnapshot>(response);
+}
+
 export async function changePassword(input: {
   currentPassword: string;
   newPassword: string;

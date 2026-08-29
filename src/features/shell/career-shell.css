@@ -4672,6 +4672,86 @@
   line-height: 1.45;
 }
 
+/* B160 — the premises editor lives where the premises are read. */
+.career-route-premises-editor {
+  display: grid;
+  gap: 14px;
+  margin: 2px 0 22px;
+  padding: 16px;
+  border: 1px solid var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.career-route-premises-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.career-route-premises-field > label,
+.career-route-premises-field > legend {
+  padding: 0;
+  color: var(--career-text-dim);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.career-route-premises-field input[type='text'],
+.career-route-premises-field select {
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  border: 1px solid var(--career-line);
+  border-radius: 10px;
+  padding: 0 11px;
+  color: var(--career-text);
+  background: var(--career-bg-elevated);
+  font-size: 0.72rem;
+}
+
+.career-route-premises-regions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.career-route-premises-regions label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  border: 1px solid var(--career-line);
+  border-radius: 999px;
+  padding: 0 12px;
+  color: var(--career-text);
+  background: var(--career-bg-elevated);
+  font-size: 0.66rem;
+  font-weight: 650;
+}
+
+.career-route-premises-hint {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: 0.63rem;
+  line-height: 1.45;
+}
+
+.career-route-premises-error {
+  margin: 0;
+  color: var(--career-danger);
+  font-size: 0.66rem;
+}
+
+.career-route-premises-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .career-role-hypotheses {
   margin-bottom: 24px;
 }

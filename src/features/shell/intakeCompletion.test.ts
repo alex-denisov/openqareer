@@ -69,4 +69,45 @@ describe('createIntakeCompletion', () => {
 
     expect(refreshCabinet).not.toHaveBeenCalled();
   });
+
+  /**
+   * B160 §3: for the ~12 seconds the import takes, «Сегодня» printed a
+   * confident `0 · нет подтверждённых фактов` over a profile the server was
+   * about to hold in full. The screen has to know the import is running.
+   */
+  it('marks the import as running until it settles, so the cabinet can stop claiming a zero', async () => {
+    let release: () => void = () => undefined;
+    const save = vi.fn(() => new Promise<void>((resolve) => {
+      release = resolve;
+    }));
+    const setImporting = vi.fn();
+
+    const complete = createIntakeCompletion({
+      save,
+      closeIntake: () => undefined,
+      refreshCabinet: () => undefined,
+      setImporting,
+    });
+    complete(input);
+
+    expect(setImporting).toHaveBeenCalledWith(true);
+    expect(setImporting).not.toHaveBeenCalledWith(false);
+
+    release();
+    await vi.waitFor(() => expect(setImporting).toHaveBeenLastCalledWith(false));
+  });
+
+  it('never leaves the import marked as running when the save is synchronous', () => {
+    const setImporting = vi.fn();
+
+    const complete = createIntakeCompletion({
+      save: () => undefined,
+      closeIntake: () => undefined,
+      refreshCabinet: () => undefined,
+      setImporting,
+    });
+    complete(input);
+
+    expect(setImporting).not.toHaveBeenCalledWith(true);
+  });
 });

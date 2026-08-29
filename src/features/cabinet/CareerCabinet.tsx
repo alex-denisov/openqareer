@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
-import type { AuthUser } from '../coach/coachApi';
+import { updateAccountProfile, type AuthUser } from '../coach/coachApi';
 import { buildCanonicalProfileJourney, type CareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { CareerIntelligencePanel } from './CareerIntelligencePanel';
@@ -11,6 +11,12 @@ import { ResumeStudio } from '../resume/ResumeStudio';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { cabinetDisplayName } from './cabinetIdentity';
 import { useCareerCabinetData } from './useCareerCabinetData';
+import {
+  applyRoutePremises,
+  routePremisesAccountPatch,
+  routePremisesDraft,
+  type RoutePremisesDraft,
+} from './routePremises';
 import type { CareerCabinetView } from './cabinetViews';
 
 export type { CareerCabinetView } from './cabinetViews';
@@ -20,6 +26,7 @@ interface CareerCabinetProps {
   session: AuthUser & { candidateId: string };
   workspace?: CandidateWorkspace;
   journey?: CareerJourney;
+  importing?: boolean;
   onNavigate: (view: CareerCabinetView) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
   onOpenAccount: () => void;
@@ -39,6 +46,7 @@ export function CareerCabinet({
   session,
   workspace,
   journey,
+  importing = false,
   onNavigate,
   onUpdateWorkspace,
   onOpenAccount,
@@ -53,6 +61,26 @@ export function CareerCabinet({
   });
   const targetDirection =
     data.account?.profile.headline?.trim() || workspace?.targetDirection || '';
+  const savePremises = useCallback(
+    async (draft: RoutePremisesDraft) => {
+      // Regions and the role live in the workspace. Without one there is
+      // nowhere to put them, and saving only the account half would drop the
+      // candidate's geography without saying so.
+      if (!workspace) {
+        throw new Error(
+          'сначала завершите карьерную диагностику — регионы и роль хранятся в её ответах',
+        );
+      }
+      const patch = routePremisesAccountPatch(draft, data.account);
+      if (patch) {
+        data.setAccount(await updateAccountProfile(patch));
+      }
+      // `onUpdateWorkspace` is the same write-through the wizard uses, so the
+      // answers reach `PUT /candidate/workspace` and survive this browser.
+      onUpdateWorkspace(applyRoutePremises(workspace, draft));
+    },
+    [data, onUpdateWorkspace, workspace],
+  );
   const canonicalJourney = useMemo(
     () =>
       data.snapshot
@@ -86,10 +114,12 @@ export function CareerCabinet({
           session={session}
           workspace={workspace}
           journey={canonicalJourney}
+          importing={importing}
           targetDirection={targetDirection}
           data={data}
           onNavigate={onNavigate}
           onUpdateWorkspace={onUpdateWorkspace}
+          onSavePremises={savePremises}
           onOpenAccount={onOpenAccount}
           onOpenExpert={onOpenExpert}
         />
@@ -106,10 +136,12 @@ function CabinetSection({
   session,
   workspace,
   journey,
+  importing,
   targetDirection,
   data,
   onNavigate,
   onUpdateWorkspace,
+  onSavePremises,
   onOpenAccount,
   onOpenExpert,
 }: {
@@ -118,10 +150,12 @@ function CabinetSection({
   session: AuthUser & { candidateId: string };
   workspace?: CandidateWorkspace;
   journey?: CareerJourney;
+  importing: boolean;
   targetDirection: string;
   data: ReturnType<typeof useCareerCabinetData>;
   onNavigate: (view: CareerCabinetView) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
+  onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
   onOpenAccount: () => void;
   onOpenExpert: () => void;
 }) {
@@ -135,6 +169,7 @@ function CabinetSection({
         account={data.account}
         workspace={workspace}
         loading={data.loading}
+        importing={importing}
         onNavigate={onNavigate}
         onOpenExpert={onOpenExpert}
       />
@@ -173,8 +208,9 @@ function CabinetSection({
         account={data.account}
         targetDirection={targetDirection}
         regions={workspace?.regions ?? []}
+        premises={routePremisesDraft({ workspace, account: data.account })}
         onNavigate={onNavigate}
-        onEditPremises={onOpenAccount}
+        onSavePremises={onSavePremises}
       />
     );
   }

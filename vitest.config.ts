@@ -24,6 +24,7 @@ export default defineConfig({
         'src/features/career-map/roleMarketMap.ts',
         'src/features/next-action/careerActionPolicy.ts',
         'src/features/opportunity/opportunityEngine.ts',
+        'src/features/cabinet/routePremises.ts',
         'src/features/workspace/workspaceStorage.ts',
         'src/features/workspace/candidateRegions.ts',
         'src/features/workspace/linkedinArchive.ts',

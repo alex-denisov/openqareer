@@ -8,6 +8,12 @@ export interface IntakeCompletionParts {
   readonly save: (input: WorkspaceInput) => void | Promise<void>;
   readonly closeIntake: () => void;
   readonly refreshCabinet: () => void;
+  /**
+   * Marks the window in which the server does not yet hold what the import is
+   * about to give it. «Сегодня» used to print a confident `0` for those ~12
+   * seconds (B160 §3).
+   */
+  readonly setImporting?: (importing: boolean) => void;
 }
 
 /**
@@ -30,12 +36,18 @@ export function createIntakeCompletion({
   save,
   closeIntake,
   refreshCabinet,
+  setImporting = () => undefined,
 }: IntakeCompletionParts): (input: WorkspaceInput) => void {
   return (input) => {
     closeIntake();
     const saved = save(input);
     if (!isPromise(saved)) return;
-    void saved.then(refreshCabinet, refreshCabinet);
+    setImporting(true);
+    const settled = () => {
+      setImporting(false);
+      refreshCabinet();
+    };
+    void saved.then(settled, settled);
   };
 }
 

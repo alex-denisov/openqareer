@@ -32,12 +32,18 @@ interface CareerTodayBriefingProps {
   readonly account?: AccountSnapshot;
   readonly workspace?: CandidateWorkspace;
   readonly loading: boolean;
+  /**
+   * True while the resume import that created this session's facts is still in
+   * flight. The cabinet's server reading was taken before it, so every number
+   * derived from the dossier is stale rather than zero (B160 §3).
+   */
+  readonly importing?: boolean;
   readonly onNavigate: (view: CareerCabinetView) => void;
   readonly onOpenExpert: () => void;
 }
 
 export function CareerTodayBriefing(props: CareerTodayBriefingProps) {
-  const { journey, snapshot, resume } = props;
+  const { journey, snapshot, resume, importing = false } = props;
   return (
     <div className="career-today">
       <NextActionCard {...props} />
@@ -45,6 +51,7 @@ export function CareerTodayBriefing(props: CareerTodayBriefingProps) {
         journey={journey}
         snapshot={snapshot}
         resume={resume}
+        importing={importing}
         onNavigate={props.onNavigate}
       />
       <AttentionList journey={journey} snapshot={snapshot} onNavigate={props.onNavigate} />
@@ -56,22 +63,27 @@ function NextActionCard({
   name,
   journey,
   loading,
+  importing = false,
   onNavigate,
   onOpenExpert,
 }: CareerTodayBriefingProps) {
-  const action = journey?.nextAction;
+  const action = importing ? undefined : journey?.nextAction;
   return (
     <section className="career-today-action" aria-labelledby="career-today-action-title">
       <span className="career-cabinet-kicker">Следующий шаг</span>
       <h2 id="career-today-action-title">
         {action?.headline ??
-          (loading
-            ? 'Собираем карьерную картину…'
-            : `${firstName(name)}, начнём с одного подтверждённого результата`)}
+          (importing
+            ? 'Импортируем профиль — идёт импорт'
+            : loading
+              ? 'Собираем карьерную картину…'
+              : `${firstName(name)}, начнём с одного подтверждённого результата`)}
       </h2>
       <p>
         {action?.reason ??
-          'Пока в профиле нет подтверждённых фактов, любая рекомендация была бы догадкой.'}
+          (importing
+            ? 'Источник ещё отдаёт данные. Пока импорт не закончился, любое число на этом экране было бы догадкой.'
+            : 'Пока в профиле нет подтверждённых фактов, любая рекомендация была бы догадкой.')}
       </p>
       {action?.expectedChange ? (
         <p className="career-today-expected">
@@ -110,11 +122,13 @@ function LoopStateGrid({
   journey,
   snapshot,
   resume,
+  importing,
   onNavigate,
 }: {
   journey?: CareerJourney;
   snapshot?: CandidateSnapshot;
   resume?: ResumeStudioView;
+  importing: boolean;
   onNavigate: (view: CareerCabinetView) => void;
 }) {
   const confirmed = snapshot?.dossier.confirmedCount ?? 0;
@@ -158,9 +172,18 @@ function LoopStateGrid({
       detail: subscriptions === 0 ? 'регулярный поиск не настроен' : 'регулярных выборок',
     },
   ];
+  // Everything derived from the dossier is unknown until the import settles;
+  // «Возможности» counts subscriptions, which the import does not touch.
+  const shown: LoopTile[] = importing
+    ? tiles.map((tile) =>
+        tile.view === 'opportunities'
+          ? tile
+          : { ...tile, value: '—', detail: 'идёт импорт профиля' },
+      )
+    : tiles;
   return (
     <section className="career-today-loop" aria-label="Состояние карьерного цикла">
-      {tiles.map((tile) => {
+      {shown.map((tile) => {
         const TileIcon = tile.icon;
         return (
           <button key={tile.view} type="button" onClick={() => onNavigate(tile.view)}>
@@ -171,7 +194,7 @@ function LoopStateGrid({
           </button>
         );
       })}
-      {reviewQueueNote(proposed) ? (
+      {!importing && reviewQueueNote(proposed) ? (
         <p className="career-today-loop-note">{reviewQueueNote(proposed)}</p>
       ) : null}
     </section>

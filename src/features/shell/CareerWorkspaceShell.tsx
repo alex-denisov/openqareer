@@ -127,6 +127,9 @@ export function CareerWorkspaceShell({
   // seed changes on every identity change except the registration the wizard
   // itself asked for, so answers never travel between candidates.
   const [intakeSeed, setIntakeSeed] = useState(0);
+  // The wizard's import keeps running after the cabinet mounts; «Сегодня» must
+  // not print a confident zero over it (B160 §3).
+  const [importing, setImporting] = useState(false);
   const visibleWorkspace = sessionPending ? undefined : workspace;
   const cabinetSession =
     !sessionPending && session?.candidateId
@@ -250,6 +253,7 @@ export function CareerWorkspaceShell({
           setIntakeSeed((seed) => seed + 1);
         },
         refreshCabinet: () => setCabinetRevision((revision) => revision + 1),
+        setImporting,
       }),
     [onSaveWorkspace],
   );
@@ -435,6 +439,7 @@ export function CareerWorkspaceShell({
               session={cabinetSession}
               workspace={visibleWorkspace}
               journey={journey}
+              importing={importing}
               onNavigate={navigate}
               onUpdateWorkspace={onUpdateWorkspace}
               onOpenAccount={() => setAccountOpen(true)}

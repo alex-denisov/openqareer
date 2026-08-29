@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { ArrowRight, Compass, TrendUp } from '@phosphor-icons/react';
 import type { AccountSnapshot, CandidateSnapshot } from '../coach/coachApi';
+import { CareerRoutePremisesEditor } from './CareerRoutePremisesEditor';
+import type { RoutePremisesDraft } from './routePremises';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { CareerCabinetView } from './cabinetViews';
 import {
@@ -19,8 +22,14 @@ interface CareerTrackBoardProps {
   readonly account?: AccountSnapshot;
   readonly targetDirection: string;
   readonly regions: readonly CandidateRegion[];
+  /** The premises as they stand now, read from both stores that hold them. */
+  readonly premises: RoutePremisesDraft;
   readonly onNavigate: (view: CareerCabinetView) => void;
-  readonly onEditPremises: () => void;
+  /**
+   * Applies the edited premises. Resolves once both stores have accepted them,
+   * rejects with the message the candidate should read.
+   */
+  readonly onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
 }
 
 export function CareerTrackBoard({
@@ -29,8 +38,9 @@ export function CareerTrackBoard({
   account,
   targetDirection,
   regions,
+  premises,
   onNavigate,
-  onEditPremises,
+  onSavePremises,
 }: CareerTrackBoardProps) {
   const latestTrack = [...(snapshot?.turns ?? [])]
     .reverse()
@@ -52,11 +62,12 @@ export function CareerTrackBoard({
         items={latestTrack?.milestones ?? journey?.track ?? []}
         empty={!latestTrack && !journey}
       />
-      <CareerRoutePremises
+      <RoutePremisesPanel
         targetRole={targetDirection}
         regions={regions}
-        workMode={account?.profile.workMode ?? undefined}
-        onEdit={onEditPremises}
+        workMode={account?.profile.workMode ?? null}
+        premises={premises}
+        onSave={onSavePremises}
       />
       <RoleHypotheses journey={journey} />
 
@@ -65,6 +76,66 @@ export function CareerTrackBoard({
       </button>
     </section>
   );
+}
+
+/**
+ * Reading and changing the premises are the same place. The edit button used
+ * to open the «Аккаунт» panel, which carries no role, no regions and no work
+ * mode, so the premises were readable and unchangeable (B160).
+ */
+function RoutePremisesPanel({
+  targetRole,
+  regions,
+  workMode,
+  premises,
+  onSave,
+}: {
+  targetRole?: string;
+  regions: readonly CandidateRegion[];
+  workMode: AccountSnapshot['profile']['workMode'];
+  premises: RoutePremisesDraft;
+  onSave: (draft: RoutePremisesDraft) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
+
+  if (!editing) {
+    return (
+      <CareerRoutePremises
+        targetRole={targetRole}
+        regions={regions}
+        workMode={workMode ?? undefined}
+        onEdit={() => {
+          setError(undefined);
+          setEditing(true);
+        }}
+      />
+    );
+  }
+
+  return (
+    <CareerRoutePremisesEditor
+      initial={premises}
+      saving={saving}
+      error={error}
+      onCancel={() => setEditing(false)}
+      onSave={(draft) => {
+        setSaving(true);
+        setError(undefined);
+        void onSave(draft)
+          .then(() => setEditing(false))
+          .catch((reason: unknown) => setError(premisesSaveError(reason)))
+          .finally(() => setSaving(false));
+      }}
+    />
+  );
+}
+
+function premisesSaveError(reason: unknown): string {
+  return reason instanceof Error
+    ? `Предпосылки не сохранены: ${reason.message}`
+    : 'Предпосылки не сохранены. Повторите попытку.';
 }
 
 /**
