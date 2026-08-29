@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import pdfInspectorWasmUrl from '@firecrawl/pdf-inspector-wasm/pdf_inspector_wasm_bg.wasm?url';
-import { fetchAssetInRanges } from './rangedAssetLoader';
+import { loadPdfEngineBytes } from './pdfEnginePayload';
 
 export const MAX_PDF_INSPECTION_BYTES = 20 * 1024 * 1024;
 
@@ -174,8 +174,9 @@ async function loadDefaultEngine(): Promise<PdfInspectorEngine> {
     async (module) => {
       // wasm-bindgen fetches the whole 4.8 MB engine in one response, and the
       // Russian route stops delivering after ~20 KB — PDF upload never started
-      // there. The bytes arrive in parts instead (PRB-013, B176).
-      const bytes = await fetchAssetInRanges(pdfInspectorWasmUrl);
+      // there. The bytes arrive compressed, in parts, and are kept for the next
+      // upload (PRB-013, B176).
+      const bytes = await loadPdfEngineBytes(pdfInspectorWasmUrl);
       await module.default({ module_or_path: bytes });
       return {
         version: module.version,

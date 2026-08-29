@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "dev:api": "tsx server/index.ts",
-    "build": "tsc && vite build && tsx scripts/prerender-career-shell.tsx dist/index.html && node scripts/split-browser-entry.mjs && node scripts/build-server.mjs",
+    "build": "tsc && vite build && tsx scripts/prerender-career-shell.tsx dist/index.html && node scripts/split-browser-entry.mjs && node scripts/compress-wasm-engine.mjs && node scripts/build-server.mjs",
     "preview": "vite preview",
     "start": "node dist/server.mjs",
     "render-shot": "node scripts/render_html_screenshot.js",

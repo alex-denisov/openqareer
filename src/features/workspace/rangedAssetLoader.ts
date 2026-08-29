@@ -6,7 +6,13 @@
  * parts and are joined before use.
  */
 
-export const RANGE_CHUNK_BYTES = 16_384;
+/**
+ * The route stalls a connection past ~20 460 bytes, headers included. 19 900
+ * is the largest part that always completed in live measurement, and since the
+ * route is connection-limited rather than byte-limited, the largest safe part
+ * is also the fastest one (B176).
+ */
+export const RANGE_CHUNK_BYTES = 19_900;
 
 const MAX_PARALLEL_PARTS = 6;
 
