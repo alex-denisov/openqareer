@@ -33,6 +33,45 @@ describe('AccountConnections', () => {
     expect(html).toContain('Отключить LinkedIn');
   });
 
+  // The wizard deliberately holds one source at a time (owner decision, B171).
+  // The cabinet is where both live at once — a candidate searching in Russia
+  // and abroad manages two платформы, not one (B158 срез 2).
+  it('holds both platforms connected at the same time', () => {
+    const html = renderToStaticMarkup(
+      <AccountConnections
+        connections={[
+          {
+            platform: 'linkedin',
+            available: false,
+            status: 'connected',
+            accessMode: 'native_session_snapshot',
+            capabilities: ['lite_identity'],
+            importsCareerHistory: false,
+            connectedAt: '2026-08-10T12:00:00.000Z',
+            lastImportedAt: '2026-08-10T12:00:00.000Z',
+            factCount: 4,
+          },
+          {
+            platform: 'hh',
+            available: false,
+            status: 'connected',
+            accessMode: 'native_session_snapshot',
+            capabilities: ['resume_read'],
+            importsCareerHistory: true,
+            connectedAt: '2026-08-11T09:00:00.000Z',
+            lastImportedAt: '2026-08-11T09:00:00.000Z',
+            factCount: 10,
+          },
+        ]}
+        onDisconnect={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Отключить LinkedIn');
+    expect(html).toContain('Отключить hh.ru');
+    expect(html.match(/Подключено/gu)?.length).toBe(2);
+  });
+
   it('offers a plain «Подключить» control for hh.ru in the desktop app', () => {
     const html = renderToStaticMarkup(
       <AccountConnections

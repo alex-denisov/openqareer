@@ -172,7 +172,7 @@ jobs:
 
           /favicon.svg|image/svg+xml
           /apple-touch-icon.png|image/png
-          /og-cover.png|image/png
+          /og-cover.jpg|image/jpeg
           /robots.txt|text/plain
           /llms.txt|text/plain
           /admin.html|text/html
