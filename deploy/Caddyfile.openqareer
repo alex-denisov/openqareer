@@ -32,7 +32,7 @@ openqareer.com {
 	# INC-018 — there used to be `rewrite @spa /index.html` here. It rewrote
 	# every path outside the four exceptions above *before* proxying, so the
 	# application never saw the real path: `/robots.txt`, `/llms.txt`,
-	# `/favicon.svg`, `/og-cover.png`, `/apple-touch-icon.png` and `/admin`
+	# `/favicon.svg`, `/og-cover.jpg`, `/apple-touch-icon.png` and `/admin`
 	# all arrived upstream as `/index.html` and came back as the SPA document.
 	# That is why the same artifact serves them correctly on localhost and not
 	# here. The rewrite was redundant as well as harmful: the application's own
