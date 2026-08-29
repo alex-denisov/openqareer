@@ -43,7 +43,8 @@ const handleHhMarket: Handler = async ({ searchVacancies }, request, reply) => {
         502,
         'market_source_official_access_required',
         'hh.ru закрыл поиск вакансий без авторизации. Пока официальный доступ не получен, выборку с hh.ru продукт не показывает.',
-        true,
+        // Retrying a closed door changes nothing; only official access does.
+        false,
       );
     }
     return sendError(

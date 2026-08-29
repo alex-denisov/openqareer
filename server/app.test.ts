@@ -88,6 +88,7 @@ describe('OpenQareer API boundary', () => {
     const body = response.json();
     expect(body.error.code).toBe('market_source_official_access_required');
     expect(body.error.message).not.toContain('Попробуйте позже');
+    expect(body.error.retryable).toBe(false);
   });
 
   it('keeps health public and provider details authenticated', async () => {
