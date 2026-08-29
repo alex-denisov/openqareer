@@ -4,7 +4,7 @@ import {
   parseRetryAfter,
   VacancyConnectorError,
 } from './vacancyConnectorError';
-import { readBoundedJson, readBoundedText } from './readBoundedJson';
+import { readBoundedJson } from './readBoundedJson';
 
 const inputSchema = z.object({
   text: z.string().trim().min(2).max(200),
@@ -42,7 +42,6 @@ export interface HhVacancySample extends VacancySample {
 interface SearchOptions {
   fetchImpl?: typeof fetch;
   now?: () => string;
-  allowPublicFallback?: boolean;
 }
 
 export async function searchHhVacancies(
@@ -73,11 +72,11 @@ export async function searchHhVacancies(
   } catch {
     throw new Error('hh_vacancy_search_unavailable');
   }
+  // hh.ru closed the unauthenticated vacancy search (INC-022). Reading their
+  // result page instead would restore access by working around the platform's
+  // own restriction, so the refusal is reported as it is (B175).
   if (response.status === 403) {
-    if (options.allowPublicFallback === false) {
-      throw new Error('hh_vacancy_search_official_access_required');
-    }
-    return searchHhPublicPage(value, fetchImpl, observedAt);
+    throw new Error('hh_vacancy_search_official_access_required');
   }
   if (response.status === 429) {
     throw new VacancyConnectorError(
@@ -109,88 +108,6 @@ export async function searchHhVacancies(
       requirements: [],
     })),
   };
-}
-
-async function searchHhPublicPage(
-  input: z.infer<typeof inputSchema>,
-  fetchImpl: typeof fetch,
-  observedAt: string,
-): Promise<HhVacancySample> {
-  const params = new URLSearchParams({
-    text: input.text,
-    search_field: 'name',
-    area: '113',
-  });
-  let response: Response;
-  try {
-    response = await fetchImpl(`https://hh.ru/search/vacancy?${params}`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)',
-        Accept: 'text/html,application/xhtml+xml',
-      },
-      signal: AbortSignal.timeout(8_000),
-    });
-  } catch {
-    throw new Error('hh_vacancy_search_unavailable');
-  }
-  if (!response.ok) {
-    throw new Error('hh_vacancy_search_unavailable');
-  }
-  const html = await readBoundedText(response);
-  if (
-    /<title>[^<]*(captcha|verify you are human|security check)|data-qa="captcha|id="captcha/iu.test(
-      html,
-    )
-  ) {
-    throw new Error('hh_vacancy_search_challenge');
-  }
-  const items: HhVacancySample['items'] = [];
-  const itemPattern =
-    /<a[^>]*data-qa="serp-item__title"[^>]*href="([^"]+)"[^>]*>[\s\S]*?<span[^>]*data-qa="serp-item__title-text"[^>]*>([\s\S]*?)<\/span>[\s\S]*?data-qa="vacancy-serp__vacancy-employer-text"[^>]*>([\s\S]*?)<\/span>[\s\S]*?data-qa="vacancy-serp__vacancy-address"[^>]*>([\s\S]*?)<\/span>/giu;
-  for (const match of html.matchAll(itemPattern)) {
-    const sourceUrl = decodeHtml(match[1]);
-    const id = /\/vacancy\/(\d+)/u.exec(sourceUrl)?.[1];
-    if (!id || !isAllowedHhVacancyUrl(sourceUrl)) continue;
-    items.push({
-      id,
-      title: textFromHtml(match[2]),
-      company: textFromHtml(match[3]) || 'Компания не указана',
-      location: textFromHtml(match[4]) || 'Локация не указана',
-      sourceUrl,
-      publishedAt: null,
-      salary: null,
-      workMode: 'unknown',
-      requirements: [],
-    });
-    if (items.length >= input.perPage) break;
-  }
-  if (!items.length) {
-    throw new Error('hh_vacancy_search_invalid');
-  }
-  const foundText = /Найден[оа]\s+([\d\s\u00a0]+)\s+ваканс/iu.exec(html)?.[1];
-  const found = foundText ? Number(foundText.replace(/\D/gu, '')) : items.length;
-  return {
-    source: 'hh',
-    query: input.text,
-    found: Number.isFinite(found) ? found : items.length,
-    fetchedAt: observedAt,
-    items,
-  };
-}
-
-function textFromHtml(value: string): string {
-  return decodeHtml(value.replace(/<[^>]+>/gu, ' '))
-    .replace(/\s+/gu, ' ')
-    .trim();
-}
-
-function decodeHtml(value: string): string {
-  return value
-    .replace(/<!--\s*-->/gu, '')
-    .replace(/&amp;/gu, '&')
-    .replace(/&quot;/gu, '"')
-    .replace(/&#39;/gu, "'")
-    .replace(/&nbsp;|&#160;/gu, '\u00a0');
 }
 
 function isAllowedHhVacancyUrl(value: string): boolean {

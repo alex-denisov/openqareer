@@ -7,10 +7,16 @@ const SOURCE_REGISTRY = [
     market: 'Россия и СНГ',
     category: 'Агрегаторы и API',
     transport: 'official_api',
-    searchCoverage: 'Полный результат официального поиска в пределах API',
+    searchCoverage:
+      'Публичный поиск закрыт для неавторизованных запросов — вакансии с hh.ru продукт не показывает',
     attributionUrl: 'https://hh.ru/',
     documentationUrl: 'https://api.hh.ru/openapi/redoc',
-    reviewedAt: '2026-08-17',
+    reviewedAt: '2026-08-29',
+    // Measured refusal, not a guess: api.hh.ru/vacancies answers 403 while
+    // api.hh.ru/areas answers 200 (INC-022). Until a candidate's own search
+    // fails there is no health row, and «ещё не проверен» would hide a refusal
+    // we already know for certain (B175).
+    declaredAccess: 'official_access_required',
   },
   {
     id: 'remotive',
@@ -270,15 +276,18 @@ const SOURCE_REGISTRY = [
 
 export function vacancySourceRegistryView(health: VacancySourceHealth[]) {
   const healthBySource = new Map(health.map((item) => [item.source, item]));
-  return SOURCE_REGISTRY.map((source) => ({
-    ...source,
-    health: healthBySource.get(source.id) ?? {
-      status: 'not_checked' as const,
-      lastAttemptAt: null,
-      lastSuccessAt: null,
-      lastErrorCode: null,
-      retryAfterAt: null,
-      consecutiveFailures: 0,
-    },
-  }));
+  return SOURCE_REGISTRY.map((source) => {
+    const declaredAccess = 'declaredAccess' in source ? source.declaredAccess : undefined;
+    return {
+      ...source,
+      health: healthBySource.get(source.id) ?? {
+        status: declaredAccess ?? ('not_checked' as const),
+        lastAttemptAt: null,
+        lastSuccessAt: null,
+        lastErrorCode: declaredAccess ?? null,
+        retryAfterAt: null,
+        consecutiveFailures: 0,
+      },
+    };
+  });
 }

@@ -31,7 +31,21 @@ const handleHhMarket: Handler = async ({ searchVacancies }, request, reply) => {
       data: await searchVacancies({ text: query.text, perPage: query.perPage }),
       meta: { requestId: request.id },
     };
-  } catch {
+  } catch (reason) {
+    // A platform that closed its public search is not a platform having a bad
+    // minute — «попробуйте позже» would promise a retry that cannot help
+    // (B175, INC-022).
+    const message = reason instanceof Error ? reason.message : String(reason);
+    if (message.includes('official_access_required')) {
+      return sendError(
+        reply,
+        request,
+        502,
+        'market_source_official_access_required',
+        'hh.ru закрыл поиск вакансий без авторизации. Пока официальный доступ не получен, выборку с hh.ru продукт не показывает.',
+        true,
+      );
+    }
     return sendError(
       reply,
       request,

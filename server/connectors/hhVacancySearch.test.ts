@@ -101,70 +101,26 @@ describe('hh vacancy search', () => {
     ).rejects.toThrow('hh_vacancy_search_invalid');
   });
 
-  it('falls back to the public result page when the unauthenticated API is forbidden', async () => {
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response('{"errors":[{"type":"forbidden"}]}', { status: 403 }))
-      .mockResolvedValueOnce(
-        new Response(
-          `
-          <h1>Найдено 27 вакансий</h1>
-          <a data-qa="serp-item__title" href="https://hh.ru/vacancy/456?from=search">
-            <span data-qa="serp-item__title-text">Head of Operations</span>
-          </a>
-          <span data-qa="vacancy-serp__vacancy-employer-text">Synthetic &amp; Co</span>
-          <span data-qa="vacancy-serp__vacancy-address">Санкт-Петербург</span>
-        `,
-          { status: 200, headers: { 'Content-Type': 'text/html' } },
-        ),
-      );
-
-    const sample = await searchHhVacancies(
-      { text: 'Head of Operations', perPage: 10 },
-      { fetchImpl, now: () => '2026-08-07T13:00:00.000Z' },
-    );
-
-    expect(sample.found).toBe(27);
-    expect(sample.items[0]).toMatchObject({
-      id: '456',
-      title: 'Head of Operations',
-      company: 'Synthetic & Co',
-      location: 'Санкт-Петербург',
-      publishedAt: null,
-    });
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-  });
-
-  it('does not use the public-page fallback for unattended scheduled collection', async () => {
+  it('fails closed when hh.ru forbids the unauthenticated search', async () => {
     const fetchImpl = vi.fn<typeof fetch>(
       async () => new Response('{"errors":[{"type":"forbidden"}]}', { status: 403 }),
     );
 
     await expect(
-      searchHhVacancies(
-        { text: 'Head of Operations', perPage: 10 },
-        { fetchImpl, allowPublicFallback: false },
-      ),
+      searchHhVacancies({ text: 'Head of Operations', perPage: 10 }, { fetchImpl }),
     ).rejects.toThrow('hh_vacancy_search_official_access_required');
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
-  it('rejects an oversized public HTML fallback before parsing it', async () => {
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 403 }))
-      .mockResolvedValueOnce(
-        new Response('<h1>Найдено 1 вакансий</h1>', {
-          status: 200,
-          headers: {
-            'Content-Type': 'text/html',
-            'Content-Length': '1000001',
-          },
-        }),
-      );
+  it('never reaches for the public result page behind the closed API (INC-022)', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () => new Response('{"errors":[{"type":"forbidden"}]}', { status: 403 }),
+    );
 
     await expect(
-      searchHhVacancies({ text: 'operations' }, { fetchImpl }),
-    ).rejects.toThrow('vacancy_source_response_too_large');
+      searchHhVacancies({ text: 'qa' }, { fetchImpl }),
+    ).rejects.toThrow('hh_vacancy_search_official_access_required');
+    const requested = fetchImpl.mock.calls.map(([url]) => String(url));
+    expect(requested.some((url) => url.includes('hh.ru/search/vacancy'))).toBe(false);
   });
 });

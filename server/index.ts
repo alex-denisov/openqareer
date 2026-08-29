@@ -67,7 +67,7 @@ const coachProvider = new CareerOrchestrator({
 const vacancyIntelligenceService = new VacancyIntelligenceService({
   store: candidateStore,
   connectors: {
-    hh: (input) => searchHhVacancies(input, { allowPublicFallback: false }),
+    hh: searchHhVacancies,
     remotive: searchRemotiveVacancies,
   },
   maxBatchSize: 5,

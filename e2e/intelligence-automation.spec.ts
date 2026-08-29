@@ -66,7 +66,10 @@ const TEST_SNAPSHOT = {
   ],
 };
 
-async function stubSession(page: Page): Promise<void> {
+async function stubSession(
+  page: Page,
+  overrides: { subscriptions?: unknown[]; hhAccessClosed?: boolean } = {},
+): Promise<void> {
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -74,7 +77,13 @@ async function stubSession(page: Page): Promise<void> {
       return route.fulfill({ json: { data: REGISTERED_CANDIDATE } });
     }
     if (pathname === '/api/v1/candidate/me') {
-      return route.fulfill({ json: { data: TEST_SNAPSHOT } });
+      return route.fulfill({
+        json: {
+          data: overrides.subscriptions
+            ? { ...TEST_SNAPSHOT, vacancySubscriptions: overrides.subscriptions }
+            : TEST_SNAPSHOT,
+        },
+      });
     }
     if (pathname === '/api/v1/account') {
       return route.fulfill({ json: { data: TEST_ACCOUNT } });
@@ -91,8 +100,19 @@ async function stubSession(page: Page): Promise<void> {
               name: 'hh.ru',
               market: 'Россия и СНГ',
               attributionUrl: 'https://hh.ru',
-              searchCoverage: 'Публичные вакансии hh.ru',
-              health: { status: 'healthy', checkedAt: '2026-08-19T00:00:00.000Z' },
+              searchCoverage: overrides.hhAccessClosed
+                ? 'Публичный поиск закрыт для неавторизованных запросов — вакансии с hh.ru продукт не показывает'
+                : 'Публичные вакансии hh.ru',
+              health: overrides.hhAccessClosed
+                ? {
+                    status: 'official_access_required',
+                    lastAttemptAt: null,
+                    lastSuccessAt: null,
+                    lastErrorCode: 'official_access_required',
+                    retryAfterAt: null,
+                    consecutiveFailures: 0,
+                  }
+                : { status: 'healthy', checkedAt: '2026-08-19T00:00:00.000Z' },
             },
           ],
         },
@@ -210,5 +230,24 @@ test.describe('B156 truthful market intelligence boundary', () => {
       .analyze();
     const criticalViolations = accessibility.violations.filter((v) => v.impact === 'critical');
     expect(criticalViolations).toEqual([]);
+  });
+
+  test('the source picker names the hh.ru access refusal before a search is spent on it', async ({
+    page,
+  }) => {
+    await stubSession(page, { subscriptions: [], hhAccessClosed: true });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await waitForLiveApp(page);
+    await openOpportunities(page);
+
+    const create = page.locator('.career-market-create');
+    await expect(create).toBeVisible();
+    // B175 / INC-022: hh.ru answers 403 to the unauthenticated search, so the
+    // candidate reads that before choosing it — not «ещё не проверен».
+    const health = create.locator('.career-source-health');
+    await expect(health).toHaveClass(/is-official_access_required/);
+    await expect(health).toContainText('нужен официальный доступ');
+    await expect(health).not.toContainText('ещё не проверен');
   });
 });

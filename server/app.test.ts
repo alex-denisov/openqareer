@@ -74,6 +74,22 @@ describe('OpenQareer API boundary', () => {
     });
   });
 
+  it('separates a closed hh.ru search from a temporary outage (B175, INC-022)', async () => {
+    const app = await createApp(successProvider, async () => {
+      throw new Error('hh_vacancy_search_official_access_required');
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/market/hh?text=qa',
+    });
+
+    expect(response.statusCode).toBe(502);
+    const body = response.json();
+    expect(body.error.code).toBe('market_source_official_access_required');
+    expect(body.error.message).not.toContain('Попробуйте позже');
+  });
+
   it('keeps health public and provider details authenticated', async () => {
     const app = await createApp();
 

@@ -154,7 +154,9 @@ describe('candidate vacancy routes', () => {
         expect.objectContaining({
           id: 'hh',
           transport: 'official_api',
-          health: expect.objectContaining({ status: 'not_checked' }),
+          // hh.ru refuses the unauthenticated search; the registry says so
+          // before a candidate spends a search direction on it (B175, INC-022).
+          health: expect.objectContaining({ status: 'official_access_required' }),
         }),
         expect.objectContaining({
           id: 'remotive',
