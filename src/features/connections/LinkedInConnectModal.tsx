@@ -33,6 +33,7 @@ import {
   type LinkedInWaitingNotice,
 } from './linkedinSessionPoll';
 import {
+  endLinkedInProtectedRoute,
   ProtectedRouteError,
   protectedRouteFailureMessage,
   startLinkedInProtectedRoute,
@@ -80,16 +81,30 @@ export function LinkedInConnectModal({
   /** Consecutive polls that could not read the page at all. */
   const unreadablePolls = useRef(0);
 
+  /**
+   * The tunnel is raised for this sign-in session, so it ends with it. Mirrored
+   * in a ref because the unmount cleanup below runs with the state it captured
+   * on mount (PRB-010, B177).
+   */
+  const tunnelRaised = useRef(false);
+
+  function releaseSession() {
+    void closeConnectorSession('linkedin').catch(() => undefined);
+    if (!tunnelRaised.current) return;
+    tunnelRaised.current = false;
+    void endLinkedInProtectedRoute();
+  }
+
   function closeModal() {
     sessionOpened.current = false;
     sessionFlow.current = undefined;
-    void closeConnectorSession('linkedin').catch(() => undefined);
+    releaseSession();
     onClose();
   }
 
   useEffect(
     () => () => {
-      void closeConnectorSession('linkedin').catch(() => undefined);
+      releaseSession();
     },
     [],
   );
@@ -168,6 +183,7 @@ export function LinkedInConnectModal({
         const route = await startLinkedInProtectedRoute();
         setProbe(route.probe);
         setTunnelActive(route.tunnelActive);
+        tunnelRaised.current = route.tunnelActive;
       } catch (reason) {
         setRouteStarting(false);
         if (reason instanceof ProtectedRouteError && reason.code === 'session_expired') {

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   ProtectedRouteError,
+  endLinkedInProtectedRoute,
   protectedRouteFailureMessage,
   startLinkedInProtectedRoute,
 } from './linkedinProtectedRoute';
@@ -187,5 +188,21 @@ describe('protectedRouteFailureMessage', () => {
     ]) {
       expect(message).toContain('PDF-экспорт профиля');
     }
+  });
+});
+
+describe('ending the LinkedIn protected route', () => {
+  it('stops the tunnel it raised for the sign-in session (PRB-010, B177)', async () => {
+    const stopTunnel = vi.fn().mockResolvedValue({ state: 'stopped' });
+
+    await endLinkedInProtectedRoute({ stopTunnel });
+
+    expect(stopTunnel).toHaveBeenCalledOnce();
+  });
+
+  it('does not turn a refused stop into a failed sign-in', async () => {
+    const stopTunnel = vi.fn().mockRejectedValue(new Error('desktop_runtime_unavailable'));
+
+    await expect(endLinkedInProtectedRoute({ stopTunnel })).resolves.toBeUndefined();
   });
 });

@@ -1,6 +1,7 @@
 import {
   probeNetworkStatus,
   startTunnel,
+  stopTunnel,
   type NetworkEnvironmentStatus,
   type PlatformProbeResult,
   type TunnelConfig,
@@ -44,6 +45,26 @@ interface ProtectedRouteDependencies {
   readonly probeNetwork?: () => Promise<NetworkEnvironmentStatus | null>;
   readonly fetchBootstrap?: () => Promise<Response>;
   readonly startTunnel?: (config: TunnelConfig) => Promise<TunnelStatusReport>;
+}
+
+interface ProtectedRouteEndDependencies {
+  readonly stopTunnel?: () => Promise<TunnelStatusReport | null>;
+}
+
+/**
+ * Releases the protected route raised for a sign-in session. `startTunnel` had
+ * no counterpart, so a tunnel opened for LinkedIn outlived the session that
+ * needed it and only ended with the application (PRB-010). Closing a session is
+ * never allowed to fail because the tunnel refused to stop.
+ */
+export async function endLinkedInProtectedRoute(
+  dependencies: ProtectedRouteEndDependencies = {},
+): Promise<void> {
+  try {
+    await (dependencies.stopTunnel ?? stopTunnel)();
+  } catch {
+    // Nothing the candidate can act on: the session is closing either way.
+  }
 }
 
 export interface ProtectedRouteResult {

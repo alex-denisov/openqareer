@@ -121,34 +121,27 @@ export async function startTunnel(config: TunnelConfig): Promise<TunnelStatusRep
   };
 }
 
-export async function stopTunnel(): Promise<TunnelStatusReport> {
-  const result = await invokeTauri<TunnelStatusReport>('stop_tunnel');
-  if (result) return result;
-
-  return {
-    state: 'stopped',
-    local_socks_endpoint: '127.0.0.1:10885',
-    local_http_endpoint: '127.0.0.1:10886',
-    active_protocol: 'SSH restricted egress',
-    split_proxied_domains: ['linkedin.com', 'licdn.com', 'lnkd.in'],
-    split_direct_domains: ['hh.ru', 'openqareer.com'],
-  };
+/**
+ * The sidecar's report after a stop, or `null` when there was no desktop
+ * runtime to stop anything in. Answering `state: 'stopped'` outside the desktop
+ * announced a stop that never happened (PRB-010).
+ */
+export async function stopTunnel(): Promise<TunnelStatusReport | null> {
+  return invokeTauri<TunnelStatusReport>('stop_tunnel');
 }
 
-export async function executeLocalAction(req: LocalActionRequest): Promise<LocalActionResult> {
-  const result = await invokeTauri<LocalActionResult>('execute_local_action', { request: req });
-  if (result) return result;
-
-  return {
-    action_id: req.action_id,
-    capability: req.capability,
-    platform: req.platform,
-    status: 'completed_with_receipt',
-    provider_reference: `receipt-web-sim-${req.platform}-${Math.random().toString(36).slice(2, 8)}`,
-    executed_at: new Date().toISOString(),
-    pacing_duration_ms: 950,
-    environment_descriptor: 'web_session_direct',
-  };
+/**
+ * The desktop's result for a candidate-authorised local action, or `null` when
+ * there is no desktop to perform it. The browser fallback used to return a
+ * plausible receipt for an application nobody submitted — indistinguishable
+ * from a real one, with no field a caller could check (PRB-010,
+ * docs/agents/design-system.md §7). Callers must treat `null` as "not
+ * performed", never as a silent success.
+ */
+export async function executeLocalAction(
+  req: LocalActionRequest,
+): Promise<LocalActionResult | null> {
+  return invokeTauri<LocalActionResult>('execute_local_action', { request: req });
 }
 
 export interface DesktopNativeHttpRequest {

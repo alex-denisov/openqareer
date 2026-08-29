@@ -44,11 +44,12 @@ describe('desktopBridge', () => {
     });
     expect(started.state).toBe('failed');
 
-    const stopped = await stopTunnel();
-    expect(stopped.state).toBe('stopped');
+    // Reporting a stop we never performed is the same fabrication as reporting
+    // a route we never measured (PRB-010, B177).
+    expect(await stopTunnel()).toBeNull();
   });
 
-  it('executes local candidate action safely with human pacing and receipt', async () => {
+  it('never claims a platform application that no desktop performed', async () => {
     const result = await executeLocalAction({
       action_id: 'act-e2e-001',
       capability: 'application.submit',
@@ -56,10 +57,13 @@ describe('desktopBridge', () => {
       payload: { vacancy_id: '123' },
     });
 
-    expect(result.action_id).toBe('act-e2e-001');
-    expect(result.capability).toBe('application.submit');
-    expect(result.status).toBe('completed_with_receipt');
-    expect(result.provider_reference).toBeDefined();
-    expect(result.pacing_duration_ms).toBeGreaterThan(0);
+    expect(result).toBeNull();
+  });
+
+  it('carries no receipt vocabulary for an action it cannot perform', () => {
+    const source = readFileSync(new URL('./desktopBridge.ts', import.meta.url), 'utf8');
+
+    expect(source).not.toContain('completed_with_receipt');
+    expect(source).not.toContain('receipt-web-sim');
   });
 });
