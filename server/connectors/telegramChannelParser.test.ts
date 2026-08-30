@@ -138,3 +138,44 @@ describe('what the candidate reads from a Telegram post (B164)', () => {
     expect(vacancy?.title).toBe('Product Manager');
   });
 });
+
+describe('Telegram posts name the real title and never invent an employer (B164)', () => {
+  const meta = {
+    postId: '77',
+    channelName: 'job_react',
+    sourceId: 'src-tg-react',
+    postUrl: 'https://t.me/job_react/77',
+    publishedAt: '2026-08-30T10:00:00.000Z',
+    observedAt: '2026-08-30T12:00:00.000Z',
+  };
+
+  it('does not print the hashtag line as the job title', () => {
+    const html = [
+      '#middle #офис #москва',
+      'МТС Банк',
+      'Frontend-разработчик',
+      'Формат работы: Москва (офис). Ищем Ведущего Web-разработчика в Центр компетенций.',
+      'Требования: React, TypeScript, опыт от 3 лет.',
+    ].join('<br/>');
+
+    const parsed = parseTelegramJobPost(html, meta);
+
+    expect(parsed).not.toBeNull();
+    expect(parsed?.title).toBe('Frontend-разработчик');
+    expect(parsed?.company).toBe('МТС Банк');
+  });
+
+  it('leaves the employer empty when the post never names one', () => {
+    const html = [
+      'Level Artist / Unity',
+      'Ищем Level Artist для участия в разработке кооперативной игры на Unity.',
+      'Требования: опыт работы с Unity от двух лет, портфолио уровней.',
+    ].join('<br/>');
+
+    const parsed = parseTelegramJobPost(html, meta);
+
+    expect(parsed).not.toBeNull();
+    expect(parsed?.company).toBe('');
+    expect(parsed?.title).toBe('Level Artist / Unity');
+  });
+});

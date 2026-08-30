@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { employerLabel } from '../../../shared/employerLabel';
 import {
   listAdminVacancies,
   syncAllAdminVacancySources,
@@ -77,7 +78,7 @@ function VacancyFilters({
 function VacancyCardMeta({ vacancy }: { vacancy: AdminVacancy }) {
   return (
     <div className="admin-vacancy-card__meta">
-      <span className="admin-vacancy-company">{vacancy.company}</span>
+      <span className="admin-vacancy-company">{employerLabel(vacancy.company)}</span>
       <span className="admin-dot-sep">•</span>
       <span className="admin-vacancy-location">{vacancy.location}</span>
       {vacancy.isRemote && <span className="admin-badge admin-badge--pro">Remote</span>}

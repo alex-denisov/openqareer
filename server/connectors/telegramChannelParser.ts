@@ -1,6 +1,7 @@
 import type { UnifiedVacancy, VacancySalary } from '../domain/unifiedVacancy';
 import { calculateVacancyFingerprint } from '../vacancies/vacancyFingerprint';
 import { decodeFeedEntities } from './feedText';
+import { extractTelegramJobHeader } from './telegramJobHeader';
 
 const KNOWN_TECH_KEYWORDS = [
   'React',
@@ -143,29 +144,13 @@ function isCandidateResumeOrNonVacancy(text: string): boolean {
   return hasResume && !hasHiring;
 }
 
-function extractJobTitleAndCompany(text: string, cleanText: string) {
+function extractJobTitleAndCompany(text: string) {
   const rawLines = text
     .split(/<br\s*\/?>|\n/)
-    .map((l) => l.replace(/<[^>]+>/g, '').trim())
+    .map((l) => decodeFeedEntities(l.replace(/<[^>]+>/g, '').trim()))
     .filter(Boolean);
 
-  let title = rawLines[0] ?? 'Разработчик';
-  title = title
-    .replace(/^#вакансия\s*/i, '')
-    .replace(/^вакансия:\s*/i, '')
-    .replace(/^ищем\s+/i, '')
-    .split(/[.\n]/)[0]
-    .trim();
-
-  let company = 'IT Company';
-  const companyMatch = cleanText.match(
-    /(?:компания|company|работодатель):\s*([A-Za-z0-9\u0400-\u04FF\s\-_.]{2,50}?)(?=\s*(?:локация|location|зарплата|salary|формат|стек|требования|[.\n]|$))/i,
-  );
-  if (companyMatch) {
-    company = companyMatch[1].trim();
-  }
-
-  return { title: decodeFeedEntities(title), company: decodeFeedEntities(company) };
+  return extractTelegramJobHeader(rawLines);
 }
 
 function extractExperienceLevel(text: string): string | undefined {
@@ -275,7 +260,7 @@ export function parseTelegramJobPost(
   );
   if (cleanText.length < 30 || isCandidateResumeOrNonVacancy(text)) return null;
 
-  const { title, company } = extractJobTitleAndCompany(text, cleanText);
+  const { title, company } = extractJobTitleAndCompany(text);
   const salary = parseSalaryText(cleanText);
   const sections = extractStructuredJobSections(text);
 

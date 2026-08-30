@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { employerLabel } from '../../../shared/employerLabel';
 import {
   ArrowClockwise,
   ArrowRight,
@@ -284,7 +285,7 @@ export function CareerIntelligencePanel({
                     <span>
                       <strong>{vacancy.title}</strong>
                       <small>
-                        {vacancy.company} · {vacancy.location}
+                        {employerLabel(vacancy.company)} · {vacancy.location}
                       </small>
                     </span>
                     <ArrowRight size={15} />

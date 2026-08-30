@@ -29,6 +29,8 @@ export default defineConfig({
         'server/vacancies/jsonSourceAdapters.ts',
         'server/vacancies/defaultVacancySources.ts',
         'server/connectors/feedText.ts',
+        'server/connectors/telegramJobHeader.ts',
+        'shared/employerLabel.ts',
         'server/vacancies/multiSourceVacancyEngine.ts',
         'server/vacancies/sqliteVacancyPoolStore.ts',
         'src/features/workspace/workspaceStorage.ts',

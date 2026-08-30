@@ -6,6 +6,7 @@ import {
   Sparkle,
   WarningCircle,
 } from '@phosphor-icons/react';
+import { employerLabel } from '../../../shared/employerLabel';
 import {
   getMatchedVacancies,
   type MatchedVacancyItem,
@@ -16,7 +17,7 @@ interface ResumeTargetVacanciesBlockProps {
   onSelectTargetVacancy?: (item: MatchedVacancyItem) => void;
 }
 
-function TargetVacancyHeader({ item }: { item: MatchedVacancyItem }) {
+export function TargetVacancyHeader({ item }: { item: MatchedVacancyItem }) {
   const fitBadgeClass = fitLevelClass(item.explanation.fitLevel);
   const fitLabel = fitLevelLabel(item.explanation.fitLevel);
   return (
@@ -24,7 +25,7 @@ function TargetVacancyHeader({ item }: { item: MatchedVacancyItem }) {
       <div>
         <strong>{item.cluster.canonicalTitle}</strong>
         <small>
-          {item.cluster.canonicalCompany} ·{' '}
+          {employerLabel(item.cluster.canonicalCompany)} ·{' '}
           {item.cluster.canonicalLocation || (item.cluster.isRemote ? 'Remote' : 'Локация не указана')}
         </small>
       </div>

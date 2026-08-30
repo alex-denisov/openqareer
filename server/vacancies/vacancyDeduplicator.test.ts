@@ -92,3 +92,42 @@ describe('Vacancy Deduplication & Clustering', () => {
     expect(fintechCluster?.salary?.from).toBe(300000);
   });
 });
+
+describe('Vacancies with no named employer stay apart (B164)', () => {
+  const base = {
+    location: 'Удалённо',
+    isRemote: true,
+    requiredSkills: ['React'],
+    publishedAt: '2026-08-30T10:00:00.000Z',
+    status: 'active' as const,
+  };
+
+  const withoutEmployer = (id: string, title: string, description: string): UnifiedVacancy => ({
+    ...base,
+    id,
+    fingerprint: `fp-${id}`,
+    title,
+    company: '',
+    description,
+    url: `https://t.me/job_react/${id}`,
+    provenance: {
+      sourceType: 'telegram',
+      sourceId: 'src-tg-react',
+      sourceUrl: `https://t.me/job_react/${id}`,
+      observedAt: '2026-08-30T12:00:00.000Z',
+    },
+  });
+
+  const first = withoutEmployer('11', 'Senior React разработчик', 'Продуктовая команда, React и TypeScript.');
+  const second = withoutEmployer('12', 'React разработчик', 'Аутсорс-студия, поддержка витрины на React.');
+
+  it('does not call two different vacancies the same one just because neither names an employer', () => {
+    expect(isDuplicateVacancy(first, second)).toBe(false);
+  });
+
+  it('gives the candidate two cards, each with one source', () => {
+    const clusters = clusterVacancies([first, second]);
+    expect(clusters).toHaveLength(2);
+    expect(clusters.every((cluster) => cluster.vacanciesCount === 1)).toBe(true);
+  });
+});
