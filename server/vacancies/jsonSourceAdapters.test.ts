@@ -317,3 +317,73 @@ describe('json source adapters', () => {
     }
   });
 });
+
+describe('what the candidate reads from a JSON board (B164)', () => {
+  it('reads a description a board publishes as escaped HTML', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-arbeitnow',
+      {
+        data: [
+          {
+            slug: 'role-1',
+            company_name: 'Beispiel GmbH',
+            title: 'Senior Engineer',
+            description:
+              '&lt;p&gt;&lt;strong&gt;THE ROLE&amp;nbsp;&lt;/strong&gt;Build things.&lt;/p&gt;',
+            remote: true,
+            url: 'https://www.arbeitnow.com/jobs/role-1',
+            tags: [],
+            location: 'Berlin',
+            created_at: 1787000000,
+          },
+        ],
+      },
+      { observedAt: OBSERVED_AT },
+    );
+    expect(vacancy?.description).toBe('THE ROLE Build things.');
+  });
+
+  it('reads a title the board escaped instead of printing the escape', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-remoteok',
+      [
+        { legal: 'licence record' },
+        {
+          id: '1',
+          company: 'Smoke Mart &amp; Giftbox',
+          position: 'Smokemart &amp; GiftBox Sales Assistant',
+          description: 'Sell things.',
+          url: 'https://remoteok.com/l/1',
+          tags: [],
+          date: '2026-08-30T09:00:00+00:00',
+        },
+      ],
+      { observedAt: OBSERVED_AT },
+    );
+    expect(vacancy?.title).toBe('Smokemart & GiftBox Sales Assistant');
+    expect(vacancy?.company).toBe('Smoke Mart & Giftbox');
+  });
+
+  it('reads a description a board publishes as plain HTML', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-arbeitnow',
+      {
+        data: [
+          {
+            slug: 'role-2',
+            company_name: 'Beispiel GmbH',
+            title: 'Datenerfasser',
+            description: '<p>Lust auf einen Neustart?</p>\n<p>Keine Vorkenntnisse&nbsp;nötig.</p>',
+            remote: false,
+            url: 'https://www.arbeitnow.com/jobs/role-2',
+            tags: [],
+            location: 'Berlin',
+            created_at: 1787000000,
+          },
+        ],
+      },
+      { observedAt: OBSERVED_AT },
+    );
+    expect(vacancy?.description).toBe('Lust auf einen Neustart? Keine Vorkenntnisse nötig.');
+  });
+});

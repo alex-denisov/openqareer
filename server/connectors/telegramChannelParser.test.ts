@@ -115,3 +115,26 @@ describe('Telegram Channel Job Parser', () => {
     expect(parsed).toBeNull();
   });
 });
+
+describe('what the candidate reads from a Telegram post (B164)', () => {
+  it('decodes the escapes the channel HTML carries instead of printing them raw', () => {
+    const vacancy = parseTelegramJobPost(
+      '<b>Product&nbsp;Manager</b><br/>Компания: R&amp;D&nbsp;Lab<br/>' +
+        'Ищем менеджера продукта &#8212; удалённо, полная занятость, стек: SQL, Figma.',
+      {
+        postId: '1',
+        channelName: 'product_jobs',
+        sourceId: 'src-tg-product',
+        postUrl: 'https://t.me/product_jobs/1',
+        publishedAt: '2026-08-30T10:00:00.000Z',
+        observedAt: '2026-08-30T12:00:00.000Z',
+      },
+    );
+    expect(vacancy).not.toBeNull();
+    expect(vacancy?.description).not.toContain('&nbsp;');
+    expect(vacancy?.description).not.toContain('&amp;');
+    expect(vacancy?.description).not.toContain('&#');
+    expect(vacancy?.description).toContain('R&D Lab');
+    expect(vacancy?.title).toBe('Product Manager');
+  });
+});

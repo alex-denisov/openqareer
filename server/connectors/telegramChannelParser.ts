@@ -1,5 +1,6 @@
 import type { UnifiedVacancy, VacancySalary } from '../domain/unifiedVacancy';
 import { calculateVacancyFingerprint } from '../vacancies/vacancyFingerprint';
+import { decodeFeedEntities } from './feedText';
 
 const KNOWN_TECH_KEYWORDS = [
   'React',
@@ -164,7 +165,7 @@ function extractJobTitleAndCompany(text: string, cleanText: string) {
     company = companyMatch[1].trim();
   }
 
-  return { title, company };
+  return { title: decodeFeedEntities(title), company: decodeFeedEntities(company) };
 }
 
 function extractExperienceLevel(text: string): string | undefined {
@@ -267,7 +268,11 @@ export function parseTelegramJobPost(
     observedAt: string;
   },
 ): UnifiedVacancy | null {
-  const cleanText = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  // The channel's HTML escapes its own characters; leaving them encoded put
+  // `&nbsp;` and `&amp;` straight into the card the candidate reads (B164).
+  const cleanText = decodeFeedEntities(
+    text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+  );
   if (cleanText.length < 30 || isCandidateResumeOrNonVacancy(text)) return null;
 
   const { title, company } = extractJobTitleAndCompany(text, cleanText);
@@ -292,7 +297,7 @@ export function parseTelegramJobPost(
     employmentType: extractEmploymentType(cleanText),
     ...sections,
     contactInfo: extractContactInfo(text),
-    fullDescription: text.replace(/<[^>]+>/g, '\n').trim(),
+    fullDescription: decodeFeedEntities(text.replace(/<[^>]+>/g, '\n').trim()),
     postType: 'vacancy',
     url: meta.postUrl,
     provenance: {

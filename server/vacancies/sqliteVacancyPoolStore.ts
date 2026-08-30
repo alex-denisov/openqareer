@@ -1,0 +1,181 @@
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import { MIGRATION_23 } from '../data/sqliteSchema';
+import type { StoredSourceState, VacancyPoolStore } from './vacancyPoolStore';
+
+interface VacancyRow {
+  payload: string;
+}
+
+interface SourceStateRow {
+  source_id: string;
+  last_sync_at: string | null;
+  last_status: string | null;
+  last_error_message: string | null;
+  items_found_total: number;
+  items_active_total: number;
+}
+
+const SOURCE_STATUSES = new Set(['healthy', 'degraded', 'error']);
+
+/**
+ * The vacancy pool on disk. Opens its own connection to the same file the
+ * candidate store uses, the way the auth service does, so the tables are
+ * created by the process that actually owns the pool (B164).
+ */
+export class SqliteVacancyPoolStore implements VacancyPoolStore {
+  private readonly database: DatabaseSync;
+
+  constructor(options: { databasePath: string }) {
+    if (options.databasePath !== ':memory:') {
+      mkdirSync(dirname(options.databasePath), { recursive: true });
+    }
+    this.database = new DatabaseSync(options.databasePath);
+    this.database.exec('PRAGMA journal_mode = WAL;');
+    this.database.exec('PRAGMA foreign_keys = ON;');
+    this.database.exec(MIGRATION_23);
+  }
+
+  loadVacancies(): UnifiedVacancy[] {
+    const rows = this.database
+      .prepare('SELECT payload FROM vacancy_pool')
+      .all() as unknown as VacancyRow[];
+    const vacancies: UnifiedVacancy[] = [];
+    for (const row of rows) {
+      const parsed = parseVacancy(row.payload);
+      // A row we cannot read back is not a vacancy we may serve: dropping it
+      // keeps the pool honest instead of surfacing a half-decoded card.
+      if (parsed) vacancies.push(parsed);
+    }
+    return vacancies;
+  }
+
+  loadSourceStates(): StoredSourceState[] {
+    const rows = this.database
+      .prepare(
+        `SELECT source_id, last_sync_at, last_status, last_error_message,
+                items_found_total, items_active_total
+           FROM vacancy_source_state`,
+      )
+      .all() as unknown as SourceStateRow[];
+    return rows.map((row) => ({
+      sourceId: row.source_id,
+      ...(row.last_sync_at ? { lastSyncAt: row.last_sync_at } : {}),
+      ...(row.last_status && SOURCE_STATUSES.has(row.last_status)
+        ? { lastStatus: row.last_status as StoredSourceState['lastStatus'] }
+        : {}),
+      ...(row.last_error_message ? { lastErrorMessage: row.last_error_message } : {}),
+      itemsFoundTotal: row.items_found_total,
+      itemsActiveTotal: row.items_active_total,
+    }));
+  }
+
+  replaceSourceSlice(sourceId: string, vacancies: UnifiedVacancy[]): void {
+    const storedAt = new Date().toISOString();
+    const remove = this.database.prepare('DELETE FROM vacancy_pool WHERE source_id = ?');
+    const insert = this.database.prepare(
+      `INSERT INTO vacancy_pool (id, source_id, published_at, stored_at, payload)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         source_id = excluded.source_id,
+         published_at = excluded.published_at,
+         stored_at = excluded.stored_at,
+         payload = excluded.payload`,
+    );
+    this.inTransaction(() => {
+      remove.run(sourceId);
+      for (const vacancy of vacancies) {
+        insert.run(
+          vacancy.id,
+          sourceId,
+          vacancy.publishedAt,
+          storedAt,
+          JSON.stringify(vacancy),
+        );
+      }
+    });
+  }
+
+  saveSourceState(state: StoredSourceState): void {
+    this.database
+      .prepare(
+        `INSERT INTO vacancy_source_state (
+           source_id, last_sync_at, last_status, last_error_message,
+           items_found_total, items_active_total
+         ) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(source_id) DO UPDATE SET
+           last_sync_at = excluded.last_sync_at,
+           last_status = excluded.last_status,
+           last_error_message = excluded.last_error_message,
+           items_found_total = excluded.items_found_total,
+           items_active_total = excluded.items_active_total`,
+      )
+      .run(
+        state.sourceId,
+        state.lastSyncAt ?? null,
+        state.lastStatus ?? null,
+        state.lastErrorMessage ?? null,
+        state.itemsFoundTotal,
+        state.itemsActiveTotal,
+      );
+  }
+
+  prune(knownSourceIds: readonly string[], oldestPublishedAt: string): void {
+    this.inTransaction(() => {
+      this.database
+        .prepare('DELETE FROM vacancy_pool WHERE published_at < ?')
+        .run(oldestPublishedAt);
+      const placeholders = knownSourceIds.map(() => '?').join(', ');
+      if (knownSourceIds.length === 0) {
+        this.database.exec('DELETE FROM vacancy_pool');
+        this.database.exec('DELETE FROM vacancy_source_state');
+        return;
+      }
+      this.database
+        .prepare(`DELETE FROM vacancy_pool WHERE source_id NOT IN (${placeholders})`)
+        .run(...knownSourceIds);
+      this.database
+        .prepare(
+          `DELETE FROM vacancy_source_state WHERE source_id NOT IN (${placeholders})`,
+        )
+        .run(...knownSourceIds);
+    });
+  }
+
+  close(): void {
+    this.database.close();
+  }
+
+  private inTransaction(operation: () => void): void {
+    this.database.exec('BEGIN');
+    try {
+      operation();
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+}
+
+function parseVacancy(payload: string): UnifiedVacancy | undefined {
+  try {
+    const parsed: unknown = JSON.parse(payload);
+    if (!parsed || typeof parsed !== 'object') return undefined;
+    const candidate = parsed as Partial<UnifiedVacancy>;
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.title !== 'string' ||
+      typeof candidate.publishedAt !== 'string' ||
+      !candidate.provenance ||
+      typeof candidate.provenance.sourceId !== 'string'
+    ) {
+      return undefined;
+    }
+    return candidate as UnifiedVacancy;
+  } catch {
+    return undefined;
+  }
+}

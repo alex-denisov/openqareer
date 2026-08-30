@@ -624,3 +624,33 @@ CREATE TABLE IF NOT EXISTS legal_consents (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS legal_consents_user ON legal_consents(user_id);
 `;
+
+/**
+ * B164 — the vacancy pool outlives the process that filled it. Until this
+ * migration the pool lived only in memory, so every restart and every deploy
+ * served an empty «Возможности» until the scheduler's next run, and the
+ * source health report claimed no source had ever been read.
+ *
+ * Applied by `SqliteVacancyPoolStore` on its own connection, the way
+ * `MIGRATION_22` is applied by the auth service: the tables belong to the
+ * process that owns the pool, not to every database the store opens.
+ */
+export const MIGRATION_23 = `
+CREATE TABLE IF NOT EXISTS vacancy_pool (
+  id TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL,
+  published_at TEXT NOT NULL,
+  stored_at TEXT NOT NULL,
+  payload TEXT NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS vacancy_pool_source ON vacancy_pool(source_id);
+
+CREATE TABLE IF NOT EXISTS vacancy_source_state (
+  source_id TEXT PRIMARY KEY,
+  last_sync_at TEXT,
+  last_status TEXT,
+  last_error_message TEXT,
+  items_found_total INTEGER NOT NULL DEFAULT 0,
+  items_active_total INTEGER NOT NULL DEFAULT 0
+) STRICT;
+`;

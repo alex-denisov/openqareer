@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { calculateVacancyFingerprint } from '../vacancies/vacancyFingerprint';
 import { extractSkillsFromText, parseSalaryText } from './telegramChannelParser';
+import { decodeFeedEntities, htmlToFeedText, unwrapCdata } from './feedText';
 
 interface RssFeedMeta {
   sourceId: string;
@@ -19,8 +20,13 @@ function parseRssItem(itemXml: string, meta: RssFeedMeta): UnifiedVacancy | null
 
   if (!title || !description) return null;
 
-  const cleanTitle = decodeXmlEntities(title);
-  const cleanDesc = decodeXmlEntities(description.replace(/<!\[CDATA\[(.*?)\]\]>/gs, '$1'));
+  // A feed wraps whichever fields it likes in CDATA. Stripping it only from
+  // the description printed `<![CDATA[…]]>` inside the title of every card the
+  // candidate saw (found on the B164 prod walk).
+  const cleanTitle = decodeFeedEntities(unwrapCdata(title));
+  // Feeds like We Work Remotely escape a whole HTML body into the description,
+  // so decoding alone would hand the candidate markup (B164 prod walk).
+  const cleanDesc = htmlToFeedText(decodeFeedEntities(unwrapCdata(description)));
   const company = meta.companyName ?? 'Tech Company';
   const isRemote = /remote|удален|anywhere/i.test(cleanDesc) || /remote/i.test(cleanTitle);
   const salary = parseSalaryText(cleanDesc);
@@ -76,15 +82,6 @@ export function parseRssJobFeed(xml: string, meta: RssFeedMeta): UnifiedVacancy[
 function extractXmlTag(xml: string, tag: string): string | null {
   const match = xml.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
   return match ? match[1].trim() : null;
-}
-
-function decodeXmlEntities(text: string): string {
-  return text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
 }
 
 function parseDateSafe(raw: string): string {

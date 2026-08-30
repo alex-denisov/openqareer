@@ -7,6 +7,7 @@ import type {
 import { clusterVacancies } from './vacancyDeduplicator';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancyMatcher';
+import type { VacancyPoolStore } from './vacancyPoolStore';
 
 export type SourceFetcher = (
   source: VacancySourceConfig,
@@ -66,18 +67,58 @@ export class MultiSourceVacancyEngine {
   private rawVacancies: Map<string, UnifiedVacancy> = new Map();
   private clusters: VacancyCluster[] = [];
   private fetcher?: SourceFetcher;
+  /** Where the pool survives a restart. Absent means memory only (tests). */
+  private readonly pool?: VacancyPoolStore;
   /** In-flight syncs, so a slow source cannot be started twice at once. */
   private running: Map<string, Promise<SourceSyncOutcome>> = new Map();
 
   constructor(options?: {
     sources?: VacancySourceConfig[];
     fetcher?: SourceFetcher;
+    pool?: VacancyPoolStore;
   }) {
     const initial = options?.sources ?? DEFAULT_VACANCY_SOURCES;
     for (const src of initial) {
       this.sources.set(src.id, { ...src });
     }
     this.fetcher = options?.fetcher;
+    this.pool = options?.pool;
+  }
+
+  /**
+   * Loads what an earlier process synced. Without it a restart — and therefore
+   * every deploy — served an empty «Возможности» until the scheduler's next
+   * run, and every source claimed it had never been read (B164).
+   */
+  public restore(nowMs: number = Date.now()): { restored: number } {
+    if (!this.pool) return { restored: 0 };
+    const oldestPublishedAt = new Date(
+      nowMs - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    this.pool.prune(Array.from(this.sources.keys()), oldestPublishedAt);
+
+    this.rawVacancies.clear();
+    for (const vacancy of this.pool.loadVacancies()) {
+      // A source the registry no longer lists must not come back through
+      // storage. A disabled one keeps its slice, exactly as it does in memory
+      // when it is switched off between syncs.
+      if (!this.sources.has(vacancy.provenance.sourceId)) continue;
+      if (!isVacancyFresh(vacancy.publishedAt, nowMs)) continue;
+      this.rawVacancies.set(vacancy.id, vacancy);
+    }
+
+    for (const state of this.pool.loadSourceStates()) {
+      const source = this.sources.get(state.sourceId);
+      if (!source) continue;
+      source.lastSyncAt = state.lastSyncAt;
+      source.lastStatus = state.lastStatus;
+      source.lastErrorMessage = state.lastErrorMessage;
+      source.itemsFoundTotal = state.itemsFoundTotal;
+      source.itemsActiveTotal = state.itemsActiveTotal;
+    }
+
+    this.recluster();
+    return { restored: this.rawVacancies.size };
   }
 
   public getSources(): VacancySourceConfig[] {
@@ -211,6 +252,7 @@ export class MultiSourceVacancyEngine {
       source.lastErrorMessage = undefined;
       source.itemsFoundTotal = freshFetched.length;
       source.itemsActiveTotal = freshFetched.filter((v) => v.status === 'active').length;
+      this.persistSourceState(source);
 
       this.recluster();
       return {
@@ -224,6 +266,7 @@ export class MultiSourceVacancyEngine {
       source.lastSyncAt = new Date(nowMs).toISOString();
       source.lastStatus = 'error';
       source.lastErrorMessage = message;
+      this.persistSourceState(source);
       // A failed reading is not evidence that the source went empty, so the
       // slice it delivered last time stays until a successful run replaces it.
       return { sourceId, status: 'error', fetched: 0, kept: 0, message };
@@ -241,6 +284,18 @@ export class MultiSourceVacancyEngine {
     for (const vacancy of vacancies) {
       this.rawVacancies.set(vacancy.id, vacancy);
     }
+    this.pool?.replaceSourceSlice(sourceId, vacancies);
+  }
+
+  private persistSourceState(source: VacancySourceConfig): void {
+    this.pool?.saveSourceState({
+      sourceId: source.id,
+      ...(source.lastSyncAt ? { lastSyncAt: source.lastSyncAt } : {}),
+      ...(source.lastStatus ? { lastStatus: source.lastStatus } : {}),
+      ...(source.lastErrorMessage ? { lastErrorMessage: source.lastErrorMessage } : {}),
+      itemsFoundTotal: source.itemsFoundTotal,
+      itemsActiveTotal: source.itemsActiveTotal,
+    });
   }
 
   /**

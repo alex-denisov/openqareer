@@ -1,4 +1,5 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import { htmlToFeedText } from '../connectors/feedText';
 
 /**
  * Each job board publishes its own JSON record shape, so normalisation is a
@@ -183,12 +184,15 @@ function build(input: {
   return {
     id,
     fingerprint: id,
-    title: input.title.trim(),
-    company: input.company.trim(),
+    title: htmlToFeedText(input.title),
+    company: htmlToFeedText(input.company),
     location: input.location,
     isRemote: input.isRemote,
     salary: input.salary,
-    description: input.description,
+    // Boards publish their description as HTML — some of it escaped once more
+    // on the way out. Left as it was, the markup reached the candidate and fed
+    // the skill extractor and the matcher (B164 prod walk).
+    description: htmlToFeedText(input.description),
     requiredSkills: input.skills,
     employmentType: input.employmentType,
     experienceLevel: input.experienceLevel,

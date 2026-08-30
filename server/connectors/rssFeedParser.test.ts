@@ -38,3 +38,57 @@ describe('RSS / XML Job Feed Parser', () => {
     expect(job.provenance.sourceType).toBe('rss');
   });
 });
+
+describe('what the candidate actually reads (B164)', () => {
+  const meta = {
+    sourceId: 'src-himalayas',
+    sourceUrl: 'https://himalayas.app/jobs/rss',
+    observedAt: '2026-08-30T12:00:00.000Z',
+  };
+
+  const feed = `<?xml version="1.0"?><rss><channel>
+    <item>
+      <title><![CDATA[Senior Technical Support Engineer]]></title>
+      <link>https://himalayas.app/jobs/one</link>
+      <guid>https://himalayas.app/jobs/one</guid>
+      <pubDate>Sat, 30 Aug 2026 09:00:00 GMT</pubDate>
+      <description><![CDATA[Remote&nbsp;role at Acme&nbsp;&amp;&nbsp;Co &#8212; TypeScript &#x26; React]]></description>
+    </item>
+  </channel></rss>`;
+
+  it('shows a title without the feed’s own CDATA wrapper', () => {
+    const [vacancy] = parseRssJobFeed(feed, meta);
+    expect(vacancy.title).toBe('Senior Technical Support Engineer');
+  });
+
+  it('decodes the entities a feed escapes instead of printing them raw', () => {
+    const [vacancy] = parseRssJobFeed(feed, meta);
+    expect(vacancy.description).toBe(
+      'Remote role at Acme & Co — TypeScript & React',
+    );
+    expect(vacancy.description).not.toContain('&nbsp;');
+    expect(vacancy.description).not.toContain('&#');
+  });
+});
+
+describe('feeds that escape a whole HTML body (B164)', () => {
+  it('reads the escaped markup to its end instead of stopping one level short', () => {
+    const [vacancy] = parseRssJobFeed(
+      `<rss><channel><item>
+        <title>Role</title>
+        <link>https://example.test/1</link>
+        <guid>https://example.test/1</guid>
+        <description>&lt;p&gt;Remote&amp;nbsp;role at Acme&lt;/p&gt;</description>
+      </item></channel></rss>`,
+      {
+        sourceId: 'src-test',
+        sourceUrl: 'https://example.test/rss',
+        observedAt: '2026-08-30T12:00:00.000Z',
+      },
+    );
+    // We Work Remotely publishes exactly this shape: HTML escaped once, so its
+    // own `&nbsp;` arrives as `&amp;nbsp;`. Decoding only the XML layer left
+    // `<p>` and `&nbsp;` in the card (B164 prod walk).
+    expect(vacancy.description).toBe('Remote role at Acme');
+  });
+});

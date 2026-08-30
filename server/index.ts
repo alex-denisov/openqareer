@@ -17,6 +17,7 @@ import { CareerCommandConnectorRouter } from './connectors/careerCommandConnecto
 import { HhConnector } from './connectors/hh/hhConnector';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
 import { buildMultiSourceFetcher } from './vacancies/multiSourceFetcher';
+import { SqliteVacancyPoolStore } from './vacancies/sqliteVacancyPoolStore';
 
 const config = readServerConfig(process.env);
 const candidateStore = new SqliteCandidateStore({
@@ -79,9 +80,16 @@ const careerCommandExecutor = new CareerCommandConnectorRouter({
 });
 // Built here rather than inside `buildApp`, so the process that owns the
 // timers also owns the pool they fill (B164).
+const vacancyPoolStore = new SqliteVacancyPoolStore({
+  databasePath: config.databasePath,
+});
 const multiSourceEngine = new MultiSourceVacancyEngine({
   fetcher: buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies),
+  pool: vacancyPoolStore,
 });
+// The pool the previous process filled is served immediately, so a restart no
+// longer empties «Возможности» until the scheduler's next run (B164).
+const restoredPool = multiSourceEngine.restore();
 const app = await buildApp({
   config,
   coachProvider,
@@ -173,6 +181,7 @@ async function shutdown(signal: string): Promise<void> {
   await app.close();
   candidateStore.close();
   authService.close();
+  vacancyPoolStore.close();
   process.exit(0);
 }
 
@@ -181,6 +190,7 @@ process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
 try {
   await app.listen({ host: config.host, port: config.port });
+  app.log.info(restoredPool, 'vacancy-pool-restored');
   runVacancyRefresh();
   runMultiSourceSync();
   runDocumentRetentionPurge();
