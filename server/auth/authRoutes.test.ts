@@ -9,6 +9,7 @@ import type { ServerConfig } from '../config';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import type { CoachProvider } from '../providers/coachProvider';
 import { AuthService } from './authService';
+import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
 
 const resources: Array<{
   app: Awaited<ReturnType<typeof buildApp>>;
@@ -146,6 +147,7 @@ describe('cookie auth routes', () => {
         email: 'Owner@Example.com',
         displayName: 'Мария Иванова',
         password: 'candidate-password-for-tests',
+        legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
       },
     });
 
@@ -275,6 +277,7 @@ describe('cookie auth routes', () => {
         email: 'recover@example.com',
         displayName: 'Анна Смирнова',
         password: 'candidate-password-before-reset',
+        legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
       },
     });
 
@@ -476,6 +479,7 @@ describe('cookie auth routes', () => {
         email: 'new.candidate@example.com',
         displayName: 'Новый кандидат',
         password: 'candidate-password-for-tests',
+        legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
       },
     });
 
@@ -502,6 +506,7 @@ describe('cookie auth routes', () => {
         email: 'NEW.CANDIDATE@example.com',
         displayName: 'Другой кандидат',
         password: 'another-password-for-tests',
+        legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
       },
     });
     expect(duplicate.statusCode).toBe(409);
@@ -517,6 +522,7 @@ describe('cookie auth routes', () => {
       payload: {
         username: 'candidate.test',
         password: 'candidate-password-for-tests',
+        legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
       },
     });
     expect(noOrigin.statusCode).toBe(403);
@@ -622,7 +628,9 @@ describe('registration without a login field (B139)', () => {
       method: 'POST',
       url: '/api/v1/auth/register',
       headers: { origin: 'http://localhost:3000' },
-      payload,
+      // Every registration now carries the accepted pack (B173); the cases
+      // that test the acceptance itself live in legalConsentRoute.test.ts.
+      payload: { legalConsent: { versionId: LEGAL_PACK_VERSION_ID }, ...payload },
     });
   }
 

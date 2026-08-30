@@ -209,6 +209,7 @@ function CabinetSection({
         targetDirection={targetDirection}
         regions={workspace?.regions ?? []}
         premises={routePremisesDraft({ workspace, account: data.account })}
+        premisesLoading={data.loading}
         onNavigate={onNavigate}
         onSavePremises={onSavePremises}
       />

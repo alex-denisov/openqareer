@@ -751,6 +751,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await dialog.getByLabel('Как к вам обращаться').fill('Тестовый кандидат');
   await dialog.getByLabel('Email').fill('fresh.candidate@example.com');
   await dialog.getByLabel('Пароль').fill('fresh-candidate-password');
+  // B173: registration is refused until the published pack is accepted.
+  await dialog.locator('#account-legal-consent').check();
   await dialog.getByRole('button', { name: 'Создать и начать' }).click();
 
   await page.getByRole('button', { name: 'Без документов' }).click();

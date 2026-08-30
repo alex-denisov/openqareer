@@ -9,6 +9,11 @@ import {
   type AuthUser,
 } from '../coach/coachApi';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
+import {
+  LEGAL_DOCS,
+  LEGAL_PACK_VERSION_ID,
+  legalPath,
+} from '../../../shared/legalRegistry';
 
 interface AuthPageProps {
   onNavigate: (path: string) => void;
@@ -268,9 +273,19 @@ export function LoginPage({ onNavigate, onSessionChange, nextPath = '/app' }: Au
   );
 }
 
-function validateSignup(email: string, pass: string): Record<string, string> | null {
+export function validateSignup(
+  email: string,
+  pass: string,
+  legalAccepted = true,
+): Record<string, string> | null {
   if (!email.trim() || !email.includes('@')) return { email: 'Укажите корректный email' };
   if (pass.length < 8) return { password: 'Длина пароля — от 8 символов' };
+  if (!legalAccepted) {
+    return {
+      legalConsent:
+        'Примите пользовательское соглашение, политику обработки персональных данных и согласие — без этого регистрация невозможна.',
+    };
+  }
   return null;
 }
 
@@ -282,6 +297,7 @@ function useSignupForm({
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -289,13 +305,18 @@ function useSignupForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(undefined);
-    const validation = validateSignup(email, password);
+    const validation = validateSignup(email, password, legalAccepted);
     if (validation) return setFieldErrors(validation);
     setFieldErrors({});
 
     setBusy(true);
     try {
-      const user = await register({ email: email.trim(), displayName: displayName.trim() || email.split('@')[0], password });
+      const user = await register({
+        email: email.trim(),
+        displayName: displayName.trim() || email.split('@')[0],
+        password,
+        legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
+      });
       onSessionChange?.(user);
       onNavigate(nextPath);
     } catch (err) {
@@ -310,7 +331,9 @@ function useSignupForm({
     }
   };
 
-  return { email, setEmail, displayName, setDisplayName, password, setPassword, busy, error, fieldErrors, handleSubmit };
+  const fields = { email, setEmail, displayName, setDisplayName, password, setPassword };
+  const consent = { legalAccepted, setLegalAccepted };
+  return { ...fields, ...consent, busy, error, fieldErrors, handleSubmit };
 }
 
 function SignupPasswordSection({ form }: { form: ReturnType<typeof useSignupForm> }) {
@@ -378,11 +401,67 @@ function SignupForm({
       ) : null}
       <form className="auth-form" method="post" action="#" onSubmit={form.handleSubmit}>
         <SignupFields form={form} />
+        <LegalConsentField
+          accepted={form.legalAccepted}
+          disabled={form.busy}
+          error={form.fieldErrors.legalConsent}
+          onChange={form.setLegalAccepted}
+        />
         <button type="submit" className="site-btn is-primary auth-submit-btn" disabled={form.busy}>
           {form.busy ? 'Создаём...' : 'Создать аккаунт'}
         </button>
       </form>
     </>
+  );
+}
+
+/**
+ * The acceptance is a field of the form, not a banner: registration is refused
+ * without it and the accepted version travels to the server (B173).
+ */
+function LegalConsentField({
+  accepted,
+  disabled,
+  error,
+  onChange,
+}: {
+  accepted: boolean;
+  disabled: boolean;
+  error?: string;
+  onChange: (accepted: boolean) => void;
+}) {
+  return (
+    <div className="auth-field auth-legal-consent">
+      <label htmlFor="signup-legal">
+        <input
+          id="signup-legal"
+          name="legalConsent"
+          type="checkbox"
+          checked={accepted}
+          disabled={disabled}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? 'signup-legal-error' : undefined}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        <span>
+          Я принимаю{' '}
+          {LEGAL_DOCS.map((doc, index) => (
+            <React.Fragment key={doc.slug}>
+              {index > 0 ? (index === LEGAL_DOCS.length - 1 ? ' и ' : ', ') : null}
+              <a href={legalPath(doc.slug)} target="_blank" rel="noreferrer">
+                {doc.title.toLowerCase()}
+              </a>
+            </React.Fragment>
+          ))}
+          . Мне исполнилось 16 лет.
+        </span>
+      </label>
+      {error ? (
+        <p className="auth-field-error" id="signup-legal-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

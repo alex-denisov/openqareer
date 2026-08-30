@@ -18,7 +18,13 @@ const DEFAULT_PART_BYTES = 12 * 1024;
 const MAX_BOOTSTRAP_BYTES = 12 * 1024;
 const FETCH_CONCURRENCY = 2;
 /** Prerendered documents that share the entry bundle with `index.html`. */
-const ADDITIONAL_SURFACES = ['admin.html'];
+const ADDITIONAL_SURFACES = [
+  'admin.html',
+  'legal-terms.html',
+  'legal-privacy.html',
+  'legal-consent.html',
+  'legal-disclaimer.html',
+];
 
 function sha256Hex(value) {
   return createHash('sha256').update(value).digest('hex');

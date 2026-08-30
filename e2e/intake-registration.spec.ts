@@ -61,6 +61,10 @@ async function registerFromTopBar(page: Page): Promise<void> {
   await dialog.getByLabel('Как к вам обращаться').fill(REGISTERED_CANDIDATE.displayName);
   await dialog.getByLabel('Email').fill(REGISTERED_CANDIDATE.email);
   await dialog.getByLabel('Пароль').fill('diagnostic-passphrase-2026');
+  // B173: registration refuses to proceed until the published pack is accepted.
+  await dialog.getByRole('button', { name: 'Создать и начать' }).click();
+  await expect(dialog.getByText('Примите пользовательское соглашение')).toBeVisible();
+  await dialog.locator('#account-legal-consent').check();
   await dialog.getByRole('button', { name: 'Создать и начать' }).click();
 }
 

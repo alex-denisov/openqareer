@@ -44,12 +44,20 @@ const provider: CoachProvider = {
   },
 };
 
-async function createStaticApp(options: { adminDocument?: boolean } = {}) {
+async function createStaticApp(
+  options: { adminDocument?: boolean; legalDocuments?: boolean } = {},
+) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-static-'));
   writeFileSync(
     join(directory, 'index.html'),
     '<!doctype html><title>current release</title>',
   );
+  if (options.legalDocuments !== false) {
+    writeFileSync(
+      join(directory, 'legal-privacy.html'),
+      '<!doctype html><title>Политика обработки персональных данных · OpenQareer</title>',
+    );
+  }
   if (options.adminDocument !== false) {
     writeFileSync(
       join(directory, 'admin.html'),
@@ -162,6 +170,38 @@ describe('static release delivery', () => {
 
     // A release built before this split must keep serving a working route
     // rather than 404 a page that used to load.
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('current release');
+  });
+
+  /**
+   * B173 — a legal deep link must reach the prerendered document, so a crawler
+   * reads the text instead of the workspace bootstrap.
+   */
+  it('answers a legal deep link with that document, not the workspace shell', async () => {
+    const app = await createStaticApp();
+
+    const response = await app.inject({ method: 'GET', url: '/legal/privacy' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('Политика обработки персональных данных');
+    expect(response.body).not.toContain('current release');
+  });
+
+  it('falls back to the workspace document when the legal page was not built', async () => {
+    const app = await createStaticApp({ legalDocuments: false });
+
+    const response = await app.inject({ method: 'GET', url: '/legal/privacy' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('current release');
+  });
+
+  it('does not invent a document for a slug the pack does not publish', async () => {
+    const app = await createStaticApp();
+
+    const response = await app.inject({ method: 'GET', url: '/legal/offer' });
+
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain('current release');
   });

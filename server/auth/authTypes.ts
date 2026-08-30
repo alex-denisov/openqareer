@@ -135,6 +135,13 @@ export interface SessionAuth {
   authenticate(sessionToken: string): AuthPrincipal | null;
   logout(sessionToken: string): void;
   getAccount?(sessionToken: string): AccountSnapshot | null;
+  /** B173: proof of which published documents the account accepted, and when. */
+  recordLegalConsent?(input: {
+    userId: string;
+    versionId: string;
+    documents: readonly string[];
+    acceptedAt?: string;
+  }): void;
   listUsers?(input: AdminUserQuery): AdminUserPage;
   getUser?(userId: string): AdminUserRecord | null;
   setUserRole?(

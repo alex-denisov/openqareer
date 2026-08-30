@@ -24,6 +24,12 @@ interface CareerTrackBoardProps {
   readonly regions: readonly CandidateRegion[];
   /** The premises as they stand now, read from both stores that hold them. */
   readonly premises: RoutePremisesDraft;
+  /**
+   * True while the cabinet is still reading the account. Opening the editor
+   * then would show empty fields over answers the server holds, and saving
+   * would write that emptiness back (found on the B160 production walk).
+   */
+  readonly premisesLoading: boolean;
   readonly onNavigate: (view: CareerCabinetView) => void;
   /**
    * Applies the edited premises. Resolves once both stores have accepted them,
@@ -39,6 +45,7 @@ export function CareerTrackBoard({
   targetDirection,
   regions,
   premises,
+  premisesLoading,
   onNavigate,
   onSavePremises,
 }: CareerTrackBoardProps) {
@@ -67,6 +74,7 @@ export function CareerTrackBoard({
         regions={regions}
         workMode={account?.profile.workMode ?? null}
         premises={premises}
+        loading={premisesLoading}
         onSave={onSavePremises}
       />
       <RoleHypotheses journey={journey} />
@@ -88,12 +96,14 @@ function RoutePremisesPanel({
   regions,
   workMode,
   premises,
+  loading,
   onSave,
 }: {
   targetRole?: string;
   regions: readonly CandidateRegion[];
   workMode: AccountSnapshot['profile']['workMode'];
   premises: RoutePremisesDraft;
+  loading: boolean;
   onSave: (draft: RoutePremisesDraft) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
@@ -106,6 +116,7 @@ function RoutePremisesPanel({
         targetRole={targetRole}
         regions={regions}
         workMode={workMode ?? undefined}
+        editDisabled={loading}
         onEdit={() => {
           setError(undefined);
           setEditing(true);
@@ -147,11 +158,13 @@ export function CareerRoutePremises({
   targetRole,
   regions,
   workMode,
+  editDisabled = false,
   onEdit,
 }: {
   targetRole?: string;
   regions: readonly CandidateRegion[];
   workMode?: AccountSnapshot['profile']['workMode'];
+  editDisabled?: boolean;
   onEdit: () => void;
 }) {
   return (
@@ -161,8 +174,8 @@ export function CareerRoutePremises({
           <span className="career-cabinet-kicker">Изменяемые предпосылки</span>
           <h3 id="career-route-premises-title">Роль и условия маршрута</h3>
         </div>
-        <button type="button" onClick={onEdit}>
-          Изменить роль и условия
+        <button type="button" onClick={onEdit} disabled={editDisabled}>
+          {editDisabled ? 'Читаем текущие ответы…' : 'Изменить роль и условия'}
         </button>
       </header>
       <dl>

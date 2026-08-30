@@ -11,6 +11,8 @@ import { prepareCareerWorkspace } from './features/journey/careerJourneyEngine';
 import { CareerWorkspaceShell } from './features/shell/CareerWorkspaceShell';
 import { AppErrorBoundary } from './features/shell/AppErrorBoundary';
 import { LandingPage } from './features/site/LandingPage';
+import { LegalDocumentPage } from './features/legal/LegalDocumentPage';
+import { legalSlugFromPath } from '../shared/legalRegistry';
 import { LoginPage, SignupPage, ResetPasswordPage } from './features/site/AuthPages';
 import { resolvedDesktopSessionPath } from './features/site/desktopSessionRouting';
 import { isTauriEnvironment } from './services/desktop/desktopBridge';
@@ -308,6 +310,15 @@ export default function App() {
     return (
       <AppErrorBoundary>
         {renderAuthContent()}
+      </AppErrorBoundary>
+    );
+  }
+
+  const legalSlug = legalSlugFromPath(currentPath);
+  if (legalSlug && !isDesktop) {
+    return (
+      <AppErrorBoundary>
+        <LegalDocumentPage slug={legalSlug} onNavigate={navigate} />
       </AppErrorBoundary>
     );
   }

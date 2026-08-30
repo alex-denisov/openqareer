@@ -4,6 +4,7 @@ import {
   getNameError,
   getPasswordError,
 } from '../../shared/accountValidation';
+import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
 import { parseProfileUrl } from '../connectors/profileUrlImport';
 import { hhApplicationExecutionTargetSchema } from '../orchestration/careerCommandPlanner';
 
@@ -17,10 +18,28 @@ function fieldGovernedBy(check: (value: string) => string | null, trim: boolean)
 
 const passwordField = fieldGovernedBy(getPasswordError, false);
 
+/**
+ * B173 — the candidate accepts the published pack before the product receives
+ * their resume. The accepted version travels with the registration so the
+ * stored proof names the exact text that was on screen, and a stale tab cannot
+ * record acceptance of a document it never showed.
+ */
 export const registrationSchema = z.object({
   displayName: fieldGovernedBy(getNameError, true),
   email: fieldGovernedBy(getEmailError, true),
   password: passwordField,
+  legalConsent: z
+    .object(
+      { versionId: z.string().trim().min(1).max(120) },
+      {
+        error:
+          'Примите пользовательское соглашение, политику обработки персональных данных и согласие — без этого регистрация невозможна.',
+      },
+    )
+    .refine((value) => value.versionId === LEGAL_PACK_VERSION_ID, {
+      message:
+        'Документы обновились, пока была открыта страница. Обновите страницу и примите действующую редакцию.',
+    }),
 });
 
 export const loginSchema = z.object({

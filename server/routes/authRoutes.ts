@@ -21,6 +21,7 @@ import {
   registrationSchema,
 } from './schemas';
 import { deriveUsernameFromEmail } from '../../shared/accountValidation';
+import { LEGAL_DOC_SLUGS } from '../../shared/legalRegistry';
 import {
   AuthEmailTakenError,
   AuthInvalidPasswordError,
@@ -28,21 +29,27 @@ import {
   AuthUsernameTakenError,
 } from '../auth/authService';
 
+function registrationValidationError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: Parameters<typeof fieldMessages>[0],
+) {
+  const fields = fieldMessages(error);
+  return sendError(
+    reply,
+    request,
+    422,
+    'validation_failed',
+    Object.values(fields)[0] ?? 'Проверьте заполненные поля.',
+    false,
+    fields,
+  );
+}
+
 async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
   const parsed = registrationSchema.safeParse(request.body);
-  if (!parsed.success) {
-    const fields = fieldMessages(parsed.error);
-    return sendError(
-      reply,
-      request,
-      422,
-      'validation_failed',
-      Object.values(fields)[0] ?? 'Проверьте заполненные поля.',
-      false,
-      fields,
-    );
-  }
+  if (!parsed.success) return registrationValidationError(request, reply, parsed.error);
   const body = parsed.data;
   try {
     const authenticated = await deps.authService.register(
@@ -56,6 +63,13 @@ async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: F
         displayName: body.displayName,
       },
     );
+    // The proof is written with the account, so no user can exist without a
+    // record of the documents they accepted (B173).
+    deps.authService.recordLegalConsent?.({
+      userId: authenticated.principal.userId,
+      versionId: body.legalConsent.versionId,
+      documents: LEGAL_DOC_SLUGS,
+    });
     setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
     return reply.code(201).send({
       data: {

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
+import { legalSlugFromPath } from '../../shared/legalRegistry';
 import { CoachProviderError } from '../providers/coachProvider';
 import {
   CandidateNotFoundError,
@@ -29,6 +30,11 @@ function entryDocumentFor(url: string, staticRoot: string): string {
   const path = url.split('?')[0] ?? '';
   if (path === '/admin' || path.startsWith('/admin/')) {
     if (existsSync(join(staticRoot, ADMIN_DOCUMENT))) return ADMIN_DOCUMENT;
+  }
+  const legalSlug = legalSlugFromPath(path);
+  if (legalSlug) {
+    const document = `legal-${legalSlug}.html`;
+    if (existsSync(join(staticRoot, document))) return document;
   }
   return 'index.html';
 }

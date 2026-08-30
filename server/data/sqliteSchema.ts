@@ -615,3 +615,18 @@ DROP TABLE IF EXISTS oauth_authorizations;
 DROP TABLE IF EXISTS oauth_connections;
 `;
 
+/**
+ * B173 — proof of what the candidate accepted and when. The version id names
+ * the exact published text, so a later re-issue cannot be mistaken for the one
+ * the candidate actually read.
+ */
+export const MIGRATION_22 = `
+CREATE TABLE IF NOT EXISTS legal_consents (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  version_id TEXT NOT NULL,
+  documents TEXT NOT NULL,
+  accepted_at TEXT NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS legal_consents_user ON legal_consents(user_id);
+`;

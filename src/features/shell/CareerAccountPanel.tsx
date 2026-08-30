@@ -35,6 +35,11 @@ import {
   sanitizeName,
 } from '../../../shared/accountValidation';
 import { pluralRu } from '../../../shared/pluralRu';
+import {
+  LEGAL_DOCS,
+  LEGAL_PACK_VERSION_ID,
+  legalPath,
+} from '../../../shared/legalRegistry';
 import { appVersionLine } from './appVersion';
 
 interface CareerAccountPanelProps {
@@ -81,6 +86,9 @@ export function CareerAccountPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // B173: the wizard's own registration accepts the same published pack as the
+  // signup page; the version travels with the request.
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const [notice, setNotice] = useState<string>();
   const closeButton = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
@@ -159,6 +167,10 @@ export function CareerAccountPanel({
       if (address) found.email = address;
       const secret = getPasswordError(password);
       if (secret) found.password = secret;
+      if (!legalAccepted) {
+        found.legalConsent =
+          'Примите пользовательское соглашение, политику обработки персональных данных и согласие — без этого регистрация невозможна.';
+      }
       setFieldErrors(found);
       if (Object.keys(found).length > 0) return;
     } else {
@@ -173,6 +185,7 @@ export function CareerAccountPanel({
               email: email.trim(),
               displayName: displayName.trim(),
               password,
+              legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
             })
           : await login(username.trim(), password);
       onIdentityChange(authenticated);
@@ -469,6 +482,17 @@ export function CareerAccountPanel({
                 required={mode === 'login'}
               />
             </AuthField>
+            {mode === 'register' ? (
+              <LegalConsentCheckbox
+                accepted={legalAccepted}
+                disabled={busy}
+                error={fieldErrors.legalConsent}
+                onChange={(next) => {
+                  setLegalAccepted(next);
+                  clearFieldError('legalConsent');
+                }}
+              />
+            ) : null}
             <button className="career-primary-button" disabled={busy}>
               {busy ? 'Сохраняем…' : mode === 'register' ? 'Создать и начать' : 'Войти'}
             </button>
@@ -740,5 +764,49 @@ function AuthField({
         <small className="career-account-field-hint">{hint}</small>
       ) : null}
     </label>
+  );
+}
+
+function LegalConsentCheckbox({
+  accepted,
+  disabled,
+  error,
+  onChange,
+}: {
+  accepted: boolean;
+  disabled: boolean;
+  error?: string;
+  onChange: (accepted: boolean) => void;
+}) {
+  return (
+    <div className="career-account-legal">
+      <label htmlFor="account-legal-consent">
+        <input
+          id="account-legal-consent"
+          type="checkbox"
+          checked={accepted}
+          disabled={disabled}
+          aria-invalid={error ? true : undefined}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        <span>
+          Я принимаю{' '}
+          {LEGAL_DOCS.map((doc, index) => (
+            <span key={doc.slug}>
+              {index > 0 ? (index === LEGAL_DOCS.length - 1 ? ' и ' : ', ') : null}
+              <a href={legalPath(doc.slug)} target="_blank" rel="noreferrer">
+                {doc.title.toLowerCase()}
+              </a>
+            </span>
+          ))}
+          . Мне исполнилось 16 лет.
+        </span>
+      </label>
+      {error ? (
+        <p className="career-account-legal-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }

@@ -11,7 +11,7 @@ import type {
   CandidateIdentity,
   CandidateStore,
 } from '../data/candidateStore';
-import { MIGRATION_2, MIGRATION_17, MIGRATION_18 } from '../data/sqliteSchema';
+import { MIGRATION_2, MIGRATION_17, MIGRATION_18, MIGRATION_22 } from '../data/sqliteSchema';
 import type {
   UserRole,
   AuthPrincipal,
@@ -501,6 +501,31 @@ export class AuthService implements SessionAuth {
     return this.getAccount(sessionToken);
   }
 
+  /**
+   * Stores what the candidate accepted at registration: the exact published
+   * version and the moment. Written in the same database as the account, so a
+   * user row can never exist without its consent row after B173.
+   */
+  recordLegalConsent(input: {
+    userId: string;
+    versionId: string;
+    documents: readonly string[];
+    acceptedAt?: string;
+  }): void {
+    this.database
+      .prepare(
+        `INSERT INTO legal_consents (id, user_id, version_id, documents, accepted_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(
+        randomUUID(),
+        input.userId,
+        input.versionId,
+        JSON.stringify([...input.documents]),
+        input.acceptedAt ?? new Date().toISOString(),
+      );
+  }
+
   async changePassword(
     sessionToken: string,
     currentPassword: string,
@@ -711,6 +736,11 @@ export class AuthService implements SessionAuth {
       this.database.exec(MIGRATION_18);
     } catch {
       // schema migration fail-open
+    }
+    try {
+      this.database.exec(MIGRATION_22);
+    } catch {
+      // legal consent table migration fail-open
     }
     // Administrators are provisioned only from configured seed accounts
     // (OPENQAREER_ADMIN_USERNAME/PASSWORD), and `seedAccounts` refuses to

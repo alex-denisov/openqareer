@@ -392,6 +392,8 @@ export async function register(input: {
   email: string;
   displayName: string;
   password: string;
+  /** Which published pack the candidate accepted on screen (B173). */
+  legalConsent: { versionId: string };
 }): Promise<AuthUser> {
   const response = await apiFetch('/api/v1/auth/register', {
     method: 'POST',

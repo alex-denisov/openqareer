@@ -16,6 +16,7 @@ import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
 import { SiteLink } from './SiteLink';
 import { LANDING_TITLE } from './siteTitles';
+import { LEGAL_DOCS, legalPath } from '../../../shared/legalRegistry';
 
 interface LandingPageProps {
   session?: AuthUser | null;
@@ -532,6 +533,24 @@ function LandingCta({ session, onNavigate }: LandingPageProps) {
   );
 }
 
+function LegalLinkGroup({ onNavigate }: { onNavigate: (path: string) => void }) {
+  return (
+    <div className="link-group">
+      <strong>Документы</strong>
+      {LEGAL_DOCS.map((doc) => (
+        <SiteLink
+          key={doc.slug}
+          to={legalPath(doc.slug)}
+          className="link-btn"
+          onNavigate={onNavigate}
+        >
+          {doc.navLabel}
+        </SiteLink>
+      ))}
+    </div>
+  );
+}
+
 function LandingFooter({
   session,
   onNavigate,
@@ -557,6 +576,7 @@ function LandingFooter({
             <a href="#tariffs">Тарифы</a>
             <a href="#faq">FAQ</a>
           </div>
+          <LegalLinkGroup onNavigate={onNavigate} />
           <div className="link-group">
             <strong>Доступ</strong>
             <SiteLink to="/login" className="link-btn" onNavigate={onNavigate}>Вход</SiteLink>

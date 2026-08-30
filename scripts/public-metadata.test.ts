@@ -33,7 +33,10 @@ describe('public discovery metadata', () => {
   it('publishes explicit crawler and LLM discovery files', () => {
     const robots = readFileSync('public/robots.txt', 'utf8');
     const llms = readFileSync('public/llms.txt', 'utf8');
-    expect(robots).toMatch(/^User-agent: \*\nAllow: \/\n$/u);
+    expect(robots).toMatch(/^User-agent: \*\nAllow: \/\n/u);
+    // B173: the published legal pack has to be discoverable, so robots names
+    // the sitemap that lists it.
+    expect(robots).toContain('Sitemap: https://openqareer.com/sitemap.xml');
     expect(llms).toMatch(/^# openqareer\n/u);
     expect(llms).toContain('https://openqareer.com');
     expect(llms).not.toMatch(/гарантирует (работу|оффер|интервью)/iu);

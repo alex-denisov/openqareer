@@ -8,6 +8,7 @@ import type { ServerConfig } from '../config';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import type { CoachProvider } from '../providers/coachProvider';
 import { AuthService } from './authService';
+import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
 
 /**
  * B089 — the administrator directory. The owner asked for an admin account and
@@ -128,7 +129,12 @@ async function register(
     method: 'POST',
     url: '/api/v1/auth/register',
     headers: { origin: 'http://localhost:3000' },
-    payload: { displayName, email, password: 'candidate-password-for-tests' },
+    payload: {
+      displayName,
+      email,
+      password: 'candidate-password-for-tests',
+      legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
+    },
   });
   expect(response.statusCode).toBe(201);
   return response.json().data as { id: string; username: string };
