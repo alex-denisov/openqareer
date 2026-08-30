@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import { MIGRATION_6, MIGRATION_12, MIGRATION_14, MIGRATION_15, MIGRATION_21 } from './sqliteSchema';
+import { MIGRATION_12, MIGRATION_14, MIGRATION_15, MIGRATION_21 } from './sqliteSchema';
 import { applyMigrations } from './store/applyMigrations';
 
 describe('vacancy source schema migration', () => {
@@ -139,6 +139,31 @@ describe('vacancy source schema migration', () => {
 });
 
 describe('oauth table cleanup migration', () => {
+  /**
+   * B163 slice 3 — the owner's decision is that the concept is gone, not that
+   * it is created and then dropped again. A fresh database must never hold the
+   * table, not even for the length of one migration.
+   */
+  it('never creates an oauth table on the way to a fresh database', () => {
+    const created: string[] = [];
+    const database = new DatabaseSync(':memory:', {
+      enableForeignKeyConstraints: true,
+    });
+    applyMigrations(database, (op) => {
+      op();
+      created.push(
+        ...(
+          database
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'oauth_%'")
+            .all() as Array<{ name: string }>
+        ).map((row) => row.name),
+      );
+    });
+    database.close();
+
+    expect(created).toEqual([]);
+  });
+
   it('leaves no oauth_% tables in a freshly migrated database', () => {
     const database = new DatabaseSync(':memory:', {
       enableForeignKeyConstraints: true,
@@ -156,9 +181,26 @@ describe('oauth table cleanup migration', () => {
     const database = new DatabaseSync(':memory:', {
       enableForeignKeyConstraints: true,
     });
+    // The legacy shape lives here, in the test that proves it is removed — the
+    // shipped migrations no longer carry it (B163).
     database.exec(`
       CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;
-      ${MIGRATION_6}
+      CREATE TABLE oauth_authorizations (
+        state_digest TEXT PRIMARY KEY,
+        candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+        platform TEXT NOT NULL CHECK (platform IN ('linkedin', 'hh')),
+        code_verifier_cipher TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      ) STRICT;
+      CREATE TABLE oauth_connections (
+        candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+        platform TEXT NOT NULL CHECK (platform IN ('linkedin', 'hh')),
+        connection_cipher TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (candidate_id, platform)
+      ) STRICT;
     `);
 
     const tablesBefore = database

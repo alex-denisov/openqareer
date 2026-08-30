@@ -148,27 +148,16 @@ CREATE TABLE market_profiles (
 ) STRICT;
 `;
 
+/**
+ * Was the platform-authorisation step. There is no official OAuth for hh.ru or
+ * LinkedIn and there cannot be one, so the owner removed the concept from the
+ * product entirely (ADR-009, B163). The tables it used to create are dropped
+ * by `MIGRATION_21` on databases that already have them; a database created
+ * from here on never holds them at all. The version number stays, because
+ * `schema_migrations` on live databases already records it.
+ */
 export const MIGRATION_6 = `
-CREATE TABLE oauth_authorizations (
-  state_digest TEXT PRIMARY KEY,
-  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
-  platform TEXT NOT NULL CHECK (platform IN ('linkedin', 'hh')),
-  code_verifier_cipher TEXT NOT NULL,
-  expires_at TEXT NOT NULL,
-  created_at TEXT NOT NULL
-) STRICT;
-
-CREATE INDEX oauth_authorizations_candidate
-  ON oauth_authorizations(candidate_id, platform, expires_at);
-
-CREATE TABLE oauth_connections (
-  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
-  platform TEXT NOT NULL CHECK (platform IN ('linkedin', 'hh')),
-  connection_cipher TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  PRIMARY KEY (candidate_id, platform)
-) STRICT;
+SELECT 1;
 `;
 
 export const MIGRATION_7 = `
@@ -610,6 +599,11 @@ CREATE TABLE candidate_workspaces (
 ) STRICT;
 `;
 
+/**
+ * Removes the platform-authorisation tables, tokens included, from databases
+ * created before B163. Dropping a table is the one place the old name has to
+ * survive: a database cannot be told to forget something it is not named.
+ */
 export const MIGRATION_21 = `
 DROP TABLE IF EXISTS oauth_authorizations;
 DROP TABLE IF EXISTS oauth_connections;

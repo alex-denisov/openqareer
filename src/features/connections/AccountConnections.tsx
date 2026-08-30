@@ -30,8 +30,9 @@ interface AccountConnectionsProps {
 }
 
 /**
- * The product has no platform OAuth: hh.ru and LinkedIn are read through the
- * candidate's own session in the desktop companion (owner decision, B156).
+ * The product has no platform authorisation flow: hh.ru and LinkedIn are read
+ * through the candidate's own session in the desktop companion (owner
+ * decision, B156).
  * This panel therefore offers session import, never an official-connect
  * button that could only end in "not configured".
  */

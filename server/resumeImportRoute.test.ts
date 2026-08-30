@@ -139,7 +139,7 @@ function nativeLinkedInImportBody(text = LINKEDIN_MARKDOWN) {
 }
 
 describe('POST /api/v1/candidate/resume/import', () => {
-  it('commits a native hh snapshot and exposes a reload-visible non-OAuth connection', async () => {
+  it('commits a native hh snapshot and exposes a reload-visible session connection', async () => {
     const { app, authorization } = await createApp();
 
     const imported = await app.inject({
