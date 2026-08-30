@@ -3,6 +3,9 @@ export type VacancySourceType =
   | 'remotive'
   | 'telegram'
   | 'rss'
+  // A JSON endpoint the board publishes for machines. Each such source has its
+  // own record shape, so the adapter is chosen by source id (B164).
+  | 'json_api'
   | 'career_site'
   | 'direct';
 
@@ -88,4 +91,10 @@ export interface VacancySourceConfig {
   lastErrorMessage?: string;
   itemsFoundTotal: number;
   itemsActiveTotal: number;
+  /**
+   * True when the endpoint answers nothing usable without a search term, so a
+   * query-less scheduled sync skips it instead of recording an empty success
+   * (B164).
+   */
+  requiresQuery?: boolean;
 }

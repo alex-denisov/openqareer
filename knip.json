@@ -1,10 +1,13 @@
 {
   "$schema": "./node_modules/knip/schema.json",
-  "ignoreBinaries": ["gitleaks"],
+  "ignoreBinaries": [
+    "gitleaks"
+  ],
   "ignore": [
     "public/assets/desktop-bootstrap.js",
     "scripts/capture-computed-styles.mjs",
     "scripts/ci_monitor.cjs",
-    "scripts/sync-local-provider-secrets.mjs"
+    "scripts/sync-local-provider-secrets.mjs",
+    "scripts/verify-vacancy-sources.ts"
   ]
 }

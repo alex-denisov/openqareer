@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { VacancySample } from '../domain/vacancy';
+import { rankVacanciesByQuery } from './vacancyRelevance';
 import { readBoundedJson } from './readBoundedJson';
 import {
   parseRetryAfter,
@@ -64,55 +65,21 @@ export async function searchRemotiveVacancies(
     observedAt,
     options.cache ?? (options.fetchImpl ? undefined : productionCache),
   );
-  const items = rankByQuery(corpus.items, value.text).slice(0, value.perPage);
+  const relevant = rankVacanciesByQuery(corpus.items, value.text);
+  const items = relevant.slice(0, value.perPage);
 
   return {
     source: 'remotive',
     query: value.text,
-    found: items.length,
+    // How many the snapshot actually holds for this query, counted before the
+    // page is cut. Counting after the slice made every answer read «N из N»
+    // and stored that as market analytics (B161 review §5).
+    found: relevant.length,
     fetchedAt: corpus.fetchedAt,
     items,
   };
 }
 
-
-/**
- * Ranks the bounded snapshot against the candidate's words.
- *
- * Remotive's own `search` parameter is ignored by the provider — a nonsense
- * query returns the identical feed (verified 2026-08-24) — so relevance has to
- * happen here. Requiring *every* term to appear verbatim made an ordinary
- * two-word search return nothing, which is how the honest source came to look
- * empty while fabricated vacancies looked full (B161). A posting that shares no
- * term with the query is still excluded; the rest are ordered by how much of
- * the query they actually match.
- */
-function rankByQuery(
-  items: VacancySample['items'],
-  query: string,
-): VacancySample['items'] {
-  const terms = query
-    .toLocaleLowerCase('en')
-    .split(/[^\p{L}\p{N}+#]+/u)
-    .filter((term) => term.length > 1);
-  // No usable term means no relevance signal. Returning the raw snapshot here
-  // would label unfiltered feed content as an answer to the query (B161).
-  if (terms.length === 0) return [];
-
-  return items
-    .map((item) => {
-      const searchable = [item.title, item.company, item.location, ...item.requirements]
-        .join(' ')
-        .toLocaleLowerCase('en');
-      const titleText = item.title.toLocaleLowerCase('en');
-      const matched = terms.filter((term) => searchable.includes(term));
-      const inTitle = terms.filter((term) => titleText.includes(term)).length;
-      return { item, score: matched.length * 2 + inTitle };
-    })
-    .filter((scored) => scored.score > 0)
-    .sort((left, right) => right.score - left.score)
-    .map((scored) => scored.item);
-}
 
 async function loadCorpus(
   fetchImpl: typeof fetch,

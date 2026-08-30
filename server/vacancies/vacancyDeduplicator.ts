@@ -5,6 +5,9 @@ const SOURCE_PRIORITY: Record<VacancySourceType, number> = {
   career_site: 5,
   direct: 5,
   hh: 4,
+  // A board's own JSON record carries structured fields the RSS summary drops,
+  // so it wins a tie against a feed describing the same vacancy (B164).
+  json_api: 3,
   remotive: 3,
   rss: 2,
   telegram: 1,

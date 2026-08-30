@@ -15,6 +15,8 @@ import { searchRemotiveVacancies } from './connectors/remotiveVacancySearch';
 import { VacancyIntelligenceService } from './vacancies/vacancyIntelligenceService';
 import { CareerCommandConnectorRouter } from './connectors/careerCommandConnectorRouter';
 import { HhConnector } from './connectors/hh/hhConnector';
+import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
+import { buildMultiSourceFetcher } from './vacancies/multiSourceFetcher';
 
 const config = readServerConfig(process.env);
 const candidateStore = new SqliteCandidateStore({
@@ -75,12 +77,18 @@ const vacancyIntelligenceService = new VacancyIntelligenceService({
 const careerCommandExecutor = new CareerCommandConnectorRouter({
   hh: new HhConnector(),
 });
+// Built here rather than inside `buildApp`, so the process that owns the
+// timers also owns the pool they fill (B164).
+const multiSourceEngine = new MultiSourceVacancyEngine({
+  fetcher: buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies),
+});
 const app = await buildApp({
   config,
   coachProvider,
   candidateStore,
   authService,
   vacancyIntelligenceService,
+  multiSourceVacancyEngine: multiSourceEngine,
   careerCommandExecutor,
   resumeStructurer: buildResumeStructurer({
     personalProvider: personalProviderId,
@@ -91,6 +99,7 @@ const app = await buildApp({
 });
 
 let vacancyRefreshTimer: NodeJS.Timeout | undefined;
+let multiSourceSyncTimer: NodeJS.Timeout | undefined;
 let documentRetentionTimer: NodeJS.Timeout | undefined;
 
 function runVacancyRefresh(): void {
@@ -105,6 +114,36 @@ function runVacancyRefresh(): void {
       app.log.error(
         { errorName: error instanceof Error ? error.name : 'UnknownError' },
         'vacancy-refresh-failed',
+      );
+    });
+}
+
+/**
+ * Fills the vacancy pool without anyone pressing a button. Until B164 the only
+ * caller of a sync was the admin route, so a fresh process — and therefore
+ * every deploy — served an empty «Возможности» (B161 review §2).
+ */
+function runMultiSourceSync(): void {
+  void multiSourceEngine
+    .syncDue()
+    .then((outcomes) => {
+      const synced = outcomes.filter((outcome) => outcome.status === 'healthy');
+      const failed = outcomes.filter((outcome) => outcome.status === 'error');
+      if (outcomes.length > 0) {
+        app.log.info(
+          {
+            synced: synced.length,
+            failed: failed.map((outcome) => outcome.sourceId),
+            kept: synced.reduce((sum, outcome) => sum + outcome.kept, 0),
+          },
+          'multi-source-sync-completed',
+        );
+      }
+    })
+    .catch((error: unknown) => {
+      app.log.error(
+        { errorName: error instanceof Error ? error.name : 'UnknownError' },
+        'multi-source-sync-failed',
       );
     });
 }
@@ -129,6 +168,7 @@ function runDocumentRetentionPurge(): void {
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, 'shutdown-started');
   if (vacancyRefreshTimer) clearInterval(vacancyRefreshTimer);
+  if (multiSourceSyncTimer) clearInterval(multiSourceSyncTimer);
   if (documentRetentionTimer) clearInterval(documentRetentionTimer);
   await app.close();
   candidateStore.close();
@@ -142,9 +182,13 @@ process.once('SIGTERM', () => void shutdown('SIGTERM'));
 try {
   await app.listen({ host: config.host, port: config.port });
   runVacancyRefresh();
+  runMultiSourceSync();
   runDocumentRetentionPurge();
   vacancyRefreshTimer = setInterval(runVacancyRefresh, 5 * 60 * 1_000);
   vacancyRefreshTimer.unref();
+  // Each source carries its own interval; the tick only asks which are due.
+  multiSourceSyncTimer = setInterval(runMultiSourceSync, 5 * 60 * 1_000);
+  multiSourceSyncTimer.unref();
   documentRetentionTimer = setInterval(
     runDocumentRetentionPurge,
     5 * 60 * 1_000,

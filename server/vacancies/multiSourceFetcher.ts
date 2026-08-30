@@ -1,4 +1,5 @@
 import { parseRssJobFeed } from '../connectors/rssFeedParser';
+import { normalizeJsonSource } from './jsonSourceAdapters';
 import { parseTelegramChannelHtml } from '../connectors/telegramChannelParser';
 import type { HhVacancySample } from '../connectors/hhVacancySearch';
 import type { VacancySample } from '../domain/vacancy';
@@ -84,21 +85,61 @@ async function fetchTelegramChannel(source: VacancySourceConfig): Promise<Unifie
   }
 }
 
-async function fetchRssFeed(source: VacancySourceConfig): Promise<UnifiedVacancy[]> {
+/**
+ * A board's own JSON endpoint. The observation time is taken before the record
+ * objects are built, so `observedAt` names the moment of the request (B164).
+ */
+async function fetchJsonApi(
+  source: VacancySourceConfig,
+  options?: { query?: string },
+): Promise<UnifiedVacancy[]> {
+  const url = withQuery(source, options?.query);
+  const res = await fetch(url, {
+    headers: { ...FETCH_HEADERS, Accept: 'application/json' },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
+  const observedAt = new Date().toISOString();
+  return normalizeJsonSource(source.id, await res.json(), { observedAt });
+}
+
+/** Only the sources whose live probe proved they honour a query get one. */
+const QUERY_PARAMETER: Readonly<Record<string, string>> = {
+  'src-getonbrd': 'query',
+  'src-habr-career': 'q',
+  'src-hh-rss': 'text',
+};
+
+function withQuery(source: VacancySourceConfig, query?: string): string {
+  const parameter = QUERY_PARAMETER[source.id];
+  if (!parameter || !query?.trim()) return source.targetUrl;
+  const url = new URL(source.targetUrl);
+  url.searchParams.set(parameter, query.trim());
+  return url.toString();
+}
+
+async function fetchRssFeed(
+  source: VacancySourceConfig,
+  options?: { query?: string },
+): Promise<UnifiedVacancy[]> {
   try {
-    const res = await fetch(source.targetUrl, {
-      headers: { ...FETCH_HEADERS, Accept: 'application/rss+xml, application/xml, text/xml' },
-      signal: AbortSignal.timeout(8_000),
+    const url = withQuery(source, options?.query);
+    const res = await fetch(url, {
+      headers: {
+        ...FETCH_HEADERS,
+        Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
+      },
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
     const xml = await res.text();
-    const vacancies = parseRssJobFeed(xml, {
+    const observedAt = new Date().toISOString();
+    return parseRssJobFeed(xml, {
       sourceId: source.id,
-      sourceUrl: source.targetUrl,
+      sourceUrl: url,
       companyName: source.name,
-      observedAt: new Date().toISOString(),
+      observedAt,
     });
-    return vacancies;
   } catch (reason) {
     throw reason instanceof Error ? reason : new Error('vacancy_source_unreachable');
   }
@@ -118,7 +159,10 @@ export function buildMultiSourceFetcher(hh: HhSearch, remotive: RemotiveSearch):
       return fetchTelegramChannel(source);
     }
     if (source.type === 'rss') {
-      return fetchRssFeed(source);
+      return fetchRssFeed(source, options);
+    }
+    if (source.type === 'json_api') {
+      return fetchJsonApi(source, options);
     }
     // An unimplemented source type has not been measured, so it must not report
     // a successful empty reading (B161).

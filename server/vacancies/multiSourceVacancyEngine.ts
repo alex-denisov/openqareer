@@ -5,12 +5,28 @@ import type {
   VacancySourceConfig,
 } from '../domain/unifiedVacancy';
 import { clusterVacancies } from './vacancyDeduplicator';
+import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancyMatcher';
 
 export type SourceFetcher = (
   source: VacancySourceConfig,
   options?: { query?: string },
 ) => Promise<UnifiedVacancy[]>;
+
+/**
+ * What one sync actually did. `syncSource` used to return `void`, so an admin
+ * route could only answer `success: true` — including for a run that failed
+ * outright and for a source id that does not exist (B161 review §3).
+ */
+export interface SourceSyncOutcome {
+  readonly sourceId: string;
+  readonly status: 'healthy' | 'error' | 'unknown_source' | 'disabled' | 'skipped_needs_query';
+  /** How many records the source returned before the freshness filter. */
+  readonly fetched: number;
+  /** How many of them the pool now holds for this source. */
+  readonly kept: number;
+  readonly message?: string;
+}
 
 export interface MatchedVacancyItem {
   cluster: VacancyCluster;
@@ -32,255 +48,6 @@ export interface VacancyQueryResult {
   statsBySource: Array<{ sourceId: string; sourceName: string; count: number }>;
 }
 
-/**
- * Sources the product knows how to contact. Counts and status stay empty
- * until a real fetch happens: a configured source is not an observed one
- * (B161).
- */
-const DEFAULT_SOURCES: VacancySourceConfig[] = [
-  {
-    id: 'hh',
-    name: 'hh.ru (Россия & СНГ)',
-    type: 'hh',
-    enabled: true,
-    targetUrl: 'https://api.hh.ru/vacancies',
-    refreshIntervalMinutes: 60,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'remotive',
-    name: 'Remotive (Global Remote)',
-    type: 'remotive',
-    enabled: true,
-    targetUrl: 'https://remotive.com/api/remote-jobs',
-    refreshIntervalMinutes: 120,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-habr-career',
-    name: 'Хабр Карьера',
-    type: 'rss',
-    enabled: true,
-    targetUrl: 'https://career.habr.com/vacancies/rss',
-    refreshIntervalMinutes: 60,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-superjob',
-    name: 'SuperJob IT',
-    type: 'rss',
-    enabled: true,
-    targetUrl: 'https://superjob.ru/export/it.xml',
-    refreshIntervalMinutes: 120,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-zarplata',
-    name: 'Зарплата.ру',
-    type: 'rss',
-    enabled: true,
-    targetUrl: 'https://zarplata.ru/export/vacancies.xml',
-    refreshIntervalMinutes: 120,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-trudvsem',
-    name: 'Работа в России (ТрудВсем)',
-    type: 'rss',
-    enabled: true,
-    targetUrl: 'https://opendata.trudvsem.ru/vacancies.xml',
-    refreshIntervalMinutes: 180,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-weworkremotely',
-    name: 'We Work Remotely',
-    type: 'rss',
-    enabled: true,
-    targetUrl: 'https://weworkremotely.com/categories/remote-programming-jobs.rss',
-    refreshIntervalMinutes: 60,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-remoteok',
-    name: 'RemoteOK',
-    type: 'rss',
-    enabled: true,
-    targetUrl: 'https://remoteok.com/api',
-    refreshIntervalMinutes: 60,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-itjobs',
-    name: 'Telegram @it_jobs',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/it_jobs',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-tproger',
-    name: 'Telegram @tproger_jobs',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/tproger_jobs',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-react',
-    name: 'Telegram @job_react',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/job_react',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-backend',
-    name: 'Telegram @forphptut',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/forphptut',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-devops',
-    name: 'Telegram @devops_jobs',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/devops_jobs',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-qa',
-    name: 'Telegram @qa_jobs',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/qa_jobs',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-product',
-    name: 'Telegram @product_jobs',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/product_jobs',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-datascience',
-    name: 'Telegram @datasciencejobs',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/datasciencejobs',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-relocate',
-    name: 'Telegram @relocate_today',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/relocate_today',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-gamedev',
-    name: 'Telegram @gamedevjob',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/gamedevjob',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-uiux',
-    name: 'Telegram @uiuxjobs',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/uiuxjobs',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-ios',
-    name: 'Telegram @ios_jobs',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/ios_jobs',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-marketing',
-    name: 'Telegram @marketing_jobs',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/marketing_jobs',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-golang',
-    name: 'Telegram @golang_jobs',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/golang_jobs',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-python',
-    name: 'Telegram @python_jobs_feed',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/python_jobs_feed',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-tg-java',
-    name: 'Telegram @javajob',
-    type: 'telegram',
-    enabled: true,
-    targetUrl: 'https://t.me/s/javajob',
-    refreshIntervalMinutes: 30,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-];
-
-
 const MAX_VACANCY_AGE_DAYS = 30;
 
 function isVacancyFresh(
@@ -299,12 +66,14 @@ export class MultiSourceVacancyEngine {
   private rawVacancies: Map<string, UnifiedVacancy> = new Map();
   private clusters: VacancyCluster[] = [];
   private fetcher?: SourceFetcher;
+  /** In-flight syncs, so a slow source cannot be started twice at once. */
+  private running: Map<string, Promise<SourceSyncOutcome>> = new Map();
 
   constructor(options?: {
     sources?: VacancySourceConfig[];
     fetcher?: SourceFetcher;
   }) {
-    const initial = options?.sources ?? DEFAULT_SOURCES;
+    const initial = options?.sources ?? DEFAULT_VACANCY_SOURCES;
     for (const src of initial) {
       this.sources.set(src.id, { ...src });
     }
@@ -389,9 +158,33 @@ export class MultiSourceVacancyEngine {
     };
   }
 
-  public async syncSource(sourceId: string): Promise<void> {
+  public async syncSource(
+    sourceId: string,
+    query?: string,
+    nowMs: number = Date.now(),
+  ): Promise<SourceSyncOutcome> {
+    const inFlight = this.running.get(sourceId);
+    if (inFlight) return inFlight;
+    const started = this.runSync(sourceId, query, nowMs).finally(() => {
+      this.running.delete(sourceId);
+    });
+    this.running.set(sourceId, started);
+    return started;
+  }
+
+  private async runSync(
+    sourceId: string,
+    query: string | undefined,
+    nowMs: number,
+  ): Promise<SourceSyncOutcome> {
     const source = this.sources.get(sourceId);
-    if (!source || !source.enabled) return;
+    if (!source) return { sourceId, status: 'unknown_source', fetched: 0, kept: 0 };
+    if (!source.enabled) return { sourceId, status: 'disabled', fetched: 0, kept: 0 };
+    // An endpoint that answers nothing usable without a search term must be
+    // skipped rather than recorded as an empty success (B164).
+    if (source.requiresQuery && !query?.trim()) {
+      return { sourceId, status: 'skipped_needs_query', fetched: 0, kept: 0 };
+    }
 
     try {
       // No transport means the source was never contacted. Reporting that as a
@@ -399,31 +192,80 @@ export class MultiSourceVacancyEngine {
       if (!this.fetcher) {
         throw new Error('vacancy_source_transport_unavailable');
       }
-      const fetched: UnifiedVacancy[] = await this.fetcher(source);
+      const fetched: UnifiedVacancy[] = await this.fetcher(
+        source,
+        query ? { query } : undefined,
+      );
 
       const freshFetched = fetched.filter((v) => isVacancyFresh(v.publishedAt));
 
-      for (const item of freshFetched) {
-        this.rawVacancies.set(item.id, item);
-      }
+      // A successful sync replaces this source's slice. Merging instead meant a
+      // vacancy the employer took down an hour after one reading stayed
+      // matchable — and openable — for thirty days (B161 review §1).
+      this.replaceSourceSlice(source.id, freshFetched);
 
-      source.lastSyncAt = new Date().toISOString();
+      // The clock of the run, so the next due check measures the same instant
+      // the scheduler used rather than drifting against wall time.
+      source.lastSyncAt = new Date(nowMs).toISOString();
       source.lastStatus = 'healthy';
       source.lastErrorMessage = undefined;
       source.itemsFoundTotal = freshFetched.length;
       source.itemsActiveTotal = freshFetched.filter((v) => v.status === 'active').length;
 
       this.recluster();
+      return {
+        sourceId,
+        status: 'healthy',
+        fetched: fetched.length,
+        kept: freshFetched.length,
+      };
     } catch (err) {
-      source.lastSyncAt = new Date().toISOString();
+      const message = err instanceof Error ? err.message : String(err);
+      source.lastSyncAt = new Date(nowMs).toISOString();
       source.lastStatus = 'error';
-      source.lastErrorMessage = err instanceof Error ? err.message : String(err);
+      source.lastErrorMessage = message;
+      // A failed reading is not evidence that the source went empty, so the
+      // slice it delivered last time stays until a successful run replaces it.
+      return { sourceId, status: 'error', fetched: 0, kept: 0, message };
     }
   }
 
-  public async syncAll(): Promise<void> {
+  /**
+   * Swaps everything this source contributed for what it just returned. Other
+   * sources are untouched, so one shrinking feed cannot empty the pool.
+   */
+  private replaceSourceSlice(sourceId: string, vacancies: UnifiedVacancy[]): void {
+    for (const [id, vacancy] of this.rawVacancies) {
+      if (vacancy.provenance?.sourceId === sourceId) this.rawVacancies.delete(id);
+    }
+    for (const vacancy of vacancies) {
+      this.rawVacancies.set(vacancy.id, vacancy);
+    }
+  }
+
+  /**
+   * Syncs the sources whose own refresh interval has elapsed. Without this
+   * nothing but an admin button ever filled the pool, so a fresh process — and
+   * therefore every deploy — served an empty «Возможности» until someone
+   * pressed it by hand (B161 review §2).
+   */
+  public async syncDue(nowMs: number = Date.now()): Promise<SourceSyncOutcome[]> {
+    const due = Array.from(this.sources.values()).filter(
+      (source) => source.enabled && !source.requiresQuery && this.isDue(source, nowMs),
+    );
+    return Promise.all(due.map((source) => this.syncSource(source.id, undefined, nowMs)));
+  }
+
+  private isDue(source: VacancySourceConfig, nowMs: number): boolean {
+    if (!source.lastSyncAt) return true;
+    const last = Date.parse(source.lastSyncAt);
+    if (Number.isNaN(last)) return true;
+    return nowMs - last >= source.refreshIntervalMinutes * 60_000;
+  }
+
+  public async syncAll(query?: string): Promise<SourceSyncOutcome[]> {
     const enabled = Array.from(this.sources.values()).filter((s) => s.enabled);
-    await Promise.all(enabled.map((s) => this.syncSource(s.id)));
+    return Promise.all(enabled.map((s) => this.syncSource(s.id, query)));
   }
 
   public recluster(): void {

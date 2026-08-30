@@ -36,9 +36,9 @@ describe('vacancy evidence honesty', () => {
   it('records an error, not a healthy empty result, when no transport exists', async () => {
     const engine = new MultiSourceVacancyEngine();
 
-    await engine.syncSource('src-tg-itjobs');
+    await engine.syncSource('src-tg-product');
 
-    const source = engine.getSource('src-tg-itjobs');
+    const source = engine.getSource('src-tg-product');
     expect(source?.lastStatus).toBe('error');
     expect(source?.lastErrorMessage).toBe('vacancy_source_transport_unavailable');
   });
@@ -46,7 +46,7 @@ describe('vacancy evidence honesty', () => {
   it('refuses to report a passing test run when no transport exists', async () => {
     const engine = new MultiSourceVacancyEngine();
 
-    const result = await engine.testSource('src-tg-itjobs', 'product manager');
+    const result = await engine.testSource('src-tg-product', 'product manager');
 
     expect(result.success).toBe(false);
   });
@@ -56,10 +56,10 @@ describe('vacancy evidence honesty', () => {
       fetcher: async () => [],
     });
 
-    await engine.syncSource('src-tg-itjobs');
+    await engine.syncSource('src-tg-product');
 
     expect(engine.getVacancies().total).toBe(0);
-    expect(engine.getSource('src-tg-itjobs')?.itemsFoundTotal).toBe(0);
+    expect(engine.getSource('src-tg-product')?.itemsFoundTotal).toBe(0);
   });
 
   it('reports an empty test run as empty instead of substituting fixtures', async () => {
@@ -67,7 +67,7 @@ describe('vacancy evidence honesty', () => {
       fetcher: async () => [],
     });
 
-    const result = await engine.testSource('src-tg-itjobs', 'product manager');
+    const result = await engine.testSource('src-tg-product', 'product manager');
 
     expect(result.count).toBe(0);
     expect(result.vacancies).toEqual([]);

@@ -188,9 +188,15 @@ async function testSource(deps: RouteDeps, request: FastifyRequest, reply: Fasti
 async function syncAllSources(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireAdmin(deps, request, reply);
   if (!principal) return;
-  await deps.multiSourceEngine.syncAll();
+  // Per source, not one blanket flag: a run where every source failed used to
+  // answer `success: true` with the size of the previous pool (B161 review §3).
+  const outcomes = await deps.multiSourceEngine.syncAll();
   return {
-    data: { success: true, count: deps.multiSourceEngine.getVacancies().total },
+    data: {
+      success: outcomes.every((outcome) => outcome.status !== 'error'),
+      count: deps.multiSourceEngine.getVacancies().total,
+      outcomes,
+    },
     meta: { requestId: request.id },
   };
 }
@@ -199,8 +205,21 @@ async function syncSource(deps: RouteDeps, request: FastifyRequest, reply: Fasti
   const principal = requireAdmin(deps, request, reply);
   if (!principal) return;
   const { sourceId } = request.params as { sourceId: string };
-  await deps.multiSourceEngine.syncSource(sourceId);
-  return { data: { success: true }, meta: { requestId: request.id } };
+  const outcome = await deps.multiSourceEngine.syncSource(sourceId);
+  if (outcome.status === 'unknown_source') {
+    return sendError(
+      reply,
+      request,
+      404,
+      'vacancy_source_not_found',
+      `Источник вакансий ${sourceId} не найден.`,
+      false,
+    );
+  }
+  return {
+    data: { success: outcome.status === 'healthy', outcome },
+    meta: { requestId: request.id },
+  };
 }
 
 async function toggleSource(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {

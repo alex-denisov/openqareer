@@ -1,0 +1,319 @@
+import { describe, expect, it } from 'vitest';
+import { normalizeJsonSource } from './jsonSourceAdapters';
+
+/**
+ * B164 — each board publishes its own record shape. The payloads below keep the
+ * field names the live endpoints actually returned on 2026-08-30, trimmed to
+ * what the adapter reads.
+ */
+const OBSERVED_AT = '2026-08-30T12:00:00.000Z';
+
+describe('json source adapters', () => {
+  it('normalises an arbeitnow record', () => {
+    const [vacancy] = normalizeJsonSource('src-arbeitnow', {
+      data: [
+        {
+          slug: 'senior-engineer-berlin-1',
+          company_name: 'Beispiel GmbH',
+          title: 'Senior Engineer',
+          description: '<p>Wir suchen</p>',
+          remote: true,
+          url: 'https://www.arbeitnow.com/jobs/companies/beispiel/senior-engineer-berlin-1',
+          tags: ['typescript'],
+          location: 'Berlin',
+          created_at: 1787000000,
+        },
+      ],
+    }, { observedAt: OBSERVED_AT });
+
+    expect(vacancy).toMatchObject({
+      title: 'Senior Engineer',
+      company: 'Beispiel GmbH',
+      location: 'Berlin',
+      isRemote: true,
+      url: 'https://www.arbeitnow.com/jobs/companies/beispiel/senior-engineer-berlin-1',
+      status: 'active',
+    });
+    expect(vacancy?.provenance).toMatchObject({
+      sourceId: 'src-arbeitnow',
+      sourceType: 'json_api',
+      observedAt: OBSERVED_AT,
+    });
+    expect(vacancy?.publishedAt).toBe(new Date(1787000000 * 1000).toISOString());
+  });
+
+  it('skips the licence record RemoteOK puts first in its array', () => {
+    const vacancies = normalizeJsonSource(
+      'src-remoteok',
+      [
+        { legal: 'API Terms of Service: please link back', last_updated: 1788060773 },
+        {
+          id: '1091234',
+          slug: 'remoteok-backend',
+          position: 'Backend Engineer',
+          company: 'Remote Co',
+          location: 'Worldwide',
+          url: 'https://remoteok.com/remote-jobs/1091234',
+          tags: ['golang'],
+          date: '2026-08-28T10:00:00+00:00',
+        },
+      ],
+      { observedAt: OBSERVED_AT },
+    );
+
+    expect(vacancies).toHaveLength(1);
+    expect(vacancies[0]).toMatchObject({
+      title: 'Backend Engineer',
+      company: 'Remote Co',
+      isRemote: true,
+    });
+  });
+
+  it('normalises a jobicy record', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-jobicy',
+      {
+        jobs: [
+          {
+            id: 152061,
+            url: 'https://jobicy.com/jobs/152061-director',
+            jobTitle: 'Director of Product Management',
+            companyName: 'PerfectServe',
+            jobGeo: 'USA',
+            jobLevel: 'Director',
+            jobType: ['Full-Time'],
+            jobExcerpt: 'What is PerfectServe?',
+            pubDate: '2026-08-27 09:00:00',
+          },
+        ],
+      },
+      { observedAt: OBSERVED_AT },
+    );
+
+    expect(vacancy).toMatchObject({
+      title: 'Director of Product Management',
+      company: 'PerfectServe',
+      location: 'USA',
+      experienceLevel: 'Director',
+      employmentType: 'Full-Time',
+    });
+  });
+
+  it('normalises a working nomads record', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-workingnomads',
+      [
+        {
+          url: 'https://www.workingnomads.com/job/go/1822420/',
+          title: 'Contract Attorney - Remote',
+          company_name: 'Sneed & Mitchell LLP',
+          description: '<p>At Sneed</p>',
+          category_name: 'Legal',
+          location: 'USA',
+          pub_date: '2026-08-29T08:00:00Z',
+        },
+      ],
+      { observedAt: OBSERVED_AT },
+    );
+
+    expect(vacancy).toMatchObject({
+      title: 'Contract Attorney - Remote',
+      company: 'Sneed & Mitchell LLP',
+      isRemote: true,
+    });
+  });
+
+  it('normalises a get on board record from its attributes envelope', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-getonbrd',
+      {
+        data: [
+          {
+            id: 'senior-ios-developer-bci-santiago',
+            type: 'job',
+            attributes: {
+              title: 'Senior iOS Developer',
+              description: '<p>Swift 6</p>',
+              remote: false,
+              company_name: 'BCI',
+              country: 'Chile',
+              published_at: 1787500000,
+              public_url: 'https://www.getonbrd.com/jobs/senior-ios-developer-bci-santiago',
+            },
+          },
+        ],
+      },
+      { observedAt: OBSERVED_AT },
+    );
+
+    expect(vacancy).toMatchObject({
+      title: 'Senior iOS Developer',
+      company: 'BCI',
+      location: 'Chile',
+      isRemote: false,
+      url: 'https://www.getonbrd.com/jobs/senior-ios-developer-bci-santiago',
+    });
+  });
+
+  it('normalises a trudvsem record from its nested vacancy envelope', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-trudvsem',
+      {
+        status: '200',
+        results: {
+          vacancies: [
+            {
+              vacancy: {
+                id: 'd3d38900-97d5-11f1-a7e8-cbebfa677ab1',
+                region: { region_code: '2600000000000', name: 'Ставропольский край' },
+                company: { name: 'БМГ' },
+                'creation-date': '2026-08-14',
+                salary_min: 100000,
+                salary_max: 120000,
+                'job-name': 'Врач-офтальмолог',
+                vac_url: 'https://trudvsem.ru/vacancy/card/1027700404797/d3d38900',
+                requirement: { education: 'Высшее', experience: 3 },
+                duty: 'Приём пациентов',
+              },
+            },
+          ],
+        },
+      },
+      { observedAt: OBSERVED_AT },
+    );
+
+    expect(vacancy).toMatchObject({
+      title: 'Врач-офтальмолог',
+      company: 'БМГ',
+      location: 'Ставропольский край',
+      url: 'https://trudvsem.ru/vacancy/card/1027700404797/d3d38900',
+    });
+    expect(vacancy?.salary).toMatchObject({ from: 100000, to: 120000, currency: 'RUR' });
+  });
+
+  it('refuses a payload it cannot read instead of reporting an empty success', () => {
+    expect(() => normalizeJsonSource('src-arbeitnow', { unexpected: true }, { observedAt: OBSERVED_AT }))
+      .toThrow(/vacancy_source_payload_unreadable/);
+  });
+
+  it('refuses a source it has no adapter for', () => {
+    expect(() => normalizeJsonSource('src-unknown', [], { observedAt: OBSERVED_AT })).toThrow(
+      /vacancy_source_adapter_missing/,
+    );
+  });
+
+  it('drops a record with no title, company or link rather than inventing one', () => {
+    const vacancies = normalizeJsonSource(
+      'src-remoteok',
+      [{ id: '1', position: '', company: '', url: '' }],
+      { observedAt: OBSERVED_AT },
+    );
+
+    expect(vacancies).toEqual([]);
+  });
+
+  it('reads the alternative field names each board also uses', () => {
+    const [remoteok] = normalizeJsonSource(
+      'src-remoteok',
+      [{ slug: 'alt', title: 'Platform Engineer', company: 'Alt Co', url: 'https://remoteok.com/1' }],
+      { observedAt: OBSERVED_AT },
+    );
+    expect(remoteok).toMatchObject({ title: 'Platform Engineer', id: 'src-remoteok:alt' });
+
+    const [getonbrd] = normalizeJsonSource(
+      'src-getonbrd',
+      {
+        data: [
+          {
+            id: 'job-1',
+            attributes: {
+              title: 'QA Engineer',
+              company: { name: 'Nested Co' },
+              city: 'Bogotá',
+              url: 'https://www.getonbrd.com/jobs/job-1',
+            },
+          },
+        ],
+      },
+      { observedAt: OBSERVED_AT },
+    );
+    expect(getonbrd).toMatchObject({ company: 'Nested Co', location: 'Bogotá' });
+
+    const [jobicy] = normalizeJsonSource(
+      'src-jobicy',
+      {
+        jobs: [
+          {
+            id: 7,
+            url: 'https://jobicy.com/jobs/7',
+            jobTitle: 'Writer',
+            companyName: 'Words Inc',
+            jobDescription: 'Long form',
+          },
+        ],
+      },
+      { observedAt: OBSERVED_AT },
+    );
+    expect(jobicy?.description).toBe('Long form');
+    expect(jobicy?.employmentType).toBeUndefined();
+  });
+
+  it('keeps an unreadable date out of the fresh window instead of calling it today', () => {
+    const [remoteok] = normalizeJsonSource(
+      'src-remoteok',
+      [{ id: '9', position: 'Engineer', company: 'Co', url: 'https://remoteok.com/9', date: 'вчера' }],
+      { observedAt: OBSERVED_AT },
+    );
+    const [arbeitnow] = normalizeJsonSource(
+      'src-arbeitnow',
+      {
+        data: [
+          {
+            slug: 'x',
+            title: 'Engineer',
+            company_name: 'Co',
+            url: 'https://www.arbeitnow.com/x',
+            created_at: 'not-a-number',
+          },
+        ],
+      },
+      { observedAt: OBSERVED_AT },
+    );
+    const [trudvsem] = normalizeJsonSource(
+      'src-trudvsem',
+      {
+        results: {
+          vacancies: [
+            {
+              vacancy: {
+                id: '1',
+                'job-name': 'Инженер',
+                company: { name: 'Компания' },
+                vac_url: 'https://trudvsem.ru/1',
+              },
+            },
+          ],
+        },
+      },
+      { observedAt: OBSERVED_AT },
+    );
+
+    expect(remoteok?.publishedAt).toBe(new Date(0).toISOString());
+    expect(arbeitnow?.publishedAt).toBe(new Date(0).toISOString());
+    expect(trudvsem?.publishedAt).toBe(new Date(0).toISOString());
+    expect(trudvsem?.salary).toBeUndefined();
+  });
+
+  it("refuses every adapter payload it cannot read", () => {
+    for (const sourceId of [
+      'src-remoteok',
+      'src-jobicy',
+      'src-workingnomads',
+      'src-getonbrd',
+      'src-trudvsem',
+    ]) {
+      expect(() => normalizeJsonSource(sourceId, { nothing: 'here' }, { observedAt: OBSERVED_AT }))
+        .toThrow(/vacancy_source_payload_unreadable/);
+    }
+  });
+});
