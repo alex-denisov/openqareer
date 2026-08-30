@@ -46,7 +46,11 @@ const MEASUREMENTS: Readonly<Record<string, VacancySourceMeasurement>> = {
     note: 'LATAM; 50 records come back, but none carries a company name or a public link, so none is usable as a vacancy card',
   },
   'src-workingnomads': { items: 44, observedAt: '2026-08-30' },
-  'src-trudvsem': { items: 20, observedAt: '2026-08-30', note: 'state open data, paginated' },
+  'src-trudvsem': {
+    items: 20,
+    observedAt: '2026-08-30',
+    note: 'Отвечает за ~2 с с клиента на российском маршруте и не отдаёт ответ за 60 с с прод-VM в EU (замерено на самой VM, 31 КБ за 60 с). Пригоден только через российский egress.',
+  },
   'src-himalayas': { items: 20, observedAt: '2026-08-30', note: 'atom feed' },
   'remotive': { items: 19, observedAt: '2026-08-30', note: 'whole public feed; ?search= is ignored by the provider' },
   'src-tg-product': { items: 20, observedAt: '2026-08-30' },
@@ -89,7 +93,12 @@ export const DEFAULT_VACANCY_SOURCES: readonly RegisteredVacancySource[] = [
     type: 'json_api',
     accessClass: 'api',
     market: 'Россия',
-    enabled: true,
+    // Работает локально и не работает с прод-VM: с самой машины ответ не
+    // приходит за 60 с. Держать источник включённым значило бы каждые три часа
+    // писать «error» о том, что и так известно (B164, прод-прогон 2026-08-30).
+    enabled: false,
+    disabledReason:
+      'Сервис не отвечает прод-машине в EU: замер с самой VM — 31 КБ за 60 с без завершения, тогда как с российского маршрута ответ приходит за ~2 с. Включить после появления российского egress для источников.',
     targetUrl: 'https://opendata.trudvsem.ru/api/v1/vacancies?limit=100',
     refreshIntervalMinutes: 180,
     itemsFoundTotal: 0,

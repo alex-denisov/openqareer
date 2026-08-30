@@ -28,6 +28,7 @@ describe('Telegram Channel Job Parser', () => {
   it('parses a full Telegram channel preview HTML into structured UnifiedVacancy records', () => {
     const vacancies = parseTelegramChannelHtml(sampleTelegramHtml, {
       channelName: 'it_jobs',
+      sourceId: 'src-tg-it_jobs',
       observedAt: '2026-08-18T00:00:00.000Z',
     });
 
@@ -53,6 +54,7 @@ describe('Telegram Channel Job Parser', () => {
     const parsed = parseTelegramJobPost(text, {
       postId: '555',
       channelName: 'datacareers',
+      sourceId: 'src-tg-datacareers',
       postUrl: 'https://t.me/datacareers/555',
       publishedAt: '2026-08-17T10:00:00.000Z',
       observedAt: '2026-08-18T00:00:00.000Z',
@@ -83,6 +85,7 @@ describe('Telegram Channel Job Parser', () => {
     const parsed = parseTelegramJobPost(resumeText, {
       postId: '1892',
       channelName: 'relocate_today',
+      sourceId: 'src-tg-relocate_today',
       postUrl: 'https://t.me/relocate_today/1892',
       publishedAt: '2026-08-17T10:00:00.000Z',
       observedAt: '2026-08-18T00:00:00.000Z',
@@ -103,6 +106,7 @@ describe('Telegram Channel Job Parser', () => {
     const parsed = parseTelegramJobPost(adText, {
       postId: '999',
       channelName: 'devops_jobs',
+      sourceId: 'src-tg-devops_jobs',
       postUrl: 'https://t.me/devops_jobs/999',
       publishedAt: '2026-08-17T10:00:00.000Z',
       observedAt: '2026-08-18T00:00:00.000Z',

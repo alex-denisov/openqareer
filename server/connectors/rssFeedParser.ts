@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { calculateVacancyFingerprint } from '../vacancies/vacancyFingerprint';
 import { extractSkillsFromText, parseSalaryText } from './telegramChannelParser';
@@ -35,7 +36,11 @@ function parseRssItem(itemXml: string, meta: RssFeedMeta): UnifiedVacancy | null
   });
 
   return {
-    id: `rss-${meta.sourceId}-${encodeURIComponent(guid).slice(0, 32)}`,
+    // A digest, not a prefix. Truncating the escaped guid to 32 characters
+    // collapsed every item of a feed whose links share a longer prefix —
+    // `https%3A%2F%2Fweworkremotely.com%2F` alone is 35 — so one sync that kept
+    // 79 vacancies left exactly one in the pool (found on the B164 prod walk).
+    id: `rss-${meta.sourceId}-${createHash('sha256').update(guid, 'utf8').digest('hex').slice(0, 32)}`,
     fingerprint,
     title: cleanTitle,
     company,

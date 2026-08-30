@@ -256,6 +256,12 @@ export function parseTelegramJobPost(
   meta: {
     postId: string;
     channelName: string;
+    /**
+     * The id the registry knows this source by. Writing `tg-<channel>` here
+     * instead meant the pool counted these vacancies under no source at all,
+     * and a later sync could never evict them (found on the B164 prod walk).
+     */
+    sourceId: string;
     postUrl: string;
     publishedAt: string;
     observedAt: string;
@@ -291,7 +297,7 @@ export function parseTelegramJobPost(
     url: meta.postUrl,
     provenance: {
       sourceType: 'telegram',
-      sourceId: `tg-${meta.channelName}`,
+      sourceId: meta.sourceId,
       sourceUrl: meta.postUrl,
       channelName: meta.channelName,
       observedAt: meta.observedAt,
@@ -303,7 +309,7 @@ export function parseTelegramJobPost(
 
 export function parseTelegramChannelHtml(
   html: string,
-  meta: { channelName: string; observedAt: string },
+  meta: { channelName: string; sourceId: string; observedAt: string },
 ): UnifiedVacancy[] {
   const vacancies: UnifiedVacancy[] = [];
   const messagePattern =
@@ -319,6 +325,7 @@ export function parseTelegramChannelHtml(
     const parsed = parseTelegramJobPost(contentHtml, {
       postId,
       channelName: meta.channelName,
+      sourceId: meta.sourceId,
       postUrl,
       publishedAt: datetime,
       observedAt: meta.observedAt,

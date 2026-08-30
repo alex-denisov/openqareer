@@ -75,6 +75,7 @@ async function fetchTelegramChannel(source: VacancySourceConfig): Promise<Unifie
     const html = await res.text();
     const vacancies = parseTelegramChannelHtml(html, {
       channelName,
+      sourceId: source.id,
       observedAt: new Date().toISOString(),
     });
     return vacancies;
