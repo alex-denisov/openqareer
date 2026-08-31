@@ -63,6 +63,21 @@ GMAT 720
 Гражданство: РФ
 `;
 
+const RESUME_WITHOUT_EDUCATION = `
+Алексей Смирнов
+Продуктовый аналитик
+
+Опыт
+2023 — настоящее время, FinCloud, продуктовый аналитик.
+Запустил центр продуктовой аналитики для трёх продуктовых направлений. Автоматизировал отчётность в Mixpanel и SQL, сократив подготовку регулярного отчёта с двух дней до двадцати минут.
+
+2021 — 2023, DataHub, аналитик данных.
+Построил сквозную аналитику клиентского пути и когорт по каналам. Снизил стоимость лида на 22 процента после сегментации каналов и креативов.
+
+Навыки
+SQL, продуктовая аналитика, Mixpanel, A/B-тесты, Python, Tableau, когортный анализ.
+`;
+
 describe('resumeParser', () => {
   it('extracts all resume sections from multi-page resume text', () => {
     const parsed = parseResumeContent(SYNTHETIC_4PAGE_RESUME);
@@ -194,5 +209,22 @@ Master's degree, Computer Science · (2008 - 2014)
     expect(parsed.courses[0].name).toContain('Reforge');
     expect(parsed.languages[0].name).toBe('English');
     expect(parsed.languages[0].cefr).toBe('C2');
+  });
+
+  it('invents no education when the source has no education section (B178)', () => {
+    const parsed = parseResumeContent(RESUME_WITHOUT_EDUCATION);
+
+    expect(parsed.experience.length).toBe(2);
+    expect(parsed.skills).toContain('SQL');
+    expect(parsed.education).toEqual([]);
+  });
+
+  it('keeps a section heading and a whole sentence out of education (B178)', () => {
+    const parsed = parseResumeContent(RESUME_WITHOUT_EDUCATION);
+    const institutions = parsed.education.map((item) => item.institution);
+
+    expect(institutions).not.toContain('Опыт');
+    expect(institutions).not.toContain('Навыки');
+    expect(institutions).not.toContain('Алексей Смирнов');
   });
 });

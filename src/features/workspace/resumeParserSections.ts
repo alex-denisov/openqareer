@@ -27,14 +27,131 @@ export function extractSkills(text: string): string[] {
   return [...new Set(items)].slice(0, 50);
 }
 
-export function extractEducation(text: string): ParsedResumeEducation[] {
+const SECTION_HEADINGS = new Set(
+  [
+    'опыт',
+    'опыт работы',
+    'навыки',
+    'ключевые навыки',
+    'о себе',
+    'контакты',
+    'языки',
+    'знание языков',
+    'образование',
+    'высшее образование',
+    'курсы',
+    'сертификаты',
+    'рекомендации',
+    'достижения',
+    'проекты',
+    'experience',
+    'skills',
+    'about',
+    'summary',
+    'education',
+    'languages',
+    'projects',
+  ].map((item) => item.toLowerCase()),
+);
+
+// An institution is a name, not a heading and not a sentence about the work
+// somebody did. Everything the parser cannot read as a name stays out of the
+// document rather than becoming a made-up school (B178).
+function readsAsInstitution(value: string): boolean {
+  const candidate = value.trim();
+  if (candidate.length < 2) {
+    return false;
+  }
+  if (SECTION_HEADINGS.has(candidate.toLowerCase().replace(/[:.]+$/u, ''))) {
+    return false;
+  }
+  if (/[.!?]$/u.test(candidate)) {
+    return false;
+  }
+  return candidate.split(/\s+/u).length <= 12;
+}
+
+// A resume that never names a school must not gain one. When the caller hands
+// over the whole document instead of an education section, the heading is the
+// only evidence that any of this text is about education at all (B178).
+function resolveEducationBody(
+  text: string,
+  requireHeading: boolean,
+): string | null {
   const lookahead = sectionLookahead('Образование');
   const regex = new RegExp(
     `(?:Высшее образование|Образование|Education)\\s*\\n+([\\s\\S]+?)${lookahead}`,
     'iu',
   );
   const match = text.match(regex);
-  const raw = match?.[1] ? match[1].trim() : text.trim();
+  if (match?.[1]) {
+    return match[1].trim();
+  }
+  return requireHeading ? null : text.trim();
+}
+
+function lastYearIn(line: string): string | undefined {
+  const matches = [...line.matchAll(/\b(19\d\d|20\d\d)\b/gu)];
+  return matches.length > 0 ? matches[matches.length - 1][0] : undefined;
+}
+
+interface ShapedEducationEntry {
+  institution: string;
+  qualification?: string;
+  endDate?: string;
+  consumedNext: boolean;
+}
+
+function shapeEducationEntry(input: {
+  line: string;
+  next: string | undefined;
+  inlineEndYear: string | undefined;
+  nextEndYear: string | undefined;
+  pendingYear: string | undefined;
+}): ShapedEducationEntry {
+  const { line, next, inlineEndYear, nextEndYear, pendingYear } = input;
+  const stripDates = (value: string): string =>
+    value.replace(/\s*·?\s*\([^)]*\d{4}[^)]*\)/u, '').trim();
+
+  if (inlineEndYear && !next) {
+    return {
+      institution: stripDates(line).replace(/\b(19\d\d|20\d\d)\b/u, '').trim(),
+      endDate: inlineEndYear,
+      consumedNext: false,
+    };
+  }
+  if (next && nextEndYear) {
+    // University on this line, degree with dates on the next (LinkedIn style).
+    return {
+      institution: line,
+      qualification: stripDates(next),
+      endDate: nextEndYear,
+      consumedNext: true,
+    };
+  }
+  if (next) {
+    return {
+      institution: line,
+      qualification: next,
+      endDate: pendingYear || inlineEndYear,
+      consumedNext: true,
+    };
+  }
+  return {
+    institution: line,
+    endDate: pendingYear || inlineEndYear,
+    consumedNext: false,
+  };
+}
+
+export function extractEducation(
+  text: string,
+  options: { requireHeading?: boolean } = {},
+): ParsedResumeEducation[] {
+  const raw = resolveEducationBody(text, options.requireHeading === true);
+  if (raw === null) {
+    return [];
+  }
   const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
   const result: ParsedResumeEducation[] = [];
 
@@ -46,38 +163,29 @@ export function extractEducation(text: string): ParsedResumeEducation[] {
       pendingYear = line;
       continue;
     }
-    const inlineYearMatches = [...line.matchAll(/\b(19\d\d|20\d\d)\b/gu)];
-    const inlineEndYear = inlineYearMatches.length > 0 ? inlineYearMatches[inlineYearMatches.length - 1][0] : undefined;
-
+    const inlineEndYear = lastYearIn(line);
     const next = lines[i + 1];
-    const nextYearMatches = next ? [...next.matchAll(/\b(19\d\d|20\d\d)\b/gu)] : [];
-    const nextEndYear = nextYearMatches.length > 0 ? nextYearMatches[nextYearMatches.length - 1][0] : undefined;
+    const nextEndYear = next ? lastYearIn(next) : undefined;
 
-    let institution = line;
-    let qualification: string | undefined;
-    let endDate: string | undefined;
-
-    if (inlineEndYear && !next) {
-      endDate = inlineEndYear;
-      institution = line.replace(/\s*·?\s*\([^)]*\d{4}[^)]*\)/u, '').replace(/\b(19\d\d|20\d\d)\b/u, '').trim();
-    } else if (next && nextEndYear) {
-      // University on line i, Degree with dates on line i+1 (LinkedIn style)
-      institution = line;
-      qualification = next.replace(/\s*·?\s*\([^)]*\d{4}[^)]*\)/u, '').trim();
-      endDate = nextEndYear;
+    const shaped = shapeEducationEntry({
+      line,
+      next,
+      inlineEndYear,
+      nextEndYear,
+      pendingYear,
+    });
+    const { institution, qualification, endDate } = shaped;
+    if (shaped.consumedNext) {
       i++;
-    } else if (next && !nextEndYear) {
-      institution = line;
-      qualification = next;
-      endDate = pendingYear || inlineEndYear;
-      i++;
-    } else {
-      endDate = pendingYear || inlineEndYear;
     }
     pendingYear = undefined;
 
+    if (!readsAsInstitution(institution)) {
+      continue;
+    }
+
     result.push({
-      institution: institution || 'Учебное заведение',
+      institution,
       qualification,
       endDate,
     });

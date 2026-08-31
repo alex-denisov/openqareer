@@ -128,7 +128,11 @@ export function parseResumeContent(rawText: string): ParsedResume {
     sections.get('education') ||
     sections.get('высшее образование') ||
     sections.get('образование');
-  const education = extractEducation(eduRaw ?? (sections.size <= 2 ? cleanText : ''));
+  const education = eduRaw
+    ? extractEducation(eduRaw)
+    : extractEducation(sections.size <= 2 ? cleanText : '', {
+        requireHeading: true,
+      });
 
   const coursesRaw = [
     sections.get('certifications'),
