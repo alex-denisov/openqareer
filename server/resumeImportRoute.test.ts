@@ -587,4 +587,36 @@ describe('POST /api/v1/candidate/resume/import', () => {
     // is refused as an untrusted origin rather than as a missing session.
     expect(response.statusCode).toBe(403);
   });
+
+  it('hands the model the same repaired text the rules parser reads (B178)', async () => {
+    const seen: string[] = [];
+    const recordingStructurer: ResumeStructurer = {
+      async structure(sourceText: string) {
+        seen.push(sourceText);
+        return null;
+      },
+    };
+    const { app, authorization } = await createApp(recordingStructurer);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: importBody(
+        [
+          'Иванова Мария',
+          'Проживает : Казань',
+          'maria.ivanova@example.com',
+          'Желаемая должность и зарплата',
+          'Директор по маркетингу ( CMO )',
+        ].join('\n'),
+      ),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toContain('Проживает: Казань');
+    expect(seen[0]).toContain('Директор по маркетингу (CMO)');
+    expect(seen[0]).not.toContain('Проживает :');
+  });
 });

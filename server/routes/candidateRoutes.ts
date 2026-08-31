@@ -24,6 +24,7 @@ import {
 } from '../domain/resumeImport';
 import { preferStructuredResume } from '../domain/resumeStructuring';
 import { parseResumeContent } from '../../src/features/workspace/resumeParser';
+import { normalizeResumeSourceText } from '../../src/features/workspace/resumeSourceText';
 import type { CandidateStore } from '../data/candidateStore';
 import { CandidateDocumentRetentionError } from '../data/sqliteCandidateStore';
 import {
@@ -100,9 +101,14 @@ async function readResume(
   resume: ReturnType<typeof parseResumeContent>;
   structuredBy: 'model' | 'rules';
 }> {
-  const deterministic = parseResumeContent(text);
+  // Both readers must see the same document. The model was handed the raw
+  // extraction while only the rules parser repaired it, so on an hh.ru export
+  // the model read `Проживает : Москва`, echoed the spacing into every title and
+  // lost the fields the rules parser had already found (B178).
+  const source = normalizeResumeSourceText(text);
+  const deterministic = parseResumeContent(source);
   if (!structurer) return { resume: deterministic, structuredBy: 'rules' };
-  const structured = await structurer.structure(text);
+  const structured = await structurer.structure(source);
   if (!structured) return { resume: deterministic, structuredBy: 'rules' };
   return {
     resume: preferStructuredResume(structured, deterministic),
