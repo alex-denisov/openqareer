@@ -300,7 +300,114 @@ function assertFallbackImportable(
   }
 }
 
-// eslint-disable-next-line max-lines-per-function
+/**
+ * A word space and a column break are both "some horizontal distance", so the
+ * threshold is measured from the page instead of guessed: four times the median
+ * gap on the page, never below six units. On a real hh.ru export the median gap
+ * is ~2.3 and every column break is ~15 or wider, so the two never overlap.
+ */
+function columnGapThreshold(
+  lines: ReadonlyArray<{ items: PdfTextItem[] }>,
+): number {
+  const gaps: number[] = [];
+  for (const line of lines) {
+    const sorted = [...line.items].sort(
+      (a, b) =>
+        ((a.transform?.[4] as number) ?? 0) - ((b.transform?.[4] as number) ?? 0),
+    );
+    for (let i = 1; i < sorted.length; i++) {
+      const previous = sorted[i - 1];
+      const end = ((previous.transform?.[4] as number) ?? 0) + (previous.width ?? 0);
+      gaps.push(((sorted[i].transform?.[4] as number) ?? 0) - end);
+    }
+  }
+  if (gaps.length === 0) return Number.POSITIVE_INFINITY;
+  const sortedGaps = [...gaps].sort((a, b) => a - b);
+  const median = sortedGaps[Math.floor(sortedGaps.length / 2)];
+  return Math.max(6, median * 4);
+}
+
+/**
+ * A LinkedIn export puts Contact, Top Skills and Languages in a narrow left
+ * rail; read as one page they interleave with the profile body. Returns `null`
+ * when the page is not that layout.
+ */
+function linkedInSidebarText(textItems: PdfTextItem[]): string | null {
+  const byY = (a: PdfTextItem, b: PdfTextItem) =>
+    ((b.transform?.[5] as number) ?? 0) - ((a.transform?.[5] as number) ?? 0);
+  const leftItems = textItems.filter(
+    (it) => ((it.transform?.[4] as number) ?? 0) < 200,
+  );
+  const rightItems = textItems.filter(
+    (it) => ((it.transform?.[4] as number) ?? 0) >= 200,
+  );
+
+  const isSidebarPage =
+    leftItems.length >= 4 &&
+    rightItems.length >= 4 &&
+    leftItems.some((it) =>
+      /Contact|Top Skills|Languages|Certifications/i.test(it.str),
+    );
+  if (!isSidebarPage) return null;
+
+  leftItems.sort(byY);
+  rightItems.sort(byY);
+  const rightText = rightItems.map((it) => it.str.trim()).filter(Boolean).join('\n');
+  const leftText = leftItems.map((it) => it.str.trim()).filter(Boolean).join('\n');
+  return `${rightText}\n\n${leftText}`;
+}
+
+function groupItemsIntoLines(
+  textItems: PdfTextItem[],
+): Array<{ y: number; items: PdfTextItem[] }> {
+  const lines: Array<{ y: number; items: PdfTextItem[] }> = [];
+  const sortedByY = [...textItems].sort(
+    (a, b) =>
+      ((b.transform?.[5] as number) ?? 0) - ((a.transform?.[5] as number) ?? 0),
+  );
+
+  for (const item of sortedByY) {
+    const y = (item.transform?.[5] as number) ?? 0;
+    let matchedLine = lines.find((l) => Math.abs(l.y - y) <= 4);
+    if (!matchedLine) {
+      matchedLine = { y, items: [] };
+      lines.push(matchedLine);
+    }
+    matchedLine.items.push(item);
+  }
+
+  lines.sort((a, b) => b.y - a.y);
+  return lines;
+}
+
+/** One visual line becomes one or more text lines, split at its column breaks. */
+function renderLine(items: PdfTextItem[], columnGap: number): string {
+  const sorted = [...items].sort(
+    (a, b) =>
+      ((a.transform?.[4] as number) ?? 0) - ((b.transform?.[4] as number) ?? 0),
+  );
+
+  return sorted
+    .map((it, index) => {
+      const text = it.str.trim();
+      if (!text) return '';
+      if (index === 0) return text;
+      const previous = sorted[index - 1];
+      const previousEnd =
+        ((previous.transform?.[4] as number) ?? 0) + (previous.width ?? 0);
+      const gap = ((it.transform?.[4] as number) ?? 0) - previousEnd;
+      // A word space grows with the type size, so a name set in 20pt must not be
+      // torn apart by a threshold measured on 8pt body text.
+      const limit = Math.max(columnGap, (it.height ?? 0) * 1.1);
+      return gap > limit ? `\n${text}` : ` ${text}`;
+    })
+    .join('')
+    .split('\n')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
 export function normalizeExtractedPageText(
   items: Array<PdfTextItem | PdfMarkedContent>,
 ): string {
@@ -320,68 +427,22 @@ export function normalizeExtractedPageText(
   );
 
   if (hasTransforms) {
-    const leftItems = textItems.filter(
-      (it) => ((it.transform?.[4] as number) ?? 0) < 200,
-    );
-    const rightItems = textItems.filter(
-      (it) => ((it.transform?.[4] as number) ?? 0) >= 200,
-    );
+    const sidebarText = linkedInSidebarText(textItems);
+    if (sidebarText !== null) return sidebarText;
 
-    const isLinkedInSidebarPage =
-      leftItems.length >= 4 &&
-      rightItems.length >= 4 &&
-      leftItems.some((it) =>
-        /Contact|Top Skills|Languages|Certifications/i.test(it.str),
-      );
+    const lines = groupItemsIntoLines(textItems);
 
-    if (isLinkedInSidebarPage) {
-      leftItems.sort(
-        (a, b) =>
-          ((b.transform?.[5] as number) ?? 0) -
-          ((a.transform?.[5] as number) ?? 0),
-      );
-      rightItems.sort(
-        (a, b) =>
-          ((b.transform?.[5] as number) ?? 0) -
-          ((a.transform?.[5] as number) ?? 0),
-      );
-
-      const rightText = rightItems.map((it) => it.str.trim()).filter(Boolean).join('\n');
-      const leftText = leftItems.map((it) => it.str.trim()).filter(Boolean).join('\n');
-      return `${rightText}\n\n${leftText}`;
-    }
-
-    const lines: Array<{ y: number; items: PdfTextItem[] }> = [];
-    const sortedByY = [...textItems].sort(
-      (a, b) =>
-        ((b.transform?.[5] as number) ?? 0) -
-        ((a.transform?.[5] as number) ?? 0),
-    );
-
-    for (const item of sortedByY) {
-      const y = (item.transform?.[5] as number) ?? 0;
-      let matchedLine = lines.find((l) => Math.abs(l.y - y) <= 4);
-      if (!matchedLine) {
-        matchedLine = { y, items: [] };
-        lines.push(matchedLine);
-      }
-      matchedLine.items.push(item);
-    }
-
-    lines.sort((a, b) => b.y - a.y);
+    // hh.ru lays the page out in columns: a heading sits far to the left of its
+    // value, and the skill cloud is a row of separate tags. Joined with a plain
+    // space they become `Навыки Project management VMware …` and
+    // `Знание языков Русский`, and no downstream heuristic can take them apart
+    // again. The page itself says where the breaks are — the gap between two
+    // items in a column break is an order of magnitude wider than a word space
+    // (B178).
+    const columnGap = columnGapThreshold(lines);
 
     return lines
-      .map((line) => {
-        line.items.sort(
-          (a, b) =>
-            ((a.transform?.[4] as number) ?? 0) -
-            ((b.transform?.[4] as number) ?? 0),
-        );
-        return line.items
-          .map((it) => it.str.trim())
-          .filter(Boolean)
-          .join(' ');
-      })
+      .map((line) => renderLine(line.items, columnGap))
       .filter(Boolean)
       .join('\n')
       .trim();

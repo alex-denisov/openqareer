@@ -62,6 +62,9 @@ export default tseslint.config(
       'output/**',
       'playwright-report/**',
       'prototypes/**',
+      // Local-only candidate material and throwaway parsing harnesses; git-ignored
+      // and never part of a release.
+      'private-research/**',
       'test-results/**',
       '.serena/**',
       'src-tauri/target/**',

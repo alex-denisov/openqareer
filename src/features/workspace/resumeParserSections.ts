@@ -27,6 +27,16 @@ export function extractSkills(text: string): string[] {
   return [...new Set(items)].slice(0, 50);
 }
 
+const EDUCATION_LEVELS = new Set([
+  'высшее',
+  'неоконченное высшее',
+  'незаконченное высшее',
+  'среднее специальное',
+  'среднее',
+  'начальное профессиональное',
+  'higher education',
+]);
+
 const SECTION_HEADINGS = new Set(
   [
     'опыт',
@@ -152,7 +162,14 @@ export function extractEducation(
   if (raw === null) {
     return [];
   }
-  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+  // hh.ru prints the level of education in its own column — `Высшее` is not the
+  // name of a school and must not become one, nor the degree of the school
+  // above it, so it is dropped before the lines are paired up (B178).
+  const lines = raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l) => !EDUCATION_LEVELS.has(l.toLowerCase().replace(/[.:]+$/u, '')));
   const result: ParsedResumeEducation[] = [];
 
   let pendingYear: string | undefined;
@@ -163,6 +180,7 @@ export function extractEducation(
       pendingYear = line;
       continue;
     }
+
     const inlineEndYear = lastYearIn(line);
     const next = lines[i + 1];
     const nextEndYear = next ? lastYearIn(next) : undefined;

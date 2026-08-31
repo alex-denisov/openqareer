@@ -79,6 +79,13 @@ function parseDocumentSections(text: string): Map<string, string> {
   return sections;
 }
 
+/**
+ * Words that make a line read as the name of a role rather than a company, an
+ * industry or a sentence about the work.
+ */
+const ROLE_TITLE_WORDS =
+  /директор|руководител|начальник|менеджер|продакт|продукт|разработчик|инженер|аналитик|лид|дизайнер|архитектор|администратор|head|lead|director|manager|developer|engineer|specialist|officer|owner|architect|vp|cto|cio|ceo|coo|founder|consultant/iu;
+
 // eslint-disable-next-line max-lines-per-function
 export function parseResumeContent(rawText: string): ParsedResume {
   // The extractor hands over Markdown; every heuristic below assumes flat text.
@@ -462,11 +469,34 @@ function extractExperience(text: string): ParsedResumeExperience[] {
 
     if (!employer || !title) {
       const candidates: string[] = [];
-      for (let k = bodyStartIdx; k < Math.min(nextEntryIdx, bodyStartIdx + 4); k++) {
+      // hh.ru already gave the employer on the date line, so the only thing
+      // still missing is the title — and an industry line or a wrapped bullet
+      // must not be mistaken for one (B178).
+      let insideIndustryBlock = Boolean(employer) && !title;
+      for (let k = bodyStartIdx; k < Math.min(nextEntryIdx, bodyStartIdx + 12); k++) {
         const l = lines[k];
-        if (l.startsWith('•') || l.startsWith('-') || l.startsWith('*') || l.startsWith('●')) break;
+        const isBullet =
+          l.startsWith('•') || l.startsWith('-') || l.startsWith('*') || l.startsWith('●');
+        // hh.ru prints the employer's industry list — with its own bullets —
+        // between the dates and the job title, so a bullet before any candidate
+        // means we are still inside that block and the title is still ahead
+        // (B178). Once a candidate exists, a bullet is the body and we stop.
+        if (isBullet) {
+          if (candidates.length === 0) {
+            insideIndustryBlock = true;
+            continue;
+          }
+          break;
+        }
+        // Inside that block a wrapped bullet and the next industry line both
+        // look like ordinary short lines, so only a line that reads as a role
+        // name ends the search. Finding none leaves the title unset, exactly as
+        // before this rule existed.
+        if (insideIndustryBlock && !ROLE_TITLE_WORDS.test(l)) continue;
         if (/^\d+\s+(?:год|года|лет|месяц|месяца|месяцев)/iu.test(l)) continue;
         if (/^(?:Информационные технологии|Телекоммуникации|Финансовый сектор)/iu.test(l)) continue;
+        // A sentence is the description of the role, never its name.
+        if (l.length > 120) continue;
         candidates.push(l);
         if (candidates.length >= 2) break;
       }
@@ -475,11 +505,11 @@ function extractExperience(text: string): ParsedResumeExperience[] {
         const c0 = candidates[0];
         const c1 = candidates[1];
         const c1IsTitle =
-          /директор|руководитель|менеджер|продакт|продукт|разработчик|инженер|аналитик|лид|дизайнер|head|lead|director|manager|developer|engineer|specialist|officer|vp|founder|consultant/iu.test(
+          ROLE_TITLE_WORDS.test(
             c1,
           );
         const c0IsTitle =
-          /директор|руководитель|менеджер|продакт|продукт|разработчик|инженер|аналитик|лид|дизайнер|head|lead|director|manager|developer|engineer|specialist|officer|vp|founder|consultant/iu.test(
+          ROLE_TITLE_WORDS.test(
             c0,
           );
 
@@ -502,7 +532,7 @@ function extractExperience(text: string): ParsedResumeExperience[] {
       } else if (candidates.length === 1) {
         const c0 = candidates[0];
         const c0IsTitle =
-          /директор|руководитель|менеджер|продакт|продукт|разработчик|инженер|аналитик|лид|дизайнер|head|lead|director|manager|developer|engineer|specialist|officer|vp|founder|consultant/iu.test(
+          ROLE_TITLE_WORDS.test(
             c0,
           );
         if (!title && c0IsTitle) {

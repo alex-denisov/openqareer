@@ -78,6 +78,60 @@ const RESUME_WITHOUT_EDUCATION = `
 SQL, продуктовая аналитика, Mixpanel, A/B-тесты, Python, Tableau, когортный анализ.
 `;
 
+// The hh.ru PDF export arrives from pdf.js with a space before every
+// punctuation mark and around in-word hyphens, because each token is its own
+// text item. Synthetic person; shape copied from a real export (B178).
+const HH_PDF_SPACED_PUNCTUATION = `
+Иванова Мария
+Женщина , 34 года , родилась 12 июля 1991
++7 (900) 1234567 — предпочитаемый способ связи
+maria.ivanova@example.com
+telegram: @maria_ivanova
+Проживает : Казань
+Гражданство : Россия , есть разрешение на работу : Россия
+Готов к переезду , готов к командировкам
+Желаемая должность и зарплата
+Директор по маркетингу
+Специализации :
+— Директор по маркетингу
+Тип занятости : полная занятость
+Опыт работы — 7 лет
+Май 2021 — ООО " Ромашка "
+Август 2025 Казань , romashka.ru/
+4 года 3 месяца
+Информационные технологии , системная интеграция , интернет
+• Разработка программного обеспечения
+Директор по маркетингу ( CMO )
+Руководила отделом из 20 человек . Отвечала за бизнес - процессы отдела .
+Ключевые навыки
+Управление командой Бюджетирование
+Digital - маркетинг
+Знание языков
+Русский — Родной
+Английский — C1
+`;
+
+// LinkedIn prints `April 2023 - October 2025`; an education block prints the
+// level in its own column. Synthetic person (B178).
+const LINKEDIN_PDF_SHAPE = `
+Maria Ivanova
+Head of Analytics | Data Leader
+Kazan, Russia
+
+Experience
+Romashka
+Head of Analytics
+April 2023 - October 2025 (2 years 7 months)
+• Led a team of 12 analysts
+
+Education
+Высшее
+2010
+Kazan Federal University
+Высшее
+Marketing, Master
+`;
+
 describe('resumeParser', () => {
   it('extracts all resume sections from multi-page resume text', () => {
     const parsed = parseResumeContent(SYNTHETIC_4PAGE_RESUME);
@@ -226,5 +280,50 @@ Master's degree, Computer Science · (2008 - 2014)
     expect(institutions).not.toContain('Опыт');
     expect(institutions).not.toContain('Навыки');
     expect(institutions).not.toContain('Алексей Смирнов');
+  });
+
+  it('reads contacts, city and target role out of a spaced-punctuation hh.ru export (B178)', () => {
+    const parsed = parseResumeContent(HH_PDF_SPACED_PUNCTUATION);
+
+    expect(parsed.fullName).toBe('Иванова Мария');
+    expect(parsed.contact.location).toBe('Казань');
+    expect(parsed.contact.email).toBe('maria.ivanova@example.com');
+    expect(parsed.contact.phone).toContain('900');
+    expect(parsed.targetRole).toBe('Директор по маркетингу');
+  });
+
+  it('reads the real job title of an hh.ru position, not a placeholder (B178)', () => {
+    const parsed = parseResumeContent(HH_PDF_SPACED_PUNCTUATION);
+
+    expect(parsed.experience.length).toBe(1);
+    expect(parsed.experience[0].employer).toContain('Ромашка');
+    expect(parsed.experience[0].title).toContain('Директор по маркетингу');
+    expect(parsed.experience[0].title).not.toBe('Специалист');
+    expect(parsed.experience[0].startDate).toBe('2021-05');
+    expect(parsed.experience[0].endDate).toBe('2025-08');
+  });
+
+  it('keeps section headings out of skills and languages (B178)', () => {
+    const parsed = parseResumeContent(HH_PDF_SPACED_PUNCTUATION);
+
+    expect(parsed.skills).not.toContain('Знание языков');
+    expect(parsed.skills).not.toContain('Дополнительная информация');
+    expect(parsed.languages.map((l) => l.name)).toEqual(['Русский', 'Английский']);
+  });
+
+  it('does not split October on the word "to" in a LinkedIn period (B178)', () => {
+    const parsed = parseResumeContent(LINKEDIN_PDF_SHAPE);
+
+    expect(parsed.experience[0].startDate).toBe('2023-04');
+    expect(parsed.experience[0].endDate).toBe('2025-10');
+  });
+
+  it('never turns the level of education into a school or a degree (B178)', () => {
+    const parsed = parseResumeContent(LINKEDIN_PDF_SHAPE);
+
+    expect(parsed.education.length).toBe(1);
+    expect(parsed.education[0].institution).toBe('Kazan Federal University');
+    expect(parsed.education[0].qualification).toBe('Marketing, Master');
+    expect(parsed.education[0].endDate).toBe('2010');
   });
 });

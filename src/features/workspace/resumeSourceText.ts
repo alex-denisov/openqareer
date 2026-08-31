@@ -33,6 +33,7 @@ export function normalizeResumeSourceText(raw: string): string {
     stripEmphasis,
     resolveLinks,
     spaceAfterLeadingDash,
+    tightenTokenSpacing,
   ].reduce((text, step) => step(text), raw.replace(/\r\n?/gu, '\n'));
   return collapseBlankLines(withoutMarkup);
 }
@@ -139,6 +140,34 @@ function resolveLinks(text: string): string {
  */
 function spaceAfterLeadingDash(text: string): string {
   return text.replace(/(\s[—–])(?=[^\s—–])/gu, '$1 ');
+}
+
+/**
+ * pdf.js hands back one text item per token, so an hh.ru export arrives as
+ * `Проживает : Москва`, `Мужчина , 37 лет` and `ИТ - директор`. Every heuristic
+ * downstream looks for `Проживает:` and never matches, so the candidate loses
+ * their city, contacts and target role (B178).
+ *
+ * Only spacing is repaired: no word is added, removed or reordered. The in-word
+ * hyphen is joined only between two letters, so a line-leading `- ` bullet and
+ * a real dash between numbers stay as they are.
+ */
+function tightenTokenSpacing(text: string): string {
+  return text
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/\s+([,;:.!?])(\s|$)/gu, '$1$2')
+        .replace(/([«(])\s+/gu, '$1')
+        .replace(/\s+([»)])/gu, '$1')
+        // A straight quote is both the opening and the closing mark, so it is
+        // only tightened as a pair: `АО " Россети Цифра "` keeps the space that
+        // separates it from `АО`.
+        .replace(/"\s*([^"\n]*?)\s*"/gu, '"$1"')
+        .replace(/(\p{L})\s-\s(\p{L})/gu, '$1-$2')
+        .replace(/(\d)-\s+(\p{L})/gu, '$1-$2'),
+    )
+    .join('\n');
 }
 
 function collapseBlankLines(text: string): string {

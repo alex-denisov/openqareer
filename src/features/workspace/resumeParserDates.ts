@@ -6,7 +6,10 @@ export const HH_START_DATE_REGEX = /^(?:(?:[А-Яа-яЁёA-Za-z]+)\s+)?(?:19\d\
 export function cleanPeriodDates(period: string): { start?: string; end?: string; current: boolean } {
   const cleaned = period.replace(/\s*\([^)]*\)/gu, '').replace(/\s*·.*$/gu, '').trim();
   const isCurrent = /настоящее|наст\.|present|current/iu.test(cleaned);
-  const parts = cleaned.split(/\s*(?:—|-|to|–)\s*/u);
+  // `to` is only a separator when it stands alone: as a bare alternative it
+  // also matched inside `Oc-to-ber`, and every October end date became `Oc`
+  // (B178).
+  const parts = cleaned.split(/(?:\s*[—–-]\s*|\s+to\s+)/u);
   const start = parts[0] ? normalizeDate(parts[0].trim()) : undefined;
   const end = isCurrent ? undefined : parts[1] ? normalizeDate(parts[1].trim()) : undefined;
   return { start, end, current: isCurrent };
