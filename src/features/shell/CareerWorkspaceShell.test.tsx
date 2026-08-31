@@ -11,6 +11,7 @@ import {
 import { recordOutcome } from '../outcome/outcomeEngine';
 import { CareerWorkspaceShell } from './CareerWorkspaceShell';
 import { CareerTariffsView } from './CareerTariffsView';
+import { CURRENT_PLAN } from './tariffPackages';
 
 describe('CareerWorkspaceShell', () => {
   it('opens the authenticated candidate on a briefing that recommends one next step', () => {
@@ -548,5 +549,69 @@ describe('CareerWorkspaceShell brand chrome', () => {
       expect(html).toContain('Возможности');
       expect(html).not.toContain('Шансы');
     });
+  });
+});
+
+/**
+ * «Пульт» (B178). Рельс называл разделы чужими глифами из набора: дом для
+ * «Сегодня», кружок с бюстом для «Профиля», пустой лист для «Резюме». Тариф
+ * стоял пунктом меню в одном ряду с «Карьерой», а «Свернуть» занимало ещё
+ * один пункт. Иконка теперь рисуется под раздел, тариф — карточка плана,
+ * ручка — не пункт меню.
+ */
+describe('рельс «Пульт»', () => {
+  function railHtml() {
+    return renderToStaticMarkup(
+      <CareerWorkspaceShell
+        session={{
+          username: 'alexey',
+          email: 'alexey@example.com',
+          displayName: 'Мария Иванова',
+          role: 'candidate',
+          isTest: false,
+          candidateId: 'candidate-1',
+        }}
+        workspace={prepareCareerWorkspace({
+          resumeText:
+            'Синтетический профиль кандидата с достаточно длинным описанием для проверки рельса.',
+          resumeSource: 'text',
+          targetDirection: 'Руководитель продукта',
+          regions: ['ru'],
+          currentSituation: 'Проверяю навигацию.',
+          constraints: '',
+          urgency: 'active',
+        })}
+      />,
+    );
+  }
+
+  it('даёт каждому разделу свою иконку, а не один глиф на всех', () => {
+    const paths = [
+      ...railHtml().matchAll(/<button class="career-nav-button[^]*?<\/button>/gu),
+    ].map((match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'));
+
+    // Пять разделов, каждый нарисован дважды: рельс и нижняя панель на
+    // узком экране. Важно, что рисунков ровно пять разных.
+    expect(paths.length).toBe(10);
+    expect(new Set(paths).size).toBe(5);
+  });
+
+  it('называет план, который действительно работает, а не выдуманный', () => {
+    const html = railHtml();
+
+    expect(html).toContain(`план «${CURRENT_PLAN.name}»`);
+    // Тариф — карточка, а не пункт меню рядом с разделами.
+    expect(html).toContain('career-plan-card');
+  });
+
+  it('не тратит пункт меню на ручку раскрытия', () => {
+    const html = railHtml();
+    const railToggle = html.match(
+      /<button class="career-rail-toggle"[^]*?<\/button>/u,
+    );
+
+    expect(railToggle).not.toBeNull();
+    expect(railToggle![0]).not.toContain('career-nav-button');
+    expect(railToggle![0]).not.toContain('<span>Свернуть</span>');
   });
 });

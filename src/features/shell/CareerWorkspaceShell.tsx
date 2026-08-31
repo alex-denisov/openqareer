@@ -1,17 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  CaretLineLeft,
-  CaretLineRight,
-  Compass,
-  FileText,
-  House,
-  Path,
-  ShieldCheck,
-  UserCircle,
-  Wallet,
-  type Icon,
-} from '@phosphor-icons/react';
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { CaretLeft, CaretRight, ShieldCheck } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
+import {
+  CareerIcon,
+  OpportunitiesIcon,
+  ProfileIcon,
+  ResumeIcon,
+  TariffsIcon,
+  TodayIcon,
+  type SectionIconProps,
+} from './sectionIcons';
 import type { AuthUser } from '../coach/coachApi';
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
 import { CareerExpertPanel } from '../journey/CareerExpertPanel';
@@ -25,6 +23,7 @@ import {
 import { buildCareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace, WorkspaceInput } from '../workspace/workspaceStorage';
 import { CareerTariffsView } from './CareerTariffsView';
+import { CURRENT_PLAN } from './tariffPackages';
 import { createIntakeCompletion } from './intakeCompletion';
 import { CareerAccountPanel } from './CareerAccountPanel';
 import { AppErrorBoundary } from './AppErrorBoundary';
@@ -54,19 +53,21 @@ interface CareerWorkspaceShellProps {
   onSessionChange?: (session: AuthUser | null) => void;
 }
 
+type SectionIcon = (props: SectionIconProps) => ReactElement;
+
 const primaryNavigation: Array<{
   id: Exclude<ShellView, 'tariffs'>;
   label: string;
-  icon: Icon;
+  icon: SectionIcon;
 }> = [
-  { id: 'today', label: 'Сегодня', icon: House },
-  { id: 'profile', label: 'Профиль', icon: UserCircle },
-  { id: 'resume', label: 'Резюме', icon: FileText },
-  { id: 'career', label: 'Карьера', icon: Path },
+  { id: 'today', label: 'Сегодня', icon: TodayIcon },
+  { id: 'profile', label: 'Профиль', icon: ProfileIcon },
+  { id: 'resume', label: 'Резюме', icon: ResumeIcon },
+  { id: 'career', label: 'Карьера', icon: CareerIcon },
   {
     id: 'opportunities',
     label: 'Возможности',
-    icon: Compass,
+    icon: OpportunitiesIcon,
   },
 ];
 
@@ -258,6 +259,11 @@ export function CareerWorkspaceShell({
     [onSaveWorkspace],
   );
 
+  const planName = CURRENT_PLAN.name;
+  const accountInitials = initialsFor(
+    session?.displayName ?? session?.username ?? null,
+  );
+
   return (
     <div
       className={`career-shell ${expertOpen ? 'expert-is-open' : ''}`}
@@ -295,23 +301,41 @@ export function CareerWorkspaceShell({
           ))}
         </nav>
         <div className="career-rail-bottom">
-          <NavigationButton
-            item={{
-              id: 'tariffs',
-              label: 'Тарифы',
-              icon: Wallet,
-            }}
-            active={activeView === 'tariffs'}
+          {/* «Пульт»: тариф — не пункт меню, а карточка текущего плана. Строка
+              меню читалась как ещё один раздел кабинета и стояла в одном ряду
+              с «Карьерой». */}
+          <button
+            className={`career-plan-card ${activeView === 'tariffs' ? 'is-active' : ''}`}
+            type="button"
             disabled={!isNavigable('tariffs')}
-            lockedReason={lockedReason('tariffs')}
             onClick={() => navigate('tariffs')}
-          />
+            aria-current={activeView === 'tariffs' ? 'page' : undefined}
+            aria-label={
+              !isNavigable('tariffs') && lockedReason('tariffs')
+                ? `Тарифы. ${lockedReason('tariffs')}`
+                : `Тарифы, текущий план «${planName}»`
+            }
+            title={
+              !isNavigable('tariffs')
+                ? (lockedReason('tariffs') ?? 'Тарифы')
+                : 'Тарифы'
+            }
+          >
+            <span className="career-plan-facet">
+              <TariffsIcon size={18} active={activeView === 'tariffs'} />
+            </span>
+            <span className="career-plan-text">
+              <b>Тарифы</b>
+              <span>план «{planName}»</span>
+            </span>
+          </button>
           {session?.role === 'admin' ? (
             <a className="career-rail-admin" href="/admin">
               <ShieldCheck size={22} />
               <span>Админка</span>
             </a>
           ) : null}
+          {/* Отделён линией: это не раздел, а вы. */}
           <button
             className="career-account-button"
             type="button"
@@ -319,29 +343,28 @@ export function CareerWorkspaceShell({
             onClick={() => setAccountOpen(true)}
             aria-label="Открыть аккаунт"
           >
-            <UserCircle size={24} />
-            <span>{session?.username ?? 'Аккаунт'}</span>
-          </button>
-          {/* The handle belongs with the rail's own controls. Floating on the
-              outer border it covered the workspace the candidate was reading
-              (owner report, 2026-08-26). */}
-          <button
-            className="career-rail-toggle"
-            type="button"
-            onClick={toggleRail}
-            aria-expanded={railExpanded}
-            aria-controls="career-rail"
-            aria-label={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
-            title={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
-          >
-            {railExpanded ? (
-              <CaretLineLeft size={22} />
-            ) : (
-              <CaretLineRight size={22} />
-            )}
-            <span>{railExpanded ? 'Свернуть' : 'Развернуть'}</span>
+            <span className="career-rail-avatar" aria-hidden="true">
+              {accountInitials}
+            </span>
+            <span className="career-account-identity">
+              <b>{session?.displayName ?? session?.username ?? 'Аккаунт'}</b>
+              <span>{session?.email ?? session?.username ?? 'Войти'}</span>
+            </span>
           </button>
         </div>
+        {/* Ручка сидит на кромке рельса, как разделитель панелей: прежняя
+            строка «Свернуть» занимала пункт меню и читалась как раздел. */}
+        <button
+          className="career-rail-toggle"
+          type="button"
+          onClick={toggleRail}
+          aria-expanded={railExpanded}
+          aria-controls="career-rail"
+          aria-label={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
+          title={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
+        >
+          {railExpanded ? <CaretLeft size={12} /> : <CaretRight size={12} />}
+        </button>
       </aside>
 
       {/* Narrow screens hide the rail, so this bar carries the two controls
@@ -379,7 +402,9 @@ export function CareerWorkspaceShell({
             onClick={() => setAccountOpen(true)}
             aria-label="Открыть аккаунт"
           >
-            <UserCircle size={20} />
+            <span className="career-rail-avatar" aria-hidden="true">
+              {accountInitials}
+            </span>
           </button>
         </div>
       </header>
@@ -544,6 +569,17 @@ export function CareerWorkspaceShell({
   );
 }
 
+/**
+ * Two letters for the avatar, or a neutral mark when there is no name yet.
+ * Never invents a letter from an email the candidate has not confirmed.
+ */
+function initialsFor(name: string | null): string {
+  const parts = (name ?? '').trim().split(/\s+/u).filter(Boolean);
+  if (parts.length === 0) return '—';
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toLocaleUpperCase('ru-RU');
+  return `${parts[0]![0]!}${parts[1]![0]!}`.toLocaleUpperCase('ru-RU');
+}
+
 function NavigationButton({
   item,
   active,
@@ -554,7 +590,7 @@ function NavigationButton({
   item: {
     id: ShellView;
     label: string;
-    icon: Icon;
+    icon: SectionIcon;
   };
   active: boolean;
   disabled?: boolean;
@@ -575,7 +611,7 @@ function NavigationButton({
       }
       title={disabled ? (lockedReason ?? item.label) : item.label}
     >
-      <ItemIcon size={22} weight={active ? 'fill' : 'regular'} />
+      <ItemIcon size={22} active={active} />
       <span>{item.label}</span>
     </button>
   );

@@ -676,7 +676,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
 
   const tariffsButton = page
     .locator(
-      '.career-mobile-tariffs:visible, .career-rail-bottom .career-nav-button:visible',
+      // «Пульт»: тариф в рельсе — карточка плана, а не пункт меню.
+      '.career-mobile-tariffs:visible, .career-rail-bottom .career-plan-card:visible',
     )
     .first();
   await tariffsButton.click();
