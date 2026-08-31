@@ -43,12 +43,6 @@ export interface CandidateAnalysis {
   reviewedAt?: string;
 }
 
-interface RoleFamily {
-  id: string;
-  signals: string[];
-  alternatives: string[];
-}
-
 const RESULT_SIGNALS = [
   /\d/u,
   /увелич|сократ|сниз|рост|выруч|эконом|запуст|достиг|improv|increas|reduc|grew|launched/iu,
@@ -57,123 +51,6 @@ const SCOPE_SIGNALS =
   /команд|бюджет|p&l|подчин|регион|стра[нны]|портфел|people|team|budget|global|country/iu;
 const RESPONSIBILITY_SIGNALS =
   /управля|отвечал|руковод|созда|разработ|внедр|проводил|формировал|координировал|managed|owned|led|built|developed|implemented|responsible/iu;
-
-const ROLE_FAMILIES: RoleFamily[] = [
-  {
-    id: 'product',
-    signals: [
-      'продукт',
-      'product',
-      'roadmap',
-      'discovery',
-      'исследован',
-      'метрик',
-    ],
-    alternatives: [
-      'Product Lead / Lead Product Manager',
-      'Product Operations Lead',
-    ],
-  },
-  {
-    id: 'technology',
-    signals: [
-      'технолог',
-      'разработ',
-      'engineering',
-      'software',
-      'архитект',
-      'cto',
-      'tech lead',
-    ],
-    alternatives: ['Engineering Manager', 'Technology Lead'],
-  },
-  {
-    id: 'operations',
-    signals: [
-      'операц',
-      'operations',
-      'процесс',
-      'delivery',
-      'program',
-      'проект',
-    ],
-    alternatives: ['Руководитель операций', 'Program Manager'],
-  },
-  {
-    id: 'analytics',
-    signals: [
-      'аналит',
-      'data',
-      'bi ',
-      'sql',
-      'модел',
-      'research',
-      'исследован',
-    ],
-    alternatives: ['Analytics Lead', 'Руководитель бизнес-аналитики'],
-  },
-  {
-    id: 'marketing',
-    signals: [
-      'маркет',
-      'marketing',
-      'бренд',
-      'brand',
-      'growth',
-      'контент',
-    ],
-    alternatives: ['Marketing Lead', 'Growth Lead'],
-  },
-  {
-    id: 'sales',
-    signals: [
-      'продаж',
-      'sales',
-      'клиент',
-      'account',
-      'business development',
-      'партнер',
-    ],
-    alternatives: ['Sales Lead', 'Business Development Lead'],
-  },
-  {
-    id: 'finance',
-    signals: [
-      'финанс',
-      'finance',
-      'бюджет',
-      'p&l',
-      'fp&a',
-      'контроллинг',
-    ],
-    alternatives: ['Finance Lead', 'FP&A Lead'],
-  },
-  {
-    id: 'people',
-    signals: [
-      'hr',
-      'people',
-      'персонал',
-      'талант',
-      'talent',
-      'найм',
-      'обучен',
-    ],
-    alternatives: ['People Partner', 'Talent Lead'],
-  },
-  {
-    id: 'design',
-    signals: [
-      'дизайн',
-      'design',
-      'ux',
-      'ui',
-      'исследован',
-      'прототип',
-    ],
-    alternatives: ['Design Lead', 'UX Research Lead'],
-  },
-];
 
 export function extractEvidenceCandidates(
   resumeText: string,
@@ -240,104 +117,50 @@ export function completeCandidateAnalysis(
   };
 }
 
+/**
+ * Роль называет только источник: направление, которое кандидат назвал сам, и
+ * `career_strategist` в кабинете. Прежняя таблица «ключевое слово → две
+ * должности» выдавала руководящие роли кандидату без единого управленческого
+ * эпизода и спорила со стратегом на одном экране (B178, находка 2). Нет
+ * названного направления — нет роли, а не подстановка из словаря.
+ */
 export function buildRoleHypotheses(
   targetDirection: string,
   evidence: EvidenceItem[],
 ): RoleHypothesis[] {
+  const cleanTarget = targetDirection.trim();
+  if (!cleanTarget) return [];
+
   const confirmed = evidence.filter((item) => item.status === 'confirmed');
   const confirmedIds = confirmed.map((item) => item.id);
   const hasResult = confirmed.some((item) => item.kind === 'result');
   const hasScope = confirmed.some((item) => item.kind === 'scope');
-  const primaryGaps = [
-    ...(!hasResult ? ['Не хватает подтверждённого результата.'] : []),
-    ...(!hasScope ? ['Неясен масштаб ответственности.'] : []),
-    ...(confirmed.length < 3
-      ? ['Нужно подтвердить ещё несколько задач или достижений.']
-      : []),
-  ];
-
-  const family = findRoleFamily(
-    `${targetDirection} ${confirmed.map((item) => item.statement).join(' ')}`,
-  );
-  const cleanTarget = targetDirection.trim();
-
-  if (!cleanTarget) {
-    const inferredTitles = family?.alternatives.slice(0, 2) ?? [
-      'Рабочая гипотеза по подтверждённым задачам',
-    ];
-    return inferredTitles.map((title, index) => ({
-      id: family ? `role-${family.id}-${index + 1}` : 'role-unclear',
-      title,
-      fitState: confirmed.length > 0 ? 'adjacent' : 'needs-evidence',
-      basis: family
-        ? `Гипотеза выведена из ${confirmed.length} подтверждённых карьерных ${
-            confirmed.length === 1 ? 'эпизода' : 'эпизодов'
-          }; название и уровень нужно проверить по вакансиям.`
-        : 'Текущих фактов достаточно для проверки задач, но недостаточно для честного названия роли.',
-      evidenceIds: confirmedIds.slice(0, 4),
-      gaps: [
-        ...primaryGaps,
-        'Сравнить повторяющиеся задачи и название роли в 5–10 вакансиях.',
-      ],
-    }));
-  }
-
-  const primary: RoleHypothesis = {
-    id: 'role-target',
-    title: cleanTarget,
-    fitState:
-      confirmed.length >= 3 && hasResult
-        ? 'plausible'
-        : confirmed.length > 0
-          ? 'adjacent'
-          : 'needs-evidence',
-    basis:
-      confirmed.length > 0
-        ? `Опирается на ${confirmed.length} подтверждённых ${
-            confirmed.length === 1 ? 'факт' : 'факта'
-          } из резюме. Это гипотеза, а не решение рынка.`
-        : 'Пока это заявленное направление без подтверждённых фактов.',
-    evidenceIds: confirmedIds.slice(0, 4),
-    gaps: primaryGaps,
-  };
-
-  if (!family) {
-    return [
-      primary,
-      {
-        id: 'role-adjacent',
-        title: `Смежная роль рядом с «${targetDirection.trim()}»`,
-        fitState: 'needs-evidence',
-        basis:
-          'Точное название нельзя вывести только из текущего резюме. Нужна проверка задач на реальных вакансиях.',
-        evidenceIds: confirmedIds.slice(0, 2),
-        gaps: [
-          'Уточнить задачи, которые хочется выполнять регулярно.',
-          'Сравнить формулировки роли на выбранном рынке.',
-        ],
-      },
-    ];
-  }
-
-  const comparableTarget = normalizeForMatch(cleanTarget);
-  const alternatives = family.alternatives
-    .filter((title) => normalizeForMatch(title) !== comparableTarget)
-    .slice(0, 2);
 
   return [
-    primary,
-    ...alternatives.map((title, index): RoleHypothesis => ({
-      id: `role-${family.id}-${index + 1}`,
-      title,
-      fitState: confirmed.length >= 2 ? 'adjacent' : 'needs-evidence',
+    {
+      id: 'role-target',
+      title: cleanTarget,
+      fitState:
+        confirmed.length >= 3 && hasResult
+          ? 'plausible'
+          : confirmed.length > 0
+            ? 'adjacent'
+            : 'needs-evidence',
       basis:
-        'Смежная гипотеза из той же группы задач. Её нужно проверить по требованиям реальных вакансий.',
-      evidenceIds: selectFamilyEvidence(confirmed, family).slice(0, 3),
+        confirmed.length > 0
+          ? `Опирается на ${confirmed.length} подтверждённых ${
+              confirmed.length === 1 ? 'факт' : 'факта'
+            } из резюме. Это гипотеза, а не решение рынка.`
+          : 'Пока это заявленное направление без подтверждённых фактов.',
+      evidenceIds: confirmedIds.slice(0, 4),
       gaps: [
-        'Сравнить повторяющиеся задачи в 5–10 вакансиях.',
-        'Проверить уровень и название роли для выбранного рынка.',
+        ...(!hasResult ? ['Не хватает подтверждённого результата.'] : []),
+        ...(!hasScope ? ['Неясен масштаб ответственности.'] : []),
+        ...(confirmed.length < 3
+          ? ['Нужно подтвердить ещё несколько задач или достижений.']
+          : []),
       ],
-    })),
+    },
   ];
 }
 
@@ -433,32 +256,6 @@ function buildEvidenceQuestions(items: EvidenceItem[]): string[] {
     questions.push('За какие решения или регулярные задачи отвечали лично вы?');
   }
   return questions;
-}
-
-function findRoleFamily(value: string): RoleFamily | undefined {
-  const normalized = normalizeForMatch(value);
-  return ROLE_FAMILIES.map((family) => ({
-    family,
-    score: family.signals.filter((signal) => normalized.includes(signal)).length,
-  }))
-    .filter(({ score }) => score > 0)
-    .sort(
-      (left, right) =>
-        right.score - left.score ||
-        left.family.id.localeCompare(right.family.id),
-    )[0]?.family;
-}
-
-function selectFamilyEvidence(
-  confirmed: EvidenceItem[],
-  family: RoleFamily,
-): string[] {
-  const matching = confirmed.filter((item) => {
-    const normalized = normalizeForMatch(item.statement);
-    return family.signals.some((signal) => normalized.includes(signal));
-  });
-  const selected = matching.length > 0 ? matching : confirmed;
-  return selected.map((item) => item.id);
 }
 
 function normalizeForMatch(value: string): string {

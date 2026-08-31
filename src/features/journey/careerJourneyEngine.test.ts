@@ -11,6 +11,7 @@ import {
   recordOpportunityDecision,
 } from '../opportunity/opportunityEngine';
 import { recordOutcome } from '../outcome/outcomeEngine';
+import type { CanonicalProfileMemory } from '../diagnostic/careerDiagnostic';
 import {
   applyCanonicalProfileToJourney,
   buildCanonicalProfileJourney,
@@ -19,30 +20,40 @@ import {
 } from './careerJourneyEngine';
 
 describe('buildCareerJourney', () => {
-  it('turns one confirmed dialogue episode into traceable role hypotheses and an active route', () => {
-    const journey = buildCanonicalProfileJourney(
+  it('turns one confirmed dialogue episode into a traceable route and names no role of its own', () => {
+    const episode = {
+      id: 'confirmed-product-result',
+      statement:
+        'Руководил запуском продукта для 1200 пользователей и сократил срок релиза на 30 процентов.',
+      kind: 'fact',
+      domain: 'outcome',
+      status: 'confirmed',
+      sourceMessageIds: ['message-1'],
+    } satisfies CanonicalProfileMemory;
+
+    // Без названного направления роль назвать нечем: словарь ролей убран
+    // (B178 срез 2), а стратег отвечает на сервере.
+    const unnamed = buildCanonicalProfileJourney(
       undefined,
-      [
-        {
-          id: 'confirmed-product-result',
-          statement:
-            'Руководил запуском продукта для 1200 пользователей и сократил срок релиза на 30 процентов.',
-          kind: 'fact',
-          domain: 'outcome',
-          status: 'confirmed',
-          sourceMessageIds: ['message-1'],
-        },
-      ],
+      [episode],
       '',
       '2026-08-14T00:00:00.000Z',
     );
 
-    expect(journey.roles.length).toBeGreaterThanOrEqual(1);
-    expect(journey.roles.length).toBeLessThanOrEqual(3);
+    expect(unnamed.roles).toEqual([]);
+
+    const journey = buildCanonicalProfileJourney(
+      undefined,
+      [episode],
+      'Руководитель продукта',
+      '2026-08-14T00:00:00.000Z',
+    );
+
+    expect(journey.roles.length).toBe(1);
     expect(journey.roles[0]).toMatchObject({
+      title: 'Руководитель продукта',
       evidenceCount: 1,
     });
-    expect(journey.roles.map((role) => role.title).join(' ')).toMatch(/product/iu);
     expect(journey.track.find((item) => item.id === 'role-market')).toMatchObject({
       status: 'active',
     });

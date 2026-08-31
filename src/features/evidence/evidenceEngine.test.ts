@@ -85,7 +85,8 @@ describe('evidence engine', () => {
       reviewed,
     );
 
-    expect(hypotheses.length).toBeGreaterThanOrEqual(2);
+    // Гипотеза одна — названная кандидатом (B178 срез 2, словарь убран).
+    expect(hypotheses.length).toBe(1);
     for (const hypothesis of hypotheses) {
       expect(hypothesis.evidenceIds).not.toContain(reviewed[0].id);
     }
@@ -102,5 +103,42 @@ describe('evidence engine', () => {
     expect(buildRoleHypotheses('Руководитель продукта', reviewed)).toEqual(
       buildRoleHypotheses('Руководитель продукта', reviewed),
     );
+  });
+});
+
+/**
+ * B178 срез 2 (живой прогон на проде `f8e4b3a`): движок называл роли из
+ * зашитой таблицы «ключевое слово → две должности». CV аналитика без единого
+ * управленческого эпизода получал `Analytics Lead` и «Руководитель
+ * бизнес-аналитики» — обе с одинаковым обоснованием слово в слово, обе из
+ * словаря, а не из источника. Роли называет стратег; локальный движок имеет
+ * право повторить только то направление, которое кандидат назвал сам.
+ */
+describe('роль не выдумывается локальным словарём', () => {
+  const ANALYST_CV = [
+    'Алексей Смирнов, продуктовый аналитик.',
+    'Построил сквозную аналитику клиентского пути и когорт, SQL и Python.',
+    'Запустил A/B-тесты для трёх продуктовых направлений, метрики в Mixpanel.',
+  ].join('\n');
+
+  function confirmedAnalystEvidence() {
+    return extractEvidenceCandidates(ANALYST_CV).items.map((item) =>
+      updateEvidenceItem(item, { status: 'confirmed' }),
+    );
+  }
+
+  it('не подставляет должность, которой нет в источнике', () => {
+    const hypotheses = buildRoleHypotheses(
+      'Продуктовый аналитик',
+      confirmedAnalystEvidence(),
+    );
+
+    expect(hypotheses.map((role) => role.title)).toEqual([
+      'Продуктовый аналитик',
+    ]);
+  });
+
+  it('без названного направления не называет роль вообще', () => {
+    expect(buildRoleHypotheses('', confirmedAnalystEvidence())).toEqual([]);
   });
 });

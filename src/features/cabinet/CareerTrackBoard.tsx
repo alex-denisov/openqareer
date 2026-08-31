@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, Compass, TrendUp } from '@phosphor-icons/react';
-import type { AccountSnapshot, CandidateSnapshot } from '../coach/coachApi';
+import type { AccountSnapshot, CandidateSnapshot, CoachResult } from '../coach/coachApi';
 import { CareerRoutePremisesEditor } from './CareerRoutePremisesEditor';
 import type { RoutePremisesDraft } from './routePremises';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
@@ -77,7 +77,7 @@ export function CareerTrackBoard({
         loading={premisesLoading}
         onSave={onSavePremises}
       />
-      <RoleHypotheses journey={journey} />
+      <RoleHypotheses alternatives={latestTrack?.alternatives} />
 
       <button className="career-primary-button" type="button" onClick={() => onNavigate('profile')}>
         Укрепить профиль <ArrowRight size={17} />
@@ -245,33 +245,48 @@ function TrackTimeline({ items, empty }: { items: CareerTrackItem[]; empty: bool
   );
 }
 
-function RoleHypotheses({ journey }: { journey?: CareerJourney }) {
+/**
+ * Роли называет `career_strategist`, а не локальный словарь: до B178 среза 2
+ * здесь печатался вывод таблицы «ключевое слово → две должности», пока панель
+ * советника на том же профиле называла другие роли. Нет вывода стратега —
+ * ролей нет; выдумывать название продукт не имеет права.
+ */
+function RoleHypotheses({
+  alternatives,
+}: {
+  alternatives?: NonNullable<CoachResult['careerTrack']>['alternatives'];
+}) {
   return (
     <section className="career-role-hypotheses">
       <header>
         <h3>Рабочие роли</h3>
-        <span>{journey?.roles.length ?? 0}</span>
+        <span>{alternatives?.length ?? 0}</span>
       </header>
-      {journey?.roles.length ? (
-        journey.roles.map((role) => (
-          <article key={role.id}>
+      {alternatives?.length ? (
+        alternatives.map((alternative, index) => (
+          <article key={`${index}:${alternative.label}`}>
             <Compass size={18} />
             <div>
-              <strong>{role.title}</strong>
-              <p>{role.basis}</p>
+              <strong>{alternative.label}</strong>
+              <p>{alternative.reason}</p>
               <small>
-                {pluralRu(role.evidenceCount, [
+                {pluralRu(alternative.evidenceRefs.length, [
                   'подтверждённая опора',
                   'подтверждённые опоры',
                   'подтверждённых опор',
-                ])}{' '}
-                · {pluralRu(role.gaps.length, ['пробел', 'пробела', 'пробелов'])}
+                ])}
+                {alternative.unknowns.length
+                  ? ` · ${alternative.unknowns.join(' ')}`
+                  : ''}
               </small>
             </div>
           </article>
         ))
       ) : (
-        <p>Роли появятся после подтверждения минимум одного карьерного эпизода.</p>
+        <p>
+          Роли назовёт карьерный стратег после разбора подтверждённых фактов.
+          Своего словаря ролей у продукта нет.
+        </p>
       )}
     </section>
   );

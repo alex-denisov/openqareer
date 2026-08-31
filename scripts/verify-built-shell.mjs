@@ -556,14 +556,18 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.locator('button[aria-label="Карьера"]:visible').click();
   await page.getByRole('heading', { name: 'Карьера', exact: true }).waitFor();
   await page.locator('.career-track-board').waitFor();
+  // B178 срез 2: роли называет `career_strategist`. В этом прогоне его вывода
+  // нет, поэтому карточек быть не должно — раньше здесь печатался локальный
+  // словарь, и гейт проверял именно его («не меньше одной роли со словом
+  // product»). Пустой раздел обязан честно сказать, откуда придут роли.
   const roleCards = page.locator('.career-role-hypotheses article');
   assert(
-    (await roleCards.count()) >= 1 && (await roleCards.count()) <= 3,
-    `${viewport.name}: confirmed dialogue evidence did not create 1–3 roles`,
+    (await roleCards.count()) === 0,
+    `${viewport.name}: роли появились без вывода стратега (${await roleCards.count()})`,
   );
   assert(
-    /product/iu.test(await roleCards.allTextContents().then((items) => items.join(' '))),
-    `${viewport.name}: role hypotheses lost the confirmed product signal`,
+    /стратег/iu.test(await page.locator('.career-role-hypotheses').innerText()),
+    `${viewport.name}: пустые «Рабочие роли» не объясняют, кто называет роль`,
   );
   await page
     .locator('.career-track-timeline article')
@@ -573,10 +577,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // INC-019: these used to be literal `true`s reported as verification. They
   // now record what the walk actually observed, and a false value fails the
   // gate instead of being printed next to `"status":"pass"`.
-  const confirmedRoleMap = (await roleCards.count()) >= 1;
+  // Та же правка B178 среза 2: раньше здесь считались карточки словаря.
+  // Проверяем, что раздел на месте и честен, а не что он что-то придумал.
+  const confirmedRoleMap =
+    (await page.locator('.career-role-hypotheses').count()) === 1;
   assert(
     confirmedRoleMap,
-    `${viewport.name}: confirmed role map did not render any role card`,
+    `${viewport.name}: раздел «Рабочие роли» не отрисовался`,
   );
   const adaptiveTrack =
     (await page.locator('.career-track-timeline article').count()) >= 1;
