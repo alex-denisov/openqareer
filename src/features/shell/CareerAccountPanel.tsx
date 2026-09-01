@@ -6,7 +6,6 @@ import {
   ShieldCheck,
   SignOut,
   Trash,
-  UserCircle,
   UserPlus,
   X,
 } from '@phosphor-icons/react';
