@@ -292,7 +292,7 @@ function VacancyChips({
   if (chips.length === 0) return null;
 
   return (
-    <ul className="career-vacancy-chips">
+    <ul className="career-vacancy-active-filters">
       {chips.map((chip) => (
         <li key={chip.key}>
           <button

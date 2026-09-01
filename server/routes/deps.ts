@@ -1,6 +1,7 @@
 import type { SessionAuth } from '../auth/authService';
 import type { ServerConfig } from '../config';
 import type { CandidateStore } from '../data/candidateStore';
+import type { UploadStaging } from '../data/uploadStaging';
 import type { HhVacancySample } from '../connectors/hhVacancySearch';
 import type { ProfileUrlImportResult } from '../connectors/profileUrlImport';
 import type { CareerCommandDispatcher } from '../orchestration/careerCommandDispatcher';
@@ -14,6 +15,8 @@ export interface RouteDeps {
   config: ServerConfig;
   authService: SessionAuth;
   candidateStore: CandidateStore;
+  /** Части файлов, ещё не собранные в документ (INC-031). */
+  uploadStaging: UploadStaging;
   coachProvider: CoachProvider;
   careerCommandDispatcher: CareerCommandDispatcher | null;
   vacancyIntelligence: VacancyIntelligenceService;

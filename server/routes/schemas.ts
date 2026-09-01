@@ -98,6 +98,21 @@ export const candidateCreateSchema = z.object({
   locale: z.enum(['ru-RU', 'en-US']).default('ru-RU'),
 });
 
+/**
+ * Часть файла. Тело запроса держится внутри бюджета маршрута: целиком файл в
+ * 86 КБ до сервера не доезжает — ответа на него нет вовсе (INC-031).
+ */
+export const documentPartSchema = z.object({
+  uploadId: z.string().uuid(),
+  index: z.number().int().min(0).max(4_096),
+  total: z.number().int().min(1).max(4_096),
+  part: z
+    .string()
+    .min(1)
+    .max(16_384)
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/u),
+});
+
 export const candidateDocumentSchema = z.object({
   kind: z.enum(['resume', 'cover_letter', 'certificate', 'portfolio', 'profile_export', 'other']),
   source: z.enum(['upload', 'generated', 'import']),
@@ -113,15 +128,22 @@ export const candidateDocumentSchema = z.object({
     'text/plain',
     'application/json',
   ]),
+  // Либо файл целиком, либо идентификатор загрузки, собранной из частей.
   contentBase64: z
     .string()
     .min(4)
     .max(7_100_000)
-    .regex(/^[A-Za-z0-9+/]+={0,2}$/u),
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/u)
+    .optional(),
+  uploadId: z.string().uuid().optional(),
   extractedText: z.string().trim().max(200_000).optional(),
   parseStatus: z.enum(['pending', 'ready', 'failed', 'not_applicable']),
   replacesDocumentId: z.string().uuid().optional(),
-});
+})
+  .refine(
+    (value) => Boolean(value.contentBase64) !== Boolean(value.uploadId),
+    'Нужен либо файл целиком, либо идентификатор собранной загрузки.',
+  );
 
 export const documentRetentionSchema = z.object({
   retentionUntil: z.string().datetime({ offset: true }).nullable(),

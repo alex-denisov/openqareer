@@ -7670,6 +7670,13 @@
 }
 
 .career-vacancy-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.career-vacancy-title > span {
   display: grid;
   gap: 2px;
   min-width: 0;
@@ -7695,8 +7702,9 @@
 }
 
 .career-vacancy-coverage {
-  display: grid;
-  gap: 1px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .career-vacancy-coverage strong {
@@ -8300,7 +8308,7 @@
   gap: 10px 16px;
 }
 
-.career-vacancy-chips {
+.career-vacancy-active-filters {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -8309,7 +8317,7 @@
   list-style: none;
 }
 
-.career-vacancy-chips button {
+.career-vacancy-active-filters button {
   border: 1px solid var(--career-line-strong);
   border-radius: 8px;
   padding: 4px 10px;
@@ -8339,24 +8347,6 @@
   font-size: 0.6rem;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-}
-
-.career-vacancy-title {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-}
-
-.career-vacancy-title > span {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.career-vacancy-coverage {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .career-vacancy-coverage .career-measure-track {

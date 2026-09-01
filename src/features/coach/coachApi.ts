@@ -546,12 +546,45 @@ export async function uploadCandidateDocument(input: {
   parseStatus: CandidateDocument['parseStatus'];
   replacesDocumentId?: string;
 }): Promise<{ created: boolean; document: CandidateDocument }> {
+  const { contentBase64, ...rest } = input;
+  // Файл целиком до сервера не доезжает: запрос уходит, ответа нет (INC-031).
+  // Всё, что больше одной части, уезжает частями и собирается на сервере.
+  const body =
+    contentBase64.length <= DOCUMENT_PART_BYTES
+      ? { ...rest, contentBase64, source: 'upload' }
+      : { ...rest, uploadId: await sendDocumentParts(contentBase64), source: 'upload' };
+
   const response = await apiFetch('/api/v1/candidate/documents', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...input, source: 'upload' }),
+    body: JSON.stringify(body),
   });
   return readDataObject(response);
+}
+
+/** Размер части: тот же бюджет, что у частей ассетов и у страниц подбора. */
+const DOCUMENT_PART_BYTES = 12_288;
+
+async function sendDocumentParts(contentBase64: string): Promise<string> {
+  const uploadId = crypto.randomUUID();
+  const total = Math.ceil(contentBase64.length / DOCUMENT_PART_BYTES);
+
+  for (let index = 0; index < total; index += 1) {
+    const part = contentBase64.slice(
+      index * DOCUMENT_PART_BYTES,
+      (index + 1) * DOCUMENT_PART_BYTES,
+    );
+    const response = await apiFetch('/api/v1/candidate/documents/parts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uploadId, index, total, part }),
+    });
+    if (!response.ok) {
+      await throwApiError(response);
+    }
+  }
+
+  return uploadId;
 }
 
 export async function deleteCandidateDocument(documentId: string): Promise<void> {

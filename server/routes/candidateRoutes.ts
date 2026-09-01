@@ -52,6 +52,7 @@ import {
   assessmentIdSchema,
   candidateCreateSchema,
   candidateDocumentSchema,
+  documentPartSchema,
   documentRetentionSchema,
   memoryChangeSchema,
   memoryIdSchema,
@@ -508,14 +509,52 @@ const handleSaveGermanyMarket: Handler = async (deps, request, reply) => {
   return { data: profile, meta: { requestId: request.id } };
 };
 
+/**
+ * Часть файла. Целиком файл по маршруту владельца не доезжает — запрос уходит,
+ * ответа нет (INC-031), — поэтому он приезжает частями и собирается здесь.
+ */
+const handleDocumentPart: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config, uploadStaging } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const body = documentPartSchema.parse(request.body);
+  try {
+    const state = uploadStaging.accept(candidate.id, body);
+    return { data: state, meta: { requestId: request.id } };
+  } catch (error) {
+    return sendError(
+      reply,
+      request,
+      400,
+      'document_upload_part_rejected',
+      error instanceof Error ? error.message : 'Часть файла не принята.',
+      false,
+    );
+  }
+};
+
 const handleSaveDocument: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, config } = deps;
+  const { authService, candidateStore, config, uploadStaging } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const body = candidateDocumentSchema.parse(request.body);
+  const contentBase64 = body.uploadId
+    ? uploadStaging.take(candidate.id, body.uploadId)
+    : body.contentBase64;
+  if (!contentBase64) {
+    return sendError(
+      reply,
+      request,
+      409,
+      'document_upload_incomplete',
+      'Загрузка не собрана: часть файла не дошла. Повторите отправку.',
+      true,
+    );
+  }
   try {
-    const stored = candidateStore.saveDocument(candidate.id, body);
+    const stored = candidateStore.saveDocument(candidate.id, { ...body, contentBase64 });
     return reply.code(stored.created ? 201 : 200).send({
       data: stored,
       meta: { requestId: request.id },
@@ -696,6 +735,14 @@ async function registerResumeEndpoints(app: FastifyInstance, deps: RouteDeps): P
 }
 
 async function registerDocumentEndpoints(app: FastifyInstance, deps: RouteDeps): Promise<void> {
+  app.post(
+    '/api/v1/candidate/documents/parts',
+    {
+      bodyLimit: 64 * 1_024,
+      config: { rateLimit: { max: 2_000, timeWindow: '1 hour' } },
+    },
+    withDeps(deps, handleDocumentPart),
+  );
   app.post(
     '/api/v1/candidate/documents',
     {

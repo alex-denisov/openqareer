@@ -20,6 +20,8 @@ import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
 import { VacancyIntelligenceService } from './vacancies/vacancyIntelligenceService';
 import { buildMultiSourceFetcher } from './vacancies/multiSourceFetcher';
 import type { RouteDeps } from './routes/deps';
+import { UploadStaging } from './data/uploadStaging';
+import { DOCUMENT_MAX_BYTES } from '../shared/fileLimits';
 import { registerAdminRoutes } from './routes/adminRoutes';
 import { registerAuthRoutes } from './routes/authRoutes';
 import { registerCandidateRoutes } from './routes/candidateRoutes';
@@ -196,6 +198,12 @@ export async function buildApp({
     config,
     authService,
     candidateStore,
+    // Части файла живут только до сборки документа: незаконченная загрузка —
+    // это не документ кандидата (INC-031).
+    uploadStaging: new UploadStaging({
+      maxBytes: Math.ceil(DOCUMENT_MAX_BYTES * 1.4),
+      ttlMs: 10 * 60_000,
+    }),
     coachProvider,
     importProfile,
     resumeStructurer,
