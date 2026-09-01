@@ -38,6 +38,9 @@ const FRESHNESS_CHOICES: ReadonlyArray<{ label: string; days?: number }> = [
   { label: 'любая', days: undefined },
 ];
 
+// Экран пула — одна таблица с фильтрами: разнесение шапки, строк и подвала по
+// файлам только спрятало бы порядок колонок.
+// eslint-disable-next-line max-lines-per-function
 export function VacancyBoard() {
   const { matched, total, poolTotal, loading, failed } = useMatchedVacancies();
   // Пока пул дочитывается, счётчик называет прочитанное, а не обещанное.
@@ -67,20 +70,42 @@ export function VacancyBoard() {
         onReset={() => setFilters({})}
       />
       <div className="career-vacancy-main">
-        <p className="career-vacancy-count">
-          <strong>{counted}</strong> в подборе{filling ? ` из ${poolTotal}, дочитываем` : ''} ·{' '}
-          <strong>{shown.length}</strong> после фильтров
-        </p>
-        <ol className="career-vacancy-list">
-          {shown.map((item) => (
-            <VacancyRow key={item.cluster.id} item={item} now={now} />
-          ))}
-        </ol>
-        {shown.length === 0 ? (
-          <p className="career-market-empty">
-            Под эти фильтры не подходит ни одна запись пула.
+        <header className="career-vacancy-head">
+          <p className="career-vacancy-count">
+            <strong>{counted}</strong> в подборе{filling ? ` из ${poolTotal}, дочитываем` : ''} ·{' '}
+            <strong>{freshToday(matched, now)}</strong> собрано сегодня ·{' '}
+            <strong>{shown.length}</strong> после фильтров
           </p>
-        ) : null}
+          <VacancyChips filters={filters} onChange={setFilters} />
+        </header>
+        <div className="career-vacancy-table">
+          <div className="career-vacancy-columns" aria-hidden="true">
+            <span>вакансия</span>
+            <span>зарплата</span>
+            <span>локация</span>
+            <span>возраст</span>
+            <span>покрытие</span>
+            <span />
+          </div>
+          <ol className="career-vacancy-list">
+            {shown.map((item) => (
+              <VacancyRow key={item.cluster.id} item={item} now={now} />
+            ))}
+          </ol>
+          {shown.length === 0 ? (
+            <p className="career-market-empty">
+              Под эти фильтры не подходит ни одна запись пула.
+            </p>
+          ) : null}
+          <footer className="career-vacancy-foot">
+            <span className="career-cabinet-tag">
+              {sources.length} {sourceNoun(sources.length)} в подборе
+            </span>
+            <span className="career-cabinet-tag">
+              последняя запись собрана {lastCollected(matched)}
+            </span>
+          </footer>
+        </div>
       </div>
     </div>
   );
@@ -247,6 +272,70 @@ function SourceFilter({
   );
 }
 
+/** Активные фильтры — чипами, каждый снимается по себе (макет «Пульт»). */
+function VacancyChips({
+  filters,
+  onChange,
+}: {
+  filters: VacancyFilters;
+  onChange: (next: VacancyFilters) => void;
+}) {
+  const chips: Array<{ key: keyof VacancyFilters; label: string }> = [];
+  if (filters.query) chips.push({ key: 'query', label: filters.query });
+  if (filters.source) {
+    chips.push({ key: 'source', label: SOURCE_LABELS[filters.source] ?? filters.source });
+  }
+  if (filters.remoteOnly) chips.push({ key: 'remoteOnly', label: 'Только удалённо' });
+  if (filters.freshness !== undefined) {
+    chips.push({ key: 'freshness', label: `до ${filters.freshness} дней` });
+  }
+  if (chips.length === 0) return null;
+
+  return (
+    <ul className="career-vacancy-chips">
+      {chips.map((chip) => (
+        <li key={chip.key}>
+          <button
+            type="button"
+            onClick={() => onChange({ ...filters, [chip.key]: undefined })}
+            aria-label={`Снять фильтр: ${chip.label}`}
+          >
+            {chip.label} ✕
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Сколько записей пул собрал сегодня — по дате первого сбора, не публикации. */
+function freshToday(items: readonly MatchedVacancyItem[], now: string): number {
+  const today = now.slice(0, 10);
+  return items.filter((item) => (item.cluster.firstObservedAt ?? '').slice(0, 10) === today)
+    .length;
+}
+
+function lastCollected(items: readonly MatchedVacancyItem[]): string {
+  const latest = items
+    .map((item) => item.cluster.lastSeenAt ?? item.cluster.firstObservedAt ?? '')
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+  if (!latest) return 'дата неизвестна';
+  return new Date(latest).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+}
+
+function sourceNoun(count: number): string {
+  const tail = count % 10;
+  const teen = count % 100;
+  if (teen >= 11 && teen <= 14) return 'источников';
+  if (tail === 1) return 'источник';
+  if (tail >= 2 && tail <= 4) return 'источника';
+  return 'источников';
+}
+
+// Строка таблицы — шесть колонок макета подряд.
+// eslint-disable-next-line max-lines-per-function
 function VacancyRow({ item, now }: { item: MatchedVacancyItem; now: string }) {
   const { cluster, explanation } = item;
   const age = vacancyAge(cluster, now);
@@ -255,6 +344,10 @@ function VacancyRow({ item, now }: { item: MatchedVacancyItem; now: string }) {
   return (
     <li className="career-vacancy-row">
       <div className="career-vacancy-title">
+        <span className="career-job-logo" aria-hidden="true">
+          {employerInitials(cluster.canonicalCompany)}
+        </span>
+        <span>
         <strong>{cluster.canonicalTitle}</strong>
         <small>
           {employerLabel(cluster.canonicalCompany)} ·{' '}
@@ -262,6 +355,7 @@ function VacancyRow({ item, now }: { item: MatchedVacancyItem; now: string }) {
             .map((source) => SOURCE_LABELS[source.sourceType] ?? source.sourceType)
             .join(', ')}
         </small>
+        </span>
       </div>
       <span className="career-vacancy-salary">{salaryLabel(cluster.salary)}</span>
       <span className="career-vacancy-location">
@@ -271,10 +365,21 @@ function VacancyRow({ item, now }: { item: MatchedVacancyItem; now: string }) {
       <span className="career-vacancy-coverage">
         {coverage ? (
           <>
+            <span
+              className="career-measure-track"
+              role="img"
+              aria-label={`Покрытие требований: ${coverage.covered} из ${coverage.total}`}
+            >
+              <span
+                className="career-measure-fill"
+                data-share={String(
+                  Math.round((coverage.covered / Math.max(1, coverage.total)) * 10) * 10,
+                )}
+              />
+            </span>
             <strong>
               {coverage.covered} из {coverage.total}
             </strong>
-            <small>требований совпало</small>
           </>
         ) : (
           <small>сравнивать не с чем</small>
@@ -289,6 +394,19 @@ function VacancyRow({ item, now }: { item: MatchedVacancyItem; now: string }) {
         Открыть <ArrowSquareOut size={14} />
       </a>
     </li>
+  );
+}
+
+function employerInitials(name?: string): string {
+  const clean = (name ?? '').trim();
+  if (!clean) return '—';
+  return (
+    clean
+      .split(/\s+/u)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((word) => word[0]?.toLocaleUpperCase('ru-RU') ?? '')
+      .join('') || '—'
   );
 }
 

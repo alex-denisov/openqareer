@@ -8286,3 +8286,96 @@
 .career-funnel li {
   min-width: 0;
 }
+
+/* ==========================================================================
+   B179 — «Вакансии» из макета «Пульт»: таблица с колонками, чипами активных
+   фильтров и подвалом состояния сбора.
+   ========================================================================== */
+
+.career-vacancy-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.career-vacancy-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-vacancy-chips button {
+  border: 1px solid var(--career-line-strong);
+  border-radius: 8px;
+  padding: 4px 10px;
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.career-vacancy-table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  padding: 10px;
+  background: var(--career-bg-elevated);
+}
+
+.career-vacancy-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) 0.9fr 0.9fr 0.9fr 1fr auto;
+  gap: 14px;
+  padding: 4px 15px 8px;
+  border-bottom: 1px solid var(--career-line);
+  color: var(--career-text-dim);
+  font-size: 0.6rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.career-vacancy-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.career-vacancy-title > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.career-vacancy-coverage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.career-vacancy-coverage .career-measure-track {
+  width: 46px;
+  flex: none;
+}
+
+.career-vacancy-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 15px 4px;
+  border-top: 1px solid var(--career-line);
+}
+
+@media (max-width: 900px) {
+  .career-vacancy-columns {
+    display: none;
+  }
+}
