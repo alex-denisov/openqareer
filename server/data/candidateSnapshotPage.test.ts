@@ -40,11 +40,30 @@ describe('buildSnapshotHead', () => {
     expect(meta.messages.total).toBe(200);
   });
 
-  it('оставляет последние ходы, а не первые', () => {
+  it('оставляет последние ходы, а не первые, и только те, что влезли', () => {
     const { data, meta } = buildSnapshotHead(snapshot(10, 0, 40), 0);
     expect(data.turns.length).toBeLessThan(40);
     expect(data.turns.at(-1)?.id).toBe('turn-39');
     expect(meta.turns.total).toBe(40);
+  });
+
+  it('не тащит ход, который сам не помещается, и говорит об этом', () => {
+    const heavy = snapshot(0, 0, 5);
+    heavy.turns = heavy.turns.map((turn) => ({ ...turn, payload: 'x'.repeat(20_000) }));
+    const { data, meta } = buildSnapshotHead(heavy, 0);
+    expect(data.turns).toEqual([]);
+    expect(meta.turns.total).toBe(5);
+    // Ход не влез — экран дочитает его отдельной страницей, а не решит, что
+    // ходов не было.
+    expect(meta.turns.nextOffset).toBe(0);
+    expect(Buffer.byteLength(JSON.stringify(data), 'utf8')).toBeLessThanOrEqual(
+      SNAPSHOT_PAGE_BYTE_BUDGET,
+    );
+  });
+
+  it('называет свой размер, чтобы бюджет можно было проверить снаружи', () => {
+    const { data, meta } = buildSnapshotHead(snapshot(50, 20, 4), 0);
+    expect(meta.headBytes).toBe(Buffer.byteLength(JSON.stringify(data), 'utf8'));
   });
 
   it('отдаёт память страницами и показывает, где продолжить', () => {

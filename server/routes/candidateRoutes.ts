@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { buildMessagePage, buildSnapshotHead } from '../data/candidateSnapshotPage';
+import {
+  buildMessagePage,
+  buildSnapshotHead,
+  buildTurnPage,
+} from '../data/candidateSnapshotPage';
 import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
 import {
   evaluateProductCase,
@@ -151,6 +155,23 @@ const handleGetSnapshot: Handler = async ({ authService, candidateStore, config 
   // 20 460 байт (INC-030). Экран получает голову снимка и дочитывает память.
   const { data, meta } = buildSnapshotHead(candidateStore.getSnapshot(candidate.id), memoryOffset);
   return { data, meta: { requestId: request.id, ...meta } };
+};
+
+/** Ходы страницами, от свежего к старому: один разбор бывает больше ответа. */
+const handleGetTurns: Handler = async ({ authService, candidateStore, config }, request, reply) => {
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const { offset } = messagesQuerySchema.parse(request.query);
+  const page = buildTurnPage(candidateStore.getSnapshot(candidate.id).turns, offset);
+  return {
+    data: page.items,
+    meta: {
+      requestId: request.id,
+      total: page.total,
+      offset: page.offset,
+      nextOffset: page.nextOffset,
+    },
+  };
 };
 
 /** Диалог не едет в снимке: его читает только панель эксперта (INC-030). */
@@ -600,6 +621,7 @@ async function registerCandidateLifecycle(
   );
   app.get('/api/v1/candidate/me', withDeps(deps, handleGetSnapshot));
   app.get('/api/v1/candidate/me/messages', withDeps(deps, handleGetMessages));
+  app.get('/api/v1/candidate/me/turns', withDeps(deps, handleGetTurns));
   app.delete('/api/v1/candidate/me', withDeps(deps, handleDeleteCandidate));
   app.get('/api/v1/candidate/export', withDeps(deps, handleExportCandidate));
   app.get('/api/v1/candidate/workspace', withDeps(deps, handleGetWorkspace));

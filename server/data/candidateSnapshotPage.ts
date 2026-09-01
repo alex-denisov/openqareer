@@ -8,12 +8,13 @@
  *
  * Первый ответ несёт то, из чего собран экран: сам кандидат, досье, резюме,
  * оценки и первая страница памяти. Диалог не едет вовсе — его читает только
- * панель эксперта, и она спрашивает его отдельно. Ходы едут последние: экран
- * показывает свежий, а не первый.
+ * панель эксперта, и она спрашивает его отдельно. Ходы едут последние и лишь
+ * те, что помещаются: один ход коуча несёт весь разбор и сам бывает больше
+ * бюджета, поэтому у ходов тоже есть своя страница.
  */
 export const SNAPSHOT_PAGE_BYTE_BUDGET = 12_288;
 
-/** Столько последних ходов достаточно всем экранам кабинета. */
+/** Больше трёх последних ходов ни один экран кабинета не читает. */
 const RECENT_TURNS = 3;
 
 export interface SnapshotCollectionMeta {
@@ -25,6 +26,8 @@ export interface SnapshotHeadMeta {
   readonly memory: SnapshotCollectionMeta;
   readonly messages: SnapshotCollectionMeta;
   readonly turns: SnapshotCollectionMeta;
+  /** Размер ответа в байтах: бюджет должен быть проверяем снаружи. */
+  readonly headBytes: number;
 }
 
 interface PageableSnapshot {
@@ -69,16 +72,33 @@ export function buildMessagePage<T>(messages: readonly T[], offset: number): Byt
   return pageByBytes(messages, offset);
 }
 
+/**
+ * Ходы страницами, от свежего к старому: экранам нужен последний разбор, а не
+ * первый, и целиком лента ходов в один ответ не помещается.
+ */
+export function buildTurnPage<T>(turns: readonly T[], offset: number): BytesPage<T> {
+  return pageByBytes([...turns].reverse(), offset);
+}
+
 export function buildSnapshotHead<T extends PageableSnapshot>(
   snapshot: T,
   memoryOffset: number,
   budgetBytes: number = SNAPSHOT_PAGE_BYTE_BUDGET,
 ): { data: T; meta: SnapshotHeadMeta } {
   const start = Math.max(0, Math.trunc(memoryOffset));
-  const turns = snapshot.turns.slice(Math.max(0, snapshot.turns.length - RECENT_TURNS));
+  const empty = { ...snapshot, memory: [], messages: [], turns: [] } as T;
+  // Ход коуча несёт весь разбор — три хода сами по себе перекрывали бюджет.
+  // Берём от свежего к старому, пока помещается, но свежий уезжает всегда:
+  // без него «Главная» не покажет ни трека, ни следующего действия.
+  const turns: unknown[] = [];
+  let size = Buffer.byteLength(JSON.stringify(empty), 'utf8');
+  for (let index = snapshot.turns.length - 1; index >= 0 && turns.length < RECENT_TURNS; index -= 1) {
+    const cost = Buffer.byteLength(JSON.stringify(snapshot.turns[index]), 'utf8') + 1;
+    if (size + cost > budgetBytes) break;
+    turns.unshift(snapshot.turns[index]);
+    size += cost;
+  }
   const base = { ...snapshot, memory: [], messages: [], turns } as T;
-
-  let size = Buffer.byteLength(JSON.stringify(base), 'utf8');
   const memory: unknown[] = [];
   for (let index = start; index < snapshot.memory.length; index += 1) {
     const cost = Buffer.byteLength(JSON.stringify(snapshot.memory[index]), 'utf8') + 1;
@@ -90,15 +110,19 @@ export function buildSnapshotHead<T extends PageableSnapshot>(
   }
 
   const nextMemoryOffset = start + memory.length;
+  const data = { ...base, memory } as T;
   return {
-    data: { ...base, memory } as T,
+    data,
     meta: {
       memory: {
         total: snapshot.memory.length,
         nextOffset: nextMemoryOffset < snapshot.memory.length ? nextMemoryOffset : null,
       },
       messages: { total: snapshot.messages.length, nextOffset: null },
-      turns: { total: snapshot.turns.length, nextOffset: null },
+      // Ходы едут от свежего к старому. Ни одного не влезло — это не «ходов
+      // нет»: экран дочитает их своей страницей.
+      turns: { total: snapshot.turns.length, nextOffset: turns.length === 0 && snapshot.turns.length > 0 ? 0 : null },
+      headBytes: Buffer.byteLength(JSON.stringify(data), 'utf8'),
     },
   };
 }
