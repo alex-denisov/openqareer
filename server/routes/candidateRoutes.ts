@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
+  buildMemoryPage,
   buildMessagePage,
   buildSnapshotHead,
   buildTurnPage,
@@ -155,6 +156,23 @@ const handleGetSnapshot: Handler = async ({ authService, candidateStore, config 
   // 20 460 байт (INC-030). Экран получает голову снимка и дочитывает память.
   const { data, meta } = buildSnapshotHead(candidateStore.getSnapshot(candidate.id), memoryOffset);
   return { data, meta: { requestId: request.id, ...meta } };
+};
+
+/** Память страницами: голова снимка её не несёт (INC-030). */
+const handleGetMemory: Handler = async ({ authService, candidateStore, config }, request, reply) => {
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const { offset } = messagesQuerySchema.parse(request.query);
+  const page = buildMemoryPage(candidateStore.getSnapshot(candidate.id).memory, offset);
+  return {
+    data: page.items,
+    meta: {
+      requestId: request.id,
+      total: page.total,
+      offset: page.offset,
+      nextOffset: page.nextOffset,
+    },
+  };
 };
 
 /** Ходы страницами, от свежего к старому: один разбор бывает больше ответа. */
@@ -622,6 +640,7 @@ async function registerCandidateLifecycle(
   app.get('/api/v1/candidate/me', withDeps(deps, handleGetSnapshot));
   app.get('/api/v1/candidate/me/messages', withDeps(deps, handleGetMessages));
   app.get('/api/v1/candidate/me/turns', withDeps(deps, handleGetTurns));
+  app.get('/api/v1/candidate/me/memory', withDeps(deps, handleGetMemory));
   app.delete('/api/v1/candidate/me', withDeps(deps, handleDeleteCandidate));
   app.get('/api/v1/candidate/export', withDeps(deps, handleExportCandidate));
   app.get('/api/v1/candidate/workspace', withDeps(deps, handleGetWorkspace));

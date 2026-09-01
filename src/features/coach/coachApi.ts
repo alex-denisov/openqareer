@@ -509,6 +509,26 @@ async function readTurnPage(offset: number): Promise<CandidateSnapshot['turns']>
   return [...(envelope.data as CandidateSnapshot['turns'])].reverse();
 }
 
+async function readMemoryPage(
+  offset: number,
+): Promise<{ items: CandidateSnapshot['memory']; nextOffset: number | null }> {
+  const response = await apiFetch(
+    `/api/v1/candidate/me/memory?offset=${encodeURIComponent(String(offset))}`,
+  );
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const envelope = (await response.json()) as { data?: unknown; meta?: { nextOffset?: unknown } };
+  if (!Array.isArray(envelope.data)) {
+    throw new CoachApiErrorClass('Ответ сервиса не разобран.', 'malformed_response', false);
+  }
+  const nextOffset = envelope.meta?.nextOffset;
+  return {
+    items: envelope.data as CandidateSnapshot['memory'],
+    nextOffset: typeof nextOffset === 'number' ? nextOffset : null,
+  };
+}
+
 export async function getCandidate(): Promise<CandidateSnapshot> {
   const first = await readSnapshotPage(0);
   const memory = [...first.snapshot.memory];
@@ -516,10 +536,10 @@ export async function getCandidate(): Promise<CandidateSnapshot> {
   let pages = 1;
 
   while (offset !== null && pages < 60) {
-    const next = await readSnapshotPage(offset);
-    if (next.snapshot.memory.length === 0) break;
-    memory.push(...next.snapshot.memory);
-    offset = next.nextMemoryOffset;
+    const next = await readMemoryPage(offset);
+    if (next.items.length === 0) break;
+    memory.push(...next.items);
+    offset = next.nextOffset;
     pages += 1;
   }
 

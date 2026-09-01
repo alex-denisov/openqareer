@@ -9,6 +9,14 @@ import { SNAPSHOT_PAGE_BYTE_BUDGET, buildSnapshotHead } from './candidateSnapsho
 function snapshot(memoryCount: number, messageCount: number, turnCount: number) {
   return {
     candidate: { id: 'candidate-1' },
+    dossier: {
+      confirmedCount: 12,
+      proposedCount: 3,
+      sections: Array.from({ length: 5 }, (_, index) => ({
+        domain: `domain-${index}`,
+        items: Array.from({ length: 20 }, (_, item) => ({ id: `item-${index}-${item}` })),
+      })),
+    },
     memory: Array.from({ length: memoryCount }, (_, index) => ({
       id: `memory-${index}`,
       statement: `Факт кандидата номер ${index}. `.repeat(4),
@@ -32,6 +40,12 @@ describe('buildSnapshotHead', () => {
     expect(Buffer.byteLength(JSON.stringify(data), 'utf8')).toBeLessThanOrEqual(
       SNAPSHOT_PAGE_BYTE_BUDGET,
     );
+  });
+
+  it('оставляет у досье счёт, но не его разделы', () => {
+    const { data } = buildSnapshotHead(snapshot(10, 0, 0), 0);
+    expect(data.dossier.confirmedCount).toBe(12);
+    expect(data.dossier.sections).toEqual([]);
   });
 
   it('не тащит диалог в первый ответ и говорит, сколько его', () => {

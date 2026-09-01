@@ -34,6 +34,7 @@ interface PageableSnapshot {
   memory: unknown[];
   messages: unknown[];
   turns: unknown[];
+  dossier: { sections: unknown[] };
 }
 
 export interface BytesPage<T> {
@@ -67,6 +68,11 @@ export function pageByBytes<T>(
   };
 }
 
+/** Память кандидата страницами: голова снимка её не несёт. */
+export function buildMemoryPage<T>(memory: readonly T[], offset: number): BytesPage<T> {
+  return pageByBytes(memory, offset);
+}
+
 /** Диалог кандидата страницами — он не едет в снимке. */
 export function buildMessagePage<T>(messages: readonly T[], offset: number): BytesPage<T> {
   return pageByBytes(messages, offset);
@@ -86,7 +92,16 @@ export function buildSnapshotHead<T extends PageableSnapshot>(
   budgetBytes: number = SNAPSHOT_PAGE_BYTE_BUDGET,
 ): { data: T; meta: SnapshotHeadMeta } {
   const start = Math.max(0, Math.trunc(memoryOffset));
-  const empty = { ...snapshot, memory: [], messages: [], turns: [] } as T;
+  // Разделы досье — те же записи памяти, разложенные по доменам. Кабинет
+  // читает у досье только счётчики и готовность, а разделы весили 14 637 из
+  // 18 494 байт головы. Записи приезжают памятью, разделы — нет.
+  const empty = {
+    ...snapshot,
+    memory: [],
+    messages: [],
+    turns: [],
+    dossier: { ...snapshot.dossier, sections: [] },
+  } as T;
   // Ход коуча несёт весь разбор — три хода сами по себе перекрывали бюджет.
   // Берём от свежего к старому, пока помещается, но свежий уезжает всегда:
   // без него «Главная» не покажет ни трека, ни следующего действия.
@@ -98,7 +113,7 @@ export function buildSnapshotHead<T extends PageableSnapshot>(
     turns.unshift(snapshot.turns[index]);
     size += cost;
   }
-  const base = { ...snapshot, memory: [], messages: [], turns } as T;
+  const base = { ...empty, turns } as T;
   const memory: unknown[] = [];
   for (let index = start; index < snapshot.memory.length; index += 1) {
     const cost = Buffer.byteLength(JSON.stringify(snapshot.memory[index]), 'utf8') + 1;
