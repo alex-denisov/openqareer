@@ -186,6 +186,22 @@ describe('candidate platform connections', () => {
     });
     expect(matchedRes.statusCode).toBe(200);
     expect(Array.isArray(matchedRes.json().data)).toBe(true);
+    // Подбор отдаётся страницами внутри байтового бюджета: целиком тело до
+    // браузера не доезжает (INC-029). Ответ обязан сказать, где продолжить.
+    expect(matchedRes.json().meta).toMatchObject({
+      total: expect.any(Number),
+      offset: 0,
+      nextOffset: null,
+    });
+    expect(Buffer.byteLength(matchedRes.body, 'utf8')).toBeLessThanOrEqual(16_384);
+
+    const pagedRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/matched-vacancies?offset=5',
+      headers: { authorization: candidateAuth },
+    });
+    expect(pagedRes.statusCode).toBe(200);
+    expect(pagedRes.json().meta.offset).toBe(5);
 
     const adminRes = await app.inject({
       method: 'GET',

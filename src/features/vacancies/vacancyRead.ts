@@ -21,3 +21,51 @@ export async function withDeadline<T>(
     clearTimeout(timer);
   }
 }
+
+/** Сколько страниц подбора экран готов прочитать за один заход. */
+export const MATCHED_POOL_PAGE_LIMIT = 60;
+
+export interface MatchedPoolRead<T> {
+  readonly items: T[];
+  readonly total: number;
+  /** `false` — часть пула осталась непрочитанной; счётчик не врёт об этом. */
+  readonly complete: boolean;
+}
+
+interface PoolPage<T> {
+  readonly items: T[];
+  readonly total: number;
+  readonly nextOffset: number | null;
+}
+
+/**
+ * Подбор приходит страницами: целиком тело не доезжает до браузера (INC-029).
+ *
+ * Первая страница — это и есть ответ: если она не пришла, читать нечего и
+ * отказ уходит наверх. Оборвавшееся продолжение не отменяет прочитанного —
+ * экран показывает то, что дошло, и честно говорит, что это не весь пул.
+ */
+export async function collectMatchedPool<T>(
+  loadPage: (offset: number) => Promise<PoolPage<T>>,
+  pageLimit: number = MATCHED_POOL_PAGE_LIMIT,
+): Promise<MatchedPoolRead<T>> {
+  const first = await loadPage(0);
+  const items = [...first.items];
+  let offset = first.nextOffset;
+  let pages = 1;
+
+  while (offset !== null && pages < pageLimit) {
+    let next: PoolPage<T>;
+    try {
+      next = await loadPage(offset);
+    } catch {
+      return { items, total: first.total, complete: false };
+    }
+    items.push(...next.items);
+    offset = next.nextOffset;
+    pages += 1;
+    if (next.items.length === 0) break;
+  }
+
+  return { items, total: first.total, complete: offset === null };
+}

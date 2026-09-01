@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowSquareOut } from '@phosphor-icons/react';
-import { getMatchedVacancies } from '../coach/coachApi';
+import { getMatchedVacancyPage } from '../coach/coachApi';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { employerLabel } from '../../../shared/employerLabel';
 import {
@@ -10,7 +10,7 @@ import {
   vacancySourceNames,
   type VacancyFilters,
 } from './vacancyFilters';
-import { withDeadline } from './vacancyRead';
+import { collectMatchedPool, withDeadline } from './vacancyRead';
 
 /**
  * «Вакансии» — весь собранный пул с фильтрами («Пульт»).
@@ -39,7 +39,7 @@ const FRESHNESS_CHOICES: ReadonlyArray<{ label: string; days?: number }> = [
 ];
 
 export function VacancyBoard() {
-  const { matched, loading, failed } = useMatchedVacancies();
+  const { matched, total, loading, failed } = useMatchedVacancies();
   const state = <VacancyBoardState loading={loading} failed={failed} empty={matched.length === 0} />;
   const [filters, setFilters] = useState<VacancyFilters>({});
   // Момент расчёта возраста берётся один раз на прочитанный пул: пересчёт на
@@ -65,7 +65,7 @@ export function VacancyBoard() {
       />
       <div className="career-vacancy-main">
         <p className="career-vacancy-count">
-          <strong>{matched.length}</strong> в подборе ·{' '}
+          <strong>{total}</strong> в подборе ·{' '}
           <strong>{shown.length}</strong> после фильтров
         </p>
         <ol className="career-vacancy-list">
@@ -301,14 +301,22 @@ function salaryLabel(salary: MatchedVacancyItem['cluster']['salary']): string {
 
 function useMatchedVacancies() {
   const [matched, setMatched] = useState<MatchedVacancyItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
-    void withDeadline((signal) => getMatchedVacancies(signal))
-      .then((data) => {
-        if (active) setMatched(data);
+    void collectMatchedPool<MatchedVacancyItem>((offset) =>
+      withDeadline((signal) => getMatchedVacancyPage(offset, signal)),
+    )
+      .then((pool) => {
+        if (!active) return;
+        setMatched(pool.items);
+        // Прочитано меньше, чем есть в подборе, — счётчик показывает
+        // прочитанное, а не заявленное: иначе экран пообещал бы записи,
+        // которых на нём нет.
+        setTotal(pool.complete ? pool.total : pool.items.length);
       })
       .catch(() => {
         // Не прочитали — это не «пусто»: молчание делает недоступный источник
@@ -324,5 +332,5 @@ function useMatchedVacancies() {
     };
   }, []);
 
-  return { matched, loading, failed };
+  return { matched, total, loading, failed };
 }

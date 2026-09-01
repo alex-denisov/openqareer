@@ -211,7 +211,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // Пул, на котором «Вакансии» действительно проверяются: две записи из разных
   // источников, одна с зарплатой и одна без, с разным возрастом и разным
   // покрытием требований. Пустой ответ проверял только пустой экран.
-  await page.route('**/api/v1/candidate/matched-vacancies', async (route) => {
+  await page.route('**/api/v1/candidate/matched-vacancies*', async (route) => {
     const day = 86_400_000;
     const seen = (daysAgo) => new Date(Date.now() - daysAgo * day).toISOString();
     await route.fulfill({
@@ -288,6 +288,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
             },
           },
         ],
+        // Подбор приходит страницами: экран читает `meta.nextOffset`, пока пул
+        // не кончится (INC-029). Одна страница — весь стенд.
+        meta: { total: 2, offset: 0, nextOffset: null },
       }),
     });
   });

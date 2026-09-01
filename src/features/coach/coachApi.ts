@@ -2,6 +2,7 @@ import type { WorkspaceInput } from '../workspace/workspaceStorage';
 type UserRole = 'candidate' | 'admin';
 type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
 import {
+  CoachApiError as CoachApiErrorClass,
   apiFetch,
   readData,
   readDataArray,
@@ -731,10 +732,42 @@ export async function reviewMemories(
 }
 
 
-export async function getMatchedVacancies(signal?: AbortSignal): Promise<MatchedVacancyItem[]> {
-  const response = await apiFetch('/api/v1/candidate/matched-vacancies', { signal });
+export interface MatchedVacancyPage {
+  readonly items: MatchedVacancyItem[];
+  readonly total: number;
+  readonly nextOffset: number | null;
+}
+
+/**
+ * Подбор приходит страницами: целиком тело в 776 КБ до браузера не доезжало —
+ * маршрут обрывал ответ примерно на 20 КБ, и экран ждал его вечно (INC-029).
+ */
+export async function getMatchedVacancyPage(
+  offset = 0,
+  signal?: AbortSignal,
+): Promise<MatchedVacancyPage> {
+  const response = await apiFetch(
+    `/api/v1/candidate/matched-vacancies?offset=${encodeURIComponent(String(offset))}`,
+    { signal },
+  );
   if (!response.ok) {
     await throwApiError(response);
   }
-  return readDataArray<MatchedVacancyItem>(response);
+  const envelope = (await response.json()) as {
+    data?: unknown;
+    meta?: { total?: unknown; nextOffset?: unknown };
+  };
+  if (!Array.isArray(envelope.data)) {
+    throw new CoachApiErrorClass('Ответ сервиса не разобран.', 'malformed_response', false);
+  }
+  const items = envelope.data as MatchedVacancyItem[];
+  const total = typeof envelope.meta?.total === 'number' ? envelope.meta.total : items.length;
+  const nextOffset =
+    typeof envelope.meta?.nextOffset === 'number' ? envelope.meta.nextOffset : null;
+  return { items, total, nextOffset };
+}
+
+export async function getMatchedVacancies(signal?: AbortSignal): Promise<MatchedVacancyItem[]> {
+  const page = await getMatchedVacancyPage(0, signal);
+  return page.items;
 }

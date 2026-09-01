@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { vacancySubscriptionInputSchema } from '../domain/vacancy';
+import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
 import type { RouteDeps } from './deps';
 import {
@@ -58,15 +59,12 @@ const handleHhMarket: Handler = async ({ searchVacancies }, request, reply) => {
   }
 };
 
-const handleMatchedVacancies: Handler = async (
-  { authService, candidateStore, config, multiSourceEngine },
-  request,
-  reply,
-) => {
-  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
-  if (!candidate) return undefined;
-
-  const snapshot = candidateStore.getSnapshot(candidate.id);
+/** Подтверждённый профиль кандидата — то, по чему вообще можно сопоставлять. */
+function readMatchProfile(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+): { confirmedSkills: string[]; targetRoles: string[] } {
+  const snapshot = candidateStore.getSnapshot(candidateId);
   const memory = snapshot?.memory ?? [];
   const confirmedSkills = memory
     .filter(
@@ -89,11 +87,38 @@ const handleMatchedVacancies: Handler = async (
     ),
   );
 
+  return { confirmedSkills, targetRoles };
+}
+
+const matchedVacanciesQuerySchema = z.object({
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+const handleMatchedVacancies: Handler = async (
+  { authService, candidateStore, config, multiSourceEngine },
+  request,
+  reply,
+) => {
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const { offset } = matchedVacanciesQuerySchema.parse(request.query);
+
+  const { confirmedSkills, targetRoles } = readMatchProfile(candidateStore, candidate.id);
+
   // Matching an invented profile produced «Подтверждённый навык: TypeScript»
   // for a candidate who confirmed nothing, and a match percentage computed
   // from it. No confirmed profile means no match claim (B161).
   if (confirmedSkills.length === 0 && targetRoles.length === 0) {
-    return { data: [], meta: { requestId: request.id, reason: 'candidate_profile_unconfirmed' } };
+    return {
+      data: [],
+      meta: {
+        requestId: request.id,
+        reason: 'candidate_profile_unconfirmed',
+        total: 0,
+        offset,
+        nextOffset: null,
+      },
+    };
   }
 
   const matched = multiSourceEngine.getMatchedVacancies({
@@ -104,7 +129,18 @@ const handleMatchedVacancies: Handler = async (
     preferredRemote: true,
   });
 
-  return { data: matched, meta: { requestId: request.id } };
+  // Весь подбор одним телом не доходит: маршрут рвёт ответ примерно на 20 460
+  // байт (INC-029). Экран забирает пул страницами внутри доказанного бюджета.
+  const page = buildMatchedVacancyPage(matched, offset);
+  return {
+    data: page.items,
+    meta: {
+      requestId: request.id,
+      total: page.total,
+      offset: page.offset,
+      nextOffset: page.nextOffset,
+    },
+  };
 };
 
 const handleListSources: Handler = async (
