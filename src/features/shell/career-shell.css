@@ -4958,14 +4958,18 @@
   gap: 4px;
 }
 
+/* Тот же аватар, что в рельсе, только крупнее: человек в интерфейсе один. */
 .career-account-avatar {
   width: 42px;
   height: 42px;
   display: grid;
   place-items: center;
   border-radius: 13px;
-  color: var(--career-accent);
-  background: var(--career-accent-soft);
+  color: var(--career-accent-ink);
+  background: linear-gradient(150deg, oklch(82% 0.13 255), oklch(56% 0.16 255));
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .career-account-quick-links {
@@ -7495,4 +7499,281 @@
   .career-home-rail {
     position: static;
   }
+}
+
+/* ---- «Пульт» · «Поиск»: кампания и её выборки в одном столбце ---------- */
+
+.career-search-board {
+  display: grid;
+  gap: 18px;
+}
+
+/* ---- «Пульт» · «Вакансии»: фильтры слева, пул справа ------------------- */
+
+.career-vacancy-board {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.career-vacancy-filters {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-lg);
+  background: var(--career-surface);
+  position: sticky;
+  top: 18px;
+}
+
+.career-vacancy-filters > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.career-vacancy-filters h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.career-vacancy-filters fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.career-vacancy-filters legend {
+  padding: 0 0 7px;
+  color: var(--career-text-dim);
+  font-size: 0.71rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.career-vacancy-search {
+  display: grid;
+  gap: 6px;
+}
+
+.career-vacancy-search > span {
+  color: var(--career-text-dim);
+  font-size: 0.71rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.career-vacancy-search input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--career-line-strong, oklch(93% 0.015 255 / 0.24));
+  border-radius: 11px;
+  color: var(--career-text);
+  background: var(--career-surface-soft, oklch(27% 0.018 255 / 0.4));
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.career-vacancy-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.career-vacancy-chips button {
+  padding: 5px 11px;
+  border: 1px solid var(--career-line-strong, oklch(93% 0.015 255 / 0.24));
+  border-radius: 999px;
+  color: var(--career-text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.career-vacancy-chips button.is-active {
+  color: var(--career-accent);
+  border-color: oklch(79% 0.145 255 / 0.5);
+  background: var(--career-accent-soft);
+}
+
+.career-vacancy-sources {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-vacancy-sources button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--career-text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+}
+
+.career-vacancy-sources button.is-active {
+  color: var(--career-accent);
+  border-color: oklch(79% 0.145 255 / 0.4);
+  background: var(--career-accent-soft);
+}
+
+.career-vacancy-sources strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.career-vacancy-main {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.career-vacancy-count {
+  margin: 0;
+  color: var(--career-text-muted);
+  font-size: 0.84rem;
+}
+
+.career-vacancy-count strong {
+  color: var(--career-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.career-vacancy-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-vacancy-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) 0.9fr 0.9fr 0.9fr 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 15px;
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md, 14px);
+  background: var(--career-surface);
+}
+
+.career-vacancy-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.career-vacancy-title strong {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.career-vacancy-title small,
+.career-vacancy-coverage small {
+  color: var(--career-text-dim);
+  font-size: 0.73rem;
+}
+
+.career-vacancy-salary,
+.career-vacancy-location,
+.career-vacancy-age {
+  color: var(--career-text-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.career-vacancy-coverage {
+  display: grid;
+  gap: 1px;
+}
+
+.career-vacancy-coverage strong {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.career-vacancy-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--career-line-strong, oklch(93% 0.015 255 / 0.24));
+  border-radius: 10px;
+  color: var(--career-text);
+  font-size: 0.8rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.career-vacancy-open:hover {
+  border-color: oklch(79% 0.145 255 / 0.5);
+  color: var(--career-accent);
+}
+
+/* Узкий экран: фильтры уходят наверх, строка вакансии складывается в карточку. */
+@media (max-width: 1080px) {
+  .career-vacancy-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .career-vacancy-filters {
+    position: static;
+  }
+
+  .career-vacancy-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 8px;
+  }
+
+  .career-vacancy-title {
+    grid-column: 1 / -1;
+  }
+
+  .career-vacancy-open {
+    grid-column: 2;
+    justify-self: end;
+  }
+}
+
+/* ---- «Тарифы»: текущий план назван, оплата названа честно -------------- */
+
+.career-plan-current {
+  display: inline-block;
+  margin-inline-start: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+.career-plan-standing {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--career-line);
+  color: var(--career-text-dim);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.career-plan-payment-state {
+  margin: 6px 0 0;
+  color: var(--career-text-dim);
+  font-size: 0.84rem;
 }

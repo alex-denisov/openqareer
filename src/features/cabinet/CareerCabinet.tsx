@@ -7,6 +7,7 @@ import { CareerIntelligencePanel } from './CareerIntelligencePanel';
 import { CareerHome } from './CareerHome';
 import { CareerTrackBoard } from './CareerTrackBoard';
 import { ResumeStudio } from '../resume/ResumeStudio';
+import { VacancyBoard } from '../vacancies/VacancyBoard';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { cabinetDisplayName } from './cabinetIdentity';
 import { useCareerCabinetData } from './useCareerCabinetData';
@@ -35,7 +36,7 @@ interface CareerCabinetProps {
 /**
  * One section, one subject (B148 §9), as «Пульт» redrew it:
  * «Главная» holds the candidate and what to do next, «Резюме» holds the document,
- * «Карьера» holds the route, «Возможности» holds the market. The strategist
+ * «Поиск» holds the campaign, «Вакансии» holds the collected pool. The strategist
  * dialogue lives only in the «Эксперт» drawer, so no screen duplicates it.
  */
 // One component, one JSX tree: splitting further would scatter the markup.
@@ -190,33 +191,37 @@ function CabinetSection({
       />
     );
   }
+  // «Поиск» — одна кампания: на чём ищем (роль, регион, маршрут) и чем ищем
+  // (регулярные выборки по источникам). Раньше это были два раздела, и
+  // кандидат настраивал поиск отдельно от того, ради чего он идёт.
   if (view === 'career') {
     return (
-      <CareerTrackBoard
-        journey={journey}
-        snapshot={data.snapshot}
-        account={data.account}
-        targetDirection={targetDirection}
-        regions={workspace?.regions ?? []}
-        premises={routePremisesDraft({ workspace, account: data.account })}
-        premisesLoading={data.loading}
-        onNavigate={onNavigate}
-        onSavePremises={onSavePremises}
-      />
+      <div className="career-search-board">
+        <CareerTrackBoard
+          journey={journey}
+          snapshot={data.snapshot}
+          account={data.account}
+          targetDirection={targetDirection}
+          regions={workspace?.regions ?? []}
+          premises={routePremisesDraft({ workspace, account: data.account })}
+          premisesLoading={data.loading}
+          onNavigate={onNavigate}
+          onSavePremises={onSavePremises}
+        />
+        <CareerIntelligencePanel
+          snapshot={data.snapshot}
+          journey={journey}
+          defaultQuery={targetDirection || undefined}
+          loading={data.loading}
+          onRefresh={data.refresh}
+          onNavigate={onNavigate}
+          expanded
+          onOpenExpert={onOpenExpert}
+        />
+      </div>
     );
   }
-  return (
-    <CareerIntelligencePanel
-      snapshot={data.snapshot}
-      journey={journey}
-      defaultQuery={targetDirection || undefined}
-      loading={data.loading}
-      onRefresh={data.refresh}
-      onNavigate={onNavigate}
-      expanded
-      onOpenExpert={onOpenExpert}
-    />
-  );
+  return <VacancyBoard />;
 }
 
 /**
@@ -268,8 +273,8 @@ const VIEW_TITLE: Record<CareerCabinetView, string> = {
   today: 'Главная',
   profile: 'Главная',
   resume: 'Резюме',
-  career: 'Карьера',
-  opportunities: 'Возможности',
+  career: 'Поиск',
+  opportunities: 'Вакансии',
 };
 
 const VIEW_DESCRIPTION: Record<CareerCabinetView, string> = {
@@ -277,8 +282,8 @@ const VIEW_DESCRIPTION: Record<CareerCabinetView, string> = {
   profile: 'Кто вы по фактам, что с этим делать дальше и как это читает рынок.',
   resume:
     'Мастер-резюме и вариант под страну — только из подтверждённых фактов, с видимыми пробелами.',
-  career: 'Гипотезы ролей, маршрут и наблюдаемые критерии проверки.',
-  opportunities: 'Рынок, регулярные выборки вакансий и воронка откликов.',
+  career: 'Кампания поиска: роль, условия, маршрут и регулярные выборки по источникам.',
+  opportunities: 'Весь собранный пул с фильтрами по свежести, формату и источнику.',
 };
 
 function todayLabel(): string {

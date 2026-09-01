@@ -61,7 +61,7 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    for (const label of ['Резюме', 'Карьера', 'Возможности']) {
+    for (const label of ['Резюме', 'Поиск', 'Вакансии']) {
       expect(html).toContain(
         `aria-label="${label}. Завершите карьерную диагностику, чтобы открыть раздел"`,
       );
@@ -155,8 +155,8 @@ describe('CareerWorkspaceShell', () => {
     expect(html).not.toContain('Выйти из демо');
     expect(html).not.toContain('Демо · синтетические данные');
     expect(html).toContain('Главная');
-    expect(html).toContain('Карьера');
-    expect(html).toContain('Возможности');
+    expect(html).toContain('Поиск');
+    expect(html).toContain('Вакансии');
     expect(html).toContain('aria-label="Открыть аккаунт"');
     expect(html).not.toContain('career-intent-list" role="list');
     expect(html).not.toContain('data-testid="workspace-setup"');
@@ -541,9 +541,9 @@ describe('CareerWorkspaceShell brand chrome', () => {
       expect(html).not.toContain('style="');
     });
 
-    it('names the opportunities section consistently without using Шансы', () => {
+    it('names the vacancy section consistently without using Шансы', () => {
       const html = renderToStaticMarkup(firstTime);
-      expect(html).toContain('Возможности');
+      expect(html).toContain('Вакансии');
       expect(html).not.toContain('Шансы');
     });
   });

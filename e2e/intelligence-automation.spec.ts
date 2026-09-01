@@ -180,7 +180,7 @@ async function seedWorkspace(page: Page): Promise<void> {
 async function openOpportunities(page: Page): Promise<void> {
   // The rail is hidden on a phone, where the same navigation lives in the
   // bottom bar; `:visible` picks whichever one this viewport shows.
-  await page.locator('button[aria-label="Возможности"]:visible').first().click();
+  await page.locator('button[aria-label="Поиск"]:visible').first().click();
   await expect(page.locator('.career-intelligence-panel')).toBeVisible();
 }
 
@@ -192,7 +192,7 @@ test.describe('B156 truthful market intelligence boundary', () => {
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
-    // Market intelligence lives in «Возможности» since B148 §9; «Сегодня» only
+    // Market intelligence lives in «Поиске» since «Пульт»; «Главная» only
     // recommends the next step.
     await openOpportunities(page);
 

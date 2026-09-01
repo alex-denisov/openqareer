@@ -129,7 +129,7 @@ async function seedWorkspace(page: Page): Promise<void> {
 
 async function openCareer(page: Page): Promise<void> {
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  await page.locator('button[aria-label="Карьера"]:visible').first().click();
+  await page.locator('button[aria-label="Поиск"]:visible').first().click();
   await expect(page.locator('.career-track-board')).toBeVisible();
 }
 

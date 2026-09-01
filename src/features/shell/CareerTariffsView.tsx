@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChatCircleDots, Check } from '@phosphor-icons/react';
-import { tariffPackages as packages } from './tariffPackages';
+import { CURRENT_PLAN, tariffPackages as packages } from './tariffPackages';
 
 
 export function CareerTariffsView({
@@ -8,8 +8,12 @@ export function CareerTariffsView({
 }: {
   onOpenCoach: () => void;
 }) {
-  const [selected, setSelected] =
-    useState<(typeof packages)[number]['id']>('setup');
+  // Экран открывается на плане, который у кандидата действительно есть.
+  // Раньше он открывался на «Настройке поиска» — платном тарифе, который никто
+  // не подключал и подключить нельзя: оплаты в продукте нет.
+  const [selected, setSelected] = useState<(typeof packages)[number]['id']>(
+    CURRENT_PLAN.id,
+  );
   const plan = packages.find((item) => item.id === selected) ?? packages[0];
   return (
     <div className="career-view career-simple-view">
@@ -17,6 +21,9 @@ export function CareerTariffsView({
         <div>
           <p className="career-eyebrow">Тарифы</p>
           <h1>Сколько делать за вас</h1>
+          <p className="career-plan-payment-state">
+            Оплата не подключена: сейчас у всех план «{CURRENT_PLAN.name}».
+          </p>
         </div>
         <button
           className="career-icon-text-button"
@@ -37,7 +44,12 @@ export function CareerTariffsView({
               aria-pressed={selected === item.id}
               onClick={() => setSelected(item.id)}
             >
-              <span>{item.name}</span>
+              <span>
+                {item.name}
+                {item.id === CURRENT_PLAN.id ? (
+                  <em className="career-plan-current">Ваш план сейчас</em>
+                ) : null}
+              </span>
               <strong>{item.price}</strong>
               <small>{item.status} · {item.time}</small>
             </button>
@@ -58,6 +70,16 @@ export function CareerTariffsView({
             ))}
           </ul>
           <p className="career-plan-note">{plan.note}</p>
+          {plan.id === CURRENT_PLAN.id ? (
+            <p className="career-plan-standing">
+              Это ваш план сейчас. Всё перечисленное работает без оплаты.
+            </p>
+          ) : (
+            <p className="career-plan-standing">
+              Оплата не подключена — перейти на этот план пока нельзя. Мы не
+              берём деньги за то, чего ещё не умеем делать.
+            </p>
+          )}
         </section>
       </div>
     </div>

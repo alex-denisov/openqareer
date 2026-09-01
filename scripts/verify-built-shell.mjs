@@ -208,11 +208,87 @@ async function verifyViewport(browser, baseUrl, viewport) {
   });
   // Resume Studio asks for the matched pool as soon as it opens; without an
   // answer the walk records a 502 the candidate would also see.
+  // Пул, на котором «Вакансии» действительно проверяются: две записи из разных
+  // источников, одна с зарплатой и одна без, с разным возрастом и разным
+  // покрытием требований. Пустой ответ проверял только пустой экран.
   await page.route('**/api/v1/candidate/matched-vacancies', async (route) => {
+    const day = 86_400_000;
+    const seen = (daysAgo) => new Date(Date.now() - daysAgo * day).toISOString();
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ data: [] }),
+      body: JSON.stringify({
+        data: [
+          {
+            cluster: {
+              id: 'cluster-fresh',
+              canonicalTitle: 'Продуктовый аналитик',
+              canonicalCompany: 'FinCloud',
+              canonicalLocation: 'Москва',
+              isRemote: true,
+              salary: { from: 240000, to: 300000, currency: '₽', gross: true },
+              descriptionSummary: '',
+              skills: [],
+              primaryUrl: 'https://example.test/vacancy/1',
+              sources: [
+                {
+                  sourceType: 'hh',
+                  sourceId: 'hh-1',
+                  sourceUrl: 'https://example.test/vacancy/1',
+                  observedAt: seen(2),
+                },
+              ],
+              firstObservedAt: seen(2),
+              lastSeenAt: seen(0),
+              status: 'active',
+              vacanciesCount: 1,
+            },
+            explanation: {
+              clusterId: 'cluster-fresh',
+              matchScore: 0.72,
+              fitLevel: 'good',
+              matchingPoints: ['SQL', 'A/B-тесты', 'продуктовая аналитика'],
+              missingPoints: ['Kubernetes'],
+              summary: '',
+              calculatedAt: seen(0),
+            },
+          },
+          {
+            cluster: {
+              id: 'cluster-old',
+              canonicalTitle: 'Product Analyst (Web3)',
+              canonicalCompany: '',
+              canonicalLocation: '',
+              isRemote: true,
+              salary: null,
+              descriptionSummary: '',
+              skills: [],
+              primaryUrl: 'https://example.test/vacancy/2',
+              sources: [
+                {
+                  sourceType: 'telegram',
+                  sourceId: 'tg-1',
+                  sourceUrl: 'https://example.test/vacancy/2',
+                  observedAt: seen(19),
+                },
+              ],
+              firstObservedAt: seen(19),
+              lastSeenAt: seen(1),
+              status: 'active',
+              vacanciesCount: 1,
+            },
+            explanation: {
+              clusterId: 'cluster-old',
+              matchScore: 0.31,
+              fitLevel: 'potential',
+              matchingPoints: ['SQL'],
+              missingPoints: ['Solidity', 'Web3'],
+              summary: '',
+              calculatedAt: seen(0),
+            },
+          },
+        ],
+      }),
     });
   });
   await page.route('**/api/v1/candidate/vacancy-sources', async (route) => {
@@ -484,7 +560,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   const shell = page.getByTestId('career-shell');
   await shell.waitFor({ state: 'visible', timeout: 10_000 });
 
-  for (const label of ['Главная', 'Карьера', 'Возможности']) {
+  for (const label of ['Главная', 'Поиск', 'Вакансии']) {
     assert(
       (await page.locator(`button[aria-label="${label}"]`).count()) >= 2,
       `${viewport.name}: invariant navigation is missing ${label}`,
@@ -502,7 +578,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // Since B148 §9 each section owns one subject; «Пульт» made «Главная» the
   // candidate himself — the dossier with the recommendation and the assessment
   // beside it — while the strategist dialogue stays in the «Эксперт» drawer and
-  // the market stays in «Возможности».
+  // the campaign stays in «Поиске» and the collected pool in «Вакансиях».
   await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
   await page.getByText('Следующий шаг', { exact: true }).waitFor();
   await page.locator('.career-profile-surface').first().waitFor();
@@ -513,7 +589,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     fullPage: true,
   });
 
-  await page.locator('button[aria-label="Возможности"]:visible').click();
+  await page.locator('button[aria-label="Поиск"]:visible').click();
   await page.getByRole('heading', { name: 'Рынок и следующие шаги' }).waitFor();
   await page.getByText('Что изменится', { exact: true }).waitFor();
   await page.getByText('Другой путь', { exact: true }).waitFor();
@@ -561,8 +637,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await expert.getByRole('button', { name: 'Закрыть карьерного советника' }).click();
   await expert.waitFor({ state: 'hidden' });
 
-  await page.locator('button[aria-label="Карьера"]:visible').click();
-  await page.getByRole('heading', { name: 'Карьера', exact: true }).waitFor();
+  await page.locator('button[aria-label="Поиск"]:visible').click();
+  await page.getByRole('heading', { name: 'Поиск', exact: true }).waitFor();
   await page.locator('.career-track-board').waitFor();
   // B178 срез 2: роли называет `career_strategist`. В этом прогоне его вывода
   // нет, поэтому карточек быть не должно — раньше здесь печатался локальный
@@ -603,8 +679,39 @@ async function verifyViewport(browser, baseUrl, viewport) {
     path: `output/playwright/b104-b105-b119-decision-${viewport.name}.png`,
     fullPage: true,
   });
-  await page.locator('button[aria-label="Возможности"]:visible').click();
-  await page.getByRole('heading', { name: 'Возможности', exact: true }).waitFor();
+  // Регулярные выборки настраиваются в «Поиске»; «Вакансии» держат пул.
+  // «Вакансии» — собранный пул. Гейт обязан дойти до него: экран читает свою
+  // ручку и должен отвечать хоть чем-то честным даже на пустом подборе.
+  await page.locator('button[aria-label="Вакансии"]:visible').click();
+  await page.getByRole('heading', { name: 'Вакансии', exact: true }).waitFor();
+  await page.locator('.career-vacancy-board').waitFor();
+  const vacancyRows = page.locator('.career-vacancy-row');
+  assert(
+    (await vacancyRows.count()) === 2,
+    `${viewport.name}: пул вакансий не отрисовался (${await vacancyRows.count()})`,
+  );
+  // Возраст и покрытие — счётные, без процентов и без выдуманной даты публикации.
+  await page.getByText('в базе 2 дня', { exact: true }).waitFor();
+  await page.getByText('3 из 4', { exact: true }).waitFor();
+  await page.getByText('Работодатель не указан', { exact: false }).first().waitFor();
+  // Фильтр свежести обязан отсечь запись девятнадцатидневной давности.
+  await page.getByRole('button', { name: 'до 7 дней' }).click();
+  assert(
+    (await vacancyRows.count()) === 1,
+    `${viewport.name}: фильтр свежести не отсёк старую запись`,
+  );
+  await page.getByRole('button', { name: 'любая' }).click();
+  await page.screenshot({
+    path: `output/playwright/b178-vacancies-${viewport.name}.png`,
+    fullPage: true,
+  });
+
+  await page.locator('button[aria-label="Поиск"]:visible').click();
+  await page.getByRole('heading', { name: 'Поиск', exact: true }).waitFor();
+  await page.screenshot({
+    path: `output/playwright/b178-search-${viewport.name}.png`,
+    fullPage: true,
+  });
   await page.getByRole('combobox', { name: 'Источник вакансий' }).waitFor();
   // The source registry loads asynchronously, so wait for the honest health
   // line instead of counting a DOM that may not have rendered yet.

@@ -114,12 +114,24 @@ describe('CareerCabinet composition', () => {
     expect(html).not.toContain('Рынок и следующие шаги');
   });
 
-  it('gives «Возможности» the market panel', () => {
-    expect(renderCabinet('opportunities')).toContain('Рынок и следующие шаги');
+  // «Пульт» развёл рынок на два раздела: кампания живёт в «Поиске», пул — в
+  // «Вакансиях».
+  it('gives «Поиск» the campaign panel beside the route', () => {
+    const html = renderCabinet('career');
+
+    expect(html).toContain('Рынок и следующие шаги');
+    expect(html).toContain('Роль и условия маршрута');
+  });
+
+  it('gives «Вакансии» the pool board', () => {
+    const html = renderCabinet('opportunities');
+
+    expect(html).toContain('career-cabinet-view-opportunities');
+    expect(html).not.toContain('Рынок и следующие шаги');
   });
 
   it('does not fabricate candidate or provider outcomes when server data is absent', () => {
-    const html = renderCabinet('opportunities');
+    const html = renderCabinet('career');
 
     expect(html).toContain('Настройте направление');
     expect(html).toContain('Роль или поисковый запрос');

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState, type ReactElement } from 're
 import { CaretLeft, CaretRight, ShieldCheck } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import {
-  CareerIcon,
-  OpportunitiesIcon,
+  SearchIcon,
+  VacanciesIcon,
   ProfileIcon,
   ResumeIcon,
   TariffsIcon,
@@ -23,6 +23,7 @@ import { buildCareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace, WorkspaceInput } from '../workspace/workspaceStorage';
 import { CareerTariffsView } from './CareerTariffsView';
 import { CURRENT_PLAN } from './tariffPackages';
+import { initialsFor } from './accountIdentity';
 import { createIntakeCompletion } from './intakeCompletion';
 import { CareerAccountPanel } from './CareerAccountPanel';
 import { AppErrorBoundary } from './AppErrorBoundary';
@@ -61,11 +62,11 @@ const primaryNavigation: Array<{
 }> = [
   { id: 'today', label: 'Главная', icon: ProfileIcon },
   { id: 'resume', label: 'Резюме', icon: ResumeIcon },
-  { id: 'career', label: 'Карьера', icon: CareerIcon },
+  { id: 'career', label: 'Поиск', icon: SearchIcon },
   {
     id: 'opportunities',
-    label: 'Возможности',
-    icon: OpportunitiesIcon,
+    label: 'Вакансии',
+    icon: VacanciesIcon,
   },
 ];
 
@@ -73,8 +74,8 @@ const pageNames: Record<ShellView, string> = {
   today: 'Главная',
   profile: 'Главная',
   resume: 'Резюме',
-  career: 'Карьера',
-  opportunities: 'Возможности',
+  career: 'Поиск',
+  opportunities: 'Вакансии',
   tariffs: 'Тарифы',
 };
 
@@ -565,17 +566,6 @@ export function CareerWorkspaceShell({
       ) : null}
     </div>
   );
-}
-
-/**
- * Two letters for the avatar, or a neutral mark when there is no name yet.
- * Never invents a letter from an email the candidate has not confirmed.
- */
-function initialsFor(name: string | null): string {
-  const parts = (name ?? '').trim().split(/\s+/u).filter(Boolean);
-  if (parts.length === 0) return '—';
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toLocaleUpperCase('ru-RU');
-  return `${parts[0]![0]!}${parts[1]![0]!}`.toLocaleUpperCase('ru-RU');
 }
 
 function NavigationButton({

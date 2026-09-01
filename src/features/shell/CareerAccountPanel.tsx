@@ -35,6 +35,7 @@ import {
   sanitizeName,
 } from '../../../shared/accountValidation';
 import { pluralRu } from '../../../shared/pluralRu';
+import { initialsFor } from './accountIdentity';
 import {
   LEGAL_DOCS,
   LEGAL_PACK_VERSION_ID,
@@ -602,8 +603,9 @@ function AuthenticatedAccount({
   return (
     <>
       <div className="career-account-current">
-        <span className="career-account-avatar">
-          <UserCircle size={22} />
+        {/* Тот же аватар, что в рельсе: человек в интерфейсе один. */}
+        <span className="career-account-avatar career-rail-avatar" aria-hidden="true">
+          {initialsFor(account?.displayName ?? user.displayName ?? user.username)}
         </span>
         <div>
           <span>Вы вошли как</span>

@@ -2,8 +2,7 @@
  * Section icons for the rail, drawn for these sections and nothing else.
  *
  * The rail used to borrow whatever generic glyph was nearest in the icon set —
- * a circled bust for the candidate, a plain sheet for
- * «Резюме», an abstract fork for «Карьера». The owner named this on the
+ * a circled bust for the candidate, a plain sheet for «Резюме». The owner named this on the
  * «Пульт» walkthrough: the icons must read as the section they open. Each one
  * below draws the object the section is actually about, on the same 24-unit
  * grid with the same 1.7 stroke, so the rail reads as one set.
@@ -67,24 +66,8 @@ export function ResumeIcon({ size = 22, active = false }: SectionIconProps) {
   );
 }
 
-/** «Карьера» — the route: steps behind, milestones ahead. */
-export function CareerIcon({ size = 22, active = false }: SectionIconProps) {
-  return (
-    <svg {...frame(size)}>
-      <path
-        d="M5.4 19.4c0-3.2 2.1-4.1 5.1-4.6 3-.5 5.1-1.4 5.1-4.6"
-        strokeLinecap="round"
-      />
-      <circle cx="5.4" cy="19.4" r="1.9" fill={active ? 'currentColor' : 'none'} />
-      <circle cx="12" cy="16.2" r="1.5" />
-      <circle cx="15.6" cy="10.2" r="1.9" fill={active ? 'currentColor' : 'none'} />
-      <path d="M15.6 3.4v3.2M12.6 5.1h6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/** «Возможности» — the radar that keeps sweeping for a match. */
-export function OpportunitiesIcon({
+/** «Поиск» — the radar that keeps sweeping for a match. */
+export function SearchIcon({
   size = 22,
   active = false,
 }: SectionIconProps) {
@@ -102,6 +85,26 @@ export function OpportunitiesIcon({
       <path
         d="M12 1.9v2.3M12 19.8v2.3M1.9 12h2.3M19.8 12h2.3"
         strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** «Вакансии» — the collected pool itself: a case with what is inside it. */
+export function VacanciesIcon({ size = 22, active = false }: SectionIconProps) {
+  return (
+    <svg {...frame(size)}>
+      <rect x="3" y="7.4" width="18" height="12.6" rx="2.4" />
+      <path
+        d="M8.6 7.4V5.5a1.8 1.8 0 0 1 1.8-1.8h3.2a1.8 1.8 0 0 1 1.8 1.8v1.9"
+        strokeLinecap="round"
+      />
+      <path d="M3 12.4h18" />
+      <path
+        d="M10.4 12.4h3.2"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        stroke={active ? 'currentColor' : undefined}
       />
     </svg>
   );
