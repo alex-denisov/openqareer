@@ -7,7 +7,6 @@ import {
   ProfileIcon,
   ResumeIcon,
   TariffsIcon,
-  TodayIcon,
   type SectionIconProps,
 } from './sectionIcons';
 import type { AuthUser } from '../coach/coachApi';
@@ -60,8 +59,7 @@ const primaryNavigation: Array<{
   label: string;
   icon: SectionIcon;
 }> = [
-  { id: 'today', label: 'Сегодня', icon: TodayIcon },
-  { id: 'profile', label: 'Профиль', icon: ProfileIcon },
+  { id: 'today', label: 'Главная', icon: ProfileIcon },
   { id: 'resume', label: 'Резюме', icon: ResumeIcon },
   { id: 'career', label: 'Карьера', icon: CareerIcon },
   {
@@ -72,8 +70,8 @@ const primaryNavigation: Array<{
 ];
 
 const pageNames: Record<ShellView, string> = {
-  today: 'Сегодня',
-  profile: 'Профиль',
+  today: 'Главная',
+  profile: 'Главная',
   resume: 'Резюме',
   career: 'Карьера',
   opportunities: 'Возможности',
@@ -284,7 +282,7 @@ export function CareerWorkspaceShell({
           className="career-brand-mark"
           type="button"
           onClick={() => navigate('today')}
-          aria-label="openqareer, сегодня"
+          aria-label="openqareer, главная"
         >
           <BrandMark variant={railExpanded ? 'lockup' : 'mark'} size={30} />
         </button>
@@ -376,7 +374,7 @@ export function CareerWorkspaceShell({
           className="career-wordmark"
           type="button"
           onClick={() => navigate('today')}
-          aria-label="openqareer, сегодня"
+          aria-label="openqareer, главная"
         >
           <BrandMark variant="lockup" size={26} />
         </button>

@@ -2,7 +2,7 @@
  * Section icons for the rail, drawn for these sections and nothing else.
  *
  * The rail used to borrow whatever generic glyph was nearest in the icon set —
- * a house for «Сегодня», a circled bust for «Профиль», a plain sheet for
+ * a circled bust for the candidate, a plain sheet for
  * «Резюме», an abstract fork for «Карьера». The owner named this on the
  * «Пульт» walkthrough: the icons must read as the section they open. Each one
  * below draws the object the section is actually about, on the same 24-unit
@@ -30,20 +30,7 @@ function frame(size: number) {
   } as const;
 }
 
-/** «Сегодня» — a day sheet with today marked and the brief under it. */
-export function TodayIcon({ size = 22, active = false }: SectionIconProps) {
-  return (
-    <svg {...frame(size)}>
-      <rect x="3.2" y="4.6" width="17.6" height="15.2" rx="2.6" />
-      <path d="M3.2 9.2h17.6" />
-      <path d="M8 2.8v3.4M16 2.8v3.4" strokeLinecap="round" />
-      <circle cx="8.2" cy="13" r="1.5" fill={active ? 'currentColor' : 'none'} />
-      <path d="M12 12.6h6M12 16.4h4.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/** «Профиль» — the candidate's own card: who you are by the facts. */
+/** «Главная» — the candidate's own card: who you are by the facts. */
 export function ProfileIcon({ size = 22, active = false }: SectionIconProps) {
   return (
     <svg {...frame(size)}>

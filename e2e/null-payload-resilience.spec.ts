@@ -54,7 +54,7 @@ test.describe('cabinet survives unexpected null API payloads', () => {
 
     const bodyText = await page.evaluate(() => document.body.innerText);
     expect(bodyText.trim().length).toBeGreaterThan(0);
-    expect(page.getByRole('button', { name: 'Сегодня' }).first()).toBeVisible();
+    expect(page.getByRole('button', { name: 'Главная' }).first()).toBeVisible();
     expect(pageErrors).toEqual([]);
 
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy');

@@ -4,7 +4,7 @@ import { expect, test, type Page } from '@playwright/test';
  * B160 §3 — the resume import runs for ~12 seconds in production. The cabinet
  * mounts the moment the wizard closes, reads the server once, and used to
  * print `0 · нет подтверждённых фактов` over a profile that did not exist yet.
- * This spec holds the import open and asserts «Сегодня» says it is importing
+ * This spec holds the import open and asserts «Главная» says it is importing
  * instead of stating a number it cannot know.
  */
 
@@ -50,7 +50,7 @@ async function completeWizard(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Собрать карьерную картину' }).click();
 }
 
-test.describe('B160 «Сегодня» during a running import', () => {
+test.describe('B160 «Главная» during a running import', () => {
   test('says the import is running instead of claiming an empty profile', async ({ page }) => {
     const releaseImport = await stubWithHeldImport(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -58,14 +58,16 @@ test.describe('B160 «Сегодня» during a running import', () => {
 
     await completeWizard(page);
 
-    const loop = page.locator('.career-today-loop');
-    await expect(loop).toBeVisible();
-    await expect(loop).toContainText('идёт импорт профиля');
-    await expect(loop).not.toContainText('нет подтверждённых фактов');
+    // «Пульт» свёл кандидата на «Главную»: то же обещание теперь держит
+    // оценка досье рядом с рекомендацией.
+    const assessment = page.locator('.career-home-panel').filter({ hasText: 'Оценка досье' });
+    await expect(assessment).toBeVisible();
+    await expect(assessment).toContainText('идёт импорт профиля');
+    await expect(assessment).not.toContainText('Нет подтверждённых фактов');
 
     await releaseImport();
 
-    await expect(loop).toContainText('нет подтверждённых фактов');
-    await expect(loop).not.toContainText('идёт импорт профиля');
+    await expect(assessment).toContainText('Нет подтверждённых фактов');
+    await expect(assessment).not.toContainText('идёт импорт профиля');
   });
 });

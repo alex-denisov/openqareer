@@ -40,11 +40,9 @@ describe('CareerWorkspaceShell', () => {
     );
 
     expect(html).toContain('Следующий шаг');
-    expect(html).toContain('Состояние карьерного цикла');
-    // «Сегодня» must not repeat what «Профиль», «Возможности» and the «Эксперт»
-    // drawer already own (B148 §9).
+    // «Главная» держит кандидата: досье и рекомендация на одном экране.
+    expect(html).toContain('Оценка досье');
     expect(html).not.toContain('Диалог со стратегом');
-    expect(html).not.toContain('Профиль и документы');
     expect(html).not.toContain('Рынок и следующие шаги');
     expect(html).not.toContain('С чем разобраться?');
   });
@@ -63,12 +61,12 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    for (const label of ['Профиль', 'Резюме', 'Карьера', 'Возможности']) {
+    for (const label of ['Резюме', 'Карьера', 'Возможности']) {
       expect(html).toContain(
         `aria-label="${label}. Завершите карьерную диагностику, чтобы открыть раздел"`,
       );
     }
-    expect(html).toContain('aria-label="Сегодня"');
+    expect(html).toContain('aria-label="Главная"');
   });
 
   it('opens the diagnostic wizard for a newly signed-in candidate without a workspace', () => {
@@ -156,8 +154,7 @@ describe('CareerWorkspaceShell', () => {
     expect(html).not.toContain('Посмотреть демо');
     expect(html).not.toContain('Выйти из демо');
     expect(html).not.toContain('Демо · синтетические данные');
-    expect(html).toContain('Сегодня');
-    expect(html).toContain('Профиль');
+    expect(html).toContain('Главная');
     expect(html).toContain('Карьера');
     expect(html).toContain('Возможности');
     expect(html).toContain('aria-label="Открыть аккаунт"');
@@ -554,7 +551,7 @@ describe('CareerWorkspaceShell brand chrome', () => {
 
 /**
  * «Пульт» (B178). Рельс называл разделы чужими глифами из набора: дом для
- * «Сегодня», кружок с бюстом для «Профиля», пустой лист для «Резюме». Тариф
+ * кандидата, пустой лист для «Резюме». Тариф
  * стоял пунктом меню в одном ряду с «Карьерой», а «Свернуть» занимало ещё
  * один пункт. Иконка теперь рисуется под раздел, тариф — карточка плана,
  * ручка — не пункт меню.
@@ -590,10 +587,10 @@ describe('рельс «Пульт»', () => {
       ...railHtml().matchAll(/<button class="career-nav-button[^]*?<\/button>/gu),
     ].map((match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'));
 
-    // Пять разделов, каждый нарисован дважды: рельс и нижняя панель на
-    // узком экране. Важно, что рисунков ровно пять разных.
-    expect(paths.length).toBe(10);
-    expect(new Set(paths).size).toBe(5);
+    // Четыре раздела, каждый нарисован дважды: рельс и нижняя панель на
+    // узком экране. Важно, что рисунков ровно четыре разных.
+    expect(paths.length).toBe(8);
+    expect(new Set(paths).size).toBe(4);
   });
 
   it('называет план, который действительно работает, а не выдуманный', () => {

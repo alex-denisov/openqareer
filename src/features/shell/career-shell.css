@@ -7326,3 +7326,173 @@
   color: var(--career-text-dim);
   font-size: 0.75rem;
 }
+
+/* ---- «Пульт» · «Главная»: досье слева, оценка и разбор справа ---------- */
+
+.career-home {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 18px;
+  align-items: start;
+}
+
+.career-home-main {
+  min-width: 0;
+}
+
+.career-home-rail {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  position: sticky;
+  top: 18px;
+}
+
+.career-home-panel {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-lg);
+  background: var(--career-surface);
+}
+
+.career-home-panel > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.career-home-panel h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+}
+
+.career-home-empty {
+  margin: 0;
+  color: var(--career-text-dim);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.career-measure-list {
+  display: grid;
+  gap: 13px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-measure-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+}
+
+.career-measure-head > span {
+  color: var(--career-text-muted);
+}
+
+.career-measure-head > strong {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.career-measure-track {
+  height: 5px;
+  margin-top: 5px;
+  border-radius: 3px;
+  background: var(--career-surface-soft, oklch(27% 0.018 255 / 0.56));
+  overflow: hidden;
+}
+
+.career-measure-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--career-accent);
+}
+
+/* Ширина — классом, а не инлайновым style: прод отдаёт `style-src 'self'`. */
+.career-measure-fill[data-share='0'] { width: 0; }
+.career-measure-fill[data-share='10'] { width: 10%; }
+.career-measure-fill[data-share='20'] { width: 20%; }
+.career-measure-fill[data-share='30'] { width: 30%; }
+.career-measure-fill[data-share='40'] { width: 40%; }
+.career-measure-fill[data-share='50'] { width: 50%; }
+.career-measure-fill[data-share='60'] { width: 60%; }
+.career-measure-fill[data-share='70'] { width: 70%; }
+.career-measure-fill[data-share='80'] { width: 80%; }
+.career-measure-fill[data-share='90'] { width: 90%; }
+.career-measure-fill[data-share='100'] { width: 100%; }
+
+.career-measure > p {
+  margin: 6px 0 0;
+  color: var(--career-text-dim);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.career-home-facts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.career-home-facts dt {
+  color: var(--career-text-dim);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.career-home-facts dd {
+  margin: 3px 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.career-home-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-home-pills > li {
+  padding: 4px 10px;
+  border: 1px solid var(--career-line-strong, oklch(93% 0.015 255 / 0.24));
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.career-home-quote {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md, 14px);
+  background: var(--career-surface-soft, oklch(27% 0.018 255 / 0.4));
+  color: var(--career-text-soft);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  /* Ответ советника бывает длинным; панель не должна тянуть страницу. */
+  max-height: 11.5em;
+  overflow-y: auto;
+}
+
+/* Узкий экран: рельс уходит под досье, а не жмёт его до нечитаемого. */
+@media (max-width: 1180px) {
+  .career-home {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .career-home-rail {
+    position: static;
+  }
+}

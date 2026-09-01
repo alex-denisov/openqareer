@@ -132,7 +132,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
           turns: [],
           dossier: {
             sections: [],
-            confirmedCount: 0,
+            // Сервер считает эти числа из той же памяти (server/domain/dossier.ts),
+            // поэтому заглушка обязана согласовываться с фактом выше — иначе гейт
+            // проверяет экран на данных, которых прод никогда не отдаст.
+            confirmedCount: 1,
             proposedCount: 0,
             readiness: { complete: false, unresolvedQuestions: 1, checks: [] },
           },
@@ -481,7 +484,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   const shell = page.getByTestId('career-shell');
   await shell.waitFor({ state: 'visible', timeout: 10_000 });
 
-  for (const label of ['Сегодня', 'Профиль', 'Карьера', 'Возможности']) {
+  for (const label of ['Главная', 'Карьера', 'Возможности']) {
     assert(
       (await page.locator(`button[aria-label="${label}"]`).count()) >= 2,
       `${viewport.name}: invariant navigation is missing ${label}`,
@@ -496,14 +499,19 @@ async function verifyViewport(browser, baseUrl, viewport) {
     (await page.getByText('Посмотреть демо', { exact: true }).count()) === 0,
     `${viewport.name}: separate demo entry is still present`,
   );
-  // Since B148 §9 each section owns one subject: «Сегодня» recommends, the
-  // strategist dialogue lives in the «Эксперт» drawer and the market lives in
-  // «Возможности». The gate walks them in that order instead of expecting one
-  // screen to carry all three.
-  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
-  await page.getByRole('heading', { name: 'Следующий шаг' }).waitFor().catch(() => undefined);
+  // Since B148 §9 each section owns one subject; «Пульт» made «Главная» the
+  // candidate himself — the dossier with the recommendation and the assessment
+  // beside it — while the strategist dialogue stays in the «Эксперт» drawer and
+  // the market stays in «Возможности».
+  await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
   await page.getByText('Следующий шаг', { exact: true }).waitFor();
-  await page.locator('.career-today-loop button').first().waitFor();
+  await page.locator('.career-profile-surface').first().waitFor();
+  await page.getByRole('heading', { name: 'Оценка досье' }).waitFor();
+  await mkdir('output/playwright', { recursive: true });
+  await page.screenshot({
+    path: `output/playwright/b178-home-${viewport.name}.png`,
+    fullPage: true,
+  });
 
   await page.locator('button[aria-label="Возможности"]:visible').click();
   await page.getByRole('heading', { name: 'Рынок и следующие шаги' }).waitFor();
@@ -636,13 +644,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: selected vacancy source was not sent to the API`,
   );
   await page.getByRole('link', { name: /Product Manager/ }).waitFor();
-  await page.locator('button[aria-label="Профиль"]:visible').click();
-  await page.getByRole('heading', { name: 'Профиль', exact: true }).waitFor();
+  await page.locator('button[aria-label="Главная"]:visible').click();
+  await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
   const profileFactReview =
     (await page.locator('.career-profile-surface').count()) === 1;
   assert(
     profileFactReview,
-    `${viewport.name}: profile fact review surface missing on «Профиль»`,
+    `${viewport.name}: profile fact review surface missing on «Главной»`,
   );
   await page.locator('button[aria-label="Резюме"]:visible').click();
   await page.getByRole('heading', { name: 'Resume Studio' }).waitFor().catch(() => undefined);
@@ -665,8 +673,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
   );
   await mkdir('output/playwright', { recursive: true });
   await page.screenshot({ path: `output/playwright/resume-source-${viewport.name}.png` });
-  await page.locator('button[aria-label="Сегодня"]:visible').click();
-  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
+  await page.locator('button[aria-label="Главная"]:visible').click();
+  await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
   const reasonedAction =
     (await page.locator('.career-today-action p').count()) >= 1;
   assert(
@@ -683,8 +691,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await tariffsButton.click();
   await page.getByRole('heading', { name: 'Сколько делать за вас' }).waitFor();
   assert(
-    (await page.locator('button[aria-label="Профиль"]:visible').count()) === 1,
-    `${viewport.name}: Profile disappeared after navigation`,
+    (await page.locator('button[aria-label="Главная"]:visible').count()) === 1,
+    `${viewport.name}: «Главная» disappeared after navigation`,
   );
 
   assert(
@@ -769,7 +777,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     'Проверяю, что смена источника удаляет факты и ссылки от ранее выбранного профиля.',
   );
   await page.getByRole('button', { name: 'Собрать карьерную картину' }).click();
-  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
   const sourceCleanWorkspace = JSON.parse(
     await page.evaluate(() => localStorage.getItem('candidate-workspace')),
   );
@@ -920,7 +928,7 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
   await page.getByLabel('Логин').fill('returning.candidate');
   await page.getByLabel('Пароль').fill('returning-candidate-password');
   await page.getByRole('button', { name: 'Войти' }).click();
-  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
   const matchingOwnerRestored =
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) !== null;
   assert(

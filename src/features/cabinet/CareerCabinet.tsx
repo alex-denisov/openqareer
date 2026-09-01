@@ -4,8 +4,7 @@ import { updateAccountProfile, type AuthUser } from '../coach/coachApi';
 import { buildCanonicalProfileJourney, type CareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { CareerIntelligencePanel } from './CareerIntelligencePanel';
-import { CareerProfileSurface } from './CareerProfileSurface';
-import { CareerTodayBriefing } from './CareerTodayBriefing';
+import { CareerHome } from './CareerHome';
 import { CareerTrackBoard } from './CareerTrackBoard';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
@@ -34,8 +33,8 @@ interface CareerCabinetProps {
 }
 
 /**
- * One section, one subject (B148 §9):
- * «Сегодня» recommends, «Профиль» holds evidence, «Резюме» holds the document,
+ * One section, one subject (B148 §9), as «Пульт» redrew it:
+ * «Главная» holds the candidate and what to do next, «Резюме» holds the document,
  * «Карьера» holds the route, «Возможности» holds the market. The strategist
  * dialogue lives only in the «Эксперт» drawer, so no screen duplicates it.
  */
@@ -159,34 +158,25 @@ function CabinetSection({
   onOpenAccount: () => void;
   onOpenExpert: () => void;
 }) {
-  if (view === 'today') {
+  // «Главная» держит кандидата и его досье: отдельный раздел «Профиль» показывал
+  // бы то же самое второй раз, поэтому его прежний адрес ведёт сюда же.
+  if (view === 'today' || view === 'profile') {
     return (
-      <CareerTodayBriefing
+      <CareerHome
         name={name}
+        session={session}
         journey={journey}
         snapshot={data.snapshot}
-        resume={data.resume}
         account={data.account}
         workspace={workspace}
+        targetDirection={targetDirection}
         loading={data.loading}
         importing={importing}
-        onNavigate={onNavigate}
-        onOpenExpert={onOpenExpert}
-      />
-    );
-  }
-  if (view === 'profile') {
-    return (
-      <CareerProfileSurface
-        account={data.account}
-        session={session}
-        snapshot={data.snapshot}
-        workspace={workspace}
-        loading={data.loading}
-        expanded
         onRefresh={data.refresh}
+        onNavigate={onNavigate}
         onUpdateWorkspace={onUpdateWorkspace}
         onOpenAccount={onOpenAccount}
+        onOpenExpert={onOpenExpert}
       />
     );
   }
@@ -275,16 +265,16 @@ function CabinetHeader({
 }
 
 const VIEW_TITLE: Record<CareerCabinetView, string> = {
-  today: 'Сегодня',
-  profile: 'Профиль',
+  today: 'Главная',
+  profile: 'Главная',
   resume: 'Резюме',
   career: 'Карьера',
   opportunities: 'Возможности',
 };
 
 const VIEW_DESCRIPTION: Record<CareerCabinetView, string> = {
-  today: 'Одно следующее действие, его причина и состояние карьерного цикла.',
-  profile: 'Кто вы по фактам: опыт, навыки, образование и документы.',
+  today: 'Кто вы по фактам, что с этим делать дальше и как это читает рынок.',
+  profile: 'Кто вы по фактам, что с этим делать дальше и как это читает рынок.',
   resume:
     'Мастер-резюме и вариант под страну — только из подтверждённых фактов, с видимыми пробелами.',
   career: 'Гипотезы ролей, маршрут и наблюдаемые критерии проверки.',
