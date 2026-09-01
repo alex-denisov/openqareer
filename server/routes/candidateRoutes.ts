@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { buildMessagePage, buildSnapshotHead } from '../data/candidateSnapshotPage';
 import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
 import {
   evaluateProductCase,
@@ -134,10 +135,43 @@ const handleCreateCandidate: Handler = async (deps, request, reply) => {
   });
 };
 
+const snapshotQuerySchema = z.object({
+  memoryOffset: z.coerce.number().int().min(0).default(0),
+});
+
+const messagesQuerySchema = z.object({
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
 const handleGetSnapshot: Handler = async ({ authService, candidateStore, config }, request, reply) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  return { data: candidateStore.getSnapshot(candidate.id), meta: { requestId: request.id } };
+  const { memoryOffset } = snapshotQuerySchema.parse(request.query);
+  // Целиком снимок до браузера не доезжает — маршрут рвёт ответ примерно на
+  // 20 460 байт (INC-030). Экран получает голову снимка и дочитывает память.
+  const { data, meta } = buildSnapshotHead(candidateStore.getSnapshot(candidate.id), memoryOffset);
+  return { data, meta: { requestId: request.id, ...meta } };
+};
+
+/** Диалог не едет в снимке: его читает только панель эксперта (INC-030). */
+const handleGetMessages: Handler = async (
+  { authService, candidateStore, config },
+  request,
+  reply,
+) => {
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const { offset } = messagesQuerySchema.parse(request.query);
+  const page = buildMessagePage(candidateStore.getSnapshot(candidate.id).messages, offset);
+  return {
+    data: page.items,
+    meta: {
+      requestId: request.id,
+      total: page.total,
+      offset: page.offset,
+      nextOffset: page.nextOffset,
+    },
+  };
 };
 
 const handleDeleteCandidate: Handler = async (deps, request, reply) => {
@@ -565,6 +599,7 @@ async function registerCandidateLifecycle(
     withDeps(deps, handleCreateCandidate),
   );
   app.get('/api/v1/candidate/me', withDeps(deps, handleGetSnapshot));
+  app.get('/api/v1/candidate/me/messages', withDeps(deps, handleGetMessages));
   app.delete('/api/v1/candidate/me', withDeps(deps, handleDeleteCandidate));
   app.get('/api/v1/candidate/export', withDeps(deps, handleExportCandidate));
   app.get('/api/v1/candidate/workspace', withDeps(deps, handleGetWorkspace));

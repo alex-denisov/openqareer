@@ -56,8 +56,10 @@ export interface VacancyCoverage {
 export function vacancyCoverage(
   explanation: VacancyExplanation,
 ): VacancyCoverage | undefined {
-  const covered = explanation.matchingPoints.length;
-  const total = covered + explanation.missingPoints.length;
+  // Списки обрезаны до видимых трёх, счёт — настоящий (INC-029).
+  const covered = explanation.matchingCount ?? explanation.matchingPoints.length;
+  const missing = explanation.missingCount ?? explanation.missingPoints.length;
+  const total = covered + missing;
   return total === 0 ? undefined : { covered, total };
 }
 

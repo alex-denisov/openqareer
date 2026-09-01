@@ -90,6 +90,23 @@ describe('vacancyCoverage', () => {
     });
   });
 
+  it('верит счёту ответа, а не длине обрезанных списков', () => {
+    // Списки приходят обрезанными до видимых трёх (INC-029), поэтому счёт
+    // покрытия берётся из чисел — иначе карточка занизила бы и совпавшее,
+    // и требуемое.
+    const trimmed = item(
+      'c1',
+      {},
+      {
+        matchingPoints: ['a', 'b', 'c'],
+        missingPoints: ['x', 'y', 'z'],
+        matchingCount: 12,
+        missingCount: 40,
+      },
+    );
+    expect(vacancyCoverage(trimmed.explanation)).toEqual({ covered: 12, total: 52 });
+  });
+
   it('не считает покрытие, когда сравнивать было не с чем', () => {
     const empty = item('c1', {}, { matchingPoints: [], missingPoints: [] });
     expect(vacancyCoverage(empty.explanation)).toBeUndefined();

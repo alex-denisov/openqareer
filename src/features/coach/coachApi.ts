@@ -458,9 +458,98 @@ export async function putCandidateWorkspace(
   return readDataObject<WorkspaceInput>(response);
 }
 
+interface SnapshotHeadEnvelope {
+  data?: unknown;
+  meta?: { memory?: { nextOffset?: unknown } };
+}
+
+async function readSnapshotPage(
+  memoryOffset: number,
+): Promise<{ snapshot: CandidateSnapshot; nextMemoryOffset: number | null }> {
+  const response = await apiFetch(
+    `/api/v1/candidate/me?memoryOffset=${encodeURIComponent(String(memoryOffset))}`,
+  );
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const envelope = (await response.json()) as SnapshotHeadEnvelope;
+  if (envelope.data === null || typeof envelope.data !== 'object') {
+    throw new CoachApiErrorClass('Ответ сервиса не разобран.', 'malformed_response', false);
+  }
+  const nextOffset = envelope.meta?.memory?.nextOffset;
+  return {
+    snapshot: envelope.data as CandidateSnapshot,
+    nextMemoryOffset: typeof nextOffset === 'number' ? nextOffset : null,
+  };
+}
+
+/**
+ * Снимок приходит частями: целиком он не доезжает до браузера — маршрут рвёт
+ * ответ примерно на 20 КБ, и кабинет оставался пустым при полной базе
+ * (INC-030). Память дочитывается страницами, диалог живёт отдельным чтением.
+ */
 export async function getCandidate(): Promise<CandidateSnapshot> {
-  const response = await apiFetch('/api/v1/candidate/me');
-  return readDataObject<CandidateSnapshot>(response);
+  const first = await readSnapshotPage(0);
+  const memory = [...first.snapshot.memory];
+  let offset = first.nextMemoryOffset;
+  let pages = 1;
+
+  while (offset !== null && pages < 60) {
+    const next = await readSnapshotPage(offset);
+    if (next.snapshot.memory.length === 0) break;
+    memory.push(...next.snapshot.memory);
+    offset = next.nextMemoryOffset;
+    pages += 1;
+  }
+
+  return { ...first.snapshot, memory };
+}
+
+/** Снимок вместе с диалогом — его просит только панель эксперта. */
+export async function getCandidateWithMessages(): Promise<CandidateSnapshot> {
+  const [snapshot, messages] = await Promise.all([getCandidate(), getCandidateMessages()]);
+  return { ...snapshot, messages };
+}
+
+export interface CandidateMessagePage {
+  readonly items: CandidateSnapshot['messages'];
+  readonly nextOffset: number | null;
+}
+
+export async function getCandidateMessagePage(offset = 0): Promise<CandidateMessagePage> {
+  const response = await apiFetch(
+    `/api/v1/candidate/me/messages?offset=${encodeURIComponent(String(offset))}`,
+  );
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const envelope = (await response.json()) as {
+    data?: unknown;
+    meta?: { nextOffset?: unknown };
+  };
+  if (!Array.isArray(envelope.data)) {
+    throw new CoachApiErrorClass('Ответ сервиса не разобран.', 'malformed_response', false);
+  }
+  const nextOffset = envelope.meta?.nextOffset;
+  return {
+    items: envelope.data as CandidateSnapshot['messages'],
+    nextOffset: typeof nextOffset === 'number' ? nextOffset : null,
+  };
+}
+
+/** Весь диалог кандидата — страницами, как и всё, что не влезает в ответ. */
+export async function getCandidateMessages(): Promise<CandidateSnapshot['messages']> {
+  const items: CandidateSnapshot['messages'] = [];
+  let offset: number | null = 0;
+  let pages = 0;
+  while (offset !== null && pages < 60) {
+    const page: CandidateMessagePage = await getCandidateMessagePage(offset);
+    if (page.items.length === 0) break;
+    items.push(...page.items);
+    offset = page.nextOffset;
+    pages += 1;
+  }
+  return items;
 }
 
 export async function getAccount(): Promise<AccountSnapshot> {

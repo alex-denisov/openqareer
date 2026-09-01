@@ -270,14 +270,16 @@ describe('OpenQareer API boundary', () => {
     });
     expect(response.json().error.message).not.toBe('limited');
 
+    // Диалог не едет в снимке: целиком снимок не доезжает до браузера, и
+    // сообщения читаются отдельной страницей (INC-030).
     const snapshot = await app.inject({
       method: 'GET',
-      url: '/api/v1/candidate/me',
+      url: '/api/v1/candidate/me/messages',
       headers: {
         authorization: candidateAuthorization(app),
       },
     });
-    expect(snapshot.json().data.messages).toEqual([
+    expect(snapshot.json().data).toEqual([
       {
         id: validPayload.messageId,
         role: 'user',

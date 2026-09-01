@@ -81,6 +81,16 @@ describe('buildMatchedVacancyPage', () => {
     expect(page.nextOffset).toBe(1);
   });
 
+  it('сохраняет счёт покрытия, обрезая списки до видимых трёх', () => {
+    const [first] = buildMatchedVacancyPage(pool, 0).items;
+    expect(first.explanation.matchingPoints.length).toBeLessThanOrEqual(3);
+    expect(first.explanation.missingPoints.length).toBeLessThanOrEqual(3);
+    // Покрытие считается по числам, а не по длине обрезанных списков: иначе
+    // карточка показала бы «3 из 6» там, где на деле 12 из 52.
+    expect(first.explanation.matchingCount).toBe(12);
+    expect(first.explanation.missingCount).toBe(40);
+  });
+
   it('не тащит поля, которых нет в интерфейсе', () => {
     const [first] = buildMatchedVacancyPage(pool, 0).items;
     expect(first.cluster.descriptionSummary).toBe('');

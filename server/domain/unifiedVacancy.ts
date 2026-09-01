@@ -75,6 +75,13 @@ export interface VacancyMatchExplanation {
   fitLevel: 'strong' | 'good' | 'potential' | 'low';
   matchingPoints: string[];
   missingPoints: string[];
+  /**
+   * Сколько требований совпало и сколько нет на самом деле. Списки уезжают на
+   * экран обрезанными до видимых трёх (INC-029), а счёт покрытия обязан
+   * остаться настоящим.
+   */
+  matchingCount?: number;
+  missingCount?: number;
   summary: string;
   calculatedAt: string;
 }

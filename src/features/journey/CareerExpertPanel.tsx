@@ -9,7 +9,7 @@ import {
 } from '@phosphor-icons/react';
 import {
   CoachApiError,
-  getCandidate,
+  getCandidateWithMessages,
   login,
   sendCoachTurn,
   type AuthUser,
@@ -101,7 +101,7 @@ export function CareerExpertPanel({
     }
     let active = true;
     setLoadingSnapshot(true);
-    void getCandidate()
+    void getCandidateWithMessages()
       .then((candidate) => {
         if (active) setSnapshot(candidate);
       })
@@ -150,7 +150,7 @@ export function CareerExpertPanel({
       setLiveTurnIdempotencyKey(idempotencyKey);
       setContent('');
       try {
-        setSnapshot(await getCandidate());
+        setSnapshot(await getCandidateWithMessages());
       } catch {
         setError('Ответ сохранён, но историю пока не удалось обновить.');
       }

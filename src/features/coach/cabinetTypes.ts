@@ -160,6 +160,12 @@ interface VacancyMatchExplanation {
   fitLevel: 'strong' | 'good' | 'potential' | 'low';
   matchingPoints: string[];
   missingPoints: string[];
+  /**
+   * Настоящее число совпавших и недостающих требований. Списки приходят
+   * обрезанными до видимых трёх (INC-029), поэтому покрытие считается отсюда.
+   */
+  matchingCount?: number;
+  missingCount?: number;
   summary: string;
   calculatedAt: string;
 }

@@ -107,7 +107,25 @@ test('candidate confirms one saved command and sees an honest queued state', asy
       return route.fulfill({ json: { data: testUser } });
     }
     if (pathname === '/api/v1/candidate/me') {
-      return route.fulfill({ json: { data: candidateSnapshot } });
+      return route.fulfill({
+        json: {
+          data: candidateSnapshot,
+          // Снимок приходит частями — маршрут не доносит его целиком (INC-030).
+          meta: {
+            memory: { total: candidateSnapshot.memory.length, nextOffset: null },
+            messages: { total: candidateSnapshot.messages.length, nextOffset: null },
+            turns: { total: candidateSnapshot.turns.length, nextOffset: null },
+          },
+        },
+      });
+    }
+    if (pathname === '/api/v1/candidate/me/messages') {
+      return route.fulfill({
+        json: {
+          data: candidateSnapshot.messages,
+          meta: { total: candidateSnapshot.messages.length, offset: 0, nextOffset: null },
+        },
+      });
     }
     // The strategist is opened from the cabinet, which exists only once the
     // diagnostic has produced a career picture. Before B169 a contextless

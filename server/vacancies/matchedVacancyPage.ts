@@ -11,13 +11,14 @@ import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
  * этот проверенный размер: страница, которая заведомо доходит.
  *
  * Заодно из ответа уходит то, чего интерфейс не показывает: сводка описания,
- * полный список навыков кластера и все недостающие требования — их было около
- * полутора килобайт на запись, а на экране видно не больше трёх.
+ * полный список навыков кластера и все требования — совпавшие и нет. Их было
+ * около полутора килобайт на запись, а на экране видно не больше трёх; чтобы
+ * покрытие осталось честным, вместо списков едет их счёт.
  */
 export const MATCHED_PAGE_BYTE_BUDGET = 12_288;
 
-/** Столько недостающих требований печатает карточка вакансии. */
-const VISIBLE_MISSING_POINTS = 3;
+/** Столько требований печатает карточка вакансии — и совпавших, и нет. */
+const VISIBLE_POINTS = 3;
 
 export interface MatchedVacancyPage {
   readonly items: MatchedVacancyItem[];
@@ -36,7 +37,10 @@ function trim(item: MatchedVacancyItem): MatchedVacancyItem {
     },
     explanation: {
       ...item.explanation,
-      missingPoints: item.explanation.missingPoints.slice(0, VISIBLE_MISSING_POINTS),
+      matchingPoints: item.explanation.matchingPoints.slice(0, VISIBLE_POINTS),
+      missingPoints: item.explanation.missingPoints.slice(0, VISIBLE_POINTS),
+      matchingCount: item.explanation.matchingPoints.length,
+      missingCount: item.explanation.missingPoints.length,
     },
   };
 }

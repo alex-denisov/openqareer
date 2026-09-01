@@ -2,6 +2,22 @@ import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 import { preview } from 'vite';
 
+const BROWSER_WALK_MESSAGES = [
+  {
+    id: 'message-long-user',
+    role: 'user',
+    content:
+      'Это вымышленный тестовый карьерный эпизод: руководил запуском цифрового продукта для 1200 пользователей и сократил срок релиза на 30 процентов.',
+  },
+  {
+    id: 'message-long-assistant',
+    role: 'assistant',
+    content:
+      'Зафиксировал измеримый результат. Чтобы превратить его в полноценный карьерный эпизод, уточним роль, зону ответственности, период и ключевые решения.',
+  },
+];
+
+
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
   { name: 'mobile', width: 390, height: 844 },
@@ -82,7 +98,18 @@ async function verifyViewport(browser, baseUrl, viewport) {
       body: JSON.stringify({ data: null }),
     });
   });
-  await page.route('**/api/v1/candidate/me', async (route) => {
+  // Диалог не едет в снимке — его читают отдельной страницей (INC-030).
+  await page.route('**/api/v1/candidate/me/messages*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: BROWSER_WALK_MESSAGES,
+        meta: { total: BROWSER_WALK_MESSAGES.length, offset: 0, nextOffset: null },
+      }),
+    });
+  });
+  await page.route('**/api/v1/candidate/me*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -102,20 +129,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
               factCount: 9,
             },
           ],
-          messages: [
-            {
-              id: 'message-long-user',
-              role: 'user',
-              content:
-                'Это вымышленный тестовый карьерный эпизод: руководил запуском цифрового продукта для 1200 пользователей и сократил срок релиза на 30 процентов.',
-            },
-            {
-              id: 'message-long-assistant',
-              role: 'assistant',
-              content:
-                'Зафиксировал измеримый результат. Чтобы превратить его в полноценный карьерный эпизод, уточним роль, зону ответственности, период и ключевые решения.',
-            },
-          ],
+          messages: BROWSER_WALK_MESSAGES,
           memory: [
             {
               id: 'confirmed-product-result',
@@ -983,7 +997,14 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
       body: JSON.stringify({ data: null }),
     });
   });
-  await page.route('**/api/v1/candidate/me', async (route) => {
+  await page.route('**/api/v1/candidate/me/messages*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [], meta: { total: 0, offset: 0, nextOffset: null } }),
+    });
+  });
+  await page.route('**/api/v1/candidate/me*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
