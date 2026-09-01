@@ -39,9 +39,10 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    expect(html).toContain('Следующий шаг');
-    // «Главная» держит кандидата: досье и рекомендация на одном экране.
-    expect(html).toContain('Оценка досье');
+    // «Главная» держит самого кандидата: профиль слева, оценка справа (B179).
+    expect(html).toContain('Разделы профиля');
+    expect(html).toContain('Оценка профиля');
+    expect(html).not.toContain('Следующий шаг');
     expect(html).not.toContain('Диалог со стратегом');
     expect(html).not.toContain('Рынок и следующие шаги');
     expect(html).not.toContain('С чем разобраться?');
@@ -61,7 +62,7 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    for (const label of ['Резюме', 'Поиск', 'Вакансии']) {
+    for (const label of ['Поиск', 'Вакансии']) {
       expect(html).toContain(
         `aria-label="${label}. Завершите карьерную диагностику, чтобы открыть раздел"`,
       );
@@ -587,10 +588,10 @@ describe('рельс «Пульт»', () => {
       ...railHtml().matchAll(/<button class="career-nav-button[^]*?<\/button>/gu),
     ].map((match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'));
 
-    // Четыре раздела, каждый нарисован дважды: рельс и нижняя панель на
-    // узком экране. Важно, что рисунков ровно четыре разных.
-    expect(paths.length).toBe(8);
-    expect(new Set(paths).size).toBe(4);
+    // Три раздела макета, каждый нарисован дважды: рельс и нижняя панель на
+    // узком экране. Важно, что рисунков ровно три разных (B179).
+    expect(paths.length).toBe(6);
+    expect(new Set(paths).size).toBe(3);
   });
 
   it('называет план, который действительно работает, а не выдуманный', () => {

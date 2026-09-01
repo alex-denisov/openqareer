@@ -313,6 +313,18 @@ function extractFullName(lines: string[], text: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Заголовок профиля LinkedIn — это витрина: «VP of Technology & Operations |
+ * Ex-Co-Founder ($50M Exit) | Scaling Cloud…». Ролью работает первый отрезок;
+ * остальное — регалии, и целиком, да ещё с висящей палкой на конце, это
+ * попадало в поле «Целевая роль» на «Главной» (B179).
+ */
+function headlineRole(line: string): string {
+  const [first] = line.split('|');
+  const role = (first ?? line).replace(/[|·,;\s]+$/u, '').trim();
+  return role.length > 2 ? role : line.trim();
+}
+
 function extractTargetRole(lines: string[], text: string, fullName?: string): string | undefined {
   const roleLabelMatch = text.match(
     /(?:Желаемая должность и зарплата|Желаемая должность|Должность|Target role|Position|Title):\s*([^\n]+)|(?:Желаемая должность и зарплата|Желаемая должность)\s*\n+([^\n]+)/iu,
@@ -342,7 +354,7 @@ function extractTargetRole(lines: string[], text: string, fullName?: string): st
           nextLine.length > 3 &&
           nextLine.length < 150
         ) {
-          return nextLine;
+          return headlineRole(nextLine);
         }
       }
     }
@@ -352,7 +364,7 @@ function extractTargetRole(lines: string[], text: string, fullName?: string): st
   for (let i = 0; i < Math.min(lines.length, 25); i++) {
     const line = lines[i];
     if (line.includes('|') && line.length < 120 && !line.includes('@') && !line.includes('linkedin.com')) {
-      return line.trim();
+      return headlineRole(line);
     }
     if (
       /^(?:Руководитель|Директор|Lead|Head|VP|Chief|Senior|Middle|Product|Engineering|Software|Analyst|Manager|Specialist|Разработчик|Менеджер|Аналитик)/iu.test(

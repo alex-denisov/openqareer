@@ -5,32 +5,30 @@ import type {
   CandidateSnapshot,
   CoachResult,
 } from '../coach/coachApi';
-import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import {
   candidateRegionLabels,
   type CandidateRegion,
 } from '../workspace/candidateRegions';
 import { CareerProfileSurface } from './CareerProfileSurface';
-import { NextActionCard } from './NextActionCard';
-import { assessProfile, type ProfileMeasure } from './profileAssessment';
+import { assessProfile, type ProfileMeasure, type ProfileScore } from './profileAssessment';
+import { buildProfileView } from './profileView';
 import type { CareerCabinetView } from './cabinetViews';
 
 /**
  * «Главная» — кандидат и его досье слева, оценка, позиционирование и вход к
  * консультанту справа («Пульт», решение владельца 2026-08-31).
  *
- * Раньше первый экран кабинета («Сегодня») только рекомендовал следующий шаг,
- * а сам кандидат — его имя, роль, опыт и факты — жил в отдельном разделе
- * «Профиль». Владелец назвал это прямо: на «Главной» должен быть профиль
- * кандидата. Досье переехало сюда целиком, вместе со своей очередью
- * подтверждения, а рекомендация встала в правый рельс, где ей и место рядом с
- * оценкой.
+ * Слева — сам кандидат, собранный из разобранного резюме: карточка личности,
+ * вкладки и места работы с датами и пунктами. Справа — оценка профиля,
+ * позиционирование и вход к консультанту.
+ *
+ * Ни очереди «Подтвердите опорные факты», ни карточки следующего шага здесь
+ * нет: макет от них отказался, а разобранное резюме — это то, что кандидат сам
+ * о себе сообщил (B179).
  */
 interface CareerHomeProps {
-  readonly name: string;
   readonly session: AuthUser;
-  readonly journey?: CareerJourney;
   readonly snapshot?: CandidateSnapshot;
   readonly account?: AccountSnapshot;
   readonly workspace?: CandidateWorkspace;
@@ -45,9 +43,7 @@ interface CareerHomeProps {
 }
 
 export function CareerHome({
-  name,
   session,
-  journey,
   snapshot,
   account,
   workspace,
@@ -73,16 +69,15 @@ export function CareerHome({
           onRefresh={onRefresh}
           onUpdateWorkspace={onUpdateWorkspace}
           onOpenAccount={onOpenAccount}
+          onOpenExpert={onOpenExpert}
+          onOpenResume={() => onNavigate('resume')}
         />
       </div>
 
       <HomeRail
-        name={name}
-        journey={journey}
         snapshot={snapshot}
         regions={workspace?.regions ?? []}
         targetDirection={targetDirection}
-        loading={loading}
         importing={importing}
         onNavigate={onNavigate}
         onOpenExpert={onOpenExpert}
@@ -93,22 +88,16 @@ export function CareerHome({
 
 /** Правый рельс: что делать дальше, чем подпёрто и кто это разбирает. */
 function HomeRail({
-  name,
-  journey,
   snapshot,
   regions,
   targetDirection,
-  loading,
   importing,
   onNavigate,
   onOpenExpert,
 }: {
-  name: string;
-  journey?: CareerJourney;
   snapshot?: CandidateSnapshot;
   regions: readonly CandidateRegion[];
   targetDirection: string;
-  loading: boolean;
   importing: boolean;
   onNavigate: (view: CareerCabinetView) => void;
   onOpenExpert: () => void;
@@ -120,14 +109,6 @@ function HomeRail({
 
   return (
     <aside className="career-home-rail" aria-label="Оценка и позиционирование">
-      <NextActionCard
-        name={name}
-        journey={journey}
-        loading={loading}
-        importing={importing}
-        onNavigate={onNavigate}
-        onOpenExpert={onOpenExpert}
-      />
       <AssessmentPanel
         snapshot={snapshot}
         targetDirection={targetDirection}
@@ -158,11 +139,7 @@ function AssessmentPanel({
   targetDirection: string;
   importing: boolean;
 }) {
-  const assessment = assessProfile({
-    memory: snapshot?.memory ?? [],
-    targetDirection,
-    dossier: snapshot?.dossier,
-  });
+  const assessment = assessProfile({ view: buildProfileView(snapshot), targetDirection });
   // Пока идёт импорт, серверное чтение кабинета старше его результата: числа
   // досье устарели, а не равны нулю (B160 §3). Экран говорит это прямо, а не
   // печатает вчерашнюю оценку как сегодняшнюю.
@@ -171,7 +148,7 @@ function AssessmentPanel({
   return (
     <section className="career-home-panel" aria-labelledby="career-assessment-title">
       <header>
-        <h3 id="career-assessment-title">Оценка досье</h3>
+        <h3 id="career-assessment-title">Оценка профиля</h3>
         {assessment.measuredAt && !importing ? (
           <span className="career-cabinet-tag">
             досье изменено {formatDay(assessment.measuredAt)}
@@ -181,22 +158,63 @@ function AssessmentPanel({
       {measures.length === 0 ? (
         <p className="career-home-empty">
           {importing
-            ? 'Пока идёт импорт профиля, оценка не пересчитывается: числа досье старше того, что уже пришло.'
-            : 'Нет подтверждённых фактов — оценивать нечего. Импортируйте резюме или разберите его с консультантом.'}
+            ? 'Пока идёт импорт профиля, оценка не пересчитывается: числа старше того, что уже пришло.'
+            : 'Профиль пуст — оценивать нечего. Импортируйте резюме или разберите его с консультантом.'}
         </p>
       ) : (
         <>
+          {assessment.score ? <ScoreRing score={assessment.score} /> : null}
           <ul className="career-measure-list">
             {measures.map((measure) => (
               <MeasureRow key={measure.id} measure={measure} />
             ))}
           </ul>
           <p className="career-cabinet-tag">
-            посчитано по вашему досье · метод {assessment.methodVersion}
+            посчитано по вашему профилю · метод {assessment.methodVersion}
           </p>
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * Кольцо из макета. Число внутри — доля пройденных проверок, и подпись под ним
+ * называет обе величины: «68 из 100» без знаменателя было бы выдумкой.
+ */
+function ScoreRing({ score }: { score: ProfileScore }) {
+  const circumference = 264;
+  return (
+    <div className="career-score">
+      <svg
+        width="96"
+        height="96"
+        viewBox="0 0 100 100"
+        role="img"
+        aria-label={`Профиль: пройдено ${score.checks} проверок из ${score.total}`}
+      >
+        <circle className="career-score-track" cx="50" cy="50" r="42" />
+        <circle
+          className="career-score-value"
+          cx="50"
+          cy="50"
+          r="42"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference - (circumference * score.value) / 100}
+          transform="rotate(-90 50 50)"
+        />
+        <text className="career-score-number" x="50" y="47" textAnchor="middle">
+          {score.value}
+        </text>
+        <text className="career-score-caption" x="50" y="63" textAnchor="middle">
+          ИЗ 100
+        </text>
+      </svg>
+      <p>
+        Пройдено {score.checks} проверок из {score.total}. Каждая проверка ниже
+        называет, из чего сложено число.
+      </p>
+    </div>
   );
 }
 

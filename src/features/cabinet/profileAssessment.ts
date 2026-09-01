@@ -1,32 +1,16 @@
-import type { CandidateMemory } from '../coach/coachApi';
+import type { CandidateProfileView } from './profileView';
 
 /**
- * Оценка досье — только пересчитываемые меры.
+ * Оценка профиля — только пересчитываемые проверки.
  *
  * Макет «Пульт» рисует кольцо «68 из 100» и четыре шкалы (ATS-читаемость,
- * конкретика, полнота, соответствие роли). Ни одну из них продукт сегодня не
- * измеряет, а `DESIGN.md` запрещает показывать оценку без источника, выборки и
- * даты — это находка 8 аудита B178, тот же класс, что проценты соответствия у
- * вакансий. Поэтому здесь считается только то, что лежит в досье кандидата:
- * сколько разделов заполнено подтверждёнными фактами, сколько результатов
- * несут число, сколько фактов ждут подтверждения и названа ли целевая роль.
- *
- * Каждая мера несёт свою опору (`basis`) и общий знаменатель, чтобы кандидат
- * видел, из чего сложено число. Пустое досье не даёт ни одной меры — пустой
- * прогресс-бар был бы такой же выдумкой, как «68 из 100».
+ * конкретика, полнота, соответствие роли). Выдумать эти числа нельзя:
+ * `DESIGN.md` запрещает показывать оценку без источника, выборки и даты — это
+ * находка 8 аудита B178. Поэтому форма макета сохранена, а содержание —
+ * счётное: кольцо равно доле пройденных проверок, каждая шкала называет свой
+ * знаменатель, а профиль без данных не даёт ни одного числа.
  */
-export const ASSESSMENT_METHOD_VERSION = 'profile-assessment-dossier-v1';
-
-/** Разделы, из которых состоит карьерная часть досье. */
-const CONTENT_DOMAINS: ReadonlyArray<{
-  domain: CandidateMemory['domain'];
-  label: string;
-}> = [
-  { domain: 'responsibility', label: 'Ответственность' },
-  { domain: 'outcome', label: 'Результаты' },
-  { domain: 'skill', label: 'Навыки' },
-  { domain: 'role-evidence', label: 'Опора под роль' },
-];
+export const ASSESSMENT_METHOD_VERSION = 'profile-assessment-resume-v2';
 
 export interface ProfileMeasure {
   readonly id: string;
@@ -37,146 +21,141 @@ export interface ProfileMeasure {
   readonly basis: string;
 }
 
+export interface ProfileScore {
+  /** Доля пройденных проверок, 0..100. */
+  readonly value: number;
+  readonly checks: number;
+  readonly total: number;
+}
+
 export interface ProfileAssessment {
   readonly methodVersion: typeof ASSESSMENT_METHOD_VERSION;
   readonly measures: readonly ProfileMeasure[];
-  /** Когда досье менялось в последний раз; неизвестно — значит не печатаем. */
+  readonly score?: ProfileScore;
   readonly measuredAt?: string;
 }
 
 export interface ProfileAssessmentInput {
-  readonly memory: readonly CandidateMemory[];
+  readonly view: CandidateProfileView;
   readonly targetDirection: string;
-  /**
-   * Счётчики самого досье. Сервер считает в них все записи, а не только
-   * «факты», и ровно эти числа стоят в шапке досье и в очереди подтверждения.
-   * Мера обязана брать их, иначе один экран печатает два разных числа об одном
-   * и том же — найдено живым прогоном на проде `f23e927`.
-   */
-  readonly dossier?: {
-    readonly confirmedCount: number;
-    readonly proposedCount: number;
-  };
 }
 
-/** Число в тексте — единственное доказательство, что результат измерим. */
-const CARRIES_A_NUMBER = /\d/u;
-
 export function assessProfile({
-  memory,
+  view,
   targetDirection,
-  dossier,
 }: ProfileAssessmentInput): ProfileAssessment {
-  const facts = memory.filter((item) => item.kind === 'fact');
-  if (facts.length === 0) {
+  const measures = [
+    sectionsMeasure(view),
+    ...measurableResultsMeasure(view),
+    ...datedExperienceMeasure(view),
+    ...targetRoleMeasure(view, targetDirection),
+  ];
+
+  if (isEmptyProfile(view)) {
     return { methodVersion: ASSESSMENT_METHOD_VERSION, measures: [] };
   }
 
-  const confirmed = facts.filter(
-    (item) => item.status === 'confirmed' || item.status === 'corrected',
-  );
+  const checks = measures.reduce((sum, measure) => sum + measure.value, 0);
+  const total = measures.reduce((sum, measure) => sum + measure.total, 0);
 
   return {
     methodVersion: ASSESSMENT_METHOD_VERSION,
-    measures: [
-      sectionsMeasure(confirmed),
-      ...outcomeMeasure(confirmed),
-      confirmedMeasure(facts, confirmed, dossier),
-      ...targetRoleMeasure(targetDirection),
-    ],
-    measuredAt: lastChangedAt(facts),
+    measures,
+    score:
+      total === 0
+        ? undefined
+        : { value: Math.round((checks / total) * 100), checks, total },
+    measuredAt: view.updatedAt,
   };
 }
 
-/** Раздел заполнен, только если в нём лежит подтверждённый факт. */
-function sectionsMeasure(confirmed: readonly CandidateMemory[]): ProfileMeasure {
-  const empty = CONTENT_DOMAINS.filter(
-    ({ domain }) => !confirmed.some((item) => item.domain === domain),
+function isEmptyProfile(view: CandidateProfileView): boolean {
+  return (
+    !view.about &&
+    view.experience.length === 0 &&
+    view.skills.length === 0 &&
+    view.education.length === 0 &&
+    view.languages.length === 0
   );
+}
+
+/** Разделы профиля — те, что кандидат заполняет о себе. */
+function sectionsMeasure(view: CandidateProfileView): ProfileMeasure {
+  const sections: Array<{ label: string; filled: boolean }> = [
+    { label: 'о себе', filled: Boolean(view.about) },
+    { label: 'опыт', filled: view.experience.length > 0 },
+    { label: 'навыки', filled: view.skills.length > 0 },
+    { label: 'образование', filled: view.education.length > 0 },
+    { label: 'языки', filled: view.languages.length > 0 },
+  ];
+  const empty = sections.filter((section) => !section.filled);
 
   return {
     id: 'sections',
-    label: 'Разделы досье',
-    value: CONTENT_DOMAINS.length - empty.length,
-    total: CONTENT_DOMAINS.length,
+    label: 'Полнота профиля',
+    value: sections.length - empty.length,
+    total: sections.length,
     basis:
       empty.length === 0
-        ? 'Все разделы держат хотя бы один подтверждённый факт.'
-        : `Пусто: ${empty
-            .map(({ label }) => label.toLocaleLowerCase('ru-RU'))
-            .join(', ')}. Раздел считается заполненным по подтверждённому факту.`,
+        ? 'Все разделы профиля заполнены.'
+        : `Пусто: ${empty.map((section) => section.label).join(', ')}.`,
   };
 }
 
 /** Результат без числа читается как обязанность, а не как достижение. */
-function outcomeMeasure(
-  confirmed: readonly CandidateMemory[],
-): ProfileMeasure[] {
-  const outcomes = confirmed.filter((item) => item.domain === 'outcome');
-  if (outcomes.length === 0) return [];
-
-  const measurable = outcomes.filter((item) =>
-    CARRIES_A_NUMBER.test(item.statement),
-  );
+function measurableResultsMeasure(view: CandidateProfileView): ProfileMeasure[] {
+  const bullets = view.experience.reduce((sum, entry) => sum + entry.bullets.length, 0);
+  if (bullets === 0) return [];
+  const measurable = view.experience.reduce((sum, entry) => sum + entry.measurableBullets, 0);
 
   return [
     {
       id: 'measurable-results',
-      label: 'Результаты с числом',
-      value: measurable.length,
-      total: outcomes.length,
+      label: 'Конкретика результатов',
+      value: measurable,
+      total: bullets,
       basis:
-        measurable.length === outcomes.length
-          ? 'Каждый подтверждённый результат называет величину.'
-          : 'Результат без числа читается как обязанность, а не как достижение.',
+        measurable === bullets
+          ? 'Каждый пункт опыта называет величину.'
+          : 'Пункт без числа читается как обязанность, а не как достижение.',
     },
   ];
 }
 
-function confirmedMeasure(
-  facts: readonly CandidateMemory[],
-  confirmed: readonly CandidateMemory[],
-  dossier: ProfileAssessmentInput['dossier'],
-): ProfileMeasure {
-  const value = dossier?.confirmedCount ?? confirmed.length;
-  const pending =
-    dossier?.proposedCount ??
-    facts.filter((item) => item.status === 'proposed').length;
-  return {
-    id: 'confirmed-facts',
-    label: 'Подтверждено записей',
-    value,
-    total: value + pending,
-    basis:
-      pending > 0
-        ? `${pending} ждут вашего подтверждения — до него они не попадают ни в резюме, ни в оценку.`
-        : 'Все факты досье подтверждены вами.',
-  };
+/** Место работы без дат не читается ни человеком, ни разбором вакансии. */
+function datedExperienceMeasure(view: CandidateProfileView): ProfileMeasure[] {
+  if (view.experience.length === 0) return [];
+  const dated = view.experience.filter((entry) => entry.period !== '');
+
+  return [
+    {
+      id: 'dated-experience',
+      label: 'Опыт с датами',
+      value: dated.length,
+      total: view.experience.length,
+      basis:
+        dated.length === view.experience.length
+          ? 'У каждого места работы есть период.'
+          : 'Без периода место работы не складывается в стаж.',
+    },
+  ];
 }
 
-/** Без названного направления рынок не с чем сравнивать. */
-function targetRoleMeasure(targetDirection: string): ProfileMeasure[] {
-  if (targetDirection.trim()) return [];
+function targetRoleMeasure(
+  view: CandidateProfileView,
+  targetDirection: string,
+): ProfileMeasure[] {
+  const named = Boolean(view.targetRole?.trim() || targetDirection.trim());
+
   return [
     {
       id: 'target-role',
       label: 'Целевая роль',
-      value: 0,
+      value: named ? 1 : 0,
       total: 1,
-      basis:
-        'Направление не названо, поэтому рынок не с чем сравнивать. Назовите его в «Карьере».',
+      basis: named
+        ? 'Направление названо — рынок есть с чем сравнивать.'
+        : 'Направление не названо, поэтому рынок не с чем сравнивать.',
     },
   ];
-}
-
-/**
- * Дата пересчёта — последнее изменение досье, а не момент отрисовки: экран не
- * имеет права выдавать открытие страницы за свежий замер.
- */
-function lastChangedAt(facts: readonly CandidateMemory[]): string | undefined {
-  const stamps = facts
-    .map((item) => item.updatedAt ?? item.createdAt)
-    .filter((value): value is string => Boolean(value))
-    .sort();
-  return stamps.at(-1);
 }

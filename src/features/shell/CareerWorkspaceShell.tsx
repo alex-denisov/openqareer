@@ -5,7 +5,6 @@ import {
   SearchIcon,
   VacanciesIcon,
   ProfileIcon,
-  ResumeIcon,
   TariffsIcon,
   type SectionIconProps,
 } from './sectionIcons';
@@ -61,7 +60,6 @@ const primaryNavigation: Array<{
   icon: SectionIcon;
 }> = [
   { id: 'today', label: 'Главная', icon: ProfileIcon },
-  { id: 'resume', label: 'Резюме', icon: ResumeIcon },
   { id: 'career', label: 'Поиск', icon: SearchIcon },
   {
     id: 'opportunities',
@@ -70,6 +68,11 @@ const primaryNavigation: Array<{
   },
 ];
 
+/**
+ * В рельсе три раздела — ровно те, что в макете «Пульт»: «Главная», «Поиск»,
+ * «Вакансии». Раздела «Резюме» в макете нет; мастер-резюме остаётся доступен
+ * из «Портфолио» на «Главной», где ему и место (B179).
+ */
 const pageNames: Record<ShellView, string> = {
   today: 'Главная',
   profile: 'Главная',

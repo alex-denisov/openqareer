@@ -58,16 +58,16 @@ test.describe('B160 «Главная» during a running import', () => {
 
     await completeWizard(page);
 
-    // «Пульт» свёл кандидата на «Главную»: то же обещание теперь держит
-    // оценка досье рядом с рекомендацией.
-    const assessment = page.locator('.career-home-panel').filter({ hasText: 'Оценка досье' });
+    // «Пульт» свёл кандидата на «Главную»: то же обещание держит оценка
+    // профиля, посчитанная по разобранному резюме (B179).
+    const assessment = page.locator('.career-home-panel').filter({ hasText: 'Оценка профиля' });
     await expect(assessment).toBeVisible();
     await expect(assessment).toContainText('идёт импорт профиля');
-    await expect(assessment).not.toContainText('Нет подтверждённых фактов');
+    await expect(assessment).not.toContainText('Профиль пуст');
 
     await releaseImport();
 
-    await expect(assessment).toContainText('Нет подтверждённых фактов');
+    await expect(assessment).toContainText('Профиль пуст');
     await expect(assessment).not.toContainText('идёт импорт профиля');
   });
 });

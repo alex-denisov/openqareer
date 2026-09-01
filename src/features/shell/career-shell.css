@@ -7777,3 +7777,306 @@
   color: var(--career-text-dim);
   font-size: 0.84rem;
 }
+
+/* ==========================================================================
+   B179 — «Главная» из макета «Пульт»: профиль кандидата, собранный из
+   разобранного резюме. Карточки мест работы, чипы, кольцо оценки.
+
+   Цвета берутся только из токенов оболочки: макет нарисован в янтаре, но знак
+   продукта синий, и гейт `brandPalette.test.ts` держит одну семью тонов — тот
+   самый дефект B138, когда логотип и интерфейс были разного цвета. Форма и
+   вёрстка перенесены из макета один в один, тон — фирменный.
+   ========================================================================== */
+
+.career-profile-identity-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-top: 6px;
+}
+
+.career-profile-role {
+  color: var(--career-accent);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.career-profile-dot {
+  color: var(--career-text-dim);
+}
+
+.career-profile-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--career-text-soft);
+  font-size: 0.74rem;
+}
+
+.career-profile-identity-actions {
+  display: flex;
+  gap: 14px;
+}
+
+.career-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 7px;
+  padding: 3px 9px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.career-pill.is-good {
+  color: var(--career-success);
+  background: var(--career-success-soft);
+}
+
+.career-pill.is-warn {
+  color: var(--career-warning);
+  background: var(--career-warning-soft);
+}
+
+.career-pill.is-danger {
+  color: var(--career-danger);
+  background: var(--career-danger-soft);
+}
+
+.career-pill.is-muted {
+  color: var(--career-text-soft);
+  background: var(--career-surface-raised);
+}
+
+.career-profile-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.career-profile-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.career-profile-block h3 {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.career-profile-about {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.career-profile-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-profile-chips li {
+  border: 1px solid var(--career-line);
+  border-radius: 8px;
+  padding: 5px 10px;
+  color: var(--career-text-soft);
+  background: var(--career-surface-raised);
+  font-size: 0.72rem;
+}
+
+.career-job-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-job-card {
+  position: relative;
+  border: 1px solid var(--career-line);
+  border-radius: 13px;
+  padding: 13px 15px;
+  background: var(--career-surface-raised);
+}
+
+.career-job-card.is-good {
+  border-color: var(--career-success-soft);
+}
+
+.career-job-card.is-warn {
+  border-color: var(--career-warning-soft);
+}
+
+.career-job-signal {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--career-text-dim);
+}
+
+.career-job-card.is-good .career-job-signal {
+  background: var(--career-success);
+}
+
+.career-job-card.is-warn .career-job-signal {
+  background: var(--career-warning);
+}
+
+.career-job-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.career-job-logo {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--career-line-strong);
+  border-radius: 10px;
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.career-job-title {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.career-job-title strong {
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.career-job-period {
+  color: var(--career-text-soft);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.career-job-bullets {
+  display: grid;
+  gap: 6px;
+  margin: 11px 0 0;
+  padding: 11px 0 0;
+  border-top: 1px solid var(--career-line);
+  list-style: none;
+}
+
+.career-job-bullets li {
+  display: flex;
+  gap: 9px;
+  color: var(--career-text-soft);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+.career-job-bullets li > span:first-child {
+  color: var(--career-warning);
+}
+
+.career-job-bullets li.is-measured > span:first-child {
+  color: var(--career-success);
+}
+
+.career-job-bullets li.is-measured {
+  color: var(--career-text);
+}
+
+.career-job-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.career-job-improve {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 10px;
+  padding: 6px 13px;
+  color: var(--career-accent-ink);
+  background: var(--career-accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.career-job-empty,
+.career-job-gap {
+  margin: 10px 0 0;
+  color: var(--career-text-dim);
+  font-size: 0.72rem;
+}
+
+.career-job-gap {
+  border: 1px dashed var(--career-line-strong);
+  border-radius: 13px;
+  padding: 13px 15px;
+}
+
+.career-score {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.career-score p {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.career-score-track {
+  fill: none;
+  stroke: var(--career-surface-raised);
+  stroke-width: 10;
+}
+
+.career-score-value {
+  fill: none;
+  stroke: var(--career-accent);
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+
+.career-score-number {
+  fill: var(--career-text);
+  font-size: 27px;
+  font-variant-numeric: tabular-nums;
+}
+
+.career-score-caption {
+  fill: var(--career-text-dim);
+  font-size: 9px;
+}

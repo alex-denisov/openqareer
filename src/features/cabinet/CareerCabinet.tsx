@@ -9,7 +9,6 @@ import { CareerTrackBoard } from './CareerTrackBoard';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { VacancyBoard } from '../vacancies/VacancyBoard';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
-import { cabinetDisplayName } from './cabinetIdentity';
 import { useCareerCabinetData } from './useCareerCabinetData';
 import {
   applyRoutePremises,
@@ -53,12 +52,6 @@ export function CareerCabinet({
   onOpenExpert,
 }: CareerCabinetProps) {
   const data = useCareerCabinetData(session.candidateId);
-  const name = cabinetDisplayName({
-    account: data.account,
-    resume: data.resume,
-    sessionDisplayName: session.displayName,
-    username: session.username,
-  });
   const targetDirection =
     data.account?.profile.headline?.trim() || workspace?.targetDirection || '';
   const savePremises = useCallback(
@@ -110,7 +103,6 @@ export function CareerCabinet({
         />
         <CabinetSection
           view={view}
-          name={name}
           session={session}
           workspace={workspace}
           journey={canonicalJourney}
@@ -132,7 +124,6 @@ export function CareerCabinet({
 // eslint-disable-next-line max-lines-per-function
 function CabinetSection({
   view,
-  name,
   session,
   workspace,
   journey,
@@ -146,7 +137,6 @@ function CabinetSection({
   onOpenExpert,
 }: {
   view: CareerCabinetView;
-  name: string;
   session: AuthUser & { candidateId: string };
   workspace?: CandidateWorkspace;
   journey?: CareerJourney;
@@ -164,9 +154,7 @@ function CabinetSection({
   if (view === 'today' || view === 'profile') {
     return (
       <CareerHome
-        name={name}
         session={session}
-        journey={journey}
         snapshot={data.snapshot}
         account={data.account}
         workspace={workspace}

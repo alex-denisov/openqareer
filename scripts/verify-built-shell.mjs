@@ -142,6 +142,16 @@ async function verifyViewport(browser, baseUrl, viewport) {
               sensitive: false,
               status: 'confirmed',
             },
+            {
+              id: 'imported-responsibility',
+              kind: 'fact',
+              domain: 'responsibility',
+              statement: 'Отвечал за продуктовую аналитику трёх направлений.',
+              confidence: 'candidate-reported',
+              sourceMessageIds: ['message-import'],
+              sensitive: false,
+              status: 'proposed',
+            },
           ],
           turns: [],
           dossier: {
@@ -155,6 +165,45 @@ async function verifyViewport(browser, baseUrl, viewport) {
           },
           assessments: [],
           germanyMarket: null,
+          // «Главная» — это профиль из разобранного резюме (B179). Без него
+          // гейт проверял бы пустой экран вместо того, ради чего он есть.
+          resume: {
+            createdAt: '2026-08-30T10:00:00.000Z',
+            updatedAt: '2026-09-01T09:00:00.000Z',
+            draft: {
+              candidate: {
+                fullName: 'Мария Иванова',
+                about: 'Продуктовый аналитик с опытом запуска аналитики в финтехе.',
+                contact: { location: 'Москва, Россия' },
+              },
+              targetRole: 'Продуктовый аналитик',
+              experience: [
+                {
+                  id: 'exp-1',
+                  chronologyMemoryId: 'imported-responsibility',
+                  title: 'Продуктовый аналитик',
+                  employer: 'FinCloud',
+                  startDate: '2023-01',
+                  current: true,
+                  bulletMemoryIds: ['confirmed-product-result', 'imported-responsibility'],
+                },
+              ],
+              skills: [{ id: 'skill-1', name: 'Продуктовая аналитика' }],
+              education: [
+                {
+                  id: 'edu-1',
+                  evidenceMemoryId: 'imported-responsibility',
+                  institution: 'МГУ',
+                  qualification: 'Прикладная математика',
+                  startDate: '2012',
+                  endDate: '2016',
+                },
+              ],
+              languages: [
+                { id: 'lang-1', evidenceMemoryId: 'imported-responsibility', name: 'Английский' },
+              ],
+            },
+          },
           documents: [],
           vacancySubscriptions: createdVacancyView
             ? [createdVacancyView.subscription]
@@ -597,9 +646,16 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // beside it — while the strategist dialogue stays in the «Эксперт» drawer and
   // the campaign stays in «Поиске» and the collected pool in «Вакансиях».
   await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
-  await page.getByText('Следующий шаг', { exact: true }).waitFor();
   await page.locator('.career-profile-surface').first().waitFor();
-  await page.getByRole('heading', { name: 'Оценка досье' }).waitFor();
+  // «Главная» показывает сам профиль: место работы из разобранного резюме с
+  // периодом и счётом измеримых пунктов, а не очередь подтверждения (B179).
+  await page.getByText('Продуктовый аналитик · FinCloud', { exact: true }).waitFor();
+  await page.getByText(/1 из 2 пунктов с измеримым результатом/u).waitFor();
+  await page.getByRole('heading', { name: 'Оценка профиля' }).waitFor();
+  assert(
+    (await page.getByText('Следующий шаг', { exact: true }).count()) === 0,
+    `${viewport.name}: the confirmation card the mockup dropped is still on «Главной»`,
+  );
   await mkdir('output/playwright', { recursive: true });
   await page.screenshot({
     path: `output/playwright/b178-home-${viewport.name}.png`,
@@ -774,9 +830,12 @@ async function verifyViewport(browser, baseUrl, viewport) {
     (await page.locator('.career-profile-surface').count()) === 1;
   assert(
     profileFactReview,
-    `${viewport.name}: profile fact review surface missing on «Главной»`,
+    `${viewport.name}: candidate profile surface missing on «Главной»`,
   );
-  await page.locator('button[aria-label="Резюме"]:visible').click();
+  // Раздела «Резюме» в рельсе больше нет — макет его не держит. Мастер-резюме
+  // открывается из «Портфолио» на «Главной» (B179).
+  await page.getByRole('button', { name: 'Портфолио' }).click();
+  await page.getByRole('button', { name: 'Открыть мастер-резюме' }).click();
   await page.getByRole('heading', { name: 'Resume Studio' }).waitFor().catch(() => undefined);
   // The candidate must read what the connected platform gave the document and
   // what it never held — an empty section with no source named reads as our
@@ -799,11 +858,14 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.screenshot({ path: `output/playwright/resume-source-${viewport.name}.png` });
   await page.locator('button[aria-label="Главная"]:visible').click();
   await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
+  // «Главная» вернулась к самому кандидату: карточка места работы из резюме и
+  // кольцо оценки, посчитанное по этому же профилю (B179).
   const reasonedAction =
-    (await page.locator('.career-today-action p').count()) >= 1;
+    (await page.locator('.career-job-card').count()) >= 1 &&
+    (await page.locator('.career-score-number').count()) === 1;
   assert(
     reasonedAction,
-    `${viewport.name}: reasoned next action is empty on «Сегодня»`,
+    `${viewport.name}: «Главная» does not show the parsed profile`,
   );
 
   const tariffsButton = page

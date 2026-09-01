@@ -1,125 +1,81 @@
 import { describe, expect, it } from 'vitest';
-import type { CandidateMemory } from '../coach/coachApi';
-import {
-  ASSESSMENT_METHOD_VERSION,
-  assessProfile,
-  type ProfileAssessment,
-} from './profileAssessment';
-
-function fact(
-  id: string,
-  domain: CandidateMemory['domain'],
-  statement: string,
-  status: CandidateMemory['status'] = 'confirmed',
-): CandidateMemory {
-  return {
-    id,
-    kind: 'fact',
-    domain,
-    statement,
-    confidence: 'candidate-confirmed',
-    sourceMessageIds: ['message-1'],
-    sensitive: false,
-    status,
-  };
-}
+import { ASSESSMENT_METHOD_VERSION, assessProfile } from './profileAssessment';
+import type { CandidateProfileView } from './profileView';
 
 /**
- * «Пульт» рисует кольцо «68 из 100» и четыре шкалы, ни одна из которых не
- * измерена. Правило продукта запрещает показывать оценку без источника,
- * выборки и даты (находка 8 аудита B178). Поэтому оценка здесь — только то,
- * что можно пересчитать по досье кандидата, и каждая мера называет, из чего
- * она сложена.
+ * «Пульт» рисует кольцо «68 из 100» и четыре шкалы. Ни одну из них нельзя
+ * взять из воздуха: правило продукта запрещает оценку без источника, выборки и
+ * даты (находка 8 аудита B178). Поэтому кольцо здесь — доля пройденных
+ * проверок, а каждая шкала называет свой знаменатель (B179).
  */
+const view: CandidateProfileView = {
+  fullName: 'Alexey Denisov',
+  targetRole: 'VP of Technology',
+  about: 'О себе.',
+  experience: [
+    {
+      id: 'e1',
+      title: 'VP of Technology',
+      employer: 'Enterprise Energy IT Services',
+      period: 'апрель 2023 — октябрь 2025',
+      duration: '2 г. 7 мес.',
+      current: false,
+      bullets: ['Grew revenue 4x', 'Owned operations'],
+      measurableBullets: 1,
+    },
+  ],
+  skills: ['Executive Leadership'],
+  education: [{ id: 'ed1', institution: 'УТМ', qualification: 'BE', period: '2005 — 2010' }],
+  languages: ['English'],
+};
+
 describe('assessProfile', () => {
-  it('считает заполненными только те разделы, где есть подтверждённый факт', () => {
-    const assessment = assessProfile({
-      memory: [
-        fact('m1', 'responsibility', 'Отвечал за сквозную аналитику продукта.'),
-        fact('m2', 'outcome', 'Сократил срок релиза на 30%.'),
-        // Предложенный факт разделa не заполняет: его никто не подтвердил.
-        fact('m3', 'skill', 'SQL и Python.', 'proposed'),
-      ],
-      targetDirection: 'Продуктовый аналитик',
-    });
+  it('считает разделы профиля по тому, что в них есть', () => {
+    const { measures } = assessProfile({ view, targetDirection: 'VP of Technology' });
+    const sections = measures.find((measure) => measure.id === 'sections');
 
-    const filled = measure(assessment, 'sections');
-    expect(filled.value).toBe(2);
-    expect(filled.total).toBe(4);
-    expect(filled.basis).toContain('подтверждённ');
+    expect(sections).toMatchObject({ value: 5, total: 5 });
   });
 
-  it('называет результат измеримым только когда в нём есть число', () => {
-    const assessment = assessProfile({
-      memory: [
-        fact('m1', 'outcome', 'Сократил срок релиза на 30%.'),
-        fact('m2', 'outcome', 'Участвовал в запуске новых направлений.'),
-      ],
+  it('считает пункты с числом отдельной мерой', () => {
+    const { measures } = assessProfile({ view, targetDirection: 'VP of Technology' });
+
+    expect(measures.find((measure) => measure.id === 'measurable-results')).toMatchObject({
+      value: 1,
+      total: 2,
+    });
+  });
+
+  it('кольцо — доля пройденных проверок, а не выдуманное число', () => {
+    const { score } = assessProfile({ view, targetDirection: 'VP of Technology' });
+
+    // 5/5 разделов + 1/2 пунктов + 1/1 датированное место + 1/1 роль = 8 из 9.
+    expect(score).toEqual({ value: 89, checks: 8, total: 9 });
+  });
+
+  it('пустой профиль не даёт ни меры, ни кольца', () => {
+    const empty = assessProfile({
+      view: { experience: [], skills: [], education: [], languages: [] },
       targetDirection: '',
     });
 
-    const measurable = measure(assessment, 'measurable-results');
-    expect(measurable.value).toBe(1);
-    expect(measurable.total).toBe(2);
+    expect(empty.measures).toEqual([]);
+    expect(empty.score).toBeUndefined();
+    expect(empty.methodVersion).toBe(ASSESSMENT_METHOD_VERSION);
   });
 
-  /**
-   * Живой прогон на проде `f23e927`: шапка досье печатала «1 подтверждено ·
-   * 83 на проверке», а мера рядом — «1 из 83, 82 ждут». Сервер считает записи
-   * досье целиком, а мера считала только записи вида «факт», и один экран
-   * показывал два разных числа об одном и том же. Мера обязана считать ровно
-   * то же, что очередь подтверждения.
-   */
-  it('считает подтверждённое так же, как очередь подтверждения', () => {
-    const assessment = assessProfile({
-      memory: [fact('m1', 'outcome', 'Сократил срок релиза на 30%.')],
-      dossier: { confirmedCount: 1, proposedCount: 83 },
-      targetDirection: 'Продуктовый аналитик',
+  it('место работы без дат видно в мере, а не спрятано', () => {
+    const undated = assessProfile({
+      view: {
+        ...view,
+        experience: [{ ...view.experience[0], period: '', duration: '' }],
+      },
+      targetDirection: 'VP of Technology',
     });
 
-    const confirmed = measure(assessment, 'confirmed-facts');
-    expect(confirmed.value).toBe(1);
-    expect(confirmed.total).toBe(84);
-    expect(confirmed.basis).toContain('83');
-  });
-
-  it('не выдаёт ни одной меры, пока досье пустое', () => {
-    const assessment = assessProfile({ memory: [], targetDirection: '' });
-
-    expect(assessment.measures).toEqual([]);
-    expect(assessment.measuredAt).toBeUndefined();
-  });
-
-  it('датирует пересчёт последним изменением досье, а не «сейчас»', () => {
-    const updated = {
-      ...fact('m1', 'outcome', 'Сократил срок релиза на 30%.'),
-      updatedAt: '2026-08-30T09:15:00.000Z',
-    };
-    const older = {
-      ...fact('m2', 'skill', 'SQL.'),
-      updatedAt: '2026-08-14T09:15:00.000Z',
-    };
-
-    const assessment = assessProfile({
-      memory: [older, updated],
-      targetDirection: '',
+    expect(undated.measures.find((measure) => measure.id === 'dated-experience')).toMatchObject({
+      value: 0,
+      total: 1,
     });
-
-    expect(assessment.measuredAt).toBe('2026-08-30T09:15:00.000Z');
-  });
-
-  it('несёт версию метода, чтобы число можно было пересчитать', () => {
-    const assessment = assessProfile({
-      memory: [fact('m1', 'outcome', 'Сократил срок релиза на 30%.')],
-      targetDirection: '',
-    });
-
-    expect(assessment.methodVersion).toBe(ASSESSMENT_METHOD_VERSION);
   });
 });
-
-function measure(assessment: ProfileAssessment, id: string) {
-  const found = assessment.measures.find((item) => item.id === id);
-  if (!found) throw new Error(`нет меры ${id}`);
-  return found;
-}

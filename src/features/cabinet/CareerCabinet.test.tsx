@@ -86,15 +86,16 @@ describe('CareerCabinet composition', () => {
     expect(html).toContain('Регионы не выбраны');
   });
 
-  // «Пульт»: «Главная» держит самого кандидата — досье слева, рекомендацию и
-  // оценку справа. Отдельного раздела «Профиль» больше нет, поэтому здесь
-  // обязаны быть оба, но по-прежнему без рынка и без второго диалога.
-  it('gives «Главная» the dossier and the next action side by side', () => {
+  // «Пульт»: «Главная» — это сам кандидат. Слева профиль из разобранного
+  // резюме, справа оценка и позиционирование. Ни очереди подтверждения, ни
+  // карточки следующего шага макет не держит (B179).
+  it('gives «Главная» the candidate profile beside the assessment', () => {
     const html = renderCabinet('today');
 
-    expect(html).toContain('Следующий шаг');
-    expect(html).toContain('Профиль и документы');
-    expect(html).toContain('Оценка досье');
+    expect(html).toContain('Разделы профиля');
+    expect(html).toContain('Оценка профиля');
+    expect(html).not.toContain('Следующий шаг');
+    expect(html).not.toContain('Подтвердить все');
     expect(html).not.toContain('Рынок и следующие шаги');
   });
 
@@ -109,8 +110,8 @@ describe('CareerCabinet composition', () => {
   it('sends the old «Профиль» address to «Главная»', () => {
     const html = renderCabinet('profile');
 
-    expect(html).toContain('Профиль и документы');
-    expect(html).toContain('Оценка досье');
+    expect(html).toContain('Разделы профиля');
+    expect(html).toContain('Оценка профиля');
     expect(html).not.toContain('Рынок и следующие шаги');
   });
 

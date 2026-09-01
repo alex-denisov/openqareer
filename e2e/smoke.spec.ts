@@ -147,8 +147,9 @@ test('candidate confirms one saved command and sees an honest queued state', asy
 
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   // B169 §8 — the strategist is opened from the place that has a reason to
-  // open it. The contextless «Эксперт» button in the top bar is gone.
-  await page.getByRole('button', { name: /Обсудить (со стратегом|с экспертом)/u }).click();
+  // open it. The contextless «Эксперт» button in the top bar is gone; на
+  // «Главной» вход к нему держит карточка консультанта (B179).
+  await page.getByRole('button', { name: /(Начать|Продолжить) разговор/u }).click();
   const dialog = page.getByRole('dialog', { name: 'Карьерный эксперт' });
   await expect(dialog.getByText('Ничего не отправлено')).toBeVisible();
 

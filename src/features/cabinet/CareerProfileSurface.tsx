@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import {
-  Check,
+  ArrowClockwise,
   DownloadSimple,
   FileArrowUp,
   FilePdf,
@@ -8,11 +8,8 @@ import {
   MapPin,
   Trash,
   UserCircle,
-  X,
 } from '@phosphor-icons/react';
 import {
-  changeMemory,
-  reviewMemories,
   CoachApiError,
   deleteCandidateDocument,
   downloadCandidateDocument,
@@ -28,7 +25,15 @@ import { extractPdfResume } from '../workspace/pdfResume';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { DOCUMENT_MAX_BYTES, megabytes } from '../../../shared/fileLimits';
 
-type ProfileTab = 'summary' | 'experience' | 'skills' | 'education' | 'documents';
+import { buildProfileView } from './profileView';
+import {
+  ProfileAbout,
+  ProfileEducation,
+  ProfileExperience,
+  ProfileSkills,
+} from './ProfileSections';
+
+type ProfileTab = 'about' | 'experience' | 'skills' | 'education' | 'portfolio';
 
 interface CareerProfileSurfaceProps {
   account?: AccountSnapshot;
@@ -40,17 +45,25 @@ interface CareerProfileSurfaceProps {
   onRefresh: () => Promise<void>;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
   onOpenAccount: () => void;
+  onOpenExpert: () => void;
+  onOpenResume: () => void;
 }
-
 const profileTabs: Array<{ id: ProfileTab; label: string }> = [
-  { id: 'summary', label: 'Сводка' },
+  { id: 'about', label: 'О себе' },
   { id: 'experience', label: 'Опыт' },
   { id: 'skills', label: 'Навыки' },
-  { id: 'education', label: 'Образование и курсы' },
-  { id: 'documents', label: 'Документы' },
+  { id: 'education', label: 'Образование' },
+  { id: 'portfolio', label: 'Портфолио' },
 ];
 
-// Profile state remains co-located so file, memory, and tab feedback cannot diverge.
+/**
+ * «Главная» из макета «Пульт»: карточка кандидата, вкладки и разделы, собранные
+ * из разобранного резюме.
+ *
+ * Отсюда убрана очередь «Подтвердите опорные факты»: макет от неё отказался, а
+ * разобранное резюме — это то, что кандидат сам о себе сообщил, и собственного
+ * подтверждения, чтобы попасть в его же профиль, оно не требует (B179).
+ */
 // eslint-disable-next-line max-lines-per-function
 export function CareerProfileSurface({
   account,
@@ -62,46 +75,21 @@ export function CareerProfileSurface({
   onRefresh,
   onUpdateWorkspace,
   onOpenAccount,
+  onOpenExpert,
+  onOpenResume,
 }: CareerProfileSurfaceProps) {
-  const [activeTab, setActiveTab] = useState<ProfileTab>('summary');
+  const [activeTab, setActiveTab] = useState<ProfileTab>('experience');
   const [busyId, setBusyId] = useState<string>();
   const [uploading, setUploading] = useState(false);
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
-  const name = account?.displayName ?? session.displayName ?? account?.username ?? session.username;
-  const facts = snapshot?.memory ?? [];
-
-  async function reviewMemory(memoryId: string, action: 'confirm' | 'delete') {
-    setBusyId(memoryId);
-    setError(undefined);
-    try {
-      await changeMemory(memoryId, { action });
-      await onRefresh();
-    } catch (reason) {
-      setError(profileError(reason));
-    } finally {
-      setBusyId(undefined);
-    }
-  }
-
-  /**
-   * An import states dozens of facts at once. Reviewing them one by one is a
-   * review nobody finishes, so the queue offers the batch decision the
-   * candidate actually wants to make (B166).
-   */
-  async function reviewAllMemories(memoryIds: readonly string[]) {
-    setBusyId(REVIEW_ALL);
-    setError(undefined);
-    try {
-      const reviewed = await reviewMemories(memoryIds, 'confirm');
-      setNotice(`Подтверждено ${reviewed} ${factNoun(reviewed)}.`);
-      await onRefresh();
-    } catch (reason) {
-      setError(profileError(reason));
-    } finally {
-      setBusyId(undefined);
-    }
-  }
+  const view = buildProfileView(snapshot);
+  const name =
+    view.fullName ??
+    account?.displayName ??
+    session.displayName ??
+    account?.username ??
+    session.username;
 
   async function removeDocument(document: CandidateDocument) {
     setBusyId(document.id);
@@ -223,7 +211,7 @@ export function CareerProfileSurface({
           : 'Такой файл уже есть в хранилище; дубликат не создан.',
       );
       await onRefresh();
-      setActiveTab('documents');
+      setActiveTab('portfolio');
     } catch (reason) {
       setError(profileError(reason));
     } finally {
@@ -241,28 +229,34 @@ export function CareerProfileSurface({
           {initials(name)}
         </span>
         <div className="career-profile-identity-copy">
-          <span className="career-cabinet-kicker">Профиль и документы</span>
           <h1 id="career-profile-surface-title">{name}</h1>
-          <p>
-            {account?.profile.headline ??
-              workspace?.targetDirection ??
-              'Карьерное направление уточняется'}
-          </p>
-          <div>
-            <span>
-              <MapPin size={14} /> {account?.profile.location ?? 'Локация не указана'}
+          <div className="career-profile-identity-line">
+            <span className="career-profile-role">
+              {view.targetRole ?? account?.profile.headline ?? 'Целевая роль не названа'}
             </span>
-            <span>
-              <UserCircle size={14} /> {workModeLabel(account?.profile.workMode)}
+            <span className="career-profile-dot" aria-hidden="true">
+              ·
+            </span>
+            <span className="career-profile-location">
+              <MapPin size={13} />{' '}
+              {view.location ?? account?.profile.location ?? 'Локация не указана'}
+            </span>
+            <span className="career-pill is-good">
+              <UserCircle size={12} /> {workModeLabel(account?.profile.workMode)}
             </span>
           </div>
         </div>
         <div className="career-profile-update-state">
-          <span>{evidenceSummary(snapshot)}</span>
+          <span className="career-cabinet-tag">обновлён</span>
           <small>{lastChangeLabel(account, snapshot)}</small>
-          <button type="button" onClick={onOpenAccount}>
-            Изменить данные
-          </button>
+          <div className="career-profile-identity-actions">
+            <button type="button" onClick={() => void onRefresh()}>
+              <ArrowClockwise size={14} /> Обновить
+            </button>
+            <button type="button" onClick={onOpenAccount}>
+              Изменить данные
+            </button>
+          </div>
         </div>
       </header>
 
@@ -276,7 +270,7 @@ export function CareerProfileSurface({
             onClick={() => setActiveTab(tab.id)}
           >
             {tab.label}
-            {tab.id === 'documents' && snapshot?.documents.length
+            {tab.id === 'portfolio' && snapshot?.documents.length
               ? ` ${snapshot.documents.length}`
               : ''}
           </button>
@@ -285,270 +279,41 @@ export function CareerProfileSurface({
 
       <div className="career-profile-surface-body">
         {loading && !snapshot ? (
-          <p className="career-cabinet-loading">Собираем подтверждённые данные…</p>
+          <p className="career-cabinet-loading">Читаем ваш профиль…</p>
         ) : null}
-        {activeTab === 'summary' ? (
-          <ProfileSummary
-            snapshot={snapshot}
-            busyId={busyId}
-            onReview={reviewMemory}
-            onReviewAll={reviewAllMemories}
-          />
-        ) : null}
+        {activeTab === 'about' ? <ProfileAbout view={view} /> : null}
         {activeTab === 'experience' ? (
-          <ProfileFacts
-            title="Опыт и результаты"
-            empty="Подтверждённые эпизоды опыта появятся после разговора или импорта резюме."
-            facts={facts.filter((item) =>
-              ['responsibility', 'outcome', 'role-evidence'].includes(item.domain),
-            )}
-            busyId={busyId}
-            onReview={reviewMemory}
-          />
+          <ProfileExperience view={view} onImprove={onOpenExpert} />
         ) : null}
-        {activeTab === 'skills' ? (
-          <ProfileFacts
-            title="Навыки и рабочие сигналы"
-            empty="Навыки ещё не подтверждены источником или в разговоре."
-            facts={facts.filter((item) => item.domain === 'skill')}
-            busyId={busyId}
-            onReview={reviewMemory}
-          />
+        {activeTab === 'skills' ? <ProfileSkills view={view} /> : null}
+        {activeTab === 'education' ? <ProfileEducation view={view} /> : null}
+        {activeTab === 'portfolio' ? (
+          <>
+            <button type="button" className="career-quiet-button" onClick={onOpenResume}>
+              Открыть мастер-резюме
+            </button>
+            <DocumentVault
+              documents={snapshot?.documents ?? []}
+              busyId={busyId}
+              uploading={uploading}
+              onUpload={uploadFile}
+              onDownload={downloadDocument}
+              onDelete={removeDocument}
+            />
+          </>
         ) : null}
-        {activeTab === 'education' ? (
-          <ProfileFacts
-            title="Образование, курсы и сертификаты"
-            empty="Сведения об образовании и курсах появятся после импорта резюме или разговора."
-            facts={facts.filter(
-              (item) =>
-                ['role-evidence', 'other'].includes(item.domain) ||
-                /образован|университет|институт|диплом|курс|сертификат|степень|бакалавр|магистр|ielts|toefl|gmat|mba/iu.test(
-                  item.statement,
-                ),
-            )}
-            busyId={busyId}
-            onReview={reviewMemory}
-          />
-        ) : null}
-        {activeTab === 'documents' ? (
-          <DocumentVault
-            documents={snapshot?.documents ?? []}
-            busyId={busyId}
-            uploading={uploading}
-            onUpload={uploadFile}
-            onDownload={downloadDocument}
-            onDelete={removeDocument}
-          />
+        {notice ? <p className="career-cabinet-notice">{notice}</p> : null}
+        {error ? (
+          <p className="career-cabinet-error" role="alert">
+            {error}
+          </p>
         ) : null}
       </div>
-
-      {notice ? (
-        <p className="career-cabinet-notice" role="status">
-          {notice}
-        </p>
-      ) : null}
-      {error ? (
-        <p className="career-expert-error" role="alert">
-          {error}
-        </p>
-      ) : null}
     </section>
   );
 }
 
-/**
- * Everything an import left for the candidate to decide. It is exported so the
- * queue can be proven on its own: a queue that shows four of thirty-two facts
- * is not a review the candidate can finish (B166).
- */
-// eslint-disable-next-line max-lines-per-function
-export function ProfileReviewQueue({
-  proposedFacts,
-  openQuestions,
-  busyId,
-  onReview,
-  onReviewAll,
-}: {
-  proposedFacts: CandidateSnapshot['memory'];
-  openQuestions: CandidateSnapshot['memory'];
-  busyId?: string;
-  onReview: (memoryId: string, action: 'confirm' | 'delete') => Promise<void>;
-  onReviewAll: (memoryIds: readonly string[]) => Promise<void>;
-}) {
-  return (
-    <aside className="career-profile-review-queue">
-      <header>
-        <span>Нужно проверить</span>
-        <strong>{proposedFacts.length}</strong>
-      </header>
-      {proposedFacts.length > 1 ? (
-        <button
-          type="button"
-          className="career-profile-review-all"
-          disabled={busyId === REVIEW_ALL}
-          onClick={() => void onReviewAll(proposedFacts.map((item) => item.id))}
-        >
-          <Check size={15} />
-          {busyId === REVIEW_ALL
-            ? 'Подтверждаем…'
-            : `Подтвердить все — ${proposedFacts.length} ${factNoun(proposedFacts.length)}`}
-        </button>
-      ) : null}
-      {proposedFacts.length ? (
-        <div className="career-profile-review-list">
-          {proposedFacts.map((item) => (
-            <article key={item.id}>
-              <p>{item.statement}</p>
-              <small>{memorySourceLabel(item.sourceMessageIds)}</small>
-              <div>
-                <button
-                  type="button"
-                  disabled={busyId === item.id}
-                  onClick={() => void onReview(item.id, 'confirm')}
-                >
-                  <Check size={15} /> Подтвердить
-                </button>
-                <button
-                  type="button"
-                  disabled={busyId === item.id}
-                  onClick={() => void onReview(item.id, 'delete')}
-                  aria-label="Не учитывать факт"
-                >
-                  <X size={15} />
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <p>
-          {openQuestions.length
-            ? 'Фактических выводов на проверке нет.'
-            : 'Все текущие выводы уже проверены кандидатом.'}
-        </p>
-      )}
-      {openQuestions.length ? (
-        <section className="career-profile-open-questions">
-          <strong>Открытые вопросы</strong>
-          {openQuestions.slice(0, 3).map((item) => (
-            <article key={item.id}>
-              <p>{item.statement}</p>
-              <small>Уточнение из диалога · {memorySourceLabel(item.sourceMessageIds)}</small>
-            </article>
-          ))}
-        </section>
-      ) : null}
-    </aside>
-  );
-}
-
-function ProfileSummary({
-  snapshot,
-  busyId,
-  onReview,
-  onReviewAll,
-}: {
-  snapshot?: CandidateSnapshot;
-  busyId?: string;
-  onReview: (memoryId: string, action: 'confirm' | 'delete') => Promise<void>;
-  onReviewAll: (memoryIds: readonly string[]) => Promise<void>;
-}) {
-  const facts = snapshot?.memory ?? [];
-  const { confirmedFacts, proposedFacts, openQuestions } = partitionProfileMemory(facts);
-  return (
-    <div className="career-profile-summary-grid">
-      <ProfileFacts
-        title="Опорные факты"
-        empty="Пока нет подтверждённых фактов. Стратег начнёт с одного карьерного эпизода."
-        facts={confirmedFacts.slice(0, 8)}
-        busyId={busyId}
-        onReview={onReview}
-      />
-      <ProfileReviewQueue
-        proposedFacts={proposedFacts}
-        openQuestions={openQuestions}
-        busyId={busyId}
-        onReview={onReview}
-        onReviewAll={onReviewAll}
-      />
-    </div>
-  );
-}
-
-const REVIEW_ALL = 'review-all';
-
-export function partitionProfileMemory(memory: CandidateSnapshot['memory']) {
-  const factual = memory.filter((item) => item.kind !== 'open-question');
-  return {
-    confirmedFacts: factual.filter((item) => item.status !== 'proposed'),
-    proposedFacts: factual.filter((item) => item.status === 'proposed'),
-    openQuestions: memory.filter((item) => item.kind === 'open-question'),
-  };
-}
-
-// eslint-disable-next-line max-lines-per-function
-function ProfileFacts({
-  title,
-  empty,
-  facts,
-  busyId,
-  onReview,
-}: {
-  title: string;
-  empty: string;
-  facts: CandidateSnapshot['memory'];
-  busyId?: string;
-  onReview: (memoryId: string, action: 'confirm' | 'delete') => Promise<void>;
-}) {
-  return (
-    <section className="career-profile-facts">
-      <header>
-        <h2>{title}</h2>
-        <span>
-          {facts.length} {factNoun(facts.length)}
-        </span>
-      </header>
-      {facts.length ? (
-        <div>
-          {facts.map((item) => (
-            <article key={item.id}>
-              <span className={`career-memory-status is-${item.status}`}>
-                {memoryStatusLabel(item.status)}
-              </span>
-              <p>{item.statement}</p>
-              <footer>
-                <small>
-                  {memoryDomainLabel(item.domain)} · {memorySourceLabel(item.sourceMessageIds)}
-                </small>
-                {item.status === 'proposed' ? (
-                  <div>
-                    <button
-                      type="button"
-                      disabled={busyId === item.id}
-                      onClick={() => void onReview(item.id, 'confirm')}
-                    >
-                      Подтвердить
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busyId === item.id}
-                      onClick={() => void onReview(item.id, 'delete')}
-                    >
-                      Не учитывать
-                    </button>
-                  </div>
-                ) : null}
-              </footer>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <p className="career-profile-empty">{empty}</p>
-      )}
-    </section>
-  );
-}
-
+// Хранилище — одна связная поверхность: список, загрузка и пустое состояние.
 // eslint-disable-next-line max-lines-per-function
 function DocumentVault({
   documents,
@@ -684,20 +449,6 @@ function readFileBase64(file: File): Promise<string> {
   });
 }
 
-/**
- * The header used to claim «Профиль синхронизирован» next to a date that was
- * really the account's last edit — a sync that does not exist, dated two days
- * before an import that had just happened (B148 §6). It now states what the
- * profile actually holds and when it last changed.
- */
-function evidenceSummary(snapshot?: CandidateSnapshot): string {
-  const confirmed = snapshot?.dossier.confirmedCount ?? 0;
-  const proposed = snapshot?.dossier.proposedCount ?? 0;
-  if (confirmed === 0 && proposed === 0) return 'Фактов пока нет';
-  const parts = [`${confirmed} подтверждено`];
-  if (proposed > 0) parts.push(`${proposed} на проверке`);
-  return parts.join(' · ');
-}
 
 function lastChangeLabel(account?: AccountSnapshot, snapshot?: CandidateSnapshot): string {
   const value = latestChange(account, snapshot);
@@ -742,39 +493,9 @@ function workModeLabel(mode?: AccountSnapshot['profile']['workMode']) {
   return labels[mode];
 }
 
-function memoryDomainLabel(domain: CandidateSnapshot['memory'][number]['domain']) {
-  return {
-    responsibility: 'Ответственность',
-    outcome: 'Результат',
-    skill: 'Навык',
-    preference: 'Предпочтение',
-    constraint: 'Ограничение',
-    gap: 'Пробел',
-    'role-evidence': 'Сигнал роли',
-    other: 'Контекст',
-  }[domain];
-}
 
-function memoryStatusLabel(status: CandidateSnapshot['memory'][number]['status']) {
-  return status === 'proposed'
-    ? 'На проверке'
-    : status === 'corrected'
-      ? 'Исправлено'
-      : 'Подтверждено';
-}
 
-function memorySourceLabel(sourceIds: string[]) {
-  if (!sourceIds.length) return 'Источник не указан';
-  return `${sourceIds.length} ${sourceIds.length === 1 ? 'источник' : 'источника'}`;
-}
 
-function factNoun(count: number) {
-  const mod100 = count % 100;
-  const mod10 = count % 10;
-  if (mod10 === 1 && mod100 !== 11) return 'факт';
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'факта';
-  return 'фактов';
-}
 
 function formatBytes(bytes: number) {
   return bytes >= 1_048_576

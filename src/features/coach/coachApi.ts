@@ -1,3 +1,4 @@
+import type { ResumeDraft } from '../../../server/domain/resumeDraft';
 import type { WorkspaceInput } from '../workspace/workspaceStorage';
 type UserRole = 'candidate' | 'admin';
 type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
@@ -378,6 +379,16 @@ export interface CandidateSnapshot {
   };
   assessments: StoredAssessment[];
   germanyMarket: StoredGermanyMarket | null;
+  /**
+   * Разобранное резюме кандидата. Сервер отдавал его в снимке с самого начала,
+   * а клиентский тип о нём не знал — поэтому «Главная» не могла показать ни
+   * одного места работы из импорта (B179).
+   */
+  resume: {
+    draft: ResumeDraft;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
   documents: CandidateDocument[];
   vacancySubscriptions: VacancySubscription[];
 }

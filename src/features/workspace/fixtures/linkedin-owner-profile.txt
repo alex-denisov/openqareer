@@ -1,0 +1,165 @@
+Alexey Denisov
+VP of Technology & Operations | Ex-Co-Founder ($50M Exit) |
+Scaling Cloud, SaaS & Enterprise AI | 250+ Team & P&L Leadership
+| Dubai · Remote
+Dubai, United Arab Emirates
+Summary
+I build, scale, and transform technology organizations that drive
+bottom-line revenue — not just support the business.Over 15+ years,
+I have led IT, Cloud Infrastructure, SaaS, and Technical Operations
+across global markets. My core expertise lies in combining P&amp;L
+ownership and executive leadership with hands-on AI-native
+capabilities — turning underperforming tech divisions into high-
+margin, scalable service engines without corporate bureaucracy.
+KEY EXECUTIVE HIGHLIGHTS:• $50M+ ARR Exit: Co-Founded
+&amp; scaled Fishance Berhad (Malaysia) from $73K seed to a
+successful acquisition. Built end-to-end tech &amp; operations
+across 14 offshore facilities and a 10+ nationality team.• 4x Revenue
+Growth &amp; Margin Turnaround: Restructured two tech divisions
+(250+ professionals) at Enterprise Energy IT Services, expanding
+margins from 0% to ~40% and achieving 99.5%+ SLA compliance
+across all commercial services.• Operational Excellence at Scale
+(VK Cloud): Scaled support &amp; technical delivery for a public B2B
+cloud platform - boosted CSAT from 23% to 68%, SLA to 92%, and
+reduced inbound ticket volume by 40% through AI search &amp;
+self-service automation.• Enterprise AI &amp; Product Building:
+Hands-on expertise in multi-agent LLM systems, n8n automation,
+and modern AI coding tools. Built and launched a full-stack SaaS
+platform (eterapy.com) with Telegram Mini App &amp; payments in
+under 3 months. CORE COMPETENCIES:Executive Leadership |
+P&amp;L &amp; Budget Ownership ($50M+) | Cloud Infrastructure
+(IaaS/PaaS) | Digital Transformation &amp; Turnaround | ITIL 4
+&amp; DevOps | Multi-Agent AI Systems | Enterprise Architecture
+| Scale-Up StrategyOpen to VP of Technology, VP of Operations,
+CTO, or COO roles in SaaS, FinTech, iGaming, or AI scale-ups.
+Dubai-based | Available for Global Remote &amp; Executive
+Relocation. Contact: alexey.denisov@me.com | Telegram:
+@alexey_denisov
+Page
+1
+of
+4
+
+Contact
++7 965 193 6059
+(Home)
+alexey.denisov@me.com
+www.linkedin.com/in/alexeydenisov
+(LinkedIn)
+t.me/alexey_denisov
+(Personal)
+Top Skills
+Turn Around Management
+Executive Leadership
+n8n
+Languages
+Russian
+(Native or Bilingual)
+English
+(Full Professional)
+Certifications
+Agile Fundamentals
+AWS Fundamentals
+ITIL® 4 Foundation Certificate in IT
+Service Management
+DevOps Professional Program
+
+Experience
+OptiLab AI
+Independent AI Consultant & Solutions Architect
+November 2025 - Present (10 months)
+• Founded an independent AI & Tech advisory practice focused on enterprise
+process automation and multi-agent system deployment.
+• Architected multi-agent AI pipelines (n8n, ComfyUI, LLM agents) for
+automated document processing, intelligent support workflows, and content
+automation.
+• Designed, built, and launched eterapy.com - an end-to-end AI-driven SaaS
+platform featuring web, mobile, Telegram Mini App, and automated payment
+gateways using cutting-edge AI engineering tools.
+• Pausing active client work to pursue a senior leadership role (VP of Tech /
+COO) where AI and automation capabilities can be applied at organizational
+scale.
+Enterprise Energy IT Services
+VP of Technology & IT Operations
+April 2023 - October 2025 (2 years 7 months)
+• Brought in to execute a strategic turnaround of two technology divisions
+managing 250+ professionals and a broad portfolio of IT products, cloud
+solutions, and managed services for heavy industry holdings.
+• Rebuilt leadership, organizational structure, and ITIL 4-based processes
+(Incident, Problem, Release, Knowledge, Availability, Service Catalog) across
+both divisions.
+• Grew combined revenue 4x and improved operating margin from near-zero
+to ~40% by consolidating fragmented service contracts into unified long-term
+agreements.
+• Achieved 99.5–100% SLA compliance across all commercial enterprise
+services (previously chronic underperformance).
+• Built DevOps function from scratch; deployed unified monitoring across all
+infrastructure services (Zabbix).
+Enterprise Public Cloud Platform (IaaS / PaaS)
+Head of Technical Support and Internal Services
+March 2020 - April 2023 (3 years 2 months)
+• Led technical operations and support for a premier public cloud platform
+(IaaS/PaaS/DBaaS) serving thousands of enterprise B2B customers.
+Page 2 of 4
+
+• Drove CSAT from 23% to 68%, SLA compliance from 50% to 92%, and FCR
+from 5% to 83% — while reducing inbound ticket volume by 40% through self-
+service portal and AI-powered search.
+• Built proprietary cloud tooling from scratch: statuspage, self-service
+knowledge base, and automated bot-based support workflows integrated into
+the platform.
+• Modernized the full support stack - migrating to Atlassian Jira Service
+Management and unifying L1/L2 support, partner integrations, and product
+development in a single instance.
+• Developed a paid managed services go-to-market (GTM) strategy with full
+pricing model - approved by executive C-suite leadership.
+Fishance Berhad
+Co-Founder & COO (Chief Operating Officer)
+July 2016 - October 2019 (3 years 4 months)
+Kedah, Malaysia
+• Scaled business from $73K seed investment to $50M+ annual revenue -
+company successfully exited via acquisition.
+• Owned full C-suite operational scope: Human Resources & Talent
+Acquisition, Legal & Compliance, Supply Chain & Procurement, Inventory
+Management, Facilities, and Fleet & Marine Operations.
+• Oversaw land acquisition, construction, and launch of 14 offshore production
+facilities and a headquarters building.
+• Built entire technology infrastructure from scratch: ERP (Microsoft Dynamics
+AX), IoT environmental monitoring systems, transport tracking, distributed data
+infrastructure, and cross-site network connectivity including radio relay towers.
+• Led multinational team across 10+ nationalities including Malaysia, Australia,
+China, India, and US.
+Corporate University of a Top-Tier Financial Institution
+IT Lead (Acting Head of IT)
+December 2012 - July 2016 (3 years 8 months)
+• Joined as the sole IT specialist and built the entire IT function from scratch
+for one of the world's top-ranked corporate universities - a 37,000 m² campus
+serving up to 600 simultaneous learners across 38 state-of-the-art classrooms,
+supporting training for 250,000+ employees.
+• Built IT infrastructure from zero: domain environment, VoIP telephony, server
+virtualization, ERP systems, end-user devices, and full network infrastructure.
+• Led technical commissioning and launch of the new campus - coordinating
+contractors and managing full organizational relocation.
+Page 3 of 4
+
+• Managed multimedia and AV infrastructure across 38 classrooms -
+supporting high-profile international events attended by ministers and heads of
+state.
+• Grew and led a team of 9 IT engineers; managed IT budget growing from ~
+$650K to ~$4M as the organization scaled.
+Kaspersky
+Premium Support Lead
+December 2010 - December 2012 (2 years 1 month)
+• Delivered premium IT support to C-suite executives, board members, and
+international investors across 45 global office locations - maintaining 100% on-
+time resolution across ~200 weekly requests with zero escalations.
+• Reduced incident resolution time by 40% through structured coordination of
+L1, L2, and application support teams (20+ engineers).
+• Promoted from IT Support Specialist to Premium Support Lead within two
+years.
+Education
+Geekbrains
+Professional Program, DevOps Engineering · (October 2021 - April 2023)
+Universitatea Tehnică a Moldovei
+Bachelor of Engineering - BE, Information Technology · (2005 - 2010)
+Page 4 of 4
