@@ -8080,3 +8080,209 @@
   fill: var(--career-text-dim);
   font-size: 9px;
 }
+
+/* ==========================================================================
+   B179 — «Поиск» из макета «Пульт»: кампания, плитки, воронка и очередь.
+   ========================================================================== */
+
+.career-campaign {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.career-campaign-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.career-campaign-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.career-campaign-head p {
+  margin: 4px 0 0;
+  color: var(--career-text-soft);
+  font-size: 0.74rem;
+}
+
+.career-campaign-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) 1.4fr;
+  gap: 11px;
+}
+
+.career-campaign-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  padding: 13px 15px;
+  background: var(--career-surface);
+}
+
+.career-campaign-tile strong {
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.career-campaign-tile strong.is-untracked {
+  color: var(--career-text-dim);
+}
+
+.career-campaign-tile small {
+  color: var(--career-text-dim);
+  font-size: 0.62rem;
+}
+
+.career-activity-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 34px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-activity-chart li {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+}
+
+.career-activity-chart li span {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 2px;
+  background: var(--career-accent);
+}
+
+.career-activity-chart li span[data-share='0'] {
+  background: var(--career-line-strong);
+}
+
+.career-activity-chart li span[data-share='10'] { height: 10%; }
+.career-activity-chart li span[data-share='20'] { height: 20%; }
+.career-activity-chart li span[data-share='30'] { height: 30%; }
+.career-activity-chart li span[data-share='40'] { height: 40%; }
+.career-activity-chart li span[data-share='50'] { height: 50%; }
+.career-activity-chart li span[data-share='60'] { height: 60%; }
+.career-activity-chart li span[data-share='70'] { height: 70%; }
+.career-activity-chart li span[data-share='80'] { height: 80%; }
+.career-activity-chart li span[data-share='90'] { height: 90%; }
+.career-activity-chart li span[data-share='100'] { height: 100%; }
+
+.career-campaign-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 366px;
+  gap: 15px;
+  align-items: start;
+}
+
+.career-campaign-column {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  min-width: 0;
+}
+
+.career-funnel {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-funnel li {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border-radius: 9px;
+  padding: 12px 6px;
+  background: var(--career-accent-soft);
+}
+
+.career-funnel li.is-untracked {
+  background: var(--career-surface-raised);
+}
+
+.career-funnel-value {
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--career-accent);
+}
+
+.career-funnel li.is-untracked .career-funnel-value {
+  color: var(--career-text-dim);
+}
+
+.career-funnel-label {
+  color: var(--career-text-soft);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.career-automation-list {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-automation-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--career-text-soft);
+  font-size: 0.76rem;
+}
+
+.career-job-card.is-plain {
+  background: var(--career-surface);
+}
+
+@media (max-width: 1180px) {
+  .career-campaign-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .career-campaign-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .career-campaign-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .career-funnel {
+    flex-wrap: wrap;
+  }
+
+  .career-funnel li {
+    flex: 1 1 30%;
+  }
+}
+
+.career-campaign,
+.career-campaign-tile,
+.career-funnel li {
+  min-width: 0;
+}

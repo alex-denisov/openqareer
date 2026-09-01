@@ -357,6 +357,15 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
+  // Кампания «Поиска» читает подтверждённые команды кандидата: без ответа
+  // прогон записал бы 502, который увидел бы и кандидат (B179).
+  await page.route('**/api/v1/candidate/career-commands', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [] }),
+    });
+  });
   await page.route('**/api/v1/candidate/vacancy-sources', async (route) => {
     await route.fulfill({
       status: 200,
@@ -662,16 +671,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
     fullPage: true,
   });
 
-  await page.locator('button[aria-label="Поиск"]:visible').click();
-  await page.getByRole('heading', { name: 'Рынок и следующие шаги' }).waitFor();
-  await page.getByText('Что изменится', { exact: true }).waitFor();
-  await page.getByText('Другой путь', { exact: true }).waitFor();
-  await page.getByText('Исправить исходные данные', { exact: true }).waitFor();
-  await page.getByText(/только после согласования кандидата/iu).waitFor();
-
   // B169 §8 — the strategist opens from the screen that has a reason to open
-  // it. The contextless top-bar trigger this used to click is gone.
-  await page.getByRole('button', { name: 'Настроить со стратегом' }).click();
+  // it. «Пульт» оставил этот вход на «Главной», рядом с профилем (B179).
+  await page.getByRole('button', { name: /(Начать|Продолжить) разговор/u }).click();
   const expert = page.getByRole('dialog', { name: 'Карьерный эксперт' });
   await expert.waitFor({ state: 'visible' });
   const dialogueContainment = await page
@@ -712,41 +714,30 @@ async function verifyViewport(browser, baseUrl, viewport) {
 
   await page.locator('button[aria-label="Поиск"]:visible').click();
   await page.getByRole('heading', { name: 'Поиск', exact: true }).waitFor();
-  await page.locator('.career-track-board').waitFor();
-  // B178 срез 2: роли называет `career_strategist`. В этом прогоне его вывода
-  // нет, поэтому карточек быть не должно — раньше здесь печатался локальный
-  // словарь, и гейт проверял именно его («не меньше одной роли со словом
-  // product»). Пустой раздел обязан честно сказать, откуда придут роли.
-  const roleCards = page.locator('.career-role-hypotheses article');
-  assert(
-    (await roleCards.count()) === 0,
-    `${viewport.name}: роли появились без вывода стратега (${await roleCards.count()})`,
-  );
-  assert(
-    /стратег/iu.test(await page.locator('.career-role-hypotheses').innerText()),
-    `${viewport.name}: пустые «Рабочие роли» не объясняют, кто называет роль`,
-  );
-  await page
-    .locator('.career-track-timeline article')
-    .filter({ hasText: 'Роль и рынок' })
-    .getByText('В работе', { exact: true })
-    .waitFor();
+  // «Поиск» — кампания из макета: плитки, воронка, очередь и автоматизация по
+  // тарифу (B179).
+  await page.getByRole('heading', { name: 'Кампания поиска' }).waitFor();
+  await page.getByRole('heading', { name: 'Воронка кампании' }).waitFor();
+  await page.getByRole('heading', { name: 'Очередь на сегодня' }).waitFor();
+  await page.getByRole('heading', { name: 'Роль и условия маршрута' }).waitFor();
   // INC-019: these used to be literal `true`s reported as verification. They
   // now record what the walk actually observed, and a false value fails the
   // gate instead of being printed next to `"status":"pass"`.
-  // Та же правка B178 среза 2: раньше здесь считались карточки словаря.
-  // Проверяем, что раздел на месте и честен, а не что он что-то придумал.
-  const confirmedRoleMap =
-    (await page.locator('.career-role-hypotheses').count()) === 1;
+  const campaignFunnel = (await page.locator('.career-funnel li').count()) === 5;
+  assert(campaignFunnel, `${viewport.name}: воронка кампании не отрисовалась`);
+  // Неизмеряемые ступени стоят прочерком и объясняют себя словами: ноль
+  // означал бы, что продукт посмотрел и не нашёл.
+  const untracked = await page.locator('.career-funnel li.is-untracked').count();
   assert(
-    confirmedRoleMap,
-    `${viewport.name}: раздел «Рабочие роли» не отрисовался`,
+    untracked === 3 &&
+      /не отслеживает/iu.test(await page.locator('.career-campaign').innerText()),
+    `${viewport.name}: кампания выдаёт неизмеренное за ноль (${untracked})`,
   );
-  const adaptiveTrack =
-    (await page.locator('.career-track-timeline article').count()) >= 1;
+  const campaignQueue =
+    (await page.locator('.career-automation-list li').count()) >= 3;
   assert(
-    adaptiveTrack,
-    `${viewport.name}: adaptive track timeline did not render`,
+    campaignQueue,
+    `${viewport.name}: автоматизация по тарифу не отрисовалась`,
   );
   await page.screenshot({
     path: `output/playwright/b104-b105-b119-decision-${viewport.name}.png`,
@@ -988,9 +979,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
     overflow,
     accountRestart,
     profileFactReview,
-    confirmedRoleMap,
+    campaignFunnel,
     reasonedAction,
-    adaptiveTrack,
+    campaignQueue,
   };
 }
 
@@ -1152,9 +1143,9 @@ try {
     results.push(result);
     candidateResults.push({
       viewport: result.viewport,
-      confirmedRoleMap: result.confirmedRoleMap,
+      campaignFunnel: result.campaignFunnel,
       reasonedAction: result.reasonedAction,
-      adaptiveTrack: result.adaptiveTrack,
+      campaignQueue: result.campaignQueue,
     });
   }
   const sessionRestore = await verifyExpiredSessionRestore(browser, baseUrl);

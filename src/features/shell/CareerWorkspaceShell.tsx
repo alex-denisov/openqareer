@@ -465,7 +465,6 @@ export function CareerWorkspaceShell({
               view={activeView as CareerCabinetView}
               session={cabinetSession}
               workspace={visibleWorkspace}
-              journey={journey}
               importing={importing}
               onNavigate={navigate}
               onUpdateWorkspace={onUpdateWorkspace}

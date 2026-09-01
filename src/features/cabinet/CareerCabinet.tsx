@@ -1,11 +1,10 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import { updateAccountProfile, type AuthUser } from '../coach/coachApi';
-import { buildCanonicalProfileJourney, type CareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
-import { CareerIntelligencePanel } from './CareerIntelligencePanel';
 import { CareerHome } from './CareerHome';
-import { CareerTrackBoard } from './CareerTrackBoard';
+import { CareerIntelligencePanel } from './CareerIntelligencePanel';
+import { SearchCampaign } from '../search/SearchCampaign';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { VacancyBoard } from '../vacancies/VacancyBoard';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
@@ -24,7 +23,6 @@ interface CareerCabinetProps {
   view: CareerCabinetView;
   session: AuthUser & { candidateId: string };
   workspace?: CandidateWorkspace;
-  journey?: CareerJourney;
   importing?: boolean;
   onNavigate: (view: CareerCabinetView) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
@@ -44,7 +42,6 @@ export function CareerCabinet({
   view,
   session,
   workspace,
-  journey,
   importing = false,
   onNavigate,
   onUpdateWorkspace,
@@ -74,20 +71,6 @@ export function CareerCabinet({
     },
     [data, onUpdateWorkspace, workspace],
   );
-  const canonicalJourney = useMemo(
-    () =>
-      data.snapshot
-        ? buildCanonicalProfileJourney(
-            journey,
-            data.snapshot.memory,
-            targetDirection,
-            undefined,
-            workspace?.constraints ?? '',
-          )
-        : journey,
-    [data.snapshot, journey, targetDirection, workspace?.constraints],
-  );
-
   return (
     <AppErrorBoundary
       fallbackTitle="Не удалось отобразить кабинет"
@@ -105,7 +88,6 @@ export function CareerCabinet({
           view={view}
           session={session}
           workspace={workspace}
-          journey={canonicalJourney}
           importing={importing}
           targetDirection={targetDirection}
           data={data}
@@ -126,7 +108,6 @@ function CabinetSection({
   view,
   session,
   workspace,
-  journey,
   importing,
   targetDirection,
   data,
@@ -139,7 +120,6 @@ function CabinetSection({
   view: CareerCabinetView;
   session: AuthUser & { candidateId: string };
   workspace?: CandidateWorkspace;
-  journey?: CareerJourney;
   importing: boolean;
   targetDirection: string;
   data: ReturnType<typeof useCareerCabinetData>;
@@ -185,20 +165,19 @@ function CabinetSection({
   if (view === 'career') {
     return (
       <div className="career-search-board">
-        <CareerTrackBoard
-          journey={journey}
-          snapshot={data.snapshot}
-          account={data.account}
+        <SearchCampaign
           targetDirection={targetDirection}
-          regions={workspace?.regions ?? []}
           premises={routePremisesDraft({ workspace, account: data.account })}
           premisesLoading={data.loading}
-          onNavigate={onNavigate}
           onSavePremises={onSavePremises}
+          onOpenVacancies={() => onNavigate('opportunities')}
         />
+        {/* Регулярные выборки — единственное место, где кандидат заводит
+            источник и запрос. В макете их представляют «сохранённые» на панели
+            фильтров «Вакансий»; до переноса блок живёт под кампанией, чтобы
+            возможность не пропала вместе с панелью рынка (B179). */}
         <CareerIntelligencePanel
           snapshot={data.snapshot}
-          journey={journey}
           defaultQuery={targetDirection || undefined}
           loading={data.loading}
           onRefresh={data.refresh}

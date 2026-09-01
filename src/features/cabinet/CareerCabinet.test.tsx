@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { CareerCabinet } from './CareerCabinet';
-import { CareerRoutePremises } from './CareerTrackBoard';
+import { CareerRoutePremises } from '../search/RoutePremises';
 import type { CareerCabinetView } from './cabinetViews';
 
 const session = {
@@ -116,12 +116,18 @@ describe('CareerCabinet composition', () => {
   });
 
   // «Пульт» развёл рынок на два раздела: кампания живёт в «Поиске», пул — в
-  // «Вакансиях».
-  it('gives «Поиск» the campaign panel beside the route', () => {
+  // «Вакансиях». Панель рынка и доска маршрута макетом не предусмотрены и
+  // удалены вместе с ними (B179).
+  it('gives «Поиск» the campaign screen', () => {
     const html = renderCabinet('career');
 
-    expect(html).toContain('Рынок и следующие шаги');
+    expect(html).toContain('Кампания поиска');
+    expect(html).toContain('Воронка кампании');
+    expect(html).toContain('Очередь на сегодня');
     expect(html).toContain('Роль и условия маршрута');
+    // Регулярные выборки остаются здесь: другого места завести источник и
+    // запрос в продукте нет (B179).
+    expect(html).toContain('Регулярный поиск');
   });
 
   it('gives «Вакансии» the pool board', () => {
@@ -134,8 +140,9 @@ describe('CareerCabinet composition', () => {
   it('does not fabricate candidate or provider outcomes when server data is absent', () => {
     const html = renderCabinet('career');
 
-    expect(html).toContain('Настройте направление');
-    expect(html).toContain('Роль или поисковый запрос');
+    // Неизмеряемое стоит прочерком и словами, а не нулём: ноль означал бы,
+    // что мы посмотрели и не нашли (B179).
+    expect(html).toContain('не отслеживается');
     expect(html).not.toContain('Индекс соответствия');
     expect(html).not.toContain('Авто-поднятие резюме');
     expect(html).not.toContain('откликов отправлено');

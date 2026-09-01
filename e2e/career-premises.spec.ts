@@ -130,7 +130,8 @@ async function seedWorkspace(page: Page): Promise<void> {
 async function openCareer(page: Page): Promise<void> {
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
   await page.locator('button[aria-label="Поиск"]:visible').first().click();
-  await expect(page.locator('.career-track-board')).toBeVisible();
+  // «Поиск» стал кампанией из макета; предпосылки маршрута живут в ней (B179).
+  await expect(page.locator('.career-campaign')).toBeVisible();
 }
 
 test.describe('B160 route premises are editable in the cabinet', () => {
