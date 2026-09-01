@@ -49,8 +49,14 @@ export function CareerCabinet({
   onOpenExpert,
 }: CareerCabinetProps) {
   const data = useCareerCabinetData(session.candidateId);
+  // Роль из разобранного резюме — такой же ответ кандидата, как поле анкеты.
+  // Без неё «Позиционирование» писало «Не названа» рядом с той же ролью в
+  // шапке профиля (B179).
   const targetDirection =
-    data.account?.profile.headline?.trim() || workspace?.targetDirection || '';
+    data.account?.profile.headline?.trim() ||
+    workspace?.targetDirection?.trim() ||
+    data.snapshot?.resume?.draft?.targetRole?.trim() ||
+    '';
   const savePremises = useCallback(
     async (draft: RoutePremisesDraft) => {
       // Regions and the role live in the workspace. Without one there is
