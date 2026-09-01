@@ -10,6 +10,7 @@ import {
   vacancySourceNames,
   type VacancyFilters,
 } from './vacancyFilters';
+import { withDeadline } from './vacancyRead';
 
 /**
  * «Вакансии» — весь собранный пул с фильтрами («Пульт»).
@@ -305,13 +306,14 @@ function useMatchedVacancies() {
 
   useEffect(() => {
     let active = true;
-    void getMatchedVacancies()
+    void withDeadline((signal) => getMatchedVacancies(signal))
       .then((data) => {
         if (active) setMatched(data);
       })
       .catch(() => {
         // Не прочитали — это не «пусто»: молчание делает недоступный источник
-        // неотличимым от честно пустого пула.
+        // неотличимым от честно пустого пула. Истёкшее ожидание попадает сюда
+        // же: подбор, который не ответил за отведённое время, не ответил.
         if (active) setFailed(true);
       })
       .finally(() => {
