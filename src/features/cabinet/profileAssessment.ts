@@ -47,6 +47,16 @@ export interface ProfileAssessment {
 export interface ProfileAssessmentInput {
   readonly memory: readonly CandidateMemory[];
   readonly targetDirection: string;
+  /**
+   * Счётчики самого досье. Сервер считает в них все записи, а не только
+   * «факты», и ровно эти числа стоят в шапке досье и в очереди подтверждения.
+   * Мера обязана брать их, иначе один экран печатает два разных числа об одном
+   * и том же — найдено живым прогоном на проде `f23e927`.
+   */
+  readonly dossier?: {
+    readonly confirmedCount: number;
+    readonly proposedCount: number;
+  };
 }
 
 /** Число в тексте — единственное доказательство, что результат измерим. */
@@ -55,6 +65,7 @@ const CARRIES_A_NUMBER = /\d/u;
 export function assessProfile({
   memory,
   targetDirection,
+  dossier,
 }: ProfileAssessmentInput): ProfileAssessment {
   const facts = memory.filter((item) => item.kind === 'fact');
   if (facts.length === 0) {
@@ -70,7 +81,7 @@ export function assessProfile({
     measures: [
       sectionsMeasure(confirmed),
       ...outcomeMeasure(confirmed),
-      confirmedMeasure(facts, confirmed),
+      confirmedMeasure(facts, confirmed, dossier),
       ...targetRoleMeasure(targetDirection),
     ],
     measuredAt: lastChangedAt(facts),
@@ -125,13 +136,17 @@ function outcomeMeasure(
 function confirmedMeasure(
   facts: readonly CandidateMemory[],
   confirmed: readonly CandidateMemory[],
+  dossier: ProfileAssessmentInput['dossier'],
 ): ProfileMeasure {
-  const pending = facts.filter((item) => item.status === 'proposed').length;
+  const value = dossier?.confirmedCount ?? confirmed.length;
+  const pending =
+    dossier?.proposedCount ??
+    facts.filter((item) => item.status === 'proposed').length;
   return {
     id: 'confirmed-facts',
-    label: 'Подтверждено фактов',
-    value: confirmed.length,
-    total: facts.length,
+    label: 'Подтверждено записей',
+    value,
+    total: value + pending,
     basis:
       pending > 0
         ? `${pending} ждут вашего подтверждения — до него они не попадают ни в резюме, ни в оценку.`

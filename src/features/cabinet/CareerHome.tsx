@@ -161,6 +161,7 @@ function AssessmentPanel({
   const assessment = assessProfile({
     memory: snapshot?.memory ?? [],
     targetDirection,
+    dossier: snapshot?.dossier,
   });
   // Пока идёт импорт, серверное чтение кабинета старше его результата: числа
   // досье устарели, а не равны нулю (B160 §3). Экран говорит это прямо, а не

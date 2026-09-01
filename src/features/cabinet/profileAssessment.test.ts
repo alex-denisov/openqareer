@@ -63,6 +63,26 @@ describe('assessProfile', () => {
     expect(measurable.total).toBe(2);
   });
 
+  /**
+   * Живой прогон на проде `f23e927`: шапка досье печатала «1 подтверждено ·
+   * 83 на проверке», а мера рядом — «1 из 83, 82 ждут». Сервер считает записи
+   * досье целиком, а мера считала только записи вида «факт», и один экран
+   * показывал два разных числа об одном и том же. Мера обязана считать ровно
+   * то же, что очередь подтверждения.
+   */
+  it('считает подтверждённое так же, как очередь подтверждения', () => {
+    const assessment = assessProfile({
+      memory: [fact('m1', 'outcome', 'Сократил срок релиза на 30%.')],
+      dossier: { confirmedCount: 1, proposedCount: 83 },
+      targetDirection: 'Продуктовый аналитик',
+    });
+
+    const confirmed = measure(assessment, 'confirmed-facts');
+    expect(confirmed.value).toBe(1);
+    expect(confirmed.total).toBe(84);
+    expect(confirmed.basis).toContain('83');
+  });
+
   it('не выдаёт ни одной меры, пока досье пустое', () => {
     const assessment = assessProfile({ memory: [], targetDirection: '' });
 
