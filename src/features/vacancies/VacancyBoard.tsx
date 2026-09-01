@@ -39,7 +39,10 @@ const FRESHNESS_CHOICES: ReadonlyArray<{ label: string; days?: number }> = [
 ];
 
 export function VacancyBoard() {
-  const { matched, total, loading, failed } = useMatchedVacancies();
+  const { matched, total, poolTotal, loading, failed } = useMatchedVacancies();
+  // Пока пул дочитывается, счётчик называет прочитанное, а не обещанное.
+  const counted = total || matched.length;
+  const filling = total === 0 && matched.length > 0;
   const state = <VacancyBoardState loading={loading} failed={failed} empty={matched.length === 0} />;
   const [filters, setFilters] = useState<VacancyFilters>({});
   // Момент расчёта возраста берётся один раз на прочитанный пул: пересчёт на
@@ -65,7 +68,7 @@ export function VacancyBoard() {
       />
       <div className="career-vacancy-main">
         <p className="career-vacancy-count">
-          <strong>{total}</strong> в подборе ·{' '}
+          <strong>{counted}</strong> в подборе{filling ? ` из ${poolTotal}, дочитываем` : ''} ·{' '}
           <strong>{shown.length}</strong> после фильтров
         </p>
         <ol className="career-vacancy-list">
@@ -302,17 +305,26 @@ function salaryLabel(salary: MatchedVacancyItem['cluster']['salary']): string {
 function useMatchedVacancies() {
   const [matched, setMatched] = useState<MatchedVacancyItem[]>([]);
   const [total, setTotal] = useState(0);
+  const [poolTotal, setPoolTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
-    void collectMatchedPool<MatchedVacancyItem>((offset) =>
-      withDeadline((signal) => getMatchedVacancyPage(offset, signal)),
+    void collectMatchedPool<MatchedVacancyItem>(
+      (offset) => withDeadline((signal) => getMatchedVacancyPage(offset, signal)),
+      undefined,
+      // Пул приходит полусотней страниц. Экран показывает каждую сразу: ждать
+      // последнюю — это десяток секунд «Читаем пул…» вместо вакансий.
+      (items, poolSize) => {
+        if (!active) return;
+        setMatched((read) => [...read, ...items]);
+        setPoolTotal(poolSize);
+        setLoading(false);
+      },
     )
       .then((pool) => {
         if (!active) return;
-        setMatched(pool.items);
         // Прочитано меньше, чем есть в подборе, — счётчик показывает
         // прочитанное, а не заявленное: иначе экран пообещал бы записи,
         // которых на нём нет.
@@ -332,5 +344,5 @@ function useMatchedVacancies() {
     };
   }, []);
 
-  return { matched, total, loading, failed };
+  return { matched, total, poolTotal, loading, failed };
 }

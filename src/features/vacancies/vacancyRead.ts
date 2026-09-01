@@ -44,13 +44,19 @@ interface PoolPage<T> {
  * Первая страница — это и есть ответ: если она не пришла, читать нечего и
  * отказ уходит наверх. Оборвавшееся продолжение не отменяет прочитанного —
  * экран показывает то, что дошло, и честно говорит, что это не весь пул.
+ *
+ * Каждая страница отдаётся вызвавшему сразу: пул из пятисот записей читается
+ * полусотней ответов, и экран, ждущий последний, дольше десяти секунд стоит на
+ * «Читаем пул…» вместо вакансий.
  */
 export async function collectMatchedPool<T>(
   loadPage: (offset: number) => Promise<PoolPage<T>>,
   pageLimit: number = MATCHED_POOL_PAGE_LIMIT,
+  onPage?: (items: readonly T[], total: number) => void,
 ): Promise<MatchedPoolRead<T>> {
   const first = await loadPage(0);
   const items = [...first.items];
+  onPage?.(first.items, first.total);
   let offset = first.nextOffset;
   let pages = 1;
 
@@ -62,6 +68,7 @@ export async function collectMatchedPool<T>(
       return { items, total: first.total, complete: false };
     }
     items.push(...next.items);
+    onPage?.(next.items, first.total);
     offset = next.nextOffset;
     pages += 1;
     if (next.items.length === 0) break;

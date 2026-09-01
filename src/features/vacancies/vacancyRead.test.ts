@@ -65,6 +65,18 @@ describe('collectMatchedPool', () => {
     ).rejects.toThrow('network');
   });
 
+  it('отдаёт каждую страницу сразу, а не в конце чтения', async () => {
+    // 524 записи приходят полусотней страниц: экран, который ждёт последнюю,
+    // двенадцать секунд показывает «Читаем пул…» вместо вакансий.
+    const seen: number[] = [];
+    await collectMatchedPool<string>(
+      async (offset) => page(offset, 20, 60),
+      60,
+      (items) => seen.push(items.length),
+    );
+    expect(seen).toEqual([20, 20, 20]);
+  });
+
   it('не читает больше отведённого числа страниц', async () => {
     let calls = 0;
     const result = await collectMatchedPool<string>(async (offset) => {
