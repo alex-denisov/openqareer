@@ -166,6 +166,18 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
         lifecycle: 'preview',
         structuredOutput: false,
       },
+      {
+        // Та же модель без суффикса `:free`. Замер B185 показал, что `:free`
+        // у OpenRouter — не модель, а пул: на третьей попытке из пяти вместо
+        // названной `…-ultra-550b-a55b:free` ответила
+        // `…-super-120b-a12b:free`. Платный идентификатор — единственный
+        // способ получить именно ту модель, которую назвали.
+        id: 'nvidia/nemotron-3-ultra-550b-a55b',
+        releaseDate: '2026-06-04',
+        pinned: true,
+        lifecycle: 'preview',
+        structuredOutput: false,
+      },
     ],
   }),
   gemini: provider({
