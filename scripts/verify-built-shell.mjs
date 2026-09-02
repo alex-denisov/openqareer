@@ -743,7 +743,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     path: `output/playwright/b104-b105-b119-decision-${viewport.name}.png`,
     fullPage: true,
   });
-  // Регулярные выборки настраиваются в «Поиске»; «Вакансии» держат пул.
+  // «Вакансии» держат и пул, и регулярные выборки в панели фильтров (B181).
   // «Вакансии» — собранный пул. Гейт обязан дойти до него: экран читает свою
   // ручку и должен отвечать хоть чем-то честным даже на пустом подборе.
   await page.locator('button[aria-label="Вакансии"]:visible').click();
@@ -770,12 +770,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
     fullPage: true,
   });
 
-  await page.locator('button[aria-label="Поиск"]:visible').click();
-  await page.getByRole('heading', { name: 'Поиск', exact: true }).waitFor();
-  await page.screenshot({
-    path: `output/playwright/b178-search-${viewport.name}.png`,
-    fullPage: true,
-  });
+  // Регулярные выборки живут в панели фильтров «Вакансий» (B181): источник,
+  // здоровье источника и создание проверяются здесь же, рядом с пулом.
   await page.getByRole('combobox', { name: 'Источник вакансий' }).waitFor();
   // The source registry loads asynchronously, so wait for the honest health
   // line instead of counting a DOM that may not have rendered yet.
@@ -814,7 +810,16 @@ async function verifyViewport(browser, baseUrl, viewport) {
     vacancyCreateSource === 'remotive',
     `${viewport.name}: selected vacancy source was not sent to the API`,
   );
-  await page.getByRole('link', { name: /Product Manager/ }).waitFor();
+  // Списка найденного в панели больше нет — пул стоит на том же экране (B181).
+  // Доказательство создания: панель перешла к самой выборке с её запросом.
+  await page.locator('.career-market-query-row strong').getByText('product manager').waitFor();
+
+  await page.locator('button[aria-label="Поиск"]:visible').click();
+  await page.getByRole('heading', { name: 'Поиск', exact: true }).waitFor();
+  await page.screenshot({
+    path: `output/playwright/b178-search-${viewport.name}.png`,
+    fullPage: true,
+  });
   await page.locator('button[aria-label="Главная"]:visible').click();
   await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
   const profileFactReview =

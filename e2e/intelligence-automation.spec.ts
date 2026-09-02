@@ -180,8 +180,9 @@ async function seedWorkspace(page: Page): Promise<void> {
 async function openOpportunities(page: Page): Promise<void> {
   // The rail is hidden on a phone, where the same navigation lives in the
   // bottom bar; `:visible` picks whichever one this viewport shows.
-  await page.locator('button[aria-label="Поиск"]:visible').first().click();
-  await expect(page.locator('.career-intelligence-panel')).toBeVisible();
+  // Регулярные выборки живут в панели фильтров «Вакансий» с B181.
+  await page.locator('button[aria-label="Вакансии"]:visible').first().click();
+  await expect(page.locator('.career-saved-searches')).toBeVisible();
 }
 
 test.describe('B156 truthful market intelligence boundary', () => {
@@ -196,14 +197,13 @@ test.describe('B156 truthful market intelligence boundary', () => {
     // recommends the next step.
     await openOpportunities(page);
 
-    const marketSearch = page.locator('.career-market-watch').filter({
+    const marketSearch = page.locator('.career-saved-searches').filter({
       has: page.getByRole('heading', { name: '12 вакансий в выборке' }),
     });
     await expect(marketSearch).toBeVisible();
     await expect(marketSearch.getByText('Senior Software Engineer', { exact: true })).toBeVisible();
-    const vacancy = marketSearch.getByRole('link', { name: /Senior \/ Lead Engineer/ });
-    await expect(vacancy).toBeVisible();
-    await expect(vacancy).toHaveAttribute('href', 'https://hh.ru/vacancy/1');
+    // Сам список найденного отсюда убран: таблица пула стоит на том же экране,
+    // и дублировать её ссылками — показывать одни и те же вакансии дважды (B181).
     await expect(marketSearch.getByRole('link', { name: 'Источник: hh.ru' })).toBeVisible();
     await expect(marketSearch.getByRole('button', { name: 'Обновить выборку' })).toBeVisible();
     await expect(
@@ -226,7 +226,7 @@ test.describe('B156 truthful market intelligence boundary', () => {
     }
 
     const accessibility = await new AxeBuilder({ page })
-      .include('.career-intelligence-panel')
+      .include('.career-saved-searches')
       .analyze();
     const criticalViolations = accessibility.violations.filter((v) => v.impact === 'critical');
     expect(criticalViolations).toEqual([]);

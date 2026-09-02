@@ -7540,6 +7540,43 @@
   font-size: 0.95rem;
 }
 
+/* Регулярные выборки стоят первым блоком панели фильтров: кандидат заводит
+   источник там же, где смотрит пул (B181). */
+.career-saved-searches {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--career-line);
+}
+
+.career-saved-searches > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.career-saved-searches > header span:first-child {
+  color: var(--career-text-dim);
+  font-size: 0.64rem;
+  font-weight: 720;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* В узкой панели фильтров запрос и кнопка не помещаются в одну строку:
+   поле обрезало роль до «Руководитель прод». */
+.career-vacancy-filters .career-market-create > div {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.career-saved-searches h3 {
+  margin: 6px 0 0;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  letter-spacing: -0.018em;
+}
+
 .career-vacancy-filters fieldset {
   margin: 0;
   padding: 0;
@@ -7730,10 +7767,16 @@
   color: var(--career-accent);
 }
 
-/* Узкий экран: фильтры уходят наверх, строка вакансии складывается в карточку. */
+/* Узкий экран: сам пул идёт первым, строка вакансии складывается в карточку.
+   Настройки уходят под него: с регулярными выборками в панели (B181) до самих
+   вакансий пришлось бы пролистывать два экрана настроек. */
 @media (max-width: 1080px) {
   .career-vacancy-board {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .career-vacancy-main {
+    order: -1;
   }
 
   .career-vacancy-filters {

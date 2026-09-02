@@ -11,6 +11,8 @@ import {
   type VacancyFilters,
 } from './vacancyFilters';
 import { collectMatchedPool, withDeadline } from './vacancyRead';
+import { SavedSearchesPanel } from './SavedSearchesPanel';
+import type { VacancySubscription } from '../coach/coachApi';
 
 /**
  * «Вакансии» — весь собранный пул с фильтрами («Пульт»).
@@ -41,7 +43,16 @@ const FRESHNESS_CHOICES: ReadonlyArray<{ label: string; days?: number }> = [
 // Экран пула — одна таблица с фильтрами: разнесение шапки, строк и подвала по
 // файлам только спрятало бы порядок колонок.
 // eslint-disable-next-line max-lines-per-function
-export function VacancyBoard() {
+export function VacancyBoard({
+  subscriptions = [],
+  defaultQuery,
+  onRefresh,
+}: {
+  /** Регулярные выборки кандидата: заводятся здесь же, в панели фильтров (B181). */
+  readonly subscriptions?: readonly VacancySubscription[];
+  readonly defaultQuery?: string;
+  readonly onRefresh?: () => Promise<void>;
+} = {}) {
   const { matched, total, poolTotal, loading, failed } = useMatchedVacancies();
   // Пока пул дочитывается, счётчик называет прочитанное, а не обещанное.
   const counted = total || matched.length;
@@ -59,16 +70,32 @@ export function VacancyBoard() {
   );
   const sources = useMemo(() => vacancySourceNames(matched), [matched]);
 
-  if (loading || failed || matched.length === 0) return state;
+  // Панель фильтров стоит на экране всегда: регулярные выборки живут в ней, и
+  // пустой пул — ровно тот случай, когда кандидату надо завести первую (B181).
+  const asidePanel = (
+    <VacancyFilterPanel
+      filters={filters}
+      sources={sources}
+      onChange={setFilters}
+      onReset={() => setFilters({})}
+      subscriptions={subscriptions}
+      defaultQuery={defaultQuery}
+      onRefresh={onRefresh}
+    />
+  );
+
+  if (loading || failed || matched.length === 0) {
+    return (
+      <div className="career-vacancy-board">
+        {asidePanel}
+        <div className="career-vacancy-main">{state}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="career-vacancy-board">
-      <VacancyFilterPanel
-        filters={filters}
-        sources={sources}
-        onChange={setFilters}
-        onReset={() => setFilters({})}
-      />
+      {asidePanel}
       <div className="career-vacancy-main">
         <header className="career-vacancy-head">
           <p className="career-vacancy-count">
@@ -153,14 +180,26 @@ function VacancyFilterPanel({
   sources,
   onChange,
   onReset,
+  subscriptions,
+  defaultQuery,
+  onRefresh,
 }: {
   filters: VacancyFilters;
   sources: ReadonlyArray<{ source: string; count: number }>;
   onChange: (filters: VacancyFilters) => void;
   onReset: () => void;
+  subscriptions: readonly VacancySubscription[];
+  defaultQuery?: string;
+  onRefresh?: () => Promise<void>;
 }) {
   return (
     <aside className="career-vacancy-filters" aria-label="Фильтры вакансий">
+      <SavedSearchesPanel
+        subscriptions={subscriptions}
+        defaultQuery={defaultQuery}
+        onRefresh={onRefresh ?? (async () => undefined)}
+      />
+
       <header>
         <h3>Фильтры</h3>
         <button className="career-inline-link" type="button" onClick={onReset}>
@@ -168,15 +207,7 @@ function VacancyFilterPanel({
         </button>
       </header>
 
-      <label className="career-vacancy-search">
-        <span>Название или работодатель</span>
-        <input
-          type="search"
-          value={filters.query ?? ''}
-          onChange={(event) => onChange({ ...filters, query: event.target.value })}
-          placeholder="Аналитик, FinCloud…"
-        />
-      </label>
+      <VacancyQueryFilter filters={filters} onChange={onChange} />
 
       <FreshnessFilter filters={filters} onChange={onChange} />
 
@@ -196,6 +227,26 @@ function VacancyFilterPanel({
 
       <SourceFilter filters={filters} sources={sources} onChange={onChange} />
     </aside>
+  );
+}
+
+function VacancyQueryFilter({
+  filters,
+  onChange,
+}: {
+  filters: VacancyFilters;
+  onChange: (filters: VacancyFilters) => void;
+}) {
+  return (
+    <label className="career-vacancy-search">
+      <span>Название или работодатель</span>
+      <input
+        type="search"
+        value={filters.query ?? ''}
+        onChange={(event) => onChange({ ...filters, query: event.target.value })}
+        placeholder="Аналитик, FinCloud…"
+      />
+    </label>
   );
 }
 

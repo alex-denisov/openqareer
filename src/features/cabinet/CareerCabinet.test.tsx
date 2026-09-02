@@ -125,9 +125,9 @@ describe('CareerCabinet composition', () => {
     expect(html).toContain('Воронка кампании');
     expect(html).toContain('Очередь на сегодня');
     expect(html).toContain('Роль и условия маршрута');
-    // Регулярные выборки остаются здесь: другого места завести источник и
-    // запрос в продукте нет (B179).
-    expect(html).toContain('Регулярный поиск');
+    // Регулярные выборки ушли отсюда в панель фильтров «Вакансий» — туда, где
+    // кандидат смотрит сам пул (решение владельца 2026-09-02, B181).
+    expect(html).not.toContain('Регулярный поиск');
   });
 
   it('gives «Вакансии» the pool board', () => {
@@ -155,5 +155,17 @@ describe('CareerCabinet composition', () => {
     for (const view of ['today', 'profile', 'career', 'opportunities'] as const) {
       expect(renderCabinet(view)).not.toContain('Данные актуальны');
     }
+  });
+});
+
+describe('CareerCabinet regular selections (B181)', () => {
+  it('не оставляет регулярные выборки на экране кампании', () => {
+    const html = renderCabinet('career');
+    expect(html).not.toContain('Регулярные выборки');
+    expect(html).not.toContain('Регулярный поиск');
+  });
+
+  it('показывает их в разделе «Вакансии»', () => {
+    expect(renderCabinet('opportunities')).toContain('Регулярные выборки');
   });
 });

@@ -178,23 +178,25 @@ function CabinetSection({
           onSavePremises={onSavePremises}
           onOpenVacancies={() => onNavigate('opportunities')}
         />
-        {/* Регулярные выборки — единственное место, где кандидат заводит
-            источник и запрос. В макете их представляют «сохранённые» на панели
-            фильтров «Вакансий»; до переноса блок живёт под кампанией, чтобы
-            возможность не пропала вместе с панелью рынка (B179). */}
+        {/* Регулярные выборки переехали в панель фильтров «Вакансий» — туда,
+            где кандидат смотрит сам пул (решение владельца 2026-09-02, B181).
+            Здесь остались читаемость резюме и следующий шаг. */}
         <CareerIntelligencePanel
           snapshot={data.snapshot}
-          defaultQuery={targetDirection || undefined}
           loading={data.loading}
-          onRefresh={data.refresh}
           onNavigate={onNavigate}
-          expanded
           onOpenExpert={onOpenExpert}
         />
       </div>
     );
   }
-  return <VacancyBoard />;
+  return (
+    <VacancyBoard
+      subscriptions={data.snapshot?.vacancySubscriptions ?? []}
+      defaultQuery={targetDirection || undefined}
+      onRefresh={data.refresh}
+    />
+  );
 }
 
 /**
@@ -255,8 +257,8 @@ const VIEW_DESCRIPTION: Record<CareerCabinetView, string> = {
   profile: 'Кто вы по фактам, что с этим делать дальше и как это читает рынок.',
   resume:
     'Мастер-резюме и вариант под страну — только из подтверждённых фактов, с видимыми пробелами.',
-  career: 'Кампания поиска: роль, условия, маршрут и регулярные выборки по источникам.',
-  opportunities: 'Весь собранный пул с фильтрами по свежести, формату и источнику.',
+  career: 'Кампания поиска: роль, условия, маршрут и воронка.',
+  opportunities: 'Весь собранный пул, фильтры и регулярные выборки по источникам.',
 };
 
 function todayLabel(): string {
