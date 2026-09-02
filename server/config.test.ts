@@ -117,7 +117,8 @@ describe('server configuration', () => {
         {
           ...validEnvironment,
           OPENQAREER_PERSONAL_AI_PROVIDER: 'gemini',
-          OPENQAREER_PERSONAL_AI_MODEL: 'gemini-3.6-flash',
+          // Модель вне реестра: рубеж и поимённые решения тут ни при чём.
+          OPENQAREER_PERSONAL_AI_MODEL: 'gemini-9.9-flash',
           OPENQAREER_GEMINI_API_KEY: 'test-gemini-key-that-is-long-enough',
           OPENQAREER_CF_AI_GATEWAY_ACCOUNT_ID: 'a'.repeat(32),
           OPENQAREER_CF_AI_GATEWAY_ID: 'openqareer',

@@ -176,6 +176,20 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
     credentialEnvironment: ['OPENQAREER_GEMINI_API_KEY'],
     models: [
       {
+        // Уточнение владельца 2026-09-03: 3.8 перегружена (`429`/`503` в
+        // логах шлюза и 246 с на ход), поэтому в очередь ставится 3.6 —
+        // отменённая 3.7 не отвечала вовсе, а 3.6 отвечала за 1.73 с при
+        // прямом замере с прод-хоста. Дата выпуска 2026-07-21 позже отсечного
+        // рубежа, поэтому допуск даёт поимённое решение владельца.
+        id: 'gemini-3.6-flash',
+        releaseDate: '2026-07-21',
+        pinned: true,
+        ownerPinned: true,
+        thinkingLevel: 'high',
+        lifecycle: 'production',
+        structuredOutput: true,
+      },
+      {
         // Решение владельца 2026-09-02 (уточнение того же дня: 3.7 → 3.8):
         // модель бесплатна для него и идёт первым приоритетом, уровень
         // рассуждения — `high`. Живая проверка через шлюз Cloudflare

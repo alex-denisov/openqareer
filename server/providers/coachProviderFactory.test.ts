@@ -39,13 +39,15 @@ describe('coach provider factory', () => {
   });
 
   it('rejects a model newer than the release cutoff', () => {
+    // Пример берётся из реестра и намеренно **не** закреплён владельцем:
+    // выпуск 2026-07-11 позже рубежа, поимённого решения нет — не допускается.
     expect(() =>
       buildCoachProvider({
-        provider: 'gemini',
+        provider: 'huggingface',
         apiKey: 'test-key-that-is-never-sent',
-        model: 'gemini-3.6-flash',
+        model: 'prism-ml/Ternary-Bonsai-27B-AWQ-4bit',
       }),
-    ).toThrow('model is not allowed for provider gemini');
+    ).toThrow('model is not allowed for provider huggingface');
   });
 });
 

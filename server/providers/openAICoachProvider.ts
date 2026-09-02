@@ -30,8 +30,11 @@ export interface OpenAICoachProviderOptions {
   client?: OpenAI;
 }
 
-/** Выбор владельца (B183): максимальное усилие рассуждения. */
-const COACH_REASONING_EFFORT = 'xhigh' as const;
+/**
+ * Выбор владельца: 2026-09-02 — `xhigh`, 2026-09-03 уточнено до `high`
+ * (B183). Усилие едет вместе с местом под него — см. `outputBudgetForRole`.
+ */
+const COACH_REASONING_EFFORT = 'high' as const;
 
 export class OpenAICoachProvider implements CoachProvider {
   private readonly client: OpenAI;
@@ -60,7 +63,6 @@ export class OpenAICoachProvider implements CoachProvider {
           instructions: careerInstructionsForRole(input.activeRole),
           input: serializeCoachInput(input),
           reasoning: {
-            // Владелец выбрал максимальное усилие рассуждения (B183).
             effort: COACH_REASONING_EFFORT,
             context: 'all_turns',
           },

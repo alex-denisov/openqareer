@@ -91,10 +91,10 @@ describe('OpenAI career coach provider', () => {
     expect(calls[0].body).toMatchObject({
       model: 'gpt-5.6-sol',
       store: false,
-      max_output_tokens: 15_200,
+      max_output_tokens: 9_200,
       reasoning: {
         // Владелец выбрал максимальное усилие рассуждения (B183).
-        effort: 'xhigh',
+        effort: 'high',
         context: 'all_turns',
       },
     });
@@ -134,7 +134,7 @@ describe('OpenAI career coach provider', () => {
       '95fb73e7-f531-4a79-a494-52217a2a54cd',
     );
 
-    expect(calls[0]).toMatchObject({ max_output_tokens: 18_000 });
+    expect(calls[0]).toMatchObject({ max_output_tokens: 12_000 });
   });
 
   it('classifies a token-limited response without parsing partial JSON', async () => {
