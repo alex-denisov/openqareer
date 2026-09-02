@@ -8,7 +8,27 @@ import type { ProviderId } from './modelRegistry';
 
 interface ProviderRoute {
   id: ProviderId;
+  /** Модель ступени: две ступени одного провайдера остывают независимо. */
+  model?: string;
   provider: CoachProvider;
+}
+
+function routeKey(route: ProviderRoute): string {
+  return `${route.id}:${route.model ?? ''}`;
+}
+
+/** Ступень в провенансе называет и провайдера, и модель: их две за одним. */
+function attemptOf(
+  route: ProviderRoute,
+  status: 'succeeded' | 'failed' | 'skipped',
+  code?: RoutingAttempt['code'],
+): RoutingAttempt {
+  return {
+    provider: route.id,
+    ...(route.model ? { model: route.model } : {}),
+    status,
+    ...(code ? { code } : {}),
+  };
 }
 
 export interface ResilientCoachProviderOptions {
@@ -25,7 +45,7 @@ export class ResilientCoachProvider implements CoachProvider {
   private readonly maxAttempts: number;
   private readonly cooldownMs: number;
   private readonly now: () => number;
-  private readonly coolingUntil = new Map<ProviderId, number>();
+  private readonly coolingUntil = new Map<string, number>();
 
   constructor(options: ResilientCoachProviderOptions) {
     if (options.routes.length === 0) {
@@ -49,13 +69,9 @@ export class ResilientCoachProvider implements CoachProvider {
     let lastError: CoachProviderError | undefined;
 
     for (const route of this.routes) {
-      const coolingUntil = this.coolingUntil.get(route.id) ?? 0;
+      const coolingUntil = this.coolingUntil.get(routeKey(route)) ?? 0;
       if (coolingUntil > this.now()) {
-        attempts.push({
-          provider: route.id,
-          status: 'skipped',
-          code: 'provider_cooldown',
-        });
+        attempts.push(attemptOf(route, 'skipped', 'provider_cooldown'));
         continue;
       }
       if (executed >= this.maxAttempts) break;
@@ -63,7 +79,7 @@ export class ResilientCoachProvider implements CoachProvider {
 
       try {
         const output = await route.provider.createTurn(input, idempotencyKey);
-        attempts.push({ provider: route.id, status: 'succeeded' });
+        attempts.push(attemptOf(route, 'succeeded'));
         return {
           ...output,
           routing: {
@@ -76,17 +92,13 @@ export class ResilientCoachProvider implements CoachProvider {
       } catch (error) {
         if (!(error instanceof CoachProviderError)) throw error;
         lastError = error;
-        attempts.push({
-          provider: route.id,
-          status: 'failed',
-          code: error.code,
-        });
+        attempts.push(attemptOf(route, 'failed', error.code));
         // Неповторяемый отказ раньше обрывал всю цепочку. На проде это стоило
         // хода коуча: провайдер отвергал наш контракт вывода (`400`), а
         // следующий маршрут, который ответил бы, даже не пробовали (B183). Пул
         // существует ровно для этого случая, поэтому идём дальше и поднимаем
         // ошибку только когда отказали все.
-        this.coolingUntil.set(route.id, this.now() + this.cooldownMs);
+        this.coolingUntil.set(routeKey(route), this.now() + this.cooldownMs);
       }
     }
 

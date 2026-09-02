@@ -8,7 +8,7 @@ import {
   setSessionCookie,
   withDeps,
 } from './helpers';
-import { syntheticFallbackProviderIds } from '../providers/syntheticProviderRoutes';
+import { queueFallbackDescriptors } from '../providers/providerQueue';
 import { CAREER_SUPER_PROMPT_REVISION } from '../prompts/careerSuperPrompt';
 import {
   adminVacancyQuerySchema,
@@ -240,15 +240,24 @@ function providerStatusData(deps: RouteDeps) {
     personalDataRoute: {
       provider: config.personalProvider ?? 'openai',
       model: config.model,
+      // У персонального класса данных теперь такая же очередь (решение
+      // владельца 2026-09-02), и отчёт обязан её показывать.
+      fallbackModels: queueFallbackDescriptors({
+        head: { provider: config.personalProvider ?? 'openai', model: config.model },
+        fallbacks: config.personalFallbacks,
+        credentials: config.providerCredentials ?? {},
+      }),
     },
     syntheticDataRoute: {
       provider: config.syntheticProvider ?? 'openrouter',
       model: config.syntheticModel ?? 'nvidia/nemotron-3-ultra-550b-a55b:free',
       // Порядок берётся у самой маршрутизации, а не у каталога: иначе отчёт
       // расходится с тем, что сервер делает на самом деле (B183).
-      fallbackProviders: syntheticFallbackProviderIds({
-        selectedProvider: config.syntheticProvider ?? 'openrouter',
-        selectedModel: config.syntheticModel,
+      fallbackModels: queueFallbackDescriptors({
+        head: {
+          provider: config.syntheticProvider ?? 'openrouter',
+          model: config.syntheticModel,
+        },
         fallbacks: config.syntheticFallbacks,
         credentials: config.providerCredentials ?? {},
       }),

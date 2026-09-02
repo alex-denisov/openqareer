@@ -6,7 +6,10 @@ import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider
 import { CareerOrchestrator } from './orchestration/careerOrchestrator';
 import { CoachProviderRoleAgent } from './orchestration/coachProviderRoleAgent';
 import { ResilientCoachProvider } from './providers/resilientCoachProvider';
-import { selectSyntheticProviderRoutes } from './providers/syntheticProviderRoutes';
+import {
+  selectProviderQueue,
+  type ProviderQueueEntry,
+} from './providers/providerQueue';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { AuthService } from './auth/authService';
 import { buildPasswordResetNotifier } from './auth/passwordResetEmail';
@@ -39,28 +42,39 @@ const authService = new AuthService({
 await authService.seedAccounts(config.seedAccounts, candidateStore);
 const personalProviderId = config.personalProvider ?? 'openai';
 const syntheticProviderId = config.syntheticProvider ?? 'openrouter';
-const personalDataProvider = buildCoachProvider({
-  provider: personalProviderId,
-  apiKey: config.providerCredentials?.[personalProviderId] ?? '',
-  model: config.model,
-  folderId: config.yandexFolderId,
-  cloudflareGateway: config.cloudflareGateway,
+// Обоим классам данных — одна и та же очередь моделей: провайдер, который
+// не ответил, уступает следующему, а не роняет ход (решение владельца
+// 2026-09-02). Персональный класс отличается только своим списком.
+const buildQueue = (
+  head: ProviderQueueEntry,
+  fallbacks: readonly ProviderQueueEntry[] | undefined,
+) =>
+  selectProviderQueue({
+    head,
+    fallbacks,
+    credentials: config.providerCredentials ?? {},
+  }).map((route) => ({
+    id: route.provider,
+    model: route.model,
+    provider: buildCoachProvider({
+      ...route,
+      folderId: config.yandexFolderId,
+      cloudflareGateway: config.cloudflareGateway,
+    }),
+  }));
+
+const personalDataProvider = new ResilientCoachProvider({
+  routes: buildQueue(
+    { provider: personalProviderId, model: config.model },
+    config.personalFallbacks,
+  ),
+  maxAttempts: 3,
 });
-const syntheticRoutes = selectSyntheticProviderRoutes({
-  selectedProvider: syntheticProviderId,
-  selectedModel: config.syntheticModel,
-  fallbacks: config.syntheticFallbacks,
-  credentials: config.providerCredentials ?? {},
-}).map((route) => ({
-  id: route.provider,
-  provider: buildCoachProvider({
-    ...route,
-    folderId: config.yandexFolderId,
-    cloudflareGateway: config.cloudflareGateway,
-  }),
-}));
 const syntheticDataProvider = new ResilientCoachProvider({
-  routes: syntheticRoutes,
+  routes: buildQueue(
+    { provider: syntheticProviderId, model: config.syntheticModel },
+    config.syntheticFallbacks,
+  ),
   maxAttempts: 3,
 });
 const routedProvider = new PrivacyAwareCoachProvider({

@@ -238,24 +238,37 @@ describe('server configuration', () => {
  * пул `openrouter/free` вторым. Порядок реестра поставил бы вторым OpenAI,
  * поэтому он читается из окружения.
  */
-describe('порядок синтетических маршрутов (B183)', () => {
-  it('читает названные владельцем запасные маршруты по порядку', () => {
+describe('очередь моделей (B183)', () => {
+  it('читает названные владельцем ступени по порядку, включая одного провайдера дважды', () => {
     expect(
       readServerConfig(
         {
           ...validEnvironment,
           OPENQAREER_SYNTHETIC_AI_FALLBACK:
-            'openrouter:openrouter/free, cerebras',
+            'openrouter:nvidia/nemotron-3-ultra-550b-a55b:free, openrouter:openrouter/free, cerebras',
         },
         import.meta.url,
       ).syntheticFallbacks,
     ).toEqual([
+      { provider: 'openrouter', model: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
       { provider: 'openrouter', model: 'openrouter/free' },
       { provider: 'cerebras' },
     ]);
   });
 
-  it('без строки запасных маршрутов их нет вовсе', () => {
+  it('персональный класс данных читает свою очередь той же строкой формата', () => {
+    expect(
+      readServerConfig(
+        {
+          ...validEnvironment,
+          OPENQAREER_PERSONAL_AI_FALLBACK: 'openrouter:openrouter/free',
+        },
+        import.meta.url,
+      ).personalFallbacks,
+    ).toEqual([{ provider: 'openrouter', model: 'openrouter/free' }]);
+  });
+
+  it('без строки запасных ступеней их нет вовсе', () => {
     expect(readServerConfig(validEnvironment, import.meta.url).syntheticFallbacks).toEqual(
       [],
     );

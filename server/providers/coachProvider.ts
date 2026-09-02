@@ -20,6 +20,11 @@ export interface CoachProviderResult {
     fallbackUsed: boolean;
     attempts: Array<{
       provider: ProviderId;
+      /**
+       * Очередь состоит из моделей: две ступени могут жить за одним
+       * провайдером, и без имени модели их не различить (B183).
+       */
+      model?: string;
       status: 'succeeded' | 'failed' | 'skipped';
       code?: ProviderErrorCode | 'provider_cooldown';
     }>;

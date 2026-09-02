@@ -119,14 +119,17 @@ describe('OpenQareer API boundary', () => {
     });
     expect(authorized.statusCode).toBe(200);
     expect(authorized.json().data).toMatchObject({
+      // Очередь называет модель, а не только провайдера: две её ступени могут
+      // жить за одним провайдером (B183).
       personalDataRoute: {
         provider: 'openai',
         model: 'gpt-5.6-sol',
+        fallbackModels: [],
       },
       syntheticDataRoute: {
         provider: 'openrouter',
         model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-        fallbackProviders: [],
+        fallbackModels: [],
         outputValidation: 'server-side-strict-schema',
       },
       qualityFloor: 'gpt-5.6-sol',

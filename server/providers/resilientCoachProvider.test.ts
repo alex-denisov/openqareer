@@ -134,3 +134,40 @@ describe('несовместимый провайдер в пуле (B183)', () 
     ).rejects.toBeInstanceOf(CoachProviderError);
   });
 });
+
+/**
+ * B183. Владелец назвал очередь из трёх моделей, две из которых живут за
+ * `openrouter`. Если остывание считать по провайдеру, отказ первой из них
+ * вычеркнет и вторую — очередь схлопнется там, где должна была продолжиться.
+ */
+describe('две ступени одного провайдера (B183)', () => {
+  it('остывают независимо и различимы в провенансе по модели', async () => {
+    const failing: CoachProvider = {
+      async createTurn() {
+        throw new CoachProviderError('provider_rate_limited', 429, true);
+      },
+    };
+    const answering: CoachProvider = {
+      async createTurn() {
+        return { ...result('nvidia'), provider: 'openrouter' as const, model: 'openrouter/free' };
+      },
+    };
+
+    const outcome = await new ResilientCoachProvider({
+      routes: [
+        { id: 'openrouter', model: 'nvidia/nemotron-3-ultra-550b-a55b:free', provider: failing },
+        { id: 'openrouter', model: 'openrouter/free', provider: answering },
+      ],
+    }).createTurn(input, 'idempotency-key');
+
+    expect(outcome.routing?.attempts).toEqual([
+      {
+        provider: 'openrouter',
+        model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+        status: 'failed',
+        code: 'provider_rate_limited',
+      },
+      { provider: 'openrouter', model: 'openrouter/free', status: 'succeeded' },
+    ]);
+  });
+});
