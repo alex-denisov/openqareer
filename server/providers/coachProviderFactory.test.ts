@@ -45,3 +45,26 @@ describe('coach provider factory', () => {
     ).toThrow('model is not allowed for provider gemini');
   });
 });
+
+describe('OpenAI model choice (B183)', () => {
+  it('строит провайдера на gpt-5.6-luna', () => {
+    expect(() =>
+      buildCoachProvider({
+        provider: 'openai',
+        apiKey: 'k'.repeat(24),
+        model: 'gpt-5.6-luna',
+      }),
+    ).not.toThrow();
+  });
+
+  it('не строит провайдера на модели вне реестра', () => {
+    expect(() =>
+      buildCoachProvider({
+        provider: 'openai',
+        apiKey: 'k'.repeat(24),
+        model: 'gpt-4o',
+      }),
+    ).toThrow();
+  });
+});
+

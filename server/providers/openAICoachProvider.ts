@@ -20,9 +20,12 @@ import {
   type ProviderOutputDiagnostic,
 } from './coachProvider';
 
+/** Модели OpenAI, которые реестр разрешает персональному маршруту (B183). */
+export type OpenAICoachModel = 'gpt-5.6' | 'gpt-5.6-sol' | 'gpt-5.6-luna';
+
 export interface OpenAICoachProviderOptions {
   apiKey: string;
-  model: 'gpt-5.6' | 'gpt-5.6-sol';
+  model: OpenAICoachModel;
   timeoutMs?: number;
   client?: OpenAI;
 }
@@ -54,7 +57,8 @@ export class OpenAICoachProvider implements CoachProvider {
           instructions: careerInstructionsForRole(input.activeRole),
           input: serializeCoachInput(input),
           reasoning: {
-            effort: 'high',
+            // Владелец выбрал максимальное усилие рассуждения (B183).
+            effort: 'xhigh',
             context: 'all_turns',
           },
           max_output_tokens: outputBudgetForRole(input.activeRole),

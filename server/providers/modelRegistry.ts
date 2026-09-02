@@ -61,6 +61,16 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
     credentialEnvironment: ['OPENQAREER_OPENAI_API_KEY'],
     models: [
       {
+        // Выбор владельца для персонального маршрута (B183): API отдаёт
+        // `created` 2026-06-23, то есть модель попадает под июньский отсечной
+        // рубеж реестра.
+        id: 'gpt-5.6-luna',
+        releaseDate: '2026-06-23',
+        pinned: true,
+        lifecycle: 'preview',
+        structuredOutput: true,
+      },
+      {
         id: 'gpt-5.6-sol',
         releaseDate: '2026-06-26',
         pinned: true,

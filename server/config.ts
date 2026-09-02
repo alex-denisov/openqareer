@@ -12,7 +12,7 @@ import {
 
 declare const __OPENQAREER_RELEASE__: string;
 
-const supportedModels = ['gpt-5.6', 'gpt-5.6-sol'] as const;
+const supportedModels = ['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-luna'] as const;
 
 const configSchema = z.object({
   OPENQAREER_HOST: z.literal('127.0.0.1').default('127.0.0.1'),

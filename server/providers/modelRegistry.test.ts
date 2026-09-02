@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MODEL_RELEASE_CUTOFF,
   PROVIDER_IDS,
+  allowedModels,
   getProviderCatalogStatus,
   isModelAllowed,
   isMutableModelAlias,
@@ -125,3 +126,10 @@ describe('LLM provider and model registry', () => {
     });
   });
 });
+
+describe('OpenAI model catalogue (B183)', () => {
+  it('разрешает выбранную владельцем gpt-5.6-luna', () => {
+    expect(allowedModels('openai').map((model) => model.id)).toContain('gpt-5.6-luna');
+  });
+});
+

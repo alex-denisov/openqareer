@@ -5,7 +5,10 @@ import {
   type ProviderId,
 } from './modelRegistry';
 import { NativeCoachProvider } from './nativeCoachProvider';
-import { OpenAICoachProvider } from './openAICoachProvider';
+import {
+  OpenAICoachProvider,
+  type OpenAICoachModel,
+} from './openAICoachProvider';
 import {
   isOpenAICompatibleProvider,
   OpenAICompatibleCoachProvider,
@@ -30,10 +33,12 @@ export function buildCoachProvider(
     throw new Error(`model is not allowed for provider ${options.provider}`);
   }
   if (options.provider === 'openai') {
-    if (model !== 'gpt-5.6-sol') {
-      throw new Error('unsupported OpenAI coach model');
-    }
-    return new OpenAICoachProvider({ apiKey: options.apiKey, model });
+    // Реестр уже проверил, что модель разрешена; отдельный список из одной
+    // строки здесь запрещал владельцу сменить модель без правки кода (B183).
+    return new OpenAICoachProvider({
+      apiKey: options.apiKey,
+      model: model as OpenAICoachModel,
+    });
   }
   if (options.provider === 'openrouter') {
     return new OpenRouterCoachProvider({

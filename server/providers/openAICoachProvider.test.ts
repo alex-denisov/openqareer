@@ -91,7 +91,8 @@ describe('OpenAI career coach provider', () => {
       store: false,
       max_output_tokens: 3_200,
       reasoning: {
-        effort: 'high',
+        // Владелец выбрал максимальное усилие рассуждения (B183).
+        effort: 'xhigh',
         context: 'all_turns',
       },
     });
