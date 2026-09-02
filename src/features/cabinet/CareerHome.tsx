@@ -15,7 +15,7 @@ import { assessProfile, type ProfileMeasure, type ProfileScore } from './profile
 import { buildProfileView } from './profileView';
 import { RolesMarketPanel } from './RolesMarketPanel';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
-import type { PoolRoleHypothesis } from '../career-map/poolRoleHypotheses';
+import type { PoolRoleHypothesis } from '../../../shared/poolRoleHypotheses';
 import type { CareerCabinetView } from './cabinetViews';
 
 /**

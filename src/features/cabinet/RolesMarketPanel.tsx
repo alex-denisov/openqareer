@@ -2,7 +2,7 @@ import { ArrowRight } from '@phosphor-icons/react';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { RoleMarketMap } from '../career-map/roleMarketMap';
 import { pluralRu } from '../../../shared/pluralRu';
-import type { PoolRoleHypothesis } from '../career-map/poolRoleHypotheses';
+import type { PoolRoleHypothesis } from '../../../shared/poolRoleHypotheses';
 import type { CareerCabinetView } from './cabinetViews';
 
 /**

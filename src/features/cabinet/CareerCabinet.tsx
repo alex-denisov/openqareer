@@ -17,8 +17,8 @@ import {
   type RoutePremisesDraft,
 } from './routePremises';
 import { cabinetJourney } from './cabinetJourney';
-import { buildProfileView } from './profileView';
-import { poolRoleHypotheses } from '../career-map/poolRoleHypotheses';
+import { useRoleHypotheses } from '../career-map/useRoleHypotheses';
+import type { PoolRoleHypothesis } from '../../../shared/poolRoleHypotheses';
 import type { CareerCabinetView } from './cabinetViews';
 
 export type { CareerCabinetView } from './cabinetViews';
@@ -69,15 +69,9 @@ export function CareerCabinet({
   const pool = useMatchedPool();
   // Имя роли берётся у рынка, а не у строки резюме: на «Главной» гипотезой
   // печаталась целая фраза из профиля, за которой нет ни одной вакансии (B180).
-  const marketRoles = useMemo(
-    () =>
-      poolRoleHypotheses({
-        pool: pool.matched,
-        candidateRole: targetDirection,
-        candidateSkills: data.snapshot ? buildProfileView(data.snapshot).skills : [],
-      }),
-    [pool.matched, targetDirection, data.snapshot],
-  );
+  // Считает их сервер (срез 1б): в браузер пул приезжает без требований —
+  // страница подбора вырезает их ради байтового бюджета маршрута (INC-029).
+  const marketRoles = useRoleHypotheses().roles;
   const journey = useMemo(
     () =>
       cabinetJourney({
@@ -167,7 +161,7 @@ function CabinetSection({
   importing: boolean;
   targetDirection: string;
   journey: ReturnType<typeof cabinetJourney>;
-  marketRoles: ReturnType<typeof poolRoleHypotheses>;
+  marketRoles: readonly PoolRoleHypothesis[];
   pool: ReturnType<typeof useMatchedPool>;
   data: ReturnType<typeof useCareerCabinetData>;
   onNavigate: (view: CareerCabinetView) => void;

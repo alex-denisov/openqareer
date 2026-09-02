@@ -1,4 +1,3 @@
-import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { canonicalRoleWord } from './roleSynonyms';
 
 /**
@@ -10,11 +9,31 @@ import { canonicalRoleWord } from './roleSynonyms';
  * рыночной ролью она не является: у неё нет ни вакансий, ни выборки. Роль
  * теперь берётся из пула и называется так, как её называет рынок (B180, срез 1).
  *
+ * Считается это на сервере (B180, срез 1б). В браузер пул приезжает без
+ * требований вовсе: `matchedVacancyPage.ts` намеренно вырезает `skills`, чтобы
+ * страница влезла в байтовый бюджет маршрута (INC-029), а обе экспертные
+ * записки строят гипотезу роли именно на пересечении требований. Полный пул
+ * живёт на сервере — там же и расчёт; наружу уходит готовый ответ в несколько
+ * сотен байт. Модуль лежит в `shared/`, потому что у него два вызывающих:
+ * маршрут и тест интерфейса.
+ *
  * Обе экспертные записки сходятся на одном пороге: меньше восьми вакансий —
  * это не гипотеза, потому что один работодатель со своим шаблоном требований
  * переворачивает картину.
  */
 export const MIN_ROLE_SAMPLE = 8;
+
+/**
+ * Наблюдение рынка в том виде, в каком его видит расчёт: заголовок, когда
+ * увидели, требования и откуда. Структурный тип, а не запись подбора: у
+ * сервера и у браузера они разные, а нужно от них одно и то же.
+ */
+export interface RoleObservation {
+  readonly canonicalTitle: string | undefined;
+  readonly firstObservedAt: string;
+  readonly skills: readonly string[];
+  readonly sources: ReadonlyArray<{ readonly sourceType: string }>;
+}
 
 export interface PoolRoleHypothesis {
   readonly id: string;
@@ -63,7 +82,7 @@ function normalizeWords(text: string): Set<string> {
 
 interface RoleGroup {
   readonly key: string;
-  readonly items: MatchedVacancyItem[];
+  readonly items: RoleObservation[];
   readonly titles: Map<string, number>;
 }
 
@@ -72,13 +91,13 @@ function emptyGroup(key: string): RoleGroup {
 }
 
 export function poolRoleHypotheses(input: {
-  readonly pool: readonly MatchedVacancyItem[];
+  readonly pool: readonly RoleObservation[];
   readonly candidateRole: string;
   readonly candidateSkills: readonly string[];
 }): PoolRoleHypothesis[] {
   const groups = new Map<string, RoleGroup>();
   for (const item of input.pool) {
-    const title = item.cluster.canonicalTitle?.trim();
+    const title = item.canonicalTitle?.trim();
     if (!title) continue;
     const key = titleKey(title);
     if (!key) continue;
@@ -107,7 +126,7 @@ function describeGroup(
   roleWords: Set<string>,
   skills: Set<string>,
 ): PoolRoleHypothesis {
-  const observed = group.items.map((item) => item.cluster.firstObservedAt).sort();
+  const observed = group.items.map((item) => item.firstObservedAt).sort();
   const requirements = repeatedRequirements(group.items);
   const titleOverlap = [...normalizeWords(canonicalTitle(group))].filter((word) =>
     roleWords.has(word),
@@ -134,10 +153,10 @@ function canonicalTitle(group: RoleGroup): string {
   )[0][0];
 }
 
-function repeatedRequirements(items: readonly MatchedVacancyItem[]): string[] {
+function repeatedRequirements(items: readonly RoleObservation[]): string[] {
   const counts = new Map<string, number>();
   for (const item of items) {
-    for (const skill of new Set(item.cluster.skills.map((value) => value.trim()))) {
+    for (const skill of new Set(item.skills.map((value) => value.trim()))) {
       if (skill) counts.set(skill, (counts.get(skill) ?? 0) + 1);
     }
   }
@@ -150,11 +169,11 @@ function repeatedRequirements(items: readonly MatchedVacancyItem[]): string[] {
 }
 
 function countSources(
-  items: readonly MatchedVacancyItem[],
+  items: readonly RoleObservation[],
 ): Array<{ source: string; count: number }> {
   const counts = new Map<string, number>();
   for (const item of items) {
-    for (const source of new Set(item.cluster.sources.map((entry) => entry.sourceType))) {
+    for (const source of new Set(item.sources.map((entry) => entry.sourceType))) {
       counts.set(source, (counts.get(source) ?? 0) + 1);
     }
   }

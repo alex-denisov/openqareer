@@ -1,4 +1,5 @@
 import type { ResumeDraft } from '../../../server/domain/resumeDraft';
+import type { PoolRoleHypothesis } from '../../../shared/poolRoleHypotheses';
 import type { WorkspaceInput } from '../workspace/workspaceStorage';
 type UserRole = 'candidate' | 'admin';
 type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
@@ -812,6 +813,25 @@ export async function getMatchedVacancyPage(
   const nextOffset =
     typeof envelope.meta?.nextOffset === 'number' ? envelope.meta.nextOffset : null;
   return { items, total, nextOffset };
+}
+
+/**
+ * Гипотезы роли считает сервер (B180, срез 1б): требования, на которых они
+ * строятся, страница подбора вырезает ради байтового бюджета (INC-029), и в
+ * браузере считать было не из чего. Ответ — до трёх ролей, сотни байт.
+ */
+export async function getRoleHypotheses(
+  signal?: AbortSignal,
+): Promise<PoolRoleHypothesis[]> {
+  const response = await apiFetch('/api/v1/candidate/role-hypotheses', { signal });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const envelope = (await response.json()) as { data?: unknown };
+  if (!Array.isArray(envelope.data)) {
+    throw new CoachApiErrorClass('Ответ сервиса не разобран.', 'malformed_response', false);
+  }
+  return envelope.data as PoolRoleHypothesis[];
 }
 
 export async function getMatchedVacancies(signal?: AbortSignal): Promise<MatchedVacancyItem[]> {

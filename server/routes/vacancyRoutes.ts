@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { vacancySubscriptionInputSchema } from '../domain/vacancy';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
+import { buildRoleHypotheses } from '../vacancies/roleHypotheses';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
 import type { RouteDeps } from './deps';
 import {
@@ -93,6 +94,55 @@ function readMatchProfile(
 const matchedVacanciesQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
+
+/**
+ * Гипотезы роли считает сервер (B180, срез 1б).
+ *
+ * Браузеру считать было не из чего: страница подбора вырезает требования ради
+ * байтового бюджета (INC-029), и на проде из 320 прочитанных записей они были
+ * у нуля. Здесь пул полный, а наружу уходит готовый ответ в несколько сотен
+ * байт — тот же бюджет перестаёт быть ограничением.
+ */
+const handleRoleHypotheses: Handler = async (
+  { authService, candidateStore, config, multiSourceEngine },
+  request,
+  reply,
+) => {
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+
+  const { confirmedSkills, targetRoles } = readMatchProfile(candidateStore, candidate.id);
+  // Без подтверждённого профиля подбора нет вовсе, а значит нет и рынка, по
+  // которому можно назвать роль. Молчаливый пустой список сказал бы «рынок
+  // ничего не назвал» там, где на самом деле некого спрашивать (B161).
+  if (confirmedSkills.length === 0 && targetRoles.length === 0) {
+    return {
+      data: [],
+      meta: {
+        requestId: request.id,
+        reason: 'candidate_profile_unconfirmed',
+        poolSize: 0,
+      },
+    };
+  }
+
+  const matched = multiSourceEngine.getMatchedVacancies({
+    candidateId: candidate.id,
+    targetRoles,
+    confirmedSkills,
+    confirmedFacts: confirmedSkills,
+    preferredRemote: true,
+  });
+
+  return {
+    data: buildRoleHypotheses({
+      matched,
+      candidateRole: targetRoles.join(', '),
+      candidateSkills: confirmedSkills,
+    }),
+    meta: { requestId: request.id, poolSize: matched.length },
+  };
+};
 
 const handleMatchedVacancies: Handler = async (
   { authService, candidateStore, config, multiSourceEngine },
@@ -299,6 +349,7 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
     withDeps(deps, handleHhMarket),
   );
   app.get('/api/v1/candidate/matched-vacancies', withDeps(deps, handleMatchedVacancies));
+  app.get('/api/v1/candidate/role-hypotheses', withDeps(deps, handleRoleHypotheses));
   app.get('/api/v1/candidate/vacancy-sources', withDeps(deps, handleListSources));
   app.get('/api/v1/candidate/vacancy-subscriptions', withDeps(deps, handleListSubscriptions));
 

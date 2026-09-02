@@ -269,6 +269,31 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
+  // Гипотезы роли считает сервер (B180, срез 1б): «Главная» спрашивает их
+  // отдельным маршрутом, и без ответа прогон записал бы 502, который увидел бы
+  // и кандидат. Отвечаем одной настоящей гипотезой — панель должна печатать
+  // рыночное имя роли, а не отказ.
+  await page.route('**/api/v1/candidate/role-hypotheses*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: [
+          {
+            id: 'pool-role-analyst',
+            title: 'Продуктовый аналитик',
+            sampleSize: 12,
+            observedFrom: '2026-08-20T08:00:00.000Z',
+            observedTo: '2026-09-01T08:00:00.000Z',
+            sources: [{ source: 'hh', count: 12 }],
+            repeatedRequirements: ['SQL', 'A/B тесты'],
+            matchedRequirements: 2,
+          },
+        ],
+        meta: { poolSize: 12 },
+      }),
+    });
+  });
   // Resume Studio asks for the matched pool as soon as it opens; without an
   // answer the walk records a 502 the candidate would also see.
   // Пул, на котором «Вакансии» действительно проверяются: две записи из разных

@@ -58,3 +58,20 @@ export function selectSyntheticProviderRoutes(input: {
     return [{ provider, apiKey, model }];
   });
 }
+
+/**
+ * Отчёт о запасных маршрутах считается той же функцией, что и маршрутизация.
+ * Раньше `/api/v1/provider/status` перечислял их по порядку каталога и после
+ * включения Gemini показывал вторым OpenAI, хотя сервер пробует OpenRouter
+ * (B183). Отчёт, расходящийся с поведением, хуже отсутствующего.
+ */
+export function syntheticFallbackProviderIds(input: {
+  selectedProvider: ProviderId;
+  selectedModel?: string;
+  fallbacks?: readonly SyntheticProviderFallback[];
+  credentials: Partial<Record<ProviderId, string>>;
+}): ProviderId[] {
+  return selectSyntheticProviderRoutes(input)
+    .slice(1)
+    .map((route) => route.provider);
+}

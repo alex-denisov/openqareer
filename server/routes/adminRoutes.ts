@@ -8,6 +8,7 @@ import {
   setSessionCookie,
   withDeps,
 } from './helpers';
+import { syntheticFallbackProviderIds } from '../providers/syntheticProviderRoutes';
 import { CAREER_SUPER_PROMPT_REVISION } from '../prompts/careerSuperPrompt';
 import {
   adminVacancyQuerySchema,
@@ -243,14 +244,14 @@ function providerStatusData(deps: RouteDeps) {
     syntheticDataRoute: {
       provider: config.syntheticProvider ?? 'openrouter',
       model: config.syntheticModel ?? 'nvidia/nemotron-3-ultra-550b-a55b:free',
-      fallbackProviders: (config.providerCatalogStatus ?? [])
-        .filter(
-          (provider) =>
-            provider.configured &&
-            provider.eligible &&
-            provider.id !== (config.syntheticProvider ?? 'openrouter'),
-        )
-        .map((provider) => provider.id),
+      // Порядок берётся у самой маршрутизации, а не у каталога: иначе отчёт
+      // расходится с тем, что сервер делает на самом деле (B183).
+      fallbackProviders: syntheticFallbackProviderIds({
+        selectedProvider: config.syntheticProvider ?? 'openrouter',
+        selectedModel: config.syntheticModel,
+        fallbacks: config.syntheticFallbacks,
+        credentials: config.providerCredentials ?? {},
+      }),
       outputValidation: 'server-side-strict-schema',
     },
     qualityFloor: 'gpt-5.6-sol',

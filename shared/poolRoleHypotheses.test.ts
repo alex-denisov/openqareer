@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { poolRoleHypotheses } from './poolRoleHypotheses';
-import type { MatchedVacancyItem } from '../coach/cabinetTypes';
+import { poolRoleHypotheses, type RoleObservation } from './poolRoleHypotheses';
 
 function vacancy(
   id: string,
@@ -8,39 +7,17 @@ function vacancy(
   skills: string[],
   source = 'hh',
   observedAt = '2026-08-20T08:00:00.000Z',
-): MatchedVacancyItem {
+): RoleObservation {
   return {
-    cluster: {
-      id,
-      canonicalTitle: title,
-      canonicalCompany: 'FinCloud',
-      canonicalLocation: 'Москва',
-      isRemote: false,
-      descriptionSummary: '',
-      skills,
-      primaryUrl: `https://example.com/${id}`,
-      sources: [
-        { sourceType: source, sourceId: id, sourceUrl: `https://example.com/${id}`, observedAt },
-      ],
-      firstObservedAt: observedAt,
-      lastSeenAt: '2026-09-02T08:00:00.000Z',
-      status: 'active' as const,
-      vacanciesCount: 1,
-    },
-    explanation: {
-      clusterId: id,
-      matchScore: 0,
-      fitLevel: 'potential' as const,
-      matchingPoints: [],
-      missingPoints: [],
-      summary: '',
-      calculatedAt: '2026-09-02T08:00:00.000Z',
-    },
-  } as MatchedVacancyItem;
+    canonicalTitle: title,
+    firstObservedAt: observedAt,
+    skills,
+    sources: [{ sourceType: source }],
+  };
 }
 
 /** Восемь однотипных вакансий — минимальная выборка, ниже неё гипотезы нет. */
-function pool(): MatchedVacancyItem[] {
+function pool(): RoleObservation[] {
   const pm = Array.from({ length: 9 }, (_, i) =>
     vacancy(`pm-${i}`, i % 3 === 0 ? 'Senior Product Manager' : 'Продакт-менеджер', [
       'product discovery',

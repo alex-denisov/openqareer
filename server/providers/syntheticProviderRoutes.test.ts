@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { selectSyntheticProviderRoutes } from './syntheticProviderRoutes';
+import {
+  selectSyntheticProviderRoutes,
+  syntheticFallbackProviderIds,
+} from './syntheticProviderRoutes';
 
 describe('selectSyntheticProviderRoutes', () => {
   it('keeps the selected provider first and adds every configured eligible fallback once', () => {
@@ -78,5 +81,28 @@ describe('явный второй приоритет (B183)', () => {
     });
 
     expect(routes.map((route) => route.provider)).toEqual(['gemini']);
+  });
+});
+
+/**
+ * B183. `/api/v1/provider/status` перечислял запасные маршруты по порядку
+ * каталога, а не по тому, в каком порядке их на самом деле пробует сервер:
+ * после включения Gemini он показывал «openai, openrouter», хотя вторым идёт
+ * openrouter. Отчёт должен считаться той же функцией, что и маршрутизация.
+ */
+describe('отчёт о запасных маршрутах (B183)', () => {
+  it('перечисляет их в том же порядке, в каком сервер их пробует', () => {
+    expect(
+      syntheticFallbackProviderIds({
+        selectedProvider: 'gemini',
+        selectedModel: 'gemini-3.8-flash',
+        fallbacks: [{ provider: 'openrouter', model: 'openrouter/free' }],
+        credentials: {
+          gemini: 'gemini-key-that-is-long-enough',
+          openrouter: 'openrouter-key-that-is-long-enough',
+          openai: 'openai-key-that-is-long-enough',
+        },
+      }),
+    ).toEqual(['openrouter', 'openai']);
   });
 });

@@ -210,4 +210,28 @@ describe('candidate platform connections', () => {
     });
     expect(adminRes.statusCode).toBe(401);
   });
+
+  // B180, срез 1б: гипотезы роли считает сервер, где пул полный. Наружу уходит
+  // готовый ответ, и байтовый бюджет маршрута (INC-029) перестаёт мешать.
+  it('отдаёт гипотезы роли готовыми и только вошедшему кандидату', async () => {
+    const app = await createApp();
+
+    const anonymous = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/role-hypotheses',
+    });
+    expect(anonymous.statusCode).toBe(401);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/role-hypotheses',
+      headers: { authorization: candidateAuthorization(app) },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(Array.isArray(response.json().data)).toBe(true);
+    expect(response.json().data.length).toBeLessThanOrEqual(3);
+    expect(response.json().meta).toMatchObject({ poolSize: expect.any(Number) });
+    expect(Buffer.byteLength(response.body, 'utf8')).toBeLessThanOrEqual(4_096);
+  });
 });
