@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { queueFallbackDescriptors, selectProviderQueue } from './providerQueue';
+import {
+  namedQueueDepth,
+  queueFallbackDescriptors,
+  selectProviderQueue,
+} from './providerQueue';
 
 const credentials = {
   gemini: 'gemini-key-that-is-long-enough',
@@ -78,5 +82,32 @@ describe('очередь моделей (B183)', () => {
       { provider: 'openrouter', model: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
       { provider: 'openrouter', model: 'openrouter/free' },
     ]);
+  });
+});
+
+/**
+ * B183. На проде очередь владельца из четырёх ступеней обрывалась на третьей:
+ * потолок попыток стоял жёсткой тройкой, и последняя ступень — единственная
+ * платная и надёжная — не пробовалась вовсе. Названное владельцем должно быть
+ * испробовано целиком.
+ */
+describe('глубина очереди (B183)', () => {
+  it('покрывает все названные ступени, а не первые три', () => {
+    expect(
+      namedQueueDepth({
+        head: { provider: 'gemini', model: 'gemini-3.8-flash' },
+        fallbacks: [
+          { provider: 'openrouter', model: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
+          { provider: 'openrouter', model: 'openrouter/free' },
+          { provider: 'openai', model: 'gpt-5.6-luna' },
+        ],
+      }),
+      // Четыре названных ступени плюс одна про запас: раньше жёсткая тройка
+      // не давала дойти до последней, единственной надёжной.
+    ).toBeGreaterThanOrEqual(4);
+  });
+
+  it('без названных запасных ступеней всё равно оставляет место одному запасу', () => {
+    expect(namedQueueDepth({ head: { provider: 'openai' } })).toBeGreaterThan(1);
   });
 });

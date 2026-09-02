@@ -7,6 +7,7 @@ import { CareerOrchestrator } from './orchestration/careerOrchestrator';
 import { CoachProviderRoleAgent } from './orchestration/coachProviderRoleAgent';
 import { ResilientCoachProvider } from './providers/resilientCoachProvider';
 import {
+  namedQueueDepth,
   selectProviderQueue,
   type ProviderQueueEntry,
 } from './providers/providerQueue';
@@ -63,19 +64,24 @@ const buildQueue = (
     }),
   }));
 
+const personalHead = { provider: personalProviderId, model: config.model };
+const syntheticHead = {
+  provider: syntheticProviderId,
+  model: config.syntheticModel,
+};
 const personalDataProvider = new ResilientCoachProvider({
-  routes: buildQueue(
-    { provider: personalProviderId, model: config.model },
-    config.personalFallbacks,
-  ),
-  maxAttempts: 3,
+  routes: buildQueue(personalHead, config.personalFallbacks),
+  maxAttempts: namedQueueDepth({
+    head: personalHead,
+    fallbacks: config.personalFallbacks,
+  }),
 });
 const syntheticDataProvider = new ResilientCoachProvider({
-  routes: buildQueue(
-    { provider: syntheticProviderId, model: config.syntheticModel },
-    config.syntheticFallbacks,
-  ),
-  maxAttempts: 3,
+  routes: buildQueue(syntheticHead, config.syntheticFallbacks),
+  maxAttempts: namedQueueDepth({
+    head: syntheticHead,
+    fallbacks: config.syntheticFallbacks,
+  }),
 });
 const routedProvider = new PrivacyAwareCoachProvider({
   personalDataProvider,

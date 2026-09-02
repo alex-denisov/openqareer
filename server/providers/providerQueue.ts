@@ -68,3 +68,19 @@ export function queueFallbackDescriptors(input: {
     .slice(1)
     .map((route) => ({ provider: route.provider, model: route.model }));
 }
+
+/**
+ * Сколько ступеней очереди имеет смысл пробовать.
+ *
+ * На проде очередь владельца из четырёх ступеней обрывалась на третьей: потолок
+ * попыток стоял жёсткой тройкой, и последняя — единственная платная и надёжная —
+ * не пробовалась вовсе (B183). Названное владельцем должно быть испробовано
+ * целиком; про запас добавляется одна неназванная ступень, дальше отказ честнее
+ * бесконечного перебора каталога.
+ */
+export function namedQueueDepth(input: {
+  head: ProviderQueueEntry;
+  fallbacks?: readonly ProviderQueueEntry[];
+}): number {
+  return 1 + (input.fallbacks?.length ?? 0) + 1;
+}
