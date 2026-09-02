@@ -49,6 +49,7 @@ const personalDataProvider = buildCoachProvider({
 const syntheticRoutes = selectSyntheticProviderRoutes({
   selectedProvider: syntheticProviderId,
   selectedModel: config.syntheticModel,
+  fallbacks: config.syntheticFallbacks,
   credentials: config.providerCredentials ?? {},
 }).map((route) => ({
   id: route.provider,

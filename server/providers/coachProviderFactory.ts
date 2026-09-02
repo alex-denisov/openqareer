@@ -37,6 +37,7 @@ export interface CoachProviderFactoryOptions {
 function buildGeminiProvider(
   options: CoachProviderFactoryOptions,
   model: string,
+  thinkingLevel: 'low' | 'high' | undefined,
 ): CoachProvider {
   if (!options.cloudflareGateway) {
     throw new Error('gemini requires a configured Cloudflare AI Gateway');
@@ -47,6 +48,7 @@ function buildGeminiProvider(
     baseUrl: geminiGatewayBaseUrl(options.cloudflareGateway),
     model,
     extraHeaders: cloudflareGatewayHeaders(options.cloudflareGateway),
+    ...(thinkingLevel ? { thinkingLevel } : {}),
   });
 }
 
@@ -88,7 +90,7 @@ export function buildCoachProvider(
     });
   }
   if (options.provider === 'gemini') {
-    return buildGeminiProvider(options, model);
+    return buildGeminiProvider(options, model, modelDefinition.thinkingLevel);
   }
   return new NativeCoachProvider({
     provider: options.provider,

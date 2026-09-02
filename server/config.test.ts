@@ -104,7 +104,7 @@ describe('server configuration', () => {
         {
           ...validEnvironment,
           OPENQAREER_PERSONAL_AI_PROVIDER: 'gemini',
-          OPENQAREER_PERSONAL_AI_MODEL: 'gemini-3.7-flash',
+          OPENQAREER_PERSONAL_AI_MODEL: 'gemini-3.8-flash',
           OPENQAREER_GEMINI_API_KEY: 'test-gemini-key-that-is-long-enough',
         },
         import.meta.url,
@@ -132,14 +132,14 @@ describe('server configuration', () => {
         {
           ...validEnvironment,
           OPENQAREER_PERSONAL_AI_PROVIDER: 'gemini',
-          OPENQAREER_PERSONAL_AI_MODEL: 'gemini-3.7-flash',
+          OPENQAREER_PERSONAL_AI_MODEL: 'gemini-3.8-flash',
           OPENQAREER_GEMINI_API_KEY: 'test-gemini-key-that-is-long-enough',
           OPENQAREER_CF_AI_GATEWAY_ACCOUNT_ID: 'a'.repeat(32),
           OPENQAREER_CF_AI_GATEWAY_ID: 'openqareer',
         },
         import.meta.url,
       ),
-    ).toMatchObject({ personalProvider: 'gemini', model: 'gemini-3.7-flash' });
+    ).toMatchObject({ personalProvider: 'gemini', model: 'gemini-3.8-flash' });
   });
 
   it('enables account email only from a complete Resend configuration', () => {
@@ -230,5 +230,43 @@ describe('server configuration', () => {
       localSocksPort: 10885,
       localHttpPort: 10886,
     });
+  });
+});
+
+/**
+ * B183. Владелец назвал порядок синтетических маршрутов: Gemini первым,
+ * пул `openrouter/free` вторым. Порядок реестра поставил бы вторым OpenAI,
+ * поэтому он читается из окружения.
+ */
+describe('порядок синтетических маршрутов (B183)', () => {
+  it('читает названные владельцем запасные маршруты по порядку', () => {
+    expect(
+      readServerConfig(
+        {
+          ...validEnvironment,
+          OPENQAREER_SYNTHETIC_AI_FALLBACK:
+            'openrouter:openrouter/free, cerebras',
+        },
+        import.meta.url,
+      ).syntheticFallbacks,
+    ).toEqual([
+      { provider: 'openrouter', model: 'openrouter/free' },
+      { provider: 'cerebras' },
+    ]);
+  });
+
+  it('без строки запасных маршрутов их нет вовсе', () => {
+    expect(readServerConfig(validEnvironment, import.meta.url).syntheticFallbacks).toEqual(
+      [],
+    );
+  });
+
+  it('опечатка в имени провайдера останавливает запуск, а не молча теряет маршрут', () => {
+    expect(() =>
+      readServerConfig(
+        { ...validEnvironment, OPENQAREER_SYNTHETIC_AI_FALLBACK: 'openrooter:free' },
+        import.meta.url,
+      ),
+    ).toThrow(/unknown synthetic fallback provider/);
   });
 });

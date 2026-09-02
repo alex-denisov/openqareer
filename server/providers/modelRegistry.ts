@@ -42,6 +42,12 @@ export interface ModelDefinition {
    * не для всего, что вышло после рубежа.
    */
   ownerPinned?: boolean;
+  /**
+   * Уровень рассуждения, выбранный вместе с самой моделью (Gemini 3.x).
+   * Живёт в реестре, а не в коннекторе: это часть выбора владельца, и смена
+   * модели не должна тянуть за собой правку транспорта.
+   */
+  thinkingLevel?: 'low' | 'high';
 }
 
 export interface ProviderDefinition {
@@ -126,9 +132,16 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
     credentialEnvironment: ['OPENQAREER_OPENROUTER_API_KEY'],
     models: [
       {
+        // Решение владельца 2026-09-02: второй приоритет после Gemini — пул
+        // бесплатных моделей OpenRouter. Пул выбирает модель сам, и это его
+        // смысл, а не скрытая подмена: коннектор сообщает наверх модель из
+        // ответа (`openRouterCoachProvider.ts:122`), а не запрошенный
+        // псевдоним. Живая проверка 2026-09-02: 200 за 2.5 с,
+        // ответ отдала `cohere/north-mini-code:free`.
         id: 'openrouter/free',
         releaseDate: null,
-        pinned: false,
+        pinned: true,
+        ownerPinned: true,
         lifecycle: 'rolling',
         structuredOutput: false,
       },
@@ -163,13 +176,17 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
     credentialEnvironment: ['OPENQAREER_GEMINI_API_KEY'],
     models: [
       {
-        // Решение владельца 2026-09-02: модель бесплатна для него и идёт в
-        // приоритете. Существование подтверждено живым списком моделей с
-        // прод-хоста, дата выпуска Google в API не приходит.
-        id: 'gemini-3.7-flash',
+        // Решение владельца 2026-09-02 (уточнение того же дня: 3.7 → 3.8):
+        // модель бесплатна для него и идёт первым приоритетом, уровень
+        // рассуждения — `high`. Живая проверка через шлюз Cloudflare
+        // 2026-09-02: 200 за 2.2 с с `thinkingLevel: "high"` и JSON-ответом,
+        // тогда как отменённая 3.7 отвечала 61 секунду. Дата выпуска в API
+        // Google не приходит, поэтому рубеж снимает поимённое решение.
+        id: 'gemini-3.8-flash',
         releaseDate: null,
         pinned: true,
         ownerPinned: true,
+        thinkingLevel: 'high',
         lifecycle: 'production',
         structuredOutput: true,
       },
@@ -387,8 +404,12 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
 };
 
 export function isModelAllowed(model: ModelDefinition): boolean {
-  if (isMutableModelAlias(model.id)) return false;
+  // Поимённое решение владельца — единственное исключение и из отсечного
+  // рубежа, и из запрета на скользящие псевдонимы. Запрет существует, чтобы
+  // непроверенный псевдоним не подменял модель молча; названный владельцем
+  // пул подменяет её громко — коннектор возвращает модель из ответа.
   if (model.ownerPinned) return model.pinned;
+  if (isMutableModelAlias(model.id)) return false;
   return (
     model.pinned &&
     model.releaseDate !== null &&

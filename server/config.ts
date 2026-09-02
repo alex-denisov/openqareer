@@ -13,6 +13,7 @@ import {
   readCloudflareGatewayConfig,
   type CloudflareGatewayConfig,
 } from './providers/cloudflareAiGateway';
+import type { SyntheticProviderFallback } from './providers/syntheticProviderRoutes';
 
 declare const __OPENQAREER_RELEASE__: string;
 
@@ -41,6 +42,7 @@ const configSchema = z.object({
   OPENQAREER_PERSONAL_AI_MODEL: z.string().min(1).optional(),
   OPENQAREER_SYNTHETIC_AI_PROVIDER: z.enum(PROVIDER_IDS).default('openrouter'),
   OPENQAREER_SYNTHETIC_AI_MODEL: z.string().min(1).optional(),
+  OPENQAREER_SYNTHETIC_AI_FALLBACK: blankAsUnset(z.string().min(1).max(512)),
   OPENQAREER_STATIC_ROOT: z.string().min(1).optional(),
   OPENQAREER_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info']).default('info'),
   OPENQAREER_ADMIN_USERNAME: z
@@ -112,6 +114,8 @@ export interface ServerConfig {
   personalProvider?: ProviderId;
   syntheticProvider?: ProviderId;
   syntheticModel?: string;
+  /** Названные владельцем запасные синтетические маршруты по порядку (B183). */
+  syntheticFallbacks?: readonly SyntheticProviderFallback[];
   providerCredentials?: Partial<Record<ProviderId, string>>;
   yandexFolderId?: string;
   staticRoot: string;
@@ -244,6 +248,9 @@ export function readServerConfig(
     personalProvider: personalRoute.provider,
     syntheticProvider: syntheticRoute.provider,
     syntheticModel: syntheticRoute.model,
+    syntheticFallbacks: parseSyntheticFallbacks(
+      parsed.OPENQAREER_SYNTHETIC_AI_FALLBACK,
+    ),
     providerCredentials,
     yandexFolderId: environment.OPENQAREER_YANDEX_FOLDER_ID?.trim(),
     staticRoot: parsed.OPENQAREER_STATIC_ROOT ?? dirname(fileURLToPath(moduleUrl)),
@@ -272,6 +279,31 @@ export function readServerConfig(
     accountEmail,
     desktopTunnel,
   };
+}
+
+/**
+ * `provider:model` через запятую, по порядку приоритета. Идентификаторы
+ * моделей содержат `/`, но не `:` до первого разделителя, поэтому делим по
+ * первому двоеточию. Нераспознанный провайдер — ошибка запуска, а не молча
+ * пропущенный маршрут: владелец должен узнать об опечатке сразу.
+ */
+export function parseSyntheticFallbacks(
+  value: string | undefined,
+): readonly SyntheticProviderFallback[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .map((entry) => {
+      const separator = entry.indexOf(':');
+      const provider = (separator === -1 ? entry : entry.slice(0, separator)).trim();
+      const model = separator === -1 ? undefined : entry.slice(separator + 1).trim();
+      if (!(PROVIDER_IDS as readonly string[]).includes(provider)) {
+        throw new Error(`unknown synthetic fallback provider ${provider}`);
+      }
+      return { provider: provider as ProviderId, ...(model ? { model } : {}) };
+    });
 }
 
 function readProviderCredentials(

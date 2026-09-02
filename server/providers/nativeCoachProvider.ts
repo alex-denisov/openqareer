@@ -23,6 +23,11 @@ interface NativeCoachProviderOptions {
   fetchImpl?: typeof fetch;
   /** Заголовки тоннеля: аутентифицированный шлюз Cloudflare требует свой. */
   extraHeaders?: Record<string, string>;
+  /**
+   * Уровень рассуждения Gemini 3.x, выбранный владельцем вместе с моделью.
+   * Не задан — поле не отправляется вовсе: модели до 3.x его отвергают.
+   */
+  thinkingLevel?: 'low' | 'high';
 }
 
 interface NativeResponse {
@@ -154,6 +159,9 @@ export class NativeCoachProvider implements CoachProvider {
           maxOutputTokens: 2_400,
           responseMimeType: 'application/json',
           responseJsonSchema: COACH_TURN_JSON_SCHEMA,
+          ...(this.options.thinkingLevel
+            ? { thinkingConfig: { thinkingLevel: this.options.thinkingLevel } }
+            : {}),
         },
       },
     );

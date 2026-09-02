@@ -42,8 +42,8 @@ describe('LLM provider and model registry', () => {
           model.releaseDate !== null && model.releaseDate <= MODEL_RELEASE_CUTOFF;
         expect(isModelAllowed(model)).toBe(
           model.pinned &&
-            (model.ownerPinned === true || allowedByCutoff) &&
-            !isMutableModelAlias(model.id),
+            (model.ownerPinned === true ||
+              (allowedByCutoff && !isMutableModelAlias(model.id))),
         );
       }
     }
@@ -137,14 +137,34 @@ describe('OpenAI model catalogue (B183)', () => {
 });
 
 describe('Gemini через тоннель (B183)', () => {
-  it('разрешает выбранную владельцем gemini-3.7-flash', () => {
-    expect(allowedModels('gemini').map((model) => model.id)).toContain('gemini-3.7-flash');
+  it('разрешает выбранную владельцем gemini-3.8-flash', () => {
+    expect(allowedModels('gemini').map((model) => model.id)).toContain('gemini-3.8-flash');
   });
 
   it('модель, закреплённая владельцем, разрешена несмотря на отсечной рубеж', () => {
-    const model = modelRegistry.gemini.models.find((item) => item.id === 'gemini-3.7-flash');
+    const model = modelRegistry.gemini.models.find((item) => item.id === 'gemini-3.8-flash');
     expect(model?.ownerPinned).toBe(true);
     expect(isModelAllowed(model!)).toBe(true);
+  });
+
+  it('владелец выбрал уровень рассуждения high — он живёт в реестре, а не в коде', () => {
+    const model = modelRegistry.gemini.models.find((item) => item.id === 'gemini-3.8-flash');
+    expect(model?.thinkingLevel).toBe('high');
+  });
+
+  it('отменённая владельцем gemini-3.7-flash больше не предлагается', () => {
+    expect(allowedModels('gemini').map((model) => model.id)).not.toContain('gemini-3.7-flash');
+  });
+});
+
+describe('Пул OpenRouter (B183)', () => {
+  it('разрешает названный владельцем пул openrouter/free', () => {
+    expect(allowedModels('openrouter').map((model) => model.id)).toContain('openrouter/free');
+  });
+
+  it('не открывает остальные скользящие псевдонимы заодно', () => {
+    expect(allowedModels('openrouter').map((model) => model.id)).not.toContain('openrouter/auto');
+    expect(isMutableModelAlias('openrouter/free')).toBe(true);
   });
 });
 

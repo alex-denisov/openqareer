@@ -77,7 +77,7 @@ describe('Gemini только через тоннель Cloudflare (B183)', () =
       buildCoachProvider({
         provider: 'gemini',
         apiKey: 'k'.repeat(24),
-        model: 'gemini-3.7-flash',
+        model: 'gemini-3.8-flash',
       }),
     ).toThrow(/cloudflare/i);
   });
@@ -87,7 +87,7 @@ describe('Gemini только через тоннель Cloudflare (B183)', () =
       buildCoachProvider({
         provider: 'gemini',
         apiKey: 'k'.repeat(24),
-        model: 'gemini-3.7-flash',
+        model: 'gemini-3.8-flash',
         cloudflareGateway: { accountId: 'acc', gatewayId: 'gw', token: 'tok' },
       }),
     ).not.toThrow();

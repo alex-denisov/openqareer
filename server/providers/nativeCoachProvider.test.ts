@@ -217,3 +217,62 @@ function nativeWith(provider: NativeProviderId, fetchImpl: typeof fetch) {
     fetchImpl,
   });
 }
+
+/**
+ * B183. Владелец выбрал `gemini-3.8-flash (high)`. Уровень рассуждения — часть
+ * выбора модели, а не украшение: без него шлюз считает запрос обычным.
+ * Живая проверка через шлюз 2026-09-02: `thinkingLevel: "high"` принят,
+ * ответ 200 за 2.2 с.
+ */
+describe('Gemini: уровень рассуждения (B183)', () => {
+  it('кладёт выбранный уровень в generationConfig.thinkingConfig', async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl: typeof fetch = async (url, init) => {
+      requests.push({ url: String(url), init: init ?? {} });
+      return new Response(JSON.stringify(responseFor('gemini')), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    const connector = new NativeCoachProvider({
+      provider: 'gemini',
+      apiKey: 'secret-that-must-not-be-returned',
+      baseUrl: 'https://provider.invalid/v1beta',
+      model: 'gemini-3.8-flash',
+      thinkingLevel: 'high',
+      fetchImpl,
+    });
+
+    await connector.createTurn(input, 'idempotency-key');
+
+    const body = JSON.parse(String(requests[0].init.body)) as {
+      generationConfig?: { thinkingConfig?: { thinkingLevel?: string } };
+    };
+    expect(body.generationConfig?.thinkingConfig?.thinkingLevel).toBe('high');
+  });
+
+  it('без выбранного уровня поле не отправляется вовсе', async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl: typeof fetch = async (url, init) => {
+      requests.push({ url: String(url), init: init ?? {} });
+      return new Response(JSON.stringify(responseFor('gemini')), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    const connector = new NativeCoachProvider({
+      provider: 'gemini',
+      apiKey: 'secret-that-must-not-be-returned',
+      baseUrl: 'https://provider.invalid/v1beta',
+      model: 'gemini-3.5-flash',
+      fetchImpl,
+    });
+
+    await connector.createTurn(input, 'idempotency-key');
+
+    const body = JSON.parse(String(requests[0].init.body)) as {
+      generationConfig?: Record<string, unknown>;
+    };
+    expect(body.generationConfig).not.toHaveProperty('thinkingConfig');
+  });
+});

@@ -24,3 +24,59 @@ describe('selectSyntheticProviderRoutes', () => {
     );
   });
 });
+
+/**
+ * B183. Владелец: Gemini первым, пул `openrouter/free` — вторым. Порядок
+ * остальных провайдеров задан реестром и поставил бы вторым `openai`, поэтому
+ * второй приоритет должен называться явно, а не выводиться из порядка списка.
+ */
+describe('явный второй приоритет (B183)', () => {
+  it('ставит названный запасной маршрут сразу после выбранного', () => {
+    const routes = selectSyntheticProviderRoutes({
+      selectedProvider: 'gemini',
+      selectedModel: 'gemini-3.8-flash',
+      fallbacks: [{ provider: 'openrouter', model: 'openrouter/free' }],
+      credentials: {
+        gemini: 'gemini-key-that-is-long-enough',
+        openrouter: 'openrouter-key-that-is-long-enough',
+        openai: 'openai-key-that-is-long-enough',
+        cerebras: 'cerebras-key-that-is-long-enough',
+      },
+    });
+
+    expect(routes.slice(0, 2)).toEqual([
+      { provider: 'gemini', apiKey: 'gemini-key-that-is-long-enough', model: 'gemini-3.8-flash' },
+      {
+        provider: 'openrouter',
+        apiKey: 'openrouter-key-that-is-long-enough',
+        model: 'openrouter/free',
+      },
+    ]);
+    expect(routes.filter((route) => route.provider === 'openrouter')).toHaveLength(1);
+  });
+
+  it('не выдумывает маршрут, если запасной провайдер не настроен', () => {
+    const routes = selectSyntheticProviderRoutes({
+      selectedProvider: 'gemini',
+      selectedModel: 'gemini-3.8-flash',
+      fallbacks: [{ provider: 'openrouter', model: 'openrouter/free' }],
+      credentials: { gemini: 'gemini-key-that-is-long-enough' },
+    });
+
+    expect(routes.map((route) => route.provider)).toEqual(['gemini']);
+  });
+
+  it('отвергает запасную модель, не разрешённую реестром', () => {
+    const routes = selectSyntheticProviderRoutes({
+      selectedProvider: 'gemini',
+      selectedModel: 'gemini-3.8-flash',
+      fallbacks: [{ provider: 'openrouter', model: 'openrouter/auto' }],
+      credentials: {
+        gemini: 'gemini-key-that-is-long-enough',
+        openrouter: 'openrouter-key-that-is-long-enough',
+      },
+    });
+
+    expect(routes.map((route) => route.provider)).toEqual(['gemini']);
+  });
+});
