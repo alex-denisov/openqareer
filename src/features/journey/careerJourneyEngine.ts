@@ -5,7 +5,11 @@ import {
   type EvidenceItem,
   type RoleFitState,
 } from '../evidence/evidenceEngine';
-import { buildRoleMarketMap } from '../career-map/roleMarketMap';
+import { buildRoleMarketMap, type RoleMarketMap } from '../career-map/roleMarketMap';
+import type {
+  PoolMarketGeography,
+  PoolMarketObservation,
+} from '../career-map/marketObservations';
 import {
   candidateRegionLabel,
   normalizeCandidateRegions,
@@ -90,6 +94,11 @@ export interface CareerJourney {
   track: CareerTrackItem[];
   nextAction: CareerJourneyAction;
   reasonedAction?: ReasonedCareerAction;
+  /**
+   * Карта ролей и рынков со своими выборками и датами наблюдения. Есть только
+   * у картины, собранной из фактов кандидата: анкета одна её не даёт (B104).
+   */
+  roleMarketMap?: RoleMarketMap;
   commercialBoundary: CareerCommercialBoundary;
 }
 
@@ -281,6 +290,7 @@ export function applyCanonicalProfileToJourney(
   targetDirection: string = '',
   now: string = new Date().toISOString(),
   constraints: string = '',
+  observations?: Record<PoolMarketGeography, PoolMarketObservation[]>,
 ): CareerJourney {
   const profileEvidence = memory.filter((item) => item.kind !== 'open-question');
   const confirmedEvidence = profileEvidence.filter((item) => item.status !== 'proposed');
@@ -289,7 +299,13 @@ export function applyCanonicalProfileToJourney(
     .filter((item) => item.kind === 'open-question' && item.status === 'proposed')
     .flatMap((item) => (item.statement?.trim() ? [item.statement.trim()] : []));
   const confirmedOutcomes = confirmedEvidence.filter((item) => item.domain === 'outcome');
-  const roleMarketMap = buildCanonicalRoleMarketMap(journey, memory, targetDirection, now);
+  const roleMarketMap = buildCanonicalRoleMarketMap(
+    journey,
+    memory,
+    targetDirection,
+    now,
+    observations,
+  );
   const roles = roleMarketMap.roles.map((role) => ({
     id: role.id,
     title: role.title,
@@ -334,6 +350,7 @@ export function applyCanonicalProfileToJourney(
     ),
     diagnostic,
     reasonedAction,
+    roleMarketMap,
     nextAction:
       proposedEvidence.length > 0
         ? {
@@ -390,6 +407,7 @@ export function buildCanonicalProfileJourney(
   targetDirection: string = '',
   now: string = new Date().toISOString(),
   constraints: string = '',
+  observations?: Record<PoolMarketGeography, PoolMarketObservation[]>,
 ): CareerJourney {
   const baseJourney =
     journey ??
@@ -408,7 +426,14 @@ export function buildCanonicalProfileJourney(
       ),
       now,
     );
-  return applyCanonicalProfileToJourney(baseJourney, memory, targetDirection, now, constraints);
+  return applyCanonicalProfileToJourney(
+    baseJourney,
+    memory,
+    targetDirection,
+    now,
+    constraints,
+    observations,
+  );
 }
 
 function buildCanonicalRoleMarketMap(
@@ -416,6 +441,7 @@ function buildCanonicalRoleMarketMap(
   memory: CanonicalProfileMemory[],
   targetDirection: string,
   now: string,
+  observations?: Record<PoolMarketGeography, PoolMarketObservation[]>,
 ) {
   const evidence = memory.flatMap((item): EvidenceItem[] => {
     const statement = item.statement?.trim();
@@ -447,12 +473,17 @@ function buildCanonicalRoleMarketMap(
     {
       roleHypotheses: roles,
       evidence,
+      // Рынки журнала названы кодами регионов кандидата («ru», «eu», …), а не
+      // словом «russia»: сравнение с ним не совпадало никогда, и российский
+      // рынок молча считался мировым remote (B104).
       markets: journey.markets.map((market) => ({
         id: market.id,
-        geography: market.id === 'russia' ? 'russia' : 'worldwide-remote',
+        geography: market.id === 'ru' ? 'russia' : 'worldwide-remote',
         label: market.label,
-        workMode: market.id === 'russia' ? 'hybrid' : 'remote',
-        observations: [],
+        workMode: market.id === 'ru' ? 'hybrid' : 'remote',
+        // Наблюдения берутся из собранного пула: без них любая выборка честно
+        // объявлялась недостаточной, и карта ролей молчала о рынке (B104).
+        observations: observations?.[market.id === 'ru' ? 'russia' : 'worldwide-remote'] ?? [],
       })),
     },
     now,

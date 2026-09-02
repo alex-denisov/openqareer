@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowSquareOut } from '@phosphor-icons/react';
-import { getMatchedVacancyPage } from '../coach/coachApi';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { employerLabel } from '../../../shared/employerLabel';
 import {
@@ -10,7 +9,7 @@ import {
   vacancySourceNames,
   type VacancyFilters,
 } from './vacancyFilters';
-import { collectMatchedPool, withDeadline } from './vacancyRead';
+import { useMatchedPool, type MatchedPool } from './useMatchedPool';
 import { SavedSearchesPanel } from './SavedSearchesPanel';
 import type { VacancySubscription } from '../coach/coachApi';
 
@@ -47,13 +46,16 @@ export function VacancyBoard({
   subscriptions = [],
   defaultQuery,
   onRefresh,
+  pool,
 }: {
   /** Регулярные выборки кандидата: заводятся здесь же, в панели фильтров (B181). */
   readonly subscriptions?: readonly VacancySubscription[];
   readonly defaultQuery?: string;
   readonly onRefresh?: () => Promise<void>;
+  /** Пул, прочитанный кабинетом один раз на все разделы (B104). */
+  readonly pool?: MatchedPool;
 } = {}) {
-  const { matched, total, poolTotal, loading, failed } = useMatchedVacancies();
+  const { matched, total, poolTotal, loading, failed } = useMatchedPool(pool);
   // Пока пул дочитывается, счётчик называет прочитанное, а не обещанное.
   const counted = total || matched.length;
   const filling = total === 0 && matched.length > 0;
@@ -471,47 +473,3 @@ function salaryLabel(salary: MatchedVacancyItem['cluster']['salary']): string {
   return `${[from, to].filter(Boolean).join(' ')} ${currency}`.trim();
 }
 
-function useMatchedVacancies() {
-  const [matched, setMatched] = useState<MatchedVacancyItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [poolTotal, setPoolTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    void collectMatchedPool<MatchedVacancyItem>(
-      (offset) => withDeadline((signal) => getMatchedVacancyPage(offset, signal)),
-      undefined,
-      // Пул приходит полусотней страниц. Экран показывает каждую сразу: ждать
-      // последнюю — это десяток секунд «Читаем пул…» вместо вакансий.
-      (items, poolSize) => {
-        if (!active) return;
-        setMatched((read) => [...read, ...items]);
-        setPoolTotal(poolSize);
-        setLoading(false);
-      },
-    )
-      .then((pool) => {
-        if (!active) return;
-        // Прочитано меньше, чем есть в подборе, — счётчик показывает
-        // прочитанное, а не заявленное: иначе экран пообещал бы записи,
-        // которых на нём нет.
-        setTotal(pool.complete ? pool.total : pool.items.length);
-      })
-      .catch(() => {
-        // Не прочитали — это не «пусто»: молчание делает недоступный источник
-        // неотличимым от честно пустого пула. Истёкшее ожидание попадает сюда
-        // же: подбор, который не ответил за отведённое время, не ответил.
-        if (active) setFailed(true);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  return { matched, total, poolTotal, loading, failed };
-}

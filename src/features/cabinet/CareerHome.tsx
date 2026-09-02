@@ -13,6 +13,8 @@ import {
 import { CareerProfileSurface } from './CareerProfileSurface';
 import { assessProfile, type ProfileMeasure, type ProfileScore } from './profileAssessment';
 import { buildProfileView } from './profileView';
+import { RolesMarketPanel } from './RolesMarketPanel';
+import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { CareerCabinetView } from './cabinetViews';
 
 /**
@@ -33,6 +35,8 @@ interface CareerHomeProps {
   readonly account?: AccountSnapshot;
   readonly workspace?: CandidateWorkspace;
   readonly targetDirection: string;
+  /** Карта ролей и рынка: гипотезы и выборка вакансий за ними (B104, B118). */
+  readonly journey?: CareerJourney;
   readonly loading: boolean;
   readonly importing?: boolean;
   readonly onRefresh: () => Promise<void>;
@@ -48,6 +52,7 @@ export function CareerHome({
   account,
   workspace,
   targetDirection,
+  journey,
   loading,
   importing = false,
   onRefresh,
@@ -78,6 +83,7 @@ export function CareerHome({
         snapshot={snapshot}
         regions={workspace?.regions ?? []}
         targetDirection={targetDirection}
+        journey={journey}
         importing={importing}
         onNavigate={onNavigate}
         onOpenExpert={onOpenExpert}
@@ -91,6 +97,7 @@ function HomeRail({
   snapshot,
   regions,
   targetDirection,
+  journey,
   importing,
   onNavigate,
   onOpenExpert,
@@ -98,6 +105,7 @@ function HomeRail({
   snapshot?: CandidateSnapshot;
   regions: readonly CandidateRegion[];
   targetDirection: string;
+  journey?: CareerJourney;
   importing: boolean;
   onNavigate: (view: CareerCabinetView) => void;
   onOpenExpert: () => void;
@@ -114,6 +122,7 @@ function HomeRail({
         targetDirection={targetDirection}
         importing={importing}
       />
+      <RolesMarketPanel journey={journey} onNavigate={onNavigate} />
       <PositioningPanel
         targetDirection={targetDirection}
         regions={regions}

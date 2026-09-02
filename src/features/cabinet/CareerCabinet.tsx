@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import { updateAccountProfile, type AuthUser } from '../coach/coachApi';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
@@ -7,6 +7,7 @@ import { CareerIntelligencePanel } from './CareerIntelligencePanel';
 import { SearchCampaign } from '../search/SearchCampaign';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { VacancyBoard } from '../vacancies/VacancyBoard';
+import { useMatchedPool } from '../vacancies/useMatchedPool';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { useCareerCabinetData } from './useCareerCabinetData';
 import {
@@ -15,6 +16,7 @@ import {
   routePremisesDraft,
   type RoutePremisesDraft,
 } from './routePremises';
+import { cabinetJourney } from './cabinetJourney';
 import type { CareerCabinetView } from './cabinetViews';
 
 export type { CareerCabinetView } from './cabinetViews';
@@ -57,6 +59,23 @@ export function CareerCabinet({
     workspace?.targetDirection?.trim() ||
     data.snapshot?.resume?.draft?.targetRole?.trim() ||
     '';
+  // Карьерная картина вошедшего кандидата: анкета плюс факты с сервера.
+  // Без неё «ATS-читаемость» и «Следующее действие» показывали пустые
+  // состояния тому, у кого разобрано резюме (B103, B105).
+  // Пул читается один раз на весь кабинет: раньше каждый раздел повторял
+  // полсотни страниц подбора сам (B104).
+  const pool = useMatchedPool();
+  const journey = useMemo(
+    () =>
+      cabinetJourney({
+        workspace,
+        memory: data.snapshot?.memory ?? [],
+        targetDirection,
+        pool: pool.matched,
+      }),
+    [workspace, data.snapshot?.memory, targetDirection, pool.matched],
+  );
+
   const savePremises = useCallback(
     async (draft: RoutePremisesDraft) => {
       // Regions and the role live in the workspace. Without one there is
@@ -96,6 +115,8 @@ export function CareerCabinet({
           workspace={workspace}
           importing={importing}
           targetDirection={targetDirection}
+          journey={journey}
+          pool={pool}
           data={data}
           onNavigate={onNavigate}
           onUpdateWorkspace={onUpdateWorkspace}
@@ -116,6 +137,8 @@ function CabinetSection({
   workspace,
   importing,
   targetDirection,
+  journey,
+  pool,
   data,
   onNavigate,
   onUpdateWorkspace,
@@ -128,6 +151,8 @@ function CabinetSection({
   workspace?: CandidateWorkspace;
   importing: boolean;
   targetDirection: string;
+  journey: ReturnType<typeof cabinetJourney>;
+  pool: ReturnType<typeof useMatchedPool>;
   data: ReturnType<typeof useCareerCabinetData>;
   onNavigate: (view: CareerCabinetView) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
@@ -145,6 +170,7 @@ function CabinetSection({
         account={data.account}
         workspace={workspace}
         targetDirection={targetDirection}
+        journey={journey}
         loading={data.loading}
         importing={importing}
         onRefresh={data.refresh}
@@ -183,6 +209,7 @@ function CabinetSection({
             Здесь остались читаемость резюме и следующий шаг. */}
         <CareerIntelligencePanel
           snapshot={data.snapshot}
+          journey={journey}
           loading={data.loading}
           onNavigate={onNavigate}
           onOpenExpert={onOpenExpert}
@@ -195,6 +222,7 @@ function CabinetSection({
       subscriptions={data.snapshot?.vacancySubscriptions ?? []}
       defaultQuery={targetDirection || undefined}
       onRefresh={data.refresh}
+      pool={pool}
     />
   );
 }
