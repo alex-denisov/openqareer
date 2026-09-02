@@ -14,12 +14,40 @@ import {
   OpenAICompatibleCoachProvider,
 } from './openAICompatibleCoachProvider';
 import { OpenRouterCoachProvider } from './openRouterCoachProvider';
+import {
+  cloudflareGatewayHeaders,
+  geminiGatewayBaseUrl,
+  type CloudflareGatewayConfig,
+} from './cloudflareAiGateway';
 
 export interface CoachProviderFactoryOptions {
   provider: ProviderId;
   apiKey: string;
   model?: string;
   folderId?: string;
+  /** Тоннель Cloudflare: без него Gemini не строится вовсе (B183). */
+  cloudflareGateway?: CloudflareGatewayConfig;
+}
+
+/**
+ * Решение владельца 2026-09-02: Gemini ходит только через тоннель Cloudflare.
+ * Прямой вызов с прод-хоста до 3.7-flash не доходит вовсе, поэтому «без
+ * тоннеля пойдём напрямую» — это молчаливый отказ в проде.
+ */
+function buildGeminiProvider(
+  options: CoachProviderFactoryOptions,
+  model: string,
+): CoachProvider {
+  if (!options.cloudflareGateway) {
+    throw new Error('gemini requires a configured Cloudflare AI Gateway');
+  }
+  return new NativeCoachProvider({
+    provider: 'gemini',
+    apiKey: options.apiKey,
+    baseUrl: geminiGatewayBaseUrl(options.cloudflareGateway),
+    model,
+    extraHeaders: cloudflareGatewayHeaders(options.cloudflareGateway),
+  });
 }
 
 export function buildCoachProvider(
@@ -58,6 +86,9 @@ export function buildCoachProvider(
           ? 'high'
           : undefined,
     });
+  }
+  if (options.provider === 'gemini') {
+    return buildGeminiProvider(options, model);
   }
   return new NativeCoachProvider({
     provider: options.provider,

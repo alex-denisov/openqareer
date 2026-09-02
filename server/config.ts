@@ -9,6 +9,10 @@ import {
   type ProviderCatalogStatus,
   type ProviderId,
 } from './providers/modelRegistry';
+import {
+  readCloudflareGatewayConfig,
+  type CloudflareGatewayConfig,
+} from './providers/cloudflareAiGateway';
 
 declare const __OPENQAREER_RELEASE__: string;
 
@@ -121,6 +125,8 @@ export interface ServerConfig {
     role: 'candidate' | 'admin';
   }>;
   providerCatalogStatus?: ProviderCatalogStatus[];
+  /** Тоннель Cloudflare для Gemini (B183). */
+  cloudflareGateway?: CloudflareGatewayConfig;
   accountEmail?: {
     apiKey: string;
     from: string;
@@ -262,6 +268,7 @@ export function readServerConfig(
         ],
     seedAccounts,
     providerCatalogStatus: getProviderCatalogStatus(environment),
+    cloudflareGateway: readCloudflareGatewayConfig(environment),
     accountEmail,
     desktopTunnel,
   };
@@ -270,8 +277,13 @@ export function readServerConfig(
 function readProviderCredentials(
   environment: NodeJS.ProcessEnv,
 ): Partial<Record<ProviderId, string>> {
+  const gateway = readCloudflareGatewayConfig(environment);
   return Object.fromEntries(
     PROVIDER_IDS.flatMap((provider) => {
+      // Решение владельца 2026-09-02: Gemini ходит только через тоннель
+      // Cloudflare. Без тоннеля ключ есть, а маршрута нет — честнее считать
+      // провайдера ненастроенным, чем настроенным и молча неработающим.
+      if (provider === 'gemini' && !gateway) return [];
       const credentialName = modelRegistry[provider].credentialEnvironment[0];
       const credential = environment[credentialName]?.trim();
       return credential ? [[provider, credential]] : [];

@@ -21,6 +21,8 @@ interface NativeCoachProviderOptions {
   folderId?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  /** Заголовки тоннеля: аутентифицированный шлюз Cloudflare требует свой. */
+  extraHeaders?: Record<string, string>;
 }
 
 interface NativeResponse {
@@ -128,16 +130,21 @@ export class NativeCoachProvider implements CoachProvider {
     };
   }
 
+  private geminiHeaders(idempotencyKey: string): Record<string, string> {
+    return {
+      'x-goog-api-key': this.options.apiKey,
+      'x-client-request-id': idempotencyKey,
+      ...(this.options.extraHeaders ?? {}),
+    };
+  }
+
   private async requestGemini(
     input: CoachTurnInput,
     idempotencyKey: string,
   ): Promise<NativeResponse> {
     const payload = await this.postJson(
       `${trimSlash(this.options.baseUrl)}/models/${encodeURIComponent(this.options.model)}:generateContent`,
-      {
-        'x-goog-api-key': this.options.apiKey,
-        'x-client-request-id': idempotencyKey,
-      },
+      this.geminiHeaders(idempotencyKey),
       {
         systemInstruction: { parts: [{ text: careerInstructionsForRole(input.activeRole) }] },
         contents: [

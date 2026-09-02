@@ -44,6 +44,7 @@ const personalDataProvider = buildCoachProvider({
   apiKey: config.providerCredentials?.[personalProviderId] ?? '',
   model: config.model,
   folderId: config.yandexFolderId,
+  cloudflareGateway: config.cloudflareGateway,
 });
 const syntheticRoutes = selectSyntheticProviderRoutes({
   selectedProvider: syntheticProviderId,
@@ -54,6 +55,7 @@ const syntheticRoutes = selectSyntheticProviderRoutes({
   provider: buildCoachProvider({
     ...route,
     folderId: config.yandexFolderId,
+    cloudflareGateway: config.cloudflareGateway,
   }),
 }));
 const syntheticDataProvider = new ResilientCoachProvider({

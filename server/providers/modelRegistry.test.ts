@@ -36,10 +36,13 @@ describe('LLM provider and model registry', () => {
   it('allows only pinned models released by the June 2026 cutoff', () => {
     for (const provider of PROVIDER_IDS) {
       for (const model of modelRegistry[provider].models) {
+        // Поимённое решение владельца — единственное исключение из рубежа
+        // (B183): оно разрешает названную модель, а не всё после даты.
+        const allowedByCutoff =
+          model.releaseDate !== null && model.releaseDate <= MODEL_RELEASE_CUTOFF;
         expect(isModelAllowed(model)).toBe(
           model.pinned &&
-            model.releaseDate !== null &&
-            model.releaseDate <= MODEL_RELEASE_CUTOFF &&
+            (model.ownerPinned === true || allowedByCutoff) &&
             !isMutableModelAlias(model.id),
         );
       }
@@ -130,6 +133,18 @@ describe('LLM provider and model registry', () => {
 describe('OpenAI model catalogue (B183)', () => {
   it('разрешает выбранную владельцем gpt-5.6-luna', () => {
     expect(allowedModels('openai').map((model) => model.id)).toContain('gpt-5.6-luna');
+  });
+});
+
+describe('Gemini через тоннель (B183)', () => {
+  it('разрешает выбранную владельцем gemini-3.7-flash', () => {
+    expect(allowedModels('gemini').map((model) => model.id)).toContain('gemini-3.7-flash');
+  });
+
+  it('модель, закреплённая владельцем, разрешена несмотря на отсечной рубеж', () => {
+    const model = modelRegistry.gemini.models.find((item) => item.id === 'gemini-3.7-flash');
+    expect(model?.ownerPinned).toBe(true);
+    expect(isModelAllowed(model!)).toBe(true);
   });
 });
 

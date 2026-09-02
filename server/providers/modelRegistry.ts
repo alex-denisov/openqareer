@@ -35,6 +35,13 @@ export interface ModelDefinition {
   pinned: boolean;
   lifecycle: 'production' | 'preview' | 'rolling';
   structuredOutput: boolean;
+  /**
+   * Модель, названная владельцем поимённо. Отсечной рубеж существует, чтобы
+   * непроверенные и «скользящие» модели отказывали закрыто; поимённое решение
+   * владельца — это и есть проверка, но только для одной названной модели, а
+   * не для всего, что вышло после рубежа.
+   */
+  ownerPinned?: boolean;
 }
 
 export interface ProviderDefinition {
@@ -155,6 +162,17 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     credentialEnvironment: ['OPENQAREER_GEMINI_API_KEY'],
     models: [
+      {
+        // Решение владельца 2026-09-02: модель бесплатна для него и идёт в
+        // приоритете. Существование подтверждено живым списком моделей с
+        // прод-хоста, дата выпуска Google в API не приходит.
+        id: 'gemini-3.7-flash',
+        releaseDate: null,
+        pinned: true,
+        ownerPinned: true,
+        lifecycle: 'production',
+        structuredOutput: true,
+      },
       {
         id: 'gemini-3.5-flash',
         releaseDate: '2026-05-19',
@@ -369,11 +387,12 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
 };
 
 export function isModelAllowed(model: ModelDefinition): boolean {
+  if (isMutableModelAlias(model.id)) return false;
+  if (model.ownerPinned) return model.pinned;
   return (
     model.pinned &&
     model.releaseDate !== null &&
-    model.releaseDate <= MODEL_RELEASE_CUTOFF &&
-    !isMutableModelAlias(model.id)
+    model.releaseDate <= MODEL_RELEASE_CUTOFF
   );
 }
 

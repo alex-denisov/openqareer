@@ -97,6 +97,21 @@ describe('server configuration', () => {
       syntheticProvider: 'openrouter',
     });
 
+    // Без тоннеля Cloudflare ключ Gemini не считается настройкой вовсе
+    // (решение владельца 2026-09-02, B183).
+    expect(() =>
+      readServerConfig(
+        {
+          ...validEnvironment,
+          OPENQAREER_PERSONAL_AI_PROVIDER: 'gemini',
+          OPENQAREER_PERSONAL_AI_MODEL: 'gemini-3.7-flash',
+          OPENQAREER_GEMINI_API_KEY: 'test-gemini-key-that-is-long-enough',
+        },
+        import.meta.url,
+      ),
+    ).toThrow('credential is required for provider gemini');
+
+    // С тоннелем ключ считается, и в силу вступает правило реестра моделей.
     expect(() =>
       readServerConfig(
         {
@@ -104,10 +119,27 @@ describe('server configuration', () => {
           OPENQAREER_PERSONAL_AI_PROVIDER: 'gemini',
           OPENQAREER_PERSONAL_AI_MODEL: 'gemini-3.6-flash',
           OPENQAREER_GEMINI_API_KEY: 'test-gemini-key-that-is-long-enough',
+          OPENQAREER_CF_AI_GATEWAY_ACCOUNT_ID: 'a'.repeat(32),
+          OPENQAREER_CF_AI_GATEWAY_ID: 'openqareer',
         },
         import.meta.url,
       ),
     ).toThrow('model is not allowed for provider gemini');
+
+    // Модель, названную владельцем поимённо, тоннель принимает.
+    expect(
+      readServerConfig(
+        {
+          ...validEnvironment,
+          OPENQAREER_PERSONAL_AI_PROVIDER: 'gemini',
+          OPENQAREER_PERSONAL_AI_MODEL: 'gemini-3.7-flash',
+          OPENQAREER_GEMINI_API_KEY: 'test-gemini-key-that-is-long-enough',
+          OPENQAREER_CF_AI_GATEWAY_ACCOUNT_ID: 'a'.repeat(32),
+          OPENQAREER_CF_AI_GATEWAY_ID: 'openqareer',
+        },
+        import.meta.url,
+      ),
+    ).toMatchObject({ personalProvider: 'gemini', model: 'gemini-3.7-flash' });
   });
 
   it('enables account email only from a complete Resend configuration', () => {

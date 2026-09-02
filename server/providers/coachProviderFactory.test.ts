@@ -9,6 +9,9 @@ describe('coach provider factory', () => {
         buildCoachProvider({
           provider,
           apiKey: 'test-key-that-is-never-sent',
+          // Gemini строится только через тоннель (B183); остальные коннекторы
+          // эти настройки игнорируют.
+          cloudflareGateway: { accountId: 'acc', gatewayId: 'gw' },
         }),
       ).toBeDefined();
     }
@@ -65,6 +68,29 @@ describe('OpenAI model choice (B183)', () => {
         model: 'gpt-4o',
       }),
     ).toThrow();
+  });
+});
+
+describe('Gemini только через тоннель Cloudflare (B183)', () => {
+  it('без тоннеля провайдер не строится вовсе', () => {
+    expect(() =>
+      buildCoachProvider({
+        provider: 'gemini',
+        apiKey: 'k'.repeat(24),
+        model: 'gemini-3.7-flash',
+      }),
+    ).toThrow(/cloudflare/i);
+  });
+
+  it('с тоннелем строится и ходит на адрес шлюза', () => {
+    expect(() =>
+      buildCoachProvider({
+        provider: 'gemini',
+        apiKey: 'k'.repeat(24),
+        model: 'gemini-3.7-flash',
+        cloudflareGateway: { accountId: 'acc', gatewayId: 'gw', token: 'tok' },
+      }),
+    ).not.toThrow();
   });
 });
 
