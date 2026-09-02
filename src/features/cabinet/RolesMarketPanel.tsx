@@ -2,6 +2,7 @@ import { ArrowRight } from '@phosphor-icons/react';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { RoleMarketMap } from '../career-map/roleMarketMap';
 import { pluralRu } from '../../../shared/pluralRu';
+import type { PoolRoleHypothesis } from '../career-map/poolRoleHypotheses';
 import type { CareerCabinetView } from './cabinetViews';
 
 /**
@@ -18,11 +19,17 @@ import type { CareerCabinetView } from './cabinetViews';
  */
 export function RolesMarketPanel({
   journey,
+  marketRoles,
   poolComplete = true,
   poolTotal = 0,
   onNavigate,
 }: {
   readonly journey?: CareerJourney;
+  /**
+   * Гипотезы, названные рынком: имя роли, её выборка и источники приходят из
+   * пула вакансий, а не из строки резюме (B180, срез 1).
+   */
+  readonly marketRoles?: readonly PoolRoleHypothesis[];
   /** Пул читается страницами: выборка по половине пула — не выборка по пулу. */
   readonly poolComplete?: boolean;
   readonly poolTotal?: number;
@@ -40,7 +47,11 @@ export function RolesMarketPanel({
         <span className="career-cabinet-tag">по вашему пулу</span>
       </header>
 
-      <RoleHypotheses roles={roles} />
+      {marketRoles ? (
+        <MarketRoleHypotheses roles={marketRoles} />
+      ) : (
+        <RoleHypotheses roles={roles} />
+      )}
 
       <MarketSamples markets={markets} />
 
@@ -60,6 +71,57 @@ export function RolesMarketPanel({
       </button>
     </section>
   );
+}
+
+/**
+ * Роли, названные рынком. Каждая строка несёт своё число, окно наблюдения и
+ * источники: роль без вакансий гипотезой не является.
+ */
+function MarketRoleHypotheses({ roles }: { readonly roles: readonly PoolRoleHypothesis[] }) {
+  if (!roles.length) {
+    return (
+      <p className="career-home-empty">
+        Роль ещё не названа рынком: в собранном пуле пока нет группы вакансий, по
+        которой можно строить гипотезу.
+      </p>
+    );
+  }
+  return (
+    <ol className="career-roles-list">
+      {roles.map((role) => (
+        <li key={role.id}>
+          <strong>{role.title}</strong>
+          <small>
+            {pluralRu(role.sampleSize, ['вакансия', 'вакансии', 'вакансий'])} ·{' '}
+            {observationWindow(role)} · {sourceSummary(role)}
+          </small>
+          {role.repeatedRequirements.length ? (
+            <small>Повторяются: {role.repeatedRequirements.slice(0, 4).join(', ')}</small>
+          ) : null}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+const SOURCE_NAMES: Record<string, string> = {
+  hh: 'hh.ru',
+  trudvsem: 'ТрудВсем',
+  remotive: 'Remotive',
+  telegram: 'Telegram-каналы',
+};
+
+function sourceSummary(role: PoolRoleHypothesis): string {
+  return role.sources
+    .slice(0, 3)
+    .map((entry) => `${SOURCE_NAMES[entry.source] ?? entry.source} ${entry.count}`)
+    .join(', ');
+}
+
+function observationWindow(role: PoolRoleHypothesis): string {
+  const from = formatDay(role.observedFrom);
+  const to = formatDay(role.observedTo);
+  return from === to ? `наблюдение ${to}` : `наблюдение ${from} — ${to}`;
 }
 
 /** До трёх гипотез роли: название, на чём стоит и чего не хватает. */

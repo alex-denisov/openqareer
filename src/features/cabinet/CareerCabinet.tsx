@@ -17,6 +17,8 @@ import {
   type RoutePremisesDraft,
 } from './routePremises';
 import { cabinetJourney } from './cabinetJourney';
+import { buildProfileView } from './profileView';
+import { poolRoleHypotheses } from '../career-map/poolRoleHypotheses';
 import type { CareerCabinetView } from './cabinetViews';
 
 export type { CareerCabinetView } from './cabinetViews';
@@ -65,6 +67,17 @@ export function CareerCabinet({
   // Пул читается один раз на весь кабинет: раньше каждый раздел повторял
   // полсотни страниц подбора сам (B104).
   const pool = useMatchedPool();
+  // Имя роли берётся у рынка, а не у строки резюме: на «Главной» гипотезой
+  // печаталась целая фраза из профиля, за которой нет ни одной вакансии (B180).
+  const marketRoles = useMemo(
+    () =>
+      poolRoleHypotheses({
+        pool: pool.matched,
+        candidateRole: targetDirection,
+        candidateSkills: data.snapshot ? buildProfileView(data.snapshot).skills : [],
+      }),
+    [pool.matched, targetDirection, data.snapshot],
+  );
   const journey = useMemo(
     () =>
       cabinetJourney({
@@ -116,6 +129,7 @@ export function CareerCabinet({
           importing={importing}
           targetDirection={targetDirection}
           journey={journey}
+          marketRoles={marketRoles}
           pool={pool}
           data={data}
           onNavigate={onNavigate}
@@ -138,6 +152,7 @@ function CabinetSection({
   importing,
   targetDirection,
   journey,
+  marketRoles,
   pool,
   data,
   onNavigate,
@@ -152,6 +167,7 @@ function CabinetSection({
   importing: boolean;
   targetDirection: string;
   journey: ReturnType<typeof cabinetJourney>;
+  marketRoles: ReturnType<typeof poolRoleHypotheses>;
   pool: ReturnType<typeof useMatchedPool>;
   data: ReturnType<typeof useCareerCabinetData>;
   onNavigate: (view: CareerCabinetView) => void;
@@ -171,6 +187,7 @@ function CabinetSection({
         workspace={workspace}
         targetDirection={targetDirection}
         journey={journey}
+        marketRoles={marketRoles}
         poolComplete={pool.complete}
         poolTotal={pool.poolTotal}
         loading={data.loading}

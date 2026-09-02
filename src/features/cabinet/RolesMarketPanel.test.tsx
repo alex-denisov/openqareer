@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { RolesMarketPanel } from './RolesMarketPanel';
 import { cabinetJourney } from './cabinetJourney';
+import { poolRoleHypotheses } from '../career-map/poolRoleHypotheses';
 import type { CanonicalProfileMemory } from '../diagnostic/careerDiagnostic';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 
@@ -98,3 +99,49 @@ describe('RolesMarketPanel while the pool is still being read', () => {
     expect(render(6)).not.toContain('прочитано');
   });
 });
+
+describe('RolesMarketPanel with market roles (B180 срез 1)', () => {
+  it('печатает рыночное название роли, её выборку и источники', () => {
+    const pool = poolOf(9);
+    const roles = poolRoleHypotheses({
+      pool,
+      candidateRole: 'Руководитель продукта',
+      candidateSkills: ['SQL'],
+    });
+
+    const html = renderToStaticMarkup(
+      <RolesMarketPanel
+        journey={cabinetJourney({
+          memory,
+          targetDirection: 'Руководитель продукта',
+          pool,
+          now: '2026-09-02T09:00:00.000Z',
+        })}
+        marketRoles={roles}
+        onNavigate={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Руководитель продукта');
+    expect(html).toContain('9 вакансий');
+    expect(html).toContain('hh.ru');
+  });
+
+  it('без рыночной выборки не называет роль вовсе', () => {
+    const html = renderToStaticMarkup(
+      <RolesMarketPanel
+        journey={cabinetJourney({
+          memory,
+          targetDirection: 'Руководитель продукта',
+          pool: poolOf(3),
+          now: '2026-09-02T09:00:00.000Z',
+        })}
+        marketRoles={[]}
+        onNavigate={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Роль ещё не названа рынком');
+  });
+});
+
