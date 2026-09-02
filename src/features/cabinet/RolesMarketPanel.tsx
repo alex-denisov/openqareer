@@ -1,6 +1,7 @@
 import { ArrowRight } from '@phosphor-icons/react';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { RoleMarketMap } from '../career-map/roleMarketMap';
+import { pluralRu } from '../../../shared/pluralRu';
 import type { CareerCabinetView } from './cabinetViews';
 
 /**
@@ -72,7 +73,10 @@ function MarketSamples({ markets }: { readonly markets: RoleMarketMap['markets']
           <span>{market.label}</span>
           {market.certainty === 'fact' && market.lastObservedAt ? (
             <span className="career-market-sample">
-              <strong>{market.sampleSize} вакансий</strong> · наблюдение{' '}
+              <strong>
+                {pluralRu(market.sampleSize, ['вакансия', 'вакансии', 'вакансий'])}
+              </strong>{' '}
+              · наблюдение{' '}
               {formatDay(market.lastObservedAt)}
             </span>
           ) : (

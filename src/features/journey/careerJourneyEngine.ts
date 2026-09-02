@@ -5,7 +5,11 @@ import {
   type EvidenceItem,
   type RoleFitState,
 } from '../evidence/evidenceEngine';
-import { buildRoleMarketMap, type RoleMarketMap } from '../career-map/roleMarketMap';
+import {
+  buildRoleMarketMap,
+  type RoleMarketMap,
+  type RoleMarketMapInput,
+} from '../career-map/roleMarketMap';
 import type {
   PoolMarketGeography,
   PoolMarketObservation,
@@ -32,6 +36,9 @@ import {
   type WorkspaceInput,
 } from '../workspace/workspaceStorage';
 import { isImportedMemoryId } from '../../../server/domain/resumeImport';
+
+type MarketGeographyInput = RoleMarketMapInput['markets'][number]['geography'];
+type MarketWorkModeInput = RoleMarketMapInput['markets'][number]['workMode'];
 
 const CAREER_JOURNEY_REVISION = 'career-journey-v1-2026-08-07' as const;
 
@@ -476,15 +483,32 @@ function buildCanonicalRoleMarketMap(
       // Рынки журнала названы кодами регионов кандидата («ru», «eu», …), а не
       // словом «russia»: сравнение с ним не совпадало никогда, и российский
       // рынок молча считался мировым remote (B104).
-      markets: journey.markets.map((market) => ({
-        id: market.id,
-        geography: market.id === 'ru' ? 'russia' : 'worldwide-remote',
-        label: market.label,
-        workMode: market.id === 'ru' ? 'hybrid' : 'remote',
-        // Наблюдения берутся из собранного пула: без них любая выборка честно
-        // объявлялась недостаточной, и карта ролей молчала о рынке (B104).
-        observations: observations?.[market.id === 'ru' ? 'russia' : 'worldwide-remote'] ?? [],
-      })),
+      //
+      // Наблюдения приписываются только тому рынку, о котором они и есть.
+      // Удалённая вакансия с международной площадки ничего не говорит о спросе
+      // в MENA или EU, поэтому на проде «MENA · 184 вакансии» было
+      // утверждением, которого никто не наблюдал. Такая выборка стоит
+      // отдельной строкой и названа тем, чем является.
+      markets: [
+        ...journey.markets.map((market) => ({
+          id: market.id,
+          geography: (market.id === 'ru' ? 'russia' : 'relocation') as MarketGeographyInput,
+          label: market.label,
+          workMode: (market.id === 'ru' ? 'hybrid' : 'remote') as MarketWorkModeInput,
+          observations: market.id === 'ru' ? (observations?.russia ?? []) : [],
+        })),
+        ...(observations?.['worldwide-remote']?.length
+          ? [
+              {
+                id: 'worldwide-remote',
+                geography: 'worldwide-remote' as MarketGeographyInput,
+                label: 'Удалённо, без привязки к стране',
+                workMode: 'remote' as MarketWorkModeInput,
+                observations: observations['worldwide-remote'],
+              },
+            ]
+          : []),
+      ],
     },
     now,
   );

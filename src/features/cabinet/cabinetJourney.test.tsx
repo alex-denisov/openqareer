@@ -125,3 +125,58 @@ describe('cabinetJourney and the collected pool (B104)', () => {
     expect(russia?.repeatedRequirements).toContain('SQL');
   });
 });
+
+describe('cabinetJourney market attribution (B104)', () => {
+  it('не приписывает удалённую выборку конкретному региону кандидата', () => {
+    const remotePool = Array.from({ length: 8 }, (_, index) => ({
+      cluster: {
+        id: `remote-${index}`,
+        canonicalTitle: 'Product Manager',
+        canonicalCompany: 'Lemon.io',
+        canonicalLocation: 'Удалённо',
+        isRemote: true,
+        descriptionSummary: '',
+        skills: ['product discovery'],
+        primaryUrl: 'https://remotive.com/1',
+        sources: [
+          {
+            sourceType: 'remotive',
+            sourceId: `${index}`,
+            sourceUrl: 'https://remotive.com/1',
+            observedAt: '2026-09-01T08:00:00.000Z',
+          },
+        ],
+        firstObservedAt: '2026-09-01T08:00:00.000Z',
+        lastSeenAt: '2026-09-02T08:00:00.000Z',
+        status: 'active' as const,
+        vacanciesCount: 1,
+      },
+      explanation: {
+        clusterId: `remote-${index}`,
+        matchScore: 0,
+        fitLevel: 'potential' as const,
+        matchingPoints: [],
+        missingPoints: [],
+        summary: '',
+        calculatedAt: '2026-09-02T08:00:00.000Z',
+      },
+    }));
+
+    const journey = cabinetJourney({
+      memory,
+      targetDirection: 'Product Manager',
+      pool: remotePool,
+      now: '2026-09-02T09:00:00.000Z',
+    });
+    const markets = journey?.roleMarketMap?.markets ?? [];
+
+    // Ни один регион кандидата не выдаёт мировую удалённую выборку за свою.
+    for (const market of markets.filter((item) => item.geography !== 'worldwide-remote')) {
+      expect(market.sampleSize).toBe(0);
+    }
+    // Наблюдение существует и названо тем, чем является.
+    const remote = markets.find((market) => market.geography === 'worldwide-remote');
+    expect(remote?.sampleSize).toBe(8);
+    expect(remote?.label).toContain('Удалённо');
+  });
+});

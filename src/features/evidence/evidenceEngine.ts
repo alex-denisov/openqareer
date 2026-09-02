@@ -1,3 +1,5 @@
+import { pluralRu } from '../../../shared/pluralRu';
+
 export const EVIDENCE_METHOD_VERSION = 'evidence-local-v1';
 export const ROLE_METHOD_VERSION = 'role-hypotheses-local-v1';
 
@@ -148,9 +150,11 @@ export function buildRoleHypotheses(
             : 'needs-evidence',
       basis:
         confirmed.length > 0
-          ? `Опирается на ${confirmed.length} подтверждённых ${
-              confirmed.length === 1 ? 'факт' : 'факта'
-            } из резюме. Это гипотеза, а не решение рынка.`
+          ? `Опирается на ${pluralRu(confirmed.length, [
+              'подтверждённый факт',
+              'подтверждённых факта',
+              'подтверждённых фактов',
+            ])} из резюме. Это гипотеза, а не решение рынка.`
           : 'Пока это заявленное направление без подтверждённых фактов.',
       evidenceIds: confirmedIds.slice(0, 4),
       gaps: [
