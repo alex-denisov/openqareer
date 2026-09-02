@@ -135,7 +135,7 @@ function CabinetSection({
   onOpenAccount: () => void;
   onOpenExpert: () => void;
 }) {
-  // «Главная» держит кандидата и его досье: отдельный раздел «Профиль» показывал
+  // «Главная» держит кандидата и его факты: отдельный раздел «Профиль» показывал
   // бы то же самое второй раз, поэтому его прежний адрес ведёт сюда же.
   if (view === 'today' || view === 'profile') {
     return (
@@ -161,7 +161,7 @@ function CabinetSection({
         memory={data.snapshot?.memory ?? []}
         importedSources={data.snapshot?.importedSources}
         regions={workspace?.regions ?? []}
-        onRefreshDossier={() => void data.refresh()}
+        onRefreshFacts={() => void data.refresh()}
       />
     );
   }

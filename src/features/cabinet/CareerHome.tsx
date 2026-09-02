@@ -16,7 +16,7 @@ import { buildProfileView } from './profileView';
 import type { CareerCabinetView } from './cabinetViews';
 
 /**
- * «Главная» — кандидат и его досье слева, оценка, позиционирование и вход к
+ * «Главная» — кандидат и его факты слева, оценка, позиционирование и вход к
  * консультанту справа («Пульт», решение владельца 2026-08-31).
  *
  * Слева — сам кандидат, собранный из разобранного резюме: карточка личности,
@@ -128,7 +128,7 @@ function HomeRail({
 /**
  * Ни одного процента без опоры. Кольцо «68 из 100» из макета продукт измерить
  * не может, поэтому здесь стоят только счётные меры, каждая со своим
- * знаменателем, объяснением и датой последнего изменения досье.
+ * знаменателем, объяснением и датой последнего изменения фактов.
  */
 function AssessmentPanel({
   snapshot,
@@ -141,7 +141,7 @@ function AssessmentPanel({
 }) {
   const assessment = assessProfile({ view: buildProfileView(snapshot), targetDirection });
   // Пока идёт импорт, серверное чтение кабинета старше его результата: числа
-  // досье устарели, а не равны нулю (B160 §3). Экран говорит это прямо, а не
+  // факты устарели, а не равны нулю (B160 §3). Экран говорит это прямо, а не
   // печатает вчерашнюю оценку как сегодняшнюю.
   const measures = importing ? [] : assessment.measures;
 
@@ -151,7 +151,7 @@ function AssessmentPanel({
         <h3 id="career-assessment-title">Оценка профиля</h3>
         {assessment.measuredAt && !importing ? (
           <span className="career-cabinet-tag">
-            досье изменено {formatDay(assessment.measuredAt)}
+            факты обновлены {formatDay(assessment.measuredAt)}
           </span>
         ) : null}
       </header>

@@ -28,7 +28,7 @@ interface ResumeStudioProps {
   readonly memory: readonly CandidateMemory[];
   readonly importedSources?: readonly ImportedSourceSummary[];
   readonly regions: readonly CandidateRegion[];
-  readonly onRefreshDossier?: () => void;
+  readonly onRefreshFacts?: () => void;
 }
 
 /** Connects the candidate-scoped resume API to the surface. */
@@ -36,9 +36,9 @@ export function ResumeStudio({
   memory,
   regions,
   importedSources,
-  onRefreshDossier,
+  onRefreshFacts,
 }: ResumeStudioProps) {
-  const state = useResumeStudio(onRefreshDossier);
+  const state = useResumeStudio(onRefreshFacts);
   return (
     <ResumeStudioSurface
       importedSource={importedSourceOf(importedSources)}

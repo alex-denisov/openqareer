@@ -10,7 +10,7 @@ import type { ResumeUnknown } from './resumeTypes';
  */
 export function EvidenceChip({ memoryId }: { memoryId: string }) {
   return (
-    <span className="career-resume-evidence" title={`Запись досье: ${memoryId}`}>
+    <span className="career-resume-evidence" title={`Факт: ${memoryId}`}>
       Источник: {evidenceOriginLabel(memoryId)}
     </span>
   );

@@ -89,7 +89,7 @@ function ImportedSourceBlock({
         <Plugs size={15} /> Что дал источник
       </h3>
       <p>
-        Импорт из {source.label} от {importDate(source.importedAt)} · Фактов в досье:{' '}
+        Импорт из {source.label} от {importDate(source.importedAt)} · Фактов о вас:{' '}
         {source.factCount}
       </p>
       {filled.length > 0 ? (

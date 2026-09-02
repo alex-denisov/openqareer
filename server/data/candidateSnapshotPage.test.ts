@@ -3,7 +3,7 @@ import { SNAPSHOT_PAGE_BYTE_BUDGET, buildSnapshotHead } from './candidateSnapsho
 
 /**
  * Снимок кандидата весил 59 561 байт, а маршрут доносит около 20 460 (INC-030):
- * «Главная» и досье оставались пустыми при полной базе. Первый ответ обязан
+ * «Главная» и факты кандидата оставались пустыми при полной базе. Первый ответ обязан
  * помещаться в бюджет и честно говорить, сколько осталось.
  */
 function snapshot(memoryCount: number, messageCount: number, turnCount: number) {
@@ -42,7 +42,7 @@ describe('buildSnapshotHead', () => {
     );
   });
 
-  it('оставляет у досье счёт, но не его разделы', () => {
+  it('оставляет у набора фактов счёт, но не его разделы', () => {
     const { data } = buildSnapshotHead(snapshot(10, 0, 0), 0);
     expect(data.dossier.confirmedCount).toBe(12);
     expect(data.dossier.sections).toEqual([]);

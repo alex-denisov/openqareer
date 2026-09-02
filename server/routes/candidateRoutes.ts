@@ -300,7 +300,7 @@ const handleReviewMemories: Handler = async (deps, request, reply) => {
       request,
       404,
       'memory_not_found',
-      'Один из фактов не найден в досье — обновите страницу и повторите.',
+      'Один из фактов не найден — обновите страницу и повторите.',
       false,
     );
   }

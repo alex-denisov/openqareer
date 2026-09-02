@@ -210,7 +210,7 @@ function ExperienceSection({
       <h3 id="career-resume-experience">Опыт работы</h3>
       {rows.length === 0 ? (
         <p className="career-resume-empty">
-          Ни одной роли. Добавьте её из подтверждённого факта досье — резюме не
+          Ни одной роли. Добавьте её из подтверждённого факта — резюме не
           придумывает историю за вас.
         </p>
       ) : null}

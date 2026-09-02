@@ -22,8 +22,8 @@ const REVIEW_FLAG_LABELS: Record<ResumeReviewFlag, string> = {
 };
 
 const STALE_REASON_LABELS: Record<StaleEvidenceReason, string> = {
-  missing: 'факт отозван из досье',
-  'duplicate-current-evidence': 'в досье появился дубликат',
+  missing: 'факт отозван',
+  'duplicate-current-evidence': 'появился дубликат факта',
   'no-longer-confirmed': 'больше не подтверждён',
   'became-sensitive': 'помечен как чувствительный',
   'became-non-factual': 'перестал быть фактом',
@@ -96,7 +96,7 @@ export function evidenceStatementLabel(
   const item = memory.find((m) => m.id === memoryId);
   const statement = item?.statement?.trim();
   if (!statement) {
-    return kind === 'stale' ? 'Факт удалён из досье' : 'Запись без текста';
+    return kind === 'stale' ? 'Факт удалён' : 'Запись без текста';
   }
   if (statement.length > 80) {
     return `${statement.slice(0, 80)}…`;

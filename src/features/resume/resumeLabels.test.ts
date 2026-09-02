@@ -59,7 +59,7 @@ describe('what the candidate reads instead of an internal record number', () => 
 
   it('never falls back to the internal number', () => {
     expect(evidenceStatementLabel(memory, 'memory-404', 'stale')).toBe(
-      'Факт удалён из досье',
+      'Факт удалён',
     );
     expect(evidenceStatementLabel(memory, 'memory-404', 'excluded')).toBe(
       'Запись без текста',

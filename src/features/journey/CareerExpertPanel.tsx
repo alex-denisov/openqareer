@@ -320,7 +320,7 @@ export function ExpertWaitingRow({ question }: { question: string }) {
       <span>Вы</span>
       <p>{question}</p>
       <p>
-        <Spinner size={16} /> Советник читает ваше досье и рынок — ответ занимает
+        <Spinner size={16} /> Советник читает ваши факты и рынок — ответ занимает
         до полутора минут. Не закрывайте панель.
       </p>
     </article>
