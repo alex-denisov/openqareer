@@ -3,6 +3,8 @@ import type { CoachTurnInput } from '../domain/coach';
 import {
   NativeCoachProvider,
   type NativeProviderId,
+  COACH_ANSWER_TOKENS,
+  geminiOutputBudget,
 } from './nativeCoachProvider';
 
 const input: CoachTurnInput = {
@@ -274,5 +276,45 @@ describe('Gemini: уровень рассуждения (B183)', () => {
       generationConfig?: Record<string, unknown>;
     };
     expect(body.generationConfig).not.toHaveProperty('thinkingConfig');
+  });
+});
+
+/**
+ * B183. Живой замер на проде: `gemini-3.8-flash` с `thinkingLevel: high` и
+ * потолком в 2400 токенов вернул `200 · out=83` — рассуждение съело бюджет, а
+ * ответ не дошёл и не прошёл разбор. Уровень рассуждения обязан ехать вместе с
+ * местом под него.
+ */
+describe('бюджет вывода Gemini под рассуждение (B183)', () => {
+  it('растёт вместе с уровнем рассуждения', () => {
+    expect(geminiOutputBudget('high')).toBeGreaterThan(geminiOutputBudget('low'));
+    expect(geminiOutputBudget('low')).toBeGreaterThan(geminiOutputBudget(undefined));
+    expect(geminiOutputBudget(undefined)).toBe(COACH_ANSWER_TOKENS);
+  });
+
+  it('оставляет место под сам ответ, а не только под размышление', async () => {
+    const requests: Array<{ init: RequestInit }> = [];
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      requests.push({ init: init ?? {} });
+      return new Response(JSON.stringify(responseFor('gemini')), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    await new NativeCoachProvider({
+      provider: 'gemini',
+      apiKey: 'secret-that-must-not-be-returned',
+      baseUrl: 'https://provider.invalid/v1beta',
+      model: 'gemini-3.8-flash',
+      thinkingLevel: 'high',
+      fetchImpl,
+    }).createTurn(input, 'idempotency-key');
+
+    const body = JSON.parse(String(requests[0].init.body)) as {
+      generationConfig: { maxOutputTokens: number };
+    };
+    expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(
+      COACH_ANSWER_TOKENS * 2,
+    );
   });
 });

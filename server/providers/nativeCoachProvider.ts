@@ -40,6 +40,22 @@ interface NativeResponse {
   totalTokens: number;
 }
 
+/** Ответу коуча хватает этого; всё сверх — бюджет на рассуждение. */
+export const COACH_ANSWER_TOKENS = 2_400;
+
+/**
+ * У Gemini 3.x рассуждение тратит **тот же** бюджет вывода, что и ответ.
+ * Живой замер на проде 2026-09-02: с `thinkingLevel: high` и потолком 2400
+ * шлюз вернул `200 · in=7762 · out=83` — модель израсходовала бюджет на
+ * размышление и отдала обрывок, который не прошёл разбор. Поэтому уровень
+ * рассуждения обязан идти вместе с местом под него (B183).
+ */
+export function geminiOutputBudget(thinkingLevel?: 'low' | 'high'): number {
+  if (thinkingLevel === 'high') return COACH_ANSWER_TOKENS * 4;
+  if (thinkingLevel === 'low') return COACH_ANSWER_TOKENS * 2;
+  return COACH_ANSWER_TOKENS;
+}
+
 export class NativeCoachProvider implements CoachProvider {
   private readonly options: NativeCoachProviderOptions;
   private readonly fetchImpl: typeof fetch;
@@ -157,7 +173,7 @@ export class NativeCoachProvider implements CoachProvider {
           { role: 'user', parts: [{ text: serializeCoachInput(input) }] },
         ],
         generationConfig: {
-          maxOutputTokens: 2_400,
+          maxOutputTokens: geminiOutputBudget(this.options.thinkingLevel),
           responseMimeType: 'application/json',
           // Gemini отвергает ограничения длины и размера (B183): контракт
           // едет без них, а годность ответа всё равно решает zod.
