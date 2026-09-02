@@ -9,6 +9,8 @@ export interface MatchedPool {
   readonly poolTotal: number;
   readonly loading: boolean;
   readonly failed: boolean;
+  /** Прочитан ли пул целиком: выборка по половине пула — не выборка по пулу. */
+  readonly complete: boolean;
 }
 
 /**
@@ -25,6 +27,7 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
   const [poolTotal, setPoolTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [complete, setComplete] = useState(false);
 
   useEffect(() => {
     if (provided) return;
@@ -47,6 +50,7 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
         // прочитанное, а не заявленное: иначе экран пообещал бы записи,
         // которых на нём нет.
         setTotal(pool.complete ? pool.total : pool.items.length);
+        setComplete(pool.complete);
       })
       .catch(() => {
         // Не прочитали — это не «пусто»: молчание делает недоступный источник
@@ -62,5 +66,5 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
     };
   }, [provided]);
 
-  return provided ?? { matched, total, poolTotal, loading, failed };
+  return provided ?? { matched, total, poolTotal, loading, failed, complete };
 }

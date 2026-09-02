@@ -37,6 +37,8 @@ interface CareerHomeProps {
   readonly targetDirection: string;
   /** Карта ролей и рынка: гипотезы и выборка вакансий за ними (B104, B118). */
   readonly journey?: CareerJourney;
+  readonly poolComplete?: boolean;
+  readonly poolTotal?: number;
   readonly loading: boolean;
   readonly importing?: boolean;
   readonly onRefresh: () => Promise<void>;
@@ -53,6 +55,8 @@ export function CareerHome({
   workspace,
   targetDirection,
   journey,
+  poolComplete,
+  poolTotal,
   loading,
   importing = false,
   onRefresh,
@@ -84,6 +88,8 @@ export function CareerHome({
         regions={workspace?.regions ?? []}
         targetDirection={targetDirection}
         journey={journey}
+        poolComplete={poolComplete}
+        poolTotal={poolTotal}
         importing={importing}
         onNavigate={onNavigate}
         onOpenExpert={onOpenExpert}
@@ -98,6 +104,8 @@ function HomeRail({
   regions,
   targetDirection,
   journey,
+  poolComplete,
+  poolTotal,
   importing,
   onNavigate,
   onOpenExpert,
@@ -106,6 +114,8 @@ function HomeRail({
   regions: readonly CandidateRegion[];
   targetDirection: string;
   journey?: CareerJourney;
+  poolComplete?: boolean;
+  poolTotal?: number;
   importing: boolean;
   onNavigate: (view: CareerCabinetView) => void;
   onOpenExpert: () => void;
@@ -122,7 +132,12 @@ function HomeRail({
         targetDirection={targetDirection}
         importing={importing}
       />
-      <RolesMarketPanel journey={journey} onNavigate={onNavigate} />
+      <RolesMarketPanel
+        journey={journey}
+        poolComplete={poolComplete}
+        poolTotal={poolTotal}
+        onNavigate={onNavigate}
+      />
       <PositioningPanel
         targetDirection={targetDirection}
         regions={regions}

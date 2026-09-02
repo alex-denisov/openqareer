@@ -18,9 +18,14 @@ import type { CareerCabinetView } from './cabinetViews';
  */
 export function RolesMarketPanel({
   journey,
+  poolComplete = true,
+  poolTotal = 0,
   onNavigate,
 }: {
   readonly journey?: CareerJourney;
+  /** Пул читается страницами: выборка по половине пула — не выборка по пулу. */
+  readonly poolComplete?: boolean;
+  readonly poolTotal?: number;
   readonly onNavigate: (view: CareerCabinetView) => void;
 }) {
   const map = journey?.roleMarketMap;
@@ -35,23 +40,16 @@ export function RolesMarketPanel({
         <span className="career-cabinet-tag">по вашему пулу</span>
       </header>
 
-      {roles.length ? (
-        <ol className="career-roles-list">
-          {roles.map((role) => (
-            <li key={role.id}>
-              <strong>{role.title}</strong>
-              <small>{role.basis}</small>
-              {role.gaps.length ? <small className="is-gap">{role.gaps[0]}</small> : null}
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className="career-home-empty">
-          Роль ещё не названа: гипотезы строятся из ваших фактов и вакансий пула.
-        </p>
-      )}
+      <RoleHypotheses roles={roles} />
 
       <MarketSamples markets={markets} />
+
+      {!poolComplete && observedCount(markets) > 0 ? (
+        <p className="career-cabinet-tag">
+          Пул ещё дочитывается: прочитано {observedCount(markets)} из {poolTotal} — числа
+          вырастут.
+        </p>
+      ) : null}
 
       <button
         type="button"
@@ -62,6 +60,33 @@ export function RolesMarketPanel({
       </button>
     </section>
   );
+}
+
+/** До трёх гипотез роли: название, на чём стоит и чего не хватает. */
+function RoleHypotheses({ roles }: { readonly roles: RoleMarketMap['roles'] }) {
+  if (!roles.length) {
+    return (
+      <p className="career-home-empty">
+        Роль ещё не названа: гипотезы строятся из ваших фактов и вакансий пула.
+      </p>
+    );
+  }
+  return (
+    <ol className="career-roles-list">
+      {roles.map((role) => (
+        <li key={role.id}>
+          <strong>{role.title}</strong>
+          <small>{role.basis}</small>
+          {role.gaps.length ? <small className="is-gap">{role.gaps[0]}</small> : null}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** Сколько записей пула вообще попало хоть в одну выборку. */
+function observedCount(markets: RoleMarketMap['markets']): number {
+  return markets.reduce((sum, market) => sum + market.sampleSize, 0);
 }
 
 /** Выборка рынка: число, дата наблюдения и повторяющиеся требования. */

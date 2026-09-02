@@ -171,6 +171,8 @@ function CabinetSection({
         workspace={workspace}
         targetDirection={targetDirection}
         journey={journey}
+        poolComplete={pool.complete}
+        poolTotal={pool.poolTotal}
         loading={data.loading}
         importing={importing}
         onRefresh={data.refresh}

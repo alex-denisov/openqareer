@@ -52,7 +52,7 @@ function poolOf(count: number): MatchedVacancyItem[] {
   })) as MatchedVacancyItem[];
 }
 
-function render(count: number) {
+function render(count: number, read: { complete?: boolean; poolTotal?: number } = {}) {
   return renderToStaticMarkup(
     <RolesMarketPanel
       journey={cabinetJourney({
@@ -61,6 +61,8 @@ function render(count: number) {
         pool: poolOf(count),
         now: '2026-09-02T09:00:00.000Z',
       })}
+      poolComplete={read.complete ?? true}
+      poolTotal={read.poolTotal ?? count}
       onNavigate={() => undefined}
     />,
   );
@@ -83,5 +85,16 @@ describe('RolesMarketPanel', () => {
 
   it('без карты ролей не рисует раздел вовсе', () => {
     expect(renderToStaticMarkup(<RolesMarketPanel onNavigate={() => undefined} />)).toBe('');
+  });
+});
+
+describe('RolesMarketPanel while the pool is still being read', () => {
+  it('говорит, что выборка считается по прочитанной части, а не по всему пулу', () => {
+    const html = render(6, { complete: false, poolTotal: 514 });
+    expect(html).toContain('прочитано 6 из 514');
+  });
+
+  it('на прочитанном пуле лишнего не пишет', () => {
+    expect(render(6)).not.toContain('прочитано');
   });
 });
