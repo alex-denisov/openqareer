@@ -1,3 +1,4 @@
+import { classifyTelegramPost } from './telegramPostType';
 import type { UnifiedVacancy, VacancySalary } from '../domain/unifiedVacancy';
 import { calculateVacancyFingerprint } from '../vacancies/vacancyFingerprint';
 import { decodeFeedEntities } from './feedText';
@@ -103,45 +104,6 @@ export function extractSkillsFromText(text: string): string[] {
 
 function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function hasResumeSignals(clean: string): boolean {
-  if (/#резюме|#cv|#ищу_работу|#ищуработу|#кандидат/iu.test(clean.slice(0, 150))) return true;
-  const resumePatterns = [
-    /#резюме/iu, /#cv\b/i, /#ищу_работу/iu, /#ищуработу/iu, /#кандидат/iu,
-    /ищу работу/iu, /ищу проект/iu, /ищу команду/iu, /рассматриваю предложения/iu,
-    /готов к предложениям/iu, /обо мне:/iu, /обо мне\s/iu, /о себе:/iu,
-    /мой стек:/iu, /мои навыки:/iu, /ищу позицию/iu, /ищу удаленку/iu,
-    /открыт к предложениям/iu, /желаемая зарплата/iu, /желаемая должность/iu,
-  ];
-  return resumePatterns.some((rx) => rx.test(clean));
-}
-
-function hasHiringSignals(clean: string): boolean {
-  const hiringPatterns = [
-    /#вакансия/iu, /#job\b/i, /мы ищем/iu, /ищем в команду/iu, /в поисках/iu,
-    /открыта позиция/iu, /открыта вакансия/iu, /требуется/iu, /нанимаем/iu,
-    /предлагаем работу/iu, /о компании:/iu, /наш стек:/iu, /чем предстоит заниматься/iu,
-    /что мы предлагаем/iu, /мы предлагаем/iu, /требования:/iu, /обязанности:/iu,
-  ];
-  return hiringPatterns.some((rx) => rx.test(clean));
-}
-
-function hasPromoSignals(clean: string): boolean {
-  if (/#реклама|#партнерский|#дайджест/iu.test(clean.slice(0, 150))) return true;
-  const promoPatterns = [
-    /#реклама/iu, /#партнерский/iu, /записывайтесь на курс/iu,
-    /бесплатный вебинар/iu, /скидка \d+%/iu, /промокод/iu,
-  ];
-  return promoPatterns.some((rx) => rx.test(clean));
-}
-
-function isCandidateResumeOrNonVacancy(text: string): boolean {
-  const clean = text.toLowerCase();
-  if (hasPromoSignals(clean)) return true;
-  const hasResume = hasResumeSignals(clean);
-  const hasHiring = hasHiringSignals(clean);
-  return hasResume && !hasHiring;
 }
 
 function extractJobTitleAndCompany(text: string) {
@@ -258,7 +220,10 @@ export function parseTelegramJobPost(
   const cleanText = decodeFeedEntities(
     text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
   );
-  if (cleanText.length < 30 || isCandidateResumeOrNonVacancy(text)) return null;
+  // Тип поста распознаётся отдельно: курс, резюме кандидата и дайджест не
+  // становятся вакансиями, а пост, о котором продукт ничего не понял, не
+  // выдаётся за вакансию (B164 срез 4).
+  if (cleanText.length < 30 || classifyTelegramPost(cleanText) !== 'vacancy') return null;
 
   const { title, company } = extractJobTitleAndCompany(text);
   const salary = parseSalaryText(cleanText);
