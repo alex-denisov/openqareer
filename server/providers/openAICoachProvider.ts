@@ -30,6 +30,9 @@ export interface OpenAICoachProviderOptions {
   client?: OpenAI;
 }
 
+/** Выбор владельца (B183): максимальное усилие рассуждения. */
+const COACH_REASONING_EFFORT = 'xhigh' as const;
+
 export class OpenAICoachProvider implements CoachProvider {
   private readonly client: OpenAI;
   private readonly model: OpenAICoachProviderOptions['model'];
@@ -58,10 +61,13 @@ export class OpenAICoachProvider implements CoachProvider {
           input: serializeCoachInput(input),
           reasoning: {
             // Владелец выбрал максимальное усилие рассуждения (B183).
-            effort: 'xhigh',
+            effort: COACH_REASONING_EFFORT,
             context: 'all_turns',
           },
-          max_output_tokens: outputBudgetForRole(input.activeRole),
+          max_output_tokens: outputBudgetForRole(
+            input.activeRole,
+            COACH_REASONING_EFFORT,
+          ),
           safety_identifier: hashCandidateReference(input.candidateReference),
           text: {
             format: {
@@ -153,8 +159,27 @@ export class OpenAICoachProvider implements CoachProvider {
   }
 }
 
-function outputBudgetForRole(role: CoachTurnInput['activeRole']): number {
-  return role === 'career_strategist' ? 6_000 : 3_200;
+/**
+ * Рассуждение тратит **тот же** бюджет вывода, что и ответ.
+ *
+ * На проде ход коуча падал `response_incomplete_max_output_tokens`: усилие
+ * подняли до `xhigh`, а потолок оставили прежним, и модель израсходовала его на
+ * размышление, не дойдя до ответа (B183). Тот же дефект вскрылся у Gemini —
+ * см. `geminiOutputBudget`. Усилие рассуждения обязано ехать вместе с местом
+ * под него.
+ */
+export function outputBudgetForRole(
+  role: CoachTurnInput['activeRole'],
+  effort: OpenAI.Reasoning['effort'] = 'medium',
+): number {
+  const answer = role === 'career_strategist' ? 6_000 : 3_200;
+  const reasoningHeadroom =
+    effort === 'xhigh' || effort === 'max'
+      ? 12_000
+      : effort === 'high'
+        ? 6_000
+        : 0;
+  return answer + reasoningHeadroom;
 }
 
 function hasRefusal(

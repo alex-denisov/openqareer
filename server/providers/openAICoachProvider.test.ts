@@ -8,7 +8,9 @@ import {
 import { describe, expect, it } from 'vitest';
 import type { CoachTurnInput } from '../domain/coach';
 import { CoachProviderError } from './coachProvider';
-import { OpenAICoachProvider } from './openAICoachProvider';
+import { OpenAICoachProvider,
+  outputBudgetForRole,
+} from './openAICoachProvider';
 
 const input: CoachTurnInput = {
   candidateReference: 'candidate-test-001',
@@ -89,7 +91,7 @@ describe('OpenAI career coach provider', () => {
     expect(calls[0].body).toMatchObject({
       model: 'gpt-5.6-sol',
       store: false,
-      max_output_tokens: 3_200,
+      max_output_tokens: 15_200,
       reasoning: {
         // Владелец выбрал максимальное усилие рассуждения (B183).
         effort: 'xhigh',
@@ -132,7 +134,7 @@ describe('OpenAI career coach provider', () => {
       '95fb73e7-f531-4a79-a494-52217a2a54cd',
     );
 
-    expect(calls[0]).toMatchObject({ max_output_tokens: 6_000 });
+    expect(calls[0]).toMatchObject({ max_output_tokens: 18_000 });
   });
 
   it('classifies a token-limited response without parsing partial JSON', async () => {
@@ -340,3 +342,26 @@ function providerWith(create: () => Promise<unknown>) {
     client,
   });
 }
+
+/**
+ * B183. На проде ход коуча падал `response_incomplete_max_output_tokens`:
+ * усилие рассуждения подняли до `xhigh`, а потолок вывода оставили прежним.
+ * Рассуждение тратит тот же бюджет, что и ответ, — усилие обязано ехать
+ * вместе с местом под него. Тот же дефект был у Gemini.
+ */
+describe('бюджет вывода под усилие рассуждения (B183)', () => {
+  it('растёт вместе с усилием и всегда оставляет место под сам ответ', () => {
+    const answerOnly = outputBudgetForRole('career_expert', 'medium');
+    expect(outputBudgetForRole('career_expert', 'xhigh')).toBeGreaterThan(answerOnly);
+    expect(outputBudgetForRole('career_expert', 'high')).toBeGreaterThan(answerOnly);
+    expect(
+      outputBudgetForRole('career_expert', 'xhigh') - answerOnly,
+    ).toBeGreaterThanOrEqual(answerOnly);
+  });
+
+  it('роль стратега держит больший ответ при том же усилии', () => {
+    expect(outputBudgetForRole('career_strategist', 'xhigh')).toBeGreaterThan(
+      outputBudgetForRole('career_expert', 'xhigh'),
+    );
+  });
+});
