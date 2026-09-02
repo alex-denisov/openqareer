@@ -5,6 +5,7 @@ import {
   type CoachTurnInput,
 } from '../domain/coach';
 import { careerInstructionsForRole } from '../prompts/careerRolePrompts';
+import { geminiResponseSchema } from './geminiSchema';
 import {
   CoachProviderError,
   type CoachProvider,
@@ -158,7 +159,9 @@ export class NativeCoachProvider implements CoachProvider {
         generationConfig: {
           maxOutputTokens: 2_400,
           responseMimeType: 'application/json',
-          responseJsonSchema: COACH_TURN_JSON_SCHEMA,
+          // Gemini отвергает ограничения длины и размера (B183): контракт
+          // едет без них, а годность ответа всё равно решает zod.
+          responseJsonSchema: geminiResponseSchema(COACH_TURN_JSON_SCHEMA),
           ...(this.options.thinkingLevel
             ? { thinkingConfig: { thinkingLevel: this.options.thinkingLevel } }
             : {}),

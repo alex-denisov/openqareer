@@ -77,3 +77,60 @@ function result(provider: 'nvidia') {
     },
   };
 }
+
+/**
+ * B183. На проде это стоило хода коуча: в пуле оказался провайдер, отвергавший
+ * наш контракт вывода (`400`), и его неповторяемая ошибка обрывала цепочку —
+ * следующий маршрут, который ответил бы, даже не пробовали. Пул существует
+ * ровно для этого случая.
+ */
+describe('несовместимый провайдер в пуле (B183)', () => {
+  it('переходит к следующему маршруту и после неповторяемой ошибки', async () => {
+    const rejecting: CoachProvider = {
+      async createTurn() {
+        throw new CoachProviderError('provider_unavailable', 502, false);
+      },
+    };
+    const answering: CoachProvider = {
+      async createTurn() {
+        return {
+          ...result('nvidia'),
+          provider: 'openrouter' as const,
+          model: 'openrouter/free',
+          responseId: 'answered',
+        };
+      },
+    };
+
+    const outcome = await new ResilientCoachProvider({
+      routes: [
+        { id: 'gemini', provider: rejecting },
+        { id: 'openrouter', provider: answering },
+      ],
+    }).createTurn(input, 'idempotency-key');
+
+    expect(outcome.responseId).toBe('answered');
+    expect(outcome.routing?.fallbackUsed).toBe(true);
+    expect(outcome.routing?.attempts).toEqual([
+      { provider: 'gemini', status: 'failed', code: 'provider_unavailable' },
+      { provider: 'openrouter', status: 'succeeded' },
+    ]);
+  });
+
+  it('когда отказали все, поднимает последнюю ошибку, а не молчит', async () => {
+    const rejecting: CoachProvider = {
+      async createTurn() {
+        throw new CoachProviderError('provider_unavailable', 502, false);
+      },
+    };
+
+    await expect(
+      new ResilientCoachProvider({
+        routes: [
+          { id: 'gemini', provider: rejecting },
+          { id: 'openrouter', provider: rejecting },
+        ],
+      }).createTurn(input, 'idempotency-key'),
+    ).rejects.toBeInstanceOf(CoachProviderError);
+  });
+});

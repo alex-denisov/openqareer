@@ -81,7 +81,11 @@ export class ResilientCoachProvider implements CoachProvider {
           status: 'failed',
           code: error.code,
         });
-        if (!error.retryable) throw error;
+        // Неповторяемый отказ раньше обрывал всю цепочку. На проде это стоило
+        // хода коуча: провайдер отвергал наш контракт вывода (`400`), а
+        // следующий маршрут, который ответил бы, даже не пробовали (B183). Пул
+        // существует ровно для этого случая, поэтому идём дальше и поднимаем
+        // ошибку только когда отказали все.
         this.coolingUntil.set(route.id, this.now() + this.cooldownMs);
       }
     }
