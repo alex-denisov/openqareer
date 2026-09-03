@@ -463,8 +463,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
             },
             explanation: {
               clusterId: 'cluster-fresh',
-              matchScore: 0.72,
-              fitLevel: 'good',
+              roleMatch: 'target',
+              requirements: { matched: 3, total: 4 },
               matchingPoints: ['SQL', 'A/B-тесты', 'продуктовая аналитика'],
               missingPoints: ['Kubernetes'],
               summary: '',
@@ -497,8 +497,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
             },
             explanation: {
               clusterId: 'cluster-old',
-              matchScore: 0.31,
-              fitLevel: 'potential',
+              roleMatch: 'partial',
+              requirements: { matched: 1, total: 3 },
               matchingPoints: ['SQL'],
               missingPoints: ['Solidity', 'Web3'],
               summary: '',
