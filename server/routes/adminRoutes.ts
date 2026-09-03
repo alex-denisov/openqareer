@@ -9,6 +9,7 @@ import {
   withDeps,
 } from './helpers';
 import { queueFallbackDescriptors } from '../providers/providerQueue';
+import { describeRoleNamerQueue } from '../providers/roleNamer';
 import { CAREER_SUPER_PROMPT_REVISION } from '../prompts/careerSuperPrompt';
 import {
   adminVacancyQuerySchema,
@@ -266,6 +267,13 @@ function providerStatusData(deps: RouteDeps) {
     qualityFloor: 'gpt-5.6-sol',
     promptRevision: CAREER_SUPER_PROMPT_REVISION,
     providers: config.providerCatalogStatus ?? [],
+    // Очередь называния ролей и её последние отказы: без них молчание головы
+    // очереди на проде недоказуемо — лог сервера снаружи не читается
+    // (INC-035, B186).
+    roleNaming: {
+      queue: describeRoleNamerQueue(deps.roleNamer),
+      recentFailures: deps.roleNamingFailures.recent(),
+    },
     ready: true,
   };
 }

@@ -5,6 +5,7 @@ import { resolveRoleNameLanguage } from '../domain/roleNameLanguage';
 import { vacancySubscriptionInputSchema } from '../domain/vacancy';
 import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
 import type { NamedRole } from '../../shared/roleProposals';
+import type { RoleNamingStageFailure } from '../providers/roleNamer';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import { buildRoleProposals } from '../vacancies/roleHypotheses';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
@@ -108,7 +109,7 @@ const matchedVacanciesQuerySchema = z.object({
  * байт — тот же бюджет перестаёт быть ограничением.
  */
 const handleRoleHypotheses: Handler = async (
-  { authService, candidateStore, config, multiSourceEngine, roleNamer },
+  { authService, candidateStore, config, multiSourceEngine, roleNamer, roleNamingFailures },
   request,
   reply,
 ) => {
@@ -153,6 +154,7 @@ const handleRoleHypotheses: Handler = async (
   const naming = roleNamer
     ? await roleNamer.nameRoles(facts, language)
     : { roles: [] as NamedRole[] };
+  reportRoleNamingFailures(request, roleNamingFailures, naming.failures ?? []);
 
   return {
     data: buildRoleProposals({
@@ -170,6 +172,24 @@ const handleRoleHypotheses: Handler = async (
     },
   };
 };
+
+/**
+ * Молчание ступени не роняет панель, но безымянным быть не должно: без кода
+ * ответа исчерпанную квоту не отличить от таймаута тоннеля (INC-035).
+ *
+ * Кандидату причина не нужна — она уходит в лог сервера и в окно последних
+ * отказов для администратора: прод-лог снаружи не читается.
+ */
+function reportRoleNamingFailures(
+  request: FastifyRequest,
+  log: RouteDeps['roleNamingFailures'],
+  failures: readonly RoleNamingStageFailure[],
+): void {
+  for (const failure of failures) {
+    request.log.warn(failure, 'role-naming-stage-failed');
+  }
+  log.record(failures);
+}
 
 /**
  * Рынки, на которых кандидат ищет, — его собственный ответ мастеру подбора.

@@ -234,4 +234,84 @@ describe('candidate platform connections', () => {
     expect(response.json().meta).toMatchObject({ poolSize: expect.any(Number) });
     expect(Buffer.byteLength(response.body, 'utf8')).toBeLessThanOrEqual(4_096);
   });
+
+  // INC-035 / B186: очередь сдвигается молча, и без записи в лог отличить
+  // исчерпанную квоту от таймаута тоннеля на проде нечем. Кандидату причина
+  // не нужна — она не должна попадать в `meta`.
+  it('пишет причину молчания ступени в лог сервера, а не в meta кандидату', async () => {
+    const lines: string[] = [];
+    const candidateStore = new SqliteCandidateStore({
+      databasePath: ':memory:',
+      encryptionKey: config.dataEncryptionKey,
+    });
+    const candidate = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+    // Без подтверждённого профиля маршрут не спрашивает модель вовсе.
+    candidateStore.saveResumeDraft(
+      candidate.id,
+      { ...EMPTY_RESUME_DRAFT, targetRole: 'Продакт-менеджер' },
+      [],
+    );
+    const app = await buildApp({
+      config: { ...config, logLevel: 'warn' },
+      coachProvider: successProvider,
+      candidateStore,
+      authService: noSessions,
+      serveStatic: false,
+      logDestination: {
+        write: (line: string) => {
+          lines.push(line);
+        },
+      },
+      roleNamer: {
+        async nameRoles() {
+          return {
+            roles: [],
+            failures: [
+              {
+                stage: 'gemini:gemini-3.6-flash',
+                kind: 'http_error',
+                status: 429,
+                detail: 'RESOURCE_EXHAUSTED',
+              },
+            ],
+          };
+        },
+      },
+    });
+    apps.push(app);
+    stores.push(candidateStore);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/role-hypotheses',
+      headers: { authorization: `Bearer ${candidate.accessToken}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.stringify(response.json().meta)).not.toContain('RESOURCE_EXHAUSTED');
+
+    const logged = lines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((entry) => entry.msg === 'role-naming-stage-failed');
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatchObject({
+      stage: 'gemini:gemini-3.6-flash',
+      kind: 'http_error',
+      status: 429,
+      detail: 'RESOURCE_EXHAUSTED',
+    });
+
+    // Лог прод-сервера снаружи не читается: ключ выкатки выполняет три
+    // команды, и `journalctl` в их числе нет. Окно последних отказов открыто
+    // администратору — иначе причину молчания нечем доказать (INC-035).
+    const status = await app.inject({
+      method: 'GET',
+      url: '/api/v1/provider/status',
+      headers: { authorization: `Bearer ${config.previewToken}` },
+    });
+    expect(status.statusCode).toBe(200);
+    expect(status.json().data.roleNaming.recentFailures).toMatchObject([
+      { stage: 'gemini:gemini-3.6-flash', kind: 'http_error', status: 429, at: expect.any(String) },
+    ]);
+  });
 });

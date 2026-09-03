@@ -1,6 +1,6 @@
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { ServerConfig } from './config';
 import type { CandidateStore } from './data/candidateStore';
 import type { HhVacancySample } from './connectors/hhVacancySearch';
@@ -15,6 +15,7 @@ import type { ConnectorExecutor } from './connectors/connectorHarness';
 import type { CoachProvider } from './providers/coachProvider';
 import type { ResumeStructurer } from './providers/resumeStructurer';
 import type { RoleNamer } from './providers/roleNamer';
+import { RoleNamingFailureLog } from './providers/roleNamingFailureLog';
 import type { SessionAuth } from './auth/authService';
 import type { VacancySample } from './domain/vacancy';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
@@ -50,6 +51,12 @@ interface BuildAppOptions {
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
   roleNamer?: RoleNamer;
+  /**
+   * Куда пишет логгер. Прод пишет в stdout, а тест читает то же самое, что
+   * увидит оператор: причина молчания ступени называния — часть контракта
+   * (INC-035, B186).
+   */
+  logDestination?: { write(line: string): void };
 }
 
 interface AppServices {
@@ -100,16 +107,27 @@ function createServices(
   };
 }
 
-async function createFastifyBase(config: ServerConfig): Promise<FastifyInstance> {
+function loggerOptions(
+  config: ServerConfig,
+  logDestination?: { write(line: string): void },
+): NonNullable<FastifyServerOptions['logger']> {
+  return {
+    level: config.logLevel,
+    redact: {
+      paths: ['req.headers.authorization', 'req.headers.cookie'],
+      censor: '[REDACTED]',
+    },
+    ...(logDestination ? { stream: logDestination } : {}),
+  };
+}
+
+async function createFastifyBase(
+  config: ServerConfig,
+  logDestination?: { write(line: string): void },
+): Promise<FastifyInstance> {
   const app = Fastify({
     trustProxy: '127.0.0.1',
-    logger: {
-      level: config.logLevel,
-      redact: {
-        paths: ['req.headers.authorization', 'req.headers.cookie'],
-        censor: '[REDACTED]',
-      },
-    },
+    logger: loggerOptions(config, logDestination),
     bodyLimit: 256 * 1_024,
     requestTimeout: 190_000,
   });
@@ -167,6 +185,15 @@ async function registerApiRoutes(app: FastifyInstance, deps: RouteDeps): Promise
   await registerCareerCommandRoutes(app, deps);
 }
 
+/** Аутентификация части реализаций читает кандидатов из того же хранилища. */
+function attachCandidateStore(authService: SessionAuth, candidateStore: CandidateStore): void {
+  if (authService && 'setCandidateStore' in authService) {
+    (authService as { setCandidateStore(s: CandidateStore): void }).setCandidateStore(
+      candidateStore,
+    );
+  }
+}
+
 export async function buildApp({
   config,
   coachProvider,
@@ -181,12 +208,9 @@ export async function buildApp({
   multiSourceVacancyEngine,
   resumeStructurer,
   roleNamer,
+  logDestination,
 }: BuildAppOptions): Promise<FastifyInstance> {
-  if (authService && 'setCandidateStore' in authService) {
-    (authService as { setCandidateStore(s: CandidateStore): void }).setCandidateStore(
-      candidateStore,
-    );
-  }
+  attachCandidateStore(authService, candidateStore);
   const services = createServices({
     config,
     candidateStore,
@@ -211,11 +235,14 @@ export async function buildApp({
     importProfile,
     resumeStructurer,
     roleNamer,
+    // Окно живёт столько же, сколько процесс: это диагностика молчания
+    // ступени, а не хранилище (INC-035).
+    roleNamingFailures: new RoleNamingFailureLog(),
     searchVacancies: searchVacancies ?? searchHhVacancies,
     ...services,
   };
 
-  const app = await createFastifyBase(config);
+  const app = await createFastifyBase(config, logDestination);
   await registerApiRoutes(app, deps);
   registerErrorHandler(app);
   await registerStaticDelivery(app, config, serveStatic);

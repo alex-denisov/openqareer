@@ -393,6 +393,157 @@ describe('провенанс ступени называния', () => {
 
   it('молчание ступени ступенью не называется', async () => {
     const namer = new LlmRoleNamer({ apiKey: 'k', model: 'm', stage: 'openrouter:x', client: client(null) });
-    await expect(namer.nameRoles(facts, 'en')).resolves.toEqual({ roles: [] });
+    const outcome = await namer.nameRoles(facts, 'en');
+    expect(outcome.roles).toEqual([]);
+    expect(outcome.stage).toBeUndefined();
+  });
+});
+
+/**
+ * INC-035: голова очереди молчала на проде, и отличить исчерпанную квоту от
+ * отказа шлюза было нечем — ступень глотала и код ответа, и причину (B186).
+ */
+describe('причина молчания ступени (B186)', () => {
+  it('Gemini называет код ответа и текст отказа шлюза', async () => {
+    const namer = new GeminiRoleNamer({
+      apiKey: 'gemini-key',
+      model: 'gemini-3.6-flash',
+      stage: 'gemini:gemini-3.6-flash',
+      baseUrl: 'https://gateway.test/v1beta',
+      fetchImpl: async () => new Response('{"error":{"status":"RESOURCE_EXHAUSTED"}}', { status: 429 }),
+    });
+
+    const outcome = await namer.nameRoles(facts, 'ru');
+
+    expect(outcome.roles).toEqual([]);
+    expect(outcome.failures).toEqual([
+      {
+        stage: 'gemini:gemini-3.6-flash',
+        kind: 'http_error',
+        status: 429,
+        detail: '{"error":{"status":"RESOURCE_EXHAUSTED"}}',
+      },
+    ]);
+  });
+
+  it('Gemini отличает таймаут от отказа шлюза', async () => {
+    const namer = new GeminiRoleNamer({
+      apiKey: 'k',
+      model: 'gemini-3.6-flash',
+      stage: 'gemini:gemini-3.6-flash',
+      baseUrl: 'https://gateway.test/v1beta',
+      fetchImpl: async () => {
+        throw new DOMException('The operation was aborted', 'TimeoutError');
+      },
+    });
+
+    expect((await namer.nameRoles(facts, 'ru')).failures).toEqual([
+      { stage: 'gemini:gemini-3.6-flash', kind: 'timeout' },
+    ]);
+  });
+
+  it('Gemini отличает негодный ответ от отказа транспорта', async () => {
+    const namer = new GeminiRoleNamer({
+      apiKey: 'k',
+      model: 'gemini-3.6-flash',
+      stage: 'gemini:gemini-3.6-flash',
+      baseUrl: 'https://gateway.test/v1beta',
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'не json' }] } }] }), {
+          status: 200,
+        }),
+    });
+
+    expect((await namer.nameRoles(facts, 'ru')).failures).toEqual([
+      { stage: 'gemini:gemini-3.6-flash', kind: 'unusable_response' },
+    ]);
+  });
+
+  it('ступень chat/completions называет код отказа провайдера', async () => {
+    const failing: ChatCompletionClient = {
+      chat: {
+        completions: {
+          create: vi.fn().mockRejectedValue(
+            Object.assign(new Error('429 Too Many Requests'), { status: 429 }),
+          ),
+        },
+      },
+    };
+    const namer = new LlmRoleNamer({
+      apiKey: 'k',
+      model: 'm',
+      stage: 'openrouter:openrouter/free',
+      client: failing,
+    });
+
+    expect((await namer.nameRoles(facts, 'ru')).failures).toEqual([
+      {
+        stage: 'openrouter:openrouter/free',
+        kind: 'http_error',
+        status: 429,
+        detail: '429 Too Many Requests',
+      },
+    ]);
+  });
+
+  it('ответ не по схеме — негодный ответ, а не отказ транспорта', async () => {
+    const namer = new LlmRoleNamer({
+      apiKey: 'k',
+      model: 'm',
+      stage: 'openai:gpt-5.6-luna',
+      client: client('не json'),
+    });
+
+    expect((await namer.nameRoles(facts, 'ru')).failures).toEqual([
+      { stage: 'openai:gpt-5.6-luna', kind: 'unusable_response' },
+    ]);
+  });
+
+  it('причина не выносит наружу ключ провайдера', async () => {
+    const namer = new GeminiRoleNamer({
+      apiKey: 'super-secret-key',
+      model: 'gemini-3.6-flash',
+      baseUrl: 'https://gateway.test/v1beta',
+      fetchImpl: async () => new Response('bad key super-secret-key rejected', { status: 403 }),
+    });
+
+    const detail = (await namer.nameRoles(facts, 'ru')).failures?.[0]?.detail ?? '';
+    expect(detail).not.toContain('super-secret-key');
+  });
+
+  it('очередь копит причины всех промолчавших ступеней', async () => {
+    const silent: RoleNamer = {
+      nameRoles: vi.fn().mockResolvedValue({
+        roles: [],
+        failures: [{ stage: 'gemini:gemini-3.6-flash', kind: 'timeout' }],
+      }),
+    };
+    const answered: RoleNamer = {
+      nameRoles: vi.fn().mockResolvedValue({
+        roles: [{ title: 'COO', reason: 'вёл операции', evidenceRefs: ['memory:1'] }],
+        stage: 'openai:gpt-5.6-luna',
+      }),
+    };
+
+    await expect(new QueuedRoleNamer([silent, answered]).nameRoles(facts, 'en')).resolves.toEqual({
+      roles: [{ title: 'COO', reason: 'вёл операции', evidenceRefs: ['memory:1'] }],
+      stage: 'openai:gpt-5.6-luna',
+      failures: [{ stage: 'gemini:gemini-3.6-flash', kind: 'timeout' }],
+    });
+  });
+
+  it('кэш не повторяет в логе отказ четвертьчасовой давности', async () => {
+    const inner: RoleNamer = {
+      nameRoles: vi.fn().mockResolvedValue({
+        roles: [{ title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] }],
+        stage: 'openai:gpt-5.6-luna',
+        failures: [{ stage: 'gemini:gemini-3.6-flash', kind: 'timeout' }],
+      }),
+    };
+    const cached = new CachedRoleNamer(inner);
+
+    expect((await cached.nameRoles(facts, 'ru')).failures).toHaveLength(1);
+    // Второй вход кандидата — то же попадание в кэш, но отказ уже записан.
+    expect((await cached.nameRoles(facts, 'ru')).failures).toBeUndefined();
   });
 });

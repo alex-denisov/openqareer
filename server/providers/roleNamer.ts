@@ -58,6 +58,63 @@ export interface CandidateFact {
 export interface RoleNamingOutcome {
   readonly roles: NamedRole[];
   readonly stage?: string;
+  /**
+   * Причины молчания ступеней — для лога сервера, не для кандидата.
+   *
+   * Поле пусто, когда молчать было некому.
+   */
+  readonly failures?: readonly RoleNamingStageFailure[];
+}
+
+/**
+ * Почему ступень не назвала роли.
+ *
+ * INC-035: голова очереди молчала на проде, и по ответу нельзя было отличить
+ * исчерпанную квоту от отказа шлюза, таймаута тоннеля или отвергнутой схемы —
+ * ступень глотала и код ответа, и текст. `unusable_response` означает «ответ
+ * пришёл, ролей из него не вышло»: и разбор не удался, и модель назвала ноль.
+ */
+export type RoleNamingFailureKind =
+  | 'http_error'
+  | 'timeout'
+  | 'transport_error'
+  | 'unusable_response';
+
+export interface RoleNamingStageFailure {
+  readonly stage: string;
+  readonly kind: RoleNamingFailureKind;
+  readonly status?: number;
+  readonly detail?: string;
+}
+
+/** Длиннее этого причина отказа ничего оператору не добавляет. */
+const MAX_FAILURE_DETAIL = 300;
+
+/** Ключ провайдера не покидает процесс даже в логе. */
+function failureDetail(text: string, apiKey: string): string | undefined {
+  const trimmed = text.trim().slice(0, MAX_FAILURE_DETAIL);
+  if (trimmed.length === 0) return undefined;
+  return apiKey.length > 0 ? trimmed.split(apiKey).join('[REDACTED]') : trimmed;
+}
+
+/** Отказ приходит то ошибкой транспорта, то таймаутом, то кодом ответа. */
+function thrownFailure(
+  stage: string,
+  error: unknown,
+  apiKey: string,
+): RoleNamingStageFailure {
+  const name = error instanceof Error ? error.name : '';
+  if (name === 'TimeoutError' || name === 'AbortError' || name === 'APIConnectionTimeoutError') {
+    return { stage, kind: 'timeout' };
+  }
+  const status =
+    typeof error === 'object' && error !== null
+      ? (error as { status?: unknown }).status
+      : undefined;
+  const detail = failureDetail(error instanceof Error ? error.message : String(error), apiKey);
+  return typeof status === 'number'
+    ? { stage, kind: 'http_error', status, ...(detail ? { detail } : {}) }
+    : { stage, kind: 'transport_error', ...(detail ? { detail } : {}) };
 }
 
 export interface RoleNamer {
@@ -100,12 +157,14 @@ export interface LlmRoleNamerOptions {
  */
 export class LlmRoleNamer implements RoleNamer {
   private readonly client: ChatCompletionClient;
+  private readonly apiKey: string;
   private readonly model: string;
   private readonly structuredOutput: boolean;
   private readonly requireParameters: boolean;
   private readonly stage: string;
 
   constructor(options: LlmRoleNamerOptions) {
+    this.apiKey = options.apiKey;
     this.model = options.model;
     this.stage = options.stage ?? options.model;
     this.structuredOutput = options.structuredOutput ?? false;
@@ -146,9 +205,11 @@ export class LlmRoleNamer implements RoleNamer {
           : {}),
       });
       return named(parseRoles(response.choices[0]?.message?.content ?? null), this.stage);
-    } catch {
+    } catch (error) {
       // Молчание провайдера не должно ронять панель: роль просто не названа.
-      return { roles: [] };
+      // Но причина обязана попасть в лог — иначе отличить квоту от таймаута
+      // нечем (INC-035).
+      return { roles: [], failures: [thrownFailure(this.stage, error, this.apiKey)] };
     }
   }
 }
@@ -181,7 +242,9 @@ function serializeFacts(facts: readonly CandidateFact[]): string {
 
 /** Ступень называется только когда она действительно назвала роли. */
 function named(roles: NamedRole[], stage: string): RoleNamingOutcome {
-  return roles.length > 0 ? { roles, stage } : { roles: [] };
+  return roles.length > 0
+    ? { roles, stage }
+    : { roles: [], failures: [{ stage, kind: 'unusable_response' }] };
 }
 
 function parseRoles(content: string | null): NamedRole[] {
@@ -237,6 +300,7 @@ export class GeminiRoleNamer implements RoleNamer {
     language: RoleNameLanguage,
   ): Promise<RoleNamingOutcome> {
     if (facts.length === 0) return { roles: [] };
+    const stage = this.options.stage ?? this.options.model;
     try {
       const response = await this.fetchImpl(
         `${this.options.baseUrl.replace(/\/+$/u, '')}/models/${encodeURIComponent(
@@ -262,7 +326,9 @@ export class GeminiRoleNamer implements RoleNamer {
           signal: AbortSignal.timeout(this.options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS),
         },
       );
-      if (!response.ok) return { roles: [] };
+      if (!response.ok) {
+        return { roles: [], failures: [await refusal(response, stage, this.options.apiKey)] };
+      }
       const body = (await response.json()) as {
         candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
       };
@@ -270,13 +336,27 @@ export class GeminiRoleNamer implements RoleNamer {
         parseRoles(
           body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? null,
         ),
-        this.options.stage ?? this.options.model,
+        stage,
       );
-    } catch {
-      // Тот же уговор, что и у остальных ступеней: молчание не роняет панель.
-      return { roles: [] };
+    } catch (error) {
+      // Тот же уговор, что и у остальных ступеней: молчание не роняет панель,
+      // но причина уходит в лог сервера.
+      return { roles: [], failures: [thrownFailure(stage, error, this.options.apiKey)] };
     }
   }
+}
+
+/**
+ * Код ответа и текст отказа — единственное, чем исчерпанная квота отличается
+ * от отказа шлюза и отвергнутой схемы (INC-035).
+ */
+async function refusal(
+  response: Response,
+  stage: string,
+  apiKey: string,
+): Promise<RoleNamingStageFailure> {
+  const detail = failureDetail(await response.text().catch(() => ''), apiKey);
+  return { stage, kind: 'http_error', status: response.status, ...(detail ? { detail } : {}) };
 }
 
 /**
@@ -314,7 +394,14 @@ export class CachedRoleNamer implements RoleNamer {
     const outcome = await this.inner.nameRoles(facts, language);
     // Пустой ответ не кэшируется: отказ провайдера не должен становиться
     // «моделью названо ноль ролей» на четверть часа.
-    if (outcome.roles.length > 0) this.entries.set(key, { at: this.now(), outcome });
+    // Причины в кэш не кладутся: попадание не должно писать в лог отказ,
+    // случившийся четверть часа назад (INC-035).
+    if (outcome.roles.length > 0) {
+      this.entries.set(key, {
+        at: this.now(),
+        outcome: { roles: outcome.roles, ...(outcome.stage ? { stage: outcome.stage } : {}) },
+      });
+    }
     return outcome;
   }
 }
@@ -339,11 +426,17 @@ export class QueuedRoleNamer implements RoleNamer {
     facts: readonly CandidateFact[],
     language: RoleNameLanguage,
   ): Promise<RoleNamingOutcome> {
+    const failures: RoleNamingStageFailure[] = [];
     for (const stage of this.stages) {
       const outcome = await stage.nameRoles(facts, language);
-      if (outcome.roles.length > 0) return outcome;
+      failures.push(...(outcome.failures ?? []));
+      // Причины промолчавших ступеней уходят вместе с ответом ответившей:
+      // иначе сдвиг очереди виден только по времени ответа (INC-035).
+      if (outcome.roles.length > 0) {
+        return failures.length > 0 ? { ...outcome, failures } : outcome;
+      }
     }
-    return { roles: [] };
+    return failures.length > 0 ? { roles: [], failures } : { roles: [] };
   }
 }
 
