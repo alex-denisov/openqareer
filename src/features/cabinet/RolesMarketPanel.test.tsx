@@ -196,3 +196,52 @@ describe('RolesMarketPanel: роль называет модель, пул по�
     expect(html).toContain('Head of Growth');
   });
 });
+
+describe('RolesMarketPanel: выбор роли в «Стратегию» (B180 срез 2)', () => {
+  const role: ProposedRole = {
+    id: 'role-head-of-product',
+    title: 'Head of Product',
+    origin: 'model',
+    reason: 'вёл продукты девять лет',
+    evidenceRefs: ['memory:1'],
+    confirmation: { state: 'not-found' },
+  };
+
+  function render(choice?: {
+    chosenTitle?: string;
+    onChoose?: (title: string, reason?: string) => void;
+  }): string {
+    return renderToStaticMarkup(
+      <RolesMarketPanel
+        proposedRoles={[role]}
+        onNavigate={() => undefined}
+        {...(choice ? { choice } : {})}
+      />,
+    );
+  }
+
+  it('без обработчика выбора кнопок не рисует вовсе', () => {
+    const html = render();
+    expect(html).toContain('Head of Product');
+    expect(html).not.toContain('Выбрать эту роль');
+  });
+
+  it('первый выбор предлагает кнопкой, без вопроса о причине', () => {
+    const html = render({ onChoose: () => undefined });
+    expect(html).toContain('Выбрать эту роль');
+    expect(html).not.toContain('Почему меняете');
+  });
+
+  it('выбранную роль помечает и второй раз выбрать не предлагает', () => {
+    const html = render({ chosenTitle: 'head of product', onChoose: () => undefined });
+    expect(html).toContain('ваша роль');
+    expect(html).not.toContain('Выбрать эту роль');
+    expect(html).not.toContain('Сменить роль на эту');
+  });
+
+  it('при уже выбранной другой роли зовёт сменить, а не выбрать', () => {
+    const html = render({ chosenTitle: 'Product Manager', onChoose: () => undefined });
+    expect(html).toContain('Сменить роль на эту');
+    expect(html).not.toContain('Выбрать эту роль');
+  });
+});

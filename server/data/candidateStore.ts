@@ -1,4 +1,5 @@
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
+import type { CareerStrategy } from '../../shared/careerStrategy';
 import type {
   CoachMessage,
   CoachPhase,
@@ -76,6 +77,8 @@ export interface CandidateSnapshot {
 export interface CandidateExport extends CandidateSnapshot {
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];
+  /** Выбранная роль с историей решений (B180, срез 2). */
+  careerStrategy: CareerStrategy | null;
 }
 
 type CandidateDocumentKind =
@@ -386,6 +389,10 @@ export interface CandidateStore {
    * The candidate's own wizard answers. Browser storage is a cache of this,
    * not the record — signing out must not erase a career context (INC-024).
    */
+  getCareerStrategy(candidateId: string): CareerStrategy | null;
+
+  saveCareerStrategy(candidateId: string, strategy: CareerStrategy): CareerStrategy;
+
   getCandidateWorkspace(candidateId: string): CandidateWorkspaceState | null;
 
   saveCandidateWorkspace(

@@ -18,6 +18,7 @@ import {
 } from './routePremises';
 import { cabinetJourney } from './cabinetJourney';
 import { useRoleHypotheses } from '../career-map/useRoleHypotheses';
+import { useCareerStrategy, type CareerStrategyRead } from './useCareerStrategy';
 import type { ProposedRole } from '../../../shared/roleProposals';
 import type { CareerCabinetView } from './cabinetViews';
 
@@ -72,6 +73,9 @@ export function CareerCabinet({
   // Считает их сервер (срез 1б): в браузер пул приезжает без требований —
   // страница подбора вырезает их ради байтового бюджета маршрута (INC-029).
   const proposedRoles = useRoleHypotheses().roles;
+  // Выбранная роль — версионированный объект, а не свободная строка анкеты:
+  // кампания «Поиск» берёт направление из него (B180, срез 2).
+  const strategy = useCareerStrategy();
   const journey = useMemo(
     () =>
       cabinetJourney({
@@ -124,6 +128,7 @@ export function CareerCabinet({
           targetDirection={targetDirection}
           journey={journey}
           proposedRoles={proposedRoles}
+          strategy={strategy}
           pool={pool}
           data={data}
           onNavigate={onNavigate}
@@ -147,6 +152,7 @@ function CabinetSection({
   targetDirection,
   journey,
   proposedRoles,
+  strategy,
   pool,
   data,
   onNavigate,
@@ -162,6 +168,7 @@ function CabinetSection({
   targetDirection: string;
   journey: ReturnType<typeof cabinetJourney>;
   proposedRoles: readonly ProposedRole[];
+  strategy: CareerStrategyRead;
   pool: ReturnType<typeof useMatchedPool>;
   data: ReturnType<typeof useCareerCabinetData>;
   onNavigate: (view: CareerCabinetView) => void;
@@ -182,6 +189,7 @@ function CabinetSection({
         targetDirection={targetDirection}
         journey={journey}
         proposedRoles={proposedRoles}
+        strategy={strategy}
         poolComplete={pool.complete}
         poolTotal={pool.poolTotal}
         loading={data.loading}
@@ -212,6 +220,7 @@ function CabinetSection({
       <div className="career-search-board">
         <SearchCampaign
           targetDirection={targetDirection}
+          strategy={strategy.strategy}
           premises={routePremisesDraft({ workspace, account: data.account })}
           premisesLoading={data.loading}
           onSavePremises={onSavePremises}

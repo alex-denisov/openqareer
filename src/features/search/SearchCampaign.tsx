@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { CareerStrategy } from '../../../shared/careerStrategy';
+import { campaignRoleLine } from '../cabinet/careerStrategyView';
 import type { CareerCommand } from '../coach/coachApi';
 import { getCareerCommands, getMatchedVacancyPage } from '../coach/coachApi';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -26,12 +28,18 @@ import {
 // eslint-disable-next-line max-lines-per-function
 export function SearchCampaign({
   targetDirection,
+  strategy = null,
   premises,
   premisesLoading,
   onSavePremises,
   onOpenVacancies,
 }: {
   readonly targetDirection: string;
+  /**
+   * Выбранная роль: кампания идёт по ней, а не по свободной строке анкеты
+   * (B180, срез 2). `null` — роль ещё не выбрана, и это честно сказано.
+   */
+  readonly strategy?: CareerStrategy | null;
   readonly premises: RoutePremisesDraft;
   /** Пока предпосылки читаются, редактор не открывается: он показал бы пустые
       поля поверх сохранённых ответов и записал бы эту пустоту обратно. */
@@ -57,11 +65,7 @@ export function SearchCampaign({
       <header className="career-campaign-head">
         <div>
           <h2 id="career-campaign-title">Кампания поиска</h2>
-          <p>
-            {targetDirection.trim()
-              ? `Направление «${targetDirection.trim()}»`
-              : 'Направление не названо — подбор идёт по подтверждённым фактам'}
-          </p>
+          <p>{campaignRoleLine(strategy, targetDirection)}</p>
         </div>
         <button
           type="button"

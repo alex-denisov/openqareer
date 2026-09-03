@@ -7397,6 +7397,71 @@
   color: var(--career-warning);
 }
 
+.career-roles-list li > .career-cabinet-tag {
+  justify-self: start;
+}
+
+/* Смена роли объясняется здесь же, где выбирается: причина уйдёт в историю
+   решений навсегда (B180, срез 2). */
+.career-roles-change {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.career-roles-change label {
+  color: var(--career-text-dim);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.career-roles-change textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  resize: vertical;
+}
+
+/* «Стратегия»: выбранная роль, её версия и то, на чём она стоит. */
+.career-strategy {
+  display: grid;
+  gap: 4px;
+}
+
+.career-strategy .career-strategy-role {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+
+.career-strategy small {
+  color: var(--career-text-dim);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.career-strategy-history summary {
+  color: var(--career-text-dim);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.career-strategy-history ol {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--career-text-dim);
+  font-size: 0.78rem;
+}
+
 .career-market-sample {
   font-size: 0.82rem;
 }

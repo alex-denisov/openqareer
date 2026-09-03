@@ -1,5 +1,6 @@
 import type { ResumeDraft } from '../../../server/domain/resumeDraft';
 import type { ProposedRole } from '../../../shared/roleProposals';
+import type { CareerStrategy } from '../../../shared/careerStrategy';
 import type { WorkspaceInput } from '../workspace/workspaceStorage';
 type UserRole = 'candidate' | 'admin';
 type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
@@ -832,6 +833,34 @@ export async function getRoleHypotheses(
     throw new CoachApiErrorClass('Ответ сервиса не разобран.', 'malformed_response', false);
   }
   return envelope.data as ProposedRole[];
+}
+
+/**
+ * «Стратегия» — выбранная роль как версионированный объект (B180, срез 2).
+ *
+ * `null` — законный ответ: кандидат ещё не выбирал, и это не ошибка.
+ */
+export async function getCareerStrategy(
+  signal?: AbortSignal,
+): Promise<CareerStrategy | null> {
+  const response = await apiFetch('/api/v1/candidate/strategy', { signal });
+  return readData<CareerStrategy | null>(response);
+}
+
+/**
+ * Смена роли обнуляет накопленную воронку, поэтому причина обязательна — её
+ * требует сервер, а не только экран.
+ */
+export async function chooseCareerStrategyRole(input: {
+  readonly title: string;
+  readonly reason?: string;
+}): Promise<CareerStrategy> {
+  const response = await apiFetch('/api/v1/candidate/strategy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return readDataObject<CareerStrategy>(response);
 }
 
 export async function getMatchedVacancies(signal?: AbortSignal): Promise<MatchedVacancyItem[]> {

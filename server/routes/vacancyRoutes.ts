@@ -1,13 +1,21 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
-import { resolveRoleNameLanguage } from '../domain/roleNameLanguage';
+import { resolveRoleNameLanguage, type RoleNameLanguage } from '../domain/roleNameLanguage';
 import { vacancySubscriptionInputSchema } from '../domain/vacancy';
 import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
-import type { NamedRole } from '../../shared/roleProposals';
+import type { NamedRole, ProposedRole } from '../../shared/roleProposals';
+import {
+  candidateNamedStrategyRole,
+  chooseStrategyRole,
+  strategyRoleFromProposal,
+  type StrategyConstraints,
+  type StrategyRole,
+} from '../../shared/careerStrategy';
 import type { RoleNamingStageFailure } from '../providers/roleNamer';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
-import { buildRoleProposals } from '../vacancies/roleHypotheses';
+import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
+import { buildRoleProposals, confirmChosenTitle } from '../vacancies/roleHypotheses';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
 import type { RouteDeps } from './deps';
 import {
@@ -108,19 +116,18 @@ const matchedVacanciesQuerySchema = z.object({
  * у нуля. Здесь пул полный, а наружу уходит готовый ответ в несколько сотен
  * байт — тот же бюджет перестаёт быть ограничением.
  */
-const handleRoleHypotheses: Handler = async (
-  { authService, candidateStore, config, multiSourceEngine, roleNamer, roleNamingFailures },
-  request,
-  reply,
-) => {
-  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+const handleRoleHypotheses: Handler = async (deps, request, reply) => {
+  const candidate = authenticateCandidate(
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
+  );
   if (!candidate) return undefined;
 
-  const { confirmedSkills, targetRoles } = readMatchProfile(candidateStore, candidate.id);
-  // Без подтверждённого профиля подбора нет вовсе, а значит нет и рынка, по
-  // которому можно назвать роль. Молчаливый пустой список сказал бы «рынок
-  // ничего не назвал» там, где на самом деле некого спрашивать (B161).
-  if (confirmedSkills.length === 0 && targetRoles.length === 0) {
+  const context = await readRoleContext(deps, request, candidate.id);
+  if (!context) {
     return {
       data: [],
       meta: {
@@ -131,8 +138,51 @@ const handleRoleHypotheses: Handler = async (
     };
   }
 
+  return {
+    data: context.proposals,
+    meta: {
+      requestId: request.id,
+      poolSize: context.poolSize,
+      // Кто именно назвал роли и на каком языке: очередь из четырёх моделей
+      // сдвигается молча, и без этого разница между 12 и 66 секундами на проде
+      // не читается ниоткуда (B180).
+      roleNaming: { stage: context.namedBy, language: context.language },
+    },
+  };
+};
+
+/**
+ * Роли и всё, что о них известно, — один расчёт на два маршрута.
+ *
+ * Панель их показывает, выбор стратегии из них выбирает (B180, срез 2), и
+ * считаться они обязаны одинаково: иначе кандидат выберет одну роль, а
+ * сохранится другая. `null` означает ровно одно — спрашивать некого, потому
+ * что профиль ещё не подтверждён (B161).
+ */
+interface RoleContext {
+  readonly proposals: readonly ProposedRole[];
+  readonly matched: readonly MatchedVacancyItem[];
+  readonly poolSize: number;
+  readonly namedBy: string | null;
+  readonly language: RoleNameLanguage;
+  readonly confirmedSkills: readonly string[];
+  readonly constraints: StrategyConstraints;
+}
+
+async function readRoleContext(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+): Promise<RoleContext | null> {
+  const { candidateStore, multiSourceEngine, roleNamer, roleNamingFailures } = deps;
+  const { confirmedSkills, targetRoles } = readMatchProfile(candidateStore, candidateId);
+  // Без подтверждённого профиля подбора нет вовсе, а значит нет и рынка, по
+  // которому можно назвать роль. Молчаливый пустой список сказал бы «рынок
+  // ничего не назвал» там, где на самом деле некого спрашивать (B161).
+  if (confirmedSkills.length === 0 && targetRoles.length === 0) return null;
+
   const matched = multiSourceEngine.getMatchedVacancies({
-    candidateId: candidate.id,
+    candidateId,
     targetRoles,
     confirmedSkills,
     confirmedFacts: confirmedSkills,
@@ -145,9 +195,10 @@ const handleRoleHypotheses: Handler = async (
   // источников, а не приговор роли (решение владельца 2026-09-03).
   // Язык названия решает код, а не модель: иначе смена провайдера переписывает
   // кандидату его же роли (B180, решение владельца 2026-09-03).
-  const facts = candidateFacts(candidateStore, candidate.id);
+  const facts = candidateFacts(candidateStore, candidateId);
+  const regions = readSearchRegions(candidateStore, candidateId);
   const { language } = resolveRoleNameLanguage({
-    searchRegions: readSearchRegions(candidateStore, candidate.id),
+    searchRegions: regions,
     targetRoles,
     resumeText: facts.map((fact) => fact.statement).join(' '),
   });
@@ -157,21 +208,142 @@ const handleRoleHypotheses: Handler = async (
   reportRoleNamingFailures(request, roleNamingFailures, naming.failures ?? []);
 
   return {
-    data: buildRoleProposals({
+    proposals: buildRoleProposals({
       matched,
       named: naming.roles,
       candidateSkills: confirmedSkills,
     }),
-    meta: {
-      requestId: request.id,
-      poolSize: matched.length,
-      // Кто именно назвал роли и на каком языке: очередь из четырёх моделей
-      // сдвигается молча, и без этого разница между 12 и 66 секундами на проде
-      // не читается ниоткуда (B180).
-      roleNaming: { stage: naming.stage ?? null, language },
+    matched,
+    poolSize: matched.length,
+    namedBy: naming.stage ?? null,
+    language,
+    confirmedSkills,
+    constraints: {
+      regions,
+      // Дословно то, что кандидат написал; код это не разбирает и не толкует.
+      note: readConstraintNote(candidateStore, candidateId),
     },
   };
+}
+
+/**
+ * «Стратегия» — выбранная роль как версионированный объект (B180, срез 2).
+ *
+ * До этого среза выбранного направления не существовало: кампания «Поиск»
+ * читала свободную строку мастера, которую никто не датировал и не объяснял, а
+ * названная моделью роль нигде не сохранялась.
+ */
+const handleReadStrategy: Handler = async (deps, request, reply) => {
+  const candidate = authenticateCandidate(
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
+  );
+  if (!candidate) return undefined;
+  return {
+    // Отсутствие стратегии — не ошибка: кандидат ещё не выбирал.
+    data: deps.candidateStore.getCareerStrategy(candidate.id),
+    meta: { requestId: request.id },
+  };
 };
+
+const strategyChoiceSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  reason: z.string().trim().max(2_000).optional(),
+});
+
+const handleChooseStrategy: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const body = strategyChoiceSchema.parse(request.body);
+
+  const context = await readRoleContext(deps, request, candidate.id);
+  if (!context) {
+    return sendError(
+      reply,
+      request,
+      409,
+      'candidate_profile_unconfirmed',
+      'Пока профиль не подтверждён, выбирать роль не из чего.',
+      false,
+    );
+  }
+
+  const chosen = chooseStrategyRole({
+    previous: candidateStore.getCareerStrategy(candidate.id),
+    role: strategyRoleFor(context, body.title),
+    constraints: context.constraints,
+    reason: body.reason ?? null,
+    decidedAt: new Date().toISOString(),
+    provenance: {
+      // Роль, названную самим кандидатом, не приписываем ступени очереди.
+      namedBy: isProposed(context, body.title) ? context.namedBy : null,
+      language: context.language,
+      poolSize: context.poolSize,
+    },
+  });
+
+  if (!chosen.ok) {
+    return sendError(
+      reply,
+      request,
+      400,
+      'strategy_reason_required',
+      'Смена роли обнуляет накопленную воронку — назовите причину, чтобы она осталась в истории.',
+      false,
+    );
+  }
+
+  return {
+    data: candidateStore.saveCareerStrategy(candidate.id, chosen.strategy),
+    meta: { requestId: request.id },
+  };
+};
+
+/**
+ * Роль вне предложенных не отклоняется: кандидат вправе назвать свою.
+ *
+ * Решение владельца 2026-09-03 по названию модели действует и здесь — имя, не
+ * найденное ни у модели, ни в пуле, помечается, а не обесценивается.
+ */
+function strategyRoleFor(context: RoleContext, title: string): StrategyRole {
+  const proposal = findProposal(context, title);
+  return proposal
+    ? strategyRoleFromProposal(proposal)
+    : candidateNamedStrategyRole(
+        title,
+        confirmChosenTitle({
+          matched: context.matched,
+          title,
+          candidateSkills: context.confirmedSkills,
+        }),
+      );
+}
+
+function findProposal(context: RoleContext, title: string): ProposedRole | undefined {
+  const wanted = title.trim().toLowerCase();
+  return context.proposals.find((role) => role.title.trim().toLowerCase() === wanted);
+}
+
+function isProposed(context: RoleContext, title: string): boolean {
+  return findProposal(context, title) !== undefined;
+}
+
+/** Ограничения кандидата — его собственный текст; пусто честнее выдуманного. */
+function readConstraintNote(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+): string | null {
+  const stored = candidateStore.getCandidateWorkspace(candidateId);
+  if (!stored) return null;
+  const parsed = candidateWorkspaceSchema.safeParse(stored);
+  const note = parsed.success ? parsed.data.constraints.trim() : '';
+  return note.length > 0 ? note : null;
+}
 
 /**
  * Молчание ступени не роняет панель, но безымянным быть не должно: без кода
@@ -421,6 +593,12 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
   );
   app.get('/api/v1/candidate/matched-vacancies', withDeps(deps, handleMatchedVacancies));
   app.get('/api/v1/candidate/role-hypotheses', withDeps(deps, handleRoleHypotheses));
+  app.get('/api/v1/candidate/strategy', withDeps(deps, handleReadStrategy));
+  app.post(
+    '/api/v1/candidate/strategy',
+    { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } },
+    withDeps(deps, handleChooseStrategy),
+  );
   app.get('/api/v1/candidate/vacancy-sources', withDeps(deps, handleListSources));
   app.get('/api/v1/candidate/vacancy-subscriptions', withDeps(deps, handleListSubscriptions));
 

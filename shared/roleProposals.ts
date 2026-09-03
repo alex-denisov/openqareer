@@ -109,6 +109,24 @@ export function proposeRoles(input: {
 }
 
 /**
+ * Что пул говорит о названии, пришедшем не из предложений, — например о роли,
+ * которую кандидат назвал сам (B180, срез 2). Считает то же самое и тем же
+ * способом: имя не даёт роли ни одного очка, доказательство даёт только пул.
+ */
+export function confirmRoleTitle(input: {
+  readonly title: string;
+  readonly pool: readonly RoleObservation[];
+  readonly candidateSkills: readonly string[];
+}): RoleConfirmation {
+  const key = titleKey(input.title);
+  if (!key) return { state: 'not-found' };
+  return confirmationFor(
+    groupObservations(input.pool).get(key),
+    new Set(input.candidateSkills.map((skill) => skill.toLowerCase().trim())),
+  );
+}
+
+/**
  * Совпадение считается только по требованиям вакансий: пересечение имени роли
  * с самим собой давало бы каждой названной роли лишний балл из воздуха.
  */

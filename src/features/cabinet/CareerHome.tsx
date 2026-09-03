@@ -13,7 +13,9 @@ import {
 import { CareerProfileSurface } from './CareerProfileSurface';
 import { assessProfile, type ProfileMeasure, type ProfileScore } from './profileAssessment';
 import { buildProfileView } from './profileView';
-import { RolesMarketPanel } from './RolesMarketPanel';
+import { RolesMarketPanel, type RoleChoiceActions } from './RolesMarketPanel';
+import { CareerStrategyPanel } from './CareerStrategyPanel';
+import type { CareerStrategyRead } from './useCareerStrategy';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { ProposedRole } from '../../../shared/roleProposals';
 import type { CareerCabinetView } from './cabinetViews';
@@ -39,6 +41,8 @@ interface CareerHomeProps {
   /** Карта ролей и рынка: гипотезы и выборка вакансий за ними (B104, B118). */
   readonly journey?: CareerJourney;
   readonly proposedRoles?: readonly ProposedRole[];
+  /** Выбранная роль и её история — «Стратегия» (B180, срез 2). */
+  readonly strategy?: CareerStrategyRead;
   readonly poolComplete?: boolean;
   readonly poolTotal?: number;
   readonly loading: boolean;
@@ -50,24 +54,20 @@ interface CareerHomeProps {
   readonly onOpenExpert: () => void;
 }
 
-export function CareerHome({
-  session,
-  snapshot,
-  account,
-  workspace,
-  targetDirection,
-  journey,
-  proposedRoles,
-  poolComplete,
-  poolTotal,
-  loading,
-  importing = false,
-  onRefresh,
-  onNavigate,
-  onUpdateWorkspace,
-  onOpenAccount,
-  onOpenExpert,
-}: CareerHomeProps) {
+export function CareerHome(props: CareerHomeProps) {
+  const {
+    session,
+    snapshot,
+    account,
+    workspace,
+    loading,
+    importing = false,
+    onRefresh,
+    onNavigate,
+    onUpdateWorkspace,
+    onOpenAccount,
+    onOpenExpert,
+  } = props;
   return (
     <div className="career-home">
       <div className="career-home-main">
@@ -86,18 +86,7 @@ export function CareerHome({
         />
       </div>
 
-      <HomeRail
-        snapshot={snapshot}
-        regions={workspace?.regions ?? []}
-        targetDirection={targetDirection}
-        journey={journey}
-        proposedRoles={proposedRoles}
-        poolComplete={poolComplete}
-        poolTotal={poolTotal}
-        importing={importing}
-        onNavigate={onNavigate}
-        onOpenExpert={onOpenExpert}
-      />
+      <HomeRail {...props} regions={workspace?.regions ?? []} importing={importing} />
     </div>
   );
 }
@@ -111,6 +100,7 @@ function HomeRail({
   targetDirection,
   journey,
   proposedRoles,
+  strategy,
   poolComplete,
   poolTotal,
   importing,
@@ -122,6 +112,7 @@ function HomeRail({
   targetDirection: string;
   journey?: CareerJourney;
   proposedRoles?: readonly ProposedRole[];
+  strategy?: CareerStrategyRead;
   poolComplete?: boolean;
   poolTotal?: number;
   importing: boolean;
@@ -145,8 +136,23 @@ function HomeRail({
         proposedRoles={proposedRoles}
         poolComplete={poolComplete}
         poolTotal={poolTotal}
+        {...(strategy ? { choice: roleChoice(strategy) } : {})}
         onNavigate={onNavigate}
       />
+      {/* Выбранная роль стоит рядом с тем местом, где её выбирают: версия,
+          дата, кто назвал и что говорил пул в момент выбора (B180, срез 2). */}
+      {strategy ? (
+        <CareerStrategyPanel
+          strategy={strategy.strategy}
+          loading={strategy.loading}
+          failed={strategy.failed}
+        />
+      ) : null}
+      {strategy?.error ? (
+        <p className="career-cabinet-error" role="alert">
+          {strategy.error}
+        </p>
+      ) : null}
       <PositioningPanel
         targetDirection={targetDirection}
         regions={regions}
@@ -392,4 +398,13 @@ function formatDay(value: string): string {
     day: 'numeric',
     month: 'long',
   }).format(new Date(value));
+}
+
+/** Выбор роли и его состояние — одним объектом, как их читает панель. */
+function roleChoice(strategy: CareerStrategyRead): RoleChoiceActions {
+  return {
+    ...(strategy.strategy ? { chosenTitle: strategy.strategy.current.role.title } : {}),
+    saving: strategy.saving,
+    onChoose: (title, reason) => void strategy.choose(title, reason),
+  };
 }

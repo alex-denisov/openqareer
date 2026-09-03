@@ -308,6 +308,64 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
+  // «Стратегия» спрашивается «Главной» отдельным маршрутом (B180, срез 2).
+  // Без ответа прогон записал бы 502, который увидел бы и кандидат. Отвечаем
+  // выбранной ролью со второй версией: панель обязана напечатать и причину
+  // смены, и прежнее решение.
+  await page.route('**/api/v1/candidate/strategy', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          current: {
+            version: 2,
+            role: {
+              title: 'Продуктовый аналитик',
+              origin: 'model',
+              reason: 'вели продуктовую аналитику четыре года',
+              evidenceRefs: ['memory:1'],
+              confirmation: {
+                state: 'observed',
+                sampleSize: 12,
+                observedFrom: '2026-08-20T08:00:00.000Z',
+                observedTo: '2026-09-01T08:00:00.000Z',
+              },
+            },
+            constraints: { regions: ['eu'], note: null },
+            reason: 'откликов много, разговоров нет',
+            decidedAt: '2026-09-03T09:00:00.000Z',
+            provenance: {
+              namedBy: 'gemini:gemini-3.6-flash',
+              language: 'en',
+              poolSize: 12,
+            },
+          },
+          history: [
+            {
+              version: 1,
+              role: {
+                title: 'Head of Growth',
+                origin: 'model',
+                reason: null,
+                evidenceRefs: [],
+                confirmation: { state: 'not-found', sampleSize: 0 },
+              },
+              constraints: { regions: ['eu'], note: null },
+              reason: 'Первый выбор роли',
+              decidedAt: '2026-09-01T09:00:00.000Z',
+              provenance: {
+                namedBy: 'gemini:gemini-3.6-flash',
+                language: 'en',
+                poolSize: 10,
+              },
+            },
+          ],
+        },
+        meta: {},
+      }),
+    });
+  });
   // Resume Studio asks for the matched pool as soon as it opens; without an
   // answer the walk records a 502 the candidate would also see.
   // Пул, на котором «Вакансии» действительно проверяются: две записи из разных

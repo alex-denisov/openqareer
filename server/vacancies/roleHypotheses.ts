@@ -1,8 +1,10 @@
 import type { RoleObservation } from '../../shared/poolRoleHypotheses';
 import {
+  confirmRoleTitle,
   proposeRoles,
   type NamedRole,
   type ProposedRole,
+  type RoleConfirmation,
 } from '../../shared/roleProposals';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 
@@ -43,6 +45,24 @@ export function buildRoleProposals(input: {
 }): ProposedRole[] {
   return proposeRoles({
     named: input.named,
+    pool: observations(input.matched),
+    candidateSkills: input.candidateSkills,
+  });
+}
+
+/**
+ * Что пул говорит о названии, которое кандидат назвал сам (B180, срез 2).
+ *
+ * Считается по тому же пулу и тем же способом, что и подтверждение
+ * предложенной роли: своя роль не получает ни поблажки, ни наказания.
+ */
+export function confirmChosenTitle(input: {
+  readonly matched: readonly MatchedVacancyItem[];
+  readonly title: string;
+  readonly candidateSkills: readonly string[];
+}): RoleConfirmation {
+  return confirmRoleTitle({
+    title: input.title,
     pool: observations(input.matched),
     candidateSkills: input.candidateSkills,
   });

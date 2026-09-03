@@ -654,3 +654,19 @@ CREATE TABLE IF NOT EXISTS vacancy_source_state (
   items_active_total INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 `;
+
+/**
+ * B180 срез 2 — выбранная роль как версионированный объект «Стратегия».
+ *
+ * Одна строка на кандидата: текущая версия и вся история решений лежат в одном
+ * запечатанном значении. Версии мало и они маленькие, а порядок между ними
+ * важнее, чем возможность искать по ним запросом.
+ */
+export const MIGRATION_24 = `
+CREATE TABLE career_strategies (
+  candidate_id TEXT PRIMARY KEY REFERENCES candidates(id) ON DELETE CASCADE,
+  strategy_cipher TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
+`;

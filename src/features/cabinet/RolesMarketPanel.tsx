@@ -1,4 +1,5 @@
 import { ArrowRight } from '@phosphor-icons/react';
+import { useState } from 'react';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { RoleMarketMap } from '../career-map/roleMarketMap';
 import { pluralRu } from '../../../shared/pluralRu';
@@ -17,11 +18,28 @@ import type { CareerCabinetView } from './cabinetViews';
  * шаблоном требований переворачивает картину, и показывать её как рынок
  * нечестно.
  */
+/**
+ * Выбор роли в «Стратегию» — одна вещь, и передаётся одной (B180, срез 2).
+ *
+ * Отдельными пропсами это расползалось по четырём сигнатурам подряд.
+ */
+export interface RoleChoiceActions {
+  /** Роль, уже выбранная стратегией: её видно на месте, а не в другой панели. */
+  readonly chosenTitle?: string;
+  readonly saving?: boolean;
+  /**
+   * Причина обязательна только при смене уже выбранной роли: смена обнуляет
+   * накопленную воронку.
+   */
+  readonly onChoose?: (title: string, reason?: string) => void;
+}
+
 export function RolesMarketPanel({
   journey,
   proposedRoles,
   poolComplete = true,
   poolTotal = 0,
+  choice,
   onNavigate,
 }: {
   readonly journey?: CareerJourney;
@@ -33,6 +51,7 @@ export function RolesMarketPanel({
   /** Пул читается страницами: выборка по половине пула — не выборка по пулу. */
   readonly poolComplete?: boolean;
   readonly poolTotal?: number;
+  readonly choice?: RoleChoiceActions;
   readonly onNavigate: (view: CareerCabinetView) => void;
 }) {
   const map = journey?.roleMarketMap;
@@ -51,7 +70,7 @@ export function RolesMarketPanel({
       </header>
 
       {proposedRoles ? (
-        <ProposedRoleList roles={proposedRoles} />
+        <ProposedRoleList roles={proposedRoles} choice={choice} />
       ) : (
         <RoleHypotheses roles={roles} />
       )}
@@ -84,7 +103,13 @@ export function RolesMarketPanel({
  * сообщить, что пока таких вакансий не найдено». Поэтому список делится на два
  * блока, и нижний называет своё состояние и следующий шаг, а не молчит.
  */
-function ProposedRoleList({ roles }: { readonly roles: readonly ProposedRole[] }) {
+function ProposedRoleList({
+  roles,
+  choice,
+}: {
+  readonly roles: readonly ProposedRole[];
+  readonly choice?: RoleChoiceActions;
+}) {
   if (!roles.length) {
     return (
       <p className="career-home-empty">
@@ -101,7 +126,7 @@ function ProposedRoleList({ roles }: { readonly roles: readonly ProposedRole[] }
       {confirmed.length ? (
         <ol className="career-roles-list">
           {confirmed.map((role) => (
-            <RoleRow key={role.id} role={role} />
+            <RoleRow key={role.id} role={role} choice={choice} />
           ))}
         </ol>
       ) : null}
@@ -111,7 +136,7 @@ function ProposedRoleList({ roles }: { readonly roles: readonly ProposedRole[] }
           <p className="career-cabinet-tag">Пока не найдено в наших источниках</p>
           <ol className="career-roles-list">
             {pending.map((role) => (
-              <RoleRow key={role.id} role={role} />
+              <RoleRow key={role.id} role={role} choice={choice} />
             ))}
           </ol>
           <p className="career-home-empty">
@@ -124,10 +149,18 @@ function ProposedRoleList({ roles }: { readonly roles: readonly ProposedRole[] }
   );
 }
 
-function RoleRow({ role }: { readonly role: ProposedRole }) {
+function RoleRow({
+  role,
+  choice,
+}: {
+  readonly role: ProposedRole;
+  readonly choice?: RoleChoiceActions;
+}) {
+  const isChosen = sameTitle(choice?.chosenTitle, role.title);
   return (
     <li>
       <strong>{role.title}</strong>
+      {isChosen ? <span className="career-cabinet-tag">ваша роль</span> : null}
       <small>{originLabel(role)}</small>
       <ConfirmationLine confirmation={role.confirmation} />
       {role.confirmation.state === 'observed' && role.confirmation.repeatedRequirements.length ? (
@@ -135,8 +168,98 @@ function RoleRow({ role }: { readonly role: ProposedRole }) {
           Повторяются: {role.confirmation.repeatedRequirements.slice(0, 4).join(', ')}
         </small>
       ) : null}
+      {choice?.onChoose && !isChosen ? (
+        <ChooseRoleAction title={role.title} choice={choice} onChoose={choice.onChoose} />
+      ) : null}
     </li>
   );
+}
+
+/**
+ * Выбор роли, а при смене — и его причина.
+ *
+ * Смена роли обнуляет накопленную воронку и уничтожает сравнимость данных,
+ * поэтому кандидат обязан увидеть, что меняет, и назвать почему. Первый выбор
+ * ничего не обнуляет и причины не требует.
+ */
+function ChooseRoleAction({
+  title,
+  choice,
+  onChoose,
+}: {
+  readonly title: string;
+  readonly choice: RoleChoiceActions;
+  readonly onChoose: (title: string, reason?: string) => void;
+}) {
+  const [explaining, setExplaining] = useState(false);
+  const saving = Boolean(choice.saving);
+
+  if (!choice.chosenTitle) {
+    return (
+      <button
+        type="button"
+        className="career-quiet-button"
+        disabled={saving}
+        onClick={() => onChoose(title)}
+      >
+        Выбрать эту роль
+      </button>
+    );
+  }
+
+  if (!explaining) {
+    return (
+      <button
+        type="button"
+        className="career-quiet-button"
+        disabled={saving}
+        onClick={() => setExplaining(true)}
+      >
+        Сменить роль на эту
+      </button>
+    );
+  }
+
+  return <ChangeRoleForm title={title} saving={saving} onChoose={onChoose} />;
+}
+
+/** Причина смены — не формальность: она остаётся в истории решений навсегда. */
+function ChangeRoleForm({
+  title,
+  saving,
+  onChoose,
+}: {
+  readonly title: string;
+  readonly saving: boolean;
+  readonly onChoose: (title: string, reason?: string) => void;
+}) {
+  const [reason, setReason] = useState('');
+  return (
+    <div className="career-roles-change">
+      <label htmlFor={`role-change-${title}`}>
+        Смена роли обнулит накопленную воронку. Почему меняете?
+      </label>
+      <textarea
+        id={`role-change-${title}`}
+        value={reason}
+        rows={2}
+        maxLength={2_000}
+        onChange={(event) => setReason(event.target.value)}
+      />
+      <button
+        type="button"
+        className="career-quiet-button"
+        disabled={saving || reason.trim().length === 0}
+        onClick={() => onChoose(title, reason.trim())}
+      >
+        Сменить роль
+      </button>
+    </div>
+  );
+}
+
+function sameTitle(left: string | undefined, right: string): boolean {
+  return Boolean(left) && left?.trim().toLowerCase() === right.trim().toLowerCase();
 }
 
 /** Имя роли и наблюдение рынка — разные вещи, и метка не даёт их спутать. */
