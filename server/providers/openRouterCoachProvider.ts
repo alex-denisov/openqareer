@@ -11,18 +11,14 @@ import {
   type CoachTurnInput,
 } from '../domain/coach';
 import { careerInstructionsForRole } from '../prompts/careerRolePrompts';
+import { outputBudgetForRole } from './openAICoachProvider';
 import {
   CoachProviderError,
   type CoachProvider,
   type CoachProviderResult,
 } from './coachProvider';
 
-const OPENROUTER_MODEL =
-  'nvidia/nemotron-3-ultra-550b-a55b:free';
-const OPENROUTER_MODELS = [
-  OPENROUTER_MODEL,
-  'nvidia/nemotron-3-super-120b-a12b:free',
-] as const;
+const OPENROUTER_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free';
 
 export interface OpenRouterCoachProviderOptions {
   apiKey: string;
@@ -33,12 +29,9 @@ export interface OpenRouterCoachProviderOptions {
 export class OpenRouterCoachProvider implements CoachProvider {
   private readonly client: OpenAI;
   private readonly model: string;
-  private readonly models: readonly string[];
 
   constructor(options: OpenRouterCoachProviderOptions) {
     this.model = options.model ?? OPENROUTER_MODEL;
-    this.models =
-      this.model === OPENROUTER_MODEL ? OPENROUTER_MODELS : [this.model];
     this.client =
       options.client ??
       new OpenAI({
@@ -66,11 +59,8 @@ export class OpenRouterCoachProvider implements CoachProvider {
     }
 
     try {
-      const request: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
-        models: readonly string[];
-      } = {
+      const request: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
         model: this.model,
-        models: this.models,
         messages: [
           {
             role: 'system',
@@ -82,7 +72,11 @@ export class OpenRouterCoachProvider implements CoachProvider {
           },
         ],
         reasoning_effort: 'high',
-        max_completion_tokens: 2_400,
+        // Рассуждение тратит тот же бюджет, что и ответ: потолок в 2 400
+        // обрезал ход на середине JSON, и наружу это выглядело как
+        // `provider_output_invalid` (замер B185). Место под ответ считается той
+        // же функцией, что и у OpenAI, — расходиться им незачем.
+        max_completion_tokens: outputBudgetForRole(input.activeRole, 'high'),
       };
       const response = await this.client.chat.completions.create(
         request,

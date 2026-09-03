@@ -81,12 +81,13 @@ describe('OpenRouter synthetic coach provider', () => {
     expect(output.provider).toBe('openrouter');
     expect(calls[0].body).toMatchObject({
       model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-      models: [
-        'nvidia/nemotron-3-ultra-550b-a55b:free',
-        'nvidia/nemotron-3-super-120b-a12b:free',
-      ],
       reasoning_effort: 'high',
     });
+    // Запасной маршрут — это ступень очереди, а не скрытый второй адресат
+    // внутри одной ступени: список `models` заставлял OpenRouter молча
+    // отвечать другой моделью, и замер B185 принял это за поведение суффикса
+    // `:free`. Провенанс обязан называть ту модель, которую попросили.
+    expect(calls[0].body).not.toHaveProperty('models');
     expect(calls[0].body).not.toHaveProperty('response_format');
     expect(calls[0].options).toEqual({
       idempotencyKey: 'idempotency-key',
@@ -124,10 +125,8 @@ describe('OpenRouter synthetic coach provider', () => {
     const result = await provider.createTurn(syntheticInput, 'idempotency-key');
 
     expect(result.result).toEqual(validOutput);
-    expect(calls[0]).toMatchObject({
-      model: 'pinned/provider-model',
-      models: ['pinned/provider-model'],
-    });
+    expect(calls[0]).toMatchObject({ model: 'pinned/provider-model' });
+    expect(calls[0]).not.toHaveProperty('models');
   });
 
   it.each([
@@ -227,3 +226,29 @@ function routerResponse(content: string | undefined) {
     choices: [{ message: { content } }],
   };
 }
+
+describe('OpenRouterCoachProvider: место под ответ', () => {
+  it('даёт стратегу больше места, чем эксперту, и не стоит на прежней тройке', async () => {
+    const calls: Record<string, unknown>[] = [];
+    const provider = routerWith(async (body) => {
+      calls.push(body);
+      return routerResponse(JSON.stringify(validOutput));
+    }, 'pinned/provider-model');
+
+    await provider.createTurn(
+      { ...syntheticInput, activeRole: 'career_expert' },
+      'key-expert',
+    );
+    await provider.createTurn(
+      { ...syntheticInput, activeRole: 'career_strategist' },
+      'key-strategist',
+    );
+
+    const expert = calls[0].max_completion_tokens as number;
+    const strategist = calls[1].max_completion_tokens as number;
+    // Потолок в 2 400 обрезал ответ на реальном ходе: замер B185 дал
+    // `provider_output_invalid` там, где модель просто не дописала JSON.
+    expect(expert).toBeGreaterThan(2_400);
+    expect(strategist).toBeGreaterThan(expert);
+  });
+});

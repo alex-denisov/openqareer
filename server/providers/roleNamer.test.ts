@@ -91,3 +91,61 @@ describe('CachedRoleNamer', () => {
     expect(inner.nameRoles).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('LlmRoleNamer: ответ свободной модели', () => {
+  it('читает голый массив без обёртки roles', async () => {
+    const namer = new LlmRoleNamer({
+      apiKey: 'k',
+      model: 'm',
+      client: client(
+        JSON.stringify([
+          { title: 'Продакт-менеджер', reason: 'вёл продукты', evidenceRefs: ['memory:1'] },
+        ]),
+      ),
+    });
+
+    await expect(namer.nameRoles(facts)).resolves.toEqual([
+      { title: 'Продакт-менеджер', reason: 'вёл продукты', evidenceRefs: ['memory:1'] },
+    ]);
+  });
+
+  it('читает ответ, где модель назвала поля по-своему', async () => {
+    // Живой ответ `nemotron-3-ultra:free` с прода 2026-09-03: массив
+    // `{role, explanation, refs}`. Смысл тот же, буквы другие.
+    const namer = new LlmRoleNamer({
+      apiKey: 'k',
+      model: 'm',
+      client: client(
+        JSON.stringify([
+          {
+            role: 'Product Manager (Fintech)',
+            explanation: 'Девять лет вёл внутренние продукты',
+            refs: ['memory:1'],
+          },
+        ]),
+      ),
+    });
+
+    await expect(namer.nameRoles(facts)).resolves.toEqual([
+      {
+        title: 'Product Manager (Fintech)',
+        reason: 'Девять лет вёл внутренние продукты',
+        evidenceRefs: ['memory:1'],
+      },
+    ]);
+  });
+
+  it('не просит json_object у модели без структурированного вывода', async () => {
+    const stub = client('{"roles":[]}');
+    const namer = new LlmRoleNamer({ apiKey: 'k', model: 'm', client: stub, structuredOutput: false });
+
+    await namer.nameRoles(facts);
+
+    // На проде `response_format: json_object` ломал вызов у
+    // `nemotron-3-ultra:free`: ответ приходил без `choices`, и роль просто
+    // не называлась (B180).
+    expect(stub.chat.completions.create).toHaveBeenCalledWith(
+      expect.not.objectContaining({ response_format: expect.anything() }),
+    );
+  });
+});

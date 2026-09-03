@@ -78,9 +78,12 @@ export class LlmRoleNamer implements RoleNamer {
           { role: 'system', content: ROLE_NAMING_INSTRUCTIONS },
           { role: 'user', content: serializeFacts(facts) },
         ],
+        // `json_object` у модели без структурированного вывода ломал вызов на
+        // проде: OpenRouter отвечал телом без `choices`, и роль не называлась
+        // вовсе. Формат просим только там, где он поддержан.
         ...(this.structuredOutput
           ? { response_format: { type: 'json_schema', json_schema: ROLE_NAMING_JSON_SCHEMA } }
-          : { response_format: { type: 'json_object' } }),
+          : {}),
       });
       return parseRoles(response.choices[0]?.message?.content ?? null);
     } catch {
@@ -88,6 +91,23 @@ export class LlmRoleNamer implements RoleNamer {
       return [];
     }
   }
+}
+
+/**
+ * Модель отвечает то объектом, то массивом, то с прозой вокруг. Скобку
+ * выбираем по тому, какая встретилась раньше: у голого массива первая
+ * фигурная скобка стоит внутри него, и жадный поиск по ней вырезал бы один
+ * элемент вместо всего списка.
+ */
+function jsonPayload(content: string): string | null {
+  const brace = content.indexOf('{');
+  const bracket = content.indexOf('[');
+  const first =
+    bracket >= 0 && (brace < 0 || bracket < brace)
+      ? ([bracket, content.lastIndexOf(']')] as const)
+      : ([brace, content.lastIndexOf('}')] as const);
+  const [start, end] = first;
+  return start >= 0 && end > start ? content.slice(start, end + 1) : null;
 }
 
 function serializeFacts(facts: readonly CandidateFact[]): string {
@@ -101,11 +121,10 @@ function serializeFacts(facts: readonly CandidateFact[]): string {
 
 function parseRoles(content: string | null): NamedRole[] {
   if (!content) return [];
-  const start = content.indexOf('{');
-  const end = content.lastIndexOf('}');
-  if (start < 0 || end <= start) return [];
+  const payload = jsonPayload(content);
+  if (!payload) return [];
   try {
-    const parsed = roleNamingSchema.safeParse(JSON.parse(content.slice(start, end + 1)));
+    const parsed = roleNamingSchema.safeParse(JSON.parse(payload));
     if (!parsed.success) return [];
     return parsed.data.roles.map((role) => ({
       title: role.title,

@@ -24,19 +24,41 @@ export const ROLE_NAMING_INSTRUCTIONS = [
   'Запрещено: любые числа, проценты, оценки востребованности, зарплаты,',
   'слова «подходит», «не подходит», «уровень», «балл».',
   'Порядок ролей не важен: его определяет не ты.',
+  'Формат ответа — ровно такой:',
+  '{"roles":[{"title":"Продакт-менеджер","reason":"девять лет вёл внутренние продукты",',
+  '"evidenceRefs":["memory:1"]}]}',
+  'Имена полей именно эти: title, reason, evidenceRefs.',
 ].join(' ');
 
-export const roleNamingSchema = z.object({
-  roles: z
-    .array(
-      z.object({
-        title: z.string().trim().min(2).max(60),
-        reason: z.string().trim().min(1).max(400),
-        evidenceRefs: z.array(z.string().trim().min(1).max(120)).max(20),
-      }),
-    )
-    .max(8),
-});
+/**
+ * Бесплатная модель не держит имена полей: живой ответ
+ * `nemotron-3-ultra:free` с прода 2026-09-03 пришёл голым массивом
+ * `{role, explanation, refs}`. Просить строго и читать снисходительно дешевле,
+ * чем терять названную роль из-за буквы; смысл при этом не размывается — поля
+ * ровно те же три, и любое лишнее отбрасывается.
+ */
+const namedRoleSchema = z
+  .object({
+    title: z.string().trim().min(2).max(60).optional(),
+    role: z.string().trim().min(2).max(60).optional(),
+    reason: z.string().trim().min(1).max(400).optional(),
+    explanation: z.string().trim().min(1).max(400).optional(),
+    evidenceRefs: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
+    refs: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
+  })
+  .transform((value) => ({
+    title: value.title ?? value.role ?? '',
+    reason: value.reason ?? value.explanation ?? '',
+    evidenceRefs: value.evidenceRefs ?? value.refs ?? [],
+  }))
+  .refine((value) => value.title.length >= 2 && value.reason.length >= 1);
+
+export const roleNamingSchema = z
+  .union([
+    z.object({ roles: z.array(namedRoleSchema).max(8) }),
+    z.array(namedRoleSchema).max(8),
+  ])
+  .transform((value) => (Array.isArray(value) ? { roles: value } : value));
 
 export type NamedRoleAnswer = z.infer<typeof roleNamingSchema>;
 

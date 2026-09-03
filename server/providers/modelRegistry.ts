@@ -344,6 +344,16 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
     credentialEnvironment: ['OPENQAREER_NVIDIA_NIM_API_KEY'],
     models: [
       {
+        // Решение владельца 2026-09-03: та же модель, что и на OpenRouter, но
+        // у самой NVIDIA — там она не бесплатная ступень чужого тарифа, а
+        // модель провайдера. Проверено с прод-хоста: каталог NIM её отдаёт.
+        id: 'nvidia/nemotron-3-ultra-550b-a55b',
+        releaseDate: '2026-06-04',
+        pinned: true,
+        lifecycle: 'preview',
+        structuredOutput: false,
+      },
+      {
         id: 'nvidia/nemotron-3-super-120b-a12b',
         releaseDate: '2026-03-11',
         pinned: true,
