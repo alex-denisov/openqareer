@@ -183,5 +183,9 @@ describe('extractTelegramJobHeader', () => {
     expect(extractTelegramJobHeader(['в команду ML-Инженера 💻', 'Задачи:']).title).toBe(
       'ML-Инженера',
     );
+    // Решётка в хвосте — часть названия языка, а не украшение.
+    expect(
+      extractTelegramJobHeader(['Senior Unity / Full-Stack Developer C#', 'Задачи:']).title,
+    ).toBe('Senior Unity / Full-Stack Developer C#');
   });
 });

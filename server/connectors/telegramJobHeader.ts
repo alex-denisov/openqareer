@@ -157,8 +157,8 @@ function readTitleLine(line: string): string {
   const chosen = segments.find((segment) => ROLE_WORD.test(segment)) ?? segments[0] ?? base;
   return cutAtClause(afterSeeksVerb(chosen))
     .replace(/[\s.,;:]+$/u, '')
-    // Значок в хвосте строки — тоже не часть должности.
-    .replace(/[^\p{L}\p{N}»"”)]+$/u, '')
+    // Значок в хвосте строки — не часть должности, а вот «C#» и «C++» — часть.
+    .replace(/(?:\s|\p{Extended_Pictographic}|\u{FE0F}|\u{200D}|[|—–])+$/gu, '')
     .trim();
 }
 
