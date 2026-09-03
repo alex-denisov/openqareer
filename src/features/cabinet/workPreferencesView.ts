@@ -2,6 +2,7 @@ import type {
   WorkFamilyCount,
   WorkPreferenceResult,
 } from '../../../shared/workPreferences';
+import { pluralRu } from '../../../shared/pluralRu';
 
 /**
  * Как читается результат заданий «Какие роли мне подходят» (B180, срез 3).
@@ -34,9 +35,15 @@ export function describeWorkPreferences(input: {
 }): WorkPreferencesView {
   const { result } = input;
   return {
-    basisLine: `${result.answered} выборов · ${result.counts.length} видов работы · ${formatDay(
-      input.completedAt,
-    )}`,
+    basisLine: `${pluralRu(result.answered, [
+      'выбор',
+      'выбора',
+      'выборов',
+    ])} · ${pluralRu(result.counts.length, [
+      'вид работы',
+      'вида работы',
+      'видов работы',
+    ])} · ${formatDay(input.completedAt)}`,
     top: result.ranked,
     excludedLine: result.excluded.length
       ? `Вы назвали «точно нет»: ${result.excluded

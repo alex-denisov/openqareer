@@ -42,6 +42,12 @@ describe('describeWorkPreferences', () => {
     expect(view({}).basisLine).toBe('12 выборов · 8 видов работы · 3 сентября');
   });
 
+  it('единственный выбор не печатается как «1 выборов»', () => {
+    expect(
+      view({ answers: [{ taskId: 'monday', optionId: 'monday-queue' }] }).basisLine,
+    ).toBe('1 выбор · 8 видов работы · 3 сентября');
+  });
+
   it('у каждого верхнего вида работы есть знаменатель', () => {
     const top = view({}).top;
     expect(top).toHaveLength(3);
