@@ -721,3 +721,22 @@ DROP TABLE assessments;
 
 ALTER TABLE assessments_product_case_only RENAME TO assessments;
 `;
+
+/**
+ * B191 — названные роли переживают рестарт.
+ *
+ * Кэш называния жил в памяти процесса и терялся при каждом деплое, поэтому
+ * каждый рестарт заново звал модель — и упирался в исчерпанную бесплатную
+ * квоту Gemini (`429`, INC-035). Ключ — хэш «язык + факты», названия ролей
+ * лежат зашифрованными: они выведены из фактов кандидата.
+ *
+ * Применяется `SqliteRoleNamingCache` на своём соединении — тем же способом,
+ * что `MIGRATION_23` применяется хранилищем пула вакансий.
+ */
+export const MIGRATION_27 = `
+CREATE TABLE IF NOT EXISTS role_naming_cache (
+  cache_key TEXT PRIMARY KEY,
+  named_at TEXT NOT NULL,
+  roles_cipher TEXT NOT NULL
+) STRICT;
+`;

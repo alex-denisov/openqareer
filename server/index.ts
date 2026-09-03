@@ -23,6 +23,7 @@ import { HhConnector } from './connectors/hh/hhConnector';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
 import { buildMultiSourceFetcher } from './vacancies/multiSourceFetcher';
 import { SqliteVacancyPoolStore } from './vacancies/sqliteVacancyPoolStore';
+import { SqliteRoleNamingCache } from './data/sqliteRoleNamingCache';
 
 const config = readServerConfig(process.env);
 const candidateStore = new SqliteCandidateStore({
@@ -107,6 +108,10 @@ const careerCommandExecutor = new CareerCommandConnectorRouter({
 const vacancyPoolStore = new SqliteVacancyPoolStore({
   databasePath: config.databasePath,
 });
+const roleNamingCache = new SqliteRoleNamingCache({
+  databasePath: config.databasePath,
+  encryptionKey: config.dataEncryptionKey,
+});
 const multiSourceEngine = new MultiSourceVacancyEngine({
   fetcher: buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies),
   pool: vacancyPoolStore,
@@ -137,6 +142,9 @@ const app = await buildApp({
     // Голова называния — Gemini, и без тоннеля она не строится (решение
     // владельца 2026-09-03).
     cloudflareGateway: config.cloudflareGateway,
+    // Названные роли переживают рестарт: без хранилища каждый деплой снова звал
+    // модель и упирался в исчерпанную бесплатную квоту (INC-035, B191).
+    cacheStore: roleNamingCache,
   }),
   serveStatic: process.env.NODE_ENV === 'production',
 });

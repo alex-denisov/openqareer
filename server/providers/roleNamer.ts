@@ -365,6 +365,22 @@ async function refusal(
   return { stage, kind: 'http_error', status: response.status, ...(detail ? { detail } : {}) };
 }
 
+export interface RoleNamingCacheEntry {
+  /** Когда роли были названы, в миллисекундах эпохи. */
+  readonly at: number;
+  readonly roles: NamedRole[];
+  readonly stage?: string;
+}
+
+/** Хранилище названных ролей между рестартами (B191). */
+export interface RoleNamingCacheStore {
+  read(key: string): RoleNamingCacheEntry | undefined;
+  write(key: string, entry: RoleNamingCacheEntry): void;
+}
+
+/** Сколько живёт названное в базе: ключ меняется вместе с фактами. */
+const DURABLE_TTL_MS = 7 * 24 * 60 * 60_000;
+
 /**
  * Кэш поверх называния ролей.
  *
@@ -373,19 +389,36 @@ async function refusal(
  * ответ тот же — спрашивать модель повторно значит платить временем кандидата
  * за уже известное.
  *
- * Ключ — хэш фактов, а не сами факты: карта живёт в памяти процесса, и класть
- * в её ключи формулировки о человеке незачем. Значения теряются при рестарте, и
- * это осознанно: постоянное хранение названных ролей — отдельная работа
- * (нужна миграция хранилища), а не побочный эффект этого среза.
+ * Ключ — хэш фактов, а не сами факты: класть в ключи формулировки о человеке
+ * незачем. Память — быстрый слой, переживает рестарт база: без неё каждый
+ * деплой снова звал модель и упирался в исчерпанную квоту (INC-035, B191).
  */
 export class CachedRoleNamer implements RoleNamer {
   private readonly entries = new Map<string, { at: number; outcome: RoleNamingOutcome }>();
 
+  private readonly ttlMs: number;
+  private readonly now: () => number;
+  /**
+   * Хранилище переживает рестарт. Без него кэш терялся при каждом деплое, и
+   * первый вход снова звал модель — в исчерпанную квоту (INC-035).
+   */
+  private readonly store: RoleNamingCacheStore | undefined;
+  private readonly durableTtlMs: number;
+
   constructor(
     readonly inner: RoleNamer,
-    private readonly ttlMs = 15 * 60_000,
-    private readonly now: () => number = () => Date.now(),
-  ) {}
+    options: {
+      readonly ttlMs?: number;
+      readonly now?: () => number;
+      readonly store?: RoleNamingCacheStore;
+      readonly durableTtlMs?: number;
+    } = {},
+  ) {
+    this.ttlMs = options.ttlMs ?? 15 * 60_000;
+    this.now = options.now ?? (() => Date.now());
+    this.store = options.store;
+    this.durableTtlMs = options.durableTtlMs ?? DURABLE_TTL_MS;
+  }
 
   async nameRoles(
     facts: readonly CandidateFact[],
@@ -397,16 +430,29 @@ export class CachedRoleNamer implements RoleNamer {
       .digest('hex');
     const cached = this.entries.get(key);
     if (cached && this.now() - cached.at < this.ttlMs) return cached.outcome;
+
+    const stored = this.store?.read(key);
+    if (stored && this.now() - stored.at < this.durableTtlMs) {
+      const outcome: RoleNamingOutcome = {
+        roles: stored.roles,
+        ...(stored.stage ? { stage: stored.stage } : {}),
+      };
+      this.entries.set(key, { at: this.now(), outcome });
+      return outcome;
+    }
+
     const outcome = await this.inner.nameRoles(facts, language);
     // Пустой ответ не кэшируется: отказ провайдера не должен становиться
     // «моделью названо ноль ролей» на четверть часа.
     // Причины в кэш не кладутся: попадание не должно писать в лог отказ,
     // случившийся четверть часа назад (INC-035).
     if (outcome.roles.length > 0) {
-      this.entries.set(key, {
-        at: this.now(),
-        outcome: { roles: outcome.roles, ...(outcome.stage ? { stage: outcome.stage } : {}) },
-      });
+      const kept: RoleNamingOutcome = {
+        roles: outcome.roles,
+        ...(outcome.stage ? { stage: outcome.stage } : {}),
+      };
+      this.entries.set(key, { at: this.now(), outcome: kept });
+      this.store?.write(key, { at: this.now(), roles: kept.roles, ...(kept.stage ? { stage: kept.stage } : {}) });
     }
     return outcome;
   }
@@ -460,6 +506,8 @@ export interface RoleNamerConfig {
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
   /** Без тоннеля ступень Gemini не строится вовсе — как и у хода коуча. */
   readonly cloudflareGateway?: CloudflareGatewayConfig;
+  /** Хранилище названных ролей: без него кэш теряется при каждом деплое (B191). */
+  readonly cacheStore?: RoleNamingCacheStore;
 }
 
 /**
@@ -539,5 +587,6 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
       ),
       stages.map((route) => `${route.provider}:${route.model}`),
     ),
+    { ...(config.cacheStore ? { store: config.cacheStore } : {}) },
   );
 }

@@ -1,3 +1,4 @@
+import type { RoleNamingCacheEntry, RoleNamingCacheStore } from './roleNamer';
 import { describe, expect, it, vi } from 'vitest';
 import type { NamedRole } from '../../shared/roleProposals';
 import {
@@ -81,6 +82,52 @@ describe('CachedRoleNamer', () => {
     await namer.nameRoles(facts, 'ru');
     await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: roles });
     expect(inner.nameRoles).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * INC-035: кэш жил только в памяти процесса, поэтому каждый деплой снова звал
+   * модель — и упирался в исчерпанную бесплатную квоту (429).
+   */
+  it('переживает рестарт: второй процесс читает названное из хранилища', async () => {
+    const rows = new Map<string, RoleNamingCacheEntry>();
+    const store: RoleNamingCacheStore = {
+      read: (key) => rows.get(key),
+      write: (key, entry) => {
+        rows.set(key, entry);
+      },
+    };
+
+    const first = { nameRoles: vi.fn().mockResolvedValue({ roles, stage: 'test:stage' }) };
+    await new CachedRoleNamer(first, { store }).nameRoles(facts, 'ru');
+
+    // Новый процесс: своя пустая память, то же хранилище.
+    const second = { nameRoles: vi.fn().mockResolvedValue({ roles, stage: 'test:stage' }) };
+    await expect(
+      new CachedRoleNamer(second, { store }).nameRoles(facts, 'ru'),
+    ).resolves.toMatchObject({ roles, stage: 'test:stage' });
+    expect(second.nameRoles).not.toHaveBeenCalled();
+  });
+
+  it('не отдаёт из хранилища то, что старше срока хранения', async () => {
+    const store: RoleNamingCacheStore = {
+      read: () => ({ at: 0, roles, stage: 'test:stage' }),
+      write: () => undefined,
+    };
+    const inner = { nameRoles: vi.fn().mockResolvedValue({ roles, stage: 'fresh:stage' }) };
+    const namer = new CachedRoleNamer(inner, { store, now: () => 30 * 24 * 60 * 60_000 });
+
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ stage: 'fresh:stage' });
+    expect(inner.nameRoles).toHaveBeenCalledTimes(1);
+  });
+
+  it('не кладёт в хранилище пустой ответ ступени', async () => {
+    const write = vi.fn();
+    const inner = { nameRoles: vi.fn().mockResolvedValue({ roles: [] }) };
+    await new CachedRoleNamer(inner, {
+      store: { read: () => undefined, write },
+    }).nameRoles(facts, 'ru');
+
+    expect(write).not.toHaveBeenCalled();
   });
 
   it('спрашивает заново, когда факты изменились', async () => {
