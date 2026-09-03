@@ -21,7 +21,10 @@
  * Ни один персональный факт владельца сюда не попадает: `dataClass` —
  * `synthetic`, содержимое выдумано.
  *
- *   npx tsx scripts/measure-provider-latency.ts [--probe=empty|real|both]
+ * `--models` обязателен: инструмент никогда не ходит по каталогу целиком.
+ *
+ *   npx tsx scripts/measure-provider-latency.ts --models=<id>[,<id>…]
+ *                                               [--probe=empty|real|both]
  *                                               [--repeat=1] [--timeout=180]
  *                                               [--only=openai,gemini]
  *                                               [--models=gpt-5.6-luna,...]
@@ -263,11 +266,25 @@ const only = argument('only', '')
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean);
-/** Отбор по модели, а не по провайдеру: очередь состоит из моделей (B183). */
+/**
+ * Отбор по модели, а не по провайдеру: очередь состоит из моделей (B183).
+ *
+ * Список обязателен и инструмент без него отказывает. Первый прогон 2026-09-03
+ * шёл по всему каталогу и задел платные модели, которых владелец не называл, —
+ * замер обязан быть закрытым по умолчанию, как и всё остальное в этом
+ * продукте: тратит деньги только то, что названо вслух.
+ */
 const onlyModels = argument('models', '')
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean);
+if (onlyModels.length === 0) {
+  process.stderr.write(
+    '--models is required: name every model to measure, comma separated.\n' +
+      'A catalogue-wide run would call models nobody asked for, and paid ones cost money.\n',
+  );
+  process.exit(2);
+}
 
 const gateway = readCloudflareGatewayConfig(environment);
 const results: Measurement[] = [];

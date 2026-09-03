@@ -167,13 +167,18 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
         structuredOutput: false,
       },
       {
-        // Та же модель без суффикса `:free`. Замер B185 показал, что `:free`
-        // у OpenRouter — не модель, а пул: на третьей попытке из пяти вместо
-        // названной `…-ultra-550b-a55b:free` ответила
-        // `…-super-120b-a12b:free`. Платный идентификатор — единственный
-        // способ получить именно ту модель, которую назвали.
-        id: 'nvidia/nemotron-3-ultra-550b-a55b',
-        releaseDate: '2026-06-04',
+        // Названы владельцем поимённо для замера B185 (2026-09-03). Оба
+        // бесплатны и выпущены до отсечного рубежа, поэтому допуск даёт сам
+        // рубеж, а не исключение.
+        id: 'z-ai/glm-5.2:free',
+        releaseDate: '2026-06-16',
+        pinned: true,
+        lifecycle: 'preview',
+        structuredOutput: false,
+      },
+      {
+        id: 'minimax/minimax-m3:free',
+        releaseDate: '2026-05-31',
         pinned: true,
         lifecycle: 'preview',
         structuredOutput: false,
