@@ -106,8 +106,12 @@ const TITLE_SCAN_LINES = 3;
 function stripTitlePrefix(line: string): string {
   return line
     .replace(/^#\S+\s*/u, '')
+    // Канал открывает строку значком или эмодзи — должность начинается после.
+    .replace(/^[^\p{L}\p{N}«"“(]+/u, '')
     .replace(/^вакансия\s*[:—-]?\s*/iu, '')
     .replace(/^(?:ищем|ищу|ищутся|требуется|требуются|нужен|нужна|нужны)\s+/iu, '')
+    // «в команду ML-инженера» — предлог принадлежит объявлению, не должности.
+    .replace(/^(?:в|во)\s+(?:команду|команде|отдел|штат|проект)\s+/iu, '')
     .trim();
 }
 
@@ -153,6 +157,8 @@ function readTitleLine(line: string): string {
   const chosen = segments.find((segment) => ROLE_WORD.test(segment)) ?? segments[0] ?? base;
   return cutAtClause(afterSeeksVerb(chosen))
     .replace(/[\s.,;:]+$/u, '')
+    // Значок в хвосте строки — тоже не часть должности.
+    .replace(/[^\p{L}\p{N}»"”)]+$/u, '')
     .trim();
 }
 

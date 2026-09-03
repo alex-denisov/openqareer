@@ -174,4 +174,14 @@ describe('extractTelegramJobHeader', () => {
     ]);
     expect(header.title).toBe('Data Engineer');
   });
+
+  /** Строки с прода `34c3f86` после первой правки PRB-018. */
+  it('drops the decoration a channel puts around the role', () => {
+    expect(extractTelegramJobHeader(['📌 Ищем Project Manager’а', 'Задачи:']).title).toBe(
+      'Project Manager’а',
+    );
+    expect(extractTelegramJobHeader(['в команду ML-Инженера 💻', 'Задачи:']).title).toBe(
+      'ML-Инженера',
+    );
+  });
 });
