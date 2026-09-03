@@ -40,21 +40,21 @@ describe('LlmRoleNamer', () => {
       ),
     });
 
-    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [
       { title: 'Продакт-менеджер', reason: 'вёл продукты', evidenceRefs: ['memory:1'] },
-    ]);
+    ] });
   });
 
   it('возвращает пусто, когда модель ответила не по схеме', async () => {
     const namer = new LlmRoleNamer({ apiKey: 'k', model: 'm', client: client('не json') });
-    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([]);
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [] });
   });
 
   it('не спрашивает модель, когда фактов нет', async () => {
     const stub = client('{"roles":[]}');
     const namer = new LlmRoleNamer({ apiKey: 'k', model: 'm', client: stub });
 
-    await expect(namer.nameRoles([], 'ru')).resolves.toEqual([]);
+    await expect(namer.nameRoles([], 'ru')).resolves.toMatchObject({ roles: [] });
     expect(stub.chat.completions.create).not.toHaveBeenCalled();
   });
 
@@ -67,7 +67,7 @@ describe('LlmRoleNamer', () => {
       },
     });
 
-    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([]);
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [] });
   });
 });
 
@@ -75,16 +75,16 @@ describe('CachedRoleNamer', () => {
   const roles = [{ title: 'Продакт-менеджер', reason: 'вёл продукты', evidenceRefs: ['memory:1'] }];
 
   it('не спрашивает модель второй раз, пока факты те же', async () => {
-    const inner = { nameRoles: vi.fn().mockResolvedValue(roles) };
+    const inner = { nameRoles: vi.fn().mockResolvedValue({ roles, stage: 'test:stage' }) };
     const namer = new CachedRoleNamer(inner);
 
     await namer.nameRoles(facts, 'ru');
-    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual(roles);
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: roles });
     expect(inner.nameRoles).toHaveBeenCalledTimes(1);
   });
 
   it('спрашивает заново, когда факты изменились', async () => {
-    const inner = { nameRoles: vi.fn().mockResolvedValue(roles) };
+    const inner = { nameRoles: vi.fn().mockResolvedValue({ roles, stage: 'test:stage' }) };
     const namer = new CachedRoleNamer(inner);
 
     await namer.nameRoles(facts, 'ru');
@@ -93,7 +93,7 @@ describe('CachedRoleNamer', () => {
   });
 
   it('не запоминает отказ: пустой ответ спрашивается заново', async () => {
-    const inner = { nameRoles: vi.fn().mockResolvedValue([]) };
+    const inner = { nameRoles: vi.fn().mockResolvedValue({ roles: [] }) };
     const namer = new CachedRoleNamer(inner);
 
     await namer.nameRoles(facts, 'ru');
@@ -114,9 +114,9 @@ describe('LlmRoleNamer: ответ свободной модели', () => {
       ),
     });
 
-    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [
       { title: 'Продакт-менеджер', reason: 'вёл продукты', evidenceRefs: ['memory:1'] },
-    ]);
+    ] });
   });
 
   it('читает ответ, где модель назвала поля по-своему', async () => {
@@ -136,13 +136,13 @@ describe('LlmRoleNamer: ответ свободной модели', () => {
       ),
     });
 
-    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [
       {
         title: 'Product Manager (Fintech)',
         reason: 'Девять лет вёл внутренние продукты',
         evidenceRefs: ['memory:1'],
       },
-    ]);
+    ] });
   });
 
   it('не просит json_object у модели без структурированного вывода', async () => {
@@ -183,7 +183,9 @@ describe('LlmRoleNamer и структурированный вывод OpenRout
 
 describe('QueuedRoleNamer', () => {
   const namer = (roles: NamedRole[]): RoleNamer => ({
-    nameRoles: vi.fn().mockResolvedValue(roles),
+    nameRoles: vi
+      .fn()
+      .mockResolvedValue(roles.length > 0 ? { roles, stage: 'test:stage' } : { roles: [] }),
   });
 
   it('отдаёт ответ первой ступени, которая назвала роли', async () => {
@@ -193,9 +195,9 @@ describe('QueuedRoleNamer', () => {
 
     const queued = new QueuedRoleNamer([first, second, third]);
 
-    await expect(queued.nameRoles(facts, 'ru')).resolves.toEqual([
+    await expect(queued.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [
       { title: 'COO', reason: 'вёл операции', evidenceRefs: ['memory:1'] },
-    ]);
+    ] });
     // Молчание первой ступени — повод спросить следующую, а не отдать пусто.
     expect(first.nameRoles).toHaveBeenCalled();
     // Ступень за ответившей не тревожится.
@@ -204,7 +206,7 @@ describe('QueuedRoleNamer', () => {
 
   it('пусто, когда промолчали все', async () => {
     const queued = new QueuedRoleNamer([namer([]), namer([])]);
-    await expect(queued.nameRoles(facts, 'ru')).resolves.toEqual([]);
+    await expect(queued.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [] });
   });
 });
 
@@ -270,9 +272,9 @@ describe('GeminiRoleNamer', () => {
       },
     });
 
-    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [
       { title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] },
-    ]);
+    ] });
 
     expect(calls[0]?.url).toBe(
       'https://gateway.test/google-ai-studio/v1beta/models/gemini-3.6-flash:generateContent',
@@ -292,7 +294,7 @@ describe('GeminiRoleNamer', () => {
       baseUrl: 'https://gateway.test/v1beta',
       fetchImpl: async () => new Response('overloaded', { status: 503 }),
     });
-    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([]);
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [] });
   });
 });
 
@@ -343,9 +345,10 @@ describe('язык названия у ступеней и кэша', () => {
 
   it('кэш не выдаёт русский ответ за английский', async () => {
     const inner: RoleNamer = {
-      nameRoles: vi
-        .fn()
-        .mockResolvedValue([{ title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] }]),
+      nameRoles: vi.fn().mockResolvedValue({
+        roles: [{ title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] }],
+        stage: 'test:stage',
+      }),
     };
     const cached = new CachedRoleNamer(inner);
 
@@ -354,5 +357,42 @@ describe('язык названия у ступеней и кэша', () => {
 
     // Те же факты на другом языке — другой ответ, а не попадание в кэш.
     expect(inner.nameRoles).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('провенанс ступени называния', () => {
+  it('очередь называет ступень, которая ответила', async () => {
+    const silent: RoleNamer = { nameRoles: vi.fn().mockResolvedValue({ roles: [] }) };
+    const answered: RoleNamer = {
+      nameRoles: vi.fn().mockResolvedValue({
+        roles: [{ title: 'COO', reason: 'вёл операции', evidenceRefs: ['memory:1'] }],
+        stage: 'openai:gpt-5.6-luna',
+      }),
+    };
+
+    await expect(new QueuedRoleNamer([silent, answered]).nameRoles(facts, 'en')).resolves.toEqual({
+      roles: [{ title: 'COO', reason: 'вёл операции', evidenceRefs: ['memory:1'] }],
+      stage: 'openai:gpt-5.6-luna',
+    });
+  });
+
+  it('ступень называет себя своим же именем из очереди', async () => {
+    const namer = new LlmRoleNamer({
+      apiKey: 'k',
+      model: 'm',
+      stage: 'openrouter:openrouter/free',
+      client: client(
+        JSON.stringify({ roles: [{ title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] }] }),
+      ),
+    });
+
+    await expect(namer.nameRoles(facts, 'en')).resolves.toMatchObject({
+      stage: 'openrouter:openrouter/free',
+    });
+  });
+
+  it('молчание ступени ступенью не называется', async () => {
+    const namer = new LlmRoleNamer({ apiKey: 'k', model: 'm', stage: 'openrouter:x', client: client(null) });
+    await expect(namer.nameRoles(facts, 'en')).resolves.toEqual({ roles: [] });
   });
 });

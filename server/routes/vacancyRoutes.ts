@@ -4,6 +4,7 @@ import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
 import { resolveRoleNameLanguage } from '../domain/roleNameLanguage';
 import { vacancySubscriptionInputSchema } from '../domain/vacancy';
 import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
+import type { NamedRole } from '../../shared/roleProposals';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import { buildRoleProposals } from '../vacancies/roleHypotheses';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
@@ -149,11 +150,24 @@ const handleRoleHypotheses: Handler = async (
     targetRoles,
     resumeText: facts.map((fact) => fact.statement).join(' '),
   });
-  const named = roleNamer ? await roleNamer.nameRoles(facts, language) : [];
+  const naming = roleNamer
+    ? await roleNamer.nameRoles(facts, language)
+    : { roles: [] as NamedRole[] };
 
   return {
-    data: buildRoleProposals({ matched, named, candidateSkills: confirmedSkills }),
-    meta: { requestId: request.id, poolSize: matched.length },
+    data: buildRoleProposals({
+      matched,
+      named: naming.roles,
+      candidateSkills: confirmedSkills,
+    }),
+    meta: {
+      requestId: request.id,
+      poolSize: matched.length,
+      // Кто именно назвал роли и на каком языке: очередь из четырёх моделей
+      // сдвигается молча, и без этого разница между 12 и 66 секундами на проде
+      // не читается ниоткуда (B180).
+      roleNaming: { stage: naming.stage ?? null, language },
+    },
   };
 };
 

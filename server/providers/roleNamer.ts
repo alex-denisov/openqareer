@@ -47,6 +47,19 @@ export interface CandidateFact {
   readonly statement: string;
 }
 
+/**
+ * Ответ называния вместе с провенансом.
+ *
+ * Ступень названа наружу, потому что очередь из четырёх моделей молча
+ * сдвигается: на проде первый ответ занял то 12, то 66 секунд, и понять по
+ * ответу, кто его дал, было нельзя. Отчёт обязан совпадать с поведением (B183).
+ * `stage` пуст ровно тогда, когда не ответил никто.
+ */
+export interface RoleNamingOutcome {
+  readonly roles: NamedRole[];
+  readonly stage?: string;
+}
+
 export interface RoleNamer {
   /**
    * Пустой список — законный ответ: он означает «модель не назвала».
@@ -58,7 +71,7 @@ export interface RoleNamer {
   nameRoles(
     facts: readonly CandidateFact[],
     language: RoleNameLanguage,
-  ): Promise<NamedRole[]>;
+  ): Promise<RoleNamingOutcome>;
 }
 
 export interface LlmRoleNamerOptions {
@@ -72,6 +85,8 @@ export interface LlmRoleNamerOptions {
    * этого условия пропадала бы молча, а роль оставалась неназванной.
    */
   requireParameters?: boolean;
+  /** Имя ступени в очереди — оно же уходит в провенанс ответа. */
+  stage?: string;
   client?: ChatCompletionClient;
 }
 
@@ -88,9 +103,11 @@ export class LlmRoleNamer implements RoleNamer {
   private readonly model: string;
   private readonly structuredOutput: boolean;
   private readonly requireParameters: boolean;
+  private readonly stage: string;
 
   constructor(options: LlmRoleNamerOptions) {
     this.model = options.model;
+    this.stage = options.stage ?? options.model;
     this.structuredOutput = options.structuredOutput ?? false;
     this.requireParameters = options.requireParameters ?? false;
     this.client =
@@ -106,9 +123,9 @@ export class LlmRoleNamer implements RoleNamer {
   async nameRoles(
     facts: readonly CandidateFact[],
     language: RoleNameLanguage,
-  ): Promise<NamedRole[]> {
+  ): Promise<RoleNamingOutcome> {
     // Спрашивать модель не о чем — это не отказ провайдера, а отсутствие входа.
-    if (facts.length === 0) return [];
+    if (facts.length === 0) return { roles: [] };
     try {
       const response = await this.client.chat.completions.create({
         model: this.model,
@@ -128,10 +145,10 @@ export class LlmRoleNamer implements RoleNamer {
             }
           : {}),
       });
-      return parseRoles(response.choices[0]?.message?.content ?? null);
+      return named(parseRoles(response.choices[0]?.message?.content ?? null), this.stage);
     } catch {
       // Молчание провайдера не должно ронять панель: роль просто не названа.
-      return [];
+      return { roles: [] };
     }
   }
 }
@@ -160,6 +177,11 @@ function serializeFacts(facts: readonly CandidateFact[]): string {
       statement: fact.statement.slice(0, MAX_STATEMENT),
     })),
   });
+}
+
+/** Ступень называется только когда она действительно назвала роли. */
+function named(roles: NamedRole[], stage: string): RoleNamingOutcome {
+  return roles.length > 0 ? { roles, stage } : { roles: [] };
 }
 
 function parseRoles(content: string | null): NamedRole[] {
@@ -197,6 +219,8 @@ export interface GeminiRoleNamerOptions {
   model: string;
   baseUrl: string;
   extraHeaders?: Record<string, string>;
+  /** Имя ступени в очереди — оно же уходит в провенанс ответа. */
+  stage?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }
@@ -211,8 +235,8 @@ export class GeminiRoleNamer implements RoleNamer {
   async nameRoles(
     facts: readonly CandidateFact[],
     language: RoleNameLanguage,
-  ): Promise<NamedRole[]> {
-    if (facts.length === 0) return [];
+  ): Promise<RoleNamingOutcome> {
+    if (facts.length === 0) return { roles: [] };
     try {
       const response = await this.fetchImpl(
         `${this.options.baseUrl.replace(/\/+$/u, '')}/models/${encodeURIComponent(
@@ -238,16 +262,19 @@ export class GeminiRoleNamer implements RoleNamer {
           signal: AbortSignal.timeout(this.options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS),
         },
       );
-      if (!response.ok) return [];
+      if (!response.ok) return { roles: [] };
       const body = (await response.json()) as {
         candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
       };
-      return parseRoles(
-        body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? null,
+      return named(
+        parseRoles(
+          body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? null,
+        ),
+        this.options.stage ?? this.options.model,
       );
     } catch {
       // Тот же уговор, что и у остальных ступеней: молчание не роняет панель.
-      return [];
+      return { roles: [] };
     }
   }
 }
@@ -266,7 +293,7 @@ export class GeminiRoleNamer implements RoleNamer {
  * (нужна миграция хранилища), а не побочный эффект этого среза.
  */
 export class CachedRoleNamer implements RoleNamer {
-  private readonly entries = new Map<string, { at: number; roles: NamedRole[] }>();
+  private readonly entries = new Map<string, { at: number; outcome: RoleNamingOutcome }>();
 
   constructor(
     readonly inner: RoleNamer,
@@ -277,18 +304,18 @@ export class CachedRoleNamer implements RoleNamer {
   async nameRoles(
     facts: readonly CandidateFact[],
     language: RoleNameLanguage,
-  ): Promise<NamedRole[]> {
+  ): Promise<RoleNamingOutcome> {
     // Язык — часть ключа: те же факты на другом языке дают другой ответ.
     const key = createHash('sha256')
       .update(`${language}\n${serializeFacts(facts)}`)
       .digest('hex');
     const cached = this.entries.get(key);
-    if (cached && this.now() - cached.at < this.ttlMs) return cached.roles;
-    const roles = await this.inner.nameRoles(facts, language);
+    if (cached && this.now() - cached.at < this.ttlMs) return cached.outcome;
+    const outcome = await this.inner.nameRoles(facts, language);
     // Пустой ответ не кэшируется: отказ провайдера не должен становиться
     // «моделью названо ноль ролей» на четверть часа.
-    if (roles.length > 0) this.entries.set(key, { at: this.now(), roles });
-    return roles;
+    if (outcome.roles.length > 0) this.entries.set(key, { at: this.now(), outcome });
+    return outcome;
   }
 }
 
@@ -311,12 +338,12 @@ export class QueuedRoleNamer implements RoleNamer {
   async nameRoles(
     facts: readonly CandidateFact[],
     language: RoleNameLanguage,
-  ): Promise<NamedRole[]> {
+  ): Promise<RoleNamingOutcome> {
     for (const stage of this.stages) {
-      const roles = await stage.nameRoles(facts, language);
-      if (roles.length > 0) return roles;
+      const outcome = await stage.nameRoles(facts, language);
+      if (outcome.roles.length > 0) return outcome;
     }
-    return [];
+    return { roles: [] };
   }
 }
 
@@ -389,12 +416,14 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
           ? new GeminiRoleNamer({
               apiKey: route.apiKey,
               model: route.model,
+              stage: `${route.provider}:${route.model}`,
               baseUrl: geminiGatewayBaseUrl(gateway),
               extraHeaders: cloudflareGatewayHeaders(gateway),
             })
           : new LlmRoleNamer({
               apiKey: route.apiKey,
               model: route.model,
+              stage: `${route.provider}:${route.model}`,
               baseUrl:
                 route.provider === 'openai'
                   ? undefined
