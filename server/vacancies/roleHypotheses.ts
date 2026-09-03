@@ -1,4 +1,5 @@
 import type { RoleObservation } from '../../shared/poolRoleHypotheses';
+import type { WorkPreferenceResult } from '../../shared/workPreferences';
 import {
   confirmRoleTitle,
   proposeRoles,
@@ -42,11 +43,14 @@ export function buildRoleProposals(input: {
   readonly matched: readonly MatchedVacancyItem[];
   readonly named: readonly NamedRole[];
   readonly candidateSkills: readonly string[];
+  /** Ответы на задания меняют порядок ролей, но не состав (B180, срез 3). */
+  readonly preferences?: WorkPreferenceResult;
 }): ProposedRole[] {
   return proposeRoles({
     named: input.named,
     pool: observations(input.matched),
     candidateSkills: input.candidateSkills,
+    ...(input.preferences ? { preferences: input.preferences } : {}),
   });
 }
 

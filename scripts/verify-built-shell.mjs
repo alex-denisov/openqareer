@@ -308,6 +308,64 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
+  // Задания «Какие роли мне подходят» тоже спрашиваются «Главной» (B180,
+  // срез 3). Отвечаем пройденным прогоном: панель обязана напечатать числа со
+  // знаменателями, а не сводный балл.
+  await page.route('**/api/v1/candidate/work-preferences', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          keyVersion: 'work-preferences-pairs-v1',
+          tasks: [
+            {
+              id: 'monday',
+              prompt: 'Понедельник, девять утра. Что возьмёте первым?',
+              options: [
+                { id: 'monday-queue', text: 'Разобрать очередь из сорока заявок.', family: 'ПП' },
+                { id: 'monday-why', text: 'Понять, почему заявок стало сорок.', family: 'НН' },
+              ],
+            },
+          ],
+          families: [
+            { code: 'ПП', name: 'Порядок и поток', about: 'операции, логистика, процессы' },
+            { code: 'НН', name: 'Неопределённость и направление', about: 'продукт, стратегия' },
+          ],
+          maxExcluded: 2,
+          run: {
+            keyVersion: 'work-preferences-pairs-v1',
+            completedAt: '2026-09-03T09:00:00.000Z',
+            result: {
+              keyVersion: 'work-preferences-pairs-v1',
+              answered: 12,
+              counts: [
+                {
+                  family: 'ПП',
+                  name: 'Порядок и поток',
+                  value: 3,
+                  total: 3,
+                  basis: 'выбрали 3 раза из 3, когда это предлагалось',
+                },
+              ],
+              excluded: [],
+              discriminates: true,
+              ranked: [
+                {
+                  family: 'ПП',
+                  name: 'Порядок и поток',
+                  value: 3,
+                  total: 3,
+                  basis: 'выбрали 3 раза из 3, когда это предлагалось',
+                },
+              ],
+            },
+          },
+        },
+        meta: {},
+      }),
+    });
+  });
   // «Стратегия» спрашивается «Главной» отдельным маршрутом (B180, срез 2).
   // Без ответа прогон записал бы 502, который увидел бы и кандидат. Отвечаем
   // выбранной ролью со второй версией: панель обязана напечатать и причину

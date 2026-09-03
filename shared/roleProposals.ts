@@ -1,3 +1,5 @@
+import { roleWorkFamily } from './roleWorkFamilies';
+import type { WorkFamilyCode, WorkPreferenceResult } from './workPreferences';
 import {
   describeGroup,
   groupObservations,
@@ -55,6 +57,11 @@ export interface ProposedRole {
   readonly reason: string | null;
   readonly evidenceRefs: readonly string[];
   readonly confirmation: RoleConfirmation;
+  /**
+   * Вид работы, к которому роль относит **таблица кода** (B180, срез 3).
+   * `null` — таблица роль не знает, и ответы кандидата её не двигают.
+   */
+  readonly family: WorkFamilyCode | null;
 }
 
 /** Больше пяти ролей кандидат не сравнивает — он их пролистывает. */
@@ -64,6 +71,12 @@ export function proposeRoles(input: {
   readonly named: readonly NamedRole[];
   readonly pool: readonly RoleObservation[];
   readonly candidateSkills: readonly string[];
+  /**
+   * Ответы на задания «Какие роли мне подходят» (B180, срез 3). Они меняют
+   * **порядок** внутри одного яруса доказанности и никогда — состав: задания
+   * уточняют порядок уже прошедших рынок гипотез, а не находят роли.
+   */
+  readonly preferences?: WorkPreferenceResult;
 }): ProposedRole[] {
   const groups = groupObservations(input.pool);
   const skills = new Set(
@@ -87,6 +100,7 @@ export function proposeRoles(input: {
           reason: role.reason.trim(),
           evidenceRefs: role.evidenceRefs,
           confirmation: confirmationFor(group, skills),
+          family: roleWorkFamily(role.title),
         },
       ];
     });
@@ -102,10 +116,36 @@ export function proposeRoles(input: {
         reason: null,
         evidenceRefs: [],
         confirmation: { state: 'observed', ...withoutIdentity(described) },
+        family: roleWorkFamily(described.title),
       };
     });
 
-  return [...fromModel, ...fromMarket].sort(byEvidence).slice(0, MAX_PROPOSALS);
+  return [...fromModel, ...fromMarket]
+    .sort(byEvidenceThen(preferenceRank(input.preferences)))
+    .slice(0, MAX_PROPOSALS);
+}
+
+/**
+ * Место вида работы в ответах кандидата: чем меньше число, тем выше роль
+ * внутри своего яруса доказанности.
+ *
+ * Роль без известного вида работы и роль вне краёв распределения стоят
+ * посередине — их ответы не двигают. Исключённый вид работы («точно не хочу»)
+ * уходит в конец яруса, но **не исчезает**: убирать роль с экрана за
+ * предпочтение значило бы решать за кандидата.
+ */
+function preferenceRank(
+  preferences: WorkPreferenceResult | undefined,
+): (role: ProposedRole) => number {
+  if (!preferences || !preferences.discriminates) return () => 0;
+  const ranked = new Map(
+    preferences.ranked.map((count, index) => [count.family, index - preferences.ranked.length]),
+  );
+  return (role) => {
+    if (!role.family) return 0;
+    if (preferences.excluded.includes(role.family)) return 1;
+    return ranked.get(role.family) ?? 0;
+  };
 }
 
 /**
@@ -161,10 +201,16 @@ function withoutIdentity(
 /** Порядок задаёт доказательство, а не модель: сначала подтверждённое. */
 const STATE_RANK = { observed: 0, 'too-few': 1, 'not-found': 2 } as const;
 
-function byEvidence(left: ProposedRole, right: ProposedRole): number {
-  const rank = STATE_RANK[left.confirmation.state] - STATE_RANK[right.confirmation.state];
-  if (rank !== 0) return rank;
-  return sampleOf(right) - sampleOf(left) || left.title.localeCompare(right.title);
+function byEvidenceThen(rankOf: (role: ProposedRole) => number) {
+  return (left: ProposedRole, right: ProposedRole): number => {
+    // Ярус доказанности первым: ответы кандидата не могут поднять роль без
+    // вакансий над ролью, которую подтвердил пул.
+    const tier = STATE_RANK[left.confirmation.state] - STATE_RANK[right.confirmation.state];
+    if (tier !== 0) return tier;
+    const preference = rankOf(left) - rankOf(right);
+    if (preference !== 0) return preference;
+    return sampleOf(right) - sampleOf(left) || left.title.localeCompare(right.title);
+  };
 }
 
 function sampleOf(role: ProposedRole): number {

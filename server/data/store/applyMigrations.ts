@@ -22,6 +22,7 @@ import {
   MIGRATION_20,
   MIGRATION_21,
   MIGRATION_24,
+  MIGRATION_25,
 } from '../sqliteSchema';
 
 const MIGRATIONS = [
@@ -49,6 +50,7 @@ const MIGRATIONS = [
   // Номер константы (24) больше номера версии: `MIGRATION_22` и `MIGRATION_23`
   // применяют своими соединениями служба входа и хранилище пула вакансий.
   MIGRATION_24,
+  MIGRATION_25,
 ];
 
 export function applyMigrations(

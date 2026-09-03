@@ -670,3 +670,20 @@ CREATE TABLE career_strategies (
   updated_at TEXT NOT NULL
 ) STRICT;
 `;
+
+/**
+ * B180 срез 3 — ответы на задания «Какие роли мне подходят».
+ *
+ * Версия ключа лежит в строке рядом с ответами: формулировки заданий
+ * версионируются вместе с ключом, и результат, посчитанный по прежним словам,
+ * нельзя молча выдавать за результат по новым.
+ */
+export const MIGRATION_25 = `
+CREATE TABLE work_preference_runs (
+  candidate_id TEXT PRIMARY KEY REFERENCES candidates(id) ON DELETE CASCADE,
+  key_version TEXT NOT NULL,
+  run_cipher TEXT NOT NULL,
+  completed_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
+`;

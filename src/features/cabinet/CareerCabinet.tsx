@@ -19,6 +19,7 @@ import {
 import { cabinetJourney } from './cabinetJourney';
 import { useRoleHypotheses } from '../career-map/useRoleHypotheses';
 import { useCareerStrategy, type CareerStrategyRead } from './useCareerStrategy';
+import { useWorkPreferences, type WorkPreferencesState } from './useWorkPreferences';
 import type { ProposedRole } from '../../../shared/roleProposals';
 import type { CareerCabinetView } from './cabinetViews';
 
@@ -76,6 +77,8 @@ export function CareerCabinet({
   // Выбранная роль — версионированный объект, а не свободная строка анкеты:
   // кампания «Поиск» берёт направление из него (B180, срез 2).
   const strategy = useCareerStrategy();
+  // Задания меняют порядок ролей, а не их состав (B180, срез 3).
+  const workPreferences = useWorkPreferences();
   const journey = useMemo(
     () =>
       cabinetJourney({
@@ -129,6 +132,7 @@ export function CareerCabinet({
           journey={journey}
           proposedRoles={proposedRoles}
           strategy={strategy}
+          workPreferences={workPreferences}
           pool={pool}
           data={data}
           onNavigate={onNavigate}
@@ -153,6 +157,7 @@ function CabinetSection({
   journey,
   proposedRoles,
   strategy,
+  workPreferences,
   pool,
   data,
   onNavigate,
@@ -169,6 +174,7 @@ function CabinetSection({
   journey: ReturnType<typeof cabinetJourney>;
   proposedRoles: readonly ProposedRole[];
   strategy: CareerStrategyRead;
+  workPreferences: WorkPreferencesState;
   pool: ReturnType<typeof useMatchedPool>;
   data: ReturnType<typeof useCareerCabinetData>;
   onNavigate: (view: CareerCabinetView) => void;
@@ -190,6 +196,7 @@ function CabinetSection({
         journey={journey}
         proposedRoles={proposedRoles}
         strategy={strategy}
+        workPreferences={workPreferences}
         poolComplete={pool.complete}
         poolTotal={pool.poolTotal}
         loading={data.loading}

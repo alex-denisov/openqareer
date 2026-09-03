@@ -6,6 +6,14 @@ import { vacancySubscriptionInputSchema } from '../domain/vacancy';
 import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
 import type { NamedRole, ProposedRole } from '../../shared/roleProposals';
 import {
+  MAX_EXCLUDED_FAMILIES,
+  scoreWorkPreferences,
+  WORK_FAMILIES,
+  WORK_PREFERENCE_KEY_VERSION,
+  WORK_PREFERENCE_TASKS,
+  type WorkFamilyCode,
+} from '../../shared/workPreferences';
+import {
   candidateNamedStrategyRole,
   chooseStrategyRole,
   strategyRoleFromProposal,
@@ -207,11 +215,19 @@ async function readRoleContext(
     : { roles: [] as NamedRole[] };
   reportRoleNamingFailures(request, roleNamingFailures, naming.failures ?? []);
 
+  // Ответы на задания меняют порядок ролей одного яруса и никогда — состав
+  // (B180, срез 3). Прогон по прежней версии ключа в счёт не идёт: смена
+  // формулировок меняет смысл сохранённых ответов.
+  const run = candidateStore.getWorkPreferenceRun(candidateId);
+  const preferences =
+    run && run.keyVersion === WORK_PREFERENCE_KEY_VERSION ? run.result : undefined;
+
   return {
     proposals: buildRoleProposals({
       matched,
       named: naming.roles,
       candidateSkills: confirmedSkills,
+      ...(preferences ? { preferences } : {}),
     }),
     matched,
     poolSize: matched.length,
@@ -225,6 +241,73 @@ async function readRoleContext(
     },
   };
 }
+
+/**
+ * Задания «Какие роли мне подходят» (B180, срез 3).
+ *
+ * Формулировки едут вместе с версией ключа: они версионируются вместе, и
+ * результат, посчитанный по прежним словам, нельзя выдавать за результат по
+ * новым. Правильных ответов нет — инструмент строит порядок, а не оценку.
+ */
+const handleReadWorkPreferences: Handler = async (deps, request, reply) => {
+  const candidate = authenticateCandidate(
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
+  );
+  if (!candidate) return undefined;
+  return {
+    data: {
+      keyVersion: WORK_PREFERENCE_KEY_VERSION,
+      tasks: WORK_PREFERENCE_TASKS,
+      families: WORK_FAMILIES,
+      maxExcluded: MAX_EXCLUDED_FAMILIES,
+      // Отсутствие прогона — не ошибка: кандидат ещё не проходил задания.
+      run: deps.candidateStore.getWorkPreferenceRun(candidate.id),
+    },
+    meta: { requestId: request.id },
+  };
+};
+
+const workPreferenceSubmissionSchema = z.object({
+  answers: z
+    .array(
+      z.object({
+        taskId: z.string().trim().min(1).max(60),
+        optionId: z.string().trim().min(1).max(60),
+      }),
+    )
+    .max(WORK_PREFERENCE_TASKS.length),
+  excluded: z
+    .array(z.enum(WORK_FAMILIES.map((family) => family.code) as [string, ...string[]]))
+    .max(WORK_FAMILIES.length)
+    .default([]),
+});
+
+const handleSubmitWorkPreferences: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const body = workPreferenceSubmissionSchema.parse(request.body);
+  const excluded = body.excluded as WorkFamilyCode[];
+
+  const run = {
+    keyVersion: WORK_PREFERENCE_KEY_VERSION,
+    answers: body.answers,
+    excluded,
+    // Числа считает код: у каждого есть знаменатель, и сводного балла нет.
+    result: scoreWorkPreferences({ answers: body.answers, excluded }),
+    completedAt: new Date().toISOString(),
+  };
+
+  return {
+    data: candidateStore.saveWorkPreferenceRun(candidate.id, run),
+    meta: { requestId: request.id },
+  };
+};
 
 /**
  * «Стратегия» — выбранная роль как версионированный объект (B180, срез 2).
@@ -593,6 +676,12 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
   );
   app.get('/api/v1/candidate/matched-vacancies', withDeps(deps, handleMatchedVacancies));
   app.get('/api/v1/candidate/role-hypotheses', withDeps(deps, handleRoleHypotheses));
+  app.get('/api/v1/candidate/work-preferences', withDeps(deps, handleReadWorkPreferences));
+  app.post(
+    '/api/v1/candidate/work-preferences',
+    { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } },
+    withDeps(deps, handleSubmitWorkPreferences),
+  );
   app.get('/api/v1/candidate/strategy', withDeps(deps, handleReadStrategy));
   app.post(
     '/api/v1/candidate/strategy',

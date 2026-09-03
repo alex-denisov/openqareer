@@ -1,5 +1,6 @@
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type { CareerStrategy } from '../../shared/careerStrategy';
+import type { StoredWorkPreferenceRun } from './sqliteWorkPreferenceRepository';
 import type {
   CoachMessage,
   CoachPhase,
@@ -79,6 +80,8 @@ export interface CandidateExport extends CandidateSnapshot {
   sourceConnections: ExportedNativeSourceConnection[];
   /** Выбранная роль с историей решений (B180, срез 2). */
   careerStrategy: CareerStrategy | null;
+  /** Ответы на задания «Какие роли мне подходят» (B180, срез 3). */
+  workPreferences: StoredWorkPreferenceRun | null;
 }
 
 type CandidateDocumentKind =
@@ -389,6 +392,13 @@ export interface CandidateStore {
    * The candidate's own wizard answers. Browser storage is a cache of this,
    * not the record — signing out must not erase a career context (INC-024).
    */
+  getWorkPreferenceRun(candidateId: string): StoredWorkPreferenceRun | null;
+
+  saveWorkPreferenceRun(
+    candidateId: string,
+    run: StoredWorkPreferenceRun,
+  ): StoredWorkPreferenceRun;
+
   getCareerStrategy(candidateId: string): CareerStrategy | null;
 
   saveCareerStrategy(candidateId: string, strategy: CareerStrategy): CareerStrategy;

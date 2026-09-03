@@ -121,6 +121,7 @@ describe('RolesMarketPanel: роль называет модель, пул по�
     origin: 'model',
     reason: 'девять лет вели внутренние продукты',
     evidenceRefs: ['memory:1'],
+    family: null,
     confirmation: {
       state: 'observed',
       sampleSize: 9,
@@ -138,6 +139,7 @@ describe('RolesMarketPanel: роль называет модель, пул по�
     origin: 'model',
     reason: 'запускали рост в двух компаниях',
     evidenceRefs: ['memory:2'],
+    family: null,
     confirmation: { state: 'not-found' },
   };
 
@@ -204,6 +206,7 @@ describe('RolesMarketPanel: выбор роли в «Стратегию» (B180 
     origin: 'model',
     reason: 'вёл продукты девять лет',
     evidenceRefs: ['memory:1'],
+    family: null,
     confirmation: { state: 'not-found' },
   };
 

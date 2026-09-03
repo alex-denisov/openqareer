@@ -7427,6 +7427,47 @@
   resize: vertical;
 }
 
+/* Задания «Какие роли мне подходят»: один парный выбор за раз. */
+.career-work-preferences {
+  display: grid;
+  gap: 6px;
+}
+
+.career-work-preferences small {
+  color: var(--career-text-dim);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.career-work-task {
+  display: grid;
+  gap: 8px;
+}
+
+.career-work-task-prompt {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.career-work-task .career-quiet-button {
+  text-align: left;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.career-work-exclude {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.career-work-exclude small {
+  display: block;
+}
+
 /* «Стратегия»: выбранная роль, её версия и то, на чём она стоит. */
 .career-strategy {
   display: grid;

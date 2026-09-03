@@ -46,6 +46,10 @@ import { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
 import { SqliteDocumentRepository } from './sqliteDocumentRepository';
 import { SqliteVacancyRepository } from './sqliteVacancyRepository';
 import { SqliteCareerStrategyRepository } from './sqliteCareerStrategyRepository';
+import {
+  SqliteWorkPreferenceRepository,
+  type StoredWorkPreferenceRun,
+} from './sqliteWorkPreferenceRepository';
 import type { CareerStrategy } from '../../shared/careerStrategy';
 import type {
   StoredVacancy,
@@ -93,6 +97,7 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly documentRepository: SqliteDocumentRepository;
   private readonly vacancyRepository: SqliteVacancyRepository;
   private readonly careerStrategyRepository: SqliteCareerStrategyRepository;
+  private readonly workPreferenceRepository: SqliteWorkPreferenceRepository;
   private readonly conversations: ConversationController;
   private readonly sourceConnections: SourceConnectionController;
 
@@ -118,6 +123,7 @@ export class SqliteCandidateStore implements CandidateStore {
       documentRepository: this.documentRepository,
       vacancyRepository: this.vacancyRepository,
       careerStrategyRepository: this.careerStrategyRepository,
+      workPreferenceRepository: this.workPreferenceRepository,
     } = createRepositories(this.database, this.sealedText));
     this.conversations = new ConversationController({
       database: this.database,
@@ -424,6 +430,20 @@ export class SqliteCandidateStore implements CandidateStore {
     return this.resumeRepository.save(candidateId, draft, evidenceSnapshot);
   }
 
+  /** Ответы на задания «Какие роли мне подходят» (B180, срез 3). */
+  getWorkPreferenceRun(candidateId: string): StoredWorkPreferenceRun | null {
+    this.requireCandidate(candidateId);
+    return this.workPreferenceRepository.get(candidateId);
+  }
+
+  saveWorkPreferenceRun(
+    candidateId: string,
+    run: StoredWorkPreferenceRun,
+  ): StoredWorkPreferenceRun {
+    this.requireCandidate(candidateId);
+    return this.workPreferenceRepository.save(candidateId, run);
+  }
+
   /** Выбранная роль как версионированный объект (B180, срез 2). */
   getCareerStrategy(candidateId: string): CareerStrategy | null {
     this.requireCandidate(candidateId);
@@ -602,6 +622,7 @@ export class SqliteCandidateStore implements CandidateStore {
       })),
       // Решение о собственной роли — данные кандидата, а не служебная запись.
       careerStrategy: this.careerStrategyRepository.get(candidateId),
+      workPreferences: this.workPreferenceRepository.get(candidateId),
       documentContents: snapshot.documents.flatMap((document) => {
         const stored = this.documentRepository.get(candidateId, document.id);
         return stored ? [stored] : [];
@@ -773,6 +794,7 @@ interface StoreRepositories {
   documentRepository: SqliteDocumentRepository;
   vacancyRepository: SqliteVacancyRepository;
   careerStrategyRepository: SqliteCareerStrategyRepository;
+  workPreferenceRepository: SqliteWorkPreferenceRepository;
 }
 
 function createRepositories(
@@ -791,5 +813,6 @@ function createRepositories(
     documentRepository: new SqliteDocumentRepository(database, sealedText),
     vacancyRepository: new SqliteVacancyRepository(database, sealedText),
     careerStrategyRepository: new SqliteCareerStrategyRepository(database, sealedText),
+    workPreferenceRepository: new SqliteWorkPreferenceRepository(database, sealedText),
   };
 }

@@ -87,8 +87,14 @@ export interface RoleNamingStageFailure {
   readonly detail?: string;
 }
 
-/** Длиннее этого причина отказа ничего оператору не добавляет. */
-const MAX_FAILURE_DETAIL = 300;
+/**
+ * Длиннее этого причина отказа ничего оператору не добавляет.
+ *
+ * Шестьсот, а не триста: живой отказ Gemini на проде 2026-09-03 обрезался
+ * ровно перед именем исчерпанной квоты («* Quota ex…»), а именно оно отличает
+ * лимит в минуту от лимита в сутки (INC-035).
+ */
+const MAX_FAILURE_DETAIL = 600;
 
 /** Ключ провайдера не покидает процесс даже в логе. */
 function failureDetail(text: string, apiKey: string): string | undefined {

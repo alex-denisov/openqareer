@@ -15,6 +15,8 @@ import { assessProfile, type ProfileMeasure, type ProfileScore } from './profile
 import { buildProfileView } from './profileView';
 import { RolesMarketPanel, type RoleChoiceActions } from './RolesMarketPanel';
 import { CareerStrategyPanel } from './CareerStrategyPanel';
+import { WorkPreferencesPanel } from './WorkPreferencesPanel';
+import type { WorkPreferencesState } from './useWorkPreferences';
 import type { CareerStrategyRead } from './useCareerStrategy';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { ProposedRole } from '../../../shared/roleProposals';
@@ -43,6 +45,8 @@ interface CareerHomeProps {
   readonly proposedRoles?: readonly ProposedRole[];
   /** Выбранная роль и её история — «Стратегия» (B180, срез 2). */
   readonly strategy?: CareerStrategyRead;
+  /** Задания «Какие роли мне подходят» (B180, срез 3). */
+  readonly workPreferences?: WorkPreferencesState;
   readonly poolComplete?: boolean;
   readonly poolTotal?: number;
   readonly loading: boolean;
@@ -101,6 +105,7 @@ function HomeRail({
   journey,
   proposedRoles,
   strategy,
+  workPreferences,
   poolComplete,
   poolTotal,
   importing,
@@ -113,6 +118,7 @@ function HomeRail({
   journey?: CareerJourney;
   proposedRoles?: readonly ProposedRole[];
   strategy?: CareerStrategyRead;
+  workPreferences?: WorkPreferencesState;
   poolComplete?: boolean;
   poolTotal?: number;
   importing: boolean;
@@ -148,6 +154,9 @@ function HomeRail({
           failed={strategy.failed}
         />
       ) : null}
+      {/* Задания стоят под ролями: они уточняют порядок уже найденных ролей,
+          а не находят их (B180, срез 3). */}
+      {workPreferences ? <WorkPreferencesPanel state={workPreferences} /> : null}
       {strategy?.error ? (
         <p className="career-cabinet-error" role="alert">
           {strategy.error}

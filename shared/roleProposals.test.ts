@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import {
+  WORK_PREFERENCE_KEY_VERSION,
+  type WorkPreferenceResult,
+} from './workPreferences';
 import type { RoleObservation } from './poolRoleHypotheses';
 import { proposeRoles, type NamedRole } from './roleProposals';
 
@@ -146,3 +150,65 @@ describe('proposeRoles: что считается одной ролью', () => 
 function sample(role: { confirmation: { state: string; sampleSize?: number } }): number {
   return role.confirmation.sampleSize ?? 0;
 }
+
+describe('порядок ролей после заданий «Какие роли мне подходят» (B180 срез 3)', () => {
+  const named = [
+    { title: 'Operations Manager', reason: 'вёл операции', evidenceRefs: ['memory:1'] },
+    { title: 'Data Analyst', reason: 'считал когорты', evidenceRefs: ['memory:2'] },
+    { title: 'Product Manager', reason: 'вёл продукты', evidenceRefs: ['memory:3'] },
+  ];
+
+  const preferring = (family: 'ПП' | 'РР'): WorkPreferenceResult => ({
+    keyVersion: WORK_PREFERENCE_KEY_VERSION,
+    answered: 12,
+    counts: [],
+    excluded: [],
+    discriminates: true,
+    ranked: [
+      { family, name: 'верх', value: 3, total: 3, basis: 'выбрали 3 раза из 3' },
+    ],
+  });
+
+  it('ответы меняют порядок ролей одного яруса, но не состав', () => {
+    const flow = proposeRoles({ named, pool: [], candidateSkills: [], preferences: preferring('ПП') });
+    const numbers = proposeRoles({ named, pool: [], candidateSkills: [], preferences: preferring('РР') });
+
+    expect(flow[0].title).toBe('Operations Manager');
+    expect(numbers[0].title).toBe('Data Analyst');
+    // Состав тот же: задания уточняют порядок гипотез, а не находят роли.
+    expect(flow.map((role) => role.title).sort()).toEqual(
+      numbers.map((role) => role.title).sort(),
+    );
+  });
+
+  it('отказ различить оставляет порядок доказательству', () => {
+    const undecided: WorkPreferenceResult = {
+      ...preferring('ПП'),
+      discriminates: false,
+      ranked: [],
+    };
+
+    expect(
+      proposeRoles({ named, pool: [], candidateSkills: [], preferences: undecided }).map(
+        (role) => role.title,
+      ),
+    ).toEqual(proposeRoles({ named, pool: [], candidateSkills: [] }).map((role) => role.title));
+  });
+
+  it('исключённый вид работы уходит в конец яруса, но роль с экрана не убирает', () => {
+    const excluded: WorkPreferenceResult = {
+      ...preferring('РР'),
+      excluded: ['ПП'],
+    };
+
+    const roles = proposeRoles({
+      named,
+      pool: [],
+      candidateSkills: [],
+      preferences: excluded,
+    });
+
+    expect(roles.map((role) => role.title)).toContain('Operations Manager');
+    expect(roles[roles.length - 1].title).toBe('Operations Manager');
+  });
+});

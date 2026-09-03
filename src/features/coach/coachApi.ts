@@ -1,6 +1,12 @@
 import type { ResumeDraft } from '../../../server/domain/resumeDraft';
 import type { ProposedRole } from '../../../shared/roleProposals';
 import type { CareerStrategy } from '../../../shared/careerStrategy';
+import type {
+  WorkFamilyCode,
+  WorkPreferenceAnswer,
+  WorkPreferenceResult,
+  WorkPreferenceTask,
+} from '../../../shared/workPreferences';
 import type { WorkspaceInput } from '../workspace/workspaceStorage';
 type UserRole = 'candidate' | 'admin';
 type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
@@ -109,7 +115,12 @@ type WorkDimension =
 
 type WorkPreferenceSubmission = Record<WorkDimension, number>;
 
-interface WorkPreferenceResult {
+/**
+ * Прежний «ассесмент» со шкалой 1..5 и сводным `signalStrength`. Его метод
+ * заменён парным выбором (B180, срез 3) — здесь он остаётся только для чтения
+ * уже сохранённых строк; экрана у него нет.
+ */
+interface LegacyWorkPreferenceResult {
   kind: 'work-preferences';
   version: 1;
   roleFamilies: Array<{
@@ -153,7 +164,7 @@ type StoredAssessment =
   | {
       assessmentId: 'work-preferences-v1';
       submission: WorkPreferenceSubmission;
-      result: WorkPreferenceResult;
+      result: LegacyWorkPreferenceResult;
       completedAt: string;
       updatedAt: string;
     }
@@ -833,6 +844,43 @@ export async function getRoleHypotheses(
     throw new CoachApiErrorClass('Ответ сервиса не разобран.', 'malformed_response', false);
   }
   return envelope.data as ProposedRole[];
+}
+
+/**
+ * Задания «Какие роли мне подходят» (B180, срез 3).
+ *
+ * Формулировки приходят с сервера вместе с версией ключа: они версионируются
+ * вместе, и результат по прежним словам нельзя выдавать за результат по новым.
+ */
+export interface WorkPreferencesRead {
+  readonly keyVersion: string;
+  readonly tasks: readonly WorkPreferenceTask[];
+  readonly families: readonly { code: WorkFamilyCode; name: string; about: string }[];
+  readonly maxExcluded: number;
+  readonly run: {
+    readonly keyVersion: string;
+    readonly result: WorkPreferenceResult;
+    readonly completedAt: string;
+  } | null;
+}
+
+export async function getWorkPreferences(
+  signal?: AbortSignal,
+): Promise<WorkPreferencesRead> {
+  const response = await apiFetch('/api/v1/candidate/work-preferences', { signal });
+  return readDataObject<WorkPreferencesRead>(response);
+}
+
+export async function submitWorkPreferences(input: {
+  readonly answers: readonly WorkPreferenceAnswer[];
+  readonly excluded: readonly WorkFamilyCode[];
+}): Promise<NonNullable<WorkPreferencesRead['run']>> {
+  const response = await apiFetch('/api/v1/candidate/work-preferences', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return readDataObject<NonNullable<WorkPreferencesRead['run']>>(response);
 }
 
 /**
