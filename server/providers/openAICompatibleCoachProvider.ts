@@ -18,6 +18,10 @@ import {
   type CoachProviderResult,
 } from './coachProvider';
 import type { ProviderId } from './modelRegistry';
+import {
+  PROVIDER_STAGE_MAX_RETRIES,
+  PROVIDER_STAGE_TIMEOUT_MS,
+} from './stageTimeout';
 
 export type OpenAICompatibleProviderId =
   | 'fireworks'
@@ -60,8 +64,8 @@ export class OpenAICompatibleCoachProvider implements CoachProvider {
       new OpenAI({
         apiKey: options.apiKey,
         baseURL: options.baseUrl,
-        timeout: options.timeoutMs ?? 85_000,
-        maxRetries: 1,
+        timeout: options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS,
+        maxRetries: PROVIDER_STAGE_MAX_RETRIES,
       });
   }
 

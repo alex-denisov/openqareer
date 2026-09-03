@@ -7,6 +7,10 @@ import {
 } from '../domain/roleNaming';
 import type { NamedRole } from '../../shared/roleProposals';
 import { modelRegistry, type ProviderId } from './modelRegistry';
+import {
+  PROVIDER_STAGE_MAX_RETRIES,
+  PROVIDER_STAGE_TIMEOUT_MS,
+} from './stageTimeout';
 
 /** Весь профиль в этот вызов не едет: роли называются по подтверждённым фактам. */
 const MAX_FACTS = 40;
@@ -39,6 +43,11 @@ export interface LlmRoleNamerOptions {
   baseUrl?: string;
   timeoutMs?: number;
   structuredOutput?: boolean;
+  /**
+   * Пул OpenRouter вправе увести вызов к модели без схемы. Просьба о схеме без
+   * этого условия пропадала бы молча, а роль оставалась неназванной.
+   */
+  requireParameters?: boolean;
   client?: ChatCompletionClient;
 }
 
@@ -54,17 +63,19 @@ export class LlmRoleNamer implements RoleNamer {
   private readonly client: ChatCompletionClient;
   private readonly model: string;
   private readonly structuredOutput: boolean;
+  private readonly requireParameters: boolean;
 
   constructor(options: LlmRoleNamerOptions) {
     this.model = options.model;
     this.structuredOutput = options.structuredOutput ?? false;
+    this.requireParameters = options.requireParameters ?? false;
     this.client =
       options.client ??
       (new OpenAI({
         apiKey: options.apiKey,
         ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
-        timeout: options.timeoutMs ?? 60_000,
-        maxRetries: 1,
+        timeout: options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS,
+        maxRetries: PROVIDER_STAGE_MAX_RETRIES,
       }) as unknown as ChatCompletionClient);
   }
 
@@ -82,7 +93,12 @@ export class LlmRoleNamer implements RoleNamer {
         // проде: OpenRouter отвечал телом без `choices`, и роль не называлась
         // вовсе. Формат просим только там, где он поддержан.
         ...(this.structuredOutput
-          ? { response_format: { type: 'json_schema', json_schema: ROLE_NAMING_JSON_SCHEMA } }
+          ? {
+              response_format: { type: 'json_schema', json_schema: ROLE_NAMING_JSON_SCHEMA },
+              ...(this.requireParameters
+                ? { provider: { require_parameters: true } }
+                : {}),
+            }
           : {}),
       });
       return parseRoles(response.choices[0]?.message?.content ?? null);
@@ -190,6 +206,7 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
       baseUrl: provider === 'openai' ? undefined : definition.baseUrl,
       structuredOutput:
         definition.models.find((item) => item.id === model)?.structuredOutput ?? false,
+      requireParameters: provider === 'openrouter',
     }),
   );
 }

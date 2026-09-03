@@ -11,6 +11,7 @@ import {
   type CoachProvider,
   type CoachProviderResult,
 } from './coachProvider';
+import { PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
 export type NativeProviderId = 'anthropic' | 'gemini' | 'cohere' | 'yandex';
 
@@ -311,7 +312,7 @@ export class NativeCoachProvider implements CoachProvider {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(this.options.timeoutMs ?? 85_000),
+      signal: AbortSignal.timeout(this.options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS),
     });
     if (!response.ok) {
       if (response.status === 429) {

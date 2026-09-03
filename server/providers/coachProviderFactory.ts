@@ -74,6 +74,7 @@ export function buildCoachProvider(
     return new OpenRouterCoachProvider({
       apiKey: options.apiKey,
       model,
+      structuredOutput: modelDefinition.structuredOutput,
     });
   }
   if (isOpenAICompatibleProvider(options.provider)) {

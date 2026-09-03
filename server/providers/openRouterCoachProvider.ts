@@ -6,6 +6,7 @@ import {
   RateLimitError,
 } from 'openai/error';
 import {
+  COACH_TURN_JSON_SCHEMA,
   coachTurnResultSchema,
   serializeCoachInput,
   type CoachTurnInput,
@@ -17,28 +18,39 @@ import {
   type CoachProvider,
   type CoachProviderResult,
 } from './coachProvider';
+import {
+  PROVIDER_STAGE_MAX_RETRIES,
+  PROVIDER_STAGE_TIMEOUT_MS,
+} from './stageTimeout';
 
 const OPENROUTER_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free';
 
 export interface OpenRouterCoachProviderOptions {
   apiKey: string;
   model?: string;
+  /**
+   * Схему вывода OpenRouter держит, и просить её честнее, чем вырезать JSON из
+   * прозы: разбор `extractJsonPayload` оставался лишь на случай отказа модели.
+   */
+  structuredOutput?: boolean;
   timeoutMs?: number;
   client?: OpenAI;
 }
 export class OpenRouterCoachProvider implements CoachProvider {
   private readonly client: OpenAI;
   private readonly model: string;
+  private readonly structuredOutput: boolean;
 
   constructor(options: OpenRouterCoachProviderOptions) {
     this.model = options.model ?? OPENROUTER_MODEL;
+    this.structuredOutput = options.structuredOutput ?? false;
     this.client =
       options.client ??
       new OpenAI({
         apiKey: options.apiKey,
         baseURL: 'https://openrouter.ai/api/v1',
-        timeout: options.timeoutMs ?? 85_000,
-        maxRetries: 1,
+        timeout: options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS,
+        maxRetries: PROVIDER_STAGE_MAX_RETRIES,
         defaultHeaders: {
           'HTTP-Referer': 'https://openqareer.com',
           'X-Title': 'OpenQareer synthetic evaluation',
@@ -77,6 +89,21 @@ export class OpenRouterCoachProvider implements CoachProvider {
         // `provider_output_invalid` (замер B185). Место под ответ считается той
         // же функцией, что и у OpenAI, — расходиться им незачем.
         max_completion_tokens: outputBudgetForRole(input.activeRole, 'high'),
+        ...(this.structuredOutput
+          ? {
+              response_format: {
+                type: 'json_schema' as const,
+                json_schema: {
+                  name: 'career_coach_turn',
+                  strict: true,
+                  schema: COACH_TURN_JSON_SCHEMA,
+                },
+              },
+              // `openrouter/free` — пул: без этого условия он вправе увести
+              // вызов к модели без схемы, и просьба о схеме молча пропадёт.
+              provider: { require_parameters: true },
+            }
+          : {}),
       };
       const response = await this.client.chat.completions.create(
         request,

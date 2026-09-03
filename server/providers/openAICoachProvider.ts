@@ -19,6 +19,10 @@ import {
   type CoachProviderResult,
   type ProviderOutputDiagnostic,
 } from './coachProvider';
+import {
+  PROVIDER_STAGE_MAX_RETRIES,
+  PROVIDER_STAGE_TIMEOUT_MS,
+} from './stageTimeout';
 
 /** Модели OpenAI, которые реестр разрешает персональному маршруту (B183). */
 export type OpenAICoachModel = 'gpt-5.6' | 'gpt-5.6-sol' | 'gpt-5.6-luna';
@@ -45,8 +49,8 @@ export class OpenAICoachProvider implements CoachProvider {
       options.client ??
       new OpenAI({
         apiKey: options.apiKey,
-        timeout: options.timeoutMs ?? 75_000,
-        maxRetries: 1,
+        timeout: options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS,
+        maxRetries: PROVIDER_STAGE_MAX_RETRIES,
       });
     this.model = options.model;
   }

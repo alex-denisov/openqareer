@@ -252,3 +252,54 @@ describe('OpenRouterCoachProvider: место под ответ', () => {
     expect(strategist).toBeGreaterThan(expert);
   });
 });
+
+describe('OpenRouter structured output', () => {
+  const respond = (calls: Array<Record<string, unknown>>) => ({
+    chat: {
+      completions: {
+        create: async (body: Record<string, unknown>) => {
+          calls.push(body);
+          return {
+            id: 'response-structured',
+            model: 'z-ai/glm-5.2:free',
+            choices: [{ message: { content: JSON.stringify(validOutput) } }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          };
+        },
+      },
+    },
+  });
+
+  it('просит схему и требует маршрутизации только к моделям, которые её держат', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const provider = new OpenRouterCoachProvider({
+      apiKey: 'k',
+      model: 'openrouter/free',
+      structuredOutput: true,
+      client: respond(calls) as unknown as OpenAI,
+    });
+
+    await provider.createTurn(syntheticInput, 'idempotency-structured');
+
+    expect(calls[0]?.response_format).toMatchObject({
+      type: 'json_schema',
+      json_schema: { name: 'career_coach_turn', strict: true },
+    });
+    expect(calls[0]?.provider).toEqual({ require_parameters: true });
+  });
+
+  it('не навязывает схему модели, которая её не держит', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const provider = new OpenRouterCoachProvider({
+      apiKey: 'k',
+      model: 'openrouter/free',
+      structuredOutput: false,
+      client: respond(calls) as unknown as OpenAI,
+    });
+
+    await provider.createTurn(syntheticInput, 'idempotency-plain');
+
+    expect(calls[0]?.response_format).toBeUndefined();
+    expect(calls[0]?.provider).toBeUndefined();
+  });
+});

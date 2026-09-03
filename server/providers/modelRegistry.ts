@@ -130,6 +130,9 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
     transport: 'openai-compatible-chat',
     baseUrl: 'https://openrouter.ai/api/v1',
     credentialEnvironment: ['OPENQAREER_OPENROUTER_API_KEY'],
+    // Решение владельца 2026-09-03 (B180): OpenRouter держит `json_schema`, и
+    // маршрут просит схему у каждой своей модели. Пулу вдобавок сообщается
+    // `require_parameters`, иначе он вправе увести вызов к модели без схемы.
     models: [
       {
         // Решение владельца 2026-09-02: второй приоритет после Gemini — пул
@@ -143,28 +146,28 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
         pinned: true,
         ownerPinned: true,
         lifecycle: 'rolling',
-        structuredOutput: false,
+        structuredOutput: true,
       },
       {
         id: 'openrouter/auto',
         releaseDate: null,
         pinned: false,
         lifecycle: 'rolling',
-        structuredOutput: false,
+        structuredOutput: true,
       },
       {
         id: 'anthropic/claude-fable-5',
         releaseDate: '2026-06-09',
         pinned: true,
         lifecycle: 'production',
-        structuredOutput: false,
+        structuredOutput: true,
       },
       {
         id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
         releaseDate: '2026-06-04',
         pinned: true,
         lifecycle: 'preview',
-        structuredOutput: false,
+        structuredOutput: true,
       },
       {
         // Названы владельцем поимённо для замера B185 (2026-09-03). Оба
@@ -174,14 +177,14 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
         releaseDate: '2026-06-16',
         pinned: true,
         lifecycle: 'preview',
-        structuredOutput: false,
+        structuredOutput: true,
       },
       {
         id: 'minimax/minimax-m3:free',
         releaseDate: '2026-05-31',
         pinned: true,
         lifecycle: 'preview',
-        structuredOutput: false,
+        structuredOutput: true,
       },
     ],
   }),

@@ -168,3 +168,11 @@ describe('Пул OpenRouter (B183)', () => {
   });
 });
 
+
+describe('структурированный вывод OpenRouter', () => {
+  it('объявлен у каждой модели маршрута (решение владельца 2026-09-03, B180)', () => {
+    for (const model of modelRegistry.openrouter.models) {
+      expect(model.structuredOutput).toBe(true);
+    }
+  });
+});

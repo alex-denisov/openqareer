@@ -149,3 +149,24 @@ describe('LlmRoleNamer: ответ свободной модели', () => {
     );
   });
 });
+
+describe('LlmRoleNamer и структурированный вывод OpenRouter', () => {
+  it('требует маршрутизации к модели со схемой, когда схему просим', async () => {
+    const stub = client('{"roles":[]}');
+    const namer = new LlmRoleNamer({
+      apiKey: 'k',
+      model: 'openrouter/free',
+      structuredOutput: true,
+      requireParameters: true,
+      client: stub,
+    });
+
+    await namer.nameRoles(facts);
+
+    const body = vi.mocked(stub.chat.completions.create).mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    expect(body?.response_format).toMatchObject({ type: 'json_schema' });
+    expect(body?.provider).toEqual({ require_parameters: true });
+  });
+});
