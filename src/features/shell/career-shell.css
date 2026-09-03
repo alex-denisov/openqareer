@@ -8481,6 +8481,7 @@
 
 .career-funnel li {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -8510,6 +8511,21 @@
   font-size: 0.6rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+/* Шесть ступеней (B165) в один ряд на узком экране не помещаются: подписи не
+   сжимаются, и ряд выдавливал страницу на пару пикселей вбок. На телефоне
+   воронка идёт двумя рядами по три. */
+@media (max-width: 520px) {
+  .career-funnel {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .career-funnel-label {
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
 }
 
 .career-automation-list {
