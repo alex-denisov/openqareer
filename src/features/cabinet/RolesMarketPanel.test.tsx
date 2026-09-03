@@ -183,4 +183,16 @@ describe('RolesMarketPanel: роль называет модель, пул по�
   it('когда модель не назвала ничего и рынок молчит — говорит об этом прямо', () => {
     expect(render([])).toContain('Роль ещё не названа');
   });
+
+  it('печатает названные роли и без карты ролей журнала', () => {
+    // На проде маршрут отдавал пять ролей, а панель не рисовалась вовсе:
+    // ранний выход по `journey.roleMarketMap` прятал и то, что от карты не
+    // зависит (B180, прод-проверка 5b5a85b).
+    const html = renderToStaticMarkup(
+      <RolesMarketPanel proposedRoles={[observed, notFound]} onNavigate={() => undefined} />,
+    );
+
+    expect(html).toContain('Руководитель продукта');
+    expect(html).toContain('Head of Growth');
+  });
 });

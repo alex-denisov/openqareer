@@ -36,9 +36,12 @@ export function RolesMarketPanel({
   readonly onNavigate: (view: CareerCabinetView) => void;
 }) {
   const map = journey?.roleMarketMap;
-  if (!map) return null;
-  const roles = map.roles.slice(0, 3);
-  const markets = map.markets;
+  // Роли, названные моделью, от карты журнала не зависят: на проде ранний
+  // выход по `roleMarketMap` прятал панель целиком, хотя маршрут отдавал пять
+  // ролей (B180). Пусто — только когда нечего показать вовсе.
+  if (!map && !proposedRoles) return null;
+  const roles = map?.roles.slice(0, 3) ?? [];
+  const markets = map?.markets ?? [];
 
   return (
     <section className="career-home-panel career-roles-market" aria-labelledby="career-roles-title">
@@ -53,7 +56,7 @@ export function RolesMarketPanel({
         <RoleHypotheses roles={roles} />
       )}
 
-      <MarketSamples markets={markets} />
+      {markets.length ? <MarketSamples markets={markets} /> : null}
 
       {!poolComplete && observedCount(markets) > 0 ? (
         <p className="career-cabinet-tag">
