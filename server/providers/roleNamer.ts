@@ -6,7 +6,11 @@ import {
   roleNamingSchema,
 } from '../domain/roleNaming';
 import type { NamedRole } from '../../shared/roleProposals';
-import { modelRegistry, type ProviderId } from './modelRegistry';
+import {
+  isMutableModelAlias,
+  modelRegistry,
+  type ProviderId,
+} from './modelRegistry';
 import {
   PROVIDER_STAGE_MAX_RETRIES,
   PROVIDER_STAGE_TIMEOUT_MS,
@@ -206,7 +210,9 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
       baseUrl: provider === 'openai' ? undefined : definition.baseUrl,
       structuredOutput:
         definition.models.find((item) => item.id === model)?.structuredOutput ?? false,
-      requireParameters: provider === 'openrouter',
+      // Условие имеет смысл только у пула: у названной модели OpenRouter
+      // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
+      requireParameters: provider === 'openrouter' && isMutableModelAlias(model),
     }),
   );
 }

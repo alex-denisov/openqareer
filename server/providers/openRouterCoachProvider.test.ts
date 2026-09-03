@@ -288,6 +288,23 @@ describe('OpenRouter structured output', () => {
     expect(calls[0]?.provider).toEqual({ require_parameters: true });
   });
 
+  it('не требует маршрутизации у поимённо названной модели', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const provider = new OpenRouterCoachProvider({
+      apiKey: 'k',
+      model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+      structuredOutput: true,
+      client: respond(calls) as unknown as OpenAI,
+    });
+
+    await provider.createTurn(syntheticInput, 'idempotency-named');
+
+    expect(calls[0]?.response_format).toMatchObject({ type: 'json_schema' });
+    // Живая проверка 2026-09-03: `require_parameters` у названной модели даёт
+    // `404 No endpoints found` за полсекунды — выбирать маршрутизации не из чего.
+    expect(calls[0]?.provider).toBeUndefined();
+  });
+
   it('не навязывает схему модели, которая её не держит', async () => {
     const calls: Array<Record<string, unknown>> = [];
     const provider = new OpenRouterCoachProvider({

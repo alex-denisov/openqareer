@@ -22,6 +22,7 @@ import {
   PROVIDER_STAGE_MAX_RETRIES,
   PROVIDER_STAGE_TIMEOUT_MS,
 } from './stageTimeout';
+import { isMutableModelAlias } from './modelRegistry';
 
 const OPENROUTER_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free';
 
@@ -101,7 +102,12 @@ export class OpenRouterCoachProvider implements CoachProvider {
               },
               // `openrouter/free` — пул: без этого условия он вправе увести
               // вызов к модели без схемы, и просьба о схеме молча пропадёт.
-              provider: { require_parameters: true },
+              // Названной модели это условие ставить нельзя: выбирать не из
+              // чего, и OpenRouter отвечает `404 No endpoints found` за
+              // полсекунды (живая проверка 2026-09-03).
+              ...(isMutableModelAlias(this.model)
+                ? { provider: { require_parameters: true } }
+                : {}),
             }
           : {}),
       };
