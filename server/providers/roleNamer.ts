@@ -5,6 +5,12 @@ import {
   ROLE_NAMING_JSON_SCHEMA,
   roleNamingSchema,
 } from '../domain/roleNaming';
+import {
+  cloudflareGatewayHeaders,
+  geminiGatewayBaseUrl,
+  type CloudflareGatewayConfig,
+} from './cloudflareAiGateway';
+import { geminiResponseSchema } from './geminiSchema';
 import type { NamedRole } from '../../shared/roleProposals';
 import {
   isMutableModelAlias,
@@ -161,6 +167,76 @@ function parseRoles(content: string | null): NamedRole[] {
 }
 
 /**
+ * Называние ролей через Gemini.
+ *
+ * Решение владельца 2026-09-03: голова очереди называния — `gemini-3.6-flash`.
+ * Замер на настоящих фактах кандидата назвал причину прямо: бесплатная голова
+ * очереди коуча тратит 59 секунд, Gemini — 14.7 (B185), а потолок ступени
+ * стоит на тридцати. Это единственный порядок, при котором потолок не
+ * приходится ни обходить, ни оплачивать.
+ *
+ * Транспорт свой: Gemini не говорит на `chat/completions`. Тоннель Cloudflare
+ * обязателен по тому же решению владельца 2026-09-02, что и у хода коуча —
+ * прямой вызов с прод-хоста не доходит.
+ */
+export interface GeminiRoleNamerOptions {
+  apiKey: string;
+  model: string;
+  baseUrl: string;
+  extraHeaders?: Record<string, string>;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+}
+
+export class GeminiRoleNamer implements RoleNamer {
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(private readonly options: GeminiRoleNamerOptions) {
+    this.fetchImpl = options.fetchImpl ?? fetch;
+  }
+
+  async nameRoles(facts: readonly CandidateFact[]): Promise<NamedRole[]> {
+    if (facts.length === 0) return [];
+    try {
+      const response = await this.fetchImpl(
+        `${this.options.baseUrl.replace(/\/+$/u, '')}/models/${encodeURIComponent(
+          this.options.model,
+        )}:generateContent`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': this.options.apiKey,
+            ...(this.options.extraHeaders ?? {}),
+          },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: ROLE_NAMING_INSTRUCTIONS }] },
+            contents: [{ role: 'user', parts: [{ text: serializeFacts(facts) }] }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              // Gemini отвергает ограничения длины и размера (B183); годность
+              // ответа всё равно решает zod.
+              responseJsonSchema: geminiResponseSchema(ROLE_NAMING_JSON_SCHEMA.schema),
+            },
+          }),
+          signal: AbortSignal.timeout(this.options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS),
+        },
+      );
+      if (!response.ok) return [];
+      const body = (await response.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      return parseRoles(
+        body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? null,
+      );
+    } catch {
+      // Тот же уговор, что и у остальных ступеней: молчание не роняет панель.
+      return [];
+    }
+  }
+}
+
+/**
  * Кэш поверх называния ролей.
  *
  * Панель «Главной» читает маршрут при каждом входе, а вызов модели по замеру
@@ -231,6 +307,8 @@ export interface RoleNamerConfig {
   readonly model?: string;
   readonly fallbacks?: readonly ProviderQueueEntry[];
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
+  /** Без тоннеля ступень Gemini не строится вовсе — как и у хода коуча. */
+  readonly cloudflareGateway?: CloudflareGatewayConfig;
 }
 
 /**
@@ -245,35 +323,66 @@ function speaksChatCompletions(provider: ProviderId): boolean {
   );
 }
 
+/**
+ * Порядок ступеней называния — не порядок очереди коуча.
+ *
+ * Решение владельца 2026-09-03: голова называния — Gemini (14.7 с против 59 с
+ * у бесплатной головы коуча на настоящих фактах кандидата). Остальные ступени
+ * сохраняют свой порядок и остаются запасом.
+ */
+function roleNamingOrder<T extends { provider: ProviderId }>(
+  routes: readonly T[],
+): T[] {
+  return [
+    ...routes.filter((route) => route.provider === 'gemini'),
+    ...routes.filter((route) => route.provider !== 'gemini'),
+  ];
+}
+
 export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
   const provider: ProviderId = config.personalProvider ?? 'openai';
-  const stages = selectProviderQueue({
-    head: { provider, ...(config.model ? { model: config.model } : {}) },
-    fallbacks: config.fallbacks,
-    credentials: config.providerCredentials ?? {},
-  }).filter((route) => speaksChatCompletions(route.provider));
+  const stages = roleNamingOrder(
+    selectProviderQueue({
+      head: { provider, ...(config.model ? { model: config.model } : {}) },
+      fallbacks: config.fallbacks,
+      credentials: config.providerCredentials ?? {},
+    }).filter(
+      (route) =>
+        speaksChatCompletions(route.provider) ||
+        // Gemini говорит своим транспортом и только через тоннель. Без тоннеля
+        // ступень пропускается: прямой вызов с прод-хоста не доходит (B183).
+        (route.provider === 'gemini' && config.cloudflareGateway !== undefined),
+    ),
+  );
   if (stages.length === 0) return undefined;
 
+  const gateway = config.cloudflareGateway;
   return new CachedRoleNamer(
     new QueuedRoleNamer(
-      stages.map(
-        (route) =>
-          new LlmRoleNamer({
-            apiKey: route.apiKey,
-            model: route.model,
-            baseUrl:
-              route.provider === 'openai'
-                ? undefined
-                : modelRegistry[route.provider].baseUrl,
-            structuredOutput:
-              modelRegistry[route.provider].models.find(
-                (item) => item.id === route.model,
-              )?.structuredOutput ?? false,
-            // Условие имеет смысл только у пула: у названной модели OpenRouter
-            // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
-            requireParameters:
-              route.provider === 'openrouter' && isMutableModelAlias(route.model),
-          }),
+      stages.map((route) =>
+        route.provider === 'gemini' && gateway
+          ? new GeminiRoleNamer({
+              apiKey: route.apiKey,
+              model: route.model,
+              baseUrl: geminiGatewayBaseUrl(gateway),
+              extraHeaders: cloudflareGatewayHeaders(gateway),
+            })
+          : new LlmRoleNamer({
+              apiKey: route.apiKey,
+              model: route.model,
+              baseUrl:
+                route.provider === 'openai'
+                  ? undefined
+                  : modelRegistry[route.provider].baseUrl,
+              structuredOutput:
+                modelRegistry[route.provider].models.find(
+                  (item) => item.id === route.model,
+                )?.structuredOutput ?? false,
+              // Условие имеет смысл только у пула: у названной модели OpenRouter
+              // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
+              requireParameters:
+                route.provider === 'openrouter' && isMutableModelAlias(route.model),
+            }),
       ),
       stages.map((route) => `${route.provider}:${route.model}`),
     ),

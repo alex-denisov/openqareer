@@ -134,6 +134,9 @@ const app = await buildApp({
     // одинокая бесплатная голова оставляла панель пустой (B180, 2026-09-03).
     fallbacks: config.personalFallbacks,
     providerCredentials: config.providerCredentials,
+    // Голова называния — Gemini, и без тоннеля она не строится (решение
+    // владельца 2026-09-03).
+    cloudflareGateway: config.cloudflareGateway,
   }),
   serveStatic: process.env.NODE_ENV === 'production',
 });

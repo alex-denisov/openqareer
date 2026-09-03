@@ -4,6 +4,7 @@ import {
   buildRoleNamer,
   CachedRoleNamer,
   describeRoleNamerQueue,
+  GeminiRoleNamer,
   LlmRoleNamer,
   QueuedRoleNamer,
   type ChatCompletionClient,
@@ -231,5 +232,98 @@ describe('buildRoleNamer', () => {
 
   it('без ключей ступеней нет вовсе', () => {
     expect(buildRoleNamer({ personalProvider: 'openrouter', providerCredentials: {} })).toBeUndefined();
+  });
+});
+
+describe('GeminiRoleNamer', () => {
+  const answer = {
+    candidates: [
+      {
+        content: {
+          parts: [
+            {
+              text: JSON.stringify({
+                roles: [
+                  { title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] },
+                ],
+              }),
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  it('спрашивает generateContent через шлюз и читает названные роли', async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const namer = new GeminiRoleNamer({
+      apiKey: 'gemini-key',
+      model: 'gemini-3.6-flash',
+      baseUrl: 'https://gateway.test/google-ai-studio/v1beta',
+      extraHeaders: { 'cf-aig-authorization': 'Bearer gate' },
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init: init as RequestInit });
+        return new Response(JSON.stringify(answer), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    });
+
+    await expect(namer.nameRoles(facts)).resolves.toEqual([
+      { title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] },
+    ]);
+
+    expect(calls[0]?.url).toBe(
+      'https://gateway.test/google-ai-studio/v1beta/models/gemini-3.6-flash:generateContent',
+    );
+    const headers = calls[0]?.init.headers as Record<string, string>;
+    expect(headers['x-goog-api-key']).toBe('gemini-key');
+    expect(headers['cf-aig-authorization']).toBe('Bearer gate');
+    const body = JSON.parse(String(calls[0]?.init.body));
+    expect(body.generationConfig.responseMimeType).toBe('application/json');
+    expect(body.generationConfig.responseJsonSchema).toBeDefined();
+  });
+
+  it('молчит вместо падения, когда шлюз отказал', async () => {
+    const namer = new GeminiRoleNamer({
+      apiKey: 'k',
+      model: 'gemini-3.6-flash',
+      baseUrl: 'https://gateway.test/v1beta',
+      fetchImpl: async () => new Response('overloaded', { status: 503 }),
+    });
+    await expect(namer.nameRoles(facts)).resolves.toEqual([]);
+  });
+});
+
+describe('buildRoleNamer с Gemini', () => {
+  it('ставит Gemini головой очереди называния ролей', () => {
+    const built = buildRoleNamer({
+      personalProvider: 'openrouter',
+      model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+      fallbacks: [
+        { provider: 'openrouter', model: 'openrouter/free' },
+        { provider: 'gemini', model: 'gemini-3.6-flash' },
+        { provider: 'openai', model: 'gpt-5.6-luna' },
+      ],
+      providerCredentials: { openrouter: 'k', gemini: 'k', openai: 'k' },
+      cloudflareGateway: { accountId: 'acc', gatewayId: 'gate' },
+    });
+
+    // Решение владельца 2026-09-03: 14.7 с против 59 с у бесплатной головы.
+    expect(describeRoleNamerQueue(built)[0]).toBe('gemini:gemini-3.6-flash');
+  });
+
+  it('без тоннеля ступень Gemini пропускается, а не зовётся напрямую', () => {
+    const built = buildRoleNamer({
+      personalProvider: 'openrouter',
+      model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+      fallbacks: [{ provider: 'gemini', model: 'gemini-3.6-flash' }],
+      providerCredentials: { openrouter: 'k', gemini: 'k' },
+    });
+
+    expect(describeRoleNamerQueue(built)).toEqual([
+      'openrouter:nvidia/nemotron-3-ultra-550b-a55b:free',
+    ]);
   });
 });
