@@ -178,4 +178,26 @@ describe('Telegram posts name the real title and never invent an employer (B164)
     expect(parsed?.company).toBe('');
     expect(parsed?.title).toBe('Level Artist / Unity');
   });
+
+  it('does not turn a post whose role it cannot read into a vacancy (PRB-018)', () => {
+    const post = [
+      'Доброго времени суток!',
+      'Мы небольшая студия, делаем мобильные игры уже семь лет и растём.',
+      'Требования: опыт от трёх лет, портфолио, аккуратность.',
+      'Условия: удалёнка, гибкий график.',
+      'Зарплата: от 200 000 руб. на руки',
+      'Контакты: @studio_hr',
+    ].join('<br/>');
+
+    const parsed = parseTelegramJobPost(post, {
+      postId: '77',
+      channelName: 'it_jobs',
+      sourceId: 'src-tg-it_jobs',
+      postUrl: 'https://t.me/it_jobs/77',
+      publishedAt: '2026-09-01T10:00:00+00:00',
+      observedAt: '2026-09-01T11:00:00.000Z',
+    });
+
+    expect(parsed).toBeNull();
+  });
 });

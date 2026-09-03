@@ -226,6 +226,9 @@ export function parseTelegramJobPost(
   if (cleanText.length < 30 || classifyTelegramPost(cleanText) !== 'vacancy') return null;
 
   const { title, company } = extractJobTitleAndCompany(text);
+  // Пост, в котором должность не прочитана, не становится вакансией: название
+  // — это данные подбора, а не подпись, и выдумывать его нельзя (PRB-018).
+  if (!title) return null;
   const salary = parseSalaryText(cleanText);
   const sections = extractStructuredJobSections(text);
 

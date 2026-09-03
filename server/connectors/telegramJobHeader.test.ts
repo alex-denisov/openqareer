@@ -56,7 +56,7 @@ describe('extractTelegramJobHeader', () => {
 
   it('never turns a common noun after "в" into an employer', () => {
     const header = extractTelegramJobHeader(['Разработчик в команду мечты', 'Задачи:']);
-    expect(header.title).toBe('Разработчик в команду мечты');
+    expect(header.title).toBe('Разработчик');
     expect(header.company).toBe('');
   });
 
@@ -77,12 +77,6 @@ describe('extractTelegramJobHeader', () => {
     expect(header.company).toBe('');
   });
 
-  it('falls back to a role name when the post carries no readable lines at all', () => {
-    const header = extractTelegramJobHeader(['#вакансия', '   ']);
-    expect(header.title).toBe('Разработчик');
-    expect(header.company).toBe('');
-  });
-
   it('reads a straight-quoted employer too', () => {
     const header = extractTelegramJobHeader(['Data Analyst в "Ромашка"', 'Задачи:']);
     expect(header.title).toBe('Data Analyst');
@@ -98,13 +92,13 @@ describe('extractTelegramJobHeader', () => {
     const tail = 'Очень Длинное Название Которое Никак Не Может Быть Именем Работодателя Компании';
     const header = extractTelegramJobHeader([`Аналитик в ${tail}`, 'Задачи:']);
     expect(header.company).toBe('');
-    expect(header.title).toBe(`Аналитик в ${tail}`);
+    expect(header.title).toBe('Аналитик');
   });
 
   it('does not read a heading line as the employer', () => {
     const header = extractTelegramJobHeader(['О НАС:', 'Ищем разработчика', 'Задачи:']);
     expect(header.company).toBe('');
-    expect(header.title).toBe('О НАС:');
+    expect(header.title).toBe('разработчика');
   });
 
   it('never turns a city into an employer', () => {
@@ -124,5 +118,60 @@ describe('extractTelegramJobHeader', () => {
       'Корпоративные чемпионаты частично закрывают этот пробел.',
     ]);
     expect(header.company).toBe('');
+  });
+
+  /**
+   * PRB-018: строки ниже сняты с прода (`b4ae411`, срез 167 вакансий одного
+   * кандидата). Приветствие названием не становится, обёртка объявления
+   * снимается до должности, выдуманного «Разработчика» больше нет.
+   */
+  it('reads no title out of a greeting', () => {
+    const header = extractTelegramJobHeader([
+      'Доброго времени суток!',
+      'Мы небольшая студия из Петербурга.',
+    ]);
+    expect(header.title).toBe('');
+  });
+
+  it('reads no title out of a greeting with emoji', () => {
+    expect(extractTelegramJobHeader(['Привет! 🎸🤖', 'Расскажем о себе ниже.']).title).toBe('');
+  });
+
+  it('unwraps an announcement around the role', () => {
+    const header = extractTelegramJobHeader([
+      'Требуется «Data Steward/Менеджер по данным» (Москва)',
+      'Задачи:',
+    ]);
+    expect(header.title).toBe('Data Steward/Менеджер по данным');
+  });
+
+  it('cuts the announcement wrapper down to the role itself', () => {
+    const header = extractTelegramJobHeader([
+      'Требуется «Kotlin Multiplatform Tech Lead — Android MDM + desktop-мессенджер» (Санкт-Петербург, от 300 000 до 450 000 ₽)',
+      'Задачи:',
+    ]);
+    expect(header.title).toBe('Kotlin Multiplatform Tech Lead');
+  });
+
+  it('takes the role out of a sentence that opens the post', () => {
+    const header = extractTelegramJobHeader([
+      'Triluna Games ищет Senior Game Designer в команду, которая разрабатывает динамичный roguelite FPS для Steam/PC на Unity',
+      'Задачи:',
+    ]);
+    expect(header.title).toBe('Senior Game Designer');
+  });
+
+  it('never invents a job title when the post carries no readable role', () => {
+    expect(extractTelegramJobHeader(['#вакансия', '   ']).title).toBe('');
+    expect(extractTelegramJobHeader(['Друзья, всем привет!']).title).toBe('');
+  });
+
+  it('finds the role below a greeting instead of dropping the post', () => {
+    const header = extractTelegramJobHeader([
+      'Друзья, всем привет!',
+      'Ищем Data Engineer',
+      'Формат: удаленно',
+    ]);
+    expect(header.title).toBe('Data Engineer');
   });
 });

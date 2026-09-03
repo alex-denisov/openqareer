@@ -8,7 +8,9 @@
  * `#middle #офис #москва` as a job title) and wrote the invented employer
  * `IT Company` whenever no `Компания:` label was present — 86 of 96 live
  * vacancies (B164). An employer this module cannot read stays empty; nothing
- * here invents one.
+ * here invents one — and neither does it invent a title: a post whose role the
+ * module cannot read returns an empty title, and the caller drops the record
+ * instead of naming it after the post's greeting (PRB-018).
  */
 
 const ROLE_WORD = new RegExp(
@@ -87,18 +89,80 @@ function looksLikeEmployerLine(line: string): boolean {
   return !ROLE_WORD.test(line);
 }
 
-function cleanTitle(line: string): string {
-  const withoutPrefix = line
+/** Название — короткая именная строка: длиннее этого начинается предложение. */
+const MAX_TITLE_WORDS = 8;
+
+/** Границы, за которыми название заканчивается и продолжается объявление. */
+const TITLE_BOUNDARIES: RegExp[] = [
+  /,/u,
+  /\s[—–]\s/u,
+  /\s(?:в|во)\s+(?:команд|компани|штат|проект|отдел|найм|наш)/iu,
+  /\sдля\s/iu,
+];
+
+/** Сколько первых содержательных строк поста читаются в поисках должности. */
+const TITLE_SCAN_LINES = 3;
+
+function stripTitlePrefix(line: string): string {
+  return line
     .replace(/^#\S+\s*/u, '')
     .replace(/^вакансия\s*[:—-]?\s*/iu, '')
-    .replace(/^(?:ищем|ищу|требуется|нужен|нужна)\s+/iu, '')
+    .replace(/^(?:ищем|ищу|ищутся|требуется|требуются|нужен|нужна|нужны)\s+/iu, '')
     .trim();
-  const segments = withoutPrefix
+}
+
+/** «Требуется «X» (Москва)» — должность стоит в кавычках, остальное обёртка. */
+function quotedRoleFragment(value: string): string {
+  const match = value.match(/[«"“]([^»"”]{2,80})[»"”]/u);
+  if (!match) return '';
+  const inner = match[1].trim();
+  return ROLE_WORD.test(inner) ? inner : '';
+}
+
+/**
+ * Хвостовая скобка объявления («(Санкт-Петербург, от 300 000 ₽)») снимается,
+ * а уточнение стека в скобке («(Go)») остаётся частью должности.
+ */
+function dropTrailingParenthetical(value: string): string {
+  return value.replace(/\s*\((?=[^)]*[\d\s,])[^)]*\)\s*$/u, '').trim();
+}
+
+/** «<Работодатель> ищет <роль> …» — названием становится роль, не предложение. */
+function afterSeeksVerb(value: string): string {
+  const match = value.match(/^.{2,60}?\s+(?:ищет|ищем|ищут|разыскивает)\s+(.+)$/iu);
+  return match && ROLE_WORD.test(match[1]) ? match[1].trim() : value;
+}
+
+function cutAtClause(value: string): string {
+  let cut = value.length;
+  for (const boundary of TITLE_BOUNDARIES) {
+    const match = value.match(boundary);
+    if (match?.index !== undefined) cut = Math.min(cut, match.index);
+  }
+  return value.slice(0, cut).trim();
+}
+
+/** Читает должность из одной строки поста. Пусто — значит не прочитал. */
+function readTitleLine(line: string): string {
+  const stripped = stripTitlePrefix(line);
+  const base = quotedRoleFragment(stripped) || dropTrailingParenthetical(stripped);
+  const segments = base
     .split(/(?<=[^\d])\.(?=\s|$)/u)
     .map((segment) => segment.trim())
     .filter(Boolean);
-  const chosen = segments.find((segment) => ROLE_WORD.test(segment)) ?? segments[0] ?? withoutPrefix;
-  return chosen.replace(/[\s.,;]+$/u, '').trim();
+  const chosen = segments.find((segment) => ROLE_WORD.test(segment)) ?? segments[0] ?? base;
+  return cutAtClause(afterSeeksVerb(chosen))
+    .replace(/[\s.,;:]+$/u, '')
+    .trim();
+}
+
+/**
+ * Продукт не выдумывает должность: строка без ролевого слова и строка длиной
+ * с предложение названием не становятся (PRB-018).
+ */
+function isReadableTitle(value: string): boolean {
+  if (!value || !ROLE_WORD.test(value)) return false;
+  return value.split(/\s+/u).filter(Boolean).length <= MAX_TITLE_WORDS;
 }
 
 /** `<Role> в <Employer>` — the employer named inside the title itself. */
@@ -125,6 +189,26 @@ function splitEmployerOutOfTitle(title: string): { title: string; company: strin
   return { title: head, company };
 }
 
+function readHeaderFromLine(
+  line: string,
+  labelled: string,
+): { title: string; company: string } | null {
+  const read = readTitleLine(line);
+  if (!read) return null;
+
+  const header = labelled ? { title: read, company: labelled } : splitEmployerOutOfTitle(read);
+  if (isReadableTitle(header.title)) return header;
+
+  // Строка оказалась длиннее названия: должность стоит до «в …», дальше идёт
+  // предложение объявления.
+  const head = header.title.split(/\s+(?:в|во)\s+/iu)[0].trim();
+  return isReadableTitle(head) ? { title: head, company: header.company } : null;
+}
+
+/**
+ * Возвращает пустое название, когда должность в посте не прочитана: пропустить
+ * запись честнее, чем назвать её первой строкой поста (PRB-018).
+ */
 export function extractTelegramJobHeader(rawLines: string[]): { title: string; company: string } {
   const lines = rawLines.map((line) => line.trim()).filter(Boolean);
   const content = lines.filter((line) => !isHashtagOnly(line));
@@ -133,11 +217,15 @@ export function extractTelegramJobHeader(rawLines: string[]): { title: string; c
   const first = content[0] ?? '';
   const second = content[1] ?? '';
 
-  if (!labelled && first && second && looksLikeEmployerLine(first) && ROLE_WORD.test(second)) {
-    return { title: cleanTitle(second), company: cleanEmployer(first) };
+  if (!labelled && first && second && looksLikeEmployerLine(first)) {
+    const title = readTitleLine(second);
+    if (isReadableTitle(title)) return { title, company: cleanEmployer(first) };
   }
 
-  const title = cleanTitle(first) || 'Разработчик';
-  if (labelled) return { title, company: labelled };
-  return splitEmployerOutOfTitle(title);
+  for (const line of content.slice(0, TITLE_SCAN_LINES)) {
+    const header = readHeaderFromLine(line, labelled);
+    if (header) return header;
+  }
+
+  return { title: '', company: labelled };
 }
