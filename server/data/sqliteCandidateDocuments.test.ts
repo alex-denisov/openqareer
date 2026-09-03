@@ -4,8 +4,6 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   evaluateProductCase,
-  evaluateWorkPreferences,
-  type WorkPreferenceSubmission,
 } from '../domain/assessment';
 import { evaluateGermanyMarket } from '../domain/germanyMarket';
 import { DatabaseSync } from 'node:sqlite';
@@ -129,47 +127,34 @@ describe('SQLite candidate documents, subscriptions, assessments and commands', 
     const store = createStore(databasePath);
     const candidateA = createCandidate(store);
     const candidateB = createCandidate(store);
-    const firstPreferences: WorkPreferenceSubmission = {
-      ambiguity: 5,
-      evidence: 5,
-      collaboration: 4,
-      persuasion: 2,
-      planning: 3,
-      detail: 2,
-      leadership: 3,
-      craft: 4,
-    };
-    const revisedPreferences = { ...firstPreferences, planning: 5 } as const;
     const productCase = {
       firstMove: 'segment-funnel-and-interviews',
       priorityRule: 'reversible-test-biggest-uncertainty',
       successMeasure: 'activation-by-segment-with-guardrail',
       rationale: 'Уникальное объяснение кейса 984.',
     } as const;
+    const revisedCase = {
+      ...productCase,
+      successMeasure: 'delivery-date',
+    } as const;
 
-    store.saveAssessment(
-      candidateA.id,
-      'work-preferences-v1',
-      firstPreferences,
-      evaluateWorkPreferences(firstPreferences),
-    );
-    store.saveAssessment(
-      candidateA.id,
-      'work-preferences-v1',
-      revisedPreferences,
-      evaluateWorkPreferences(revisedPreferences),
-    );
     store.saveAssessment(
       candidateA.id,
       'product-case-v1',
       productCase,
       evaluateProductCase(productCase),
     );
+    store.saveAssessment(
+      candidateA.id,
+      'product-case-v1',
+      revisedCase,
+      evaluateProductCase(revisedCase),
+    );
 
-    expect(store.getSnapshot(candidateA.id).assessments).toHaveLength(2);
+    expect(store.getSnapshot(candidateA.id).assessments).toHaveLength(1);
     expect(
       store.getSnapshot(candidateA.id).assessments[0].submission,
-    ).toMatchObject({ planning: 5 });
+    ).toMatchObject({ successMeasure: 'delivery-date' });
     expect(store.getSnapshot(candidateB.id).assessments).toEqual([]);
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -178,8 +163,8 @@ describe('SQLite candidate documents, subscriptions, assessments and commands', 
     );
 
     const reopened = createStore(databasePath);
-    expect(reopened.getSnapshot(candidateA.id).assessments).toHaveLength(2);
-    expect(reopened.exportCandidate(candidateA.id).assessments[1]).toMatchObject({
+    expect(reopened.getSnapshot(candidateA.id).assessments).toHaveLength(1);
+    expect(reopened.exportCandidate(candidateA.id).assessments[0]).toMatchObject({
       assessmentId: 'product-case-v1',
       result: { kind: 'product-case' },
     });

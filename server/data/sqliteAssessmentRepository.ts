@@ -1,12 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
 import {
   productCaseSubmissionSchema,
-  workPreferenceSubmissionSchema,
   type AssessmentId,
   type AssessmentResult,
   type AssessmentSubmission,
   type ProductCaseResult,
-  type WorkPreferenceResult,
 } from '../domain/assessment';
 import type { StoredAssessment } from './candidateStore';
 import type { SealedText } from './sealedText';
@@ -31,7 +29,7 @@ export class SqliteAssessmentRepository {
     submission: AssessmentSubmission,
     result: AssessmentResult,
   ): StoredAssessment {
-    const parsed = parseAssessment(assessmentId, submission, result);
+    const parsed = parseAssessment(submission, result);
     const now = new Date().toISOString();
     this.database
       .prepare(
@@ -91,7 +89,7 @@ export class SqliteAssessmentRepository {
     ) as AssessmentResult;
     return {
       assessmentId: row.assessment_id,
-      ...parseAssessment(row.assessment_id, submission, result),
+      ...parseAssessment(submission, result),
       completedAt: row.completed_at,
       updatedAt: row.updated_at,
     };
@@ -133,20 +131,9 @@ function associatedData(
 }
 
 function parseAssessment(
-  assessmentId: AssessmentId,
   submission: AssessmentSubmission,
   result: AssessmentResult,
 ): { submission: AssessmentSubmission; result: AssessmentResult } {
-  if (assessmentId === 'work-preferences-v1') {
-    const parsedResult = result as WorkPreferenceResult;
-    if (parsedResult.kind !== 'work-preferences' || parsedResult.version !== 1) {
-      throw new AssessmentStateConflictError();
-    }
-    return {
-      submission: workPreferenceSubmissionSchema.parse(submission),
-      result: parsedResult,
-    };
-  }
   const parsedResult = result as ProductCaseResult;
   if (parsedResult.kind !== 'product-case' || parsedResult.version !== 1) {
     throw new AssessmentStateConflictError();

@@ -1,6 +1,13 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import { MIGRATION_12, MIGRATION_14, MIGRATION_15, MIGRATION_21 } from './sqliteSchema';
+import {
+  MIGRATION_4,
+  MIGRATION_12,
+  MIGRATION_14,
+  MIGRATION_15,
+  MIGRATION_21,
+  MIGRATION_26,
+} from './sqliteSchema';
 import { applyMigrations } from './store/applyMigrations';
 
 describe('vacancy source schema migration', () => {
@@ -218,3 +225,74 @@ describe('oauth table cleanup migration', () => {
   });
 });
 
+describe('dead work-preferences assessment removal (B187)', () => {
+  it('drops stored work-preferences-v1 rows and keeps the product case intact', () => {
+    const database = new DatabaseSync(':memory:', {
+      enableForeignKeyConstraints: true,
+    });
+    database.exec(`
+      CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;
+      INSERT INTO candidates (id) VALUES ('candidate-1');
+      ${MIGRATION_4}
+      INSERT INTO assessments
+        (candidate_id, assessment_id, submission_cipher, result_cipher,
+         completed_at, updated_at)
+      VALUES
+        ('candidate-1', 'work-preferences-v1', 'sealed-legacy-submission',
+         'sealed-legacy-result', '2026-08-01T10:00:00.000Z',
+         '2026-08-01T10:00:00.000Z'),
+        ('candidate-1', 'product-case-v1', 'sealed-case-submission',
+         'sealed-case-result', '2026-08-02T10:00:00.000Z',
+         '2026-08-02T11:00:00.000Z');
+    `);
+
+    database.exec(MIGRATION_26);
+
+    const rows = database
+      .prepare('SELECT * FROM assessments ORDER BY assessment_id')
+      .all() as Array<Record<string, string>>;
+    expect(rows).toEqual([
+      {
+        candidate_id: 'candidate-1',
+        assessment_id: 'product-case-v1',
+        submission_cipher: 'sealed-case-submission',
+        result_cipher: 'sealed-case-result',
+        completed_at: '2026-08-02T10:00:00.000Z',
+        updated_at: '2026-08-02T11:00:00.000Z',
+      },
+    ]);
+    database.close();
+  });
+
+  it('refuses a work-preferences-v1 row in a freshly migrated database', () => {
+    const database = new DatabaseSync(':memory:', {
+      enableForeignKeyConstraints: true,
+    });
+    applyMigrations(database, (op) => op());
+    database.exec(
+      "INSERT INTO candidates (id, token_hash, data_class, locale, created_at, updated_at)" +
+        " VALUES ('candidate-1', 'hash-1', 'synthetic', 'ru-RU'," +
+        " '2026-09-03T10:00:00.000Z', '2026-09-03T10:00:00.000Z')",
+    );
+
+    expect(() =>
+      database.exec(
+        "INSERT INTO assessments (candidate_id, assessment_id, submission_cipher," +
+          " result_cipher, completed_at, updated_at) VALUES ('candidate-1'," +
+          " 'work-preferences-v1', 'sealed', 'sealed', '2026-09-03T10:00:00.000Z'," +
+          " '2026-09-03T10:00:00.000Z')",
+      ),
+    ).toThrow(/CHECK constraint failed/u);
+
+    database.exec(
+      "INSERT INTO assessments (candidate_id, assessment_id, submission_cipher," +
+        " result_cipher, completed_at, updated_at) VALUES ('candidate-1'," +
+        " 'product-case-v1', 'sealed', 'sealed', '2026-09-03T10:00:00.000Z'," +
+        " '2026-09-03T10:00:00.000Z')",
+    );
+    expect(
+      database.prepare('SELECT COUNT(*) AS total FROM assessments').get(),
+    ).toEqual({ total: 1 });
+    database.close();
+  });
+});

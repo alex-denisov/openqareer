@@ -10,10 +10,7 @@ import {
 import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
 import {
   evaluateProductCase,
-  evaluateWorkPreferences,
   productCaseSubmissionSchema,
-  workPreferenceSubmissionSchema,
-  type AssessmentId,
 } from '../domain/assessment';
 import { evaluateGermanyMarket, germanyMarketSubmissionSchema } from '../domain/germanyMarket';
 import {
@@ -123,11 +120,7 @@ async function readResume(
   };
 }
 
-function evaluateAssessment(assessmentId: AssessmentId, body: unknown) {
-  if (assessmentId === 'work-preferences-v1') {
-    const submission = workPreferenceSubmissionSchema.parse(body);
-    return { submission, result: evaluateWorkPreferences(submission) };
-  }
+function evaluateAssessment(body: unknown) {
   const submission = productCaseSubmissionSchema.parse(body);
   return { submission, result: evaluateProductCase(submission) };
 }
@@ -318,7 +311,7 @@ const handleSaveAssessment: Handler = async (deps, request, reply) => {
   const assessmentId = assessmentIdSchema.parse(
     (request.params as { assessmentId: string }).assessmentId,
   );
-  const evaluated = evaluateAssessment(assessmentId, request.body);
+  const evaluated = evaluateAssessment(request.body);
   const assessment = candidateStore.saveAssessment(
     candidate.id,
     assessmentId,

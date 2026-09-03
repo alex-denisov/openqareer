@@ -266,7 +266,7 @@ export const memoryChangeSchema = z
     }
   });
 
-export const assessmentIdSchema = z.enum(['work-preferences-v1', 'product-case-v1']);
+export const assessmentIdSchema = z.enum(['product-case-v1']);
 
 export const resumeImportSchema = z
   .object({
