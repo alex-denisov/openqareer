@@ -12,6 +12,10 @@ import {
   type ProviderId,
 } from './modelRegistry';
 import {
+  selectProviderQueue,
+  type ProviderQueueEntry,
+} from './providerQueue';
+import {
   PROVIDER_STAGE_MAX_RETRIES,
   PROVIDER_STAGE_TIMEOUT_MS,
 } from './stageTimeout';
@@ -173,7 +177,7 @@ export class CachedRoleNamer implements RoleNamer {
   private readonly entries = new Map<string, { at: number; roles: NamedRole[] }>();
 
   constructor(
-    private readonly inner: RoleNamer,
+    readonly inner: RoleNamer,
     private readonly ttlMs = 15 * 60_000,
     private readonly now: () => number = () => Date.now(),
   ) {}
@@ -190,29 +194,88 @@ export class CachedRoleNamer implements RoleNamer {
   }
 }
 
+/**
+ * Очередь ступеней для называния ролей.
+ *
+ * Потолок ступени в тридцать секунд (решение владельца 2026-09-03) сам по себе
+ * роль не называет: живой замер по 32 фактам кандидата дал у бесплатной головы
+ * очереди 59 секунд, из которых 2 373 токена ушли в рассуждение. Ступень с
+ * потолком, за которой никого нет, превращает медленный ответ в пустую панель.
+ * Поэтому называние ролей идёт той же очередью, что и ход коуча: молчание
+ * ступени — повод спросить следующую.
+ */
+export class QueuedRoleNamer implements RoleNamer {
+  constructor(
+    private readonly stages: readonly RoleNamer[],
+    readonly descriptors: readonly string[] = [],
+  ) {}
+
+  async nameRoles(facts: readonly CandidateFact[]): Promise<NamedRole[]> {
+    for (const stage of this.stages) {
+      const roles = await stage.nameRoles(facts);
+      if (roles.length > 0) return roles;
+    }
+    return [];
+  }
+}
+
+/** Отчёт об очереди считается по ней самой, а не по отдельному списку (B183). */
+export function describeRoleNamerQueue(namer: RoleNamer | undefined): string[] {
+  const queue = namer instanceof CachedRoleNamer ? namer.inner : namer;
+  if (!(queue instanceof QueuedRoleNamer)) return [];
+  return [...queue.descriptors];
+}
+
 export interface RoleNamerConfig {
   readonly personalProvider?: ProviderId;
   readonly model?: string;
+  readonly fallbacks?: readonly ProviderQueueEntry[];
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
+}
+
+/**
+ * Называние ролей говорит на `chat/completions`. Ступень с другим транспортом
+ * (Gemini, Anthropic, Cohere, Yandex) пропускается: звать её этим клиентом
+ * значило бы получить отказ и выдать его за молчание модели.
+ */
+function speaksChatCompletions(provider: ProviderId): boolean {
+  return (
+    provider === 'openai' ||
+    modelRegistry[provider].transport === 'openai-compatible-chat'
+  );
 }
 
 export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
   const provider: ProviderId = config.personalProvider ?? 'openai';
-  const apiKey = config.providerCredentials?.[provider];
-  if (!apiKey) return undefined;
-  const definition = modelRegistry[provider];
-  const model = config.model ?? definition.models[0]?.id;
-  if (!model) return undefined;
+  const stages = selectProviderQueue({
+    head: { provider, ...(config.model ? { model: config.model } : {}) },
+    fallbacks: config.fallbacks,
+    credentials: config.providerCredentials ?? {},
+  }).filter((route) => speaksChatCompletions(route.provider));
+  if (stages.length === 0) return undefined;
+
   return new CachedRoleNamer(
-    new LlmRoleNamer({
-      apiKey,
-      model,
-      baseUrl: provider === 'openai' ? undefined : definition.baseUrl,
-      structuredOutput:
-        definition.models.find((item) => item.id === model)?.structuredOutput ?? false,
-      // Условие имеет смысл только у пула: у названной модели OpenRouter
-      // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
-      requireParameters: provider === 'openrouter' && isMutableModelAlias(model),
-    }),
+    new QueuedRoleNamer(
+      stages.map(
+        (route) =>
+          new LlmRoleNamer({
+            apiKey: route.apiKey,
+            model: route.model,
+            baseUrl:
+              route.provider === 'openai'
+                ? undefined
+                : modelRegistry[route.provider].baseUrl,
+            structuredOutput:
+              modelRegistry[route.provider].models.find(
+                (item) => item.id === route.model,
+              )?.structuredOutput ?? false,
+            // Условие имеет смысл только у пула: у названной модели OpenRouter
+            // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
+            requireParameters:
+              route.provider === 'openrouter' && isMutableModelAlias(route.model),
+          }),
+      ),
+      stages.map((route) => `${route.provider}:${route.model}`),
+    ),
   );
 }

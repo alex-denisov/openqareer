@@ -130,6 +130,9 @@ const app = await buildApp({
   roleNamer: buildRoleNamer({
     personalProvider: personalProviderId,
     model: config.model,
+    // Очередь та же, что у хода коуча: с потолком ступени в тридцать секунд
+    // одинокая бесплатная голова оставляла панель пустой (B180, 2026-09-03).
+    fallbacks: config.personalFallbacks,
     providerCredentials: config.providerCredentials,
   }),
   serveStatic: process.env.NODE_ENV === 'production',

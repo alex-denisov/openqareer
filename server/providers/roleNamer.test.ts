@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CachedRoleNamer, LlmRoleNamer, type ChatCompletionClient } from './roleNamer';
+import type { NamedRole } from '../../shared/roleProposals';
+import {
+  buildRoleNamer,
+  CachedRoleNamer,
+  describeRoleNamerQueue,
+  LlmRoleNamer,
+  QueuedRoleNamer,
+  type ChatCompletionClient,
+  type RoleNamer,
+} from './roleNamer';
 
 function client(content: string | null): ChatCompletionClient {
   return {
@@ -168,5 +177,59 @@ describe('LlmRoleNamer и структурированный вывод OpenRout
       | undefined;
     expect(body?.response_format).toMatchObject({ type: 'json_schema' });
     expect(body?.provider).toEqual({ require_parameters: true });
+  });
+});
+
+describe('QueuedRoleNamer', () => {
+  const namer = (roles: NamedRole[]): RoleNamer => ({
+    nameRoles: vi.fn().mockResolvedValue(roles),
+  });
+
+  it('отдаёт ответ первой ступени, которая назвала роли', async () => {
+    const first = namer([]);
+    const second = namer([{ title: 'COO', reason: 'вёл операции', evidenceRefs: ['memory:1'] }]);
+    const third = namer([{ title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] }]);
+
+    const queued = new QueuedRoleNamer([first, second, third]);
+
+    await expect(queued.nameRoles(facts)).resolves.toEqual([
+      { title: 'COO', reason: 'вёл операции', evidenceRefs: ['memory:1'] },
+    ]);
+    // Молчание первой ступени — повод спросить следующую, а не отдать пусто.
+    expect(first.nameRoles).toHaveBeenCalled();
+    // Ступень за ответившей не тревожится.
+    expect(third.nameRoles).not.toHaveBeenCalled();
+  });
+
+  it('пусто, когда промолчали все', async () => {
+    const queued = new QueuedRoleNamer([namer([]), namer([])]);
+    await expect(queued.nameRoles(facts)).resolves.toEqual([]);
+  });
+});
+
+describe('buildRoleNamer', () => {
+  it('строит очередь и пропускает ступени с другим транспортом', () => {
+    const built = buildRoleNamer({
+      personalProvider: 'openrouter',
+      model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+      fallbacks: [
+        { provider: 'openrouter', model: 'openrouter/free' },
+        // Gemini говорит не на chat/completions — честнее пропустить ступень,
+        // чем звать её транспортом, которого она не понимает.
+        { provider: 'gemini', model: 'gemini-3.6-flash' },
+        { provider: 'openai', model: 'gpt-5.6-luna' },
+      ],
+      providerCredentials: { openrouter: 'k', gemini: 'k', openai: 'k' },
+    });
+
+    expect(describeRoleNamerQueue(built)).toEqual([
+      'openrouter:nvidia/nemotron-3-ultra-550b-a55b:free',
+      'openrouter:openrouter/free',
+      'openai:gpt-5.6-luna',
+    ]);
+  });
+
+  it('без ключей ступеней нет вовсе', () => {
+    expect(buildRoleNamer({ personalProvider: 'openrouter', providerCredentials: {} })).toBeUndefined();
   });
 });
