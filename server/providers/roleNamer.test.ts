@@ -40,21 +40,21 @@ describe('LlmRoleNamer', () => {
       ),
     });
 
-    await expect(namer.nameRoles(facts)).resolves.toEqual([
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([
       { title: 'Продакт-менеджер', reason: 'вёл продукты', evidenceRefs: ['memory:1'] },
     ]);
   });
 
   it('возвращает пусто, когда модель ответила не по схеме', async () => {
     const namer = new LlmRoleNamer({ apiKey: 'k', model: 'm', client: client('не json') });
-    await expect(namer.nameRoles(facts)).resolves.toEqual([]);
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([]);
   });
 
   it('не спрашивает модель, когда фактов нет', async () => {
     const stub = client('{"roles":[]}');
     const namer = new LlmRoleNamer({ apiKey: 'k', model: 'm', client: stub });
 
-    await expect(namer.nameRoles([])).resolves.toEqual([]);
+    await expect(namer.nameRoles([], 'ru')).resolves.toEqual([]);
     expect(stub.chat.completions.create).not.toHaveBeenCalled();
   });
 
@@ -67,7 +67,7 @@ describe('LlmRoleNamer', () => {
       },
     });
 
-    await expect(namer.nameRoles(facts)).resolves.toEqual([]);
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([]);
   });
 });
 
@@ -78,8 +78,8 @@ describe('CachedRoleNamer', () => {
     const inner = { nameRoles: vi.fn().mockResolvedValue(roles) };
     const namer = new CachedRoleNamer(inner);
 
-    await namer.nameRoles(facts);
-    await expect(namer.nameRoles(facts)).resolves.toEqual(roles);
+    await namer.nameRoles(facts, 'ru');
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual(roles);
     expect(inner.nameRoles).toHaveBeenCalledTimes(1);
   });
 
@@ -87,8 +87,8 @@ describe('CachedRoleNamer', () => {
     const inner = { nameRoles: vi.fn().mockResolvedValue(roles) };
     const namer = new CachedRoleNamer(inner);
 
-    await namer.nameRoles(facts);
-    await namer.nameRoles([...facts, { ref: 'memory:3', statement: 'Запускал маркетплейс' }]);
+    await namer.nameRoles(facts, 'ru');
+    await namer.nameRoles([...facts, { ref: 'memory:3', statement: 'Запускал маркетплейс' }], 'ru');
     expect(inner.nameRoles).toHaveBeenCalledTimes(2);
   });
 
@@ -96,8 +96,8 @@ describe('CachedRoleNamer', () => {
     const inner = { nameRoles: vi.fn().mockResolvedValue([]) };
     const namer = new CachedRoleNamer(inner);
 
-    await namer.nameRoles(facts);
-    await namer.nameRoles(facts);
+    await namer.nameRoles(facts, 'ru');
+    await namer.nameRoles(facts, 'ru');
     expect(inner.nameRoles).toHaveBeenCalledTimes(2);
   });
 });
@@ -114,7 +114,7 @@ describe('LlmRoleNamer: ответ свободной модели', () => {
       ),
     });
 
-    await expect(namer.nameRoles(facts)).resolves.toEqual([
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([
       { title: 'Продакт-менеджер', reason: 'вёл продукты', evidenceRefs: ['memory:1'] },
     ]);
   });
@@ -136,7 +136,7 @@ describe('LlmRoleNamer: ответ свободной модели', () => {
       ),
     });
 
-    await expect(namer.nameRoles(facts)).resolves.toEqual([
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([
       {
         title: 'Product Manager (Fintech)',
         reason: 'Девять лет вёл внутренние продукты',
@@ -149,7 +149,7 @@ describe('LlmRoleNamer: ответ свободной модели', () => {
     const stub = client('{"roles":[]}');
     const namer = new LlmRoleNamer({ apiKey: 'k', model: 'm', client: stub, structuredOutput: false });
 
-    await namer.nameRoles(facts);
+    await namer.nameRoles(facts, 'ru');
 
     // На проде `response_format: json_object` ломал вызов у
     // `nemotron-3-ultra:free`: ответ приходил без `choices`, и роль просто
@@ -171,7 +171,7 @@ describe('LlmRoleNamer и структурированный вывод OpenRout
       client: stub,
     });
 
-    await namer.nameRoles(facts);
+    await namer.nameRoles(facts, 'ru');
 
     const body = vi.mocked(stub.chat.completions.create).mock.calls[0]?.[0] as
       | Record<string, unknown>
@@ -193,7 +193,7 @@ describe('QueuedRoleNamer', () => {
 
     const queued = new QueuedRoleNamer([first, second, third]);
 
-    await expect(queued.nameRoles(facts)).resolves.toEqual([
+    await expect(queued.nameRoles(facts, 'ru')).resolves.toEqual([
       { title: 'COO', reason: 'вёл операции', evidenceRefs: ['memory:1'] },
     ]);
     // Молчание первой ступени — повод спросить следующую, а не отдать пусто.
@@ -204,7 +204,7 @@ describe('QueuedRoleNamer', () => {
 
   it('пусто, когда промолчали все', async () => {
     const queued = new QueuedRoleNamer([namer([]), namer([])]);
-    await expect(queued.nameRoles(facts)).resolves.toEqual([]);
+    await expect(queued.nameRoles(facts, 'ru')).resolves.toEqual([]);
   });
 });
 
@@ -270,7 +270,7 @@ describe('GeminiRoleNamer', () => {
       },
     });
 
-    await expect(namer.nameRoles(facts)).resolves.toEqual([
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([
       { title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] },
     ]);
 
@@ -292,7 +292,7 @@ describe('GeminiRoleNamer', () => {
       baseUrl: 'https://gateway.test/v1beta',
       fetchImpl: async () => new Response('overloaded', { status: 503 }),
     });
-    await expect(namer.nameRoles(facts)).resolves.toEqual([]);
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toEqual([]);
   });
 });
 
@@ -325,5 +325,34 @@ describe('buildRoleNamer с Gemini', () => {
     expect(describeRoleNamerQueue(built)).toEqual([
       'openrouter:nvidia/nemotron-3-ultra-550b-a55b:free',
     ]);
+  });
+});
+
+describe('язык названия у ступеней и кэша', () => {
+  it('инструкция едет тем языком, который дал вызывающий', async () => {
+    const stub = client('{"roles":[]}');
+    const namer = new LlmRoleNamer({ apiKey: 'k', model: 'm', client: stub });
+
+    await namer.nameRoles(facts, 'en');
+
+    const body = vi.mocked(stub.chat.completions.create).mock.calls[0]?.[0] as
+      | { messages: Array<{ content: string }> }
+      | undefined;
+    expect(body?.messages[0]?.content).toContain('английск');
+  });
+
+  it('кэш не выдаёт русский ответ за английский', async () => {
+    const inner: RoleNamer = {
+      nameRoles: vi
+        .fn()
+        .mockResolvedValue([{ title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] }]),
+    };
+    const cached = new CachedRoleNamer(inner);
+
+    await cached.nameRoles(facts, 'ru');
+    await cached.nameRoles(facts, 'en');
+
+    // Те же факты на другом языке — другой ответ, а не попадание в кэш.
+    expect(inner.nameRoles).toHaveBeenCalledTimes(2);
   });
 });

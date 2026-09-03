@@ -1,6 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
+import { resolveRoleNameLanguage } from '../domain/roleNameLanguage';
 import { vacancySubscriptionInputSchema } from '../domain/vacancy';
+import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import { buildRoleProposals } from '../vacancies/roleHypotheses';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
@@ -138,13 +141,35 @@ const handleRoleHypotheses: Handler = async (
   // доказательство или честное «пока не найдено» (B180, срез 1в). Роль без
   // вакансий с экрана не убирается: отсутствие вакансий — состояние наших
   // источников, а не приговор роли (решение владельца 2026-09-03).
-  const named = roleNamer ? await roleNamer.nameRoles(candidateFacts(candidateStore, candidate.id)) : [];
+  // Язык названия решает код, а не модель: иначе смена провайдера переписывает
+  // кандидату его же роли (B180, решение владельца 2026-09-03).
+  const facts = candidateFacts(candidateStore, candidate.id);
+  const { language } = resolveRoleNameLanguage({
+    searchRegions: readSearchRegions(candidateStore, candidate.id),
+    targetRoles,
+    resumeText: facts.map((fact) => fact.statement).join(' '),
+  });
+  const named = roleNamer ? await roleNamer.nameRoles(facts, language) : [];
 
   return {
     data: buildRoleProposals({ matched, named, candidateSkills: confirmedSkills }),
     meta: { requestId: request.id, poolSize: matched.length },
   };
 };
+
+/**
+ * Рынки, на которых кандидат ищет, — его собственный ответ мастеру подбора.
+ * Пустой список честен: он означает «ещё не сказал», а не «ищет везде».
+ */
+function readSearchRegions(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+): CandidateRegion[] {
+  const stored = candidateStore.getCandidateWorkspace(candidateId);
+  if (!stored) return [];
+  const parsed = candidateWorkspaceSchema.safeParse(stored);
+  return parsed.success ? [...parsed.data.regions] : [];
+}
 
 /** Факты, по которым модель называет роль: своя ссылка у каждого. */
 function candidateFacts(

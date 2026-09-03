@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import OpenAI from 'openai';
 import {
-  ROLE_NAMING_INSTRUCTIONS,
   ROLE_NAMING_JSON_SCHEMA,
+  roleNamingInstructions,
   roleNamingSchema,
 } from '../domain/roleNaming';
+import type { RoleNameLanguage } from '../domain/roleNameLanguage';
 import {
   cloudflareGatewayHeaders,
   geminiGatewayBaseUrl,
@@ -47,8 +48,17 @@ export interface CandidateFact {
 }
 
 export interface RoleNamer {
-  /** Пустой список — законный ответ: он означает «модель не назвала». */
-  nameRoles(facts: readonly CandidateFact[]): Promise<NamedRole[]>;
+  /**
+   * Пустой список — законный ответ: он означает «модель не назвала».
+   *
+   * Язык названия приходит снаружи и решается кодом (`roleNameLanguage.ts`):
+   * оставлять его модели значило бы менять факт о кандидате вместе с
+   * провайдером.
+   */
+  nameRoles(
+    facts: readonly CandidateFact[],
+    language: RoleNameLanguage,
+  ): Promise<NamedRole[]>;
 }
 
 export interface LlmRoleNamerOptions {
@@ -93,14 +103,17 @@ export class LlmRoleNamer implements RoleNamer {
       }) as unknown as ChatCompletionClient);
   }
 
-  async nameRoles(facts: readonly CandidateFact[]): Promise<NamedRole[]> {
+  async nameRoles(
+    facts: readonly CandidateFact[],
+    language: RoleNameLanguage,
+  ): Promise<NamedRole[]> {
     // Спрашивать модель не о чем — это не отказ провайдера, а отсутствие входа.
     if (facts.length === 0) return [];
     try {
       const response = await this.client.chat.completions.create({
         model: this.model,
         messages: [
-          { role: 'system', content: ROLE_NAMING_INSTRUCTIONS },
+          { role: 'system', content: roleNamingInstructions(language) },
           { role: 'user', content: serializeFacts(facts) },
         ],
         // `json_object` у модели без структурированного вывода ломал вызов на
@@ -195,7 +208,10 @@ export class GeminiRoleNamer implements RoleNamer {
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
-  async nameRoles(facts: readonly CandidateFact[]): Promise<NamedRole[]> {
+  async nameRoles(
+    facts: readonly CandidateFact[],
+    language: RoleNameLanguage,
+  ): Promise<NamedRole[]> {
     if (facts.length === 0) return [];
     try {
       const response = await this.fetchImpl(
@@ -210,7 +226,7 @@ export class GeminiRoleNamer implements RoleNamer {
             ...(this.options.extraHeaders ?? {}),
           },
           body: JSON.stringify({
-            systemInstruction: { parts: [{ text: ROLE_NAMING_INSTRUCTIONS }] },
+            systemInstruction: { parts: [{ text: roleNamingInstructions(language) }] },
             contents: [{ role: 'user', parts: [{ text: serializeFacts(facts) }] }],
             generationConfig: {
               responseMimeType: 'application/json',
@@ -258,11 +274,17 @@ export class CachedRoleNamer implements RoleNamer {
     private readonly now: () => number = () => Date.now(),
   ) {}
 
-  async nameRoles(facts: readonly CandidateFact[]): Promise<NamedRole[]> {
-    const key = createHash('sha256').update(serializeFacts(facts)).digest('hex');
+  async nameRoles(
+    facts: readonly CandidateFact[],
+    language: RoleNameLanguage,
+  ): Promise<NamedRole[]> {
+    // Язык — часть ключа: те же факты на другом языке дают другой ответ.
+    const key = createHash('sha256')
+      .update(`${language}\n${serializeFacts(facts)}`)
+      .digest('hex');
     const cached = this.entries.get(key);
     if (cached && this.now() - cached.at < this.ttlMs) return cached.roles;
-    const roles = await this.inner.nameRoles(facts);
+    const roles = await this.inner.nameRoles(facts, language);
     // Пустой ответ не кэшируется: отказ провайдера не должен становиться
     // «моделью названо ноль ролей» на четверть часа.
     if (roles.length > 0) this.entries.set(key, { at: this.now(), roles });
@@ -286,9 +308,12 @@ export class QueuedRoleNamer implements RoleNamer {
     readonly descriptors: readonly string[] = [],
   ) {}
 
-  async nameRoles(facts: readonly CandidateFact[]): Promise<NamedRole[]> {
+  async nameRoles(
+    facts: readonly CandidateFact[],
+    language: RoleNameLanguage,
+  ): Promise<NamedRole[]> {
     for (const stage of this.stages) {
-      const roles = await stage.nameRoles(facts);
+      const roles = await stage.nameRoles(facts, language);
       if (roles.length > 0) return roles;
     }
     return [];
