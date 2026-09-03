@@ -14,6 +14,7 @@ import { CareerCommandDispatcher } from './orchestration/careerCommandDispatcher
 import type { ConnectorExecutor } from './connectors/connectorHarness';
 import type { CoachProvider } from './providers/coachProvider';
 import type { ResumeStructurer } from './providers/resumeStructurer';
+import type { RoleNamer } from './providers/roleNamer';
 import type { SessionAuth } from './auth/authService';
 import type { VacancySample } from './domain/vacancy';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
@@ -48,6 +49,7 @@ interface BuildAppOptions {
   multiSourceVacancyEngine?: MultiSourceVacancyEngine;
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
+  roleNamer?: RoleNamer;
 }
 
 interface AppServices {
@@ -178,6 +180,7 @@ export async function buildApp({
   vacancyIntelligenceService,
   multiSourceVacancyEngine,
   resumeStructurer,
+  roleNamer,
 }: BuildAppOptions): Promise<FastifyInstance> {
   if (authService && 'setCandidateStore' in authService) {
     (authService as { setCandidateStore(s: CandidateStore): void }).setCandidateStore(
@@ -207,6 +210,7 @@ export async function buildApp({
     coachProvider,
     importProfile,
     resumeStructurer,
+    roleNamer,
     searchVacancies: searchVacancies ?? searchHhVacancies,
     ...services,
   };

@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { vacancySubscriptionInputSchema } from '../domain/vacancy';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
-import { buildRoleHypotheses } from '../vacancies/roleHypotheses';
+import { buildRoleProposals } from '../vacancies/roleHypotheses';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
 import type { RouteDeps } from './deps';
 import {
@@ -104,7 +104,7 @@ const matchedVacanciesQuerySchema = z.object({
  * байт — тот же бюджет перестаёт быть ограничением.
  */
 const handleRoleHypotheses: Handler = async (
-  { authService, candidateStore, config, multiSourceEngine },
+  { authService, candidateStore, config, multiSourceEngine, roleNamer },
   request,
   reply,
 ) => {
@@ -134,15 +134,27 @@ const handleRoleHypotheses: Handler = async (
     preferredRemote: true,
   });
 
+  // Имя роли даёт модель, читающая факты кандидата; пул приписывает к нему
+  // доказательство или честное «пока не найдено» (B180, срез 1в). Роль без
+  // вакансий с экрана не убирается: отсутствие вакансий — состояние наших
+  // источников, а не приговор роли (решение владельца 2026-09-03).
+  const named = roleNamer ? await roleNamer.nameRoles(candidateFacts(candidateStore, candidate.id)) : [];
+
   return {
-    data: buildRoleHypotheses({
-      matched,
-      candidateRole: targetRoles.join(', '),
-      candidateSkills: confirmedSkills,
-    }),
+    data: buildRoleProposals({ matched, named, candidateSkills: confirmedSkills }),
     meta: { requestId: request.id, poolSize: matched.length },
   };
 };
+
+/** Факты, по которым модель называет роль: своя ссылка у каждого. */
+function candidateFacts(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+): Array<{ ref: string; statement: string }> {
+  return (candidateStore.getSnapshot(candidateId)?.memory ?? [])
+    .filter((memory) => memory.status !== 'corrected')
+    .map((memory) => ({ ref: `memory:${memory.id}`, statement: memory.statement }));
+}
 
 const handleMatchedVacancies: Handler = async (
   { authService, candidateStore, config, multiSourceEngine },

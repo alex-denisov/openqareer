@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { getRoleHypotheses } from '../coach/coachApi';
-import type { PoolRoleHypothesis } from '../../../shared/poolRoleHypotheses';
+import type { ProposedRole } from '../../../shared/roleProposals';
 
 export interface RoleHypothesesRead {
-  readonly roles: readonly PoolRoleHypothesis[];
+  readonly roles: readonly ProposedRole[];
   readonly loading: boolean;
   readonly failed: boolean;
 }
@@ -17,7 +17,7 @@ export interface RoleHypothesesRead {
  * Расчёт переехал туда, где пул полный; сюда приезжают три роли.
  */
 export function useRoleHypotheses(provided?: RoleHypothesesRead): RoleHypothesesRead {
-  const [roles, setRoles] = useState<readonly PoolRoleHypothesis[]>([]);
+  const [roles, setRoles] = useState<readonly ProposedRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 

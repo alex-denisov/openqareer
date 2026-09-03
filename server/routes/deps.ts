@@ -7,6 +7,7 @@ import type { ProfileUrlImportResult } from '../connectors/profileUrlImport';
 import type { CareerCommandDispatcher } from '../orchestration/careerCommandDispatcher';
 import type { CoachProvider } from '../providers/coachProvider';
 import type { ResumeStructurer } from '../providers/resumeStructurer';
+import type { RoleNamer } from '../providers/roleNamer';
 import type { VacancySample } from '../domain/vacancy';
 import type { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyIntelligenceService } from '../vacancies/vacancyIntelligenceService';
@@ -25,5 +26,7 @@ export interface RouteDeps {
   importProfile: (url: string) => Promise<ProfileUrlImportResult>;
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
+  /** Роли называет модель по фактам кандидата (B180, срез 1в). */
+  roleNamer?: RoleNamer;
   searchRemotive?: (input: { text: string; perPage?: number }) => Promise<VacancySample>;
 }

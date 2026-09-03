@@ -1,13 +1,14 @@
 import { canonicalRoleWord } from './roleSynonyms';
 
 /**
- * Гипотеза роли — это наблюдение в пуле вакансий, а не строка из резюме.
+ * Наблюдения рынка, сгруппированные по роли.
  *
  * На проде «Роли и рынок» печатала заголовком гипотезы целую фразу из профиля
  * («VP of Technology, VP of Operations, CTO, or COO roles in SaaS, FinTech,
  * iGaming, or AI scale-ups»). Продукт её не выдумал — это ответ кандидата, — но
  * рыночной ролью она не является: у неё нет ни вакансий, ни выборки. Роль
- * теперь берётся из пула и называется так, как её называет рынок (B180, срез 1).
+ * берётся не из строки резюме: пул либо подтверждает её, либо честно молчит
+ * (B180, срезы 1 и 1в).
  *
  * Считается это на сервере (B180, срез 1б). В браузер пул приезжает без
  * требований вовсе: `matchedVacancyPage.ts` намеренно вырезает `skills`, чтобы
@@ -56,7 +57,12 @@ const NOISE = new Set([
   'удаленно', 'офис', 'гибрид', 'fulltime', 'parttime', 'в', 'и', 'на', 'для',
 ]);
 
-function titleKey(title: string): string {
+/**
+ * Ключ группировки: две формулировки одной роли обязаны попасть в один ключ.
+ * Экспортирован, потому что тем же ключом роль, названную моделью, ищут в пуле
+ * (`roleProposals.ts`, срез 1в) — иначе имя и доказательство разошлись бы.
+ */
+export function titleKey(title: string): string {
   return title
     .toLowerCase()
     .replace(/[()«»"'’,.:;/\\|—–-]/gu, ' ')
@@ -80,7 +86,7 @@ function normalizeWords(text: string): Set<string> {
   );
 }
 
-interface RoleGroup {
+export interface RoleGroup {
   readonly key: string;
   readonly items: RoleObservation[];
   readonly titles: Map<string, number>;
@@ -90,13 +96,12 @@ function emptyGroup(key: string): RoleGroup {
   return { key, items: [], titles: new Map<string, number>() };
 }
 
-export function poolRoleHypotheses(input: {
-  readonly pool: readonly RoleObservation[];
-  readonly candidateRole: string;
-  readonly candidateSkills: readonly string[];
-}): PoolRoleHypothesis[] {
+/** Пул, сгруппированный по ключу роли. Один проход для обоих вызывающих. */
+export function groupObservations(
+  pool: readonly RoleObservation[],
+): Map<string, RoleGroup> {
   const groups = new Map<string, RoleGroup>();
-  for (const item of input.pool) {
+  for (const item of pool) {
     const title = item.canonicalTitle?.trim();
     if (!title) continue;
     const key = titleKey(title);
@@ -106,22 +111,10 @@ export function poolRoleHypotheses(input: {
     group.titles.set(title, (group.titles.get(title) ?? 0) + 1);
     groups.set(key, group);
   }
-
-  const roleWords = normalizeWords(input.candidateRole);
-  const skills = new Set(input.candidateSkills.map((skill) => skill.toLowerCase().trim()));
-
-  return [...groups.values()]
-    // Меньше восьми наблюдений — не гипотеза, а совпадение.
-    .filter((group) => group.items.length >= MIN_ROLE_SAMPLE)
-    .map((group) => describeGroup(group, roleWords, skills))
-    .sort((left, right) =>
-      right.matchedRequirements - left.matchedRequirements ||
-      right.sampleSize - left.sampleSize,
-    )
-    .slice(0, 3);
+  return groups;
 }
 
-function describeGroup(
+export function describeGroup(
   group: RoleGroup,
   roleWords: Set<string>,
   skills: Set<string>,

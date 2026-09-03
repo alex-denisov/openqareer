@@ -15,7 +15,7 @@ import { assessProfile, type ProfileMeasure, type ProfileScore } from './profile
 import { buildProfileView } from './profileView';
 import { RolesMarketPanel } from './RolesMarketPanel';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
-import type { PoolRoleHypothesis } from '../../../shared/poolRoleHypotheses';
+import type { ProposedRole } from '../../../shared/roleProposals';
 import type { CareerCabinetView } from './cabinetViews';
 
 /**
@@ -38,7 +38,7 @@ interface CareerHomeProps {
   readonly targetDirection: string;
   /** Карта ролей и рынка: гипотезы и выборка вакансий за ними (B104, B118). */
   readonly journey?: CareerJourney;
-  readonly marketRoles?: readonly PoolRoleHypothesis[];
+  readonly proposedRoles?: readonly ProposedRole[];
   readonly poolComplete?: boolean;
   readonly poolTotal?: number;
   readonly loading: boolean;
@@ -57,7 +57,7 @@ export function CareerHome({
   workspace,
   targetDirection,
   journey,
-  marketRoles,
+  proposedRoles,
   poolComplete,
   poolTotal,
   loading,
@@ -91,7 +91,7 @@ export function CareerHome({
         regions={workspace?.regions ?? []}
         targetDirection={targetDirection}
         journey={journey}
-        marketRoles={marketRoles}
+        proposedRoles={proposedRoles}
         poolComplete={poolComplete}
         poolTotal={poolTotal}
         importing={importing}
@@ -110,7 +110,7 @@ function HomeRail({
   regions,
   targetDirection,
   journey,
-  marketRoles,
+  proposedRoles,
   poolComplete,
   poolTotal,
   importing,
@@ -121,7 +121,7 @@ function HomeRail({
   regions: readonly CandidateRegion[];
   targetDirection: string;
   journey?: CareerJourney;
-  marketRoles?: readonly PoolRoleHypothesis[];
+  proposedRoles?: readonly ProposedRole[];
   poolComplete?: boolean;
   poolTotal?: number;
   importing: boolean;
@@ -142,7 +142,7 @@ function HomeRail({
       />
       <RolesMarketPanel
         journey={journey}
-        marketRoles={marketRoles}
+        proposedRoles={proposedRoles}
         poolComplete={poolComplete}
         poolTotal={poolTotal}
         onNavigate={onNavigate}

@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { RolesMarketPanel } from './RolesMarketPanel';
 import { cabinetJourney } from './cabinetJourney';
-import { poolRoleHypotheses } from '../../../shared/poolRoleHypotheses';
+import type { ProposedRole } from '../../../shared/roleProposals';
 import type { CanonicalProfileMemory } from '../diagnostic/careerDiagnostic';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 
@@ -100,48 +100,87 @@ describe('RolesMarketPanel while the pool is still being read', () => {
   });
 });
 
-describe('RolesMarketPanel with market roles (B180 срез 1)', () => {
-  it('печатает рыночное название роли, её выборку и источники', () => {
-    const pool = poolOf(9);
-    const roles = poolRoleHypotheses({
-      pool: pool.map((item) => item.cluster),
-      candidateRole: 'Руководитель продукта',
-      candidateSkills: ['SQL'],
+describe('RolesMarketPanel: роль называет модель, пул подтверждает (B180 срез 1в)', () => {
+  const journey = () =>
+    cabinetJourney({
+      memory,
+      targetDirection: 'Руководитель продукта',
+      pool: poolOf(9),
+      now: '2026-09-02T09:00:00.000Z',
     });
 
-    const html = renderToStaticMarkup(
-      <RolesMarketPanel
-        journey={cabinetJourney({
-          memory,
-          targetDirection: 'Руководитель продукта',
-          pool,
-          now: '2026-09-02T09:00:00.000Z',
-        })}
-        marketRoles={roles}
-        onNavigate={() => undefined}
-      />,
+  function render(roles: ProposedRole[]): string {
+    return renderToStaticMarkup(
+      <RolesMarketPanel journey={journey()} proposedRoles={roles} onNavigate={() => undefined} />,
     );
+  }
+
+  const observed: ProposedRole = {
+    id: 'role-product',
+    title: 'Руководитель продукта',
+    origin: 'model',
+    reason: 'девять лет вели внутренние продукты',
+    evidenceRefs: ['memory:1'],
+    confirmation: {
+      state: 'observed',
+      sampleSize: 9,
+      observedFrom: '2026-09-01T08:00:00.000Z',
+      observedTo: '2026-09-02T08:00:00.000Z',
+      sources: [{ source: 'hh', count: 9 }],
+      repeatedRequirements: ['SQL'],
+      matchedRequirements: 1,
+    },
+  };
+
+  const notFound: ProposedRole = {
+    id: 'role-growth',
+    title: 'Head of Growth',
+    origin: 'model',
+    reason: 'запускали рост в двух компаниях',
+    evidenceRefs: ['memory:2'],
+    confirmation: { state: 'not-found' },
+  };
+
+  it('печатает подтверждённую роль с её выборкой и источником', () => {
+    const html = render([observed]);
 
     expect(html).toContain('Руководитель продукта');
     expect(html).toContain('9 вакансий');
     expect(html).toContain('hh.ru');
   });
 
-  it('без рыночной выборки не называет роль вовсе', () => {
-    const html = renderToStaticMarkup(
-      <RolesMarketPanel
-        journey={cabinetJourney({
-          memory,
-          targetDirection: 'Руководитель продукта',
-          pool: poolOf(3),
-          now: '2026-09-02T09:00:00.000Z',
-        })}
-        marketRoles={[]}
-        onNavigate={() => undefined}
-      />,
-    );
+  it('роль без вакансий остаётся на экране и говорит, что делать', () => {
+    const html = render([observed, notFound]);
 
-    expect(html).toContain('Роль ещё не названа рынком');
+    expect(html).toContain('Head of Growth');
+    expect(html).toContain('Пока не найдено в наших источниках');
+    expect(html).toContain('шире фильтр');
+  });
+
+  it('не выдаёт названное моделью за наблюдение рынка', () => {
+    const html = render([notFound]);
+
+    expect(html).toContain('названо по вашему опыту');
+    expect(html).not.toContain('вакансий ·');
+  });
+
+  it('малую выборку показывает числом и не печатает требований', () => {
+    const html = render([
+      { ...notFound, confirmation: { state: 'too-few', sampleSize: 3 } },
+    ]);
+
+    const pending = html.slice(
+      html.indexOf('career-roles-pending'),
+      html.indexOf('career-market-list'),
+    );
+    expect(pending).toContain('Найдено 3');
+    expect(pending).toContain('рано делать выводы');
+    // Требования на выборке меньше восьми не агрегируются: их переворачивает
+    // один работодатель со своим шаблоном.
+    expect(pending).not.toContain('Повторяются');
+  });
+
+  it('когда модель не назвала ничего и рынок молчит — говорит об этом прямо', () => {
+    expect(render([])).toContain('Роль ещё не названа');
   });
 });
-

@@ -2,6 +2,7 @@ import { buildApp } from './app';
 import { readServerConfig } from './config';
 import { buildCoachProvider } from './providers/coachProviderFactory';
 import { buildResumeStructurer } from './providers/resumeStructurer';
+import { buildRoleNamer } from './providers/roleNamer';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
 import { CareerOrchestrator } from './orchestration/careerOrchestrator';
 import { CoachProviderRoleAgent } from './orchestration/coachProviderRoleAgent';
@@ -122,6 +123,11 @@ const app = await buildApp({
   multiSourceVacancyEngine: multiSourceEngine,
   careerCommandExecutor,
   resumeStructurer: buildResumeStructurer({
+    personalProvider: personalProviderId,
+    model: config.model,
+    providerCredentials: config.providerCredentials,
+  }),
+  roleNamer: buildRoleNamer({
     personalProvider: personalProviderId,
     model: config.model,
     providerCredentials: config.providerCredentials,

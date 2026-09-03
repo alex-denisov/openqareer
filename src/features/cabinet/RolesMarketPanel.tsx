@@ -2,7 +2,7 @@ import { ArrowRight } from '@phosphor-icons/react';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { RoleMarketMap } from '../career-map/roleMarketMap';
 import { pluralRu } from '../../../shared/pluralRu';
-import type { PoolRoleHypothesis } from '../../../shared/poolRoleHypotheses';
+import type { ProposedRole, RoleConfirmation } from '../../../shared/roleProposals';
 import type { CareerCabinetView } from './cabinetViews';
 
 /**
@@ -19,17 +19,17 @@ import type { CareerCabinetView } from './cabinetViews';
  */
 export function RolesMarketPanel({
   journey,
-  marketRoles,
+  proposedRoles,
   poolComplete = true,
   poolTotal = 0,
   onNavigate,
 }: {
   readonly journey?: CareerJourney;
   /**
-   * Гипотезы, названные рынком: имя роли, её выборка и источники приходят из
-   * пула вакансий, а не из строки резюме (B180, срез 1).
+   * Роли, названные моделью по фактам кандидата, с меткой о том, что про них
+   * говорит пул вакансий (B180, срез 1в).
    */
-  readonly marketRoles?: readonly PoolRoleHypothesis[];
+  readonly proposedRoles?: readonly ProposedRole[];
   /** Пул читается страницами: выборка по половине пула — не выборка по пулу. */
   readonly poolComplete?: boolean;
   readonly poolTotal?: number;
@@ -47,8 +47,8 @@ export function RolesMarketPanel({
         <span className="career-cabinet-tag">по вашему пулу</span>
       </header>
 
-      {marketRoles ? (
-        <MarketRoleHypotheses roles={marketRoles} />
+      {proposedRoles ? (
+        <ProposedRoleList roles={proposedRoles} />
       ) : (
         <RoleHypotheses roles={roles} />
       )}
@@ -74,33 +74,91 @@ export function RolesMarketPanel({
 }
 
 /**
- * Роли, названные рынком. Каждая строка несёт своё число, окно наблюдения и
- * источники: роль без вакансий гипотезой не является.
+ * Роли, названные моделью по резюме, с тем, что про них говорит пул.
+ *
+ * Роль без вакансий с экрана **не убирается**: решение владельца 2026-09-03 —
+ * «если в пуле вакансий таких нет, не нужно обесценивать ответ LLM, нужно лишь
+ * сообщить, что пока таких вакансий не найдено». Поэтому список делится на два
+ * блока, и нижний называет своё состояние и следующий шаг, а не молчит.
  */
-function MarketRoleHypotheses({ roles }: { readonly roles: readonly PoolRoleHypothesis[] }) {
+function ProposedRoleList({ roles }: { readonly roles: readonly ProposedRole[] }) {
   if (!roles.length) {
     return (
       <p className="career-home-empty">
-        Роль ещё не названа рынком: в собранном пуле пока нет группы вакансий, по
-        которой можно строить гипотезу.
+        Роль ещё не названа: нужны подтверждённые факты о вашем опыте, по которым
+        её можно назвать.
       </p>
     );
   }
+  const confirmed = roles.filter((role) => role.confirmation.state === 'observed');
+  const pending = roles.filter((role) => role.confirmation.state !== 'observed');
+
   return (
-    <ol className="career-roles-list">
-      {roles.map((role) => (
-        <li key={role.id}>
-          <strong>{role.title}</strong>
-          <small>
-            {pluralRu(role.sampleSize, ['вакансия', 'вакансии', 'вакансий'])} ·{' '}
-            {observationWindow(role)} · {sourceSummary(role)}
-          </small>
-          {role.repeatedRequirements.length ? (
-            <small>Повторяются: {role.repeatedRequirements.slice(0, 4).join(', ')}</small>
-          ) : null}
-        </li>
-      ))}
-    </ol>
+    <>
+      {confirmed.length ? (
+        <ol className="career-roles-list">
+          {confirmed.map((role) => (
+            <RoleRow key={role.id} role={role} />
+          ))}
+        </ol>
+      ) : null}
+
+      {pending.length ? (
+        <div className="career-roles-pending">
+          <p className="career-cabinet-tag">Пока не найдено в наших источниках</p>
+          <ol className="career-roles-list">
+            {pending.map((role) => (
+              <RoleRow key={role.id} role={role} />
+            ))}
+          </ol>
+          <p className="career-home-empty">
+            Это названия ролей по вашему опыту, а не наблюдение рынка. Чтобы они
+            подтвердились, нужен шире фильтр, больше источников или ещё один сбор.
+          </p>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function RoleRow({ role }: { readonly role: ProposedRole }) {
+  return (
+    <li>
+      <strong>{role.title}</strong>
+      <small>{originLabel(role)}</small>
+      <ConfirmationLine confirmation={role.confirmation} />
+      {role.confirmation.state === 'observed' && role.confirmation.repeatedRequirements.length ? (
+        <small>
+          Повторяются: {role.confirmation.repeatedRequirements.slice(0, 4).join(', ')}
+        </small>
+      ) : null}
+    </li>
+  );
+}
+
+/** Имя роли и наблюдение рынка — разные вещи, и метка не даёт их спутать. */
+function originLabel(role: ProposedRole): string {
+  return role.origin === 'model'
+    ? `названо по вашему опыту: ${role.reason ?? ''}`.trim()
+    : 'названо рынком: так эту роль называют в вакансиях';
+}
+
+function ConfirmationLine({ confirmation }: { readonly confirmation: RoleConfirmation }) {
+  if (confirmation.state === 'not-found') {
+    return <small>Вакансий по ней в собранном пуле пока нет.</small>;
+  }
+  if (confirmation.state === 'too-few') {
+    return (
+      <small>
+        Найдено {confirmation.sampleSize} — рано делать выводы, нужна выборка от восьми.
+      </small>
+    );
+  }
+  return (
+    <small>
+      {pluralRu(confirmation.sampleSize, ['вакансия', 'вакансии', 'вакансий'])} ·{' '}
+      {observationWindow(confirmation)} · {sourceSummary(confirmation)}
+    </small>
   );
 }
 
@@ -111,14 +169,14 @@ const SOURCE_NAMES: Record<string, string> = {
   telegram: 'Telegram-каналы',
 };
 
-function sourceSummary(role: PoolRoleHypothesis): string {
+function sourceSummary(role: { sources: ReadonlyArray<{ source: string; count: number }> }): string {
   return role.sources
     .slice(0, 3)
     .map((entry) => `${SOURCE_NAMES[entry.source] ?? entry.source} ${entry.count}`)
     .join(', ');
 }
 
-function observationWindow(role: PoolRoleHypothesis): string {
+function observationWindow(role: { observedFrom: string; observedTo: string }): string {
   const from = formatDay(role.observedFrom);
   const to = formatDay(role.observedTo);
   return from === to ? `наблюдение ${to}` : `наблюдение ${from} — ${to}`;

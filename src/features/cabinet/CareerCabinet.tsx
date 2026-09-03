@@ -18,7 +18,7 @@ import {
 } from './routePremises';
 import { cabinetJourney } from './cabinetJourney';
 import { useRoleHypotheses } from '../career-map/useRoleHypotheses';
-import type { PoolRoleHypothesis } from '../../../shared/poolRoleHypotheses';
+import type { ProposedRole } from '../../../shared/roleProposals';
 import type { CareerCabinetView } from './cabinetViews';
 
 export type { CareerCabinetView } from './cabinetViews';
@@ -71,7 +71,7 @@ export function CareerCabinet({
   // печаталась целая фраза из профиля, за которой нет ни одной вакансии (B180).
   // Считает их сервер (срез 1б): в браузер пул приезжает без требований —
   // страница подбора вырезает их ради байтового бюджета маршрута (INC-029).
-  const marketRoles = useRoleHypotheses().roles;
+  const proposedRoles = useRoleHypotheses().roles;
   const journey = useMemo(
     () =>
       cabinetJourney({
@@ -123,7 +123,7 @@ export function CareerCabinet({
           importing={importing}
           targetDirection={targetDirection}
           journey={journey}
-          marketRoles={marketRoles}
+          proposedRoles={proposedRoles}
           pool={pool}
           data={data}
           onNavigate={onNavigate}
@@ -146,7 +146,7 @@ function CabinetSection({
   importing,
   targetDirection,
   journey,
-  marketRoles,
+  proposedRoles,
   pool,
   data,
   onNavigate,
@@ -161,7 +161,7 @@ function CabinetSection({
   importing: boolean;
   targetDirection: string;
   journey: ReturnType<typeof cabinetJourney>;
-  marketRoles: readonly PoolRoleHypothesis[];
+  proposedRoles: readonly ProposedRole[];
   pool: ReturnType<typeof useMatchedPool>;
   data: ReturnType<typeof useCareerCabinetData>;
   onNavigate: (view: CareerCabinetView) => void;
@@ -181,7 +181,7 @@ function CabinetSection({
         workspace={workspace}
         targetDirection={targetDirection}
         journey={journey}
-        marketRoles={marketRoles}
+        proposedRoles={proposedRoles}
         poolComplete={pool.complete}
         poolTotal={pool.poolTotal}
         loading={data.loading}

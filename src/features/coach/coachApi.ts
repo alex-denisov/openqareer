@@ -1,5 +1,5 @@
 import type { ResumeDraft } from '../../../server/domain/resumeDraft';
-import type { PoolRoleHypothesis } from '../../../shared/poolRoleHypotheses';
+import type { ProposedRole } from '../../../shared/roleProposals';
 import type { WorkspaceInput } from '../workspace/workspaceStorage';
 type UserRole = 'candidate' | 'admin';
 type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
@@ -822,7 +822,7 @@ export async function getMatchedVacancyPage(
  */
 export async function getRoleHypotheses(
   signal?: AbortSignal,
-): Promise<PoolRoleHypothesis[]> {
+): Promise<ProposedRole[]> {
   const response = await apiFetch('/api/v1/candidate/role-hypotheses', { signal });
   if (!response.ok) {
     await throwApiError(response);
@@ -831,7 +831,7 @@ export async function getRoleHypotheses(
   if (!Array.isArray(envelope.data)) {
     throw new CoachApiErrorClass('Ответ сервиса не разобран.', 'malformed_response', false);
   }
-  return envelope.data as PoolRoleHypothesis[];
+  return envelope.data as ProposedRole[];
 }
 
 export async function getMatchedVacancies(signal?: AbortSignal): Promise<MatchedVacancyItem[]> {
