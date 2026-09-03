@@ -1,40 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  evaluateProductCase,
-  evaluateWorkPreferences,
-  productCaseSubmissionSchema,
-  workPreferenceSubmissionSchema,
-} from './assessment';
+import { evaluateProductCase, productCaseSubmissionSchema } from './assessment';
 
 describe('role assessment domain', () => {
-  it('routes self-reported work preferences with visible weighted evidence', () => {
-    const result = evaluateWorkPreferences(
-      workPreferenceSubmissionSchema.parse({
-        ambiguity: 5,
-        evidence: 5,
-        collaboration: 4,
-        persuasion: 2,
-        planning: 3,
-        detail: 2,
-        leadership: 3,
-        craft: 4,
-      }),
-    );
-
-    expect(result.kind).toBe('work-preferences');
-    expect(result.roleFamilies[0].id).toBe('product-discovery');
-    expect(result.roleFamilies[0].contributions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          dimension: 'ambiguity',
-          answer: 5,
-          weight: 2,
-        }),
-      ]),
-    );
-    expect(result.caveat).toMatch(/самоотчёт/i);
-  });
-
   it('evaluates a Product/PM case against an inspectable rubric without fit claims', () => {
     const result = evaluateProductCase(
       productCaseSubmissionSchema.parse({

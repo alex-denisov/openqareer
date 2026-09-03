@@ -103,39 +103,6 @@ export interface CandidateMemory {
   updatedAt?: string;
 }
 
-type WorkDimension =
-  | 'ambiguity'
-  | 'evidence'
-  | 'collaboration'
-  | 'persuasion'
-  | 'planning'
-  | 'detail'
-  | 'leadership'
-  | 'craft';
-
-type WorkPreferenceSubmission = Record<WorkDimension, number>;
-
-/**
- * Прежний «ассесмент» со шкалой 1..5 и сводным `signalStrength`. Его метод
- * заменён парным выбором (B180, срез 3) — здесь он остаётся только для чтения
- * уже сохранённых строк; экрана у него нет.
- */
-interface LegacyWorkPreferenceResult {
-  kind: 'work-preferences';
-  version: 1;
-  roleFamilies: Array<{
-    id: 'product-discovery' | 'operations-program' | 'commercial-customer' | 'specialist-analysis';
-    signalStrength: number;
-    contributions: Array<{
-      dimension: WorkDimension;
-      answer: number;
-      weight: number;
-      contribution: number;
-    }>;
-  }>;
-  caveat: string;
-}
-
 interface ProductCaseSubmission {
   firstMove: 'segment-funnel-and-interviews' | 'review-funnel-only' | 'ship-largest-client-request';
   priorityRule:
@@ -160,21 +127,13 @@ interface ProductCaseResult {
   caveat: string;
 }
 
-type StoredAssessment =
-  | {
-      assessmentId: 'work-preferences-v1';
-      submission: WorkPreferenceSubmission;
-      result: LegacyWorkPreferenceResult;
-      completedAt: string;
-      updatedAt: string;
-    }
-  | {
-      assessmentId: 'product-case-v1';
-      submission: ProductCaseSubmission;
-      result: ProductCaseResult;
-      completedAt: string;
-      updatedAt: string;
-    };
+interface StoredAssessment {
+  assessmentId: 'product-case-v1';
+  submission: ProductCaseSubmission;
+  result: ProductCaseResult;
+  completedAt: string;
+  updatedAt: string;
+}
 
 interface GermanyMarketSubmission {
   workAuthorization: 'eu-eea-swiss' | 'german-permit' | 'none' | 'unknown';

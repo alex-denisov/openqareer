@@ -687,3 +687,37 @@ CREATE TABLE work_preference_runs (
   updated_at TEXT NOT NULL
 ) STRICT;
 `;
+
+/**
+ * B187 — прежний «ассесмент» `work-preferences-v1` удаляется целиком.
+ *
+ * Его метод (шкала 1..5, веса семейств и сводный балл `signalStrength`)
+ * запрещён правилами честности продукта (B178, PRB-016) и заменён парным
+ * выбором (B180 срез 3). Сохранённые строки удаляются, а не остаются лежать:
+ * прочитать их без удалённого движка нельзя, а ответы 1..5 не переносятся в
+ * новый ключ. `CHECK` в SQLite не сужается на месте, поэтому таблица
+ * пересоздаётся; строки `product-case-v1` переносятся как есть.
+ */
+export const MIGRATION_26 = `
+CREATE TABLE assessments_product_case_only (
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  assessment_id TEXT NOT NULL CHECK (assessment_id = 'product-case-v1'),
+  submission_cipher TEXT NOT NULL,
+  result_cipher TEXT NOT NULL,
+  completed_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (candidate_id, assessment_id)
+) STRICT;
+
+INSERT INTO assessments_product_case_only
+  (candidate_id, assessment_id, submission_cipher, result_cipher,
+   completed_at, updated_at)
+SELECT candidate_id, assessment_id, submission_cipher, result_cipher,
+       completed_at, updated_at
+  FROM assessments
+ WHERE assessment_id = 'product-case-v1';
+
+DROP TABLE assessments;
+
+ALTER TABLE assessments_product_case_only RENAME TO assessments;
+`;

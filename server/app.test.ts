@@ -342,35 +342,29 @@ describe('OpenQareer API boundary', () => {
   it('evaluates, stores and replaces candidate-scoped assessments', async () => {
     const app = await createApp();
     const authorization = candidateAuthorization(app);
-    const preferences = {
-      ambiguity: 5,
-      evidence: 5,
-      collaboration: 4,
-      persuasion: 2,
-      planning: 3,
-      detail: 2,
-      leadership: 3,
-      craft: 4,
+    const productCase = {
+      firstMove: 'segment-funnel-and-interviews',
+      priorityRule: 'reversible-test-biggest-uncertainty',
+      successMeasure: 'activation-by-segment-with-guardrail',
+      rationale: 'Сначала проверю, где падает активация.',
     };
     const first = await app.inject({
       method: 'POST',
-      url: '/api/v1/candidate/assessments/work-preferences-v1',
+      url: '/api/v1/candidate/assessments/product-case-v1',
       headers: { authorization },
-      payload: preferences,
+      payload: productCase,
     });
     expect(first.statusCode).toBe(200);
-    const firstAssessment = first.json().data;
-    expect(firstAssessment).toMatchObject({
-      assessmentId: 'work-preferences-v1',
-      result: { kind: 'work-preferences' },
+    expect(first.json().data).toMatchObject({
+      assessmentId: 'product-case-v1',
+      result: { kind: 'product-case' },
     });
-    expect(firstAssessment.result.roleFamilies[0].id).toBe('product-discovery');
 
     const revised = await app.inject({
       method: 'POST',
-      url: '/api/v1/candidate/assessments/work-preferences-v1',
+      url: '/api/v1/candidate/assessments/product-case-v1',
       headers: { authorization },
-      payload: { ...preferences, planning: 5 },
+      payload: { ...productCase, successMeasure: 'delivery-date' },
     });
     expect(revised.statusCode).toBe(200);
     const snapshot = await app.inject({
@@ -379,7 +373,9 @@ describe('OpenQareer API boundary', () => {
       headers: { authorization },
     });
     expect(snapshot.json().data.assessments).toHaveLength(1);
-    expect(snapshot.json().data.assessments[0].submission.planning).toBe(5);
+    expect(snapshot.json().data.assessments[0].submission.successMeasure).toBe(
+      'delivery-date',
+    );
 
     const invalid = await app.inject({
       method: 'POST',
@@ -388,6 +384,35 @@ describe('OpenQareer API boundary', () => {
       payload: { firstMove: 'invent-the-answer' },
     });
     expect(invalid.statusCode).toBe(422);
+  });
+
+  it('refuses the removed work-preferences-v1 assessment (B187)', async () => {
+    const app = await createApp();
+    const authorization = candidateAuthorization(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/assessments/work-preferences-v1',
+      headers: { authorization },
+      payload: {
+        ambiguity: 5,
+        evidence: 5,
+        collaboration: 4,
+        persuasion: 2,
+        planning: 3,
+        detail: 2,
+        leadership: 3,
+        craft: 4,
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    const snapshot = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/me',
+      headers: { authorization },
+    });
+    expect(snapshot.json().data.assessments).toEqual([]);
   });
 
   it('evaluates and returns a dated Germany route without eligibility claims', async () => {
