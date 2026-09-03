@@ -1,3 +1,4 @@
+import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { pluralRu } from '../../../shared/pluralRu';
 
@@ -108,6 +109,7 @@ export function vacancySourceNames(
     .sort((left, right) => right.count - left.count || left.source.localeCompare(right.source));
 }
 
+/** Названия площадок кластера без повторов — по ним и фильтр, и подпись. */
 function clusterSources(cluster: VacancyCluster): string[] {
-  return cluster.sources.map((source) => source.sourceType);
+  return vacancySourceLabels(cluster.sources);
 }

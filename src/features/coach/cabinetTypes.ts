@@ -148,6 +148,8 @@ interface VacancyCluster {
   sources: Array<{
     sourceType: string;
     sourceId: string;
+    /** Название площадки из реестра источников (PRB-017). */
+    sourceName?: string;
     sourceUrl: string;
     channelName?: string;
     observedAt: string;

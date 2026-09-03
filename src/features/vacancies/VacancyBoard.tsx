@@ -1,3 +1,4 @@
+import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { useMemo, useState } from 'react';
 import { ArrowSquareOut } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -26,13 +27,6 @@ import type { VacancySubscription } from '../coach/coachApi';
  * источника, выборки и даты — отдельная находка аудита B178, и повторять её
  * здесь нельзя.
  */
-const SOURCE_LABELS: Record<string, string> = {
-  hh: 'hh.ru',
-  remotive: 'Remotive',
-  telegram: 'Telegram-каналы',
-  trudvsem: 'ТрудВсем',
-};
-
 const FRESHNESS_CHOICES: ReadonlyArray<{ label: string; days?: number }> = [
   { label: 'до 7 дней', days: 7 },
   { label: 'до 30 дней', days: 30 },
@@ -315,7 +309,7 @@ function SourceFilter({
                 })
               }
             >
-              <span>{SOURCE_LABELS[source] ?? source}</span>
+              <span>{source}</span>
               <strong>{count}</strong>
             </button>
           </li>
@@ -336,7 +330,7 @@ function VacancyChips({
   const chips: Array<{ key: keyof VacancyFilters; label: string }> = [];
   if (filters.query) chips.push({ key: 'query', label: filters.query });
   if (filters.source) {
-    chips.push({ key: 'source', label: SOURCE_LABELS[filters.source] ?? filters.source });
+    chips.push({ key: 'source', label: filters.source });
   }
   if (filters.remoteOnly) chips.push({ key: 'remoteOnly', label: 'Только удалённо' });
   if (filters.freshness !== undefined) {
@@ -404,9 +398,7 @@ function VacancyRow({ item, now }: { item: MatchedVacancyItem; now: string }) {
         <strong>{cluster.canonicalTitle}</strong>
         <small>
           {employerLabel(cluster.canonicalCompany)} ·{' '}
-          {cluster.sources
-            .map((source) => SOURCE_LABELS[source.sourceType] ?? source.sourceType)
-            .join(', ')}
+          {vacancySourceLabels(cluster.sources).join(', ')}
         </small>
         </span>
       </div>

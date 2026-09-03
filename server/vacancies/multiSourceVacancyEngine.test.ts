@@ -83,6 +83,10 @@ describe('MultiSourceVacancyEngine', () => {
     expect(sources).toHaveLength(2);
     expect(sources[0].lastStatus).toBe('healthy');
 
+    // Название площадки едет вместе с записью, иначе кандидат читает под
+    // вакансией тип адаптера — «json_api», «rss, rss» (PRB-017).
+    expect(engine.getActiveClusters()[0].sources.map((s) => s.sourceName)).not.toContain(undefined);
+
     const clusters = engine.getActiveClusters();
     // 2 items merged into 1 cluster due to deduplication
     expect(clusters).toHaveLength(1);
@@ -171,6 +175,10 @@ describe('MultiSourceVacancyEngine', () => {
     const vacancies = engine.getVacancies();
     expect(vacancies.items.some((v) => v.id === 'fresh-1')).toBe(true);
     expect(vacancies.items.some((v) => v.id === 'stale-1')).toBe(false);
+
+    // Название площадки едет вместе с записью, иначе кандидат читает под
+    // вакансией тип адаптера — «json_api», «rss, rss» (PRB-017).
+    expect(engine.getActiveClusters()[0].sources.map((s) => s.sourceName)).not.toContain(undefined);
 
     const clusters = engine.getActiveClusters();
     expect(clusters.some((c) => c.canonicalTitle === 'Fresh React Developer')).toBe(true);

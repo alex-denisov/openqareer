@@ -158,7 +158,8 @@ describe('filterVacancies', () => {
 
   it('фильтрует по источнику и по удалённой работе', () => {
     expect(
-      filterVacancies(pool, { source: 'hh' }, NOW).map((f) => f.cluster.id),
+      // Фильтр называет площадку, а не тип адаптера (PRB-017).
+      filterVacancies(pool, { source: 'hh.ru' }, NOW).map((f) => f.cluster.id),
     ).toEqual(['office']);
     expect(
       filterVacancies(pool, { remoteOnly: true }, NOW).map((f) => f.cluster.id),
@@ -188,8 +189,8 @@ describe('vacancySourceNames', () => {
     ]);
 
     expect(counted).toEqual([
-      { source: 'telegram', count: 2 },
-      { source: 'hh', count: 1 },
+      { source: 'Telegram-каналы', count: 2 },
+      { source: 'hh.ru', count: 1 },
     ]);
   });
 });

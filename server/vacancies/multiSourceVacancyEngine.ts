@@ -239,7 +239,13 @@ export class MultiSourceVacancyEngine {
         query ? { query } : undefined,
       );
 
-      const freshFetched = fetched.filter((v) => isVacancyFresh(v.publishedAt));
+      // Название площадки едет вместе с записью: на экране кандидат читает
+      // источник, а не тип транспорта (PRB-017).
+      const freshFetched = fetched
+        .filter((v) => isVacancyFresh(v.publishedAt))
+        .map((v) =>
+          v.provenance ? { ...v, provenance: { ...v.provenance, sourceName: source.name } } : v,
+        );
 
       // A successful sync replaces this source's slice. Merging instead meant a
       // vacancy the employer took down an hour after one reading stayed

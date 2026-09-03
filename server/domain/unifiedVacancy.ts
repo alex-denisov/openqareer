@@ -24,6 +24,8 @@ export interface VacancySalary {
 interface VacancyProvenance {
   sourceType: VacancySourceType;
   sourceId: string;
+  /** Название площадки из реестра: кандидат читает его, а не тип адаптера (PRB-017). */
+  sourceName?: string;
   sourceUrl: string;
   externalId?: string;
   channelName?: string;
