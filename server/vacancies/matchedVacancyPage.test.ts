@@ -35,11 +35,11 @@ function item(index: number): MatchedVacancyItem {
     },
     explanation: {
       clusterId: `cluster-${index}`,
-      matchScore: 100 - (index % 100),
-      fitLevel: 'good',
+      roleMatch: 'target' as const,
+      requirements: { matched: 12, total: 52 },
       matchingPoints: Array.from({ length: 12 }, (_, p) => `Подтверждённый навык: навык-${p}`),
       missingPoints: Array.from({ length: 40 }, (_, p) => `навык-${index}-${p}`),
-      summary: 'Хорошее совпадение. Требуются незначительные дополнения по отдельным навыкам.',
+      summary: 'Совпало 12 из 52 требований вакансии. Название совпадает с целевой ролью.',
       calculatedAt: '2026-09-01T10:00:00.000Z',
     },
   };

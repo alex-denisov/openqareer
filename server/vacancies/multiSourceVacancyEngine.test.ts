@@ -101,8 +101,10 @@ describe('MultiSourceVacancyEngine', () => {
 
     const matched = engine.getMatchedVacancies(candidate);
     expect(matched).toHaveLength(1);
-    expect(matched[0].explanation.matchScore).toBeGreaterThanOrEqual(80);
-    expect(matched[0].explanation.fitLevel).toBe('strong');
+    // Каноническое название кластера — «Senior TypeScript / React Developer»,
+    // целевая роль совпадает с ним частично, и продукт называет это честно.
+    expect(matched[0].explanation.roleMatch).toBe('partial');
+    expect(matched[0].explanation.requirements?.matched).toBeGreaterThanOrEqual(3);
     expect(matched[0].cluster.primaryUrl).toBe('https://hh.ru/1');
   });
 

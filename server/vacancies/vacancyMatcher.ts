@@ -1,5 +1,12 @@
 import type { VacancyCluster, VacancyMatchExplanation } from '../domain/unifiedVacancy';
+import type { VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
 import { normalizeTextForComparison } from './vacancyFingerprint';
+
+/**
+ * Объяснение соответствия состоит только из измеримого. Сводный балл убран
+ * (PRB-016): его веса 50/35/15 ничем не обоснованы, а вакансия без
+ * перечисленных требований получала 30 баллов из отсутствия данных.
+ */
 
 export interface CandidateMatchProfile {
   candidateId: string;
@@ -25,82 +32,72 @@ function evaluateSkills(candidateSkills: string[], vacancySkills: string[]) {
     }
   }
 
-  const score = vacancySkills.length > 0 ? Math.round((matchedCount / vacancySkills.length) * 50) : 30;
-  return { score, matchingPoints, missingPoints };
+  return { matchedCount, matchingPoints, missingPoints };
 }
 
 function evaluateRole(targetRoles: string[], vacancyTitle: string) {
-  let score = 0;
+  let roleMatch: VacancyRoleMatch = 'none';
   const matchingPoints: string[] = [];
   const vacTitleNorm = normalizeTextForComparison(vacancyTitle);
 
   for (const targetRole of targetRoles) {
     const roleNorm = normalizeTextForComparison(targetRole);
     if (vacTitleNorm.includes(roleNorm) || roleNorm.includes(vacTitleNorm)) {
-      score = 35;
+      roleMatch = 'target';
       matchingPoints.push(`Целевая роль: ${targetRole}`);
       break;
     }
     const overlap = roleNorm.split(' ').filter((w) => vacTitleNorm.includes(w)).length;
     if (overlap >= 2) {
-      score = Math.max(score, 20);
+      roleMatch = 'partial';
       matchingPoints.push(`Частичное совпадение по роли: ${targetRole}`);
     }
   }
-  return { score, matchingPoints };
+  return { roleMatch, matchingPoints };
 }
 
-function evaluateFitSummary(totalScore: number, hasRoleMatch: boolean) {
-  if (totalScore >= 75) {
-    return {
-      fitLevel: 'strong' as const,
-      summary: `Сильное совпадение по целевой роли (${hasRoleMatch ? 'соответствует' : 'близка'}) и ключевому стеку. Профиль кандидата имеет необходимые доказательства.`,
-    };
-  }
-  if (totalScore >= 55) {
-    return {
-      fitLevel: 'good' as const,
-      summary: 'Хорошее совпадение. Требуются незначительные дополнения по отдельным навыкам.',
-    };
-  }
-  if (totalScore >= 35) {
-    return {
-      fitLevel: 'potential' as const,
-      summary: 'Потенциальное направление. Существенные пробелы в стеке или требованиях роли.',
-    };
-  }
-  return {
-    fitLevel: 'low' as const,
-    summary: 'Низкое соответствие текущему подтверждённому профилю кандидата.',
-  };
+const ROLE_SENTENCE: Record<VacancyRoleMatch, string> = {
+  target: 'Название совпадает с целевой ролью.',
+  partial: 'Название частично совпадает с целевой ролью.',
+  none: 'Название не совпадает с целевыми ролями.',
+};
+
+/** Сводка называет то, что проверяемо: покрытие требований и совпадение роли. */
+function summarize(
+  roleMatch: VacancyRoleMatch,
+  requirements: { matched: number; total: number } | undefined,
+): string {
+  const coverage = requirements
+    ? `Совпало ${requirements.matched} из ${requirements.total} требований вакансии.`
+    : 'Вакансия не перечислила требований — сравнивать не с чем.';
+  return `${coverage} ${ROLE_SENTENCE[roleMatch]}`;
 }
 
 export function matchCandidateWithVacancy(
   candidate: CandidateMatchProfile,
   vacancy: VacancyCluster,
 ): VacancyMatchExplanation {
-  const skillEval = evaluateSkills(candidate.confirmedSkills, vacancy.skills ?? []);
+  const vacancySkills = vacancy.skills ?? [];
+  const skillEval = evaluateSkills(candidate.confirmedSkills, vacancySkills);
   const roleEval = evaluateRole(candidate.targetRoles, vacancy.canonicalTitle);
 
-  let locationScore = 0;
-  const locPoints: string[] = [];
+  const locationPoints: string[] = [];
   if (candidate.preferredRemote && vacancy.isRemote) {
-    locationScore = 15;
-    locPoints.push('Формат: Удалённая работа соответствует пожеланиям');
-  } else if (!candidate.preferredRemote && !vacancy.isRemote) {
-    locationScore = 10;
+    locationPoints.push('Формат: Удалённая работа соответствует пожеланиям');
   }
 
-  const totalScore = Math.min(100, Math.max(0, skillEval.score + roleEval.score + locationScore));
-  const { fitLevel, summary } = evaluateFitSummary(totalScore, roleEval.score > 0);
+  const requirements =
+    vacancySkills.length > 0
+      ? { matched: skillEval.matchedCount, total: vacancySkills.length }
+      : undefined;
 
   return {
     clusterId: vacancy.id,
-    matchScore: totalScore,
-    fitLevel,
-    matchingPoints: [...roleEval.matchingPoints, ...skillEval.matchingPoints, ...locPoints],
+    roleMatch: roleEval.roleMatch,
+    ...(requirements ? { requirements } : {}),
+    matchingPoints: [...roleEval.matchingPoints, ...skillEval.matchingPoints, ...locationPoints],
     missingPoints: skillEval.missingPoints,
-    summary,
+    summary: summarize(roleEval.roleMatch, requirements),
     calculatedAt: new Date().toISOString(),
   };
 }

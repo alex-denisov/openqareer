@@ -1,3 +1,4 @@
+import { vacancyCoverage } from '../vacancies/vacancyFilters';
 import { useEffect, useMemo, useState } from 'react';
 import type { CareerStrategy } from '../../../shared/careerStrategy';
 import { campaignRoleLine } from '../cabinet/careerStrategyView';
@@ -238,8 +239,7 @@ function ActivityChart({ activity }: { activity: readonly number[] }) {
 }
 
 function QueueRow({ entry }: { entry: MatchedVacancyItem }) {
-  const covered = entry.explanation.matchingCount ?? entry.explanation.matchingPoints.length;
-  const missing = entry.explanation.missingCount ?? entry.explanation.missingPoints.length;
+  const coverage = vacancyCoverage(entry.explanation);
   return (
     <li className="career-job-card is-plain">
       <div className="career-job-head">
@@ -251,7 +251,9 @@ function QueueRow({ entry }: { entry: MatchedVacancyItem }) {
           </span>
         </div>
         <span className="career-cabinet-tag">
-          {covered} из {covered + missing} требований
+          {coverage
+            ? `${coverage.covered} из ${coverage.total} требований`
+            : 'требования не указаны'}
         </span>
         <a
           className="career-quiet-button"

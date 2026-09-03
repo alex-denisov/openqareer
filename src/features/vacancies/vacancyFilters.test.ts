@@ -40,8 +40,8 @@ function item(
     } as MatchedVacancyItem['cluster'],
     explanation: {
       clusterId: id,
-      matchScore: 0.7,
-      fitLevel: 'good',
+      roleMatch: 'target',
+      requirements: { matched: 2, total: 3 },
       matchingPoints: ['SQL', 'A/B-тесты'],
       missingPoints: ['Kubernetes'],
       summary: '',
@@ -90,25 +90,30 @@ describe('vacancyCoverage', () => {
     });
   });
 
-  it('верит счёту ответа, а не длине обрезанных списков', () => {
-    // Списки приходят обрезанными до видимых трёх (INC-029), поэтому счёт
-    // покрытия берётся из чисел — иначе карточка занизила бы и совпавшее,
-    // и требуемое.
+  it('считает покрытие по требованиям вакансии, а не по обрезанным спискам', () => {
+    // Списки приходят обрезанными до видимых трёх (INC-029), а в совпавшие
+    // попадают ещё роль и формат работы — знаменателем они быть не могут
+    // (PRB-016).
     const trimmed = item(
       'c1',
       {},
       {
-        matchingPoints: ['a', 'b', 'c'],
+        matchingPoints: ['Целевая роль: X', 'a', 'b'],
         missingPoints: ['x', 'y', 'z'],
         matchingCount: 12,
         missingCount: 40,
+        requirements: { matched: 12, total: 52 },
       },
     );
     expect(vacancyCoverage(trimmed.explanation)).toEqual({ covered: 12, total: 52 });
   });
 
-  it('не считает покрытие, когда сравнивать было не с чем', () => {
-    const empty = item('c1', {}, { matchingPoints: [], missingPoints: [] });
+  it('не считает покрытие, когда вакансия не перечислила требований', () => {
+    const empty = item('c1', {}, {
+      matchingPoints: [],
+      missingPoints: [],
+      requirements: undefined,
+    });
     expect(vacancyCoverage(empty.explanation)).toBeUndefined();
   });
 });

@@ -44,19 +44,34 @@ describe('Explainable Vacancy Matcher', () => {
     preferredRemote: true,
   };
 
-  it('evaluates strong fit with high score and detailed matching points', () => {
+  it('counts the requirements it could check instead of scoring the candidate', () => {
     const explanation = matchCandidateWithVacancy(strongCandidate, sampleCluster);
-    expect(explanation.matchScore).toBeGreaterThanOrEqual(75);
-    expect(explanation.fitLevel).toBe('strong');
+    expect(explanation.requirements).toEqual({ matched: 4, total: 5 });
+    expect(explanation.roleMatch).toBe('target');
     expect(explanation.matchingPoints.length).toBeGreaterThanOrEqual(2);
     expect(explanation.missingPoints).toContain('GraphQL');
-    expect(explanation.summary).toContain('Сильное совпадение');
+    expect(explanation.summary).toContain('4 из 5');
   });
 
-  it('evaluates low fit for mismatched roles and skillsets honestly', () => {
+  it('names a role that does not match the candidate targets', () => {
     const explanation = matchCandidateWithVacancy(partialCandidate, sampleCluster);
-    expect(explanation.matchScore).toBeLessThan(50);
-    expect(explanation.fitLevel).toBe('low');
+    expect(explanation.roleMatch).toBe('none');
+    expect(explanation.requirements).toEqual({ matched: 0, total: 5 });
     expect(explanation.missingPoints.length).toBeGreaterThanOrEqual(3);
+  });
+
+  /**
+   * PRB-016: раньше вакансия без перечисленных требований получала 30 баллов
+   * из 50 — соответствие выдумывалось из отсутствия данных.
+   */
+  it('says there is nothing to compare when the vacancy lists no requirements', () => {
+    const explanation = matchCandidateWithVacancy(strongCandidate, {
+      ...sampleCluster,
+      skills: [],
+    });
+    expect(explanation.requirements).toBeUndefined();
+    expect(explanation.summary).toContain('не перечислила требований');
+    expect(explanation).not.toHaveProperty('matchScore');
+    expect(explanation).not.toHaveProperty('fitLevel');
   });
 });

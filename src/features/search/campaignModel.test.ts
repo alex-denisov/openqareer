@@ -36,8 +36,8 @@ function item(id: string, firstObservedAt: string, score = 70): MatchedVacancyIt
     },
     explanation: {
       clusterId: id,
-      matchScore: score,
-      fitLevel: 'good',
+      roleMatch: 'target',
+      requirements: { matched: score, total: 100 },
       matchingPoints: ['Целевая роль'],
       missingPoints: [],
       summary: '',

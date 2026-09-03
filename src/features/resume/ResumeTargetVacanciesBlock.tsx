@@ -1,3 +1,4 @@
+import { vacancyCoverage } from '../vacancies/vacancyFilters';
 import { useEffect, useState } from 'react';
 import {
   ArrowRight,
@@ -18,8 +19,7 @@ interface ResumeTargetVacanciesBlockProps {
 }
 
 export function TargetVacancyHeader({ item }: { item: MatchedVacancyItem }) {
-  const fitBadgeClass = fitLevelClass(item.explanation.fitLevel);
-  const fitLabel = fitLevelLabel(item.explanation.fitLevel);
+  const coverage = vacancyCoverage(item.explanation);
   return (
     <div className="career-resume-target-header">
       <div>
@@ -29,8 +29,10 @@ export function TargetVacancyHeader({ item }: { item: MatchedVacancyItem }) {
           {item.cluster.canonicalLocation || (item.cluster.isRemote ? 'Remote' : 'Локация не указана')}
         </small>
       </div>
-      <span className={`career-match-badge ${fitBadgeClass}`}>
-        {item.explanation.matchScore}% · {fitLabel}
+      <span className={`career-match-badge ${roleMatchClass(item.explanation.roleMatch)}`}>
+        {coverage
+          ? `${coverage.covered} из ${coverage.total} требований`
+          : 'требования не указаны'}
       </span>
     </div>
   );
@@ -198,29 +200,18 @@ export function ResumeTargetVacanciesBlock({
 }
 
 
-function fitLevelClass(level: string): string {
-  switch (level) {
-    case 'strong':
+/**
+ * Бейдж называет покрытие требований, а не выдуманный процент (PRB-016).
+ * Цвет — по совпадению с целевой ролью: это тоже проверяемый факт.
+ */
+function roleMatchClass(roleMatch: MatchedVacancyItem['explanation']['roleMatch']): string {
+  switch (roleMatch) {
+    case 'target':
       return 'is-strong';
-    case 'good':
+    case 'partial':
       return 'is-good';
-    case 'potential':
-      return 'is-potential';
     default:
       return 'is-low';
-  }
-}
-
-function fitLevelLabel(level: string): string {
-  switch (level) {
-    case 'strong':
-      return 'Сильное';
-    case 'good':
-      return 'Хорошее';
-    case 'potential':
-      return 'Потенциал';
-    default:
-      return 'Базовое';
   }
 }
 

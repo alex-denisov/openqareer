@@ -100,8 +100,7 @@ describe('cabinetJourney and the collected pool (B104)', () => {
       },
       explanation: {
         clusterId: `cluster-${index}`,
-        matchScore: 0,
-        fitLevel: 'potential' as const,
+        roleMatch: 'none' as const,
         matchingPoints: [],
         missingPoints: [],
         summary: '',
@@ -153,8 +152,7 @@ describe('cabinetJourney market attribution (B104)', () => {
       },
       explanation: {
         clusterId: `remote-${index}`,
-        matchScore: 0,
-        fitLevel: 'potential' as const,
+        roleMatch: 'none' as const,
         matchingPoints: [],
         missingPoints: [],
         summary: '',

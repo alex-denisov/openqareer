@@ -1,3 +1,8 @@
+import type {
+  VacancyRequirementCoverage,
+  VacancyRoleMatch,
+} from '../../shared/vacancyMatchOrder';
+
 export type VacancySourceType =
   | 'hh'
   | 'remotive'
@@ -71,8 +76,14 @@ export interface VacancyCluster {
 
 export interface VacancyMatchExplanation {
   clusterId: string;
-  matchScore: number; // 0..100
-  fitLevel: 'strong' | 'good' | 'potential' | 'low';
+  /** Совпадение названия вакансии с целевыми ролями кандидата. */
+  roleMatch: VacancyRoleMatch;
+  /**
+   * Требования вакансии: сколько перечислено и сколько из них подтверждено.
+   * `undefined` — вакансия требований не перечислила, сравнивать не с чем;
+   * выдавать это за соответствие продукту запрещено (PRB-016).
+   */
+  requirements?: VacancyRequirementCoverage;
   matchingPoints: string[];
   missingPoints: string[];
   /**

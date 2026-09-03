@@ -1,3 +1,4 @@
+import { compareMatchedVacancies } from '../../../shared/vacancyMatchOrder';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 
 /**
@@ -76,7 +77,7 @@ export function buildSearchCampaign({
       { label: 'интервью' },
     ],
     queue: [...pool]
-      .sort((left, right) => right.explanation.matchScore - left.explanation.matchScore)
+      .sort(compareMatchedVacancies)
       .slice(0, QUEUE_SIZE),
     activity: activityByDay(pool, now),
   };

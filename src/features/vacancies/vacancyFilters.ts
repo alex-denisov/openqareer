@@ -52,15 +52,17 @@ export interface VacancyCoverage {
 /**
  * Покрытие требований — счёт, а не процент: процент без источника, выборки и
  * даты продукту запрещён. Нечего сравнивать — покрытия нет, а не ноль.
+ *
+ * Знаменатель берётся из требований вакансии, а не из `matchingPoints`: туда
+ * попадают ещё и совпадение роли с форматом работы, и «7 из 11» получалось при
+ * пяти требованиях в вакансии (PRB-016).
  */
 export function vacancyCoverage(
   explanation: VacancyExplanation,
 ): VacancyCoverage | undefined {
-  // Списки обрезаны до видимых трёх, счёт — настоящий (INC-029).
-  const covered = explanation.matchingCount ?? explanation.matchingPoints.length;
-  const missing = explanation.missingCount ?? explanation.missingPoints.length;
-  const total = covered + missing;
-  return total === 0 ? undefined : { covered, total };
+  const requirements = explanation.requirements;
+  if (!requirements || requirements.total === 0) return undefined;
+  return { covered: requirements.matched, total: requirements.total };
 }
 
 export function filterVacancies(

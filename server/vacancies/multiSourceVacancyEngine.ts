@@ -1,3 +1,4 @@
+import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import type {
   UnifiedVacancy,
   VacancyCluster,
@@ -339,7 +340,7 @@ export class MultiSourceVacancyEngine {
       matched.push({ cluster, explanation });
     }
 
-    return matched.sort((a, b) => b.explanation.matchScore - a.explanation.matchScore);
+    return matched.sort(compareMatchedVacancies);
   }
 
 

@@ -1,3 +1,7 @@
+import type {
+  VacancyRequirementCoverage,
+  VacancyRoleMatch,
+} from '../../../shared/vacancyMatchOrder';
 export interface AccountSnapshot {
   username: string;
   email: string | null;
@@ -156,8 +160,13 @@ interface VacancyCluster {
 
 interface VacancyMatchExplanation {
   clusterId: string;
-  matchScore: number;
-  fitLevel: 'strong' | 'good' | 'potential' | 'low';
+  /** Совпадение названия вакансии с целевыми ролями кандидата. */
+  roleMatch: VacancyRoleMatch;
+  /**
+   * Требования вакансии: сколько перечислено и сколько подтверждено.
+   * `undefined` — требований нет, и соответствие не выдумывается (PRB-016).
+   */
+  requirements?: VacancyRequirementCoverage;
   matchingPoints: string[];
   missingPoints: string[];
   /**

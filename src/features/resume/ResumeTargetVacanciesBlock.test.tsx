@@ -34,8 +34,8 @@ function itemWithCompany(company: string): MatchedVacancyItem {
       vacanciesCount: 1,
     },
     explanation: {
-      matchScore: 72,
-      fitLevel: 'good',
+      roleMatch: 'target',
+      requirements: { matched: 3, total: 5 },
       matchingPoints: ['React'],
       missingPoints: [],
     },
@@ -52,5 +52,15 @@ describe('target vacancy card employer line', () => {
     const html = renderToStaticMarkup(<TargetVacancyHeader item={itemWithCompany('МТС Банк')} />);
     expect(html).toContain('МТС Банк');
     expect(html).not.toContain(EMPLOYER_NOT_NAMED);
+  });
+
+  /**
+   * PRB-016: бейдж печатал «72 % · Хорошее» — процент без выборки и
+   * знаменателя, собранный необоснованными весами.
+   */
+  it('prints the requirement coverage instead of a percentage', () => {
+    const html = renderToStaticMarkup(<TargetVacancyHeader item={itemWithCompany('Комета')} />);
+    expect(html).toContain('3 из 5 требований');
+    expect(html).not.toContain('%');
   });
 });
