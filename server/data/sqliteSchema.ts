@@ -740,3 +740,24 @@ CREATE TABLE IF NOT EXISTS role_naming_cache (
   roles_cipher TEXT NOT NULL
 ) STRICT;
 `;
+
+/**
+ * B165 срез 1 — ручной отклик кандидата (узлы 5, 6, 8, 9).
+ *
+ * Одна строка на пару кандидат + запись пула. Снимок вакансии запечатан рядом
+ * со статусом: запись выбывает из пула через недели, а отклик и воронка
+ * обязаны пережить это выбывание. `opened` и `applied` — разные события, и
+ * дата у каждого своя, чтобы «открыл» никогда не считалось откликом.
+ */
+export const MIGRATION_28 = `
+CREATE TABLE vacancy_applications (
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  cluster_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('opened', 'applied')),
+  vacancy_cipher TEXT NOT NULL,
+  opened_at TEXT,
+  applied_at TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (candidate_id, cluster_id)
+) STRICT;
+`;

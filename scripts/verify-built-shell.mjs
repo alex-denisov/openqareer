@@ -521,6 +521,38 @@ async function verifyViewport(browser, baseUrl, viewport) {
       body: JSON.stringify({ data: [] }),
     });
   });
+  // Ручные отклики (B165, срез 1): экран читает свою ручку, а подтверждение
+  // уходит на неё же. Стенд помнит записанное, чтобы прогон видел ровно то,
+  // что увидит кандидат, — и запоминает тела запросов для проверки.
+  page.__recordedApplications = [];
+  await page.route('**/api/v1/candidate/vacancy-applications', async (route) => {
+    const request = route.request();
+    if (request.method() === 'POST') {
+      const body = JSON.parse(request.postData() ?? '{}');
+      page.__recordedApplications.push(body);
+      const now = new Date().toISOString();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            clusterId: body.clusterId,
+            status: body.status,
+            vacancy: body.vacancy,
+            openedAt: now,
+            appliedAt: body.status === 'applied' ? now : null,
+            confirmedBy: body.status === 'applied' ? 'candidate' : null,
+          },
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [] }),
+    });
+  });
   await page.route('**/api/v1/candidate/vacancy-sources', async (route) => {
     await route.fulfill({
       status: 200,
@@ -878,8 +910,16 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // INC-019: these used to be literal `true`s reported as verification. They
   // now record what the walk actually observed, and a false value fails the
   // gate instead of being printed next to `"status":"pass"`.
-  const campaignFunnel = (await page.locator('.career-funnel li').count()) === 5;
-  assert(campaignFunnel, `${viewport.name}: воронка кампании не отрисовалась`);
+  // Шесть ступеней с B165: «открыто» стоит между «подобрано» и «откликом» —
+  // переход на площадку и отклик считаются раздельно.
+  const funnelLabels = (
+    await page.locator('.career-funnel .career-funnel-label').allInnerTexts()
+  ).map((label) => label.trim().toLocaleLowerCase('ru-RU'));
+  const campaignFunnel = funnelLabels.length === 6 && funnelLabels.includes('открыто');
+  assert(
+    campaignFunnel,
+    `${viewport.name}: воронка кампании не отрисовалась ${JSON.stringify(funnelLabels)}`,
+  );
   // Неизмеряемые ступени стоят прочерком и объясняют себя словами: ноль
   // означал бы, что продукт посмотрел и не нашёл.
   const untracked = await page.locator('.career-funnel li.is-untracked').count();
@@ -922,6 +962,25 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByRole('button', { name: 'любая' }).click();
   await page.screenshot({
     path: `output/playwright/b178-vacancies-${viewport.name}.png`,
+    fullPage: true,
+  });
+
+  // Ручной отклик (B165, срез 1, узлы 6 и 8): кандидат подтверждает отклик
+  // сам, строка после этого говорит датой, а не значком, и на сервер уходит
+  // ровно «applied» — открытие ссылки откликом не становится.
+  await page.getByRole('button', { name: 'Я откликнулся' }).first().click();
+  await page.getByText('Отклик подтверждён', { exact: false }).first().waitFor();
+  const recorded = page.__recordedApplications;
+  assert(
+    recorded.length === 1 && recorded[0].status === 'applied' && Boolean(recorded[0].clusterId),
+    `${viewport.name}: подтверждение отклика не ушло на сервер ${JSON.stringify(recorded)}`,
+  );
+  assert(
+    (await page.getByRole('button', { name: 'Я откликнулся' }).count()) === 1,
+    `${viewport.name}: подтверждённая строка всё ещё предлагает подтвердить отклик`,
+  );
+  await page.screenshot({
+    path: `output/playwright/b165-manual-application-${viewport.name}.png`,
     fullPage: true,
   });
 

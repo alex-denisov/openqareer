@@ -50,6 +50,11 @@ import {
   SqliteWorkPreferenceRepository,
   type StoredWorkPreferenceRun,
 } from './sqliteWorkPreferenceRepository';
+import {
+  SqliteVacancyApplicationRepository,
+  type VacancyApplicationInput,
+} from './sqliteVacancyApplicationRepository';
+import type { VacancyApplication } from '../../shared/vacancyApplication';
 import type { CareerStrategy } from '../../shared/careerStrategy';
 import type {
   StoredVacancy,
@@ -98,6 +103,7 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly vacancyRepository: SqliteVacancyRepository;
   private readonly careerStrategyRepository: SqliteCareerStrategyRepository;
   private readonly workPreferenceRepository: SqliteWorkPreferenceRepository;
+  private readonly vacancyApplicationRepository: SqliteVacancyApplicationRepository;
   private readonly conversations: ConversationController;
   private readonly sourceConnections: SourceConnectionController;
 
@@ -124,6 +130,7 @@ export class SqliteCandidateStore implements CandidateStore {
       vacancyRepository: this.vacancyRepository,
       careerStrategyRepository: this.careerStrategyRepository,
       workPreferenceRepository: this.workPreferenceRepository,
+      vacancyApplicationRepository: this.vacancyApplicationRepository,
     } = createRepositories(this.database, this.sealedText));
     this.conversations = new ConversationController({
       database: this.database,
@@ -434,6 +441,19 @@ export class SqliteCandidateStore implements CandidateStore {
   getWorkPreferenceRun(candidateId: string): StoredWorkPreferenceRun | null {
     this.requireCandidate(candidateId);
     return this.workPreferenceRepository.get(candidateId);
+  }
+
+  listVacancyApplications(candidateId: string): VacancyApplication[] {
+    this.requireCandidate(candidateId);
+    return this.vacancyApplicationRepository.list(candidateId);
+  }
+
+  recordVacancyApplication(
+    candidateId: string,
+    input: VacancyApplicationInput,
+  ): VacancyApplication {
+    this.requireCandidate(candidateId);
+    return this.vacancyApplicationRepository.record(candidateId, input);
   }
 
   saveWorkPreferenceRun(
@@ -795,6 +815,7 @@ interface StoreRepositories {
   vacancyRepository: SqliteVacancyRepository;
   careerStrategyRepository: SqliteCareerStrategyRepository;
   workPreferenceRepository: SqliteWorkPreferenceRepository;
+  vacancyApplicationRepository: SqliteVacancyApplicationRepository;
 }
 
 function createRepositories(
@@ -814,5 +835,6 @@ function createRepositories(
     vacancyRepository: new SqliteVacancyRepository(database, sealedText),
     careerStrategyRepository: new SqliteCareerStrategyRepository(database, sealedText),
     workPreferenceRepository: new SqliteWorkPreferenceRepository(database, sealedText),
+    vacancyApplicationRepository: new SqliteVacancyApplicationRepository(database, sealedText),
   };
 }

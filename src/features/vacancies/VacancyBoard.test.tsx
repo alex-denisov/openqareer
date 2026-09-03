@@ -86,3 +86,90 @@ describe('VacancyBoard filters', () => {
     expect(html).not.toContain('json_api');
   });
 });
+
+/**
+ * Ручной отклик в строке пула (B165, срез 1, узлы 6 и 8).
+ *
+ * «Открыть» уводит на площадку под сессией кандидата (ADR-009), отклик там
+ * делает он сам, и подтверждает его тоже он: платформа не имеет права
+ * записать отклик за него.
+ */
+describe('VacancyBoard · ручной отклик', () => {
+  const item = {
+    cluster: {
+      id: 'c1',
+      canonicalTitle: 'Продуктовый аналитик',
+      canonicalCompany: 'FinCloud',
+      canonicalLocation: 'Удалённо',
+      isRemote: true,
+      descriptionSummary: '',
+      skills: [],
+      primaryUrl: 'https://example.test/1',
+      sources: [
+        {
+          sourceType: 'rss',
+          sourceId: 'himalayas',
+          sourceName: 'Himalayas',
+          sourceUrl: 'https://example.test/1',
+          observedAt: '2026-09-01T10:00:00.000Z',
+        },
+      ],
+      firstObservedAt: '2026-09-01T10:00:00.000Z',
+      lastSeenAt: '2026-09-01T10:00:00.000Z',
+      status: 'active',
+      vacanciesCount: 1,
+    },
+    explanation: {
+      clusterId: 'c1',
+      roleMatch: 'target',
+      requirements: { matched: 2, total: 3 },
+      matchingPoints: [],
+      missingPoints: [],
+      summary: '',
+      calculatedAt: '2026-09-01T10:00:00.000Z',
+    },
+  } as unknown as MatchedVacancyItem;
+
+  const pool = {
+    matched: [item],
+    total: 1,
+    poolTotal: 1,
+    loading: false,
+    failed: false,
+    complete: true,
+  };
+
+  it('предлагает подтвердить отклик, пока он не подтверждён', () => {
+    const html = renderToStaticMarkup(<VacancyBoard pool={pool} applications={[]} />);
+
+    expect(html).toContain('Я откликнулся');
+    expect(html).not.toContain('Отклик подтверждён');
+  });
+
+  it('подтверждённый отклик назван датой, а не значком, и кнопки больше нет', () => {
+    const html = renderToStaticMarkup(
+      <VacancyBoard
+        pool={pool}
+        applications={[
+          {
+            clusterId: 'c1',
+            status: 'applied',
+            vacancy: {
+              title: 'Продуктовый аналитик',
+              company: 'FinCloud',
+              url: 'https://example.test/1',
+              source: 'himalayas',
+            },
+            openedAt: '2026-09-02T08:00:00.000Z',
+            appliedAt: '2026-09-02T09:00:00.000Z',
+            confirmedBy: 'candidate',
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Отклик подтверждён');
+    expect(html).toContain('2 сентября');
+    expect(html).not.toContain('Я откликнулся');
+  });
+});

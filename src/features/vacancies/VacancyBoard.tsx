@@ -11,6 +11,8 @@ import {
   type VacancyFilters,
 } from './vacancyFilters';
 import { useMatchedPool, type MatchedPool } from './useMatchedPool';
+import { useVacancyApplications, type VacancyApplications } from './useVacancyApplications';
+import type { VacancyApplication } from '../../../shared/vacancyApplication';
 import { SavedSearchesPanel } from './SavedSearchesPanel';
 import type { VacancySubscription } from '../coach/coachApi';
 
@@ -41,6 +43,7 @@ export function VacancyBoard({
   defaultQuery,
   onRefresh,
   pool,
+  applications,
 }: {
   /** Регулярные выборки кандидата: заводятся здесь же, в панели фильтров (B181). */
   readonly subscriptions?: readonly VacancySubscription[];
@@ -48,8 +51,11 @@ export function VacancyBoard({
   readonly onRefresh?: () => Promise<void>;
   /** Пул, прочитанный кабинетом один раз на все разделы (B104). */
   readonly pool?: MatchedPool;
+  /** Ручные отклики кандидата (B165, срез 1); передаются в тестах и с сервера. */
+  readonly applications?: readonly VacancyApplication[];
 } = {}) {
   const { matched, total, poolTotal, loading, failed } = useMatchedPool(pool);
+  const vacancyApplications = useVacancyApplications(applications);
   // Пока пул дочитывается, счётчик называет прочитанное, а не обещанное.
   const counted = total || matched.length;
   const filling = total === 0 && matched.length > 0;
@@ -112,7 +118,12 @@ export function VacancyBoard({
           </div>
           <ol className="career-vacancy-list">
             {shown.map((item) => (
-              <VacancyRow key={item.cluster.id} item={item} now={now} />
+              <VacancyRow
+                key={item.cluster.id}
+                item={item}
+                now={now}
+                applications={vacancyApplications}
+              />
             ))}
           </ol>
           {shown.length === 0 ? (
@@ -383,10 +394,25 @@ function sourceNoun(count: number): string {
 
 // Строка таблицы — шесть колонок макета подряд.
 // eslint-disable-next-line max-lines-per-function
-function VacancyRow({ item, now }: { item: MatchedVacancyItem; now: string }) {
+function VacancyRow({
+  item,
+  now,
+  applications,
+}: {
+  item: MatchedVacancyItem;
+  now: string;
+  applications: VacancyApplications;
+}) {
   const { cluster, explanation } = item;
   const age = vacancyAge(cluster, now);
   const coverage = vacancyCoverage(explanation);
+  const application = applications.byCluster.get(cluster.id);
+  const snapshot = {
+    title: cluster.canonicalTitle,
+    company: cluster.canonicalCompany ?? '',
+    url: cluster.primaryUrl,
+    source: cluster.sources[0]?.sourceId ?? '',
+  };
 
   return (
     <li className="career-vacancy-row">
@@ -430,16 +456,46 @@ function VacancyRow({ item, now }: { item: MatchedVacancyItem; now: string }) {
           <small>сравнивать не с чем</small>
         )}
       </span>
-      <a
-        className="career-vacancy-open"
-        href={cluster.primaryUrl}
-        target="_blank"
-        rel="noreferrer"
-      >
-        Открыть <ArrowSquareOut size={14} />
-      </a>
+      <div className="career-vacancy-actions">
+        <a
+          className="career-vacancy-open"
+          href={cluster.primaryUrl}
+          target="_blank"
+          rel="noreferrer"
+          onClick={() => applications.record(cluster.id, 'opened', snapshot)}
+        >
+          Открыть <ArrowSquareOut size={14} />
+        </a>
+        {application?.status === 'applied' ? (
+          <span className="career-vacancy-applied">
+            Отклик подтверждён {confirmedOn(application.appliedAt)}
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="career-inline-link"
+            onClick={() => applications.record(cluster.id, 'applied', snapshot)}
+          >
+            Я откликнулся
+          </button>
+        )}
+        {applications.unsaved.has(cluster.id) ? (
+          <span className="career-vacancy-unsaved" role="status">
+            Не сохранилось — повторите
+          </span>
+        ) : null}
+      </div>
     </li>
   );
+}
+
+/**
+ * Дата подтверждения, а не значок: «откликнулся» без даты через неделю ничего
+ * не говорит кандидату, а воронка считается по датам.
+ */
+function confirmedOn(appliedAt: string | null): string {
+  if (!appliedAt) return 'сегодня';
+  return new Date(appliedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 }
 
 function employerInitials(name?: string): string {

@@ -4,7 +4,12 @@ import type { CareerStrategy } from '../../../shared/careerStrategy';
 import { campaignRoleLine } from '../cabinet/careerStrategyView';
 import { StrategyReviewPanel } from './StrategyReviewPanel';
 import type { CareerCommand } from '../coach/coachApi';
-import { getCareerCommands, getMatchedVacancyPage } from '../coach/coachApi';
+import {
+  getCareerCommands,
+  getMatchedVacancyPage,
+  getVacancyApplications,
+} from '../coach/coachApi';
+import type { VacancyApplication } from '../../../shared/vacancyApplication';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { collectMatchedPool, withDeadline } from '../vacancies/vacancyRead';
 import { CareerRoutePremisesEditor } from '../cabinet/CareerRoutePremisesEditor';
@@ -52,14 +57,14 @@ export function SearchCampaign({
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
-  const { pool, commands, loading, failed } = useCampaignData();
+  const { pool, commands, applications, loading, failed } = useCampaignData();
   // Момент берётся один раз на прочитанный пул: пересчёт на каждый рендер
   // сдвигал бы «новых сегодня» под курсором.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const now = useMemo(() => new Date().toISOString(), [pool.length]);
   const campaign = useMemo(
-    () => buildSearchCampaign({ pool, commands, now }),
-    [pool, commands, now],
+    () => buildSearchCampaign({ pool, commands, applications, now }),
+    [pool, commands, applications, now],
   );
 
   return (
@@ -166,8 +171,9 @@ function FunnelPanel({ campaign }: { campaign: SearchCampaignView }) {
         ))}
       </ol>
       <p className="career-cabinet-tag">
-        Просмотр, ответ и интервью продукт не отслеживает — их некому сообщить,
-        поэтому на их месте прочерк, а не ноль.
+        «Открыто» — переходы на площадку, «отклик» — только то, что кандидат
+        подтвердил сам. Просмотр, ответ и интервью продукт не отслеживает — их
+        некому сообщить, поэтому на их месте прочерк, а не ноль.
       </p>
     </section>
   );
@@ -301,6 +307,7 @@ function AutomationPanel() {
 function useCampaignData() {
   const [pool, setPool] = useState<MatchedVacancyItem[]>([]);
   const [commands, setCommands] = useState<CareerCommand[]>([]);
+  const [applications, setApplications] = useState<VacancyApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
@@ -325,10 +332,17 @@ function useCampaignData() {
       // Команд может не быть вовсе — это не ошибка кампании.
       .catch(() => undefined);
 
+    void getVacancyApplications()
+      .then((list) => {
+        if (active) setApplications(list);
+      })
+      // Откликов может не быть вовсе — это тоже не ошибка кампании.
+      .catch(() => undefined);
+
     return () => {
       active = false;
     };
   }, []);
 
-  return { pool, commands, loading, failed };
+  return { pool, commands, applications, loading, failed };
 }

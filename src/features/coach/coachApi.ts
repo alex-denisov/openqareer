@@ -7,6 +7,11 @@ import type {
   WorkPreferenceResult,
   WorkPreferenceTask,
 } from '../../../shared/workPreferences';
+import type {
+  VacancyApplication,
+  VacancyApplicationSnapshot,
+  VacancyApplicationStatus,
+} from '../../../shared/vacancyApplication';
 import type { WorkspaceInput } from '../workspace/workspaceStorage';
 type UserRole = 'candidate' | 'admin';
 type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
@@ -821,6 +826,32 @@ export interface WorkPreferencesRead {
     readonly result: WorkPreferenceResult;
     readonly completedAt: string;
   } | null;
+}
+
+/**
+ * Ручной отклик кандидата (B165, срез 1, узлы 6 и 8).
+ *
+ * Продукт ничего не отправляет за кандидата: он записывает, что кандидат ушёл
+ * на площадку и что он сам подтвердил отклик.
+ */
+export async function getVacancyApplications(
+  signal?: AbortSignal,
+): Promise<VacancyApplication[]> {
+  const response = await apiFetch('/api/v1/candidate/vacancy-applications', { signal });
+  return readDataArray<VacancyApplication>(response);
+}
+
+export async function recordVacancyApplication(input: {
+  readonly clusterId: string;
+  readonly status: VacancyApplicationStatus;
+  readonly vacancy: VacancyApplicationSnapshot;
+}): Promise<VacancyApplication> {
+  const response = await apiFetch('/api/v1/candidate/vacancy-applications', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return readDataObject<VacancyApplication>(response);
 }
 
 export async function getWorkPreferences(

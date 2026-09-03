@@ -7969,6 +7969,27 @@
   color: var(--career-accent);
 }
 
+/* Ручной отклик (B165, срез 1): «Открыть» уводит на площадку, подтверждение
+   стоит рядом. Подтверждённый отклик говорит датой, а не значком. */
+.career-vacancy-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.career-vacancy-applied {
+  color: var(--career-text-muted);
+  font-size: 0.76rem;
+}
+
+/* Отклик, который не сохранился, назван словами: молчание сделало бы его
+   неотличимым от записанного (B165). */
+.career-vacancy-unsaved {
+  color: var(--career-warning);
+  font-size: 0.76rem;
+}
+
 /* Узкий экран: сам пул идёт первым, строка вакансии складывается в карточку.
    Настройки уходят под него: с регулярными выборками в панели (B181) до самих
    вакансий пришлось бы пролистывать два экрана настроек. */
@@ -7994,9 +8015,11 @@
     grid-column: 1 / -1;
   }
 
-  .career-vacancy-open {
-    grid-column: 2;
-    justify-self: end;
+  /* Отклик занимает свою строку: рядом с колонками он съедал ширину зарплаты
+     и возраста, и «от 240 000 до 300 000 ₽» разваливалось по словам (B165). */
+  .career-vacancy-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
   }
 }
 

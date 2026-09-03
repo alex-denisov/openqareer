@@ -243,6 +243,58 @@ async function readRoleContext(
 }
 
 /**
+ * Ручной отклик (B165, срез 1, узлы 5, 6, 8, 9).
+ *
+ * Ничего не отправляет за кандидата: отклик уходит на площадке под его
+ * собственной сессией (ADR-009), а продукт хранит только то, что кандидат
+ * сделал сам, — ушёл по ссылке и подтвердил отклик.
+ */
+const vacancyApplicationSchema = z.object({
+  clusterId: z.string().trim().min(1).max(200),
+  status: z.enum(['opened', 'applied']),
+  vacancy: z.object({
+    title: z.string().trim().min(1).max(300),
+    company: z.string().trim().max(300).default(''),
+    // Только http(s): `javascript:` — тоже валидный URL, а снимок отклика
+    // рано или поздно окажется ссылкой на экране.
+    url: z
+      .string()
+      .trim()
+      .url()
+      .max(2000)
+      .refine((value) => /^https?:\/\//iu.test(value), 'url_scheme_not_allowed'),
+    source: z.string().trim().max(120).default(''),
+  }),
+});
+
+const handleListVacancyApplications: Handler = async (deps, request, reply) => {
+  const candidate = authenticateCandidate(
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
+  );
+  if (!candidate) return undefined;
+  return {
+    data: deps.candidateStore.listVacancyApplications(candidate.id),
+    meta: { requestId: request.id },
+  };
+};
+
+const handleRecordVacancyApplication: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const body = vacancyApplicationSchema.parse(request.body);
+  return {
+    data: candidateStore.recordVacancyApplication(candidate.id, body),
+    meta: { requestId: request.id },
+  };
+};
+
+/**
  * Задания «Какие роли мне подходят» (B180, срез 3).
  *
  * Формулировки едут вместе с версией ключа: они версионируются вместе, и
@@ -668,6 +720,19 @@ const handleDeleteSubscription: Handler = async (deps, request, reply) => {
   return reply.code(204).send();
 };
 
+/** Ручной отклик (B165, срез 1) — свои два маршрута, чтение и запись. */
+function registerVacancyApplicationRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  app.get(
+    '/api/v1/candidate/vacancy-applications',
+    withDeps(deps, handleListVacancyApplications),
+  );
+  app.post(
+    '/api/v1/candidate/vacancy-applications',
+    { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },
+    withDeps(deps, handleRecordVacancyApplication),
+  );
+}
+
 export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   app.get(
     '/api/v1/market/hh',
@@ -682,6 +747,7 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
     { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } },
     withDeps(deps, handleSubmitWorkPreferences),
   );
+  registerVacancyApplicationRoutes(app, deps);
   app.get('/api/v1/candidate/strategy', withDeps(deps, handleReadStrategy));
   app.post(
     '/api/v1/candidate/strategy',

@@ -1,6 +1,8 @@
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type { CareerStrategy } from '../../shared/careerStrategy';
 import type { StoredWorkPreferenceRun } from './sqliteWorkPreferenceRepository';
+import type { VacancyApplicationInput } from './sqliteVacancyApplicationRepository';
+import type { VacancyApplication } from '../../shared/vacancyApplication';
 import type {
   CoachMessage,
   CoachPhase,
@@ -392,6 +394,14 @@ export interface CandidateStore {
    * The candidate's own wizard answers. Browser storage is a cache of this,
    * not the record — signing out must not erase a career context (INC-024).
    */
+  /** Ручные отклики кандидата: открыто и подтверждено (B165, срез 1). */
+  listVacancyApplications(candidateId: string): VacancyApplication[];
+
+  recordVacancyApplication(
+    candidateId: string,
+    input: VacancyApplicationInput,
+  ): VacancyApplication;
+
   getWorkPreferenceRun(candidateId: string): StoredWorkPreferenceRun | null;
 
   saveWorkPreferenceRun(

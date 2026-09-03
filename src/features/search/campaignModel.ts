@@ -1,4 +1,9 @@
 import { compareMatchedVacancies } from '../../../shared/vacancyMatchOrder';
+import {
+  countConfirmedApplications,
+  countOpenedApplications,
+  type VacancyApplication,
+} from '../../../shared/vacancyApplication';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 
 /**
@@ -43,6 +48,12 @@ export interface SearchCampaignInput {
   readonly pool: readonly MatchedVacancyItem[];
   /** Команды кандидата: отклик засчитывается только подтверждённый. */
   readonly commands: ReadonlyArray<{ status: string }>;
+  /**
+   * Ручные отклики (B165, срез 1). Переход по ссылке стоит в ступени
+   * «открыто» и откликом не считается: платформа не видит, что произошло на
+   * площадке, и вместо кандидата этого не утверждает.
+   */
+  readonly applications?: readonly VacancyApplication[];
   readonly now: string;
 }
 
@@ -52,26 +63,31 @@ const UNTRACKED = 'не отслеживается';
 export function buildSearchCampaign({
   pool,
   commands,
+  applications = [],
   now,
 }: SearchCampaignInput): SearchCampaign {
   const today = dayKey(now);
   const freshToday = pool.filter(
     (entry) => dayKey(entry.cluster.firstObservedAt) === today,
   ).length;
-  const applications = commands.filter((command) => SENT_STATUSES.has(command.status)).length;
+  const opened = countOpenedApplications(applications);
+  const applied =
+    countConfirmedApplications(applications) +
+    commands.filter((command) => SENT_STATUSES.has(command.status)).length;
 
   return {
     poolTotal: pool.length,
     freshToday,
     tiles: [
       { id: 'fresh', label: 'новых сегодня', value: freshToday },
-      { id: 'applications', label: 'откликов', value: applications },
+      { id: 'applications', label: 'откликов', value: applied },
       { id: 'answers', label: 'ответы', note: UNTRACKED },
       { id: 'interviews', label: 'интервью', note: UNTRACKED },
     ],
     funnel: [
       { label: 'подобрано', value: pool.length },
-      { label: 'отклик', value: applications },
+      { label: 'открыто', value: opened },
+      { label: 'отклик', value: applied },
       { label: 'просмотр' },
       { label: 'ответ' },
       { label: 'интервью' },
