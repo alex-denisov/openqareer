@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CareerStrategy } from '../../../shared/careerStrategy';
 import { campaignRoleLine } from '../cabinet/careerStrategyView';
+import { StrategyReviewPanel } from './StrategyReviewPanel';
 import type { CareerCommand } from '../coach/coachApi';
 import { getCareerCommands, getMatchedVacancyPage } from '../coach/coachApi';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -127,6 +128,9 @@ export function SearchCampaign({
           <QueuePanel campaign={campaign} loading={loading} onOpenVacancies={onOpenVacancies} />
         </div>
         <div className="career-campaign-column">
+          {/* Сигналы пересмотра стратегии стоят рядом с воронкой, по которой
+              они считаются (B180, срез 4). */}
+          <StrategyReviewPanel strategy={strategy} pool={pool} commands={commands} now={now} />
           <AutomationPanel />
           <section className="career-home-panel">
             <header>

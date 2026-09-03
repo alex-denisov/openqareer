@@ -7427,6 +7427,58 @@
   resize: vertical;
 }
 
+/* Сигналы пересмотра стратегии: сработавшее впереди, неотслеживаемое тише. */
+.career-strategy-review {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-lg, 14px);
+}
+
+.career-strategy-review > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.career-strategy-review h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+}
+
+.career-signal-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-signal-list li {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md);
+}
+
+.career-signal-list small {
+  color: var(--career-text-dim);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.career-signal-list li.is-fired {
+  border-color: var(--career-warning);
+}
+
+.career-signal-list li.is-untracked {
+  opacity: 0.75;
+}
+
 /* Задания «Какие роли мне подходят»: один парный выбор за раз. */
 .career-work-preferences {
   display: grid;
