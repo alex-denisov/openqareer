@@ -28,7 +28,7 @@
     "security:history": "gitleaks detect --no-banner --redact -c .gitleaks.toml -s .",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "tauri:build": "node scripts/tauri-build.mjs",
     "test:e2e:intake-fits": "node scripts/verify-intake-fits.mjs",
     "test:e2e:wizard-source-step": "node scripts/verify-wizard-source-step.mjs",
     "verify:hh-session-import": "tsx scripts/verify-hh-session-import.ts"
