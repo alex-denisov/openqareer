@@ -33,6 +33,7 @@ export default defineConfig({
         'shared/employerLabel.ts',
         'server/vacancies/multiSourceVacancyEngine.ts',
         'server/vacancies/adminVacancyPage.ts',
+        'server/data/documentTextPage.ts',
         'server/vacancies/sqliteVacancyPoolStore.ts',
         'src/features/workspace/workspaceStorage.ts',
         'src/features/workspace/candidateRegions.ts',

@@ -145,6 +145,11 @@ export const candidateDocumentSchema = z.object({
     'Нужен либо файл целиком, либо идентификатор собранной загрузки.',
   );
 
+/** Смещение страницы разобранного текста: маршрут отдаёт его частями (INC-034). */
+export const documentTextQuerySchema = z.object({
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
 export const documentRetentionSchema = z.object({
   retentionUntil: z.string().datetime({ offset: true }).nullable(),
 });

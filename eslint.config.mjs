@@ -101,7 +101,9 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
-        { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+        // `ignoreRestSiblings` разрешает выбросить поле через rest — так
+        // карточка документа отдаётся без байтов файла (INC-034).
+        { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_', ignoreRestSiblings: true },
       ],
     },
   },

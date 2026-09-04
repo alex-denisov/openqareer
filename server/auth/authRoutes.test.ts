@@ -417,11 +417,22 @@ describe('cookie auth routes', () => {
       headers: { cookie: candidate.cookie },
     });
     expect(downloaded.statusCode).toBe(200);
+    // Карточка лёгкая: байты файла отдаёт `/download`, текст — своя страница
+    // (INC-034). Целиком запись маршрут не доносил.
     expect(downloaded.json().data).toMatchObject({
       id: documentId,
-      contentBase64,
-      extractedText: 'Руководил операциями и улучшал удержание на 18%.',
+      textLength: 'Руководил операциями и улучшал удержание на 18%.'.length,
     });
+    expect(downloaded.json().data).not.toHaveProperty('contentBase64');
+
+    const text = await app.inject({
+      method: 'GET',
+      url: `/api/v1/candidate/documents/${documentId}/text`,
+      headers: { cookie: candidate.cookie },
+    });
+    expect(text.statusCode).toBe(200);
+    expect(text.json().data.text).toBe('Руководил операциями и улучшал удержание на 18%.');
+    expect(text.json().meta.nextOffset).toBeNull();
 
     const binaryDownload = await app.inject({
       method: 'GET',

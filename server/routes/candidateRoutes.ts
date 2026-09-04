@@ -30,6 +30,7 @@ import { parseResumeContent } from '../../src/features/workspace/resumeParser';
 import { normalizeResumeSourceText } from '../../src/features/workspace/resumeSourceText';
 import type { CandidateStore } from '../data/candidateStore';
 import { CandidateDocumentRetentionError } from '../data/sqliteCandidateStore';
+import { buildDocumentTextPage } from '../data/documentTextPage';
 import {
   CandidateDocumentValidationError,
   CandidateDocumentVersionError,
@@ -51,6 +52,7 @@ import {
   candidateDocumentSchema,
   documentPartSchema,
   documentRetentionSchema,
+  documentTextQuerySchema,
   memoryChangeSchema,
   memoryIdSchema,
   memoryReviewSchema,
@@ -597,7 +599,31 @@ function loadCandidateDocument(
 const handleGetDocument: Handler = async (deps, request, _reply) => {
   const document = loadCandidateDocument(deps, request, _reply);
   if (!document) return undefined;
-  return { data: document, meta: { requestId: request.id } };
+  // Целиком запись до клиента не доезжает: маршрут рвал ответ на 20 469 байтах
+  // и обрывал `extractedText` на середине строки (INC-034). Карточка везёт
+  // поля документа и длину текста; байты файла отдаёт `/download`, а текст —
+  // своя страница.
+  const { contentBase64, extractedText, ...card } = document;
+  return {
+    data: { ...card, textLength: extractedText?.length ?? 0 },
+    meta: { requestId: request.id },
+  };
+};
+
+const handleGetDocumentText: Handler = async (deps, request, reply) => {
+  const document = loadCandidateDocument(deps, request, reply);
+  if (!document) return undefined;
+  const { offset } = documentTextQuerySchema.parse(request.query ?? {});
+  const page = buildDocumentTextPage(document.extractedText ?? '', offset);
+  return {
+    data: { text: page.text },
+    meta: {
+      requestId: request.id,
+      offset: page.offset,
+      nextOffset: page.nextOffset,
+      length: page.length,
+    },
+  };
 };
 
 const handleDownloadDocument: Handler = async (deps, request, reply) => {
@@ -745,6 +771,7 @@ async function registerDocumentEndpoints(app: FastifyInstance, deps: RouteDeps):
     withDeps(deps, handleSaveDocument),
   );
   app.get('/api/v1/candidate/documents/:documentId', withDeps(deps, handleGetDocument));
+  app.get('/api/v1/candidate/documents/:documentId/text', withDeps(deps, handleGetDocumentText));
   app.get(
     '/api/v1/candidate/documents/:documentId/download',
     { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
