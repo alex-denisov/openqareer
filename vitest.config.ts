@@ -30,6 +30,7 @@ export default defineConfig({
         'server/vacancies/defaultVacancySources.ts',
         'server/connectors/feedText.ts',
         'server/connectors/telegramJobHeader.ts',
+        'server/connectors/telegramPostType.ts',
         'shared/employerLabel.ts',
         'server/vacancies/multiSourceVacancyEngine.ts',
         'server/vacancies/adminVacancyPage.ts',
