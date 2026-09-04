@@ -75,6 +75,28 @@ const RESUME_SIGNALS = [
   /#ищуработу/iu,
 ];
 
+/**
+ * Пост о себе. Признак не в словах «ищу работу» — их может не быть вовсе, —
+ * а в отсутствии нанимающей стороны: человек говорит от первого лица
+ * единственного числа, даёт своё портфолио, своё резюме и свой профиль и
+ * обращается к работодателю на «вы» (PRB-019, запись `tg-gamedevjob-5040`).
+ *
+ * Одного совпадения мало: «портфолио:» просит и настоящая вакансия. У поста о
+ * себе таких признаков обычно пять-шесть, поэтому порог — два.
+ */
+const SELF_POST_SIGNALS = [
+  /(?:^|[^а-яё])ищу (?:работу|проект|вакансию|возможность|команду|место)/iu,
+  /(?:^|[^а-яё])готов[аы]? (?:к |подстроиться|приступить|рассмотреть|обсудить|выйти)/iu,
+  /(?:^|[^а-яё])мо[ёеийя][а-яё]* (?:опыт|стек|портфолио|проект|резюме|навыки|работы)/iu,
+  /(?:^|[^а-яё])(?:работаю|занимаюсь|разрабатываю|пишу код|специализируюсь)(?:[^а-яё]|$)/iu,
+  /(?:^|[^а-яё])(?:вашему|вашей|вашим) (?:проекту|команде|компании|задачам)/iu,
+  /портфолио\s*[:\-—]/iu,
+  /резюме\s*[:\-—]\s*https?:/iu,
+  /linkedin\.com\/in\//i,
+  /open to work/i,
+  /looking for (?:a )?(?:job|work|new opportunit)/i,
+];
+
 const PROMO_SIGNALS = [
   /#реклама/iu,
   /#партнерский/iu,
@@ -106,7 +128,13 @@ export function classifyTelegramPost(text: string): TelegramPostType {
   const looksLikeVacancy =
     hiring || structure >= 2 || (structure >= 1 && SALARY.test(clean) && APPLY_CONTACT.test(clean));
 
-  if (RESUME_SIGNALS.some((rx) => rx.test(clean)) && !hiring) return 'resume';
+  // Пост о себе проверяется раньше структуры объявления: «условия работы
+  // обсуждаемы» и «под ваши требования» — слова кандидата, а не работодателя,
+  // и структура принимала их за разделы вакансии (PRB-019).
+  const selfSignals = SELF_POST_SIGNALS.filter((rx) => rx.test(clean)).length;
+  if (!hiring && (RESUME_SIGNALS.some((rx) => rx.test(clean)) || selfSignals >= 2)) {
+    return 'resume';
+  }
   if (PROMO_SIGNALS.some((rx) => rx.test(clean)) && !looksLikeVacancy) return 'promo';
   if (DIGEST_SIGNALS.some((rx) => rx.test(clean)) && !looksLikeVacancy) return 'digest';
   if (looksLikeVacancy) return 'vacancy';
