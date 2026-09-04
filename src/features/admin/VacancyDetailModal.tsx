@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import type { AdminVacancy } from './adminApi';
+import React, { useEffect, useState } from 'react';
+import { getAdminVacancy, type AdminVacancy } from './adminApi';
 
 function formatSalary(salary?: AdminVacancy['salary']): string {
   if (!salary) return 'Зарплата не указана';
@@ -186,7 +186,33 @@ function VacancyModalFooter({ url, onClose }: { url: string; onClose: () => void
   );
 }
 
-export function VacancyDetailModal({ vacancy, onClose }: { vacancy: AdminVacancy; onClose: () => void }) {
+/**
+ * Полную запись читает окно, а не список: список отдаётся кратким видом внутри
+ * байтового бюджета маршрута, иначе ответ обрывается на середине строки
+ * (INC-032).
+ */
+function useAdminVacancy(vacancyId: string) {
+  const [vacancy, setVacancy] = useState<AdminVacancy | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setVacancy(null);
+    setError(null);
+    getAdminVacancy(vacancyId, controller.signal)
+      .then(setVacancy)
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(cause instanceof Error ? cause.message : 'Не удалось загрузить вакансию');
+      });
+    return () => controller.abort();
+  }, [vacancyId]);
+
+  return { vacancy, error };
+}
+
+export function VacancyDetailModal({ vacancyId, onClose }: { vacancyId: string; onClose: () => void }) {
+  const { vacancy, error } = useAdminVacancy(vacancyId);
   return (
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
@@ -198,9 +224,25 @@ export function VacancyDetailModal({ vacancy, onClose }: { vacancy: AdminVacancy
     >
       <button type="button" className="admin-modal-backdrop" aria-label="Закрыть модальное окно" onClick={onClose} tabIndex={-1} />
       <div className="admin-modal admin-modal--large">
-        <VacancyModalHeader vacancy={vacancy} onClose={onClose} />
-        <VacancyModalBody vacancy={vacancy} />
-        <VacancyModalFooter url={vacancy.url} onClose={onClose} />
+        {error ? (
+          <div className="admin-alert admin-alert--error" role="alert">
+            <h3 className="admin-modal__title" id="vacancy-modal-title">Вакансия не открылась</h3>
+            <p>{error}</p>
+            <button type="button" className="admin-btn admin-btn--secondary" onClick={onClose}>
+              Закрыть
+            </button>
+          </div>
+        ) : vacancy ? (
+          <>
+            <VacancyModalHeader vacancy={vacancy} onClose={onClose} />
+            <VacancyModalBody vacancy={vacancy} />
+            <VacancyModalFooter url={vacancy.url} onClose={onClose} />
+          </>
+        ) : (
+          <div className="admin-loading-state">
+            <h3 className="admin-modal__title" id="vacancy-modal-title">Загрузка вакансии…</h3>
+          </div>
+        )}
       </div>
     </div>
   );

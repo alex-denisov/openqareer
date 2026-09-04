@@ -149,6 +149,14 @@ export class MultiSourceVacancyEngine {
     return this.clusters.filter((c) => c.status === 'active');
   }
 
+  /**
+   * Одна запись целиком: список отдаётся кратким видом внутри байтового бюджета
+   * маршрута (INC-032), а полный текст поста читает карточка.
+   */
+  public getVacancy(id: string): UnifiedVacancy | undefined {
+    return this.rawVacancies.get(id);
+  }
+
   public getVacancies(filter: VacancyQueryFilter = {}): VacancyQueryResult {
     let all = Array.from(this.rawVacancies.values()).filter((v) =>
       isVacancyFresh(v.publishedAt),

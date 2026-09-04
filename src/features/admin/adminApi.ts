@@ -82,10 +82,37 @@ export interface AdminVacancy {
   status: 'active' | 'archived' | 'expired';
 }
 
+/**
+ * Краткий вид записи: полный текст поста маршрут не доносит — ответ рвался на
+ * 20 220 байтах при любом `limit` (INC-032). Разделы читает карточка.
+ */
+export interface AdminVacancySummary {
+  id: string;
+  fingerprint: string;
+  title: string;
+  company: string;
+  location?: string;
+  isRemote?: boolean;
+  salary?: AdminVacancy['salary'];
+  descriptionSnippet: string;
+  requiredSkills: string[];
+  skillCount: number;
+  employmentType?: string;
+  experienceLevel?: string;
+  postType?: AdminVacancy['postType'];
+  url: string;
+  provenance: AdminVacancy['provenance'];
+  publishedAt: string;
+  status: AdminVacancy['status'];
+}
+
 export interface AdminVacancyPage {
   total: number;
-  items: AdminVacancy[];
+  items: AdminVacancySummary[];
   statsBySource: Array<{ sourceId: string; sourceName: string; count: number }>;
+  offset: number;
+  /** Смещение следующей страницы; `null` — выборка кончилась. */
+  nextOffset: number | null;
 }
 
 export interface AdminVacancySource {
@@ -242,6 +269,17 @@ export async function listAdminVacancies(input?: {
     ...(input?.signal ? { signal: input.signal } : {}),
   });
   return readData<AdminVacancyPage>(response);
+}
+
+/** Полная запись для модального окна: список её больше не везёт (INC-032). */
+export async function getAdminVacancy(
+  vacancyId: string,
+  signal?: AbortSignal,
+): Promise<AdminVacancy> {
+  const response = await apiFetch(`/api/v1/admin/vacancies/${encodeURIComponent(vacancyId)}`, {
+    ...(signal ? { signal } : {}),
+  });
+  return readData<AdminVacancy>(response);
 }
 
 export async function listAdminVacancySources(

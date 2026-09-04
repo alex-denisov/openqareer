@@ -3,14 +3,14 @@ import { employerLabel } from '../../../shared/employerLabel';
 import {
   listAdminVacancies,
   syncAllAdminVacancySources,
-  type AdminVacancy,
   type AdminVacancyPage,
+  type AdminVacancySummary,
 } from './adminApi';
 import { VacancyDetailModal } from './VacancyDetailModal';
 
 type RemoteFilter = 'all' | 'remote' | 'office';
 
-function formatSalary(salary?: AdminVacancy['salary']): string {
+function formatSalary(salary?: AdminVacancySummary['salary']): string {
   if (!salary) return 'Зарплата не указана';
   const parts: string[] = [];
   if (salary.from) parts.push(`от ${salary.from.toLocaleString()}`);
@@ -75,7 +75,7 @@ function VacancyFilters({
 
 // ---------- Vacancy Card ----------
 
-function VacancyCardMeta({ vacancy }: { vacancy: AdminVacancy }) {
+function VacancyCardMeta({ vacancy }: { vacancy: AdminVacancySummary }) {
   return (
     <div className="admin-vacancy-card__meta">
       <span className="admin-vacancy-company">{employerLabel(vacancy.company)}</span>
@@ -87,7 +87,7 @@ function VacancyCardMeta({ vacancy }: { vacancy: AdminVacancy }) {
   );
 }
 
-function VacancyCard({ vacancy, onSelect }: { vacancy: AdminVacancy; onSelect: (v: AdminVacancy) => void }) {
+function VacancyCard({ vacancy, onSelect }: { vacancy: AdminVacancySummary; onSelect: (v: AdminVacancySummary) => void }) {
   return (
     <article className="admin-vacancy-card">
       <div className="admin-vacancy-card__header">
@@ -101,12 +101,17 @@ function VacancyCard({ vacancy, onSelect }: { vacancy: AdminVacancy; onSelect: (
         <VacancyCardMeta vacancy={vacancy} />
       </div>
       <div className="admin-vacancy-salary">{formatSalary(vacancy.salary)}</div>
-      <p className="admin-vacancy-desc">{vacancy.description}</p>
+      <p className="admin-vacancy-desc">{vacancy.descriptionSnippet}</p>
       {vacancy.requiredSkills && vacancy.requiredSkills.length > 0 && (
         <div className="admin-vacancy-skills">
-          {vacancy.requiredSkills.slice(0, 6).map((s, idx) => (
+          {vacancy.requiredSkills.map((s, idx) => (
             <span key={idx} className="admin-skill-chip">{s}</span>
           ))}
+          {vacancy.skillCount > vacancy.requiredSkills.length && (
+            <span className="admin-skill-chip">
+              +{vacancy.skillCount - vacancy.requiredSkills.length}
+            </span>
+          )}
         </div>
       )}
       <VacancyCardFooter vacancy={vacancy} onSelect={onSelect} />
@@ -114,7 +119,7 @@ function VacancyCard({ vacancy, onSelect }: { vacancy: AdminVacancy; onSelect: (
   );
 }
 
-function VacancyCardFooter({ vacancy, onSelect }: { vacancy: AdminVacancy; onSelect: (v: AdminVacancy) => void }) {
+function VacancyCardFooter({ vacancy, onSelect }: { vacancy: AdminVacancySummary; onSelect: (v: AdminVacancySummary) => void }) {
   return (
     <div className="admin-vacancy-card__footer">
       <span className="admin-vacancy-date">
@@ -150,7 +155,7 @@ function VacanciesHeader({ syncing, onSyncAll }: { syncing: boolean; onSyncAll: 
   );
 }
 
-function VacanciesList({ items, onSelect }: { items: AdminVacancy[]; onSelect: (v: AdminVacancy) => void }) {
+function VacanciesList({ items, onSelect }: { items: AdminVacancySummary[]; onSelect: (v: AdminVacancySummary) => void }) {
   if (items.length === 0) {
     return <div className="admin-empty-state">По выбранным фильтрам вакансий не найдено.</div>;
   }
@@ -195,8 +200,8 @@ function useVacancyLoader(selectedSource: string, searchQuery: string, selectedR
 
 function useVacancyUrlSync(
   data: AdminVacancyPage | null,
-  selectedVacancy: AdminVacancy | null,
-  setSelectedVacancy: (v: AdminVacancy | null) => void,
+  selectedVacancy: AdminVacancySummary | null,
+  setSelectedVacancy: (v: AdminVacancySummary | null) => void,
 ) {
   useEffect(() => {
     if (data?.items && typeof window !== 'undefined') {
@@ -209,7 +214,7 @@ function useVacancyUrlSync(
     }
   }, [data, selectedVacancy, setSelectedVacancy]);
 
-  return (v: AdminVacancy | null) => {
+  return (v: AdminVacancySummary | null) => {
     setSelectedVacancy(v);
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -232,7 +237,7 @@ export function AdminVacanciesView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSource, setSelectedSource] = useState('all');
   const [selectedRemote, setSelectedRemote] = useState<RemoteFilter>('all');
-  const [selectedVacancy, setSelectedVacancy] = useState<AdminVacancy | null>(null);
+  const [selectedVacancy, setSelectedVacancy] = useState<AdminVacancySummary | null>(null);
   const { data, loading, error, setError, fetchVacancies } = useVacancyLoader(selectedSource, searchQuery, selectedRemote);
   const handleSelectVacancy = useVacancyUrlSync(data, selectedVacancy, setSelectedVacancy);
 
@@ -263,7 +268,9 @@ export function AdminVacanciesView() {
       />
       {error && <div className="admin-alert admin-alert--error">{error}</div>}
       {loading ? <div className="admin-loading-state">Загрузка вакансий...</div> : data ? <VacanciesList items={data.items} onSelect={handleSelectVacancy} /> : null}
-      {selectedVacancy && <VacancyDetailModal vacancy={selectedVacancy} onClose={() => handleSelectVacancy(null)} />}
+      {selectedVacancy && (
+        <VacancyDetailModal vacancyId={selectedVacancy.id} onClose={() => handleSelectVacancy(null)} />
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   setSessionCookie,
   withDeps,
 } from './helpers';
+import { buildAdminVacancyPage } from '../vacancies/adminVacancyPage';
 import { queueFallbackDescriptors } from '../providers/providerQueue';
 import { describeRoleNamerQueue } from '../providers/roleNamer';
 import { CAREER_SUPER_PROMPT_REVISION } from '../prompts/careerSuperPrompt';
@@ -173,7 +174,36 @@ async function handleGetVacancies(deps: RouteDeps, request: FastifyRequest, repl
   const principal = requireAdmin(deps, request, reply);
   if (!principal) return;
   const query = adminVacancyQuerySchema.parse(request.query ?? {});
-  return { data: deps.multiSourceEngine.getVacancies(query), meta: { requestId: request.id } };
+  // Целиком выборка до консоли не доезжает: маршрут рвёт ответ примерно на
+  // 20 220 байтах при любом `limit` (INC-032). Фильтры считаются по всему пулу,
+  // а наружу уходит страница краткого вида внутри доказанного бюджета.
+  const { total, items, statsBySource } = deps.multiSourceEngine.getVacancies({
+    ...query,
+    offset: 0,
+    limit: Number.MAX_SAFE_INTEGER,
+  });
+  const page = buildAdminVacancyPage(items, query.offset, query.limit);
+  return {
+    data: {
+      total,
+      items: page.items,
+      statsBySource,
+      offset: page.offset,
+      nextOffset: page.nextOffset,
+    },
+    meta: { requestId: request.id },
+  };
+}
+
+async function handleGetVacancy(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+  const principal = requireAdmin(deps, request, reply);
+  if (!principal) return;
+  const { vacancyId } = request.params as { vacancyId: string };
+  const vacancy = deps.multiSourceEngine.getVacancy(vacancyId);
+  if (!vacancy) {
+    return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  }
+  return { data: vacancy, meta: { requestId: request.id } };
 }
 
 async function testSource(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
@@ -299,6 +329,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
   app.get('/api/v1/admin/audit', withDeps(deps, handleListAudit));
 
   app.get('/api/v1/admin/vacancies', withDeps(deps, handleGetVacancies));
+  app.get('/api/v1/admin/vacancies/:vacancyId', withDeps(deps, handleGetVacancy));
   app.get('/api/v1/admin/vacancy-sources', async (request, reply) => {
     const principal = requireAdmin(deps, request, reply);
     if (!principal) return;
