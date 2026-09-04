@@ -241,6 +241,9 @@ export function VacancyDetailModal({ vacancyId, onClose }: { vacancyId: string; 
         ) : (
           <div className="admin-loading-state">
             <h3 className="admin-modal__title" id="vacancy-modal-title">Загрузка вакансии…</h3>
+            <button type="button" className="admin-btn admin-btn--secondary" onClick={onClose}>
+              Закрыть
+            </button>
           </div>
         )}
       </div>
