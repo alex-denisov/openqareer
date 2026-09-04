@@ -4,19 +4,22 @@ import { OpenAICoachProvider } from './openAICoachProvider';
 import { OpenAICompatibleCoachProvider } from './openAICompatibleCoachProvider';
 import { OpenRouterCoachProvider } from './openRouterCoachProvider';
 import { LlmRoleNamer } from './roleNamer';
-import {
-  PROVIDER_STAGE_MAX_RETRIES,
-  PROVIDER_STAGE_TIMEOUT_MS,
-} from './stageTimeout';
+import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
 function clientOf(instance: unknown): OpenAI {
   return (instance as { client: OpenAI }).client;
 }
 
 describe('потолок ступени', () => {
-  it('владелец назвал тридцать секунд без повторов внутри ступени', () => {
-    expect(PROVIDER_STAGE_TIMEOUT_MS).toBe(30_000);
+  it('покрывает самую медленную здоровую попытку замера и не даёт повторов (B197)', () => {
+    expect(PROVIDER_STAGE_TIMEOUT_MS).toBe(50_000);
     expect(PROVIDER_STAGE_MAX_RETRIES).toBe(0);
+  });
+
+  it('три роли на ход при потолке остаются внутри таймаута запроса', () => {
+    const rolesPerTurn = 3;
+    const serverRequestTimeoutMs = 190_000;
+    expect(PROVIDER_STAGE_TIMEOUT_MS * rolesPerTurn).toBeLessThan(serverRequestTimeoutMs);
   });
 
   it('держится на каждой ступени очереди', () => {

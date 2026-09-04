@@ -13,19 +13,9 @@ import {
 } from './cloudflareAiGateway';
 import { geminiResponseSchema } from './geminiSchema';
 import type { NamedRole } from '../../shared/roleProposals';
-import {
-  isMutableModelAlias,
-  modelRegistry,
-  type ProviderId,
-} from './modelRegistry';
-import {
-  selectProviderQueue,
-  type ProviderQueueEntry,
-} from './providerQueue';
-import {
-  PROVIDER_STAGE_MAX_RETRIES,
-  PROVIDER_STAGE_TIMEOUT_MS,
-} from './stageTimeout';
+import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
+import { selectProviderQueue, type ProviderQueueEntry } from './providerQueue';
+import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
 /** Весь профиль в этот вызов не едет: роли называются по подтверждённым фактам. */
 const MAX_FACTS = 40;
@@ -75,10 +65,7 @@ export interface RoleNamingOutcome {
  * пришёл, ролей из него не вышло»: и разбор не удался, и модель назвала ноль.
  */
 export type RoleNamingFailureKind =
-  | 'http_error'
-  | 'timeout'
-  | 'transport_error'
-  | 'unusable_response';
+  'http_error' | 'timeout' | 'transport_error' | 'unusable_response';
 
 export interface RoleNamingStageFailure {
   readonly stage: string;
@@ -104,11 +91,7 @@ function failureDetail(text: string, apiKey: string): string | undefined {
 }
 
 /** Отказ приходит то ошибкой транспорта, то таймаутом, то кодом ответа. */
-function thrownFailure(
-  stage: string,
-  error: unknown,
-  apiKey: string,
-): RoleNamingStageFailure {
+function thrownFailure(stage: string, error: unknown, apiKey: string): RoleNamingStageFailure {
   const name = error instanceof Error ? error.name : '';
   if (name === 'TimeoutError' || name === 'AbortError' || name === 'APIConnectionTimeoutError') {
     return { stage, kind: 'timeout' };
@@ -204,9 +187,7 @@ export class LlmRoleNamer implements RoleNamer {
         ...(this.structuredOutput
           ? {
               response_format: { type: 'json_schema', json_schema: ROLE_NAMING_JSON_SCHEMA },
-              ...(this.requireParameters
-                ? { provider: { require_parameters: true } }
-                : {}),
+              ...(this.requireParameters ? { provider: { require_parameters: true } } : {}),
             }
           : {}),
       });
@@ -275,8 +256,8 @@ function parseRoles(content: string | null): NamedRole[] {
  *
  * Решение владельца 2026-09-03: голова очереди называния — `gemini-3.6-flash`.
  * Замер на настоящих фактах кандидата назвал причину прямо: бесплатная голова
- * очереди коуча тратит 59 секунд, Gemini — 14.7 (B185), а потолок ступени
- * стоит на тридцати. Это единственный порядок, при котором потолок не
+ * очереди коуча тратит 59 секунд, Gemini — 14.7 (B185), а потолок ступени стоит
+ * на пятидесяти (B197). Это единственный порядок, при котором потолок не
  * приходится ни обходить, ни оплачивать.
  *
  * Транспорт свой: Gemini не говорит на `chat/completions`. Тоннель Cloudflare
@@ -452,7 +433,11 @@ export class CachedRoleNamer implements RoleNamer {
         ...(outcome.stage ? { stage: outcome.stage } : {}),
       };
       this.entries.set(key, { at: this.now(), outcome: kept });
-      this.store?.write(key, { at: this.now(), roles: kept.roles, ...(kept.stage ? { stage: kept.stage } : {}) });
+      this.store?.write(key, {
+        at: this.now(),
+        roles: kept.roles,
+        ...(kept.stage ? { stage: kept.stage } : {}),
+      });
     }
     return outcome;
   }
@@ -461,8 +446,8 @@ export class CachedRoleNamer implements RoleNamer {
 /**
  * Очередь ступеней для называния ролей.
  *
- * Потолок ступени в тридцать секунд (решение владельца 2026-09-03) сам по себе
- * роль не называет: живой замер по 32 фактам кандидата дал у бесплатной головы
+ * Потолок ступени (30 секунд по решению владельца 2026-09-03, 50 после замера
+ * B185 — см. B197) сам по себе роль не называет: живой замер по 32 фактам кандидата дал у бесплатной головы
  * очереди 59 секунд, из которых 2 373 токена ушли в рассуждение. Ступень с
  * потолком, за которой никого нет, превращает медленный ответ в пустую панель.
  * Поэтому называние ролей идёт той же очередью, что и ход коуча: молчание
@@ -516,10 +501,7 @@ export interface RoleNamerConfig {
  * значило бы получить отказ и выдать его за молчание модели.
  */
 function speaksChatCompletions(provider: ProviderId): boolean {
-  return (
-    provider === 'openai' ||
-    modelRegistry[provider].transport === 'openai-compatible-chat'
-  );
+  return provider === 'openai' || modelRegistry[provider].transport === 'openai-compatible-chat';
 }
 
 /**
@@ -529,9 +511,7 @@ function speaksChatCompletions(provider: ProviderId): boolean {
  * у бесплатной головы коуча на настоящих фактах кандидата). Остальные ступени
  * сохраняют свой порядок и остаются запасом.
  */
-function roleNamingOrder<T extends { provider: ProviderId }>(
-  routes: readonly T[],
-): T[] {
+function roleNamingOrder<T extends { provider: ProviderId }>(routes: readonly T[]): T[] {
   return [
     ...routes.filter((route) => route.provider === 'gemini'),
     ...routes.filter((route) => route.provider !== 'gemini'),
@@ -572,13 +552,10 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
               model: route.model,
               stage: `${route.provider}:${route.model}`,
               baseUrl:
-                route.provider === 'openai'
-                  ? undefined
-                  : modelRegistry[route.provider].baseUrl,
+                route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
               structuredOutput:
-                modelRegistry[route.provider].models.find(
-                  (item) => item.id === route.model,
-                )?.structuredOutput ?? false,
+                modelRegistry[route.provider].models.find((item) => item.id === route.model)
+                  ?.structuredOutput ?? false,
               // Условие имеет смысл только у пула: у названной модели OpenRouter
               // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
               requireParameters:
