@@ -22,8 +22,14 @@ function formatSalary(salary?: AdminVacancySummary['salary']): string {
 
 // ---------- Stats & Filters ----------
 
+/**
+ * Числа называют свой знаменатель. «18 активных каналов» стояло литералом в
+ * разметке, а «удалённый формат» считался по загруженной странице и выдавался
+ * за счёт по всей выборке — тот же запрет выдуманных чисел, что в PRB-016.
+ */
 function VacancyStatsGrid({ data }: { data: AdminVacancyPage }) {
   const remoteCount = data.items.filter((i) => i.isRemote).length;
+  const sourcesWithRecords = data.statsBySource.filter((s) => s.count > 0).length;
   return (
     <div className="admin-stats-grid">
       <div className="admin-stat-card">
@@ -31,12 +37,16 @@ function VacancyStatsGrid({ data }: { data: AdminVacancyPage }) {
         <span className="admin-stat-card__label">Всего вакансий в выборке</span>
       </div>
       <div className="admin-stat-card">
-        <span className="admin-stat-card__value">18</span>
-        <span className="admin-stat-card__label">Активных подключенных каналов</span>
+        <span className="admin-stat-card__value">
+          {sourcesWithRecords} из {data.statsBySource.length}
+        </span>
+        <span className="admin-stat-card__label">Источников с записями в пуле</span>
       </div>
       <div className="admin-stat-card">
-        <span className="admin-stat-card__value">{remoteCount}</span>
-        <span className="admin-stat-card__label">Удаленный формат</span>
+        <span className="admin-stat-card__value">
+          {remoteCount} из {data.items.length}
+        </span>
+        <span className="admin-stat-card__label">Удалённых на этой странице</span>
       </div>
     </div>
   );
