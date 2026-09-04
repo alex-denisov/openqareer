@@ -35,12 +35,10 @@ import {
 } from '../../../shared/accountValidation';
 import { pluralRu } from '../../../shared/pluralRu';
 import { initialsFor } from './accountIdentity';
-import {
-  LEGAL_DOCS,
-  LEGAL_PACK_VERSION_ID,
-  legalPath,
-} from '../../../shared/legalRegistry';
+import { LEGAL_DOCS, LEGAL_PACK_VERSION_ID, legalPath } from '../../../shared/legalRegistry';
 import { appVersionLine } from './appVersion';
+import { buildFreshnessLine } from './buildFreshness';
+import { useBuildFreshness } from './useBuildFreshness';
 
 interface CareerAccountPanelProps {
   initialUser?: AuthUser | null;
@@ -205,9 +203,7 @@ export function CareerAccountPanel({
   function clearFieldError(field: string) {
     setFieldErrors((current) => {
       if (!(field in current)) return current;
-      return Object.fromEntries(
-        Object.entries(current).filter(([name]) => name !== field),
-      );
+      return Object.fromEntries(Object.entries(current).filter(([name]) => name !== field));
     });
   }
 
@@ -357,9 +353,7 @@ export function CareerAccountPanel({
           <div>
             <strong>Аккаунт</strong>
             <small>
-              {user
-                ? 'Подключения, безопасность и ваши данные'
-                : 'Защищённый карьерный профиль'}
+              {user ? 'Подключения, безопасность и ваши данные' : 'Защищённый карьерный профиль'}
             </small>
           </div>
         </div>
@@ -465,9 +459,7 @@ export function CareerAccountPanel({
             <AuthField
               label="Пароль"
               error={fieldErrors.password}
-              hint={
-                mode === 'register' ? `Не короче ${MIN_PASSWORD_LENGTH} символов` : undefined
-              }
+              hint={mode === 'register' ? `Не короче ${MIN_PASSWORD_LENGTH} символов` : undefined}
             >
               <input
                 type="password"
@@ -568,11 +560,36 @@ export function CareerAccountPanel({
             {error}
           </p>
         ) : null}
-        <p className="career-account-version">
-          {appVersionLine(__APP_VERSION__, __APP_COMMIT__)}
-        </p>
+        <p className="career-account-version">{appVersionLine(__APP_VERSION__, __APP_COMMIT__)}</p>
+        {user ? <BuildFreshnessNote /> : null}
       </div>
     </aside>
+  );
+}
+
+/**
+ * B159 — приложение раздаётся без подписи и без канала обновлений, поэтому оно
+ * само говорит, отстала ли сборка от продакшена. Пока ответ не пришёл, строки
+ * нет: молчание лучше обещания, которого никто не проверял.
+ *
+ * Проверка идёт только у вошедшего кандидата: до входа каркас не ходит на
+ * сервер вовсе, и это свойство держит релизный гейт `smoke.spec.ts` («ни одной
+ * неудавшейся заявки на собранном каркасе без бэкенда»).
+ */
+function BuildFreshnessNote() {
+  const freshness = useBuildFreshness(__APP_COMMIT__);
+  if (!freshness) return null;
+  return (
+    <p
+      className={
+        freshness.kind === 'outdated'
+          ? 'career-account-version career-account-version-stale'
+          : 'career-account-version'
+      }
+      role={freshness.kind === 'outdated' ? 'alert' : 'status'}
+    >
+      {buildFreshnessLine(freshness)}
+    </p>
   );
 }
 
@@ -626,9 +643,7 @@ function AuthenticatedAccount({
           </button>
         ))}
       </nav>
-      <p className="career-account-section-lead">
-        {ACCOUNT_SECTION_LEADS[section]}
-      </p>
+      <p className="career-account-section-lead">{ACCOUNT_SECTION_LEADS[section]}</p>
 
       {section === 'connections' ? <AccountConnectionsManager /> : null}
 

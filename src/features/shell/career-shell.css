@@ -354,11 +354,7 @@
   position: relative;
   color: var(--career-accent);
   border-color: oklch(79% 0.145 255 / 0.3);
-  background: linear-gradient(
-    90deg,
-    oklch(79% 0.145 255 / 0.2),
-    oklch(79% 0.145 255 / 0.04)
-  );
+  background: linear-gradient(90deg, oklch(79% 0.145 255 / 0.2), oklch(79% 0.145 255 / 0.04));
 }
 
 .career-nav-button.is-active::before {
@@ -7331,6 +7327,13 @@
   font-size: 0.75rem;
 }
 
+/* B159: отставшая сборка читается как предупреждение, а не как подпись. */
+.career-account-version-stale {
+  margin-top: 6px;
+  color: var(--career-warning);
+  font-weight: 600;
+}
+
 /* ---- «Пульт» · «Главная»: кандидат слева, оценка и разбор справа ------- */
 
 .career-home {
@@ -7624,17 +7627,39 @@
 }
 
 /* Ширина — классом, а не инлайновым style: прод отдаёт `style-src 'self'`. */
-.career-measure-fill[data-share='0'] { width: 0; }
-.career-measure-fill[data-share='10'] { width: 10%; }
-.career-measure-fill[data-share='20'] { width: 20%; }
-.career-measure-fill[data-share='30'] { width: 30%; }
-.career-measure-fill[data-share='40'] { width: 40%; }
-.career-measure-fill[data-share='50'] { width: 50%; }
-.career-measure-fill[data-share='60'] { width: 60%; }
-.career-measure-fill[data-share='70'] { width: 70%; }
-.career-measure-fill[data-share='80'] { width: 80%; }
-.career-measure-fill[data-share='90'] { width: 90%; }
-.career-measure-fill[data-share='100'] { width: 100%; }
+.career-measure-fill[data-share='0'] {
+  width: 0;
+}
+.career-measure-fill[data-share='10'] {
+  width: 10%;
+}
+.career-measure-fill[data-share='20'] {
+  width: 20%;
+}
+.career-measure-fill[data-share='30'] {
+  width: 30%;
+}
+.career-measure-fill[data-share='40'] {
+  width: 40%;
+}
+.career-measure-fill[data-share='50'] {
+  width: 50%;
+}
+.career-measure-fill[data-share='60'] {
+  width: 60%;
+}
+.career-measure-fill[data-share='70'] {
+  width: 70%;
+}
+.career-measure-fill[data-share='80'] {
+  width: 80%;
+}
+.career-measure-fill[data-share='90'] {
+  width: 90%;
+}
+.career-measure-fill[data-share='100'] {
+  width: 100%;
+}
 
 .career-measure > p {
   margin: 6px 0 0;
@@ -8446,16 +8471,36 @@
   background: var(--career-line-strong);
 }
 
-.career-activity-chart li span[data-share='10'] { height: 10%; }
-.career-activity-chart li span[data-share='20'] { height: 20%; }
-.career-activity-chart li span[data-share='30'] { height: 30%; }
-.career-activity-chart li span[data-share='40'] { height: 40%; }
-.career-activity-chart li span[data-share='50'] { height: 50%; }
-.career-activity-chart li span[data-share='60'] { height: 60%; }
-.career-activity-chart li span[data-share='70'] { height: 70%; }
-.career-activity-chart li span[data-share='80'] { height: 80%; }
-.career-activity-chart li span[data-share='90'] { height: 90%; }
-.career-activity-chart li span[data-share='100'] { height: 100%; }
+.career-activity-chart li span[data-share='10'] {
+  height: 10%;
+}
+.career-activity-chart li span[data-share='20'] {
+  height: 20%;
+}
+.career-activity-chart li span[data-share='30'] {
+  height: 30%;
+}
+.career-activity-chart li span[data-share='40'] {
+  height: 40%;
+}
+.career-activity-chart li span[data-share='50'] {
+  height: 50%;
+}
+.career-activity-chart li span[data-share='60'] {
+  height: 60%;
+}
+.career-activity-chart li span[data-share='70'] {
+  height: 70%;
+}
+.career-activity-chart li span[data-share='80'] {
+  height: 80%;
+}
+.career-activity-chart li span[data-share='90'] {
+  height: 90%;
+}
+.career-activity-chart li span[data-share='100'] {
+  height: 100%;
+}
 
 .career-campaign-body {
   display: grid;

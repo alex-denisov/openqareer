@@ -40,6 +40,16 @@ async function verifyViewport(browser, baseUrl, viewport) {
   let hhDisconnectAttempts = 0;
   let vacancyCreateSource = null;
   let createdVacancyView = null;
+  // B159: собранный каркас спрашивает у продакшена его SHA, чтобы сказать
+  // кандидату, отстала ли сборка. В гейте бэкенда нет, поэтому `/health`
+  // отвечает тем же, чем прод, — сорока символами SHA.
+  await page.route((url) => url.pathname === '/health', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/plain; charset=utf-8',
+      body: 'b159b159b159b159b159b159b159b159b159b159',
+    });
+  });
   await page.route((url) => url.pathname.startsWith('/api/v1/auth'), async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;

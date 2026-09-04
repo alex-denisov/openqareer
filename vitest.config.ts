@@ -38,6 +38,8 @@ export default defineConfig({
         'server/domain/dataRetention.ts',
         'server/auth/legalConsentStore.ts',
         'server/routes/rateLimitMessage.ts',
+        'src/features/shell/buildFreshness.ts',
+        'src/features/shell/releaseSha.ts',
         'server/vacancies/sqliteVacancyPoolStore.ts',
         'src/features/workspace/workspaceStorage.ts',
         'src/features/workspace/candidateRegions.ts',
