@@ -152,6 +152,7 @@ const app = await buildApp({
 let vacancyRefreshTimer: NodeJS.Timeout | undefined;
 let multiSourceSyncTimer: NodeJS.Timeout | undefined;
 let documentRetentionTimer: NodeJS.Timeout | undefined;
+let retentionSweepTimer: NodeJS.Timeout | undefined;
 
 function runVacancyRefresh(): void {
   void vacancyIntelligenceService
@@ -201,10 +202,7 @@ function runMultiSourceSync(): void {
 
 function runDocumentRetentionPurge(): void {
   try {
-    const purged = candidateStore.purgeExpiredDocuments(
-      new Date().toISOString(),
-      100,
-    );
+    const purged = candidateStore.purgeExpiredDocuments(new Date().toISOString(), 100);
     if (purged > 0) {
       app.log.info({ purged }, 'document-retention-purge-completed');
     }
@@ -216,11 +214,32 @@ function runDocumentRetentionPurge(): void {
   }
 }
 
+/**
+ * B195 / PRB-014 — опубликованные сроки хранения соблюдаются кодом: согласие
+ * живёт три года с прекращения договора, журнал безопасности — 12 месяцев.
+ * Числа берутся из `RETENTION_POLICIES`, то есть из того же места, что и текст
+ * политики.
+ */
+function runRetentionSweep(): void {
+  try {
+    const purged = authService.purgeExpiredRetention(new Date().toISOString());
+    if (purged.consents > 0 || purged.securityLog > 0) {
+      app.log.info(purged, 'retention-sweep-completed');
+    }
+  } catch (error) {
+    app.log.error(
+      { errorName: error instanceof Error ? error.name : 'UnknownError' },
+      'retention-sweep-failed',
+    );
+  }
+}
+
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, 'shutdown-started');
   if (vacancyRefreshTimer) clearInterval(vacancyRefreshTimer);
   if (multiSourceSyncTimer) clearInterval(multiSourceSyncTimer);
   if (documentRetentionTimer) clearInterval(documentRetentionTimer);
+  if (retentionSweepTimer) clearInterval(retentionSweepTimer);
   await app.close();
   candidateStore.close();
   authService.close();
@@ -237,16 +256,17 @@ try {
   runVacancyRefresh();
   runMultiSourceSync();
   runDocumentRetentionPurge();
+  runRetentionSweep();
   vacancyRefreshTimer = setInterval(runVacancyRefresh, 5 * 60 * 1_000);
   vacancyRefreshTimer.unref();
   // Each source carries its own interval; the tick only asks which are due.
   multiSourceSyncTimer = setInterval(runMultiSourceSync, 5 * 60 * 1_000);
   multiSourceSyncTimer.unref();
-  documentRetentionTimer = setInterval(
-    runDocumentRetentionPurge,
-    5 * 60 * 1_000,
-  );
+  documentRetentionTimer = setInterval(runDocumentRetentionPurge, 5 * 60 * 1_000);
   documentRetentionTimer.unref();
+  // Сроки измеряются годами и месяцами, поэтому час — достаточная частота.
+  retentionSweepTimer = setInterval(runRetentionSweep, 60 * 60 * 1_000);
+  retentionSweepTimer.unref();
 } catch (error) {
   app.log.fatal(
     { errorName: error instanceof Error ? error.name : 'UnknownError' },

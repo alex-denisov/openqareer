@@ -5,10 +5,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { legalSlugFromPath } from '../../shared/legalRegistry';
 import { CoachProviderError } from '../providers/coachProvider';
-import {
-  CandidateNotFoundError,
-  CandidateStoreConflictError,
-} from '../data/sqliteCandidateStore';
+import { CandidateNotFoundError, CandidateStoreConflictError } from '../data/sqliteCandidateStore';
 import {
   CareerCommandApprovalError,
   CareerCommandConflictError,
@@ -17,6 +14,7 @@ import {
 import { CareerCommandPolicyError } from '../orchestration/careerCommandPlanner';
 import type { ServerConfig } from '../config';
 import { sendError } from './helpers';
+import { rateLimitMessage, retryAfterSeconds } from './rateLimitMessage';
 
 const ADMIN_DOCUMENT = 'admin.html';
 
@@ -108,7 +106,8 @@ interface MappedError {
 
 const mappedErrors: MappedError[] = [
   {
-    match: (e) => e instanceof CandidateStoreConflictError || e instanceof CareerCommandConflictError,
+    match: (e) =>
+      e instanceof CandidateStoreConflictError || e instanceof CareerCommandConflictError,
     status: 409,
     code: 'candidate_state_conflict',
     message: 'Состояние кандидата изменилось. Обновите данные и повторите действие.',
@@ -192,12 +191,15 @@ function handleRouteError(
   if (known) return known;
 
   if (getErrorStatusCode(error) === 429) {
+    // Срок берём у самого лимитера: окна маршрутов разные (15 минут на входе,
+    // час на сбросе пароля), а прежняя константа «через минуту» звала повторять
+    // раньше конца окна и получать тот же отказ (PRB-015).
     return sendError(
       reply,
       request,
       429,
       'rate_limit_exceeded',
-      'Слишком много запросов. Повторите действие через минуту.',
+      rateLimitMessage(retryAfterSeconds(reply.getHeader('retry-after'))),
       true,
     );
   }

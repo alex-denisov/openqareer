@@ -7,11 +7,21 @@ import {
 } from 'node:crypto';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
-import type {
-  CandidateIdentity,
-  CandidateStore,
-} from '../data/candidateStore';
-import { MIGRATION_2, MIGRATION_17, MIGRATION_18, MIGRATION_22 } from '../data/sqliteSchema';
+import type { CandidateIdentity, CandidateStore } from '../data/candidateStore';
+import {
+  MIGRATION_2,
+  MIGRATION_17,
+  MIGRATION_18,
+  MIGRATION_22,
+  MIGRATION_29,
+} from '../data/sqliteSchema';
+import {
+  listConsents,
+  purgeExpiredRetention,
+  recordLegalConsent,
+  stampContractEnd,
+} from './legalConsentStore';
+import type { LegalConsentRecord, RetentionSweepResult } from './legalConsentStore';
 import type {
   UserRole,
   AuthPrincipal,
@@ -206,18 +216,14 @@ export class AuthService implements SessionAuth {
       );
   }
 
-  async seedAccounts(
-    accounts: SeedAccount[],
-    candidateStore: CandidateStore,
-  ): Promise<void> {
+  async seedAccounts(accounts: SeedAccount[], candidateStore: CandidateStore): Promise<void> {
     for (const account of accounts) {
       const username = normalizeUsername(account.username);
       const existing = this.findUser(username);
       if (existing && existing.role !== account.role) {
         throw new Error('seed account role cannot change');
       }
-      let candidateId =
-        account.role === 'candidate' ? (existing?.candidate_id ?? null) : null;
+      let candidateId = account.role === 'candidate' ? (existing?.candidate_id ?? null) : null;
       if (account.role === 'candidate' && !candidateId) {
         candidateId = candidateStore.createCandidate({
           dataClass: 'synthetic',
@@ -281,9 +287,7 @@ export class AuthService implements SessionAuth {
     const sessionToken = `oqs_${randomBytes(32).toString('base64url')}`;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SESSION_HOURS * 60 * 60 * 1_000);
-    this.database
-      .prepare('DELETE FROM sessions WHERE expires_at <= ?')
-      .run(now.toISOString());
+    this.database.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now.toISOString());
     this.database
       .prepare(
         `INSERT INTO sessions (token_hash, user_id, expires_at, created_at, last_seen_at)
@@ -324,9 +328,7 @@ export class AuthService implements SessionAuth {
   }
 
   logout(sessionToken: string): void {
-    this.database
-      .prepare('DELETE FROM sessions WHERE token_hash = ?')
-      .run(hashToken(sessionToken));
+    this.database.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashToken(sessionToken));
   }
 
   listUsers(input: AdminUserQuery): AdminUserPage {
@@ -343,7 +345,13 @@ export class AuthService implements SessionAuth {
     actorPrincipal?: AuthPrincipal,
   ): AdminUserRecord {
     if (!this.candidateStore) throw new Error('CandidateStore не инициализирован.');
-    return adminSetUserRole(this.database, this.candidateStore, targetUserId, newRole, actorPrincipal);
+    return adminSetUserRole(
+      this.database,
+      this.candidateStore,
+      targetUserId,
+      newRole,
+      actorPrincipal,
+    );
   }
 
   setUserBlocked(
@@ -414,12 +422,13 @@ export class AuthService implements SessionAuth {
     };
   }
 
-  deleteUserByAdmin(
-    targetUserId: string,
-    actorPrincipal?: AuthPrincipal,
-  ): void {
+  deleteUserByAdmin(targetUserId: string, actorPrincipal?: AuthPrincipal): void {
     if (!this.candidateStore) throw new Error('CandidateStore не инициализирован.');
     adminDeleteUser(this.database, this.candidateStore, targetUserId, actorPrincipal);
+    // Договор прекращён — с этой даты идут опубликованные три года хранения
+    // записи об акцепте (B195). Само согласие переживает аккаунт: без него
+    // доказать принятое было бы нечем.
+    stampContractEnd(this.database, targetUserId, new Date().toISOString());
   }
 
   listAudit(query?: { limit: number; offset: number }): AdminAuditPage {
@@ -460,26 +469,17 @@ export class AuthService implements SessionAuth {
     };
   }
 
-  updateAccount(
-    sessionToken: string,
-    input: AccountProfileUpdate,
-  ): AccountSnapshot | null {
+  updateAccount(sessionToken: string, input: AccountProfileUpdate): AccountSnapshot | null {
     const principal = this.authenticate(sessionToken);
     if (!principal) return null;
     const user = this.findUserById(principal.userId);
     if (!user) return null;
     const email =
-      input.email === undefined
-        ? user.email
-        : input.email
-          ? normalizeEmail(input.email)
-          : null;
+      input.email === undefined ? user.email : input.email ? normalizeEmail(input.email) : null;
     const owner = email ? this.findUserByEmail(email) : null;
     if (owner && owner.id !== user.id) throw new AuthEmailTakenError();
-    const normalizeNullable = (
-      value: string | null | undefined,
-      fallback: string | null,
-    ) => (value === undefined ? fallback : value?.trim() || null);
+    const normalizeNullable = (value: string | null | undefined, fallback: string | null) =>
+      value === undefined ? fallback : value?.trim() || null;
     const now = new Date().toISOString();
     this.database
       .prepare(
@@ -511,19 +511,19 @@ export class AuthService implements SessionAuth {
     versionId: string;
     documents: readonly string[];
     acceptedAt?: string;
+    contractEndedAt?: string;
   }): void {
-    this.database
-      .prepare(
-        `INSERT INTO legal_consents (id, user_id, version_id, documents, accepted_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      )
-      .run(
-        randomUUID(),
-        input.userId,
-        input.versionId,
-        JSON.stringify([...input.documents]),
-        input.acceptedAt ?? new Date().toISOString(),
-      );
+    recordLegalConsent(this.database, input);
+  }
+
+  /** Записи акцепта одного пользователя (B195). */
+  listConsents(userId: string): readonly LegalConsentRecord[] {
+    return listConsents(this.database, userId);
+  }
+
+  /** Уборка по опубликованной таблице сроков хранения (B195 / PRB-014). */
+  purgeExpiredRetention(now: string = new Date().toISOString(), limit = 500): RetentionSweepResult {
+    return purgeExpiredRetention(this.database, now, limit);
   }
 
   async changePassword(
@@ -539,12 +539,7 @@ export class AuthService implements SessionAuth {
       currentPassword,
       Buffer.from(user.password_salt, 'base64'),
     );
-    if (
-      !timingSafeEqual(
-        currentHash,
-        Buffer.from(user.password_hash, 'base64'),
-      )
-    ) {
+    if (!timingSafeEqual(currentHash, Buffer.from(user.password_hash, 'base64'))) {
       throw new AuthInvalidPasswordError();
     }
     const salt = randomBytes(16);
@@ -558,15 +553,8 @@ export class AuthService implements SessionAuth {
            SET password_salt = ?, password_hash = ?, updated_at = ?
            WHERE id = ?`,
         )
-        .run(
-          salt.toString('base64'),
-          passwordHash.toString('base64'),
-          now,
-          user.id,
-        );
-      this.database
-        .prepare('DELETE FROM sessions WHERE user_id = ?')
-        .run(user.id);
+        .run(salt.toString('base64'), passwordHash.toString('base64'), now, user.id);
+      this.database.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
       this.database.exec('COMMIT');
     } catch (error) {
       this.database.exec('ROLLBACK');
@@ -585,9 +573,7 @@ export class AuthService implements SessionAuth {
     if (!user?.email || !this.onPasswordReset) return;
     const token = `oqr_${randomBytes(32).toString('base64url')}`;
     const now = new Date();
-    const expiresAt = new Date(
-      now.getTime() + PASSWORD_RESET_HOURS * 60 * 60 * 1_000,
-    );
+    const expiresAt = new Date(now.getTime() + PASSWORD_RESET_HOURS * 60 * 60 * 1_000);
     this.database.exec('BEGIN IMMEDIATE');
     try {
       this.database
@@ -602,12 +588,7 @@ export class AuthService implements SessionAuth {
             (token_hash, user_id, expires_at, consumed_at, created_at)
            VALUES (?, ?, ?, NULL, ?)`,
         )
-        .run(
-          hashToken(token),
-          user.id,
-          expiresAt.toISOString(),
-          now.toISOString(),
-        );
+        .run(hashToken(token), user.id, expiresAt.toISOString(), now.toISOString());
       this.database.exec('COMMIT');
     } catch (error) {
       this.database.exec('ROLLBACK');
@@ -670,15 +651,8 @@ export class AuthService implements SessionAuth {
            SET password_salt = ?, password_hash = ?, updated_at = ?
            WHERE id = ?`,
         )
-        .run(
-          salt.toString('base64'),
-          passwordHash.toString('base64'),
-          now,
-          userId,
-        );
-      this.database
-        .prepare('DELETE FROM sessions WHERE user_id = ?')
-        .run(userId);
+        .run(salt.toString('base64'), passwordHash.toString('base64'), now, userId);
+      this.database.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
       this.database
         .prepare(
           `DELETE FROM password_reset_tokens
@@ -717,9 +691,7 @@ export class AuthService implements SessionAuth {
       try {
         this.database.exec(MIGRATION_2);
         this.database
-          .prepare(
-            'INSERT INTO schema_migrations (version, applied_at) VALUES (2, ?)',
-          )
+          .prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (2, ?)')
           .run(new Date().toISOString());
         this.database.exec('COMMIT');
       } catch (error) {
@@ -742,6 +714,11 @@ export class AuthService implements SessionAuth {
     } catch {
       // legal consent table migration fail-open
     }
+    try {
+      this.database.exec(MIGRATION_29);
+    } catch {
+      // contract-end column already present
+    }
     // Administrators are provisioned only from configured seed accounts
     // (OPENQAREER_ADMIN_USERNAME/PASSWORD), and `seedAccounts` refuses to
     // change an existing user's role. A previous hardcoded handle list granted
@@ -752,25 +729,22 @@ export class AuthService implements SessionAuth {
 
   private findUser(username: string): UserRow | null {
     return (
-      (this.database
-        .prepare(`${USER_SELECT} WHERE users.username = ?`)
-        .get(username) as UserRow | undefined) ?? null
+      (this.database.prepare(`${USER_SELECT} WHERE users.username = ?`).get(username) as
+        UserRow | undefined) ?? null
     );
   }
 
   private findUserById(userId: string): UserRow | null {
     return (
-      (this.database
-        .prepare(`${USER_SELECT} WHERE users.id = ?`)
-        .get(userId) as UserRow | undefined) ?? null
+      (this.database.prepare(`${USER_SELECT} WHERE users.id = ?`).get(userId) as
+        UserRow | undefined) ?? null
     );
   }
 
   private findUserByEmail(email: string): UserRow | null {
     return (
-      (this.database
-        .prepare(`${USER_SELECT} WHERE users.email = ?`)
-        .get(email) as UserRow | undefined) ?? null
+      (this.database.prepare(`${USER_SELECT} WHERE users.email = ?`).get(email) as
+        UserRow | undefined) ?? null
     );
   }
 }
@@ -787,10 +761,7 @@ const USER_SELECT = `
   LEFT JOIN candidates ON candidates.id = users.candidate_id
 `;
 
-async function derivePassword(
-  password: string,
-  salt: Buffer,
-): Promise<Buffer> {
+async function derivePassword(password: string, salt: Buffer): Promise<Buffer> {
   return (await scrypt(password, salt, 64)) as Buffer;
 }
 
@@ -815,10 +786,7 @@ function principalFromRow(row: UserRow): AuthPrincipal {
     role: row.role,
     isTest: row.is_test === 1,
     candidate:
-      row.candidate_id &&
-      row.data_class &&
-      row.locale &&
-      row.candidate_created_at
+      row.candidate_id && row.data_class && row.locale && row.candidate_created_at
         ? {
             id: row.candidate_id,
             dataClass: row.data_class,

@@ -185,11 +185,7 @@ describe('cookie auth routes', () => {
 
   it('updates candidate-owned account fields through an origin-protected route', async () => {
     const app = await createApp();
-    const candidate = await login(
-      app,
-      'candidate.test',
-      'candidate-password-for-tests',
-    );
+    const candidate = await login(app, 'candidate.test', 'candidate-password-for-tests');
 
     const updated = await app.inject({
       method: 'PATCH',
@@ -221,16 +217,8 @@ describe('cookie auth routes', () => {
 
   it('changes the password and rotates every existing session', async () => {
     const app = await createApp();
-    const first = await login(
-      app,
-      'candidate.test',
-      'candidate-password-for-tests',
-    );
-    const second = await login(
-      app,
-      'candidate.test',
-      'candidate-password-for-tests',
-    );
+    const first = await login(app, 'candidate.test', 'candidate-password-for-tests');
+    const second = await login(app, 'candidate.test', 'candidate-password-for-tests');
 
     const changed = await app.inject({
       method: 'POST',
@@ -255,12 +243,10 @@ describe('cookie auth routes', () => {
     });
     expect(oldSession.json().data).toBeNull();
     expect(
-      (await login(app, 'candidate.test', 'candidate-password-for-tests'))
-        .response.statusCode,
+      (await login(app, 'candidate.test', 'candidate-password-for-tests')).response.statusCode,
     ).toBe(401);
     expect(
-      (await login(app, 'candidate.test', 'candidate-password-after-change'))
-        .response.statusCode,
+      (await login(app, 'candidate.test', 'candidate-password-after-change')).response.statusCode,
     ).toBe(200);
   });
 
@@ -308,27 +294,19 @@ describe('cookie auth routes', () => {
     });
     expect(reset.statusCode).toBe(200);
     expect(
-      (await login(app, 'recover@example.com', 'candidate-password-before-reset'))
-        .response.statusCode,
+      (await login(app, 'recover@example.com', 'candidate-password-before-reset')).response
+        .statusCode,
     ).toBe(401);
     expect(
-      (await login(app, 'recover@example.com', 'candidate-password-after-reset'))
-        .response.statusCode,
+      (await login(app, 'recover@example.com', 'candidate-password-after-reset')).response
+        .statusCode,
     ).toBe(200);
   });
 
   it('revokes every session except the one making the request', async () => {
     const app = await createApp();
-    const older = await login(
-      app,
-      'candidate.test',
-      'candidate-password-for-tests',
-    );
-    const current = await login(
-      app,
-      'candidate.test',
-      'candidate-password-for-tests',
-    );
+    const older = await login(app, 'candidate.test', 'candidate-password-for-tests');
+    const current = await login(app, 'candidate.test', 'candidate-password-for-tests');
 
     const revoked = await app.inject({
       method: 'DELETE',
@@ -357,14 +335,8 @@ describe('cookie auth routes', () => {
 
   it('uploads, downloads and deletes a candidate-owned CV', async () => {
     const app = await createApp();
-    const candidate = await login(
-      app,
-      'candidate.test',
-      'candidate-password-for-tests',
-    );
-    const contentBase64 = Buffer.from('%PDF candidate CV 881').toString(
-      'base64',
-    );
+    const candidate = await login(app, 'candidate.test', 'candidate-password-for-tests');
+    const contentBase64 = Buffer.from('%PDF candidate CV 881').toString('base64');
 
     const uploaded = await app.inject({
       method: 'POST',
@@ -444,9 +416,7 @@ describe('cookie auth routes', () => {
     expect(binaryDownload.headers['content-disposition']).toContain(
       "filename*=UTF-8''candidate-cv.pdf",
     );
-    expect(binaryDownload.rawPayload).toEqual(
-      Buffer.from('%PDF candidate CV 881'),
-    );
+    expect(binaryDownload.rawPayload).toEqual(Buffer.from('%PDF candidate CV 881'));
     expect(binaryDownload.body).not.toContain('Руководил операциями');
     for (let requestNumber = 2; requestNumber <= 30; requestNumber += 1) {
       const repeated = await app.inject({
@@ -538,11 +508,7 @@ describe('cookie auth routes', () => {
     });
     expect(noOrigin.statusCode).toBe(403);
 
-    const candidate = await login(
-      app,
-      'candidate.test',
-      'candidate-password-for-tests',
-    );
+    const candidate = await login(app, 'candidate.test', 'candidate-password-for-tests');
     expect(candidate.response.statusCode).toBe(200);
     expect(candidate.response.headers['set-cookie']).toContain('HttpOnly');
     expect(candidate.response.headers['set-cookie']).toContain('SameSite=Strict');
@@ -593,11 +559,7 @@ describe('cookie auth routes', () => {
     });
     expect(coach.statusCode).toBe(200);
 
-    const admin = await login(
-      app,
-      'admin.test',
-      'admin-password-for-tests',
-    );
+    const admin = await login(app, 'admin.test', 'admin-password-for-tests');
     const adminProviderStatus = await app.inject({
       method: 'GET',
       url: '/api/v1/provider/status',
@@ -660,11 +622,15 @@ describe('registration without a login field (B139)', () => {
 
   it('accepts an eight-character password, which the old floor of twelve refused', async () => {
     const app = await createApp();
-    expect((await register(app, {
-      displayName: 'Анна',
-      email: 'anna@example.com',
-      password: '12345678',
-    })).statusCode).toBe(201);
+    expect(
+      (
+        await register(app, {
+          displayName: 'Анна',
+          email: 'anna@example.com',
+          password: '12345678',
+        })
+      ).statusCode,
+    ).toBe(201);
   });
 
   it('says which field is wrong instead of one anonymous line', async () => {
@@ -677,9 +643,7 @@ describe('registration without a login field (B139)', () => {
 
     expect(short.statusCode).toBe(422);
     expect(short.json().error.fields.password).toContain('8');
-    expect(short.json().error.message).not.toBe(
-      'Проверьте формат и длину переданных данных.',
-    );
+    expect(short.json().error.message).not.toBe('Проверьте формат и длину переданных данных.');
 
     const badEmail = await register(app, {
       displayName: 'Анна',
@@ -745,6 +709,20 @@ describe('registration without a login field (B139)', () => {
 
     const signedIn = await login(app, 'anna@example.com', 'parol123');
     expect(signedIn.response.statusCode).toBe(200);
+  });
+
+  it('names the real fifteen-minute wait when sign-in hits the limit (PRB-015)', async () => {
+    const app = await createApp();
+    let limited = await login(app, 'candidate.test', 'wrong-password-entirely');
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      limited = await login(app, 'candidate.test', 'wrong-password-entirely');
+      if (limited.response.statusCode === 429) break;
+    }
+
+    expect(limited.response.statusCode).toBe(429);
+    expect(limited.response.json().error.message).toBe(
+      'Слишком много запросов. Повторите действие через 15 минут.',
+    );
   });
 
   it('keeps sign-in working for handles typed before the field was removed', async () => {

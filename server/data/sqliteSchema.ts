@@ -761,3 +761,13 @@ CREATE TABLE vacancy_applications (
   PRIMARY KEY (candidate_id, cluster_id)
 ) STRICT;
 `;
+
+/**
+ * B195 / PRB-014 — политика обещает хранить запись об акцепте «3 года с даты
+ * прекращения договора». Даты прекращения не существовало, поэтому и считать
+ * было не от чего: строка согласия жила вечно. Колонка ставится при удалении
+ * аккаунта; пока она пуста, договор действует и уборка запись не трогает.
+ */
+export const MIGRATION_29 = `
+ALTER TABLE legal_consents ADD COLUMN contract_ended_at TEXT;
+`;
