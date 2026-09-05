@@ -107,6 +107,47 @@ async function readSourceCards(page) {
   });
 }
 
+/**
+ * B207 — отказ маршрута обязан быть назван. Раньше провал выглядел ровно как
+ * честный ответ «источников нет»: пустая сетка и ничего больше. Проверяется
+ * сам переход, а не наличие страницы: маршрут заставляют отказать и смотрят,
+ * что экран печатает.
+ */
+async function measureRefusal(page) {
+  const pattern = '**/api/v1/admin/vacancy-sources?*';
+  const handler = (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: { code: 'unavailable', message: 'Маршрут отказал: проверка B207.' },
+      }),
+    });
+
+  await page.route(pattern, handler);
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.admin-error[role="alert"]', { timeout: 20_000 });
+    const seen = await page.evaluate(() => {
+      const alert = document.querySelector('.admin-error[role="alert"]');
+      return {
+        message: alert?.querySelector('p')?.textContent ?? '',
+        retry: Array.from(alert?.querySelectorAll('button') ?? []).some(
+          (button) => button.textContent?.trim() === 'Повторить',
+        ),
+        cards: document.querySelectorAll('.admin-source-card').length,
+      };
+    });
+    if (!seen.retry) return { ok: false, verdict: 'отказ назван, но кнопки повтора нет' };
+    if (seen.cards > 0) return { ok: false, verdict: 'при отказе экран всё ещё рисует карточки' };
+    return { ok: true, verdict: `назван словами сервера — «${seen.message}»` };
+  } catch (error) {
+    return { ok: false, verdict: `отказ не назван: ${String(error).slice(0, 80)}` };
+  } finally {
+    await page.unroute(pattern, handler);
+  }
+}
+
 async function measureOne(browser, storageState, viewport, failures) {
   {
     const context = await browser.newContext({
@@ -156,6 +197,10 @@ async function measureOne(browser, storageState, viewport, failures) {
     }
     if (measured.overflow > 0) failures.push(`${viewport.name}: горизонтальный вылет`);
     if (measured.cards === 0) failures.push(`${viewport.name}: ни одной карточки источника`);
+
+    const refusal = await measureRefusal(page);
+    console.log(`отказ маршрута: ${refusal.verdict}`);
+    if (!refusal.ok) failures.push(`${viewport.name}: ${refusal.verdict}`);
 
     await context.close();
   }

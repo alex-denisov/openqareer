@@ -10,9 +10,14 @@ import {
   impersonateAdminUser,
   type AdminUser,
   type AdminUserPage,
-  type AdminVacancySource,
 } from './adminApi';
 import { AdminVacancySourcesView } from './AdminVacancySourcesView';
+import {
+  sourcesFailure,
+  sourcesLoaded,
+  sourcesLoading,
+  type VacancySourcesState,
+} from './vacancySourcesState';
 import { AdminVacanciesView } from './AdminVacanciesView';
 import { AdminAuditView } from './AdminAuditView';
 import { AdminUserProfileModal } from './AdminUserProfileModal';
@@ -28,18 +33,19 @@ type DirectoryState =
   | { status: 'failed'; message: string };
 
 function useVacancySourcesPage() {
-  const [sources, setSources] = useState<AdminVacancySource[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<VacancySourcesState>(sourcesLoading);
 
   const load = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
+    setState(sourcesLoading());
     try {
       const data = await listAdminVacancySources(signal);
-      if (!signal?.aborted) setSources(data);
-    } catch {
-      // ignore
-    } finally {
-      if (!signal?.aborted) setLoading(false);
+      if (!signal?.aborted) setState(sourcesLoaded(data));
+    } catch (reason: unknown) {
+      if (signal?.aborted) return;
+      // Отказ маршрута выглядел ровно как честный пустой список: администратор
+      // видел «источников нет» и не знал, что запрос не дошёл (B207).
+      const failure = sourcesFailure(reason);
+      if (failure) setState(failure);
     }
   }, []);
 
@@ -57,7 +63,7 @@ function useVacancySourcesPage() {
     [load],
   );
 
-  return { sources, loading, refresh: () => void load(), sync };
+  return { state, refresh: () => void load(), sync };
 }
 
 function AdminNav({
@@ -102,15 +108,8 @@ function AdminNav({
 }
 
 function AdminVacancySourcesTab() {
-  const { sources, loading, refresh, sync } = useVacancySourcesPage();
-  return (
-    <AdminVacancySourcesView
-      sources={sources}
-      loading={loading}
-      onRefresh={refresh}
-      onSync={sync}
-    />
-  );
+  const { state, refresh, sync } = useVacancySourcesPage();
+  return <AdminVacancySourcesView state={state} onRefresh={refresh} onSync={sync} />;
 }
 
 function getInitialAdminTab(): 'users' | 'vacancies' | 'sources' | 'audit' {

@@ -15,6 +15,7 @@ import {
   type VacancySourceTestItem,
   type VacancySourceTestResult,
 } from './adminApi';
+import type { VacancySourcesState } from './vacancySourcesState';
 
 /**
  * B200 — живость и доверие площадки показываются как две разные шкалы.
@@ -126,10 +127,51 @@ function SourceHealthPanel({ health }: { health?: AdminSourceHealth }) {
 }
 
 interface AdminVacancySourcesViewProps {
-  sources: AdminVacancySource[];
-  loading: boolean;
+  state: VacancySourcesState;
   onRefresh: () => void;
   onSync: (sourceId: string) => Promise<void>;
+}
+
+/**
+ * Три ответа экрана — три разных вида (B207). Отказ маршрута выглядел ровно
+ * как честный пустой список, и администратор не мог их различить.
+ */
+function SourcesBody({
+  state,
+  onRefresh,
+  onSync,
+  onOpenTest,
+}: {
+  state: VacancySourcesState;
+  onRefresh: () => void;
+  onSync: (sourceId: string) => Promise<void>;
+  onOpenTest: (source: AdminVacancySource) => void;
+}) {
+  if (state.status === 'failed') {
+    return (
+      <div className="admin-error" role="alert">
+        <p>{state.message}</p>
+        <button className="admin-quiet-button" type="button" onClick={onRefresh}>
+          Повторить
+        </button>
+      </div>
+    );
+  }
+
+  // Пока загрузка не кончилась, пустота — это ещё не ответ.
+  if (state.status === 'loading') return null;
+
+  if (state.sources.length === 0) {
+    return <p className="admin-note is-empty-note">Ни одной площадки не зарегистрировано.</p>;
+  }
+
+  return (
+    <div className="admin-sources-grid">
+      {state.sources.map((source) => (
+        <SourceCard key={source.id} source={source} onSync={onSync} onOpenTest={onOpenTest} />
+      ))}
+    </div>
+  );
 }
 
 function SourceStatusBadge({ status }: { status?: AdminVacancySource['lastStatus'] }) {
@@ -393,8 +435,7 @@ function VacancySourceTestModal({
 }
 
 export function AdminVacancySourcesView({
-  sources,
-  loading,
+  state,
   onRefresh,
   onSync,
 }: AdminVacancySourcesViewProps) {
@@ -412,24 +453,23 @@ export function AdminVacancySourcesView({
         <button
           className="admin-btn is-secondary"
           type="button"
-          disabled={loading}
+          disabled={state.status === 'loading'}
           onClick={onRefresh}
         >
-          <ArrowsClockwise size={16} className={loading ? 'is-spinning' : ''} />
+          <ArrowsClockwise
+            size={16}
+            className={state.status === 'loading' ? 'is-spinning' : ''}
+          />
           Обновить статус
         </button>
       </div>
 
-      <div className="admin-sources-grid">
-        {sources.map((source) => (
-          <SourceCard
-            key={source.id}
-            source={source}
-            onSync={onSync}
-            onOpenTest={(src) => setTestingSource(src)}
-          />
-        ))}
-      </div>
+      <SourcesBody
+        state={state}
+        onRefresh={onRefresh}
+        onSync={onSync}
+        onOpenTest={(src) => setTestingSource(src)}
+      />
 
       {testingSource ? (
         <VacancySourceTestModal

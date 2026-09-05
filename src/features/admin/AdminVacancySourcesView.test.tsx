@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { AdminVacancySourcesView } from './AdminVacancySourcesView';
 import type { AdminVacancySource } from './adminApi';
+import { sourcesFailure, sourcesLoaded, sourcesLoading } from './vacancySourcesState';
 
 describe('AdminVacancySourcesView', () => {
   const sampleSources: AdminVacancySource[] = [
@@ -34,8 +35,7 @@ describe('AdminVacancySourcesView', () => {
   it('renders the list of vacancy sources with status and stats', () => {
     const html = renderToStaticMarkup(
       <AdminVacancySourcesView
-        sources={sampleSources}
-        loading={false}
+        state={sourcesLoaded(sampleSources)}
         onRefresh={vi.fn()}
         onSync={vi.fn()}
       />,
@@ -56,7 +56,7 @@ describe('AdminVacancySourcesView', () => {
   it('печатает живость и доверие раздельно, со знаменателями', () => {
     const html = renderToStaticMarkup(
       <AdminVacancySourcesView
-        sources={[
+        state={sourcesLoaded([
           {
             ...sampleSources[0],
             health: {
@@ -83,8 +83,7 @@ describe('AdminVacancySourcesView', () => {
               },
             },
           },
-        ]}
-        loading={false}
+        ])}
         onRefresh={vi.fn()}
         onSync={vi.fn()}
       />,
@@ -103,8 +102,7 @@ describe('AdminVacancySourcesView', () => {
   it('не выдаёт неопрошенную площадку за живую', () => {
     const html = renderToStaticMarkup(
       <AdminVacancySourcesView
-        sources={sampleSources}
-        loading={false}
+        state={sourcesLoaded(sampleSources)}
         onRefresh={vi.fn()}
         onSync={vi.fn()}
       />,
@@ -113,5 +111,43 @@ describe('AdminVacancySourcesView', () => {
     expect(html).toContain('Не опрошена');
     // У «доверие неизвестно» приговора нет — причины не повторяют факты.
     expect(html).not.toContain('admin-source-health-reasons');
+  });
+
+  /**
+   * B207 — отказ загрузки обязан быть назван. Раньше провал маршрута выглядел
+   * ровно как честный ответ «источников нет»: пустая сетка и ничего больше.
+   */
+  it('печатает названный отказ и кнопку повтора вместо пустой сетки', () => {
+    const html = renderToStaticMarkup(
+      <AdminVacancySourcesView
+        state={sourcesFailure(new Error('Слишком много запросов. Повторите через 8 минут.'))!}
+        onRefresh={vi.fn()}
+        onSync={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('Слишком много запросов. Повторите через 8 минут.');
+    expect(html).toContain('Повторить');
+    expect(html).toContain('role="alert"');
+    expect(html).not.toContain('admin-source-card');
+  });
+
+  it('пустой список называет себя пустым, а не отказом', () => {
+    const html = renderToStaticMarkup(
+      <AdminVacancySourcesView state={sourcesLoaded([])} onRefresh={vi.fn()} onSync={vi.fn()} />,
+    );
+
+    expect(html).toContain('Ни одной площадки не зарегистрировано');
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain('Повторить');
+  });
+
+  it('во время загрузки не выдаёт пустоту за ответ', () => {
+    const html = renderToStaticMarkup(
+      <AdminVacancySourcesView state={sourcesLoading()} onRefresh={vi.fn()} onSync={vi.fn()} />,
+    );
+
+    expect(html).not.toContain('Ни одной площадки не зарегистрировано');
+    expect(html).not.toContain('role="alert"');
   });
 });
