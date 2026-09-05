@@ -1,5 +1,23 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
-import { htmlToFeedText } from '../connectors/feedText';
+import {
+  asArray,
+  buildJsonVacancy as build,
+  firstOf,
+  fromEpochSeconds,
+  fromIso,
+  fromLooseDate,
+  isUsableVacancy as isUsable,
+  listOf,
+  numeric,
+  record,
+  stringList,
+  text,
+  type JsonAdapterContext,
+  type JsonRecord,
+} from './jsonVacancyRecord';
+import { hasAtsBoardAdapter, normalizeAtsBoard } from './atsBoardAdapters';
+
+export type { JsonAdapterContext } from './jsonVacancyRecord';
 
 /**
  * Each job board publishes its own JSON record shape, so normalisation is a
@@ -10,20 +28,18 @@ import { htmlToFeedText } from '../connectors/feedText';
  *   reading is a measurement nobody took (B161);
  * - `observedAt` is passed in from the moment of the actual request, never
  *   taken when the object is constructed.
+ *
+ * Доски работодателей (Greenhouse, Lever, Ashby, Workable, Recruitee,
+ * SmartRecruiters) — не отдельные площадки, а одно семейство с общим адресом на
+ * компанию, поэтому они живут в `atsBoardAdapters.ts` и подключаются здесь
+ * (B202).
  */
-export interface JsonAdapterContext {
-  readonly observedAt: string;
-}
-
-type JsonRecord = Record<string, unknown>;
-
-const UNREADABLE = 'vacancy_source_payload_unreadable';
-
 export function normalizeJsonSource(
   sourceId: string,
   payload: unknown,
   context: JsonAdapterContext,
 ): UnifiedVacancy[] {
+  if (hasAtsBoardAdapter(sourceId)) return normalizeAtsBoard(sourceId, payload, context);
   const adapter = ADAPTERS[sourceId];
   if (!adapter) throw new Error(`vacancy_source_adapter_missing: ${sourceId}`);
   return adapter(payload, context, sourceId).filter(isUsable);
@@ -35,16 +51,7 @@ export function normalizeJsonSource(
  * выглядит подключённым (B199).
  */
 export function hasJsonAdapter(sourceId: string): boolean {
-  return sourceId in ADAPTERS;
-}
-
-/** A record without a title, a company or a link cannot be shown or opened. */
-function isUsable(vacancy: UnifiedVacancy): boolean {
-  return (
-    vacancy.title.trim().length > 0 &&
-    vacancy.company.trim().length > 0 &&
-    vacancy.url.trim().length > 0
-  );
+  return sourceId in ADAPTERS || hasAtsBoardAdapter(sourceId);
 }
 
 type Adapter = (
@@ -173,108 +180,9 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
     }),
 };
 
-function build(input: {
-  sourceId: string;
-  context: JsonAdapterContext;
-  externalId: string;
-  title: string;
-  company: string;
-  location?: string;
-  isRemote: boolean;
-  description: string;
-  skills: string[];
-  employmentType?: string;
-  experienceLevel?: string;
-  salary?: UnifiedVacancy['salary'];
-  url: string;
-  publishedAt: string;
-}): UnifiedVacancy {
-  const id = `${input.sourceId}:${input.externalId || input.url}`;
-  return {
-    id,
-    fingerprint: id,
-    title: htmlToFeedText(input.title),
-    company: htmlToFeedText(input.company),
-    location: input.location,
-    isRemote: input.isRemote,
-    salary: input.salary,
-    // Boards publish their description as HTML — some of it escaped once more
-    // on the way out. Left as it was, the markup reached the candidate and fed
-    // the skill extractor and the matcher (B164 prod walk).
-    description: htmlToFeedText(input.description),
-    requiredSkills: input.skills,
-    employmentType: input.employmentType,
-    experienceLevel: input.experienceLevel,
-    url: input.url,
-    provenance: {
-      sourceType: 'json_api',
-      sourceId: input.sourceId,
-      sourceUrl: input.url,
-      externalId: input.externalId || undefined,
-      observedAt: input.context.observedAt,
-    },
-    publishedAt: input.publishedAt,
-    status: 'active',
-  };
-}
-
-function listOf(payload: unknown, select: (value: unknown) => unknown[] | null): unknown[] {
-  const items = select(payload);
-  if (!items) throw new Error(UNREADABLE);
-  return items;
-}
-
-function asArray(value: unknown): unknown[] | null {
-  return Array.isArray(value) ? value : null;
-}
-
-function record(value: unknown): JsonRecord {
-  return value && typeof value === 'object' ? (value as JsonRecord) : {};
-}
-
-function text(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number') return String(value);
-  return '';
-}
-
-function stringList(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(text).filter((item) => item.length > 0) : [];
-}
-
-function firstOf(value: unknown): string | undefined {
-  const list = stringList(value);
-  return list[0];
-}
-
 function numericSalary(job: JsonRecord): UnifiedVacancy['salary'] | undefined {
-  const from = typeof job.salary_min === 'number' ? job.salary_min : undefined;
-  const to = typeof job.salary_max === 'number' ? job.salary_max : undefined;
+  const from = numeric(job.salary_min);
+  const to = numeric(job.salary_max);
   if (from === undefined && to === undefined) return undefined;
   return { from, to, currency: 'RUR' };
-}
-
-/**
- * An unreadable date is not today. Falling back to `now` is what made a
- * long-dead posting look fresh, so an unparseable value keeps the epoch and is
- * filtered out by the freshness window instead.
- */
-const UNKNOWN_PUBLISHED_AT = new Date(0).toISOString();
-
-function fromEpochSeconds(value: unknown): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return UNKNOWN_PUBLISHED_AT;
-  return new Date(value * 1000).toISOString();
-}
-
-function fromIso(value: unknown): string {
-  const parsed = Date.parse(text(value));
-  return Number.isNaN(parsed) ? UNKNOWN_PUBLISHED_AT : new Date(parsed).toISOString();
-}
-
-/** `2026-08-27 09:00:00` and `2026-08-14` are both dates these boards return. */
-function fromLooseDate(value: unknown): string {
-  const raw = text(value).trim();
-  if (!raw) return UNKNOWN_PUBLISHED_AT;
-  const parsed = Date.parse(raw.includes(' ') ? raw.replace(' ', 'T') + 'Z' : raw);
-  return Number.isNaN(parsed) ? UNKNOWN_PUBLISHED_AT : new Date(parsed).toISOString();
 }

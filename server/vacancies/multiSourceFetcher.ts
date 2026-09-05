@@ -101,7 +101,9 @@ async function fetchJsonApi(
   });
   if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
   const observedAt = new Date().toISOString();
-  return normalizeJsonSource(source.id, await res.json(), { observedAt });
+  // Имя источника нужно разбору: доски Lever и Ashby не публикуют работодателя
+  // в записи, и назвать его может только реестр (B202).
+  return normalizeJsonSource(source.id, await res.json(), { observedAt, sourceName: source.name });
 }
 
 /** Only the sources whose live probe proved they honour a query get one. */

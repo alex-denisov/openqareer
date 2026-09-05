@@ -1,4 +1,5 @@
 import type { VacancySourceConfig } from '../domain/unifiedVacancy';
+import { ATS_BOARD_MEASUREMENTS, ATS_BOARD_SOURCES } from './atsBoardSources';
 
 /**
  * The three access classes the owner named for B164: what may be read from the
@@ -281,14 +282,17 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
  * права на включение.
  */
 export function vacancySourceMeasurement(sourceId: string): VacancySourceMeasurement | undefined {
-  const readings = MEASUREMENTS[sourceId];
-  if (!readings || readings.length === 0) return undefined;
+  const readings = vacancySourceMeasurements(sourceId);
+  if (readings.length === 0) return undefined;
   return readings.find((reading) => reading.route === 'eu-prod') ?? readings[0];
 }
 
 /** Все замеры источника, со всех маршрутов, в порядке записи. */
 export function vacancySourceMeasurements(sourceId: string): readonly VacancySourceMeasurement[] {
-  return MEASUREMENTS[sourceId] ?? [];
+  // Доски работодателей замерены отдельной пробой и живут своим списком: их
+  // сотни, и держать их в одной таблице с площадками — значит перестать её
+  // читать глазами (B202).
+  return MEASUREMENTS[sourceId] ?? ATS_BOARD_MEASUREMENTS[sourceId] ?? [];
 }
 
 /**
@@ -305,7 +309,7 @@ export function vacancySourceMeasurements(sourceId: string): readonly VacancySou
  * выключенными, чтобы отказ был назван, а не забыт. Владелец: «Не отсекай
  * площадки типа linkedin, glassdoor и другие у которых антиботы».
  */
-export const DEFAULT_VACANCY_SOURCES: readonly RegisteredVacancySource[] = [
+const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
   {
     id: 'src-trudvsem',
     name: 'Работа в России (ТрудВсем)',
@@ -690,4 +694,14 @@ export const DEFAULT_VACANCY_SOURCES: readonly RegisteredVacancySource[] = [
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
   },
+];
+
+/**
+ * Площадки плюс доски работодателей, найденные живой пробой (B202). Доска
+ * компании — такой же источник: у него тот же разбор и те же правила честности,
+ * просто адрес строится из провайдера и слага, а не пишется руками.
+ */
+export const DEFAULT_VACANCY_SOURCES: readonly RegisteredVacancySource[] = [
+  ...PLATFORM_SOURCES,
+  ...ATS_BOARD_SOURCES,
 ];

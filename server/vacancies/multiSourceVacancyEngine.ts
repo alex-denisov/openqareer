@@ -79,6 +79,22 @@ function isVacancyFresh(
   return ageMs >= 0 && ageMs <= maxAgeDays * 24 * 60 * 60 * 1000;
 }
 
+/**
+ * Сколько площадок плановый опрос берёт за один такт (такт — 5 минут,
+ * `server/index.ts`). Доски работодателей исчисляются сотнями и после запуска
+ * процесса все до одной «пора опросить»: залп из сотен одновременных запросов —
+ * это и невежливо к чужим серверам, и мегабайты ответов в памяти одного
+ * процесса. Партия берётся с самых давно не опрошенных, поэтому очередь
+ * проходит целиком, а не по кругу первым двенадцати (B202).
+ */
+export const SYNC_BATCH_LIMIT = 12;
+
+function lastSyncMs(source: VacancySourceConfig): number {
+  if (!source.lastSyncAt) return 0;
+  const parsed = Date.parse(source.lastSyncAt);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 export class MultiSourceVacancyEngine {
   private sources: Map<string, VacancySourceConfig> = new Map();
   private rawVacancies: Map<string, UnifiedVacancy> = new Map();
@@ -411,7 +427,10 @@ export class MultiSourceVacancyEngine {
         // полгода нет, а вежливость к чужому серверу этим и измеряется (B200).
         !isDeadSource(this.healthOf(source.id, nowMs)),
     );
-    return Promise.all(due.map((source) => this.syncSource(source.id, undefined, nowMs)));
+    const batch = [...due]
+      .sort((left, right) => lastSyncMs(left) - lastSyncMs(right))
+      .slice(0, SYNC_BATCH_LIMIT);
+    return Promise.all(batch.map((source) => this.syncSource(source.id, undefined, nowMs)));
   }
 
   private isDue(source: VacancySourceConfig, nowMs: number): boolean {
