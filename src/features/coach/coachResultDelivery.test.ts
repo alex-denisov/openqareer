@@ -62,6 +62,26 @@ describe('coach result recovery', () => {
     expect(fetchMock.mock.calls.filter(([url]) => url.endsWith('offset=8192'))).toHaveLength(2);
   });
 
+  /**
+   * Замерено на проде 2026-09-05: ход провайдера ещё идёт, опрос `/result`
+   * отвечает `202`, но один опрос не уложился в свой дедлайн — и клиент уходил
+   * в восстановление по частям, где `202` считался повреждённой доставкой.
+   * Кандидат получал «Не удалось получить ответ полностью» за 42 секунды,
+   * пока ответ спокойно генерировался. Ожидание — не поломка доставки.
+   */
+  it('keeps waiting when the operation is still running, whichever read noticed it', async () => {
+    let reads = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      reads += 1;
+      // Первый обычный опрос обрывается, как на живом канале.
+      if (reads === 1) throw new Error('interrupted while pending');
+      if (url.includes('offset=')) return json({ status: 'pending' }, 202);
+      return reads < 5 ? json({ status: 'pending' }, 202) : json(result);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await receiveCoachResult(key)).toEqual(result);
+  });
+
   it('does not present a corrupted result as complete', async () => {
     const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
       if (init.method === 'POST') return json({ status: 'pending', idempotencyKey: key }, 202);

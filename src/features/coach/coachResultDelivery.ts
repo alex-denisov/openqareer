@@ -38,16 +38,21 @@ export async function receiveCoachResult<T extends object>(key: string): Promise
     try {
       const full = await readWithDeadline<T>(url);
       if (!full.pending) return full.data!;
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
     } catch (error) {
       if (error instanceof CoachApiError && !['network_error', 'malformed_response', 'delivery_incomplete'].includes(error.code)) throw error;
-      return receiveParts<T>(url);
+      // Обрыв мог случиться и на ходе, который ещё идёт. Восстановление по
+      // частям отвечает `undefined`, если операция всё ещё выполняется: тогда
+      // мы возвращаемся к ожиданию, а не объявляем доставку сломанной.
+      const parts = await receiveParts<T>(url);
+      if (parts) return parts;
     }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
   throw incomplete();
 }
 
-async function receiveParts<T extends object>(url: string): Promise<T> {
+/** `undefined` means the operation is still running: wait, do not fail it. */
+async function receiveParts<T extends object>(url: string): Promise<T | undefined> {
   const chunks: Uint8Array[] = [];
   let offset = 0;
   let expectedLength: number | undefined;
@@ -57,7 +62,8 @@ async function receiveParts<T extends object>(url: string): Promise<T> {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         const response = await readWithDeadline<Part>(`${url}?offset=${offset}`);
-        if (response.pending || !response.data) throw incomplete();
+        if (response.pending) return undefined;
+        if (!response.data) throw incomplete();
         part = response.data;
         break;
       } catch (error) {
