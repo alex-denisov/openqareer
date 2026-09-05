@@ -115,6 +115,41 @@ export interface AdminVacancyPage {
   nextOffset: number | null;
 }
 
+/** Доля всегда едет со своим знаменателем: «10 из 96», а не «10 %» (B192). */
+export interface AdminCountedShare {
+  counted: number;
+  of: number;
+}
+
+/**
+ * Здоровье площадки — две разные шкалы (B200). «Жива» отвечает на вопрос,
+ * приходит ли с неё свежий улов; «доверие» — можно ли верить тому, что пришло.
+ */
+export interface AdminSourceHealth {
+  liveness: {
+    verdict: 'never_read' | 'unreachable' | 'alive' | 'fading' | 'dead';
+    reason: string;
+    lastNonEmptyReadingAt: string | null;
+    consecutiveEmptyReadings: number;
+    fresherThan30Days: AdminCountedShare;
+    fresherThan90Days: AdminCountedShare;
+    fresherThan180Days: AdminCountedShare;
+  };
+  trust: {
+    verdict: 'unknown' | 'trusted' | 'mixed' | 'low';
+    reasons: string[];
+    completeness: {
+      withEmployer: AdminCountedShare;
+      withLink: AdminCountedShare;
+      withDate: AdminCountedShare;
+    };
+    consistency: { successful: AdminCountedShare };
+    lawfulness: { permitted: boolean; addressStatus: string };
+    /** Подлинность ждёт дедупликатора B205 и до него числом не притворяется. */
+    authenticity: { measured: false; blockedBy: 'B205' };
+  };
+}
+
 export interface AdminVacancySource {
   id: string;
   name: string;
@@ -127,6 +162,8 @@ export interface AdminVacancySource {
   lastErrorMessage?: string;
   itemsFoundTotal: number;
   itemsActiveTotal: number;
+  /** Отсутствует у площадки, которую этот сервер ещё ни разу не опрашивал. */
+  health?: AdminSourceHealth;
 }
 
 export interface VacancySourceTestItem {

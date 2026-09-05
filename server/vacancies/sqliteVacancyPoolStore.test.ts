@@ -131,3 +131,88 @@ describe('SqliteVacancyPoolStore', () => {
     expect(store.loadVacancies()).toHaveLength(0);
   });
 });
+
+/**
+ * B200 — наблюдения опроса переживают перезапуск. Живость считается по серии,
+ * которая копится днями; процесс живёт часы, поэтому без записи на диск каждый
+ * деплой объявлял бы любую площадку «ещё ни разу не опрошенной».
+ */
+describe('SqliteVacancyPoolStore · наблюдения площадки (B200)', () => {
+  const observations = {
+    firstReadingAt: '2026-09-01T00:00:00.000Z',
+    lastReadingAt: '2026-09-05T00:00:00.000Z',
+    lastReadingSucceeded: true,
+    lastNonEmptyReadingAt: '2026-09-02T00:00:00.000Z',
+    consecutiveEmptyReadings: 3,
+    windowStartedAt: '2026-09-01T00:00:00.000Z',
+    windowReadings: 4,
+    windowSuccessful: 4,
+    census: {
+      total: 96,
+      fresherThan30Days: 96,
+      fresherThan90Days: 96,
+      fresherThan180Days: 96,
+      withEmployer: 10,
+      withLink: 96,
+      withDate: 96,
+    },
+  } as const;
+
+  it('читает наблюдения обратно тем же значением', () => {
+    const { store, path } = openStore();
+    store.saveSourceState({
+      sourceId: 'src',
+      itemsFoundTotal: 96,
+      itemsActiveTotal: 96,
+      observations,
+    });
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+
+    const reopened = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(reopened);
+    expect(reopened.loadSourceStates()[0]?.observations).toEqual(observations);
+  });
+
+  it('открывает базу, созданную до B200, и достраивает колонку наблюдений', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'vacancy-pool-legacy-'));
+    directories.push(directory);
+    const path = join(directory, 'pool.db');
+    const legacy = new DatabaseSync(path);
+    legacy.exec(`CREATE TABLE vacancy_source_state (
+      source_id TEXT PRIMARY KEY,
+      last_sync_at TEXT,
+      last_status TEXT,
+      last_error_message TEXT,
+      items_found_total INTEGER NOT NULL DEFAULT 0,
+      items_active_total INTEGER NOT NULL DEFAULT 0
+    ) STRICT;`);
+    legacy.exec(
+      `INSERT INTO vacancy_source_state (source_id, items_found_total, items_active_total)
+       VALUES ('src', 1, 1)`,
+    );
+    legacy.close();
+
+    const store = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(store);
+    expect(store.loadSourceStates()[0]?.observations).toBeUndefined();
+
+    store.saveSourceState({
+      sourceId: 'src',
+      itemsFoundTotal: 1,
+      itemsActiveTotal: 1,
+      observations,
+    });
+    expect(store.loadSourceStates()[0]?.observations).toEqual(observations);
+  });
+
+  it('не выдаёт нечитаемую запись за наблюдение', () => {
+    const { store, path } = openStore();
+    store.saveSourceState({ sourceId: 'src', itemsFoundTotal: 0, itemsActiveTotal: 0 });
+    const raw = new DatabaseSync(path);
+    raw.exec("UPDATE vacancy_source_state SET observations = '{не json'");
+    raw.close();
+
+    expect(store.loadSourceStates()[0]?.observations).toBeUndefined();
+  });
+});

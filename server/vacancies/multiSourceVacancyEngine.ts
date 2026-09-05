@@ -7,6 +7,16 @@ import type {
 } from '../domain/unifiedVacancy';
 import { clusterVacancies } from './vacancyDeduplicator';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
+import {
+  censusOfReading,
+  describeSourceHealth,
+  emptySourceObservations,
+  isDeadSource,
+  recordReading,
+  type SourceAddressRight,
+  type SourceHealth,
+  type SourceObservations,
+} from './sourceHealthVerdict';
 import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancyMatcher';
 import type { VacancyPoolStore } from './vacancyPoolStore';
 
@@ -44,6 +54,12 @@ export interface VacancyQueryFilter {
   offset?: number;
 }
 
+/** Здоровье одной площадки вместе с её именем: админка печатает оба (B200). */
+export interface SourceHealthReportItem extends SourceHealth {
+  readonly sourceId: string;
+  readonly sourceName: string;
+}
+
 export interface VacancyQueryResult {
   total: number;
   items: UnifiedVacancy[];
@@ -72,6 +88,10 @@ export class MultiSourceVacancyEngine {
   private readonly pool?: VacancyPoolStore;
   /** In-flight syncs, so a slow source cannot be started twice at once. */
   private running: Map<string, Promise<SourceSyncOutcome>> = new Map();
+  /** Что опросы установили про каждую площадку — вход живости и доверия (B200). */
+  private observations: Map<string, SourceObservations> = new Map();
+  /** Право читать площадку из реестра B199; без записи право не установлено. */
+  private rights: Map<string, SourceAddressRight> = new Map();
 
   constructor(options?: {
     sources?: VacancySourceConfig[];
@@ -81,6 +101,7 @@ export class MultiSourceVacancyEngine {
     const initial = options?.sources ?? DEFAULT_VACANCY_SOURCES;
     for (const src of initial) {
       this.sources.set(src.id, { ...src });
+      this.rememberRight(src);
     }
     this.fetcher = options?.fetcher;
     this.pool = options?.pool;
@@ -116,6 +137,10 @@ export class MultiSourceVacancyEngine {
       source.lastErrorMessage = state.lastErrorMessage;
       source.itemsFoundTotal = state.itemsFoundTotal;
       source.itemsActiveTotal = state.itemsActiveTotal;
+      // Живость считается по серии наблюдений, которая копится днями. Считать
+      // её заново с нуля значило бы воскрешать мёртвую площадку каждым
+      // деплоем (B200).
+      if (state.observations) this.observations.set(state.sourceId, state.observations);
     }
 
     this.recluster();
@@ -132,6 +157,40 @@ export class MultiSourceVacancyEngine {
 
   public addOrUpdateSource(source: VacancySourceConfig): void {
     this.sources.set(source.id, { ...source });
+    this.rememberRight(source);
+  }
+
+  /**
+   * Право берётся только из реестра B199. Источник, пришедший без него,
+   * остаётся fail-closed: «право не установлено» — это не разрешение.
+   */
+  private rememberRight(source: VacancySourceConfig): void {
+    const right = (source as { addressStatus?: SourceAddressRight }).addressStatus;
+    if (right) this.rights.set(source.id, right);
+  }
+
+  /** Здоровье каждой площадки: живость и доверие считаются раздельно (B200). */
+  public getSourceHealthReport(nowMs: number = Date.now()): SourceHealthReportItem[] {
+    return Array.from(this.sources.values()).map((source) => ({
+      sourceId: source.id,
+      sourceName: source.name,
+      ...this.healthOf(source.id, nowMs),
+    }));
+  }
+
+  private healthOf(sourceId: string, nowMs: number): SourceHealth {
+    return describeSourceHealth(
+      this.observations.get(sourceId) ?? emptySourceObservations(),
+      { addressStatus: this.rights.get(sourceId) ?? 'not_established' },
+      nowMs,
+    );
+  }
+
+  private observe(sourceId: string, reading: Parameters<typeof recordReading>[1]): void {
+    this.observations.set(
+      sourceId,
+      recordReading(this.observations.get(sourceId) ?? emptySourceObservations(), reading),
+    );
   }
 
   public toggleSource(sourceId: string, enabled: boolean): VacancySourceConfig {
@@ -247,37 +306,22 @@ export class MultiSourceVacancyEngine {
         query ? { query } : undefined,
       );
 
-      // Название площадки едет вместе с записью: на экране кандидат читает
-      // источник, а не тип транспорта (PRB-017).
-      const freshFetched = fetched
-        .filter((v) => isVacancyFresh(v.publishedAt))
-        .map((v) =>
-          v.provenance ? { ...v, provenance: { ...v.provenance, sourceName: source.name } } : v,
-        );
+      // Перепись улова считается по тому, что площадка отдала, — до фильтра
+      // свежести. Пул хранит только 30 дней, поэтому по нему доля «свежее 180
+      // дней» всегда была бы 100 %: тавтология вместо меры (B200).
+      this.observe(source.id, {
+        succeeded: true,
+        census: censusOfReading(fetched, nowMs),
+        atMs: nowMs,
+      });
 
-      // A successful sync replaces this source's slice. Merging instead meant a
-      // vacancy the employer took down an hour after one reading stayed
-      // matchable — and openable — for thirty days (B161 review §1).
-      this.replaceSourceSlice(source.id, freshFetched);
-
-      // The clock of the run, so the next due check measures the same instant
-      // the scheduler used rather than drifting against wall time.
-      source.lastSyncAt = new Date(nowMs).toISOString();
-      source.lastStatus = 'healthy';
-      source.lastErrorMessage = undefined;
-      source.itemsFoundTotal = freshFetched.length;
-      source.itemsActiveTotal = freshFetched.filter((v) => v.status === 'active').length;
-      this.persistSourceState(source);
-
-      this.recluster();
-      return {
-        sourceId,
-        status: 'healthy',
-        fetched: fetched.length,
-        kept: freshFetched.length,
-      };
+      const kept = this.acceptReading(source, fetched, nowMs);
+      return { sourceId, status: 'healthy', fetched: fetched.length, kept };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // Провал транспорта — не пустой улов: про содержимое площадки он не
+      // говорит ничего, поэтому серию пустых уловов он не удлиняет (B200).
+      this.observe(source.id, { succeeded: false, atMs: nowMs });
       source.lastSyncAt = new Date(nowMs).toISOString();
       source.lastStatus = 'error';
       source.lastErrorMessage = message;
@@ -286,6 +330,42 @@ export class MultiSourceVacancyEngine {
       // slice it delivered last time stays until a successful run replaces it.
       return { sourceId, status: 'error', fetched: 0, kept: 0, message };
     }
+  }
+
+  /**
+   * Принимает удачный улов: свежая часть заменяет прежний срез площадки, и
+   * состояние источника переписывается по этому же чтению. Возвращает, сколько
+   * записей пул оставил.
+   */
+  private acceptReading(
+    source: VacancySourceConfig,
+    fetched: readonly UnifiedVacancy[],
+    nowMs: number,
+  ): number {
+    // Название площадки едет вместе с записью: на экране кандидат читает
+    // источник, а не тип адаптера (PRB-017).
+    const freshFetched = fetched
+      .filter((v) => isVacancyFresh(v.publishedAt))
+      .map((v) =>
+        v.provenance ? { ...v, provenance: { ...v.provenance, sourceName: source.name } } : v,
+      );
+
+    // A successful sync replaces this source's slice. Merging instead meant a
+    // vacancy the employer took down an hour after one reading stayed
+    // matchable — and openable — for thirty days (B161 review §1).
+    this.replaceSourceSlice(source.id, freshFetched);
+
+    // The clock of the run, so the next due check measures the same instant
+    // the scheduler used rather than drifting against wall time.
+    source.lastSyncAt = new Date(nowMs).toISOString();
+    source.lastStatus = 'healthy';
+    source.lastErrorMessage = undefined;
+    source.itemsFoundTotal = freshFetched.length;
+    source.itemsActiveTotal = freshFetched.filter((v) => v.status === 'active').length;
+    this.persistSourceState(source);
+
+    this.recluster();
+    return freshFetched.length;
   }
 
   /**
@@ -303,8 +383,10 @@ export class MultiSourceVacancyEngine {
   }
 
   private persistSourceState(source: VacancySourceConfig): void {
+    const observations = this.observations.get(source.id);
     this.pool?.saveSourceState({
       sourceId: source.id,
+      ...(observations ? { observations } : {}),
       ...(source.lastSyncAt ? { lastSyncAt: source.lastSyncAt } : {}),
       ...(source.lastStatus ? { lastStatus: source.lastStatus } : {}),
       ...(source.lastErrorMessage ? { lastErrorMessage: source.lastErrorMessage } : {}),
@@ -321,7 +403,13 @@ export class MultiSourceVacancyEngine {
    */
   public async syncDue(nowMs: number = Date.now()): Promise<SourceSyncOutcome[]> {
     const due = Array.from(this.sources.values()).filter(
-      (source) => source.enabled && !source.requiresQuery && this.isDue(source, nowMs),
+      (source) =>
+        source.enabled &&
+        !source.requiresQuery &&
+        this.isDue(source, nowMs) &&
+        // Мёртвую площадку плановый опрос не выбирает: свежего улова с неё уже
+        // полгода нет, а вежливость к чужому серверу этим и измеряется (B200).
+        !isDeadSource(this.healthOf(source.id, nowMs)),
     );
     return Promise.all(due.map((source) => this.syncSource(source.id, undefined, nowMs)));
   }

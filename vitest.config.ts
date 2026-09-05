@@ -33,6 +33,7 @@ export default defineConfig({
         'server/connectors/telegramPostType.ts',
         'shared/employerLabel.ts',
         'server/vacancies/multiSourceVacancyEngine.ts',
+        'server/vacancies/sourceHealthVerdict.ts',
         'server/vacancies/adminVacancyPage.ts',
         'server/data/documentTextPage.ts',
         'server/domain/dataRetention.ts',

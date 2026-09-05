@@ -336,6 +336,38 @@ describe('POST /api/v1/admin/vacancy-sources/:sourceId/test', () => {
   });
 });
 
+/**
+ * B200 — суперадминка видит живость и доверие раздельно, и каждое число
+ * называет свой знаменатель. Без этого «источник отвечает 200» и «источник
+ * жив» выглядели на экране одинаково.
+ */
+describe('GET /api/v1/admin/vacancy-sources', () => {
+  it('называет живость и доверие каждой площадки', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/vacancy-sources',
+      headers: { cookie: adminCookie },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const sources = response.json().data;
+    expect(Array.isArray(sources)).toBe(true);
+    expect(sources.length).toBeGreaterThan(0);
+    for (const source of sources) {
+      expect(source.health.liveness.verdict).toBeTypeOf('string');
+      expect(source.health.liveness.reason).toBeTypeOf('string');
+      expect(source.health.trust.verdict).toBeTypeOf('string');
+      // Знаменатель едет вместе с числом (правило B192).
+      expect(source.health.trust.completeness.withEmployer).toHaveProperty('of');
+      // Подлинность не измерена и не притворяется измеренной.
+      expect(source.health.trust.authenticity).toEqual({ measured: false, blockedBy: 'B205' });
+    }
+  });
+});
+
 describe('DELETE /api/v1/admin/users/:userId', () => {
   it('deletes candidate dossier along with the user account', async () => {
     const app = await createApp();

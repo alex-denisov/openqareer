@@ -333,7 +333,18 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
   app.get('/api/v1/admin/vacancy-sources', async (request, reply) => {
     const principal = requireAdmin(deps, request, reply);
     if (!principal) return;
-    return { data: deps.multiSourceEngine.getSources(), meta: { requestId: request.id } };
+    // Живость и доверие едут вместе с самой площадкой: администратор читает
+    // «жива ли она» и «можно ли ей верить» как две разные вещи (B200).
+    const health = new Map(
+      deps.multiSourceEngine.getSourceHealthReport().map((item) => [item.sourceId, item]),
+    );
+    const sources = deps.multiSourceEngine.getSources().map((source) => {
+      const measured = health.get(source.id);
+      return measured
+        ? { ...source, health: { liveness: measured.liveness, trust: measured.trust } }
+        : source;
+    });
+    return { data: sources, meta: { requestId: request.id } };
   });
   app.post('/api/v1/admin/vacancy-sources/:sourceId/test', withDeps(deps, testSource));
   app.post('/api/v1/admin/vacancy-sources/sync-all', withDeps(deps, syncAllSources));

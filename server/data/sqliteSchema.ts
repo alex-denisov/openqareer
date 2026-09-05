@@ -651,8 +651,22 @@ CREATE TABLE IF NOT EXISTS vacancy_source_state (
   last_status TEXT,
   last_error_message TEXT,
   items_found_total INTEGER NOT NULL DEFAULT 0,
-  items_active_total INTEGER NOT NULL DEFAULT 0
+  items_active_total INTEGER NOT NULL DEFAULT 0,
+  observations TEXT
 ) STRICT;
+`;
+
+/**
+ * B200 — наблюдения опроса на базах, созданных до B200. `MIGRATION_23`
+ * применяется самим хранилищем пула и обязан оставаться идемпотентным, а
+ * SQLite не знает `ADD COLUMN IF NOT EXISTS`; поэтому колонка добавляется
+ * отдельно, после проверки `PRAGMA table_info`.
+ *
+ * Без неё живость обнулялась бы каждым деплоем: «пусто три опроса подряд» —
+ * наблюдение, которое копится днями, а процесс живёт часы.
+ */
+export const VACANCY_SOURCE_OBSERVATIONS_COLUMN = `
+ALTER TABLE vacancy_source_state ADD COLUMN observations TEXT;
 `;
 
 /**

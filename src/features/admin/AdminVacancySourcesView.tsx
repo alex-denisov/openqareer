@@ -9,10 +9,121 @@ import {
 } from '@phosphor-icons/react';
 import {
   testAdminVacancySource,
+  type AdminCountedShare,
+  type AdminSourceHealth,
   type AdminVacancySource,
   type VacancySourceTestItem,
   type VacancySourceTestResult,
 } from './adminApi';
+
+/**
+ * B200 — живость и доверие площадки показываются как две разные шкалы.
+ * «Отвечает 200» и «жива» — не одно и то же: площадка может исправно отдавать
+ * прошлогодний архив. Каждое число печатается со своим знаменателем (B192).
+ */
+const LIVENESS_LABELS: Record<AdminSourceHealth['liveness']['verdict'], string> = {
+  never_read: 'Не опрошена',
+  unreachable: 'Недоступна',
+  alive: 'Жива',
+  fading: 'Затухает',
+  dead: 'Мертва',
+};
+
+const LIVENESS_TONES: Record<AdminSourceHealth['liveness']['verdict'], string> = {
+  never_read: 'is-muted',
+  unreachable: 'is-error',
+  alive: 'is-success',
+  fading: 'is-warning',
+  dead: 'is-error',
+};
+
+const TRUST_LABELS: Record<AdminSourceHealth['trust']['verdict'], string> = {
+  unknown: 'Доверие неизвестно',
+  trusted: 'Доверенная',
+  mixed: 'Доверие частичное',
+  low: 'Не доверять',
+};
+
+const TRUST_TONES: Record<AdminSourceHealth['trust']['verdict'], string> = {
+  unknown: 'is-muted',
+  trusted: 'is-success',
+  mixed: 'is-warning',
+  low: 'is-error',
+};
+
+function countedShare(share: AdminCountedShare): string {
+  return `${share.counted} из ${share.of}`;
+}
+
+/** Измеренные факты под приговорами: каждое число со своим знаменателем. */
+function SourceHealthFacts({ health }: { health: AdminSourceHealth }) {
+  const { liveness, trust } = health;
+  return (
+    /*
+      Перепись описывает последний непустой улов, а не сегодняшний ответ:
+      площадка, замолчавшая вчера, показывает вчерашние числа и отдельно —
+      серию пустых уловов. Подпись обязана это называть.
+    */
+    <ul className="admin-source-health-facts">
+      <li>
+        В последнем непустом улове свежее 30 дней:{' '}
+        {countedShare(liveness.fresherThan30Days)}
+      </li>
+      <li>В нём же свежее 180 дней: {countedShare(liveness.fresherThan180Days)}</li>
+      <li>Карточек с работодателем: {countedShare(trust.completeness.withEmployer)}</li>
+      <li>За 30 дней успешных опросов: {countedShare(trust.consistency.successful)}</li>
+      <li>
+        Право читать площадку:{' '}
+        {trust.lawfulness.permitted
+          ? 'установлено'
+          : `не установлено (${trust.lawfulness.addressStatus})`}
+      </li>
+      <li>Подлинность не измерена — ждёт дедупликатора B205</li>
+    </ul>
+  );
+}
+
+function SourceHealthPanel({ health }: { health?: AdminSourceHealth }) {
+  if (!health) {
+    return (
+      <div className="admin-source-health">
+        <span className="admin-badge is-muted">Не опрошена</span>
+        <p className="admin-note">Этот сервер площадку ещё ни разу не опрашивал.</p>
+      </div>
+    );
+  }
+
+  const { liveness, trust } = health;
+  const justified = trust.verdict === 'low' || trust.verdict === 'mixed';
+  return (
+    <div className="admin-source-health">
+      <div className="admin-source-health-badges">
+        <span className={`admin-badge ${LIVENESS_TONES[liveness.verdict]}`}>
+          {LIVENESS_LABELS[liveness.verdict]}
+        </span>
+        <span className={`admin-badge ${TRUST_TONES[trust.verdict]}`}>
+          {TRUST_LABELS[trust.verdict]}
+        </span>
+      </div>
+
+      <p className="admin-note">{liveness.reason}</p>
+
+      <SourceHealthFacts health={health} />
+
+      {/*
+        Причины объясняют приговор доверия. У «неизвестно» приговора нет — там
+        они лишь повторяли бы факты выше, а повтор читается как второй довод.
+      */}
+      {justified && trust.reasons.length > 0 ? (
+        <ul className="admin-source-health-reasons">
+          {trust.reasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 interface AdminVacancySourcesViewProps {
   sources: AdminVacancySource[];
@@ -109,6 +220,8 @@ function SourceCard({
       </div>
 
       <p className="admin-source-url">{source.targetUrl}</p>
+
+      <SourceHealthPanel health={source.health} />
 
       <div className="admin-source-stats">
         <span>{source.itemsActiveTotal} активных</span>

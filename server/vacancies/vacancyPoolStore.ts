@@ -1,4 +1,5 @@
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
+import type { SourceObservations } from './sourceHealthVerdict';
 
 /** What a source's last reading recorded, kept apart from the source's config. */
 export interface StoredSourceState {
@@ -8,6 +9,12 @@ export interface StoredSourceState {
   readonly lastErrorMessage?: string;
   readonly itemsFoundTotal: number;
   readonly itemsActiveTotal: number;
+  /**
+   * Что опросы установили про площадку. Живость считается по наблюдениям,
+   * которые копятся днями, а процесс живёт часы: без записи на диск каждый
+   * деплой объявлял бы любую площадку «ещё ни разу не опрошенной» (B200).
+   */
+  readonly observations?: SourceObservations;
 }
 
 /**

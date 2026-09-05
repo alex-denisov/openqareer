@@ -2,7 +2,8 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
-import { MIGRATION_23 } from '../data/sqliteSchema';
+import { MIGRATION_23, VACANCY_SOURCE_OBSERVATIONS_COLUMN } from '../data/sqliteSchema';
+import type { SourceObservations } from './sourceHealthVerdict';
 import type { StoredSourceState, VacancyPoolStore } from './vacancyPoolStore';
 
 interface VacancyRow {
@@ -16,9 +17,26 @@ interface SourceStateRow {
   last_error_message: string | null;
   items_found_total: number;
   items_active_total: number;
+  observations: string | null;
 }
 
 const SOURCE_STATUSES = new Set(['healthy', 'degraded', 'error']);
+
+/**
+ * Наблюдения лежат одним JSON-значением, как `payload` у самой вакансии.
+ * Запись, которую не удалось прочитать, наблюдением не считается: обнулённая
+ * живость честнее наполовину разобранной (B200).
+ */
+function parseObservations(raw: string | null): SourceObservations | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return undefined;
+    return parsed as SourceObservations;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * The vacancy pool on disk. Opens its own connection to the same file the
@@ -36,6 +54,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec('PRAGMA journal_mode = WAL;');
     this.database.exec('PRAGMA foreign_keys = ON;');
     this.database.exec(MIGRATION_23);
+    this.ensureObservationsColumn();
   }
 
   loadVacancies(): UnifiedVacancy[] {
@@ -52,11 +71,24 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return vacancies;
   }
 
+  /**
+   * Достраивает колонку наблюдений на базе, созданной до B200. `MIGRATION_23`
+   * обязан оставаться идемпотентным, а `ADD COLUMN IF NOT EXISTS` в SQLite
+   * нет — поэтому наличие колонки проверяется явно.
+   */
+  private ensureObservationsColumn(): void {
+    const columns = this.database
+      .prepare('PRAGMA table_info(vacancy_source_state)')
+      .all() as unknown as Array<{ name: string }>;
+    if (columns.some((column) => column.name === 'observations')) return;
+    this.database.exec(VACANCY_SOURCE_OBSERVATIONS_COLUMN);
+  }
+
   loadSourceStates(): StoredSourceState[] {
     const rows = this.database
       .prepare(
         `SELECT source_id, last_sync_at, last_status, last_error_message,
-                items_found_total, items_active_total
+                items_found_total, items_active_total, observations
            FROM vacancy_source_state`,
       )
       .all() as unknown as SourceStateRow[];
@@ -69,6 +101,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       ...(row.last_error_message ? { lastErrorMessage: row.last_error_message } : {}),
       itemsFoundTotal: row.items_found_total,
       itemsActiveTotal: row.items_active_total,
+      ...(parseObservations(row.observations) === undefined
+        ? {}
+        : { observations: parseObservations(row.observations) as SourceObservations }),
     }));
   }
 
@@ -103,14 +138,15 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       .prepare(
         `INSERT INTO vacancy_source_state (
            source_id, last_sync_at, last_status, last_error_message,
-           items_found_total, items_active_total
-         ) VALUES (?, ?, ?, ?, ?, ?)
+           items_found_total, items_active_total, observations
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(source_id) DO UPDATE SET
            last_sync_at = excluded.last_sync_at,
            last_status = excluded.last_status,
            last_error_message = excluded.last_error_message,
            items_found_total = excluded.items_found_total,
-           items_active_total = excluded.items_active_total`,
+           items_active_total = excluded.items_active_total,
+           observations = excluded.observations`,
       )
       .run(
         state.sourceId,
@@ -119,6 +155,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         state.lastErrorMessage ?? null,
         state.itemsFoundTotal,
         state.itemsActiveTotal,
+        state.observations ? JSON.stringify(state.observations) : null,
       );
   }
 
