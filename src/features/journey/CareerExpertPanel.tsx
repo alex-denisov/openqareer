@@ -140,6 +140,7 @@ export function CareerExpertPanel({
     setSending(true);
     setPendingQuestion(clean);
     setError(undefined);
+    let delivered = false;
     try {
       const query = marketQuery?.trim() || undefined;
       if (!pendingOperation.current || pendingOperation.current.user !== user ||
@@ -153,16 +154,22 @@ export function CareerExpertPanel({
       setLiveResult(result);
       setLiveTurnIdempotencyKey(idempotencyKey);
       setContent('');
-      try {
-        setSnapshot(await getCandidateWithMessages());
-      } catch {
-        setError('Ответ сохранён, но историю пока не удалось обновить.');
-      }
+      delivered = true;
     } catch (reason) {
       setError(messageFrom(reason));
     } finally {
       setSending(false);
       setPendingQuestion(undefined);
+    }
+    // Ответ уже доставлен и показан, поэтому следующий вопрос доступен сразу.
+    // Обновление истории — отдельная сетевая операция: на проблемном канале она
+    // может тянуться или не дойти, и держать на ней композер значит отнимать у
+    // кандидата разговор из-за уже полученного ответа (B198).
+    if (!delivered) return;
+    try {
+      setSnapshot(await getCandidateWithMessages());
+    } catch {
+      setError('Ответ сохранён, но историю пока не удалось обновить.');
     }
   }
 
