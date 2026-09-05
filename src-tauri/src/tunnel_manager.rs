@@ -318,9 +318,19 @@ mod tests {
     #[tokio::test]
     async fn never_reports_running_without_a_live_proxy() {
         let m = TunnelManager::new();
-        *m.config.lock().await = Some(valid());
+        let mut config = valid();
+        // B157: фикстура слушала штатный порт туннеля, поэтому на машине с уже
+        // поднятым туннелем проверка «нет слушателя — значит не Running»
+        // проверяла обратное и падала. Порт 1 закрыт всегда: соединиться с ним
+        // нельзя ни на одной машине, и тест больше не зависит от окружения.
+        config.local_http_port = 1;
+        *m.config.lock().await = Some(config);
         *m.state.lock().await = TunnelState::Running;
         let s = m.get_status().await;
         assert_eq!(s.state, TunnelState::Failed);
+        assert_eq!(
+            m.last_error.lock().await.clone(),
+            Some("tunnel_process_not_listening".into())
+        );
     }
 }
