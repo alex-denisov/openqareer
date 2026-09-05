@@ -1,7 +1,4 @@
-import type {
-  VacancyRequirementCoverage,
-  VacancyRoleMatch,
-} from '../../shared/vacancyMatchOrder';
+import type { VacancyRequirementCoverage, VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
 
 export type VacancySourceType =
   | 'hh'
@@ -12,6 +9,12 @@ export type VacancySourceType =
   // own record shape, so the adapter is chosen by source id (B164).
   | 'json_api'
   | 'career_site'
+  // Площадка, до которой сервер не дотягивается по праву: анти-бот отвечает
+  // `403` честному агенту, либо `robots.txt` запрещает обход. Читается только
+  // в браузерной сессии самого кандидата (ADR-009, B206). Такой источник
+  // зарегистрирован, но серверный сборщик обязан на нём падать, а не
+  // возвращать пустой успех (B199).
+  | 'browser_session'
   | 'direct';
 
 export interface VacancySalary {

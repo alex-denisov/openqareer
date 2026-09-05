@@ -29,6 +29,15 @@ export function normalizeJsonSource(
   return adapter(payload, context, sourceId).filter(isUsable);
 }
 
+/**
+ * Есть ли у площадки свой разбор записи. Реестр источников обязан спросить это
+ * до того, как включит JSON-площадку: без адаптера сбор падает, а источник
+ * выглядит подключённым (B199).
+ */
+export function hasJsonAdapter(sourceId: string): boolean {
+  return sourceId in ADAPTERS;
+}
+
 /** A record without a title, a company or a link cannot be shown or opened. */
 function isUsable(vacancy: UnifiedVacancy): boolean {
   return (

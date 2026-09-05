@@ -5,6 +5,10 @@ const SOURCE_PRIORITY: Record<VacancySourceType, number> = {
   career_site: 5,
   direct: 5,
   hh: 4,
+  // Запись, снятая в браузерной сессии самого кандидата, приходит с площадки
+  // напрямую и несёт её собственные поля — как и запись из официального API
+  // площадки, но всё же не с сайта работодателя (B199, B206).
+  browser_session: 4,
   // A board's own JSON record carries structured fields the RSS summary drops,
   // so it wins a tie against a feed describing the same vacancy (B164).
   json_api: 3,

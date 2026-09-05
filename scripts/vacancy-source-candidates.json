@@ -1,0 +1,458 @@
+[
+ {
+  "id": "himalayas-rss",
+  "group": "owner-2",
+  "kind": "feed",
+  "url": "https://himalayas.app/jobs/rss"
+ },
+ {
+  "id": "himalayas-api",
+  "group": "owner-2",
+  "kind": "json",
+  "url": "https://himalayas.app/jobs/api?limit=20"
+ },
+ {
+  "id": "wellfound",
+  "group": "owner-2",
+  "kind": "portal",
+  "url": "https://wellfound.com/jobs"
+ },
+ {
+  "id": "nodesk-feed",
+  "group": "owner-2",
+  "kind": "feed",
+  "url": "https://nodesk.co/remote-jobs/index.xml"
+ },
+ {
+  "id": "aijobs-feed",
+  "group": "owner-2",
+  "kind": "feed",
+  "url": "https://aijobs.net/feed/"
+ },
+ {
+  "id": "aijobs-rss",
+  "group": "owner-2",
+  "kind": "feed",
+  "url": "https://aijobs.net/rss/"
+ },
+ {
+  "id": "aijobs-json",
+  "group": "owner-2",
+  "kind": "json",
+  "url": "https://aijobs.net/api/jobs/"
+ },
+ {
+  "id": "aijobs-sitemap",
+  "group": "owner-2",
+  "kind": "html",
+  "url": "https://aijobs.net/sitemap.xml"
+ },
+ {
+  "id": "list-notion-160-relocation",
+  "group": "owner-companies",
+  "kind": "company",
+  "url": "https://creative-smoke-b50.notion.site/160-3c32f9511b1b81848453de6ea9134f14"
+ },
+ {
+  "id": "list-telegraph-240-currency-remote",
+  "group": "owner-companies",
+  "kind": "company",
+  "url": "https://telegra.ph/240-kompanij-dlya-valyutnyh-udalenok-08-25"
+ },
+ {
+  "id": "list-telegraph-240-mirror",
+  "group": "owner-companies",
+  "kind": "company",
+  "url": "https://graph.org/240-kompanij-dlya-valyutnyh-udalenok-08-25"
+ },
+ {
+  "id": "list-buildin-ru-abroad",
+  "group": "owner-companies",
+  "kind": "company",
+  "url": "https://buildin.ai/api/docs/1f71f42f-0f3b-4971-962d-327e799d3749"
+ },
+ {
+  "id": "list-google-drive",
+  "group": "owner-companies",
+  "kind": "company",
+  "url": "https://drive.google.com/file/d/1aSFyk9oS1pn7-X1idM6821kteimezSJM/view"
+ },
+ {
+  "id": "remoteok",
+  "group": "registered",
+  "kind": "json",
+  "url": "https://remoteok.com/api"
+ },
+ {
+  "id": "remotive",
+  "group": "registered",
+  "kind": "json",
+  "url": "https://remotive.com/api/remote-jobs"
+ },
+ {
+  "id": "weworkremotely",
+  "group": "registered",
+  "kind": "feed",
+  "url": "https://weworkremotely.com/remote-jobs.rss"
+ },
+ {
+  "id": "jobicy",
+  "group": "registered",
+  "kind": "json",
+  "url": "https://jobicy.com/api/v2/remote-jobs?count=50"
+ },
+ {
+  "id": "workingnomads",
+  "group": "registered",
+  "kind": "json",
+  "url": "https://www.workingnomads.com/api/exposed_jobs/"
+ },
+ {
+  "id": "arbeitnow",
+  "group": "registered",
+  "kind": "json",
+  "url": "https://www.arbeitnow.com/api/job-board-api"
+ },
+ {
+  "id": "habr-career",
+  "group": "registered",
+  "kind": "feed",
+  "url": "https://career.habr.com/vacancies/rss"
+ },
+ {
+  "id": "trudvsem",
+  "group": "registered",
+  "kind": "json",
+  "url": "https://opendata.trudvsem.ru/api/v1/vacancies?limit=100"
+ },
+ {
+  "id": "hh-api",
+  "group": "registered",
+  "kind": "json",
+  "url": "https://api.hh.ru/vacancies?text=qa&per_page=20"
+ },
+ {
+  "id": "hh-rss",
+  "group": "registered",
+  "kind": "feed",
+  "url": "https://hh.ru/search/vacancy/rss?text=qa"
+ },
+ {
+  "id": "getonbrd",
+  "group": "registered",
+  "kind": "json",
+  "url": "https://www.getonbrd.com/api/v0/search/jobs?per_page=50&query=qa"
+ },
+ {
+  "id": "linkedin",
+  "group": "owner-7",
+  "kind": "portal",
+  "url": "https://www.linkedin.com/jobs/search/?keywords=qa"
+ },
+ {
+  "id": "indeed",
+  "group": "owner-7",
+  "kind": "portal",
+  "url": "https://www.indeed.com/jobs?q=qa"
+ },
+ {
+  "id": "glassdoor",
+  "group": "owner-7",
+  "kind": "portal",
+  "url": "https://www.glassdoor.com/Job/index.htm"
+ },
+ {
+  "id": "flexjobs",
+  "group": "owner-7",
+  "kind": "portal",
+  "url": "https://www.flexjobs.com/remote-jobs"
+ },
+ {
+  "id": "remote-com",
+  "group": "owner-7",
+  "kind": "html",
+  "url": "https://remote.com/jobs"
+ },
+ {
+  "id": "upwork",
+  "group": "owner-7",
+  "kind": "portal",
+  "url": "https://www.upwork.com/nx/search/jobs/?q=qa"
+ },
+ {
+  "id": "freelancer",
+  "group": "owner-7",
+  "kind": "portal",
+  "url": "https://www.freelancer.com/jobs/"
+ },
+ {
+  "id": "fiverr",
+  "group": "owner-7",
+  "kind": "portal",
+  "url": "https://www.fiverr.com/"
+ },
+ {
+  "id": "guru",
+  "group": "owner-7",
+  "kind": "portal",
+  "url": "https://www.guru.com/d/jobs/"
+ },
+ {
+  "id": "toptal",
+  "group": "owner-7",
+  "kind": "portal",
+  "url": "https://www.toptal.com/careers"
+ },
+ {
+  "id": "angellist",
+  "group": "owner-7",
+  "kind": "dead",
+  "url": "https://angel.co/jobs"
+ },
+ {
+  "id": "hubstafftalent",
+  "group": "owner-7",
+  "kind": "dead",
+  "url": "https://talent.hubstaff.com/"
+ },
+ {
+  "id": "simplyhired",
+  "group": "owner-7",
+  "kind": "portal",
+  "url": "https://www.simplyhired.com/search?q=qa"
+ },
+ {
+  "id": "remotive-site",
+  "group": "owner-7",
+  "kind": "feed",
+  "url": "https://remotive.com/feed"
+ },
+ {
+  "id": "virtualvocations",
+  "group": "owner-7",
+  "kind": "html",
+  "url": "https://www.virtualvocations.com/jobs/"
+ },
+ {
+  "id": "workingnomads-site",
+  "group": "owner-7",
+  "kind": "html",
+  "url": "https://www.workingnomads.com/jobs"
+ },
+ {
+  "id": "hired",
+  "group": "owner-7",
+  "kind": "portal",
+  "url": "https://hired.com/"
+ },
+ {
+  "id": "cloudpeeps",
+  "group": "owner-7",
+  "kind": "dead",
+  "url": "https://www.cloudpeeps.com/"
+ },
+ {
+  "id": "taskrabbit",
+  "group": "owner-7",
+  "kind": "portal",
+  "url": "https://www.taskrabbit.com/"
+ },
+ {
+  "id": "talent-com",
+  "group": "owner-7",
+  "kind": "html",
+  "url": "https://www.talent.com/jobs?k=qa"
+ },
+ {
+  "id": "remoteok-io",
+  "group": "owner-7",
+  "kind": "json",
+  "url": "https://remoteok.io/api"
+ },
+ {
+  "id": "dremote-io",
+  "group": "owner-7",
+  "kind": "html",
+  "url": "https://dremote.io/"
+ },
+ {
+  "id": "jooble",
+  "group": "owner-7",
+  "kind": "html",
+  "url": "https://jooble.org/"
+ },
+ {
+  "id": "stackoverflow-jobs",
+  "group": "owner-7",
+  "kind": "dead",
+  "url": "https://stackoverflow.com/jobs"
+ },
+ {
+  "id": "jobspresso",
+  "group": "owner-7",
+  "kind": "feed",
+  "url": "https://jobspresso.co/feed/"
+ },
+ {
+  "id": "onlinejobs-ph",
+  "group": "owner-7",
+  "kind": "html",
+  "url": "https://www.onlinejobs.ph/jobseekers/jobsearch"
+ },
+ {
+  "id": "themuse-api",
+  "group": "owner-7",
+  "kind": "json",
+  "url": "https://www.themuse.com/api/public/jobs?page=1"
+ },
+ {
+  "id": "skipthedrive",
+  "group": "owner-7",
+  "kind": "feed",
+  "url": "https://www.skipthedrive.com/feed/"
+ },
+ {
+  "id": "zirtual",
+  "group": "owner-7",
+  "kind": "dead",
+  "url": "https://www.zirtual.com/"
+ },
+ {
+  "id": "justremote",
+  "group": "owner-7",
+  "kind": "html",
+  "url": "https://justremote.co/remote-jobs"
+ },
+ {
+  "id": "hireable",
+  "group": "owner-7",
+  "kind": "dead",
+  "url": "https://hireable.com/"
+ },
+ {
+  "id": "remoteworkhub",
+  "group": "owner-7",
+  "kind": "dead",
+  "url": "https://remoteworkhub.com/"
+ },
+ {
+  "id": "jobbatical",
+  "group": "owner-7",
+  "kind": "html",
+  "url": "https://jobbatical.com/"
+ },
+ {
+  "id": "freelancewritinggigs",
+  "group": "owner-7",
+  "kind": "feed",
+  "url": "https://www.freelancewritinggigs.com/feed/"
+ },
+ {
+  "id": "problogger",
+  "group": "owner-7",
+  "kind": "feed",
+  "url": "https://problogger.com/jobs/feed/"
+ },
+ {
+  "id": "behance-joblist",
+  "group": "owner-7",
+  "kind": "portal",
+  "url": "https://www.behance.net/joblist"
+ },
+ {
+  "id": "designhill",
+  "group": "owner-7",
+  "kind": "html",
+  "url": "https://www.designhill.com/"
+ },
+ {
+  "id": "monster",
+  "group": "owner-8",
+  "kind": "portal",
+  "url": "https://www.monster.com/jobs/q-remote-jobs"
+ },
+ {
+  "id": "ziprecruiter",
+  "group": "owner-8",
+  "kind": "portal",
+  "url": "https://www.ziprecruiter.com/jobs-search?search=qa"
+ },
+ {
+  "id": "careerbuilder",
+  "group": "owner-8",
+  "kind": "portal",
+  "url": "https://www.careerbuilder.com/jobs?keywords=qa"
+ },
+ {
+  "id": "dice",
+  "group": "owner-8",
+  "kind": "portal",
+  "url": "https://www.dice.com/jobs?q=qa"
+ },
+ {
+  "id": "careerjet",
+  "group": "owner-8",
+  "kind": "html",
+  "url": "https://www.careerjet.com/search/jobs?s=qa"
+ },
+ {
+  "id": "welcometothejungle",
+  "group": "owner-8",
+  "kind": "html",
+  "url": "https://www.welcometothejungle.com/en/jobs"
+ },
+ {
+  "id": "hirehi",
+  "group": "owner-9",
+  "kind": "html",
+  "url": "https://hirehi.ru/"
+ },
+ {
+  "id": "hirify",
+  "group": "owner-9",
+  "kind": "html",
+  "url": "https://hirify.me/"
+ },
+ {
+  "id": "ats-greenhouse",
+  "group": "ats-sample",
+  "kind": "json",
+  "url": "https://boards-api.greenhouse.io/v1/boards/airbnb/jobs"
+ },
+ {
+  "id": "ats-lever",
+  "group": "ats-sample",
+  "kind": "json",
+  "url": "https://api.lever.co/v0/postings/leverdemo?mode=json"
+ },
+ {
+  "id": "ats-ashby",
+  "group": "ats-sample",
+  "kind": "json",
+  "url": "https://api.ashbyhq.com/posting-api/job-board/ashby"
+ },
+ {
+  "id": "ats-workable",
+  "group": "ats-sample",
+  "kind": "json",
+  "url": "https://apply.workable.com/api/v1/widget/accounts/workable"
+ },
+ {
+  "id": "ats-recruitee",
+  "group": "ats-sample",
+  "kind": "json",
+  "url": "https://recruitee.recruitee.com/api/offers/"
+ },
+ {
+  "id": "ats-smartrecruiters",
+  "group": "ats-sample",
+  "kind": "json",
+  "url": "https://api.smartrecruiters.com/v1/companies/smartrecruiters/postings"
+ },
+ {
+  "id": "ats-personio",
+  "group": "ats-sample",
+  "kind": "feed",
+  "url": "https://personio.jobs.personio.de/xml"
+ }
+]
