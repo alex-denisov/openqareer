@@ -7,7 +7,7 @@ import { DOCUMENT_TEXT_PAGE_BYTE_BUDGET } from './data/documentTextPage';
  * JSON невалиден, `extractedText` не доезжал (INC-034). Карточка обязана быть
  * лёгкой, а текст — читаться страницами и склеиваться в исходный.
  */
-const EXTRACTED_TEXT = 'Разработчик интерфейсов. Опыт восемь лет. '.repeat(2_000);
+const EXTRACTED_TEXT = ('Кириллица 👨‍💻 ' + String.fromCharCode(34, 92, 10, 9).repeat(20)).repeat(2_000);
 /** Хранилище отдаёт текст без хвостовых пробелов — сравниваем с тем, что легло. */
 const STORED_TEXT = EXTRACTED_TEXT.trim();
 
@@ -74,7 +74,7 @@ describe('GET /api/v1/candidate/documents/:documentId', () => {
       });
       expect(response.statusCode).toBe(200);
       expect(Buffer.byteLength(response.body, 'utf8')).toBeLessThanOrEqual(
-        DOCUMENT_TEXT_PAGE_BYTE_BUDGET + 1_024,
+        DOCUMENT_TEXT_PAGE_BYTE_BUDGET,
       );
       joined += response.json().data.text;
       offset = response.json().meta.nextOffset;

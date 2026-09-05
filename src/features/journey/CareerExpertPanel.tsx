@@ -50,6 +50,7 @@ export function CareerExpertPanel({
   const [sending, setSending] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState<string>();
   const [error, setError] = useState<string>();
+  const pendingOperation = useRef<{ user: AuthUser; content: string; marketQuery?: string; idempotencyKey: string; messageId: string }>();
   const panel = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
 
@@ -140,12 +141,15 @@ export function CareerExpertPanel({
     setPendingQuestion(clean);
     setError(undefined);
     try {
-      const idempotencyKey = crypto.randomUUID();
-      const result = await sendCoachTurn({
-        content: clean,
-        marketQuery: marketQuery?.trim() || undefined,
-        idempotencyKey,
-      });
+      const query = marketQuery?.trim() || undefined;
+      if (!pendingOperation.current || pendingOperation.current.user !== user ||
+        pendingOperation.current.content !== clean || pendingOperation.current.marketQuery !== query) {
+        pendingOperation.current = { user, content: clean, marketQuery: query,
+          idempotencyKey: crypto.randomUUID(), messageId: crypto.randomUUID() };
+      }
+      const { idempotencyKey, messageId } = pendingOperation.current;
+      const result = await sendCoachTurn({ content: clean, marketQuery: query, idempotencyKey, messageId });
+      pendingOperation.current = undefined;
       setLiveResult(result);
       setLiveTurnIdempotencyKey(idempotencyKey);
       setContent('');
@@ -162,6 +166,9 @@ export function CareerExpertPanel({
     }
   }
 
+  const showLiveMessage = liveResult && !snapshot?.messages.some(
+    (message) => message.role === 'assistant' && message.content === liveResult.message,
+  );
   const latestStoredTurn = [...(snapshot?.turns ?? [])]
     .reverse()
     .find((turn) => turn.status === 'completed' && turn.result);
@@ -207,9 +214,9 @@ export function CareerExpertPanel({
           </p>
         </div>
 
-        {snapshot?.messages.length ? (
+        {snapshot?.messages.length || showLiveMessage ? (
           <div className="career-dialogue-history" aria-label="История диалога">
-            {snapshot.messages.map((message) => (
+            {snapshot?.messages.map((message) => (
               <article
                 className={`career-dialogue-turn is-${message.role}`}
                 key={message.id}
@@ -220,6 +227,14 @@ export function CareerExpertPanel({
                 )}
               </article>
             ))}
+            {showLiveMessage ? (
+              <article className="career-dialogue-turn is-assistant" aria-live="polite">
+                <span>Карьерный советник</span>
+                {liveResult.message.split('\n').map((paragraph, index) =>
+                  paragraph ? <p key={index}>{paragraph}</p> : null,
+                )}
+              </article>
+            ) : null}
           </div>
         ) : null}
 

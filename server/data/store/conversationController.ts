@@ -635,6 +635,12 @@ export class ConversationController {
     return rows.map((row) => this.memoryFromRow(candidateId, row));
   }
 
+  getCoachTurn(candidateId: string, key: string) {
+    const row = this.getTurn(candidateId, key);
+    if (!row) return null;
+    return { status: row.status, result: row.status === 'completed' ? this.outputFromTurn(candidateId, key, row).result : null };
+  }
+
   private turns(candidateId: string): StoredTurn[] {
     const rows = this.database
       .prepare(

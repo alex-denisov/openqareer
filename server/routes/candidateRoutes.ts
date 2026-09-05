@@ -614,7 +614,13 @@ const handleGetDocumentText: Handler = async (deps, request, reply) => {
   const document = loadCandidateDocument(deps, request, reply);
   if (!document) return undefined;
   const { offset } = documentTextQuerySchema.parse(request.query ?? {});
-  const page = buildDocumentTextPage(document.extractedText ?? '', offset);
+  // Reserve the exact worst-case JSON envelope, including request id and offsets.
+  const text = document.extractedText ?? '';
+  const envelopeBytes = Buffer.byteLength(JSON.stringify({
+    data: { text: '' },
+    meta: { requestId: request.id, offset, nextOffset: text.length, length: text.length },
+  }), 'utf8') + 4; // null may be wider than a short numeric nextOffset
+  const page = buildDocumentTextPage(text, offset, 12_288 - envelopeBytes);
   return {
     data: { text: page.text },
     meta: {

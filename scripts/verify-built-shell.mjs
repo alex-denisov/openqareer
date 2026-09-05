@@ -1,3 +1,4 @@
+import { verifyCoachDelivery } from './verify-coach-delivery.mjs';
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 import { preview } from 'vite';
@@ -873,6 +874,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByRole('button', { name: /(Начать|Продолжить) разговор/u }).click();
   const expert = page.getByRole('dialog', { name: 'Карьерный эксперт' });
   await expert.waitFor({ state: 'visible' });
+  await verifyCoachDelivery(page, expert, viewport);
   const dialogueContainment = await page
     .locator('.career-dialogue-history')
     .evaluate((history) => {

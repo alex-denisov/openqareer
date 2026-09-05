@@ -1,3 +1,4 @@
+import { receiveCoachResult } from './coachResultDelivery';
 import type { ResumeDraft } from '../../../server/domain/resumeDraft';
 import type { ProposedRole } from '../../../shared/roleProposals';
 import type { CareerStrategy } from '../../../shared/careerStrategy';
@@ -658,19 +659,30 @@ export async function sendCoachTurn(input: {
   idempotencyKey?: string;
   messageId?: string;
 }): Promise<CoachResult> {
-  const response = await apiFetch('/api/v1/coach/turn', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID(),
-    },
-    body: JSON.stringify({
-      messageId: input.messageId ?? crypto.randomUUID(),
-      content: input.content,
-      marketQuery: input.marketQuery,
-    }),
-  });
-  return readDataObject<CoachResult>(response);
+  const key = input.idempotencyKey ?? crypto.randomUUID();
+  try {
+    const response = await apiFetch('/api/v1/coach/turn?delivery=receipt', {
+      signal: AbortSignal.timeout(20_000),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+      body: JSON.stringify({
+        messageId: input.messageId ?? crypto.randomUUID(),
+        content: input.content,
+        marketQuery: input.marketQuery,
+      }),
+    });
+    const data = await readDataObject<CoachResult & { status?: string }>(response);
+    // Older immutable releases return the complete result; preserve compatibility.
+    if (typeof data.message === 'string') return data;
+    if (data.status !== 'pending' && data.status !== 'completed') {
+      throw new CoachApiErrorClass('Сервис вернул ответ неожиданной формы.', 'malformed_response', true);
+    }
+  } catch (error) {
+    if (!(error instanceof CoachApiErrorClass) ||
+      !['network_error', 'malformed_response'].includes(error.code)) throw error;
+    // The POST may have succeeded: read the saved operation, never generate again.
+  }
+  return receiveCoachResult<CoachResult>(key);
 }
 
 export async function prepareCareerCommand(input: {

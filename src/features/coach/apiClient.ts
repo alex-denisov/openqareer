@@ -118,6 +118,7 @@ export async function apiFetch(
         });
       }
     } catch {
+      if (init.signal?.aborted) throw new CoachApiError('Загрузка прервана.', 'network_error', true);
       // Fallback to browser fetch below
     }
   }

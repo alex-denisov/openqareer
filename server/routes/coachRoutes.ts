@@ -13,7 +13,10 @@ import {
   sendError,
   withDeps,
 } from './helpers';
+import { registerCoachResultRoute } from './coachResultRoute';
 import { coachTurnRequestSchema } from './schemas';
+
+const activeTurns = new WeakMap<RouteDeps, Set<string>>();
 
 type Handler = (
   deps: RouteDeps,
@@ -50,6 +53,9 @@ function providerResponse(
   request: FastifyRequest,
   output: Awaited<ReturnType<CoachProvider['createTurn']>>,
 ) {
+  if ((request.query as { delivery?: string }).delivery === 'receipt') {
+    return { data: { status: 'completed', idempotencyKey: request.headers['idempotency-key'] } };
+  }
   return {
     data: output.result,
     meta: {
@@ -98,6 +104,44 @@ async function completeTurnWithProvider(
   }
 }
 
+async function deliverTurn(
+  deps: RouteDeps, request: FastifyRequest, reply: FastifyReply,
+  candidateId: string, key: string,
+  input: Omit<Parameters<CoachProvider['createTurn']>[0], 'marketObservations'>,
+  marketQuery?: string,
+) {
+  const active = activeTurns.get(deps) ?? new Set<string>();
+  activeTurns.set(deps, active);
+  const operation = `${candidateId}:${key}`;
+  const pending = () => reply.code(202).send({ data: { status: 'pending', idempotencyKey: key } });
+  if (active.has(operation)) return pending();
+  active.add(operation);
+  const work = generateTurn(deps, candidateId, key, input, marketQuery)
+    .finally(() => active.delete(operation));
+  if ((request.query as { delivery?: string }).delivery === 'receipt') {
+    // Failure is persisted by the worker; polling does not restart generation.
+    void work.catch(() => undefined);
+    return pending();
+  }
+  const output = await work;
+  if (!output) return sendError(reply, request, 502, 'market_source_unavailable', 'hh.ru не вернул свежую выборку. Повторите позже.', true);
+  return providerResponse(request, output);
+}
+
+async function generateTurn(
+  deps: RouteDeps, candidateId: string, key: string,
+  input: Omit<Parameters<CoachProvider['createTurn']>[0], 'marketObservations'>,
+  marketQuery?: string,
+) {
+  let marketObservations: MarketObservation[] = [];
+  if (input.phase === 'market' && marketQuery) {
+    const fetched = await fetchMarketObservations(deps, candidateId, key, marketQuery);
+    if (fetched === 'unavailable') return null;
+    marketObservations = fetched;
+  }
+  return completeTurnWithProvider(deps, candidateId, key, { ...input, marketObservations });
+}
+
 const handleCoachTurn: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
@@ -123,35 +167,11 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
     return providerResponse(request, started.output);
   }
 
-  let marketObservations: MarketObservation[] = [];
-  if (phase === 'market' && body.marketQuery) {
-    const observations = await fetchMarketObservations(
-      deps,
-      candidate.id,
-      key,
-      body.marketQuery,
-    );
-    if (observations === 'unavailable') {
-      return sendError(
-        reply,
-        request,
-        502,
-        'market_source_unavailable',
-        'hh.ru не вернул свежую выборку. Повторите позже.',
-        true,
-      );
-    }
-    marketObservations = observations;
-  }
-
-  const output = await completeTurnWithProvider(deps, candidate.id, key, {
-    ...started.input,
-    marketObservations,
-  });
-  return providerResponse(request, output);
+  return deliverTurn(deps, request, reply, candidate.id, key, started.input, body.marketQuery);
 };
 
 export async function registerCoachRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
+  registerCoachResultRoute(app, deps);
   app.post(
     '/api/v1/coach/turn',
     {

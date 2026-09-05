@@ -36,7 +36,7 @@ export function buildDocumentTextPage(
     const code = text.codePointAt(end);
     if (code === undefined) break;
     const unit = String.fromCodePoint(code);
-    const cost = Buffer.byteLength(unit, 'utf8');
+    const cost = Buffer.byteLength(JSON.stringify(unit), 'utf8') - 2;
     if (size + cost > budgetBytes) break;
     size += cost;
     end += unit.length;

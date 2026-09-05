@@ -282,6 +282,7 @@ export interface CandidateStore {
     idempotencyKey: string,
     errorCode: string,
   ): void;
+  getCoachTurn(candidateId: string, key: string): { status: StoredTurn['status']; result: CoachTurnResult | null } | null;
   getSnapshot(candidateId: string): CandidateSnapshot;
   changeMemory(
     candidateId: string,

@@ -199,6 +199,11 @@ export class SqliteCandidateStore implements CandidateStore {
     return row ? candidateFromRow(row) : null;
   }
 
+  getCoachTurn(candidateId: string, key: string) {
+    this.requireCandidate(candidateId);
+    return this.conversations.getCoachTurn(candidateId, key);
+  }
+
   startTurn(
     candidateId: string,
     idempotencyKey: string,
