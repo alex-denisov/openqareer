@@ -12,6 +12,22 @@ function incomplete(): CoachApiError {
   return new CoachApiError('Не удалось получить ответ полностью. Повторите попытку.', 'delivery_incomplete', true);
 }
 
+/** Ход ещё идёт: это ожидание, а не поломка, и называть его надо честно. */
+function stillRunning(): CoachApiError {
+  return new CoachApiError('Ответ ещё готовится. Откройте разговор чуть позже — генерация не повторится.', 'turn_still_running', true);
+}
+
+/**
+ * Сколько клиент ждёт сохранённый результат.
+ *
+ * Сервер обещает ход до 190 секунд: три роли по `PROVIDER_STAGE_TIMEOUT_MS`
+ * (50 с) внутри собственного `requestTimeout`. Клиент ждал 180 с и сдавался
+ * раньше своего же сервера, объявляя сломанной доставку хода, который ещё шёл.
+ * Замер на проде 2026-09-05: результат приходил на 74-й и на 160-й секунде.
+ * Потолок покрывает серверное обещание и оставляет запас на саму передачу.
+ */
+const RESULT_WAIT_MS = 240_000;
+
 async function readWithDeadline<T>(url: string): Promise<{ pending: boolean; data?: T }> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout>;
@@ -33,11 +49,13 @@ async function readWithDeadline<T>(url: string): Promise<{ pending: boolean; dat
 /** Normal paths receive one full response. Only failed delivery uses bounded parts. */
 export async function receiveCoachResult<T extends object>(key: string): Promise<T> {
   const url = `/api/v1/coach/turn/${encodeURIComponent(key)}/result`;
-  const deadline = Date.now() + 180_000;
+  const deadline = Date.now() + RESULT_WAIT_MS;
+  let pending = false;
   while (Date.now() < deadline) {
     try {
       const full = await readWithDeadline<T>(url);
       if (!full.pending) return full.data!;
+      pending = true;
     } catch (error) {
       if (error instanceof CoachApiError && !['network_error', 'malformed_response', 'delivery_incomplete'].includes(error.code)) throw error;
       // Обрыв мог случиться и на ходе, который ещё идёт. Восстановление по
@@ -45,10 +63,11 @@ export async function receiveCoachResult<T extends object>(key: string): Promise
       // мы возвращаемся к ожиданию, а не объявляем доставку сломанной.
       const parts = await receiveParts<T>(url);
       if (parts) return parts;
+      pending = true;
     }
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
-  throw incomplete();
+  throw pending ? stillRunning() : incomplete();
 }
 
 /** `undefined` means the operation is still running: wait, do not fail it. */

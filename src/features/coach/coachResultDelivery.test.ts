@@ -82,6 +82,39 @@ describe('coach result recovery', () => {
     expect(await receiveCoachResult(key)).toEqual(result);
   });
 
+  /**
+   * Сервер сам обещает ход до 190 секунд (`PROVIDER_STAGE_TIMEOUT_MS`: три
+   * роли по 50 с внутри `requestTimeout`). Клиент ждал 180 с и сдавался
+   * раньше собственного сервера, объявляя сломанной доставку хода, который
+   * ещё шёл. Замер на проде 2026-09-05: ходы 74 с, 160 с и дольше.
+   */
+  it('waits at least as long as the server may take for one turn', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const started = Date.now();
+      vi.stubGlobal('fetch', vi.fn(async () =>
+        Date.now() - started < 200_000 ? json({ status: 'pending' }, 202) : json(result)));
+      const receiving = receiveCoachResult(key);
+      await vi.advanceTimersByTimeAsync(210_000);
+      expect(await receiving).toEqual(result);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('names the wait honestly when the turn is still running at the deadline', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.stubGlobal('fetch', vi.fn(async () => json({ status: 'pending' }, 202)));
+      const receiving = receiveCoachResult(key);
+      const rejects = expect(receiving).rejects.toMatchObject({ code: 'turn_still_running' });
+      await vi.advanceTimersByTimeAsync(250_000);
+      await rejects;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not present a corrupted result as complete', async () => {
     const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
       if (init.method === 'POST') return json({ status: 'pending', idempotencyKey: key }, 202);
