@@ -8,6 +8,7 @@ import {
   setSessionCookie,
   withDeps,
 } from './helpers';
+import { buildAdminSourcePage } from '../vacancies/adminSourcePage';
 import { buildAdminVacancyPage } from '../vacancies/adminVacancyPage';
 import { queueFallbackDescriptors } from '../providers/providerQueue';
 import { describeRoleNamerQueue } from '../providers/roleNamer';
@@ -344,7 +345,19 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
         ? { ...source, health: { liveness: measured.liveness, trust: measured.trust } }
         : source;
     });
-    return { data: sources, meta: { requestId: request.id } };
+    // Весь реестр со здоровьем — 29 788 байт, а прод рвёт тело на 20 220
+    // (INC-032). Экран забирает список страницами внутри доказанного бюджета.
+    const offset = Number((request.query as { offset?: string } | undefined)?.offset ?? 0);
+    const page = buildAdminSourcePage(sources, Number.isFinite(offset) ? offset : 0);
+    return {
+      data: {
+        items: page.items,
+        total: page.total,
+        offset: page.offset,
+        nextOffset: page.nextOffset,
+      },
+      meta: { requestId: request.id },
+    };
   });
   app.post('/api/v1/admin/vacancy-sources/:sourceId/test', withDeps(deps, testSource));
   app.post('/api/v1/admin/vacancy-sources/sync-all', withDeps(deps, syncAllSources));

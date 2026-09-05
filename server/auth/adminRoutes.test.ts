@@ -353,9 +353,14 @@ describe('GET /api/v1/admin/vacancy-sources', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const sources = response.json().data;
+    const page = response.json().data;
+    const sources = page.items;
     expect(Array.isArray(sources)).toBe(true);
     expect(sources.length).toBeGreaterThan(0);
+    // Весь реестр со здоровьем в один ответ не помещается — прод рвёт тело на
+    // 20 220 байтах (INC-032), поэтому список отдаётся страницами.
+    expect(page.total).toBeGreaterThan(sources.length);
+    expect(page.nextOffset).toBe(sources.length);
     for (const source of sources) {
       expect(source.health.liveness.verdict).toBeTypeOf('string');
       expect(source.health.liveness.reason).toBeTypeOf('string');

@@ -319,13 +319,37 @@ export async function getAdminVacancy(
   return readData<AdminVacancy>(response);
 }
 
+interface AdminVacancySourcePage {
+  items: AdminVacancySource[];
+  total: number;
+  offset: number;
+  nextOffset: number | null;
+}
+
+/**
+ * Реестр со здоровьем площадок весит около 30 КБ, а прод рвёт тело ответа на
+ * 20 220 байтах (INC-032). Экран собирает список страницами, пока маршрут не
+ * скажет, что выборка кончилась: остановиться на первой странице значило бы
+ * молча потерять две трети площадок.
+ */
 export async function listAdminVacancySources(
   signal?: AbortSignal,
 ): Promise<AdminVacancySource[]> {
-  const response = await apiFetch('/api/v1/admin/vacancy-sources', {
-    ...(signal ? { signal } : {}),
-  });
-  return readData<AdminVacancySource[]>(response);
+  const collected: AdminVacancySource[] = [];
+  let offset: number | null = 0;
+
+  while (offset !== null) {
+    const response = await apiFetch(
+      `/api/v1/admin/vacancy-sources?offset=${offset}`,
+      { ...(signal ? { signal } : {}) },
+    );
+    const page: AdminVacancySourcePage = await readData<AdminVacancySourcePage>(response);
+    collected.push(...page.items);
+    // Страница, не сдвинувшая смещение, вернула бы нас сюда навсегда.
+    offset = page.nextOffset !== null && page.nextOffset > offset ? page.nextOffset : null;
+  }
+
+  return collected;
 }
 
 export async function syncAllAdminVacancySources(): Promise<{ success: boolean; count: number }> {
