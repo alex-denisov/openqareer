@@ -20,6 +20,11 @@ import {
 import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancyMatcher';
 import type { VacancyPoolStore } from './vacancyPoolStore';
 
+import {
+  PoliteScheduler,
+  type SourceScheduleInfo,
+} from './politeScheduler';
+
 export type SourceFetcher = (
   source: VacancySourceConfig,
   options?: { query?: string },
@@ -58,6 +63,7 @@ export interface VacancyQueryFilter {
 export interface SourceHealthReportItem extends SourceHealth {
   readonly sourceId: string;
   readonly sourceName: string;
+  readonly schedule?: SourceScheduleInfo;
 }
 
 export interface VacancyQueryResult {
@@ -95,6 +101,42 @@ function lastSyncMs(source: VacancySourceConfig): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+function extractErrorHttpDetails(err: unknown): { statusCode?: number; retryAfterHeader?: string } {
+  if (!err || typeof err !== 'object') return {};
+  const obj = err as Record<string, unknown>;
+  const statusCode =
+    typeof obj.statusCode === 'number'
+      ? obj.statusCode
+      : typeof obj.status === 'number'
+        ? obj.status
+        : typeof (obj.response as Record<string, unknown> | undefined)?.status === 'number'
+          ? ((obj.response as Record<string, unknown>).status as number)
+          : undefined;
+
+  const headers =
+    (obj.headers as { get?: (k: string) => string | null } | undefined) ??
+    ((obj.response as Record<string, unknown> | undefined)?.headers as
+      | { get?: (k: string) => string | null }
+      | undefined);
+
+  let retryAfterHeader =
+    typeof headers?.get === 'function' ? headers.get('retry-after') : undefined;
+
+  const message = err instanceof Error ? err.message : String(err);
+  let resolvedStatus = statusCode;
+  if (!resolvedStatus) {
+    if (message.includes('429')) resolvedStatus = 429;
+    else if (message.includes('403')) resolvedStatus = 403;
+    else if (message.includes('503')) resolvedStatus = 503;
+  }
+  if (!retryAfterHeader) {
+    const match = message.match(/retry-after:\s*([^\s,]+)/iu);
+    if (match) retryAfterHeader = match[1];
+  }
+
+  return { statusCode: resolvedStatus, retryAfterHeader: retryAfterHeader ?? undefined };
+}
+
 export class MultiSourceVacancyEngine {
   private sources: Map<string, VacancySourceConfig> = new Map();
   private rawVacancies: Map<string, UnifiedVacancy> = new Map();
@@ -108,6 +150,8 @@ export class MultiSourceVacancyEngine {
   private observations: Map<string, SourceObservations> = new Map();
   /** Право читать площадку из реестра B199; без записи право не установлено. */
   private rights: Map<string, SourceAddressRight> = new Map();
+  /** Вежливый диспетчер опроса: отступ, retry-after, бюджет и адаптация (B204). */
+  private readonly scheduler: PoliteScheduler = new PoliteScheduler();
 
   constructor(options?: {
     sources?: VacancySourceConfig[];
@@ -118,9 +162,25 @@ export class MultiSourceVacancyEngine {
     for (const src of initial) {
       this.sources.set(src.id, { ...src });
       this.rememberRight(src);
+      this.configureSourcePoliteness(src);
     }
     this.fetcher = options?.fetcher;
     this.pool = options?.pool;
+  }
+
+  private configureSourcePoliteness(source: VacancySourceConfig): void {
+    const addressStatus = (source as { addressStatus?: string }).addressStatus;
+    if (addressStatus === 'robots_forbidden') {
+      this.scheduler.setRobotsPolicy(source.id, { verdict: 'disallowed' });
+    } else {
+      this.scheduler.setRobotsPolicy(source.id, { verdict: 'allowed' });
+    }
+    if (source.lastSyncAt) {
+      const parsed = Date.parse(source.lastSyncAt);
+      if (!Number.isNaN(parsed)) {
+        this.scheduler.recordAttempt(source.id, { success: true, nowMs: parsed });
+      }
+    }
   }
 
   /**
@@ -153,10 +213,12 @@ export class MultiSourceVacancyEngine {
       source.lastErrorMessage = state.lastErrorMessage;
       source.itemsFoundTotal = state.itemsFoundTotal;
       source.itemsActiveTotal = state.itemsActiveTotal;
-      // Живость считается по серии наблюдений, которая копится днями. Считать
-      // её заново с нуля значило бы воскрешать мёртвую площадку каждым
-      // деплоем (B200).
-      if (state.observations) this.observations.set(state.sourceId, state.observations);
+      if (state.observations) {
+        this.observations.set(state.sourceId, state.observations);
+        if (state.observations.schedule) {
+          this.scheduler.importState({ [state.sourceId]: state.observations.schedule });
+        }
+      }
     }
 
     this.recluster();
@@ -174,6 +236,7 @@ export class MultiSourceVacancyEngine {
   public addOrUpdateSource(source: VacancySourceConfig): void {
     this.sources.set(source.id, { ...source });
     this.rememberRight(source);
+    this.configureSourcePoliteness(source);
   }
 
   /**
@@ -191,6 +254,7 @@ export class MultiSourceVacancyEngine {
       sourceId: source.id,
       sourceName: source.name,
       ...this.healthOf(source.id, nowMs),
+      schedule: this.scheduler.getScheduleInfo(source.id, nowMs, source.refreshIntervalMinutes),
     }));
   }
 
@@ -336,6 +400,14 @@ export class MultiSourceVacancyEngine {
         atMs: nowMs,
       });
 
+      const newItemsCount = fetched.filter((v) => !this.rawVacancies.has(v.id)).length;
+      this.scheduler.recordAttempt(source.id, {
+        success: true,
+        statusCode: 200,
+        newItemsCount,
+        nowMs,
+      });
+
       const kept = this.acceptReading(source, fetched, nowMs);
       return { sourceId, status: 'healthy', fetched: fetched.length, kept };
     } catch (err) {
@@ -346,6 +418,15 @@ export class MultiSourceVacancyEngine {
       source.lastSyncAt = new Date(nowMs).toISOString();
       source.lastStatus = 'error';
       source.lastErrorMessage = message;
+
+      const { statusCode, retryAfterHeader } = extractErrorHttpDetails(err);
+      this.scheduler.recordAttempt(source.id, {
+        success: false,
+        statusCode,
+        retryAfterHeader,
+        nowMs,
+      });
+
       this.persistSourceState(source);
       // A failed reading is not evidence that the source went empty, so the
       // slice it delivered last time stays until a successful run replaces it.
@@ -405,9 +486,10 @@ export class MultiSourceVacancyEngine {
 
   private persistSourceState(source: VacancySourceConfig): void {
     const observations = this.observations.get(source.id);
+    const schedule = this.scheduler.exportState()[source.id] ?? null;
     this.pool?.saveSourceState({
       sourceId: source.id,
-      ...(observations ? { observations } : {}),
+      ...(observations ? { observations: { ...observations, schedule } } : {}),
       ...(source.lastSyncAt ? { lastSyncAt: source.lastSyncAt } : {}),
       ...(source.lastStatus ? { lastStatus: source.lastStatus } : {}),
       ...(source.lastErrorMessage ? { lastErrorMessage: source.lastErrorMessage } : {}),
@@ -439,10 +521,14 @@ export class MultiSourceVacancyEngine {
   }
 
   private isDue(source: VacancySourceConfig, nowMs: number): boolean {
-    if (!source.lastSyncAt) return true;
-    const last = Date.parse(source.lastSyncAt);
-    if (Number.isNaN(last)) return true;
-    return nowMs - last >= source.refreshIntervalMinutes * 60_000;
+    const addressStatus = (source as { addressStatus?: string }).addressStatus;
+    if (addressStatus === 'robots_forbidden') return false;
+    const status = this.scheduler.isSourceDue(source.id, source.refreshIntervalMinutes, nowMs);
+    return status.due;
+  }
+
+  public getScheduler(): PoliteScheduler {
+    return this.scheduler;
   }
 
   public async syncAll(query?: string): Promise<SourceSyncOutcome[]> {

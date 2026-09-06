@@ -78,6 +78,8 @@ export interface SourceObservations {
     readonly originalShare: CountedShare;
     readonly reprintShare: CountedShare;
   } | null;
+  /** Состояние вежливого опроса: отступ, retry-after, бюджет и адаптивный интервал (B204). */
+  readonly schedule?: import('./politeScheduler').SourceScheduleState | null;
 }
 
 export function emptySourceObservations(): SourceObservations {
@@ -92,6 +94,7 @@ export function emptySourceObservations(): SourceObservations {
     windowSuccessful: 0,
     census: null,
     authenticity: null,
+    schedule: null,
   };
 }
 

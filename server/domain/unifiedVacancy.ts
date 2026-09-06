@@ -128,6 +128,8 @@ export interface VacancySourceConfig {
   lastErrorMessage?: string;
   itemsFoundTotal: number;
   itemsActiveTotal: number;
+  /** Правомерность и доступность адреса площадки из реестра (B199/B200/B204). */
+  addressStatus?: import('../vacancies/defaultVacancySources').VacancyAddressStatus;
   /**
    * True when the endpoint answers nothing usable without a search term, so a
    * query-less scheduled sync skips it instead of recording an empty success

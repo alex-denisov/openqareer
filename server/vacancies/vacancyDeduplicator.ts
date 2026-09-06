@@ -169,7 +169,7 @@ function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluster {
     canonicalLocation: vacancy.location,
     isRemote: Boolean(vacancy.isRemote),
     salary: vacancy.salary,
-    descriptionSummary: vacancy.description.slice(0, 300),
+    descriptionSummary: (vacancy.description ?? '').slice(0, 300),
     skills: [...vacancy.requiredSkills],
     primaryUrl: vacancy.url,
     sources: [vacancy.provenance],
