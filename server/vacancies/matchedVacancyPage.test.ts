@@ -144,3 +144,30 @@ describe('buildMatchedVacancyPage', () => {
     expect(enriched.cluster.companyFeatures?.coordinates?.lat).toBeCloseTo(52.3676, 1);
   });
 });
+
+describe('место вакансии на карте называется честно (B203)', () => {
+  function withLocation(location: string): MatchedVacancyItem {
+    const base = item(0);
+    return { ...base, cluster: { ...base.cluster, canonicalLocation: location } };
+  }
+
+  it('страна в поле места городским хабом не становится', () => {
+    const [first] = buildMatchedVacancyPage([withLocation('Italy')], 0).items;
+    expect(first?.cluster.companyFeatures?.city).toBeUndefined();
+    expect(first?.cluster.companyFeatures?.country).toBe('Italy');
+  });
+
+  it('страновая приставка площадки снимается с названия города', () => {
+    const [first] = buildMatchedVacancyPage([withLocation('US - San Francisco, United States')], 0)
+      .items;
+    expect(first?.cluster.companyFeatures?.city).toBe('San Francisco');
+  });
+
+  it('перечисление стран местом на карте не считается', () => {
+    const [first] = buildMatchedVacancyPage(
+      [withLocation('Germany (Remote) ; Ireland (Remote) ; Portugal (Remote)')],
+      0,
+    ).items;
+    expect(first?.cluster.companyFeatures?.city).toBeUndefined();
+  });
+});

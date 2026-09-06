@@ -1,6 +1,7 @@
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import type { VacancyCompanyFeatures, VacancyCluster } from '../domain/unifiedVacancy';
 import { normalizeCityLabel } from '../../shared/cityLabel';
+import { isKnownCountry } from '../domain/geoCoordinates';
 import { getCompanyRegistry } from '../domain/companyRegistry';
 import { lookupLocationCoordinates } from '../domain/geoCoordinates';
 import type { Company } from '../domain/company';
@@ -49,8 +50,11 @@ function extractLocationCoordinates(
     const parts = canonicalLocation.split(',').map((p) => p.trim());
     // «US - San Francisco» и «San Francisco» — один город, а
     // «Germany (Remote) ; Ireland (Remote) ; …» — вовсе не город (B203).
-    city = normalizeCityLabel(parts[0]);
-    country = parts[1] || undefined;
+    const named = normalizeCityLabel(parts[0]);
+    // «Alma · Italy»: площадка положила в место страну. Страна — не городской
+    // хаб, и выдавать её за точку на карте нельзя (B203).
+    city = named && isKnownCountry(named) ? undefined : named;
+    country = parts[1] || (named && isKnownCountry(named) ? named : undefined);
     coordinates = lookupLocationCoordinates(city, country);
   }
 
@@ -77,7 +81,9 @@ function resolveCompanyFeatures(cluster: VacancyCluster): VacancyCompanyFeatures
 
   const loc = extractLocationCoordinates(cluster.canonicalLocation, company);
 
-  if (!company && !loc.coordinates && !loc.city) {
+  // Страна без города — тоже сведение о месте: карточка честно скажет страну,
+  // хотя точки на карте у неё не будет (B203).
+  if (!company && !loc.coordinates && !loc.city && !loc.country) {
     return undefined;
   }
 
