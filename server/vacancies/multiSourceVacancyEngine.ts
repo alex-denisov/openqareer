@@ -7,6 +7,7 @@ import type {
 } from '../domain/unifiedVacancy';
 import { calculateSourceAuthenticity, clusterVacancies } from './vacancyDeduplicator';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
+import { mapWithConcurrency } from './boundedConcurrency';
 import {
   censusOfReading,
   describeSourceHealth,
@@ -531,9 +532,16 @@ export class MultiSourceVacancyEngine {
     return this.scheduler;
   }
 
+  /**
+   * Ручной опрос всех площадок. Идёт волнами той же ширины, что и плановый:
+   * залп из 195 одновременных запросов кончился 92 ложными отказами по таймауту
+   * на проде 2026-09-06 (B202, B204).
+   */
   public async syncAll(query?: string): Promise<SourceSyncOutcome[]> {
     const enabled = Array.from(this.sources.values()).filter((s) => s.enabled);
-    return Promise.all(enabled.map((s) => this.syncSource(s.id, query)));
+    return mapWithConcurrency(enabled, SYNC_BATCH_LIMIT, (source) =>
+      this.syncSource(source.id, query),
+    );
   }
 
   public recluster(): void {

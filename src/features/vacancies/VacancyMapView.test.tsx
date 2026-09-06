@@ -78,3 +78,27 @@ describe("B203: VacancyMapView Component", () => {
     expect(html).toContain("UnknownLocationCo");
   });
 });
+
+describe("подписи городов не наезжают друг на друга", () => {
+  it("рядом стоящие хабы оставляют подпись самому крупному, но точки рисуют обе", () => {
+    // Амстердам и Гаага на карте продукта попадают в одну и ту же область в
+    // несколько пикселей: 2026-09-06 на проде подписи европейских хабов легли
+    // друг на друга и перестали читаться.
+    const html = renderToStaticMarkup(
+      <VacancyMapView
+        items={[
+          makeItem("v-1", "Alpha", "Amsterdam", { lat: 52.37, lng: 4.9 }),
+          makeItem("v-2", "Alpha", "Amsterdam", { lat: 52.37, lng: 4.9 }),
+          makeItem("v-3", "Beta", "Haarlem", { lat: 52.38, lng: 4.63 }),
+        ]}
+        selectedCity={undefined}
+        onSelectCity={() => {}}
+      />,
+    );
+
+    expect(html).toContain("Amsterdam (2)");
+    expect(html).not.toContain("Haarlem (1)");
+    // Точка соседнего хаба остаётся: он есть на карте и кликабелен.
+    expect(html).toContain("Город Haarlem: 1 вакансий");
+  });
+});

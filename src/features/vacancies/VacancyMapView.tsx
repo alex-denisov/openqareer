@@ -129,13 +129,23 @@ function MapHeader({
   );
 }
 
+/**
+ * Ширина и высота места, которое занимает подпись хаба. Подписи соседних
+ * городов на проде 2026-09-06 легли друг на друга и перестали читаться, поэтому
+ * подпись достаётся более крупному хабу, а сосед остаётся точкой (B203).
+ */
+const LABEL_HALF_WIDTH = 46;
+const LABEL_HEIGHT = 16;
+
 function MapPinNode({
   city,
   isSelected,
+  showLabel,
   onClick,
 }: {
   city: CityFacet;
   isSelected: boolean;
+  showLabel: boolean;
   onClick: () => void;
 }) {
   if (!city.coordinates) return null;
@@ -153,11 +163,37 @@ function MapPinNode({
     >
       <circle cx={x} cy={y} r={isSelected ? 16 : 10} className="career-map-pulse" />
       <circle cx={x} cy={y} r={isSelected ? 6 : 4} className="career-map-dot" />
-      <text x={x} y={y - 12} textAnchor="middle" className="career-map-label">
-        {city.city} ({city.count})
-      </text>
+      {showLabel ? (
+        <text x={x} y={y - 12} textAnchor="middle" className="career-map-label">
+          {city.city} ({city.count})
+        </text>
+      ) : null}
     </g>
   );
+}
+
+/**
+ * Кто из хабов получает подпись. Идём от самого крупного: подпись рисуется,
+ * если её место ещё свободно. Выбранный город подписывается всегда — кандидат
+ * должен видеть, что именно он открыл.
+ */
+function withReadableLabels(
+  cities: readonly CityFacet[],
+  selectedCity?: string,
+): { city: CityFacet; showLabel: boolean }[] {
+  const taken: { x: number; y: number }[] = [];
+  return [...cities]
+    .sort((left, right) => right.count - left.count)
+    .map((city) => {
+      if (!city.coordinates) return { city, showLabel: false };
+      const { x, y } = projectCoords(city.coordinates.lat, city.coordinates.lng);
+      const collides = taken.some(
+        (spot) => Math.abs(spot.x - x) < LABEL_HALF_WIDTH && Math.abs(spot.y - y) < LABEL_HEIGHT,
+      );
+      const showLabel = city.city === selectedCity || !collides;
+      if (showLabel) taken.push({ x, y });
+      return { city, showLabel };
+    });
 }
 
 function MapSvg({
@@ -182,11 +218,12 @@ function MapSvg({
         </pattern>
       </defs>
       <rect width="900" height="480" fill="url(#grid)" className="career-map-bg" />
-      {cities.map((c) => (
+      {withReadableLabels(cities, selectedCity).map(({ city: c, showLabel }) => (
         <MapPinNode
           key={c.city}
           city={c}
           isSelected={selectedCity === c.city}
+          showLabel={showLabel}
           onClick={() => onSelectCity(selectedCity === c.city ? undefined : c.city)}
         />
       ))}

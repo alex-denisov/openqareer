@@ -1,5 +1,6 @@
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import type { VacancyCompanyFeatures, VacancyCluster } from '../domain/unifiedVacancy';
+import { normalizeCityLabel } from '../../shared/cityLabel';
 import { getCompanyRegistry } from '../domain/companyRegistry';
 import { lookupLocationCoordinates } from '../domain/geoCoordinates';
 import type { Company } from '../domain/company';
@@ -46,7 +47,9 @@ function extractLocationCoordinates(
 
   if (canonicalLocation) {
     const parts = canonicalLocation.split(',').map((p) => p.trim());
-    city = parts[0] || undefined;
+    // «US - San Francisco» и «San Francisco» — один город, а
+    // «Germany (Remote) ; Ireland (Remote) ; …» — вовсе не город (B203).
+    city = normalizeCityLabel(parts[0]);
     country = parts[1] || undefined;
     coordinates = lookupLocationCoordinates(city, country);
   }
@@ -55,10 +58,10 @@ function extractLocationCoordinates(
     const locWithCoords = company.locations.find((l) => l.coordinates);
     if (locWithCoords) {
       coordinates = locWithCoords.coordinates;
-      if (!city) city = locWithCoords.city;
+      if (!city) city = normalizeCityLabel(locWithCoords.city);
       if (!country) country = locWithCoords.country;
     } else {
-      if (!city) city = company.locations[0].city;
+      if (!city) city = normalizeCityLabel(company.locations[0].city);
       if (!country) country = company.locations[0].country;
     }
   }

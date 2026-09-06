@@ -183,3 +183,37 @@ describe("B203: Vacancy Facets and Map/Feature Projections", () => {
     });
   });
 });
+
+describe("город на карте считается один раз", () => {
+  it("сводит «US - San Francisco» и «San Francisco» в один хаб", () => {
+    const items = [
+      makeItem("c-1", "Alpha", {
+        location: "San Francisco, United States",
+        features: { city: "San Francisco", coordinates: { lat: 37.7749, lng: -122.4194 } },
+      }),
+      makeItem("c-2", "Beta", {
+        location: "US - San Francisco, United States",
+        features: { city: "US - San Francisco", coordinates: { lat: 37.7749, lng: -122.4194 } },
+      }),
+    ];
+
+    const cities = calculateVacancyFacets(items).cities;
+    const sf = cities.filter((c) => c.city.toLowerCase().includes("san francisco"));
+    expect(sf).toHaveLength(1);
+    expect(sf[0]?.count).toBe(2);
+  });
+
+  it("перечисление стран на карту не попадает", () => {
+    const items = [
+      makeItem("c-3", "Gamma", {
+        location: "Germany (Remote) ; Ireland (Remote) ; Portugal (Remote)",
+        features: {
+          city: "Germany (Remote) ; Ireland (Remote) ; Portugal (Remote)",
+          coordinates: { lat: 51.1657, lng: 10.4515 },
+        },
+      }),
+    ];
+
+    expect(calculateVacancyFacets(items).cities).toHaveLength(0);
+  });
+});

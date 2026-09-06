@@ -1,4 +1,5 @@
 import type { MatchedVacancyItem, VacancyCompanyFeatures } from "../coach/cabinetTypes";
+import { normalizeCityLabel } from "../../../shared/cityLabel";
 
 export interface FacetMetric {
   readonly count: number;
@@ -103,7 +104,8 @@ function aggregateCities(items: readonly MatchedVacancyItem[]) {
   for (const item of items) {
     const feat = item.cluster.companyFeatures;
     if (!hasCoordinates(feat)) continue;
-    const city = feat.city?.trim() || extractCityFromLocation(item.cluster.canonicalLocation);
+    const city =
+      normalizeCityLabel(feat.city) ?? extractCityFromLocation(item.cluster.canonicalLocation);
     if (!city) continue;
 
     const existing = map.get(city) ?? {
@@ -132,7 +134,7 @@ function aggregateCities(items: readonly MatchedVacancyItem[]) {
 function extractCityFromLocation(location?: string): string | undefined {
   if (!location) return undefined;
   const parts = location.split(",").map((s) => s.trim());
-  return parts[0] || undefined;
+  return normalizeCityLabel(parts[0]);
 }
 
 export function calculateVacancyFacets(items: readonly MatchedVacancyItem[]): VacancyFacetCounts {

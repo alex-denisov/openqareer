@@ -9,6 +9,14 @@ import type { SourceFetcher } from './multiSourceVacancyEngine';
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
 
+/**
+ * Доска работодателя отдаёт весь список целиком: у Ashby это до 10 МБ (замер
+ * `airwallex`, 2026-09-05), у Greenhouse с текстом вакансий — до 1,7 МБ. Пока
+ * потолок был 15 с, волна больших досок упиралась в него и записывала живым
+ * площадкам отказ «aborted due to timeout» (прод 2026-09-06, 92 источника).
+ */
+const JSON_SOURCE_TIMEOUT_MS = 45_000;
+
 const FETCH_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)',
 } as const;
@@ -97,7 +105,7 @@ async function fetchJsonApi(
   const url = withQuery(source, options?.query);
   const res = await fetch(url, {
     headers: { ...FETCH_HEADERS, Accept: 'application/json' },
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
   const observedAt = new Date().toISOString();
