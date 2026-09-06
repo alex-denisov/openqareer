@@ -1,5 +1,6 @@
 import type { MatchedVacancyItem, VacancyCompanyFeatures } from "../coach/cabinetTypes";
 import { normalizeCityLabel } from "../../../shared/cityLabel";
+import { isCountryName } from "../../../shared/placeNames";
 
 export interface FacetMetric {
   readonly count: number;
@@ -106,7 +107,9 @@ function aggregateCities(items: readonly MatchedVacancyItem[]) {
     if (!hasCoordinates(feat)) continue;
     const city =
       normalizeCityLabel(feat.city) ?? extractCityFromLocation(item.cluster.canonicalLocation);
-    if (!city) continue;
+    // Страна — не городской хаб: «USA 12» в списке городов раздувает счёт и
+    // обещает точку там, где её нет (B203, прод 2026-09-06).
+    if (!city || isCountryName(city)) continue;
 
     const existing = map.get(city) ?? {
       city,

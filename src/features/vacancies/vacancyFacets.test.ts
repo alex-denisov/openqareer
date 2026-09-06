@@ -217,3 +217,19 @@ describe("город на карте считается один раз", () => 
     expect(calculateVacancyFacets(items).cities).toHaveLength(0);
   });
 });
+
+describe("страна и способ работы в списке городов не появляются", () => {
+  it("«USA» и «EMEA» городами-хабами не становятся", () => {
+    const items = [
+      makeItem("c-10", "Delta", { location: "USA", features: { city: "USA" } }),
+      makeItem("c-11", "Epsilon", { location: "EMEA", features: { city: "EMEA" } }),
+      makeItem("c-12", "Zeta", {
+        location: "Berlin, Germany",
+        features: { city: "Berlin", coordinates: { lat: 52.52, lng: 13.405 } },
+      }),
+    ];
+
+    const cities = calculateVacancyFacets(items).cities.map((c) => c.city);
+    expect(cities).toEqual(["Berlin"]);
+  });
+});

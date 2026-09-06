@@ -1,3 +1,4 @@
+import { isCountryName } from '../../shared/placeNames';
 export interface GeoPoint {
   readonly lat: number;
   readonly lng: number;
@@ -144,100 +145,15 @@ function normalizeGeoKey(text?: string): string {
  * координаты остаются в `COUNTRY_COORDINATES` и приписываются лишь там, где они
  * действительно измерены, а не выдуманы ради точки на карте.
  */
-const COUNTRY_NAMES: ReadonlySet<string> = new Set([
-  ...Object.keys(COUNTRY_COORDINATES),
-  'italy',
-  'италия',
-  'ireland',
-  'ирландия',
-  'estonia',
-  'эстония',
-  'latvia',
-  'латвия',
-  'lithuania',
-  'литва',
-  'singapore',
-  'сингапур',
-  'canada',
-  'канада',
-  'india',
-  'индия',
-  'israel',
-  'израиль',
-  'turkey',
-  'турция',
-  'sweden',
-  'швеция',
-  'norway',
-  'норвегия',
-  'denmark',
-  'дания',
-  'finland',
-  'финляндия',
-  'switzerland',
-  'швейцария',
-  'austria',
-  'австрия',
-  'belgium',
-  'бельгия',
-  'czechia',
-  'чехия',
-  'romania',
-  'румыния',
-  'bulgaria',
-  'болгария',
-  'hungary',
-  'венгрия',
-  'greece',
-  'греция',
-  'ukraine',
-  'украина',
-  'mexico',
-  'мексика',
-  'brazil',
-  'бразилия',
-  'argentina',
-  'аргентина',
-  'chile',
-  'чили',
-  'australia',
-  'австралия',
-  'japan',
-  'япония',
-  'china',
-  'китай',
-  'malaysia',
-  'малайзия',
-  'indonesia',
-  'индонезия',
-  'thailand',
-  'таиланд',
-  'vietnam',
-  'вьетнам',
-  'philippines',
-  'филиппины',
-  'unitedstates',
-  'unitedkingdom',
-  'unitedarabemirates',
-  'россия',
-  'russia',
-  'беларусь',
-  'belarus',
-  'узбекистан',
-  'uzbekistan',
-  'азербайджан',
-  'azerbaijan',
-]);
-
 /**
- * Название страны, а не города. Площадки кладут в поле места и то и другое
- * («Alma · Italy»), а карта считает хабы по городам: страна в этом списке
- * раздувает счёт хабов и обещает точку там, где её нет (B203).
+ * Название страны, а не города. Список имён общий с экраном
+ * (`shared/placeNames.ts`): координаты живут здесь, имена — там, чтобы сервер
+ * и карта считали одинаково (B203).
  */
 export function isKnownCountry(label?: string): boolean {
-  const key = normalizeGeoKey(label);
-  return key.length > 0 && COUNTRY_NAMES.has(key);
+  return isCountryName(label);
 }
+
 
 export function lookupLocationCoordinates(
   city?: string,

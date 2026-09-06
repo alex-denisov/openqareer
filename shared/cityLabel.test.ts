@@ -57,3 +57,18 @@ describe('название города на карте', () => {
     );
   });
 });
+
+describe('способ работы и надрегион местом не считаются', () => {
+  it('снимает форму работы перед местом', () => {
+    expect(normalizeCityLabel('Remote - Texas')).toBe('Texas');
+    expect(normalizeCityLabel('Hybrid Berlin')).toBe('Berlin');
+  });
+
+  it('надрегион и способ работы городом не становятся', () => {
+    expect(normalizeCityLabel('EMEA')).toBeUndefined();
+    expect(normalizeCityLabel('Hybrid')).toBeUndefined();
+    expect(normalizeCityLabel('Home Office')).toBeUndefined();
+    expect(normalizeCityLabel('Distributed')).toBeUndefined();
+    expect(normalizeCityLabel('Remote US')).toBe('US');
+  });
+});

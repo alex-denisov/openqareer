@@ -8,6 +8,7 @@
  *
  * Правило одно на сервер и на экран, поэтому живёт в общем слое.
  */
+import { isRegionLabel } from './placeNames';
 
 /** Перечисление мест, а не место: такую строку картой показывать нельзя. */
 const LIST_SEPARATORS = /[;|/]|\s+·\s+/;
@@ -22,18 +23,8 @@ const COUNTRY_PREFIX = /^\p{L}{2}[\p{L}\s.]{0,18}?\s+[-–—]\s+(?=\p{L})/u;
 /** `(Remote)`, `(Hybrid)`, `(On-site)` — формат работы, а не часть названия. */
 const MODE_SUFFIX = /\s*\((?:remote|hybrid|on-?site|удал[её]нно|гибрид)\)\s*$/iu;
 
-/** Строки, которые местом на карте не являются вовсе. */
-const NOT_A_PLACE = new Set([
-  'remote',
-  'remote work',
-  'anywhere',
-  'worldwide',
-  'global',
-  'удалённо',
-  'удаленно',
-  'везде',
-  'по всему миру',
-]);
+/** Форма работы перед местом: «Remote - Texas», «Hybrid Berlin». */
+const MODE_PREFIX = /^(?:remote|hybrid|on-?site|удал[её]нно|гибрид)\s+(?=\p{L})/iu;
 
 export function normalizeCityLabel(raw?: string): string | undefined {
   if (!raw) return undefined;
@@ -41,11 +32,13 @@ export function normalizeCityLabel(raw?: string): string | undefined {
   if (!trimmed) return undefined;
   if (LIST_SEPARATORS.test(trimmed)) return undefined;
 
-  const withoutMode = trimmed.replace(MODE_SUFFIX, '').trim();
+  const withoutMode = trimmed.replace(MODE_SUFFIX, '').replace(MODE_PREFIX, '').trim();
   const withoutPrefix = withoutMode.replace(COUNTRY_PREFIX, '').trim();
   const label = withoutPrefix || withoutMode;
 
   if (!label) return undefined;
-  if (NOT_A_PLACE.has(label.toLowerCase())) return undefined;
+  // «Remote», «Hybrid», «EMEA», «Home Office» — это не города, а способ работы
+  // или надрегион: на карте у них нет точки, и хабом они быть не могут (B203).
+  if (isRegionLabel(label)) return undefined;
   return label;
 }
