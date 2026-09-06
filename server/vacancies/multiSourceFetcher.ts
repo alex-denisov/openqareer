@@ -5,6 +5,7 @@ import type { HhVacancySample } from '../connectors/hhVacancySearch';
 import type { VacancySample } from '../domain/vacancy';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import type { SourceFetcher } from './multiSourceVacancyEngine';
+import type { RobotsFetcher } from './robotsPolicyLoader';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -155,6 +156,19 @@ async function fetchRssFeed(
     throw reason instanceof Error ? reason : new Error('vacancy_source_unreachable');
   }
 }
+
+/**
+ * Читает `robots.txt` площадки. Отдельный короткий запрос: правило обхода
+ * нужно до самого обхода, и ждать его дольше нескольких секунд бессмысленно —
+ * недоступное правило не запрещает и не разрешает (B204).
+ */
+export const fetchRobotsTxt: RobotsFetcher = async (robotsUrl) => {
+  const res = await fetch(robotsUrl, {
+    headers: { ...FETCH_HEADERS, Accept: 'text/plain' },
+    signal: AbortSignal.timeout(8_000),
+  });
+  return { status: res.status, body: res.ok ? await res.text() : null };
+};
 
 export function buildMultiSourceFetcher(hh: HhSearch, remotive: RemotiveSearch): SourceFetcher {
   return async (source, options) => {

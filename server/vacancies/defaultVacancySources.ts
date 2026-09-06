@@ -191,6 +191,12 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
       note: 'whole public feed; ?search= is ignored by the provider',
     },
     { items: 18, observedAt: '2026-09-05', route: 'ru-owner' },
+    {
+      items: 0,
+      observedAt: '2026-09-06',
+      route: 'eu-prod',
+      note: 'robots.txt площадки читан с прод-VM: User-agent: * → Disallow: /api — обход запрещён словами (B204)',
+    },
   ],
   // Замерено 2026-09-05 с прод-VM: подсчёт постов в публичном веб-виде канала
   // (`tgme_widget_message_wrap`). Телеграм отвечает EU-маршруту, хотя домашний
@@ -487,8 +493,10 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     type: 'remotive',
     accessClass: 'api',
     market: 'Удалённо, мир',
-    addressStatus: 'live',
-    enabled: true,
+    addressStatus: 'robots_forbidden',
+    enabled: false,
+    disabledReason:
+      'robots.txt Remotive запрещает /api именно тому агенту, которым ходит продукт (замер с прод-VM 2026-09-06: User-agent: * → Disallow: /api). Публичный API у площадки задокументирован, но её же robots.txt говорит «не ходи», и слово площадки сильнее нашего удобства — как у ТрудВсем в B199. Возвращается по письменному разрешению площадки.',
     targetUrl: 'https://remotive.com/api/remote-jobs',
     refreshIntervalMinutes: 120,
     itemsFoundTotal: 0,

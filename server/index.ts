@@ -21,7 +21,8 @@ import { VacancyIntelligenceService } from './vacancies/vacancyIntelligenceServi
 import { CareerCommandConnectorRouter } from './connectors/careerCommandConnectorRouter';
 import { HhConnector } from './connectors/hh/hhConnector';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
-import { buildMultiSourceFetcher } from './vacancies/multiSourceFetcher';
+import { RobotsPolicyLoader } from './vacancies/robotsPolicyLoader';
+import { buildMultiSourceFetcher, fetchRobotsTxt } from './vacancies/multiSourceFetcher';
 import { SqliteVacancyPoolStore } from './vacancies/sqliteVacancyPoolStore';
 import { SqliteRoleNamingCache } from './data/sqliteRoleNamingCache';
 
@@ -115,6 +116,9 @@ const roleNamingCache = new SqliteRoleNamingCache({
 const multiSourceEngine = new MultiSourceVacancyEngine({
   fetcher: buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies),
   pool: vacancyPoolStore,
+  // Право обхода спрашивается у самой площадки, а не берётся из записи,
+  // сделанной когда-то руками; `Crawl-delay` тоже приходит оттуда (B204).
+  robots: new RobotsPolicyLoader({ fetchRobots: fetchRobotsTxt }),
 });
 // The pool the previous process filled is served immediately, so a restart no
 // longer empties «Возможности» until the scheduler's next run (B164).

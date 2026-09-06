@@ -8,6 +8,7 @@ import type {
 import { calculateSourceAuthenticity, clusterVacancies } from './vacancyDeduplicator';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import { mapWithConcurrency } from './boundedConcurrency';
+import type { RobotsPolicyLoader } from './robotsPolicyLoader';
 import {
   censusOfReading,
   describeSourceHealth,
@@ -154,10 +155,18 @@ export class MultiSourceVacancyEngine {
   /** Вежливый диспетчер опроса: отступ, retry-after, бюджет и адаптация (B204). */
   private readonly scheduler: PoliteScheduler = new PoliteScheduler();
 
+  /**
+   * Кто спрашивает у площадки её `robots.txt`. Без него право берётся из
+   * реестра — из замера, сделанного когда-то руками; с ним площадка называет
+   * своё правило сама (B204).
+   */
+  private readonly robots?: RobotsPolicyLoader;
+
   constructor(options?: {
     sources?: VacancySourceConfig[];
     fetcher?: SourceFetcher;
     pool?: VacancyPoolStore;
+    robots?: RobotsPolicyLoader;
   }) {
     const initial = options?.sources ?? DEFAULT_VACANCY_SOURCES;
     for (const src of initial) {
@@ -167,6 +176,7 @@ export class MultiSourceVacancyEngine {
     }
     this.fetcher = options?.fetcher;
     this.pool = options?.pool;
+    this.robots = options?.robots;
   }
 
   private configureSourcePoliteness(source: VacancySourceConfig): void {
@@ -367,6 +377,35 @@ export class MultiSourceVacancyEngine {
     return started;
   }
 
+  /** Один успешный опрос: улов, перепись и запись в пул. */
+  private async readSource(
+    source: VacancySourceConfig,
+    query: string | undefined,
+    nowMs: number,
+  ): Promise<SourceSyncOutcome> {
+    const fetched: UnifiedVacancy[] = await this.fetcher!(source, query ? { query } : undefined);
+
+    // Перепись улова считается по тому, что площадка отдала, — до фильтра
+    // свежести. Пул хранит только 30 дней, поэтому по нему доля «свежее 180
+    // дней» всегда была бы 100 %: тавтология вместо меры (B200).
+    this.observe(source.id, {
+      succeeded: true,
+      census: censusOfReading(fetched, nowMs),
+      atMs: nowMs,
+    });
+
+    const newItemsCount = fetched.filter((v) => !this.rawVacancies.has(v.id)).length;
+    this.scheduler.recordAttempt(source.id, {
+      success: true,
+      statusCode: 200,
+      newItemsCount,
+      nowMs,
+    });
+
+    const kept = this.acceptReading(source, fetched, nowMs);
+    return { sourceId: source.id, status: 'healthy', fetched: fetched.length, kept };
+  }
+
   private async runSync(
     sourceId: string,
     query: string | undefined,
@@ -387,30 +426,13 @@ export class MultiSourceVacancyEngine {
       if (!this.fetcher) {
         throw new Error('vacancy_source_transport_unavailable');
       }
-      const fetched: UnifiedVacancy[] = await this.fetcher(
-        source,
-        query ? { query } : undefined,
-      );
-
-      // Перепись улова считается по тому, что площадка отдала, — до фильтра
-      // свежести. Пул хранит только 30 дней, поэтому по нему доля «свежее 180
-      // дней» всегда была бы 100 %: тавтология вместо меры (B200).
-      this.observe(source.id, {
-        succeeded: true,
-        census: censusOfReading(fetched, nowMs),
-        atMs: nowMs,
-      });
-
-      const newItemsCount = fetched.filter((v) => !this.rawVacancies.has(v.id)).length;
-      this.scheduler.recordAttempt(source.id, {
-        success: true,
-        statusCode: 200,
-        newItemsCount,
-        nowMs,
-      });
-
-      const kept = this.acceptReading(source, fetched, nowMs);
-      return { sourceId, status: 'healthy', fetched: fetched.length, kept };
+      const permission = await this.robotsPermission(source, nowMs);
+      if (permission.disallowed) {
+        // Запрет словами — не поломка: площадка сказала «не ходи», и продукт
+        // не ходит. Красным отказом это выглядеть не должно (B204).
+        return { sourceId, status: 'disabled', fetched: 0, kept: 0, message: permission.reason };
+      }
+      return await this.readSource(source, query, nowMs);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       // Провал транспорта — не пустой улов: про содержимое площадки он не
@@ -519,6 +541,24 @@ export class MultiSourceVacancyEngine {
       .sort((left, right) => lastSyncMs(left) - lastSyncMs(right))
       .slice(0, SYNC_BATCH_LIMIT);
     return Promise.all(batch.map((source) => this.syncSource(source.id, undefined, nowMs)));
+  }
+
+  /**
+   * Спрашивает у площадки её собственное правило и подчиняется ему. Запрет
+   * словами — не отговорка расписания, а отказ от запроса: продукт не ходит
+   * туда, куда ему сказали не ходить (B204).
+   */
+  private async robotsPermission(
+    source: VacancySourceConfig,
+    nowMs: number,
+  ): Promise<{ disallowed: boolean; reason?: string }> {
+    if (!this.robots) return { disallowed: false };
+    const policy = await this.robots.policyFor(source.targetUrl, nowMs);
+    if (policy.verdict === 'unconfirmed') return { disallowed: false };
+    this.scheduler.setRobotsPolicy(source.id, policy);
+    return policy.verdict === 'disallowed'
+      ? { disallowed: true, reason: 'robots_txt_disallows_this_address' }
+      : { disallowed: false };
   }
 
   private isDue(source: VacancySourceConfig, nowMs: number): boolean {
