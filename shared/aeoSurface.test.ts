@@ -45,6 +45,17 @@ describe('витрина для ИИ-поисковиков (B209)', () => {
     expect(buildLlmsFullTxt()).not.toMatch(UNVERIFIABLE);
   });
 
+  /**
+   * Витрина обещает перечислить адреса продукта. Публичный каталог вакансий
+   * (B209, срез 2a) — самая большая его часть, и умолчать о ней значит скрыть
+   * от ИИ-ответчика ровно то, ради чего он приходит.
+   */
+  it('называет публичный каталог вакансий', () => {
+    expect(AEO_PUBLISHED_PATHS).toContain('/vacancies');
+    expect(buildLlmsTxt()).toContain('/vacancies');
+    expect(buildLlmsFullTxt()).toContain('/vacancies');
+  });
+
   it('называет границы продукта, а не только возможности', () => {
     const full = buildLlmsFullTxt();
     expect(full).toContain('Чего продукт не делает');
