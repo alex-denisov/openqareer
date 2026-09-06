@@ -2,6 +2,8 @@ import React from 'react';
 import { BrandMark } from '../brand/BrandMark';
 import { SiteLink } from '../site/SiteLink';
 import { LEGAL_CONTENT, type LegalBlock, type LegalSection } from './legalContent';
+import { legalStructuredData } from './legalStructuredData';
+import { SITE_ORIGIN } from '../../../shared/aeoSurface';
 import {
   LEGAL_DOCS,
   LEGAL_PACK_PUBLISHED_AT,
@@ -11,7 +13,6 @@ import {
   type LegalDocSlug,
 } from '../../../shared/legalRegistry';
 
-const SITE_ORIGIN = 'https://openqareer.com';
 
 export function legalDocumentTitle(slug: LegalDocSlug): string {
   return `${legalDocMeta(slug).title} · OpenQareer`;
@@ -38,7 +39,7 @@ export function LegalDocumentPage({
     <div className="site-layout legal-layout">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData(slug)) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(legalStructuredData(slug)) }}
       />
       <LegalPageHeader onNavigate={onNavigate} />
       <main id="main-content" className="legal-main">
@@ -148,21 +149,6 @@ function LegalBlockView({ block }: { block: LegalBlock }) {
       </table>
     </div>
   );
-}
-
-function structuredData(slug: LegalDocSlug) {
-  const meta = legalDocMeta(slug);
-  return {
-    '@context': 'https://schema.org',
-    '@type': 'WebPage',
-    name: meta.title,
-    description: meta.description,
-    url: `${SITE_ORIGIN}${legalPath(slug)}`,
-    inLanguage: 'ru-RU',
-    datePublished: LEGAL_PACK_PUBLISHED_AT,
-    version: LEGAL_PACK_VERSION,
-    isPartOf: { '@type': 'WebSite', name: 'OpenQareer', url: SITE_ORIGIN },
-  };
 }
 
 const MONTHS = [

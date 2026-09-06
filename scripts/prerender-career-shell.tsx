@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { AdminConsole } from '../src/features/admin/AdminConsole';
 import { LandingPage } from '../src/features/site/LandingPage';
 import { LegalDocumentPage, legalDocumentTitle } from '../src/features/legal/LegalDocumentPage';
+import { buildLlmsFullTxt, buildLlmsTxt } from '../shared/aeoSurface';
+import { publicPathViolation } from '../shared/seoSlugPolicy';
 import {
   LEGAL_DOCS,
   LEGAL_PACK_PUBLISHED_AT,
@@ -60,6 +62,23 @@ export function buildSitemap(): string {
     )
     .join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`;
+}
+
+/** Адреса из готовой карты сайта — вход для сторожа политики адресов. */
+export function sitemapUrls(sitemap: string): readonly string[] {
+  return Array.from(sitemap.matchAll(/<loc>([^<]+)<\/loc>/gu), (match) => match[1] as string);
+}
+
+/**
+ * B209 — правило владельца «только естественный английский URL, транслит
+ * запрещён» держит сборка. Нарушение роняет её здесь, а не всплывает через
+ * месяц в поисковой выдаче.
+ */
+export function assertSitemapUrlPolicy(urls: readonly string[]): void {
+  for (const url of urls) {
+    const violation = publicPathViolation(new URL(url).pathname);
+    if (violation) throw new Error(`политика адресов нарушена: ${violation}`);
+  }
 }
 
 const EMPTY_ROOT = '<div id="root"></div>';
@@ -122,7 +141,13 @@ export async function prerenderShells(
       ),
     );
   }
-  await writeFile(`${distDirectory}/sitemap.xml`, buildSitemap());
+  const sitemap = buildSitemap();
+  assertSitemapUrlPolicy(sitemapUrls(sitemap));
+  await writeFile(`${distDirectory}/sitemap.xml`, sitemap);
+  // Витрина для ИИ-поисковиков собирается из того же источника, что и продукт,
+  // поэтому расхождение с ним невозможно (B209).
+  await writeFile(`${distDirectory}/llms.txt`, buildLlmsTxt());
+  await writeFile(`${distDirectory}/llms-full.txt`, buildLlmsFullTxt());
 }
 
 const directPath = process.argv[1];

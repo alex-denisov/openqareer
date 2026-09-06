@@ -25,6 +25,7 @@ export default defineConfig({
         'src/features/next-action/careerActionPolicy.ts',
         'src/features/opportunity/opportunityEngine.ts',
         'src/features/cabinet/routePremises.ts',
+        'src/features/legal/legalStructuredData.ts',
         'server/connectors/vacancyRelevance.ts',
         'server/vacancies/jsonSourceAdapters.ts',
         'server/vacancies/defaultVacancySources.ts',

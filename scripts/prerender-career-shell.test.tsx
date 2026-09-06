@@ -3,7 +3,14 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { prerenderShells } from './prerender-career-shell';
+import { buildLlmsFullTxt, buildLlmsTxt } from '../shared/aeoSurface';
+import { publicPathViolation } from '../shared/seoSlugPolicy';
+import {
+  assertSitemapUrlPolicy,
+  buildSitemap,
+  prerenderShells,
+  sitemapUrls,
+} from './prerender-career-shell';
 
 const temporaryDirectories: string[] = [];
 
@@ -109,5 +116,38 @@ describe('production career shell prerender', () => {
         '<script type="module" src="/assets/app.js"></script>',
       );
     }
+  });
+
+  /**
+   * B209 — витрина для ИИ-поисковиков собирается на сборке из того же
+   * источника, что и правовой пакет, а не лежит ручным файлом в `public/`.
+   */
+  it('publishes the generated AEO surface next to the sitemap', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'openqareer-prerender-'));
+    temporaryDirectories.push(directory);
+    const indexPath = join(directory, 'index.html');
+    const adminPath = join(directory, 'admin.html');
+    writeFileSync(
+      indexPath,
+      '<!doctype html><html><body><div id="root"></div></body></html>',
+    );
+
+    await prerenderShells(indexPath, adminPath);
+
+    expect(readFileSync(join(directory, 'llms.txt'), 'utf8')).toBe(buildLlmsTxt());
+    expect(readFileSync(join(directory, 'llms-full.txt'), 'utf8')).toBe(buildLlmsFullTxt());
+  });
+
+  /**
+   * B209 — правило владельца про адреса без транслита проверяет сборка, а не
+   * память агента: страница с транслитом в пути не доедет до продакшена.
+   */
+  it('refuses to publish a sitemap URL that breaks the owner\'s URL policy', () => {
+    for (const url of sitemapUrls(buildSitemap())) {
+      expect(publicPathViolation(new URL(url).pathname)).toBeNull();
+    }
+    expect(() => assertSitemapUrlPolicy(['https://openqareer.com/vakansii/moskva'])).toThrow(
+      /vakansii/u,
+    );
   });
 });

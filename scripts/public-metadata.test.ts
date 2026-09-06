@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LANDING_TITLE } from '../src/features/site/siteTitles';
+import { buildLlmsTxt } from '../shared/aeoSurface';
 
 describe('public discovery metadata', () => {
   it('describes the candidate product truthfully in the entry document', () => {
@@ -32,7 +33,9 @@ describe('public discovery metadata', () => {
 
   it('publishes explicit crawler and LLM discovery files', () => {
     const robots = readFileSync('public/robots.txt', 'utf8');
-    const llms = readFileSync('public/llms.txt', 'utf8');
+    // B209 — витрина больше не лежит ручным файлом: её собирает предрендер из
+    // того же источника, что и продукт, поэтому проверяем генератор.
+    const llms = buildLlmsTxt();
     expect(robots).toMatch(/^User-agent: \*\nAllow: \/\n/u);
     // B173: the published legal pack has to be discoverable, so robots names
     // the sitemap that lists it.
