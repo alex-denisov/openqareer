@@ -198,4 +198,64 @@ describe('работодатель берётся из записи, а не и�
     expect(job.title).toBe('Data Analyst at Scale');
     expect(job.company).toBe('');
   });
+
+  it('не принимает адрес почты за имя работодателя', () => {
+    const [job] = parseRssJobFeed(
+      feed(`<item>
+        <title>Backend Engineer</title>
+        <link>https://example.com/jobs/3</link>
+        <description>${description}</description>
+        <author>jobs@example.com</author>
+      </item>`),
+      { sourceId: 'src-any', sourceUrl: 'https://example.com/rss', observedAt: '2026-09-06T00:00:00.000Z' },
+    );
+    expect(job.company).toBe('');
+  });
+
+  it('читает простой тег company без пространства имён', () => {
+    const [job] = parseRssJobFeed(
+      feed(`<item>
+        <title>Backend Engineer</title>
+        <link>https://example.com/jobs/4</link>
+        <description>${description}</description>
+        <company>Acme</company>
+      </item>`),
+      { sourceId: 'src-any', sourceUrl: 'https://example.com/rss', observedAt: '2026-09-06T00:00:00.000Z' },
+    );
+    expect(job.company).toBe('Acme');
+  });
+
+  it('оставляет заголовок целым, когда объявленная форма в нём не встретилась', () => {
+    const [colon] = parseRssJobFeed(
+      feed(`<item>
+        <title>Director of Privacy Legal</title>
+        <link>https://example.com/jobs/5</link>
+        <description>${description}</description>
+      </item>`),
+      {
+        sourceId: 'src-weworkremotely',
+        sourceUrl: 'https://example.com/rss',
+        observedAt: '2026-09-06T00:00:00.000Z',
+        employerShape: 'title-colon-prefix',
+      },
+    );
+    expect(colon.title).toBe('Director of Privacy Legal');
+    expect(colon.company).toBe('');
+
+    const [suffix] = parseRssJobFeed(
+      feed(`<item>
+        <title>Staff Systems Engineer</title>
+        <link>https://example.com/jobs/6</link>
+        <description>${description}</description>
+      </item>`),
+      {
+        sourceId: 'src-nodesk',
+        sourceUrl: 'https://example.com/rss',
+        observedAt: '2026-09-06T00:00:00.000Z',
+        employerShape: 'title-at-suffix',
+      },
+    );
+    expect(suffix.title).toBe('Staff Systems Engineer');
+    expect(suffix.company).toBe('');
+  });
 });

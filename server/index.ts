@@ -3,6 +3,7 @@ import { readServerConfig } from './config';
 import { buildCoachProvider } from './providers/coachProviderFactory';
 import { buildResumeStructurer } from './providers/resumeStructurer';
 import { buildRoleNamer } from './providers/roleNamer';
+import { HygienicCoachProvider } from './providers/hygienicCoachProvider';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
 import { CareerOrchestrator } from './orchestration/careerOrchestrator';
 import { CoachProviderRoleAgent } from './orchestration/coachProviderRoleAgent';
@@ -86,9 +87,13 @@ const syntheticDataProvider = new ResilientCoachProvider({
     fallbacks: config.syntheticFallbacks,
   }),
 });
-const routedProvider = new PrivacyAwareCoachProvider({
-  personalDataProvider,
-  syntheticDataProvider,
+const routedProvider = new HygienicCoachProvider({
+  // Ни один ответ модели не доходит до кандидата с невидимыми метками: чистка
+  // стоит там, где сходятся все ступени очереди моделей (B210).
+  inner: new PrivacyAwareCoachProvider({
+    personalDataProvider,
+    syntheticDataProvider,
+  }),
 });
 const coachProvider = new CareerOrchestrator({
   roleAgent: new CoachProviderRoleAgent({ provider: routedProvider }),

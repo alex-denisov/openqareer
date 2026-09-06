@@ -96,6 +96,8 @@ export default defineConfig({
         'server/connectors/hh/hhTestAccountEnvironment.ts',
         'server/connectors/hostedApplicationBrowser.ts',
         'server/connectors/jobPostingParser.ts',
+        'server/connectors/rssFeedParser.ts',
+        'server/providers/hygienicCoachProvider.ts',
         'server/connectors/oauthConnector.ts',
         'server/connectors/officialOAuthTransport.ts',
         'server/providers/openAICoachProvider.ts',
