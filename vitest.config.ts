@@ -36,6 +36,8 @@ export default defineConfig({
         'server/vacancies/multiSourceVacancyEngine.ts',
         'server/vacancies/sourceHealthVerdict.ts',
         'server/vacancies/adminVacancyPage.ts',
+        'server/vacancies/adminSourceSchedule.ts',
+        'src/features/admin/sourceScheduleLabel.ts',
         'server/vacancies/vacancyCatalogPage.ts',
         'server/vacancies/vacancyCatalogDocument.ts',
         'server/routes/vacancyCatalogRoutes.ts',

@@ -150,6 +150,22 @@ export interface AdminSourceHealth {
   };
 }
 
+/**
+ * Расписание площадки (B204): когда её опросят и почему не раньше. Сводка
+ * короткая — тот же маршрут уже рвался на 20 220 байтах (INC-032).
+ */
+export interface AdminSourceSchedule {
+  due: boolean;
+  nextInMin: number;
+  intervalMin: number;
+  crawlDelaySec: number | null;
+  robots: 'allowed' | 'disallowed' | 'unconfirmed';
+  hourly: number;
+  hourlyMax: number;
+  failures: number;
+  reason: string;
+}
+
 export interface AdminVacancySource {
   id: string;
   name: string;
@@ -164,6 +180,7 @@ export interface AdminVacancySource {
   itemsActiveTotal: number;
   /** Отсутствует у площадки, которую этот сервер ещё ни разу не опрашивал. */
   health?: AdminSourceHealth;
+  schedule?: AdminSourceSchedule;
 }
 
 export interface VacancySourceTestItem {

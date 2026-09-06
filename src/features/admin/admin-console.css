@@ -1234,3 +1234,19 @@
   display: inline-block;
 }
 
+/* Расписание площадки одной строкой: администратор видит, когда её опросят и
+   почему не раньше, не раскрывая карточку (B204). */
+.admin-source-schedule {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.admin-source-schedule .admin-note {
+  margin: 0;
+  flex-basis: 100%;
+}

@@ -11,11 +11,13 @@ import {
   testAdminVacancySource,
   type AdminCountedShare,
   type AdminSourceHealth,
+  type AdminSourceSchedule,
   type AdminVacancySource,
   type VacancySourceTestItem,
   type VacancySourceTestResult,
 } from './adminApi';
 import type { VacancySourcesState } from './vacancySourcesState';
+import { sourceScheduleLabel } from './sourceScheduleLabel';
 
 /**
  * B200 — живость и доверие площадки показываются как две разные шкалы.
@@ -81,6 +83,22 @@ function SourceHealthFacts({ health }: { health: AdminSourceHealth }) {
       </li>
       <li>Подлинность не измерена — ждёт дедупликатора B205</li>
     </ul>
+  );
+}
+
+/**
+ * B204 сделал расписание, но администратор его не видел: маршрут отдавал
+ * только живость и доверие, и «почему площадку не опрашивают» оставалось
+ * вопросом без ответа (названо в B204, показано 2026-09-07).
+ */
+function SourceSchedule({ schedule }: { schedule?: AdminSourceSchedule }) {
+  if (!schedule) return null;
+  return (
+    <p className="admin-source-schedule">
+      <span className={`admin-badge ${schedule.due ? 'is-ok' : 'is-muted'}`}>Расписание</span>
+      <span>{sourceScheduleLabel(schedule)}</span>
+      <span className="admin-note">{schedule.reason}</span>
+    </p>
   );
 }
 
@@ -263,6 +281,7 @@ function SourceCard({
 
       <p className="admin-source-url">{source.targetUrl}</p>
 
+      <SourceSchedule schedule={source.schedule} />
       <SourceHealthPanel health={source.health} />
 
       <div className="admin-source-stats">

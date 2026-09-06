@@ -8,6 +8,7 @@ import {
   setSessionCookie,
   withDeps,
 } from './helpers';
+import { toAdminSourceSchedule } from '../vacancies/adminSourceSchedule';
 import { buildAdminSourcePage } from '../vacancies/adminSourcePage';
 import { buildAdminVacancyPage } from '../vacancies/adminVacancyPage';
 import { queueFallbackDescriptors } from '../providers/providerQueue';
@@ -339,11 +340,18 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
     const health = new Map(
       deps.multiSourceEngine.getSourceHealthReport().map((item) => [item.sourceId, item]),
     );
+    // Расписание B204 админ не видел вовсе, и «почему площадку не опрашивают»
+    // оставалось вопросом без ответа. Сводка короткая намеренно: тот же
+    // маршрут уже рвался на 20 220 байтах (INC-032).
+    const scheduler = deps.multiSourceEngine.getScheduler();
     const sources = deps.multiSourceEngine.getSources().map((source) => {
       const measured = health.get(source.id);
+      const schedule = toAdminSourceSchedule(
+        scheduler.getScheduleInfo(source.id, Date.now(), source.refreshIntervalMinutes),
+      );
       return measured
-        ? { ...source, health: { liveness: measured.liveness, trust: measured.trust } }
-        : source;
+        ? { ...source, schedule, health: { liveness: measured.liveness, trust: measured.trust } }
+        : { ...source, schedule };
     });
     // Весь реестр со здоровьем — 29 788 байт, а прод рвёт тело на 20 220
     // (INC-032). Экран забирает список страницами внутри доказанного бюджета.
