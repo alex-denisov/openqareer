@@ -71,38 +71,63 @@ function cleanCompanyName(company: string): string {
     .trim();
 }
 
-function hasUrlOverlap(a: UnifiedVacancy, b: UnifiedVacancy): boolean {
-  const urlA = normalizeUrl(a.url);
-  const urlB = normalizeUrl(b.url);
-  if (urlA && urlB && urlA === urlB) return true;
 
-  const atsA = extractAtsLink(a.url) || extractAtsLink(a.description);
-  const atsB = extractAtsLink(b.url) || extractAtsLink(b.description);
-  return Boolean(atsA && atsB && atsA === atsB);
+/**
+ * Вакансия, разобранная один раз.
+ *
+ * Сведение сравнивает каждую вакансию с каждым уже собранным кластером, и до
+ * B202 это стоило недорого — пул был меньше двух тысяч. С досками
+ * работодателей пул вырос до 4836, и повторный разбор строк на каждое
+ * сравнение (токенизация названия и работодателя, нормализация ссылки) занял
+ * 45 секунд при запуске: прод не успевал ответить на проверку здоровья, и
+ * выкат откатывался. Правила сравнения те же — меняется только то, что разбор
+ * делается один раз на запись, а не миллионы раз на пару.
+ */
+interface PreparedVacancy {
+  readonly fingerprint: string;
+  readonly url: string;
+  readonly atsLink: string | null;
+  readonly company: string;
+  readonly companyTokens: Set<string>;
+  readonly roleTitleTokens: Set<string>;
+  readonly normalizedTitle: string;
 }
 
-export function isDuplicateVacancy(a: UnifiedVacancy, b: UnifiedVacancy): boolean {
+function prepareVacancy(vacancy: UnifiedVacancy): PreparedVacancy {
+  const company = cleanCompanyName(vacancy.company);
+  return {
+    fingerprint: vacancy.fingerprint,
+    url: normalizeUrl(vacancy.url),
+    atsLink: extractAtsLink(vacancy.url) || extractAtsLink(vacancy.description),
+    company,
+    companyTokens: tokenize(company),
+    roleTitleTokens: tokenize(normalizeRoleTitle(vacancy.title)),
+    normalizedTitle: normalizeTextForComparison(vacancy.title),
+  };
+}
+
+function isDuplicatePrepared(a: PreparedVacancy, b: PreparedVacancy): boolean {
   if (a.fingerprint === b.fingerprint) return true;
-  if (hasUrlOverlap(a, b)) return true;
+  if (a.url && b.url && a.url === b.url) return true;
+  if (a.atsLink && b.atsLink && a.atsLink === b.atsLink) return true;
 
-  const compA = cleanCompanyName(a.company);
-  const compB = cleanCompanyName(b.company);
-  if (!compA || !compB) return false;
+  if (!a.company || !b.company) return false;
 
-  const companyOverlap = jaccardSimilarity(tokenize(compA), tokenize(compB));
-  const exactCompany = compA === compB || compA.includes(compB) || compB.includes(compA);
-  if (!exactCompany && companyOverlap < 0.75) {
+  const exactCompany =
+    a.company === b.company || a.company.includes(b.company) || b.company.includes(a.company);
+  if (!exactCompany && jaccardSimilarity(a.companyTokens, b.companyTokens) < 0.75) {
     return false;
   }
 
-  const titleTokensA = tokenize(normalizeRoleTitle(a.title));
-  const titleTokensB = tokenize(normalizeRoleTitle(b.title));
-  const titleOverlap = jaccardSimilarity(titleTokensA, titleTokensB);
-  if (titleOverlap >= 0.45) return true;
+  if (jaccardSimilarity(a.roleTitleTokens, b.roleTitleTokens) >= 0.45) return true;
 
-  const normTitleA = normalizeTextForComparison(a.title);
-  const normTitleB = normalizeTextForComparison(b.title);
-  return normTitleA.includes(normTitleB) || normTitleB.includes(normTitleA);
+  return (
+    a.normalizedTitle.includes(b.normalizedTitle) || b.normalizedTitle.includes(a.normalizedTitle)
+  );
+}
+
+export function isDuplicateVacancy(a: UnifiedVacancy, b: UnifiedVacancy): boolean {
+  return isDuplicatePrepared(prepareVacancy(a), prepareVacancy(b));
 }
 
 function pickHigherPrioritySource(cluster: VacancyCluster, vacancy: UnifiedVacancy): void {
@@ -182,35 +207,40 @@ function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluster {
 
 export function clusterVacancies(vacancies: UnifiedVacancy[]): VacancyCluster[] {
   const clusters: VacancyCluster[] = [];
+  // Представитель кластера разбирается один раз и переразбирается только когда
+  // слияние меняет его каноническое название, работодателя или ссылку.
+  const prepared: PreparedVacancy[] = [];
 
   for (const vacancy of vacancies) {
-    const matchedCluster = clusters.find((cluster) => {
-      const representative: UnifiedVacancy = {
-        id: cluster.id,
-        fingerprint: cluster.id,
-        title: cluster.canonicalTitle,
-        company: cluster.canonicalCompany,
-        location: cluster.canonicalLocation,
-        isRemote: cluster.isRemote,
-        salary: cluster.salary,
-        description: cluster.descriptionSummary,
-        requiredSkills: cluster.skills,
-        url: cluster.primaryUrl,
-        provenance: cluster.sources[0],
-        publishedAt: cluster.firstObservedAt,
-        status: cluster.status,
-      };
-      return isDuplicateVacancy(vacancy, representative);
-    });
+    const candidate = prepareVacancy(vacancy);
+    const index = prepared.findIndex((representative) =>
+      isDuplicatePrepared(candidate, representative),
+    );
 
-    if (matchedCluster) {
-      mergeVacancyIntoCluster(matchedCluster, vacancy);
+    if (index >= 0) {
+      mergeVacancyIntoCluster(clusters[index]!, vacancy);
+      prepared[index] = prepareCluster(clusters[index]!);
     } else {
-      clusters.push(createClusterFromVacancy(vacancy));
+      const cluster = createClusterFromVacancy(vacancy);
+      clusters.push(cluster);
+      prepared.push(prepareCluster(cluster));
     }
   }
 
   return clusters;
+}
+
+function prepareCluster(cluster: VacancyCluster): PreparedVacancy {
+  const company = cleanCompanyName(cluster.canonicalCompany);
+  return {
+    fingerprint: cluster.id,
+    url: normalizeUrl(cluster.primaryUrl),
+    atsLink: extractAtsLink(cluster.primaryUrl) || extractAtsLink(cluster.descriptionSummary),
+    company,
+    companyTokens: tokenize(company),
+    roleTitleTokens: tokenize(normalizeRoleTitle(cluster.canonicalTitle)),
+    normalizedTitle: normalizeTextForComparison(cluster.canonicalTitle),
+  };
 }
 
 export interface SourceAuthenticityResult {
