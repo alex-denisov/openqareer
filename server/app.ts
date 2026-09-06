@@ -31,6 +31,7 @@ import { registerCareerCommandRoutes } from './routes/careerCommandRoutes';
 import { registerCoachRoutes } from './routes/coachRoutes';
 import { registerConnectorRoutes } from './routes/connectorRoutes';
 import { registerVacancyRoutes } from './routes/vacancyRoutes';
+import { registerCompanyRoutes } from './routes/companiesRoute';
 import {
   registerErrorHandler,
   registerStaticDelivery,
@@ -183,6 +184,7 @@ async function registerApiRoutes(app: FastifyInstance, deps: RouteDeps): Promise
   await registerVacancyRoutes(app, deps);
   await registerCoachRoutes(app, deps);
   await registerCareerCommandRoutes(app, deps);
+  await registerCompanyRoutes(app);
 }
 
 /** Аутентификация части реализаций читает кандидатов из того же хранилища. */
