@@ -175,7 +175,9 @@ function jobPosting(cluster: VacancyCluster, entry: CatalogEntry): StructuredNod
     datePosted: isoDate(entry.publishedAt),
     identifier: { '@type': 'PropertyValue', name: 'openqareer', value: entry.key },
     url: `${SITE_ORIGIN}${entry.path}`,
-    inLanguage: 'ru-RU',
+    // Языка вакансии мы не знаем: текст пришёл от работодателя и бывает любым.
+    // На живом проде разметка объявляла `ru-RU` над английским описанием —
+    // машинно читаемая неправда, поэтому поля здесь просто нет.
     // Отклик подаётся на площадке работодателя, а не здесь. Сказать обратное —
     // обещать кандидату действие, которого продукт не делает.
     directApply: false,

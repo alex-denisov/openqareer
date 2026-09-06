@@ -14,6 +14,11 @@
  *   node scripts/signed-in-walk.mjs --role admin
  *   node scripts/signed-in-walk.mjs --path /cabinet --shot out.png
  *   node scripts/signed-in-walk.mjs --eval "document.title"
+ *   node scripts/signed-in-walk.mjs --anonymous --path /vacancies --shot out.png
+ *
+ * `--anonymous` — обход публичной страницы без входа: тем же кодом, теми же
+ * проверками ошибок и тем же снимком, чтобы публичное и подписанное не
+ * проверялись двумя разными способами.
  */
 import { readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -49,7 +54,8 @@ const script = argument('eval', null);
 const width = Number(argument('width', '1440'));
 const height = Number(argument('height', '900'));
 
-const environment = readEnvironment(ENV_FILE);
+const anonymous = process.argv.includes('--anonymous');
+const environment = anonymous ? {} : readEnvironment(ENV_FILE);
 const credentials =
   role === 'admin'
     ? {
@@ -61,7 +67,7 @@ const credentials =
         password: environment.OPENQAREER_TEST_CANDIDATE_PASSWORD,
       };
 
-if (!credentials.username || !credentials.password) {
+if (!anonymous && (!credentials.username || !credentials.password)) {
   throw new Error(`в ${ENV_FILE} нет учётной записи для роли «${role}»`);
 }
 
@@ -78,26 +84,38 @@ page.on('requestfailed', (request) => {
   problems.push(`request: ${request.method()} ${request.url()} — ${request.failure()?.errorText}`);
 });
 
-await page.goto(`${base}/login`, { waitUntil: 'domcontentloaded' });
-await page.fill('#login-identifier', credentials.username);
-await page.fill('#login-password', credentials.password);
-await Promise.all([
-  page.waitForLoadState('networkidle').catch(() => {}),
-  page.click('button.auth-submit-btn'),
-]);
-await page.waitForTimeout(2500);
+let signedIn = true;
+if (!anonymous) {
+  await page.goto(`${base}/login`, { waitUntil: 'domcontentloaded' });
+  await page.fill('#login-identifier', credentials.username);
+  await page.fill('#login-password', credentials.password);
+  await Promise.all([
+    page.waitForLoadState('networkidle').catch(() => {}),
+    page.click('button.auth-submit-btn'),
+  ]);
+  await page.waitForTimeout(2500);
 
-const signedIn = !new URL(page.url()).pathname.startsWith('/login');
-process.stdout.write(`вход под «${credentials.username}»: ${signedIn ? 'да' : 'НЕТ'} → ${page.url()}\n`);
-if (!signedIn) {
-  const message = await page.locator('[role="alert"]').first().textContent().catch(() => null);
-  if (message) process.stdout.write(`сообщение формы: ${message.trim()}\n`);
+  signedIn = !new URL(page.url()).pathname.startsWith('/login');
+  process.stdout.write(
+    `вход под «${credentials.username}»: ${signedIn ? 'да' : 'НЕТ'} → ${page.url()}\n`,
+  );
+  if (!signedIn) {
+    const message = await page.locator('[role="alert"]').first().textContent().catch(() => null);
+    if (message) process.stdout.write(`сообщение формы: ${message.trim()}\n`);
+  }
 }
 
-if (path !== '/') {
-  await page.goto(`${base}${path}`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(3000);
+if (anonymous || path !== '/') {
+  await page.goto(`${base}${path}`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(anonymous ? 300 : 3000);
 }
+
+// Горизонтальная прокрутка — отдельный признак поломки вёрстки, и её видно
+// только в настоящем браузере, а не в разметке.
+const overflow = await page.evaluate(
+  () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+);
+process.stdout.write(`горизонтальная прокрутка: ${overflow ? 'ЕСТЬ' : 'нет'}\n`);
 
 if (script) {
   const value = await page.evaluate(script);

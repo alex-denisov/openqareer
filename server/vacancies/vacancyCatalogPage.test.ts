@@ -92,6 +92,8 @@ describe('страница публичного каталога ваканси�
     expect(posting).not.toHaveProperty('baseSalary');
     expect(posting).not.toHaveProperty('jobLocation');
     expect(posting).not.toHaveProperty('validThrough');
+    // Язык текста вакансии задаёт работодатель, и мы его не знаем.
+    expect(posting).not.toHaveProperty('inLanguage');
     expect(posting).not.toHaveProperty('hiringOrganization');
   });
 
