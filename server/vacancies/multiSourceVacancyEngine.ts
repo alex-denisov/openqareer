@@ -154,6 +154,9 @@ export class MultiSourceVacancyEngine {
   private rights: Map<string, SourceAddressRight> = new Map();
   /** Вежливый диспетчер опроса: отступ, retry-after, бюджет и адаптация (B204). */
   private readonly scheduler: PoliteScheduler = new PoliteScheduler();
+  /** Принесла ли волна что-то новое в пул с последней пересборки кластеров. */
+  private poolChangedSinceRecluster = false;
+  private reclusterCount = 0;
 
   /**
    * Кто спрашивает у площадки её `robots.txt`. Без него право берётся из
@@ -368,6 +371,21 @@ export class MultiSourceVacancyEngine {
     query?: string,
     nowMs: number = Date.now(),
   ): Promise<SourceSyncOutcome> {
+    const started = this.syncOne(sourceId, query, nowMs).then((outcome) => {
+      // Одиночный опрос сам оставляет пул пересобранным: волна делает это один
+      // раз за всю партию (прод 2026-09-06).
+      this.reclusterIfChanged();
+      return outcome;
+    });
+    return started;
+  }
+
+  /** Один опрос без пересборки пула — шаг волны. */
+  private syncOne(
+    sourceId: string,
+    query: string | undefined,
+    nowMs: number,
+  ): Promise<SourceSyncOutcome> {
     const inFlight = this.running.get(sourceId);
     if (inFlight) return inFlight;
     const started = this.runSync(sourceId, query, nowMs).finally(() => {
@@ -489,7 +507,10 @@ export class MultiSourceVacancyEngine {
     source.itemsActiveTotal = freshFetched.filter((v) => v.status === 'active').length;
     this.persistSourceState(source);
 
-    this.recluster();
+    // Пересборка кластеров — работа по всему пулу, и внутри волны она
+    // повторялась на каждую площадку. Волна пересобирает пул один раз, когда
+    // все ответы прочитаны (прод 2026-09-06).
+    this.poolChangedSinceRecluster = true;
     return freshFetched.length;
   }
 
@@ -540,7 +561,11 @@ export class MultiSourceVacancyEngine {
     const batch = [...due]
       .sort((left, right) => lastSyncMs(left) - lastSyncMs(right))
       .slice(0, SYNC_BATCH_LIMIT);
-    return Promise.all(batch.map((source) => this.syncSource(source.id, undefined, nowMs)));
+    const outcomes = await Promise.all(
+      batch.map((source) => this.syncOne(source.id, undefined, nowMs)),
+    );
+    this.reclusterIfChanged();
+    return outcomes;
   }
 
   /**
@@ -579,9 +604,11 @@ export class MultiSourceVacancyEngine {
    */
   public async syncAll(query?: string): Promise<SourceSyncOutcome[]> {
     const enabled = Array.from(this.sources.values()).filter((s) => s.enabled);
-    return mapWithConcurrency(enabled, SYNC_BATCH_LIMIT, (source) =>
-      this.syncSource(source.id, query),
+    const outcomes = await mapWithConcurrency(enabled, SYNC_BATCH_LIMIT, (source) =>
+      this.syncOne(source.id, query, Date.now()),
     );
+    this.reclusterIfChanged();
+    return outcomes;
   }
 
   public recluster(): void {
@@ -589,6 +616,22 @@ export class MultiSourceVacancyEngine {
       isVacancyFresh(v.publishedAt),
     );
     this.clusters = clusterVacancies(freshVacancies);
+    this.poolChangedSinceRecluster = false;
+    this.reclusterCount += 1;
+  }
+
+  /**
+   * Сколько раз пул пересобирался. Не украшение: именно двенадцать пересборок
+   * подряд в одной волне держали процесс и не давали дочитать ответы
+   * остальным площадкам (прод 2026-09-06, B202/B204).
+   */
+  public get clusterRebuildCount(): number {
+    return this.reclusterCount;
+  }
+
+  /** Пересобирает пул, только если волна что-то в него принесла. */
+  private reclusterIfChanged(): void {
+    if (this.poolChangedSinceRecluster) this.recluster();
   }
 
   public getMatchedVacancies(candidate: CandidateMatchProfile): MatchedVacancyItem[] {
