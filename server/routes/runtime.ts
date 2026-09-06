@@ -234,7 +234,11 @@ export async function registerStaticDelivery(
     await app.register(fastifyStatic, {
       root: config.staticRoot,
       wildcard: false,
-      globIgnore: ['server.mjs', 'health'],
+      // `sitemap.xml` собирается на запросе из живого пула (B209): плагин
+      // статики заводит маршрут на каждый файл сборки, и оставленный в `dist`
+      // файл сталкивался бы с живым маршрутом — `FST_ERR_DUPLICATED_ROUTE` и
+      // процесс не поднимается вовсе.
+      globIgnore: ['server.mjs', 'health', 'sitemap.xml'],
       etag: false,
       lastModified: false,
       cacheControl: false,

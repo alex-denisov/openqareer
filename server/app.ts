@@ -32,6 +32,7 @@ import { registerCoachRoutes } from './routes/coachRoutes';
 import { registerConnectorRoutes } from './routes/connectorRoutes';
 import { registerVacancyRoutes } from './routes/vacancyRoutes';
 import { registerCompanyRoutes } from './routes/companiesRoute';
+import { registerVacancyCatalogRoutes } from './routes/vacancyCatalogRoutes';
 import {
   registerErrorHandler,
   registerStaticDelivery,
@@ -185,6 +186,8 @@ async function registerApiRoutes(app: FastifyInstance, deps: RouteDeps): Promise
   await registerCoachRoutes(app, deps);
   await registerCareerCommandRoutes(app, deps);
   await registerCompanyRoutes(app);
+  // Публичный каталог вакансий: без сессии, HTML собирается на запросе (B209).
+  registerVacancyCatalogRoutes(app, deps);
 }
 
 /** Аутентификация части реализаций читает кандидатов из того же хранилища. */

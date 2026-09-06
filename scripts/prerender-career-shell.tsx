@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -6,6 +6,10 @@ import { AdminConsole } from '../src/features/admin/AdminConsole';
 import { LandingPage } from '../src/features/site/LandingPage';
 import { LegalDocumentPage, legalDocumentTitle } from '../src/features/legal/LegalDocumentPage';
 import { buildLlmsFullTxt, buildLlmsTxt } from '../shared/aeoSurface';
+import {
+  CATALOG_STYLE,
+  CATALOG_STYLESHEET_PATH,
+} from '../server/vacancies/vacancyCatalogDocument';
 import { publicPathViolation } from '../shared/seoSlugPolicy';
 import {
   LEGAL_DOCS,
@@ -141,13 +145,18 @@ export async function prerenderShells(
       ),
     );
   }
-  const sitemap = buildSitemap();
-  assertSitemapUrlPolicy(sitemapUrls(sitemap));
-  await writeFile(`${distDirectory}/sitemap.xml`, sitemap);
+  // Карту сайта отдаёт сервер из живого пула (B209, срез 2), поэтому файла в
+  // сборке больше нет. Постоянные адреса всё равно проверяются здесь: сборка
+  // обязана падать на транслите до выката, а не после.
+  assertSitemapUrlPolicy(sitemapUrls(buildSitemap()));
   // Витрина для ИИ-поисковиков собирается из того же источника, что и продукт,
   // поэтому расхождение с ним невозможно (B209).
   await writeFile(`${distDirectory}/llms.txt`, buildLlmsTxt());
   await writeFile(`${distDirectory}/llms-full.txt`, buildLlmsFullTxt());
+  // Стиль публичного каталога — настоящий файл, а не инлайн: боевая политика
+  // `style-src 'self'` инлайновый стиль не применит (B209).
+  await mkdir(`${distDirectory}/assets`, { recursive: true });
+  await writeFile(`${distDirectory}${CATALOG_STYLESHEET_PATH}`, CATALOG_STYLE);
 }
 
 const directPath = process.argv[1];
@@ -156,6 +165,6 @@ if (directPath && import.meta.url === pathToFileURL(directPath).href) {
   const adminPath = process.argv[3] ?? 'dist/admin.html';
   await prerenderShells(indexPath, adminPath);
   process.stdout.write(
-    `prerendered career shell into ${indexPath}, administrator console into ${adminPath} and ${LEGAL_DOCS.length} legal documents with a sitemap\n`,
+    `prerendered career shell into ${indexPath}, administrator console into ${adminPath} and ${LEGAL_DOCS.length} legal documents\n`,
   );
 }

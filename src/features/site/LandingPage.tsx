@@ -575,6 +575,9 @@ function LandingFooter({
             <a href="#services">Возможности</a>
             <a href="#tariffs">Тарифы</a>
             <a href="#faq">FAQ</a>
+            {/* Публичный каталог — отдельный документ вне приложения, поэтому
+                обычная ссылка, а не переход роутером (B209). */}
+            <a href="/vacancies">Вакансии</a>
           </div>
           <LegalLinkGroup onNavigate={onNavigate} />
           <div className="link-group">
