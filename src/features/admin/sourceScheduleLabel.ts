@@ -23,7 +23,10 @@ export function sourceScheduleLabel(schedule: AdminSourceSchedule): string {
         // отправила бы администратора ждать того, чего не будет.
         'Опрос не запланирован'
       : `Опрос ${waitLabel(schedule.nextInMin)}`;
-  const parts = [when, `интервал ${schedule.intervalMin} мин`];
+  // «Действующий», а не просто «интервал»: в карточке рядом уже стоит
+  // настроенный интервал площадки, и адаптированный бывает другим. Два разных
+  // числа под одной подписью читаются как ошибка (снимок прода 2026-09-07).
+  const parts = [when, `действующий интервал ${schedule.intervalMin} мин`];
 
   if (schedule.crawlDelaySec !== null) {
     parts.push(`пауза площадки ${schedule.crawlDelaySec} с`);
