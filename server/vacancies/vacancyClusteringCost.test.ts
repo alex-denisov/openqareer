@@ -1,5 +1,4 @@
-import { describe, expect, it } from 'vitest';
-import { clusterVacancies } from './vacancyDeduplicator';
+import { describe, expect, it, vi } from 'vitest';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 
 /**
@@ -8,9 +7,32 @@ import type { UnifiedVacancy } from '../domain/unifiedVacancy';
  * разбирало строки заново на каждое сравнение. Выкат не успевал ответить на
  * проверку здоровья и откатывался: продукт стало нельзя выпускать.
  *
- * Тест держит стоимость на месте. Порог намеренно щедрый: он ловит возврат
- * квадратичного разбора (было 14 с на этой же машине), а не колебания в разы.
+ * ПОЧЕМУ СЧЁТЧИК, А НЕ СЕКУНДОМЕР (PRB-021). Первая версия сторожа сравнивала
+ * настенное время с порогом 5 с. Под `npm run test:coverage` инструментирование
+ * v8 замедляло прогон до 8187 мс, и собственный гейт покрытия репозитория
+ * краснел без единого регресса в коде. Секундомер мерил машину и условия
+ * замера, а не то, что сломалось.
+ *
+ * Сломалось же именно число разборов записи: подготовка уехала внутрь
+ * сравнения, и `normalizeTextForComparison` вызывался квадратично вместо
+ * линейного. Счётчик вызовов детерминирован — одинаков на любой машине, под
+ * любым инструментированием и в любой нагрузке.
  */
+const counter = vi.hoisted(() => ({ calls: 0 }));
+
+vi.mock('./vacancyFingerprint', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./vacancyFingerprint')>();
+  return {
+    ...actual,
+    normalizeTextForComparison: (text: string) => {
+      counter.calls += 1;
+      return actual.normalizeTextForComparison(text);
+    },
+  };
+});
+
+const { clusterVacancies } = await import('./vacancyDeduplicator');
+
 function vacancy(index: number): UnifiedVacancy {
   const roles = ['Senior Backend Engineer', 'Product Manager', 'Data Scientist', 'DevOps Engineer'];
   return {
@@ -33,15 +55,50 @@ function vacancy(index: number): UnifiedVacancy {
   };
 }
 
-describe('стоимость сведения пула', () => {
-  it('пул размером с прод сводится за считанные секунды, а не за минуту', () => {
-    const pool = Array.from({ length: 4836 }, (_, index) => vacancy(index));
+/**
+ * Разбор одной записи трогает строки постоянное число раз (название,
+ * работодатель, ссылка), и каждая запись разбирается дважды: как кандидат и
+ * как представитель своего кластера. Потолок взят с большим запасом на эту
+ * постоянную — он ловит возврат разбора в цикл сравнения, а не изменение
+ * состава полей.
+ */
+const PARSES_PER_RECORD = 12;
 
-    const started = Date.now();
+/**
+ * Свой потолок времени у прогона всё-таки нужен — но как защита от зависания,
+ * а не как мерило стоимости. Под инструментированием покрытия сведение пула
+ * размером с прод честно не укладывается в общие 5 секунд vitest, и падение по
+ * общему потолку было бы тем же секундомером с другого конца (PRB-021).
+ */
+const NO_HANG_TIMEOUT_MS = 120_000;
+
+describe('стоимость сведения пула', () => {
+  it('разбирает запись постоянное число раз, а не заново на каждое сравнение', () => {
+    const size = 4836;
+    const pool = Array.from({ length: size }, (_, index) => vacancy(index));
+
+    counter.calls = 0;
     const clusters = clusterVacancies(pool);
-    const elapsedMs = Date.now() - started;
+    const parses = counter.calls;
 
     expect(clusters.length).toBeGreaterThan(1000);
-    expect(elapsedMs).toBeLessThan(5_000);
-  });
+    // Квадратичный разбор дал бы миллионы вызовов на этом же пуле.
+    expect(parses).toBeLessThan(size * PARSES_PER_RECORD);
+  }, NO_HANG_TIMEOUT_MS);
+
+  it('удвоение пула удваивает разбор, а не возводит его в квадрат', () => {
+    const small = Array.from({ length: 600 }, (_, index) => vacancy(index));
+    const large = Array.from({ length: 1200 }, (_, index) => vacancy(index));
+
+    counter.calls = 0;
+    clusterVacancies(small);
+    const smallParses = counter.calls;
+
+    counter.calls = 0;
+    clusterVacancies(large);
+    const largeParses = counter.calls;
+
+    // Линейный рост даёт ~2×; квадратичный дал бы ~4× и выше.
+    expect(largeParses / smallParses).toBeLessThan(2.5);
+  }, NO_HANG_TIMEOUT_MS);
 });

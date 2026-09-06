@@ -54,6 +54,24 @@ function itemCompanyTag(itemXml: string): string | null {
 }
 
 /**
+ * Служебная обёртка Хабр Карьеры: «Требуется «Senior Golang Developer»» и
+ * «Требуется «Java Developer eFX» (Москва)». Слово площадки и город в поле
+ * должности — не должность; на проде 2026-09-06 их читал каждый кандидат.
+ *
+ * Город отличается от уточнения должности местом скобок: площадка ставит его
+ * **за** кавычками, а уточнение вроде «Java (Т-банк)» живёт внутри них.
+ * Гадать по словарю городов не нужно — форма сама всё говорит.
+ */
+const REQUIRED_TITLE = /^требуется\s+[«"“](.+?)[»"”]\s*(?:\(([^()]+)\))?\s*$/iu;
+
+function unwrapRequiredTitle(title: string): { title: string; location?: string } {
+  const match = REQUIRED_TITLE.exec(title.trim());
+  if (!match) return { title };
+  const place = match[2]?.trim();
+  return place ? { title: match[1].trim(), location: place } : { title: match[1].trim() };
+}
+
+/**
  * Работодатель и должность из записи. Пустой работодатель — законный исход:
  * `employerLabel` скажет «Работодатель не указан», и это честнее выдуманного
  * имени, по которому вакансию не найти.
@@ -96,12 +114,13 @@ function parseRssItem(itemXml: string, meta: RssFeedMeta): UnifiedVacancy | null
   const cleanDesc = htmlToFeedText(decodeFeedEntities(unwrapCdata(description)));
   const employer = splitEmployer(decodeFeedEntities(unwrapCdata(title)), itemXml, meta);
   const company = employer.company;
+  const named = unwrapRequiredTitle(employer.title);
   const isRemote = /remote|удален|anywhere/i.test(cleanDesc) || /remote/i.test(cleanTitle);
   const salary = parseSalaryText(cleanDesc);
   const requiredSkills = extractSkillsFromText(`${cleanTitle} ${cleanDesc}`);
 
   const fingerprint = calculateVacancyFingerprint({
-    title: employer.title,
+    title: named.title,
     company,
     description: cleanDesc,
     salaryFrom: salary?.from,
@@ -116,8 +135,9 @@ function parseRssItem(itemXml: string, meta: RssFeedMeta): UnifiedVacancy | null
     // 79 vacancies left exactly one in the pool (found on the B164 prod walk).
     id: `rss-${meta.sourceId}-${createHash('sha256').update(guid, 'utf8').digest('hex').slice(0, 32)}`,
     fingerprint,
-    title: employer.title,
+    title: named.title,
     company,
+    ...(named.location ? { location: named.location } : {}),
     isRemote,
     salary,
     description: cleanDesc,

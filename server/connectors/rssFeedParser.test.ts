@@ -259,3 +259,49 @@ describe('работодатель берётся из записи, а не и�
     expect(suffix.company).toBe('');
   });
 });
+
+/**
+ * Прод 2026-09-06, снято под админом: карточки Хабр Карьеры печатали
+ * «Требуется «Senior Golang Developer»» и «Требуется «Java (Т-банк)» (Воронеж)».
+ * Служебное слово площадки и город — не часть названия должности.
+ */
+describe('заголовок вакансии — это должность, а не строка ленты', () => {
+  function habr(title: string): string {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><item>
+  <title>${title}</title>
+  <link>https://career.habr.com/vacancies/1</link>
+  <description><![CDATA[Требуемые навыки: TypeScript, PostgreSQL.]]></description>
+  <author>Raft Digital Solutions</author>
+</item></channel></rss>`;
+  }
+
+  function parse(title: string) {
+    return parseRssJobFeed(habr(title), {
+      sourceId: 'src-habr-career',
+      sourceUrl: 'https://career.habr.com/vacancies/rss',
+      observedAt: '2026-09-06T00:00:00.000Z',
+    })[0];
+  }
+
+  it('снимает служебное «Требуется» и кавычки площадки', () => {
+    expect(parse('Требуется «Senior Golang Developer»').title).toBe('Senior Golang Developer');
+    expect(parse('Требуется "Java Developer"').title).toBe('Java Developer');
+  });
+
+  it('выносит город из названия должности в место работы', () => {
+    const job = parse('Требуется «Java Developer eFX» (Москва)');
+    expect(job.title).toBe('Java Developer eFX');
+    expect(job.location).toBe('Москва');
+  });
+
+  it('не путает город с уточнением должности в скобках', () => {
+    const job = parse('Требуется «Java (Т-банк)»');
+    expect(job.title).toBe('Java (Т-банк)');
+    expect(job.location).toBeUndefined();
+  });
+
+  it('оставляет заголовок как есть, когда служебной обёртки нет', () => {
+    expect(parse('Senior Golang Developer').title).toBe('Senior Golang Developer');
+  });
+});
