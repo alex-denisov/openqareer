@@ -32,8 +32,46 @@ export interface AdminSourceSchedule {
   readonly reason: string;
 }
 
-export function toAdminSourceSchedule(info: SourceScheduleInfo): AdminSourceSchedule {
-  const waitSec = Math.max(info.backoffRemainingSec ?? 0, info.retryAfterRemainingSec ?? 0);
+/**
+ * Причина решения планировщика человеческими словами.
+ *
+ * Планировщик пишет коды для журнала, и печатать их администратору нельзя:
+ * «json_api» вместо имени площадки уже был отдельным дефектом (PRB-017).
+ * Незнакомый код не показывается сырым — читателю он ничего не объясняет.
+ */
+const SCHEDULE_REASONS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^ok$/u, 'готова к опросу'],
+  [/^interval_elapsed$/u, 'интервал вышел'],
+  [/^interval_not_elapsed/u, 'интервал ещё не вышел'],
+  [/^fresh_source$/u, 'площадку ещё ни разу не опрашивали'],
+  [/^backoff_elapsed_ready_to_retry$/u, 'отступ кончился, можно пробовать снова'],
+  [/^robots_disallowed$/u, 'площадка запретила обход в robots.txt'],
+  [/^retry_after_active/u, 'площадка попросила подождать (Retry-After)'],
+  [/^exponential_backoff_active/u, 'отступ после отказов площадки'],
+  [/^hourly_budget_exhausted/u, 'часовой бюджет запросов исчерпан'],
+  [/^crawl_delay_active/u, 'пауза между запросами по robots.txt'],
+];
+
+function humanReason(raw: string): string {
+  for (const [pattern, text] of SCHEDULE_REASONS) {
+    if (pattern.test(raw)) return text;
+  }
+  return 'решение планировщика';
+}
+
+export function toAdminSourceSchedule(
+  info: SourceScheduleInfo,
+  nowMs: number = Date.now(),
+): AdminSourceSchedule {
+  // Ожидание по интервалу не лежит ни в отступе, ни в паузе `Retry-After` —
+  // только в `nextAvailableAtMs`. Без него сводка печатала «через 1 мин»
+  // площадке, которой ждать 78 минут (найдено на живом проде 2026-09-07).
+  const untilNextSec = info.nextAvailableAtMs ? (info.nextAvailableAtMs - nowMs) / 1000 : 0;
+  const waitSec = Math.max(
+    info.backoffRemainingSec ?? 0,
+    info.retryAfterRemainingSec ?? 0,
+    untilNextSec,
+  );
   // Округление вверх: «через 0 минут» у площадки, которая ещё не готова, —
   // ложь, по которой администратор пойдёт искать несуществующую поломку.
   const nextInMin = info.isDue ? 0 : Math.max(1, Math.ceil(waitSec / 60));
@@ -47,6 +85,6 @@ export function toAdminSourceSchedule(info: SourceScheduleInfo): AdminSourceSche
     hourly: info.hourlyRequestsCount,
     hourlyMax: info.maxRequestsPerHour,
     failures: info.consecutiveFailures,
-    reason: info.scheduleReason,
+    reason: humanReason(info.scheduleReason),
   };
 }

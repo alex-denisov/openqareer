@@ -15,7 +15,7 @@ function info(overrides: Partial<SourceScheduleInfo> = {}): SourceScheduleInfo {
     hourlyRequestsCount: 3,
     maxRequestsPerHour: 30,
     isDue: true,
-    scheduleReason: 'интервал вышел',
+    scheduleReason: 'interval_elapsed',
     nextAvailableAtMs: null,
     ...overrides,
   };
@@ -27,15 +27,72 @@ function info(overrides: Partial<SourceScheduleInfo> = {}): SourceScheduleInfo {
  * не опрашивают (названо в B204, сделано 2026-09-07).
  */
 describe('расписание площадки в суперадминке (B204)', () => {
+  /**
+   * Найдено на живом проде 2026-09-07: Хабр ждал интервала 4699 с, а сводка
+   * печатала «через 1 мин». Ожидание по интервалу не лежит ни в отступе, ни в
+   * паузе `Retry-After` — оно только в `nextAvailableAtMs`.
+   */
+  it('берёт ожидание из времени следующей готовности, а не только из отступа', () => {
+    const now = 1_757_000_000_000;
+    const waiting = toAdminSourceSchedule(
+      info({ isDue: false, nextAvailableAtMs: now + 4_699_000, scheduleReason: 'interval_not_elapsed (4699s remaining, adapted: 90m)' }),
+      now,
+    );
+    expect(waiting.nextInMin).toBe(79);
+  });
+
+  it('переводит причину планировщика на человеческий язык', () => {
+    expect(toAdminSourceSchedule(info({ scheduleReason: 'robots_disallowed' })).reason).toBe(
+      'площадка запретила обход в robots.txt',
+    );
+    expect(
+      toAdminSourceSchedule(info({ scheduleReason: 'interval_not_elapsed (4699s remaining, adapted: 90m)' })).reason,
+    ).toBe('интервал ещё не вышел');
+    expect(toAdminSourceSchedule(info({ scheduleReason: 'ok' })).reason).toBe('готова к опросу');
+    expect(toAdminSourceSchedule(info({ scheduleReason: 'fresh_source' })).reason).toBe(
+      'площадку ещё ни разу не опрашивали',
+    );
+    expect(
+      toAdminSourceSchedule(info({ scheduleReason: 'hourly_budget_exhausted (30/30 req/h)' })).reason,
+    ).toBe('часовой бюджет запросов исчерпан');
+    expect(
+      toAdminSourceSchedule(info({ scheduleReason: 'exponential_backoff_active (900s remaining, failures: 3)' })).reason,
+    ).toBe('отступ после отказов площадки');
+    expect(
+      toAdminSourceSchedule(info({ scheduleReason: 'retry_after_active (600s remaining)' })).reason,
+    ).toBe('площадка попросила подождать (Retry-After)');
+    expect(
+      toAdminSourceSchedule(info({ scheduleReason: 'crawl_delay_active (10s remaining)' })).reason,
+    ).toBe('пауза между запросами по robots.txt');
+  });
+
+  /**
+   * Незнакомый код планировщика не печатается сырым: «json_api» вместо имени
+   * площадки уже был отдельным дефектом (PRB-017).
+   */
+  it('не печатает незнакомый машинный код читателю', () => {
+    expect(toAdminSourceSchedule(info({ scheduleReason: 'some_new_code (17s)' })).reason).toBe(
+      'решение планировщика',
+    );
+  });
+
   it('называет, когда площадка будет опрошена, словами и числом', () => {
-    const due = toAdminSourceSchedule(info());
+    const due = toAdminSourceSchedule(info({ scheduleReason: 'interval_elapsed' }));
     expect(due).toMatchObject({ due: true, reason: 'интервал вышел', intervalMin: 120 });
     expect(due.nextInMin).toBe(0);
 
     const waiting = toAdminSourceSchedule(
-      info({ isDue: false, backoffRemainingSec: 900, scheduleReason: 'отступ после отказа' }),
+      info({
+        isDue: false,
+        backoffRemainingSec: 900,
+        scheduleReason: 'exponential_backoff_active (900s remaining, failures: 3)',
+      }),
     );
-    expect(waiting).toMatchObject({ due: false, nextInMin: 15, reason: 'отступ после отказа' });
+    expect(waiting).toMatchObject({
+      due: false,
+      nextInMin: 15,
+      reason: 'отступ после отказов площадки',
+    });
   });
 
   it('округляет ожидание вверх: «через 0 минут» у неготовой площадки — ложь', () => {
