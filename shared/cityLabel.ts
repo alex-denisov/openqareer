@@ -23,6 +23,25 @@ const COUNTRY_PREFIX = /^\p{L}{2}[\p{L}\s.]{0,18}?\s+[-–—]\s+(?=\p{L})/u;
 /** `(Remote)`, `(Hybrid)`, `(On-site)` — формат работы, а не часть названия. */
 const MODE_SUFFIX = /\s*\((?:remote|hybrid|on-?site|удал[её]нно|гибрид)\)\s*$/iu;
 
+/**
+ * Слово про офис после названия города: «London Office», «Berlin HQ»,
+ * «Прага, офис», «Москва (офис)». Слово должно стоять отдельным хвостом —
+ * иначе «Officer Springs» перестал бы быть городом (прод 2026-09-06).
+ */
+const OFFICE_WORD = '(?:office|hq|headquarters|campus|hub|офис|штаб-квартира|кампус)';
+
+/**
+ * Строка только про офис и ничего про город: «Office», «Home Office»,
+ * «Головной офис». Города здесь нет, точки на карте — тоже.
+ */
+const OFFICE_ONLY = new RegExp(
+  `^(?:home|main|head|global|corporate|головной|главный|центральный|домашний)?\\s*${OFFICE_WORD}$`,
+  'iu',
+);
+
+const OFFICE_SUFFIX =
+  new RegExp(`(?:\\s*[,(]\\s*|\\s+)${OFFICE_WORD}\\s*\\)?\\s*$`, 'iu');
+
 /** Форма работы перед местом: «Remote - Texas», «Hybrid Berlin». */
 const MODE_PREFIX = /^(?:remote|hybrid|on-?site|удал[её]нно|гибрид)\s+(?=\p{L})/iu;
 
@@ -34,7 +53,9 @@ export function normalizeCityLabel(raw?: string): string | undefined {
 
   const withoutMode = trimmed.replace(MODE_SUFFIX, '').replace(MODE_PREFIX, '').trim();
   const withoutPrefix = withoutMode.replace(COUNTRY_PREFIX, '').trim();
-  const label = withoutPrefix || withoutMode;
+  if (OFFICE_ONLY.test(withoutPrefix)) return undefined;
+  const withoutOffice = withoutPrefix.replace(OFFICE_SUFFIX, '').trim();
+  const label = withoutOffice || withoutMode;
 
   if (!label) return undefined;
   // «Remote», «Hybrid», «EMEA», «Home Office» — это не города, а способ работы

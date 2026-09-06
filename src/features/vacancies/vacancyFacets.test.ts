@@ -233,3 +233,41 @@ describe("страна и способ работы в списке городо
     expect(cities).toEqual(["Berlin"]);
   });
 });
+
+/**
+ * Прод 2026-09-06: «Лиссабон» и «Lisbon» стояли на карте двумя хабами с одной
+ * и той же точкой. Счёт по городу перестаёт быть счётом, когда один город
+ * посчитан дважды: одна точка на карте — один хаб.
+ */
+describe("город на двух языках — один хаб", () => {
+  const lisbon = { lat: 38.7223, lng: -9.1393 };
+
+  it("сводит записи с одинаковой точкой в один хаб", () => {
+    const facets = calculateVacancyFacets([
+      makeItem("1", "A", { features: { city: "Лиссабон", country: "Португалия", coordinates: lisbon } }),
+      makeItem("2", "B", { features: { city: "Lisbon", country: "Portugal", coordinates: lisbon } }),
+      makeItem("3", "C", { features: { city: "Lisbon Office", country: "Portugal", coordinates: lisbon } }),
+    ]);
+
+    const hubs = facets.cities.filter((c) => Math.abs((c.coordinates?.lat ?? 0) - lisbon.lat) < 0.001);
+    expect(hubs).toHaveLength(1);
+    expect(hubs[0].count).toBe(3);
+    expect(hubs[0].companyCount).toBe(3);
+  });
+
+  it("называет сведённый хаб по-русски, когда площадка дала русское имя", () => {
+    const facets = calculateVacancyFacets([
+      makeItem("1", "A", { features: { city: "Lisbon", country: "Portugal", coordinates: lisbon } }),
+      makeItem("2", "B", { features: { city: "Лиссабон", country: "Португалия", coordinates: lisbon } }),
+    ]);
+    expect(facets.cities[0].city).toBe("Лиссабон");
+  });
+
+  it("оставляет разные города разными хабами", () => {
+    const facets = calculateVacancyFacets([
+      makeItem("1", "A", { features: { city: "Lisbon", coordinates: lisbon } }),
+      makeItem("2", "B", { features: { city: "Porto", coordinates: { lat: 41.1579, lng: -8.6291 } } }),
+    ]);
+    expect(facets.cities).toHaveLength(2);
+  });
+});

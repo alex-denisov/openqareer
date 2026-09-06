@@ -90,6 +90,27 @@ function aggregateIndustries(items: readonly MatchedVacancyItem[]) {
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru-RU'));
 }
 
+/**
+ * Ключ хаба — точка на карте, а не написание названия. «Лиссабон» и «Lisbon»
+ * приходят с одними координатами из общего справочника, и до этого стояли на
+ * карте двумя хабами: один город был посчитан дважды (прод 2026-09-06).
+ */
+function hubKey(coordinates: { lat: number; lng: number }): string {
+  return `${coordinates.lat.toFixed(3)},${coordinates.lng.toFixed(3)}`;
+}
+
+const CYRILLIC = /\p{Script=Cyrillic}/u;
+
+/**
+ * Каким из наблюдённых написаний называть сведённый хаб. Продукт говорит
+ * по-русски, поэтому русское имя выигрывает; иначе — первое наблюдённое, чтобы
+ * подпись не прыгала от состава пула.
+ */
+function preferredCityName(current: string, candidate: string): string {
+  if (CYRILLIC.test(current)) return current;
+  return CYRILLIC.test(candidate) ? candidate : current;
+}
+
 function aggregateCities(items: readonly MatchedVacancyItem[]) {
   const map = new Map<
     string,
@@ -111,16 +132,18 @@ function aggregateCities(items: readonly MatchedVacancyItem[]) {
     // обещает точку там, где её нет (B203, прод 2026-09-06).
     if (!city || isCountryName(city)) continue;
 
-    const existing = map.get(city) ?? {
+    const key = hubKey(feat.coordinates);
+    const existing = map.get(key) ?? {
       city,
       country: feat.country,
       coordinates: feat.coordinates,
       count: 0,
       companies: new Set<string>(),
     };
+    existing.city = preferredCityName(existing.city, city);
     existing.count += 1;
     if (item.cluster.canonicalCompany) existing.companies.add(item.cluster.canonicalCompany);
-    map.set(city, existing);
+    map.set(key, existing);
   }
 
   return Array.from(map.values())

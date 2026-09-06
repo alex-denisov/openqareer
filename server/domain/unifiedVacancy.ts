@@ -136,4 +136,10 @@ export interface VacancySourceConfig {
    * (B164).
    */
   requiresQuery?: boolean;
+  /**
+   * Как эта лента называет работодателя в заголовке записи. Ставится только
+   * тем площадкам, чья форма измерена на живой ленте: агрегатор без объявленной
+   * формы оставляет работодателя неназванным, а не подставляет своё имя.
+   */
+  employerShape?: import('../connectors/rssFeedParser').RssEmployerShape;
 }

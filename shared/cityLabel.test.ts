@@ -79,3 +79,29 @@ describe('коды стран городом не становятся', () => {
     expect(normalizeCityLabel('Remote US')).toBeUndefined();
   });
 });
+
+/**
+ * Прод 2026-09-06: в поле места приезжает название офиса, а не города —
+ * «London Office», «Berlin HQ», «Прага, офис». Хаб «London Office» стоял на
+ * карте отдельно от «London», и один город считался дважды.
+ */
+describe('название офиса — не название города', () => {
+  it('срезает слово об офисе и оставляет город', () => {
+    expect(normalizeCityLabel('London Office')).toBe('London');
+    expect(normalizeCityLabel('Berlin HQ')).toBe('Berlin');
+    expect(normalizeCityLabel('Warsaw Headquarters')).toBe('Warsaw');
+    expect(normalizeCityLabel('Austin Campus')).toBe('Austin');
+    expect(normalizeCityLabel('Прага, офис')).toBe('Прага');
+    expect(normalizeCityLabel('Москва (офис)')).toBe('Москва');
+  });
+
+  it('не оставляет пустое место, когда города в строке нет', () => {
+    expect(normalizeCityLabel('Office')).toBeUndefined();
+    expect(normalizeCityLabel('Головной офис')).toBeUndefined();
+  });
+
+  it('не трогает город, в имени которого такое слово настоящее', () => {
+    expect(normalizeCityLabel('Officer Springs')).toBe('Officer Springs');
+    expect(normalizeCityLabel('Hamburg')).toBe('Hamburg');
+  });
+});

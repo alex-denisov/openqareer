@@ -379,6 +379,8 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     addressStatus: 'live',
     enabled: true,
     targetUrl: 'https://weworkremotely.com/remote-jobs.rss',
+    // «Reddit: Director, Privacy Legal» — форма измерена на живой ленте 2026-09-06.
+    employerShape: 'title-colon-prefix',
     refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
@@ -465,6 +467,8 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     addressStatus: 'live',
     enabled: true,
     targetUrl: 'https://nodesk.co/remote-jobs/index.xml',
+    // «Staff Systems Engineer, IT at GitLab» — форма измерена на живой ленте 2026-09-06.
+    employerShape: 'title-at-suffix',
     refreshIntervalMinutes: 120,
     // `Allow: /` нам, но площадка отзывает право учить модели на её контенте и
     // запрещает ClaudeBot, GPTBot, CCBot, Bytespider и других (2026-09-05).

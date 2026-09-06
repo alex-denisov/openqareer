@@ -149,7 +149,9 @@ async function fetchRssFeed(
     return parseRssJobFeed(xml, {
       sourceId: source.id,
       sourceUrl: url,
-      companyName: source.name,
+      // Имя площадки — не имя работодателя: агрегатор печатал себя в поле
+      // нанимателя у каждой своей записи. Работодателя называет сама запись.
+      employerShape: source.employerShape,
       observedAt,
     });
   } catch (reason) {
