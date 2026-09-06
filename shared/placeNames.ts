@@ -129,6 +129,9 @@ export function isCountryName(label?: string): boolean {
 
 /** Надрегиональные ярлыки площадок: местом на карте они не являются. */
 const REGION_LABELS: ReadonlySet<string> = new Set([
+  // Коды, которыми площадки записывают «страна целиком»: города за ними нет.
+  'us',
+  'eu',
   'emea',
   'apac',
   'latam',

@@ -69,6 +69,13 @@ describe('способ работы и надрегион местом не сч
     expect(normalizeCityLabel('Hybrid')).toBeUndefined();
     expect(normalizeCityLabel('Home Office')).toBeUndefined();
     expect(normalizeCityLabel('Distributed')).toBeUndefined();
-    expect(normalizeCityLabel('Remote US')).toBe('US');
+  });
+});
+
+describe('коды стран городом не становятся', () => {
+  it('«US» и «EU» на карте хабами не работают', () => {
+    expect(normalizeCityLabel('US')).toBeUndefined();
+    expect(normalizeCityLabel('EU')).toBeUndefined();
+    expect(normalizeCityLabel('Remote US')).toBeUndefined();
   });
 });
