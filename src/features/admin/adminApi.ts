@@ -156,7 +156,7 @@ export interface AdminSourceHealth {
  */
 export interface AdminSourceSchedule {
   due: boolean;
-  nextInMin: number;
+  nextInMin: number | null;
   intervalMin: number;
   crawlDelaySec: number | null;
   robots: 'allowed' | 'disallowed' | 'unconfirmed';

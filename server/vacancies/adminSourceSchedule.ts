@@ -16,8 +16,12 @@ import type { SourceScheduleInfo } from './politeScheduler';
 export interface AdminSourceSchedule {
   /** Готова ли площадка к опросу прямо сейчас. */
   readonly due: boolean;
-  /** Через сколько минут её можно опросить. `0` — можно сейчас. */
-  readonly nextInMin: number;
+  /**
+   * Через сколько минут её можно опросить. `0` — можно сейчас, `null` — срока
+   * нет: площадка запрещена в `robots.txt` и готовой не станет. Выдуманная
+   * минута отправила бы администратора ждать того, чего не будет.
+   */
+  readonly nextInMin: number | null;
   /** Действующий интервал опроса с учётом адаптации. */
   readonly intervalMin: number;
   /** Правило самой площадки из `robots.txt`, если она его назвала. */
@@ -74,7 +78,9 @@ export function toAdminSourceSchedule(
   );
   // Округление вверх: «через 0 минут» у площадки, которая ещё не готова, —
   // ложь, по которой администратор пойдёт искать несуществующую поломку.
-  const nextInMin = info.isDue ? 0 : Math.max(1, Math.ceil(waitSec / 60));
+  // Ноль ожидания у неготовой площадки означает, что срока нет вовсе
+  // (запрет в `robots.txt`), и тогда честный ответ — `null`.
+  const nextInMin = info.isDue ? 0 : waitSec > 0 ? Math.max(1, Math.ceil(waitSec / 60)) : null;
 
   return {
     due: info.isDue,

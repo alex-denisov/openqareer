@@ -95,6 +95,20 @@ describe('расписание площадки в суперадминке (B20
     });
   });
 
+  /**
+   * Найдено на живом проде 2026-09-07, второй заход: ТрудВсем запрещён в
+   * `robots.txt` и не станет готовым никогда, а сводка обещала «через 1 мин».
+   * Времени следующей готовности у такой площадки просто нет — и говорить надо
+   * это, а не выдумывать минуту.
+   */
+  it('не называет срок, когда его нет', () => {
+    const forbidden = toAdminSourceSchedule(
+      info({ isDue: false, nextAvailableAtMs: null, scheduleReason: 'robots_disallowed' }),
+    );
+    expect(forbidden.nextInMin).toBeNull();
+    expect(forbidden.reason).toBe('площадка запретила обход в robots.txt');
+  });
+
   it('округляет ожидание вверх: «через 0 минут» у неготовой площадки — ложь', () => {
     const almost = toAdminSourceSchedule(info({ isDue: false, backoffRemainingSec: 5 }));
     expect(almost.nextInMin).toBe(1);

@@ -16,10 +16,14 @@ function waitLabel(minutes: number): string {
 }
 
 export function sourceScheduleLabel(schedule: AdminSourceSchedule): string {
-  const parts = [
-    schedule.due ? 'Опрос сейчас' : `Опрос ${waitLabel(schedule.nextInMin)}`,
-    `интервал ${schedule.intervalMin} мин`,
-  ];
+  const when = schedule.due
+    ? 'Опрос сейчас'
+    : schedule.nextInMin === null
+      ? // Срока нет: площадка запрещена и готовой не станет. Выдуманная минута
+        // отправила бы администратора ждать того, чего не будет.
+        'Опрос не запланирован'
+      : `Опрос ${waitLabel(schedule.nextInMin)}`;
+  const parts = [when, `интервал ${schedule.intervalMin} мин`];
 
   if (schedule.crawlDelaySec !== null) {
     parts.push(`пауза площадки ${schedule.crawlDelaySec} с`);

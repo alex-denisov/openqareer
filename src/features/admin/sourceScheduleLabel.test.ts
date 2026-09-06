@@ -22,6 +22,12 @@ describe('расписание площадки словами (B204)', () => {
     expect(sourceScheduleLabel(schedule())).toBe('Опрос сейчас · интервал 120 мин');
   });
 
+  it('говорит, что срока нет, вместо выдуманной минуты', () => {
+    expect(sourceScheduleLabel(schedule({ due: false, nextInMin: null }))).toContain(
+      'Опрос не запланирован',
+    );
+  });
+
   it('называет ожидание в минутах и часах, а не в секундах', () => {
     expect(sourceScheduleLabel(schedule({ due: false, nextInMin: 15 }))).toContain('через 15 мин');
     expect(sourceScheduleLabel(schedule({ due: false, nextInMin: 90 }))).toContain('через 1 ч 30 мин');
