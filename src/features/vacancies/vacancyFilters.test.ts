@@ -169,6 +169,17 @@ describe('filterVacancies', () => {
   it('без фильтров возвращает пул как есть', () => {
     expect(filterVacancies(pool, {}, NOW)).toHaveLength(3);
   });
+
+  it('фильтрует по фишкам компании и карте', () => {
+    const itemWithReloc = item('reloc', {
+      companyFeatures: { relocation: true, currencyRemote: true, city: 'Берлин' },
+    });
+    const testPool = [...pool, itemWithReloc];
+
+    expect(filterVacancies(testPool, { relocationOnly: true }, NOW).map((f) => f.cluster.id)).toEqual(['reloc']);
+    expect(filterVacancies(testPool, { currencyRemoteOnly: true }, NOW).map((f) => f.cluster.id)).toEqual(['reloc']);
+    expect(filterVacancies(testPool, { city: 'Берлин' }, NOW).map((f) => f.cluster.id)).toEqual(['reloc']);
+  });
 });
 
 describe('vacancySourceNames', () => {

@@ -172,4 +172,39 @@ describe('VacancyBoard · ручной отклик', () => {
     expect(html).toContain('2 сентября');
     expect(html).not.toContain('Я откликнулся');
   });
+
+  it('отображает переключатель видов (Список и На карте) с честным знаменателем B192', () => {
+    const itemWithFeatures = {
+      ...item,
+      cluster: {
+        ...item.cluster,
+        companyFeatures: {
+          relocation: true,
+          currencyRemote: true,
+          city: 'Амстердам',
+          coordinates: { lat: 52.3676, lng: 4.9041 },
+        },
+      },
+    };
+    const html = renderToStaticMarkup(
+      <VacancyBoard
+        pool={{
+          matched: [itemWithFeatures],
+          total: 1,
+          poolTotal: 1,
+          loading: false,
+          failed: false,
+          complete: true,
+        }}
+        applications={[]}
+      />,
+    );
+
+    expect(html).toContain('Список (1)');
+    expect(html).toContain('На карте (1 из 1)');
+    expect(html).toContain('Релокация (1 из 1)');
+    expect(html).toContain('Валюта (1 из 1)');
+    expect(html).toContain('✈️ Релокация');
+    expect(html).toContain('💵 Валюта');
+  });
 });

@@ -130,6 +130,19 @@ export interface VacancySubscriptionView {
   vacancies: StoredVacancy[];
 }
 
+export interface VacancyCompanyFeatures {
+  readonly relocation?: boolean;
+  readonly currencyRemote?: boolean;
+  readonly russianAbroad?: boolean;
+  readonly fullRemote?: boolean;
+  readonly industry?: string;
+  readonly city?: string;
+  readonly country?: string;
+  readonly coordinates?: { readonly lat: number; readonly lng: number };
+  readonly atsProvider?: string;
+  readonly atsBoardUrl?: string;
+}
+
 interface VacancyCluster {
   id: string;
   canonicalTitle: string;
@@ -158,6 +171,7 @@ interface VacancyCluster {
   lastSeenAt: string;
   status: 'active' | 'archived';
   vacanciesCount: number;
+  companyFeatures?: VacancyCompanyFeatures;
 }
 
 interface VacancyMatchExplanation {

@@ -105,4 +105,42 @@ describe('buildMatchedVacancyPage', () => {
     expect(page.total).toBe(0);
     expect(page.nextOffset).toBeNull();
   });
+
+  it('обогащает вакансию фишками компании и координатами при наличии данных в реестре', () => {
+    const miroItem: MatchedVacancyItem = {
+      cluster: {
+        id: 'cluster-miro',
+        canonicalTitle: 'Senior Frontend Engineer',
+        canonicalCompany: 'Miro',
+        canonicalLocation: 'Amsterdam, Netherlands',
+        isRemote: false,
+        salary: { from: 100_000, to: 150_000, currency: 'EUR', gross: true },
+        descriptionSummary: 'Full description',
+        skills: ['React', 'TS'],
+        primaryUrl: 'https://miro.com/careers/frontend',
+        sources: [],
+        firstObservedAt: '2026-09-01T00:00:00.000Z',
+        lastSeenAt: '2026-09-06T00:00:00.000Z',
+        status: 'active',
+        vacanciesCount: 1,
+      },
+      explanation: {
+        clusterId: 'cluster-miro',
+        roleMatch: 'target',
+        requirements: { matched: 2, total: 2 },
+        matchingPoints: ['React', 'TS'],
+        missingPoints: [],
+        summary: '2 из 2',
+        calculatedAt: '2026-09-06T00:00:00.000Z',
+      },
+    };
+
+    const page = buildMatchedVacancyPage([miroItem], 0);
+    const enriched = page.items[0];
+    expect(enriched.cluster.companyFeatures).toBeDefined();
+    expect(enriched.cluster.companyFeatures?.relocation).toBe(true);
+    expect(enriched.cluster.companyFeatures?.atsProvider).toBe('ashby');
+    expect(enriched.cluster.companyFeatures?.coordinates).toBeDefined();
+    expect(enriched.cluster.companyFeatures?.coordinates?.lat).toBeCloseTo(52.3676, 1);
+  });
 });

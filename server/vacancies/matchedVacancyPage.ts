@@ -1,4 +1,8 @@
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
+import type { VacancyCompanyFeatures, VacancyCluster } from '../domain/unifiedVacancy';
+import { getCompanyRegistry } from '../domain/companyRegistry';
+import { lookupLocationCoordinates } from '../domain/geoCoordinates';
+import type { Company } from '../domain/company';
 
 /**
  * Подбор отдаётся страницами, помещающимися в один ответ.
@@ -28,12 +32,77 @@ export interface MatchedVacancyPage {
   readonly nextOffset: number | null;
 }
 
+function extractLocationCoordinates(
+  canonicalLocation?: string,
+  company?: Company,
+): {
+  city?: string;
+  country?: string;
+  coordinates?: { lat: number; lng: number };
+} {
+  let city: string | undefined;
+  let country: string | undefined;
+  let coordinates: { lat: number; lng: number } | undefined;
+
+  if (canonicalLocation) {
+    const parts = canonicalLocation.split(',').map((p) => p.trim());
+    city = parts[0] || undefined;
+    country = parts[1] || undefined;
+    coordinates = lookupLocationCoordinates(city, country);
+  }
+
+  if (!coordinates && company && company.locations.length > 0) {
+    const locWithCoords = company.locations.find((l) => l.coordinates);
+    if (locWithCoords) {
+      coordinates = locWithCoords.coordinates;
+      if (!city) city = locWithCoords.city;
+      if (!country) country = locWithCoords.country;
+    } else {
+      if (!city) city = company.locations[0].city;
+      if (!country) country = company.locations[0].country;
+    }
+  }
+
+  return { city, country, coordinates };
+}
+
+function resolveCompanyFeatures(cluster: VacancyCluster): VacancyCompanyFeatures | undefined {
+  const registry = getCompanyRegistry();
+  const company =
+    registry.findByName(cluster.canonicalCompany) ??
+    (cluster.primaryUrl ? registry.findByDomain(cluster.primaryUrl) : undefined);
+
+  const loc = extractLocationCoordinates(cluster.canonicalLocation, company);
+
+  if (!company && !loc.coordinates && !loc.city) {
+    return undefined;
+  }
+
+  const hasAttr = (k: string) =>
+    Boolean(company?.attributes.some((a) => a.key === k && Boolean(a.value)));
+
+  return {
+    relocation: hasAttr('relocation') || undefined,
+    currencyRemote: hasAttr('currency_remote') || undefined,
+    russianAbroad: hasAttr('russian_founded_abroad') || undefined,
+    fullRemote: hasAttr('full_remote') || (cluster.isRemote ? true : undefined),
+    industry: company?.industry,
+    atsProvider: company?.atsProvider,
+    atsBoardUrl: company?.careersUrl,
+    city: loc.city,
+    country: loc.country,
+    coordinates: loc.coordinates,
+  };
+}
+
 function trim(item: MatchedVacancyItem): MatchedVacancyItem {
+  const companyFeatures = item.cluster.companyFeatures ?? resolveCompanyFeatures(item.cluster);
   return {
     cluster: {
       ...item.cluster,
       descriptionSummary: '',
       skills: [],
+      ...(companyFeatures ? { companyFeatures } : {}),
     },
     explanation: {
       ...item.explanation,

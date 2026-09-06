@@ -1,6 +1,6 @@
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { useMemo, useState } from 'react';
-import { ArrowSquareOut } from '@phosphor-icons/react';
+import { ArrowSquareOut, ListDashes, MapPin } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { employerLabel } from '../../../shared/employerLabel';
 import {
@@ -15,6 +15,11 @@ import { useVacancyApplications, type VacancyApplications } from './useVacancyAp
 import type { VacancyApplication } from '../../../shared/vacancyApplication';
 import { SavedSearchesPanel } from './SavedSearchesPanel';
 import type { VacancySubscription } from '../coach/coachApi';
+import { VacancyMapView } from './VacancyMapView';
+import {
+  calculateVacancyFacets,
+  type VacancyFacetCounts,
+} from './vacancyFacets';
 
 /**
  * «Вакансии» — весь собранный пул с фильтрами («Пульт»).
@@ -60,12 +65,14 @@ export function VacancyBoard({
   const counted = total || matched.length;
   const filling = total === 0 && matched.length > 0;
   const state = <VacancyBoardState loading={loading} failed={failed} empty={matched.length === 0} />;
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [filters, setFilters] = useState<VacancyFilters>({});
   // Момент расчёта возраста берётся один раз на прочитанный пул: пересчёт на
   // каждый рендер сдвигал бы возраст записей под курсором.
   const poolKey = `${matched.length}:${matched.at(-1)?.cluster.id ?? ''}`;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const now = useMemo(() => new Date().toISOString(), [poolKey]);
+  const facets = useMemo(() => calculateVacancyFacets(matched), [matched]);
   const shown = useMemo(
     () => filterVacancies(matched, filters, now),
     [matched, filters, now],
@@ -77,6 +84,7 @@ export function VacancyBoard({
   const asidePanel = (
     <VacancyFilterPanel
       filters={filters}
+      facets={facets}
       sources={sources}
       onChange={setFilters}
       onReset={() => setFilters({})}
@@ -105,41 +113,71 @@ export function VacancyBoard({
             <strong>{freshToday(matched, now)}</strong> собрано сегодня ·{' '}
             <strong>{shown.length}</strong> после фильтров
           </p>
+          <div className="career-vacancy-view-switcher" role="radiogroup" aria-label="Режим отображения">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={viewMode === 'list'}
+              className={`career-tab-btn ${viewMode === 'list' ? 'is-active' : ''}`}
+              onClick={() => setViewMode('list')}
+            >
+              <ListDashes size={14} aria-hidden="true" />
+              <span>Список ({shown.length})</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={viewMode === 'map'}
+              className={`career-tab-btn ${viewMode === 'map' ? 'is-active' : ''}`}
+              onClick={() => setViewMode('map')}
+            >
+              <MapPin size={14} aria-hidden="true" />
+              <span>На карте ({facets.onMap.count} из {facets.total})</span>
+            </button>
+          </div>
           <VacancyChips filters={filters} onChange={setFilters} />
         </header>
-        <div className="career-vacancy-table">
-          <div className="career-vacancy-columns" aria-hidden="true">
-            <span>вакансия</span>
-            <span>зарплата</span>
-            <span>локация</span>
-            <span>возраст</span>
-            <span>покрытие</span>
-            <span />
+        {viewMode === 'map' ? (
+          <VacancyMapView
+            items={shown}
+            selectedCity={filters.city}
+            onSelectCity={(city) => setFilters({ ...filters, city })}
+          />
+        ) : (
+          <div className="career-vacancy-table">
+            <div className="career-vacancy-columns" aria-hidden="true">
+              <span>вакансия</span>
+              <span>зарплата</span>
+              <span>локация</span>
+              <span>возраст</span>
+              <span>покрытие</span>
+              <span />
+            </div>
+            <ol className="career-vacancy-list">
+              {shown.map((item) => (
+                <VacancyRow
+                  key={item.cluster.id}
+                  item={item}
+                  now={now}
+                  applications={vacancyApplications}
+                />
+              ))}
+            </ol>
+            {shown.length === 0 ? (
+              <p className="career-market-empty">
+                Под эти фильтры не подходит ни одна запись пула.
+              </p>
+            ) : null}
+            <footer className="career-vacancy-foot">
+              <span className="career-cabinet-tag">
+                {sources.length} {sourceNoun(sources.length)} в подборе
+              </span>
+              <span className="career-cabinet-tag">
+                последняя запись собрана {lastCollected(matched)}
+              </span>
+            </footer>
           </div>
-          <ol className="career-vacancy-list">
-            {shown.map((item) => (
-              <VacancyRow
-                key={item.cluster.id}
-                item={item}
-                now={now}
-                applications={vacancyApplications}
-              />
-            ))}
-          </ol>
-          {shown.length === 0 ? (
-            <p className="career-market-empty">
-              Под эти фильтры не подходит ни одна запись пула.
-            </p>
-          ) : null}
-          <footer className="career-vacancy-foot">
-            <span className="career-cabinet-tag">
-              {sources.length} {sourceNoun(sources.length)} в подборе
-            </span>
-            <span className="career-cabinet-tag">
-              последняя запись собрана {lastCollected(matched)}
-            </span>
-          </footer>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -184,6 +222,7 @@ function VacancyBoardState({
 
 function VacancyFilterPanel({
   filters,
+  facets,
   sources,
   onChange,
   onReset,
@@ -192,6 +231,7 @@ function VacancyFilterPanel({
   onRefresh,
 }: {
   filters: VacancyFilters;
+  facets: VacancyFacetCounts;
   sources: ReadonlyArray<{ source: string; count: number }>;
   onChange: (filters: VacancyFilters) => void;
   onReset: () => void;
@@ -218,22 +258,81 @@ function VacancyFilterPanel({
 
       <FreshnessFilter filters={filters} onChange={onChange} />
 
-      <fieldset>
-        <legend>Формат</legend>
-        <div className="career-vacancy-chips">
-          <button
-            type="button"
-            className={filters.remoteOnly ? 'is-active' : ''}
-            aria-pressed={Boolean(filters.remoteOnly)}
-            onClick={() => onChange({ ...filters, remoteOnly: !filters.remoteOnly })}
-          >
-            Только удалённо
-          </button>
-        </div>
-      </fieldset>
+      <RemoteFormatFilter
+        remoteOnly={filters.remoteOnly}
+        onToggle={() => onChange({ ...filters, remoteOnly: !filters.remoteOnly })}
+      />
+
+      <FeatureFacetsFilter filters={filters} facets={facets} onChange={onChange} />
 
       <SourceFilter filters={filters} sources={sources} onChange={onChange} />
     </aside>
+  );
+}
+
+function FeatureFacetsFilter({
+  filters,
+  facets,
+  onChange,
+}: {
+  filters: VacancyFilters;
+  facets: VacancyFacetCounts;
+  onChange: (filters: VacancyFilters) => void;
+}) {
+  return (
+    <fieldset>
+      <legend>Фишки работодателей</legend>
+      <div className="career-vacancy-chips">
+        <button
+          type="button"
+          className={filters.relocationOnly ? 'is-active' : ''}
+          aria-pressed={Boolean(filters.relocationOnly)}
+          onClick={() => onChange({ ...filters, relocationOnly: !filters.relocationOnly })}
+        >
+          Релокация ({facets.relocation.count} из {facets.total})
+        </button>
+        <button
+          type="button"
+          className={filters.currencyRemoteOnly ? 'is-active' : ''}
+          aria-pressed={Boolean(filters.currencyRemoteOnly)}
+          onClick={() => onChange({ ...filters, currencyRemoteOnly: !filters.currencyRemoteOnly })}
+        >
+          Валюта ({facets.currencyRemote.count} из {facets.total})
+        </button>
+        <button
+          type="button"
+          className={filters.russianAbroadOnly ? 'is-active' : ''}
+          aria-pressed={Boolean(filters.russianAbroadOnly)}
+          onClick={() => onChange({ ...filters, russianAbroadOnly: !filters.russianAbroadOnly })}
+        >
+          Рос. за рубежом ({facets.russianAbroad.count} из {facets.total})
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
+function RemoteFormatFilter({
+  remoteOnly,
+  onToggle,
+}: {
+  remoteOnly?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <fieldset>
+      <legend>Формат</legend>
+      <div className="career-vacancy-chips">
+        <button
+          type="button"
+          className={remoteOnly ? 'is-active' : ''}
+          aria-pressed={Boolean(remoteOnly)}
+          onClick={onToggle}
+        >
+          Только удалённо
+        </button>
+      </div>
+    </fieldset>
   );
 }
 
@@ -347,6 +446,11 @@ function VacancyChips({
   if (filters.freshness !== undefined) {
     chips.push({ key: 'freshness', label: `до ${filters.freshness} дней` });
   }
+  if (filters.relocationOnly) chips.push({ key: 'relocationOnly', label: 'Релокация' });
+  if (filters.currencyRemoteOnly) chips.push({ key: 'currencyRemoteOnly', label: 'Валютная удалёнка' });
+  if (filters.russianAbroadOnly) chips.push({ key: 'russianAbroadOnly', label: 'Рос. за рубежом' });
+  if (filters.city) chips.push({ key: 'city', label: `Город: ${filters.city}` });
+  if (filters.industry) chips.push({ key: 'industry', label: `Индустрия: ${filters.industry}` });
   if (chips.length === 0) return null;
 
   return (
@@ -392,6 +496,30 @@ function sourceNoun(count: number): string {
   return 'источников';
 }
 
+function VacancyFeatureBadges({
+  features,
+}: {
+  features?: MatchedVacancyItem['cluster']['companyFeatures'];
+}) {
+  if (!features) return null;
+  const badges: string[] = [];
+  if (features.relocation) badges.push('✈️ Релокация');
+  if (features.currencyRemote) badges.push('💵 Валюта');
+  if (features.russianAbroad) badges.push('🌍 Рос. за рубежом');
+  if (features.atsProvider) badges.push(`ATS: ${features.atsProvider}`);
+  if (badges.length === 0) return null;
+
+  return (
+    <span className="career-vacancy-feature-badges">
+      {badges.map((b) => (
+        <span key={b} className="career-feature-badge">
+          {b}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 // Строка таблицы — шесть колонок макета подряд.
 // eslint-disable-next-line max-lines-per-function
 function VacancyRow({
@@ -426,6 +554,7 @@ function VacancyRow({
           {employerLabel(cluster.canonicalCompany)} ·{' '}
           {vacancySourceLabels(cluster.sources).join(', ')}
         </small>
+        <VacancyFeatureBadges features={cluster.companyFeatures} />
         </span>
       </div>
       <span className="career-vacancy-salary">{salaryLabel(cluster.salary)}</span>

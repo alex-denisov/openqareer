@@ -1,11 +1,12 @@
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { pluralRu } from '../../../shared/pluralRu';
+import { filterVacanciesByFacets, type VacancyFacetFilters } from './vacancyFacets';
 
 type VacancyCluster = MatchedVacancyItem['cluster'];
 type VacancyExplanation = MatchedVacancyItem['explanation'];
 
-export interface VacancyFilters {
+export interface VacancyFilters extends VacancyFacetFilters {
   /** Возраст в днях; `undefined` — не ограничивать. */
   readonly freshness?: number;
   readonly source?: string;
@@ -71,9 +72,10 @@ export function filterVacancies(
   filters: VacancyFilters,
   now: string,
 ): MatchedVacancyItem[] {
+  const facetFiltered = filterVacanciesByFacets(items, filters);
   const query = filters.query?.trim().toLocaleLowerCase('ru-RU');
 
-  return items.filter(({ cluster }) => {
+  return facetFiltered.filter(({ cluster }) => {
     if (filters.remoteOnly && !cluster.isRemote) return false;
     if (filters.source && !clusterSources(cluster).includes(filters.source)) {
       return false;

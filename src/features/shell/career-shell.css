@@ -8698,3 +8698,212 @@
     display: none;
   }
 }
+
+/* ==========================================================================
+   B203 — Вакансии по фишкам: переключатель видов (Список / На карте),
+   интерактивная карта распределения, пины городов и бейджи фишек.
+   ========================================================================== */
+
+.career-vacancy-view-switcher {
+  display: inline-flex;
+  align-items: center;
+  background: var(--career-bg-card);
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.career-vacancy-feature-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.career-feature-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid var(--career-line);
+  background: var(--career-bg-card);
+  color: var(--career-text-subtle);
+}
+
+.career-feature-badge.is-reloc {
+  border-color: rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.08);
+  color: #2563eb;
+}
+
+.career-feature-badge.is-currency {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.08);
+  color: #059669;
+}
+
+.career-feature-badge.is-ru-abroad {
+  border-color: rgba(139, 92, 246, 0.3);
+  background: rgba(139, 92, 246, 0.08);
+  color: #7c3aed;
+}
+
+.career-feature-badge.is-ats {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+  color: #d97706;
+}
+
+.career-vacancy-map-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.career-map-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--career-bg-elevated);
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md);
+}
+
+.career-map-canvas-container {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(24, 28, 38, 0.03) 0%, rgba(24, 28, 38, 0.08) 100%);
+}
+
+.career-map-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 440px;
+}
+
+.career-map-bg {
+  width: 100%;
+  height: 100%;
+}
+
+.career-map-pin-group {
+  cursor: pointer;
+  outline: none;
+  transition: transform 0.2s ease;
+}
+
+.career-map-pin-group:hover,
+.career-map-pin-group:focus-visible {
+  filter: drop-shadow(0 2px 8px rgba(37, 99, 235, 0.4));
+}
+
+.career-map-pulse {
+  fill: rgba(37, 99, 235, 0.15);
+  stroke: rgba(37, 99, 235, 0.4);
+  stroke-width: 1.5;
+  transition: all 0.2s ease;
+}
+
+.career-map-pin-group.is-active .career-map-pulse {
+  fill: rgba(37, 99, 235, 0.3);
+  stroke: #2563eb;
+  stroke-width: 2;
+}
+
+.career-map-dot {
+  fill: #2563eb;
+}
+
+.career-map-label {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--career-text);
+  paint-order: stroke;
+  stroke: var(--career-bg-elevated);
+  stroke-width: 3px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.career-map-city-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.career-map-active-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  background: var(--career-accent-soft);
+  border: 1px solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  font-size: 0.8rem;
+}
+
+.career-map-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.career-map-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: var(--career-bg-card);
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.career-map-card-head h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.career-map-card-company {
+  font-size: 0.8rem;
+  color: var(--career-text-dim);
+}
+
+.career-map-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.75rem;
+}
+
+.career-map-card-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.career-map-card-actions {
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.career-map-unmapped-section {
+  margin-top: 16px;
+  border-top: 1px solid var(--career-line);
+  padding-top: 16px;
+}
+

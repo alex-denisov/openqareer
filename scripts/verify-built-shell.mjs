@@ -471,6 +471,16 @@ async function verifyViewport(browser, baseUrl, viewport) {
               lastSeenAt: seen(0),
               status: 'active',
               vacanciesCount: 1,
+              companyFeatures: {
+                relocation: true,
+                currencyRemote: true,
+                russianAbroad: false,
+                fullRemote: true,
+                industry: 'Fintech',
+                atsProvider: 'greenhouse',
+                city: 'Москва',
+                coordinates: { lat: 55.7558, lng: 37.6173 },
+              },
             },
             explanation: {
               clusterId: 'cluster-fresh',
@@ -976,6 +986,21 @@ async function verifyViewport(browser, baseUrl, viewport) {
     path: `output/playwright/b178-vacancies-${viewport.name}.png`,
     fullPage: true,
   });
+  await page.screenshot({
+    path: `output/playwright/b203-vacancies-list-${viewport.name}.png`,
+    fullPage: true,
+  });
+
+  // B203: переключение на карту и проверка честных знаменателей
+  const mapSwitchBtn = page.getByRole('radio', { name: /На карте/ });
+  await mapSwitchBtn.click();
+  await page.locator('.career-vacancy-map-view').waitFor();
+  await page.screenshot({
+    path: `output/playwright/b203-vacancies-map-${viewport.name}.png`,
+    fullPage: true,
+  });
+  await page.getByRole('radio', { name: /Список/ }).click();
+  await page.locator('.career-vacancy-board').waitFor();
 
   // Ручной отклик (B165, срез 1, узлы 6 и 8): кандидат подтверждает отклик
   // сам, строка после этого говорит датой, а не значком, и на сервер уходит
