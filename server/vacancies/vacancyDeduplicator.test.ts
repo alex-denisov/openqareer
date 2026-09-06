@@ -131,3 +131,179 @@ describe('Vacancies with no named employer stay apart (B164)', () => {
     expect(clusters.every((cluster) => cluster.vacanciesCount === 1)).toBe(true);
   });
 });
+
+describe('B205: Cross-source deduplication across five platforms into one card', () => {
+  const atsPostingUrl = 'https://boards.greenhouse.io/miro/jobs/987654';
+
+  const atsVacancy: UnifiedVacancy = {
+    id: 'ats-miro-987654',
+    fingerprint: 'fp-ats-987654',
+    title: 'Senior Frontend Engineer (Design Systems)',
+    company: 'Miro',
+    location: 'Амстердам, Нидерланды',
+    isRemote: true,
+    description: 'Lead our core UI design system development using React and WebGL.',
+    requiredSkills: ['React', 'TypeScript', 'WebGL', 'Design Systems'],
+    url: atsPostingUrl,
+    provenance: {
+      sourceType: 'json_api',
+      sourceId: 'ats_greenhouse_miro',
+      sourceName: 'Miro (Greenhouse ATS)',
+      sourceUrl: atsPostingUrl,
+      observedAt: '2026-09-01T08:00:00.000Z',
+    },
+    publishedAt: '2026-09-01T08:00:00.000Z',
+    status: 'active',
+  };
+
+  const remotiveVacancy: UnifiedVacancy = {
+    id: 'remotive-miro-ui',
+    fingerprint: 'fp-remotive-miro-ui',
+    title: 'Senior Frontend Engineer - Design Systems',
+    company: 'Miro Inc.',
+    location: 'Worldwide',
+    isRemote: true,
+    salary: { from: 110000, to: 140000, currency: 'EUR', gross: true },
+    description: 'Miro is looking for a Senior Frontend Engineer to scale our design systems.',
+    requiredSkills: ['React', 'TypeScript'],
+    url: 'https://remotive.com/jobs/miro-design-systems',
+    provenance: {
+      sourceType: 'remotive',
+      sourceId: 'remotive',
+      sourceName: 'Remotive',
+      sourceUrl: 'https://remotive.com/jobs/miro-design-systems',
+      observedAt: '2026-09-01T10:00:00.000Z',
+    },
+    publishedAt: '2026-09-01T09:30:00.000Z',
+    status: 'active',
+  };
+
+  const remoteOkVacancy: UnifiedVacancy = {
+    id: 'remoteok-miro-ds',
+    fingerprint: 'fp-remoteok-miro-ds',
+    title: 'Senior Frontend Engineer (Design Systems)',
+    company: 'Miro',
+    location: 'Remote',
+    isRemote: true,
+    description: 'Lead our core UI design system development. Direct apply: https://boards.greenhouse.io/miro/jobs/987654',
+    requiredSkills: ['React', 'Design Systems'],
+    url: 'https://remoteok.com/remote-jobs/miro-senior-frontend-engineer',
+    provenance: {
+      sourceType: 'json_api',
+      sourceId: 'remoteok',
+      sourceName: 'RemoteOK',
+      sourceUrl: 'https://remoteok.com/remote-jobs/miro-senior-frontend-engineer',
+      observedAt: '2026-09-01T11:00:00.000Z',
+    },
+    publishedAt: '2026-09-01T10:15:00.000Z',
+    status: 'active',
+  };
+
+  const rssVacancy: UnifiedVacancy = {
+    id: 'rss-miro-ds',
+    fingerprint: 'fp-rss-miro-ds',
+    title: 'Senior Frontend Developer, Design Systems',
+    company: 'Miro',
+    location: 'Amsterdam / Remote',
+    isRemote: true,
+    description: 'Core UI engineering role at Miro. Apply via ATS.',
+    requiredSkills: ['Frontend', 'React'],
+    url: 'https://newsfeed.example/jobs/miro-ds',
+    provenance: {
+      sourceType: 'rss',
+      sourceId: 'rss_europe_tech',
+      sourceName: 'EU Tech RSS Feed',
+      sourceUrl: 'https://newsfeed.example/jobs/miro-ds',
+      observedAt: '2026-09-01T12:00:00.000Z',
+    },
+    publishedAt: '2026-09-01T11:45:00.000Z',
+    status: 'active',
+  };
+
+  const telegramVacancy: UnifiedVacancy = {
+    id: 'tg-miro-ds',
+    fingerprint: 'fp-tg-miro-ds',
+    title: 'Senior Frontend Engineer (Design Systems) в Miro',
+    company: 'Miro',
+    location: 'Амстердам / Удаленно',
+    isRemote: true,
+    description: 'Горячая вакансия в Miro: Senior Frontend Engineer (Design Systems). Отклик на ATS: https://boards.greenhouse.io/miro/jobs/987654',
+    requiredSkills: ['React', 'TypeScript', 'CSS'],
+    url: 'https://t.me/relocation_jobs/7788',
+    provenance: {
+      sourceType: 'telegram',
+      sourceId: 'tg_relocation_jobs',
+      sourceName: 'Relocation Jobs TG',
+      sourceUrl: 'https://t.me/relocation_jobs/7788',
+      observedAt: '2026-09-01T14:00:00.000Z',
+    },
+    publishedAt: '2026-09-01T13:00:00.000Z',
+    status: 'active',
+  };
+
+  it('clusters the same vacancy from 5 platforms into a single card', () => {
+    const clusters = clusterVacancies([
+      telegramVacancy,
+      remotiveVacancy,
+      atsVacancy,
+      remoteOkVacancy,
+      rssVacancy,
+    ]);
+
+    expect(clusters).toHaveLength(1);
+    const card = clusters[0];
+
+    // Vacancies count reflects all 5 platforms
+    expect(card.vacanciesCount).toBe(5);
+
+    // Lists all 5 distinct sources
+    expect(card.sources).toHaveLength(5);
+    const sourceIds = card.sources.map((s) => s.sourceId);
+    expect(sourceIds).toContain('ats_greenhouse_miro');
+    expect(sourceIds).toContain('remotive');
+    expect(sourceIds).toContain('remoteok');
+    expect(sourceIds).toContain('rss_europe_tech');
+    expect(sourceIds).toContain('tg_relocation_jobs');
+
+    // Direct employer ATS is chosen as canonical primaryUrl over aggregators/channels
+    expect(card.primaryUrl).toBe(atsPostingUrl);
+    expect(card.canonicalCompany).toBe('Miro');
+
+    // Salary enriched from Remotive
+    expect(card.salary?.from).toBe(110000);
+    expect(card.salary?.currency).toBe('EUR');
+
+    // Location keeps the specific city over generic "Worldwide"
+    expect(card.canonicalLocation).toContain('Амстердам');
+
+    // Skills merged from all platforms
+    expect(card.skills).toContain('WebGL');
+    expect(card.skills).toContain('Design Systems');
+  });
+
+  it('calculates reprint and authenticity share per source for B200', async () => {
+    const { calculateSourceAuthenticity } = await import('./vacancyDeduplicator');
+    const clusters = clusterVacancies([
+      atsVacancy,
+      remotiveVacancy,
+      remoteOkVacancy,
+      rssVacancy,
+      telegramVacancy,
+    ]);
+
+    // ATS is the original direct employer: 1 original, 0 reprints
+    const atsAuth = calculateSourceAuthenticity('ats_greenhouse_miro', clusters);
+    expect(atsAuth.originalShare).toEqual({ counted: 1, of: 1 });
+    expect(atsAuth.reprintShare).toEqual({ counted: 0, of: 1 });
+
+    // Remotive reprinted from employer ATS: 0 original, 1 reprint
+    const remotiveAuth = calculateSourceAuthenticity('remotive', clusters);
+    expect(remotiveAuth.originalShare).toEqual({ counted: 0, of: 1 });
+    expect(remotiveAuth.reprintShare).toEqual({ counted: 1, of: 1 });
+
+    // Telegram reprinted: 0 original, 1 reprint
+    const tgAuth = calculateSourceAuthenticity('tg_relocation_jobs', clusters);
+    expect(tgAuth.originalShare).toEqual({ counted: 0, of: 1 });
+    expect(tgAuth.reprintShare).toEqual({ counted: 1, of: 1 });
+  });
+});

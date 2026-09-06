@@ -73,6 +73,11 @@ export interface SourceObservations {
   readonly windowSuccessful: number;
   /** Перепись последнего непустого улова; `null` — непустого улова не было. */
   readonly census: ReadingCensus | null;
+  /** Подлинность: доля неперепечатанных объявлений из дедупликатора B205. */
+  readonly authenticity?: {
+    readonly originalShare: CountedShare;
+    readonly reprintShare: CountedShare;
+  } | null;
 }
 
 export function emptySourceObservations(): SourceObservations {
@@ -86,6 +91,7 @@ export function emptySourceObservations(): SourceObservations {
     windowReadings: 0,
     windowSuccessful: 0,
     census: null,
+    authenticity: null,
   };
 }
 
@@ -226,8 +232,14 @@ export interface SourceTrust {
     readonly permitted: boolean;
     readonly addressStatus: SourceAddressRight;
   };
-  /** Подлинность ждёт дедупликатора B205 и до него не выдумывает числа. */
-  readonly authenticity: { readonly measured: false; readonly blockedBy: 'B205' };
+  /** Подлинность: доля неперепечатанных объявлений (B205). */
+  readonly authenticity:
+    | {
+        readonly measured: true;
+        readonly originalShare: CountedShare;
+        readonly reprintShare: CountedShare;
+      }
+    | { readonly measured: false; readonly blockedBy?: 'B205' };
 }
 
 export interface SourceHealth {
@@ -341,6 +353,7 @@ const TRUST_GOOD = 0.9;
 function trustShortfalls(
   completeness: SourceTrust['completeness'],
   consistency: SourceTrust['consistency'],
+  authenticity: SourceTrust['authenticity'],
   total: number,
 ): { reasons: string[]; worstRatio: number } {
   const criteria = [
@@ -352,6 +365,13 @@ function trustShortfalls(
       text: (n: number) => `Успешных опросов ${n} из ${consistency.successful.of} за 30 дней`,
     },
   ];
+
+  if (authenticity.measured && authenticity.originalShare.of > 0) {
+    criteria.push({
+      share: authenticity.originalShare,
+      text: (n: number) => `Подлинных объявлений ${n} из ${authenticity.originalShare.of}`,
+    });
+  }
 
   const reasons: string[] = [];
   let worstRatio = 1;
@@ -376,7 +396,13 @@ function describeTrust(observations: SourceObservations, right: SourceRight): So
   };
   const permitted = isPermitted(right.addressStatus);
   const lawfulness = { permitted, addressStatus: right.addressStatus };
-  const authenticity = { measured: false, blockedBy: 'B205' } as const;
+  const authenticity: SourceTrust['authenticity'] = observations.authenticity
+    ? {
+        measured: true,
+        originalShare: observations.authenticity.originalShare,
+        reprintShare: observations.authenticity.reprintShare,
+      }
+    : { measured: false, blockedBy: 'B205' };
   const measured = { completeness, consistency, lawfulness, authenticity };
 
   const lawfulnessReason = permitted
@@ -391,7 +417,7 @@ function describeTrust(observations: SourceObservations, right: SourceRight): So
     };
   }
 
-  const { reasons, worstRatio } = trustShortfalls(completeness, consistency, total);
+  const { reasons, worstRatio } = trustShortfalls(completeness, consistency, authenticity, total);
   const allReasons = [...lawfulnessReason, ...reasons];
   const verdict: SourceTrustVerdict =
     !permitted || worstRatio < TRUST_LOW ? 'low' : allReasons.length > 0 ? 'mixed' : 'trusted';

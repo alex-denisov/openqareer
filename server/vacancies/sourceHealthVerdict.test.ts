@@ -187,4 +187,38 @@ describe('B200 · доверие площадке', () => {
 
     expect(health.trust.consistency.successful).toEqual({ counted: 1, of: 1 });
   });
+
+  it('B205: учитывает подлинность объявлений, когда дедупликатор посчитал перепечатки', () => {
+    const observed: SourceObservations = {
+      ...emptySourceObservations(),
+      firstReadingAt: daysAgo(1),
+      lastReadingAt: daysAgo(0),
+      lastReadingSucceeded: true,
+      lastNonEmptyReadingAt: daysAgo(0),
+      windowReadings: 1,
+      windowSuccessful: 1,
+      census: {
+        total: 10,
+        fresherThan30Days: 10,
+        fresherThan90Days: 10,
+        fresherThan180Days: 10,
+        withEmployer: 10,
+        withLink: 10,
+        withDate: 10,
+      },
+      authenticity: {
+        originalShare: { counted: 2, of: 10 },
+        reprintShare: { counted: 8, of: 10 },
+      },
+    };
+
+    const health = describeSourceHealth(observed, { addressStatus: 'live' }, NOW);
+    expect(health.trust.authenticity.measured).toBe(true);
+    if (health.trust.authenticity.measured) {
+      expect(health.trust.authenticity.originalShare).toEqual({ counted: 2, of: 10 });
+      expect(health.trust.authenticity.reprintShare).toEqual({ counted: 8, of: 10 });
+    }
+    expect(health.trust.verdict).toBe('low');
+    expect(health.trust.reasons.some((r) => r.includes('Подлинных объявлений 2 из 10'))).toBe(true);
+  });
 });

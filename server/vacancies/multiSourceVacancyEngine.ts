@@ -5,7 +5,7 @@ import type {
   VacancyMatchExplanation,
   VacancySourceConfig,
 } from '../domain/unifiedVacancy';
-import { clusterVacancies } from './vacancyDeduplicator';
+import { calculateSourceAuthenticity, clusterVacancies } from './vacancyDeduplicator';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import {
   censusOfReading,
@@ -195,8 +195,13 @@ export class MultiSourceVacancyEngine {
   }
 
   private healthOf(sourceId: string, nowMs: number): SourceHealth {
+    const rawObs = this.observations.get(sourceId) ?? emptySourceObservations();
+    const authenticity =
+      this.clusters.length > 0
+        ? calculateSourceAuthenticity(sourceId, this.clusters)
+        : rawObs.authenticity;
     return describeSourceHealth(
-      this.observations.get(sourceId) ?? emptySourceObservations(),
+      { ...rawObs, authenticity },
       { addressStatus: this.rights.get(sourceId) ?? 'not_established' },
       nowMs,
     );
