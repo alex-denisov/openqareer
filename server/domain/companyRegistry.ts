@@ -18,6 +18,12 @@ import {
   type NotionRelocationRaw,
   type TelegraphCurrencyRemoteRaw,
 } from './companyListIngestion';
+import {
+  BUILDIN_RU_ABROAD_SEEDS,
+  DRIVE_COMPANIES_SEEDS,
+  NOTION_RELOCATION_SEEDS,
+  TELEGRAPH_CURRENCY_REMOTE_SEEDS,
+} from './companySeeds';
 import type { UnifiedVacancy } from './unifiedVacancy';
 
 export interface CompanyQuery {
@@ -49,6 +55,43 @@ const DEFAULT_EVIDENCE_DIR = path.resolve(
   process.cwd(),
   'docs/v1-release/tasks/evidence/B199-source-probe',
 );
+
+function loadFileRecords(dir: string): IngestedCompanyRecord[] {
+  const records: IngestedCompanyRecord[] = [];
+  const notionPath = path.join(dir, 'notion-160-relocation.json');
+  if (fs.existsSync(notionPath)) {
+    const data = JSON.parse(fs.readFileSync(notionPath, 'utf-8')) as NotionRelocationRaw[];
+    records.push(...ingestNotionRelocation(data));
+  }
+  const telegraphPath = path.join(dir, 'telegraph-240-currency-remote.json');
+  if (fs.existsSync(telegraphPath)) {
+    const data = JSON.parse(fs.readFileSync(telegraphPath, 'utf-8')) as TelegraphCurrencyRemoteRaw[];
+    records.push(...ingestTelegraphCurrencyRemote(data));
+  }
+  const buildinPath = path.join(dir, 'buildin-ru-abroad.json');
+  if (fs.existsSync(buildinPath)) {
+    const data = JSON.parse(fs.readFileSync(buildinPath, 'utf-8')) as BuildinRuAbroadRaw[];
+    records.push(...ingestBuildinRuAbroad(data));
+  }
+  const drivePath = path.join(dir, 'drive-companies.json');
+  if (fs.existsSync(drivePath)) {
+    const data = JSON.parse(fs.readFileSync(drivePath, 'utf-8')) as DriveCompanyRaw[];
+    records.push(...ingestDriveCompanies(data));
+  }
+  return records;
+}
+
+function loadRawRecords(baseDir?: string): IngestedCompanyRecord[] {
+  if (baseDir && fs.existsSync(path.join(baseDir, 'notion-160-relocation.json'))) {
+    return loadFileRecords(baseDir);
+  }
+  return [
+    ...ingestNotionRelocation(NOTION_RELOCATION_SEEDS),
+    ...ingestTelegraphCurrencyRemote(TELEGRAPH_CURRENCY_REMOTE_SEEDS),
+    ...ingestBuildinRuAbroad(BUILDIN_RU_ABROAD_SEEDS),
+    ...ingestDriveCompanies(DRIVE_COMPANIES_SEEDS),
+  ];
+}
 
 function matchesSearch(c: Company, search?: string): boolean {
   if (!search) return true;
@@ -127,32 +170,7 @@ export class CompanyRegistry {
    * Loads the 4 verified owner lists from evidence directory and indexes all companies.
    */
   public loadOwnerLists(baseDir = DEFAULT_EVIDENCE_DIR): void {
-    const records: IngestedCompanyRecord[] = [];
-
-    const notionPath = path.join(baseDir, 'notion-160-relocation.json');
-    if (fs.existsSync(notionPath)) {
-      const data = JSON.parse(fs.readFileSync(notionPath, 'utf-8')) as NotionRelocationRaw[];
-      records.push(...ingestNotionRelocation(data));
-    }
-
-    const telegraphPath = path.join(baseDir, 'telegraph-240-currency-remote.json');
-    if (fs.existsSync(telegraphPath)) {
-      const data = JSON.parse(fs.readFileSync(telegraphPath, 'utf-8')) as TelegraphCurrencyRemoteRaw[];
-      records.push(...ingestTelegraphCurrencyRemote(data));
-    }
-
-    const buildinPath = path.join(baseDir, 'buildin-ru-abroad.json');
-    if (fs.existsSync(buildinPath)) {
-      const data = JSON.parse(fs.readFileSync(buildinPath, 'utf-8')) as BuildinRuAbroadRaw[];
-      records.push(...ingestBuildinRuAbroad(data));
-    }
-
-    const drivePath = path.join(baseDir, 'drive-companies.json');
-    if (fs.existsSync(drivePath)) {
-      const data = JSON.parse(fs.readFileSync(drivePath, 'utf-8')) as DriveCompanyRaw[];
-      records.push(...ingestDriveCompanies(data));
-    }
-
+    const records = loadRawRecords(baseDir);
     const merged = mergeCompanyRecords(records);
     this.companies.clear();
     this.domainIndex.clear();

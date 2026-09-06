@@ -330,5 +330,12 @@ describe('B201: Company Registry and Owner Lists with Provenance', () => {
       const reg = getCompanyRegistry();
       expect(reg.getAll().length).toBeGreaterThan(600);
     });
+
+    it('falls back to embedded companySeeds when evidence directory is missing', () => {
+      const registry = new CompanyRegistry();
+      registry.loadOwnerLists('/non/existent/path/for/ci');
+      expect(registry.getAll().length).toBeGreaterThan(600);
+      expect(registry.findByName('Miro')).toBeDefined();
+    });
   });
 });
