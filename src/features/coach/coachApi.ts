@@ -401,12 +401,22 @@ export async function register(input: {
 }
 
 export async function logout(): Promise<void> {
-  setStoredSessionToken(null);
-  const response = await apiFetch('/api/v1/auth/logout', {
-    method: 'POST',
-  });
-  if (!response.ok) {
-    await throwApiError(response);
+  // Сначала спрашиваем сервер, потом стираем удостоверение. Порядок наоборот
+  // означал, что `POST /auth/logout` уходил без токена: в браузере сессию ещё
+  // опознавала cookie, а в десктопе cookie нет вовсе — и серверная сессия
+  // оставалась живой до истечения срока. Сервер отвечает `204` в обоих
+  // случаях, поэтому клиент об этом не узнавал (PRB-022).
+  try {
+    const response = await apiFetch('/api/v1/auth/logout', {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      await throwApiError(response);
+    }
+  } finally {
+    // Токен уходит в любом случае: отказ сети — не повод оставить кандидата
+    // подписанным на устройстве, с которого он попросил выйти.
+    setStoredSessionToken(null);
   }
 }
 
