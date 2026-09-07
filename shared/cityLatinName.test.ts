@@ -80,4 +80,32 @@ describe('английское имя города для адреса (B209)', 
     expect(latinCityName('St Petersburg')).toBe('st-petersburg');
     expect(latinCityName('St Albans')).toBe('st-albans');
   });
+
+  /**
+   * Прод 2026-09-07, третий заход по живому пулу: адреса `/vacancies/blank`,
+   * `/vacancies/update-location`, `/vacancies/city-of-london-corporation`.
+   * Первые два — заглушки ATS вместо места, третий — название организации.
+   * Страница «Вакансии — Blank» не значит ничего.
+   */
+  it('не принимает за город заглушку площадки', () => {
+    expect(latinCityName('Blank')).toBeUndefined();
+    expect(latinCityName('Update Location')).toBeUndefined();
+    expect(latinCityName('Unknown')).toBeUndefined();
+    expect(latinCityName('N/A')).toBeUndefined();
+    expect(latinCityName('TBD')).toBeUndefined();
+    expect(latinCityName('Not Specified')).toBeUndefined();
+  });
+
+  it('не принимает за город название организации', () => {
+    expect(latinCityName('City of London Corporation')).toBeUndefined();
+    expect(latinCityName('Acme GmbH')).toBeUndefined();
+    expect(latinCityName('Globex Inc')).toBeUndefined();
+  });
+
+  it('сводит польское и английское написание одного города', () => {
+    expect(latinCityName('Warszawa')).toBe('warsaw');
+    expect(latinCityName('Warsaw')).toBe('warsaw');
+    expect(latinCityName('Wien')).toBe('vienna');
+    expect(latinCityName('München')).toBe('munich');
+  });
 });

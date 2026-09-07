@@ -266,6 +266,27 @@ const NON_CITY_WORDS = new Set([
   'in',
   'across',
   'select',
+  // Заглушки площадок вместо места: страница «Вакансии — Blank» не значит
+  // ничего (найдено на проде 2026-09-07).
+  'blank',
+  'update',
+  'unknown',
+  'undefined',
+  'null',
+  'none',
+  'tbd',
+  'tba',
+  'specified',
+  'n/a',
+  'na',
+  // Название организации — не место.
+  'corporation',
+  'corp',
+  'inc',
+  'ltd',
+  'llc',
+  'gmbh',
+  'company',
 ]);
 
 /**
@@ -295,6 +316,23 @@ const CITY_SLUG_ALIASES: Readonly<Record<string, string>> = {
   nyc: 'new-york',
   'saint-petersburg-russia': 'saint-petersburg',
   'washington-dc': 'washington',
+  // Самоназвание города и его английское имя — один город и один адрес.
+  warszawa: 'warsaw',
+  wien: 'vienna',
+  münchen: 'munich',
+  muenchen: 'munich',
+  köln: 'cologne',
+  koeln: 'cologne',
+  praha: 'prague',
+  lisboa: 'lisbon',
+  roma: 'rome',
+  milano: 'milan',
+  firenze: 'florence',
+  torino: 'turin',
+  napoli: 'naples',
+  sevilla: 'seville',
+  gothenburg: 'goteborg',
+  kyiv: 'kiev',
 };
 
 const LATIN_LABEL = /^[a-z0-9]+(?:[ -][a-z0-9]+)*$/u;
@@ -311,14 +349,27 @@ export function latinCityName(label?: string): string | undefined {
   const named = CITY_LATIN_NAMES[key];
   if (named) return RESERVED_CITY_SLUGS.has(named) ? undefined : named;
 
-  const latin = trimmed.toLowerCase().replace(/[\s-]+/gu, ' ').trim();
+  const latin = trimmed
+    .toLowerCase()
+    .normalize('NFC')
+    .replace(/[\s\-/]+/gu, ' ')
+    .trim();
+  // Слова проверяются до приведения к латинице: «München» и «Warszawa» — имена
+  // городов, у которых есть общепринятое английское написание, и они лежат в
+  // списке псевдонимов.
+  const aliased = CITY_SLUG_ALIASES[latin.replace(/ /gu, '-')];
+  if (aliased) return RESERVED_CITY_SLUGS.has(aliased) ? undefined : aliased;
   if (!LATIN_LABEL.test(latin.replace(/ /gu, '-'))) return undefined;
   // Способ работы и надрегион городом не становятся, даже когда написаны
   // латиницей и выглядят как имя собственное.
+  // «N/A» после очистки становится «n a»: имени города в двух буквах не
+  // бывает, а заглушек такого вида у площадок много.
+  if (latin.replace(/[^a-z0-9]/gu, '').length < 3) return undefined;
+
   const words = latin.split(' ');
   if (words.some((word) => NON_CITY_WORDS.has(word))) return undefined;
   if (words.length > 1 && STREET_TAIL_WORDS.has(words[words.length - 1]!)) return undefined;
 
-  const slug = CITY_SLUG_ALIASES[latin.replace(/ /gu, '-')] ?? latin.replace(/ /gu, '-');
+  const slug = latin.replace(/ /gu, '-');
   return RESERVED_CITY_SLUGS.has(slug) ? undefined : slug;
 }
