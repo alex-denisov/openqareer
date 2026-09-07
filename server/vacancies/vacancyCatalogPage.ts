@@ -12,6 +12,7 @@ import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import {
   CATALOG_ROOT,
   catalogPagePath,
+  listingPath,
   vacancyKey,
   vacancyPath,
 } from '../../shared/vacancyCatalogRoutes';
@@ -47,6 +48,11 @@ export interface StructuredGraph {
 }
 
 export interface CatalogPage {
+  /** Заголовок `h1`. У корня каталога — просто «Вакансии». */
+  readonly heading: string;
+  /** Заголовок документа и `og:title`. */
+  readonly documentTitle: string;
+  readonly description: string;
   readonly page: number;
   readonly pageCount: number;
   readonly total: number;
@@ -59,6 +65,12 @@ export interface CatalogPage {
 
 export interface VacancyDetail {
   readonly entry: CatalogEntry;
+  /**
+   * Текст вакансии для страницы и для разметки — одно и то же значение.
+   * Поисковик требует, чтобы разметка совпадала с видимым текстом, поэтому
+   * два источника здесь были бы нарушением, а не удобством.
+   */
+  readonly description: string;
   readonly jsonLd: StructuredGraph;
 }
 
@@ -112,6 +124,19 @@ export function catalogEntries(clusters: readonly VacancyCluster[]): CatalogEntr
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || a.title.localeCompare(b.title));
 }
 
+/**
+ * Сводка списка, из которой строится его страница. Приходит из
+ * `vacancyCatalogFacets` — там же решается, публикуется список вообще или нет.
+ */
+export interface ListingSummary {
+  readonly place: string;
+  readonly placeLabel: string;
+  readonly role?: string;
+  readonly roleLabel?: string;
+  readonly path: string;
+  readonly count: number;
+}
+
 function breadcrumbs(extra?: { name: string; path: string }): StructuredNode {
   const items = [
     { '@type': 'ListItem', position: 1, name: 'openqareer', item: `${SITE_ORIGIN}/` },
@@ -136,6 +161,16 @@ export function buildCatalogPage(
   const slice = entries.slice((page - 1) * pageSize, page * pageSize);
 
   return {
+    heading: 'Вакансии',
+    documentTitle:
+      page > 1
+        ? `Вакансии — страница ${page} · openqareer`
+        : 'Вакансии с досок работодателей и открытых площадок · openqareer',
+    description:
+      entries.length === 0
+        ? 'Каталог вакансий openqareer: сейчас в нём нет ни одной записи с публичным адресом.'
+        : `${entries.length} вакансий, собранных с досок работодателей и открытых площадок. ` +
+          'Каждая карточка называет источник и дату наблюдения.',
     page,
     pageCount,
     total: entries.length,
@@ -163,7 +198,11 @@ export function buildCatalogPage(
   };
 }
 
-function jobPosting(cluster: VacancyCluster, entry: CatalogEntry): StructuredNode {
+function jobPosting(
+  cluster: VacancyCluster,
+  entry: CatalogEntry,
+  description: string,
+): StructuredNode {
   const salary = cluster.salary;
   const hasSalary = salary && (salary.from !== undefined || salary.to !== undefined);
   const company = cluster.canonicalCompany.trim();
@@ -171,7 +210,7 @@ function jobPosting(cluster: VacancyCluster, entry: CatalogEntry): StructuredNod
   return {
     '@type': 'JobPosting',
     title: entry.title,
-    description: entry.summary,
+    description,
     datePosted: isoDate(entry.publishedAt),
     identifier: { '@type': 'PropertyValue', name: 'openqareer', value: entry.key },
     url: `${SITE_ORIGIN}${entry.path}`,
@@ -209,18 +248,95 @@ function jobPosting(cluster: VacancyCluster, entry: CatalogEntry): StructuredNod
   };
 }
 
-/** Карточка вакансии с микроразметкой, или `null`, если адреса у неё нет. */
-export function buildVacancyDetail(cluster: VacancyCluster): VacancyDetail | null {
+/**
+ * Карточка вакансии с микроразметкой, или `null`, если адреса у неё нет.
+ *
+ * `fullDescription` — полный текст исходной вакансии: кластер несёт только
+ * первые 300 знаков, и без него в разметку уходил обрывок на полуслове.
+ */
+export function buildVacancyDetail(
+  cluster: VacancyCluster,
+  fullDescription?: string,
+): VacancyDetail | null {
   const entry = toCatalogEntry(cluster);
   if (!entry) return null;
+  const description = fullDescription?.trim() || entry.summary;
 
   return {
     entry,
+    description,
     jsonLd: {
       '@context': 'https://schema.org',
       '@graph': [
-        jobPosting(cluster, entry),
+        jobPosting(cluster, entry, description),
         breadcrumbs({ name: entry.title, path: entry.path }),
+      ],
+    },
+  };
+}
+
+/**
+ * Заголовок списка. Место названо через тире, а не предлогом: «в Москве» и «в
+ * Берлине» требуют склонения, а склонять чужие названия по правилу — тот же
+ * сорт выдумки, что и транслит. Тире читается одинаково для любого города.
+ */
+function listingHeading(summary: ListingSummary): string {
+  const remote = summary.place === 'remote';
+  if (summary.roleLabel) {
+    return remote
+      ? `${summary.roleLabel} — удалённые вакансии`
+      : `${summary.roleLabel} — вакансии, ${summary.placeLabel}`;
+  }
+  return remote ? 'Удалённые вакансии' : `Вакансии — ${summary.placeLabel}`;
+}
+
+/** Страница списка по месту и роли (B209, срез 2b). */
+export function buildListingPage(
+  clusters: readonly VacancyCluster[],
+  summary: ListingSummary,
+  requestedPage: number,
+  pageSize: number = CATALOG_PAGE_SIZE,
+): CatalogPage {
+  const entries = catalogEntries(clusters);
+  const pageCount = Math.max(1, Math.ceil(entries.length / pageSize));
+  const page = requestedPage >= 1 && requestedPage <= pageCount ? Math.trunc(requestedPage) : 1;
+  const slice = entries.slice((page - 1) * pageSize, page * pageSize);
+  const heading = listingHeading(summary);
+  const canonicalPath = listingPath(summary.place, summary.role, page) ?? summary.path;
+
+  return {
+    heading,
+    documentTitle: page > 1 ? `${heading} — страница ${page} · openqareer` : `${heading} · openqareer`,
+    description:
+      `${entries.length} вакансий: ${heading.toLowerCase()}. ` +
+      'Каждая карточка называет работодателя, источник и дату наблюдения, ' +
+      'а отклик подаётся на площадке работодателя.',
+    page,
+    pageCount,
+    total: entries.length,
+    entries: slice,
+    canonicalPath,
+    ...(page > 1
+      ? { previousPath: listingPath(summary.place, summary.role, page - 1) ?? summary.path }
+      : {}),
+    ...(page < pageCount
+      ? { nextPath: listingPath(summary.place, summary.role, page + 1) ?? summary.path }
+      : {}),
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'ItemList',
+          name: heading,
+          numberOfItems: slice.length,
+          itemListElement: slice.map((entry, index) => ({
+            '@type': 'ListItem',
+            position: (page - 1) * pageSize + index + 1,
+            url: `${SITE_ORIGIN}${entry.path}`,
+            name: entry.title,
+          })),
+        },
+        breadcrumbs({ name: heading, path: summary.path }),
       ],
     },
   };

@@ -39,6 +39,7 @@ export default defineConfig({
         'server/vacancies/adminSourceSchedule.ts',
         'src/features/admin/sourceScheduleLabel.ts',
         'server/vacancies/vacancyCatalogPage.ts',
+        'server/vacancies/vacancyCatalogFacets.ts',
         'server/vacancies/vacancyCatalogDocument.ts',
         'server/routes/vacancyCatalogRoutes.ts',
         'server/data/documentTextPage.ts',

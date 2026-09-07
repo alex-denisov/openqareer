@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildCatalogPage, buildVacancyDetail, CATALOG_PAGE_SIZE } from './vacancyCatalogPage';
+import {
+  buildCatalogPage,
+  buildListingPage,
+  buildVacancyDetail,
+  CATALOG_PAGE_SIZE,
+} from './vacancyCatalogPage';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 
 function cluster(overrides: Partial<VacancyCluster> = {}): VacancyCluster {
@@ -83,6 +88,28 @@ describe('страница публичного каталога ваканси�
     expect(posting.identifier).toMatchObject({ '@type': 'PropertyValue' });
   });
 
+  /**
+   * Кластер несёт только первые 300 знаков описания, и в разметку уходил
+   * обрывок на полуслове. Поисковик требует, чтобы разметка совпадала с тем,
+   * что видит читатель, поэтому полный текст идёт и в `JobPosting`, и на
+   * страницу — одним и тем же значением.
+   */
+  it('берёт полный текст вакансии, когда он известен', () => {
+    const full = 'Полное описание вакансии. '.repeat(30);
+    const detail = buildVacancyDetail(cluster(), full)!;
+    const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
+
+    expect(detail.description).toBe(full.trim());
+    expect(posting.description).toBe(full.trim());
+    expect(String(posting.description).length).toBeGreaterThan(300);
+  });
+
+  it('довольствуется сводкой, когда полного текста нет', () => {
+    const detail = buildVacancyDetail(cluster())!;
+    expect(detail.description).toBe(cluster().descriptionSummary);
+    expect(buildVacancyDetail(cluster(), '   ')!.description).toBe(cluster().descriptionSummary);
+  });
+
   it('не выдумывает поля, которых площадка не назвала', () => {
     const detail = buildVacancyDetail(
       cluster({ canonicalLocation: undefined, salary: undefined, canonicalCompany: '' }),
@@ -164,5 +191,49 @@ describe('страница публичного каталога ваканси�
     const detail = buildVacancyDetail(cluster({ skills: [] }))!;
     const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
     expect(posting).not.toHaveProperty('skills');
+  });
+});
+
+/**
+ * Срез 2b: страница списка по месту и роли. Именно по таким запросам ищут, и
+ * заголовок страницы обязан называть и место, и роль.
+ */
+describe('страница списка каталога (B209, срез 2b)', () => {
+  const summary = {
+    place: 'moscow',
+    placeLabel: 'Москва',
+    role: 'frontend-developer',
+    roleLabel: 'Frontend Developer',
+    path: '/vacancies/moscow/frontend-developer',
+    count: 4,
+  };
+
+  it('называет место и роль в заголовке и в каноническом адресе', () => {
+    const page = buildListingPage([cluster()], summary, 1);
+    expect(page.heading).toBe('Frontend Developer — вакансии, Москва');
+    expect(page.canonicalPath).toBe('/vacancies/moscow/frontend-developer');
+    expect(page.documentTitle).toContain('Frontend Developer');
+    expect(page.documentTitle).toContain('Москва');
+  });
+
+  it('называет список по одному месту без роли', () => {
+    const page = buildListingPage([cluster()], { ...summary, role: undefined, roleLabel: undefined, path: '/vacancies/moscow' }, 1);
+    expect(page.heading).toBe('Вакансии — Москва');
+  });
+
+  it('нумерует страницы списка адресами самого списка', () => {
+    const many = Array.from({ length: CATALOG_PAGE_SIZE + 2 }, (_, index) =>
+      cluster({ id: `c${index}`, canonicalTitle: `Frontend Developer ${index}` }),
+    );
+    const page = buildListingPage(many, summary, 2);
+    expect(page.canonicalPath).toBe('/vacancies/moscow/frontend-developer/page/2');
+    expect(page.previousPath).toBe('/vacancies/moscow/frontend-developer');
+    expect(page.nextPath).toBeUndefined();
+  });
+
+  it('ведёт хлебные крошки через каталог к самому списку', () => {
+    const page = buildListingPage([cluster()], summary, 1);
+    const crumbs = page.jsonLd['@graph'].find((node) => node['@type'] === 'BreadcrumbList');
+    expect(JSON.stringify(crumbs)).toContain('/vacancies/moscow/frontend-developer');
   });
 });

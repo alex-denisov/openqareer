@@ -58,6 +58,11 @@ a:focus-visible{outline:2px solid var(--primary-accent);outline-offset:2px;borde
 .catalog-apply a{display:inline-block;background:var(--primary-accent);color:oklch(15% 0.015 255);font-weight:600;padding:.65rem 1.2rem;border-radius:12px}
 .catalog-apply a:hover{text-decoration:none;filter:brightness(1.08)}
 .catalog-footer{border-top:1px solid var(--line);color:var(--text-muted);font-size:.85rem}
+.catalog-related{margin-top:2rem;border-top:1px solid var(--line);padding-top:1.25rem}
+.catalog-related h2{font-size:1rem;margin:0 0 .75rem}
+.catalog-related ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.5rem}
+.catalog-related li{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:.3rem .8rem;font-size:.9rem}
+.catalog-related span{color:var(--text-muted)}
 @media (max-width:520px){.catalog-header{flex-direction:column;align-items:flex-start}}`;
 
 export function escapeHtml(value: string): string {
@@ -169,6 +174,31 @@ function entryCard(entry: CatalogEntry): string {
   );
 }
 
+export interface RelatedLink {
+  readonly path: string;
+  readonly label: string;
+  readonly count: number;
+}
+
+/**
+ * Внутренние ссылки на списки. Без них краулер доходит до страницы списка
+ * только через карту сайта, а читатель — никогда: у каталога не было бы ни
+ * одного способа сузить выборку.
+ */
+function relatedLinks(links: readonly RelatedLink[]): string {
+  if (links.length === 0) return '';
+  return (
+    '<nav class="catalog-related"><h2>Подборки</h2><ul>' +
+    links
+      .map(
+        (link) =>
+          `<li><a href="${escapeHtml(link.path)}">${escapeHtml(link.label)}</a> <span>${link.count}</span></li>`,
+      )
+      .join('') +
+    '</ul></nav>'
+  );
+}
+
 function pagination(page: CatalogPage): string {
   if (page.pageCount <= 1) return '';
   const previous = page.previousPath
@@ -214,21 +244,23 @@ export function renderGoneDocument(page: CatalogPage): string {
   );
 }
 
-export function renderCatalogDocument(page: CatalogPage): string {
+/**
+ * Одна страница-список на все случаи: корень каталога и списки по месту и роли
+ * отличаются только заголовком и адресом, а вёрстка, разметка и постраничная
+ * навигация у них общие (B209, срез 2b).
+ */
+export function renderCatalogDocument(page: CatalogPage, related: readonly RelatedLink[] = []): string {
   const empty = page.total === 0;
-  const title =
-    page.page > 1
-      ? `Вакансии — страница ${page.page} · openqareer`
-      : 'Вакансии с досок работодателей и открытых площадок · openqareer';
-  const description = empty
-    ? 'Каталог вакансий openqareer: сейчас в нём нет ни одной записи с публичным адресом.'
-    : `${page.total} вакансий, собранных с досок работодателей и открытых площадок. ` +
-      'Каждая карточка называет источник и дату наблюдения.';
+  const title = page.documentTitle;
+  const description = page.description;
 
   const body =
     siteHeader() +
     '<main class="catalog-main">' +
-    `<h1>Вакансии</h1>` +
+    (page.canonicalPath === CATALOG_ROOT
+      ? ''
+      : `<nav class="catalog-breadcrumbs"><a href="/">openqareer</a> · <a href="${CATALOG_ROOT}">Вакансии</a></nav>`) +
+    `<h1>${escapeHtml(page.heading)}</h1>` +
     (empty
       ? '<p class="catalog-empty">Каталог пока пуст: ни одной вакансии с публичным адресом ' +
         'в пуле сейчас нет. Это состояние данных, а не ошибка страницы.</p>'
@@ -236,6 +268,7 @@ export function renderCatalogDocument(page: CatalogPage): string {
         'Каждая карточка ведёт на первоисточник — отклик подаётся там.</p>' +
         `<ul class="catalog-list">${page.entries.map(entryCard).join('')}</ul>` +
         pagination(page)) +
+    relatedLinks(related) +
     '</main>' +
     siteFooter();
 
@@ -270,7 +303,7 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
     `<p class="catalog-card-meta">${escapeHtml(employer)} · ${escapeHtml(placeLabel(entry))}` +
     (entry.salaryLabel ? ` · ${escapeHtml(entry.salaryLabel)}` : '') +
     '</p>' +
-    `<p class="catalog-detail-summary">${escapeHtml(entry.summary)}</p>` +
+    `<p class="catalog-detail-summary">${escapeHtml(detail.description)}</p>` +
     (entry.skills.length > 0
       ? `<ul class="catalog-skills">${entry.skills.map((skill) => `<li>${escapeHtml(skill)}</li>`).join('')}</ul>`
       : '') +

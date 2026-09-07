@@ -6,7 +6,7 @@ import {
   renderGoneDocument,
   renderVacancyDocument,
 } from './vacancyCatalogDocument';
-import { buildCatalogPage, buildVacancyDetail } from './vacancyCatalogPage';
+import { buildCatalogPage, buildListingPage, buildVacancyDetail } from './vacancyCatalogPage';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 
 function cluster(overrides: Partial<VacancyCluster> = {}): VacancyCluster {
@@ -185,5 +185,37 @@ describe('документ публичного каталога (B209)', () => 
     expect(html).toContain('Этой вакансии больше нет');
     expect(html).toContain('noindex');
     expect(html).toContain('catalog-card');
+  });
+
+  /**
+   * Без внутренних ссылок краулер доходит до списка только через карту сайта,
+   * а читатель — никогда: сузить выборку было бы нечем (B209, срез 2b).
+   */
+  it('печатает ссылки на подборки, когда они есть', () => {
+    const html = renderCatalogDocument(buildCatalogPage([cluster()], 1), [
+      { path: '/vacancies/remote/frontend-developer', label: 'Frontend Developer — удалённо', count: 12 },
+    ]);
+    expect(html).toContain('href="/vacancies/remote/frontend-developer"');
+    expect(html).toContain('Подборки');
+  });
+
+  it('не печатает пустой блок подборок', () => {
+    expect(renderCatalogDocument(buildCatalogPage([cluster()], 1))).not.toContain('Подборки');
+  });
+
+  it('ведёт крошками от списка обратно в каталог, а на корне их не печатает', () => {
+    const listing = renderCatalogDocument(
+      buildListingPage([cluster()], {
+        place: 'moscow',
+        placeLabel: 'Москва',
+        path: '/vacancies/moscow',
+        count: 3,
+      }, 1),
+    );
+    expect(listing).toContain('catalog-breadcrumbs');
+    expect(listing).toContain('<h1>Вакансии — Москва</h1>');
+    expect(renderCatalogDocument(buildCatalogPage([cluster()], 1))).not.toContain(
+      'catalog-breadcrumbs',
+    );
   });
 });

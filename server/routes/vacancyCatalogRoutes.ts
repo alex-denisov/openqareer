@@ -11,6 +11,7 @@ import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import {
   CATALOG_ROOT,
   catalogPagePath,
+  parseListingPath,
   parseVacancyPath,
   vacancyKey,
 } from '../../shared/vacancyCatalogRoutes';
@@ -18,9 +19,11 @@ import type { VacancyCluster } from '../domain/unifiedVacancy';
 import {
   CATALOG_PAGE_SIZE,
   buildCatalogPage,
+  buildListingPage,
   buildVacancyDetail,
   catalogEntries,
 } from '../vacancies/vacancyCatalogPage';
+import { catalogListings, listingEntries } from '../vacancies/vacancyCatalogFacets';
 import {
   renderCatalogDocument,
   renderGoneDocument,
@@ -28,6 +31,9 @@ import {
 } from '../vacancies/vacancyCatalogDocument';
 import type { RouteDeps } from './deps';
 import { withDeps } from './helpers';
+
+/** Сколько подборок печатать ссылками на странице. */
+const RELATED_LIMIT = 24;
 
 /** Предел протокола карты сайта — 50 000 адресов в одном файле. */
 const SITEMAP_URL_LIMIT = 50_000;
@@ -52,6 +58,8 @@ export function buildCatalogSitemap(clusters: readonly VacancyCluster[]): string
     ...Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) =>
       urlEntry(catalogPagePath(index + 2)),
     ),
+    // Списки по месту и роли — те самые страницы, по которым ищут (срез 2b).
+    ...catalogListings(entries).map((listing) => urlEntry(listing.path)),
     ...entries.map((entry) => urlEntry(entry.path, entry.lastSeenAt.slice(0, 10))),
   ].slice(0, SITEMAP_URL_LIMIT);
 
@@ -73,9 +81,50 @@ function pageNumber(request: FastifyRequest): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
+function relatedFor(entries: readonly ReturnType<typeof catalogEntries>[number][]) {
+  return catalogListings(entries)
+    .slice(0, RELATED_LIMIT)
+    .map((listing) => ({
+      path: listing.path,
+      label: listing.roleLabel
+        ? `${listing.roleLabel} — ${listing.placeLabel}`
+        : listing.placeLabel,
+      count: listing.count,
+    }));
+}
+
 async function handleCatalog(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
-  const page = buildCatalogPage(deps.multiSourceEngine.getActiveClusters(), pageNumber(request));
-  return sendDocument(reply, renderCatalogDocument(page));
+  const clusters = deps.multiSourceEngine.getActiveClusters();
+  const page = buildCatalogPage(clusters, pageNumber(request));
+  return sendDocument(reply, renderCatalogDocument(page, relatedFor(catalogEntries(clusters))));
+}
+
+/**
+ * Список по месту и роли. Список, которого нет или который опустел ниже порога
+ * публикации, отвечает `410`, а не пустой страницей: адрес, который мы сами же
+ * перестали печатать, должен уйти из индекса, а не копиться.
+ */
+async function handleListing(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+  const listing = parseListingPath(request.url);
+  const clusters = deps.multiSourceEngine.getActiveClusters();
+  const entries = catalogEntries(clusters);
+  const summary = listing
+    ? catalogListings(entries).find(
+        (candidate) =>
+          candidate.place === listing.place && (candidate.role ?? undefined) === listing.role,
+      )
+    : undefined;
+
+  if (!listing || !summary) {
+    return sendDocument(reply, renderGoneDocument(buildCatalogPage(clusters, 1)), 410);
+  }
+
+  const chosen = listingEntries(entries, listing);
+  const chosenClusters = clusters.filter((cluster) =>
+    chosen.some((entry) => entry.key === vacancyKey(cluster.id)),
+  );
+  const page = buildListingPage(chosenClusters, summary, listing.page ?? 1);
+  return sendDocument(reply, renderCatalogDocument(page, relatedFor(chosen)));
 }
 
 /**
@@ -87,7 +136,15 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
   const key = parseVacancyPath(request.url);
   const clusters = deps.multiSourceEngine.getActiveClusters();
   const found = key ? clusters.find((cluster) => vacancyKey(cluster.id) === key) : undefined;
-  const detail = found ? buildVacancyDetail(found) : null;
+  // Кластер несёт только первые 300 знаков описания. Полный текст лежит у
+  // исходной вакансии — её идентификатор и есть хвост идентификатора кластера
+  // (`cluster-<vacancyId>`), поэтому разметка и страница показывают то же
+  // самое, что отдала площадка, а не обрывок на полуслове.
+  const sourceId = found?.id.startsWith('cluster-') ? found.id.slice('cluster-'.length) : undefined;
+  const full = sourceId ? deps.multiSourceEngine.getVacancy(sourceId) : undefined;
+  const detail = found
+    ? buildVacancyDetail(found, full?.fullDescription ?? full?.description)
+    : null;
 
   if (!detail) {
     const page = buildCatalogPage(clusters, 1);
@@ -107,6 +164,11 @@ export function registerVacancyCatalogRoutes(app: FastifyInstance, deps: RouteDe
   app.get(CATALOG_ROOT, withDeps(deps, handleCatalog));
   app.get(`${CATALOG_ROOT}/page/:page`, withDeps(deps, handleCatalog));
   app.get(`${CATALOG_ROOT}/job/:slug`, withDeps(deps, handleVacancy));
+  // Списки по месту и роли, со своей постраничной навигацией (срез 2b).
+  app.get(`${CATALOG_ROOT}/:place`, withDeps(deps, handleListing));
+  app.get(`${CATALOG_ROOT}/:place/page/:page`, withDeps(deps, handleListing));
+  app.get(`${CATALOG_ROOT}/:place/:role`, withDeps(deps, handleListing));
+  app.get(`${CATALOG_ROOT}/:place/:role/page/:page`, withDeps(deps, handleListing));
   // Карта сайта живая, поэтому маршрут перекрывает файл сборки.
   app.get('/sitemap.xml', withDeps(deps, handleSitemap));
 }

@@ -5,6 +5,8 @@ import {
   catalogPagePath,
   parseVacancyPath,
   vacancyKey,
+  listingPath,
+  parseListingPath,
   CATALOG_ROOT,
 } from './vacancyCatalogRoutes';
 import { isValidPublicPath } from './seoSlugPolicy';
@@ -22,6 +24,18 @@ describe('адреса публичного каталога вакансий (B
     expect(buildVacancySlug('Разработчик интерфейсов')).toBe('frontend-developer');
     expect(buildVacancySlug('Аналитик данных')).toBe('data-analyst');
     expect(buildVacancySlug('Бухгалтер')).toBe('accountant');
+  });
+
+  /**
+   * «Продакт-менеджер» — заимствование, уже стоящее в английском порядке, а
+   * «аналитик данных» — русская конструкция «главное слово — уточнение».
+   * Разворот слов по правилу ломал первое, поэтому порядок задаёт словарь
+   * фраз, а не догадка (найдено на живом пуле 2026-09-07).
+   */
+  it('не переставляет слова в заимствованной фразе', () => {
+    expect(buildVacancySlug('Продакт-менеджер')).toBe('product-manager');
+    expect(buildVacancySlug('Менеджер продукта')).toBe('product-manager');
+    expect(buildVacancySlug('Product Manager')).toBe('product-manager');
   });
 
   it('пропускает 1С как исконно российский продукт', () => {
@@ -95,8 +109,11 @@ describe('адреса публичного каталога вакансий (B
     expect(buildVacancySlug('по и на')).toBeNull();
   });
 
-  it('оставляет порядок слов смешанной фразы таким, каким его задал автор', () => {
+  it('оставляет порядок слов таким, каким его задал автор', () => {
     expect(buildVacancySlug('Senior аналитик')).toBe('senior-analyst');
+    // Фраза из словаря побеждает пословный перевод: «qa-engineer» — то, как
+    // роль называется по-английски, а «engineer-qa» — калька.
+    expect(buildVacancySlug('Инженер тестирования')).toBe('qa-engineer');
   });
 
   it('не принимает за карточку чужой путь', () => {
@@ -114,5 +131,73 @@ describe('адреса публичного каталога вакансий (B
   it('сводит нулевую и отрицательную страницу к корню каталога', () => {
     expect(catalogPagePath(0)).toBe(CATALOG_ROOT);
     expect(catalogPagePath(-3)).toBe(CATALOG_ROOT);
+  });
+});
+
+/**
+ * Срез 2b: списки по месту и роли — именно те страницы, по которым ищут
+ * («frontend developer remote jobs», «вакансии в Москве»). Пример владельца
+ * дословно: `/vacancies/remote/frontend-developer` и
+ * `/vacancies/moscow/programmist-1c`.
+ */
+describe('адреса списков каталога (B209, срез 2b)', () => {
+  it('строит адрес места и адрес места с ролью', () => {
+    expect(listingPath('remote')).toBe('/vacancies/remote');
+    expect(listingPath('moscow')).toBe('/vacancies/moscow');
+    expect(listingPath('remote', 'frontend-developer')).toBe(
+      '/vacancies/remote/frontend-developer',
+    );
+    expect(listingPath('moscow', 'programmist-1c')).toBe('/vacancies/moscow/programmist-1c');
+  });
+
+  it('каждый построенный адрес отвечает правилу адресов', () => {
+    for (const path of [
+      listingPath('remote', 'frontend-developer'),
+      listingPath('moscow', 'programmist-1c'),
+      listingPath('saint-petersburg'),
+    ]) {
+      expect(isValidPublicPath(path!)).toBe(true);
+    }
+  });
+
+  it('не отдаёт служебный сегмент каталога под место', () => {
+    expect(listingPath('job')).toBeNull();
+    expect(listingPath('page')).toBeNull();
+    expect(listingPath('remote', 'page')).toBeNull();
+  });
+
+  it('нумерует страницы списка и разбирает их обратно', () => {
+    expect(listingPath('remote', 'frontend-developer', 2)).toBe(
+      '/vacancies/remote/frontend-developer/page/2',
+    );
+    expect(listingPath('moscow', undefined, 3)).toBe('/vacancies/moscow/page/3');
+    expect(listingPath('moscow', undefined, 1)).toBe('/vacancies/moscow');
+    expect(parseListingPath('/vacancies/remote/frontend-developer/page/2')).toEqual({
+      place: 'remote',
+      role: 'frontend-developer',
+      page: 2,
+    });
+    expect(parseListingPath('/vacancies/moscow/page/3')).toEqual({ place: 'moscow', page: 3 });
+  });
+
+  it('разбирает адрес списка обратно', () => {
+    expect(parseListingPath('/vacancies/remote')).toEqual({ place: 'remote' });
+    expect(parseListingPath('/vacancies/moscow/programmist-1c')).toEqual({
+      place: 'moscow',
+      role: 'programmist-1c',
+    });
+    expect(parseListingPath('/vacancies/remote/frontend-developer/')).toEqual({
+      place: 'remote',
+      role: 'frontend-developer',
+    });
+  });
+
+  /** Служебные пути каталога не должны опознаваться как список. */
+  it('не путает список со страницей каталога и с карточкой', () => {
+    expect(parseListingPath('/vacancies')).toBeNull();
+    expect(parseListingPath('/vacancies/page/2')).toBeNull();
+    expect(parseListingPath('/vacancies/job/data-analyst-at-acme-x1')).toBeNull();
+    expect(parseListingPath('/vacancies/remote/frontend-developer/extra')).toBeNull();
+    expect(parseListingPath('/legal/terms')).toBeNull();
   });
 });

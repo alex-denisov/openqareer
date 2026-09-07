@@ -45,6 +45,38 @@ const CATALOG_ROLE_WORDS: Readonly<Record<string, string>> = {
   главный: 'principal',
 };
 
+/**
+ * Целые русские фразы с их английским именем.
+ *
+ * Порядок слов задаёт словарь, а не правило: «аналитик данных» — русская
+ * конструкция «главное слово — уточнение» (data analyst), а
+ * «продакт-менеджер» — заимствование, уже стоящее в английском порядке.
+ * Разворот по правилу ломал второе, поэтому догадка заменена списком
+ * (найдено на живом пуле 2026-09-07).
+ */
+const ROLE_PHRASES: Readonly<Record<string, string>> = {
+  'аналитик данных': 'data-analyst',
+  'аналитик данныx': 'data-analyst',
+  'разработчик интерфейсов': 'frontend-developer',
+  'разработчик интерфейса': 'frontend-developer',
+  'менеджер продукта': 'product-manager',
+  'продакт менеджер': 'product-manager',
+  'менеджер проектов': 'project-manager',
+  'проджект менеджер': 'project-manager',
+  'руководитель проектов': 'project-manager',
+  'инженер данных': 'data-engineer',
+  'аналитик систем': 'systems-analyst',
+  'системный аналитик': 'systems-analyst',
+  'бизнес аналитик': 'business-analyst',
+  'инженер качества': 'qa-engineer',
+  'инженер тестирования': 'qa-engineer',
+  'специалист поддержки': 'support-specialist',
+  'менеджер продаж': 'sales-manager',
+  'руководитель отдела продаж': 'head-of-sales',
+  'дизайнер интерфейсов': 'product-designer',
+  'администратор баз данных': 'database-administrator',
+};
+
 /** Служебные слова, которые в адресе не нужны ни на каком языке. */
 const STOP_WORDS = new Set(['по', 'в', 'на', 'и', 'the', 'of', 'a', 'an', 'for']);
 
@@ -62,7 +94,6 @@ const ONE_C_ROLE_WORDS: Readonly<Record<string, string>> = {
   методист: 'metodist',
 };
 
-const CYRILLIC = /\p{Script=Cyrillic}/u;
 const LATIN_TOKEN = /^[a-z0-9]+$/u;
 
 function tokens(title: string): string[] {
@@ -110,6 +141,9 @@ export function buildVacancySlug(title: string): string | null {
     return `${ONE_C_ROLE_WORDS[role] ?? role}-1c`;
   }
 
+  const phrase = ROLE_PHRASES[parts.join(' ')];
+  if (phrase) return phrase;
+
   const translated: string[] = [];
   for (const token of parts) {
     const word = translate(token);
@@ -117,9 +151,9 @@ export function buildVacancySlug(title: string): string | null {
     translated.push(word);
   }
 
-  const allCyrillic = parts.every((token) => CYRILLIC.test(token));
-  const ordered = allCyrillic ? [...translated].reverse() : translated;
-  const slug = ordered.join('-');
+  // Порядок слов остаётся авторским: переставлять их по догадке — тот же
+  // сорт выдумки, что и транслит.
+  const slug = translated.join('-');
   return slug.length > 0 ? slug : null;
 }
 
@@ -168,6 +202,62 @@ export function parseVacancyPath(path: string): string | null {
   if (!rest || rest.includes('/')) return null;
   const key = rest.split('-').at(-1);
   return key && key.length > 0 ? key : null;
+}
+
+/**
+ * Сегменты, занятые самим каталогом. Место или роль с таким именем сделали бы
+ * адрес неоднозначным: `/vacancies/page/2` — страница каталога, а не список
+ * вакансий в городе «page».
+ */
+const RESERVED_SEGMENTS = new Set([JOB_SEGMENT, PAGE_SEGMENT]);
+
+export interface CatalogListing {
+  /** `remote` или слаг города. */
+  readonly place: string;
+  /** Слаг роли; отсутствует у списка по одному только месту. */
+  readonly role?: string;
+  /** Номер страницы списка; отсутствует у первой. */
+  readonly page?: number;
+}
+
+/**
+ * Адрес списка: `/vacancies/<место>` и `/vacancies/<место>/<роль>` (B209,
+ * срез 2b). Именно по таким страницам ищут — «frontend developer remote jobs»,
+ * «вакансии в Москве».
+ */
+export function listingPath(place: string, role?: string, page = 1): string | null {
+  if (!place || RESERVED_SEGMENTS.has(place)) return null;
+  if (role !== undefined && (!role || RESERVED_SEGMENTS.has(role))) return null;
+  const base = role ? `${CATALOG_ROOT}/${place}/${role}` : `${CATALOG_ROOT}/${place}`;
+  const path = page > 1 ? `${base}/${PAGE_SEGMENT}/${Math.trunc(page)}` : base;
+  return isValidPublicPath(path) ? path : null;
+}
+
+/** Разбирает адрес списка, или `null`, если это не список. */
+export function parseListingPath(path: string): CatalogListing | null {
+  const clean = path.split('?')[0]?.replace(/\/$/u, '') ?? '';
+  if (!clean.startsWith(`${CATALOG_ROOT}/`)) return null;
+  const segments = clean.slice(CATALOG_ROOT.length + 1).split('/');
+
+  // Хвост `/page/<n>` принадлежит списку, а не месту: `/vacancies/moscow/page/3`
+  // — третья страница московского списка, а не роль с именем «page».
+  let page: number | undefined;
+  if (segments.length >= 2 && segments[segments.length - 2] === PAGE_SEGMENT) {
+    const parsed = Number.parseInt(segments[segments.length - 1] ?? '', 10);
+    if (!Number.isFinite(parsed) || parsed < 2) return null;
+    page = parsed;
+    segments.splice(-2, 2);
+  }
+
+  if (segments.length === 0 || segments.length > 2) return null;
+  const [place, role] = segments;
+  if (!place || RESERVED_SEGMENTS.has(place)) return null;
+  if (role !== undefined && (!role || RESERVED_SEGMENTS.has(role))) return null;
+  return {
+    place,
+    ...(role ? { role } : {}),
+    ...(page ? { page } : {}),
+  };
 }
 
 /** Адрес страницы каталога. Первая страница живёт в корне, а не в `/page/1`. */
