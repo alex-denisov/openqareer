@@ -134,6 +134,18 @@ export interface AdminSourceHealth {
     fresherThan30Days: AdminCountedShare;
     fresherThan90Days: AdminCountedShare;
     fresherThan180Days: AdminCountedShare;
+    /**
+     * Обход ссылок объявлений (B200 срез 2). Поля нет у сервера, который ещё
+     * не умеет обходить ссылки, — экран обязан это назвать словами, а не нулём.
+     */
+    linkCheck?: {
+      checkedAt: string | null;
+      open: number;
+      gone: number;
+      unknown: number;
+      checked: number;
+      sampledFrom: number;
+    };
   };
   trust: {
     verdict: 'unknown' | 'trusted' | 'mixed' | 'low';

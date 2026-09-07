@@ -27,6 +27,11 @@ export interface VacancyPoolStore {
   /** Swaps everything this source contributed for what it just returned. */
   replaceSourceSlice(sourceId: string, vacancies: UnifiedVacancy[]): void;
   saveSourceState(state: StoredSourceState): void;
+  /**
+   * Помечает снятые объявления датой смерти, оставляя их в базе. Возвращает,
+   * сколько записей похоронено этим вызовом (B200 срез 2).
+   */
+  markExpired(vacancyIds: readonly string[], atIso: string): number;
   /** Drops rows of sources the registry no longer knows and stale readings. */
   prune(knownSourceIds: readonly string[], oldestPublishedAt: string): void;
 }

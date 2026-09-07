@@ -99,6 +99,97 @@ describe('AdminVacancySourcesView', () => {
     expect(html).toContain('Подлинность не измерена');
   });
 
+  /**
+   * B200 срез 2 — обход ссылок печатается со своим знаменателем и с датой
+   * замера, а «не проверяли» называется словами, а не нулём.
+   */
+  it('печатает обход ссылок объявлений со знаменателем и датой', () => {
+    const html = renderToStaticMarkup(
+      <AdminVacancySourcesView
+        state={sourcesLoaded([
+          {
+            ...sampleSources[0],
+            health: {
+              liveness: {
+                verdict: 'alive',
+                reason: 'Свежее 30 дней: 50 из 50',
+                lastNonEmptyReadingAt: '2026-09-07T09:00:00.000Z',
+                consecutiveEmptyReadings: 0,
+                fresherThan30Days: { counted: 50, of: 50 },
+                fresherThan90Days: { counted: 50, of: 50 },
+                fresherThan180Days: { counted: 50, of: 50 },
+                linkCheck: {
+                  checkedAt: '2026-09-07T09:00:00.000Z',
+                  open: 18,
+                  gone: 2,
+                  unknown: 0,
+                  checked: 20,
+                  sampledFrom: 250,
+                },
+              },
+              trust: {
+                verdict: 'trusted',
+                reasons: [],
+                completeness: {
+                  withEmployer: { counted: 50, of: 50 },
+                  withLink: { counted: 50, of: 50 },
+                  withDate: { counted: 50, of: 50 },
+                },
+                consistency: { successful: { counted: 4, of: 4 } },
+                lawfulness: { permitted: true, addressStatus: 'live' },
+                authenticity: { measured: false, blockedBy: 'B205' },
+              },
+            },
+          },
+        ])}
+        onRefresh={vi.fn()}
+        onSync={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('Ссылок открылось: 18 из 20');
+    expect(html).toContain('выборка из 250');
+  });
+
+  it('называет словами, что ссылки объявлений ещё не проверяли', () => {
+    const html = renderToStaticMarkup(
+      <AdminVacancySourcesView
+        state={sourcesLoaded([
+          {
+            ...sampleSources[0],
+            health: {
+              liveness: {
+                verdict: 'alive',
+                reason: 'Свежее 30 дней: 50 из 50',
+                lastNonEmptyReadingAt: '2026-09-07T09:00:00.000Z',
+                consecutiveEmptyReadings: 0,
+                fresherThan30Days: { counted: 50, of: 50 },
+                fresherThan90Days: { counted: 50, of: 50 },
+                fresherThan180Days: { counted: 50, of: 50 },
+              },
+              trust: {
+                verdict: 'trusted',
+                reasons: [],
+                completeness: {
+                  withEmployer: { counted: 50, of: 50 },
+                  withLink: { counted: 50, of: 50 },
+                  withDate: { counted: 50, of: 50 },
+                },
+                consistency: { successful: { counted: 4, of: 4 } },
+                lawfulness: { permitted: true, addressStatus: 'live' },
+                authenticity: { measured: false, blockedBy: 'B205' },
+              },
+            },
+          },
+        ])}
+        onRefresh={vi.fn()}
+        onSync={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('Ссылки объявлений ещё не проверяли');
+  });
+
   it('не выдаёт неопрошенную площадку за живую', () => {
     const html = renderToStaticMarkup(
       <AdminVacancySourcesView

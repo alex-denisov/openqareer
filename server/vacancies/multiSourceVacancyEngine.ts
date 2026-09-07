@@ -8,12 +8,19 @@ import type {
 import { calculateSourceAuthenticity, clusterVacancies } from './vacancyDeduplicator';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import { mapWithConcurrency } from './boundedConcurrency';
+import {
+  DEFAULT_LINK_SAMPLE,
+  probeVacancyLinks,
+  type LinkCheckCensus,
+  type LinkProbe,
+} from './linkLivenessProbe';
 import type { RobotsPolicyLoader } from './robotsPolicyLoader';
 import {
   censusOfReading,
   describeSourceHealth,
   emptySourceObservations,
   isDeadSource,
+  recordLinkCheck,
   recordReading,
   type SourceAddressRight,
   type SourceHealth,
@@ -152,6 +159,8 @@ export class MultiSourceVacancyEngine {
   private observations: Map<string, SourceObservations> = new Map();
   /** Право читать площадку из реестра B199; без записи право не установлено. */
   private rights: Map<string, SourceAddressRight> = new Map();
+  /** Когда обход ссылок последний раз доходил до площадки (B200 срез 2). */
+  private linkCheckedAt: Map<string, number> = new Map();
   /** Вежливый диспетчер опроса: отступ, retry-after, бюджет и адаптация (B204). */
   private readonly scheduler: PoliteScheduler = new PoliteScheduler();
   /** Принесла ли волна что-то новое в пул с последней пересборки кластеров. */
@@ -165,11 +174,18 @@ export class MultiSourceVacancyEngine {
    */
   private readonly robots?: RobotsPolicyLoader;
 
+  /**
+   * Кто ходит по ссылке объявления. Без него обход не делается вовсе: живость
+   * ссылок — измерение, а не догадка, и выдумывать её нельзя (B200 срез 2).
+   */
+  private readonly linkProbe?: LinkProbe;
+
   constructor(options?: {
     sources?: VacancySourceConfig[];
     fetcher?: SourceFetcher;
     pool?: VacancyPoolStore;
     robots?: RobotsPolicyLoader;
+    linkProbe?: LinkProbe;
   }) {
     const initial = options?.sources ?? DEFAULT_VACANCY_SOURCES;
     for (const src of initial) {
@@ -180,6 +196,7 @@ export class MultiSourceVacancyEngine {
     this.fetcher = options?.fetcher;
     this.pool = options?.pool;
     this.robots = options?.robots;
+    this.linkProbe = options?.linkProbe;
   }
 
   private configureSourcePoliteness(source: VacancySourceConfig): void {
@@ -526,6 +543,70 @@ export class MultiSourceVacancyEngine {
       this.rawVacancies.set(vacancy.id, vacancy);
     }
     this.pool?.replaceSourceSlice(sourceId, vacancies);
+  }
+
+  /**
+   * Обходит выборку ссылок площадки. Улов может исправно приходить свежим у
+   * объявлений, которых на сайте уже нет; единственное доказательство — сходить
+   * по адресу. Снятое объявление уходит из пула и остаётся в базе с датой
+   * смерти (B200 срез 2).
+   *
+   * Возвращает `undefined`, когда обход не делался: без пробы и без записей
+   * измерения нет, а показывать неизмеренное числом нельзя.
+   */
+  public async probeSourceLinks(
+    sourceId: string,
+    nowMs: number = Date.now(),
+  ): Promise<LinkCheckCensus | undefined> {
+    if (!this.linkProbe) return undefined;
+    const source = this.sources.get(sourceId);
+    if (!source || !source.enabled) return undefined;
+
+    const slice = [...this.rawVacancies.values()].filter(
+      (vacancy) => vacancy.provenance?.sourceId === sourceId,
+    );
+    if (slice.length === 0) return undefined;
+
+    const { census, goneVacancyIds } = await probeVacancyLinks(slice, this.linkProbe, {
+      sample: DEFAULT_LINK_SAMPLE,
+      nowMs,
+    });
+
+    this.observations.set(
+      sourceId,
+      recordLinkCheck(this.observations.get(sourceId) ?? emptySourceObservations(), census),
+    );
+    this.linkCheckedAt.set(sourceId, nowMs);
+
+    if (goneVacancyIds.length > 0) {
+      for (const id of goneVacancyIds) this.rawVacancies.delete(id);
+      this.pool?.markExpired(goneVacancyIds, census.checkedAt);
+      this.poolChangedSinceRecluster = true;
+      this.reclusterIfChanged();
+    }
+    this.persistSourceState(source);
+    return census;
+  }
+
+  /**
+   * Один обход за раз, у площадки, чьи ссылки проверяли дольше всех. Обход по
+   * всем площадкам сразу — это залп по чужим серверам, а очередь по одной
+   * держит нагрузку на уровне десятка запросов за такт (B200 срез 2, B204).
+   */
+  public async probeDueLinks(nowMs: number = Date.now()): Promise<LinkCheckCensus | undefined> {
+    if (!this.linkProbe) return undefined;
+    const candidates = [...this.sources.values()].filter((source) => {
+      if (!source.enabled) return false;
+      return [...this.rawVacancies.values()].some((v) => v.provenance?.sourceId === source.id);
+    });
+    if (candidates.length === 0) return undefined;
+
+    const oldest = candidates.reduce((best, source) =>
+      (this.linkCheckedAt.get(source.id) ?? 0) < (this.linkCheckedAt.get(best.id) ?? 0)
+        ? source
+        : best,
+    );
+    return this.probeSourceLinks(oldest.id, nowMs);
   }
 
   private persistSourceState(source: VacancySourceConfig): void {

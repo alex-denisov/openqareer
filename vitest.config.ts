@@ -35,6 +35,7 @@ export default defineConfig({
         'shared/employerLabel.ts',
         'server/vacancies/multiSourceVacancyEngine.ts',
         'server/vacancies/sourceHealthVerdict.ts',
+        'server/vacancies/linkLivenessProbe.ts',
         'server/vacancies/adminVacancyPage.ts',
         'server/vacancies/adminSourceSchedule.ts',
         'src/features/admin/sourceScheduleLabel.ts',

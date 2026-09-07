@@ -145,6 +145,7 @@ describe('B200 · здоровье площадок в движке', () => {
         states.set(state.sourceId, state);
       },
       prune: () => undefined,
+      markExpired: () => 0,
     };
 
     const first = new MultiSourceVacancyEngine({

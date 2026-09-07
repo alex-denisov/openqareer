@@ -670,6 +670,14 @@ ALTER TABLE vacancy_source_state ADD COLUMN observations TEXT;
 `;
 
 /**
+ * Дата смерти объявления (B200 срез 2). Отсутствие записи неотличимо от
+ * «никогда не видели», поэтому снятое объявление не удаляется, а помечается.
+ */
+export const VACANCY_POOL_EXPIRED_AT_COLUMN = `
+ALTER TABLE vacancy_pool ADD COLUMN expired_at TEXT;
+`;
+
+/**
  * B180 срез 2 — выбранная роль как версионированный объект «Стратегия».
  *
  * Одна строка на кандидата: текущая версия и вся история решений лежат в одном

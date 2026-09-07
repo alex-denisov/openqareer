@@ -22,6 +22,7 @@ import { VacancyIntelligenceService } from './vacancies/vacancyIntelligenceServi
 import { CareerCommandConnectorRouter } from './connectors/careerCommandConnectorRouter';
 import { HhConnector } from './connectors/hh/hhConnector';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
+import { createHttpLinkProbe } from './vacancies/linkLivenessProbe';
 import { RobotsPolicyLoader } from './vacancies/robotsPolicyLoader';
 import { buildMultiSourceFetcher, fetchRobotsTxt } from './vacancies/multiSourceFetcher';
 import { SqliteVacancyPoolStore } from './vacancies/sqliteVacancyPoolStore';
@@ -124,6 +125,10 @@ const multiSourceEngine = new MultiSourceVacancyEngine({
   // Право обхода спрашивается у самой площадки, а не берётся из записи,
   // сделанной когда-то руками; `Crawl-delay` тоже приходит оттуда (B204).
   robots: new RobotsPolicyLoader({ fetchRobots: fetchRobotsTxt }),
+  // Открывается ли ещё ссылка объявления — отдельное доказательство: лента
+  // может отдавать свежие даты у вакансий, которых на сайте уже нет (B200
+  // срез 2).
+  linkProbe: createHttpLinkProbe(),
 });
 // The pool the previous process filled is served immediately, so a restart no
 // longer empties «Возможности» until the scheduler's next run (B164).
@@ -160,6 +165,7 @@ const app = await buildApp({
 
 let vacancyRefreshTimer: NodeJS.Timeout | undefined;
 let multiSourceSyncTimer: NodeJS.Timeout | undefined;
+let linkLivenessTimer: NodeJS.Timeout | undefined;
 let documentRetentionTimer: NodeJS.Timeout | undefined;
 let retentionSweepTimer: NodeJS.Timeout | undefined;
 
@@ -209,6 +215,26 @@ function runMultiSourceSync(): void {
     });
 }
 
+/**
+ * Обходит ссылки одной площадки за такт — той, которую проверяли дольше всех.
+ * Снятое объявление уходит из пула и остаётся в базе с датой смерти: без этого
+ * обхода вакансия, закрытая работодателем час назад, оставалась в подборе до
+ * следующей замены среза (B200 срез 2).
+ */
+function runLinkLivenessProbe(): void {
+  void multiSourceEngine
+    .probeDueLinks()
+    .then((census) => {
+      if (census) app.log.info(census, 'vacancy-link-liveness-checked');
+    })
+    .catch((error: unknown) => {
+      app.log.error(
+        { errorName: error instanceof Error ? error.name : 'UnknownError' },
+        'vacancy-link-liveness-failed',
+      );
+    });
+}
+
 function runDocumentRetentionPurge(): void {
   try {
     const purged = candidateStore.purgeExpiredDocuments(new Date().toISOString(), 100);
@@ -247,6 +273,7 @@ async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, 'shutdown-started');
   if (vacancyRefreshTimer) clearInterval(vacancyRefreshTimer);
   if (multiSourceSyncTimer) clearInterval(multiSourceSyncTimer);
+  if (linkLivenessTimer) clearInterval(linkLivenessTimer);
   if (documentRetentionTimer) clearInterval(documentRetentionTimer);
   if (retentionSweepTimer) clearInterval(retentionSweepTimer);
   await app.close();
@@ -271,6 +298,10 @@ try {
   // Each source carries its own interval; the tick only asks which are due.
   multiSourceSyncTimer = setInterval(runMultiSourceSync, 5 * 60 * 1_000);
   multiSourceSyncTimer.unref();
+  // Одна площадка за такт и двадцать ссылок за обход: полный обход пула — это
+  // тысячи чужих запросов, а выборка со своим знаменателем честна и дешева.
+  linkLivenessTimer = setInterval(runLinkLivenessProbe, 15 * 60 * 1_000);
+  linkLivenessTimer.unref();
   documentRetentionTimer = setInterval(runDocumentRetentionPurge, 5 * 60 * 1_000);
   documentRetentionTimer.unref();
   // Сроки измеряются годами и месяцами, поэтому час — достаточная частота.

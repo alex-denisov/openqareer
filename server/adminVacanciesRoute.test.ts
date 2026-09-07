@@ -82,6 +82,7 @@ async function createAdminApp(poolSize: number) {
       replaceSourceSlice: () => {},
       saveSourceState: () => {},
       prune: () => {},
+      markExpired: () => 0,
     },
   });
   engine.restore();

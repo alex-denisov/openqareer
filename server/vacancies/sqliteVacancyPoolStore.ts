@@ -2,7 +2,11 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
-import { MIGRATION_23, VACANCY_SOURCE_OBSERVATIONS_COLUMN } from '../data/sqliteSchema';
+import {
+  MIGRATION_23,
+  VACANCY_POOL_EXPIRED_AT_COLUMN,
+  VACANCY_SOURCE_OBSERVATIONS_COLUMN,
+} from '../data/sqliteSchema';
 import type { SourceObservations } from './sourceHealthVerdict';
 import type { StoredSourceState, VacancyPoolStore } from './vacancyPoolStore';
 
@@ -55,11 +59,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec('PRAGMA foreign_keys = ON;');
     this.database.exec(MIGRATION_23);
     this.ensureObservationsColumn();
+    this.ensureExpiredAtColumn();
   }
 
+  /**
+   * Снятое объявление из пула не отдаётся, но и не удаляется: строка с датой
+   * смерти — доказательство, что мы его видели и что его больше нет (B200
+   * срез 2).
+   */
   loadVacancies(): UnifiedVacancy[] {
     const rows = this.database
-      .prepare('SELECT payload FROM vacancy_pool')
+      .prepare('SELECT payload FROM vacancy_pool WHERE expired_at IS NULL')
       .all() as unknown as VacancyRow[];
     const vacancies: UnifiedVacancy[] = [];
     for (const row of rows) {
@@ -82,6 +92,37 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       .all() as unknown as Array<{ name: string }>;
     if (columns.some((column) => column.name === 'observations')) return;
     this.database.exec(VACANCY_SOURCE_OBSERVATIONS_COLUMN);
+  }
+
+  /**
+   * Достраивает колонку даты смерти на базе, созданной до среза 2 — по той же
+   * причине, что и колонку наблюдений: `ADD COLUMN IF NOT EXISTS` в SQLite нет.
+   */
+  private ensureExpiredAtColumn(): void {
+    const columns = this.database
+      .prepare('PRAGMA table_info(vacancy_pool)')
+      .all() as unknown as Array<{ name: string }>;
+    if (columns.some((column) => column.name === 'expired_at')) return;
+    this.database.exec(VACANCY_POOL_EXPIRED_AT_COLUMN);
+  }
+
+  /**
+   * Хоронит объявления, чей адрес сервер объявил несуществующим. Возвращает,
+   * сколько записей похоронено этим вызовом: уже похороненное не переписывается
+   * — первая дата смерти и есть дата смерти.
+   */
+  markExpired(vacancyIds: readonly string[], atIso: string): number {
+    if (vacancyIds.length === 0) return 0;
+    const statement = this.database.prepare(
+      'UPDATE vacancy_pool SET expired_at = ? WHERE id = ? AND expired_at IS NULL',
+    );
+    let buried = 0;
+    this.inTransaction(() => {
+      for (const id of vacancyIds) {
+        buried += Number(statement.run(atIso, id).changes);
+      }
+    });
+    return buried;
   }
 
   loadSourceStates(): StoredSourceState[] {
@@ -109,7 +150,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   replaceSourceSlice(sourceId: string, vacancies: UnifiedVacancy[]): void {
     const storedAt = new Date().toISOString();
-    const remove = this.database.prepare('DELETE FROM vacancy_pool WHERE source_id = ?');
+    // Похороненная запись переживает замену среза: иначе доказательство
+    // смерти стиралось бы следующим же опросом площадки (B200 срез 2).
+    const remove = this.database.prepare(
+      'DELETE FROM vacancy_pool WHERE source_id = ? AND expired_at IS NULL',
+    );
     const insert = this.database.prepare(
       `INSERT INTO vacancy_pool (id, source_id, published_at, stored_at, payload)
        VALUES (?, ?, ?, ?, ?)

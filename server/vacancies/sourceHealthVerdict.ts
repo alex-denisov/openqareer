@@ -1,5 +1,6 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import type { VacancyAddressStatus } from './defaultVacancySources';
+import type { LinkCheckCensus } from './linkLivenessProbe';
 
 /**
  * B200 срез 1 — здоровье площадки как две разные шкалы.
@@ -21,6 +22,13 @@ const EMPTY_STREAK_LIMIT = 3;
 
 /** Старше этого площадка называется мёртвой. */
 const DEAD_AFTER_DAYS = 180;
+
+/**
+ * Меньше этого числа определившихся ссылок приговором не считается. Две
+ * снятые вакансии есть у любой живой площадки — объявление закрывают в тот же
+ * день, когда нашли человека (B200 срез 2).
+ */
+const MIN_DECIDED_LINKS = 5;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -80,6 +88,8 @@ export interface SourceObservations {
   } | null;
   /** Состояние вежливого опроса: отступ, retry-after, бюджет и адаптивный интервал (B204). */
   readonly schedule?: import('./politeScheduler').SourceScheduleState | null;
+  /** Последний обход ссылок: открываются ли ещё объявления площадки (срез 2). */
+  readonly linkCheck?: LinkCheckCensus | null;
 }
 
 export function emptySourceObservations(): SourceObservations {
@@ -95,6 +105,7 @@ export function emptySourceObservations(): SourceObservations {
     census: null,
     authenticity: null,
     schedule: null,
+    linkCheck: null,
   };
 }
 
@@ -203,6 +214,17 @@ export function recordReading(
   };
 }
 
+/**
+ * Добавляет обход ссылок к наблюдениям. Перепись улова он не трогает: это
+ * разные замеры, и заменять один другим нельзя (B200 срез 2).
+ */
+export function recordLinkCheck(
+  previous: SourceObservations,
+  linkCheck: LinkCheckCensus,
+): SourceObservations {
+  return { ...previous, linkCheck };
+}
+
 export type SourceLivenessVerdict =
   | 'never_read'
   | 'unreachable'
@@ -218,6 +240,15 @@ export interface SourceLiveness {
   readonly fresherThan30Days: CountedShare;
   readonly fresherThan90Days: CountedShare;
   readonly fresherThan180Days: CountedShare;
+  /** Обход ссылок: `checkedAt: null` — ссылки ещё ни разу не проверяли. */
+  readonly linkCheck: {
+    readonly checkedAt: string | null;
+    readonly open: number;
+    readonly gone: number;
+    readonly unknown: number;
+    readonly checked: number;
+    readonly sampledFrom: number;
+  };
 }
 
 export type SourceTrustVerdict = 'unknown' | 'trusted' | 'mixed' | 'low';
@@ -284,6 +315,29 @@ function olderThanDeadLine(iso: string | null, nowMs: number): boolean {
 /** Один приговор живости: что решено и почему. */
 type LivenessCall = Pick<SourceLiveness, 'verdict' | 'reason'>;
 
+/**
+ * Приговор по обходу ссылок или `null`, когда обход ничего не доказал: горстка
+ * определившихся ссылок приговором не является (B200 срез 2).
+ */
+function callLivenessByLinks(link: LinkCheckCensus | null): LivenessCall | null {
+  if (!link) return null;
+  const decided = link.open + link.gone;
+  if (decided < MIN_DECIDED_LINKS) return null;
+  if (link.open === 0) {
+    return {
+      verdict: 'dead',
+      reason: `Ни одна ссылка не открылась: 0 из ${decided} ответивших о судьбе объявления`,
+    };
+  }
+  if (link.gone > link.open) {
+    return {
+      verdict: 'fading',
+      reason: `Открывается ${link.open} из ${link.checked} проверенных ссылок`,
+    };
+  }
+  return null;
+}
+
 function callLiveness(observations: SourceObservations, nowMs: number): LivenessCall {
   const census = observations.census;
   const total = census?.total ?? 0;
@@ -310,9 +364,17 @@ function callLiveness(observations: SourceObservations, nowMs: number): Liveness
     return { verdict: 'dead', reason: 'За 180 дней опросов площадка не отдала ни одной вакансии' };
   }
 
+  const byLinks = callLivenessByLinks(observations.linkCheck ?? null);
+
+  // Лента может исправно отдавать свежие даты у объявлений, которых на сайте
+  // уже нет. Ответ `404` — единственное доказательство, что их нет (срез 2).
+  if (byLinks?.verdict === 'dead') return byLinks;
+
   if (observations.lastReadingSucceeded === false) {
     return { verdict: 'unreachable', reason: 'Последний опрос завершился ошибкой' };
   }
+
+  if (byLinks) return byLinks;
 
   if (observations.consecutiveEmptyReadings >= EMPTY_STREAK_LIMIT) {
     return {
@@ -341,6 +403,14 @@ function describeLiveness(observations: SourceObservations, nowMs: number): Sour
     fresherThan30Days: share(census?.fresherThan30Days ?? 0, total),
     fresherThan90Days: share(census?.fresherThan90Days ?? 0, total),
     fresherThan180Days: share(census?.fresherThan180Days ?? 0, total),
+    linkCheck: {
+      checkedAt: observations.linkCheck?.checkedAt ?? null,
+      open: observations.linkCheck?.open ?? 0,
+      gone: observations.linkCheck?.gone ?? 0,
+      unknown: observations.linkCheck?.unknown ?? 0,
+      checked: observations.linkCheck?.checked ?? 0,
+      sampledFrom: observations.linkCheck?.sampledFrom ?? 0,
+    },
   };
 }
 
@@ -358,6 +428,7 @@ function trustShortfalls(
   consistency: SourceTrust['consistency'],
   authenticity: SourceTrust['authenticity'],
   total: number,
+  linkCheck: LinkCheckCensus | null,
 ): { reasons: string[]; worstRatio: number } {
   const criteria = [
     { share: completeness.withEmployer, text: (n: number) => `Работодатель назван у ${n} из ${total} карточек` },
@@ -368,6 +439,15 @@ function trustShortfalls(
       text: (n: number) => `Успешных опросов ${n} из ${consistency.successful.of} за 30 дней`,
     },
   ];
+
+  // Проверенная ссылка — критерий полноты сильнее самой полной карточки:
+  // карточка может называть всё, а вести в никуда (B200 срез 2).
+  if (linkCheck && linkCheck.checked >= MIN_DECIDED_LINKS) {
+    criteria.push({
+      share: share(linkCheck.open, linkCheck.checked),
+      text: (n: number) => `Открывается ${n} из ${linkCheck.checked} проверенных ссылок`,
+    });
+  }
 
   if (authenticity.measured && authenticity.originalShare.of > 0) {
     criteria.push({
@@ -420,7 +500,13 @@ function describeTrust(observations: SourceObservations, right: SourceRight): So
     };
   }
 
-  const { reasons, worstRatio } = trustShortfalls(completeness, consistency, authenticity, total);
+  const { reasons, worstRatio } = trustShortfalls(
+    completeness,
+    consistency,
+    authenticity,
+    total,
+    observations.linkCheck ?? null,
+  );
   const allReasons = [...lawfulnessReason, ...reasons];
   const verdict: SourceTrustVerdict =
     !permitted || worstRatio < TRUST_LOW ? 'low' : allReasons.length > 0 ? 'mixed' : 'trusted';

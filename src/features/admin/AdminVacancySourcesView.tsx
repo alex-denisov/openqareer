@@ -58,6 +58,26 @@ function countedShare(share: AdminCountedShare): string {
   return `${share.counted} из ${share.of}`;
 }
 
+/**
+ * Обход ссылок объявлений (B200 срез 2). Лента может отдавать свежие даты у
+ * вакансий, которых на сайте уже нет, — единственное доказательство обратного
+ * лежит здесь. Замера, которого не было, экран числом не называет.
+ */
+function SourceLinkCheckFact({ liveness }: { liveness: AdminSourceHealth['liveness'] }) {
+  const linkCheck = liveness.linkCheck;
+  if (!linkCheck || linkCheck.checked === 0 || !linkCheck.checkedAt) {
+    return <li>Ссылки объявлений ещё не проверяли</li>;
+  }
+  return (
+    <li>
+      Ссылок открылось: {linkCheck.open} из {linkCheck.checked} (выборка из{' '}
+      {linkCheck.sampledFrom}), проверено{' '}
+      {new Date(linkCheck.checkedAt).toLocaleDateString('ru-RU')}
+      {linkCheck.unknown > 0 ? `; без ответа ${linkCheck.unknown}` : ''}
+    </li>
+  );
+}
+
 /** Измеренные факты под приговорами: каждое число со своим знаменателем. */
 function SourceHealthFacts({ health }: { health: AdminSourceHealth }) {
   const { liveness, trust } = health;
@@ -81,6 +101,7 @@ function SourceHealthFacts({ health }: { health: AdminSourceHealth }) {
           ? 'установлено'
           : `не установлено (${trust.lawfulness.addressStatus})`}
       </li>
+      <SourceLinkCheckFact liveness={liveness} />
       <li>Подлинность не измерена — ждёт дедупликатора B205</li>
     </ul>
   );

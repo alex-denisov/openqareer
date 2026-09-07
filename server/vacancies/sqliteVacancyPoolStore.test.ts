@@ -216,3 +216,94 @@ describe('SqliteVacancyPoolStore · наблюдения площадки (B200)
     expect(store.loadSourceStates()[0]?.observations).toBeUndefined();
   });
 });
+
+/**
+ * B200 срез 2. Отсутствие записи неотличимо от «никогда не видели», а запись о
+ * смерти — это и есть доказательство: объявление, чей адрес сервер объявил
+ * несуществующим, остаётся в базе с датой смерти.
+ */
+describe('SqliteVacancyPoolStore · снятое объявление', () => {
+  function card(id: string): Parameters<SqliteVacancyPoolStore['replaceSourceSlice']>[1][number] {
+    return {
+      id,
+      fingerprint: `fp-${id}`,
+      title: 'Role',
+      company: 'Company',
+      description: '',
+      requiredSkills: [],
+      url: `https://example.test/${id}`,
+      provenance: {
+        sourceType: 'json_api',
+        sourceId: 'src',
+        sourceUrl: `https://example.test/${id}`,
+        observedAt: '2026-09-01T10:00:00.000Z',
+      },
+      publishedAt: '2026-09-01T10:00:00.000Z',
+      status: 'active',
+    };
+  }
+
+  it('перестаёт отдавать объявление, чья ссылка ответила 404', () => {
+    const { store } = openStore();
+    store.replaceSourceSlice('src', [card('v1'), card('v2')]);
+
+    expect(store.markExpired(['v2'], '2026-09-07T09:00:00.000Z')).toBe(1);
+
+    expect(store.loadVacancies().map((v) => v.id)).toEqual(['v1']);
+  });
+
+  it('держит запись о смерти, когда площадка снова отдаёт то же объявление', () => {
+    const { store } = openStore();
+    store.replaceSourceSlice('src', [card('v1'), card('v2')]);
+    store.markExpired(['v2'], '2026-09-07T09:00:00.000Z');
+
+    store.replaceSourceSlice('src', [card('v1'), card('v2')]);
+
+    expect(store.loadVacancies().map((v) => v.id)).toEqual(['v1']);
+  });
+
+  it('переживает перезапуск процесса', () => {
+    const { store, path } = openStore();
+    store.replaceSourceSlice('src', [card('v1'), card('v2')]);
+    store.markExpired(['v2'], '2026-09-07T09:00:00.000Z');
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+
+    const reopened = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(reopened);
+    expect(reopened.loadVacancies().map((v) => v.id)).toEqual(['v1']);
+  });
+
+  it('хоронит объявление один раз — первая дата смерти остаётся', () => {
+    const { store, path } = openStore();
+    store.replaceSourceSlice('src', [card('v1')]);
+    store.markExpired(['v1'], '2026-09-07T09:00:00.000Z');
+    expect(store.markExpired(['v1'], '2026-09-08T09:00:00.000Z')).toBe(0);
+
+    const rows = new DatabaseSync(path)
+      .prepare('SELECT expired_at FROM vacancy_pool WHERE id = ?')
+      .all('v1') as unknown as Array<{ expired_at: string }>;
+    expect(rows[0]?.expired_at).toBe('2026-09-07T09:00:00.000Z');
+  });
+
+  it('достраивает колонку на базе, созданной до среза 2', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'vacancy-pool-legacy-'));
+    directories.push(directory);
+    const path = join(directory, 'pool.db');
+    const legacy = new DatabaseSync(path);
+    legacy.exec(`CREATE TABLE vacancy_pool (
+      id TEXT PRIMARY KEY,
+      source_id TEXT NOT NULL,
+      published_at TEXT,
+      stored_at TEXT NOT NULL,
+      payload TEXT NOT NULL
+    );`);
+    legacy.close();
+
+    const store = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(store);
+    store.replaceSourceSlice('src', [card('v1')]);
+    expect(store.markExpired(['v1'], '2026-09-07T09:00:00.000Z')).toBe(1);
+    expect(store.loadVacancies()).toEqual([]);
+  });
+});

@@ -49,6 +49,7 @@ async function appWithPool(vacancies: readonly UnifiedVacancy[]) {
     replaceSourceSlice: () => {},
     saveSourceState: () => {},
     prune: () => {},
+    markExpired: () => 0,
   };
   const engine = new MultiSourceVacancyEngine({ pool });
   engine.restore();

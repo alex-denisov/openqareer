@@ -3,6 +3,7 @@ import {
   censusOfReading,
   describeSourceHealth,
   emptySourceObservations,
+  recordLinkCheck,
   recordReading,
   type SourceObservations,
 } from './sourceHealthVerdict';
@@ -220,5 +221,103 @@ describe('B200 · доверие площадке', () => {
     }
     expect(health.trust.verdict).toBe('low');
     expect(health.trust.reasons.some((r) => r.includes('Подлинных объявлений 2 из 10'))).toBe(true);
+  });
+});
+
+/**
+ * B200 срез 2. Проверка ссылки — отдельное доказательство: лента может отдавать
+ * свежие даты у объявлений, которых на сайте уже нет.
+ */
+describe('B200 · живая ссылка как доказательство', () => {
+  const alive = readings(emptySourceObservations(), [
+    { vacancies: [card({ id: 'a' }), card({ id: 'b' })], atDaysAgo: 0 },
+  ]);
+
+  it('добавляет обход ссылок к наблюдениям, не трогая перепись улова', () => {
+    const observed = recordLinkCheck(alive, {
+      checkedAt: daysAgo(0),
+      open: 18,
+      gone: 2,
+      unknown: 0,
+      checked: 20,
+      sampledFrom: 250,
+    });
+    expect(observed.linkCheck?.open).toBe(18);
+    expect(observed.census).toEqual(alive.census);
+  });
+
+  it('называет мёртвой площадку, у которой не открылась ни одна проверенная ссылка', () => {
+    const observed = recordLinkCheck(alive, {
+      checkedAt: daysAgo(0),
+      open: 0,
+      gone: 12,
+      unknown: 3,
+      checked: 15,
+      sampledFrom: 40,
+    });
+    const health = describeSourceHealth(observed, { addressStatus: 'live' }, NOW);
+    expect(health.liveness.verdict).toBe('dead');
+    expect(health.liveness.reason).toContain('0 из 12');
+  });
+
+  it('роняет живость до угасающей, когда снятых объявлений больше, чем открытых', () => {
+    const observed = recordLinkCheck(alive, {
+      checkedAt: daysAgo(0),
+      open: 4,
+      gone: 11,
+      unknown: 0,
+      checked: 15,
+      sampledFrom: 60,
+    });
+    const health = describeSourceHealth(observed, { addressStatus: 'live' }, NOW);
+    expect(health.liveness.verdict).toBe('fading');
+    expect(health.liveness.reason).toContain('4 из 15');
+  });
+
+  it('не выносит приговор по горстке ссылок', () => {
+    const observed = recordLinkCheck(alive, {
+      checkedAt: daysAgo(0),
+      open: 0,
+      gone: 2,
+      unknown: 0,
+      checked: 2,
+      sampledFrom: 2,
+    });
+    const health = describeSourceHealth(observed, { addressStatus: 'live' }, NOW);
+    expect(health.liveness.verdict).toBe('alive');
+  });
+
+  it('не считает приговором ответы, которые ничего не доказали', () => {
+    const observed = recordLinkCheck(alive, {
+      checkedAt: daysAgo(0),
+      open: 0,
+      gone: 0,
+      unknown: 20,
+      checked: 20,
+      sampledFrom: 200,
+    });
+    const health = describeSourceHealth(observed, { addressStatus: 'live' }, NOW);
+    expect(health.liveness.verdict).toBe('alive');
+    expect(health.liveness.linkCheck.checked).toBe(20);
+  });
+
+  it('роняет доверие, когда открывается меньше девяти ссылок из десяти', () => {
+    const observed = recordLinkCheck(alive, {
+      checkedAt: daysAgo(0),
+      open: 14,
+      gone: 6,
+      unknown: 0,
+      checked: 20,
+      sampledFrom: 200,
+    });
+    const health = describeSourceHealth(observed, { addressStatus: 'live' }, NOW);
+    expect(health.trust.verdict).not.toBe('trusted');
+    expect(health.trust.reasons.some((r) => r.includes('14 из 20'))).toBe(true);
+  });
+
+  it('печатает словами, что ссылки ещё не проверяли', () => {
+    const health = describeSourceHealth(alive, { addressStatus: 'live' }, NOW);
+    expect(health.liveness.linkCheck.checked).toBe(0);
+    expect(health.liveness.linkCheck.checkedAt).toBeNull();
   });
 });
