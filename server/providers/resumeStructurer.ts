@@ -23,6 +23,45 @@ export interface ChatCompletionClient {
   };
 }
 
+/**
+ * Сколько импорт ждёт модель, прежде чем отдать кандидату разбор правилами.
+ *
+ * INC-037: на проде 2026-09-07 импорт отвечал 389 секунд и всё равно приходил
+ * к правилам — у структуратора 90 секунд на попытку плюс повтор, а у самого
+ * импорта потолка не было вовсе. Модель здесь — улучшение, а не условие:
+ * правила дают полный разбор сразу, поэтому ждать её дольше бюджета нельзя.
+ */
+export function resumeStructuringBudgetMs(): number {
+  const configured = Number(process.env.OPENQAREER_RESUME_STRUCTURING_BUDGET_MS);
+  return Number.isFinite(configured) && configured > 0 ? configured : 45_000;
+}
+
+/**
+ * Разбор моделью в пределах бюджета. По его истечении возвращает `null` —
+ * то же, что и отказ модели, поэтому вызывающему не нужен отдельный случай.
+ * Брошенный запрос дорабатывает молча: его ответ уже никому не нужен, но
+ * необработанный отказ уронил бы процесс.
+ */
+export async function structureWithinBudget(
+  sourceText: string,
+  structurer: ResumeStructurer,
+  budgetMs: number = resumeStructuringBudgetMs(),
+): Promise<ParsedResume | null> {
+  let timer: NodeJS.Timeout | undefined;
+  const budget = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), Math.max(0, budgetMs));
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([
+      structurer.structure(sourceText).catch(() => null),
+      budget,
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export interface ResumeStructurer {
   /** Returns `null` when the provider could not produce a valid answer. */
   structure(sourceText: string): Promise<ParsedResume | null>;

@@ -620,3 +620,46 @@ describe('POST /api/v1/candidate/resume/import', () => {
     expect(seen[0]).not.toContain('Проживает :');
   });
 });
+
+/**
+ * INC-037 — у импорта не было потолка времени. На проде 2026-09-07 разбор шёл
+ * 389 секунд и всё равно откатился на правила: кандидат ждал шесть с половиной
+ * минут ради результата, который правила дают сразу.
+ */
+describe('INC-037 · импорт не ждёт модель дольше своего бюджета', () => {
+  it('отдаёт разбор правилами, когда модель молчит дольше бюджета', async () => {
+    // Боевой бюджет — 45 секунд; проверке важен не он, а то, что потолок есть.
+    process.env.OPENQAREER_RESUME_STRUCTURING_BUDGET_MS = '400';
+    let released: (() => void) | undefined;
+    const slow: ResumeStructurer = {
+      structure: () =>
+        new Promise((resolve) => {
+          released = () => resolve(null);
+        }),
+    };
+    const { app, authorization } = await createApp(slow);
+
+    const started = Date.now();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: importBody(
+        [
+          'Иван Синтетов — Senior Software Engineer',
+          'ООО «Финтех Платформа», Москва — Senior Software Engineer',
+          'Март 2021 — настоящее время',
+          'Веду платформенную команду из шести инженеров.',
+          'Стек: TypeScript, React, Node.js, PostgreSQL.',
+        ].join('\n'),
+      ),
+    });
+    const elapsed = Date.now() - started;
+    released?.();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.structuredBy).toBe('rules');
+    // Бюджет в тестах короткий; важно, что ответ не ждёт зависшую модель.
+    expect(elapsed).toBeLessThan(5_000);
+  });
+});

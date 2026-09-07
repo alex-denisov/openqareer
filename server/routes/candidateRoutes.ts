@@ -26,6 +26,7 @@ import {
   planResumeImport,
 } from '../domain/resumeImport';
 import { preferStructuredResume } from '../domain/resumeStructuring';
+import { structureWithinBudget } from '../providers/resumeStructurer';
 import { parseResumeContent } from '../../src/features/workspace/resumeParser';
 import { normalizeResumeSourceText } from '../../src/features/workspace/resumeSourceText';
 import type { CandidateStore } from '../data/candidateStore';
@@ -114,7 +115,9 @@ async function readResume(
   const source = normalizeResumeSourceText(text);
   const deterministic = parseResumeContent(source);
   if (!structurer) return { resume: deterministic, structuredBy: 'rules' };
-  const structured = await structurer.structure(source);
+  // Модель — улучшение, а не условие: без потолка кандидат ждал её отказа
+  // шесть с половиной минут (INC-037).
+  const structured = await structureWithinBudget(source, structurer);
   if (!structured) return { resume: deterministic, structuredBy: 'rules' };
   return {
     resume: preferStructuredResume(structured, deterministic),

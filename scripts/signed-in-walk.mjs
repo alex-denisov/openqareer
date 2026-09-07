@@ -62,7 +62,14 @@ const credentials =
         username: environment.OPENQAREER_ADMIN_USERNAME,
         password: environment.OPENQAREER_ADMIN_PASSWORD,
       }
-    : {
+    : role === 'qa'
+      ? {
+          // Синтетический кандидат первого запуска: у него мастер пройден
+          // только что, поэтому им проверяется путь нового пользователя.
+          username: environment.OPENQAREER_QA_CANDIDATE_USERNAME,
+          password: environment.OPENQAREER_QA_CANDIDATE_PASSWORD,
+        }
+      : {
         username: environment.OPENQAREER_TEST_CANDIDATE_USERNAME,
         password: environment.OPENQAREER_TEST_CANDIDATE_PASSWORD,
       };
