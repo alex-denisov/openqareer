@@ -14,12 +14,20 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 
-const BASE = (process.argv[2] ?? 'https://openqareer.com').replace(/\/$/, '');
+const positional = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : null;
+const BASE = (positional ?? 'https://openqareer.com').replace(/\/$/, '');
 const ENV_FILE = process.env.OPENQAREER_ENV_FILE ?? join(homedir(), '.openqareer/openqareer.env');
-const VIEWPORTS = [
+const ALL_VIEWPORTS = [
   { name: 'desktop', width: 1440, height: 900 },
   { name: 'mobile', width: 390, height: 844 },
 ];
+
+// Каждый проход — это два входа, а защита частоты B196 считает их в окне 15
+// минут. Поэтому ширину можно взять одну: `--viewport mobile`.
+const only = process.argv.includes('--viewport')
+  ? process.argv[process.argv.indexOf('--viewport') + 1]
+  : null;
+const VIEWPORTS = only ? ALL_VIEWPORTS.filter((v) => v.name === only) : ALL_VIEWPORTS;
 
 function credentials() {
   const values = {};
@@ -83,8 +91,31 @@ async function readState(page) {
   });
 }
 
+/** Токен сессии, которым браузер удостоверяется перед сервером. */
+async function sessionToken(page) {
+  return page.evaluate(() => window.localStorage.getItem('openqareer_session_token'));
+}
+
+/**
+ * PRB-022 — после выхода тот же токен обязан получать отказ. Раньше клиент
+ * стирал его до запроса выхода, и серверная сессия оставалась живой.
+ */
+async function tokenStillOpensCabinet(page, token) {
+  if (!token) return null;
+  // Запрос идёт мимо страницы: `fetch` внутри неё писал бы свой же `401` в
+  // консоль, и проверка ловила бы собственный шум как дефект продукта.
+  const response = await page.context().request.get(`${BASE}/api/v1/candidate/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+    failOnStatusCode: false,
+  });
+  return response.status();
+}
+
 async function signOutInPage(page) {
-  await page.click('[aria-label="Открыть аккаунт"]');
+  // Кнопка аккаунта есть и в рельсе, и в мобильной шапке: кликать нужно ту,
+  // что действительно на экране, иначе проверка спорит с вёрсткой, а не с
+  // продуктом.
+  await page.locator('[aria-label="Открыть аккаунт"]:visible').first().click();
   await page.waitForSelector('.career-account-signout', { timeout: 15000 });
   await page.click('.career-account-signout');
   await page.waitForTimeout(2500);
@@ -139,6 +170,21 @@ function describe(name, round, state) {
   );
 }
 
+/**
+ * Среда прохода. Выход уводит страницу, и браузер помечает уже отвеченный
+ * запрос выхода как прерванный; что сервер его обработал, доказывает `401` на
+ * прежний токен, поэтому этот след — не отказ продукта.
+ */
+function judgeEnvironment(name, problems) {
+  const meaningful = problems.filter(
+    (problem) => !/(auth\/logout|candidate\/me) — net::ERR_ABORTED/u.test(problem),
+  );
+  if (problems.length !== meaningful.length) {
+    process.stdout.write('  (уход со страницы прервал её же запросы — это след выхода)\n');
+  }
+  return meaningful.length > 0 ? [`${name}: ${meaningful.join('; ')}`] : [];
+}
+
 /** Один проход по одной ширине; возвращает список найденных расхождений. */
 async function walkOneViewport(browser, viewport, account) {
   const failures = [];
@@ -168,7 +214,17 @@ async function walkOneViewport(browser, viewport, account) {
 
     // Второй круг: выход прямо в интерфейсе и вход снова — тот самый путь из
     // отчёта INC-024, а не только чистый браузер.
+    const tokenBeforeSignOut = await sessionToken(page);
     await signOutInPage(page);
+    const statusAfterSignOut = await tokenStillOpensCabinet(page, tokenBeforeSignOut);
+    process.stdout.write(
+      `  тот же токен после выхода: ${statusAfterSignOut ?? 'токена не было'} (ожидаем 401)\n`,
+    );
+    if (statusAfterSignOut !== null && statusAfterSignOut !== 401) {
+      failures.push(
+        `${viewport.name}: после выхода прежний токен всё ещё открывает кабинет (${statusAfterSignOut})`,
+      );
+    }
     const afterSignOut = new URL(page.url()).pathname;
     if (!(await signIn(page, account))) {
       failures.push(`${viewport.name}: повторный вход не выполнен`);
@@ -183,7 +239,7 @@ async function walkOneViewport(browser, viewport, account) {
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     );
     if (overflow) failures.push(`${viewport.name}: горизонтальный вылет`);
-    if (problems.length > 0) failures.push(`${viewport.name}: ${problems.join('; ')}`);
+    failures.push(...judgeEnvironment(viewport.name, problems));
 
     await context.close();
   }
