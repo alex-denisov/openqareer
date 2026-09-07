@@ -45,6 +45,20 @@ describe('public discovery metadata', () => {
     expect(llms).not.toMatch(/гарантирует (работу|оффер|интервью)/iu);
   });
 
+  /**
+   * Подтверждение прав в Вебмастере и Search Console держится на мета-теге в
+   * корневом документе. Потерять его при следующей правке `<head>` — потерять
+   * доступ к данным поиска, причём молча: сайт просто перестанет быть
+   * подтверждённым (B209).
+   */
+  it('keeps the search-console verification tags that prove domain ownership (B209)', () => {
+    const html = readFileSync('index.html', 'utf8');
+    expect(html).toContain(
+      '<meta name="google-site-verification" content="mUXfqE5gjjwO1OkPksbiRk6t7UYfQ4nFK1N82UZdOTQ">',
+    );
+    expect(html).toContain('<meta name="yandex-verification" content="c64c7773544f50fe">');
+  });
+
   it('keeps the entry document title in exact sync with the hydrated landing title (B162)', () => {
     const html = readFileSync('index.html', 'utf8');
     const match = /<title>([^<]+)<\/title>/u.exec(html);
