@@ -70,8 +70,12 @@ function rememberCandidate(candidate) {
 }
 
 async function register(page, candidate) {
+  // Оболочка приходит частями (338 кусков сборки): без явного ожидания
+  // проверка спорит со скоростью загрузки, а не с продуктом.
+  const accountButton = page.locator('[aria-label="Открыть аккаунт"]:visible').first();
+  await accountButton.waitFor({ state: 'visible', timeout: 90_000 });
   // Кнопка аккаунта есть и в рельсе, и в мобильной шапке: жать нужно видимую.
-  await page.locator('[aria-label="Открыть аккаунт"]:visible').first().click();
+  await accountButton.click();
   const dialog = page.getByRole('dialog', { name: 'Аккаунт' });
   await dialog.getByRole('button', { name: 'Создать аккаунт' }).click();
   await dialog.getByLabel('Как к вам обращаться').fill(candidate.displayName);
@@ -109,14 +113,22 @@ async function completeWizard(page) {
   await page.getByRole('button', { name: 'Собрать карьерную картину' }).click();
 }
 
-/** Что экран утверждает и что в тот же момент отвечает сервер. */
+/**
+ * Что экран утверждает и что в тот же момент отвечает сервер.
+ *
+ * Факты спрашиваются страницей памяти, а не головой снимка: голова память не
+ * несёт (INC-030), и чтение `dossier.confirmedCount` показывало ноль там, где
+ * у сервера лежали все факты — это была ошибка замера, а не продукта.
+ */
 async function compare(page) {
   return page.evaluate(async () => {
-    const response = await fetch('/api/v1/candidate/me', { credentials: 'include' });
-    const body = response.ok ? await response.json() : null;
+    const memory = await fetch('/api/v1/candidate/me/memory?offset=0', {
+      credentials: 'include',
+    });
+    const body = memory.ok ? await memory.json() : null;
     const text = document.body.innerText;
     return {
-      serverFacts: body?.data?.dossier?.confirmedCount ?? null,
+      serverFacts: body?.meta?.total ?? null,
       saysNoFacts: /Фактов пока нет|Профиль пуст/u.test(text),
       saysImporting: /идёт импорт/iu.test(text),
     };
@@ -125,15 +137,30 @@ async function compare(page) {
 
 /** Слушатели, которые доказывают судьбу самого запроса импорта. */
 function watchImport(page, importCalls) {
+  let startedAt = 0;
   page.on('request', (request) => {
     if (request.url().includes('/candidate/resume/import')) {
-      importCalls.push(`запрос ушёл ${new Date().toISOString()}`);
+      startedAt = Date.now();
+      importCalls.push('запрос ушёл');
     }
   });
   page.on('response', async (response) => {
     if (!response.url().includes('/candidate/resume/import')) return;
     const body = await response.text().catch(() => '(тело не прочитано)');
-    importCalls.push(`ответ ${response.status()}: ${body.slice(0, 600)}`);
+    let factCount = null;
+    let structuredBy = null;
+    try {
+      const parsed = JSON.parse(body);
+      factCount = parsed?.data?.factCount ?? null;
+      structuredBy = parsed?.data?.structuredBy ?? parsed?.error?.code ?? null;
+    } catch {
+      structuredBy = '(тело не разобрано)';
+    }
+    // INC-037: время ответа — сама суть замера, а не подробность.
+    importCalls.push(
+      `ответ ${response.status()} за ${((Date.now() - startedAt) / 1000).toFixed(1)} с, ` +
+        `фактов ${factCount}, разобрано: ${structuredBy}`,
+    );
   });
   page.on('requestfailed', (request) => {
     if (request.url().includes('/candidate/resume/import')) {
