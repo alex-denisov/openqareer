@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { collectMatchedPool, withDeadline } from './vacancyRead';
+import { MATCHED_POOL_READ_WIDTH, collectMatchedPool, withDeadline } from './vacancyRead';
 
 /**
  * Прод отдал заголовки `200` и не отдал тело: экран висел на «Читаем пул…»
@@ -85,6 +85,95 @@ describe('collectMatchedPool', () => {
     }, 5);
     expect(calls).toBe(5);
     expect(result.items).toHaveLength(50);
+    expect(result.complete).toBe(false);
+  });
+});
+
+/**
+ * Шестьдесят страниц — шестьдесят кругов по каналу подряд, 73 секунды на вход
+ * и шестьдесят шансов словить обрыв INC-036 (PRB-023). Названные сервером
+ * смещения читаются волнами, а не по одному.
+ */
+describe('collectMatchedPool со списком смещений (B211)', () => {
+  const PAGE = 4;
+  const TOTAL = 52;
+  const offsets = Array.from({ length: Math.ceil(TOTAL / PAGE) }, (_, i) => i * PAGE);
+
+  function planned(offset: number) {
+    const count = Math.max(0, Math.min(PAGE, TOTAL - offset));
+    return {
+      items: Array.from({ length: count }, (_, index) => `item-${offset + index}`),
+      total: TOTAL,
+      nextOffset: offset + count < TOTAL ? offset + count : null,
+      ...(offset === 0 ? { pageOffsets: offsets } : {}),
+    };
+  }
+
+  it('держит в полёте не больше пяти запросов и читает пул целиком по порядку', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const result = await collectMatchedPool<string>(async (offset) => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await Promise.resolve();
+      inFlight -= 1;
+      return planned(offset);
+    });
+    expect(peak).toBeLessThanOrEqual(MATCHED_POOL_READ_WIDTH);
+    expect(peak).toBeGreaterThan(1);
+    expect(result.items).toEqual(Array.from({ length: TOTAL }, (_, i) => `item-${i}`));
+    expect(result.complete).toBe(true);
+    expect(result.total).toBe(TOTAL);
+  });
+
+  it('не ждёт ответа, чтобы попросить следующую страницу', async () => {
+    // Прежнее чтение узнавало смещение только из предыдущего ответа: 13 страниц
+    // = 13 кругов по каналу подряд. Со списком смещений следующие пять уходят,
+    // не дожидаясь ни одного из них.
+    const pending: Array<() => void> = [];
+    const asked: number[] = [];
+    const read = collectMatchedPool<string>(
+      (offset) =>
+        new Promise((resolve) => {
+          asked.push(offset);
+          if (offset === 0) {
+            resolve(planned(0));
+            return;
+          }
+          pending.push(() => resolve(planned(offset)));
+        }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(asked).toHaveLength(1 + MATCHED_POOL_READ_WIDTH);
+    while (pending.length > 0) {
+      pending.splice(0).forEach((release) => release());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    await read;
+    expect(asked).toHaveLength(offsets.length);
+  });
+
+  it('отказ одной страницы не отменяет остальных и не выдаётся за полный пул', async () => {
+    const broken = offsets[3];
+    const result = await collectMatchedPool<string>(async (offset) => {
+      if (offset === broken) throw new Error('network');
+      return planned(offset);
+    });
+    expect(result.complete).toBe(false);
+    expect(result.items).toHaveLength(TOTAL - PAGE);
+    expect(result.items).not.toContain(`item-${broken}`);
+    // Прочитанное после провалившейся страницы не теряется.
+    expect(result.items).toContain(`item-${TOTAL - 1}`);
+  });
+
+  it('соблюдает потолок страниц и в параллельном чтении', async () => {
+    let calls = 0;
+    const result = await collectMatchedPool<string>(async (offset) => {
+      calls += 1;
+      return planned(offset);
+    }, 5);
+    expect(calls).toBe(5);
+    expect(result.items).toHaveLength(5 * PAGE);
     expect(result.complete).toBe(false);
   });
 });

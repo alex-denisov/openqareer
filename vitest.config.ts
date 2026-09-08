@@ -37,6 +37,11 @@ export default defineConfig({
         'server/vacancies/sourceHealthVerdict.ts',
         'server/vacancies/linkLivenessProbe.ts',
         'server/vacancies/adminVacancyPage.ts',
+        // Чтение подбора страницами и план этих страниц: пул, который читается
+        // неправильно, кандидат видит неполным (INC-029, PRB-023, B211).
+        'server/vacancies/matchedVacancyPage.ts',
+        'src/features/vacancies/vacancyRead.ts',
+        'src/features/coach/matchedVacancyApi.ts',
         'server/vacancies/adminSourceSchedule.ts',
         'src/features/admin/sourceScheduleLabel.ts',
         'server/vacancies/vacancyCatalogPage.ts',

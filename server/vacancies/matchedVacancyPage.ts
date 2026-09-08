@@ -32,6 +32,17 @@ export interface MatchedVacancyPage {
   readonly offset: number;
   /** Смещение следующей страницы; `null` — пул кончился. */
   readonly nextOffset: number | null;
+  /**
+   * Смещения всех страниц пула — только на первой странице.
+   *
+   * Без них следующее смещение известно только из предыдущего ответа, и пул из
+   * шестидесяти страниц читается шестьюдесятью кругами по каналу подряд: 73
+   * секунды сети на каждый вход и шестьдесят отдельных шансов словить обрыв
+   * INC-036 (PRB-023). Названный план едет в `meta`, а не в `data`: байтовый
+   * бюджет записей остаётся нетронутым, а до стены канала (~20 460) остаётся
+   * восемь килобайт запаса — шестьдесят смещений весят меньше полукилобайта.
+   */
+  readonly pageOffsets?: readonly number[];
 }
 
 function extractLocationCoordinates(
@@ -123,12 +134,11 @@ function trim(item: MatchedVacancyItem): MatchedVacancyItem {
   };
 }
 
-export function buildMatchedVacancyPage(
+function takePage(
   all: readonly MatchedVacancyItem[],
-  offset: number,
-  budgetBytes: number = MATCHED_PAGE_BYTE_BUDGET,
-): MatchedVacancyPage {
-  const start = Math.max(0, Math.trunc(offset));
+  start: number,
+  budgetBytes: number,
+): MatchedVacancyItem[] {
   const items: MatchedVacancyItem[] = [];
   // Открывающая и закрывающая скобки массива входят в тот же бюджет.
   let size = 2;
@@ -143,11 +153,52 @@ export function buildMatchedVacancyPage(
     size += cost;
   }
 
+  return items;
+}
+
+/**
+ * Смещения всех страниц пула — тем же разбиением, каким режется страница.
+ *
+ * План и факт считает одна функция намеренно: разойдись они хоть на запись,
+ * клиент попросил бы смещение, с которого начинается не та страница, и пул
+ * приехал бы с дырой или с повтором.
+ */
+export function planMatchedVacancyPages(
+  all: readonly MatchedVacancyItem[],
+  budgetBytes: number = MATCHED_PAGE_BYTE_BUDGET,
+): number[] {
+  const offsets: number[] = [0];
+  let start = 0;
+
+  while (start < all.length) {
+    const taken = takePage(all, start, budgetBytes).length;
+    // Пустая страница на непустом остатке — это бесконечный цикл, а не конец
+    // пула. Такой страницы быть не может (одна запись уходит через бюджет),
+    // но план обязан кончаться при любом ответе разбиения.
+    if (taken === 0) break;
+    start += taken;
+    if (start < all.length) offsets.push(start);
+  }
+
+  return offsets;
+}
+
+export function buildMatchedVacancyPage(
+  all: readonly MatchedVacancyItem[],
+  offset: number,
+  budgetBytes: number = MATCHED_PAGE_BYTE_BUDGET,
+): MatchedVacancyPage {
+  const start = Math.max(0, Math.trunc(offset));
+  const items = takePage(all, start, budgetBytes);
   const nextOffset = start + items.length;
+
   return {
     items,
     total: all.length,
     offset: start,
     nextOffset: nextOffset < all.length ? nextOffset : null,
+    // План едет только с первой страницей: в каждом ответе он был бы лишними
+    // байтами внутри того самого бюджета, ради которого пул и режется.
+    ...(start === 0 ? { pageOffsets: planMatchedVacancyPages(all, budgetBytes) } : {}),
   };
 }

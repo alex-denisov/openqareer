@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
-import { MATCHED_PAGE_BYTE_BUDGET, buildMatchedVacancyPage } from './matchedVacancyPage';
+import type { MatchedVacancyPage } from './matchedVacancyPage';
+import {
+  MATCHED_PAGE_BYTE_BUDGET,
+  buildMatchedVacancyPage,
+  planMatchedVacancyPages,
+} from './matchedVacancyPage';
 
 /**
  * Прод отдавал подбор одним куском в 794 319 байт, а маршрут владельца рвёт
@@ -169,5 +174,45 @@ describe('место вакансии на карте называется че�
       0,
     ).items;
     expect(first?.cluster.companyFeatures?.city).toBeUndefined();
+  });
+});
+
+/**
+ * Шестьдесят страниц читались шестьюдесятью кругами по каналу: следующее
+ * смещение было известно только из предыдущего ответа (PRB-023). Первая
+ * страница обязана назвать смещения всех остальных, и названный план обязан
+ * совпасть с фактическим обходом — иначе клиент попросит страницу, которой нет.
+ */
+describe('план страниц подбора (B211)', () => {
+  const pool = Array.from({ length: 500 }, (_, index) => item(index));
+
+  it('план совпадает со смещениями фактического обхода', () => {
+    const walked: number[] = [];
+    let offset: number | null = 0;
+    while (offset !== null) {
+      walked.push(offset);
+      const page: MatchedVacancyPage = buildMatchedVacancyPage(pool, offset);
+      offset = page.nextOffset;
+      expect(walked.length).toBeLessThan(200);
+    }
+    expect(planMatchedVacancyPages(pool)).toEqual(walked);
+  });
+
+  it('первая страница называет смещения всех страниц', () => {
+    const page = buildMatchedVacancyPage(pool, 0);
+    expect(page.pageOffsets).toEqual(planMatchedVacancyPages(pool));
+    expect(page.pageOffsets?.[0]).toBe(0);
+    expect(page.pageOffsets?.length).toBeGreaterThan(1);
+  });
+
+  it('страница из середины списка смещений не несёт', () => {
+    const first = buildMatchedVacancyPage(pool, 0);
+    const second = buildMatchedVacancyPage(pool, first.nextOffset ?? 0);
+    expect(second.pageOffsets).toBeUndefined();
+  });
+
+  it('пустой пул — одна страница в плане, а не ноль', () => {
+    expect(planMatchedVacancyPages([])).toEqual([0]);
+    expect(buildMatchedVacancyPage([], 0).pageOffsets).toEqual([0]);
   });
 });

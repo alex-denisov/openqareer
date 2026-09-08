@@ -193,6 +193,9 @@ describe('candidate platform connections', () => {
       offset: 0,
       nextOffset: null,
     });
+    // Первая страница называет смещения всех страниц — иначе кабинет читает
+    // пул шестьюдесятью кругами по каналу подряд (PRB-023, B211).
+    expect(matchedRes.json().meta.pageOffsets).toEqual([0]);
     expect(Buffer.byteLength(matchedRes.body, 'utf8')).toBeLessThanOrEqual(16_384);
 
     const pagedRes = await app.inject({

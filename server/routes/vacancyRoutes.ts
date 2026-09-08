@@ -545,6 +545,10 @@ const handleMatchedVacancies: Handler = async (
         total: 0,
         offset,
         nextOffset: null,
+        // Пустой пул — это одна страница, а не отсутствие плана: клиент читает
+        // план первой страницы и не должен различать «нет плана» и «нечего
+        // читать» (B211).
+        ...(offset === 0 ? { pageOffsets: [0] } : {}),
       },
     };
   }
@@ -567,6 +571,10 @@ const handleMatchedVacancies: Handler = async (
       total: page.total,
       offset: page.offset,
       nextOffset: page.nextOffset,
+      // Смещения всех страниц — только с первой: без них кабинет узнаёт, куда
+      // идти дальше, лишь из предыдущего ответа, и держит канал 73 секунды
+      // шестьюдесятью кругами подряд (PRB-023, B211).
+      ...(page.pageOffsets ? { pageOffsets: page.pageOffsets } : {}),
     },
   };
 };

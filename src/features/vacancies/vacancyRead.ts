@@ -25,6 +25,17 @@ export async function withDeadline<T>(
 /** Сколько страниц подбора экран готов прочитать за один заход. */
 export const MATCHED_POOL_PAGE_LIMIT = 60;
 
+/**
+ * Сколько страниц подбора читается одновременно.
+ *
+ * Пять — это компромисс между кругами по каналу и залпом. Залп по всем
+ * шестидесяти страницам продукт уже пробовал в другом месте: ручной опрос
+ * поднял 195 источников разом и сам себе забил канал, после чего записал живым
+ * площадкам отказ, которого не было (B202). Пять запросов в полёте сокращают
+ * шестьдесят кругов до двенадцати и не создают той же давки.
+ */
+export const MATCHED_POOL_READ_WIDTH = 5;
+
 export interface MatchedPoolRead<T> {
   readonly items: T[];
   readonly total: number;
@@ -36,6 +47,8 @@ interface PoolPage<T> {
   readonly items: T[];
   readonly total: number;
   readonly nextOffset: number | null;
+  /** Смещения всех страниц пула — приходят только с первой (B211). */
+  readonly pageOffsets?: readonly number[];
 }
 
 /**
@@ -57,6 +70,66 @@ export async function collectMatchedPool<T>(
   const first = await loadPage(0);
   const items = [...first.items];
   onPage?.(first.items, first.total);
+
+  const planned = first.pageOffsets;
+  if (planned && planned.length > 1) {
+    return readPlannedPages(loadPage, first, items, planned, pageLimit, onPage);
+  }
+
+  return readChainedPages(loadPage, first, items, pageLimit, onPage);
+}
+
+/**
+ * Сервер назвал смещения всех страниц — читать их можно, не ожидая друг друга.
+ *
+ * Порядок записей задаёт смещение, а не порядок ответов: волна раскладывается
+ * в пул по возрастанию смещения, поэтому подбор остаётся отсортированным даже
+ * если пятая страница ответила раньше первой.
+ */
+async function readPlannedPages<T>(
+  loadPage: (offset: number) => Promise<PoolPage<T>>,
+  first: PoolPage<T>,
+  items: T[],
+  planned: readonly number[],
+  pageLimit: number,
+  onPage?: (items: readonly T[], total: number) => void,
+): Promise<MatchedPoolRead<T>> {
+  const rest = planned.slice(1, Math.max(1, pageLimit));
+  let missed = rest.length < planned.length - 1;
+
+  for (let start = 0; start < rest.length; start += MATCHED_POOL_READ_WIDTH) {
+    const wave = rest.slice(start, start + MATCHED_POOL_READ_WIDTH);
+    const answers = await Promise.all(
+      // Непришедшая страница не отменяет остальных: пул уходит в чтение
+      // целиком, а провалившееся место остаётся честной дырой в счётчике.
+      wave.map((offset) => loadPage(offset).then((page) => page.items).catch(() => null)),
+    );
+    for (const answer of answers) {
+      if (answer === null) {
+        missed = true;
+        continue;
+      }
+      items.push(...answer);
+      onPage?.(answer, first.total);
+    }
+  }
+
+  return { items, total: first.total, complete: !missed };
+}
+
+/**
+ * Сервер смещений не назвал — читаем прежней цепочкой по `nextOffset`.
+ *
+ * Это не запасной путь на всякий случай: во время выката браузер уже держит
+ * новый код, а отвечает ещё старый прод. Цепочка медленная, но она доезжает.
+ */
+async function readChainedPages<T>(
+  loadPage: (offset: number) => Promise<PoolPage<T>>,
+  first: PoolPage<T>,
+  items: T[],
+  pageLimit: number,
+  onPage?: (items: readonly T[], total: number) => void,
+): Promise<MatchedPoolRead<T>> {
   let offset = first.nextOffset;
   let pages = 1;
 
