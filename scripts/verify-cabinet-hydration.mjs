@@ -121,6 +121,23 @@ async function signOutInPage(page) {
   await page.waitForTimeout(2500);
 }
 
+/**
+ * Страница прохода. Оболочка приходит частями, и по домашнему каналу владельца
+ * это иногда выходит за стандартные 30 секунд: ждать дольше честнее, чем
+ * объявлять отказом медленную загрузку (INC-036).
+ */
+async function openPage(context, problems) {
+  const page = await context.newPage();
+  page.setDefaultNavigationTimeout(90_000);
+  page.setDefaultTimeout(60_000);
+  page.on('console', (m) => m.type() === 'error' && problems.push(`console: ${m.text()}`));
+  page.on('pageerror', (e) => problems.push(`page: ${e.message}`));
+  page.on('requestfailed', (r) =>
+    problems.push(`request: ${r.method()} ${r.url()} — ${r.failure()?.errorText}`),
+  );
+  return page;
+}
+
 /** Расхождения первого — чистого — входа. */
 function judgeFirstEntry(name, state) {
   const failures = [];
@@ -191,16 +208,11 @@ async function walkOneViewport(browser, viewport, account) {
   {
     // Новый контекст — пустой `localStorage`: ровно то состояние браузера, в
     // котором кандидат оказывается после выхода из аккаунта.
+    const problems = [];
     const context = await browser.newContext({
       viewport: { width: viewport.width, height: viewport.height },
     });
-    const page = await context.newPage();
-    const problems = [];
-    page.on('console', (m) => m.type() === 'error' && problems.push(`console: ${m.text()}`));
-    page.on('pageerror', (e) => problems.push(`page: ${e.message}`));
-    page.on('requestfailed', (r) =>
-      problems.push(`request: ${r.method()} ${r.url()} — ${r.failure()?.errorText}`),
-    );
+    const page = await openPage(context, problems);
 
     if (!(await signIn(page, account))) {
       failures.push(`${viewport.name}: вход не выполнен`);

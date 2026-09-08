@@ -184,6 +184,11 @@ async function waitForFacts(page, limitMs) {
 async function openPage(browser, problems) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
+  // Оболочка приходит частями, и по домашнему каналу владельца это иногда
+  // выходит за стандартные 30 секунд. Ждать дольше честнее, чем объявлять
+  // отказом медленную загрузку (INC-036).
+  page.setDefaultNavigationTimeout(90_000);
+  page.setDefaultTimeout(60_000);
   page.on('console', (m) => m.type() === 'error' && problems.push(`console: ${m.text()}`));
   page.on('pageerror', (e) => problems.push(`page: ${e.message}`));
   return page;
