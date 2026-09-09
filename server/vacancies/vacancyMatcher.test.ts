@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancyMatcher';
+import { lintTextQuality } from '../../shared/textQualityLinter';
 
 describe('Explainable Vacancy Matcher', () => {
   const sampleCluster: VacancyCluster = {
@@ -73,5 +74,28 @@ describe('Explainable Vacancy Matcher', () => {
     expect(explanation.summary).toContain('не перечислила требований');
     expect(explanation).not.toHaveProperty('matchScore');
     expect(explanation).not.toHaveProperty('fitLevel');
+  });
+  /**
+   * Объяснение подбора — текст, который читает кандидат. Штампов в нём быть не
+   * должно, и проверять это должен тест, а не внимательность (B210).
+   */
+  describe('объяснение подбора написано без штампов', () => {
+    it('ни одна фраза объяснения не берётся из реестра штампов', () => {
+      const explanation = matchCandidateWithVacancy(strongCandidate, sampleCluster);
+      const texts = [
+        explanation.summary,
+        ...explanation.matchingPoints,
+        ...explanation.missingPoints,
+      ];
+      expect(texts.flatMap((text) => lintTextQuality(text))).toEqual([]);
+    });
+
+    it('вакансия без требований объясняется без штампов тоже', () => {
+      const explanation = matchCandidateWithVacancy(strongCandidate, {
+        ...sampleCluster,
+        skills: [],
+      });
+      expect(lintTextQuality(explanation.summary)).toEqual([]);
+    });
   });
 });

@@ -8,6 +8,7 @@ import {
 } from '../domain/resumeStructuring';
 import type { ParsedResume } from '../../src/features/workspace/resumeParser';
 import { modelRegistry, type ProviderId } from './modelRegistry';
+import { HygienicResumeStructurer } from './hygienicResumeStructurer';
 
 /** Enough for a long two-column CV; longer input is truncated, never guessed. */
 const MAX_SOURCE_CHARACTERS = 60_000;
@@ -189,12 +190,16 @@ export function buildResumeStructurer(
   const definition = modelRegistry[provider];
   const model = config.model ?? definition.models[0]?.id;
   if (!model) return undefined;
-  return new LlmResumeStructurer({
-    apiKey,
-    model,
-    baseUrl: provider === 'openai' ? undefined : definition.baseUrl,
-    structuredOutput:
-      definition.models.find((item) => item.id === model)?.structuredOutput ??
-      true,
+  // Чистка стоит на самой сборке: разобранное резюме кандидат правит в
+  // «Студии» и уносит в отклики, и пути мимо неё быть не должно (B210).
+  return new HygienicResumeStructurer({
+    inner: new LlmResumeStructurer({
+      apiKey,
+      model,
+      baseUrl: provider === 'openai' ? undefined : definition.baseUrl,
+      structuredOutput:
+        definition.models.find((item) => item.id === model)?.structuredOutput ??
+        true,
+    }),
   });
 }

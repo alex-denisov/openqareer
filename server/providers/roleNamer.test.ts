@@ -1,6 +1,7 @@
 import type { RoleNamingCacheEntry, RoleNamingCacheStore } from './roleNamer';
 import { describe, expect, it, vi } from 'vitest';
 import type { NamedRole } from '../../shared/roleProposals';
+import { HygienicRoleNamer } from './hygienicRoleNamer';
 import {
   buildRoleNamer,
   CachedRoleNamer,
@@ -257,6 +258,11 @@ describe('QueuedRoleNamer', () => {
   });
 });
 
+function namedRoleHygieneIsWired(namer: unknown): boolean {
+  const inner = (namer as { inner?: unknown })?.inner;
+  return inner instanceof HygienicRoleNamer;
+}
+
 describe('buildRoleNamer', () => {
   it('строит очередь и пропускает ступени с другим транспортом', () => {
     const built = buildRoleNamer({
@@ -277,6 +283,9 @@ describe('buildRoleNamer', () => {
       'openrouter:openrouter/free',
       'openai:gpt-5.6-luna',
     ]);
+    // Названия ролей уходят кандидату и переживают рестарт в хранилище — они
+    // обязаны проходить чистку до записи в него (B210).
+    expect(namedRoleHygieneIsWired(built)).toBe(true);
   });
 
   it('без ключей ступеней нет вовсе', () => {

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { HygienicRoleNamer } from './hygienicRoleNamer';
 import OpenAI from 'openai';
 import {
   ROLE_NAMING_JSON_SCHEMA,
@@ -479,7 +480,10 @@ export class QueuedRoleNamer implements RoleNamer {
 
 /** Отчёт об очереди считается по ней самой, а не по отдельному списку (B183). */
 export function describeRoleNamerQueue(namer: RoleNamer | undefined): string[] {
-  const queue = namer instanceof CachedRoleNamer ? namer.inner : namer;
+  const cached = namer instanceof CachedRoleNamer ? namer.inner : namer;
+  // Между хранилищем и очередью стоит чистка названий (B210): она ступеней не
+  // добавляет, поэтому обёртку разворачиваем, а не считаем концом очереди.
+  const queue = cached instanceof HygienicRoleNamer ? cached.inner : cached;
   if (!(queue instanceof QueuedRoleNamer)) return [];
   return [...queue.descriptors];
 }
@@ -537,33 +541,37 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
 
   const gateway = config.cloudflareGateway;
   return new CachedRoleNamer(
-    new QueuedRoleNamer(
-      stages.map((route) =>
-        route.provider === 'gemini' && gateway
-          ? new GeminiRoleNamer({
-              apiKey: route.apiKey,
-              model: route.model,
-              stage: `${route.provider}:${route.model}`,
-              baseUrl: geminiGatewayBaseUrl(gateway),
-              extraHeaders: cloudflareGatewayHeaders(gateway),
-            })
-          : new LlmRoleNamer({
-              apiKey: route.apiKey,
-              model: route.model,
-              stage: `${route.provider}:${route.model}`,
-              baseUrl:
-                route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
-              structuredOutput:
-                modelRegistry[route.provider].models.find((item) => item.id === route.model)
-                  ?.structuredOutput ?? false,
-              // Условие имеет смысл только у пула: у названной модели OpenRouter
-              // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
-              requireParameters:
-                route.provider === 'openrouter' && isMutableModelAlias(route.model),
-            }),
+    // Чистка стоит до хранилища: невидимая метка в названии роли не должна
+    // пережить рестарт вместе с ним (B210, B191).
+    new HygienicRoleNamer({
+      inner: new QueuedRoleNamer(
+        stages.map((route) =>
+          route.provider === 'gemini' && gateway
+            ? new GeminiRoleNamer({
+                apiKey: route.apiKey,
+                model: route.model,
+                stage: `${route.provider}:${route.model}`,
+                baseUrl: geminiGatewayBaseUrl(gateway),
+                extraHeaders: cloudflareGatewayHeaders(gateway),
+              })
+            : new LlmRoleNamer({
+                apiKey: route.apiKey,
+                model: route.model,
+                stage: `${route.provider}:${route.model}`,
+                baseUrl:
+                  route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
+                structuredOutput:
+                  modelRegistry[route.provider].models.find((item) => item.id === route.model)
+                    ?.structuredOutput ?? false,
+                // Условие имеет смысл только у пула: у названной модели OpenRouter
+                // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
+                requireParameters:
+                  route.provider === 'openrouter' && isMutableModelAlias(route.model),
+              }),
+        ),
+        stages.map((route) => `${route.provider}:${route.model}`),
       ),
-      stages.map((route) => `${route.provider}:${route.model}`),
-    ),
+    }),
     { ...(config.cacheStore ? { store: config.cacheStore } : {}) },
   );
 }

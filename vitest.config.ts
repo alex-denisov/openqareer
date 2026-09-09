@@ -42,6 +42,11 @@ export default defineConfig({
         'server/vacancies/matchedVacancyPage.ts',
         'src/features/vacancies/vacancyRead.ts',
         'src/features/coach/matchedVacancyApi.ts',
+        // Чистка текста модели на всех трёх путях к кандидату и реестр штампов
+        // (B210).
+        'server/providers/hygienicResumeStructurer.ts',
+        'server/providers/hygienicRoleNamer.ts',
+        'shared/textQualityLinter.ts',
         'server/vacancies/adminSourceSchedule.ts',
         'src/features/admin/sourceScheduleLabel.ts',
         'server/vacancies/vacancyCatalogPage.ts',

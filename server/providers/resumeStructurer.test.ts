@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LlmResumeStructurer, buildResumeStructurer } from './resumeStructurer';
+import { HygienicResumeStructurer } from './hygienicResumeStructurer';
 
 function clientReturning(content: string | null) {
   const create = vi.fn().mockResolvedValue({
@@ -136,12 +137,14 @@ describe('buildResumeStructurer', () => {
   });
 
   it('builds a structurer when the personal provider has a credential', () => {
-    expect(
-      buildResumeStructurer({
-        personalProvider: 'openai',
-        model: 'gpt-5.6-sol',
-        providerCredentials: { openai: 'sk-test-key' },
-      }),
-    ).toBeInstanceOf(LlmResumeStructurer);
+    // Собранный структуратор обязан быть в чистке: разобранное резюме кандидат
+    // правит и уносит в отклики, и мимо чистки пути быть не должно (B210).
+    const built = buildResumeStructurer({
+      personalProvider: 'openai',
+      model: 'gpt-5.6-sol',
+      providerCredentials: { openai: 'sk-test-key' },
+    });
+    expect(built).toBeInstanceOf(HygienicResumeStructurer);
+    expect((built as HygienicResumeStructurer).inner).toBeInstanceOf(LlmResumeStructurer);
   });
 });
