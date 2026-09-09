@@ -40,6 +40,7 @@ export default defineConfig({
         // Чтение подбора страницами и план этих страниц: пул, который читается
         // неправильно, кандидат видит неполным (INC-029, PRB-023, B211).
         'server/vacancies/matchedVacancyPage.ts',
+        'server/vacancies/matchedPoolSnapshot.ts',
         'src/features/vacancies/vacancyRead.ts',
         'src/features/coach/matchedVacancyApi.ts',
         // Чистка текста модели на всех трёх путях к кандидату и реестр штампов

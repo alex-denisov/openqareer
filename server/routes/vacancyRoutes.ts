@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
@@ -22,6 +23,7 @@ import {
 } from '../../shared/careerStrategy';
 import type { RoleNamingStageFailure } from '../providers/roleNamer';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
+import { MatchedPoolSnapshots } from '../vacancies/matchedPoolSnapshot';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { buildRoleProposals, confirmChosenTitle } from '../vacancies/roleHypotheses';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
@@ -35,11 +37,7 @@ import {
 } from './helpers';
 import { hhMarketQuerySchema } from './schemas';
 
-type Handler = (
-  deps: RouteDeps,
-  request: FastifyRequest,
-  reply: FastifyReply,
-) => Promise<unknown>;
+type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 const SUBSCRIPTION_NOT_FOUND = {
   status: 404,
@@ -110,6 +108,26 @@ function readMatchProfile(
   );
 
   return { confirmedSkills, targetRoles };
+}
+
+/**
+ * Отпечаток того, из чего считается подбор.
+ *
+ * Сменился профиль — сменился и снимок: иначе кандидат, подтвердивший навык,
+ * дочитывал бы старый подбор до конца срока жизни снимка.
+ */
+function matchProfileKey(
+  confirmedSkills: readonly string[],
+  targetRoles: readonly string[],
+): string {
+  return createHash('sha256')
+    .update(
+      [[...confirmedSkills].sort().join('\u0000'), [...targetRoles].sort().join('\u0000')].join(
+        '\u0001',
+      ),
+    )
+    .digest('hex')
+    .slice(0, 16);
 }
 
 const matchedVacanciesQuerySchema = z.object({
@@ -522,6 +540,15 @@ function candidateFacts(
     .map((memory) => ({ ref: `memory:${memory.id}`, statement: memory.statement }));
 }
 
+/**
+ * Снимки подбора живут на процессе: одно чтение пула — один список.
+ *
+ * Кабинет читает пул шестьюдесятью запросами (PRB-023), и пересчёт на каждый из
+ * них стоил и времени, и правды: между страницами проходит опрос площадок, и
+ * то же смещение указывает уже на другую запись (B211).
+ */
+const matchedPoolSnapshots = new MatchedPoolSnapshots();
+
 const handleMatchedVacancies: Handler = async (
   { authService, candidateStore, config, multiSourceEngine },
   request,
@@ -553,13 +580,20 @@ const handleMatchedVacancies: Handler = async (
     };
   }
 
-  const matched = multiSourceEngine.getMatchedVacancies({
-    candidateId: candidate.id,
-    targetRoles,
-    confirmedSkills,
-    confirmedFacts: confirmedSkills,
-    preferredRemote: true,
-  });
+  // Подбор считается один раз на чтение: страницы одного чтения обязаны
+  // приходить из одного списка, иначе смещение указывает не на ту запись.
+  const matched = matchedPoolSnapshots.read(
+    candidate.id,
+    matchProfileKey(confirmedSkills, targetRoles),
+    () =>
+      multiSourceEngine.getMatchedVacancies({
+        candidateId: candidate.id,
+        targetRoles,
+        confirmedSkills,
+        confirmedFacts: confirmedSkills,
+        preferredRemote: true,
+      }),
+  );
 
   // Весь подбор одним телом не доходит: маршрут рвёт ответ примерно на 20 460
   // байт (INC-029). Экран забирает пул страницами внутри доказанного бюджета.
@@ -618,11 +652,7 @@ const handleCreateSubscription: Handler = async (deps, request, reply) => {
   });
 };
 
-function loadSubscription(
-  deps: RouteDeps,
-  request: FastifyRequest,
-  reply: FastifyReply,
-) {
+function loadSubscription(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const { authService, candidateStore, config } = deps;
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return null;
@@ -630,7 +660,11 @@ function loadSubscription(
     .string()
     .uuid()
     .parse((request.params as { subscriptionId: string }).subscriptionId);
-  return { candidate, subscriptionId, subscription: candidateStore.getVacancySubscription(candidate.id, subscriptionId) };
+  return {
+    candidate,
+    subscriptionId,
+    subscription: candidateStore.getVacancySubscription(candidate.id, subscriptionId),
+  };
 }
 
 const handleSubscriptionVacancies: Handler = async (deps, request, reply) => {
@@ -650,7 +684,10 @@ const handleSubscriptionVacancies: Handler = async (deps, request, reply) => {
   return {
     data: {
       subscription: loaded.subscription,
-      vacancies: candidateStore.listSubscriptionVacancies(loaded.candidate.id, loaded.subscriptionId),
+      vacancies: candidateStore.listSubscriptionVacancies(
+        loaded.candidate.id,
+        loaded.subscriptionId,
+      ),
     },
     meta: { requestId: request.id },
   };
@@ -730,10 +767,7 @@ const handleDeleteSubscription: Handler = async (deps, request, reply) => {
 
 /** Ручной отклик (B165, срез 1) — свои два маршрута, чтение и запись. */
 function registerVacancyApplicationRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  app.get(
-    '/api/v1/candidate/vacancy-applications',
-    withDeps(deps, handleListVacancyApplications),
-  );
+  app.get('/api/v1/candidate/vacancy-applications', withDeps(deps, handleListVacancyApplications));
   app.post(
     '/api/v1/candidate/vacancy-applications',
     { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },
