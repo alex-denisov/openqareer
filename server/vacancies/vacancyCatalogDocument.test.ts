@@ -191,16 +191,48 @@ describe('документ публичного каталога (B209)', () => 
    * Без внутренних ссылок краулер доходит до списка только через карту сайта,
    * а читатель — никогда: сузить выборку было бы нечем (B209, срез 2b).
    */
-  it('печатает ссылки на подборки, когда они есть', () => {
+  it('печатает фильтры группами, называя, по чему идёт сужение', () => {
     const html = renderCatalogDocument(buildCatalogPage([cluster()], 1), [
-      { path: '/vacancies/remote/frontend-developer', label: 'Frontend Developer — удалённо', count: 12 },
+      {
+        kind: 'places',
+        title: 'Места',
+        links: [{ path: '/vacancies/berlin', label: 'Berlin', count: 7 }],
+      },
+      {
+        kind: 'roles',
+        title: 'Роли',
+        links: [
+          {
+            path: '/vacancies/remote/frontend-developer',
+            label: 'Frontend Developer — удалённо',
+            count: 12,
+          },
+        ],
+      },
     ]);
     expect(html).toContain('href="/vacancies/remote/frontend-developer"');
-    expect(html).toContain('Подборки');
+    expect(html).toContain('href="/vacancies/berlin"');
+    // Группа называет, по чему сужение: «Берлин» и «Frontend Developer —
+    // удалённо» в одном плоском списке читателю ничего не объясняли.
+    expect(html).toContain('Места');
+    expect(html).toContain('Роли');
+    expect(html).toContain('Сузить выборку');
   });
 
-  it('не печатает пустой блок подборок', () => {
-    expect(renderCatalogDocument(buildCatalogPage([cluster()], 1))).not.toContain('Подборки');
+  it('не печатает пустой блок фильтров', () => {
+    expect(renderCatalogDocument(buildCatalogPage([cluster()], 1))).not.toContain('Сузить выборку');
+  });
+
+  it('экранирует чужой текст в подписи фильтра', () => {
+    const html = renderCatalogDocument(buildCatalogPage([cluster()], 1), [
+      {
+        kind: 'places',
+        title: 'Места',
+        links: [{ path: '/vacancies/berlin', label: '<script>alert(1)</script>', count: 3 }],
+      },
+    ]);
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
   });
 
   it('ведёт крошками от списка обратно в каталог, а на корне их не печатает', () => {

@@ -17,6 +17,7 @@ import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import { CATALOG_ROOT } from '../../shared/vacancyCatalogRoutes';
 import { employerLabel } from '../../shared/employerLabel';
 import type { CatalogEntry, CatalogPage, StructuredGraph, VacancyDetail } from './vacancyCatalogPage';
+import type { CatalogFilterGroup } from './vacancyCatalogFilters';
 
 /**
  * ПОЧЕМУ ФАЙЛ, А НЕ ИНЛАЙН. Боевая политика безопасности — `style-src 'self'`
@@ -58,11 +59,13 @@ a:focus-visible{outline:2px solid var(--primary-accent);outline-offset:2px;borde
 .catalog-apply a{display:inline-block;background:var(--primary-accent);color:oklch(15% 0.015 255);font-weight:600;padding:.65rem 1.2rem;border-radius:12px}
 .catalog-apply a:hover{text-decoration:none;filter:brightness(1.08)}
 .catalog-footer{border-top:1px solid var(--line);color:var(--text-muted);font-size:.85rem}
-.catalog-related{margin-top:2rem;border-top:1px solid var(--line);padding-top:1.25rem}
-.catalog-related h2{font-size:1rem;margin:0 0 .75rem}
-.catalog-related ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.5rem}
-.catalog-related li{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:.3rem .8rem;font-size:.9rem}
-.catalog-related span{color:var(--text-muted)}
+.catalog-filters{margin-top:2rem;border-top:1px solid var(--line);padding-top:1.25rem}
+.catalog-filters h2{font-size:1rem;margin:0 0 1rem}
+.catalog-filter-group{margin:0 0 1rem}
+.catalog-filter-group h3{font-size:.85rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);margin:0 0 .5rem;font-weight:600}
+.catalog-filters ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.5rem}
+.catalog-filters li{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:.3rem .8rem;font-size:.9rem}
+.catalog-filters span{color:var(--text-muted)}
 @media (max-width:520px){.catalog-header{flex-direction:column;align-items:flex-start}}`;
 
 export function escapeHtml(value: string): string {
@@ -174,28 +177,33 @@ function entryCard(entry: CatalogEntry): string {
   );
 }
 
-export interface RelatedLink {
-  readonly path: string;
-  readonly label: string;
-  readonly count: number;
-}
-
 /**
- * Внутренние ссылки на списки. Без них краулер доходит до страницы списка
- * только через карту сайта, а читатель — никогда: у каталога не было бы ни
- * одного способа сузить выборку.
+ * Фильтры каталога — ссылки, сгруппированные по тому, по чему идёт сужение.
+ *
+ * Без них краулер доходит до страницы списка только через карту сайта, а
+ * читатель — никогда: у каталога не было бы ни одного способа сузить выборку.
+ * До этого среза группа была одна и плоская: «Берлин» стоял рядом с «Frontend
+ * Developer — Берлин», и что из этого место, а что роль, читатель не видел.
  */
-function relatedLinks(links: readonly RelatedLink[]): string {
-  if (links.length === 0) return '';
+function filterPanel(groups: readonly CatalogFilterGroup[]): string {
+  const filled = groups.filter((group) => group.links.length > 0);
+  if (filled.length === 0) return '';
   return (
-    '<nav class="catalog-related"><h2>Подборки</h2><ul>' +
-    links
+    '<nav class="catalog-filters"><h2>Сузить выборку</h2>' +
+    filled
       .map(
-        (link) =>
-          `<li><a href="${escapeHtml(link.path)}">${escapeHtml(link.label)}</a> <span>${link.count}</span></li>`,
+        (group) =>
+          `<section class="catalog-filter-group"><h3>${escapeHtml(group.title)}</h3><ul>` +
+          group.links
+            .map(
+              (link) =>
+                `<li><a href="${escapeHtml(link.path)}">${escapeHtml(link.label)}</a> <span>${link.count}</span></li>`,
+            )
+            .join('') +
+          '</ul></section>',
       )
       .join('') +
-    '</ul></nav>'
+    '</nav>'
   );
 }
 
@@ -249,7 +257,10 @@ export function renderGoneDocument(page: CatalogPage): string {
  * отличаются только заголовком и адресом, а вёрстка, разметка и постраничная
  * навигация у них общие (B209, срез 2b).
  */
-export function renderCatalogDocument(page: CatalogPage, related: readonly RelatedLink[] = []): string {
+export function renderCatalogDocument(
+  page: CatalogPage,
+  filters: readonly CatalogFilterGroup[] = [],
+): string {
   const empty = page.total === 0;
   const title = page.documentTitle;
   const description = page.description;
@@ -268,7 +279,7 @@ export function renderCatalogDocument(page: CatalogPage, related: readonly Relat
         'Каждая карточка ведёт на первоисточник — отклик подаётся там.</p>' +
         `<ul class="catalog-list">${page.entries.map(entryCard).join('')}</ul>` +
         pagination(page)) +
-    relatedLinks(related) +
+    filterPanel(filters) +
     '</main>' +
     siteFooter();
 

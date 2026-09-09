@@ -24,6 +24,7 @@ import {
   catalogEntries,
 } from '../vacancies/vacancyCatalogPage';
 import { catalogListings, listingEntries } from '../vacancies/vacancyCatalogFacets';
+import { catalogFilterGroups } from '../vacancies/vacancyCatalogFilters';
 import {
   renderCatalogDocument,
   renderGoneDocument,
@@ -33,7 +34,6 @@ import type { RouteDeps } from './deps';
 import { withDeps } from './helpers';
 
 /** Сколько подборок печатать ссылками на странице. */
-const RELATED_LIMIT = 24;
 
 /** Предел протокола карты сайта — 50 000 адресов в одном файле. */
 const SITEMAP_URL_LIMIT = 50_000;
@@ -81,22 +81,24 @@ function pageNumber(request: FastifyRequest): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
-function relatedFor(entries: readonly ReturnType<typeof catalogEntries>[number][]) {
-  return catalogListings(entries)
-    .slice(0, RELATED_LIMIT)
-    .map((listing) => ({
-      path: listing.path,
-      label: listing.roleLabel
-        ? `${listing.roleLabel} — ${listing.placeLabel}`
-        : listing.placeLabel,
-      count: listing.count,
-    }));
+/**
+ * Фильтры считаются по всему каталогу, а не по выбранному списку.
+ *
+ * Иначе со страницы «Берлин» нельзя было бы уйти ни в какое другое место: в
+ * выбранных записях других мест нет по определению, и «сузить» превращалось бы
+ * в «остаться здесь» (B209, срез 2b).
+ */
+function filtersFor(
+  entries: readonly ReturnType<typeof catalogEntries>[number][],
+  current?: { place: string; role?: string },
+) {
+  return catalogFilterGroups(entries, current);
 }
 
 async function handleCatalog(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const clusters = deps.multiSourceEngine.getActiveClusters();
   const page = buildCatalogPage(clusters, pageNumber(request));
-  return sendDocument(reply, renderCatalogDocument(page, relatedFor(catalogEntries(clusters))));
+  return sendDocument(reply, renderCatalogDocument(page, filtersFor(catalogEntries(clusters))));
 }
 
 /**
@@ -124,7 +126,16 @@ async function handleListing(deps: RouteDeps, request: FastifyRequest, reply: Fa
     chosen.some((entry) => entry.key === vacancyKey(cluster.id)),
   );
   const page = buildListingPage(chosenClusters, summary, listing.page ?? 1);
-  return sendDocument(reply, renderCatalogDocument(page, relatedFor(chosen)));
+  return sendDocument(
+    reply,
+    renderCatalogDocument(
+      page,
+      filtersFor(entries, {
+        place: listing.place,
+        ...(listing.role ? { role: listing.role } : {}),
+      }),
+    ),
+  );
 }
 
 /**

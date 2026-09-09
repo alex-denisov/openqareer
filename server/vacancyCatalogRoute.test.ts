@@ -170,11 +170,29 @@ describe('B209: публичный каталог вакансий', () => {
     expect(role.body).toContain('"@type":"ItemList"');
   });
 
-  it('печатает подборки ссылками на корне каталога', async () => {
+  it('печатает фильтры группами на корне каталога', async () => {
     const app = await appWithPool(Array.from({ length: 5 }, (_, index) => vacancy(index)));
     const response = await app.inject({ method: 'GET', url: '/vacancies' });
-    expect(response.body).toContain('Подборки');
+    expect(response.body).toContain('Сузить выборку');
+    // Место и роль названы порознь: в плоском списке читатель не видел, что из
+    // этого город, а что должность (B209, срез 2b).
+    expect(response.body).toContain('<h3>Места</h3>');
+    expect(response.body).toContain('<h3>Роли</h3>');
+    expect(response.body).toContain('href="/vacancies/berlin"');
     expect(response.body).toContain('href="/vacancies/berlin/frontend-developer"');
+  });
+
+  it('на странице списка предлагает уйти в другое место, а не только остаться', async () => {
+    const app = await appWithPool([
+      ...Array.from({ length: 4 }, (_, index) => vacancy(index)),
+      ...Array.from({ length: 3 }, (_, index) => vacancy(index + 10, { location: 'Amsterdam' })),
+    ]);
+    const response = await app.inject({ method: 'GET', url: '/vacancies/berlin' });
+    expect(response.statusCode).toBe(200);
+    // Фильтры считаются по всему каталогу: иначе со страницы места уйти было бы
+    // некуда — других мест в выбранных записях нет по определению.
+    expect(response.body).toContain('href="/vacancies/amsterdam"');
+    expect(response.body).not.toContain('href="/vacancies/berlin"');
   });
 
   it('кладёт списки в карту сайта рядом с вакансиями', async () => {

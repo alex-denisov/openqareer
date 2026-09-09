@@ -53,6 +53,7 @@ export default defineConfig({
         'src/features/admin/sourceCountLabel.ts',
         'server/vacancies/vacancyCatalogPage.ts',
         'server/vacancies/vacancyCatalogFacets.ts',
+        'server/vacancies/vacancyCatalogFilters.ts',
         'server/vacancies/vacancyCatalogDocument.ts',
         'server/routes/vacancyCatalogRoutes.ts',
         'server/data/documentTextPage.ts',
