@@ -87,7 +87,7 @@ function AdminNav({
         className={`admin-nav-item ${activeTab === 'vacancies' ? 'is-active' : ''}`}
         onClick={() => onSelectTab('vacancies')}
       >
-        💼 База вакансий (18+)
+        💼 База вакансий
       </button>
       <button
         type="button"

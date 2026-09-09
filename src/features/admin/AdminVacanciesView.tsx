@@ -7,6 +7,7 @@ import {
   type AdminVacancySummary,
 } from './adminApi';
 import { VacancyDetailModal } from './VacancyDetailModal';
+import { sourceCountLabel } from './sourceCountLabel';
 
 type RemoteFilter = 'all' | 'remote' | 'office';
 
@@ -52,6 +53,26 @@ function VacancyStatsGrid({ data }: { data: AdminVacancyPage }) {
   );
 }
 
+/** Число источников в подписи — настоящее или его нет вовсе (B212, PRB-024). */
+function SourceSelect({
+  value, onChange, sources,
+}: {
+  value: string; onChange: (v: string) => void;
+  sources?: Array<{ sourceId: string; sourceName: string; count: number }>;
+}) {
+  // «18+» стояло литералом с тех пор, когда источников было восемнадцать; их
+  // стало 195. Пока список не пришёл, число не называется вовсе.
+  const named = sourceCountLabel(sources);
+  return (
+    <select className="admin-select" value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="all">{named === null ? 'Все источники' : `Все источники (${named})`}</option>
+      {sources?.map((s) => (
+        <option key={s.sourceId} value={s.sourceId}>{s.sourceName} ({s.count})</option>
+      ))}
+    </select>
+  );
+}
+
 function VacancyFilters({
   searchQuery, onSearchChange, selectedSource, onSourceChange,
   selectedRemote, onRemoteChange, sources,
@@ -67,12 +88,7 @@ function VacancyFilters({
         <input type="text" className="admin-input" placeholder="Поиск по должности, компании, навыкам, ID..." value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} />
       </div>
       <div className="admin-filter-group">
-        <select className="admin-select" value={selectedSource} onChange={(e) => onSourceChange(e.target.value)}>
-          <option value="all">Все источники (18+)</option>
-          {sources?.map((s) => (
-            <option key={s.sourceId} value={s.sourceId}>{s.sourceName} ({s.count})</option>
-          ))}
-        </select>
+        <SourceSelect value={selectedSource} onChange={onSourceChange} sources={sources} />
         <select className="admin-select" value={selectedRemote} onChange={(e) => onRemoteChange(e.target.value as RemoteFilter)}>
           <option value="all">Формат: Все</option>
           <option value="remote">Только Remote</option>
@@ -149,13 +165,15 @@ function VacancyCardFooter({ vacancy, onSelect }: { vacancy: AdminVacancySummary
 
 // ---------- Header & List ----------
 
-function VacanciesHeader({ syncing, onSyncAll }: { syncing: boolean; onSyncAll: () => void }) {
+function VacanciesHeader({ syncing, onSyncAll, sourcesNamed }: { syncing: boolean; onSyncAll: () => void; sourcesNamed: string | null }) {
   return (
     <div className="admin-vacancies-header">
       <div>
         <h2 className="admin-section-title">База вакансий всех источников</h2>
         <p className="admin-section-subtitle">
-          Агрегация, валидация и мониторинг качества вакансий из 18+ каналов (API, биржи, Telegram)
+          {sourcesNamed === null
+            ? 'Агрегация, валидация и мониторинг качества вакансий (API, биржи, Telegram)'
+            : `Агрегация, валидация и мониторинг качества вакансий из ${sourcesNamed} каналов (API, биржи, Telegram)`}
         </p>
       </div>
       <button type="button" className="admin-btn admin-btn--primary" onClick={onSyncAll} disabled={syncing}>
@@ -265,7 +283,7 @@ export function AdminVacanciesView() {
 
   return (
     <div className="admin-vacancies-view">
-      <VacanciesHeader syncing={syncing} onSyncAll={handleSyncAll} />
+      <VacanciesHeader syncing={syncing} onSyncAll={handleSyncAll} sourcesNamed={sourceCountLabel(data?.statsBySource)} />
       {data && <VacancyStatsGrid data={data} />}
       <VacancyFilters
         searchQuery={searchQuery}

@@ -50,6 +50,7 @@ export default defineConfig({
         'shared/textQualityLinter.ts',
         'server/vacancies/adminSourceSchedule.ts',
         'src/features/admin/sourceScheduleLabel.ts',
+        'src/features/admin/sourceCountLabel.ts',
         'server/vacancies/vacancyCatalogPage.ts',
         'server/vacancies/vacancyCatalogFacets.ts',
         'server/vacancies/vacancyCatalogDocument.ts',
