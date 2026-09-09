@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { RU_SLOP_REGISTRY, lintTextQuality } from './textQualityLinter';
 
 /**
@@ -40,11 +40,27 @@ describe('lintTextQuality', () => {
   });
 });
 
+const SKILL_PATH = '.agents/skills/anti-slop-humanizer/SKILL.md';
+
+/**
+ * Навык лежит в `.agents/`, а этот каталог намеренно вне git: репозиторий —
+ * только приложение (PRB-009). Поэтому в CI файла навыка нет, и сверка идёт
+ * там, где он есть. Молча она не исчезает: пропуск виден в отчёте прогона.
+ */
 describe('реестр штампов не расходится с навыком', () => {
-  it('каждое слово реестра названо в SKILL.md', () => {
+  it('реестр не пуст и не содержит повторов', () => {
+    expect(RU_SLOP_REGISTRY.length).toBeGreaterThan(10);
+    expect(new Set(RU_SLOP_REGISTRY).size).toBe(RU_SLOP_REGISTRY.length);
+    // Пустая строка нашлась бы в любом тексте и сделала бы проверку шумом.
+    expect(RU_SLOP_REGISTRY.every((phrase) => phrase.trim() === phrase && phrase.length > 2)).toBe(
+      true,
+    );
+  });
+
+  it.runIf(existsSync(SKILL_PATH))('каждое слово реестра названо в SKILL.md', () => {
     // Навык — текст с переносами: «ключевой\nдрайвер» и «ключевой драйвер» —
     // одно и то же слово реестра, и сверка не должна спотыкаться о вёрстку.
-    const skill = readFileSync('.agents/skills/anti-slop-humanizer/SKILL.md', 'utf8')
+    const skill = readFileSync(SKILL_PATH, 'utf8')
       .toLowerCase()
       .replace(/\s+/gu, ' ');
     const missing = RU_SLOP_REGISTRY.filter((phrase) => !skill.includes(phrase));
