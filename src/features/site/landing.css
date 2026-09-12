@@ -998,6 +998,15 @@
   .site-header .brand-lockup-word {
     display: none;
   }
+
+  .site-hero-actions .site-btn {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    min-height: 44px;
+    padding-inline: 12px;
+    white-space: normal;
+  }
 }
 
 /* B173 — published legal documents. Long-form reading, one column, the same
