@@ -943,7 +943,24 @@
     padding: 14px 18px;
   }
 
+  .site-header > a {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+
   .site-nav {
+    display: none;
+  }
+
+  .site-header-actions {
+    min-width: 0;
+    gap: 8px;
+  }
+
+  /* The landing hero already names the signed-in candidate. Keeping that
+     potentially long name beside the primary actions made the sticky header
+     wider than a phone; mobile keeps the actions and removes the duplicate. */
+  .site-header-actions .site-user-badge {
     display: none;
   }
 
@@ -974,6 +991,12 @@
 
   .auth-card {
     padding: 28px 20px;
+  }
+}
+
+@media (max-width: 360px) {
+  .site-header .brand-lockup-word {
+    display: none;
   }
 }
 

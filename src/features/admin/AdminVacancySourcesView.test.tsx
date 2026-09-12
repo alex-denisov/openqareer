@@ -151,6 +151,48 @@ describe('AdminVacancySourcesView', () => {
     expect(html).toContain('выборка из 250');
   });
 
+  it('B200/B205: печатает измеренную подлинность со знаменателем', () => {
+    const measuredHealth = {
+      liveness: {
+        verdict: 'alive' as const,
+        reason: 'Свежее 30 дней: 10 из 10',
+        lastNonEmptyReadingAt: '2026-09-12T00:00:00.000Z',
+        consecutiveEmptyReadings: 0,
+        fresherThan30Days: { counted: 10, of: 10 },
+        fresherThan90Days: { counted: 10, of: 10 },
+        fresherThan180Days: { counted: 10, of: 10 },
+      },
+      trust: {
+        verdict: 'mixed' as const,
+        reasons: ['Подлинных объявлений 8 из 10'],
+        completeness: {
+          withEmployer: { counted: 10, of: 10 },
+          withLink: { counted: 10, of: 10 },
+          withDate: { counted: 10, of: 10 },
+        },
+        consistency: { successful: { counted: 4, of: 4 } },
+        lawfulness: { permitted: true, addressStatus: 'live' },
+        authenticity: {
+          measured: true as const,
+          originalShare: { counted: 8, of: 10 },
+          reprintShare: { counted: 2, of: 10 },
+        },
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <AdminVacancySourcesView
+        state={sourcesLoaded([{ ...sampleSources[0], health: measuredHealth }])}
+        onRefresh={vi.fn()}
+        onSync={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('Подлинных объявлений: 8 из 10');
+    expect(html).toContain('Перепечаток: 2 из 10');
+    expect(html).not.toContain('ждёт дедупликатора B205');
+  });
+
   it('называет словами, что ссылки объявлений ещё не проверяли', () => {
     const html = renderToStaticMarkup(
       <AdminVacancySourcesView

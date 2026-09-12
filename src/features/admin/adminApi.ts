@@ -157,8 +157,14 @@ export interface AdminSourceHealth {
     };
     consistency: { successful: AdminCountedShare };
     lawfulness: { permitted: boolean; addressStatus: string };
-    /** Подлинность ждёт дедупликатора B205 и до него числом не притворяется. */
-    authenticity: { measured: false; blockedBy: 'B205' };
+    /** Подлинность приходит из кросс-источникового сведения B205. */
+    authenticity:
+      | {
+          measured: true;
+          originalShare: AdminCountedShare;
+          reprintShare: AdminCountedShare;
+        }
+      | { measured: false; blockedBy: 'B205' };
   };
 }
 

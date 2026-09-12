@@ -102,7 +102,14 @@ function SourceHealthFacts({ health }: { health: AdminSourceHealth }) {
           : `не установлено (${trust.lawfulness.addressStatus})`}
       </li>
       <SourceLinkCheckFact liveness={liveness} />
-      <li>Подлинность не измерена — ждёт дедупликатора B205</li>
+      {trust.authenticity.measured ? (
+        <>
+          <li>Подлинных объявлений: {countedShare(trust.authenticity.originalShare)}</li>
+          <li>Перепечаток: {countedShare(trust.authenticity.reprintShare)}</li>
+        </>
+      ) : (
+        <li>Подлинность не измерена — ждёт дедупликатора B205</li>
+      )}
     </ul>
   );
 }
