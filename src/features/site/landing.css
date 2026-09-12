@@ -999,6 +999,10 @@
     display: none;
   }
 
+  .site-hero-title {
+    font-size: 2.1rem;
+  }
+
   .site-hero-actions .site-btn {
     width: 100%;
     max-width: 100%;
