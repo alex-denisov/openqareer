@@ -978,7 +978,12 @@
   }
 
   .site-tariffs-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .site-tariff-card {
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .site-pillars-grid {
@@ -997,10 +1002,6 @@
 @media (max-width: 360px) {
   .site-header .brand-lockup-word {
     display: none;
-  }
-
-  .site-hero-title {
-    font-size: 2.1rem;
   }
 
   .site-hero-actions .site-btn {
