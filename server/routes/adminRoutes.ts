@@ -14,6 +14,7 @@ import { buildAdminVacancyPage } from '../vacancies/adminVacancyPage';
 import { queueFallbackDescriptors } from '../providers/providerQueue';
 import { describeRoleNamerQueue } from '../providers/roleNamer';
 import { CAREER_SUPER_PROMPT_REVISION } from '../prompts/careerSuperPrompt';
+import { registerHhCrawlFilterRoutes } from './hhCrawlFilterRoutes';
 import {
   adminVacancyQuerySchema,
   adminVacancySourceTestSchema,
@@ -320,7 +321,19 @@ async function handleProviderStatus(deps: RouteDeps, request: FastifyRequest, re
   return { data: providerStatusData(deps), meta: { requestId: request.id } };
 }
 
+/** Фильтр веера обхода hh.ru: полный справочник ролей площадки и выбор владельца. */
+function registerCrawlFilter(app: FastifyInstance, deps: RouteDeps): void {
+  if (!deps.hhCrawlSettings) return;
+  registerHhCrawlFilterRoutes(app, {
+    settings: deps.hhCrawlSettings,
+    requireAdmin: (request, reply) => requireAdmin(deps, request, reply),
+    sendError: (reply, request, status, code, message, retryable) =>
+      sendError(reply, request, status, code, message, retryable),
+  });
+}
+
 export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
+  registerCrawlFilter(app, deps);
   app.get('/api/v1/admin/users', withDeps(deps, handleListUsers));
   app.get('/api/v1/admin/users/:userId', withDeps(deps, handleGetUser));
   app.patch('/api/v1/admin/users/:userId', withDeps(deps, handlePatchUser));

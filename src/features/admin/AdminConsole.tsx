@@ -12,6 +12,8 @@ import {
   type AdminUserPage,
 } from './adminApi';
 import { AdminVacancySourcesView } from './AdminVacancySourcesView';
+import { HhCrawlFilterView } from './HhCrawlFilterView';
+import { getHhCrawlFilter, type HhCrawlFilter } from './adminApi';
 import {
   sourcesFailure,
   sourcesLoaded,
@@ -107,9 +109,37 @@ function AdminNav({
   );
 }
 
+/**
+ * Справочник ролей площадки для фильтра обхода. Недоступный фильтр оставляет
+ * экран источников рабочим: это настройка одной площадки, а не условие показа
+ * всего списка (B214).
+ */
+function useHhCrawlFilter(): HhCrawlFilter | null {
+  const [filter, setFilter] = useState<HhCrawlFilter | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getHhCrawlFilter(controller.signal)
+      .then(setFilter)
+      .catch(() => setFilter(null));
+    return () => controller.abort();
+  }, []);
+
+  return filter;
+}
+
 function AdminVacancySourcesTab() {
   const { state, refresh, sync } = useVacancySourcesPage();
-  return <AdminVacancySourcesView state={state} onRefresh={refresh} onSync={sync} />;
+  // Фильтр обхода hh.ru стоит рядом с источниками: он и есть настройка одного
+  // из них, и искать его в отдельной вкладке владельцу незачем (B214).
+  const crawlFilter = useHhCrawlFilter();
+
+  return (
+    <>
+      <AdminVacancySourcesView state={state} onRefresh={refresh} onSync={sync} />
+      <HhCrawlFilterView filter={crawlFilter} />
+    </>
+  );
 }
 
 function getInitialAdminTab(): 'users' | 'vacancies' | 'sources' | 'audit' {

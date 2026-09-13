@@ -25,6 +25,7 @@ import {
   MIGRATION_25,
   MIGRATION_26,
   MIGRATION_28,
+  MIGRATION_30,
 } from '../sqliteSchema';
 
 const MIGRATIONS = [
@@ -56,6 +57,8 @@ const MIGRATIONS = [
   MIGRATION_26,
   // `MIGRATION_27` применяет своим соединением кэш называния ролей.
   MIGRATION_28,
+  // `MIGRATION_29` применяет своим соединением служба согласий.
+  MIGRATION_30,
 ];
 
 export function applyMigrations(

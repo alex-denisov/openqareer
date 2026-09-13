@@ -14,6 +14,8 @@ import type { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEn
 import type { VacancyIntelligenceService } from '../vacancies/vacancyIntelligenceService';
 
 export interface RouteDeps {
+  /** Настройки веера обхода hh.ru: набор ролей выбирает владелец (B214). */
+  hhCrawlSettings?: import('../vacancies/hhCrawlSettings').HhCrawlSettingsStore;
   config: ServerConfig;
   authService: SessionAuth;
   candidateStore: CandidateStore;

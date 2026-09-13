@@ -414,3 +414,48 @@ export async function testAdminVacancySource(
   );
   return readData<VacancySourceTestResult>(response);
 }
+
+/** Роль и категория из справочника hh.ru — основа фильтра веера обхода (B214). */
+export interface HhCrawlRole {
+  readonly id: string;
+  readonly name: string;
+}
+
+export interface HhCrawlCategory {
+  readonly id: string;
+  readonly name: string;
+  readonly roles: readonly HhCrawlRole[];
+}
+
+export interface HhCrawlFilter {
+  readonly categories: readonly HhCrawlCategory[];
+  readonly selectedRoleIds: readonly string[];
+  readonly searchPeriodDays: number;
+  readonly lastFullSweepAt: string | null;
+}
+
+export interface HhCrawlFilterSaved {
+  readonly selectedRoleIds: readonly string[];
+  readonly searchPeriodDays: number;
+  /** Роли, которых площадка не знает: они названы, а не выброшены молча. */
+  readonly ignoredRoleIds: readonly string[];
+}
+
+export async function getHhCrawlFilter(signal?: AbortSignal): Promise<HhCrawlFilter> {
+  const response = await apiFetch('/api/v1/admin/hh-crawl-filter', {
+    ...(signal ? { signal } : {}),
+  });
+  return readData<HhCrawlFilter>(response);
+}
+
+export async function saveHhCrawlFilter(input: {
+  roleIds: readonly string[];
+  searchPeriodDays: number;
+}): Promise<HhCrawlFilterSaved> {
+  const response = await apiFetch('/api/v1/admin/hh-crawl-filter', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roleIds: [...input.roleIds], searchPeriodDays: input.searchPeriodDays }),
+  });
+  return readData<HhCrawlFilterSaved>(response);
+}

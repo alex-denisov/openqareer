@@ -111,3 +111,21 @@ export function buildEgressTransport(config: EgressTransportConfig): HhSearchTra
       child.stdin.end(`${url}\n`);
     });
 }
+
+/**
+ * Путь до страницы поиска для обхода: прямой, с запасным российским выходом,
+ * если он настроен. Собирается один раз на процесс — настройки выхода не
+ * меняются на ходу.
+ */
+export function buildHhPageFetcher(
+  env: NodeJS.ProcessEnv = process.env,
+): HhSearchTransport {
+  const egress = readEgressConfig(env);
+  if (!egress) return directHhTransport;
+  const fallback = buildEgressTransport(egress);
+  return async (url) => {
+    const direct = await directHhTransport(url);
+    if (direct.status === 200 && direct.body) return direct;
+    return fallback(url);
+  };
+}

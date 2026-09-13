@@ -6,12 +6,8 @@ import type { VacancySample } from '../domain/vacancy';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import type { SourceFetcher } from './multiSourceVacancyEngine';
 import type { RobotsFetcher } from './robotsPolicyLoader';
-import { fetchHhSearch } from './hhSearchFetcher';
-import {
-  buildEgressTransport,
-  directHhTransport,
-  readEgressConfig,
-} from './hhSearchTransport';
+import type { HhCrawlCoordinator } from './hhCrawlCoordinator';
+
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -178,7 +174,11 @@ export const fetchRobotsTxt: RobotsFetcher = async (robotsUrl) => {
   return { status: res.status, body: res.ok ? await res.text() : null };
 };
 
-export function buildMultiSourceFetcher(hh: HhSearch, remotive: RemotiveSearch): SourceFetcher {
+export function buildMultiSourceFetcher(
+  hh: HhSearch,
+  remotive: RemotiveSearch,
+  crawlCoordinator?: HhCrawlCoordinator,
+): SourceFetcher {
   return async (source, options) => {
     if (source.type === 'hh') {
       const sample = await hh({ text: options?.query || 'Developer', perPage: 20 });
@@ -198,18 +198,16 @@ export function buildMultiSourceFetcher(hh: HhSearch, remotive: RemotiveSearch):
       return fetchJsonApi(source, options);
     }
     if (source.type === 'hh_search') {
-      // Страница поиска hh.ru. Прямой путь основной, российский выход — запасной:
-      // измерено, что площадка отвечает не всем адресам (B214).
-      const egress = readEgressConfig();
-      const result = await fetchHhSearch(
-        source,
-        { query: options?.query },
-        {
-          transport: directHhTransport,
-          ...(egress ? { fallbackTransport: buildEgressTransport(egress) } : {}),
-          observedAt: new Date().toISOString(),
-        },
-      );
+      // Веер обхода hh.ru. Координатор сам решает, быстрый это проход или
+      // глубокий, и отдаёт весь улов одним пакетом: пересобирать пул на каждой
+      // странице нельзя — на сорока тысячах записей это четыре секунды за раз
+      // (замер B214).
+      if (!crawlCoordinator) {
+        // Источник включён, а обход не собран: это поломка сборки, а не пустая
+        // выдача. Молчаливый ноль здесь спрятал бы причину (B199).
+        throw new Error('hh_crawl_coordinator_missing');
+      }
+      const result = await crawlCoordinator.collect();
       return [...result.vacancies];
     }
     // An unimplemented source type has not been measured, so it must not report

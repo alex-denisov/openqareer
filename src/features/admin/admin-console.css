@@ -1250,3 +1250,74 @@
   margin: 0;
   flex-basis: 100%;
 }
+
+/* Фильтр веера обхода hh.ru (B214): множественный выбор ролей площадки. */
+.hh-crawl-filter__head h3 {
+  margin: 0 0 var(--space-2);
+}
+
+.hh-crawl-filter__period {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+  flex-wrap: wrap;
+}
+
+.hh-crawl-filter__period input {
+  width: 5rem;
+}
+
+.hh-crawl-filter__categories {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: var(--space-2);
+}
+
+.hh-crawl-filter__categories details {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  /* Категория с тремя десятками ролей не должна растягивать сетку: список
+     внутри прокручивается сам. */
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.hh-crawl-filter__categories summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.hh-crawl-filter__categories summary button {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.hh-crawl-filter__categories ul {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.hh-crawl-filter__categories label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.hh-crawl-filter__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  flex-wrap: wrap;
+}

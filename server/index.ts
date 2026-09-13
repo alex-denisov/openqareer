@@ -26,6 +26,9 @@ import { createHttpLinkProbe } from './vacancies/linkLivenessProbe';
 import { RobotsPolicyLoader } from './vacancies/robotsPolicyLoader';
 import { buildMultiSourceFetcher, fetchRobotsTxt } from './vacancies/multiSourceFetcher';
 import { SqliteVacancyPoolStore } from './vacancies/sqliteVacancyPoolStore';
+import { createHhCrawlSettings } from './vacancies/hhCrawlSettings';
+import { HhCrawlCoordinator } from './vacancies/hhCrawlCoordinator';
+import { buildHhPageFetcher } from './vacancies/hhSearchTransport';
 import { SqliteRoleNamingCache } from './data/sqliteRoleNamingCache';
 
 const config = readServerConfig(process.env);
@@ -119,8 +122,19 @@ const roleNamingCache = new SqliteRoleNamingCache({
   databasePath: config.databasePath,
   encryptionKey: config.dataEncryptionKey,
 });
+// Настройки веера обхода hh.ru: набор ролей выбирает владелец, отметка
+// глубокого прохода переживает выкат (B214).
+const hhCrawlSettings = createHhCrawlSettings({ databasePath: config.databasePath });
+const hhCrawlCoordinator = new HhCrawlCoordinator(hhCrawlSettings, {
+  fetchPage: buildHhPageFetcher(),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+});
 const multiSourceEngine = new MultiSourceVacancyEngine({
-  fetcher: buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies),
+  fetcher: buildMultiSourceFetcher(
+    searchHhVacancies,
+    searchRemotiveVacancies,
+    hhCrawlCoordinator,
+  ),
   pool: vacancyPoolStore,
   // Право обхода спрашивается у самой площадки, а не берётся из записи,
   // сделанной когда-то руками; `Crawl-delay` тоже приходит оттуда (B204).
@@ -140,6 +154,7 @@ const app = await buildApp({
   authService,
   vacancyIntelligenceService,
   multiSourceVacancyEngine: multiSourceEngine,
+  hhCrawlSettings,
   careerCommandExecutor,
   resumeStructurer: buildResumeStructurer({
     personalProvider: personalProviderId,

@@ -793,3 +793,21 @@ CREATE TABLE vacancy_applications (
 export const MIGRATION_29 = `
 ALTER TABLE legal_consents ADD COLUMN contract_ended_at TEXT;
 `;
+
+/**
+ * B214 — настройки веера обхода hh.ru. Одна строка на всю установку.
+ *
+ * ЗАЧЕМ ТАБЛИЦА, А НЕ КОНСТАНТА. Набор ролей выбирает владелец, а не агент, и
+ * выбор обязан пережить выкат. Отметка последнего полного прохода лежит рядом
+ * по той же причине: без неё каждый перезапуск начинал бы двадцатиминутный
+ * глубокий обход заново, и площадка видела бы всплеск на каждый деплой.
+ */
+export const MIGRATION_30 = `
+CREATE TABLE IF NOT EXISTS hh_crawl_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  role_ids TEXT NOT NULL,
+  search_period_days INTEGER NOT NULL,
+  last_full_sweep_at TEXT,
+  updated_at TEXT NOT NULL
+) STRICT;
+`;

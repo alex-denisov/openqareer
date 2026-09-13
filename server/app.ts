@@ -50,6 +50,7 @@ interface BuildAppOptions {
   careerCommandExecutor?: ConnectorExecutor;
   vacancyIntelligenceService?: VacancyIntelligenceService;
   multiSourceVacancyEngine?: MultiSourceVacancyEngine;
+  hhCrawlSettings?: import('./vacancies/hhCrawlSettings').HhCrawlSettingsStore;
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
   roleNamer?: RoleNamer;
@@ -205,6 +206,7 @@ export async function buildApp({
   candidateStore,
   authService,
   serveStatic = true,
+  hhCrawlSettings,
   searchVacancies = searchHhVacancies,
   searchRemotive = searchRemotiveVacancies,
   importProfile = importPublicProfileUrl,
@@ -244,6 +246,7 @@ export async function buildApp({
     // ступени, а не хранилище (INC-035).
     roleNamingFailures: new RoleNamingFailureLog(),
     searchVacancies: searchVacancies ?? searchHhVacancies,
+    ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
     ...services,
   };
 
