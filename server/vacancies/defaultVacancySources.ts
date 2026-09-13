@@ -229,6 +229,26 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
       note: 'api.hh.ru/vacancies → 403 for an unauthorised search (INC-022, B175); тот же 403 со всех трёх маршрутов',
     },
   ],
+  'src-hh-search': [
+    {
+      items: 50,
+      observedAt: '2026-09-13',
+      route: 'eu-prod',
+      note: 'страница поиска отдала 50 вакансий и totalResults 1319 по запросу «qa»; без запроса по всей России totalResults 920 303, глубина — 39 страниц по 50',
+    },
+    {
+      items: 50,
+      observedAt: '2026-09-13',
+      route: 'ru-dc',
+      note: 'тот же ответ с московской ноды; капчи в теле нет',
+    },
+    {
+      items: 0,
+      observedAt: '2026-09-13',
+      route: 'ru-owner',
+      note: '451 на весь домен, включая robots.txt — выход рабочей машины владельца площадка не обслуживает',
+    },
+  ],
   'src-hh-rss': [
     {
       items: 20,
@@ -583,6 +603,22 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
       'Соискательский API hh.ru отвечает 403 без официального доступа партнёра (INC-022). Тот же 403 получен со всех трёх маршрутов 2026-09-05, то есть дело не в географии. Источник оставлен в реестре, чтобы отказ был назван, а не забыт (B175).',
     targetUrl: 'https://api.hh.ru/vacancies',
     refreshIntervalMinutes: 60,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  },
+  {
+    id: 'src-hh-search',
+    name: 'hh.ru (страница поиска)',
+    type: 'hh_search',
+    accessClass: 'open_web',
+    market: 'Россия и СНГ',
+    addressStatus: 'robots_forbidden',
+    enabled: false,
+    disabledReason:
+      'Разбор работает и проверен на живой выдаче 2026-09-13: с прода читается 50 вакансий со страницы, totalResults по России — 920 303. Выключен не по технической причине: hh.ru/robots.txt для User-agent: * содержит Disallow: *?*, то есть запрещает любой адрес с параметрами, включая страницу поиска. По этому же признаку в реестре выключены ТрудВсем, LinkedIn и ZipRecruiter. Включение — решение владельца (B214), а не агента.',
+    targetUrl: 'https://hh.ru/search/vacancy',
+    refreshIntervalMinutes: 60,
+    requiresQuery: false,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
   },

@@ -6,6 +6,12 @@ import type { VacancySample } from '../domain/vacancy';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import type { SourceFetcher } from './multiSourceVacancyEngine';
 import type { RobotsFetcher } from './robotsPolicyLoader';
+import { fetchHhSearch } from './hhSearchFetcher';
+import {
+  buildEgressTransport,
+  directHhTransport,
+  readEgressConfig,
+} from './hhSearchTransport';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -190,6 +196,21 @@ export function buildMultiSourceFetcher(hh: HhSearch, remotive: RemotiveSearch):
     }
     if (source.type === 'json_api') {
       return fetchJsonApi(source, options);
+    }
+    if (source.type === 'hh_search') {
+      // Страница поиска hh.ru. Прямой путь основной, российский выход — запасной:
+      // измерено, что площадка отвечает не всем адресам (B214).
+      const egress = readEgressConfig();
+      const result = await fetchHhSearch(
+        source,
+        { query: options?.query },
+        {
+          transport: directHhTransport,
+          ...(egress ? { fallbackTransport: buildEgressTransport(egress) } : {}),
+          observedAt: new Date().toISOString(),
+        },
+      );
+      return [...result.vacancies];
     }
     // An unimplemented source type has not been measured, so it must not report
     // a successful empty reading (B161).

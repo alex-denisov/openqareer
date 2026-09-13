@@ -8,6 +8,11 @@ export type VacancySourceType =
   // A JSON endpoint the board publishes for machines. Each such source has its
   // own record shape, so the adapter is chosen by source id (B164).
   | 'json_api'
+  // Страница поиска hh.ru: площадка отдаёт полное состояние выдачи в JSON
+  // внутри разметки, поэтому это разбор состояния, а не скрейпинг HTML.
+  // Официальный API закрыт для всех неавторизованных с апреля 2026 (INC-022),
+  // а приложение на dev.hh.ru кандидату недоступно (решение владельца B214).
+  | 'hh_search'
   | 'career_site'
   // Площадка, до которой сервер не дотягивается по праву: анти-бот отвечает
   // `403` честному агенту, либо `robots.txt` запрещает обход. Читается только
