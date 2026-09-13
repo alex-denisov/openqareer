@@ -63,8 +63,15 @@ export interface CrawlPlanDeps {
   /** Спрашивает у площадки размер части. */
   readonly countResults: (query: HhCrawlQuery) => Promise<number>;
   readonly searchPeriodDays: number;
-  /** Регионы для второй оси дробления. */
-  readonly areaIds?: readonly string[];
+  /**
+   * Вторая ось дробления: дети региона в дереве площадки. Без аргумента —
+   * страны верхнего уровня (их девять), для России — её 89 областей.
+   *
+   * Ось именно древовидная, а не плоским списком: почти вся выдача лежит в
+   * России, и одного уровня не хватает — «Россия целиком» сама выходит за
+   * потолок и требует дробления дальше.
+   */
+  readonly areaChildren?: (areaId?: string) => readonly string[];
 }
 
 export function planQueryUrl(query: HhCrawlQuery, searchPeriodDays: number, page: number): string {
@@ -105,10 +112,10 @@ async function splitQuery(
     return totalResults > 0 ? [planned(query, totalResults)] : [];
   }
 
-  const axis: readonly (Partial<HhCrawlQuery> & { readonly label: string })[] =
+  const axis: readonly Partial<HhCrawlQuery>[] =
     query.experience === undefined
-      ? HH_EXPERIENCE_VALUES.map((experience) => ({ experience, label: experience }))
-      : (deps.areaIds ?? []).map((areaId) => ({ areaId, label: areaId }));
+      ? HH_EXPERIENCE_VALUES.map((experience) => ({ experience }))
+      : (deps.areaChildren?.(query.areaId) ?? []).map((areaId) => ({ areaId }));
 
   // Ось кончилась — делить больше нечем. Часть берётся до потолка, и это
   // записано в плане, а не скрыто.

@@ -5,6 +5,7 @@ import { runHhCrawl, HH_CRAWL_ABANDONED, type HhCrawlProgress } from './hhCrawlR
 import { parseHhSearchState } from './hhSearchState';
 import type { HhCrawlSettingsStore } from './hhCrawlSettings';
 import { keepKnownRoleIds } from './hhRoleCatalog';
+import { hhAreaChildren } from './hhAreaTree';
 
 /**
  * Когда какой обход делать (B214, срез 4).
@@ -122,6 +123,9 @@ export class HhCrawlCoordinator {
   ): Promise<HhCrawlPlan> {
     return buildCrawlPlan(roleIds, {
       searchPeriodDays,
+      // Вторая ось: части, не влезшие в потолок даже после дробления по опыту,
+      // делятся по дереву регионов площадки — сначала страны, потом области.
+      areaChildren: hhAreaChildren,
       countResults: async (query) => {
         const response = await this.deps.fetchPage(planQueryUrl(query, searchPeriodDays, 0));
         await this.deps.sleep(this.deps.delayMs ?? 1_000);

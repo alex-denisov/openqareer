@@ -69,13 +69,41 @@ describe('buildCrawlPlan', () => {
     const plan = await buildCrawlPlan(['96'], {
       countResults: count,
       searchPeriodDays: 30,
-      areaIds: ['1', '2'],
+      areaChildren: (areaId) => (areaId === undefined ? ['1', '2'] : []),
     });
 
     const split = plan.queries.filter((q) => q.experience === 'between1And3');
     expect(split.map((q) => q.areaId).sort()).toEqual(['1', '2']);
     // Остальные три части опыта дробить не понадобилось.
     expect(plan.queries.filter((q) => q.areaId === undefined)).toHaveLength(3);
+  });
+
+  it('страна, не влезшая целиком, дробится на свои области', async () => {
+    // Так устроено дерево площадки: 9 стран верхнего уровня, у России 89
+    // областей. Одного уровня мало — почти вся выдача лежит в России.
+    const count = vi.fn(async (q: { experience?: string; areaId?: string }) => {
+      if (q.experience === undefined) return 9000;
+      if (q.areaId === undefined) return 2500;
+      if (q.areaId === '113') return 2400;
+      return 200;
+    });
+
+    const plan = await buildCrawlPlan(['96'], {
+      countResults: count,
+      searchPeriodDays: 30,
+      areaChildren: (areaId) => {
+        if (areaId === undefined) return ['113', '40'];
+        if (areaId === '113') return ['1', '2'];
+        return [];
+      },
+    });
+
+    const areas = plan.queries.map((q) => q.areaId).filter(Boolean);
+    // Россия целиком в план не попадает — вместо неё её области.
+    expect(areas).not.toContain('113');
+    expect(areas).toContain('1');
+    expect(areas).toContain('2');
+    expect(areas).toContain('40');
   });
 
   it('пустая часть в план не попадает — запрос за нулём бессмысленен', async () => {
@@ -112,11 +140,29 @@ describe('buildCrawlPlan', () => {
     const plan = await buildCrawlPlan(['96'], {
       countResults: async () => 9000,
       searchPeriodDays: 30,
-      areaIds: [],
+      areaChildren: () => [],
     });
 
     expect(plan.queries).toHaveLength(4);
     expect(plan.queries[0].pages).toBe(HH_RESULT_CAP / HH_PAGE_SIZE);
     expect(plan.truncatedQueries).toBe(4);
+  });
+});
+
+describe('дерево регионов площадки', () => {
+  it('верхний уровень — страны, у России её области', async () => {
+    const { hhAreaChildren } = await import('./hhAreaTree');
+
+    expect(hhAreaChildren()).toHaveLength(9);
+    expect(hhAreaChildren()).toContain('113');
+    expect(hhAreaChildren('113')).toHaveLength(89);
+    // Область дальше не делится — там планировщик остановится.
+    expect(hhAreaChildren('1')).toEqual([]);
+  });
+
+  it('неизвестный регион детей не выдумывает', async () => {
+    const { hhAreaChildren } = await import('./hhAreaTree');
+
+    expect(hhAreaChildren('такого-нет')).toEqual([]);
   });
 });
