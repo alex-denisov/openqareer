@@ -123,3 +123,27 @@ describe('фильтр веера обхода hh.ru', () => {
     expect(response.json().data.ignoredRoleIds).toEqual(['выдуманная']);
   });
 });
+
+describe('глубокий обход по требованию', () => {
+  it('закрыт от неадминистратора', async () => {
+    const app = await createApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/hh-crawl-filter/deep-sweep',
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('снимает отметку, чтобы следующий проход был глубоким', async () => {
+    const app = await createApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/hh-crawl-filter/deep-sweep',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.lastFullSweepAt).toBeNull();
+  });
+});

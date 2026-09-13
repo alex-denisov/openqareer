@@ -13,6 +13,7 @@ function settingsStore(value: Partial<HhCrawlSettingsValue> = {}) {
     read: () => state,
     saveRoles: () => undefined,
     markFullSweep: (at) => void marked.push(at),
+    requestFullSweep: () => undefined,
   };
   return { store, marked };
 }

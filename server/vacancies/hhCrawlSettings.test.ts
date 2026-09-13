@@ -63,6 +63,27 @@ describe('SqliteHhCrawlSettings', () => {
     expect(s.read().lastFullSweepAt).toBe('2026-09-13T12:00:00.000Z');
   });
 
+  it('смена фильтра снимает отметку — новые роли собираются сразу', () => {
+    const s = store();
+    s.markFullSweep('2026-09-13T12:00:00.000Z');
+    expect(s.read().lastFullSweepAt).toBe('2026-09-13T12:00:00.000Z');
+
+    s.saveRoles(['96', '124'], 30);
+
+    // Иначе роль, добавленную владельцем, обход не увидел бы до суток.
+    expect(s.read().lastFullSweepAt).toBeUndefined();
+  });
+
+  it('снятие отметки вручную тоже возможно — глубокий проход по требованию', () => {
+    const s = store();
+    s.markFullSweep('2026-09-13T12:00:00.000Z');
+
+    s.requestFullSweep();
+
+    expect(s.read().lastFullSweepAt).toBeUndefined();
+    expect(s.read().roleIds.length).toBe(25);
+  });
+
   it('отметка прохода не стирает выбор ролей', () => {
     const s = store();
     s.saveRoles(['96'], 7);

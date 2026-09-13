@@ -266,10 +266,7 @@ export async function updateAdminUser(
   return readData<AdminUser>(response);
 }
 
-export async function blockAdminUser(
-  userId: string,
-  blocked: boolean,
-): Promise<AdminUser> {
+export async function blockAdminUser(userId: string, blocked: boolean): Promise<AdminUser> {
   const response = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(userId)}/block`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -278,10 +275,7 @@ export async function blockAdminUser(
   return readData<AdminUser>(response);
 }
 
-export async function resetAdminUserPassword(
-  userId: string,
-  newPassword: string,
-): Promise<void> {
+export async function resetAdminUserPassword(userId: string, newPassword: string): Promise<void> {
   await apiFetch(`/api/v1/admin/users/${encodeURIComponent(userId)}/reset-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -367,17 +361,14 @@ interface AdminVacancySourcePage {
  * скажет, что выборка кончилась: остановиться на первой странице значило бы
  * молча потерять две трети площадок.
  */
-export async function listAdminVacancySources(
-  signal?: AbortSignal,
-): Promise<AdminVacancySource[]> {
+export async function listAdminVacancySources(signal?: AbortSignal): Promise<AdminVacancySource[]> {
   const collected: AdminVacancySource[] = [];
   let offset: number | null = 0;
 
   while (offset !== null) {
-    const response = await apiFetch(
-      `/api/v1/admin/vacancy-sources?offset=${offset}`,
-      { ...(signal ? { signal } : {}) },
-    );
+    const response = await apiFetch(`/api/v1/admin/vacancy-sources?offset=${offset}`, {
+      ...(signal ? { signal } : {}),
+    });
     const page: AdminVacancySourcePage = await readData<AdminVacancySourcePage>(response);
     collected.push(...page.items);
     // Страница, не сдвинувшая смещение, вернула бы нас сюда навсегда.
@@ -458,4 +449,9 @@ export async function saveHhCrawlFilter(input: {
     body: JSON.stringify({ roleIds: [...input.roleIds], searchPeriodDays: input.searchPeriodDays }),
   });
   return readData<HhCrawlFilterSaved>(response);
+}
+
+/** Просит глубокий обход: следующий проход соберёт выдачу целиком. */
+export async function requestHhDeepSweep(): Promise<void> {
+  await apiFetch('/api/v1/admin/hh-crawl-filter/deep-sweep', { method: 'POST' });
 }

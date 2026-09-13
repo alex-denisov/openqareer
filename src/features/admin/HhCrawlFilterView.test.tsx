@@ -79,3 +79,11 @@ describe('HhCrawlFilterView', () => {
     expect(html).toContain('Полного обхода ещё не было');
   });
 });
+
+describe('глубокий обход по требованию', () => {
+  it('кнопка «собрать всё заново» есть на экране', () => {
+    const html = renderToStaticMarkup(<HhCrawlFilterView filter={filter} />);
+
+    expect(html).toContain('Собрать всё заново');
+  });
+});

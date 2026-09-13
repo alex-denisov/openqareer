@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { saveHhCrawlFilter, type HhCrawlFilter } from './adminApi';
+import { requestHhDeepSweep, saveHhCrawlFilter, type HhCrawlFilter } from './adminApi';
 
 /**
  * Фильтр веера обхода hh.ru (B214).
@@ -23,6 +23,93 @@ function formatSweep(lastFullSweepAt: string | null): string {
   const parsed = new Date(lastFullSweepAt);
   if (Number.isNaN(parsed.getTime())) return 'Время последнего обхода неизвестно';
   return `Последний полный обход: ${parsed.toLocaleString('ru-RU')}`;
+}
+
+/**
+ * Действия над фильтром: сохранение выбора и запрос глубокого обхода. Оба
+ * пишут в одну строку сообщения — владелец читает результат последнего
+ * действия, а не историю.
+ */
+function useFilterActions(apply: (roleIds: readonly string[]) => void) {
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const save = async (roleIds: readonly string[], searchPeriodDays: number) => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const saved = await saveHhCrawlFilter({ roleIds, searchPeriodDays });
+      // Роль, которой площадка не знает, называется вслух, а не исчезает молча.
+      setMessage(
+        saved.ignoredRoleIds.length > 0
+          ? `Сохранено. Площадка не знает ролей: ${saved.ignoredRoleIds.join(', ')}`
+          : 'Сохранено. Новый набор соберётся ближайшим глубоким проходом',
+      );
+      apply(saved.selectedRoleIds);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Сохранить не удалось');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deepSweep = async () => {
+    setMessage(null);
+    try {
+      await requestHhDeepSweep();
+      // Проход запускает планировщик; кнопка только снимает отметку.
+      setMessage('Глубокий обход запрошен — он начнётся ближайшим опросом');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Запросить обход не удалось');
+    }
+  };
+
+  return { saving, message, save, deepSweep };
+}
+
+/** Выбор владельца: состояние экрана отдельно от разметки. */
+function useRoleSelection(
+  filter: HhCrawlFilter | null,
+  onSaved?: HhCrawlFilterViewProps['onSaved'],
+) {
+  const [selected, setSelected] = useState<readonly string[]>(filter?.selectedRoleIds ?? []);
+  const [periodDays, setPeriodDays] = useState(filter?.searchPeriodDays ?? 30);
+  const actions = useFilterActions((roleIds) => {
+    setSelected(roleIds);
+    onSaved?.(roleIds);
+  });
+
+  useEffect(() => {
+    if (!filter) return;
+    setSelected(filter.selectedRoleIds);
+    setPeriodDays(filter.searchPeriodDays);
+  }, [filter]);
+
+  const toggleRole = (roleId: string) => {
+    setSelected((current) =>
+      current.includes(roleId) ? current.filter((id) => id !== roleId) : [...current, roleId],
+    );
+  };
+
+  const toggleCategory = (categoryId: string) => {
+    const category = filter?.categories.find((item) => item.id === categoryId);
+    if (!category) return;
+    const ids = category.roles.map((role) => role.id);
+    const allSelected = ids.every((id) => selected.includes(id));
+    setSelected((current) =>
+      allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])],
+    );
+  };
+
+  return {
+    selected,
+    periodDays,
+    setPeriodDays,
+    toggleRole,
+    toggleCategory,
+    ...actions,
+    save: () => actions.save(selected, periodDays),
+  };
 }
 
 interface CategoryBlockProps {
@@ -65,76 +152,26 @@ function CategoryBlock({
   );
 }
 
-/** Выбор владельца и его сохранение: состояние экрана отдельно от разметки. */
-function useRoleSelection(
-  filter: HhCrawlFilter | null,
-  onSaved?: HhCrawlFilterViewProps['onSaved'],
-) {
-  const [selected, setSelected] = useState<readonly string[]>(filter?.selectedRoleIds ?? []);
-  const [periodDays, setPeriodDays] = useState(filter?.searchPeriodDays ?? 30);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!filter) return;
-    setSelected(filter.selectedRoleIds);
-    setPeriodDays(filter.searchPeriodDays);
-  }, [filter]);
-
-  const toggleRole = (roleId: string) => {
-    setSelected((current) =>
-      current.includes(roleId) ? current.filter((id) => id !== roleId) : [...current, roleId],
-    );
-  };
-
-  const toggleCategory = (categoryId: string) => {
-    const category = filter?.categories.find((item) => item.id === categoryId);
-    if (!category) return;
-    const ids = category.roles.map((role) => role.id);
-    const allSelected = ids.every((id) => selected.includes(id));
-    setSelected((current) =>
-      allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])],
-    );
-  };
-
-  const save = async () => {
-    setSaving(true);
-    setMessage(null);
-    try {
-      const saved = await saveHhCrawlFilter({ roleIds: selected, searchPeriodDays: periodDays });
-      // Роль, которой площадка не знает, называется вслух, а не исчезает молча.
-      setMessage(
-        saved.ignoredRoleIds.length > 0
-          ? `Сохранено. Площадка не знает ролей: ${saved.ignoredRoleIds.join(', ')}`
-          : 'Сохранено',
-      );
-      setSelected(saved.selectedRoleIds);
-      onSaved?.(saved.selectedRoleIds);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Сохранить не удалось');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return { selected, periodDays, setPeriodDays, saving, message, toggleRole, toggleCategory, save };
-}
-
 function FilterFooter({
   saving,
   empty,
   message,
   onSave,
+  onDeepSweep,
 }: {
   readonly saving: boolean;
   readonly empty: boolean;
   readonly message: string | null;
   readonly onSave: () => void;
+  readonly onDeepSweep: () => void;
 }) {
   return (
     <footer className="hh-crawl-filter__foot">
       <button type="button" onClick={onSave} disabled={saving || empty}>
         {saving ? 'Сохраняем…' : 'Сохранить фильтр'}
+      </button>
+      <button type="button" onClick={onDeepSweep} disabled={saving}>
+        Собрать всё заново
       </button>
       {empty && (
         <span className="admin-muted">
@@ -146,32 +183,35 @@ function FilterFooter({
   );
 }
 
-export function HhCrawlFilterView({ filter, onSaved }: HhCrawlFilterViewProps) {
-  const { selected, periodDays, setPeriodDays, saving, message, toggleRole, toggleCategory, save } =
-    useRoleSelection(filter, onSaved);
-
-  const totalRoles = useMemo(
-    () => filter?.categories.reduce((sum, category) => sum + category.roles.length, 0) ?? 0,
-    [filter],
-  );
-
-  if (!filter) {
-    return (
-      <section className="admin-panel">
-        <h3>Фильтр обхода hh.ru</h3>
-        <p className="admin-muted">Загружаем справочник ролей площадки…</p>
-      </section>
-    );
-  }
-
-  const selectedSet = new Set(selected);
-
+/** Пока справочник не пришёл, экран не называет ни одного числа. */
+function FilterLoading() {
   return (
-    <section className="admin-panel hh-crawl-filter">
+    <section className="admin-panel">
+      <h3>Фильтр обхода hh.ru</h3>
+      <p className="admin-muted">Загружаем справочник ролей площадки…</p>
+    </section>
+  );
+}
+
+function FilterHeader({
+  chosen,
+  total,
+  lastFullSweepAt,
+  periodDays,
+  onPeriodChange,
+}: {
+  readonly chosen: number;
+  readonly total: number;
+  readonly lastFullSweepAt: string | null;
+  readonly periodDays: number;
+  readonly onPeriodChange: (days: number) => void;
+}) {
+  return (
+    <>
       <header className="hh-crawl-filter__head">
         <h3>Фильтр обхода hh.ru</h3>
         <p className="admin-muted">
-          Выбрано ролей: {selected.length} из {totalRoles}. {formatSweep(filter.lastFullSweepAt)}
+          Выбрано ролей: {chosen} из {total}. {formatSweep(lastFullSweepAt)}
         </p>
       </header>
 
@@ -182,10 +222,45 @@ export function HhCrawlFilterView({ filter, onSaved }: HhCrawlFilterViewProps) {
           min={1}
           max={30}
           value={periodDays}
-          onChange={(event) => setPeriodDays(Number(event.target.value))}
+          onChange={(event) => onPeriodChange(Number(event.target.value))}
         />
         дней
       </label>
+    </>
+  );
+}
+
+export function HhCrawlFilterView({ filter, onSaved }: HhCrawlFilterViewProps) {
+  const {
+    selected,
+    periodDays,
+    setPeriodDays,
+    saving,
+    message,
+    toggleRole,
+    toggleCategory,
+    save,
+    deepSweep,
+  } = useRoleSelection(filter, onSaved);
+
+  const totalRoles = useMemo(
+    () => filter?.categories.reduce((sum, category) => sum + category.roles.length, 0) ?? 0,
+    [filter],
+  );
+
+  if (!filter) return <FilterLoading />;
+
+  const selectedSet = new Set(selected);
+
+  return (
+    <section className="admin-panel hh-crawl-filter">
+      <FilterHeader
+        chosen={selected.length}
+        total={totalRoles}
+        lastFullSweepAt={filter.lastFullSweepAt}
+        periodDays={periodDays}
+        onPeriodChange={setPeriodDays}
+      />
 
       <div className="hh-crawl-filter__categories">
         {filter.categories.map((category) => (
@@ -199,7 +274,13 @@ export function HhCrawlFilterView({ filter, onSaved }: HhCrawlFilterViewProps) {
         ))}
       </div>
 
-      <FilterFooter saving={saving} empty={selected.length === 0} message={message} onSave={save} />
+      <FilterFooter
+        saving={saving}
+        empty={selected.length === 0}
+        message={message}
+        onSave={save}
+        onDeepSweep={deepSweep}
+      />
     </section>
   );
 }

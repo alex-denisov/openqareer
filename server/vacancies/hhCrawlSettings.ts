@@ -30,6 +30,8 @@ export interface HhCrawlSettingsStore {
   read(): HhCrawlSettingsValue;
   saveRoles(roleIds: readonly string[], searchPeriodDays: number): void;
   markFullSweep(atIso: string): void;
+  /** Снимает отметку: следующий проход будет глубоким. */
+  requestFullSweep(): void;
 }
 
 export class SqliteHhCrawlSettings implements HhCrawlSettingsStore {
@@ -74,16 +76,33 @@ export class SqliteHhCrawlSettings implements HhCrawlSettingsStore {
       throw new Error('hh_crawl_period_out_of_range');
     }
 
+    // Отметка глубокого прохода снимается вместе с изменением набора: роль,
+    // которую владелец только что добавил, обход обязан увидеть сейчас, а не
+    // через двадцать часов. Фильтр без этого выглядел бы сломанным.
     this.database
       .prepare(
-        `INSERT INTO hh_crawl_settings (id, role_ids, search_period_days, updated_at)
-         VALUES (1, ?, ?, ?)
+        `INSERT INTO hh_crawl_settings (id, role_ids, search_period_days, last_full_sweep_at, updated_at)
+         VALUES (1, ?, ?, NULL, ?)
          ON CONFLICT(id) DO UPDATE SET
            role_ids = excluded.role_ids,
            search_period_days = excluded.search_period_days,
+           last_full_sweep_at = NULL,
            updated_at = excluded.updated_at`,
       )
       .run(JSON.stringify(known), searchPeriodDays, new Date().toISOString());
+  }
+
+  public requestFullSweep(): void {
+    const current = this.read();
+    this.database
+      .prepare(
+        `INSERT INTO hh_crawl_settings (id, role_ids, search_period_days, last_full_sweep_at, updated_at)
+         VALUES (1, ?, ?, NULL, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           last_full_sweep_at = NULL,
+           updated_at = excluded.updated_at`,
+      )
+      .run(JSON.stringify(current.roleIds), current.searchPeriodDays, new Date().toISOString());
   }
 
   public markFullSweep(atIso: string): void {

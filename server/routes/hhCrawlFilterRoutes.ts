@@ -93,10 +93,26 @@ function handleWrite(deps: HhCrawlFilterRouteDeps) {
   };
 }
 
+/**
+ * Глубокий обход по требованию. Нужен, когда пул надо пересобрать сейчас, а не
+ * ждать двадцати часов: например, после того как обход был чем-то нарушен.
+ */
+function handleRequestSweep(deps: HhCrawlFilterRouteDeps) {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!deps.requireAdmin(request, reply)) return;
+    deps.settings.requestFullSweep();
+    return {
+      data: { lastFullSweepAt: deps.settings.read().lastFullSweepAt ?? null },
+      meta: { requestId: request.id },
+    };
+  };
+}
+
 export function registerHhCrawlFilterRoutes(
   app: FastifyInstance,
   deps: HhCrawlFilterRouteDeps,
 ): void {
   app.get('/api/v1/admin/hh-crawl-filter', handleRead(deps));
   app.put('/api/v1/admin/hh-crawl-filter', handleWrite(deps));
+  app.post('/api/v1/admin/hh-crawl-filter/deep-sweep', handleRequestSweep(deps));
 }
