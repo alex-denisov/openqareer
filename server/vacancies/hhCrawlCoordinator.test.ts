@@ -148,3 +148,48 @@ describe('HhCrawlCoordinator', () => {
     expect(marked).toEqual([]);
   });
 });
+
+describe('режим прохода доходит до движка', () => {
+  it('быстрый проход помечается частичным, глубокий — нет', async () => {
+    const { buildMultiSourceFetcher } = await import('./multiSourceFetcher');
+    const source = {
+      id: 'src-hh-search',
+      name: 'hh.ru',
+      type: 'hh_search' as const,
+      enabled: true,
+      targetUrl: 'https://hh.ru/search/vacancy',
+      refreshIntervalMinutes: 20,
+      itemsFoundTotal: 0,
+      itemsActiveTotal: 0,
+    };
+    const hh = (async () => ({ source: 'hh', vacancies: [] })) as never;
+    const remotive = (async () => ({ vacancies: [] })) as never;
+
+    const freshStore = settingsStore({ lastFullSweepAt: '2026-09-13T11:00:00.000Z' });
+    const freshFetcher = buildMultiSourceFetcher(
+      hh,
+      remotive,
+      new HhCrawlCoordinator(freshStore.store, {
+        fetchPage: okTransport,
+        sleep,
+        now: () => new Date('2026-09-13T12:00:00.000Z'),
+      }),
+    );
+    const freshReading = await freshFetcher(source);
+    expect(Array.isArray(freshReading)).toBe(false);
+    expect((freshReading as { partial: boolean }).partial).toBe(true);
+
+    const fullStore = settingsStore();
+    const fullFetcher = buildMultiSourceFetcher(
+      hh,
+      remotive,
+      new HhCrawlCoordinator(fullStore.store, {
+        fetchPage: okTransport,
+        sleep,
+        now: () => new Date('2026-09-13T12:00:00.000Z'),
+      }),
+    );
+    const fullReading = await fullFetcher(source);
+    expect((fullReading as { partial: boolean }).partial).toBe(false);
+  });
+});

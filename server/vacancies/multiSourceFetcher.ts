@@ -208,7 +208,10 @@ export function buildMultiSourceFetcher(
         throw new Error('hh_crawl_coordinator_missing');
       }
       const result = await crawlCoordinator.collect();
-      return [...result.vacancies];
+      // Быстрый проход видит только свежие сутки: он дополняет срез, а не
+      // заменяет его. Иначе каждые двадцать минут пул схлопывался бы до
+      // выдачи одного дня — ровно это и случилось на проде (B214).
+      return { vacancies: [...result.vacancies], partial: result.mode === 'fresh' };
     }
     // An unimplemented source type has not been measured, so it must not report
     // a successful empty reading (B161).

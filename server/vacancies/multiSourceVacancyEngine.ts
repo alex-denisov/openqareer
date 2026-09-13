@@ -34,10 +34,24 @@ import {
   type SourceScheduleInfo,
 } from './politeScheduler';
 
+/**
+ * Улов одного опроса. Простой список означает полное чтение: площадка показала
+ * весь свой срез, и то, чего в нём нет, снято (B161).
+ *
+ * `partial: true` означает частичное чтение — источник показал только часть
+ * своей выдачи и о судьбе остального ничего не сказал. Такое чтение обязано
+ * дополнять срез, а не заменять его: быстрый проход по свежим суткам hh.ru
+ * однажды заменил 36 376 собранных вакансий на 1 464 прочитанных (B214).
+ */
+export interface SourceReading {
+  readonly vacancies: UnifiedVacancy[];
+  readonly partial: boolean;
+}
+
 export type SourceFetcher = (
   source: VacancySourceConfig,
   options?: { query?: string },
-) => Promise<UnifiedVacancy[]>;
+) => Promise<UnifiedVacancy[] | SourceReading>;
 
 /**
  * What one sync actually did. `syncSource` used to return `void`, so an admin
@@ -418,7 +432,9 @@ export class MultiSourceVacancyEngine {
     query: string | undefined,
     nowMs: number,
   ): Promise<SourceSyncOutcome> {
-    const fetched: UnifiedVacancy[] = await this.fetcher!(source, query ? { query } : undefined);
+    const reading = await this.fetcher!(source, query ? { query } : undefined);
+    const fetched: UnifiedVacancy[] = Array.isArray(reading) ? reading : reading.vacancies;
+    const partial = Array.isArray(reading) ? false : reading.partial;
 
     // Перепись улова считается по тому, что площадка отдала, — до фильтра
     // свежести. Пул хранит только 30 дней, поэтому по нему доля «свежее 180
@@ -437,7 +453,7 @@ export class MultiSourceVacancyEngine {
       nowMs,
     });
 
-    const kept = this.acceptReading(source, fetched, nowMs);
+    const kept = this.acceptReading(source, fetched, nowMs, partial);
     return { sourceId: source.id, status: 'healthy', fetched: fetched.length, kept };
   }
 
@@ -501,6 +517,7 @@ export class MultiSourceVacancyEngine {
     source: VacancySourceConfig,
     fetched: readonly UnifiedVacancy[],
     nowMs: number,
+    partial = false,
   ): number {
     // Название площадки едет вместе с записью: на экране кандидат читает
     // источник, а не тип адаптера (PRB-017).
@@ -513,15 +530,24 @@ export class MultiSourceVacancyEngine {
     // A successful sync replaces this source's slice. Merging instead meant a
     // vacancy the employer took down an hour after one reading stayed
     // matchable — and openable — for thirty days (B161 review §1).
-    this.replaceSourceSlice(source.id, freshFetched);
+    //
+    // Частичное чтение — исключение, и только оно: источник показал часть
+    // выдачи и про остальное ничего не сказал, поэтому «нет в улове» здесь не
+    // значит «снято». Срез дополняется, а устаревшее убирает тридцатидневная
+    // уборка и проверка живости ссылок (B214).
+    const slice = partial
+      ? this.mergeSourceSlice(source.id, freshFetched)
+      : this.replaceSourceSlice(source.id, freshFetched);
 
     // The clock of the run, so the next due check measures the same instant
     // the scheduler used rather than drifting against wall time.
     source.lastSyncAt = new Date(nowMs).toISOString();
     source.lastStatus = 'healthy';
     source.lastErrorMessage = undefined;
-    source.itemsFoundTotal = freshFetched.length;
-    source.itemsActiveTotal = freshFetched.filter((v) => v.status === 'active').length;
+    // Счётчик называет размер среза, а не размер одного чтения: после
+    // частичного прохода «найдено 1 464» при 36 376 в пуле было бы неправдой.
+    source.itemsFoundTotal = slice.length;
+    source.itemsActiveTotal = slice.filter((v) => v.status === 'active').length;
     this.persistSourceState(source);
 
     // Пересборка кластеров — работа по всему пулу, и внутри волны она
@@ -535,7 +561,7 @@ export class MultiSourceVacancyEngine {
    * Swaps everything this source contributed for what it just returned. Other
    * sources are untouched, so one shrinking feed cannot empty the pool.
    */
-  private replaceSourceSlice(sourceId: string, vacancies: UnifiedVacancy[]): void {
+  private replaceSourceSlice(sourceId: string, vacancies: UnifiedVacancy[]): UnifiedVacancy[] {
     for (const [id, vacancy] of this.rawVacancies) {
       if (vacancy.provenance?.sourceId === sourceId) this.rawVacancies.delete(id);
     }
@@ -543,6 +569,23 @@ export class MultiSourceVacancyEngine {
       this.rawVacancies.set(vacancy.id, vacancy);
     }
     this.pool?.replaceSourceSlice(sourceId, vacancies);
+    return vacancies;
+  }
+
+  /**
+   * Дополняет срез источника частичным чтением: прежние записи остаются,
+   * прочитанные заново — обновляются. Хранилище знает только «заменить срез»,
+   * поэтому в него уходит объединение целиком.
+   */
+  private mergeSourceSlice(sourceId: string, vacancies: UnifiedVacancy[]): UnifiedVacancy[] {
+    for (const vacancy of vacancies) {
+      this.rawVacancies.set(vacancy.id, vacancy);
+    }
+    const slice = Array.from(this.rawVacancies.values()).filter(
+      (vacancy) => vacancy.provenance?.sourceId === sourceId,
+    );
+    this.pool?.replaceSourceSlice(sourceId, slice);
+    return slice;
   }
 
   /**
@@ -750,7 +793,10 @@ export class MultiSourceVacancyEngine {
       if (!this.fetcher) {
         throw new Error('vacancy_source_transport_unavailable');
       }
-      const fetched: UnifiedVacancy[] = await this.fetcher(source, { query });
+      const reading = await this.fetcher(source, { query });
+      // Пробный опрос показывает то, что площадка отдала сейчас; полное это
+      // чтение или частичное — для пробы значения не имеет.
+      const fetched: UnifiedVacancy[] = Array.isArray(reading) ? reading : reading.vacancies;
       const latencyMs = Date.now() - start;
       return {
         sourceId: source.id,
