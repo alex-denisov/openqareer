@@ -304,6 +304,17 @@ process.once('SIGTERM', () => void shutdown('SIGTERM'));
 try {
   await app.listen({ host: config.host, port: config.port });
   app.log.info(restoredPool, 'vacancy-pool-restored');
+  // Кластеры собираются уже после того, как сервер начал отвечать: на большом
+  // пуле сборка занимает секунды, и держать ею проверку здоровья выката
+  // нельзя (B218). До сборки чтение пула соберёт их по требованию.
+  setImmediate(() => {
+    const startedAt = Date.now();
+    multiSourceEngine.recluster();
+    app.log.info(
+      { ms: Date.now() - startedAt, clusters: multiSourceEngine.getActiveClusters().length },
+      'vacancy-pool-clustered',
+    );
+  });
   runVacancyRefresh();
   runMultiSourceSync();
   runDocumentRetentionPurge();

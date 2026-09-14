@@ -266,7 +266,13 @@ export class MultiSourceVacancyEngine {
       }
     }
 
-    this.recluster();
+    // Сведение кластеров здесь НЕ делается намеренно. На 77 тысячах вакансий
+    // оно занимает 5 с (замер на копии прод-базы 2026-09-14), а `restore()`
+    // вызывается до `app.listen()` — значит сервер столько же не отвечает на
+    // проверку здоровья, и выкат откатывается тем вернее, чем больше пул.
+    // Данные загружены, пул помечен изменённым: кластеры соберёт фоновый
+    // вызов сразу после старта, а любое чтение — по требованию.
+    this.poolChangedSinceRecluster = true;
     return { restored: this.rawVacancies.size };
   }
 
@@ -305,6 +311,7 @@ export class MultiSourceVacancyEngine {
 
   private healthOf(sourceId: string, nowMs: number): SourceHealth {
     const rawObs = this.observations.get(sourceId) ?? emptySourceObservations();
+    this.ensureClusters();
     const authenticity =
       this.clusters.length > 0
         ? calculateSourceAuthenticity(sourceId, this.clusters)
@@ -335,7 +342,17 @@ export class MultiSourceVacancyEngine {
   }
 
   public getActiveClusters(): VacancyCluster[] {
+    this.ensureClusters();
     return this.clusters.filter((c) => c.status === 'active');
+  }
+
+  /**
+   * Собирает кластеры, если пул менялся с прошлой сборки. Страховка для
+   * чтения, которое случилось раньше фоновой сборки после старта: лучше одно
+   * медленное чтение, чем пустая выдача (B218).
+   */
+  private ensureClusters(): void {
+    if (this.poolChangedSinceRecluster) this.recluster();
   }
 
   /**
