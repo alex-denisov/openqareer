@@ -226,7 +226,10 @@ describe('paging plans (B216)', () => {
     expect(first.url).toBe(targetUrl);
 
     const storyPayload = {
-      hits: [{ objectID: '49522897', title: 'Ask HN: Who is hiring? (September 2026)' }],
+      hits: [
+        { objectID: '1001', title: 'Ask HN: Who wants to be hired? (September 2026)' },
+        { objectID: '49522897', title: 'Ask HN: Who is hiring? (September 2026)' },
+      ],
     };
     const commentsReq = plan.next(first, storyPayload);
     expect(commentsReq).not.toBeNull();

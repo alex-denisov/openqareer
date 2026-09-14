@@ -86,6 +86,28 @@ describe('Hacker News "Who is hiring" source', () => {
       expect(parsed?.location).toContain('Washington, DC');
     });
 
+    it('does not confuse experience ranges (e.g. 3-5 years) with salary', () => {
+      const line = 'Company | Role | Remote | 3-5 years | $180k - $220k';
+      const parsed = parseHnHeaderLine(line);
+      expect(parsed).not.toBeNull();
+      expect(parsed?.company).toBe('Company');
+      expect(parsed?.title).toBe('Role');
+      expect(parsed?.isRemote).toBe(true);
+      expect(parsed?.location).toBe('Remote');
+      expect(parsed?.salary).toEqual({
+        from: 180000,
+        to: 220000,
+        currency: 'USD',
+      });
+    });
+
+    it('detects explicit "Remote: No" as non-remote', () => {
+      const line = 'Fintech | Backend Dev | New York | Remote: No | $160k';
+      const parsed = parseHnHeaderLine(line);
+      expect(parsed?.isRemote).toBe(false);
+      expect(parsed?.location).toBe('New York');
+    });
+
     it('returns null for lines without pipes or missing required parts', () => {
       expect(parseHnHeaderLine('Just a regular comment with no pipes')).toBeNull();
       expect(parseHnHeaderLine('SinglePartOnly')).toBeNull();
@@ -284,6 +306,49 @@ describe('Hacker News "Who is hiring" source', () => {
           fetchJson: mockFetchJson,
         }),
       ).rejects.toThrow('hn_story_not_found');
+    });
+
+    it('filters out "Who wants to be hired" and "Freelancer" stories, picking "Who is hiring"', async () => {
+      const mockFetchJson = vi.fn(async (url: string) => {
+        if (url.includes('tags=story,author_whoishiring')) {
+          return {
+            hits: [
+              {
+                objectID: '1001',
+                title: 'Ask HN: Who wants to be hired? (September 2026)',
+              },
+              {
+                objectID: '1002',
+                title: 'Ask HN: Freelancer? Seeking freelancer? (September 2026)',
+              },
+              {
+                objectID: '49522897',
+                title: 'Ask HN: Who is hiring? (September 2026)',
+              },
+            ],
+          };
+        }
+        if (url.includes('tags=comment,story_49522897')) {
+          return {
+            nbPages: 1,
+            hits: [
+              {
+                objectID: '49667711',
+                parent_id: 49522897,
+                story_id: 49522897,
+                author: 'alice',
+                created_at: '2026-09-02T16:00:00Z',
+                comment_text: 'Beta | Dev | Remote | $150k',
+              },
+            ],
+          };
+        }
+        throw new Error(`Unexpected url: ${url}`);
+      });
+
+      const vacancies = await fetchHnWhoIsHiring({ fetchJson: mockFetchJson });
+      expect(vacancies).toHaveLength(1);
+      expect(vacancies[0]?.company).toBe('Beta');
     });
   });
 });

@@ -481,8 +481,15 @@ const hnWhoIsHiring: PagingPlan = {
     const state = record(previous.state);
     if (state.stage === 'story') {
       const hits = asArray(record(payload).hits) ?? [];
-      const first = record(hits[0]);
-      const storyId = text(first.objectID);
+      const matching = hits.find((h) => {
+        const title = text(record(h).title).toLowerCase();
+        return (
+          title.includes('who is hiring') &&
+          !title.includes('who wants to be hired') &&
+          !title.includes('freelancer')
+        );
+      });
+      const storyId = text(record(matching).objectID);
       if (!storyId) return null;
       return {
         url: `https://hn.algolia.com/api/v1/search?tags=comment,story_${storyId}&hitsPerPage=1000`,

@@ -9,12 +9,14 @@ import {
   record,
   text,
   type JsonAdapterContext,
+  type JsonRecord,
 } from './jsonVacancyRecord';
 
 export const HN_SOURCE_ID = 'src-hn-whoishiring';
 export const HN_ALGOLIA_SEARCH_URL =
   'https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=Ask+HN:+Who+is+hiring';
 export const HN_ITEM_BASE_URL = 'https://news.ycombinator.com/item?id=';
+const HN_FETCH_TIMEOUT_MS = 15_000;
 
 const CURRENCY_MAP: Readonly<Record<string, string>> = {
   $: 'USD',
@@ -94,39 +96,49 @@ function parseNumberWithK(numStr: string, hasK: boolean): number | undefined {
   return hasK || val < 1000 ? Math.round(val * 1000) : Math.round(val);
 }
 
+function resolveCurrency(raw?: string): string {
+  if (!raw) return 'USD';
+  return CURRENCY_MAP[raw.toUpperCase()] || CURRENCY_MAP[raw] || 'USD';
+}
+
+function parseSalaryRange(partText: string): VacancySalary | undefined {
+  const rangePattern =
+    /([$€£¥]|USD|EUR|GBP|CHF|CAD|AUD)?\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*([kK])?\s*(?:-|–|—|to)\s*([$€£¥]|USD|EUR|GBP|CHF|CAD|AUD)?\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*([kK])?\s*(USD|EUR|GBP|CHF|CAD|AUD)?/i;
+  const match = rangePattern.exec(partText);
+  if (!match) return undefined;
+
+  const currency = resolveCurrency(match[1] || match[4] || match[7]);
+  const hasK2 = Boolean(match[6]);
+  const hasK1 = Boolean(match[3]) || hasK2;
+  const from = parseNumberWithK(match[2]!, hasK1);
+  const to = parseNumberWithK(match[5]!, hasK2);
+  if (from === undefined && to === undefined) return undefined;
+
+  return { from, to, currency };
+}
+
+function parseSingleSalary(partText: string): VacancySalary | undefined {
+  const singlePattern =
+    /([$€£¥]|USD|EUR|GBP|CHF|CAD|AUD)\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*([kK])?/i;
+  const match = singlePattern.exec(partText);
+  if (!match) return undefined;
+
+  const currency = resolveCurrency(match[1]);
+  const hasK = Boolean(match[3]);
+  const from = parseNumberWithK(match[2]!, hasK);
+  if (from === undefined) return undefined;
+
+  return { from, currency };
+}
+
 export function parseSalary(partText: string): VacancySalary | undefined {
-  const rangeMatch =
-    /([$€£¥]|USD|EUR|GBP|CHF|CAD|AUD)?\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*([kK])?\s*(?:-|–|—|to)\s*([$€£¥]|USD|EUR|GBP|CHF|CAD|AUD)?\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*([kK])?\s*(USD|EUR|GBP|CHF|CAD|AUD)?/i.exec(
-      partText,
-    );
+  if (/\b(?:years?|yrs?|yoe|months?)\b/i.test(partText)) return undefined;
 
-  if (rangeMatch) {
-    const rawCur = rangeMatch[1] || rangeMatch[4] || rangeMatch[7];
-    const currency = rawCur ? CURRENCY_MAP[rawCur.toUpperCase()] || CURRENCY_MAP[rawCur] : 'USD';
-    const hasK2 = Boolean(rangeMatch[6]);
-    const hasK1 = Boolean(rangeMatch[3]) || hasK2;
-    const from = parseNumberWithK(rangeMatch[2]!, hasK1);
-    const to = parseNumberWithK(rangeMatch[5]!, hasK2);
-    if (from !== undefined || to !== undefined) {
-      return { from, to, currency: currency ?? 'USD' };
-    }
-  }
+  const hasCurrency = /[$€£¥]|\b(?:USD|EUR|GBP|CHF|CAD|AUD|RUR|RUB)\b/i.test(partText);
+  const hasK = /\b\d+\s*[kK]\b/i.test(partText);
+  if (!hasCurrency && !hasK) return undefined;
 
-  const singleMatch =
-    /([$€£¥]|USD|EUR|GBP|CHF|CAD|AUD)\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*([kK])?/i.exec(
-      partText,
-    );
-  if (singleMatch) {
-    const rawCur = singleMatch[1]!;
-    const currency = CURRENCY_MAP[rawCur.toUpperCase()] || CURRENCY_MAP[rawCur] || 'USD';
-    const hasK = Boolean(singleMatch[3]);
-    const from = parseNumberWithK(singleMatch[2]!, hasK);
-    if (from !== undefined) {
-      return { from, currency };
-    }
-  }
-
-  return undefined;
+  return parseSalaryRange(partText) ?? parseSingleSalary(partText);
 }
 
 export function parseEmploymentType(part: string): string | undefined {
@@ -139,7 +151,10 @@ export function parseEmploymentType(part: string): string | undefined {
 }
 
 export function detectIsRemote(text: string): boolean {
-  if (/\b(?:no\s+remote|onsite\s+only|not\s+remote|in-office\s+only)\b/i.test(text)) {
+  if (
+    /\b(?:no\s+remote|onsite\s+only|not\s+remote|in-office\s+only)\b/i.test(text) ||
+    /\bremote\s*:\s*(?:no|false|none)\b/i.test(text)
+  ) {
     return false;
   }
   return /\bremote\b/i.test(text);
@@ -149,7 +164,7 @@ export function isHnMetaComment(headerLine: string, fullText: string, author?: s
   if (author === 'whoishiring') return true;
   const h = headerLine.toLowerCase();
   const f = fullText.toLowerCase();
-  if (
+  return (
     h.includes('please follow this format') ||
     h.includes('please follow the format') ||
     h.includes('rules:') ||
@@ -159,10 +174,7 @@ export function isHnMetaComment(headerLine: string, fullText: string, author?: s
     h.startsWith('feedback or criticism') ||
     f.includes('only post if you are personally part of the hiring company') ||
     f.includes('no third-party recruiters')
-  ) {
-    return true;
-  }
-  return false;
+  );
 }
 
 export function extractSkillsFromPart(part: string): string[] {
@@ -172,14 +184,65 @@ export function extractSkillsFromPart(part: string): string[] {
       .map((s) => s.trim())
       .filter(Boolean);
     const hasTech = items.some((item) => KNOWN_TECH_KEYWORDS.has(item.toLowerCase()));
-    if (hasTech) {
-      return items;
-    }
+    if (hasTech) return items;
   }
   if (KNOWN_TECH_KEYWORDS.has(part.toLowerCase())) {
     return [part];
   }
   return [];
+}
+
+function isWorkModality(part: string): boolean {
+  return (
+    /^(?:onsite|remote|hybrid|in[-\s]office|in[-\s]person)(?:\s+only)?(?:\s*\(no\s+remote\))?$/i.test(
+      part,
+    ) ||
+    /\b(?:onsite\s+only|no\s+remote)\b/i.test(part) ||
+    /\bremote\s*:\s*(?:no|false|none)\b/i.test(part)
+  );
+}
+
+interface ClassifiedParts {
+  salary?: VacancySalary;
+  employmentType?: string;
+  skills: string[];
+  locationCandidates: string[];
+}
+
+function classifyHeaderParts(remaining: string[]): ClassifiedParts {
+  let salary: VacancySalary | undefined;
+  let employmentType: string | undefined;
+  const skills: string[] = [];
+  const locationCandidates: string[] = [];
+
+  for (const part of remaining) {
+    const s = parseSalary(part);
+    if (s && !salary) {
+      salary = s;
+      continue;
+    }
+    const emp = parseEmploymentType(part);
+    if (emp && !employmentType) {
+      employmentType = emp;
+      continue;
+    }
+    const sk = extractSkillsFromPart(part);
+    if (sk.length > 0) {
+      skills.push(...sk);
+      continue;
+    }
+    if (
+      isWorkModality(part) ||
+      /\b(?:years?|yrs?|yoe|months?)\b/i.test(part) ||
+      /^https?:\/\//i.test(part) ||
+      /^www\./i.test(part)
+    ) {
+      continue;
+    }
+    locationCandidates.push(part);
+  }
+
+  return { salary, employmentType, skills, locationCandidates };
 }
 
 export interface HnHeaderParsed {
@@ -204,50 +267,16 @@ export function parseHnHeaderLine(line: string): HnHeaderParsed | null {
 
   const company = parts[0]!;
   const title = parts[1]!;
-  if (!company || !title) return null;
-  if (/^(?:please|note:|format:|ask hn|rules:)/i.test(company)) return null;
-
-  const isRemote = detectIsRemote(clean);
-  const remaining = parts.slice(2);
-
-  let salary: VacancySalary | undefined;
-  let employmentType: string | undefined;
-  const skills: string[] = [];
-  const locationCandidates: string[] = [];
-
-  for (const part of remaining) {
-    const s = parseSalary(part);
-    if (s && !salary) {
-      salary = s;
-      continue;
-    }
-    const emp = parseEmploymentType(part);
-    if (emp && !employmentType) {
-      employmentType = emp;
-      continue;
-    }
-    const sk = extractSkillsFromPart(part);
-    if (sk.length > 0) {
-      skills.push(...sk);
-      continue;
-    }
-    if (
-      /^(?:onsite|remote|hybrid|in[-\s]office|in[-\s]person)(?:\s+only)?(?:\s*\(no\s+remote\))?$/i.test(
-        part,
-      ) ||
-      /\b(?:onsite\s+only|no\s+remote)\b/i.test(part)
-    ) {
-      continue;
-    }
-    if (/^https?:\/\//i.test(part) || /^www\./i.test(part)) {
-      continue;
-    }
-    locationCandidates.push(part);
+  if (!company || !title || /^(?:please|note:|format:|ask hn|rules:)/i.test(company)) {
+    return null;
   }
 
-  let location: string | undefined = locationCandidates[0];
+  const isRemote = detectIsRemote(clean);
+  const classified = classifyHeaderParts(parts.slice(2));
+
+  let location: string | undefined = classified.locationCandidates[0];
   if (!location && isRemote) {
-    const remotePart = remaining.find((p) => /remote/i.test(p));
+    const remotePart = parts.slice(2).find((p) => /remote/i.test(p));
     if (remotePart) location = remotePart;
   }
 
@@ -256,9 +285,9 @@ export function parseHnHeaderLine(line: string): HnHeaderParsed | null {
     title,
     location,
     isRemote,
-    salary,
-    skills,
-    employmentType,
+    salary: classified.salary,
+    skills: classified.skills,
+    employmentType: classified.employmentType,
   };
 }
 
@@ -277,37 +306,26 @@ export function extractHnHeaderAndBody(rawHtml: string): {
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  if (lines.length === 0) {
-    return { headerLine: '', bodyText: '' };
-  }
-
-  const headerLine = lines[0]!;
-  const bodyText = lines.slice(1).join('\n\n');
-  return { headerLine, bodyText };
+  if (lines.length === 0) return { headerLine: '', bodyText: '' };
+  return { headerLine: lines[0]!, bodyText: lines.slice(1).join('\n\n') };
 }
 
-export function parseHnCommentToVacancy(
-  comment: unknown,
-  context?: { observedAt?: string; storyId?: number | string; sourceName?: string },
-): UnifiedVacancy | null {
-  const c = record(comment);
+function validateHnComment(
+  c: JsonRecord,
+  context?: { storyId?: number | string },
+): { objectID: string; rawText: string; author: string } | null {
   if (c.deleted === true || c.dead === true) return null;
 
   const objectID = text(c.objectID);
-  if (!objectID) return null;
-
   const rawText = text(c.comment_text);
-  if (!rawText) return null;
+  if (!objectID || !rawText) return null;
 
   const parentId = numeric(c.parent_id);
   const storyId = numeric(c.story_id);
   const author = text(c.author);
 
   if (author === 'whoishiring') return null;
-
-  if (parentId !== undefined && storyId !== undefined && parentId !== storyId) {
-    return null;
-  }
+  if (parentId !== undefined && storyId !== undefined && parentId !== storyId) return null;
   if (
     context?.storyId !== undefined &&
     parentId !== undefined &&
@@ -316,14 +334,24 @@ export function parseHnCommentToVacancy(
     return null;
   }
 
-  const { headerLine, bodyText } = extractHnHeaderAndBody(rawText);
-  if (!headerLine || isHnMetaComment(headerLine, rawText, author)) return null;
+  return { objectID, rawText, author };
+}
+
+export function parseHnCommentToVacancy(
+  comment: unknown,
+  context?: { observedAt?: string; storyId?: number | string; sourceName?: string },
+): UnifiedVacancy | null {
+  const valid = validateHnComment(record(comment), context);
+  if (!valid) return null;
+
+  const { headerLine, bodyText } = extractHnHeaderAndBody(valid.rawText);
+  if (!headerLine || isHnMetaComment(headerLine, valid.rawText, valid.author)) return null;
 
   const header = parseHnHeaderLine(headerLine);
   if (!header || !header.company || !header.title) return null;
 
   const observedAt = context?.observedAt || new Date().toISOString();
-  const url = `${HN_ITEM_BASE_URL}${objectID}`;
+  const url = `${HN_ITEM_BASE_URL}${valid.objectID}`;
   const fullDescription = [headerLine, bodyText].filter(Boolean).join('\n\n');
 
   const vacancy = buildJsonVacancy({
@@ -333,7 +361,7 @@ export function parseHnCommentToVacancy(
       sourceName: context?.sourceName ?? 'Hacker News (Who is hiring)',
       sourceUrl: url,
     },
-    externalId: objectID,
+    externalId: valid.objectID,
     title: header.title,
     company: header.company,
     location: header.location,
@@ -343,13 +371,10 @@ export function parseHnCommentToVacancy(
     skills: [...header.skills],
     employmentType: header.employmentType,
     url,
-    publishedAt: text(c.created_at) || observedAt,
+    publishedAt: text(record(comment).created_at) || observedAt,
   });
 
-  return {
-    ...vacancy,
-    fullDescription,
-  };
+  return { ...vacancy, fullDescription };
 }
 
 export function hnWhoIsHiringAdapter(
@@ -368,9 +393,34 @@ export function hnWhoIsHiringAdapter(
     .filter((v): v is UnifiedVacancy => v !== null && isUsableVacancy(v));
 }
 
+export function isHnWhoIsHiringStory(title: string): boolean {
+  const lower = title.toLowerCase();
+  return (
+    lower.includes('who is hiring') &&
+    !lower.includes('who wants to be hired') &&
+    !lower.includes('freelancer')
+  );
+}
+
 export interface HnFetchDeps {
   readonly fetchJson?: (url: string) => Promise<unknown>;
   readonly nowMs?: number;
+}
+
+async function findHnWhoIsHiringStoryId(
+  fetchJson: (url: string) => Promise<unknown>,
+): Promise<string> {
+  const searchPayload = record(await fetchJson(HN_ALGOLIA_SEARCH_URL));
+  const storyHits = asArray(searchPayload.hits) ?? [];
+  const matching = storyHits.find((h) => isHnWhoIsHiringStory(text(record(h).title)));
+  if (!matching) {
+    throw new Error('hn_story_not_found');
+  }
+  const storyId = text(record(matching).objectID);
+  if (!storyId) {
+    throw new Error('hn_story_id_missing');
+  }
+  return storyId;
 }
 
 export async function fetchHnWhoIsHiring(
@@ -383,6 +433,7 @@ export async function fetchHnWhoIsHiring(
       : async (url: string) => {
           const res = await fetch(url, {
             headers: { 'User-Agent': 'OpenQareer/1.0 (HN WhoIsHiring Scraper)' },
+            signal: AbortSignal.timeout(HN_FETCH_TIMEOUT_MS),
           });
           if (!res.ok) {
             throw new Error(`hn_api_error: ${res.status} ${res.statusText}`);
@@ -390,17 +441,7 @@ export async function fetchHnWhoIsHiring(
           return res.json();
         };
 
-  const searchPayload = record(await fetchJson(HN_ALGOLIA_SEARCH_URL));
-  const storyHits = asArray(searchPayload.hits) ?? [];
-  if (storyHits.length === 0) {
-    throw new Error('hn_story_not_found');
-  }
-
-  const storyId = text(record(storyHits[0]).objectID);
-  if (!storyId) {
-    throw new Error('hn_story_id_missing');
-  }
-
+  const storyId = await findHnWhoIsHiringStoryId(fetchJson);
   const observedAt = new Date(nowMs).toISOString();
   const vacancies: UnifiedVacancy[] = [];
   let page = 0;
