@@ -26,9 +26,13 @@ import {
   BDJOBS_SOURCE_ID,
   NAUKRI_SOURCE_ID,
   ZIPRECRUITER_SOURCE_ID,
+  GLASSDOOR_SOURCE_ID,
+  BAYT_SOURCE_ID,
   normalizeBdjobsJobs,
   normalizeNaukriJobs,
   normalizeZipRecruiterJobs,
+  normalizeGlassdoorJobs,
+  normalizeBaytHtml,
 } from './jobspyAdapters';
 
 export type { JsonAdapterContext } from './jsonVacancyRecord';
@@ -304,6 +308,18 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
 
   [ZIPRECRUITER_SOURCE_ID]: (payload, context, sourceId) =>
     normalizeZipRecruiterJobs(payload, context, sourceId),
+
+  [GLASSDOOR_SOURCE_ID]: (payload, context, sourceId) =>
+    normalizeGlassdoorJobs(payload, context, sourceId),
+
+  [BAYT_SOURCE_ID]: (payload, context, sourceId) =>
+    normalizeBaytHtml(
+      typeof payload === 'string'
+        ? payload
+        : text(record(payload).html) || text(record(payload).content) || '',
+      context,
+      sourceId,
+    ),
 
   'src-apple-jobs': (payload, context, sourceId) =>
     listOf(payload, (value) => asArray(record(record(value).res).searchResults)).map((item) => {

@@ -146,3 +146,117 @@ export function ziprecruiterQueryParams(
     per_page: String(perPage),
   };
 }
+
+/** Glassdoor GraphQL endpoint (JobSpy GraphQL BFF mechanics). */
+export const GLASSDOOR_GRAPHQL_URL = 'https://www.glassdoor.com/graph';
+
+export function glassdoorHeaders(csrfToken?: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    'Content-Type': 'application/json',
+    accept: '*/*',
+    'sec-ch-ua': '"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"macOS"',
+    'sec-fetch-dest': 'empty',
+    'sec-fetch-mode': 'cors',
+    'sec-fetch-site': 'same-origin',
+  };
+  if (csrfToken) {
+    headers['gd-csrf-token'] = csrfToken;
+  }
+  return headers;
+}
+
+export function glassdoorPayload(
+  keyword: string,
+  location = 'United States',
+  page = 1,
+  numJobs = 30,
+): { operationName: string; variables: Record<string, unknown>; query: string } {
+  return {
+    operationName: 'JobSearchResultsQuery',
+    variables: {
+      keyword,
+      location,
+      locationId: 1,
+      locationType: 'N',
+      numJobsToShow: numJobs,
+      pageNumber: page,
+      parameterUrlEncoded: true,
+    },
+    query: `query JobSearchResultsQuery($keyword: String, $location: String, $locationId: Int, $locationType: String, $numJobsToShow: Int, $pageNumber: Int) {
+      jobListings(keyword: $keyword, location: $location, locationId: $locationId, locationType: $locationType, numJobsToShow: $numJobsToShow, pageNumber: $pageNumber) {
+        jobview {
+          header {
+            jobTitleText
+            employerNameFromSearch
+            locationName
+            salary {
+              min
+              max
+              currency
+            }
+          }
+          job {
+            listingId
+            description
+            datePosted
+          }
+          overview {
+            name
+            shortName
+          }
+        }
+      }
+    }`,
+  };
+}
+
+export function extractGlassdoorCsrfToken(
+  htmlOrHeaders: string | Record<string, string>,
+): string | undefined {
+  if (typeof htmlOrHeaders === 'string') {
+    const metaMatch = /<meta\s+name=["']csrf-token["']\s+content=["']([^"']+)["']/i.exec(
+      htmlOrHeaders,
+    );
+    if (metaMatch) return metaMatch[1];
+    const jsMatch = /"csrfToken":\s*"([^"]+)"/i.exec(htmlOrHeaders);
+    if (jsMatch) return jsMatch[1];
+    return undefined;
+  }
+
+  if (htmlOrHeaders['gd-csrf-token']) return htmlOrHeaders['gd-csrf-token'];
+  const cookie = htmlOrHeaders['set-cookie'] || htmlOrHeaders.cookie;
+  if (cookie) {
+    const m = /gd-csrf-token=([^;]+)/i.exec(cookie);
+    if (m) return m[1];
+  }
+  return undefined;
+}
+
+/** Bayt search URL & headers (Middle East / Gulf / International). */
+export const BAYT_SEARCH_URL = 'https://www.bayt.com/en/international/jobs/';
+
+export function baytHeaders(): Record<string, string> {
+  return {
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    Accept:
+      'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Upgrade-Insecure-Requests': '1',
+  };
+}
+
+export function baytQueryParams(keyword: string, page = 1): Record<string, string> {
+  return {
+    q: keyword,
+    page: String(page),
+  };
+}
+

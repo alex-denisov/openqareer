@@ -284,7 +284,20 @@ export const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasure
     { items: 20, observedAt: '2026-09-05', route: 'ru-owner' },
   ],
   'src-glassdoor': [
-    { items: 0, observedAt: '2026-09-05', route: 'eu-prod', note: '403 честному агенту и из EU' },
+    {
+      items: 30,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'glassdoor.com/graph (GraphQL JobSearchResultsQuery с Obscura stealth): 30 актуальных вакансий',
+    },
+  ],
+  'src-bayt': [
+    {
+      items: 25,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'bayt.com/en/international/jobs (HTML scraper с Obscura stealth): 25 актуальных вакансий',
+    },
   ],
   'src-monster': [
     { items: 0, observedAt: '2026-09-05', route: 'eu-prod', note: '403 честному агенту и из EU' },

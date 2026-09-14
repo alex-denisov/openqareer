@@ -10,14 +10,29 @@ import {
   ZIPRECRUITER_AUTH_TOKEN,
   ziprecruiterHeaders,
   ziprecruiterQueryParams,
+  GLASSDOOR_GRAPHQL_URL,
+  glassdoorHeaders,
+  glassdoorPayload,
+  extractGlassdoorCsrfToken,
+  BAYT_SEARCH_URL,
+  baytHeaders,
+  baytQueryParams,
 } from './jobspyEndpoints';
 import {
   normalizeNaukriJobs,
   normalizeBdjobsJobs,
   normalizeZipRecruiterJobs,
+  normalizeGlassdoorJobs,
+  normalizeBaytHtml,
+  isCloudflareChallenge,
+  fetchWithStealthFallback,
+  glassdoorAdapter,
+  baytAdapter,
   NAUKRI_SOURCE_ID,
   BDJOBS_SOURCE_ID,
   ZIPRECRUITER_SOURCE_ID,
+  GLASSDOOR_SOURCE_ID,
+  BAYT_SOURCE_ID,
 } from './jobspyAdapters';
 import { hasJsonAdapter, normalizeJsonSource } from './jsonSourceAdapters';
 import { pagingPlanFor } from './pagedJsonSources';
@@ -437,3 +452,322 @@ describe('Registry & adapter wiring integration', () => {
     expect(zipPlan!.next(zipFirst, { jobs: [] })).toBeNull();
   });
 });
+
+describe('Glassdoor & Bayt endpoints & request builders', () => {
+  describe('Glassdoor', () => {
+    it('provides correct GraphQL endpoint URL', () => {
+      expect(GLASSDOOR_GRAPHQL_URL).toBe('https://www.glassdoor.com/graph');
+    });
+
+    it('generates headers with browser stealth signatures and optional CSRF token', () => {
+      const headers = glassdoorHeaders('test-csrf-token-123');
+      expect(headers['User-Agent']).toContain('Mozilla');
+      expect(headers['Content-Type']).toBe('application/json');
+      expect(headers['gd-csrf-token']).toBe('test-csrf-token-123');
+      expect(headers['sec-ch-ua']).toBeDefined();
+    });
+
+    it('builds GraphQL payload with JobSearchResultsQuery, variables, and query', () => {
+      const payload = glassdoorPayload('react developer', 'New York', 2, 30);
+      expect(payload.operationName).toBe('JobSearchResultsQuery');
+      expect(payload.variables).toMatchObject({
+        keyword: 'react developer',
+        pageNumber: 2,
+        numJobsToShow: 30,
+      });
+      expect(typeof payload.query).toBe('string');
+      expect(payload.query).toContain('jobListings');
+    });
+
+    it('extracts CSRF token from HTML meta tags or response headers', () => {
+      const html = '<html><head><meta name="csrf-token" content="csrf_xyz_789" /></head></html>';
+      expect(extractGlassdoorCsrfToken(html)).toBe('csrf_xyz_789');
+
+      const headers = { 'gd-csrf-token': 'csrf_header_456' };
+      expect(extractGlassdoorCsrfToken(headers)).toBe('csrf_header_456');
+
+      const cookieHeaders = { 'set-cookie': 'gdId=abc; gd-csrf-token=csrf_cookie_123; path=/' };
+      expect(extractGlassdoorCsrfToken(cookieHeaders)).toBe('csrf_cookie_123');
+    });
+  });
+
+  describe('Bayt', () => {
+    it('provides correct search URL', () => {
+      expect(BAYT_SEARCH_URL).toBe('https://www.bayt.com/en/international/jobs/');
+    });
+
+    it('generates headers with browser stealth signature', () => {
+      const headers = baytHeaders();
+      expect(headers['User-Agent']).toContain('Mozilla');
+      expect(headers.Accept).toContain('text/html');
+      expect(headers['Sec-Fetch-Dest']).toBe('document');
+    });
+
+    it('builds query parameters with keyword and page', () => {
+      const params = baytQueryParams('frontend engineer', 3);
+      expect(params).toEqual({
+        q: 'frontend engineer',
+        page: '3',
+      });
+    });
+  });
+});
+
+describe('Glassdoor parser (JobSearchResultsQuery GraphQL)', () => {
+  it('normalizes Glassdoor GraphQL payload into UnifiedVacancy[]', () => {
+    const payload = {
+      data: {
+        jobListings: [
+          {
+            jobview: {
+              header: {
+                jobTitleText: 'Staff Frontend Engineer',
+                employerNameFromSearch: 'Stripe, Inc.',
+                locationName: 'San Francisco, CA',
+                salary: {
+                  min: 180000,
+                  max: 240000,
+                  currency: 'USD',
+                },
+              },
+              job: {
+                listingId: 1009876543,
+                description: '<p>Build next generation payment infrastructure using React.</p>',
+                datePosted: '2026-09-13T10:00:00Z',
+              },
+              overview: {
+                name: 'Stripe, Inc.',
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const vacancies = normalizeGlassdoorJobs(payload, CONTEXT, GLASSDOOR_SOURCE_ID);
+    expect(vacancies).toHaveLength(1);
+    const v = vacancies[0]!;
+    expect(v.id).toBe('src-glassdoor:1009876543');
+    expect(v.title).toBe('Staff Frontend Engineer');
+    expect(v.company).toBe('Stripe, Inc.');
+    expect(v.location).toBe('San Francisco, CA');
+    expect(v.url).toBe('https://www.glassdoor.com/job-listing/job-details.htm?jl=1009876543');
+    expect(v.salary).toEqual({
+      from: 180000,
+      to: 240000,
+      currency: 'USD',
+    });
+    expect(v.publishedAt).toBe('2026-09-13T10:00:00.000Z');
+    expect(v.isRemote).toBe(false);
+    expect(v.description).toContain('Build next generation');
+  });
+
+  it('detects remote work from title or location and parses alternative schema paths', () => {
+    const payload = {
+      data: {
+        jobSearchResults: {
+          jobListings: [
+            {
+              jobView: {
+                header: {
+                  jobTitleText: 'Remote Senior Fullstack Developer',
+                  employerNameFromSearch: 'RemoteWorks',
+                  locationName: 'Remote, US',
+                  salary: {
+                    min: 150000,
+                    max: 190000,
+                    currency: 'USD',
+                  },
+                },
+                job: {
+                  listingId: 'gd_777888',
+                  description: 'Fully remote position',
+                  datePosted: '2026-09-14T04:00:00Z',
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    const [v] = normalizeGlassdoorJobs(payload, CONTEXT, GLASSDOOR_SOURCE_ID);
+    expect(v?.id).toBe('src-glassdoor:gd_777888');
+    expect(v?.isRemote).toBe(true);
+    expect(v?.company).toBe('RemoteWorks');
+  });
+
+  it('throws vacancy_source_payload_unreadable when payload structure is unexpected', () => {
+    expect(() => normalizeGlassdoorJobs({ invalid: true }, CONTEXT, GLASSDOOR_SOURCE_ID)).toThrow(
+      /vacancy_source_payload_unreadable/,
+    );
+  });
+});
+
+describe('Bayt parser (HTML scraper)', () => {
+  const sampleBaytHtml = `
+    <!DOCTYPE html>
+    <html>
+      <body>
+        <div class="job-results">
+          <ul>
+            <li class="has-pointer-d" data-js-job="1029384" data-job-id="1029384">
+              <h2 class="jb-title">
+                <a href="/en/international/jobs/lead-devops-engineer-1029384/">Lead DevOps Engineer - Remote</a>
+              </h2>
+              <b class="jb-company">Emirates Tech Solutions</b>
+              <span class="jb-loc">Dubai, United Arab Emirates</span>
+              <span class="jb-date">2 days ago</span>
+              <p class="jb-desc">Lead cloud infrastructure migration on AWS and Kubernetes.</p>
+              <span class="jb-salary">AED 25,000 - 35,000</span>
+            </li>
+          </ul>
+        </div>
+      </body>
+    </html>
+  `;
+
+  it('normalizes Bayt HTML listing cards (li[data-js-job]) into UnifiedVacancy[]', () => {
+    const vacancies = normalizeBaytHtml(sampleBaytHtml, CONTEXT, BAYT_SOURCE_ID);
+    expect(vacancies).toHaveLength(1);
+    const v = vacancies[0]!;
+    expect(v.id).toBe('src-bayt:1029384');
+    expect(v.title).toBe('Lead DevOps Engineer - Remote');
+    expect(v.company).toBe('Emirates Tech Solutions');
+    expect(v.location).toBe('Dubai, United Arab Emirates');
+    expect(v.url).toBe('https://www.bayt.com/en/international/jobs/lead-devops-engineer-1029384/');
+    expect(v.isRemote).toBe(true);
+    expect(v.description).toContain('Lead cloud infrastructure migration');
+    expect(v.salary).toEqual({
+      from: 25000,
+      to: 35000,
+      currency: 'AED',
+    });
+  });
+
+  it('throws vacancy_source_payload_unreadable when HTML contains no job cards', () => {
+    expect(() => normalizeBaytHtml('<html><body><div>No jobs here</div></body></html>', CONTEXT, BAYT_SOURCE_ID)).toThrow(
+      /vacancy_source_payload_unreadable/,
+    );
+  });
+});
+
+describe('Obscura stealth integration & challenge fallback', () => {
+  it('detects Cloudflare 403 challenges and challenge signatures', () => {
+    expect(isCloudflareChallenge(403)).toBe(true);
+    expect(isCloudflareChallenge(503, '<html>Just a moment... cf-chl</html>')).toBe(true);
+    expect(isCloudflareChallenge(200, '<div>Normal page</div>')).toBe(false);
+    expect(isCloudflareChallenge(200, '<div>challenge-platform script</div>')).toBe(true);
+  });
+
+  it('returns direct HTTP response when direct fetch succeeds (200 OK)', async () => {
+    const result = await fetchWithStealthFallback('https://example.com/api', {}, {
+      httpFetch: async () => ({
+        status: 200,
+        text: async () => JSON.stringify({ data: { jobListings: [] } }),
+      }),
+      stealthFetch: async () => {
+        throw new Error('Stealth should not be called');
+      },
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.usedStealth).toBe(false);
+    expect(result.body).toContain('jobListings');
+  });
+
+  it('falls back to Obscura stealth runner when direct HTTP receives 403 challenge', async () => {
+    const result = await fetchWithStealthFallback('https://www.glassdoor.com/graph', {}, {
+      httpFetch: async () => ({
+        status: 403,
+        text: async () => '<html><title>Just a moment...</title>Cloudflare challenge</html>',
+      }),
+      stealthFetch: async () => ({
+        status: 200,
+        content: JSON.stringify({ data: { jobListings: [{ jobview: {} }] } }),
+      }),
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.usedStealth).toBe(true);
+    expect(result.body).toContain('jobListings');
+  });
+
+  it('exports glassdoorAdapter and baytAdapter wrapper functions', () => {
+    expect(typeof glassdoorAdapter).toBe('function');
+    expect(typeof baytAdapter).toBe('function');
+  });
+});
+
+describe('Glassdoor & Bayt registry & wiring integration', () => {
+  it('registers src-glassdoor and src-bayt in DEFAULT_VACANCY_SOURCES with active/live status', () => {
+    const gd = DEFAULT_VACANCY_SOURCES.find((s) => s.id === 'src-glassdoor');
+    const bayt = DEFAULT_VACANCY_SOURCES.find((s) => s.id === 'src-bayt');
+
+    expect(gd).toBeDefined();
+    expect(gd?.type).toBe('json_api');
+    expect(gd?.accessClass).toBe('api');
+    expect(gd?.addressStatus).toBe('live');
+    expect(gd?.enabled).toBe(true);
+
+    expect(bayt).toBeDefined();
+    expect(bayt?.type).toBe('json_api');
+    expect(bayt?.accessClass).toBe('api');
+    expect(bayt?.addressStatus).toBe('live');
+    expect(bayt?.enabled).toBe(true);
+  });
+
+  it('wires adapters into hasJsonAdapter and normalizeJsonSource', () => {
+    expect(hasJsonAdapter('src-glassdoor')).toBe(true);
+    expect(hasJsonAdapter('src-bayt')).toBe(true);
+
+    const gdVacancies = normalizeJsonSource(
+      'src-glassdoor',
+      {
+        data: {
+          jobListings: [
+            {
+              jobview: {
+                header: { jobTitleText: 'Architect', employerNameFromSearch: 'Corp', locationName: 'NY' },
+                job: { listingId: 'gd-1', description: 'Desc' },
+              },
+            },
+          ],
+        },
+      },
+      CONTEXT,
+    );
+    expect(gdVacancies).toHaveLength(1);
+
+    const baytVacancies = normalizeJsonSource(
+      'src-bayt',
+      `<li data-js-job="bayt-1"><h2 class="jb-title"><a href="/job/1">Engineer</a></h2><b class="jb-company">Co</b></li>`,
+      CONTEXT,
+    );
+    expect(baytVacancies).toHaveLength(1);
+  });
+
+  it('provides paging plans for Glassdoor and Bayt', () => {
+    const gdPlan = pagingPlanFor('src-glassdoor');
+    const baytPlan = pagingPlanFor('src-bayt');
+
+    expect(gdPlan).toBeDefined();
+    expect(baytPlan).toBeDefined();
+
+    const gdFirst = gdPlan!.first('https://www.glassdoor.com/graph', 0);
+    expect(gdFirst.url).toContain('glassdoor.com');
+    expect(gdFirst.method).toBe('POST');
+
+    const gdNext = gdPlan!.next(gdFirst, { data: { jobListings: [{ jobview: {} }] } });
+    expect(gdNext).not.toBeNull();
+    expect(gdPlan!.next(gdFirst, { data: { jobListings: [] } })).toBeNull();
+
+    const baytFirst = baytPlan!.first('https://www.bayt.com/en/international/jobs/', 0);
+    expect(baytFirst.url).toContain('bayt.com');
+
+    const baytNext = baytPlan!.next(baytFirst, '<li data-js-job="1">...</li>');
+    expect(baytNext).not.toBeNull();
+    expect(baytPlan!.next(baytFirst, '')).toBeNull();
+  });
+});
+

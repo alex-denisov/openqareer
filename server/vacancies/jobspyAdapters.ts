@@ -1,4 +1,8 @@
+import path from 'node:path';
+import os from 'node:os';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import { htmlToFeedText } from '../connectors/feedText';
+import { ObscuraRunner } from '../crawler/obscuraRunner';
 import {
   asArray,
   buildJsonVacancy as build,
@@ -14,11 +18,14 @@ import {
   type JsonAdapterContext,
   type JsonRecord,
   UNKNOWN_PUBLISHED_AT,
+  UNREADABLE,
 } from './jsonVacancyRecord';
 
 export const NAUKRI_SOURCE_ID = 'src-naukri';
 export const BDJOBS_SOURCE_ID = 'src-bdjobs';
 export const ZIPRECRUITER_SOURCE_ID = 'src-ziprecruiter';
+export const GLASSDOOR_SOURCE_ID = 'src-glassdoor';
+export const BAYT_SOURCE_ID = 'src-bayt';
 
 interface ParsedSalary {
   readonly from?: number;
@@ -237,3 +244,405 @@ export function normalizeZipRecruiterJobs(
     .map((item) => parseZipRecruiterJob(item, context, sourceId))
     .filter(isUsable);
 }
+
+function extractGlassdoorListings(payload: unknown): unknown[] | null {
+  const root = record(payload);
+  const data = record(root.data);
+  return (
+    asArray(data.jobListings) ??
+    asArray(record(data.jobSearchResults).jobListings) ??
+    asArray(record(data.jobSearch).jobListings) ??
+    asArray(root.jobListings)
+  );
+}
+
+function parseGlassdoorSalary(header: JsonRecord): ParsedSalary | undefined {
+  const sal = record(header.salary);
+  const from = numeric(sal.min);
+  const to = numeric(sal.max);
+  if (from === undefined && to === undefined) return undefined;
+  return {
+    from,
+    to,
+    currency: text(sal.currency) || 'USD',
+  };
+}
+
+interface GlassdoorMeta {
+  readonly externalId: string;
+  readonly title: string;
+  readonly company: string;
+  readonly location?: string;
+  readonly url: string;
+  readonly description: string;
+  readonly isRemote: boolean;
+  readonly publishedAt: string;
+  readonly header: JsonRecord;
+}
+
+function extractGlassdoorCompany(
+  header: JsonRecord,
+  overview: JsonRecord,
+  job: JsonRecord,
+): string {
+  return (
+    text(header.employerNameFromSearch) ||
+    text(overview.name) ||
+    text(overview.shortName) ||
+    text(header.employer) ||
+    text(job.companyName)
+  );
+}
+
+function extractGlassdoorMeta(item: unknown): GlassdoorMeta {
+  const envelope = record(item);
+  const jobview = record(envelope.jobview || envelope.jobView || envelope);
+  const header = record(jobview.header);
+  const job = record(jobview.job);
+  const overview = record(jobview.overview);
+
+  const externalId =
+    text(job.listingId) ||
+    text(header.jobListingId) ||
+    text(jobview.listingId) ||
+    text(envelope.listingId) ||
+    text(job.id);
+  const title =
+    text(header.jobTitleText) || text(header.title) || text(job.title) || text(jobview.title);
+  const company = extractGlassdoorCompany(header, overview, job);
+  const location =
+    text(header.locationName) || text(header.location) || text(job.location) || undefined;
+  const url =
+    text(job.jobViewUrl) ||
+    text(header.seoUrl) ||
+    (externalId ? `https://www.glassdoor.com/job-listing/job-details.htm?jl=${externalId}` : '');
+  const description = text(job.description) || text(jobview.description) || title;
+  const isRemote =
+    /remote/i.test(location ?? '') ||
+    /remote/i.test(title) ||
+    /remote/i.test(description) ||
+    header.isRemote === true;
+  const rawDate = text(job.datePosted) || text(job.postedDate) || text(header.datePosted);
+
+  return {
+    externalId,
+    title,
+    company,
+    location,
+    url,
+    description,
+    isRemote,
+    publishedAt: rawDate ? fromIso(rawDate) : UNKNOWN_PUBLISHED_AT,
+    header,
+  };
+}
+
+function parseGlassdoorJob(
+  item: unknown,
+  context: JsonAdapterContext,
+  sourceId: string,
+): UnifiedVacancy {
+  const meta = extractGlassdoorMeta(item);
+  return build({
+    sourceId,
+    context,
+    externalId: meta.externalId,
+    title: meta.title,
+    company: meta.company,
+    location: meta.location,
+    isRemote: meta.isRemote,
+    description: meta.description,
+    skills: [],
+    salary: parseGlassdoorSalary(meta.header),
+    url: meta.url,
+    publishedAt: meta.publishedAt,
+  });
+}
+
+/** Pure parser for Glassdoor GraphQL JobSearchResultsQuery responses. */
+export function normalizeGlassdoorJobs(
+  payload: unknown,
+  context: JsonAdapterContext,
+  sourceId: string = GLASSDOOR_SOURCE_ID,
+): UnifiedVacancy[] {
+  return listOf(payload, extractGlassdoorListings)
+    .map((item) => parseGlassdoorJob(item, context, sourceId))
+    .filter(isUsable);
+}
+
+function parseBaytSalary(raw: string): ParsedSalary | undefined {
+  const cleaned = htmlToFeedText(raw).replace(/,/g, '');
+  const match = /([A-Za-z$]{1,4})\s*(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)/i.exec(cleaned);
+  if (!match) return undefined;
+  const rawCurrency = match[1]!.trim();
+  return {
+    from: Math.round(parseFloat(match[2]!)),
+    to: Math.round(parseFloat(match[3]!)),
+    currency: rawCurrency === '$' ? 'USD' : rawCurrency.toUpperCase(),
+  };
+}
+
+function parseBaytDate(raw: string, observedAt: string): string {
+  const textVal = raw.trim().toLowerCase();
+  const observed = Date.parse(observedAt);
+  if (!textVal || Number.isNaN(observed)) return UNKNOWN_PUBLISHED_AT;
+  if (textVal.includes('today')) return new Date(observed).toISOString();
+  if (textVal.includes('yesterday')) return new Date(observed - 24 * 60 * 60 * 1000).toISOString();
+  const days = /(\d+)\+?\s*days?/.exec(textVal);
+  if (days) {
+    return new Date(observed - Number(days[1]) * 24 * 60 * 60 * 1000).toISOString();
+  }
+  const iso = fromIso(textVal);
+  return iso !== UNKNOWN_PUBLISHED_AT ? iso : fromLooseDate(textVal);
+}
+
+function extractBaytCards(html: string): string[] {
+  const cardRegex = /<li\b[^>]*\bdata-js-job[^>]*>[\s\S]*?<\/li>/gi;
+  const matches = html.match(cardRegex);
+  if (matches && matches.length > 0) return matches;
+  const parts = html.split(/<li\b/i).slice(1);
+  return parts
+    .filter((p) => /data-js-job/i.test(p))
+    .map((p) => `<li ${p.split('</li>')[0]}</li>`);
+}
+
+function extractBaytLinkAndTitle(
+  card: string,
+  externalId: string,
+): { url: string; title: string } {
+  const titleMatch = /<h2\b[^>]*>([\s\S]*?)<\/h2>/i.exec(card);
+  const titleHtml = titleMatch ? titleMatch[1]! : card;
+  const linkMatch =
+    /<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i.exec(titleHtml) ??
+    /<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i.exec(card);
+
+  const rawUrl = linkMatch ? linkMatch[1]! : '';
+  const url = rawUrl
+    ? rawUrl.startsWith('http')
+      ? rawUrl
+      : `https://www.bayt.com${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`
+    : externalId
+      ? `https://www.bayt.com/en/international/jobs/${externalId}/`
+      : '';
+
+  const rawTitle = linkMatch ? linkMatch[2]! : titleMatch ? titleMatch[1]! : '';
+  const title = htmlToFeedText(rawTitle);
+  return { url, title };
+}
+
+function extractBaytSnippets(card: string): {
+  company: string;
+  location?: string;
+  descSnippet: string;
+  dateText: string;
+  salarySnippet?: string;
+} {
+  const companyMatch =
+    /<(?:b|span|div|a)\b[^>]*\bclass=["'][^"']*\bjb-company[^"']*["'][^>]*>([\s\S]*?)<\/(?:b|span|div|a)>/i.exec(
+      card,
+    ) ?? /<b\b[^>]*>([\s\S]*?)<\/b>/i.exec(card);
+  const locMatch =
+    /<(?:span|div)\b[^>]*\bclass=["'][^"']*\bjb-loc[^"']*["'][^>]*>([\s\S]*?)<\/(?:span|div)>/i.exec(
+      card,
+    );
+  const descMatch =
+    /<p\b[^>]*\bclass=["'][^"']*\bjb-desc[^"']*["'][^>]*>([\s\S]*?)<\/p>/i.exec(card) ??
+    /<p\b[^>]*>([\s\S]*?)<\/p>/i.exec(card);
+  const dateMatch =
+    /<(?:span|div)\b[^>]*\bclass=["'][^"']*\bjb-date[^"']*["'][^>]*>([\s\S]*?)<\/(?:span|div)>/i.exec(
+      card,
+    );
+  const salMatch =
+    /<(?:span|div)\b[^>]*\bclass=["'][^"']*\bjb-salary[^"']*["'][^>]*>([\s\S]*?)<\/(?:span|div)>/i.exec(
+      card,
+    );
+
+  return {
+    company: companyMatch ? htmlToFeedText(companyMatch[1]!) : '',
+    location: locMatch ? htmlToFeedText(locMatch[1]!) : undefined,
+    descSnippet: descMatch ? htmlToFeedText(descMatch[1]!) : '',
+    dateText: dateMatch ? htmlToFeedText(dateMatch[1]!) : '',
+    salarySnippet: salMatch ? salMatch[1]! : undefined,
+  };
+}
+
+function extractBaytJob(
+  card: string,
+  context: JsonAdapterContext,
+  sourceId: string,
+): UnifiedVacancy {
+  const idMatch =
+    /data-js-job=["']?(\w+)["']?/i.exec(card) || /data-job-id=["']?(\w+)["']?/i.exec(card);
+  const externalId = idMatch ? idMatch[1]! : '';
+  const { url, title } = extractBaytLinkAndTitle(card, externalId);
+  const snippets = extractBaytSnippets(card);
+  const description = snippets.descSnippet || title;
+  const isRemote =
+    /remote/i.test(snippets.location ?? '') ||
+    /remote/i.test(title) ||
+    /remote/i.test(description);
+
+  return build({
+    sourceId,
+    context,
+    externalId,
+    title,
+    company: snippets.company,
+    location: snippets.location,
+    isRemote,
+    description,
+    skills: [],
+    salary: snippets.salarySnippet ? parseBaytSalary(snippets.salarySnippet) : undefined,
+    url,
+    publishedAt: parseBaytDate(snippets.dateText, context.observedAt),
+  });
+}
+
+/** Pure parser for Bayt HTML job listings scraper. */
+export function normalizeBaytHtml(
+  html: string,
+  context: JsonAdapterContext,
+  sourceId: string = BAYT_SOURCE_ID,
+): UnifiedVacancy[] {
+  if (typeof html !== 'string' || !html.trim()) {
+    throw new Error(UNREADABLE);
+  }
+  const cards = extractBaytCards(html);
+  if (cards.length === 0) {
+    throw new Error(UNREADABLE);
+  }
+  return cards.map((card) => extractBaytJob(card, context, sourceId)).filter(isUsable);
+}
+
+/** Detects Cloudflare 403 or anti-bot challenge signatures. */
+export function isCloudflareChallenge(status: number, body?: string): boolean {
+  if (status === 403) return true;
+  if (status === 503 && body && /cf-chl|cloudflare|just a moment/i.test(body)) {
+    return true;
+  }
+  if (body && /challenge-platform|cf-turnstile|cf-chl|just a moment\.\.\./i.test(body)) {
+    return true;
+  }
+  return false;
+}
+
+export interface StealthFetchResult {
+  readonly status: number;
+  readonly body: string;
+  readonly usedStealth: boolean;
+  readonly headers?: Record<string, string>;
+}
+
+export interface StealthFetchDeps {
+  readonly httpFetch?: (
+    url: string,
+    init?: RequestInit,
+  ) => Promise<{ status: number; text: () => Promise<string>; headers?: unknown }>;
+  readonly stealthFetch?: (
+    url: string,
+    options?: { headers?: Record<string, string>; method?: string; body?: unknown },
+  ) => Promise<{ status: number; content: string }>;
+}
+
+export interface StealthFetchOptions {
+  readonly method?: string;
+  readonly headers?: Record<string, string>;
+  readonly body?: unknown;
+}
+
+function buildDirectRequestInit(options: StealthFetchOptions): RequestInit {
+  return {
+    method: options.method ?? 'GET',
+    headers: options.headers,
+    ...(options.body
+      ? {
+          body: typeof options.body === 'string' ? options.body : JSON.stringify(options.body),
+        }
+      : {}),
+  };
+}
+
+async function executeHeadlessObscuraFetch(url: string): Promise<StealthFetchResult> {
+  const runner = new ObscuraRunner({
+    userDataDir: path.join(
+      os.tmpdir(),
+      `obscura-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    ),
+    headless: true,
+  });
+  try {
+    const page = await runner.openPage(url);
+    await page.waitForLoadState('domcontentloaded').catch(() => {});
+    const content = await page.content();
+    return {
+      status: 200,
+      body: content,
+      usedStealth: true,
+    };
+  } finally {
+    await runner.close();
+  }
+}
+
+/**
+ * Two-phase fetch strategy: tries direct HTTP first; when blocked by Cloudflare 403 challenge,
+ * falls back to Obscura stealth runner.
+ */
+export async function fetchWithStealthFallback(
+  url: string,
+  options: StealthFetchOptions = {},
+  deps: StealthFetchDeps = {},
+): Promise<StealthFetchResult> {
+  const httpFetch =
+    deps.httpFetch ??
+    (async (u, init) => {
+      const res = await fetch(u, init);
+      return {
+        status: res.status,
+        text: () => res.text(),
+      };
+    });
+
+  const directRes = await httpFetch(url, buildDirectRequestInit(options));
+  const directBody = await directRes.text();
+
+  if (!isCloudflareChallenge(directRes.status, directBody)) {
+    return {
+      status: directRes.status,
+      body: directBody,
+      usedStealth: false,
+    };
+  }
+
+  if (deps.stealthFetch) {
+    const stealthRes = await deps.stealthFetch(url, options);
+    return {
+      status: stealthRes.status,
+      body: stealthRes.content,
+      usedStealth: true,
+    };
+  }
+
+  return executeHeadlessObscuraFetch(url);
+}
+
+export function glassdoorAdapter(
+  payload: unknown,
+  context: JsonAdapterContext,
+  sourceId = GLASSDOOR_SOURCE_ID,
+): UnifiedVacancy[] {
+  return normalizeGlassdoorJobs(payload, context, sourceId);
+}
+
+export function baytAdapter(
+  payload: unknown,
+  context: JsonAdapterContext,
+  sourceId = BAYT_SOURCE_ID,
+): UnifiedVacancy[] {
+  const html =
+    typeof payload === 'string'
+      ? payload
+      : text(record(payload).html) || text(record(payload).content) || '';
+  return normalizeBaytHtml(html, context, sourceId);
+}
+
