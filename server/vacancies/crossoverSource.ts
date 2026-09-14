@@ -1,6 +1,6 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import type { SourceReading } from './multiSourceVacancyEngine';
-import { asArray, buildJsonVacancy, fromIso, isUsableVacancy, record, text } from './jsonVacancyRecord';
+import { asArray, buildJsonVacancy, isUsableVacancy, record, text } from './jsonVacancyRecord';
 
 /**
  * Crossover (B217). Открытого списка вакансий у площадки нет: `profile-api`
@@ -164,7 +164,12 @@ function toVacancy(
     skills: elementNames(elements, 'functional_domain'),
     employmentType: elementText(elements, 'weekly_hours') || undefined,
     url: job.url,
-    publishedAt: fromIso(system.last_modified),
+    // Даты публикации Crossover не отдаёт: sitemap без lastmod, а
+    // `last_modified` Kentico — дата правки текста (у вечных конвейеров — годы
+    // назад, и пул их отсеял бы как несвежие: 85 → 24 на проде 2026-09-14).
+    // Честная дата — момент, когда sitemap назвал вакансию открытой; «впервые»
+    // в каталоге считает сам пул по первому наблюдению.
+    publishedAt: observedAt,
   });
 }
 

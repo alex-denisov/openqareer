@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getonbrdCategories, pagingPlanFor, rotatingWindowStart, themuseQueries } from './pagedJsonSources';
 
-function withStart(url: string, start: number): string {
-  const next = new URL(url);
-  next.searchParams.set('start', String(start));
-  return next.toString();
-}
 
 /**
  * B216 — у каждой постраничной площадки своя механика продолжения. План
@@ -83,38 +78,37 @@ describe('paging plans (B216)', () => {
     expect(plan.next(first, { total: 45, jobPostings: [{}] })).toBeNull();
   });
 
-  it('Apple: POST с номером страницы по 20, окно по кругу, за последней — снова первая (B217)', () => {
+  it('Apple: POST по 20 от свежих, стоп на границе 30 дней или на последней странице (B217)', () => {
     const plan = pagingPlanFor('src-apple-jobs')!;
     const url = 'https://jobs.apple.com/api/v1/search';
-    const first = plan.first(url, 0);
+    const now = Date.parse('2026-09-14T09:00:00Z');
+    const first = plan.first(url, now);
     expect(first.method).toBe('POST');
     expect(first.body).toMatchObject({ page: 1, sort: 'newest', locale: 'en-us' });
     // Без `format` площадка отдаёт пустую выдачу (замер 2026-09-14).
     expect(first.body).toHaveProperty('format');
-    const page = Array.from({ length: 20 }, () => ({}));
-    const next = plan.next(first, { res: { totalRecords: 6081, searchResults: page } });
+    const page = (date: string) => Array.from({ length: 20 }, () => ({ postDateInGMT: date }));
+    const next = plan.next(first, { res: { totalRecords: 6081, searchResults: page('2026-09-13T00:00:00Z') } });
     expect(next?.body).toMatchObject({ page: 2 });
-    const last = { ...first, body: { ...(first.body as object), page: 305 }, state: { page: 305 } };
-    const wrapped = plan.next(last, { res: { totalRecords: 6081, searchResults: [{}] } });
-    expect(wrapped?.body).toMatchObject({ page: 1 });
-    // Окно от времени: другой тик — другая первая страница.
-    const later = plan.first(url, 240 * 60_000);
-    expect((later.body as { page: number }).page).toBeGreaterThan(1);
+    // Страница, чей хвост старше 30 дней, — последняя: дальше пул ничего не примет.
+    expect(plan.next(next!, { res: { totalRecords: 6081, searchResults: page('2026-08-01T00:00:00Z') } })).toBeNull();
+    expect(plan.next(next!, { res: { totalRecords: 40, searchResults: page('2026-09-13T00:00:00Z') } })).toBeNull();
+    expect(plan.next(first, { res: { totalRecords: 6081, searchResults: [] } })).toBeNull();
   });
 
-  it('Microsoft: Eightfold под `data`, окно по кругу, за концом — снова start=0 (B217)', () => {
+  it('Microsoft: Eightfold под `data` от свежих, стоп на границе 30 дней, пауза не короче секунды (B217)', () => {
     const plan = pagingPlanFor('src-microsoft-careers')!;
     const url = 'https://apply.careers.microsoft.com/api/pcsx/search?domain=microsoft.com&num=10';
     const first = plan.first(url, 0);
     expect(new URL(first.url).searchParams.get('start')).toBe('0');
-    const next = plan.next(first, { data: { count: 2215, positions: [{}] } });
+    // 429 на проде при 300 мс между страницами (2026-09-14).
+    expect(plan.delayMs).toBeGreaterThanOrEqual(1000);
+    const fresh = Math.floor(Date.now() / 1000) - 86_400;
+    const next = plan.next(first, { data: { count: 2215, positions: [{ postedTs: fresh }] } });
     expect(new URL(next!.url).searchParams.get('start')).toBe('10');
-    const atEnd = { url: withStart(url, 2210) };
-    const wrapped = plan.next(atEnd, { data: { count: 2215, positions: [{}] } });
-    expect(new URL(wrapped!.url).searchParams.get('start')).toBe('0');
+    expect(plan.next(next!, { data: { count: 2215, positions: [{ postedTs: fresh - 40 * 86_400 }] } })).toBeNull();
+    expect(plan.next(first, { data: { count: 5, positions: [{ postedTs: fresh }] } })).toBeNull();
     expect(plan.next(first, { data: { count: 2215, positions: [] } })).toBeNull();
-    const later = plan.first(url, 240 * 60_000);
-    expect(Number(new URL(later.url).searchParams.get('start'))).toBeGreaterThan(0);
   });
 
   it('Get on Board: веер по категориям, страницы по meta.total_pages, категории по кругу (B217)', () => {

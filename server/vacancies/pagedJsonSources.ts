@@ -179,42 +179,51 @@ const eightfold: PagingPlan = {
 };
 
 /**
- * Microsoft: 2 215 вакансий по 10 — 222 страницы, за один опрос читается
- * окно, и оно сдвигается по кругу от времени; за концом выдачи — снова начало,
- * так что чтение всегда частичное и срез дополняется (замер 2026-09-14).
+ * Пул держит вакансии не старше 30 дней (`MAX_VACANCY_AGE_DAYS` движка).
+ * У площадок с сортировкой от свежих читать окно по кругу бессмысленно: первый
+ * опрос Apple на проде прочёл 800 записей 2023 года и не оставил ни одной
+ * (2026-09-14). Такие площадки читаются с первой страницы до границы свежести —
+ * и это полное чтение всего, что пул вообще примет.
+ */
+export const FRESHNESS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+function olderThanWindow(publishedMs: number | undefined, nowMs: number): boolean {
+  return publishedMs !== undefined && nowMs - publishedMs > FRESHNESS_WINDOW_MS;
+}
+
+/**
+ * Microsoft: 2 215 вакансий по 10, `sort_by=timestamp` — от свежих. Читается
+ * с начала до границы свежести. Первый опрос на проде получил 429 на 60
+ * страницах с паузой 300 мс — площадка считает запросы; пауза длиннее, бюджет
+ * меньше (2026-09-14).
  */
 const MICROSOFT_PAGE = 10;
-const MICROSOFT_PAGE_CEILING = 250;
-const MICROSOFT_INTERVAL_MINUTES = 240;
 
 const microsoft: PagingPlan = {
-  pagesPerSync: 60,
-  delayMs: 300,
-  first: (targetUrl, nowMs) => {
-    const page = rotatingWindowStart(nowMs, MICROSOFT_INTERVAL_MINUTES, 60, MICROSOFT_PAGE_CEILING);
-    return { url: withParam(targetUrl, 'start', String((page - 1) * MICROSOFT_PAGE)) };
-  },
+  pagesPerSync: 40,
+  delayMs: 1_500,
+  first: (targetUrl) => ({ url: withParam(targetUrl, 'start', '0'), state: { startedAt: Date.now() } }),
   next: (previous, payload) => {
     const start = pageOf(previous.url, 'start');
     const num = pageOf(previous.url, 'num') || MICROSOFT_PAGE;
     const { count, positions } = eightfoldPayload(payload);
-    if (positions.length === 0) return null;
-    const nextStart = start + num >= count ? 0 : start + num;
-    return { url: withParam(previous.url, 'start', String(nextStart)) };
+    if (positions.length === 0 || start + num >= count) return null;
+    const oldest = numeric(record(positions[positions.length - 1]).postedTs);
+    const nowMs = numeric(record(previous.state).startedAt) ?? Date.now();
+    if (olderThanWindow(oldest === undefined ? undefined : oldest * 1000, nowMs)) return null;
+    return { url: withParam(previous.url, 'start', String(start + num)), state: previous.state };
   },
 };
 
 /**
  * Apple: POST с номером страницы по 20, `res.totalRecords` = 6 081 (305 страниц,
- * замер 2026-09-14). Без `format` в теле площадка отдаёт пустую выдачу. Окно
- * по кругу от времени; за последней страницей — первая.
+ * замер 2026-09-14), `sort: newest`. Без `format` в теле площадка отдаёт пустую
+ * выдачу. Читается с первой страницы до границы свежести.
  */
 const APPLE_PAGE = 20;
-const APPLE_PAGE_CEILING = 320;
 const APPLE_PAGES_PER_SYNC = 40;
-const APPLE_INTERVAL_MINUTES = 240;
 
-function appleRequest(url: string, page: number): PagedRequest {
+function appleRequest(url: string, page: number, startedAt: number): PagedRequest {
   return {
     url,
     method: 'POST',
@@ -226,26 +235,25 @@ function appleRequest(url: string, page: number): PagedRequest {
       sort: 'newest',
       format: { longDate: 'MMMM D, YYYY', mediumDate: 'MMM D, YYYY' },
     },
-    state: { page },
+    state: { page, startedAt },
   };
 }
 
 const apple: PagingPlan = {
   pagesPerSync: APPLE_PAGES_PER_SYNC,
   delayMs: 400,
-  first: (targetUrl, nowMs) =>
-    appleRequest(
-      targetUrl,
-      rotatingWindowStart(nowMs, APPLE_INTERVAL_MINUTES, APPLE_PAGES_PER_SYNC, APPLE_PAGE_CEILING),
-    ),
+  first: (targetUrl, nowMs) => appleRequest(targetUrl, 1, nowMs),
   next: (previous, payload) => {
-    const page = numeric(record(previous.state).page) ?? 1;
+    const state = record(previous.state);
+    const page = numeric(state.page) ?? 1;
+    const startedAt = numeric(state.startedAt) ?? Date.now();
     const res = record(record(payload).res);
     const total = numeric(res.totalRecords) ?? 0;
     const results = asArray(res.searchResults) ?? [];
-    if (results.length === 0) return null;
-    const lastPage = Math.max(1, Math.ceil(total / APPLE_PAGE));
-    return appleRequest(previous.url, page >= lastPage ? 1 : page + 1);
+    if (results.length === 0 || page >= Math.ceil(total / APPLE_PAGE)) return null;
+    const oldest = Date.parse(text(record(results[results.length - 1]).postDateInGMT));
+    if (olderThanWindow(Number.isNaN(oldest) ? undefined : oldest, startedAt)) return null;
+    return appleRequest(previous.url, page + 1, startedAt);
   },
 };
 

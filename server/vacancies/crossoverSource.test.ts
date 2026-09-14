@@ -78,6 +78,8 @@ describe('Crossover (B217)', () => {
       url: 'https://www.crossover.com/jobs/5630/alpha/campus-operations-specialist',
     });
     expect(reading.vacancies[0]?.description).toContain('Keep the campus safe');
+    // Дата — момент наблюдения в sitemap, а не правка текста в CMS.
+    expect(reading.vacancies[0]?.publishedAt).toBe('2026-09-14T09:00:00.000Z');
     expect(reading.vacancies[0]?.requiredSkills).toContain('Education');
   });
 
