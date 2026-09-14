@@ -34,11 +34,11 @@ describe('multi-source fetcher (B199)', () => {
 });
 
 /**
- * B215 — постраничная площадка читается в пределах бюджета страниц, и
+ * B216 — постраничная площадка читается в пределах бюджета страниц, и
  * незаконченное чтение называет себя частичным, чтобы движок дополнял срез, а
  * не схлопывал его до последней прочитанной страницы.
  */
-describe('multi-source fetcher: paged JSON sources (B215)', () => {
+describe('multi-source fetcher: paged JSON sources (B216)', () => {
   const himalayas: VacancySourceConfig = {
     id: 'src-himalayas-api',
     name: 'Himalayas (JSON API)',

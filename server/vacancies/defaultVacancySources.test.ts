@@ -160,13 +160,13 @@ describe('registry of vacancy sources: routes and address status (B199)', () => 
 
     // Лента NoDesk читается существующим общим разбором RSS, поэтому она
     // подключена. JSON-адрес Himalayas с B199 стоял выключенным без адаптера;
-    // B215 дал ему адаптер и курсорную постраничность — теперь он включён.
+    // B216 дал ему адаптер и курсорную постраничность — теперь он включён.
     expect(nodesk?.enabled).toBe(true);
     expect(himalayasApi?.type).toBe('json_api');
     expect(himalayasApi?.enabled).toBe(true);
   });
 
-  it('подключает постраничные площадки и карьерные сайты B215 с замером с прод-маршрута', () => {
+  it('подключает постраничные площадки и карьерные сайты B216 с замером с прод-маршрута', () => {
     const enabledIds = DEFAULT_VACANCY_SOURCES.filter((source) => source.enabled).map(
       (source) => source.id,
     );

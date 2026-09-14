@@ -2,7 +2,7 @@ import { record, numeric, asArray, text } from './jsonVacancyRecord';
 import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
 
 /**
- * Постраничные JSON-площадки (B215).
+ * Постраничные JSON-площадки (B216).
  *
  * Одна страница — это не источник. У TheMuse 120 000 вакансий на 6 000
  * страницах, у Himalayas 100 000 за курсором, у Amazon 10 000 через смещение,

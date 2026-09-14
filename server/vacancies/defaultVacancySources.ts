@@ -146,7 +146,7 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
       items: 100,
       observedAt: '2026-09-14',
       route: 'eu-prod',
-      note: 'перепроверка с прод-VM: /api/v0/categories/<id>/jobs открыт и отдаёт links.public_url, но работодатель по-прежнему только числовым company.data.id; /api/v0/companies/<id> отвечает 404 (B215)',
+      note: 'перепроверка с прод-VM: /api/v0/categories/<id>/jobs открыт и отдаёт links.public_url, но работодатель по-прежнему только числовым company.data.id; /api/v0/companies/<id> отвечает 404 (B216)',
     },
   ],
   'src-workingnomads': [
@@ -173,7 +173,7 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
       items: 20,
       observedAt: '2026-09-14',
       route: 'eu-prod',
-      note: 'с прод-VM: totalCount=103 845, курсорная постраничность, не больше 20 на страницу; robots.txt Allow: / (B215)',
+      note: 'с прод-VM: totalCount=103 845, курсорная постраничность, не больше 20 на страницу; robots.txt Allow: / (B216)',
     },
     {
       items: 0,
@@ -199,7 +199,7 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
       items: 20,
       observedAt: '2026-09-14',
       route: 'eu-prod',
-      note: 'с прод-VM: 22 категории белых воротничков — 215 202 вакансии на 10 761 странице; robots.txt не запрещает /api/public (B215)',
+      note: 'с прод-VM: 22 категории белых воротничков — 215 202 вакансии на 10 761 странице; robots.txt не запрещает /api/public (B216)',
     },
   ],
   'src-amazon-jobs': [
@@ -207,7 +207,7 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
       items: 100,
       observedAt: '2026-09-14',
       route: 'eu-prod',
-      note: 'search.json с прод-VM: 100 записей на страницу, hits=10000 (потолок площадки); robots.txt запрещает только /internal (B215)',
+      note: 'search.json с прод-VM: 100 записей на страницу, hits=10000 (потолок площадки); robots.txt запрещает только /internal (B216)',
     },
   ],
   'src-netflix': [
@@ -215,7 +215,7 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
       items: 10,
       observedAt: '2026-09-14',
       route: 'eu-prod',
-      note: 'Eightfold API с прод-VM: count=488, не больше 10 записей на страницу; robots.txt у jobs.netflix.com нет (B215)',
+      note: 'Eightfold API с прод-VM: count=488, не больше 10 записей на страницу; robots.txt у jobs.netflix.com нет (B216)',
     },
   ],
   remotive: [
@@ -508,7 +508,7 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     market: 'Удалённо, мир',
     addressStatus: 'live',
     // Курсорная лента от свежих к старым: опрос читает 25 страниц по 20 и
-    // дополняет срез (B215). RSS-источник `src-himalayas` остаётся: он даёт
+    // дополняет срез (B216). RSS-источник `src-himalayas` остаётся: он даёт
     // те же вакансии, и дедупликатор их склеит.
     enabled: true,
     targetUrl: 'https://himalayas.app/jobs/api?limit=20',
@@ -543,7 +543,7 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     addressStatus: 'live',
     // Категории — те же «белые воротнички», что и фильтр hh.ru (B214): роль,
     // где резюме имеет значение. Сортировки по дате у API нет, поэтому окно из
-    // 60 страниц вращается по кругу от времени (B215).
+    // 60 страниц вращается по кругу от времени (B216).
     enabled: true,
     targetUrl:
       'https://www.themuse.com/api/public/jobs?page=1&category=Software%20Engineering&category=Data%20and%20Analytics&category=Data%20Science&category=Design%20and%20UX&category=Product%20Management&category=Project%20Management&category=Computer%20and%20IT&category=IT&category=Business%20Operations&category=Sales&category=Marketing&category=Account%20Management&category=Accounting%20and%20Finance&category=Human%20Resources%20and%20Recruitment&category=Legal%20Services&category=Science%20and%20Engineering&category=Management&category=Writing%20and%20Editing&category=Media%2C%20PR%2C%20and%20Communications&category=Education&category=Medical%2C%20Clinical%20and%20Veterinary&category=Customer%20Service',
@@ -693,7 +693,7 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     addressStatus: 'live',
     enabled: true,
     // `sort=recent`: 20 страниц по 100 за опрос — свежие две тысячи; хвост до
-    // потолка 10 000 доходит частичными чтениями (B215).
+    // потолка 10 000 доходит частичными чтениями (B216).
     targetUrl: 'https://www.amazon.jobs/en/search.json?result_limit=100&sort=recent',
     refreshIntervalMinutes: 120,
     itemsFoundTotal: 0,

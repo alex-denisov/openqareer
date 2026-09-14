@@ -1,7 +1,7 @@
 import type { RegisteredVacancySource, VacancySourceMeasurement } from './defaultVacancySources';
 
 /**
- * Карьерные сайты на Workday (B215).
+ * Карьерные сайты на Workday (B216).
  *
  * Workday — не ATS-доска в смысле B202 (у тех один адрес на слаг), а
  * тенант с собственным хостом и именем сайта: `<tenant>.wd<N>.myworkdayjobs.com`

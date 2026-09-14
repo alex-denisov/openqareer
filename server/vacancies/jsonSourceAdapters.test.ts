@@ -411,10 +411,10 @@ describe('what the candidate reads from a JSON board (B164)', () => {
 });
 
 /**
- * B215 — формы записей сняты с живых ответов площадок 2026-09-14 с прод-VM и
+ * B216 — формы записей сняты с живых ответов площадок 2026-09-14 с прод-VM и
  * урезаны до того, что читает адаптер.
  */
-describe('json source adapters: paged platforms and career sites (B215)', () => {
+describe('json source adapters: paged platforms and career sites (B216)', () => {
   const observedAt = '2026-09-14T01:30:00.000Z';
 
   it('normalises a TheMuse record', () => {

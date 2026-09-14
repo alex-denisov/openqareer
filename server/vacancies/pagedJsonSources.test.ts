@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { pagingPlanFor, rotatingWindowStart } from './pagedJsonSources';
 
 /**
- * B215 — у каждой постраничной площадки своя механика продолжения. План
+ * B216 — у каждой постраничной площадки своя механика продолжения. План
  * обязан остановиться ровно там, где площадка отдала всё, и не просить
  * страницу за пределами выдачи.
  */
-describe('paging plans (B215)', () => {
+describe('paging plans (B216)', () => {
   it('TheMuse: начинает с окна, сдвинутого от времени, и останавливается на page_count', () => {
     const plan = pagingPlanFor('src-themuse')!;
     const url = 'https://www.themuse.com/api/public/jobs?page=1&category=IT';
