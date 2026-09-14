@@ -2,6 +2,7 @@ import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import type { SourceReading } from './multiSourceVacancyEngine';
 import { buildJsonVacancy, fromIso, isUsableVacancy } from './jsonVacancyRecord';
 import { LINKEDIN_GUEST_URL } from './jobspyEndpoints';
+import { type FanCombo, fanCombos, fanStartIndex } from './jobspyFan';
 
 /**
  * LinkedIn — гостевой список вакансий (B218). Механика JobSpy: адрес
@@ -18,11 +19,19 @@ import { LINKEDIN_GUEST_URL } from './jobspyEndpoints';
  */
 export const LINKEDIN_SOURCE_ID = 'src-linkedin-guest';
 
-/** Широкий охват белых воротничков, а не одна роль. */
-const LINKEDIN_TERMS = 'engineer OR manager OR analyst OR developer OR designer';
-const LINKEDIN_LOCATION = 'United States';
+/**
+ * Один запрос отдаёт не больше 550 карточек: `start=550` уже пуст (замер с
+ * прод-VM 2026-09-14, 56 запросов подряд без единого 429). Поэтому охват даёт
+ * веер «роль × город», а не более глубокое чтение одного запроса; окно
+ * комбинаций сдвигается по кругу от времени, и за сутки веер проходится
+ * целиком.
+ */
 const LINKEDIN_PAGE = 10;
-export const LINKEDIN_PAGES_PER_SYNC = 20;
+const LINKEDIN_MAX_START = 540;
+const LINKEDIN_COMBOS_PER_SYNC = 4;
+const LINKEDIN_INTERVAL_MINUTES = 90;
+const LINKEDIN_PAGES_PER_COMBO = LINKEDIN_MAX_START / LINKEDIN_PAGE + 1;
+export const LINKEDIN_PAGES_PER_SYNC = LINKEDIN_COMBOS_PER_SYNC * LINKEDIN_PAGES_PER_COMBO;
 const LINKEDIN_HEADERS = {
   accept: 'text/html,application/xhtml+xml',
   'accept-language': 'en-US,en;q=0.9',
@@ -30,10 +39,11 @@ const LINKEDIN_HEADERS = {
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
 } as const;
 
-export function linkedinGuestUrl(start: number): string {
+export function linkedinGuestUrl(start: number, combo?: FanCombo): string {
   const url = new URL(LINKEDIN_GUEST_URL);
-  url.searchParams.set('keywords', LINKEDIN_TERMS);
-  url.searchParams.set('location', LINKEDIN_LOCATION);
+  const target = combo ?? fanCombos()[0]!;
+  url.searchParams.set('keywords', target.term);
+  url.searchParams.set('location', target.location);
   url.searchParams.set('start', String(start));
   return url.toString();
 }
@@ -98,28 +108,44 @@ export interface LinkedinFetchDeps {
   readonly observedAt: string;
 }
 
-export async function fetchLinkedinGuest(deps: LinkedinFetchDeps): Promise<SourceReading> {
+export async function fetchLinkedinGuest(
+  deps: LinkedinFetchDeps,
+  nowMs: number = Date.now(),
+): Promise<SourceReading> {
+  const combos = fanCombos();
+  const startIndex = fanStartIndex(nowMs, LINKEDIN_INTERVAL_MINUTES, LINKEDIN_COMBOS_PER_SYNC);
   const vacancies: UnifiedVacancy[] = [];
-  let partial = false;
-  for (let page = 0; page < LINKEDIN_PAGES_PER_SYNC; page += 1) {
-    // Джиттер: LinkedIn быстро отдаёт 429 ровному такту (B218 security-review).
-    if (page > 0) await deps.sleep(1_200 + Math.floor(Math.random() * 800));
-    const { status, body } = await deps.fetchPage(linkedinGuestUrl(page * LINKEDIN_PAGE), { ...LINKEDIN_HEADERS });
-    // 429 — площадка просит остановиться. Первая страница обязана прочитаться:
-    // отказ на ней — отказ площадки, а не пустой успех (B199).
-    if (status === 429) {
-      if (page === 0) throw new Error('vacancy_source_unreachable: 429');
-      partial = true;
-      break;
+  // Веер шире одного опроса, поэтому чтение частичное: движок дополняет срез,
+  // а не заменяет его — иначе каждый опрос стирал бы прошлые комбинации.
+  let partial = true;
+  let requests = 0;
+
+  for (let step = 0; step < LINKEDIN_COMBOS_PER_SYNC; step += 1) {
+    const combo = combos[(startIndex + step) % combos.length]!;
+    for (let start = 0; start <= LINKEDIN_MAX_START; start += LINKEDIN_PAGE) {
+      // Джиттер: LinkedIn быстро отдаёт 429 ровному такту (B218 security-review).
+      if (requests > 0) await deps.sleep(600 + Math.floor(Math.random() * 600));
+      requests += 1;
+      const { status, body } = await deps.fetchPage(linkedinGuestUrl(start, combo), { ...LINKEDIN_HEADERS });
+      // 429 — площадка просит остановиться, и мы останавливаемся совсем.
+      // Первая страница обязана прочитаться: отказ на ней — отказ площадки,
+      // а не пустой успех (B199).
+      if (status === 429) {
+        if (requests === 1) throw new Error('vacancy_source_unreachable: 429');
+        return { vacancies: vacancies.filter(isUsableVacancy), partial: true };
+      }
+      if (status < 200 || status >= 400) {
+        if (requests === 1) throw new Error(`vacancy_source_unreachable: ${status}`);
+        return { vacancies: vacancies.filter(isUsableVacancy), partial: true };
+      }
+      const parsed = parseLinkedinCards(body, deps.observedAt);
+      // Комбинация исчерпана — к следующей, не добивая её потолок впустую.
+      if (parsed.length === 0) break;
+      vacancies.push(...parsed);
     }
-    if (status < 200 || status >= 400) {
-      if (page === 0) throw new Error(`vacancy_source_unreachable: ${status}`);
-      partial = true;
-      break;
-    }
-    const parsed = parseLinkedinCards(body, deps.observedAt);
-    if (parsed.length === 0) break;
-    vacancies.push(...parsed);
   }
+
+  // Полный круг веера за один опрос — чтение полное.
+  if (LINKEDIN_COMBOS_PER_SYNC >= combos.length) partial = false;
   return { vacancies: vacancies.filter(isUsableVacancy), partial };
 }

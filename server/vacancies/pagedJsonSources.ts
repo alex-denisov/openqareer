@@ -1,5 +1,6 @@
 import { record, numeric, asArray, text } from './jsonVacancyRecord';
 import { INDEED_GRAPHQL_URL, indeedHeaders, indeedQuery } from './jobspyEndpoints';
+import { FAN_SIZE, fanCombos, fanStartIndex } from './jobspyFan';
 import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
 
 /**
@@ -395,33 +396,53 @@ const workday: PagingPlan = {
 
 /**
  * Indeed: мобильный GraphQL `apis.indeed.com/graphql`, курсор `nextCursor`, по
- * 100 записей (замер 2026-09-14). Запрос — POST с телом `{query}`, заголовки
- * приложения ставит фетчер. Читается от свежих; курсорная площадка сама
- * кончится, бюджет страниц ограничит опрос. Ключевые слова широкие
- * («engineer OR manager OR analyst …») — цель охватить белые воротнички, а не
- * одну роль.
+ * 100 записей. Один запрос отдаёт не больше 968 записей — дальше курсора нет
+ * (замер 2026-09-14), поэтому охват даёт веер «роль × город», а не более
+ * глубокое чтение: план дочитывает комбинацию до конца курсора и переходит к
+ * следующей. Окно комбинаций сдвигается по кругу от времени.
  */
-const INDEED_TERMS = 'engineer OR developer OR manager OR analyst OR designer OR marketing OR sales OR finance OR product OR data';
+const INDEED_COMBOS_PER_SYNC = 12;
+const INDEED_PAGES_PER_COMBO = 10;
+const INDEED_INTERVAL_MINUTES = 60;
 
-function indeedRequest(cursor: string | null): PagedRequest {
+interface IndeedState {
+  readonly index: number;
+  readonly startIndex: number;
+  readonly wrapped: boolean;
+}
+
+function indeedRequest(state: IndeedState, cursor: string | null): PagedRequest {
+  const combos = fanCombos();
+  const combo = combos[state.index % combos.length]!;
   return {
     url: INDEED_GRAPHQL_URL,
     method: 'POST',
-    body: { query: indeedQuery(INDEED_TERMS, cursor) },
+    body: { query: indeedQuery(combo.term, cursor, combo.location) },
     headers: indeedHeaders(),
+    state,
   };
 }
 
 const indeed: PagingPlan = {
-  pagesPerSync: 40,
+  pagesPerSync: INDEED_COMBOS_PER_SYNC * INDEED_PAGES_PER_COMBO,
   delayMs: 800,
-  first: () => indeedRequest(null),
-  next: (_previous, payload) => {
+  first: (_targetUrl, nowMs) => {
+    const startIndex = fanStartIndex(nowMs, INDEED_INTERVAL_MINUTES, INDEED_COMBOS_PER_SYNC);
+    return indeedRequest({ index: startIndex, startIndex, wrapped: false }, null);
+  },
+  next: (previous, payload) => {
+    const state = previous.state as IndeedState;
     const search = record(record(record(payload).data).jobSearch);
     const cursor = text(record(search.pageInfo).nextCursor);
     const results = asArray(search.results) ?? [];
-    if (!cursor || results.length === 0) return null;
-    return indeedRequest(cursor);
+    // Курсор ещё есть — дочитываем эту же комбинацию.
+    if (cursor && results.length > 0) return indeedRequest(state, cursor);
+    // Комбинация кончилась — следующая по кругу; полный круг означает, что
+    // веер прочитан целиком.
+    const nextIndex = (state.index + 1) % FAN_SIZE;
+    const wrapped = state.wrapped || nextIndex === 0;
+    if (wrapped && nextIndex === state.startIndex) return null;
+    return indeedRequest({ ...state, index: nextIndex, wrapped }, null);
   },
 };
 

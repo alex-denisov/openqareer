@@ -14,12 +14,12 @@ const CARD = (id: string, title: string) => `<li>
   </div></li>`;
 
 describe('LinkedIn guest source (B218)', () => {
-  it('строит адрес с offset, ключевыми словами и локацией', () => {
-    const url = new URL(linkedinGuestUrl(20));
+  it('строит адрес с offset и комбинацией веера', () => {
+    const url = new URL(linkedinGuestUrl(20, { term: 'data analyst', location: 'Austin, TX' }));
     expect(url.pathname).toBe('/jobs-guest/jobs/api/seeMoreJobPostings/search');
     expect(url.searchParams.get('start')).toBe('20');
-    expect(url.searchParams.get('keywords')).toContain('engineer');
-    expect(url.searchParams.get('location')).toBe('United States');
+    expect(url.searchParams.get('keywords')).toBe('data analyst');
+    expect(url.searchParams.get('location')).toBe('Austin, TX');
   });
 
   it('разбирает карточки: id, заголовок, компания, город, дата', () => {
@@ -41,31 +41,61 @@ describe('LinkedIn guest source (B218)', () => {
     expect(parseLinkedinCards(html, 'now')).toHaveLength(0);
   });
 
-  it('пагинация по offset до пустой страницы; чтение частичное на 429', async () => {
-    const seen: number[] = [];
-    const reading = await fetchLinkedinGuest({
-      fetchPage: async (url) => {
-        const start = Number(new URL(url).searchParams.get('start'));
-        seen.push(start);
-        if (start === 0) return { status: 200, body: `<ul>${CARD('1', 'A')}${CARD('2', 'B')}</ul>` };
-        if (start === 10) return { status: 429, body: '' };
-        return { status: 200, body: '<ul></ul>' };
+  it('идёт веером «роль × город»: комбинация до пустой страницы, потом следующая (B218)', async () => {
+    const seen: { term: string; start: number }[] = [];
+    const reading = await fetchLinkedinGuest(
+      {
+        fetchPage: async (url) => {
+          const params = new URL(url).searchParams;
+          const start = Number(params.get('start'));
+          const term = params.get('keywords')!;
+          seen.push({ term, start });
+          // Каждая комбинация отдаёт одну страницу, вторая пуста.
+          if (start === 0) return { status: 200, body: `<ul>${CARD(`${seen.length}01`, 'A')}</ul>` };
+          return { status: 200, body: '<ul></ul>' };
+        },
+        sleep: async () => {},
+        observedAt: '2026-09-14T09:00:00.000Z',
       },
-      sleep: async () => {},
-      observedAt: '2026-09-14T09:00:00.000Z',
-    });
-    expect(seen).toEqual([0, 10]);
-    expect(reading.vacancies).toHaveLength(2);
+      0,
+    );
+    // Четыре комбинации за опрос, каждая — своя роль или город.
+    const terms = new Set(seen.map((s) => s.term));
+    expect(terms.size).toBe(4);
+    expect(reading.vacancies).toHaveLength(4);
+    // Веер шире опроса, поэтому срез дополняется, а не заменяется.
+    expect(reading.partial).toBe(true);
+  });
+
+  it('429 посреди опроса останавливает чтение и называет его частичным', async () => {
+    let calls = 0;
+    const reading = await fetchLinkedinGuest(
+      {
+        fetchPage: async () => {
+          calls += 1;
+          if (calls === 1) return { status: 200, body: `<ul>${CARD('1', 'A')}</ul>` };
+          return { status: 429, body: '' };
+        },
+        sleep: async () => {},
+        observedAt: '2026-09-14T09:00:00.000Z',
+      },
+      0,
+    );
+    expect(calls).toBe(2);
+    expect(reading.vacancies).toHaveLength(1);
     expect(reading.partial).toBe(true);
   });
 
   it('429 на первой странице — отказ площадки, а не пустой успех (B199)', async () => {
     await expect(
-      fetchLinkedinGuest({
-        fetchPage: async () => ({ status: 429, body: '' }),
-        sleep: async () => {},
-        observedAt: 'now',
-      }),
+      fetchLinkedinGuest(
+        {
+          fetchPage: async () => ({ status: 429, body: '' }),
+          sleep: async () => {},
+          observedAt: 'now',
+        },
+        0,
+      ),
     ).rejects.toThrow(/429/);
   });
 });

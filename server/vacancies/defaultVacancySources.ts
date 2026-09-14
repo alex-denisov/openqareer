@@ -519,7 +519,8 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
       basis:
         'Прямое решение владельца (B218): мобильный GraphQL Indeed (механика JobSpy) — тот же адрес и ключ приложения, что у iOS-клиента Indeed; вакансии Indeed критичны для продукта. robots хоста apis.indeed.com запрещает краулеров, но продукт ходит как клиент приложения, не как краулер.',
     },
-    refreshIntervalMinutes: 180,
+    // Час: веер «роль × город» (308 комбинаций) проходится за сутки (B218).
+    refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
   },
@@ -541,7 +542,8 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
       basis:
         'Прямое решение владельца (B218, повторено трижды): гостевой список /jobs-guest/ открыт без учётной записи; вакансии LinkedIn критичны для продукта. Темп вежливый, на 429 источник останавливается.',
     },
-    refreshIntervalMinutes: 240,
+    // Полтора часа: веер по 4 комбинации за опрос (B218).
+    refreshIntervalMinutes: 90,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
   },

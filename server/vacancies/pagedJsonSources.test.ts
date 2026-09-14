@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getonbrdCategories, pagingPlanFor, rotatingWindowStart, themuseQueries } from './pagedJsonSources';
+import { FAN_SIZE } from './jobspyFan';
 
 
 /**
@@ -7,6 +8,14 @@ import { getonbrdCategories, pagingPlanFor, rotatingWindowStart, themuseQueries 
  * обязан остановиться ровно там, где площадка отдала всё, и не просить
  * страницу за пределами выдачи.
  */
+function termOf(query: string): string {
+  return /what: "([^"]*)"/.exec(query)?.[1] ?? '';
+}
+
+function whereOf(query: string): string {
+  return /where: "([^"]*)"/.exec(query)?.[1] ?? '';
+}
+
 /** Ближайший такт (шаг 4 ч), на котором окно стартует с начала. */
 function tickWhere(from: number, ok: (t: number) => boolean): number {
   for (let t = from; t < from + 24 * 240 * 60_000; t += 240 * 60_000) if (ok(t)) return t;
@@ -154,17 +163,42 @@ describe('paging plans (B216)', () => {
     expect(getonbrdCategories().length).toBeGreaterThanOrEqual(17);
   });
 
-  it('Indeed: POST graphql с курсором, стоп на пустом nextCursor или пустой выдаче (B218)', () => {
+  it('Indeed: веер «роль × город», курсор внутри комбинации, следующая — за его концом (B218)', () => {
     const plan = pagingPlanFor('src-indeed')!;
     const first = plan.first('https://apis.indeed.com/graphql', 0);
     expect(first.method).toBe('POST');
     expect(first.headers?.['indeed-api-key']).toBeTruthy();
-    expect((first.body as { query: string }).query).toContain('jobSearch');
-    const payload = { data: { jobSearch: { pageInfo: { nextCursor: 'cur2' }, results: [{ job: {} }] } } };
-    const next = plan.next(first, payload);
-    expect((next!.body as { query: string }).query).toContain('cursor: "cur2"');
-    expect(plan.next(first, { data: { jobSearch: { pageInfo: { nextCursor: '' }, results: [{ job: {} }] } } })).toBeNull();
-    expect(plan.next(first, { data: { jobSearch: { pageInfo: { nextCursor: 'x' }, results: [] } } })).toBeNull();
+    const firstQuery = (first.body as { query: string }).query;
+    expect(firstQuery).toContain('jobSearch');
+    // По дате, а не по релевантности: иначе выдача мешает свежее со старым.
+    expect(firstQuery).toContain('sort: DATE');
+
+    // Курсор есть — та же комбинация, следующая страница.
+    const more = { data: { jobSearch: { pageInfo: { nextCursor: 'cur2' }, results: [{ job: {} }] } } };
+    const next = plan.next(first, more);
+    const nextQuery = (next!.body as { query: string }).query;
+    expect(nextQuery).toContain('cursor: "cur2"');
+    expect(termOf(nextQuery)).toBe(termOf(firstQuery));
+
+    // Курсор кончился — следующая комбинация веера, чтение начинается заново.
+    const done = { data: { jobSearch: { pageInfo: { nextCursor: '' }, results: [{ job: {} }] } } };
+    const rolled = plan.next(first, done);
+    expect(rolled).not.toBeNull();
+    expect((rolled!.body as { query: string }).query).not.toContain('cursor:');
+    expect(termOf((rolled!.body as { query: string }).query)).not.toBe(termOf(firstQuery));
+
+    // Окно комбинаций сдвигается от времени: другой такт — другое начало.
+    const later = plan.first('https://apis.indeed.com/graphql', 60 * 60_000);
+    expect(termOf((later.body as { query: string }).query) + whereOf((later.body as { query: string }).query))
+      .not.toBe(termOf(firstQuery) + whereOf(firstQuery));
+  });
+
+  it('Indeed: бюджет опроса — порция веера, поэтому чтение частичное (B218)', () => {
+    const plan = pagingPlanFor('src-indeed')!;
+    // 12 комбинаций по 10 страниц: меньше веера из 308, значит опрос не
+    // дочитывает его до конца и срез дополняется, а не заменяется.
+    expect(plan.pagesPerSync).toBe(120);
+    expect(FAN_SIZE).toBeGreaterThan(120);
   });
 
   it('у площадки без плана плана нет', () => {

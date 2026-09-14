@@ -25,16 +25,23 @@ export function indeedHeaders(): Record<string, string> {
   };
 }
 
-/** Форма запроса приложения Indeed (проверена JobSpy). 100 записей на страницу. */
-export function indeedQuery(what: string, cursor: string | null): string {
+/**
+ * Форма запроса приложения Indeed (проверена JobSpy). 100 записей на страницу,
+ * не больше 968 на один запрос — дальше курсора нет (замер 2026-09-14).
+ *
+ * `sort: DATE`, а не RELEVANCE: по релевантности выдача мешает свежее со
+ * старым (в замере — до 2021 года), и фильтр свежести пула отбрасывал больше
+ * половины прочитанного. По дате первая же страница — свежайшее.
+ */
+export function indeedQuery(what: string, cursor: string | null, where = 'United States'): string {
   const cursorLine = cursor ? `cursor: "${cursor}"` : '';
   return `query GetJobData {
     jobSearch(
-      what: "${what}"
-      location: { where: "United States", radius: 50, radiusUnit: MILES }
+      what: "${escapeGraphqlString(what)}"
+      location: { where: "${escapeGraphqlString(where)}", radius: 50, radiusUnit: MILES }
       limit: 100
       ${cursorLine}
-      sort: RELEVANCE
+      sort: DATE
     ) {
       pageInfo { nextCursor }
       results {
@@ -53,6 +60,11 @@ export function indeedQuery(what: string, cursor: string | null): string {
       }
     }
   }`;
+}
+
+/** Значение едет внутрь строки GraphQL — кавычки и обратный слэш экранируются. */
+function escapeGraphqlString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]+/g, ' ');
 }
 
 export const LINKEDIN_GUEST_URL =
