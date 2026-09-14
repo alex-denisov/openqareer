@@ -555,3 +555,174 @@ describe('json source adapters: paged platforms and career sites (B216)', () => 
     expect(vacancies).toEqual([]);
   });
 });
+
+/**
+ * B217 — площадки, названные владельцем. Форма записи взята с прод-VM
+ * 2026-09-14, а не угадана.
+ */
+describe('json source adapters (B217)', () => {
+  const observedAt = '2026-09-14T09:00:00.000Z';
+
+  it('Apple: карточка из res.searchResults с адресом /en-us/details/<id>/<slug>', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-apple-jobs',
+      {
+        res: {
+          totalRecords: 6081,
+          searchResults: [
+            {
+              id: 'PIPE-200313970',
+              positionId: '200313970',
+              postingTitle: 'IN-Business Expert',
+              jobSummary: 'Apple Retail is where the best of Apple comes together.',
+              locations: [{ name: 'India', countryName: 'India' }],
+              postDateInGMT: '2026-09-14T06:29:22.144Z',
+              transformedPostingTitle: 'in-business-expert',
+              team: { teamName: 'Apple Retail' },
+              homeOffice: false,
+            },
+          ],
+        },
+      },
+      { observedAt, sourceName: 'Apple' },
+    );
+    expect(vacancy).toMatchObject({
+      company: 'Apple',
+      title: 'IN-Business Expert',
+      location: 'India',
+      isRemote: false,
+      url: 'https://jobs.apple.com/en-us/details/200313970/in-business-expert',
+      publishedAt: '2026-09-14T06:29:22.144Z',
+    });
+    expect(vacancy?.provenance.externalId).toBe('200313970');
+    expect(vacancy?.requiredSkills).toContain('Apple Retail');
+  });
+
+  it('Microsoft: Eightfold-запись под data.positions с относительным positionUrl', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-microsoft-careers',
+      {
+        data: {
+          count: 2215,
+          positions: [
+            {
+              id: 1970393556960444,
+              displayJobId: '200048065',
+              name: 'Metro Construction EHS Manager - Spain',
+              locations: ['Spain, Zaragoza, Zaragoza'],
+              postedTs: 1789365721,
+              department: 'Environmental Health & Safety',
+              workLocationOption: 'onsite',
+              positionUrl: '/careers/job/1970393556960444',
+            },
+          ],
+        },
+      },
+      { observedAt, sourceName: 'Microsoft' },
+    );
+    expect(vacancy).toMatchObject({
+      company: 'Microsoft',
+      location: 'Spain, Zaragoza, Zaragoza',
+      isRemote: false,
+      url: 'https://apply.careers.microsoft.com/careers/job/1970393556960444',
+      publishedAt: new Date(1789365721 * 1000).toISOString(),
+    });
+    expect(vacancy?.provenance.externalId).toBe('200048065');
+    expect(vacancy?.description).toContain('Environmental Health');
+  });
+
+  it('Eightfold: относительный адрес пришивается к хосту площадки, чужой хост — отсев', () => {
+    const position = (positionUrl: string) => ({
+      data: { count: 1, positions: [{ id: 1, displayJobId: 'X1', name: 'Role', locations: ['Spain'], postedTs: 1789365721, positionUrl }] },
+    });
+    const context = { observedAt, sourceName: 'Microsoft' };
+    expect(normalizeJsonSource('src-microsoft-careers', position('/careers/job/1'), context)[0]?.url).toBe(
+      'https://apply.careers.microsoft.com/careers/job/1',
+    );
+    // Без ведущей косой черты адрес всё равно остаётся на хосте площадки.
+    expect(normalizeJsonSource('src-microsoft-careers', position('evil.example/x'), context)[0]?.url).toBe(
+      'https://apply.careers.microsoft.com/evil.example/x',
+    );
+    expect(normalizeJsonSource('src-microsoft-careers', position('https://evil.example/x'), context)).toHaveLength(0);
+  });
+
+  it('Apple: идентификатор с чужими символами не становится адресом', () => {
+    const payload = (positionId: string) => ({
+      res: { totalRecords: 1, searchResults: [{ positionId, postingTitle: 'T', jobSummary: 'S', transformedPostingTitle: 'a b?', postDateInGMT: observedAt, locations: [] }] },
+    });
+    const context = { observedAt, sourceName: 'Apple' };
+    expect(normalizeJsonSource('src-apple-jobs', payload('200313970'), context)[0]?.url).toBe(
+      'https://jobs.apple.com/en-us/details/200313970/a%20b%3F',
+    );
+    expect(normalizeJsonSource('src-apple-jobs', payload('1/../x'), context)).toHaveLength(0);
+  });
+
+  it('Remotive: запись из jobs[] с работодателем, ссылкой на площадку и датой', () => {
+    const [vacancy] = normalizeJsonSource(
+      'remotive',
+      {
+        'job-count': 16,
+        jobs: [
+          {
+            id: 1680495,
+            url: 'https://remotive.com/remote-jobs/marketing/remote-office-assistant-1680495',
+            title: 'Remote Office Assistant',
+            company_name: 'Coalition Technologies ',
+            category: 'Marketing',
+            job_type: 'full_time',
+            publication_date: '2026-09-11T20:16:48',
+            candidate_required_location: 'USA',
+            salary: '$40k - $50k',
+            description: '<p>Help the team.</p>',
+          },
+        ],
+      },
+      { observedAt, sourceName: 'Remotive' },
+    );
+    expect(vacancy).toMatchObject({
+      company: 'Coalition Technologies',
+      title: 'Remote Office Assistant',
+      location: 'USA',
+      isRemote: true,
+      employmentType: 'full_time',
+      url: 'https://remotive.com/remote-jobs/marketing/remote-office-assistant-1680495',
+    });
+    expect(vacancy?.publishedAt.startsWith('2026-09-11')).toBe(true);
+    expect(vacancy?.provenance.externalId).toBe('1680495');
+  });
+
+  it('Get on Board: работодатель из expand=["company"], ссылка из links.public_url', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-getonbrd',
+      {
+        data: [
+          {
+            id: 'frontend-engineer-angular-improving-south-america-remote',
+            attributes: {
+              title: 'Front-end Engineer (Angular)',
+              description: '<p>Angular work</p>',
+              functions: '<ul><li>Build</li></ul>',
+              remote: true,
+              remote_modality: 'fully_remote',
+              countries: ['Colombia'],
+              published_at: 1788556837,
+              seniority: { data: { id: 3, attributes: { name: 'Senior' } } },
+              modality: { data: { id: 1, attributes: { name: 'Full time' } } },
+              company: { data: { id: 'improving', attributes: { name: 'Improving' } } },
+            },
+            links: { public_url: 'https://www.getonbrd.com/jobs/frontend-engineer-angular-improving-south-america-remote' },
+          },
+        ],
+      },
+      { observedAt, sourceName: 'Get on Board' },
+    );
+    expect(vacancy).toMatchObject({
+      company: 'Improving',
+      location: 'Colombia',
+      isRemote: true,
+      url: 'https://www.getonbrd.com/jobs/frontend-engineer-angular-improving-south-america-remote',
+      publishedAt: new Date(1788556837 * 1000).toISOString(),
+    });
+    expect(vacancy?.description).toContain('Build');
+  });
+});

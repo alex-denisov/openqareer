@@ -147,4 +147,18 @@ export interface VacancySourceConfig {
    * формы оставляет работодателя неназванным, а не подставляет своё имя.
    */
   employerShape?: import('../connectors/rssFeedParser').RssEmployerShape;
+  /**
+   * Явное разрешение владельца опрашивать адрес, который `robots.txt`
+   * площадки запрещает. Только словами, с датой и основанием — без него
+   * запрет площадки действует (B204, B217).
+   */
+  robotsOverride?: RobotsOverride;
+}
+
+export interface RobotsOverride {
+  readonly grantedBy: 'owner';
+  /** Дата решения, ISO. */
+  readonly grantedOn: string;
+  /** Почему это не обход: документ площадки, разрешающий именно такое чтение. */
+  readonly basis: string;
 }

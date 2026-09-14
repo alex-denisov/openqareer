@@ -702,6 +702,9 @@ export class MultiSourceVacancyEngine {
     nowMs: number,
   ): Promise<{ disallowed: boolean; reason?: string }> {
     if (!this.robots) return { disallowed: false };
+    // Разрешение владельца поверх robots — только явное, с основанием в
+    // реестре (B217). Молчаливого исключения здесь нет.
+    if (source.robotsOverride) return { disallowed: false };
     const policy = await this.robots.policyFor(source.targetUrl, nowMs);
     if (policy.verdict === 'unconfirmed') return { disallowed: false };
     this.scheduler.setRobotsPolicy(source.id, policy);

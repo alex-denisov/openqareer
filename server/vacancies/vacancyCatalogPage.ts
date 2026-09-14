@@ -35,6 +35,8 @@ export interface CatalogEntry {
   readonly publishedAt: string;
   readonly lastSeenAt: string;
   readonly sourceCount: number;
+  /** Площадка, с которой ведёт ссылка, — по имени из реестра (B217). */
+  readonly sourceName?: string;
 }
 
 export interface StructuredNode {
@@ -113,7 +115,18 @@ export function toCatalogEntry(cluster: VacancyCluster): CatalogEntry | null {
     publishedAt: cluster.firstObservedAt,
     lastSeenAt: cluster.lastSeenAt,
     sourceCount: cluster.sources.length,
+    ...(primarySourceName(cluster) ? { sourceName: primarySourceName(cluster) } : {}),
   };
+}
+
+/**
+ * Имя площадки, на которую ведёт ссылка карточки. Remotive отдаёт свой API
+ * при условии ссылки на себя и упоминания источника словами (B217); читателю
+ * это тоже честнее, чем безымянное «у работодателя».
+ */
+function primarySourceName(cluster: VacancyCluster): string | undefined {
+  const primary = cluster.sources.find((source) => source.sourceUrl === cluster.primaryUrl);
+  return (primary ?? cluster.sources[0])?.sourceName || undefined;
 }
 
 /** Каждая вакансия, у которой есть публичный адрес. Порядок — свежие первыми. */

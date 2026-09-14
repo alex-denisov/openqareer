@@ -155,7 +155,16 @@ const amazon: PagingPlan = {
   },
 };
 
-/** Eightfold (Netflix): `start`/`num`, `count` — общее число, `num` не больше 10. */
+/**
+ * Eightfold: `start`/`num`, `count` — общее число, `num` не больше 10. Netflix
+ * отдаёт поля в корне, Microsoft (`/api/pcsx/search`) — под `data` (B217).
+ */
+export function eightfoldPayload(payload: unknown): { count: number; positions: unknown[] } {
+  const root = record(payload);
+  const body = asArray(root.positions) ? root : record(root.data);
+  return { count: numeric(body.count) ?? 0, positions: asArray(body.positions) ?? [] };
+}
+
 const eightfold: PagingPlan = {
   pagesPerSync: 60,
   delayMs: 300,
@@ -163,10 +172,139 @@ const eightfold: PagingPlan = {
   next: (previous, payload) => {
     const start = pageOf(previous.url, 'start');
     const num = pageOf(previous.url, 'num') || 10;
-    const count = numeric(record(payload).count) ?? 0;
-    const positions = asArray(record(payload).positions) ?? [];
+    const { count, positions } = eightfoldPayload(payload);
     if (positions.length === 0 || start + num >= count) return null;
     return { url: withParam(previous.url, 'start', String(start + num)) };
+  },
+};
+
+/**
+ * Microsoft: 2 215 вакансий по 10 — 222 страницы, за один опрос читается
+ * окно, и оно сдвигается по кругу от времени; за концом выдачи — снова начало,
+ * так что чтение всегда частичное и срез дополняется (замер 2026-09-14).
+ */
+const MICROSOFT_PAGE = 10;
+const MICROSOFT_PAGE_CEILING = 250;
+const MICROSOFT_INTERVAL_MINUTES = 240;
+
+const microsoft: PagingPlan = {
+  pagesPerSync: 60,
+  delayMs: 300,
+  first: (targetUrl, nowMs) => {
+    const page = rotatingWindowStart(nowMs, MICROSOFT_INTERVAL_MINUTES, 60, MICROSOFT_PAGE_CEILING);
+    return { url: withParam(targetUrl, 'start', String((page - 1) * MICROSOFT_PAGE)) };
+  },
+  next: (previous, payload) => {
+    const start = pageOf(previous.url, 'start');
+    const num = pageOf(previous.url, 'num') || MICROSOFT_PAGE;
+    const { count, positions } = eightfoldPayload(payload);
+    if (positions.length === 0) return null;
+    const nextStart = start + num >= count ? 0 : start + num;
+    return { url: withParam(previous.url, 'start', String(nextStart)) };
+  },
+};
+
+/**
+ * Apple: POST с номером страницы по 20, `res.totalRecords` = 6 081 (305 страниц,
+ * замер 2026-09-14). Без `format` в теле площадка отдаёт пустую выдачу. Окно
+ * по кругу от времени; за последней страницей — первая.
+ */
+const APPLE_PAGE = 20;
+const APPLE_PAGE_CEILING = 320;
+const APPLE_PAGES_PER_SYNC = 40;
+const APPLE_INTERVAL_MINUTES = 240;
+
+function appleRequest(url: string, page: number): PagedRequest {
+  return {
+    url,
+    method: 'POST',
+    body: {
+      query: '',
+      filters: {},
+      page,
+      locale: 'en-us',
+      sort: 'newest',
+      format: { longDate: 'MMMM D, YYYY', mediumDate: 'MMM D, YYYY' },
+    },
+    state: { page },
+  };
+}
+
+const apple: PagingPlan = {
+  pagesPerSync: APPLE_PAGES_PER_SYNC,
+  delayMs: 400,
+  first: (targetUrl, nowMs) =>
+    appleRequest(
+      targetUrl,
+      rotatingWindowStart(nowMs, APPLE_INTERVAL_MINUTES, APPLE_PAGES_PER_SYNC, APPLE_PAGE_CEILING),
+    ),
+  next: (previous, payload) => {
+    const page = numeric(record(previous.state).page) ?? 1;
+    const res = record(record(payload).res);
+    const total = numeric(res.totalRecords) ?? 0;
+    const results = asArray(res.searchResults) ?? [];
+    if (results.length === 0) return null;
+    const lastPage = Math.max(1, Math.ceil(total / APPLE_PAGE));
+    return appleRequest(previous.url, page >= lastPage ? 1 : page + 1);
+  },
+};
+
+/**
+ * Get on Board: без строки поиска `/search/jobs` пуст, зато
+ * `/categories/<id>/jobs` отдаёт всё по категории (замер 2026-09-14). Веер по
+ * категориям по кругу, внутри — страницы по `meta.total_pages`.
+ */
+const GETONBRD_CATEGORIES = [
+  'programming',
+  'sysadmin-devops-qa',
+  'data-science-analytics',
+  'machine-learning-ai',
+  'mobile-developer',
+  'cybersecurity',
+  'design-ux',
+  'digital-marketing',
+  'advertising-media',
+  'sales',
+  'innovation-agile',
+  'operations-management',
+  'technical-support',
+  'customer-support',
+  'hr',
+  'education-coaching',
+  'hardware-electronics',
+  'other',
+] as const;
+const GETONBRD_INTERVAL_MINUTES = 180;
+
+export function getonbrdCategories(): readonly string[] {
+  return GETONBRD_CATEGORIES;
+}
+
+function getonbrdUrl(targetUrl: string, category: string, page: number): string {
+  const next = new URL(targetUrl);
+  next.pathname = `/api/v0/categories/${category}/jobs`;
+  next.searchParams.set('page', String(page));
+  return next.toString();
+}
+
+const getonbrd: PagingPlan = {
+  pagesPerSync: 24,
+  delayMs: 500,
+  first: (targetUrl, nowMs) => {
+    const tick = Math.floor(nowMs / (GETONBRD_INTERVAL_MINUTES * 60_000));
+    const index = tick % GETONBRD_CATEGORIES.length;
+    return { url: getonbrdUrl(targetUrl, GETONBRD_CATEGORIES[index]!, 1), state: { index } };
+  },
+  next: (previous, payload) => {
+    const index = numeric(record(previous.state).index) ?? 0;
+    const page = pageOf(previous.url, 'page') || 1;
+    const totalPages = numeric(record(record(payload).meta).total_pages) ?? 0;
+    const data = asArray(record(payload).data) ?? [];
+    if (data.length > 0 && page < totalPages) {
+      return { url: getonbrdUrl(previous.url, GETONBRD_CATEGORIES[index]!, page + 1), state: previous.state };
+    }
+    const nextIndex = (index + 1) % GETONBRD_CATEGORIES.length;
+    return { url: getonbrdUrl(previous.url, GETONBRD_CATEGORIES[nextIndex]!, 1), state: { index: nextIndex } };
   },
 };
 
@@ -203,6 +341,9 @@ const PLANS: Readonly<Record<string, PagingPlan>> = {
   'src-himalayas-api': himalayas,
   'src-amazon-jobs': amazon,
   'src-netflix': eightfold,
+  'src-microsoft-careers': microsoft,
+  'src-apple-jobs': apple,
+  'src-getonbrd': getonbrd,
 };
 
 export function pagingPlanFor(sourceId: string): PagingPlan | null {

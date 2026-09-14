@@ -60,10 +60,29 @@ describe('registry of vacancy sources', () => {
     }
   });
 
-  it('marks a source that answers nothing without a query, so a scheduled sync skips it', () => {
+  it('Get on Board читается веером по категориям и больше не требует запроса (B217)', () => {
     const getonbrd = DEFAULT_VACANCY_SOURCES.find((source) => source.id === 'src-getonbrd');
 
-    expect(getonbrd?.requiresQuery).toBe(true);
+    expect(getonbrd?.enabled).toBe(true);
+    expect(getonbrd?.requiresQuery).toBeFalsy();
+    expect(getonbrd?.targetUrl).toContain('/api/v0/categories/');
+    expect(getonbrd?.targetUrl).toContain('expand=');
+  });
+
+  it('подключает площадки решения владельца B217 с замером с прод-маршрута', () => {
+    const enabled = new Map(DEFAULT_VACANCY_SOURCES.map((source) => [source.id, source]));
+    for (const id of ['src-apple-jobs', 'src-microsoft-careers', 'src-crossover', 'remotive']) {
+      expect(enabled.get(id)?.enabled, id).toBe(true);
+      expect(vacancySourceMeasurements(id).some((m) => m.route === 'eu-prod' && m.items > 0)).toBe(true);
+    }
+    // Remotive — единственное разрешение поверх robots, и оно названо словами.
+    const remotive = enabled.get('remotive');
+    expect(remotive?.type).toBe('json_api');
+    expect(remotive?.robotsOverride?.grantedBy).toBe('owner');
+    expect(remotive?.refreshIntervalMinutes).toBeGreaterThanOrEqual(360);
+    for (const source of DEFAULT_VACANCY_SOURCES) {
+      if (source.id !== 'remotive') expect(source.robotsOverride, source.id).toBeUndefined();
+    }
   });
 });
 

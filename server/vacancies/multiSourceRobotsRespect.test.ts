@@ -76,3 +76,41 @@ describe('движок уважает robots.txt площадки', () => {
     expect(fetched).toBe(1);
   });
 });
+
+/**
+ * B217 — владелец разрешил Remotive вопреки `Disallow: /api/*`: API площадки
+ * задокументирован для того же использования. Исключение живёт в реестре
+ * явным полем с датой и основанием, а не в памяти агента; без него запрет
+ * robots действует как прежде.
+ */
+describe('явное разрешение владельца поверх robots.txt (B217)', () => {
+  it('источник с robotsOverride опрашивается, без него — нет', async () => {
+    const calls: string[] = [];
+    const robots = new RobotsPolicyLoader({
+      fetchRobots: async () => ({ status: 200, body: 'User-agent: *\nDisallow: /api/\n' }),
+    });
+    const engine = new MultiSourceVacancyEngine({
+      sources: [
+        {
+          ...source('remotive', 'https://remotive.com/api/remote-jobs'),
+          robotsOverride: {
+            grantedBy: 'owner',
+            grantedOn: '2026-09-14',
+            basis: 'API задокументирован площадкой для распространения вакансий со ссылкой на источник',
+          },
+        },
+        source('other', 'https://remotive.com/api/other'),
+      ],
+      fetcher: async (config) => {
+        calls.push(config.id);
+        return [];
+      },
+      robots,
+    });
+
+    await engine.syncSource('remotive');
+    await engine.syncSource('other');
+
+    expect(calls).toEqual(['remotive']);
+  });
+});

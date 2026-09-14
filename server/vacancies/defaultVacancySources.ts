@@ -218,6 +218,30 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
       note: 'Eightfold API с прод-VM: count=488, не больше 10 записей на страницу; robots.txt у jobs.netflix.com нет (B216)',
     },
   ],
+  'src-apple-jobs': [
+    {
+      items: 20,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'POST /api/v1/search с прод-VM без CSRF: totalRecords=6081 по 20 на страницу, 305 страниц; тело обязано нести format; robots.txt у jobs.apple.com — 404 (B217)',
+    },
+  ],
+  'src-microsoft-careers': [
+    {
+      items: 10,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'apply.careers.microsoft.com/api/pcsx/search (Eightfold) с прод-VM: data.count=2215, не больше 10 на страницу; robots.txt этого хоста явно Allow: /api/pcsx. Старый gcsservices.careers.microsoft.com отвечает чужим TLS-сертификатом (B217)',
+    },
+  ],
+  'src-crossover': [
+    {
+      items: 99,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'sitemap.xml с прод-VM: 102 адреса /jobs/<id>/<brand>/<slug>, 99 уникальных id; описания — Kentico Delivery без ключа (kontent-proxy, тип pipeline, 967 записей, все 99 id найдены); robots открыт. profile-api отвечает 403 без ключа — не используется (B217)',
+    },
+  ],
   remotive: [
     {
       items: 18,
@@ -231,6 +255,12 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
       observedAt: '2026-09-06',
       route: 'eu-prod',
       note: 'robots.txt площадки читан с прод-VM: User-agent: * → Disallow: /api — обход запрещён словами (B204)',
+    },
+    {
+      items: 16,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'публичный API с прод-VM: job-count=16, задержка 24 ч; юридическая записка в ответе разрешает распространение со ссылкой на Remotive и упоминанием источника, не чаще 4 раз в сутки (B217)',
     },
   ],
   // Замерено 2026-09-05 с прод-VM: подсчёт постов в публичном веб-виде канала
@@ -478,11 +508,12 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     accessClass: 'api',
     market: 'LATAM',
     addressStatus: 'live',
-    enabled: false,
-    disabledReason:
-      'API Get on Board отдаёт публичную ссылку (`links.public_url`, перепроверено 2026-09-14), но работодателя — только числовым `company.data.id`, а `/api/v0/companies/<id>` отвечает 404 без токена. Карточка без работодателя — то, что запрещает B161, поэтому источник зарегистрирован, но выключен до доступа к справочнику компаний.',
-    targetUrl: 'https://www.getonbrd.com/api/v0/search/jobs?per_page=50',
-    requiresQuery: true,
+    enabled: true,
+    // `expand=["company"]` отдаёт имя работодателя, которого не хватало в
+    // B216; веер по категориям — в pagedJsonSources (B217).
+    targetUrl:
+      'https://www.getonbrd.com/api/v0/categories/programming/jobs?per_page=100&expand=%5B%22company%22%5D',
+    contentSignals: ['search=yes', 'ai-train=no', 'use=reference'],
     refreshIntervalMinutes: 180,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
@@ -554,15 +585,24 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
   {
     id: 'remotive',
     name: 'Remotive (Global Remote)',
-    type: 'remotive',
+    type: 'json_api',
     accessClass: 'api',
     market: 'Удалённо, мир',
-    addressStatus: 'robots_forbidden',
-    enabled: false,
-    disabledReason:
-      'robots.txt Remotive запрещает /api именно тому агенту, которым ходит продукт (замер с прод-VM 2026-09-06: User-agent: * → Disallow: /api). Публичный API у площадки задокументирован, но её же robots.txt говорит «не ходи», и слово площадки сильнее нашего удобства — как у ТрудВсем в B199. Возвращается по письменному разрешению площадки.',
+    addressStatus: 'live',
+    enabled: true,
     targetUrl: 'https://remotive.com/api/remote-jobs',
-    refreshIntervalMinutes: 120,
+    // Решение владельца 2026-09-14 (B217): robots.txt площадки закрывает
+    // /api/* краулерам, но тот же API задокументирован площадкой для
+    // распространения её вакансий — со ссылкой на Remotive, упоминанием
+    // источника и не чаще 4 раз в сутки. Реестр печатает атрибуцию
+    // (vacancySourceRegistry), интервал держит их условие.
+    robotsOverride: {
+      grantedBy: 'owner',
+      grantedOn: '2026-09-14',
+      basis:
+        'https://remotive.com/api-documentation — публичный API для распространения вакансий со ссылкой на Remotive; ≤ 4 запросов в сутки',
+    },
+    refreshIntervalMinutes: 360,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
   },
@@ -709,6 +749,46 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     enabled: true,
     targetUrl: 'https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&num=10',
     refreshIntervalMinutes: 240,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  },
+  {
+    id: 'src-apple-jobs',
+    name: 'Apple',
+    type: 'json_api',
+    accessClass: 'api',
+    market: 'Мир (карьерный сайт Apple)',
+    addressStatus: 'live',
+    enabled: true,
+    targetUrl: 'https://jobs.apple.com/api/v1/search',
+    refreshIntervalMinutes: 240,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  },
+  {
+    id: 'src-microsoft-careers',
+    name: 'Microsoft',
+    type: 'json_api',
+    accessClass: 'api',
+    market: 'Мир (карьерный сайт Microsoft, Eightfold)',
+    addressStatus: 'live',
+    enabled: true,
+    targetUrl:
+      'https://apply.careers.microsoft.com/api/pcsx/search?domain=microsoft.com&query=&num=10&sort_by=timestamp',
+    refreshIntervalMinutes: 240,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  },
+  {
+    id: 'src-crossover',
+    name: 'Crossover',
+    type: 'json_api',
+    accessClass: 'open_web',
+    market: 'Удалённо, мир (Crossover)',
+    addressStatus: 'live',
+    enabled: true,
+    targetUrl: 'https://www.crossover.com/sitemap.xml',
+    refreshIntervalMinutes: 360,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
   },

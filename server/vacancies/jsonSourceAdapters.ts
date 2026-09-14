@@ -17,7 +17,8 @@ import {
   UNKNOWN_PUBLISHED_AT,
 } from './jsonVacancyRecord';
 import { hasAtsBoardAdapter, normalizeAtsBoard } from './atsBoardAdapters';
-import { isWorkdaySource } from './pagedJsonSources';
+import { eightfoldPayload, isWorkdaySource } from './pagedJsonSources';
+import { CROSSOVER_SOURCE_ID } from './crossoverSource';
 
 export type { JsonAdapterContext } from './jsonVacancyRecord';
 
@@ -54,7 +55,13 @@ export function normalizeJsonSource(
  * выглядит подключённым (B199).
  */
 export function hasJsonAdapter(sourceId: string): boolean {
-  return sourceId in ADAPTERS || hasAtsBoardAdapter(sourceId) || isWorkdaySource(sourceId);
+  return (
+    sourceId in ADAPTERS ||
+    hasAtsBoardAdapter(sourceId) ||
+    isWorkdaySource(sourceId) ||
+    // Crossover собирается из sitemap и Kentico своим сборщиком (B217).
+    sourceId === CROSSOVER_SOURCE_ID
+  );
 }
 
 type Adapter = (
@@ -146,17 +153,25 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
     listOf(payload, (value) => asArray(record(value).data)).map((item) => {
       const envelope = record(item);
       const job = record(envelope.attributes);
+      // Работодатель приходит только с `expand=["company"]` — иначе в записи
+      // один числовой id, и карточка не годится (B216 → B217).
+      const company = record(record(record(job.company).data).attributes);
+      const countries = stringList(job.countries);
       return build({
         sourceId,
         context,
         externalId: text(envelope.id),
         title: text(job.title),
-        company: text(job.company_name) || text(record(job.company).name),
-        location: text(job.country) || text(job.city) || undefined,
+        company: text(job.company_name) || text(company.name) || text(record(job.company).name),
+        location: countries[0] || text(job.country) || text(job.city) || undefined,
         isRemote: job.remote === true,
-        description: text(job.description),
+        description: [text(job.description), text(job.functions), text(job.desirable)]
+          .filter(Boolean)
+          .join('\n'),
         skills: [],
-        url: text(job.public_url) || text(job.url),
+        employmentType: nestedName(job.modality) || undefined,
+        experienceLevel: nestedName(job.seniority) || undefined,
+        url: text(record(envelope.links).public_url) || text(job.public_url) || text(job.url),
         publishedAt: fromEpochSeconds(job.published_at),
       });
     }),
@@ -232,25 +247,53 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
     }),
 
   'src-netflix': (payload, context, sourceId) =>
-    listOf(payload, (value) => asArray(record(value).positions)).map((item) => {
+    eightfold(payload, context, sourceId, 'https://explore.jobs.netflix.net'),
+
+  'src-microsoft-careers': (payload, context, sourceId) =>
+    eightfold(payload, context, sourceId, 'https://apply.careers.microsoft.com'),
+
+  'src-apple-jobs': (payload, context, sourceId) =>
+    listOf(payload, (value) => asArray(record(record(value).res).searchResults)).map((item) => {
       const job = record(item);
-      const location = text(job.location) || firstOf(job.locations);
+      // Идентификатор идёт в адрес карточки: чужой символ в нём — не вакансия.
+      const positionId = /^[A-Za-z0-9-]+$/.test(text(job.positionId)) ? text(job.positionId) : '';
+      const location = firstOf(job.locations) || text(record(asArray(job.locations)?.[0]).name);
+      const team = text(record(job.team).teamName);
       return build({
         sourceId,
         context,
-        externalId: text(job.display_job_id) || text(job.id),
-        title: text(job.name) || text(job.posting_name),
-        company: context.sourceName ?? '',
+        externalId: positionId,
+        title: text(job.postingTitle),
+        company: context.sourceName ?? 'Apple',
         location: location || undefined,
-        isRemote: /remote/i.test(location ?? '') || job.work_location_option === 'remote',
-        description:
-          text(job.job_description) ||
-          [text(job.name), text(job.department), text(job.business_unit)]
-            .filter(Boolean)
-            .join(' — '),
-        skills: [text(job.department)].filter(Boolean),
-        url: text(job.canonicalPositionUrl),
-        publishedAt: fromEpochSeconds(numeric(job.t_create)),
+        isRemote: job.homeOffice === true || /remote/i.test(location),
+        description: text(job.jobSummary) || [text(job.postingTitle), team].filter(Boolean).join(' — '),
+        skills: [team].filter(Boolean),
+        employmentType: text(job.type) || undefined,
+        url: positionId
+          ? `https://jobs.apple.com/en-us/details/${positionId}/${encodeURIComponent(text(job.transformedPostingTitle))}`
+          : '',
+        publishedAt: fromIso(job.postDateInGMT),
+      });
+    }),
+
+  remotive: (payload, context, sourceId) =>
+    listOf(payload, (value) => asArray(record(value).jobs)).map((item) => {
+      const job = record(item);
+      const location = text(job.candidate_required_location);
+      return build({
+        sourceId,
+        context,
+        externalId: text(job.id),
+        title: text(job.title),
+        company: text(job.company_name).trim(),
+        location: location || undefined,
+        isRemote: true,
+        description: text(job.description) || text(job.title),
+        skills: stringList(job.tags),
+        employmentType: text(job.job_type) || undefined,
+        url: text(job.url),
+        publishedAt: fromIso(job.publication_date),
       });
     }),
 
@@ -330,4 +373,55 @@ function numericSalary(job: JsonRecord): UnifiedVacancy['salary'] | undefined {
   const to = numeric(job.salary_max);
   if (from === undefined && to === undefined) return undefined;
   return { from, to, currency: 'RUR' };
+}
+
+/** Имя вложенного справочника Get on Board: `{ data: { attributes: { name } } }`. */
+function nestedName(value: unknown): string {
+  return text(record(record(record(value).data).attributes).name);
+}
+
+/**
+ * Eightfold (Netflix, Microsoft): работодателя в записи нет — его называет
+ * реестр; описания в списке тоже нет, поэтому карточка собирается из названия
+ * и подразделения. Microsoft отдаёт относительный `positionUrl` и поля в
+ * camelCase, Netflix — абсолютный `canonicalPositionUrl` и snake_case (B217).
+ */
+function eightfold(
+  payload: unknown,
+  context: JsonAdapterContext,
+  sourceId: string,
+  baseUrl: string,
+): UnifiedVacancy[] {
+  return listOf(payload, (value) => eightfoldPayload(value).positions).map((item) => {
+    const job = record(item);
+    const location = text(job.location) || firstOf(job.locations) || '';
+    const workLocation = text(job.work_location_option) || text(job.workLocationOption);
+    const url = sameOriginUrl(text(job.canonicalPositionUrl) || text(job.positionUrl), baseUrl);
+    return build({
+      sourceId,
+      context,
+      externalId: text(job.display_job_id) || text(job.displayJobId) || text(job.id),
+      title: text(job.name) || text(job.posting_name),
+      company: context.sourceName ?? '',
+      location: location || undefined,
+      isRemote: /remote/i.test(location) || workLocation === 'remote',
+      description:
+        text(job.job_description) ||
+        [text(job.name), text(job.department), text(job.business_unit)].filter(Boolean).join(' — '),
+      skills: [text(job.department)].filter(Boolean),
+      url,
+      publishedAt: fromEpochSeconds(numeric(job.t_create) ?? numeric(job.postedTs)),
+    });
+  });
+}
+
+/** Относительный адрес площадки — только на её же хосте; чужой хост — пустая ссылка. */
+function sameOriginUrl(candidate: string, baseUrl: string): string {
+  if (!candidate) return '';
+  try {
+    const resolved = new URL(candidate, baseUrl);
+    return resolved.origin === new URL(baseUrl).origin ? resolved.toString() : '';
+  } catch {
+    return '';
+  }
 }

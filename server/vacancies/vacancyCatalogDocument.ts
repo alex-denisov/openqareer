@@ -321,6 +321,7 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
     '<p class="catalog-provenance">' +
     `Наблюдалась ${escapeHtml(entry.lastSeenAt.slice(0, 10))}, впервые ${escapeHtml(entry.publishedAt.slice(0, 10))}` +
     (entry.sourceCount > 1 ? `, найдена на ${entry.sourceCount} площадках` : '') +
+    (entry.sourceName ? `, источник — ${escapeHtml(entry.sourceName)}` : '') +
     '.</p>' +
     `<p class="catalog-apply"><a class="site-btn is-primary" rel="nofollow noopener" target="_blank" href="${escapeHtml(entry.sourceUrl)}">Открыть у работодателя</a></p>` +
     '</main>' +

@@ -87,6 +87,29 @@ describe('документ публичного каталога (B209)', () => 
     expect(html).toContain('rel="nofollow noopener"');
   });
 
+  it('называет площадку-источник словами: условие Remotive и честность перед читателем (B217)', () => {
+    const html = renderVacancyDocument(
+      buildVacancyDetail(
+        cluster({
+          primaryUrl: 'https://remotive.com/remote-jobs/marketing/remote-office-assistant-1680495',
+          sources: [
+            {
+              sourceType: 'json_api',
+              sourceId: 'remotive',
+              sourceName: 'Remotive (Global Remote)',
+              sourceUrl: 'https://remotive.com/remote-jobs/marketing/remote-office-assistant-1680495',
+              observedAt: '2026-09-14T00:00:00.000Z',
+            },
+          ],
+        }),
+      )!,
+    );
+    expect(html).toContain('источник — Remotive (Global Remote)');
+    // Без имени в реестре площадка не выдумывается.
+    const nameless = renderVacancyDocument(buildVacancyDetail(cluster())!);
+    expect(nameless).not.toContain('источник —');
+  });
+
   it('печатает постраничную навигацию ссылками, а не кнопками на скрипте', () => {
     const many = Array.from({ length: 30 }, (_, index) =>
       cluster({ id: `c${index}`, canonicalTitle: `Data Analyst ${index}` }),

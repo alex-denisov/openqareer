@@ -9,6 +9,7 @@ import type { RobotsFetcher } from './robotsPolicyLoader';
 import type { HhCrawlCoordinator } from './hhCrawlCoordinator';
 import { pagingPlanFor, type PagedRequest } from './pagedJsonSources';
 import type { SourceReading } from './multiSourceVacancyEngine';
+import { CROSSOVER_KONTENT_URL, CROSSOVER_SOURCE_ID, fetchCrossover } from './crossoverSource';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -174,6 +175,26 @@ async function fetchPagedJsonApi(
   return { vacancies, partial: request !== null };
 }
 
+/** Crossover: sitemap → открытые вакансии, Kentico без ключа → описания (B217). */
+async function fetchCrossoverSource(source: VacancySourceConfig): Promise<SourceReading> {
+  const observedAt = new Date().toISOString();
+  return fetchCrossover(
+    { sitemapUrl: source.targetUrl, kontentUrl: CROSSOVER_KONTENT_URL },
+    {
+      fetchText: async (url) => {
+        const res = await fetch(url, {
+          headers: { ...FETCH_HEADERS, Accept: 'application/xml, text/xml' },
+          signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
+        });
+        if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
+        return res.text();
+      },
+      fetchJson: async (url) => (await fetchJsonPayload({ url })).payload,
+      observedAt,
+    },
+  );
+}
+
 /** Only the sources whose live probe proved they honour a query get one. */
 const QUERY_PARAMETER: Readonly<Record<string, string>> = {
   'src-getonbrd': 'query',
@@ -263,6 +284,7 @@ export function buildMultiSourceFetcher(
       return fetchRssFeed(source, options);
     }
     if (source.type === 'json_api') {
+      if (source.id === CROSSOVER_SOURCE_ID) return fetchCrossoverSource(source);
       if (pagingPlanFor(source.id)) return fetchPagedJsonApi(source, sleep, now);
       return fetchJsonApi(source, options);
     }
