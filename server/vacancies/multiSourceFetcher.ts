@@ -131,14 +131,17 @@ async function fetchJsonPayload(
 ): Promise<{ payload: unknown; observedAt: string }> {
   const res = await fetch(request.url, {
     method: request.method ?? 'GET',
-    headers: {
-      ...FETCH_HEADERS,
-      Accept: 'application/json',
-      ...(request.method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
-      // Площадка со своим протоколом (ключ приложения Indeed) сама называет
-      // заголовки; они перекрывают общие (B218).
-      ...(request.headers ?? {}),
-    },
+    // Заголовки площадки перекрывают общие РЕГИСТРОНЕЗАВИСИМО: дубль
+    // `Content-Type` + `content-type` fetch склеивает в «application/json,
+    // application/json», и CSRF-защита Indeed это блокирует (замер B218).
+    headers: mergeHeaders(
+      {
+        ...FETCH_HEADERS,
+        Accept: 'application/json',
+        ...(request.method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+      },
+      request.headers,
+    ),
     ...(request.method === 'POST' ? { body: JSON.stringify(request.body ?? {}) } : {}),
     signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
   });
@@ -277,6 +280,22 @@ export interface MultiSourceFetcherDeps {
 
 const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Сливает заголовки так, что заголовки площадки заменяют общие по имени без
+ * учёта регистра: `Content-Type` и `content-type` — один заголовок, и оставить
+ * оба нельзя (Indeed видит склейку через запятую как CSRF, B218).
+ */
+function mergeHeaders(
+  base: Record<string, string>,
+  overrides?: Readonly<Record<string, string>>,
+): Record<string, string> {
+  if (!overrides) return base;
+  const result = new Map<string, [string, string]>();
+  for (const [key, value] of Object.entries(base)) result.set(key.toLowerCase(), [key, value]);
+  for (const [key, value] of Object.entries(overrides)) result.set(key.toLowerCase(), [key, value]);
+  return Object.fromEntries(result.values());
+}
 
 /** Пауза ±25 % от базовой: обход не должен идти ровным тактом (B218). */
 function jitter(baseMs: number, now: () => number): number {

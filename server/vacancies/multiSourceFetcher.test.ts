@@ -168,3 +168,41 @@ describe('multi-source fetcher: paged JSON sources (B216)', () => {
     });
   });
 });
+
+describe('multi-source fetcher: заголовки Indeed (B218)', () => {
+  const indeed: VacancySourceConfig = {
+    id: 'src-indeed',
+    name: 'Indeed',
+    type: 'json_api',
+    enabled: true,
+    targetUrl: 'https://apis.indeed.com/graphql',
+    refreshIntervalMinutes: 180,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  };
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('заголовки площадки заменяют общие без дубля Content-Type (CSRF Indeed)', async () => {
+    let captured: Headers | undefined;
+    vi.stubGlobal('fetch', async (_url: string, init?: RequestInit) => {
+      captured = new Headers(init?.headers);
+      return new Response(
+        JSON.stringify({ data: { jobSearch: { pageInfo: { nextCursor: '' }, results: [] } } }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    const fetcher = buildMultiSourceFetcher(refuse, refuse, undefined, {
+      sleep: async () => {},
+      now: () => 0,
+    });
+
+    await fetcher(indeed);
+
+    // Ровно один Content-Type, значение без склейки через запятую.
+    expect(captured?.get('content-type')).toBe('application/json');
+    // Ключ приложения дошёл, общий UA перекрыт клиентским.
+    expect(captured?.get('indeed-api-key')).toBeTruthy();
+    expect(captured?.get('user-agent')).toContain('Indeed App');
+  });
+})
