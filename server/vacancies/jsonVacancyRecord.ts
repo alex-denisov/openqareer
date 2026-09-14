@@ -43,7 +43,11 @@ export function buildJsonVacancy(input: {
   url: string;
   publishedAt: string;
 }): UnifiedVacancy {
-  const id = `${input.sourceId}:${input.externalId || input.url}`;
+  // Адрес вакансии печатается ссылкой в публичном каталоге. Чужая площадка
+  // могла отдать `javascript:` или иную схему — берём только http(s), иначе
+  // адрес пуст и запись отсеивается как непригодная (B218 security-review).
+  const url = /^https?:\/\//i.test(input.url) ? input.url : '';
+  const id = `${input.sourceId}:${input.externalId || url}`;
   return {
     id,
     fingerprint: id,
@@ -59,12 +63,12 @@ export function buildJsonVacancy(input: {
     requiredSkills: input.skills,
     employmentType: input.employmentType,
     experienceLevel: input.experienceLevel,
-    url: input.url,
+    url,
     provenance: {
       sourceType: 'json_api',
       sourceId: input.sourceId,
       sourceName: input.context.sourceName,
-      sourceUrl: input.url,
+      sourceUrl: url,
       externalId: input.externalId || undefined,
       observedAt: input.context.observedAt,
     },

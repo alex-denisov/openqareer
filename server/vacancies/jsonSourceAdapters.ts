@@ -4,6 +4,7 @@ import {
   buildJsonVacancy as build,
   firstOf,
   fromEpochSeconds,
+  fromEpochMilliseconds,
   fromIso,
   fromLooseDate,
   isUsableVacancy as isUsable,
@@ -19,6 +20,7 @@ import {
 import { hasAtsBoardAdapter, normalizeAtsBoard } from './atsBoardAdapters';
 import { eightfoldPayload, isWorkdaySource } from './pagedJsonSources';
 import { CROSSOVER_SOURCE_ID } from './crossoverSource';
+import { LINKEDIN_SOURCE_ID } from './linkedinGuestSource';
 
 export type { JsonAdapterContext } from './jsonVacancyRecord';
 
@@ -60,7 +62,9 @@ export function hasJsonAdapter(sourceId: string): boolean {
     hasAtsBoardAdapter(sourceId) ||
     isWorkdaySource(sourceId) ||
     // Crossover собирается из sitemap и Kentico своим сборщиком (B217).
-    sourceId === CROSSOVER_SOURCE_ID
+    sourceId === CROSSOVER_SOURCE_ID ||
+    // LinkedIn собирается своим HTML-разбором (B218).
+    sourceId === LINKEDIN_SOURCE_ID
   );
 }
 
@@ -175,6 +179,31 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
         publishedAt: fromEpochSeconds(job.published_at),
       });
     }),
+
+  'src-indeed': (payload, context, sourceId) =>
+    listOf(payload, (value) => asArray(record(record(record(value).data).jobSearch).results)).map(
+      (item) => {
+        const job = record(record(item).job);
+        const loc = record(job.location);
+        const city = text(loc.city);
+        const country = text(loc.countryName);
+        const location = text(record(loc.formatted).long) || [city, country].filter(Boolean).join(', ');
+        const key = text(job.key);
+        return build({
+          sourceId,
+          context,
+          externalId: key,
+          title: text(job.title),
+          company: text(record(job.employer).name),
+          location: location || undefined,
+          isRemote: /remote/i.test(location),
+          description: text(record(job.description).html) || text(job.title),
+          skills: [],
+          url: text(record(job.recruit).viewJobUrl) || `https://www.indeed.com/viewjob?jk=${key}`,
+          publishedAt: fromEpochMilliseconds(numeric(job.datePublished) ?? numeric(job.dateOnIndeed)),
+        });
+      },
+    ),
 
   'src-themuse': (payload, context, sourceId) =>
     listOf(payload, (value) => asArray(record(value).results)).map((item) => {

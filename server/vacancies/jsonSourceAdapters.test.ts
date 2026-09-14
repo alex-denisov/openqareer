@@ -726,3 +726,54 @@ describe('json source adapters (B217)', () => {
     expect(vacancy?.description).toContain('Build');
   });
 });
+
+/**
+ * B218 — Indeed через мобильный GraphQL. Форма записи снята с прод-VM
+ * 2026-09-14.
+ */
+describe('Indeed adapter (B218)', () => {
+  it('разбирает запись jobSearch.results[].job с адресом viewjob', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-indeed',
+      {
+        data: {
+          jobSearch: {
+            pageInfo: { nextCursor: 'abc' },
+            results: [
+              {
+                job: {
+                  key: 'a1b2c3',
+                  title: 'Communication Systems Engineer',
+                  datePublished: 1788963204000,
+                  description: { html: '<p>Build systems.</p>' },
+                  location: { city: 'Merritt Island', countryName: 'US', formatted: { long: 'Merritt Island, FL' } },
+                  employer: { name: 'Aetos Systems' },
+                  recruit: { viewJobUrl: 'https://www.indeed.com/rc/clk?jk=a1b2c3' },
+                },
+              },
+            ],
+          },
+        },
+      },
+      { observedAt: '2026-09-14T09:00:00.000Z', sourceName: 'Indeed' },
+    );
+    expect(vacancy).toMatchObject({
+      title: 'Communication Systems Engineer',
+      company: 'Aetos Systems',
+      location: 'Merritt Island, FL',
+      url: 'https://www.indeed.com/rc/clk?jk=a1b2c3',
+      publishedAt: new Date(1788963204000).toISOString(),
+    });
+    expect(vacancy?.provenance.externalId).toBe('a1b2c3');
+    expect(vacancy?.description).toContain('Build systems');
+  });
+
+  it('без recruit.viewJobUrl адрес собирается из ключа', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-indeed',
+      { data: { jobSearch: { results: [{ job: { key: 'zz9', title: 'T', employer: { name: 'E' }, location: {}, datePublished: 1788963204000 } }] } } },
+      { observedAt: 'now', sourceName: 'Indeed' },
+    );
+    expect(vacancy?.url).toBe('https://www.indeed.com/viewjob?jk=zz9');
+  });
+});

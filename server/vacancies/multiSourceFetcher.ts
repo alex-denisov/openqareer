@@ -10,6 +10,7 @@ import type { HhCrawlCoordinator } from './hhCrawlCoordinator';
 import { pagingPlanFor, type PagedRequest } from './pagedJsonSources';
 import type { SourceReading } from './multiSourceVacancyEngine';
 import { CROSSOVER_KONTENT_URL, CROSSOVER_SOURCE_ID, fetchCrossover } from './crossoverSource';
+import { LINKEDIN_SOURCE_ID, fetchLinkedinGuest } from './linkedinGuestSource';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -134,6 +135,9 @@ async function fetchJsonPayload(
       ...FETCH_HEADERS,
       Accept: 'application/json',
       ...(request.method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+      // Площадка со своим протоколом (ключ приложения Indeed) сама называет
+      // заголовки; они перекрывают общие (B218).
+      ...(request.headers ?? {}),
     },
     ...(request.method === 'POST' ? { body: JSON.stringify(request.body ?? {}) } : {}),
     signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
@@ -160,7 +164,9 @@ async function fetchPagedJsonApi(
   let request: PagedRequest | null = plan.first(source.targetUrl, now());
   let pagesRead = 0;
   while (request && pagesRead < plan.pagesPerSync) {
-    if (pagesRead > 0) await sleep(plan.delayMs);
+    // Джиттер паузы: ровный такт выглядит роботом; ±25 % ломает регулярность,
+    // не ускоряя опрос заметно (B218 security-review).
+    if (pagesRead > 0) await sleep(jitter(plan.delayMs, now));
     const { payload, observedAt } = await fetchJsonPayload(request);
     vacancies.push(
       ...normalizeJsonSource(source.id, payload, {
@@ -173,6 +179,18 @@ async function fetchPagedJsonApi(
     request = plan.next(request, payload);
   }
   return { vacancies, partial: request !== null };
+}
+
+/** LinkedIn — гостевой список, свой HTML-разбор и вежливый темп (B218). */
+async function fetchLinkedinGuestSource(sleep: (ms: number) => Promise<void>): Promise<SourceReading> {
+  return fetchLinkedinGuest({
+    fetchPage: async (url, headers) => {
+      const res = await fetch(url, { headers, signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS) });
+      return { status: res.status, body: res.ok ? await res.text() : '' };
+    },
+    sleep,
+    observedAt: new Date().toISOString(),
+  });
 }
 
 /** Crossover: sitemap → открытые вакансии, Kentico без ключа → описания (B217). */
@@ -260,6 +278,12 @@ export interface MultiSourceFetcherDeps {
 const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Пауза ±25 % от базовой: обход не должен идти ровным тактом (B218). */
+function jitter(baseMs: number, now: () => number): number {
+  const spread = baseMs * 0.5;
+  return Math.round(baseMs - spread / 2 + (now() % 1000) / 1000 * spread);
+}
+
 export function buildMultiSourceFetcher(
   hh: HhSearch,
   remotive: RemotiveSearch,
@@ -285,6 +309,7 @@ export function buildMultiSourceFetcher(
     }
     if (source.type === 'json_api') {
       if (source.id === CROSSOVER_SOURCE_ID) return fetchCrossoverSource(source);
+      if (source.id === LINKEDIN_SOURCE_ID) return fetchLinkedinGuestSource(sleep);
       if (pagingPlanFor(source.id)) return fetchPagedJsonApi(source, sleep, now);
       return fetchJsonApi(source, options);
     }

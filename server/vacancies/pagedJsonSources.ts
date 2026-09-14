@@ -1,4 +1,5 @@
 import { record, numeric, asArray, text } from './jsonVacancyRecord';
+import { INDEED_GRAPHQL_URL, indeedHeaders, indeedQuery } from './jobspyEndpoints';
 import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
 
 /**
@@ -24,6 +25,8 @@ export interface PagedRequest {
   readonly url: string;
   readonly method?: 'GET' | 'POST';
   readonly body?: unknown;
+  /** Заголовки, которые ставит именно эта площадка (ключ приложения Indeed). */
+  readonly headers?: Readonly<Record<string, string>>;
   /** Состояние обхода между страницами; площадке не отправляется. */
   readonly state?: unknown;
 }
@@ -390,6 +393,38 @@ const workday: PagingPlan = {
   },
 };
 
+/**
+ * Indeed: мобильный GraphQL `apis.indeed.com/graphql`, курсор `nextCursor`, по
+ * 100 записей (замер 2026-09-14). Запрос — POST с телом `{query}`, заголовки
+ * приложения ставит фетчер. Читается от свежих; курсорная площадка сама
+ * кончится, бюджет страниц ограничит опрос. Ключевые слова широкие
+ * («engineer OR manager OR analyst …») — цель охватить белые воротнички, а не
+ * одну роль.
+ */
+const INDEED_TERMS = 'engineer OR developer OR manager OR analyst OR designer OR marketing OR sales OR finance OR product OR data';
+
+function indeedRequest(cursor: string | null): PagedRequest {
+  return {
+    url: INDEED_GRAPHQL_URL,
+    method: 'POST',
+    body: { query: indeedQuery(INDEED_TERMS, cursor) },
+    headers: indeedHeaders(),
+  };
+}
+
+const indeed: PagingPlan = {
+  pagesPerSync: 40,
+  delayMs: 800,
+  first: () => indeedRequest(null),
+  next: (_previous, payload) => {
+    const search = record(record(record(payload).data).jobSearch);
+    const cursor = text(record(search.pageInfo).nextCursor);
+    const results = asArray(search.results) ?? [];
+    if (!cursor || results.length === 0) return null;
+    return indeedRequest(cursor);
+  },
+};
+
 const PLANS: Readonly<Record<string, PagingPlan>> = {
   'src-themuse': themuse,
   'src-himalayas-api': himalayas,
@@ -398,6 +433,7 @@ const PLANS: Readonly<Record<string, PagingPlan>> = {
   'src-microsoft-careers': microsoft,
   'src-apple-jobs': apple,
   'src-getonbrd': getonbrd,
+  'src-indeed': indeed,
 };
 
 export function pagingPlanFor(sourceId: string): PagingPlan | null {

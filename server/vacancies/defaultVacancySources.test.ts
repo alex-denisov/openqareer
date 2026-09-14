@@ -80,9 +80,9 @@ describe('registry of vacancy sources', () => {
     expect(remotive?.type).toBe('json_api');
     expect(remotive?.robotsOverride?.grantedBy).toBe('owner');
     expect(remotive?.refreshIntervalMinutes).toBeGreaterThanOrEqual(360);
-    for (const source of DEFAULT_VACANCY_SOURCES) {
-      if (source.id !== 'remotive') expect(source.robotsOverride, source.id).toBeUndefined();
-    }
+    // Разрешение поверх robots — только явное, у Remotive и LinkedIn (B217, B218).
+    const overridden = DEFAULT_VACANCY_SOURCES.filter((s) => s.robotsOverride).map((s) => s.id).sort();
+    expect(overridden).toEqual(['remotive', 'src-linkedin-guest']);
   });
 });
 
@@ -165,8 +165,9 @@ describe('registry of vacancy sources: routes and address status (B199)', () => 
     const ids = DEFAULT_VACANCY_SOURCES.map((source) => source.id);
 
     // Владелец 2026-09-05: «Не отсекай площадки типа linkedin, glassdoor и
-    // другие у которых антиботы». Они остаются названными и выключенными.
-    expect(ids).toContain('src-linkedin');
+    // другие у которых антиботы». Indeed и LinkedIn подключены по механике
+    // JobSpy (B218), Glassdoor остаётся названным и выключенным.
+    expect(ids).toContain('src-linkedin-guest');
     expect(ids).toContain('src-glassdoor');
     expect(ids).toContain('src-indeed');
   });

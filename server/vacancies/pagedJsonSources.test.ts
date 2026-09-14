@@ -154,6 +154,19 @@ describe('paging plans (B216)', () => {
     expect(getonbrdCategories().length).toBeGreaterThanOrEqual(17);
   });
 
+  it('Indeed: POST graphql с курсором, стоп на пустом nextCursor или пустой выдаче (B218)', () => {
+    const plan = pagingPlanFor('src-indeed')!;
+    const first = plan.first('https://apis.indeed.com/graphql', 0);
+    expect(first.method).toBe('POST');
+    expect(first.headers?.['indeed-api-key']).toBeTruthy();
+    expect((first.body as { query: string }).query).toContain('jobSearch');
+    const payload = { data: { jobSearch: { pageInfo: { nextCursor: 'cur2' }, results: [{ job: {} }] } } };
+    const next = plan.next(first, payload);
+    expect((next!.body as { query: string }).query).toContain('cursor: "cur2"');
+    expect(plan.next(first, { data: { jobSearch: { pageInfo: { nextCursor: '' }, results: [{ job: {} }] } } })).toBeNull();
+    expect(plan.next(first, { data: { jobSearch: { pageInfo: { nextCursor: 'x' }, results: [] } } })).toBeNull();
+  });
+
   it('у площадки без плана плана нет', () => {
     expect(pagingPlanFor('src-arbeitnow')).toBeNull();
   });

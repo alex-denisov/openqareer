@@ -242,6 +242,22 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
       note: 'sitemap.xml с прод-VM: 102 адреса /jobs/<id>/<brand>/<slug>, 99 уникальных id; описания — Kentico Delivery без ключа (kontent-proxy, тип pipeline, 967 записей, все 99 id найдены); robots открыт. profile-api отвечает 403 без ключа — не используется (B217)',
     },
   ],
+  'src-indeed': [
+    {
+      items: 100,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'apis.indeed.com/graphql с ключом приложения (механика JobSpy) с прод-VM: 100 записей на страницу + nextCursor; indeed.com/robots.txt Allow: / на страницы поиска (B218)',
+    },
+  ],
+  'src-linkedin-guest': [
+    {
+      items: 10,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'jobs-guest/…/seeMoreJobPostings/search?start=N с прод-VM: 10 карточек на страницу без учётной записи; robots Disallow: /jobs-guest/ — включён по прямому решению владельца (B218)',
+    },
+  ],
   remotive: [
     {
       items: 18,
@@ -323,17 +339,6 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
     },
     { items: 20, observedAt: '2026-09-05', route: 'ru-dc' },
     { items: 20, observedAt: '2026-09-05', route: 'ru-owner' },
-  ],
-  'src-linkedin': [
-    {
-      items: 0,
-      observedAt: '2026-09-05',
-      route: 'eu-prod',
-      note: 'страница отвечает 200, но robots.txt содержит Disallow: / — серверный обход исключён',
-    },
-  ],
-  'src-indeed': [
-    { items: 0, observedAt: '2026-09-05', route: 'eu-prod', note: '403 честному агенту и из EU' },
   ],
   'src-glassdoor': [
     { items: 0, observedAt: '2026-09-05', route: 'eu-prod', note: '403 честному агенту и из EU' },
@@ -793,6 +798,41 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     itemsActiveTotal: 0,
   },
   {
+    id: 'src-indeed',
+    name: 'Indeed',
+    type: 'json_api',
+    accessClass: 'api',
+    market: 'США (мобильный API Indeed)',
+    addressStatus: 'live',
+    enabled: true,
+    targetUrl: 'https://apis.indeed.com/graphql',
+    refreshIntervalMinutes: 180,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  },
+  {
+    id: 'src-linkedin-guest',
+    name: 'LinkedIn',
+    type: 'json_api',
+    accessClass: 'open_web',
+    market: 'США (гостевой список LinkedIn)',
+    addressStatus: 'live',
+    enabled: true,
+    targetUrl: 'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search',
+    // robots.txt LinkedIn запрещает /jobs-guest/ словами; включено по прямому,
+    // трижды повторённому решению владельца (B218). Гостевой список открыт без
+    // учётной записи; капчу не решаем, аккаунт не вводим.
+    robotsOverride: {
+      grantedBy: 'owner',
+      grantedOn: '2026-09-14',
+      basis:
+        'Прямое решение владельца (B218, повторено трижды): гостевой список /jobs-guest/ открыт без учётной записи; вакансии LinkedIn критичны для продукта. Темп вежливый, на 429 источник останавливается.',
+    },
+    refreshIntervalMinutes: 240,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  },
+  {
     id: 'src-aijobs',
     name: 'aijobs.net',
     type: 'rss',
@@ -803,36 +843,6 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     disabledReason:
       'Адрес ленты не найден: /feed/, /rss/, /api/jobs/ и /sitemap.xml отдают одну и ту же оболочку приложения в 10 836 байт со всех трёх маршрутов (2026-09-05). Площадка названа владельцем и остаётся в реестре, пока адрес не найден вручную.',
     targetUrl: 'https://aijobs.net/feed/',
-    refreshIntervalMinutes: 120,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-linkedin',
-    name: 'LinkedIn Jobs',
-    type: 'browser_session',
-    accessClass: 'browser_session',
-    market: 'Мир',
-    addressStatus: 'robots_forbidden',
-    enabled: false,
-    disabledReason:
-      'robots.txt LinkedIn содержит Disallow: / — площадка отказала словами, поэтому сервер её не опрашивает никогда. Данные доступны только в браузерной сессии самого кандидата (ADR-009, B206). Владелец 2026-09-05 просил площадку не отсекать — она названа и ждёт своей поверхности.',
-    targetUrl: 'https://www.linkedin.com/jobs/search/',
-    refreshIntervalMinutes: 120,
-    itemsFoundTotal: 0,
-    itemsActiveTotal: 0,
-  },
-  {
-    id: 'src-indeed',
-    name: 'Indeed',
-    type: 'browser_session',
-    accessClass: 'browser_session',
-    market: 'Мир',
-    addressStatus: 'needs_browser_session',
-    enabled: false,
-    disabledReason:
-      'Отвечает 403 честному агенту со всех трёх маршрутов (2026-09-05), то есть это защита, а не география. Читается только в браузерной сессии кандидата (B206).',
-    targetUrl: 'https://www.indeed.com/jobs',
     refreshIntervalMinutes: 120,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
