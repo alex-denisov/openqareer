@@ -82,7 +82,7 @@ describe('registry of vacancy sources', () => {
     expect(remotive?.refreshIntervalMinutes).toBeGreaterThanOrEqual(360);
     // Разрешение поверх robots — только явное, у Remotive и LinkedIn (B217, B218).
     const overridden = DEFAULT_VACANCY_SOURCES.filter((s) => s.robotsOverride).map((s) => s.id).sort();
-    expect(overridden).toEqual(['remotive', 'src-linkedin-guest']);
+    expect(overridden).toEqual(['remotive', 'src-indeed', 'src-linkedin-guest']);
   });
 });
 
