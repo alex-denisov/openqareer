@@ -159,13 +159,24 @@ describe('registry of vacancy sources: routes and address status (B199)', () => 
     );
 
     // Лента NoDesk читается существующим общим разбором RSS, поэтому она
-    // подключена. У JSON-адреса Himalayas своя форма записи: замер есть, но
-    // пока нет адаптера, источник остаётся названным и выключенным — иначе он
-    // числился бы подключённым и не приносил бы ни одной вакансии (B199).
+    // подключена. JSON-адрес Himalayas с B199 стоял выключенным без адаптера;
+    // B215 дал ему адаптер и курсорную постраничность — теперь он включён.
     expect(nodesk?.enabled).toBe(true);
     expect(himalayasApi?.type).toBe('json_api');
-    expect(himalayasApi?.enabled).toBe(false);
-    expect(himalayasApi?.disabledReason).toBeTruthy();
+    expect(himalayasApi?.enabled).toBe(true);
+  });
+
+  it('подключает постраничные площадки и карьерные сайты B215 с замером с прод-маршрута', () => {
+    const enabledIds = DEFAULT_VACANCY_SOURCES.filter((source) => source.enabled).map(
+      (source) => source.id,
+    );
+
+    for (const id of ['src-themuse', 'src-amazon-jobs', 'src-netflix', 'ats-workday-nvidia']) {
+      expect(enabledIds).toContain(id);
+      expect(vacancySourceMeasurements(id).some((m) => m.route === 'eu-prod' && m.items > 0)).toBe(
+        true,
+      );
+    }
   });
 
   it('records what a platform allows, not only whether it answered', () => {

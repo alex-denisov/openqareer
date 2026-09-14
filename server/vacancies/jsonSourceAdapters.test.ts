@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeJsonSource } from './jsonSourceAdapters';
+import { fromWorkdayPostedOn, normalizeJsonSource, workdayPublicUrl } from './jsonSourceAdapters';
+import { UNKNOWN_PUBLISHED_AT } from './jsonVacancyRecord';
 
 /**
  * B164 — each board publishes its own record shape. The payloads below keep the
@@ -10,21 +11,25 @@ const OBSERVED_AT = '2026-08-30T12:00:00.000Z';
 
 describe('json source adapters', () => {
   it('normalises an arbeitnow record', () => {
-    const [vacancy] = normalizeJsonSource('src-arbeitnow', {
-      data: [
-        {
-          slug: 'senior-engineer-berlin-1',
-          company_name: 'Beispiel GmbH',
-          title: 'Senior Engineer',
-          description: '<p>Wir suchen</p>',
-          remote: true,
-          url: 'https://www.arbeitnow.com/jobs/companies/beispiel/senior-engineer-berlin-1',
-          tags: ['typescript'],
-          location: 'Berlin',
-          created_at: 1787000000,
-        },
-      ],
-    }, { observedAt: OBSERVED_AT });
+    const [vacancy] = normalizeJsonSource(
+      'src-arbeitnow',
+      {
+        data: [
+          {
+            slug: 'senior-engineer-berlin-1',
+            company_name: 'Beispiel GmbH',
+            title: 'Senior Engineer',
+            description: '<p>Wir suchen</p>',
+            remote: true,
+            url: 'https://www.arbeitnow.com/jobs/companies/beispiel/senior-engineer-berlin-1',
+            tags: ['typescript'],
+            location: 'Berlin',
+            created_at: 1787000000,
+          },
+        ],
+      },
+      { observedAt: OBSERVED_AT },
+    );
 
     expect(vacancy).toMatchObject({
       title: 'Senior Engineer',
@@ -192,8 +197,9 @@ describe('json source adapters', () => {
   });
 
   it('refuses a payload it cannot read instead of reporting an empty success', () => {
-    expect(() => normalizeJsonSource('src-arbeitnow', { unexpected: true }, { observedAt: OBSERVED_AT }))
-      .toThrow(/vacancy_source_payload_unreadable/);
+    expect(() =>
+      normalizeJsonSource('src-arbeitnow', { unexpected: true }, { observedAt: OBSERVED_AT }),
+    ).toThrow(/vacancy_source_payload_unreadable/);
   });
 
   it('refuses a source it has no adapter for', () => {
@@ -215,7 +221,14 @@ describe('json source adapters', () => {
   it('reads the alternative field names each board also uses', () => {
     const [remoteok] = normalizeJsonSource(
       'src-remoteok',
-      [{ slug: 'alt', title: 'Platform Engineer', company: 'Alt Co', url: 'https://remoteok.com/1' }],
+      [
+        {
+          slug: 'alt',
+          title: 'Platform Engineer',
+          company: 'Alt Co',
+          url: 'https://remoteok.com/1',
+        },
+      ],
       { observedAt: OBSERVED_AT },
     );
     expect(remoteok).toMatchObject({ title: 'Platform Engineer', id: 'src-remoteok:alt' });
@@ -261,7 +274,15 @@ describe('json source adapters', () => {
   it('keeps an unreadable date out of the fresh window instead of calling it today', () => {
     const [remoteok] = normalizeJsonSource(
       'src-remoteok',
-      [{ id: '9', position: 'Engineer', company: 'Co', url: 'https://remoteok.com/9', date: 'вчера' }],
+      [
+        {
+          id: '9',
+          position: 'Engineer',
+          company: 'Co',
+          url: 'https://remoteok.com/9',
+          date: 'вчера',
+        },
+      ],
       { observedAt: OBSERVED_AT },
     );
     const [arbeitnow] = normalizeJsonSource(
@@ -304,7 +325,7 @@ describe('json source adapters', () => {
     expect(trudvsem?.salary).toBeUndefined();
   });
 
-  it("refuses every adapter payload it cannot read", () => {
+  it('refuses every adapter payload it cannot read', () => {
     for (const sourceId of [
       'src-remoteok',
       'src-jobicy',
@@ -312,8 +333,9 @@ describe('json source adapters', () => {
       'src-getonbrd',
       'src-trudvsem',
     ]) {
-      expect(() => normalizeJsonSource(sourceId, { nothing: 'here' }, { observedAt: OBSERVED_AT }))
-        .toThrow(/vacancy_source_payload_unreadable/);
+      expect(() =>
+        normalizeJsonSource(sourceId, { nothing: 'here' }, { observedAt: OBSERVED_AT }),
+      ).toThrow(/vacancy_source_payload_unreadable/);
     }
   });
 });
@@ -385,5 +407,151 @@ describe('what the candidate reads from a JSON board (B164)', () => {
       { observedAt: OBSERVED_AT },
     );
     expect(vacancy?.description).toBe('Lust auf einen Neustart? Keine Vorkenntnisse nötig.');
+  });
+});
+
+/**
+ * B215 — формы записей сняты с живых ответов площадок 2026-09-14 с прод-VM и
+ * урезаны до того, что читает адаптер.
+ */
+describe('json source adapters: paged platforms and career sites (B215)', () => {
+  const observedAt = '2026-09-14T01:30:00.000Z';
+
+  it('normalises a TheMuse record', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-themuse',
+      {
+        page: 1,
+        page_count: 10761,
+        results: [
+          {
+            contents: '<p><b>Infosys is hiring</b></p>',
+            name: 'Principal SAP ATTP Consultant',
+            publication_date: '2026-09-13T20:11:49Z',
+            id: 22160581,
+            locations: [{ name: 'Calgary, Canada' }, { name: 'Flexible / Remote' }],
+            categories: [{ name: 'Software Engineering' }],
+            levels: [{ name: 'Senior Level', short_name: 'senior' }],
+            refs: {
+              landing_page: 'https://www.themuse.com/jobs/infosys/principal-sap-attp-consultant',
+            },
+            company: { id: 15000261, short_name: 'infosys', name: 'Infosys' },
+          },
+        ],
+      },
+      { observedAt },
+    );
+
+    expect(vacancy).toMatchObject({
+      title: 'Principal SAP ATTP Consultant',
+      company: 'Infosys',
+      location: 'Calgary, Canada; Flexible / Remote',
+      isRemote: true,
+      experienceLevel: 'Senior Level',
+      requiredSkills: ['Software Engineering'],
+      url: 'https://www.themuse.com/jobs/infosys/principal-sap-attp-consultant',
+      publishedAt: '2026-09-13T20:11:49.000Z',
+    });
+  });
+
+  it('normalises an Amazon.jobs record with an absolute link', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-amazon-jobs',
+      {
+        hits: 10000,
+        jobs: [
+          {
+            id: '45f954d9',
+            id_icims: '10538311',
+            title: 'Senior Manager, Supply Chain Management',
+            company_name: 'Amazon Japan G.K.',
+            normalized_location: 'Tokyo, JPN',
+            description: 'AMXL JP is looking for a Senior Manager',
+            basic_qualifications: '- 7+ years',
+            job_category: 'Fulfillment & Operations Management',
+            job_family: 'Supply Chain Management',
+            job_schedule_type: 'full-time',
+            job_path: '/en/jobs/10538311/senior-manager-supply-chain-management',
+            posted_date: 'September 13, 2026',
+          },
+        ],
+      },
+      { observedAt, sourceName: 'Amazon' },
+    );
+
+    expect(vacancy).toMatchObject({
+      company: 'Amazon Japan G.K.',
+      location: 'Tokyo, JPN',
+      isRemote: false,
+      employmentType: 'full-time',
+      url: 'https://www.amazon.jobs/en/jobs/10538311/senior-manager-supply-chain-management',
+      publishedAt: '2026-09-13T00:00:00.000Z',
+    });
+    expect(vacancy?.description).toContain('7+ years');
+    expect(vacancy?.provenance.externalId).toBe('10538311');
+  });
+
+  it('normalises a Netflix (Eightfold) position and names the employer from the registry', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-netflix',
+      {
+        count: 488,
+        positions: [
+          {
+            id: 790318395912,
+            name: 'Sr. Account Manager (Germany)',
+            location: 'Germany - Remote',
+            department: 'Advertising',
+            business_unit: 'Streaming',
+            t_create: 1788825600,
+            display_job_id: 'JR42469',
+            job_description: '',
+            work_location_option: 'onsite',
+            canonicalPositionUrl: 'https://explore.jobs.netflix.net/careers/job/790318395912',
+          },
+        ],
+      },
+      { observedAt, sourceName: 'Netflix' },
+    );
+
+    expect(vacancy).toMatchObject({
+      company: 'Netflix',
+      location: 'Germany - Remote',
+      isRemote: true,
+      url: 'https://explore.jobs.netflix.net/careers/job/790318395912',
+      publishedAt: new Date(1788825600 * 1000).toISOString(),
+    });
+    expect(vacancy?.description).toContain('Advertising');
+    expect(vacancy?.provenance.externalId).toBe('JR42469');
+  });
+
+  it('reads Workday "Posted N Days Ago" against the observation time', () => {
+    expect(fromWorkdayPostedOn('Posted Today', observedAt)).toBe(observedAt);
+    expect(fromWorkdayPostedOn('Posted Yesterday', observedAt)).toBe('2026-09-13T01:30:00.000Z');
+    expect(fromWorkdayPostedOn('Posted 3 Days Ago', observedAt)).toBe('2026-09-11T01:30:00.000Z');
+    expect(fromWorkdayPostedOn('Posted 30+ Days Ago', observedAt)).toBe('2026-08-15T01:30:00.000Z');
+    expect(fromWorkdayPostedOn('', observedAt)).toBe(UNKNOWN_PUBLISHED_AT);
+  });
+
+  it('builds the public Workday link from the tenant site, not from the API path', () => {
+    expect(
+      workdayPublicUrl(
+        'https://nvidia.wd5.myworkdayjobs.com/wday/cxs/nvidia/NVIDIAExternalCareerSite/jobs',
+        '/job/US-CA-Santa-Clara/Senior-Firmware-Engineer_JR1999599',
+      ),
+    ).toBe(
+      'https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Senior-Firmware-Engineer_JR1999599',
+    );
+    expect(workdayPublicUrl('https://example.com/other/path', '/job/x')).toBe('');
+    expect(workdayPublicUrl(undefined, '/job/x')).toBe('');
+  });
+
+  it('drops a Workday posting whose public link cannot be built', () => {
+    const vacancies = normalizeJsonSource(
+      'ats-workday-nvidia',
+      { total: 1, jobPostings: [{ title: 'X', externalPath: '/job/x', postedOn: 'Posted Today' }] },
+      { observedAt, sourceName: 'NVIDIA' },
+    );
+    expect(vacancies).toEqual([]);
   });
 });

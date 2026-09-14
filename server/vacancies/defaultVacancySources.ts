@@ -1,5 +1,6 @@
 import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import { ATS_BOARD_MEASUREMENTS, ATS_BOARD_SOURCES } from './atsBoardSources';
+import { WORKDAY_BOARD_MEASUREMENTS, WORKDAY_BOARD_SOURCES } from './workdayBoardSources';
 
 /**
  * The three access classes the owner named for B164: what may be read from the
@@ -141,6 +142,12 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
       note: 'LATAM; 50 записей приходят, но ни одна не несёт названия компании и публичной ссылки, поэтому ни одна не годится как карточка вакансии',
     },
     { items: 50, observedAt: '2026-09-05', route: 'ru-dc' },
+    {
+      items: 100,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'перепроверка с прод-VM: /api/v0/categories/<id>/jobs открыт и отдаёт links.public_url, но работодатель по-прежнему только числовым company.data.id; /api/v0/companies/<id> отвечает 404 (B215)',
+    },
   ],
   'src-workingnomads': [
     { items: 35, observedAt: '2026-09-05', route: 'eu-prod' },
@@ -163,6 +170,12 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
       note: 'JSON-поверхность той же ленты, 150 971 байт; найдена пробой B199',
     },
     {
+      items: 20,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'с прод-VM: totalCount=103 845, курсорная постраничность, не больше 20 на страницу; robots.txt Allow: / (B215)',
+    },
+    {
       items: 0,
       observedAt: '2026-09-05',
       route: 'ru-dc',
@@ -182,6 +195,28 @@ const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>
   'src-themuse': [
     { items: 20, observedAt: '2026-09-05', route: 'eu-prod', note: 'публичный API, страница 1' },
     { items: 20, observedAt: '2026-09-05', route: 'ru-dc' },
+    {
+      items: 20,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'с прод-VM: 22 категории белых воротничков — 215 202 вакансии на 10 761 странице; robots.txt не запрещает /api/public (B215)',
+    },
+  ],
+  'src-amazon-jobs': [
+    {
+      items: 100,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'search.json с прод-VM: 100 записей на страницу, hits=10000 (потолок площадки); robots.txt запрещает только /internal (B215)',
+    },
+  ],
+  'src-netflix': [
+    {
+      items: 10,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'Eightfold API с прод-VM: count=488, не больше 10 записей на страницу; robots.txt у jobs.netflix.com нет (B215)',
+    },
   ],
   remotive: [
     {
@@ -318,7 +353,12 @@ export function vacancySourceMeasurements(sourceId: string): readonly VacancySou
   // Доски работодателей замерены отдельной пробой и живут своим списком: их
   // сотни, и держать их в одной таблице с площадками — значит перестать её
   // читать глазами (B202).
-  return MEASUREMENTS[sourceId] ?? ATS_BOARD_MEASUREMENTS[sourceId] ?? [];
+  return (
+    MEASUREMENTS[sourceId] ??
+    ATS_BOARD_MEASUREMENTS[sourceId] ??
+    WORKDAY_BOARD_MEASUREMENTS[sourceId] ??
+    []
+  );
 }
 
 /**
@@ -440,7 +480,7 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     addressStatus: 'live',
     enabled: false,
     disabledReason:
-      'API Get on Board не отдаёт ни названия компании, ни публичной ссылки на вакансию: `company` приходит ссылкой на идентификатор, `public_url` отсутствует в обеих поверхностях (проверено 2026-08-30, подтверждено 2026-09-05). Карточка без работодателя и без рабочей ссылки — ровно то, что запрещает B161, поэтому источник зарегистрирован, но выключен до отдельного среза с дозапросом компании.',
+      'API Get on Board отдаёт публичную ссылку (`links.public_url`, перепроверено 2026-09-14), но работодателя — только числовым `company.data.id`, а `/api/v0/companies/<id>` отвечает 404 без токена. Карточка без работодателя — то, что запрещает B161, поэтому источник зарегистрирован, но выключен до доступа к справочнику компаний.',
     targetUrl: 'https://www.getonbrd.com/api/v0/search/jobs?per_page=50',
     requiresQuery: true,
     refreshIntervalMinutes: 180,
@@ -467,12 +507,10 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     accessClass: 'api',
     market: 'Удалённо, мир',
     addressStatus: 'live',
-    // Адрес отдаёт записи, но своей формы записи продукт пока не разбирает: у
-    // каждой JSON-площадки собственный адаптер, и без него сбор упал бы на
-    // `vacancy_source_adapter_missing`. Замер живёт в каталоге, подключение —
-    // отдельная работа (B199 не подключает новые источники, см. B202).
-    enabled: false,
-    disabledReason: 'Живой JSON-адрес без адаптера записи; подключение отдельным тикетом',
+    // Курсорная лента от свежих к старым: опрос читает 25 страниц по 20 и
+    // дополняет срез (B215). RSS-источник `src-himalayas` остаётся: он даёт
+    // те же вакансии, и дедупликатор их склеит.
+    enabled: true,
     targetUrl: 'https://himalayas.app/jobs/api?limit=20',
     refreshIntervalMinutes: 120,
     itemsFoundTotal: 0,
@@ -503,11 +541,13 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     accessClass: 'api',
     market: 'US',
     addressStatus: 'live',
-    // См. `src-himalayas-api`: замер есть, адаптера записи нет.
-    enabled: false,
-    disabledReason: 'Живой JSON-адрес без адаптера записи; подключение отдельным тикетом',
-    targetUrl: 'https://www.themuse.com/api/public/jobs?page=1',
-    refreshIntervalMinutes: 120,
+    // Категории — те же «белые воротнички», что и фильтр hh.ru (B214): роль,
+    // где резюме имеет значение. Сортировки по дате у API нет, поэтому окно из
+    // 60 страниц вращается по кругу от времени (B215).
+    enabled: true,
+    targetUrl:
+      'https://www.themuse.com/api/public/jobs?page=1&category=Software%20Engineering&category=Data%20and%20Analytics&category=Data%20Science&category=Design%20and%20UX&category=Product%20Management&category=Project%20Management&category=Computer%20and%20IT&category=IT&category=Business%20Operations&category=Sales&category=Marketing&category=Account%20Management&category=Accounting%20and%20Finance&category=Human%20Resources%20and%20Recruitment&category=Legal%20Services&category=Science%20and%20Engineering&category=Management&category=Writing%20and%20Editing&category=Media%2C%20PR%2C%20and%20Communications&category=Education&category=Medical%2C%20Clinical%20and%20Veterinary&category=Customer%20Service',
+    refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
   },
@@ -645,6 +685,34 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     itemsActiveTotal: 0,
   },
   {
+    id: 'src-amazon-jobs',
+    name: 'Amazon',
+    type: 'json_api',
+    accessClass: 'api',
+    market: 'Мир (карьерный сайт Amazon)',
+    addressStatus: 'live',
+    enabled: true,
+    // `sort=recent`: 20 страниц по 100 за опрос — свежие две тысячи; хвост до
+    // потолка 10 000 доходит частичными чтениями (B215).
+    targetUrl: 'https://www.amazon.jobs/en/search.json?result_limit=100&sort=recent',
+    refreshIntervalMinutes: 120,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  },
+  {
+    id: 'src-netflix',
+    name: 'Netflix',
+    type: 'json_api',
+    accessClass: 'api',
+    market: 'Мир (карьерный сайт Netflix, Eightfold)',
+    addressStatus: 'live',
+    enabled: true,
+    targetUrl: 'https://explore.jobs.netflix.net/api/apply/v2/jobs?domain=netflix.com&num=10',
+    refreshIntervalMinutes: 240,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  },
+  {
     id: 'src-aijobs',
     name: 'aijobs.net',
     type: 'rss',
@@ -759,4 +827,5 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
 export const DEFAULT_VACANCY_SOURCES: readonly RegisteredVacancySource[] = [
   ...PLATFORM_SOURCES,
   ...ATS_BOARD_SOURCES,
+  ...WORKDAY_BOARD_SOURCES,
 ];

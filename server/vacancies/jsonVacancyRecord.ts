@@ -15,6 +15,12 @@ export interface JsonAdapterContext {
    * работодателя в записи вовсе — тогда его называет реестр, а не догадка.
    */
   readonly sourceName?: string;
+  /**
+   * Адрес, по которому пришла страница. Workday отдаёт путь вакансии
+   * относительно своего сайта, и собрать публичную ссылку можно только зная,
+   * с какого адреса читали (B215).
+   */
+  readonly sourceUrl?: string;
 }
 
 export type JsonRecord = Record<string, unknown>;
@@ -131,7 +137,9 @@ export function fromIso(value: unknown): string {
 export function fromLooseDate(value: unknown): string {
   // `2026-07-31 22:26:40 UTC` — форма Recruitee; часовой пояс словами Date.parse
   // не читает, а невычитанная дата уводит живую вакансию в отсев по свежести.
-  const raw = text(value).trim().replace(/\s+UTC$/i, '');
+  const raw = text(value)
+    .trim()
+    .replace(/\s+UTC$/i, '');
   if (!raw) return UNKNOWN_PUBLISHED_AT;
   const parsed = Date.parse(raw.includes(' ') ? raw.replace(' ', 'T') + 'Z' : raw);
   return Number.isNaN(parsed) ? UNKNOWN_PUBLISHED_AT : new Date(parsed).toISOString();

@@ -7,7 +7,8 @@ import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacan
 import type { SourceFetcher } from './multiSourceVacancyEngine';
 import type { RobotsFetcher } from './robotsPolicyLoader';
 import type { HhCrawlCoordinator } from './hhCrawlCoordinator';
-
+import { pagingPlanFor, type PagedRequest } from './pagedJsonSources';
+import type { SourceReading } from './multiSourceVacancyEngine';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -106,15 +107,71 @@ async function fetchJsonApi(
   options?: { query?: string },
 ): Promise<UnifiedVacancy[]> {
   const url = withQuery(source, options?.query);
-  const res = await fetch(url, {
-    headers: { ...FETCH_HEADERS, Accept: 'application/json' },
+  return readJsonPage(source, { url });
+}
+
+async function readJsonPage(
+  source: VacancySourceConfig,
+  request: PagedRequest,
+): Promise<UnifiedVacancy[]> {
+  const { payload, observedAt } = await fetchJsonPayload(request);
+  // Имя источника нужно разбору: доски Lever и Ashby не публикуют работодателя
+  // в записи, и назвать его может только реестр (B202).
+  return normalizeJsonSource(source.id, payload, {
+    observedAt,
+    sourceName: source.name,
+    sourceUrl: request.url,
+  });
+}
+
+async function fetchJsonPayload(
+  request: PagedRequest,
+): Promise<{ payload: unknown; observedAt: string }> {
+  const res = await fetch(request.url, {
+    method: request.method ?? 'GET',
+    headers: {
+      ...FETCH_HEADERS,
+      Accept: 'application/json',
+      ...(request.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(request.body !== undefined ? { body: JSON.stringify(request.body) } : {}),
     signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
   const observedAt = new Date().toISOString();
-  // Имя источника нужно разбору: доски Lever и Ashby не публикуют работодателя
-  // в записи, и назвать его может только реестр (B202).
-  return normalizeJsonSource(source.id, await res.json(), { observedAt, sourceName: source.name });
+  return { payload: await res.json(), observedAt };
+}
+
+/**
+ * Постраничная площадка (B215): опрос читает не больше `pagesPerSync` страниц
+ * и, если площадка отдала не всё, называет чтение частичным — движок тогда
+ * дополняет срез, а не заменяет его. Первая страница обязана прочитаться:
+ * отказ на ней — отказ площадки, а не «ноль вакансий».
+ */
+async function fetchPagedJsonApi(
+  source: VacancySourceConfig,
+  sleep: (ms: number) => Promise<void>,
+  now: () => number,
+): Promise<SourceReading> {
+  const plan = pagingPlanFor(source.id);
+  if (!plan) throw new Error(`vacancy_source_paging_missing: ${source.id}`);
+  const vacancies: UnifiedVacancy[] = [];
+  let request: PagedRequest | null = plan.first(source.targetUrl, now());
+  let pagesRead = 0;
+  while (request && pagesRead < plan.pagesPerSync) {
+    if (pagesRead > 0) await sleep(plan.delayMs);
+    const { payload, observedAt } = await fetchJsonPayload(request);
+    vacancies.push(
+      ...normalizeJsonSource(source.id, payload, {
+        observedAt,
+        sourceName: source.name,
+        sourceUrl: request.url,
+      }),
+    );
+    pagesRead += 1;
+    request = plan.next(request, payload);
+  }
+  return { vacancies, partial: request !== null };
 }
 
 /** Only the sources whose live probe proved they honour a query get one. */
@@ -174,11 +231,22 @@ export const fetchRobotsTxt: RobotsFetcher = async (robotsUrl) => {
   return { status: res.status, body: res.ok ? await res.text() : null };
 };
 
+export interface MultiSourceFetcherDeps {
+  readonly sleep?: (ms: number) => Promise<void>;
+  readonly now?: () => number;
+}
+
+const defaultSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 export function buildMultiSourceFetcher(
   hh: HhSearch,
   remotive: RemotiveSearch,
   crawlCoordinator?: HhCrawlCoordinator,
+  deps: MultiSourceFetcherDeps = {},
 ): SourceFetcher {
+  const sleep = deps.sleep ?? defaultSleep;
+  const now = deps.now ?? Date.now;
   return async (source, options) => {
     if (source.type === 'hh') {
       const sample = await hh({ text: options?.query || 'Developer', perPage: 20 });
@@ -195,6 +263,7 @@ export function buildMultiSourceFetcher(
       return fetchRssFeed(source, options);
     }
     if (source.type === 'json_api') {
+      if (pagingPlanFor(source.id)) return fetchPagedJsonApi(source, sleep, now);
       return fetchJsonApi(source, options);
     }
     if (source.type === 'hh_search') {
