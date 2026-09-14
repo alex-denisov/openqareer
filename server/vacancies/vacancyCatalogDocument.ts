@@ -18,8 +18,6 @@ import { CATALOG_ROOT } from '../../shared/vacancyCatalogRoutes';
 import { employerLabel } from '../../shared/employerLabel';
 import type { CatalogEntry, CatalogPage, StructuredGraph, VacancyDetail } from './vacancyCatalogPage';
 import type { CatalogFilterGroup } from './vacancyCatalogFilters';
-import type { UnifiedVacancy } from '../domain/unifiedVacancy';
-import { renderUnifiedVacancyView } from './renderVacancyTemplate';
 
 /**
  * ПОЧЕМУ ФАЙЛ, А НЕ ИНЛАЙН. Боевая политика безопасности — `style-src 'self'`
@@ -301,18 +299,11 @@ export function renderCatalogDocument(
   );
 }
 
-export function renderVacancyDocument(
-  detail: VacancyDetail,
-  vacancy?: UnifiedVacancy,
-): string {
+export function renderVacancyDocument(detail: VacancyDetail): string {
   const { entry } = detail;
   const employer = employerLabel(entry.company);
   const title = `${entry.title} — ${employer} · openqareer`;
   const description = `${entry.title}, ${employer}, ${placeLabel(entry)}. Источник и дата наблюдения указаны на странице.`;
-  const targetVacancy = vacancy ?? detail.vacancy;
-  const detailText = targetVacancy
-    ? renderUnifiedVacancyView(targetVacancy)
-    : detail.description;
 
   const body =
     siteHeader() +
@@ -323,7 +314,7 @@ export function renderVacancyDocument(
     `<p class="catalog-card-meta">${escapeHtml(employer)} · ${escapeHtml(placeLabel(entry))}` +
     (entry.salaryLabel ? ` · ${escapeHtml(entry.salaryLabel)}` : '') +
     '</p>' +
-    `<p class="catalog-detail-summary">${escapeHtml(detailText)}</p>` +
+    `<p class="catalog-detail-summary">${escapeHtml(detail.description)}</p>` +
     (entry.skills.length > 0
       ? `<ul class="catalog-skills">${entry.skills.map((skill) => `<li>${escapeHtml(skill)}</li>`).join('')}</ul>`
       : '') +

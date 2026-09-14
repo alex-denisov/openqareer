@@ -64,7 +64,7 @@ describe('renderUnifiedVacancyView (Dynamic LinkedIn Template Engine)', () => {
       expect(output).toContain('💼 **Уровень роли:** `Staff`');
 
       // 4. Compensation range
-      expect(output).toContain('💰 **Компенсация:** `$200,000 – $280,000 USD`');
+      expect(output).toContain('💰 **Компенсация:** `$200,000 – $280,000`');
 
       // 5. Status line with publication and provenance
       expect(output).toContain('🕒 **Статус:**');
@@ -87,16 +87,47 @@ describe('renderUnifiedVacancyView (Dynamic LinkedIn Template Engine)', () => {
       expect(output).not.toContain('💰 **Компенсация:**');
     });
 
-    it('formats single-bound salary (from only / to only)', () => {
-      const fromOnly = sampleVacancy({
+    it('formats single-bound salary (from only / to only) with proper currency', () => {
+      const fromEur = sampleVacancy({
         salary: { from: 150000, currency: 'EUR' },
       });
-      const toOnly = sampleVacancy({
+      const toUsd = sampleVacancy({
         salary: { to: 190000, currency: 'USD' },
       });
+      const fromRub = sampleVacancy({
+        salary: { from: 120000, currency: 'RUB' },
+      });
+      const toCad = sampleVacancy({
+        salary: { to: 160000, currency: 'CAD' },
+      });
 
-      expect(renderUnifiedVacancyView(fromOnly)).toContain('💰 **Компенсация:** `от 150,000 EUR`');
-      expect(renderUnifiedVacancyView(toOnly)).toContain('💰 **Компенсация:** `до 190,000 USD`');
+      expect(renderUnifiedVacancyView(fromEur)).toContain('💰 **Компенсация:** `от €150,000`');
+      expect(renderUnifiedVacancyView(toUsd)).toContain('💰 **Компенсация:** `до $190,000`');
+      expect(renderUnifiedVacancyView(fromRub)).toContain('💰 **Компенсация:** `от 120,000 ₽`');
+      expect(renderUnifiedVacancyView(toCad)).toContain('💰 **Компенсация:** `до 160,000 CAD`');
+    });
+
+    it('formats non-USD and symbol currency ranges accurately', () => {
+      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'USD' } })))
+        .toContain('💰 **Компенсация:** `$100,000 – $150,000`');
+      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000 } })))
+        .toContain('💰 **Компенсация:** `$100,000 – $150,000`');
+      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: '$' } })))
+        .toContain('💰 **Компенсация:** `$100,000 – $150,000`');
+      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'EUR' } })))
+        .toContain('💰 **Компенсация:** `€100,000 – €150,000`');
+      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: '€' } })))
+        .toContain('💰 **Компенсация:** `€100,000 – €150,000`');
+      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'GBP' } })))
+        .toContain('💰 **Компенсация:** `£100,000 – £150,000`');
+      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: '£' } })))
+        .toContain('💰 **Компенсация:** `£100,000 – £150,000`');
+      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'RUB' } })))
+        .toContain('💰 **Компенсация:** `100,000 – 150,000 ₽`');
+      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: '₽' } })))
+        .toContain('💰 **Компенсация:** `100,000 – 150,000 ₽`');
+      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'CAD' } })))
+        .toContain('💰 **Компенсация:** `100,000 – 150,000 CAD`');
     });
   });
 

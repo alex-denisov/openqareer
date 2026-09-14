@@ -29,17 +29,42 @@ export function stripEeoBoilerplate(text: string): string {
   return kept.join('\n\n').trim();
 }
 
+interface CurrencyFormat {
+  readonly prefix: string;
+  readonly suffix: string;
+}
+
+function resolveCurrencyFormat(currency?: string): CurrencyFormat {
+  const trimmed = currency?.trim();
+  if (!trimmed || trimmed.toUpperCase() === 'USD' || trimmed === '$') {
+    return { prefix: '$', suffix: '' };
+  }
+  if (trimmed.toUpperCase() === 'EUR' || trimmed === '€') {
+    return { prefix: '€', suffix: '' };
+  }
+  if (trimmed.toUpperCase() === 'GBP' || trimmed === '£') {
+    return { prefix: '£', suffix: '' };
+  }
+  if (trimmed.toUpperCase() === 'RUB' || trimmed.toUpperCase() === 'RUR' || trimmed === '₽') {
+    return { prefix: '', suffix: ' ₽' };
+  }
+  return { prefix: '', suffix: ` ${trimmed}` };
+}
+
 function formatSalary(salary?: VacancySalary): string | undefined {
   if (!salary) return undefined;
-  const currency = salary.currency?.trim() ? ` ${salary.currency.trim()}` : '';
+  const { prefix, suffix } = resolveCurrencyFormat(salary.currency);
+
   if (salary.from !== undefined && salary.to !== undefined) {
-    return `$${salary.from.toLocaleString('en-US')} – $${salary.to.toLocaleString('en-US')}${currency}`;
+    const fromStr = `${prefix}${salary.from.toLocaleString('en-US')}`;
+    const toStr = `${prefix}${salary.to.toLocaleString('en-US')}${suffix}`;
+    return `${fromStr} – ${toStr}`;
   }
   if (salary.from !== undefined) {
-    return `от ${salary.from.toLocaleString('en-US')}${currency}`;
+    return `от ${prefix}${salary.from.toLocaleString('en-US')}${suffix}`;
   }
   if (salary.to !== undefined) {
-    return `до ${salary.to.toLocaleString('en-US')}${currency}`;
+    return `до ${prefix}${salary.to.toLocaleString('en-US')}${suffix}`;
   }
   return undefined;
 }

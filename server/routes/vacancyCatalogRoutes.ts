@@ -161,7 +161,7 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
     const page = buildCatalogPage(clusters, 1);
     return sendDocument(reply, renderGoneDocument(page), 410);
   }
-  return sendDocument(reply, renderVacancyDocument(detail, full));
+  return sendDocument(reply, renderVacancyDocument(detail));
 }
 
 async function handleSitemap(deps: RouteDeps, _request: FastifyRequest, reply: FastifyReply) {

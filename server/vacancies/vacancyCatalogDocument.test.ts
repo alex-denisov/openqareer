@@ -302,8 +302,10 @@ describe('документ публичного каталога (B209)', () => 
     };
     const detail = buildVacancyDetail(
       cluster({ canonicalCompany: 'Databricks', canonicalTitle: 'Senior Distributed Systems Engineer' }),
+      undefined,
+      rawVacancy,
     )!;
-    const html = renderVacancyDocument(detail, rawVacancy);
+    const html = renderVacancyDocument(detail);
 
     expect(html).toContain('# Senior Distributed Systems Engineer');
     expect(html).toContain('**Databricks** · Amsterdam, Netherlands · `Remote` · `Full-time`');
