@@ -67,11 +67,14 @@ describe('paging plans (B216)', () => {
     const first = plan.first('https://t.wd5.myworkdayjobs.com/wday/cxs/t/Site/jobs', 0);
     expect(first.method).toBe('POST');
     expect(first.body).toMatchObject({ limit: 20, offset: 0 });
-    const next = plan.next(first, { total: 45, jobPostings: [{}] });
+    const page = Array.from({ length: 20 }, () => ({}));
+    const next = plan.next(first, { total: 45, jobPostings: page });
     expect(next?.body).toMatchObject({ offset: 20 });
-    const third = plan.next(next!, { total: 45, jobPostings: [{}] });
+    // Дальше первой страницы Workday отдаёт total = 0 — план помнит его сам.
+    const third = plan.next(next!, { total: 0, jobPostings: page });
     expect(third?.body).toMatchObject({ offset: 40 });
-    expect(plan.next(third!, { total: 45, jobPostings: [{}] })).toBeNull();
+    expect(plan.next(third!, { total: 0, jobPostings: page })).toBeNull();
+    expect(plan.next(first, { total: 45, jobPostings: [{}] })).toBeNull();
   });
 
   it('у площадки без плана плана нет', () => {

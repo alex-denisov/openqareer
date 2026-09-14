@@ -24,6 +24,8 @@ export interface PagedRequest {
   readonly url: string;
   readonly method?: 'GET' | 'POST';
   readonly body?: unknown;
+  /** Состояние обхода между страницами; площадке не отправляется. */
+  readonly state?: unknown;
 }
 
 export interface PagingPlan {
@@ -101,11 +103,11 @@ const themuse: PagingPlan = {
     if (!query) return { url: targetUrl };
     return {
       url: themuseUrl(targetUrl, query, 1),
-      body: { targetUrl, index: tick % queries.length },
+      state: { targetUrl, index: tick % queries.length },
     };
   },
   next: (previous, payload) => {
-    const state = record(previous.body);
+    const state = record(previous.state);
     const targetUrl = text(state.targetUrl);
     const queries = targetUrl ? themuseQueries(targetUrl) : [];
     if (queries.length === 0) return null;
@@ -114,13 +116,13 @@ const themuse: PagingPlan = {
     const results = asArray(record(payload).results) ?? [];
     const index = numeric(state.index) ?? 0;
     if (results.length > 0 && page < pageCount) {
-      return { url: themuseUrl(targetUrl, queries[index]!, page + 1), body: previous.body };
+      return { url: themuseUrl(targetUrl, queries[index]!, page + 1), state: previous.state };
     }
     // Комбинация дочитана — следующая по кругу; бюджет страниц остановит опрос.
     const nextIndex = (index + 1) % queries.length;
     return {
       url: themuseUrl(targetUrl, queries[nextIndex]!, 1),
-      body: { targetUrl, index: nextIndex },
+      state: { targetUrl, index: nextIndex },
     };
   },
 };
@@ -168,21 +170,31 @@ const eightfold: PagingPlan = {
   },
 };
 
-/** Workday: POST с `offset`/`limit` (не больше 20), `total` в ответе. */
-function workdayBody(offset: number): unknown {
-  return { appliedFacets: {}, limit: WORKDAY_PAGE, offset, searchText: '' };
+/**
+ * Workday: POST с `offset`/`limit` (не больше 20). `total` площадка называет
+ * только на первой странице, дальше отдаёт 0 (замер NVIDIA 2026-09-14) —
+ * поэтому он переносится в состояние обхода.
+ */
+function workdayRequest(url: string, offset: number, total: number): PagedRequest {
+  return {
+    url,
+    method: 'POST',
+    body: { appliedFacets: {}, limit: WORKDAY_PAGE, offset, searchText: '' },
+    state: { offset, total },
+  };
 }
 
 const workday: PagingPlan = {
   pagesPerSync: 100,
   delayMs: 400,
-  first: (targetUrl) => ({ url: targetUrl, method: 'POST', body: workdayBody(0) }),
+  first: (targetUrl) => workdayRequest(targetUrl, 0, 0),
   next: (previous, payload) => {
-    const offset = numeric(record(previous.body).offset) ?? 0;
-    const total = numeric(record(payload).total) ?? 0;
+    const state = record(previous.state);
+    const offset = numeric(state.offset) ?? 0;
+    const total = Math.max(numeric(record(payload).total) ?? 0, numeric(state.total) ?? 0);
     const postings = asArray(record(payload).jobPostings) ?? [];
-    if (postings.length === 0 || offset + WORKDAY_PAGE >= total) return null;
-    return { url: previous.url, method: 'POST', body: workdayBody(offset + WORKDAY_PAGE) };
+    if (postings.length < WORKDAY_PAGE || offset + WORKDAY_PAGE >= total) return null;
+    return workdayRequest(previous.url, offset + WORKDAY_PAGE, total);
   },
 };
 
