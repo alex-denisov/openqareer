@@ -22,6 +22,14 @@ import { eightfoldPayload, isWorkdaySource } from './pagedJsonSources';
 import { CROSSOVER_SOURCE_ID } from './crossoverSource';
 import { LINKEDIN_SOURCE_ID } from './linkedinGuestSource';
 import { HN_SOURCE_ID, hnWhoIsHiringAdapter } from './hnWhoIsHiringSource';
+import {
+  BDJOBS_SOURCE_ID,
+  NAUKRI_SOURCE_ID,
+  ZIPRECRUITER_SOURCE_ID,
+  normalizeBdjobsJobs,
+  normalizeNaukriJobs,
+  normalizeZipRecruiterJobs,
+} from './jobspyAdapters';
 
 export type { JsonAdapterContext } from './jsonVacancyRecord';
 
@@ -287,6 +295,15 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
 
   [HN_SOURCE_ID]: (payload, context, sourceId) =>
     hnWhoIsHiringAdapter(payload, context, sourceId),
+
+  [NAUKRI_SOURCE_ID]: (payload, context, sourceId) =>
+    normalizeNaukriJobs(payload, context, sourceId),
+
+  [BDJOBS_SOURCE_ID]: (payload, context, sourceId) =>
+    normalizeBdjobsJobs(payload, context, sourceId),
+
+  [ZIPRECRUITER_SOURCE_ID]: (payload, context, sourceId) =>
+    normalizeZipRecruiterJobs(payload, context, sourceId),
 
   'src-apple-jobs': (payload, context, sourceId) =>
     listOf(payload, (value) => asArray(record(record(value).res).searchResults)).map((item) => {

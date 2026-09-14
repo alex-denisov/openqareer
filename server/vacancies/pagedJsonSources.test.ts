@@ -256,6 +256,51 @@ describe('paging plans (B216)', () => {
     expect(plan.next(commentsReqPage1!, commentsPage1)).toBeNull();
   });
 
+  it('Naukri: инкрементирует pageNo пока есть jobDetails', () => {
+    const plan = pagingPlanFor('src-naukri')!;
+    expect(plan).toBeDefined();
+    const first = plan.first('https://www.naukri.com/jobapi/v3/search', 0);
+    expect(first.url).toContain('pageNo=1');
+    expect(first.headers?.appid).toBe('109');
+    expect(first.headers?.systemid).toBe('Naukri');
+
+    const next = plan.next(first, { jobDetails: [{ jobId: '123' }] });
+    expect(next).not.toBeNull();
+    expect(next?.url).toContain('pageNo=2');
+
+    expect(plan.next(first, { jobDetails: [] })).toBeNull();
+  });
+
+  it('BDJobs: инкрементирует pg пока есть data', () => {
+    const plan = pagingPlanFor('src-bdjobs')!;
+    expect(plan).toBeDefined();
+    const first = plan.first('https://gateway.bdjobs.com/v1/api/jobsearch', 0);
+    expect(first.url).toContain('pg=1');
+    expect(first.headers?.['User-Agent']).toContain('Mozilla');
+
+    const next = plan.next(first, { data: [{ JobId: '456' }] });
+    expect(next).not.toBeNull();
+    expect(next?.url).toContain('pg=2');
+
+    expect(plan.next(first, { data: [] })).toBeNull();
+  });
+
+  it('ZipRecruiter: инкрементирует page и передает continue token', () => {
+    const plan = pagingPlanFor('src-ziprecruiter')!;
+    expect(plan).toBeDefined();
+    const first = plan.first('https://api.ziprecruiter.com/jobs-app/jobs', 0);
+    expect(first.url).toContain('page=1');
+    expect(first.headers?.authorization).toContain('Basic ');
+    expect(first.headers?.['x-zr-zapi-version']).toBe('8');
+
+    const next = plan.next(first, { jobs: [{ listing_key: '789' }], continue: 'tok_abc' });
+    expect(next).not.toBeNull();
+    expect(next?.url).toContain('page=2');
+    expect(next?.url).toContain('continue_from=tok_abc');
+
+    expect(plan.next(first, { jobs: [] })).toBeNull();
+  });
+
   it('у площадки без плана плана нет', () => {
     expect(pagingPlanFor('src-arbeitnow')).toBeNull();
   });

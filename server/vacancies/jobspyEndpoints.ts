@@ -74,3 +74,75 @@ function escapeGraphqlString(value: string): string {
 
 export const LINKEDIN_GUEST_URL =
   'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search';
+
+/** Naukri API endpoint (механика JobSpy, v3 search API). */
+export const NAUKRI_SEARCH_URL = 'https://www.naukri.com/jobapi/v3/search';
+
+export function naukriHeaders(): Record<string, string> {
+  return {
+    appid: '109',
+    systemid: 'Naukri',
+    clientid: '109',
+    Nkparam:
+      'Ppy0YK9uSHqPtG3bEejYc04RTpUN2CjJOrqA68tzQt0SKJHXZKzz9M8cZtKLVkoOuQmfe4cTb1r2CwfHaxW5Tg==',
+    accept:
+      'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  };
+}
+
+export function naukriQueryParams(keyword: string, pageNo = 1): Record<string, string> {
+  return {
+    keyword,
+    pageNo: String(pageNo),
+    sort: 'date',
+    noOfResults: '20',
+  };
+}
+
+/** BDJobs API gateway endpoint (механика JobSpy). */
+export const BDJOBS_SEARCH_URL = 'https://gateway.bdjobs.com/v1/api/jobsearch';
+
+export function bdjobsHeaders(): Record<string, string> {
+  return {
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    Accept: 'application/json, text/html, */*',
+  };
+}
+
+export function bdjobsPayload(keyword: string, pg = 1): Record<string, string> {
+  return {
+    hidJobSearch: 'jobsearch',
+    txtKeyword: keyword,
+    pg: String(pg),
+  };
+}
+
+/** ZipRecruiter mobile iOS API endpoint (механика JobSpy). */
+export const ZIPRECRUITER_JOBS_URL = 'https://api.ziprecruiter.com/jobs-app/jobs';
+export const ZIPRECRUITER_AUTH_TOKEN = 'Basic YTBlZjMyZDYtN2I0Yy00MWVkLWEyODMtYTI1NDAzMzI0YTcyOg==';
+
+export function ziprecruiterHeaders(): Record<string, string> {
+  return {
+    authorization: ZIPRECRUITER_AUTH_TOKEN,
+    'x-zr-zapi-version': '8',
+    'User-Agent': 'Job Search/87.0 (iPhone; CPU iOS 16_6_1 like Mac OS X)',
+    accept: 'application/json',
+  };
+}
+
+export function ziprecruiterQueryParams(
+  search: string,
+  location = 'United States',
+  page = 1,
+  perPage = 50,
+): Record<string, string> {
+  return {
+    search,
+    location,
+    page: String(page),
+    per_page: String(perPage),
+  };
+}

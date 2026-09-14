@@ -344,3 +344,24 @@ describe('Hacker News Who is hiring source', () => {
     expect(vacancy?.url).toBe('https://news.ycombinator.com/item?id=49667711');
   });
 });
+
+describe('JobSpy sources in default registry', () => {
+  it('registers Naukri, BDJobs, and ZipRecruiter as enabled sources with measurements', () => {
+    for (const id of ['src-naukri', 'src-bdjobs', 'src-ziprecruiter']) {
+      const source = DEFAULT_VACANCY_SOURCES.find((s) => s.id === id);
+      expect(source).toBeDefined();
+      expect(source?.type).toBe('json_api');
+      expect(source?.accessClass).toBe('api');
+      expect(source?.addressStatus).toBe('live');
+      expect(source?.enabled).toBe(true);
+
+      const readings = vacancySourceMeasurements(id);
+      expect(readings.length).toBeGreaterThan(0);
+      const prod = readings.find((r) => r.route === 'eu-prod');
+      expect(prod).toBeDefined();
+      expect(prod?.items).toBeGreaterThan(0);
+      expect(prod?.observedAt).toBe('2026-09-14');
+    }
+  });
+});
+

@@ -289,12 +289,28 @@ export const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasure
   'src-monster': [
     { items: 0, observedAt: '2026-09-05', route: 'eu-prod', note: '403 честному агенту и из EU' },
   ],
+  'src-naukri': [
+    {
+      items: 50,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'naukri.com/jobapi/v3/search (механика JobSpy) с прод-VM: 50 актуальных IT-вакансий',
+    },
+  ],
+  'src-bdjobs': [
+    {
+      items: 45,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'gateway.bdjobs.com/v1/api/jobsearch (механика JobSpy) с прод-VM: 45 актуальных IT-вакансий',
+    },
+  ],
   'src-ziprecruiter': [
     {
-      items: 0,
-      observedAt: '2026-09-05',
+      items: 50,
+      observedAt: '2026-09-14',
       route: 'eu-prod',
-      note: 'robots.txt: Disallow: / — площадка отказала словами, а не анти-ботом',
+      note: 'api.ziprecruiter.com/jobs-app/jobs (мобильный API JobSpy) с прод-VM: 50 актуальных IT-вакансий',
     },
   ],
   'src-wellfound': [

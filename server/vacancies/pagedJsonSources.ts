@@ -1,5 +1,17 @@
 import { record, numeric, asArray, text } from './jsonVacancyRecord';
-import { INDEED_GRAPHQL_URL, indeedHeaders, indeedQuery } from './jobspyEndpoints';
+import {
+  INDEED_GRAPHQL_URL,
+  indeedHeaders,
+  indeedQuery,
+  naukriHeaders,
+  bdjobsHeaders,
+  ziprecruiterHeaders,
+} from './jobspyEndpoints';
+import {
+  BDJOBS_SOURCE_ID,
+  NAUKRI_SOURCE_ID,
+  ZIPRECRUITER_SOURCE_ID,
+} from './jobspyAdapters';
 import { FAN_SIZE, fanComboAt, fanStartIndex } from './jobspyFan';
 import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
 
@@ -511,6 +523,100 @@ const hnWhoIsHiring: PagingPlan = {
   },
 };
 
+function naukriFirstRequest(targetUrl: string): PagedRequest {
+  const url = new URL(targetUrl);
+  if (!url.searchParams.has('keyword')) url.searchParams.set('keyword', 'software engineer');
+  if (!url.searchParams.has('pageNo')) url.searchParams.set('pageNo', '1');
+  if (!url.searchParams.has('sort')) url.searchParams.set('sort', 'date');
+  if (!url.searchParams.has('noOfResults')) url.searchParams.set('noOfResults', '20');
+  return {
+    url: url.toString(),
+    headers: naukriHeaders(),
+    state: { page: 1 },
+  };
+}
+
+const naukri: PagingPlan = {
+  pagesPerSync: 10,
+  delayMs: 1_000,
+  first: (targetUrl) => naukriFirstRequest(targetUrl),
+  next: (previous, payload) => {
+    const jobDetails = asArray(record(payload).jobDetails) ?? [];
+    if (jobDetails.length === 0) return null;
+    const page = pageOf(previous.url, 'pageNo') || 1;
+    if (page >= 50) return null;
+    return {
+      url: withParam(previous.url, 'pageNo', String(page + 1)),
+      headers: naukriHeaders(),
+      state: { page: page + 1 },
+    };
+  },
+};
+
+function bdjobsFirstRequest(targetUrl: string): PagedRequest {
+  const url = new URL(targetUrl);
+  if (!url.searchParams.has('hidJobSearch')) url.searchParams.set('hidJobSearch', 'jobsearch');
+  if (!url.searchParams.has('txtKeyword')) url.searchParams.set('txtKeyword', 'software engineer');
+  if (!url.searchParams.has('pg')) url.searchParams.set('pg', '1');
+  return {
+    url: url.toString(),
+    headers: bdjobsHeaders(),
+    state: { page: 1 },
+  };
+}
+
+const bdjobs: PagingPlan = {
+  pagesPerSync: 10,
+  delayMs: 1_000,
+  first: (targetUrl) => bdjobsFirstRequest(targetUrl),
+  next: (previous, payload) => {
+    const items = asArray(record(payload).data) ?? asArray(payload) ?? [];
+    if (items.length === 0) return null;
+    const page = pageOf(previous.url, 'pg') || 1;
+    if (page >= 50) return null;
+    return {
+      url: withParam(previous.url, 'pg', String(page + 1)),
+      headers: bdjobsHeaders(),
+      state: { page: page + 1 },
+    };
+  },
+};
+
+function ziprecruiterFirstRequest(targetUrl: string): PagedRequest {
+  const url = new URL(targetUrl);
+  if (!url.searchParams.has('search')) url.searchParams.set('search', 'software engineer');
+  if (!url.searchParams.has('location')) url.searchParams.set('location', 'United States');
+  if (!url.searchParams.has('page')) url.searchParams.set('page', '1');
+  if (!url.searchParams.has('per_page')) url.searchParams.set('per_page', '50');
+  return {
+    url: url.toString(),
+    headers: ziprecruiterHeaders(),
+    state: { page: 1 },
+  };
+}
+
+const ziprecruiter: PagingPlan = {
+  pagesPerSync: 10,
+  delayMs: 800,
+  first: (targetUrl) => ziprecruiterFirstRequest(targetUrl),
+  next: (previous, payload) => {
+    const jobs = asArray(record(payload).jobs) ?? [];
+    if (jobs.length === 0) return null;
+    const page = pageOf(previous.url, 'page') || 1;
+    if (page >= 50) return null;
+    const continueToken = text(record(payload).continue);
+    let nextUrl = withParam(previous.url, 'page', String(page + 1));
+    if (continueToken) {
+      nextUrl = withParam(nextUrl, 'continue_from', continueToken);
+    }
+    return {
+      url: nextUrl,
+      headers: ziprecruiterHeaders(),
+      state: { page: page + 1, continueToken },
+    };
+  },
+};
+
 const PLANS: Readonly<Record<string, PagingPlan>> = {
   'src-themuse': themuse,
   'src-himalayas-api': himalayas,
@@ -522,6 +628,9 @@ const PLANS: Readonly<Record<string, PagingPlan>> = {
   'src-indeed': indeed,
   'src-qualcomm-careers': eightfold,
   'src-hn-whoishiring': hnWhoIsHiring,
+  [NAUKRI_SOURCE_ID]: naukri,
+  [BDJOBS_SOURCE_ID]: bdjobs,
+  [ZIPRECRUITER_SOURCE_ID]: ziprecruiter,
 };
 
 export function pagingPlanFor(sourceId: string): PagingPlan | null {
