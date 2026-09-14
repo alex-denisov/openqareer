@@ -11,14 +11,19 @@ export const INDEED_API_KEY = '161092c2017b5bbab13edb12461a62d5a833871e7cad6d9d4
 
 export const INDEED_GRAPHQL_URL = 'https://apis.indeed.com/graphql';
 
-export function indeedHeaders(): Record<string, string> {
+/**
+ * Код страны едет заголовком `indeed-co` и обязан быть заглавным: на строчный
+ * площадка отвечает «Request country us does not correspond to a valid Indeed
+ * country» (замер 2026-09-14).
+ */
+export function indeedHeaders(country = 'US'): Record<string, string> {
   return {
     Host: 'apis.indeed.com',
     'content-type': 'application/json',
     'indeed-api-key': INDEED_API_KEY,
     accept: 'application/json',
     'indeed-locale': 'en-US',
-    'indeed-co': 'US',
+    'indeed-co': country.toUpperCase(),
     'User-Agent':
       'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Indeed App 193.1',
     'indeed-app-info': 'appv=193.1; appid=com.indeed.jobsearch; osv=16.6.1; os=ios; dtype=phone',

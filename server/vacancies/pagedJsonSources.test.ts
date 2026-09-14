@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getonbrdCategories, pagingPlanFor, rotatingWindowStart, themuseQueries } from './pagedJsonSources';
-import { FAN_SIZE } from './jobspyFan';
+import { FAN_SIZE, MARKET_TARGETS } from './jobspyFan';
 
 
 /**
@@ -8,10 +8,6 @@ import { FAN_SIZE } from './jobspyFan';
  * обязан остановиться ровно там, где площадка отдала всё, и не просить
  * страницу за пределами выдачи.
  */
-function termOf(query: string): string {
-  return /what: "([^"]*)"/.exec(query)?.[1] ?? '';
-}
-
 function whereOf(query: string): string {
   return /where: "([^"]*)"/.exec(query)?.[1] ?? '';
 }
@@ -163,7 +159,7 @@ describe('paging plans (B216)', () => {
     expect(getonbrdCategories().length).toBeGreaterThanOrEqual(17);
   });
 
-  it('Indeed: веер «роль × город», курсор внутри комбинации, следующая — за его концом (B218)', () => {
+  it('Indeed: веер «роль × рынок», курсор внутри комбинации, следующая — за её концом (B218)', () => {
     const plan = pagingPlanFor('src-indeed')!;
     const first = plan.first('https://apis.indeed.com/graphql', 0);
     expect(first.method).toBe('POST');
@@ -178,27 +174,45 @@ describe('paging plans (B216)', () => {
     const next = plan.next(first, more);
     const nextQuery = (next!.body as { query: string }).query;
     expect(nextQuery).toContain('cursor: "cur2"');
-    expect(termOf(nextQuery)).toBe(termOf(firstQuery));
+    // Внутри комбинации рынок и роль те же.
+    expect(whereOf(nextQuery)).toBe(whereOf(firstQuery));
+    expect(next!.headers?.['indeed-co']).toBe(first.headers?.['indeed-co']);
 
-    // Курсор кончился — следующая комбинация веера, чтение начинается заново.
+    // Курсор кончился — следующий рынок, чтение начинается заново.
     const done = { data: { jobSearch: { pageInfo: { nextCursor: '' }, results: [{ job: {} }] } } };
     const rolled = plan.next(first, done);
     expect(rolled).not.toBeNull();
     expect((rolled!.body as { query: string }).query).not.toContain('cursor:');
-    expect(termOf((rolled!.body as { query: string }).query)).not.toBe(termOf(firstQuery));
+    expect(whereOf((rolled!.body as { query: string }).query)).not.toBe(whereOf(firstQuery));
+
+    // Потолок страниц на комбинацию: за ним — тоже следующий рынок, даже когда
+    // курсор ещё есть, иначе опрос уходит вглубь одного рынка (B218).
+    let deep = first;
+    for (let i = 1; i < 4; i += 1) deep = plan.next(deep, more)!;
+    const capped = plan.next(deep, more);
+    expect(whereOf((capped!.body as { query: string }).query)).not.toBe(whereOf(firstQuery));
 
     // Окно комбинаций сдвигается от времени: другой такт — другое начало.
     const later = plan.first('https://apis.indeed.com/graphql', 60 * 60_000);
-    expect(termOf((later.body as { query: string }).query) + whereOf((later.body as { query: string }).query))
-      .not.toBe(termOf(firstQuery) + whereOf(firstQuery));
+    expect(whereOf((later.body as { query: string }).query)).not.toBe(whereOf(firstQuery));
+  });
+
+  it('Indeed читает только рынки, у которых есть страна площадки (B218)', () => {
+    const plan = pagingPlanFor('src-indeed')!;
+    // У России страны в Indeed нет вовсе — её закрывает hh.ru; план обязан
+    // такие рынки пропускать, а не слать запрос без страны.
+    const withoutCountry = MARKET_TARGETS.filter((t) => !t.indeedCountry).map((t) => t.location);
+    expect(withoutCountry).toContain('Russia');
+    const request = plan.first('https://apis.indeed.com/graphql', 0);
+    expect(request.headers?.['indeed-co']).toMatch(/^[A-Z]{2}$/);
   });
 
   it('Indeed: бюджет опроса — порция веера, поэтому чтение частичное (B218)', () => {
     const plan = pagingPlanFor('src-indeed')!;
-    // 12 комбинаций по 10 страниц: меньше веера из 308, значит опрос не
-    // дочитывает его до конца и срез дополняется, а не заменяется.
+    // 30 рынков по 4 страницы: меньше веера, значит опрос не дочитывает его
+    // до конца и срез дополняется, а не заменяется.
     expect(plan.pagesPerSync).toBe(120);
-    expect(FAN_SIZE).toBeGreaterThan(120);
+    expect(FAN_SIZE).toBeGreaterThan(plan.pagesPerSync);
   });
 
   it('у площадки без плана плана нет', () => {

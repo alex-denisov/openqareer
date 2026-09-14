@@ -2,7 +2,7 @@ import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import type { SourceReading } from './multiSourceVacancyEngine';
 import { buildJsonVacancy, fromIso, isUsableVacancy } from './jsonVacancyRecord';
 import { LINKEDIN_GUEST_URL } from './jobspyEndpoints';
-import { type FanCombo, fanCombos, fanStartIndex } from './jobspyFan';
+import { FAN_SIZE, type FanCombo, fanComboAt, fanStartIndex } from './jobspyFan';
 
 /**
  * LinkedIn — гостевой список вакансий (B218). Механика JobSpy: адрес
@@ -27,11 +27,19 @@ export const LINKEDIN_SOURCE_ID = 'src-linkedin-guest';
  * целиком.
  */
 const LINKEDIN_PAGE = 10;
-const LINKEDIN_MAX_START = 540;
-const LINKEDIN_COMBOS_PER_SYNC = 4;
+const LINKEDIN_COMBOS_PER_SYNC = 20;
+const LINKEDIN_PAGES_PER_COMBO = 8;
 const LINKEDIN_INTERVAL_MINUTES = 90;
-const LINKEDIN_PAGES_PER_COMBO = LINKEDIN_MAX_START / LINKEDIN_PAGE + 1;
 export const LINKEDIN_PAGES_PER_SYNC = LINKEDIN_COMBOS_PER_SYNC * LINKEDIN_PAGES_PER_COMBO;
+
+/**
+ * Окно свежести выдачи, секунды. `f_TPR=r604800` — «размещено за неделю»:
+ * площадка тогда отдаёт только свежие карточки (замер: без фильтра выдача
+ * уходит на две недели назад, с фильтром — 4 дня). Пул держит тридцать дней,
+ * и круг веера примерно недельный, поэтому недельное окно закрывает рынок без
+ * разрывов и не тратит страницы на то, что уже прочитано.
+ */
+const LINKEDIN_FRESH_WINDOW_SECONDS = 7 * 24 * 60 * 60;
 const LINKEDIN_HEADERS = {
   accept: 'text/html,application/xhtml+xml',
   'accept-language': 'en-US,en;q=0.9',
@@ -39,11 +47,11 @@ const LINKEDIN_HEADERS = {
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
 } as const;
 
-export function linkedinGuestUrl(start: number, combo?: FanCombo): string {
+export function linkedinGuestUrl(start: number, combo: FanCombo = fanComboAt(0)): string {
   const url = new URL(LINKEDIN_GUEST_URL);
-  const target = combo ?? fanCombos()[0]!;
-  url.searchParams.set('keywords', target.term);
-  url.searchParams.set('location', target.location);
+  url.searchParams.set('keywords', combo.term);
+  url.searchParams.set('location', combo.target.location);
+  url.searchParams.set('f_TPR', `r${LINKEDIN_FRESH_WINDOW_SECONDS}`);
   url.searchParams.set('start', String(start));
   return url.toString();
 }
@@ -112,7 +120,6 @@ export async function fetchLinkedinGuest(
   deps: LinkedinFetchDeps,
   nowMs: number = Date.now(),
 ): Promise<SourceReading> {
-  const combos = fanCombos();
   const startIndex = fanStartIndex(nowMs, LINKEDIN_INTERVAL_MINUTES, LINKEDIN_COMBOS_PER_SYNC);
   const vacancies: UnifiedVacancy[] = [];
   // Веер шире одного опроса, поэтому чтение частичное: движок дополняет срез,
@@ -121,8 +128,9 @@ export async function fetchLinkedinGuest(
   let requests = 0;
 
   for (let step = 0; step < LINKEDIN_COMBOS_PER_SYNC; step += 1) {
-    const combo = combos[(startIndex + step) % combos.length]!;
-    for (let start = 0; start <= LINKEDIN_MAX_START; start += LINKEDIN_PAGE) {
+    const combo = fanComboAt(startIndex + step);
+    for (let page = 0; page < LINKEDIN_PAGES_PER_COMBO; page += 1) {
+      const start = page * LINKEDIN_PAGE;
       // Джиттер: LinkedIn быстро отдаёт 429 ровному такту (B218 security-review).
       if (requests > 0) await deps.sleep(600 + Math.floor(Math.random() * 600));
       requests += 1;
@@ -146,6 +154,6 @@ export async function fetchLinkedinGuest(
   }
 
   // Полный круг веера за один опрос — чтение полное.
-  if (LINKEDIN_COMBOS_PER_SYNC >= combos.length) partial = false;
+  if (LINKEDIN_COMBOS_PER_SYNC >= FAN_SIZE) partial = false;
   return { vacancies: vacancies.filter(isUsableVacancy), partial };
 }

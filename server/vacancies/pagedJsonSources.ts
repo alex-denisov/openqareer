@@ -1,6 +1,6 @@
 import { record, numeric, asArray, text } from './jsonVacancyRecord';
 import { INDEED_GRAPHQL_URL, indeedHeaders, indeedQuery } from './jobspyEndpoints';
-import { FAN_SIZE, fanCombos, fanStartIndex } from './jobspyFan';
+import { FAN_SIZE, fanComboAt, fanStartIndex } from './jobspyFan';
 import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
 
 /**
@@ -397,29 +397,47 @@ const workday: PagingPlan = {
 /**
  * Indeed: мобильный GraphQL `apis.indeed.com/graphql`, курсор `nextCursor`, по
  * 100 записей. Один запрос отдаёт не больше 968 записей — дальше курсора нет
- * (замер 2026-09-14), поэтому охват даёт веер «роль × город», а не более
- * глубокое чтение: план дочитывает комбинацию до конца курсора и переходит к
- * следующей. Окно комбинаций сдвигается по кругу от времени.
+ * (замер 2026-09-14), поэтому охват даёт веер «роль × рынок».
+ *
+ * ПОЧЕМУ У КОМБИНАЦИИ ПОТОЛОК СТРАНИЦ. Выдача идёт `sort: DATE`, то есть от
+ * свежих. Дочитывать комбинацию до конца курсора значит уходить в вакансии,
+ * которые пул всё равно отсеет по тридцатидневной свежести. Четыре страницы —
+ * четыреста самых свежих по рынку — и опрос переходит к следующему рынку.
+ * За то же время веер покрывает в разы больше рынков.
  */
-const INDEED_COMBOS_PER_SYNC = 12;
-const INDEED_PAGES_PER_COMBO = 10;
+const INDEED_COMBOS_PER_SYNC = 30;
+const INDEED_PAGES_PER_COMBO = 4;
 const INDEED_INTERVAL_MINUTES = 60;
 
 interface IndeedState {
   readonly index: number;
   readonly startIndex: number;
+  readonly page: number;
   readonly wrapped: boolean;
 }
 
-function indeedRequest(state: IndeedState, cursor: string | null): PagedRequest {
-  const combos = fanCombos();
-  const combo = combos[state.index % combos.length]!;
+/** Ближайшая комбинация, которую Indeed вообще умеет читать (страна известна). */
+function indeedComboFrom(index: number): { combo: ReturnType<typeof fanComboAt>; index: number } | null {
+  for (let step = 0; step < FAN_SIZE; step += 1) {
+    const at = (index + step) % FAN_SIZE;
+    const combo = fanComboAt(at);
+    if (combo.target.indeedCountry) return { combo, index: at };
+  }
+  // Ни одного рынка со страной Indeed — сбор невозможен, и молчать об этом
+  // нельзя (B199).
+  return null;
+}
+
+function indeedRequest(state: IndeedState, cursor: string | null): PagedRequest | null {
+  const found = indeedComboFrom(state.index);
+  if (!found) return null;
+  const { combo, index } = found;
   return {
     url: INDEED_GRAPHQL_URL,
     method: 'POST',
-    body: { query: indeedQuery(combo.term, cursor, combo.location) },
-    headers: indeedHeaders(),
-    state,
+    body: { query: indeedQuery(combo.term, cursor, combo.target.location) },
+    headers: indeedHeaders(combo.target.indeedCountry!),
+    state: { ...state, index },
   };
 }
 
@@ -428,21 +446,25 @@ const indeed: PagingPlan = {
   delayMs: 800,
   first: (_targetUrl, nowMs) => {
     const startIndex = fanStartIndex(nowMs, INDEED_INTERVAL_MINUTES, INDEED_COMBOS_PER_SYNC);
-    return indeedRequest({ index: startIndex, startIndex, wrapped: false }, null);
+    const request = indeedRequest({ index: startIndex, startIndex, page: 1, wrapped: false }, null);
+    if (!request) throw new Error('indeed_fan_has_no_country');
+    return request;
   },
   next: (previous, payload) => {
     const state = previous.state as IndeedState;
     const search = record(record(record(payload).data).jobSearch);
     const cursor = text(record(search.pageInfo).nextCursor);
     const results = asArray(search.results) ?? [];
-    // Курсор ещё есть — дочитываем эту же комбинацию.
-    if (cursor && results.length > 0) return indeedRequest(state, cursor);
-    // Комбинация кончилась — следующая по кругу; полный круг означает, что
-    // веер прочитан целиком.
+    // Внутри комбинации: есть курсор, есть записи и не выбран потолок страниц.
+    if (cursor && results.length > 0 && state.page < INDEED_PAGES_PER_COMBO) {
+      return indeedRequest({ ...state, page: state.page + 1 }, cursor);
+    }
+    // Комбинация закрыта — следующий рынок; полный круг означает, что веер
+    // прочитан целиком.
     const nextIndex = (state.index + 1) % FAN_SIZE;
     const wrapped = state.wrapped || nextIndex === 0;
     if (wrapped && nextIndex === state.startIndex) return null;
-    return indeedRequest({ ...state, index: nextIndex, wrapped }, null);
+    return indeedRequest({ index: nextIndex, startIndex: state.startIndex, page: 1, wrapped }, null);
   },
 };
 

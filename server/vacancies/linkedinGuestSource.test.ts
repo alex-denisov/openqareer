@@ -15,11 +15,18 @@ const CARD = (id: string, title: string) => `<li>
 
 describe('LinkedIn guest source (B218)', () => {
   it('строит адрес с offset и комбинацией веера', () => {
-    const url = new URL(linkedinGuestUrl(20, { term: 'data analyst', location: 'Austin, TX' }));
+    const url = new URL(
+      linkedinGuestUrl(20, {
+        term: 'data analyst',
+        target: { region: 'mena', indeedCountry: 'AE', location: 'Dubai' },
+      }),
+    );
     expect(url.pathname).toBe('/jobs-guest/jobs/api/seeMoreJobPostings/search');
     expect(url.searchParams.get('start')).toBe('20');
     expect(url.searchParams.get('keywords')).toBe('data analyst');
-    expect(url.searchParams.get('location')).toBe('Austin, TX');
+    expect(url.searchParams.get('location')).toBe('Dubai');
+    // Фильтр свежести: площадка отдаёт только размещённое за неделю.
+    expect(url.searchParams.get('f_TPR')).toBe('r604800');
   });
 
   it('разбирает карточки: id, заголовок, компания, город, дата', () => {
@@ -41,15 +48,14 @@ describe('LinkedIn guest source (B218)', () => {
     expect(parseLinkedinCards(html, 'now')).toHaveLength(0);
   });
 
-  it('идёт веером «роль × город»: комбинация до пустой страницы, потом следующая (B218)', async () => {
-    const seen: { term: string; start: number }[] = [];
+  it('идёт веером «роль × рынок»: на каждом шаге новый рынок (B218)', async () => {
+    const seen: { term: string; location: string; start: number }[] = [];
     const reading = await fetchLinkedinGuest(
       {
         fetchPage: async (url) => {
           const params = new URL(url).searchParams;
           const start = Number(params.get('start'));
-          const term = params.get('keywords')!;
-          seen.push({ term, start });
+          seen.push({ term: params.get('keywords')!, location: params.get('location')!, start });
           // Каждая комбинация отдаёт одну страницу, вторая пуста.
           if (start === 0) return { status: 200, body: `<ul>${CARD(`${seen.length}01`, 'A')}</ul>` };
           return { status: 200, body: '<ul></ul>' };
@@ -59,10 +65,11 @@ describe('LinkedIn guest source (B218)', () => {
       },
       0,
     );
-    // Четыре комбинации за опрос, каждая — своя роль или город.
-    const terms = new Set(seen.map((s) => s.term));
-    expect(terms.size).toBe(4);
-    expect(reading.vacancies).toHaveLength(4);
+    // Двадцать комбинаций за опрос, и каждая — свой рынок: порция опроса
+    // покрывает разные регионы, а не одну роль в двадцати городах подряд.
+    const locations = new Set(seen.map((s) => s.location));
+    expect(locations.size).toBe(20);
+    expect(reading.vacancies).toHaveLength(20);
     // Веер шире опроса, поэтому срез дополняется, а не заменяется.
     expect(reading.partial).toBe(true);
   });
