@@ -205,4 +205,138 @@ describe('multi-source fetcher: заголовки Indeed (B218)', () => {
     expect(captured?.get('indeed-api-key')).toBeTruthy();
     expect(captured?.get('user-agent')).toContain('Indeed App');
   });
-})
+});
+
+describe('multi-source fetcher: Bayt career site and Obscura stealth (B218)', () => {
+  const bayt: VacancySourceConfig = {
+    id: 'src-bayt',
+    name: 'Bayt',
+    type: 'career_site',
+    enabled: true,
+    targetUrl: 'https://www.bayt.com/en/international/jobs/',
+    refreshIntervalMinutes: 60,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  };
+
+  const baytCard = (id: string, title: string) => `
+    <li data-js-job="${id}">
+      <h2><a href="/en/jobs/${id}/">${title}</a></h2>
+      <b class="jb-company">Gulf Tech</b>
+      <span class="jb-loc">Dubai</span>
+      <span class="jb-date">1 day ago</span>
+      <p class="jb-desc">Job description for ${title}</p>
+    </li>
+  `;
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('читает страницы Bayt через HTML-скрейпер с поддержкой stealth', async () => {
+    const fetcher = buildMultiSourceFetcher(refuse, refuse, undefined, {
+      sleep: async () => {},
+      now: () => 0,
+      fetchWithStealth: async (url) => {
+        if (url.includes('page=1')) {
+          return {
+            status: 200,
+            body: `<ul>${baytCard('101', 'Frontend Developer')}</ul>`,
+            usedStealth: false,
+          };
+        }
+        return {
+          status: 200,
+          body: `<div id="search_results"><title>Bayt</title>No jobs</div>`,
+          usedStealth: false,
+        };
+      },
+    });
+
+    const reading = await fetcher(bayt);
+    expect(reading).toMatchObject({ partial: false });
+    expect('vacancies' in reading && reading.vacancies).toHaveLength(1);
+    expect('vacancies' in reading && reading.vacancies[0]!.title).toBe('Frontend Developer');
+  });
+
+  it('передает параметры запроса и падает на 429 на первой странице', async () => {
+    const fetcher = buildMultiSourceFetcher(refuse, refuse, undefined, {
+      sleep: async () => {},
+      now: () => 0,
+      fetchWithStealth: async () => ({
+        status: 429,
+        body: 'Too many requests',
+        usedStealth: false,
+      }),
+    });
+
+    await expect(fetcher(bayt)).rejects.toThrow('vacancy_source_unreachable: 429');
+  });
+});
+
+describe('multi-source fetcher: Glassdoor Cloudflare 403 challenge fallback (B218)', () => {
+  const glassdoor: VacancySourceConfig = {
+    id: 'src-glassdoor',
+    name: 'Glassdoor',
+    type: 'json_api',
+    enabled: true,
+    targetUrl: 'https://www.glassdoor.com/graph',
+    refreshIntervalMinutes: 60,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  };
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('при 403 Cloudflare challenge отдает запрос в stealth-раннер с сохранением POST и тела', async () => {
+    vi.stubGlobal('fetch', async () => {
+      return new Response('<html><title>Just a moment...</title>cf-chl</html>', {
+        status: 403,
+        headers: { 'content-type': 'text/html' },
+      });
+    });
+
+    let capturedOptions: unknown;
+    const fetcher = buildMultiSourceFetcher(refuse, refuse, undefined, {
+      sleep: async () => {},
+      now: () => 0,
+      fetchWithStealth: async (_url, options) => {
+        capturedOptions = options;
+        const bodyObj = typeof options?.body === 'string' ? JSON.parse(options.body) : options?.body;
+        const page = bodyObj?.variables?.pageNumber ?? 1;
+        return {
+          status: 200,
+          body: JSON.stringify({
+            data: {
+              jobListings:
+                page === 1
+                  ? [
+                      {
+                        jobview: {
+                          header: {
+                            jobTitleText: 'Senior Backend Engineer',
+                            employerNameFromSearch: 'Fintech',
+                            locationName: 'Remote',
+                          },
+                          job: {
+                            listingId: 'gd-stealth-1',
+                            description: 'Distributed Go services',
+                          },
+                        },
+                      },
+                    ]
+                  : [],
+            },
+          }),
+          usedStealth: true,
+        };
+      },
+    });
+
+    const reading = await fetcher(glassdoor);
+    expect('vacancies' in reading && reading.vacancies).toHaveLength(1);
+    expect('vacancies' in reading && reading.vacancies[0]!.title).toBe('Senior Backend Engineer');
+    expect(capturedOptions).toMatchObject({
+      method: 'POST',
+      body: expect.objectContaining({ operationName: 'JobSearchResultsQuery' }),
+    });
+  });
+});

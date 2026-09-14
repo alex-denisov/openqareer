@@ -1,5 +1,7 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import type { Page } from 'playwright';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { htmlToFeedText } from '../connectors/feedText';
 import { ObscuraRunner } from '../crawler/obscuraRunner';
@@ -294,6 +296,14 @@ function extractGlassdoorCompany(
   );
 }
 
+function formatGlassdoorUrl(rawUrl: string, externalId: string): string {
+  if (rawUrl) {
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) return rawUrl;
+    return `https://www.glassdoor.com${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+  }
+  return externalId ? `https://www.glassdoor.com/job-listing/job-details.htm?jl=${externalId}` : '';
+}
+
 function extractGlassdoorMeta(item: unknown): GlassdoorMeta {
   const envelope = record(item);
   const jobview = record(envelope.jobview || envelope.jobView || envelope);
@@ -312,10 +322,8 @@ function extractGlassdoorMeta(item: unknown): GlassdoorMeta {
   const company = extractGlassdoorCompany(header, overview, job);
   const location =
     text(header.locationName) || text(header.location) || text(job.location) || undefined;
-  const url =
-    text(job.jobViewUrl) ||
-    text(header.seoUrl) ||
-    (externalId ? `https://www.glassdoor.com/job-listing/job-details.htm?jl=${externalId}` : '');
+  const rawUrl = text(job.jobViewUrl) || text(header.seoUrl);
+  const url = formatGlassdoorUrl(rawUrl, externalId);
   const description = text(job.description) || text(jobview.description) || title;
   const isRemote =
     /remote/i.test(location ?? '') ||
@@ -498,6 +506,17 @@ function extractBaytJob(
   });
 }
 
+function isRecognizedBaytHtml(html: string): boolean {
+  return (
+    /bayt\.com/i.test(html) ||
+    /data-js-job/i.test(html) ||
+    /search[_-]results/i.test(html) ||
+    /class=["'][^"']*jb-/i.test(html) ||
+    /<title>[^<]*bayt/i.test(html) ||
+    /id=["']search_results/i.test(html)
+  );
+}
+
 /** Pure parser for Bayt HTML job listings scraper. */
 export function normalizeBaytHtml(
   html: string,
@@ -509,6 +528,9 @@ export function normalizeBaytHtml(
   }
   const cards = extractBaytCards(html);
   if (cards.length === 0) {
+    if (isRecognizedBaytHtml(html)) {
+      return [];
+    }
     throw new Error(UNREADABLE);
   }
   return cards.map((card) => extractBaytJob(card, context, sourceId)).filter(isUsable);
@@ -562,25 +584,56 @@ function buildDirectRequestInit(options: StealthFetchOptions): RequestInit {
   };
 }
 
-async function executeHeadlessObscuraFetch(url: string): Promise<StealthFetchResult> {
+interface PageFetchParams {
+  readonly reqUrl: string;
+  readonly method: string;
+  readonly headers?: Record<string, string>;
+  readonly body?: unknown;
+}
+
+async function evaluatePageFetch(
+  page: Page,
+  params: PageFetchParams,
+): Promise<{ status: number; body: string }> {
+  return page.evaluate(async ({ reqUrl, method, headers, body }) => {
+    const res = await window.fetch(reqUrl, {
+      method,
+      headers,
+      body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+    });
+    const text = await res.text();
+    return { status: res.status, body: text };
+  }, params);
+}
+
+async function executeHeadlessObscuraFetch(
+  url: string,
+  options: StealthFetchOptions = {},
+): Promise<StealthFetchResult> {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obscura-'));
   const runner = new ObscuraRunner({
-    userDataDir: path.join(
-      os.tmpdir(),
-      `obscura-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    ),
+    userDataDir: tempDir,
     headless: true,
   });
   try {
+    const isPost = options.method === 'POST' || options.body !== undefined;
+    if (isPost) {
+      const origin = new URL(url).origin;
+      const page = await runner.openPage(origin);
+      const evaluated = await evaluatePageFetch(page, {
+        reqUrl: url,
+        method: options.method ?? 'POST',
+        headers: options.headers,
+        body: options.body,
+      });
+      return { status: evaluated.status, body: evaluated.body, usedStealth: true };
+    }
     const page = await runner.openPage(url);
-    await page.waitForLoadState('domcontentloaded').catch(() => {});
     const content = await page.content();
-    return {
-      status: 200,
-      body: content,
-      usedStealth: true,
-    };
+    return { status: 200, body: content, usedStealth: true };
   } finally {
     await runner.close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
@@ -623,7 +676,7 @@ export async function fetchWithStealthFallback(
     };
   }
 
-  return executeHeadlessObscuraFetch(url);
+  return executeHeadlessObscuraFetch(url, options);
 }
 
 export function glassdoorAdapter(

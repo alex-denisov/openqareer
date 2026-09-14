@@ -11,6 +11,13 @@ import { pagingPlanFor, type PagedRequest } from './pagedJsonSources';
 import type { SourceReading } from './multiSourceVacancyEngine';
 import { CROSSOVER_KONTENT_URL, CROSSOVER_SOURCE_ID, fetchCrossover } from './crossoverSource';
 import { LINKEDIN_SOURCE_ID, fetchLinkedinGuest } from './linkedinGuestSource';
+import {
+  BAYT_SOURCE_ID,
+  fetchWithStealthFallback,
+  isCloudflareChallenge,
+  normalizeBaytHtml,
+} from './jobspyAdapters';
+import { baytHeaders } from './jobspyEndpoints';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -128,24 +135,43 @@ async function readJsonPage(
 
 async function fetchJsonPayload(
   request: PagedRequest,
+  fetchStealth: typeof fetchWithStealthFallback = fetchWithStealthFallback,
 ): Promise<{ payload: unknown; observedAt: string }> {
+  const mergedHeaders = mergeHeaders(
+    {
+      ...FETCH_HEADERS,
+      Accept: 'application/json',
+      ...(request.method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+    },
+    request.headers,
+  );
   const res = await fetch(request.url, {
     method: request.method ?? 'GET',
-    // Заголовки площадки перекрывают общие РЕГИСТРОНЕЗАВИСИМО: дубль
-    // `Content-Type` + `content-type` fetch склеивает в «application/json,
-    // application/json», и CSRF-защита Indeed это блокирует (замер B218).
-    headers: mergeHeaders(
-      {
-        ...FETCH_HEADERS,
-        Accept: 'application/json',
-        ...(request.method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
-      },
-      request.headers,
-    ),
+    headers: mergedHeaders,
     ...(request.method === 'POST' ? { body: JSON.stringify(request.body ?? {}) } : {}),
     signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
+  if (!res.ok) {
+    const errorBody = await res.text().catch(() => '');
+    if (isCloudflareChallenge(res.status, errorBody)) {
+      const stealthRes = await fetchStealth(request.url, {
+        method: request.method,
+        headers: mergedHeaders,
+        body: request.body,
+      });
+      if (stealthRes.status >= 200 && stealthRes.status < 300) {
+        try {
+          return {
+            payload: JSON.parse(stealthRes.body),
+            observedAt: new Date().toISOString(),
+          };
+        } catch {
+          throw new Error('vacancy_source_payload_unreadable');
+        }
+      }
+    }
+    throw new Error(`vacancy_source_unreachable: ${res.status}`);
+  }
   const observedAt = new Date().toISOString();
   return { payload: await res.json(), observedAt };
 }
@@ -160,6 +186,7 @@ async function fetchPagedJsonApi(
   source: VacancySourceConfig,
   sleep: (ms: number) => Promise<void>,
   now: () => number,
+  fetchStealth?: typeof fetchWithStealthFallback,
 ): Promise<SourceReading> {
   const plan = pagingPlanFor(source.id);
   if (!plan) throw new Error(`vacancy_source_paging_missing: ${source.id}`);
@@ -170,7 +197,7 @@ async function fetchPagedJsonApi(
     // Джиттер паузы: ровный такт выглядит роботом; ±25 % ломает регулярность,
     // не ускоряя опрос заметно (B218 security-review).
     if (pagesRead > 0) await sleep(jitter(plan.delayMs, now));
-    const { payload, observedAt } = await fetchJsonPayload(request);
+    const { payload, observedAt } = await fetchJsonPayload(request, fetchStealth);
     vacancies.push(
       ...normalizeJsonSource(source.id, payload, {
         observedAt,
@@ -194,6 +221,65 @@ async function fetchLinkedinGuestSource(sleep: (ms: number) => Promise<void>): P
     sleep,
     observedAt: new Date().toISOString(),
   });
+}
+
+export const BAYT_PAGES_PER_SYNC = 5;
+export const BAYT_DELAY_MS = 1_000;
+
+function baytRequestUrl(targetUrl: string, query?: string, page = 1): string {
+  const url = new URL(targetUrl);
+  const keyword = query?.trim() || url.searchParams.get('q') || 'software engineer';
+  url.searchParams.set('q', keyword);
+  url.searchParams.set('page', String(page));
+  return url.toString();
+}
+
+/** Bayt — HTML-выдача скрейпера, постраничный обход с Obscura stealth (B218). */
+async function fetchBaytSource(
+  source: VacancySourceConfig,
+  sleep: (ms: number) => Promise<void>,
+  now: () => number,
+  options?: { query?: string },
+  fetchStealth: typeof fetchWithStealthFallback = fetchWithStealthFallback,
+): Promise<SourceReading> {
+  const vacancies: UnifiedVacancy[] = [];
+  const observedAt = new Date().toISOString();
+  let partial = false;
+
+  for (let page = 1; page <= BAYT_PAGES_PER_SYNC; page += 1) {
+    if (page > 1) await sleep(jitter(BAYT_DELAY_MS, now));
+    const pageUrl = baytRequestUrl(source.targetUrl, options?.query, page);
+    const result = await fetchStealth(pageUrl, {
+      method: 'GET',
+      headers: baytHeaders(),
+    });
+
+    if (result.status === 429) {
+      if (page === 1) throw new Error('vacancy_source_unreachable: 429');
+      return { vacancies, partial: true };
+    }
+    if (result.status < 200 || result.status >= 400) {
+      if (page === 1) throw new Error(`vacancy_source_unreachable: ${result.status}`);
+      return { vacancies, partial: true };
+    }
+
+    const pageVacancies = normalizeBaytHtml(
+      result.body,
+      { observedAt, sourceName: source.name, sourceUrl: pageUrl },
+      source.id,
+    );
+
+    if (pageVacancies.length === 0) {
+      partial = false;
+      break;
+    }
+    vacancies.push(...pageVacancies);
+    if (page === BAYT_PAGES_PER_SYNC) {
+      partial = true;
+    }
+  }
+
+  return { vacancies, partial };
 }
 
 /** Crossover: sitemap → открытые вакансии, Kentico без ключа → описания (B217). */
@@ -276,6 +362,7 @@ export const fetchRobotsTxt: RobotsFetcher = async (robotsUrl) => {
 export interface MultiSourceFetcherDeps {
   readonly sleep?: (ms: number) => Promise<void>;
   readonly now?: () => number;
+  readonly fetchWithStealth?: typeof fetchWithStealthFallback;
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -326,10 +413,20 @@ export function buildMultiSourceFetcher(
     if (source.type === 'rss') {
       return fetchRssFeed(source, options);
     }
+    if (source.type === 'career_site') {
+      if (source.id === BAYT_SOURCE_ID) {
+        return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
+      }
+    }
     if (source.type === 'json_api') {
       if (source.id === CROSSOVER_SOURCE_ID) return fetchCrossoverSource(source);
       if (source.id === LINKEDIN_SOURCE_ID) return fetchLinkedinGuestSource(sleep);
-      if (pagingPlanFor(source.id)) return fetchPagedJsonApi(source, sleep, now);
+      if (source.id === BAYT_SOURCE_ID) {
+        return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
+      }
+      if (pagingPlanFor(source.id)) {
+        return fetchPagedJsonApi(source, sleep, now, deps.fetchWithStealth);
+      }
       return fetchJsonApi(source, options);
     }
     if (source.type === 'hh_search') {

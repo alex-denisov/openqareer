@@ -605,8 +605,8 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
   {
     id: 'src-bayt',
     name: 'Bayt',
-    type: 'json_api',
-    accessClass: 'api',
+    type: 'career_site',
+    accessClass: 'open_web',
     market: 'Middle East / Gulf / International (Bayt HTML & Obscura Stealth)',
     addressStatus: 'live',
     enabled: true,

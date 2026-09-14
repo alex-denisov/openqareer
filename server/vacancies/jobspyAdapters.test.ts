@@ -597,6 +597,31 @@ describe('Glassdoor parser (JobSearchResultsQuery GraphQL)', () => {
     expect(v?.company).toBe('RemoteWorks');
   });
 
+  it('prefixes relative header.seoUrl with https://www.glassdoor.com', () => {
+    const payload = {
+      data: {
+        jobListings: [
+          {
+            jobview: {
+              header: {
+                jobTitleText: 'Backend Engineer',
+                employerNameFromSearch: 'Fintech Inc',
+                seoUrl: '/partner/jobListing.htm?pos=101&ao=123',
+              },
+              job: {
+                listingId: 'gd_seo_123',
+                description: 'Go/Rust backend engineer',
+                datePosted: '2026-09-14T05:00:00Z',
+              },
+            },
+          },
+        ],
+      },
+    };
+    const [v] = normalizeGlassdoorJobs(payload, CONTEXT, GLASSDOOR_SOURCE_ID);
+    expect(v?.url).toBe('https://www.glassdoor.com/partner/jobListing.htm?pos=101&ao=123');
+  });
+
   it('throws vacancy_source_payload_unreadable when payload structure is unexpected', () => {
     expect(() => normalizeGlassdoorJobs({ invalid: true }, CONTEXT, GLASSDOOR_SOURCE_ID)).toThrow(
       /vacancy_source_payload_unreadable/,
@@ -645,7 +670,23 @@ describe('Bayt parser (HTML scraper)', () => {
     });
   });
 
-  it('throws vacancy_source_payload_unreadable when HTML contains no job cards', () => {
+  it('returns empty array when recognized Bayt page has zero job listings', () => {
+    const emptyBaytPage = `
+      <!DOCTYPE html>
+      <html>
+        <head><title>Jobs in Dubai - Bayt.com</title></head>
+        <body>
+          <div id="search_results" class="job-results">
+            <p>No matching jobs found.</p>
+          </div>
+        </body>
+      </html>
+    `;
+    const result = normalizeBaytHtml(emptyBaytPage, CONTEXT, BAYT_SOURCE_ID);
+    expect(result).toEqual([]);
+  });
+
+  it('throws vacancy_source_payload_unreadable when HTML contains no job cards and is unrecognized', () => {
     expect(() => normalizeBaytHtml('<html><body><div>No jobs here</div></body></html>', CONTEXT, BAYT_SOURCE_ID)).toThrow(
       /vacancy_source_payload_unreadable/,
     );
@@ -693,6 +734,39 @@ describe('Obscura stealth integration & challenge fallback', () => {
     expect(result.body).toContain('jobListings');
   });
 
+  it('passes method, headers, and body to stealth fetcher on fallback', async () => {
+    let capturedOptions: unknown;
+    const result = await fetchWithStealthFallback(
+      'https://www.glassdoor.com/graph',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { query: 'JobSearchResultsQuery' },
+      },
+      {
+        httpFetch: async () => ({
+          status: 403,
+          text: async () => 'cf-chl-bypass',
+        }),
+        stealthFetch: async (_url, options) => {
+          capturedOptions = options;
+          return {
+            status: 200,
+            content: JSON.stringify({ data: { jobListings: [] } }),
+          };
+        },
+      },
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.usedStealth).toBe(true);
+    expect(capturedOptions).toMatchObject({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: { query: 'JobSearchResultsQuery' },
+    });
+  });
+
   it('exports glassdoorAdapter and baytAdapter wrapper functions', () => {
     expect(typeof glassdoorAdapter).toBe('function');
     expect(typeof baytAdapter).toBe('function');
@@ -711,8 +785,8 @@ describe('Glassdoor & Bayt registry & wiring integration', () => {
     expect(gd?.enabled).toBe(true);
 
     expect(bayt).toBeDefined();
-    expect(bayt?.type).toBe('json_api');
-    expect(bayt?.accessClass).toBe('api');
+    expect(bayt?.type).toBe('career_site');
+    expect(bayt?.accessClass).toBe('open_web');
     expect(bayt?.addressStatus).toBe('live');
     expect(bayt?.enabled).toBe(true);
   });
@@ -747,12 +821,12 @@ describe('Glassdoor & Bayt registry & wiring integration', () => {
     expect(baytVacancies).toHaveLength(1);
   });
 
-  it('provides paging plans for Glassdoor and Bayt', () => {
+  it('provides paging plan for Glassdoor, while Bayt uses dedicated career_site fetcher', () => {
     const gdPlan = pagingPlanFor('src-glassdoor');
     const baytPlan = pagingPlanFor('src-bayt');
 
     expect(gdPlan).toBeDefined();
-    expect(baytPlan).toBeDefined();
+    expect(baytPlan).toBeNull();
 
     const gdFirst = gdPlan!.first('https://www.glassdoor.com/graph', 0);
     expect(gdFirst.url).toContain('glassdoor.com');
@@ -761,13 +835,6 @@ describe('Glassdoor & Bayt registry & wiring integration', () => {
     const gdNext = gdPlan!.next(gdFirst, { data: { jobListings: [{ jobview: {} }] } });
     expect(gdNext).not.toBeNull();
     expect(gdPlan!.next(gdFirst, { data: { jobListings: [] } })).toBeNull();
-
-    const baytFirst = baytPlan!.first('https://www.bayt.com/en/international/jobs/', 0);
-    expect(baytFirst.url).toContain('bayt.com');
-
-    const baytNext = baytPlan!.next(baytFirst, '<li data-js-job="1">...</li>');
-    expect(baytNext).not.toBeNull();
-    expect(baytPlan!.next(baytFirst, '')).toBeNull();
   });
 });
 

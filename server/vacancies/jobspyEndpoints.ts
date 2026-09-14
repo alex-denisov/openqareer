@@ -1,3 +1,5 @@
+import { getRandomizedUserAgent } from '../crawler/obscuraStealth';
+
 /**
  * Общие данные площадок, снятых по механике JobSpy (B218). Отдельный файл,
  * потому что это факты о чужих адресах (ключ приложения Indeed, форма запроса),
@@ -152,8 +154,7 @@ export const GLASSDOOR_GRAPHQL_URL = 'https://www.glassdoor.com/graph';
 
 export function glassdoorHeaders(csrfToken?: string): Record<string, string> {
   const headers: Record<string, string> = {
-    'User-Agent':
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    'User-Agent': getRandomizedUserAgent(),
     'Content-Type': 'application/json',
     accept: '*/*',
     'sec-ch-ua': '"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"',
@@ -241,8 +242,7 @@ export const BAYT_SEARCH_URL = 'https://www.bayt.com/en/international/jobs/';
 
 export function baytHeaders(): Record<string, string> {
   return {
-    'User-Agent':
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    'User-Agent': getRandomizedUserAgent(),
     Accept:
       'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.9',

@@ -9,14 +9,12 @@ import {
   GLASSDOOR_GRAPHQL_URL,
   glassdoorHeaders,
   glassdoorPayload,
-  baytHeaders,
 } from './jobspyEndpoints';
 import {
   BDJOBS_SOURCE_ID,
   NAUKRI_SOURCE_ID,
   ZIPRECRUITER_SOURCE_ID,
   GLASSDOOR_SOURCE_ID,
-  BAYT_SOURCE_ID,
 } from './jobspyAdapters';
 import { FAN_SIZE, fanComboAt, fanStartIndex } from './jobspyFan';
 import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
@@ -659,37 +657,6 @@ const glassdoor: PagingPlan = {
   },
 };
 
-function baytFirstRequest(targetUrl: string): PagedRequest {
-  const url = new URL(targetUrl);
-  if (!url.searchParams.has('q')) url.searchParams.set('q', 'software engineer');
-  if (!url.searchParams.has('page')) url.searchParams.set('page', '1');
-  return {
-    url: url.toString(),
-    headers: baytHeaders(),
-    state: { page: 1 },
-  };
-}
-
-const bayt: PagingPlan = {
-  pagesPerSync: 10,
-  delayMs: 1_000,
-  first: (targetUrl) => baytFirstRequest(targetUrl),
-  next: (previous, payload) => {
-    const html =
-      typeof payload === 'string'
-        ? payload
-        : text(record(payload).html) || text(record(payload).content);
-    if (!html || !/data-js-job/i.test(html)) return null;
-    const page = pageOf(previous.url, 'page') || (numeric(record(previous.state).page) ?? 1);
-    if (page >= 20) return null;
-    return {
-      url: withParam(previous.url, 'page', String(page + 1)),
-      headers: baytHeaders(),
-      state: { page: page + 1 },
-    };
-  },
-};
-
 const PLANS: Readonly<Record<string, PagingPlan>> = {
   'src-themuse': themuse,
   'src-himalayas-api': himalayas,
@@ -705,7 +672,6 @@ const PLANS: Readonly<Record<string, PagingPlan>> = {
   [BDJOBS_SOURCE_ID]: bdjobs,
   [ZIPRECRUITER_SOURCE_ID]: ziprecruiter,
   [GLASSDOOR_SOURCE_ID]: glassdoor,
-  [BAYT_SOURCE_ID]: bayt,
 };
 
 export function pagingPlanFor(sourceId: string): PagingPlan | null {
