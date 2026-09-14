@@ -132,9 +132,10 @@ async function fetchJsonPayload(
     headers: {
       ...FETCH_HEADERS,
       Accept: 'application/json',
-      ...(request.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(request.method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
     },
-    ...(request.body !== undefined ? { body: JSON.stringify(request.body) } : {}),
+    // Тело уходит только с POST: у GET-планов `body` — состояние обхода.
+    ...(request.method === 'POST' ? { body: JSON.stringify(request.body ?? {}) } : {}),
     signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);

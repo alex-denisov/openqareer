@@ -542,12 +542,12 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     market: 'US',
     addressStatus: 'live',
     // Категории — те же «белые воротнички», что и фильтр hh.ru (B214): роль,
-    // где резюме имеет значение. Сортировки по дате у API нет, поэтому окно из
-    // 60 страниц вращается по кругу от времени (B216).
+    // где резюме имеет значение. `page` у площадки не больше 99, поэтому
+    // выдача дробится веером «категория × уровень», по кругу от времени (B216).
     enabled: true,
     targetUrl:
       'https://www.themuse.com/api/public/jobs?page=1&category=Software%20Engineering&category=Data%20and%20Analytics&category=Data%20Science&category=Design%20and%20UX&category=Product%20Management&category=Project%20Management&category=Computer%20and%20IT&category=IT&category=Business%20Operations&category=Sales&category=Marketing&category=Account%20Management&category=Accounting%20and%20Finance&category=Human%20Resources%20and%20Recruitment&category=Legal%20Services&category=Science%20and%20Engineering&category=Management&category=Writing%20and%20Editing&category=Media%2C%20PR%2C%20and%20Communications&category=Education&category=Medical%2C%20Clinical%20and%20Veterinary&category=Customer%20Service',
-    refreshIntervalMinutes: 60,
+    refreshIntervalMinutes: 30,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
   },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pagingPlanFor, rotatingWindowStart } from './pagedJsonSources';
+import { pagingPlanFor, rotatingWindowStart, themuseQueries } from './pagedJsonSources';
 
 /**
  * B216 — у каждой постраничной площадки своя механика продолжения. План
@@ -7,20 +7,31 @@ import { pagingPlanFor, rotatingWindowStart } from './pagedJsonSources';
  * страницу за пределами выдачи.
  */
 describe('paging plans (B216)', () => {
-  it('TheMuse: начинает с окна, сдвинутого от времени, и останавливается на page_count', () => {
+  it('TheMuse: веер «категория × уровень», страница не выше 99, комбинации по кругу', () => {
     const plan = pagingPlanFor('src-themuse')!;
-    const url = 'https://www.themuse.com/api/public/jobs?page=1&category=IT';
+    const url = 'https://www.themuse.com/api/public/jobs?page=1&category=IT&category=Sales';
+    expect(themuseQueries(url)).toHaveLength(10);
 
     const first = plan.first(url, 0);
-    expect(new URL(first.url).searchParams.get('page')).toBe('1');
+    const firstParams = new URL(first.url).searchParams;
+    expect(firstParams.getAll('category')).toEqual(['IT']);
+    expect(firstParams.get('level')).toBe('Internship');
+    expect(firstParams.get('page')).toBe('1');
 
-    const laterWindow = plan.first(url, 60 * 60_000);
-    expect(new URL(laterWindow.url).searchParams.get('page')).toBe('61');
+    const later = plan.first(url, 30 * 60_000);
+    expect(new URL(later.url).searchParams.get('level')).toBe('Entry Level');
 
-    const next = plan.next(first, { page_count: 2, results: [{}] });
-    expect(next && new URL(next.url).searchParams.get('page')).toBe('2');
-    expect(plan.next(next!, { page_count: 2, results: [{}] })).toBeNull();
-    expect(plan.next(first, { page_count: 9, results: [] })).toBeNull();
+    const next = plan.next(first, { page_count: 500, results: [{}] });
+    expect(new URL(next!.url).searchParams.get('page')).toBe('2');
+
+    const atCap = { ...first, url: first.url.replace('page=1', 'page=99') };
+    const rolled = plan.next(atCap, { page_count: 500, results: [{}] });
+    const rolledParams = new URL(rolled!.url).searchParams;
+    expect(rolledParams.get('page')).toBe('1');
+    expect(rolledParams.get('level')).toBe('Entry Level');
+
+    const empty = plan.next(first, { page_count: 500, results: [] });
+    expect(new URL(empty!.url).searchParams.get('level')).toBe('Entry Level');
   });
 
   it('Himalayas: следует за nextCursor, пока есть записи', () => {

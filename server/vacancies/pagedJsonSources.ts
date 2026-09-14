@@ -61,38 +61,67 @@ function pageOf(url: string, name: string): number {
 }
 
 /**
- * TheMuse: `page` от 1, `page_count` в ответе. Сортировки по дате у API нет,
- * поэтому окно вращается. Оценка страниц для вращения — из самого ответа не
- * взять до первого запроса, поэтому используется последняя замеренная
- * величина; переоценка безвредна: пустая страница завершает чтение.
+ * TheMuse: `page` от 1, но не больше 99 — площадка отвечает `400 Value page is
+ * too high` (замер с прод-VM 2026-09-14). Значит один фильтр отдаёт не больше
+ * 1 980 записей, а категория «Software Engineering» одна держит 120 000.
+ * Поэтому выдача дробится веером «категория × уровень», и каждый опрос читает
+ * очередные комбинации по кругу от времени; сортировки по дате у API нет.
  */
-const THEMUSE_PAGES_ESTIMATE = 10_000;
-const THEMUSE_PAGES_PER_SYNC = 60;
-const THEMUSE_INTERVAL_MINUTES = 60;
+const THEMUSE_MAX_PAGE = 99;
+const THEMUSE_LEVELS = ['Internship', 'Entry Level', 'Mid Level', 'Senior Level', 'Management'];
+const THEMUSE_PAGES_PER_SYNC = 200;
+const THEMUSE_INTERVAL_MINUTES = 30;
+
+interface ThemuseQuery {
+  readonly category: string;
+  readonly level: string;
+}
+
+export function themuseQueries(targetUrl: string): ThemuseQuery[] {
+  const categories = new URL(targetUrl).searchParams.getAll('category');
+  return categories.flatMap((category) => THEMUSE_LEVELS.map((level) => ({ category, level })));
+}
+
+function themuseUrl(targetUrl: string, query: ThemuseQuery, page: number): string {
+  const url = new URL(targetUrl);
+  url.searchParams.delete('category');
+  url.searchParams.set('category', query.category);
+  url.searchParams.set('level', query.level);
+  url.searchParams.set('page', String(page));
+  return url.toString();
+}
 
 const themuse: PagingPlan = {
   pagesPerSync: THEMUSE_PAGES_PER_SYNC,
   delayMs: 400,
-  first: (targetUrl, nowMs) => ({
-    url: withParam(
-      targetUrl,
-      'page',
-      String(
-        rotatingWindowStart(
-          nowMs,
-          THEMUSE_INTERVAL_MINUTES,
-          THEMUSE_PAGES_PER_SYNC,
-          THEMUSE_PAGES_ESTIMATE,
-        ),
-      ),
-    ),
-  }),
+  first: (targetUrl, nowMs) => {
+    const queries = themuseQueries(targetUrl);
+    const tick = Math.floor(nowMs / (THEMUSE_INTERVAL_MINUTES * 60_000));
+    const query = queries[tick % Math.max(1, queries.length)];
+    if (!query) return { url: targetUrl };
+    return {
+      url: themuseUrl(targetUrl, query, 1),
+      body: { targetUrl, index: tick % queries.length },
+    };
+  },
   next: (previous, payload) => {
+    const state = record(previous.body);
+    const targetUrl = text(state.targetUrl);
+    const queries = targetUrl ? themuseQueries(targetUrl) : [];
+    if (queries.length === 0) return null;
     const page = pageOf(previous.url, 'page');
-    const pageCount = numeric(record(payload).page_count) ?? 0;
+    const pageCount = Math.min(numeric(record(payload).page_count) ?? 0, THEMUSE_MAX_PAGE);
     const results = asArray(record(payload).results) ?? [];
-    if (results.length === 0 || page >= pageCount) return null;
-    return { url: withParam(previous.url, 'page', String(page + 1)) };
+    const index = numeric(state.index) ?? 0;
+    if (results.length > 0 && page < pageCount) {
+      return { url: themuseUrl(targetUrl, queries[index]!, page + 1), body: previous.body };
+    }
+    // Комбинация дочитана — следующая по кругу; бюджет страниц остановит опрос.
+    const nextIndex = (index + 1) % queries.length;
+    return {
+      url: themuseUrl(targetUrl, queries[nextIndex]!, 1),
+      body: { targetUrl, index: nextIndex },
+    };
   },
 };
 
