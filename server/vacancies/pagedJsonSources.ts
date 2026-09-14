@@ -198,20 +198,62 @@ function olderThanWindow(publishedMs: number | undefined, nowMs: number): boolea
  * меньше (2026-09-14).
  */
 const MICROSOFT_PAGE = 10;
+const MICROSOFT_PAGES_PER_SYNC = 40;
+const MICROSOFT_PAGE_CEILING = 250;
+const MICROSOFT_INTERVAL_MINUTES = 240;
+
+/**
+ * Состояние окна по свежим страницам. Окно стартует не с начала, а по кругу от
+ * времени: бюджет одного опроса — не потолок площадки, а порция; следующий
+ * опрос продолжит с другой порции, и за несколько опросов прочитается всё
+ * свежее. За границей свежести окно заворачивает на первую страницу и
+ * останавливается, дойдя до своей стартовой — тогда чтение полное.
+ */
+interface FreshWindowState {
+  readonly startPage: number;
+  readonly startedAt: number;
+  readonly wrapped: boolean;
+}
+
+function freshWindowNext(
+  state: FreshWindowState,
+  page: number,
+  lastPage: number,
+  oldestMs: number | undefined,
+): { page: number; wrapped: boolean } | null {
+  const edge = page >= lastPage || olderThanWindow(oldestMs, state.startedAt);
+  if (!edge) {
+    const next = page + 1;
+    return state.wrapped && next >= state.startPage ? null : { page: next, wrapped: state.wrapped };
+  }
+  if (state.wrapped || state.startPage === 1) return null;
+  return { page: 1, wrapped: true };
+}
+
+function microsoftRequest(url: string, page: number, state: FreshWindowState): PagedRequest {
+  return { url: withParam(url, 'start', String((page - 1) * MICROSOFT_PAGE)), state };
+}
 
 const microsoft: PagingPlan = {
-  pagesPerSync: 40,
+  pagesPerSync: MICROSOFT_PAGES_PER_SYNC,
   delayMs: 1_500,
-  first: (targetUrl) => ({ url: withParam(targetUrl, 'start', '0'), state: { startedAt: Date.now() } }),
+  first: (targetUrl, nowMs) => {
+    const startPage = rotatingWindowStart(
+      nowMs,
+      MICROSOFT_INTERVAL_MINUTES,
+      MICROSOFT_PAGES_PER_SYNC,
+      MICROSOFT_PAGE_CEILING,
+    );
+    return microsoftRequest(targetUrl, startPage, { startPage, startedAt: nowMs, wrapped: false });
+  },
   next: (previous, payload) => {
-    const start = pageOf(previous.url, 'start');
-    const num = pageOf(previous.url, 'num') || MICROSOFT_PAGE;
+    const state = previous.state as FreshWindowState;
+    const page = Math.floor(pageOf(previous.url, 'start') / MICROSOFT_PAGE) + 1;
     const { count, positions } = eightfoldPayload(payload);
-    if (positions.length === 0 || start + num >= count) return null;
+    if (positions.length === 0) return state.wrapped || state.startPage === 1 ? null : microsoftRequest(previous.url, 1, { ...state, wrapped: true });
     const oldest = numeric(record(positions[positions.length - 1]).postedTs);
-    const nowMs = numeric(record(previous.state).startedAt) ?? Date.now();
-    if (olderThanWindow(oldest === undefined ? undefined : oldest * 1000, nowMs)) return null;
-    return { url: withParam(previous.url, 'start', String(start + num)), state: previous.state };
+    const step = freshWindowNext(state, page, Math.ceil(count / MICROSOFT_PAGE), oldest === undefined ? undefined : oldest * 1000);
+    return step ? microsoftRequest(previous.url, step.page, { ...state, wrapped: step.wrapped }) : null;
   },
 };
 
@@ -222,8 +264,10 @@ const microsoft: PagingPlan = {
  */
 const APPLE_PAGE = 20;
 const APPLE_PAGES_PER_SYNC = 100;
+const APPLE_PAGE_CEILING = 320;
+const APPLE_INTERVAL_MINUTES = 240;
 
-function appleRequest(url: string, page: number, startedAt: number): PagedRequest {
+function appleRequest(url: string, page: number, state: FreshWindowState): PagedRequest {
   return {
     url,
     method: 'POST',
@@ -235,25 +279,27 @@ function appleRequest(url: string, page: number, startedAt: number): PagedReques
       sort: 'newest',
       format: { longDate: 'MMMM D, YYYY', mediumDate: 'MMM D, YYYY' },
     },
-    state: { page, startedAt },
+    state,
   };
 }
 
 const apple: PagingPlan = {
   pagesPerSync: APPLE_PAGES_PER_SYNC,
   delayMs: 400,
-  first: (targetUrl, nowMs) => appleRequest(targetUrl, 1, nowMs),
+  first: (targetUrl, nowMs) => {
+    const startPage = rotatingWindowStart(nowMs, APPLE_INTERVAL_MINUTES, APPLE_PAGES_PER_SYNC, APPLE_PAGE_CEILING);
+    return appleRequest(targetUrl, startPage, { startPage, startedAt: nowMs, wrapped: false });
+  },
   next: (previous, payload) => {
-    const state = record(previous.state);
-    const page = numeric(state.page) ?? 1;
-    const startedAt = numeric(state.startedAt) ?? Date.now();
+    const state = previous.state as FreshWindowState;
+    const page = numeric(record(previous.body).page) ?? 1;
     const res = record(record(payload).res);
     const total = numeric(res.totalRecords) ?? 0;
     const results = asArray(res.searchResults) ?? [];
-    if (results.length === 0 || page >= Math.ceil(total / APPLE_PAGE)) return null;
+    if (results.length === 0) return state.wrapped || state.startPage === 1 ? null : appleRequest(previous.url, 1, { ...state, wrapped: true });
     const oldest = Date.parse(text(record(results[results.length - 1]).postDateInGMT));
-    if (olderThanWindow(Number.isNaN(oldest) ? undefined : oldest, startedAt)) return null;
-    return appleRequest(previous.url, page + 1, startedAt);
+    const step = freshWindowNext(state, page, Math.ceil(total / APPLE_PAGE), Number.isNaN(oldest) ? undefined : oldest);
+    return step ? appleRequest(previous.url, step.page, { ...state, wrapped: step.wrapped }) : null;
   },
 };
 
