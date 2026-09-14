@@ -221,7 +221,7 @@ const microsoft: PagingPlan = {
  * выдачу. Читается с первой страницы до границы свежести.
  */
 const APPLE_PAGE = 20;
-const APPLE_PAGES_PER_SYNC = 40;
+const APPLE_PAGES_PER_SYNC = 100;
 
 function appleRequest(url: string, page: number, startedAt: number): PagedRequest {
   return {
