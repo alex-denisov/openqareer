@@ -18,6 +18,8 @@ import { CATALOG_ROOT } from '../../shared/vacancyCatalogRoutes';
 import { employerLabel } from '../../shared/employerLabel';
 import type { CatalogEntry, CatalogPage, StructuredGraph, VacancyDetail } from './vacancyCatalogPage';
 import type { CatalogFilterGroup } from './vacancyCatalogFilters';
+import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import { renderUnifiedVacancyView } from './renderVacancyTemplate';
 
 /**
  * ПОЧЕМУ ФАЙЛ, А НЕ ИНЛАЙН. Боевая политика безопасности — `style-src 'self'`
@@ -49,7 +51,7 @@ a:focus-visible{outline:2px solid var(--primary-accent);outline-offset:2px;borde
 .catalog-card h2{font-size:1.05rem;margin:0 0 .35rem;line-height:1.35}
 .catalog-card-meta{color:var(--text-muted);font-size:.9rem;margin:0 0 .5rem}
 .catalog-card-summary,.catalog-detail-summary{margin:0;color:var(--text-muted)}
-.catalog-detail-summary{color:var(--text-main);margin-block:1rem}
+.catalog-detail-summary{color:var(--text-main);margin-block:1rem;white-space:pre-wrap}
 .catalog-pagination{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:1.5rem;color:var(--text-muted);flex-wrap:wrap}
 .catalog-breadcrumbs{color:var(--text-muted);font-size:.9rem;margin-bottom:.75rem}
 .catalog-skills{list-style:none;display:flex;flex-wrap:wrap;gap:.4rem;padding:0;margin:1rem 0}
@@ -299,11 +301,18 @@ export function renderCatalogDocument(
   );
 }
 
-export function renderVacancyDocument(detail: VacancyDetail): string {
+export function renderVacancyDocument(
+  detail: VacancyDetail,
+  vacancy?: UnifiedVacancy,
+): string {
   const { entry } = detail;
   const employer = employerLabel(entry.company);
   const title = `${entry.title} — ${employer} · openqareer`;
   const description = `${entry.title}, ${employer}, ${placeLabel(entry)}. Источник и дата наблюдения указаны на странице.`;
+  const targetVacancy = vacancy ?? detail.vacancy;
+  const detailText = targetVacancy
+    ? renderUnifiedVacancyView(targetVacancy)
+    : detail.description;
 
   const body =
     siteHeader() +
@@ -314,7 +323,7 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
     `<p class="catalog-card-meta">${escapeHtml(employer)} · ${escapeHtml(placeLabel(entry))}` +
     (entry.salaryLabel ? ` · ${escapeHtml(entry.salaryLabel)}` : '') +
     '</p>' +
-    `<p class="catalog-detail-summary">${escapeHtml(detail.description)}</p>` +
+    `<p class="catalog-detail-summary">${escapeHtml(detailText)}</p>` +
     (entry.skills.length > 0
       ? `<ul class="catalog-skills">${entry.skills.map((skill) => `<li>${escapeHtml(skill)}</li>`).join('')}</ul>`
       : '') +

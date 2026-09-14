@@ -7,7 +7,7 @@ import {
   renderVacancyDocument,
 } from './vacancyCatalogDocument';
 import { buildCatalogPage, buildListingPage, buildVacancyDetail } from './vacancyCatalogPage';
-import type { VacancyCluster } from '../domain/unifiedVacancy';
+import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 
 function cluster(overrides: Partial<VacancyCluster> = {}): VacancyCluster {
   return {
@@ -272,5 +272,46 @@ describe('документ публичного каталога (B209)', () => 
     expect(renderCatalogDocument(buildCatalogPage([cluster()], 1))).not.toContain(
       'catalog-breadcrumbs',
     );
+  });
+
+  it('рендерит динамический шаблон LinkedIn, когда передана UnifiedVacancy', () => {
+    const rawVacancy: UnifiedVacancy = {
+      id: 'ats-greenhouse:123',
+      fingerprint: 'ats-greenhouse:123',
+      title: 'Senior Distributed Systems Engineer',
+      company: 'Databricks',
+      location: 'Amsterdam, Netherlands',
+      isRemote: true,
+      employmentType: 'Full-time',
+      experienceLevel: 'Senior',
+      salary: { from: 140000, to: 180000, currency: 'EUR' },
+      description: 'Join Databricks engineering team.',
+      requiredSkills: ['Rust', 'Distributed Systems'],
+      responsibilities: ['Build high-scale ingestion systems'],
+      qualifications: ['5+ years distributed systems'],
+      url: 'https://boards.greenhouse.io/databricks/jobs/123',
+      provenance: {
+        sourceType: 'json_api',
+        sourceId: 'ats-databricks',
+        sourceName: 'Greenhouse',
+        sourceUrl: 'https://boards.greenhouse.io/databricks/jobs/123',
+        observedAt: '2026-09-14T00:00:00.000Z',
+      },
+      publishedAt: '2026-09-13T00:00:00.000Z',
+      status: 'active',
+    };
+    const detail = buildVacancyDetail(
+      cluster({ canonicalCompany: 'Databricks', canonicalTitle: 'Senior Distributed Systems Engineer' }),
+    )!;
+    const html = renderVacancyDocument(detail, rawVacancy);
+
+    expect(html).toContain('# Senior Distributed Systems Engineer');
+    expect(html).toContain('**Databricks** · Amsterdam, Netherlands · `Remote` · `Full-time`');
+    expect(html).toContain('### Top Skills &amp; Match');
+    expect(html).toContain('`[Rust]` `[Distributed Systems]`');
+    expect(html).toContain('### About the Role');
+    expect(html).toContain("### What You&#39;ll Do");
+    expect(html).toContain('- Build high-scale ingestion systems');
+    expect(html).toContain('### Basic Qualifications');
   });
 });

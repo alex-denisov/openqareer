@@ -16,7 +16,8 @@ import {
   vacancyKey,
   vacancyPath,
 } from '../../shared/vacancyCatalogRoutes';
-import type { VacancyCluster } from '../domain/unifiedVacancy';
+import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
+import { renderUnifiedVacancyView } from './renderVacancyTemplate';
 
 /** Сколько карточек на странице каталога. */
 export const CATALOG_PAGE_SIZE = 24;
@@ -74,6 +75,7 @@ export interface VacancyDetail {
    */
   readonly description: string;
   readonly jsonLd: StructuredGraph;
+  readonly vacancy?: UnifiedVacancy;
 }
 
 function isoDate(value: string): string {
@@ -270,10 +272,13 @@ function jobPosting(
 export function buildVacancyDetail(
   cluster: VacancyCluster,
   fullDescription?: string,
+  vacancy?: UnifiedVacancy,
 ): VacancyDetail | null {
   const entry = toCatalogEntry(cluster);
   if (!entry) return null;
-  const description = fullDescription?.trim() || entry.summary;
+  const description = vacancy
+    ? renderUnifiedVacancyView(vacancy)
+    : fullDescription?.trim() || entry.summary;
 
   return {
     entry,
@@ -285,6 +290,7 @@ export function buildVacancyDetail(
         breadcrumbs({ name: entry.title, path: entry.path }),
       ],
     },
+    ...(vacancy ? { vacancy } : {}),
   };
 }
 

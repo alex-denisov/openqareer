@@ -154,14 +154,14 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
   const sourceId = found?.id.startsWith('cluster-') ? found.id.slice('cluster-'.length) : undefined;
   const full = sourceId ? deps.multiSourceEngine.getVacancy(sourceId) : undefined;
   const detail = found
-    ? buildVacancyDetail(found, full?.fullDescription ?? full?.description)
+    ? buildVacancyDetail(found, full?.fullDescription ?? full?.description, full)
     : null;
 
   if (!detail) {
     const page = buildCatalogPage(clusters, 1);
     return sendDocument(reply, renderGoneDocument(page), 410);
   }
-  return sendDocument(reply, renderVacancyDocument(detail));
+  return sendDocument(reply, renderVacancyDocument(detail, full));
 }
 
 async function handleSitemap(deps: RouteDeps, _request: FastifyRequest, reply: FastifyReply) {
