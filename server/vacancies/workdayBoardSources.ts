@@ -12,6 +12,14 @@ import type { RegisteredVacancySource, VacancySourceMeasurement } from './defaul
  * Список Workday отдаёт по 20 записей без описания: карточка несёт заголовок и
  * место, публичная ссылка собирается из адреса сайта. Полный текст — отдельный
  * запрос на каждую вакансию, и на 1 744 вакансиях NVIDIA это отдельный срез.
+ *
+ * Статус компаний, ранее предполагавшихся на Workday (B216/B218):
+ * - Snap и Sony подтверждены на Workday (snapchat/snap и sonyglobal/SonyGlobalCareers).
+ * - AMD использует iCIMS (careers-amd.icims.com).
+ * - Dell использует Oracle Cloud HCM.
+ * - Cisco использует Phenom People.
+ * - JPMC использует Oracle Cloud HCM.
+ * - VMware поглощена Broadcom (уже активна под Broadcom).
  */
 export interface MeasuredWorkdayTenant {
   readonly company: string;
@@ -109,6 +117,22 @@ export const MEASURED_WORKDAY_TENANTS: readonly MeasuredWorkdayTenant[] = [
     host: 'capitalone.wd12.myworkdayjobs.com',
     site: 'Capital_One',
     jobs: 1939,
+    observedAt: '2026-09-14',
+  },
+  {
+    company: 'Snap',
+    tenant: 'snapchat',
+    host: 'snapchat.wd1.myworkdayjobs.com',
+    site: 'snap',
+    jobs: 176,
+    observedAt: '2026-09-14',
+  },
+  {
+    company: 'Sony',
+    tenant: 'sonyglobal',
+    host: 'sonyglobal.wd1.myworkdayjobs.com',
+    site: 'SonyGlobalCareers',
+    jobs: 113,
     observedAt: '2026-09-14',
   },
 ];

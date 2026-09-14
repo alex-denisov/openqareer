@@ -161,6 +161,14 @@ export const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasure
       note: 'apply.careers.microsoft.com/api/pcsx/search (Eightfold) с прод-VM: data.count=2215, не больше 10 на страницу; robots.txt этого хоста явно Allow: /api/pcsx. Старый gcsservices.careers.microsoft.com отвечает чужим TLS-сертификатом (B217)',
     },
   ],
+  'src-qualcomm-careers': [
+    {
+      items: 1963,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'careers.qualcomm.com/api/pcsx/search (Eightfold AI) с прод-VM: 1 963 актуальные IT-вакансии',
+    },
+  ],
   'src-crossover': [
     {
       items: 99,

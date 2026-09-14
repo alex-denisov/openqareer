@@ -477,6 +477,7 @@ const PLANS: Readonly<Record<string, PagingPlan>> = {
   'src-apple-jobs': apple,
   'src-getonbrd': getonbrd,
   'src-indeed': indeed,
+  'src-qualcomm-careers': eightfold,
 };
 
 export function pagingPlanFor(sourceId: string): PagingPlan | null {

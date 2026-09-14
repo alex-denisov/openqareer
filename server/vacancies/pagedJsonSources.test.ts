@@ -68,6 +68,7 @@ describe('paging plans (B216)', () => {
 
   it('Eightfold: шагает start на num до count', () => {
     const plan = pagingPlanFor('src-netflix')!;
+    expect(pagingPlanFor('src-qualcomm-careers')).toBe(plan);
     const first = plan.first('https://x.example/api/apply/v2/jobs?domain=x.com&num=10', 0);
     const next = plan.next(first, { count: 15, positions: [{}] });
     expect(new URL(next!.url).searchParams.get('start')).toBe('10');

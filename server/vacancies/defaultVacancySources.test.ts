@@ -4,7 +4,7 @@ import {
   vacancySourceMeasurement,
   vacancySourceMeasurements,
 } from './defaultVacancySources';
-import { hasJsonAdapter } from './jsonSourceAdapters';
+import { hasJsonAdapter, normalizeJsonSource } from './jsonSourceAdapters';
 
 /**
  * B164 — the registry used to carry sources nobody had ever contacted, and
@@ -241,5 +241,59 @@ describe('registry of vacancy sources: an enabled source is readable (B199)', ()
     ).map((source) => source.id);
 
     expect(missing).toEqual([]);
+  });
+});
+
+describe('Qualcomm Eightfold source', () => {
+  it('registers Qualcomm as an enabled Eightfold source with measurement', () => {
+    const qualcomm = DEFAULT_VACANCY_SOURCES.find((s) => s.id === 'src-qualcomm-careers');
+    expect(qualcomm).toBeDefined();
+    expect(qualcomm?.name).toBe('Qualcomm');
+    expect(qualcomm?.type).toBe('json_api');
+    expect(qualcomm?.accessClass).toBe('api');
+    expect(qualcomm?.addressStatus).toBe('live');
+    expect(qualcomm?.enabled).toBe(true);
+    expect(qualcomm?.targetUrl).toBe('https://careers.qualcomm.com/api/pcsx/search?domain=qualcomm.com');
+
+    const readings = vacancySourceMeasurements('src-qualcomm-careers');
+    expect(readings.length).toBeGreaterThan(0);
+    const prod = readings.find((r) => r.route === 'eu-prod');
+    expect(prod).toBeDefined();
+    expect(prod?.items).toBe(1963);
+    expect(prod?.observedAt).toBe('2026-09-14');
+  });
+
+  it('normalises Qualcomm Eightfold position payload', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-qualcomm-careers',
+      {
+        data: {
+          count: 1963,
+          positions: [
+            {
+              id: '3071234',
+              displayJobId: '3071234',
+              name: 'Staff Engineer, SW Architecture',
+              locations: ['San Diego, CA, United States'],
+              postedTs: 1789365721,
+              department: 'Engineering - Software',
+              workLocationOption: 'onsite',
+              positionUrl: '/careers/job/3071234',
+            },
+          ],
+        },
+      },
+      { observedAt: '2026-09-14T09:00:00.000Z', sourceName: 'Qualcomm' },
+    );
+    expect(vacancy).toMatchObject({
+      company: 'Qualcomm',
+      title: 'Staff Engineer, SW Architecture',
+      location: 'San Diego, CA, United States',
+      isRemote: false,
+      url: 'https://careers.qualcomm.com/careers/job/3071234',
+      publishedAt: new Date(1789365721 * 1000).toISOString(),
+    });
+    expect(vacancy?.provenance.externalId).toBe('3071234');
+    expect(vacancy?.description).toContain('Engineering - Software');
   });
 });

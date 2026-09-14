@@ -281,6 +281,9 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
   'src-microsoft-careers': (payload, context, sourceId) =>
     eightfold(payload, context, sourceId, 'https://apply.careers.microsoft.com'),
 
+  'src-qualcomm-careers': (payload, context, sourceId) =>
+    eightfold(payload, context, sourceId, 'https://careers.qualcomm.com'),
+
   'src-apple-jobs': (payload, context, sourceId) =>
     listOf(payload, (value) => asArray(record(record(value).res).searchResults)).map((item) => {
       const job = record(item);
