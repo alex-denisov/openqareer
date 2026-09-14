@@ -216,6 +216,43 @@ describe('paging plans (B216)', () => {
     expect(FAN_SIZE).toBeGreaterThan(plan.pagesPerSync);
   });
 
+  it('Hacker News: сначала ищет story_id темы, затем читает комментарии', () => {
+    const plan = pagingPlanFor('src-hn-whoishiring')!;
+    expect(plan).toBeDefined();
+
+    const targetUrl =
+      'https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=Ask+HN:+Who+is+hiring';
+    const first = plan.first(targetUrl, 0);
+    expect(first.url).toBe(targetUrl);
+
+    const storyPayload = {
+      hits: [{ objectID: '49522897', title: 'Ask HN: Who is hiring? (September 2026)' }],
+    };
+    const commentsReq = plan.next(first, storyPayload);
+    expect(commentsReq).not.toBeNull();
+    expect(commentsReq?.url).toBe(
+      'https://hn.algolia.com/api/v1/search?tags=comment,story_49522897&hitsPerPage=1000',
+    );
+
+    const commentsPage0 = {
+      page: 0,
+      nbPages: 2,
+      hits: [{ objectID: '49667711' }],
+    };
+    const commentsReqPage1 = plan.next(commentsReq!, commentsPage0);
+    expect(commentsReqPage1).not.toBeNull();
+    expect(commentsReqPage1?.url).toBe(
+      'https://hn.algolia.com/api/v1/search?tags=comment,story_49522897&hitsPerPage=1000&page=1',
+    );
+
+    const commentsPage1 = {
+      page: 1,
+      nbPages: 2,
+      hits: [{ objectID: '49667712' }],
+    };
+    expect(plan.next(commentsReqPage1!, commentsPage1)).toBeNull();
+  });
+
   it('у площадки без плана плана нет', () => {
     expect(pagingPlanFor('src-arbeitnow')).toBeNull();
   });

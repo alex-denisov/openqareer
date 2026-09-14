@@ -21,6 +21,7 @@ import { hasAtsBoardAdapter, normalizeAtsBoard } from './atsBoardAdapters';
 import { eightfoldPayload, isWorkdaySource } from './pagedJsonSources';
 import { CROSSOVER_SOURCE_ID } from './crossoverSource';
 import { LINKEDIN_SOURCE_ID } from './linkedinGuestSource';
+import { HN_SOURCE_ID, hnWhoIsHiringAdapter } from './hnWhoIsHiringSource';
 
 export type { JsonAdapterContext } from './jsonVacancyRecord';
 
@@ -283,6 +284,9 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
 
   'src-qualcomm-careers': (payload, context, sourceId) =>
     eightfold(payload, context, sourceId, 'https://careers.qualcomm.com'),
+
+  [HN_SOURCE_ID]: (payload, context, sourceId) =>
+    hnWhoIsHiringAdapter(payload, context, sourceId),
 
   'src-apple-jobs': (payload, context, sourceId) =>
     listOf(payload, (value) => asArray(record(record(value).res).searchResults)).map((item) => {

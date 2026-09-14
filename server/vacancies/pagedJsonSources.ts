@@ -468,6 +468,42 @@ const indeed: PagingPlan = {
   },
 };
 
+const hnWhoIsHiring: PagingPlan = {
+  pagesPerSync: 5,
+  delayMs: 300,
+  first: (targetUrl) => {
+    if (targetUrl.includes('tags=comment')) {
+      return { url: targetUrl, state: { stage: 'comments', page: 0 } };
+    }
+    return { url: targetUrl, state: { stage: 'story' } };
+  },
+  next: (previous, payload) => {
+    const state = record(previous.state);
+    if (state.stage === 'story') {
+      const hits = asArray(record(payload).hits) ?? [];
+      const first = record(hits[0]);
+      const storyId = text(first.objectID);
+      if (!storyId) return null;
+      return {
+        url: `https://hn.algolia.com/api/v1/search?tags=comment,story_${storyId}&hitsPerPage=1000`,
+        state: { stage: 'comments', storyId, page: 0 },
+      };
+    }
+    if (state.stage === 'comments') {
+      const page = numeric(state.page) ?? 0;
+      const nbPages = numeric(record(payload).nbPages) ?? 1;
+      const storyId = text(state.storyId);
+      if (storyId && page + 1 < nbPages) {
+        return {
+          url: `https://hn.algolia.com/api/v1/search?tags=comment,story_${storyId}&hitsPerPage=1000&page=${page + 1}`,
+          state: { stage: 'comments', storyId, page: page + 1 },
+        };
+      }
+    }
+    return null;
+  },
+};
+
 const PLANS: Readonly<Record<string, PagingPlan>> = {
   'src-themuse': themuse,
   'src-himalayas-api': himalayas,
@@ -478,6 +514,7 @@ const PLANS: Readonly<Record<string, PagingPlan>> = {
   'src-getonbrd': getonbrd,
   'src-indeed': indeed,
   'src-qualcomm-careers': eightfold,
+  'src-hn-whoishiring': hnWhoIsHiring,
 };
 
 export function pagingPlanFor(sourceId: string): PagingPlan | null {

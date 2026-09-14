@@ -501,6 +501,20 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     itemsActiveTotal: 0,
   },
   {
+    id: 'src-hn-whoishiring',
+    name: 'Hacker News',
+    type: 'json_api',
+    accessClass: 'api',
+    market: 'Мир (Hacker News Who is hiring, Algolia API)',
+    addressStatus: 'live',
+    enabled: true,
+    targetUrl:
+      'https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=Ask+HN:+Who+is+hiring',
+    refreshIntervalMinutes: 360,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  },
+  {
     id: 'src-crossover',
     name: 'Crossover',
     type: 'json_api',

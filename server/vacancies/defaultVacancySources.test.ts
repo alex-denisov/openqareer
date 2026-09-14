@@ -297,3 +297,50 @@ describe('Qualcomm Eightfold source', () => {
     expect(vacancy?.description).toContain('Engineering - Software');
   });
 });
+
+describe('Hacker News Who is hiring source', () => {
+  it('registers Hacker News as an enabled source with measurement', () => {
+    const hn = DEFAULT_VACANCY_SOURCES.find((s) => s.id === 'src-hn-whoishiring');
+    expect(hn).toBeDefined();
+    expect(hn?.name).toBe('Hacker News');
+    expect(hn?.type).toBe('json_api');
+    expect(hn?.accessClass).toBe('api');
+    expect(hn?.addressStatus).toBe('live');
+    expect(hn?.enabled).toBe(true);
+    expect(hn?.targetUrl).toContain('hn.algolia.com/api/v1/search_by_date');
+
+    const readings = vacancySourceMeasurements('src-hn-whoishiring');
+    expect(readings.length).toBeGreaterThan(0);
+    const prod = readings.find((r) => r.route === 'eu-prod');
+    expect(prod).toBeDefined();
+    expect(prod?.items).toBeGreaterThan(0);
+    expect(prod?.observedAt).toBe('2026-09-14');
+  });
+
+  it('normalises Hacker News comments payload via normalizeJsonSource', () => {
+    const [vacancy] = normalizeJsonSource(
+      'src-hn-whoishiring',
+      {
+        hits: [
+          {
+            objectID: '49667711',
+            parent_id: 49522897,
+            story_id: 49522897,
+            author: 'Daniel_Van_Zant',
+            created_at: '2026-09-02T16:00:00Z',
+            comment_text:
+              'Lumen Labs | Robotics Engineer | San Francisco, CA | ONSITE | $150k<p>We build physical AI.',
+          },
+        ],
+      },
+      { observedAt: '2026-09-14T22:00:00Z' },
+    );
+
+    expect(vacancy).toBeDefined();
+    expect(vacancy?.company).toBe('Lumen Labs');
+    expect(vacancy?.title).toBe('Robotics Engineer');
+    expect(vacancy?.location).toBe('San Francisco, CA');
+    expect(vacancy?.isRemote).toBe(false);
+    expect(vacancy?.url).toBe('https://news.ycombinator.com/item?id=49667711');
+  });
+});

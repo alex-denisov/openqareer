@@ -332,6 +332,7 @@ describe('json source adapters', () => {
       'src-workingnomads',
       'src-getonbrd',
       'src-trudvsem',
+      'src-hn-whoishiring',
     ]) {
       expect(() =>
         normalizeJsonSource(sourceId, { nothing: 'here' }, { observedAt: OBSERVED_AT }),

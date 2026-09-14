@@ -169,6 +169,14 @@ export const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasure
       note: 'careers.qualcomm.com/api/pcsx/search (Eightfold AI) с прод-VM: 1 963 актуальные IT-вакансии',
     },
   ],
+  'src-hn-whoishiring': [
+    {
+      items: 394,
+      observedAt: '2026-09-14',
+      route: 'eu-prod',
+      note: 'Hacker News "Who is hiring?" monthly thread (September 2026, story 49522897)',
+    },
+  ],
   'src-crossover': [
     {
       items: 99,
