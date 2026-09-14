@@ -355,4 +355,8 @@ export const MEASURED_ATS_BOARDS: readonly MeasuredAtsBoard[] = [
   { company: 'Samsung', provider: 'recruitee', board: 'samsung', jobs: 1, observedAt: '2026-09-14', lists: ['owner-2026-09-14'] },
   { company: 'Hugging Face', provider: 'workable', board: 'huggingface', jobs: 6, observedAt: '2026-09-14', lists: ['owner-2026-09-14'] },
   { company: 'Jasper', provider: 'workable', board: 'jasper', jobs: 1, observedAt: '2026-09-14', lists: ['owner-2026-09-14'] },
+  { company: 'Bosch Group', provider: 'smartrecruiters', board: 'BoschGroup', jobs: 4811, observedAt: '2026-09-14', lists: ['owner-2026-09-14'] },
+  { company: 'Visa', provider: 'smartrecruiters', board: 'visa', jobs: 1240, observedAt: '2026-09-14', lists: ['owner-2026-09-14'] },
+  { company: 'Joom', provider: 'breezy', board: 'joom-group', jobs: 24, observedAt: '2026-09-14', lists: ['buildin'] },
+  { company: 'Pinpoint', provider: 'pinpoint', board: 'pinpoint', jobs: 15, observedAt: '2026-09-14', lists: ['owner-2026-09-14'] },
 ];

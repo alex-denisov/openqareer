@@ -33,7 +33,9 @@ export type AtsProvider =
   | 'ashby'
   | 'workable'
   | 'recruitee'
-  | 'smartrecruiters';
+  | 'smartrecruiters'
+  | 'breezy'
+  | 'pinpoint';
 
 /**
  * Что площадка разрешила словами в своём `robots.txt` на 2026-09-05. Запрет —
@@ -109,10 +111,28 @@ export const ATS_PROVIDERS: readonly AtsProviderContract[] = [
     name: 'SmartRecruiters',
     endpoint: (board) => `https://api.smartrecruiters.com/v1/companies/${board}/postings?limit=100`,
     boardUrl: (board) => `https://jobs.smartrecruiters.com/${board}`,
-    crawlPermission: 'robots_forbidden',
+    crawlPermission: 'allowed',
     robotsNote:
-      'robots.txt: User-agent * → Disallow: /, разрешён только LinkedInBot (замер 2026-09-05)',
-    measuredAt: '2026-09-05',
+      'robotsOverride владельца: открытый Job Postings API каталога вакансий компаний (замер 2026-09-14)',
+    measuredAt: '2026-09-14',
+  },
+  {
+    provider: 'breezy',
+    name: 'Breezy HR',
+    endpoint: (board) => `https://${board}.breezy.hr/json`,
+    boardUrl: (board) => `https://${board}.breezy.hr`,
+    crawlPermission: 'allowed',
+    robotsNote: 'Публичная JSON-лента вакансий компании (замер 2026-09-14)',
+    measuredAt: '2026-09-14',
+  },
+  {
+    provider: 'pinpoint',
+    name: 'Pinpoint',
+    endpoint: (board) => `https://${board}.pinpointhq.com/postings.json`,
+    boardUrl: (board) => `https://${board}.pinpointhq.com`,
+    crawlPermission: 'allowed',
+    robotsNote: 'Публичная JSON-лента вакансий компании (замер 2026-09-14)',
+    measuredAt: '2026-09-14',
   },
 ];
 
@@ -311,6 +331,85 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
         experienceLevel: text(record(posting.experienceLevel).label) || undefined,
         url: `https://jobs.smartrecruiters.com/${board}/${id}`,
         publishedAt: fromIso(posting.releasedDate),
+      });
+    }),
+
+  breezy: (payload, context, sourceId, board) =>
+    listOf(payload, (value) => asArray(value) ?? asArray(record(value).jobs)).map((item) => {
+      const job = record(item);
+      const loc = record(job.location);
+      const location =
+        text(job.location) ||
+        text(loc.name) ||
+        placeOf(text(loc.city), text(loc.country)) ||
+        undefined;
+      const isRemote =
+        loc.is_remote === true ||
+        job.is_remote === true ||
+        job.telecommuting === true ||
+        /\bremote\b/i.test(location ?? '');
+      const typeRecord = record(job.type);
+      const employmentType = text(typeRecord.name) || text(job.type) || undefined;
+      const id = text(job.id);
+      return buildJsonVacancy({
+        sourceId,
+        context,
+        externalId: id,
+        title: text(job.name) || text(job.title),
+        company: employer(text(record(job.company).name) || text(job.company), context, board),
+        location,
+        isRemote,
+        description:
+          text(job.description) ||
+          text(job.description_plain) ||
+          text(job.name) ||
+          text(job.title),
+        skills: [],
+        employmentType,
+        url: text(job.url) || `https://${board}.breezy.hr/p/${id}`,
+        publishedAt: fromLooseDate(job.published_at ?? job.updated_at ?? job.created_at),
+      });
+    }),
+
+  pinpoint: (payload, context, sourceId, board) =>
+    listOf(payload, (value) => asArray(record(value).data) ?? asArray(value)).map((item) => {
+      const job = record(item);
+      const loc = record(job.location);
+      const location =
+        text(job.location) ||
+        text(loc.name) ||
+        placeOf(text(loc.city), text(loc.country)) ||
+        undefined;
+      const isRemote =
+        loc.remote === true ||
+        loc.is_remote === true ||
+        job.is_remote === true ||
+        /\bremote\b/i.test(location ?? '');
+      const typeRecord = record(job.employment_type);
+      const employmentType =
+        text(typeRecord.name) ||
+        text(job.employment_type) ||
+        text(record(job.type).name) ||
+        text(job.type) ||
+        undefined;
+      const id = text(job.id);
+      return buildJsonVacancy({
+        sourceId,
+        context,
+        externalId: id,
+        title: text(job.title) || text(job.name),
+        company: employer(text(record(job.company).name) || text(job.company), context, board),
+        location,
+        isRemote,
+        description:
+          text(job.description) ||
+          text(job.description_plain) ||
+          text(job.title) ||
+          text(job.name),
+        skills: [],
+        employmentType,
+        url: text(job.url) || text(job.job_url) || `https://${board}.pinpointhq.com/postings/${id}`,
+        publishedAt: fromLooseDate(job.published_at ?? job.created_at ?? job.updated_at),
       });
     }),
 };

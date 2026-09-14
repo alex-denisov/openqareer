@@ -48,13 +48,24 @@ describe('ats board source id', () => {
     expect(atsBoardEndpoint('smartrecruiters', 'BoschGroup')).toBe(
       'https://api.smartrecruiters.com/v1/companies/BoschGroup/postings?limit=100',
     );
+    expect(atsBoardEndpoint('breezy', 'joom-group')).toBe(
+      'https://joom-group.breezy.hr/json',
+    );
+    expect(atsBoardEndpoint('pinpoint', 'pinpoint')).toBe(
+      'https://pinpoint.pinpointhq.com/postings.json',
+    );
   });
 
-  it('называет запрет SmartRecruiters, а не прячет его', () => {
+  it('разрешает SmartRecruiters, Breezy HR и Pinpoint в контрактах', () => {
     const smart = ATS_PROVIDERS.find((p) => p.provider === 'smartrecruiters');
-    expect(smart?.crawlPermission).toBe('robots_forbidden');
+    expect(smart?.crawlPermission).toBe('allowed');
+    expect(smart?.robotsNote).toContain('robotsOverride');
+    const breezy = ATS_PROVIDERS.find((p) => p.provider === 'breezy');
+    expect(breezy?.crawlPermission).toBe('allowed');
+    const pinpoint = ATS_PROVIDERS.find((p) => p.provider === 'pinpoint');
+    expect(pinpoint?.crawlPermission).toBe('allowed');
     expect(ATS_PROVIDERS.filter((p) => p.crawlPermission === 'allowed').map((p) => p.provider)).toEqual(
-      ['greenhouse', 'lever', 'ashby', 'workable', 'recruitee'],
+      ['greenhouse', 'lever', 'ashby', 'workable', 'recruitee', 'smartrecruiters', 'breezy', 'pinpoint'],
     );
   });
 });
@@ -226,6 +237,95 @@ describe('ats board adapters', () => {
       url: 'https://jobs.smartrecruiters.com/BoschGroup/744000147640279',
       employmentType: 'Full-time',
       experienceLevel: 'Associate',
+    });
+  });
+
+  it('читает запись Breezy HR из массива объектов', () => {
+    const [vacancy] = normalizeAtsBoard('ats-breezy-joom-group', [
+      {
+        id: 'c87413d0a10b',
+        name: 'Senior Frontend Engineer',
+        url: 'https://joom-group.breezy.hr/p/c87413d0a10b-senior-frontend-engineer',
+        department: 'Engineering',
+        location: {
+          name: 'Berlin, Germany',
+          is_remote: true,
+        },
+        type: {
+          id: 'full_time',
+          name: 'Full-Time',
+        },
+        description: '<p>Join Joom as Senior Frontend Engineer</p>',
+      },
+    ], { observedAt: OBSERVED_AT, sourceName: 'Joom' });
+
+    expect(vacancy).toMatchObject({
+      title: 'Senior Frontend Engineer',
+      company: 'Joom',
+      location: 'Berlin, Germany',
+      isRemote: true,
+      employmentType: 'Full-Time',
+      url: 'https://joom-group.breezy.hr/p/c87413d0a10b-senior-frontend-engineer',
+      status: 'active',
+    });
+    expect(vacancy?.provenance).toMatchObject({
+      sourceId: 'ats-breezy-joom-group',
+      sourceType: 'json_api',
+      externalId: 'c87413d0a10b',
+      observedAt: OBSERVED_AT,
+    });
+  });
+
+  it('читает объект с полем data от Pinpoint', () => {
+    const [vacancy] = normalizeAtsBoard('ats-pinpoint-pinpoint', {
+      data: [
+        {
+          id: '12345',
+          title: 'Senior Backend Engineer (Go)',
+          url: 'https://pinpoint.pinpointhq.com/postings/12345',
+          department: 'Product & Engineering',
+          location: 'London, United Kingdom',
+        },
+      ],
+    }, { observedAt: OBSERVED_AT, sourceName: 'Pinpoint' });
+
+    expect(vacancy).toMatchObject({
+      title: 'Senior Backend Engineer (Go)',
+      company: 'Pinpoint',
+      location: 'London, United Kingdom',
+      url: 'https://pinpoint.pinpointhq.com/postings/12345',
+      status: 'active',
+    });
+    expect(vacancy?.provenance).toMatchObject({
+      sourceId: 'ats-pinpoint-pinpoint',
+      sourceType: 'json_api',
+      externalId: '12345',
+      observedAt: OBSERVED_AT,
+    });
+  });
+
+  it('читает массив вакансий от Pinpoint', () => {
+    const [vacancy] = normalizeAtsBoard('ats-pinpoint-pinpoint', [
+      {
+        id: '67890',
+        title: 'Platform Engineer',
+        url: 'https://pinpoint.pinpointhq.com/postings/67890',
+        department: 'Infrastructure',
+        location: {
+          name: 'Remote, UK',
+          city: 'London',
+          country: 'United Kingdom',
+        },
+      },
+    ], { observedAt: OBSERVED_AT, sourceName: 'Pinpoint' });
+
+    expect(vacancy).toMatchObject({
+      title: 'Platform Engineer',
+      company: 'Pinpoint',
+      location: 'Remote, UK',
+      isRemote: true,
+      url: 'https://pinpoint.pinpointhq.com/postings/67890',
+      status: 'active',
     });
   });
 

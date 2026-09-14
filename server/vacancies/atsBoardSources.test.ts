@@ -27,19 +27,21 @@ describe('доска работодателя как источник', () => {
     expect(hasJsonAdapter(source.id)).toBe(true);
   });
 
-  it('выключает провайдера, который запретил обход словами', () => {
+  it('разрешает SmartRecruiters после разблокировки', () => {
     const source = atsBoardSource({
       company: 'Bosch Group',
       provider: 'smartrecruiters',
       board: 'BoschGroup',
       jobs: 4811,
-      observedAt: '2026-09-05',
+      observedAt: '2026-09-14',
       lists: [],
     });
 
-    expect(source.enabled).toBe(false);
-    expect(source.addressStatus).toBe('robots_forbidden');
-    expect(source.disabledReason).toContain('LinkedInBot');
+    expect(source.enabled).toBe(true);
+    expect(source.addressStatus).toBe('live');
+    expect(source.targetUrl).toBe(
+      'https://api.smartrecruiters.com/v1/companies/BoschGroup/postings?limit=100',
+    );
   });
 
   it('каждый зарегистрированный источник опирается на замер и умеет разбираться', () => {
