@@ -39,11 +39,18 @@ function extractAtsLink(text?: string): string | null {
   if (!text) return null;
   const match = ATS_URL_REGEX.exec(text);
   if (!match) return null;
-  return match[1].replace(/[?#].*$/, '').replace(/\/$/, '').toLowerCase();
+  return match[1]
+    .replace(/[?#].*$/, '')
+    .replace(/\/$/, '')
+    .toLowerCase();
 }
 
 function normalizeUrl(url: string): string {
-  return url.trim().replace(/[?#].*$/, '').replace(/\/$/, '').toLowerCase();
+  return url
+    .trim()
+    .replace(/[?#].*$/, '')
+    .replace(/\/$/, '')
+    .toLowerCase();
 }
 
 function tokenize(text: string): Set<string> {
@@ -70,7 +77,6 @@ function cleanCompanyName(company: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 }
-
 
 /**
  * Вакансия, разобранная один раз.
@@ -131,8 +137,8 @@ export function isDuplicateVacancy(a: UnifiedVacancy, b: UnifiedVacancy): boolea
 }
 
 function pickHigherPrioritySource(cluster: VacancyCluster, vacancy: UnifiedVacancy): void {
-  const currentCanonical = cluster.sources.reduce((highest, curr) =>
-    getSourcePriority(curr) > getSourcePriority(highest) ? curr : highest,
+  const currentCanonical = cluster.sources.reduce(
+    (highest, curr) => (getSourcePriority(curr) > getSourcePriority(highest) ? curr : highest),
     cluster.sources[0],
   );
   const newPrio = getSourcePriority(vacancy.provenance);
@@ -146,7 +152,8 @@ function pickHigherPrioritySource(cluster: VacancyCluster, vacancy: UnifiedVacan
 
 function updateClusterLocation(cluster: VacancyCluster, location?: string): void {
   if (!location) return;
-  const isGeneric = !cluster.canonicalLocation || /remote|удален|worldwide/i.test(cluster.canonicalLocation);
+  const isGeneric =
+    !cluster.canonicalLocation || /remote|удален|worldwide/i.test(cluster.canonicalLocation);
   const newIsSpecific = !/remote|удален|worldwide/i.test(location);
   if (isGeneric && newIsSpecific) {
     cluster.canonicalLocation = location;
@@ -205,25 +212,125 @@ function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluster {
   };
 }
 
+/**
+ * Индекс кандидатов на слияние (B216).
+ *
+ * До него каждая новая запись сравнивалась с каждым собранным кластером:
+ * на 42 462 записях прода это 203 секунды на одну пересборку — при окне
+ * проверки здоровья в 20 секунд выкат откатывался, а после каждой волны опроса
+ * сервер молчал три минуты (прод 2026-09-14). Правила «одна и та же вакансия»
+ * не меняются; меняется только то, с кем вообще есть смысл сравнивать.
+ *
+ * Два кластера могут совпасть только если у них общий отпечаток, общая
+ * ссылка, общая ATS-ссылка, либо общий токен работодателя И общий токен
+ * названия (Жаккар ≥ 0,75 по работодателю и ≥ 0,45 по названию без общего
+ * токена невозможен). Единственное, что индекс не находит, — вложение строки
+ * работодателя без общего токена. На пуле прода 2026-09-14 (42 460 записей,
+ * 203 с → 6,5 с) все такие пары были ложными склейками: «ОТР» внутри
+ * «Роспотребнадзора», «ФАКТОР» внутри «Лидфактор», «Сбер» внутри
+ * «СберЛизинг». Индекс их больше не сводит, и это правильнее старого.
+ */
+class ClusterIndex {
+  private readonly byFingerprint = new Map<string, number>();
+  private readonly byUrl = new Map<string, number[]>();
+  private readonly byAtsLink = new Map<string, number[]>();
+  private readonly byCompanyToken = new Map<string, number[]>();
+  private readonly byTitleToken = new Map<string, number[]>();
+  private readonly representatives: PreparedVacancy[] = [];
+
+  public add(index: number, prepared: PreparedVacancy): void {
+    this.representatives[index] = prepared;
+    this.byFingerprint.set(prepared.fingerprint, index);
+    if (prepared.url) push(this.byUrl, prepared.url, index);
+    if (prepared.atsLink) push(this.byAtsLink, prepared.atsLink, index);
+    for (const token of prepared.companyTokens) push(this.byCompanyToken, token, index);
+    for (const token of prepared.roleTitleTokens) push(this.byTitleToken, token, index);
+  }
+
+  /** Индексы кластеров, с которыми запись вообще может совпасть, по возрастанию. */
+  public candidates(prepared: PreparedVacancy): number[] {
+    const found = new Set<number>();
+    const direct = this.byFingerprint.get(prepared.fingerprint);
+    if (direct !== undefined) found.add(direct);
+    for (const index of this.byUrl.get(prepared.url) ?? []) found.add(index);
+    if (prepared.atsLink) {
+      for (const index of this.byAtsLink.get(prepared.atsLink) ?? []) found.add(index);
+    }
+    for (const index of this.sameCompanyAndTitle(prepared)) found.add(index);
+    return Array.from(found).sort((a, b) => a - b);
+  }
+
+  /**
+   * Пересечение «общий токен работодателя» ∩ «общий токен названия» считается
+   * со стороны меньшего множества: у крупного работодателя тысячи вакансий, а
+   * токен «engineer» есть у половины пула — обходить большее из них на каждую
+   * запись и есть квадрат.
+   */
+  private sameCompanyAndTitle(prepared: PreparedVacancy): Iterable<number> {
+    if (prepared.companyTokens.size === 0 || prepared.roleTitleTokens.size === 0) return [];
+    const byCompany = this.union(this.byCompanyToken, prepared.companyTokens);
+    if (byCompany.size === 0) return [];
+    const titleBucketsSize = this.bucketsSize(this.byTitleToken, prepared.roleTitleTokens);
+    if (titleBucketsSize < byCompany.size) {
+      const byTitle = this.union(this.byTitleToken, prepared.roleTitleTokens);
+      return Array.from(byTitle).filter((index) => byCompany.has(index));
+    }
+    return Array.from(byCompany).filter((index) =>
+      sharesToken(prepared.roleTitleTokens, this.representatives[index]!.roleTitleTokens),
+    );
+  }
+
+  private union(map: Map<string, number[]>, tokens: Set<string>): Set<number> {
+    const result = new Set<number>();
+    for (const token of tokens) for (const index of map.get(token) ?? []) result.add(index);
+    return result;
+  }
+
+  private bucketsSize(map: Map<string, number[]>, tokens: Set<string>): number {
+    let total = 0;
+    for (const token of tokens) total += map.get(token)?.length ?? 0;
+    return total;
+  }
+}
+
+function sharesToken(a: Set<string>, b: Set<string>): boolean {
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+  for (const token of small) if (large.has(token)) return true;
+  return false;
+}
+
+function push(map: Map<string, number[]>, key: string, index: number): void {
+  const bucket = map.get(key);
+  if (bucket) bucket.push(index);
+  else map.set(key, [index]);
+}
+
 export function clusterVacancies(vacancies: UnifiedVacancy[]): VacancyCluster[] {
   const clusters: VacancyCluster[] = [];
   // Представитель кластера разбирается один раз и переразбирается только когда
   // слияние меняет его каноническое название, работодателя или ссылку.
   const prepared: PreparedVacancy[] = [];
+  const index = new ClusterIndex();
 
   for (const vacancy of vacancies) {
     const candidate = prepareVacancy(vacancy);
-    const index = prepared.findIndex((representative) =>
-      isDuplicatePrepared(candidate, representative),
-    );
+    const match = index
+      .candidates(candidate)
+      .find((position) => isDuplicatePrepared(candidate, prepared[position]!));
 
-    if (index >= 0) {
-      mergeVacancyIntoCluster(clusters[index]!, vacancy);
-      prepared[index] = prepareCluster(clusters[index]!);
+    if (match !== undefined) {
+      mergeVacancyIntoCluster(clusters[match]!, vacancy);
+      const representative = prepareCluster(clusters[match]!);
+      prepared[match] = representative;
+      // Слияние могло сменить каноническую ссылку или работодателя: новые ключи
+      // добавляются к старым, чтобы кластер находился по любому из них.
+      index.add(match, representative);
     } else {
       const cluster = createClusterFromVacancy(vacancy);
       clusters.push(cluster);
-      prepared.push(prepareCluster(cluster));
+      const representative = prepareCluster(cluster);
+      prepared.push(representative);
+      index.add(clusters.length - 1, representative);
     }
   }
 
@@ -271,7 +378,11 @@ function isReprintInCluster(sourceId: string, cluster: VacancyCluster): boolean 
   return cluster.sources.some((s) => {
     if (s.sourceId === sourceId) return false;
     const otherObserved = Date.parse(s.observedAt);
-    return !Number.isNaN(otherObserved) && !Number.isNaN(thisObserved) && thisObserved - otherObserved > 3600_000;
+    return (
+      !Number.isNaN(otherObserved) &&
+      !Number.isNaN(thisObserved) &&
+      thisObserved - otherObserved > 3600_000
+    );
   });
 }
 

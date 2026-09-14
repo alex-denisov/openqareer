@@ -102,3 +102,37 @@ describe('стоимость сведения пула', () => {
     expect(largeParses / smallParses).toBeLessThan(2.5);
   }, NO_HANG_TIMEOUT_MS);
 });
+
+/**
+ * B216 — сведение 42 460 записей прода занимало 203 секунды: каждая запись
+ * сравнивалась с каждым кластером. Индекс кандидатов держит стоимость близкой
+ * к линейной; на 20 000 записей без дублей квадратичный обход занимал ~15 с.
+ */
+describe('clustering scales with an index, not a full scan (B216)', () => {
+  it('сводит 20 000 несовпадающих записей за секунды, а не за десятки секунд', () => {
+    const vacancies: UnifiedVacancy[] = Array.from({ length: 20_000 }, (_, i) => ({
+      id: `v-${i}`,
+      fingerprint: `fp-${i}`,
+      title: `Engineer ${i % 97} level ${i % 13}`,
+      company: `Firm${i}z`,
+      description: 'x',
+      requiredSkills: [],
+      url: `https://example.com/jobs/${i}`,
+      provenance: {
+        sourceType: 'json_api',
+        sourceId: `src-${i % 5}`,
+        sourceUrl: `https://example.com/jobs/${i}`,
+        observedAt: '2026-09-14T00:00:00.000Z',
+      },
+      publishedAt: '2026-09-14T00:00:00.000Z',
+      status: 'active',
+    }));
+
+    const started = performance.now();
+    const clusters = clusterVacancies(vacancies);
+    const seconds = (performance.now() - started) / 1000;
+
+    expect(clusters).toHaveLength(20_000);
+    expect(seconds).toBeLessThan(4);
+  });
+});
