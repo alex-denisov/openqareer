@@ -1,6 +1,7 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import type { LinkedinAccountPool } from './linkedinAccountPool';
 import { parseLinkedinJobCards } from './linkedinParser';
+import { parseLinkedinPostCards } from './linkedinPostParser';
 import { ObscuraRunner } from './obscuraRunner';
 
 export interface PageNavigationResult {
@@ -20,6 +21,11 @@ export interface ScrapeQuery {
   readonly start?: number;
 }
 
+export interface ScrapePostsQuery {
+  readonly keywords?: string;
+  readonly page?: number;
+}
+
 export interface ScrapeResult {
   readonly status: 'success' | 'no_accounts_available' | 'exhausted_retries';
   readonly accountId?: string;
@@ -32,6 +38,7 @@ export interface LinkedinScraperOptions {
   readonly navigator?: PageNavigator;
   readonly minDelayMs?: number;
   readonly maxDelayMs?: number;
+  readonly proxyUrl?: string;
 }
 
 export class LinkedinScraper {
@@ -51,6 +58,7 @@ export class LinkedinScraper {
         const runner = new ObscuraRunner({
           userDataDir: storagePath,
           headless: true,
+          proxyUrl: options.proxyUrl ?? process.env.LINKEDIN_PROXY_URL,
         });
         try {
           const page = await runner.openPage(targetUrl);
@@ -69,6 +77,22 @@ export class LinkedinScraper {
     const startParam = query.start ? `&start=${query.start}` : '';
     const searchUrl = `https://www.linkedin.com/jobs/search?keywords=${encodedKeywords}&location=${encodedLocation}${startParam}`;
 
+    return this.executeScrapeWithPool(searchUrl, parseLinkedinJobCards);
+  }
+
+  public async scrapePosts(query: ScrapePostsQuery = {}): Promise<ScrapeResult> {
+    const rawKeywords = query.keywords?.trim() || '#hiring';
+    const encodedKeywords = encodeURIComponent(rawKeywords);
+    const pageParam = query.page && query.page > 1 ? `&page=${query.page}` : '';
+    const searchUrl = `https://www.linkedin.com/search/results/content/?keywords=${encodedKeywords}&origin=GLOBAL_SEARCH_HEADER&sortBy=%22date_posted%22${pageParam}`;
+
+    return this.executeScrapeWithPool(searchUrl, parseLinkedinPostCards);
+  }
+
+  private async executeScrapeWithPool(
+    targetUrl: string,
+    parser: (content: string, context: { observedAt: string }) => readonly UnifiedVacancy[],
+  ): Promise<ScrapeResult> {
     const totalAccounts = this.pool.getPoolSummary().total;
     const maxAttempts = Math.max(1, totalAccounts);
 
@@ -85,7 +109,7 @@ export class LinkedinScraper {
       await this.applyJitter();
 
       try {
-        const result = await this.navigator(searchUrl, account.storagePath);
+        const result = await this.navigator(targetUrl, account.storagePath);
 
         // Detect security checkpoint / captcha / bot challenge
         if (
@@ -104,7 +128,7 @@ export class LinkedinScraper {
         }
 
         const observedAt = new Date().toISOString();
-        const vacancies = parseLinkedinJobCards(result.content, { observedAt });
+        const vacancies = parser(result.content, { observedAt });
 
         this.pool.recordSuccess(account.id);
 

@@ -111,4 +111,56 @@ describe('LinkedinScraper with Obscura pool rotation', () => {
     expect(result.status).toBe('no_accounts_available');
     expect(result.vacancies).toHaveLength(0);
   });
+
+  it('scrapes #hiring posts from LinkedIn content search feed', async () => {
+    const pool = new LinkedinAccountPool({
+      accountIds: ['acc-1'],
+      storageRoot: '/tmp/test-crawlers',
+    });
+
+    const samplePostContentHtml = `
+      <div class="feed-shared-update-v2" data-urn="urn:li:activity:7999111222333">
+        <div class="update-components-actor">
+          <a class="update-components-actor__meta-link" href="https://www.linkedin.com/in/recruiter1">
+            <span class="update-components-actor__name">Alice Recruiter</span>
+            <span class="update-components-actor__description">Talent Lead at TechCorp</span>
+          </a>
+        </div>
+        <div class="update-components-text">
+          <span class="break-words">
+            We are hiring! Looking for a Senior Full Stack Engineer (React/Node.js).
+            Remote. Send email to jobs@techcorp.com #hiring #fullstack
+          </span>
+        </div>
+      </div>
+    `;
+
+    let calledUrl = '';
+    const mockNavigator: PageNavigator = async (targetUrl) => {
+      calledUrl = targetUrl;
+      return {
+        status: 200,
+        url: targetUrl,
+        content: samplePostContentHtml,
+      };
+    };
+
+    const scraper = new LinkedinScraper({
+      pool,
+      navigator: mockNavigator,
+      minDelayMs: 0,
+      maxDelayMs: 0,
+    });
+
+    const result = await scraper.scrapePosts({ keywords: '#hiring react' });
+
+    expect(result.status).toBe('success');
+    expect(calledUrl).toContain('/search/results/content/');
+    expect(calledUrl).toContain('sortBy=%22date_posted%22');
+    expect(result.vacancies).toHaveLength(1);
+    expect(result.vacancies[0]?.title).toContain('Senior Full Stack Engineer');
+    expect(result.vacancies[0]?.company).toBe('TechCorp');
+    expect(result.vacancies[0]?.provenance.sourceId).toBe('src-linkedin-posts');
+  });
 });
+

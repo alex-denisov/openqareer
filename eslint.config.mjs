@@ -16,6 +16,7 @@ const legacyComplexityFiles = [
   'server/connectors/hhVacancySearch.ts',
   'server/connectors/hostedApplicationBrowser.ts',
   'server/connectors/officialOAuthTransport.ts',
+  'server/vacancies/atsBoardMeasurements.ts',
   'server/providers/openAICoachProvider.ts',
   'server/providers/openAICompatibleCoachProvider.ts',
   'server/providers/openRouterCoachProvider.ts',
