@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { fetchLinkedinGuest, linkedinGuestUrl, parseLinkedinCards, LINKEDIN_SOURCE_ID } from './linkedinGuestSource';
+import {
+  fetchLinkedinGuest,
+  linkedinGuestUrl,
+  parseLinkedinCards,
+  LINKEDIN_SOURCE_ID,
+} from './linkedinGuestSource';
 
 /**
  * B218 — LinkedIn гостевой список: HTML по 10 карточек, offset `start`.
@@ -57,7 +62,8 @@ describe('LinkedIn guest source (B218)', () => {
           const start = Number(params.get('start'));
           seen.push({ term: params.get('keywords')!, location: params.get('location')!, start });
           // Каждая комбинация отдаёт одну страницу, вторая пуста.
-          if (start === 0) return { status: 200, body: `<ul>${CARD(`${seen.length}01`, 'A')}</ul>` };
+          if (start === 0)
+            return { status: 200, body: `<ul>${CARD(`${seen.length}01`, 'A')}</ul>` };
           return { status: 200, body: '<ul></ul>' };
         },
         sleep: async () => {},

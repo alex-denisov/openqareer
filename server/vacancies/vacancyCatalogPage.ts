@@ -157,7 +157,14 @@ function breadcrumbs(extra?: { name: string; path: string }): StructuredNode {
     { '@type': 'ListItem', position: 1, name: 'openqareer', item: `${SITE_ORIGIN}/` },
     { '@type': 'ListItem', position: 2, name: 'Вакансии', item: `${SITE_ORIGIN}${CATALOG_ROOT}` },
     ...(extra
-      ? [{ '@type': 'ListItem', position: 3, name: extra.name, item: `${SITE_ORIGIN}${extra.path}` }]
+      ? [
+          {
+            '@type': 'ListItem',
+            position: 3,
+            name: extra.name,
+            item: `${SITE_ORIGIN}${extra.path}`,
+          },
+        ]
       : []),
   ];
   return { '@type': 'BreadcrumbList', itemListElement: items };
@@ -325,7 +332,8 @@ export function buildListingPage(
 
   return {
     heading,
-    documentTitle: page > 1 ? `${heading} — страница ${page} · openqareer` : `${heading} · openqareer`,
+    documentTitle:
+      page > 1 ? `${heading} — страница ${page} · openqareer` : `${heading} · openqareer`,
     description:
       `${entries.length} вакансий: ${heading.toLowerCase()}. ` +
       'Каждая карточка называет работодателя, источник и дату наблюдения, ' +

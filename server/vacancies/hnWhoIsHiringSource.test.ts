@@ -69,7 +69,8 @@ describe('Hacker News "Who is hiring" source', () => {
         currency: 'GBP',
       });
 
-      const eurLine = 'Berlin Tech | Senior SRE | Berlin, Germany | Remote (EU) | €80,000 - €100,000';
+      const eurLine =
+        'Berlin Tech | Senior SRE | Berlin, Germany | Remote (EU) | €80,000 - €100,000';
       const parsedEur = parseHnHeaderLine(eurLine);
       expect(parsedEur?.salary).toEqual({
         from: 80000,
@@ -80,7 +81,8 @@ describe('Hacker News "Who is hiring" source', () => {
     });
 
     it('detects explicit "No remote" or "ONSITE ONLY"', () => {
-      const line = 'Defense Dynamics | Security Engineer | Washington, DC | ONSITE ONLY (no remote)';
+      const line =
+        'Defense Dynamics | Security Engineer | Washington, DC | ONSITE ONLY (no remote)';
       const parsed = parseHnHeaderLine(line);
       expect(parsed?.isRemote).toBe(false);
       expect(parsed?.location).toContain('Washington, DC');

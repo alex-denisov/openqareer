@@ -163,8 +163,10 @@ describe('место вакансии на карте называется че�
   });
 
   it('страновая приставка площадки снимается с названия города', () => {
-    const [first] = buildMatchedVacancyPage([withLocation('US - San Francisco, United States')], 0)
-      .items;
+    const [first] = buildMatchedVacancyPage(
+      [withLocation('US - San Francisco, United States')],
+      0,
+    ).items;
     expect(first?.cluster.companyFeatures?.city).toBe('San Francisco');
   });
 

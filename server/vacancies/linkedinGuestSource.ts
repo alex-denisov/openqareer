@@ -78,23 +78,25 @@ function decodeEntities(value: string): string {
 }
 
 /** Разбор одной страницы гостевого списка: набор `<li>` с карточками. */
-export function parseLinkedinCards(
-  html: string,
-  observedAt: string,
-): UnifiedVacancy[] {
+export function parseLinkedinCards(html: string, observedAt: string): UnifiedVacancy[] {
   const cards = html.split('<li>').slice(1);
   const out: UnifiedVacancy[] = [];
   for (const card of cards) {
     const id = attr(card, 'data-entity-urn').replace('urn:li:jobPosting:', '');
     if (!/^\d+$/.test(id)) continue;
     const title = tagText(card, 'sr-only') || tagText(card, 'base-search-card__title');
-    const company = tagText(card, 'hidden-nested-link') || tagText(card, 'base-search-card__subtitle');
+    const company =
+      tagText(card, 'hidden-nested-link') || tagText(card, 'base-search-card__subtitle');
     const location = tagText(card, 'job-search-card__location');
     const datetime = attr(card, 'datetime');
     out.push(
       buildJsonVacancy({
         sourceId: LINKEDIN_SOURCE_ID,
-        context: { observedAt, sourceName: 'LinkedIn', sourceUrl: `https://www.linkedin.com/jobs/view/${id}` },
+        context: {
+          observedAt,
+          sourceName: 'LinkedIn',
+          sourceUrl: `https://www.linkedin.com/jobs/view/${id}`,
+        },
         externalId: id,
         title,
         company,
@@ -111,7 +113,10 @@ export function parseLinkedinCards(
 }
 
 export interface LinkedinFetchDeps {
-  readonly fetchPage: (url: string, headers: Record<string, string>) => Promise<{ status: number; body: string }>;
+  readonly fetchPage: (
+    url: string,
+    headers: Record<string, string>,
+  ) => Promise<{ status: number; body: string }>;
   readonly sleep: (ms: number) => Promise<void>;
   readonly observedAt: string;
 }
@@ -134,7 +139,9 @@ export async function fetchLinkedinGuest(
       // Джиттер: LinkedIn быстро отдаёт 429 ровному такту (B218 security-review).
       if (requests > 0) await deps.sleep(600 + Math.floor(Math.random() * 600));
       requests += 1;
-      const { status, body } = await deps.fetchPage(linkedinGuestUrl(start, combo), { ...LINKEDIN_HEADERS });
+      const { status, body } = await deps.fetchPage(linkedinGuestUrl(start, combo), {
+        ...LINKEDIN_HEADERS,
+      });
       // 429 — площадка просит остановиться, и мы останавливаемся совсем.
       // Первая страница обязана прочитаться: отказ на ней — отказ площадки,
       // а не пустой успех (B199).

@@ -135,10 +135,7 @@ function readPublishedAt(vacancy: Record<string, unknown>, fallback: string): st
   return created || fallback;
 }
 
-function readVacancy(
-  value: unknown,
-  context: HhSearchStateContext,
-): UnifiedVacancy | null {
+function readVacancy(value: unknown, context: HhSearchStateContext): UnifiedVacancy | null {
   const vacancy = record(value);
   const url = text(record(vacancy.links).desktop);
   const title = htmlToFeedText(text(vacancy.name));

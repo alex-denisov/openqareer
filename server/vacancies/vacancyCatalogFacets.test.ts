@@ -75,7 +75,10 @@ describe('списки каталога по месту и роли (B209, ср�
   });
 
   it('отдаёт вакансии выбранного списка', () => {
-    const pool = [...many(3, { location: 'Berlin' }), ...many(3, { location: 'Amsterdam', key: 'a' })];
+    const pool = [
+      ...many(3, { location: 'Berlin' }),
+      ...many(3, { location: 'Amsterdam', key: 'a' }),
+    ];
     const berlin = listingEntries(pool, { place: 'berlin' });
     expect(berlin).toHaveLength(3);
     expect(listingEntries(pool, { place: 'berlin', role: 'frontend-developer' })).toHaveLength(3);

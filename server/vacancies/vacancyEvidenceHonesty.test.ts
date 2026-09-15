@@ -20,9 +20,7 @@ describe('vacancy evidence honesty', () => {
   it('does not claim a source is healthy before it has ever been contacted', () => {
     const engine = new MultiSourceVacancyEngine();
 
-    const claimedHealthy = engine
-      .getSources()
-      .filter((source) => source.lastStatus === 'healthy');
+    const claimedHealthy = engine.getSources().filter((source) => source.lastStatus === 'healthy');
 
     expect(claimedHealthy).toEqual([]);
   });

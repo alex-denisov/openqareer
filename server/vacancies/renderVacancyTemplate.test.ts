@@ -33,7 +33,8 @@ function sampleVacancy(overrides: Partial<UnifiedVacancy> = {}): UnifiedVacancy 
       'Experience with AI/ML infrastructure and model deployment',
       'Familiarity with Kubernetes and cloud-native workflows',
     ],
-    aboutCompany: 'Anthropic is an AI safety and research company working to build steerable, trustworthy systems.',
+    aboutCompany:
+      'Anthropic is an AI safety and research company working to build steerable, trustworthy systems.',
     url: 'https://boards.greenhouse.io/anthropic/jobs/12345',
     provenance: {
       sourceType: 'json_api',
@@ -108,26 +109,54 @@ describe('renderUnifiedVacancyView (Dynamic LinkedIn Template Engine)', () => {
     });
 
     it('formats non-USD and symbol currency ranges accurately', () => {
-      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'USD' } })))
-        .toContain('💰 **Компенсация:** `$100,000 – $150,000`');
-      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000 } })))
-        .toContain('💰 **Компенсация:** `$100,000 – $150,000`');
-      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: '$' } })))
-        .toContain('💰 **Компенсация:** `$100,000 – $150,000`');
-      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'EUR' } })))
-        .toContain('💰 **Компенсация:** `€100,000 – €150,000`');
-      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: '€' } })))
-        .toContain('💰 **Компенсация:** `€100,000 – €150,000`');
-      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'GBP' } })))
-        .toContain('💰 **Компенсация:** `£100,000 – £150,000`');
-      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: '£' } })))
-        .toContain('💰 **Компенсация:** `£100,000 – £150,000`');
-      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'RUB' } })))
-        .toContain('💰 **Компенсация:** `100,000 – 150,000 ₽`');
-      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: '₽' } })))
-        .toContain('💰 **Компенсация:** `100,000 – 150,000 ₽`');
-      expect(renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'CAD' } })))
-        .toContain('💰 **Компенсация:** `100,000 – 150,000 CAD`');
+      expect(
+        renderUnifiedVacancyView(
+          sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'USD' } }),
+        ),
+      ).toContain('💰 **Компенсация:** `$100,000 – $150,000`');
+      expect(
+        renderUnifiedVacancyView(sampleVacancy({ salary: { from: 100000, to: 150000 } })),
+      ).toContain('💰 **Компенсация:** `$100,000 – $150,000`');
+      expect(
+        renderUnifiedVacancyView(
+          sampleVacancy({ salary: { from: 100000, to: 150000, currency: '$' } }),
+        ),
+      ).toContain('💰 **Компенсация:** `$100,000 – $150,000`');
+      expect(
+        renderUnifiedVacancyView(
+          sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'EUR' } }),
+        ),
+      ).toContain('💰 **Компенсация:** `€100,000 – €150,000`');
+      expect(
+        renderUnifiedVacancyView(
+          sampleVacancy({ salary: { from: 100000, to: 150000, currency: '€' } }),
+        ),
+      ).toContain('💰 **Компенсация:** `€100,000 – €150,000`');
+      expect(
+        renderUnifiedVacancyView(
+          sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'GBP' } }),
+        ),
+      ).toContain('💰 **Компенсация:** `£100,000 – £150,000`');
+      expect(
+        renderUnifiedVacancyView(
+          sampleVacancy({ salary: { from: 100000, to: 150000, currency: '£' } }),
+        ),
+      ).toContain('💰 **Компенсация:** `£100,000 – £150,000`');
+      expect(
+        renderUnifiedVacancyView(
+          sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'RUB' } }),
+        ),
+      ).toContain('💰 **Компенсация:** `100,000 – 150,000 ₽`');
+      expect(
+        renderUnifiedVacancyView(
+          sampleVacancy({ salary: { from: 100000, to: 150000, currency: '₽' } }),
+        ),
+      ).toContain('💰 **Компенсация:** `100,000 – 150,000 ₽`');
+      expect(
+        renderUnifiedVacancyView(
+          sampleVacancy({ salary: { from: 100000, to: 150000, currency: 'CAD' } }),
+        ),
+      ).toContain('💰 **Компенсация:** `100,000 – 150,000 CAD`');
     });
   });
 
@@ -138,7 +167,9 @@ describe('renderUnifiedVacancyView (Dynamic LinkedIn Template Engine)', () => {
 
       expect(output).toContain('### Top Skills & Match');
       expect(output).toContain('🎯 **Ключевой стек роли:**');
-      expect(output).toContain('`[TypeScript]` `[React]` `[Node.js]` `[Distributed Systems]` `[PostgreSQL]` `[AWS]`');
+      expect(output).toContain(
+        '`[TypeScript]` `[React]` `[Node.js]` `[Distributed Systems]` `[PostgreSQL]` `[AWS]`',
+      );
     });
 
     it('omits Top Skills & Match section when skills array is empty', () => {
@@ -156,7 +187,9 @@ describe('renderUnifiedVacancyView (Dynamic LinkedIn Template Engine)', () => {
       const output = renderUnifiedVacancyView(vacancy);
 
       expect(output).toContain('### About the Role');
-      expect(output).toContain('Anthropic is building reliable, interpretable, and steerable AI systems.');
+      expect(output).toContain(
+        'Anthropic is building reliable, interpretable, and steerable AI systems.',
+      );
 
       expect(output).toContain("### What You'll Do");
       expect(output).toContain('- Design and implement high-throughput distributed systems');
@@ -169,7 +202,9 @@ describe('renderUnifiedVacancyView (Dynamic LinkedIn Template Engine)', () => {
       expect(output).toContain('- Experience with AI/ML infrastructure and model deployment');
 
       expect(output).toContain('### About Anthropic');
-      expect(output).toContain('Anthropic is an AI safety and research company working to build steerable, trustworthy systems.');
+      expect(output).toContain(
+        'Anthropic is an AI safety and research company working to build steerable, trustworthy systems.',
+      );
     });
 
     it('extracts structured sections from raw markdown description when fields are not pre-split', () => {
@@ -205,7 +240,9 @@ Acme Corp provides automated cloud infrastructure for modern engineering teams.
       const output = renderUnifiedVacancyView(vacancy);
 
       expect(output).toContain('### About the Role');
-      expect(output).toContain('We are looking for a Senior Platform Engineer to build scalable developer tooling.');
+      expect(output).toContain(
+        'We are looking for a Senior Platform Engineer to build scalable developer tooling.',
+      );
 
       expect(output).toContain("### What You'll Do");
       expect(output).toContain('- Architect high-throughput API gateways');
@@ -220,7 +257,9 @@ Acme Corp provides automated cloud infrastructure for modern engineering teams.
       expect(output).toContain('- Background in Kubernetes operators');
 
       expect(output).toContain('### About Anthropic');
-      expect(output).toContain('Acme Corp provides automated cloud infrastructure for modern engineering teams.');
+      expect(output).toContain(
+        'Acme Corp provides automated cloud infrastructure for modern engineering teams.',
+      );
     });
   });
 

@@ -12,7 +12,9 @@ describe('чтение robots.txt площадки', () => {
       fetchRobots: async () => ({ status: 200, body: 'User-agent: *\nDisallow: /\n' }),
     });
 
-    const policy = await loader.policyFor('https://api.smartrecruiters.com/v1/companies/X/postings');
+    const policy = await loader.policyFor(
+      'https://api.smartrecruiters.com/v1/companies/X/postings',
+    );
 
     expect(policy.verdict).toBe('disallowed');
   });

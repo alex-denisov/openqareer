@@ -71,7 +71,10 @@ export function indeedQuery(what: string, cursor: string | null, where = 'United
 
 /** Значение едет внутрь строки GraphQL — кавычки и обратный слэш экранируются. */
 function escapeGraphqlString(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]+/g, ' ');
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/[\r\n]+/g, ' ');
 }
 
 export const LINKEDIN_GUEST_URL =
@@ -243,8 +246,7 @@ export const BAYT_SEARCH_URL = 'https://www.bayt.com/en/international/jobs/';
 export function baytHeaders(): Record<string, string> {
   return {
     'User-Agent': getRandomizedUserAgent(),
-    Accept:
-      'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.9',
     'Sec-Fetch-Dest': 'document',
     'Sec-Fetch-Mode': 'navigate',
@@ -259,4 +261,3 @@ export function baytQueryParams(keyword: string, page = 1): Record<string, strin
     page: String(page),
   };
 }
-

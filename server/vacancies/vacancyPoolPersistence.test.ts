@@ -12,9 +12,7 @@ const stores: SqliteVacancyPoolStore[] = [];
 
 afterEach(() => {
   stores.splice(0).forEach((store) => store.close());
-  directories.splice(0).forEach((directory) =>
-    rmSync(directory, { recursive: true, force: true }),
-  );
+  directories.splice(0).forEach((directory) => rmSync(directory, { recursive: true, force: true }));
 });
 
 function databasePath(): string {
@@ -97,9 +95,7 @@ describe('vacancy pool persistence (B164)', () => {
 
     expect(restarted.getVacancies().total).toBe(2);
     expect(restarted.getActiveClusters().length).toBe(2);
-    expect(restarted.getSource(SOURCE.id)?.lastSyncAt).toBe(
-      new Date(syncedAt).toISOString(),
-    );
+    expect(restarted.getSource(SOURCE.id)?.lastSyncAt).toBe(new Date(syncedAt).toISOString());
     expect(restarted.getSource(SOURCE.id)?.lastStatus).toBe('healthy');
     expect(restarted.getSource(SOURCE.id)?.itemsFoundTotal).toBe(2);
 
@@ -190,9 +186,7 @@ describe('vacancy pool persistence (B164)', () => {
     const store = openStore(path);
     const stale = vacancy('old');
     const staleAt = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-    store.replaceSourceSlice(SOURCE.id, [
-      { ...stale, publishedAt: staleAt },
-    ]);
+    store.replaceSourceSlice(SOURCE.id, [{ ...stale, publishedAt: staleAt }]);
 
     const engine = new MultiSourceVacancyEngine({ sources: [SOURCE], pool: store });
     engine.restore();

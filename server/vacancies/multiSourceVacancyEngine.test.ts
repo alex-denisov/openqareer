@@ -185,5 +185,3 @@ describe('MultiSourceVacancyEngine', () => {
     expect(clusters.some((c) => c.canonicalTitle === 'Stale React Developer')).toBe(false);
   });
 });
-
-

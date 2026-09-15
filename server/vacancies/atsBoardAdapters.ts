@@ -360,10 +360,7 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
         location,
         isRemote,
         description:
-          text(job.description) ||
-          text(job.description_plain) ||
-          text(job.name) ||
-          text(job.title),
+          text(job.description) || text(job.description_plain) || text(job.name) || text(job.title),
         skills: [],
         employmentType,
         url: text(job.url) || `https://${board}.breezy.hr/p/${id}`,
@@ -404,10 +401,7 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
         location,
         isRemote,
         description:
-          text(job.description) ||
-          text(job.description_plain) ||
-          text(job.title) ||
-          text(job.name),
+          text(job.description) || text(job.description_plain) || text(job.title) || text(job.name),
         skills: [],
         employmentType,
         url: text(job.url) || text(job.job_url) || `https://${board}.pinpointhq.com/postings/${id}`,

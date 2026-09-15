@@ -141,7 +141,9 @@ describe('JobSpy adapters (pure parsers)', () => {
       expect(v.title).toBe('Senior Fullstack Engineer');
       expect(v.company).toBe('Infosys Limited');
       expect(v.location).toBe('Bangalore, Karnataka');
-      expect(v.url).toBe('https://www.naukri.com/job-listings-senior-fullstack-engineer-infosys-140926001');
+      expect(v.url).toBe(
+        'https://www.naukri.com/job-listings-senior-fullstack-engineer-infosys-140926001',
+      );
       expect(v.requiredSkills).toEqual(['React', 'Node.js', 'TypeScript', 'PostgreSQL']);
       expect(v.salary).toEqual({
         from: 1500000,
@@ -335,9 +337,9 @@ describe('JobSpy adapters (pure parsers)', () => {
     });
 
     it('throws vacancy_source_payload_unreadable when payload structure is unexpected', () => {
-      expect(() => normalizeZipRecruiterJobs({ unexpected: true }, CONTEXT, ZIPRECRUITER_SOURCE_ID)).toThrow(
-        /vacancy_source_payload_unreadable/,
-      );
+      expect(() =>
+        normalizeZipRecruiterJobs({ unexpected: true }, CONTEXT, ZIPRECRUITER_SOURCE_ID),
+      ).toThrow(/vacancy_source_payload_unreadable/);
     });
   });
 });
@@ -687,9 +689,13 @@ describe('Bayt parser (HTML scraper)', () => {
   });
 
   it('throws vacancy_source_payload_unreadable when HTML contains no job cards and is unrecognized', () => {
-    expect(() => normalizeBaytHtml('<html><body><div>No jobs here</div></body></html>', CONTEXT, BAYT_SOURCE_ID)).toThrow(
-      /vacancy_source_payload_unreadable/,
-    );
+    expect(() =>
+      normalizeBaytHtml(
+        '<html><body><div>No jobs here</div></body></html>',
+        CONTEXT,
+        BAYT_SOURCE_ID,
+      ),
+    ).toThrow(/vacancy_source_payload_unreadable/);
   });
 });
 
@@ -702,15 +708,19 @@ describe('Obscura stealth integration & challenge fallback', () => {
   });
 
   it('returns direct HTTP response when direct fetch succeeds (200 OK)', async () => {
-    const result = await fetchWithStealthFallback('https://example.com/api', {}, {
-      httpFetch: async () => ({
-        status: 200,
-        text: async () => JSON.stringify({ data: { jobListings: [] } }),
-      }),
-      stealthFetch: async () => {
-        throw new Error('Stealth should not be called');
+    const result = await fetchWithStealthFallback(
+      'https://example.com/api',
+      {},
+      {
+        httpFetch: async () => ({
+          status: 200,
+          text: async () => JSON.stringify({ data: { jobListings: [] } }),
+        }),
+        stealthFetch: async () => {
+          throw new Error('Stealth should not be called');
+        },
       },
-    });
+    );
 
     expect(result.status).toBe(200);
     expect(result.usedStealth).toBe(false);
@@ -718,16 +728,20 @@ describe('Obscura stealth integration & challenge fallback', () => {
   });
 
   it('falls back to Obscura stealth runner when direct HTTP receives 403 challenge', async () => {
-    const result = await fetchWithStealthFallback('https://www.glassdoor.com/graph', {}, {
-      httpFetch: async () => ({
-        status: 403,
-        text: async () => '<html><title>Just a moment...</title>Cloudflare challenge</html>',
-      }),
-      stealthFetch: async () => ({
-        status: 200,
-        content: JSON.stringify({ data: { jobListings: [{ jobview: {} }] } }),
-      }),
-    });
+    const result = await fetchWithStealthFallback(
+      'https://www.glassdoor.com/graph',
+      {},
+      {
+        httpFetch: async () => ({
+          status: 403,
+          text: async () => '<html><title>Just a moment...</title>Cloudflare challenge</html>',
+        }),
+        stealthFetch: async () => ({
+          status: 200,
+          content: JSON.stringify({ data: { jobListings: [{ jobview: {} }] } }),
+        }),
+      },
+    );
 
     expect(result.status).toBe(200);
     expect(result.usedStealth).toBe(true);
@@ -802,7 +816,11 @@ describe('Glassdoor & Bayt registry & wiring integration', () => {
           jobListings: [
             {
               jobview: {
-                header: { jobTitleText: 'Architect', employerNameFromSearch: 'Corp', locationName: 'NY' },
+                header: {
+                  jobTitleText: 'Architect',
+                  employerNameFromSearch: 'Corp',
+                  locationName: 'NY',
+                },
                 job: { listingId: 'gd-1', description: 'Desc' },
               },
             },
@@ -837,4 +855,3 @@ describe('Glassdoor & Bayt registry & wiring integration', () => {
     expect(gdPlan!.next(gdFirst, { data: { jobListings: [] } })).toBeNull();
   });
 });
-

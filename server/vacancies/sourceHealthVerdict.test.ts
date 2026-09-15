@@ -100,11 +100,7 @@ describe('B200 · живость площадки', () => {
   });
 
   it('никогда не опрошенная площадка не выдаёт себя за живую', () => {
-    const health = describeSourceHealth(
-      emptySourceObservations(),
-      { addressStatus: 'live' },
-      NOW,
-    );
+    const health = describeSourceHealth(emptySourceObservations(), { addressStatus: 'live' }, NOW);
 
     expect(health.liveness.verdict).toBe('never_read');
     expect(health.trust.verdict).toBe('unknown');
@@ -155,11 +151,7 @@ describe('B200 · доверие площадке', () => {
       { vacancies: [card({ id: 'a' })], atDaysAgo: 0 },
     ]);
 
-    const health = describeSourceHealth(
-      observed,
-      { addressStatus: 'robots_forbidden' },
-      NOW,
-    );
+    const health = describeSourceHealth(observed, { addressStatus: 'robots_forbidden' }, NOW);
 
     expect(health.trust.verdict).toBe('low');
     expect(health.trust.lawfulness.permitted).toBe(false);

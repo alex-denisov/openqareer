@@ -17,15 +17,28 @@ const SITEMAP = `<?xml version="1.0"?><urlset>
 describe('Crossover (B217)', () => {
   it('sitemap: только адреса вакансий с числовым id, без дублей', () => {
     expect(parseCrossoverSitemap(SITEMAP)).toEqual([
-      { id: '3147', brand: 'trilogy', slug: 'finance-manager', url: 'https://www.crossover.com/jobs/3147/trilogy/finance-manager' },
-      { id: '5630', brand: 'alpha', slug: 'campus-operations-specialist', url: 'https://www.crossover.com/jobs/5630/alpha/campus-operations-specialist' },
+      {
+        id: '3147',
+        brand: 'trilogy',
+        slug: 'finance-manager',
+        url: 'https://www.crossover.com/jobs/3147/trilogy/finance-manager',
+      },
+      {
+        id: '5630',
+        brand: 'alpha',
+        slug: 'campus-operations-specialist',
+        url: 'https://www.crossover.com/jobs/5630/alpha/campus-operations-specialist',
+      },
     ]);
   });
 
   it('собирает карточку из sitemap и Kontent по pipeline_code', async () => {
     const requested: string[] = [];
     const reading = await fetchCrossover(
-      { sitemapUrl: 'https://www.crossover.com/sitemap.xml', kontentUrl: 'https://kontent-proxy.crossover.com/items' },
+      {
+        sitemapUrl: 'https://www.crossover.com/sitemap.xml',
+        kontentUrl: 'https://kontent-proxy.crossover.com/items',
+      },
       {
         fetchText: async (url) => {
           requested.push(url);
@@ -35,14 +48,23 @@ describe('Crossover (B217)', () => {
           requested.push(url);
           if (url.includes('system.type=brand')) {
             return {
-              items: [{ system: { codename: 'alpha', name: 'Alpha' }, elements: { name: { value: 'Alpha School' } } }],
+              items: [
+                {
+                  system: { codename: 'alpha', name: 'Alpha' },
+                  elements: { name: { value: 'Alpha School' } },
+                },
+              ],
               pagination: { next_page: '' },
             };
           }
           return {
             items: [
               {
-                system: { name: 'Campus Operations Specialist, Alpha', last_modified: '2026-09-01T10:00:00Z', codename: 'x' },
+                system: {
+                  name: 'Campus Operations Specialist, Alpha',
+                  last_modified: '2026-09-01T10:00:00Z',
+                  codename: 'x',
+                },
                 elements: {
                   pipeline_code: { value: '5630' },
                   hook: { value: '<p>LOCATION NOTE: in-person role at our Austin campus.</p>' },
@@ -87,7 +109,11 @@ describe('Crossover (B217)', () => {
     await expect(
       fetchCrossover(
         { sitemapUrl: 'https://x/sitemap.xml', kontentUrl: 'https://x/items' },
-        { fetchText: async () => '<urlset></urlset>', fetchJson: async () => ({ items: [] }), observedAt: 'now' },
+        {
+          fetchText: async () => '<urlset></urlset>',
+          fetchJson: async () => ({ items: [] }),
+          observedAt: 'now',
+        },
       ),
     ).rejects.toThrow(/crossover_sitemap_empty/);
   });

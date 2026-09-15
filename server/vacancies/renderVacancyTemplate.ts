@@ -113,10 +113,7 @@ function formatSubHeroLine(vacancy: UnifiedVacancy): string {
 }
 
 function formatHeroBlock(vacancy: UnifiedVacancy): string {
-  const lines: string[] = [
-    `# ${vacancy.title.trim()}`,
-    formatSubHeroLine(vacancy),
-  ];
+  const lines: string[] = [`# ${vacancy.title.trim()}`, formatSubHeroLine(vacancy)];
 
   if (vacancy.experienceLevel?.trim()) {
     lines.push(`💼 **Уровень роли:** \`${vacancy.experienceLevel.trim()}\``);
@@ -150,7 +147,12 @@ function extractBulletItems(text: string): string[] {
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
-    .map((line) => line.replace(/^[-*•+]\s+/u, '').replace(/^\d+\.\s+/u, '').trim())
+    .map((line) =>
+      line
+        .replace(/^[-*•+]\s+/u, '')
+        .replace(/^\d+\.\s+/u, '')
+        .trim(),
+    )
     .filter((line) => line.length > 0 && !isEeoText(line));
 }
 
@@ -163,11 +165,16 @@ interface ParsedSections {
 }
 
 const SECTION_PATTERNS = {
-  aboutRole: /^(?:#+\s*|\*\*)(?:about\s+(?:the\s+)?(?:role|job|position)|role\s+overview|position\s+overview|job\s+summary|summary|overview|о\s+роли|о\s+вакансии)(?:\*\*|\b)/iu,
-  responsibilities: /^(?:#+\s*|\*\*)(?:what\s+you(?:'ll|\s+will)\s+do|responsibilities|key\s+responsibilities|duties|what\s+you'll\s+be\s+doing|your\s+mission|обязанности|чем\s+предстоит\s+заниматься|задачи)(?:\*\*|\b)/iu,
-  qualifications: /^(?:#+\s*|\*\*)(?:basic\s+qualifications|minimum\s+qualifications|qualifications|requirements|what\s+you\s+bring|what\s+we(?:'re|\s+are)\s+looking\s+for|who\s+you\s+are|must\s+have|требования|необходимые\s+навыки|что\s+мы\s+ждем)(?:\*\*|\b)/iu,
-  niceToHave: /^(?:#+\s*|\*\*)(?:preferred\s+qualifications|preferred\s+requirements|nice\s+to\s+have|nice-to-have|bonus\s+points|pluses?|будет\s+плюсом|желательно)(?:\*\*|\b)/iu,
-  aboutCompany: /^(?:#+\s*|\*\*)(?:about\s+(?:us|the\s+company|[a-z0-9_ -]+)|who\s+we\s+are|our\s+company|о\s+компании|о\s+нас)(?:\*\*|\b)/iu,
+  aboutRole:
+    /^(?:#+\s*|\*\*)(?:about\s+(?:the\s+)?(?:role|job|position)|role\s+overview|position\s+overview|job\s+summary|summary|overview|о\s+роли|о\s+вакансии)(?:\*\*|\b)/iu,
+  responsibilities:
+    /^(?:#+\s*|\*\*)(?:what\s+you(?:'ll|\s+will)\s+do|responsibilities|key\s+responsibilities|duties|what\s+you'll\s+be\s+doing|your\s+mission|обязанности|чем\s+предстоит\s+заниматься|задачи)(?:\*\*|\b)/iu,
+  qualifications:
+    /^(?:#+\s*|\*\*)(?:basic\s+qualifications|minimum\s+qualifications|qualifications|requirements|what\s+you\s+bring|what\s+we(?:'re|\s+are)\s+looking\s+for|who\s+you\s+are|must\s+have|требования|необходимые\s+навыки|что\s+мы\s+ждем)(?:\*\*|\b)/iu,
+  niceToHave:
+    /^(?:#+\s*|\*\*)(?:preferred\s+qualifications|preferred\s+requirements|nice\s+to\s+have|nice-to-have|bonus\s+points|pluses?|будет\s+плюсом|желательно)(?:\*\*|\b)/iu,
+  aboutCompany:
+    /^(?:#+\s*|\*\*)(?:about\s+(?:us|the\s+company|[a-z0-9_ -]+)|who\s+we\s+are|our\s+company|о\s+компании|о\s+нас)(?:\*\*|\b)/iu,
   eeo: /^(?:#+\s*|\*\*)(?:equal\s+opportunity|equal\s+employment|eeo|diversity)(?:\*\*|\b)/iu,
 };
 
@@ -215,17 +222,20 @@ function resolveSections(vacancy: UnifiedVacancy): ParsedSections {
   const rawDesc = vacancy.fullDescription?.trim() || vacancy.description.trim();
   const parsed = parseRawSections(rawDesc);
 
-  const responsibilities = vacancy.responsibilities && vacancy.responsibilities.length > 0
-    ? vacancy.responsibilities
-    : parsed.responsibilities;
+  const responsibilities =
+    vacancy.responsibilities && vacancy.responsibilities.length > 0
+      ? vacancy.responsibilities
+      : parsed.responsibilities;
 
-  const basicQualifications = vacancy.qualifications && vacancy.qualifications.length > 0
-    ? vacancy.qualifications
-    : parsed.basicQualifications;
+  const basicQualifications =
+    vacancy.qualifications && vacancy.qualifications.length > 0
+      ? vacancy.qualifications
+      : parsed.basicQualifications;
 
-  const preferredQualifications = vacancy.niceToHave && vacancy.niceToHave.length > 0
-    ? vacancy.niceToHave
-    : parsed.preferredQualifications;
+  const preferredQualifications =
+    vacancy.niceToHave && vacancy.niceToHave.length > 0
+      ? vacancy.niceToHave
+      : parsed.preferredQualifications;
 
   const aboutCompany = vacancy.aboutCompany?.trim()
     ? stripEeoBoilerplate(vacancy.aboutCompany.trim())

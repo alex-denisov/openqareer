@@ -73,12 +73,8 @@ describe('документ публичного каталога (B209)', () => 
   });
 
   it('печатает микроразметку списка и карточки', () => {
-    expect(renderCatalogDocument(buildCatalogPage([cluster()], 1))).toContain(
-      '"@type":"ItemList"',
-    );
-    expect(renderVacancyDocument(buildVacancyDetail(cluster())!)).toContain(
-      '"@type":"JobPosting"',
-    );
+    expect(renderCatalogDocument(buildCatalogPage([cluster()], 1))).toContain('"@type":"ItemList"');
+    expect(renderVacancyDocument(buildVacancyDetail(cluster())!)).toContain('"@type":"JobPosting"');
   });
 
   it('ведёт на первоисточник и называет его, а не выдаёт вакансию за свою', () => {
@@ -97,7 +93,8 @@ describe('документ публичного каталога (B209)', () => 
               sourceType: 'json_api',
               sourceId: 'remotive',
               sourceName: 'Remotive (Global Remote)',
-              sourceUrl: 'https://remotive.com/remote-jobs/marketing/remote-office-assistant-1680495',
+              sourceUrl:
+                'https://remotive.com/remote-jobs/marketing/remote-office-assistant-1680495',
               observedAt: '2026-09-14T00:00:00.000Z',
             },
           ],
@@ -260,12 +257,16 @@ describe('документ публичного каталога (B209)', () => 
 
   it('ведёт крошками от списка обратно в каталог, а на корне их не печатает', () => {
     const listing = renderCatalogDocument(
-      buildListingPage([cluster()], {
-        place: 'moscow',
-        placeLabel: 'Москва',
-        path: '/vacancies/moscow',
-        count: 3,
-      }, 1),
+      buildListingPage(
+        [cluster()],
+        {
+          place: 'moscow',
+          placeLabel: 'Москва',
+          path: '/vacancies/moscow',
+          count: 3,
+        },
+        1,
+      ),
     );
     expect(listing).toContain('catalog-breadcrumbs');
     expect(listing).toContain('<h1>Вакансии — Москва</h1>');
@@ -301,7 +302,10 @@ describe('документ публичного каталога (B209)', () => 
       status: 'active',
     };
     const detail = buildVacancyDetail(
-      cluster({ canonicalCompany: 'Databricks', canonicalTitle: 'Senior Distributed Systems Engineer' }),
+      cluster({
+        canonicalCompany: 'Databricks',
+        canonicalTitle: 'Senior Distributed Systems Engineer',
+      }),
       undefined,
       rawVacancy,
     )!;
@@ -312,7 +316,7 @@ describe('документ публичного каталога (B209)', () => 
     expect(html).toContain('### Top Skills &amp; Match');
     expect(html).toContain('`[Rust]` `[Distributed Systems]`');
     expect(html).toContain('### About the Role');
-    expect(html).toContain("### What You&#39;ll Do");
+    expect(html).toContain('### What You&#39;ll Do');
     expect(html).toContain('- Build high-scale ingestion systems');
     expect(html).toContain('### Basic Qualifications');
   });

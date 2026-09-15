@@ -5,7 +5,7 @@ import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import {
   MIGRATION_23,
   VACANCY_POOL_EXPIRED_AT_COLUMN,
-  VACANCY_POOL_INDEX_CLUSTER_COLUMN,
+  VACANCY_CLUSTER_INPUT_TABLE,
   VACANCY_POOL_INDEX_TABLE,
   VACANCY_SOURCE_OBSERVATIONS_COLUMN,
 } from '../data/sqliteSchema';
@@ -81,7 +81,6 @@ function indexColumns(vacancy: UnifiedVacancy, sourceId: string): SQLInputValue[
     flag(vacancy.isRemote),
     typeof vacancy.url === 'string' ? vacancy.url : '',
     searchTextOf(vacancy),
-    JSON.stringify(clusterProjectionOf(vacancy)),
   ];
 }
 
@@ -110,7 +109,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.ensureColumn('vacancy_source_state', 'observations', VACANCY_SOURCE_OBSERVATIONS_COLUMN);
     this.ensureColumn('vacancy_pool', 'expired_at', VACANCY_POOL_EXPIRED_AT_COLUMN);
     this.database.exec(VACANCY_POOL_INDEX_TABLE);
-    this.ensureColumn('vacancy_pool_index', 'cluster_json', VACANCY_POOL_INDEX_CLUSTER_COLUMN);
+    this.database.exec(VACANCY_CLUSTER_INPUT_TABLE);
   }
 
   /**
@@ -134,7 +133,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const row = this.database
       .prepare(
         `SELECT count(*) AS n FROM vacancy_pool p
-          WHERE NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = p.id AND i.cluster_json IS NOT NULL)`,
+          WHERE (NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = p.id)
+               OR NOT EXISTS (SELECT 1 FROM vacancy_cluster_input c WHERE c.id = p.id))`,
       )
       .get() as { n: number };
     return row.n;
@@ -155,7 +155,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         `SELECT p.rowid AS rowid, p.id, p.source_id, p.payload, p.expired_at
            FROM vacancy_pool p
           WHERE p.rowid > ?
-            AND NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = p.id AND i.cluster_json IS NOT NULL)
+            AND (NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = p.id)
+               OR NOT EXISTS (SELECT 1 FROM vacancy_cluster_input c WHERE c.id = p.id))
           ORDER BY p.rowid LIMIT ?`,
       )
       .all(this.backfillCursor, chunk) as unknown as Array<{
@@ -170,11 +171,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       return 0;
     }
     const insert = this.prepareIndexUpsert();
-    // Строка индекса с выката 1 уже есть — ей не хватает только проекции;
-    // переписывать её целиком (и все её индексы) впятеро дороже.
-    const addProjection = this.database.prepare(
-      'UPDATE vacancy_pool_index SET cluster_json = ? WHERE id = ? AND cluster_json IS NULL',
-    );
+    const projection = this.prepareProjectionUpsert();
+    const hasIndexRow = this.database.prepare('SELECT 1 FROM vacancy_pool_index WHERE id = ?');
     const remove = this.database.prepare('DELETE FROM vacancy_pool WHERE id = ?');
     this.inTransaction(() => {
       for (const row of rows) {
@@ -189,15 +187,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
           continue;
         }
         const projected = { ...vacancy, id: row.id };
-        if (addProjection.run(JSON.stringify(clusterProjectionOf(projected)), row.id).changes > 0) {
-          continue;
-        }
+        projection.run(row.id, JSON.stringify(clusterProjectionOf(projected)));
+        // Строка индекса с выката 1 уже есть: переписывать её целиком (и все
+        // её индексы) впятеро дороже, чем добавить одну проекцию.
+        if (hasIndexRow.get(row.id) !== undefined) continue;
         // Любая другая ошибка — не повод тихо удалять строку: она всплывает
         // в лог старта, а проход повторится на следующем запуске.
-        insert.run(
-          ...indexColumns({ ...vacancy, id: row.id }, row.source_id),
-          row.expired_at === null ? 0 : 1,
-        );
+        insert.run(...indexColumns(projected, row.source_id), row.expired_at === null ? 0 : 1);
       }
     });
     this.backfillCursor = rows[rows.length - 1]!.rowid;
@@ -230,8 +226,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    */
   *iterateClusterInput(window: FreshnessWindow): IterableIterator<UnifiedVacancy> {
     const statement = this.database.prepare(
-      `SELECT i.cluster_json AS payload FROM vacancy_pool_index i
-        WHERE ${FRESH} AND i.cluster_json IS NOT NULL`,
+      `SELECT c.cluster_json AS payload
+         FROM vacancy_pool_index i JOIN vacancy_cluster_input c ON c.id = i.id
+        WHERE ${FRESH}`,
     );
     for (const row of statement.iterate(
       window.fromMs,
@@ -392,10 +389,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private prepareIndexUpsert() {
     return this.database.prepare(
       `INSERT INTO vacancy_pool_index (
-         id, source_id, published_ms, observed_ms, is_active, is_remote, url, search_text,
-         cluster_json, expired
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, coalesce(
-         (SELECT p.expired_at IS NOT NULL FROM vacancy_pool p WHERE p.id = ?1), ?10))
+         id, source_id, published_ms, observed_ms, is_active, is_remote, url, search_text, expired
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, coalesce(
+         (SELECT p.expired_at IS NOT NULL FROM vacancy_pool p WHERE p.id = ?1), ?9))
        ON CONFLICT(id) DO UPDATE SET
          source_id = excluded.source_id,
          published_ms = excluded.published_ms,
@@ -403,8 +399,14 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
          is_active = excluded.is_active,
          is_remote = excluded.is_remote,
          url = excluded.url,
-         search_text = excluded.search_text,
-         cluster_json = excluded.cluster_json`,
+         search_text = excluded.search_text`,
+    );
+  }
+
+  private prepareProjectionUpsert() {
+    return this.database.prepare(
+      `INSERT INTO vacancy_cluster_input (id, cluster_json) VALUES (?, ?)
+       ON CONFLICT(id) DO UPDATE SET cluster_json = excluded.cluster_json`,
     );
   }
 
@@ -412,9 +414,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const storedAt = new Date().toISOString();
     const insert = this.prepareUpsert();
     const index = this.prepareIndexUpsert();
+    const projection = this.prepareProjectionUpsert();
     for (const vacancy of vacancies) {
       insert.run(vacancy.id, sourceId, vacancy.publishedAt, storedAt, JSON.stringify(vacancy));
       index.run(...indexColumns(vacancy, sourceId), 0);
+      projection.run(vacancy.id, JSON.stringify(clusterProjectionOf(vacancy)));
     }
   }
 
@@ -494,6 +498,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       if (knownSourceIds.length === 0) {
         this.database.exec('DELETE FROM vacancy_pool');
         this.database.exec('DELETE FROM vacancy_pool_index');
+        this.database.exec('DELETE FROM vacancy_cluster_input');
         this.database.exec('DELETE FROM vacancy_source_state');
         return;
       }
@@ -503,6 +508,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       // Индекс следует за таблицей: строка без записи — это не запись.
       this.database.exec(
         `DELETE FROM vacancy_pool_index WHERE id NOT IN (SELECT id FROM vacancy_pool)`,
+      );
+      this.database.exec(
+        `DELETE FROM vacancy_cluster_input WHERE id NOT IN (SELECT id FROM vacancy_pool_index)`,
       );
       this.database
         .prepare(`DELETE FROM vacancy_source_state WHERE source_id NOT IN (${placeholders})`)

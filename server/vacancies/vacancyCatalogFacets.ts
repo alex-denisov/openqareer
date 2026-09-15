@@ -16,7 +16,11 @@
  */
 import { normalizeCityLabel } from '../../shared/cityLabel';
 import { latinCityName } from '../../shared/placeNames';
-import { buildVacancySlug, listingPath, type CatalogListing } from '../../shared/vacancyCatalogRoutes';
+import {
+  buildVacancySlug,
+  listingPath,
+  type CatalogListing,
+} from '../../shared/vacancyCatalogRoutes';
 import type { CatalogEntry } from './vacancyCatalogPage';
 
 /** Меньше этого числа вакансий — страница не публикуется. */
@@ -98,7 +102,6 @@ export function catalogListings(entries: readonly CatalogEntry[]): CatalogListin
     };
     roleBucket.count += 1;
     buckets.set(roleId, roleBucket);
-
   }
 
   const listings: CatalogListingSummary[] = [];

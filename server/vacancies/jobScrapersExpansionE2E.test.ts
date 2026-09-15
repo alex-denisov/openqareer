@@ -20,20 +20,17 @@ describe('Job Scrapers Expansion & LinkedIn Template E2E Pipeline', () => {
           name: 'Staff Wireless Systems Engineer',
           canonicalPositionUrl: 'https://careers.qualcomm.com/jobs/991',
           location: 'San Diego, CA',
-          jobDescription: 'Design next-generation 5G/6G modem architectures. Requirements: 5+ years in wireless DSP.',
+          jobDescription:
+            'Design next-generation 5G/6G modem architectures. Requirements: 5+ years in wireless DSP.',
           standardJobPostingUpdatedDate: '2026-09-14T08:00:00.000Z',
         },
       ],
     };
-    const qualcommJobs = normalizeJsonSource(
-      'src-qualcomm-careers',
-      qualcommPayload,
-      {
-        observedAt: baseObservedAt,
-        sourceName: 'Qualcomm',
-        sourceUrl: 'https://careers.qualcomm.com/api/pcsx/search?domain=qualcomm.com',
-      },
-    );
+    const qualcommJobs = normalizeJsonSource('src-qualcomm-careers', qualcommPayload, {
+      observedAt: baseObservedAt,
+      sourceName: 'Qualcomm',
+      sourceUrl: 'https://careers.qualcomm.com/api/pcsx/search?domain=qualcomm.com',
+    });
     expect(qualcommJobs).toHaveLength(1);
     expect(qualcommJobs[0]?.company).toBe('Qualcomm');
 
@@ -50,15 +47,11 @@ describe('Job Scrapers Expansion & LinkedIn Template E2E Pipeline', () => {
         },
       ],
     };
-    const snapJobs = normalizeJsonSource(
-      'ats-workday-snapchat',
-      snapPayload,
-      {
-        observedAt: baseObservedAt,
-        sourceName: 'Snap',
-        sourceUrl: 'https://snapchat.wd1.myworkdayjobs.com/wday/cxs/snapchat/snap/jobs',
-      },
-    );
+    const snapJobs = normalizeJsonSource('ats-workday-snapchat', snapPayload, {
+      observedAt: baseObservedAt,
+      sourceName: 'Snap',
+      sourceUrl: 'https://snapchat.wd1.myworkdayjobs.com/wday/cxs/snapchat/snap/jobs',
+    });
     expect(snapJobs).toHaveLength(1);
     expect(snapJobs[0]?.company).toBe('Snap');
 
@@ -75,15 +68,12 @@ describe('Job Scrapers Expansion & LinkedIn Template E2E Pipeline', () => {
         },
       ],
     };
-    const sonyJobs = normalizeJsonSource(
-      'ats-workday-sonyglobal',
-      sonyPayload,
-      {
-        observedAt: baseObservedAt,
-        sourceName: 'Sony',
-        sourceUrl: 'https://sonyglobal.wd1.myworkdayjobs.com/wday/cxs/sonyglobal/SonyGlobalCareers/jobs',
-      },
-    );
+    const sonyJobs = normalizeJsonSource('ats-workday-sonyglobal', sonyPayload, {
+      observedAt: baseObservedAt,
+      sourceName: 'Sony',
+      sourceUrl:
+        'https://sonyglobal.wd1.myworkdayjobs.com/wday/cxs/sonyglobal/SonyGlobalCareers/jobs',
+    });
     expect(sonyJobs).toHaveLength(1);
     expect(sonyJobs[0]?.company).toBe('Sony');
 
@@ -98,11 +88,11 @@ describe('Job Scrapers Expansion & LinkedIn Template E2E Pipeline', () => {
         type: { name: 'Full-Time' },
       },
     ];
-    const breezyJobs = normalizeJsonSource(
-      'ats-breezy-acme',
-      breezyPayload,
-      { observedAt: baseObservedAt, sourceName: 'Acme', sourceUrl: 'https://acme.breezy.hr/json' },
-    );
+    const breezyJobs = normalizeJsonSource('ats-breezy-acme', breezyPayload, {
+      observedAt: baseObservedAt,
+      sourceName: 'Acme',
+      sourceUrl: 'https://acme.breezy.hr/json',
+    });
     expect(breezyJobs).toHaveLength(1);
     expect(breezyJobs[0]?.isRemote).toBe(true);
 
@@ -119,11 +109,11 @@ describe('Job Scrapers Expansion & LinkedIn Template E2E Pipeline', () => {
         },
       ],
     };
-    const pinpointJobs = normalizeJsonSource(
-      'ats-pinpoint-pinpoint',
-      pinpointPayload,
-      { observedAt: baseObservedAt, sourceName: 'Pinpoint', sourceUrl: 'https://pinpoint.pinpointhq.com/postings.json' },
-    );
+    const pinpointJobs = normalizeJsonSource('ats-pinpoint-pinpoint', pinpointPayload, {
+      observedAt: baseObservedAt,
+      sourceName: 'Pinpoint',
+      sourceUrl: 'https://pinpoint.pinpointhq.com/postings.json',
+    });
     expect(pinpointJobs).toHaveLength(1);
     expect(pinpointJobs[0]?.location).toBe('London, UK');
 
@@ -139,11 +129,11 @@ describe('Job Scrapers Expansion & LinkedIn Template E2E Pipeline', () => {
         },
       ],
     };
-    const srJobs = normalizeJsonSource(
-      'ats-smartrecruiters-visa',
-      smartRecruitersPayload,
-      { observedAt: baseObservedAt, sourceName: 'Visa', sourceUrl: 'https://api.smartrecruiters.com/v1/companies/visa/postings' },
-    );
+    const srJobs = normalizeJsonSource('ats-smartrecruiters-visa', smartRecruitersPayload, {
+      observedAt: baseObservedAt,
+      sourceName: 'Visa',
+      sourceUrl: 'https://api.smartrecruiters.com/v1/companies/visa/postings',
+    });
     expect(srJobs).toHaveLength(1);
 
     // 7. Hacker News "Who is hiring"
@@ -158,11 +148,11 @@ describe('Job Scrapers Expansion & LinkedIn Template E2E Pipeline', () => {
         },
       ],
     };
-    const hnJobs = normalizeJsonSource(
-      'src-hn-whoishiring',
-      hnPayload,
-      { observedAt: baseObservedAt, sourceName: 'Hacker News', sourceUrl: 'https://news.ycombinator.com' },
-    );
+    const hnJobs = normalizeJsonSource('src-hn-whoishiring', hnPayload, {
+      observedAt: baseObservedAt,
+      sourceName: 'Hacker News',
+      sourceUrl: 'https://news.ycombinator.com',
+    });
     expect(hnJobs).toHaveLength(1);
     expect(hnJobs[0]?.company).toBe('SuperTech');
     expect(hnJobs[0]?.salary?.from).toBe(190000);
@@ -185,11 +175,11 @@ describe('Job Scrapers Expansion & LinkedIn Template E2E Pipeline', () => {
         },
       ],
     };
-    const naukriJobs = normalizeJsonSource(
-      'src-naukri',
-      naukriPayload,
-      { observedAt: baseObservedAt, sourceName: 'Naukri', sourceUrl: 'https://www.naukri.com' },
-    );
+    const naukriJobs = normalizeJsonSource('src-naukri', naukriPayload, {
+      observedAt: baseObservedAt,
+      sourceName: 'Naukri',
+      sourceUrl: 'https://www.naukri.com',
+    });
     expect(naukriJobs).toHaveLength(1);
     expect(naukriJobs[0]?.salary?.currency).toBe('INR');
 
@@ -207,11 +197,11 @@ describe('Job Scrapers Expansion & LinkedIn Template E2E Pipeline', () => {
         },
       ],
     };
-    const bdjobsJobs = normalizeJsonSource(
-      'src-bdjobs',
-      bdjobsPayload,
-      { observedAt: baseObservedAt, sourceName: 'BDJobs', sourceUrl: 'https://jobs.bdjobs.com' },
-    );
+    const bdjobsJobs = normalizeJsonSource('src-bdjobs', bdjobsPayload, {
+      observedAt: baseObservedAt,
+      sourceName: 'BDJobs',
+      sourceUrl: 'https://jobs.bdjobs.com',
+    });
     expect(bdjobsJobs).toHaveLength(1);
 
     // 10. ZipRecruiter (JobSpy)
@@ -231,11 +221,11 @@ describe('Job Scrapers Expansion & LinkedIn Template E2E Pipeline', () => {
         },
       ],
     };
-    const zipJobs = normalizeJsonSource(
-      'src-ziprecruiter',
-      zipPayload,
-      { observedAt: baseObservedAt, sourceName: 'ZipRecruiter', sourceUrl: 'https://www.ziprecruiter.com' },
-    );
+    const zipJobs = normalizeJsonSource('src-ziprecruiter', zipPayload, {
+      observedAt: baseObservedAt,
+      sourceName: 'ZipRecruiter',
+      sourceUrl: 'https://www.ziprecruiter.com',
+    });
     expect(zipJobs).toHaveLength(1);
     expect(zipJobs[0]?.salary?.from).toBe(180000);
 
@@ -265,11 +255,11 @@ describe('Job Scrapers Expansion & LinkedIn Template E2E Pipeline', () => {
         ],
       },
     };
-    const glassdoorJobs = normalizeJsonSource(
-      'src-glassdoor',
-      glassdoorPayload,
-      { observedAt: baseObservedAt, sourceName: 'Glassdoor', sourceUrl: 'https://www.glassdoor.com' },
-    );
+    const glassdoorJobs = normalizeJsonSource('src-glassdoor', glassdoorPayload, {
+      observedAt: baseObservedAt,
+      sourceName: 'Glassdoor',
+      sourceUrl: 'https://www.glassdoor.com',
+    });
     expect(glassdoorJobs).toHaveLength(1);
     expect(glassdoorJobs[0]?.company).toBe('GitHub');
 

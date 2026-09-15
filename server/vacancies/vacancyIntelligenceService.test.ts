@@ -114,9 +114,11 @@ describe('vacancy intelligence scheduler', () => {
       },
     });
 
-    await expect(
-      service.runDue('2026-08-13T09:00:00.000Z'),
-    ).resolves.toEqual({ claimed: 2, succeeded: 1, failed: 1 });
+    await expect(service.runDue('2026-08-13T09:00:00.000Z')).resolves.toEqual({
+      claimed: 2,
+      succeeded: 1,
+      failed: 1,
+    });
     const failedSubscription = store.getVacancySubscription(candidate.id, failed.id)!;
     expect(failedSubscription).toMatchObject({
       lastSuccessAt: null,
@@ -128,9 +130,7 @@ describe('vacancy intelligence scheduler', () => {
     expect(new Date(failedSubscription.nextRunAt).getTime()).toBeLessThanOrEqual(
       new Date('2026-08-13T10:15:00.000Z').getTime(),
     );
-    expect(
-      store.getVacancySubscription(candidate.id, succeeded.id),
-    ).toMatchObject({
+    expect(store.getVacancySubscription(candidate.id, succeeded.id)).toMatchObject({
       lastSuccessAt: '2026-08-13T09:01:00.000Z',
       lastErrorCode: null,
     });

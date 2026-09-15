@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { getonbrdCategories, pagingPlanFor, rotatingWindowStart, themuseQueries } from './pagedJsonSources';
+import {
+  getonbrdCategories,
+  pagingPlanFor,
+  rotatingWindowStart,
+  themuseQueries,
+} from './pagedJsonSources';
 import { FAN_SIZE, MARKET_TARGETS } from './jobspyFan';
-
 
 /**
  * B216 — у каждой постраничной площадки своя механика продолжения. План
@@ -93,7 +97,10 @@ describe('paging plans (B216)', () => {
   it('Apple: POST по 20, окно по кругу, за границей свежести — заворот к началу, полный круг — стоп (B217)', () => {
     const plan = pagingPlanFor('src-apple-jobs')!;
     const url = 'https://jobs.apple.com/api/v1/search';
-    const now = tickWhere(Date.parse('2026-09-14T09:00:00Z'), (t) => (plan.first(url, t).body as { page: number }).page === 1);
+    const now = tickWhere(
+      Date.parse('2026-09-14T09:00:00Z'),
+      (t) => (plan.first(url, t).body as { page: number }).page === 1,
+    );
     const first = plan.first(url, now);
     expect(first.method).toBe('POST');
     expect(first.body).toMatchObject({ page: 1, sort: 'newest', locale: 'en-us' });
@@ -119,14 +126,21 @@ describe('paging plans (B216)', () => {
     // Со старта с первой страницы граница свежести — конец.
     const fromStart = first;
     expect(plan.next(fromStart, stale)).toBeNull();
-    expect(plan.next(fromStart, { res: { totalRecords: 20, searchResults: page('2026-09-13T00:00:00Z') } })).toBeNull();
+    expect(
+      plan.next(fromStart, {
+        res: { totalRecords: 20, searchResults: page('2026-09-13T00:00:00Z') },
+      }),
+    ).toBeNull();
     expect(plan.next(fromStart, { res: { totalRecords: 6081, searchResults: [] } })).toBeNull();
   });
 
   it('Microsoft: Eightfold под `data`, окно по кругу до границы свежести, пауза не короче секунды (B217)', () => {
     const plan = pagingPlanFor('src-microsoft-careers')!;
     const url = 'https://apply.careers.microsoft.com/api/pcsx/search?domain=microsoft.com&num=10';
-    const now = tickWhere(Date.now(), (t) => new URL(plan.first(url, t).url).searchParams.get('start') === '0');
+    const now = tickWhere(
+      Date.now(),
+      (t) => new URL(plan.first(url, t).url).searchParams.get('start') === '0',
+    );
     const first = plan.first(url, now);
     expect(new URL(first.url).searchParams.get('start')).toBe('0');
     // 429 на проде при 300 мс между страницами (2026-09-14).
@@ -148,13 +162,17 @@ describe('paging plans (B216)', () => {
 
   it('Get on Board: веер по категориям, страницы по meta.total_pages, категории по кругу (B217)', () => {
     const plan = pagingPlanFor('src-getonbrd')!;
-    const url = 'https://www.getonbrd.com/api/v0/categories/programming/jobs?per_page=100&expand=%5B%22company%22%5D';
+    const url =
+      'https://www.getonbrd.com/api/v0/categories/programming/jobs?per_page=100&expand=%5B%22company%22%5D';
     const first = plan.first(url, 0);
     expect(new URL(first.url).pathname).toBe('/api/v0/categories/programming/jobs');
     expect(new URL(first.url).searchParams.get('page')).toBe('1');
     const next = plan.next(first, { meta: { page: 1, per_page: 100, total_pages: 4 }, data: [{}] });
     expect(new URL(next!.url).searchParams.get('page')).toBe('2');
-    const last = plan.next({ ...first, url: next!.url.replace('page=2', 'page=4') }, { meta: { total_pages: 4 }, data: [{}] });
+    const last = plan.next(
+      { ...first, url: next!.url.replace('page=2', 'page=4') },
+      { meta: { total_pages: 4 }, data: [{}] },
+    );
     expect(new URL(last!.url).pathname).not.toBe('/api/v0/categories/programming/jobs');
     expect(new URL(last!.url).searchParams.get('page')).toBe('1');
     expect(getonbrdCategories().length).toBeGreaterThanOrEqual(17);
@@ -171,7 +189,9 @@ describe('paging plans (B216)', () => {
     expect(firstQuery).toContain('sort: DATE');
 
     // Курсор есть — та же комбинация, следующая страница.
-    const more = { data: { jobSearch: { pageInfo: { nextCursor: 'cur2' }, results: [{ job: {} }] } } };
+    const more = {
+      data: { jobSearch: { pageInfo: { nextCursor: 'cur2' }, results: [{ job: {} }] } },
+    };
     const next = plan.next(first, more);
     const nextQuery = (next!.body as { query: string }).query;
     expect(nextQuery).toContain('cursor: "cur2"');

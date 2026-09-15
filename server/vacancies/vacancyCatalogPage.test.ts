@@ -217,7 +217,11 @@ describe('страница списка каталога (B209, срез 2b)', (
   });
 
   it('называет список по одному месту без роли', () => {
-    const page = buildListingPage([cluster()], { ...summary, role: undefined, roleLabel: undefined, path: '/vacancies/moscow' }, 1);
+    const page = buildListingPage(
+      [cluster()],
+      { ...summary, role: undefined, roleLabel: undefined, path: '/vacancies/moscow' },
+      1,
+    );
     expect(page.heading).toBe('Вакансии — Москва');
   });
 

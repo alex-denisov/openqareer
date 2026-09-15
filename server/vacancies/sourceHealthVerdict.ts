@@ -208,8 +208,7 @@ export function recordReading(
         : previous.consecutiveEmptyReadings + 1,
     windowStartedAt: windowExpired ? at : previous.windowStartedAt,
     windowReadings: (windowExpired ? 0 : previous.windowReadings) + 1,
-    windowSuccessful:
-      (windowExpired ? 0 : previous.windowSuccessful) + (reading.succeeded ? 1 : 0),
+    windowSuccessful: (windowExpired ? 0 : previous.windowSuccessful) + (reading.succeeded ? 1 : 0),
     census: caught && reading.census ? reading.census : previous.census,
   };
 }
@@ -225,12 +224,7 @@ export function recordLinkCheck(
   return { ...previous, linkCheck };
 }
 
-export type SourceLivenessVerdict =
-  | 'never_read'
-  | 'unreachable'
-  | 'alive'
-  | 'fading'
-  | 'dead';
+export type SourceLivenessVerdict = 'never_read' | 'unreachable' | 'alive' | 'fading' | 'dead';
 
 export interface SourceLiveness {
   readonly verdict: SourceLivenessVerdict;
@@ -431,9 +425,18 @@ function trustShortfalls(
   linkCheck: LinkCheckCensus | null,
 ): { reasons: string[]; worstRatio: number } {
   const criteria = [
-    { share: completeness.withEmployer, text: (n: number) => `Работодатель назван у ${n} из ${total} карточек` },
-    { share: completeness.withLink, text: (n: number) => `Рабочая ссылка есть у ${n} из ${total} карточек` },
-    { share: completeness.withDate, text: (n: number) => `Дата публикации есть у ${n} из ${total} карточек` },
+    {
+      share: completeness.withEmployer,
+      text: (n: number) => `Работодатель назван у ${n} из ${total} карточек`,
+    },
+    {
+      share: completeness.withLink,
+      text: (n: number) => `Рабочая ссылка есть у ${n} из ${total} карточек`,
+    },
+    {
+      share: completeness.withDate,
+      text: (n: number) => `Дата публикации есть у ${n} из ${total} карточек`,
+    },
     {
       share: consistency.successful,
       text: (n: number) => `Успешных опросов ${n} из ${consistency.successful.of} за 30 дней`,

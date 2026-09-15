@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { CANDIDATE_REGIONS } from '../../src/features/workspace/candidateRegions';
-import { FAN_SIZE, FAN_TERMS, MARKET_TARGETS, fanComboAt, fanRegions, fanStartIndex } from './jobspyFan';
+import {
+  FAN_SIZE,
+  FAN_TERMS,
+  MARKET_TARGETS,
+  fanComboAt,
+  fanRegions,
+  fanStartIndex,
+} from './jobspyFan';
 
 /**
  * B218 — веер обязан покрывать те рынки, которые платформа спрашивает у
@@ -51,6 +58,8 @@ describe('веер рынков (B218)', () => {
     }
     expect(starts.size).toBe(windows);
     // Следующий круг начинается заново, а не уползает.
-    expect(fanStartIndex(windows * intervalMinutes * 60_000, intervalMinutes, combosPerSync)).toBe(0);
+    expect(fanStartIndex(windows * intervalMinutes * 60_000, intervalMinutes, combosPerSync)).toBe(
+      0,
+    );
   });
 });

@@ -93,21 +93,11 @@ describe('MultiSourceVacancyEngine query surface', () => {
 
   it('narrows by source type, remoteness and free text', async () => {
     const engine = await filledEngine();
-    expect(engine.getVacancies({ type: 'telegram' }).items.map((v) => v.id)).toEqual([
-      'c1',
-    ]);
-    expect(engine.getVacancies({ isRemote: false }).items.map((v) => v.id)).toEqual([
-      'b2',
-    ]);
-    expect(engine.getVacancies({ query: 'aurora' }).items.map((v) => v.id)).toEqual([
-      'b1',
-    ]);
-    expect(engine.getVacancies({ query: 'berlin' }).items.map((v) => v.id)).toEqual([
-      'b2',
-    ]);
-    expect(engine.getVacancies({ query: 'python' }).items.map((v) => v.id)).toEqual([
-      'b2',
-    ]);
+    expect(engine.getVacancies({ type: 'telegram' }).items.map((v) => v.id)).toEqual(['c1']);
+    expect(engine.getVacancies({ isRemote: false }).items.map((v) => v.id)).toEqual(['b2']);
+    expect(engine.getVacancies({ query: 'aurora' }).items.map((v) => v.id)).toEqual(['b1']);
+    expect(engine.getVacancies({ query: 'berlin' }).items.map((v) => v.id)).toEqual(['b2']);
+    expect(engine.getVacancies({ query: 'python' }).items.map((v) => v.id)).toEqual(['b2']);
     expect(engine.getVacancies({ query: 'nothing-here' }).total).toBe(0);
   });
 

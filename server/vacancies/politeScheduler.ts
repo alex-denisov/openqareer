@@ -69,7 +69,10 @@ export interface SourceScheduleInfo {
   readonly nextAvailableAtMs: number | null;
 }
 
-export function parseRetryAfterHeader(header: string | undefined | null, nowMs: number): number | null {
+export function parseRetryAfterHeader(
+  header: string | undefined | null,
+  nowMs: number,
+): number | null {
   if (!header) return null;
   const trimmed = header.trim();
   if (!trimmed) return null;
@@ -214,7 +217,11 @@ export class PoliteScheduler {
     }
   }
 
-  public isSourceDue(sourceId: string, baseIntervalMinutes: number, nowMs: number = Date.now()): SourceDueVerdict {
+  public isSourceDue(
+    sourceId: string,
+    baseIntervalMinutes: number,
+    nowMs: number = Date.now(),
+  ): SourceDueVerdict {
     const state = this.getState(sourceId);
 
     if (state.robotsVerdict === 'disallowed') {
@@ -297,7 +304,11 @@ export class PoliteScheduler {
     return { due: true, reason: 'ok' };
   }
 
-  private checkInterval(state: SourceScheduleState, baseIntervalMinutes: number, nowMs: number): SourceDueVerdict {
+  private checkInterval(
+    state: SourceScheduleState,
+    baseIntervalMinutes: number,
+    nowMs: number,
+  ): SourceDueVerdict {
     if (state.consecutiveFailures > 0) {
       return { due: true, reason: 'backoff_elapsed_ready_to_retry' };
     }
@@ -352,7 +363,9 @@ export class PoliteScheduler {
     );
     const backoffUntil = (state.lastAttemptAtMs ?? 0) + backoffMs;
     const backoffRemaining =
-      state.consecutiveFailures > 0 && backoffUntil > nowMs ? Math.ceil((backoffUntil - nowMs) / 1000) : null;
+      state.consecutiveFailures > 0 && backoffUntil > nowMs
+        ? Math.ceil((backoffUntil - nowMs) / 1000)
+        : null;
 
     return {
       sourceId,

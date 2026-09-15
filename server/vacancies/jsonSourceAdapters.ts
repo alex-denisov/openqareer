@@ -200,7 +200,8 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
         const loc = record(job.location);
         const city = text(loc.city);
         const country = text(loc.countryName);
-        const location = text(record(loc.formatted).long) || [city, country].filter(Boolean).join(', ');
+        const location =
+          text(record(loc.formatted).long) || [city, country].filter(Boolean).join(', ');
         const key = text(job.key);
         return build({
           sourceId,
@@ -213,7 +214,9 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
           description: text(record(job.description).html) || text(job.title),
           skills: [],
           url: text(record(job.recruit).viewJobUrl) || `https://www.indeed.com/viewjob?jk=${key}`,
-          publishedAt: fromEpochMilliseconds(numeric(job.datePublished) ?? numeric(job.dateOnIndeed)),
+          publishedAt: fromEpochMilliseconds(
+            numeric(job.datePublished) ?? numeric(job.dateOnIndeed),
+          ),
         });
       },
     ),
@@ -297,8 +300,7 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
   'src-qualcomm-careers': (payload, context, sourceId) =>
     eightfold(payload, context, sourceId, 'https://careers.qualcomm.com'),
 
-  [HN_SOURCE_ID]: (payload, context, sourceId) =>
-    hnWhoIsHiringAdapter(payload, context, sourceId),
+  [HN_SOURCE_ID]: (payload, context, sourceId) => hnWhoIsHiringAdapter(payload, context, sourceId),
 
   [NAUKRI_SOURCE_ID]: (payload, context, sourceId) =>
     normalizeNaukriJobs(payload, context, sourceId),
@@ -336,7 +338,8 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
         company: context.sourceName ?? 'Apple',
         location: location || undefined,
         isRemote: job.homeOffice === true || /remote/i.test(location),
-        description: text(job.jobSummary) || [text(job.postingTitle), team].filter(Boolean).join(' — '),
+        description:
+          text(job.jobSummary) || [text(job.postingTitle), team].filter(Boolean).join(' — '),
         skills: [team].filter(Boolean),
         employmentType: text(job.type) || undefined,
         url: positionId

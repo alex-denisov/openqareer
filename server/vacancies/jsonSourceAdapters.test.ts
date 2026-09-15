@@ -637,22 +637,48 @@ describe('json source adapters (B217)', () => {
 
   it('Eightfold: относительный адрес пришивается к хосту площадки, чужой хост — отсев', () => {
     const position = (positionUrl: string) => ({
-      data: { count: 1, positions: [{ id: 1, displayJobId: 'X1', name: 'Role', locations: ['Spain'], postedTs: 1789365721, positionUrl }] },
+      data: {
+        count: 1,
+        positions: [
+          {
+            id: 1,
+            displayJobId: 'X1',
+            name: 'Role',
+            locations: ['Spain'],
+            postedTs: 1789365721,
+            positionUrl,
+          },
+        ],
+      },
     });
     const context = { observedAt, sourceName: 'Microsoft' };
-    expect(normalizeJsonSource('src-microsoft-careers', position('/careers/job/1'), context)[0]?.url).toBe(
-      'https://apply.careers.microsoft.com/careers/job/1',
-    );
+    expect(
+      normalizeJsonSource('src-microsoft-careers', position('/careers/job/1'), context)[0]?.url,
+    ).toBe('https://apply.careers.microsoft.com/careers/job/1');
     // Без ведущей косой черты адрес всё равно остаётся на хосте площадки.
-    expect(normalizeJsonSource('src-microsoft-careers', position('evil.example/x'), context)[0]?.url).toBe(
-      'https://apply.careers.microsoft.com/evil.example/x',
-    );
-    expect(normalizeJsonSource('src-microsoft-careers', position('https://evil.example/x'), context)).toHaveLength(0);
+    expect(
+      normalizeJsonSource('src-microsoft-careers', position('evil.example/x'), context)[0]?.url,
+    ).toBe('https://apply.careers.microsoft.com/evil.example/x');
+    expect(
+      normalizeJsonSource('src-microsoft-careers', position('https://evil.example/x'), context),
+    ).toHaveLength(0);
   });
 
   it('Apple: идентификатор с чужими символами не становится адресом', () => {
     const payload = (positionId: string) => ({
-      res: { totalRecords: 1, searchResults: [{ positionId, postingTitle: 'T', jobSummary: 'S', transformedPostingTitle: 'a b?', postDateInGMT: observedAt, locations: [] }] },
+      res: {
+        totalRecords: 1,
+        searchResults: [
+          {
+            positionId,
+            postingTitle: 'T',
+            jobSummary: 'S',
+            transformedPostingTitle: 'a b?',
+            postDateInGMT: observedAt,
+            locations: [],
+          },
+        ],
+      },
     });
     const context = { observedAt, sourceName: 'Apple' };
     expect(normalizeJsonSource('src-apple-jobs', payload('200313970'), context)[0]?.url).toBe(
@@ -714,7 +740,10 @@ describe('json source adapters (B217)', () => {
               modality: { data: { id: 1, attributes: { name: 'Full time' } } },
               company: { data: { id: 'improving', attributes: { name: 'Improving' } } },
             },
-            links: { public_url: 'https://www.getonbrd.com/jobs/frontend-engineer-angular-improving-south-america-remote' },
+            links: {
+              public_url:
+                'https://www.getonbrd.com/jobs/frontend-engineer-angular-improving-south-america-remote',
+            },
           },
         ],
       },
@@ -750,7 +779,11 @@ describe('Indeed adapter (B218)', () => {
                   title: 'Communication Systems Engineer',
                   datePublished: 1788963204000,
                   description: { html: '<p>Build systems.</p>' },
-                  location: { city: 'Merritt Island', countryName: 'US', formatted: { long: 'Merritt Island, FL' } },
+                  location: {
+                    city: 'Merritt Island',
+                    countryName: 'US',
+                    formatted: { long: 'Merritt Island, FL' },
+                  },
                   employer: { name: 'Aetos Systems' },
                   recruit: { viewJobUrl: 'https://www.indeed.com/rc/clk?jk=a1b2c3' },
                 },
@@ -775,7 +808,23 @@ describe('Indeed adapter (B218)', () => {
   it('без recruit.viewJobUrl адрес собирается из ключа', () => {
     const [vacancy] = normalizeJsonSource(
       'src-indeed',
-      { data: { jobSearch: { results: [{ job: { key: 'zz9', title: 'T', employer: { name: 'E' }, location: {}, datePublished: 1788963204000 } }] } } },
+      {
+        data: {
+          jobSearch: {
+            results: [
+              {
+                job: {
+                  key: 'zz9',
+                  title: 'T',
+                  employer: { name: 'E' },
+                  location: {},
+                  datePublished: 1788963204000,
+                },
+              },
+            ],
+          },
+        },
+      },
       { observedAt: 'now', sourceName: 'Indeed' },
     );
     expect(vacancy?.url).toBe('https://www.indeed.com/viewjob?jk=zz9');

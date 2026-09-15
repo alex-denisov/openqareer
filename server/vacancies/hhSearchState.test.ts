@@ -38,7 +38,10 @@ const vacancy = {
   compensation: { currencyCode: 'RUR', from: 80000, to: 100000, gross: false },
   creationTime: '2026-06-01T12:16:59.803+03:00',
   publicationTime: { '@timestamp': 1788862062, $: '2026-09-08T13:07:42.322+03:00' },
-  links: { desktop: 'https://hh.ru/vacancy/133712099', mobile: 'https://m.hh.ru/vacancy/133712099' },
+  links: {
+    desktop: 'https://hh.ru/vacancy/133712099',
+    mobile: 'https://m.hh.ru/vacancy/133712099',
+  },
   workExperience: 'between1And3',
   employmentForm: 'FULL',
   workFormats: [{ workFormatsElement: ['REMOTE'] }],

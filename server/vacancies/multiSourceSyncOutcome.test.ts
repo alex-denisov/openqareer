@@ -49,7 +49,12 @@ describe('sync outcome and eviction', () => {
     });
 
     await engine.syncSource('src-test');
-    expect(engine.getVacancies().items.map((item) => item.id).sort()).toEqual(['a', 'b']);
+    expect(
+      engine
+        .getVacancies()
+        .items.map((item) => item.id)
+        .sort(),
+    ).toEqual(['a', 'b']);
 
     batch = [vacancy('b')];
     await engine.syncSource('src-test');
@@ -64,7 +69,12 @@ describe('sync outcome and eviction', () => {
       fetcher: async (source) =>
         source.id === 'src-test'
           ? [vacancy('a')]
-          : [{ ...vacancy('z'), provenance: { ...vacancy('z').provenance, sourceId: 'src-other' } }],
+          : [
+              {
+                ...vacancy('z'),
+                provenance: { ...vacancy('z').provenance, sourceId: 'src-other' },
+              },
+            ],
     });
 
     await engine.syncAll();

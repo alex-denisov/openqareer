@@ -117,9 +117,7 @@ export function buildEgressTransport(config: EgressTransportConfig): HhSearchTra
  * если он настроен. Собирается один раз на процесс — настройки выхода не
  * меняются на ходу.
  */
-export function buildHhPageFetcher(
-  env: NodeJS.ProcessEnv = process.env,
-): HhSearchTransport {
+export function buildHhPageFetcher(env: NodeJS.ProcessEnv = process.env): HhSearchTransport {
   const egress = readEgressConfig(env);
   if (!egress) return directHhTransport;
   const fallback = buildEgressTransport(egress);

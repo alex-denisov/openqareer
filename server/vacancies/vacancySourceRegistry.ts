@@ -273,7 +273,6 @@ const SOURCE_REGISTRY = [
   },
 ] as const;
 
-
 export function vacancySourceRegistryView(health: VacancySourceHealth[]) {
   const healthBySource = new Map(health.map((item) => [item.source, item]));
   return SOURCE_REGISTRY.map((source) => {

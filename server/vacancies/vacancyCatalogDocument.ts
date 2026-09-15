@@ -16,7 +16,12 @@
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import { CATALOG_ROOT } from '../../shared/vacancyCatalogRoutes';
 import { employerLabel } from '../../shared/employerLabel';
-import type { CatalogEntry, CatalogPage, StructuredGraph, VacancyDetail } from './vacancyCatalogPage';
+import type {
+  CatalogEntry,
+  CatalogPage,
+  StructuredGraph,
+  VacancyDetail,
+} from './vacancyCatalogPage';
 import type { CatalogFilterGroup } from './vacancyCatalogFilters';
 
 /**
@@ -117,8 +122,12 @@ function head(options: {
     `<meta name="description" content="${escapeHtml(options.description)}">`,
     `<link rel="canonical" href="${SITE_ORIGIN}${escapeHtml(options.canonicalPath)}">`,
     options.noindex ? '<meta name="robots" content="noindex, follow">' : '',
-    options.previousPath ? `<link rel="prev" href="${SITE_ORIGIN}${escapeHtml(options.previousPath)}">` : '',
-    options.nextPath ? `<link rel="next" href="${SITE_ORIGIN}${escapeHtml(options.nextPath)}">` : '',
+    options.previousPath
+      ? `<link rel="prev" href="${SITE_ORIGIN}${escapeHtml(options.previousPath)}">`
+      : '',
+    options.nextPath
+      ? `<link rel="next" href="${SITE_ORIGIN}${escapeHtml(options.nextPath)}">`
+      : '',
     '<link rel="icon" href="/favicon.svg" type="image/svg+xml">',
     '<meta property="og:type" content="website">',
     '<meta property="og:site_name" content="openqareer">',

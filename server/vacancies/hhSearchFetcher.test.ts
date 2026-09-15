@@ -109,7 +109,11 @@ describe('fetchHhSearch', () => {
   it('пустая выдача — это честный ноль', async () => {
     const transport = vi.fn().mockResolvedValue({ status: 200, body: page([], 0) });
 
-    const result = await fetchHhSearch(source, { query: 'неттакого' }, { transport, observedAt: 'NOW' });
+    const result = await fetchHhSearch(
+      source,
+      { query: 'неттакого' },
+      { transport, observedAt: 'NOW' },
+    );
 
     expect(result.vacancies).toEqual([]);
     expect(result.totalResults).toBe(0);

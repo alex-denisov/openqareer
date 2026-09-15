@@ -73,34 +73,42 @@ const PARSES_PER_RECORD = 12;
 const NO_HANG_TIMEOUT_MS = 120_000;
 
 describe('стоимость сведения пула', () => {
-  it('разбирает запись постоянное число раз, а не заново на каждое сравнение', () => {
-    const size = 4836;
-    const pool = Array.from({ length: size }, (_, index) => vacancy(index));
+  it(
+    'разбирает запись постоянное число раз, а не заново на каждое сравнение',
+    () => {
+      const size = 4836;
+      const pool = Array.from({ length: size }, (_, index) => vacancy(index));
 
-    counter.calls = 0;
-    const clusters = clusterVacancies(pool);
-    const parses = counter.calls;
+      counter.calls = 0;
+      const clusters = clusterVacancies(pool);
+      const parses = counter.calls;
 
-    expect(clusters.length).toBeGreaterThan(1000);
-    // Квадратичный разбор дал бы миллионы вызовов на этом же пуле.
-    expect(parses).toBeLessThan(size * PARSES_PER_RECORD);
-  }, NO_HANG_TIMEOUT_MS);
+      expect(clusters.length).toBeGreaterThan(1000);
+      // Квадратичный разбор дал бы миллионы вызовов на этом же пуле.
+      expect(parses).toBeLessThan(size * PARSES_PER_RECORD);
+    },
+    NO_HANG_TIMEOUT_MS,
+  );
 
-  it('удвоение пула удваивает разбор, а не возводит его в квадрат', () => {
-    const small = Array.from({ length: 600 }, (_, index) => vacancy(index));
-    const large = Array.from({ length: 1200 }, (_, index) => vacancy(index));
+  it(
+    'удвоение пула удваивает разбор, а не возводит его в квадрат',
+    () => {
+      const small = Array.from({ length: 600 }, (_, index) => vacancy(index));
+      const large = Array.from({ length: 1200 }, (_, index) => vacancy(index));
 
-    counter.calls = 0;
-    clusterVacancies(small);
-    const smallParses = counter.calls;
+      counter.calls = 0;
+      clusterVacancies(small);
+      const smallParses = counter.calls;
 
-    counter.calls = 0;
-    clusterVacancies(large);
-    const largeParses = counter.calls;
+      counter.calls = 0;
+      clusterVacancies(large);
+      const largeParses = counter.calls;
 
-    // Линейный рост даёт ~2×; квадратичный дал бы ~4× и выше.
-    expect(largeParses / smallParses).toBeLessThan(2.5);
-  }, NO_HANG_TIMEOUT_MS);
+      // Линейный рост даёт ~2×; квадратичный дал бы ~4× и выше.
+      expect(largeParses / smallParses).toBeLessThan(2.5);
+    },
+    NO_HANG_TIMEOUT_MS,
+  );
 });
 
 /**

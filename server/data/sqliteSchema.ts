@@ -696,9 +696,20 @@ ALTER TABLE vacancy_pool ADD COLUMN expired_at TEXT;
  * только латиницу. Строки, записанные до B221, дочитываются из `payload`
  * фоновым проходом при старте.
  */
-/** Проекция для сведения на индексе, созданном выкатом 1 без неё. */
-export const VACANCY_POOL_INDEX_CLUSTER_COLUMN = `
-ALTER TABLE vacancy_pool_index ADD COLUMN cluster_json TEXT;
+/**
+ * Вход сведения (B221): проекция записи, которую кластеры читают на самом
+ * деле — см. `clusterProjectionOf`. Отдельная таблица, а не колонка индекса:
+ * `ALTER TABLE … ADD COLUMN` на STRICT-таблице в 173 000 строк шёл на проде
+ * дольше окна проверки здоровья при старте (выкат `d2d1b75` отклонён
+ * activate-скриптом), а пустая таблица создаётся мгновенно. Наполняется тем
+ * же фоновым дочитыванием, что и индекс; сироты (запись снята) вычищаются
+ * при `prune`, читаются они всё равно только через живую строку индекса.
+ */
+export const VACANCY_CLUSTER_INPUT_TABLE = `
+CREATE TABLE IF NOT EXISTS vacancy_cluster_input (
+  id TEXT PRIMARY KEY,
+  cluster_json TEXT NOT NULL
+) STRICT;
 `;
 
 export const VACANCY_POOL_INDEX_TABLE = `
@@ -711,8 +722,7 @@ CREATE TABLE IF NOT EXISTS vacancy_pool_index (
   is_remote INTEGER,
   url TEXT NOT NULL,
   search_text TEXT NOT NULL,
-  expired INTEGER NOT NULL DEFAULT 0,
-  cluster_json TEXT
+  expired INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 CREATE INDEX IF NOT EXISTS vacancy_pool_index_fresh
   ON vacancy_pool_index(published_ms, id) WHERE expired = 0;

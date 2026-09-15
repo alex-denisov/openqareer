@@ -127,8 +127,16 @@ describe('Vacancies with no named employer stay apart (B164)', () => {
     },
   });
 
-  const first = withoutEmployer('11', 'Senior React разработчик', 'Продуктовая команда, React и TypeScript.');
-  const second = withoutEmployer('12', 'React разработчик', 'Аутсорс-студия, поддержка витрины на React.');
+  const first = withoutEmployer(
+    '11',
+    'Senior React разработчик',
+    'Продуктовая команда, React и TypeScript.',
+  );
+  const second = withoutEmployer(
+    '12',
+    'React разработчик',
+    'Аутсорс-студия, поддержка витрины на React.',
+  );
 
   it('does not call two different vacancies the same one just because neither names an employer', () => {
     expect(isDuplicateVacancy(first, second)).toBe(false);
@@ -194,7 +202,8 @@ describe('B205: Cross-source deduplication across five platforms into one card',
     company: 'Miro',
     location: 'Remote',
     isRemote: true,
-    description: 'Lead our core UI design system development. Direct apply: https://boards.greenhouse.io/miro/jobs/987654',
+    description:
+      'Lead our core UI design system development. Direct apply: https://boards.greenhouse.io/miro/jobs/987654',
     requiredSkills: ['React', 'Design Systems'],
     url: 'https://remoteok.com/remote-jobs/miro-senior-frontend-engineer',
     provenance: {
@@ -236,7 +245,8 @@ describe('B205: Cross-source deduplication across five platforms into one card',
     company: 'Miro',
     location: 'Амстердам / Удаленно',
     isRemote: true,
-    description: 'Горячая вакансия в Miro: Senior Frontend Engineer (Design Systems). Отклик на ATS: https://boards.greenhouse.io/miro/jobs/987654',
+    description:
+      'Горячая вакансия в Miro: Senior Frontend Engineer (Design Systems). Отклик на ATS: https://boards.greenhouse.io/miro/jobs/987654',
     requiredSkills: ['React', 'TypeScript', 'CSS'],
     url: 'https://t.me/relocation_jobs/7788',
     provenance: {

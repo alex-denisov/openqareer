@@ -73,7 +73,9 @@ describe('registry of vacancy sources', () => {
     const enabled = new Map(DEFAULT_VACANCY_SOURCES.map((source) => [source.id, source]));
     for (const id of ['src-apple-jobs', 'src-microsoft-careers', 'src-crossover', 'remotive']) {
       expect(enabled.get(id)?.enabled, id).toBe(true);
-      expect(vacancySourceMeasurements(id).some((m) => m.route === 'eu-prod' && m.items > 0)).toBe(true);
+      expect(vacancySourceMeasurements(id).some((m) => m.route === 'eu-prod' && m.items > 0)).toBe(
+        true,
+      );
     }
     // Remotive — единственное разрешение поверх robots, и оно названо словами.
     const remotive = enabled.get('remotive');
@@ -81,7 +83,9 @@ describe('registry of vacancy sources', () => {
     expect(remotive?.robotsOverride?.grantedBy).toBe('owner');
     expect(remotive?.refreshIntervalMinutes).toBeGreaterThanOrEqual(360);
     // Разрешение поверх robots — только явное, у Remotive и LinkedIn (B217, B218).
-    const overridden = DEFAULT_VACANCY_SOURCES.filter((s) => s.robotsOverride).map((s) => s.id).sort();
+    const overridden = DEFAULT_VACANCY_SOURCES.filter((s) => s.robotsOverride)
+      .map((s) => s.id)
+      .sort();
     expect(overridden).toEqual(['remotive', 'src-indeed', 'src-linkedin-guest']);
   });
 });
@@ -253,7 +257,9 @@ describe('Qualcomm Eightfold source', () => {
     expect(qualcomm?.accessClass).toBe('api');
     expect(qualcomm?.addressStatus).toBe('live');
     expect(qualcomm?.enabled).toBe(true);
-    expect(qualcomm?.targetUrl).toBe('https://careers.qualcomm.com/api/pcsx/search?domain=qualcomm.com');
+    expect(qualcomm?.targetUrl).toBe(
+      'https://careers.qualcomm.com/api/pcsx/search?domain=qualcomm.com',
+    );
 
     const readings = vacancySourceMeasurements('src-qualcomm-careers');
     expect(readings.length).toBeGreaterThan(0);
@@ -364,4 +370,3 @@ describe('JobSpy sources in default registry', () => {
     }
   });
 });
-

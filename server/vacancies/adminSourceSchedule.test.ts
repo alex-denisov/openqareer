@@ -35,7 +35,11 @@ describe('расписание площадки в суперадминке (B20
   it('берёт ожидание из времени следующей готовности, а не только из отступа', () => {
     const now = 1_757_000_000_000;
     const waiting = toAdminSourceSchedule(
-      info({ isDue: false, nextAvailableAtMs: now + 4_699_000, scheduleReason: 'interval_not_elapsed (4699s remaining, adapted: 90m)' }),
+      info({
+        isDue: false,
+        nextAvailableAtMs: now + 4_699_000,
+        scheduleReason: 'interval_not_elapsed (4699s remaining, adapted: 90m)',
+      }),
       now,
     );
     expect(waiting.nextInMin).toBe(79);
@@ -46,17 +50,22 @@ describe('расписание площадки в суперадминке (B20
       'площадка запретила обход в robots.txt',
     );
     expect(
-      toAdminSourceSchedule(info({ scheduleReason: 'interval_not_elapsed (4699s remaining, adapted: 90m)' })).reason,
+      toAdminSourceSchedule(
+        info({ scheduleReason: 'interval_not_elapsed (4699s remaining, adapted: 90m)' }),
+      ).reason,
     ).toBe('интервал ещё не вышел');
     expect(toAdminSourceSchedule(info({ scheduleReason: 'ok' })).reason).toBe('готова к опросу');
     expect(toAdminSourceSchedule(info({ scheduleReason: 'fresh_source' })).reason).toBe(
       'площадку ещё ни разу не опрашивали',
     );
     expect(
-      toAdminSourceSchedule(info({ scheduleReason: 'hourly_budget_exhausted (30/30 req/h)' })).reason,
+      toAdminSourceSchedule(info({ scheduleReason: 'hourly_budget_exhausted (30/30 req/h)' }))
+        .reason,
     ).toBe('часовой бюджет запросов исчерпан');
     expect(
-      toAdminSourceSchedule(info({ scheduleReason: 'exponential_backoff_active (900s remaining, failures: 3)' })).reason,
+      toAdminSourceSchedule(
+        info({ scheduleReason: 'exponential_backoff_active (900s remaining, failures: 3)' }),
+      ).reason,
     ).toBe('отступ после отказов площадки');
     expect(
       toAdminSourceSchedule(info({ scheduleReason: 'retry_after_active (600s remaining)' })).reason,

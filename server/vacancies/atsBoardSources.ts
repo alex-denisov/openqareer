@@ -59,18 +59,17 @@ export const ATS_BOARD_SOURCES: readonly RegisteredVacancySource[] =
  * Замер доски в той же форме, в какой его читает реестр: включённый источник
  * без наблюдения с маршрута продукта запрещён (B199).
  */
-export const ATS_BOARD_MEASUREMENTS: Readonly<
-  Record<string, readonly VacancySourceMeasurement[]>
-> = Object.fromEntries(
-  MEASURED_ATS_BOARDS.map((measured) => [
-    atsBoardSourceId(measured.provider, measured.board),
-    [
-      {
-        items: measured.jobs,
-        observedAt: measured.observedAt,
-        route: 'eu-prod' as const,
-        note: `доска ${measured.board} у ${atsBoardContract(measured.provider).name}`,
-      },
-    ],
-  ]),
-);
+export const ATS_BOARD_MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>> =
+  Object.fromEntries(
+    MEASURED_ATS_BOARDS.map((measured) => [
+      atsBoardSourceId(measured.provider, measured.board),
+      [
+        {
+          items: measured.jobs,
+          observedAt: measured.observedAt,
+          route: 'eu-prod' as const,
+          note: `доска ${measured.board} у ${atsBoardContract(measured.provider).name}`,
+        },
+      ],
+    ]),
+  );

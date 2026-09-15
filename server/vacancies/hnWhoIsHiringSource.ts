@@ -426,7 +426,7 @@ async function findHnWhoIsHiringStoryId(
 export async function fetchHnWhoIsHiring(
   nowMsOrDeps?: number | HnFetchDeps,
 ): Promise<UnifiedVacancy[]> {
-  const nowMs = typeof nowMsOrDeps === 'number' ? nowMsOrDeps : nowMsOrDeps?.nowMs ?? Date.now();
+  const nowMs = typeof nowMsOrDeps === 'number' ? nowMsOrDeps : (nowMsOrDeps?.nowMs ?? Date.now());
   const fetchJson =
     typeof nowMsOrDeps === 'object' && nowMsOrDeps?.fetchJson
       ? nowMsOrDeps.fetchJson

@@ -270,10 +270,20 @@ const microsoft: PagingPlan = {
     const state = previous.state as FreshWindowState;
     const page = Math.floor(pageOf(previous.url, 'start') / MICROSOFT_PAGE) + 1;
     const { count, positions } = eightfoldPayload(payload);
-    if (positions.length === 0) return state.wrapped || state.startPage === 1 ? null : microsoftRequest(previous.url, 1, { ...state, wrapped: true });
+    if (positions.length === 0)
+      return state.wrapped || state.startPage === 1
+        ? null
+        : microsoftRequest(previous.url, 1, { ...state, wrapped: true });
     const oldest = numeric(record(positions[positions.length - 1]).postedTs);
-    const step = freshWindowNext(state, page, Math.ceil(count / MICROSOFT_PAGE), oldest === undefined ? undefined : oldest * 1000);
-    return step ? microsoftRequest(previous.url, step.page, { ...state, wrapped: step.wrapped }) : null;
+    const step = freshWindowNext(
+      state,
+      page,
+      Math.ceil(count / MICROSOFT_PAGE),
+      oldest === undefined ? undefined : oldest * 1000,
+    );
+    return step
+      ? microsoftRequest(previous.url, step.page, { ...state, wrapped: step.wrapped })
+      : null;
   },
 };
 
@@ -307,7 +317,12 @@ const apple: PagingPlan = {
   pagesPerSync: APPLE_PAGES_PER_SYNC,
   delayMs: 400,
   first: (targetUrl, nowMs) => {
-    const startPage = rotatingWindowStart(nowMs, APPLE_INTERVAL_MINUTES, APPLE_PAGES_PER_SYNC, APPLE_PAGE_CEILING);
+    const startPage = rotatingWindowStart(
+      nowMs,
+      APPLE_INTERVAL_MINUTES,
+      APPLE_PAGES_PER_SYNC,
+      APPLE_PAGE_CEILING,
+    );
     return appleRequest(targetUrl, startPage, { startPage, startedAt: nowMs, wrapped: false });
   },
   next: (previous, payload) => {
@@ -316,9 +331,17 @@ const apple: PagingPlan = {
     const res = record(record(payload).res);
     const total = numeric(res.totalRecords) ?? 0;
     const results = asArray(res.searchResults) ?? [];
-    if (results.length === 0) return state.wrapped || state.startPage === 1 ? null : appleRequest(previous.url, 1, { ...state, wrapped: true });
+    if (results.length === 0)
+      return state.wrapped || state.startPage === 1
+        ? null
+        : appleRequest(previous.url, 1, { ...state, wrapped: true });
     const oldest = Date.parse(text(record(results[results.length - 1]).postDateInGMT));
-    const step = freshWindowNext(state, page, Math.ceil(total / APPLE_PAGE), Number.isNaN(oldest) ? undefined : oldest);
+    const step = freshWindowNext(
+      state,
+      page,
+      Math.ceil(total / APPLE_PAGE),
+      Number.isNaN(oldest) ? undefined : oldest,
+    );
     return step ? appleRequest(previous.url, step.page, { ...state, wrapped: step.wrapped }) : null;
   },
 };
@@ -375,10 +398,16 @@ const getonbrd: PagingPlan = {
     const totalPages = numeric(record(record(payload).meta).total_pages) ?? 0;
     const data = asArray(record(payload).data) ?? [];
     if (data.length > 0 && page < totalPages) {
-      return { url: getonbrdUrl(previous.url, GETONBRD_CATEGORIES[index]!, page + 1), state: previous.state };
+      return {
+        url: getonbrdUrl(previous.url, GETONBRD_CATEGORIES[index]!, page + 1),
+        state: previous.state,
+      };
     }
     const nextIndex = (index + 1) % GETONBRD_CATEGORIES.length;
-    return { url: getonbrdUrl(previous.url, GETONBRD_CATEGORIES[nextIndex]!, 1), state: { index: nextIndex } };
+    return {
+      url: getonbrdUrl(previous.url, GETONBRD_CATEGORIES[nextIndex]!, 1),
+      state: { index: nextIndex },
+    };
   },
 };
 
@@ -433,7 +462,9 @@ interface IndeedState {
 }
 
 /** Ближайшая комбинация, которую Indeed вообще умеет читать (страна известна). */
-function indeedComboFrom(index: number): { combo: ReturnType<typeof fanComboAt>; index: number } | null {
+function indeedComboFrom(
+  index: number,
+): { combo: ReturnType<typeof fanComboAt>; index: number } | null {
   for (let step = 0; step < FAN_SIZE; step += 1) {
     const at = (index + step) % FAN_SIZE;
     const combo = fanComboAt(at);
@@ -480,7 +511,10 @@ const indeed: PagingPlan = {
     const nextIndex = (state.index + 1) % FAN_SIZE;
     const wrapped = state.wrapped || nextIndex === 0;
     if (wrapped && nextIndex === state.startIndex) return null;
-    return indeedRequest({ index: nextIndex, startIndex: state.startIndex, page: 1, wrapped }, null);
+    return indeedRequest(
+      { index: nextIndex, startIndex: state.startIndex, page: 1, wrapped },
+      null,
+    );
   },
 };
 

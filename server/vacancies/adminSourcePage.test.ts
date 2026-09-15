@@ -12,9 +12,7 @@ import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
  */
 function sourcesWithHealth() {
   const engine = new MultiSourceVacancyEngine();
-  const health = new Map(
-    engine.getSourceHealthReport().map((item) => [item.sourceId, item]),
-  );
+  const health = new Map(engine.getSourceHealthReport().map((item) => [item.sourceId, item]));
   return engine.getSources().map((source) => {
     const measured = health.get(source.id);
     return measured
@@ -33,9 +31,7 @@ describe('buildAdminSourcePage', () => {
     const seen: string[] = [];
     for (;;) {
       const page = buildAdminSourcePage(all, offset);
-      expect(JSON.stringify(page.items).length).toBeLessThanOrEqual(
-        ADMIN_VACANCY_PAGE_BYTE_BUDGET,
-      );
+      expect(JSON.stringify(page.items).length).toBeLessThanOrEqual(ADMIN_VACANCY_PAGE_BYTE_BUDGET);
       seen.push(...page.items.map((item) => item.id));
       pages += 1;
       if (page.nextOffset === null) break;

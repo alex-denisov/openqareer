@@ -300,7 +300,8 @@ describe('multi-source fetcher: Glassdoor Cloudflare 403 challenge fallback (B21
       now: () => 0,
       fetchWithStealth: async (_url, options) => {
         capturedOptions = options;
-        const bodyObj = typeof options?.body === 'string' ? JSON.parse(options.body) : options?.body;
+        const bodyObj =
+          typeof options?.body === 'string' ? JSON.parse(options.body) : options?.body;
         const page = bodyObj?.variables?.pageNumber ?? 1;
         return {
           status: 200,

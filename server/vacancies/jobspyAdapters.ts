@@ -64,7 +64,11 @@ function extractNaukriPlaceholders(placeholders: unknown[]): {
   return { location, salary };
 }
 
-function parseNaukriJob(item: unknown, context: JsonAdapterContext, sourceId: string): UnifiedVacancy {
+function parseNaukriJob(
+  item: unknown,
+  context: JsonAdapterContext,
+  sourceId: string,
+): UnifiedVacancy {
   const job = record(item);
   const externalId = text(job.jobId);
   const title = text(job.title);
@@ -81,7 +85,10 @@ function parseNaukriJob(item: unknown, context: JsonAdapterContext, sourceId: st
   const { location, salary } = extractNaukriPlaceholders(placeholders);
   const tagsStr = text(job.tagsAndSkills);
   const skills = tagsStr
-    ? tagsStr.split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+    ? tagsStr
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
     : stringList(job.tags);
   const isRemote = /remote/i.test(location ?? '') || /remote/i.test(title);
   const publishedAt = fromEpochMilliseconds(numeric(job.createdDate));
@@ -127,7 +134,11 @@ function parseBdjobsDate(job: JsonRecord): string {
   return iso !== UNKNOWN_PUBLISHED_AT ? iso : fromLooseDate(raw);
 }
 
-function parseBdjobsJob(item: unknown, context: JsonAdapterContext, sourceId: string): UnifiedVacancy {
+function parseBdjobsJob(
+  item: unknown,
+  context: JsonAdapterContext,
+  sourceId: string,
+): UnifiedVacancy {
   const job = record(item);
   const externalId = text(job.JobId) || text(job.job_id) || text(job.jobid) || text(job.id);
   const title = text(job.JobTitle) || text(job.job_title) || text(job.jobtitle) || text(job.title);
@@ -137,19 +148,21 @@ function parseBdjobsJob(item: unknown, context: JsonAdapterContext, sourceId: st
     text(job.company_name) ||
     text(job.companyname) ||
     text(job.company);
-  const location = text(job.JobLocation) || text(job.job_location) || text(job.location) || undefined;
+  const location =
+    text(job.JobLocation) || text(job.job_location) || text(job.location) || undefined;
   const url =
     text(job.url) ||
     text(job.job_url) ||
     (externalId ? `https://jobs.bdjobs.com/jobdetails.asp?id=${externalId}` : '');
   const workplace = text(job.JobWorkPlace) || text(job.job_workplace);
   const isRemote =
-    /remote|home/i.test(workplace) ||
-    /remote/i.test(title) ||
-    /remote/i.test(location ?? '');
+    /remote|home/i.test(workplace) || /remote/i.test(title) || /remote/i.test(location ?? '');
   const skillsRaw = text(job.SkillsRequired) || text(job.skills_required);
   const skills = skillsRaw
-    ? skillsRaw.split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+    ? skillsRaw
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
     : stringList(job.skills);
 
   return build({
@@ -200,21 +213,16 @@ function parseZipRecruiterJob(
   const externalId = text(job.listing_key) || text(job.id);
   const title = text(job.name) || text(job.title);
   const company =
-    text(record(job.hiring_company).name) ||
-    text(job.company_name) ||
-    text(job.company);
+    text(record(job.hiring_company).name) || text(job.company_name) || text(job.company);
   const city = text(job.job_city);
   const state = text(job.job_state);
   const country = text(job.job_country);
   const location = [city, state, country].filter(Boolean).join(', ') || undefined;
   const url =
-    text(job.url) ||
-    (externalId ? `https://www.ziprecruiter.com/jobs//j?lvk=${externalId}` : '');
+    text(job.url) || (externalId ? `https://www.ziprecruiter.com/jobs//j?lvk=${externalId}` : '');
   const description = text(job.job_description) || title;
   const isRemote =
-    /remote/i.test(location ?? '') ||
-    /remote/i.test(title) ||
-    /remote/i.test(description);
+    /remote/i.test(location ?? '') || /remote/i.test(title) || /remote/i.test(description);
 
   return build({
     sourceId,
@@ -406,15 +414,10 @@ function extractBaytCards(html: string): string[] {
   const matches = html.match(cardRegex);
   if (matches && matches.length > 0) return matches;
   const parts = html.split(/<li\b/i).slice(1);
-  return parts
-    .filter((p) => /data-js-job/i.test(p))
-    .map((p) => `<li ${p.split('</li>')[0]}</li>`);
+  return parts.filter((p) => /data-js-job/i.test(p)).map((p) => `<li ${p.split('</li>')[0]}</li>`);
 }
 
-function extractBaytLinkAndTitle(
-  card: string,
-  externalId: string,
-): { url: string; title: string } {
+function extractBaytLinkAndTitle(card: string, externalId: string): { url: string; title: string } {
   const titleMatch = /<h2\b[^>]*>([\s\S]*?)<\/h2>/i.exec(card);
   const titleHtml = titleMatch ? titleMatch[1]! : card;
   const linkMatch =
@@ -483,9 +486,7 @@ function extractBaytJob(
   const snippets = extractBaytSnippets(card);
   const description = snippets.descSnippet || title;
   const isRemote =
-    /remote/i.test(snippets.location ?? '') ||
-    /remote/i.test(title) ||
-    /remote/i.test(description);
+    /remote/i.test(snippets.location ?? '') || /remote/i.test(title) || /remote/i.test(description);
 
   return build({
     sourceId,
@@ -659,4 +660,3 @@ export function baytAdapter(
       : text(record(payload).html) || text(record(payload).content) || '';
   return normalizeBaytHtml(html, context, sourceId);
 }
-

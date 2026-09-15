@@ -410,7 +410,7 @@ describe('SqliteVacancyPoolStore · снятое объявление', () => {
     expect(store.pendingBackfill()).toBe(0);
     expect(store.hasVacancy('row-id')).toBe(true);
   });
-  it('дочитывает проекцию сведения на индексе, созданном выкатом 1 без неё', () => {
+  it('дочитывает проекцию сведения для индекса, созданного выкатом 1 без неё', () => {
     const directory = mkdtempSync(join(tmpdir(), 'vacancy-pool-b221-idx-'));
     directories.push(directory);
     const path = join(directory, 'pool.db');

@@ -120,7 +120,10 @@ function brandsUrl(base: string): string {
   return url.toString();
 }
 
-async function readBrands(base: string, fetchJson: CrossoverFetchDeps['fetchJson']): Promise<Map<string, string>> {
+async function readBrands(
+  base: string,
+  fetchJson: CrossoverFetchDeps['fetchJson'],
+): Promise<Map<string, string>> {
   const brands = new Map<string, string>();
   const payload = record(await fetchJson(brandsUrl(base)));
   for (const item of asArray(payload.items) ?? []) {

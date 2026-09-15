@@ -53,7 +53,12 @@ function parseDirectiveGroups(content: string): ParsedGroup[] {
 
     if (key === 'user-agent') {
       if (!currentGroup || currentGroup.allow.length > 0 || currentGroup.disallow.length > 0) {
-        currentGroup = { agents: [value.toLowerCase()], allow: [], disallow: [], crawlDelaySeconds: null };
+        currentGroup = {
+          agents: [value.toLowerCase()],
+          allow: [],
+          disallow: [],
+          crawlDelaySeconds: null,
+        };
         groups.push(currentGroup);
       } else {
         currentGroup.agents.push(value.toLowerCase());
@@ -79,7 +84,10 @@ function handleGroupDirective(group: ParsedGroup, key: string, value: string): v
   }
 }
 
-export function parseRobotsDirectives(content: string, targetAgent: string = '*'): RobotsDirectives {
+export function parseRobotsDirectives(
+  content: string,
+  targetAgent: string = '*',
+): RobotsDirectives {
   const groups = parseDirectiveGroups(content);
   const normalizedTarget = targetAgent.toLowerCase();
 
@@ -131,7 +139,11 @@ function matchRuleLength(path: string, pattern: string): number | null {
   }
 }
 
-export function isPathAllowed(path: string, robotsTxtContent: string, targetAgent: string = '*'): boolean {
+export function isPathAllowed(
+  path: string,
+  robotsTxtContent: string,
+  targetAgent: string = '*',
+): boolean {
   const directives = parseRobotsDirectives(robotsTxtContent, targetAgent);
   const safePath = path.startsWith('/') ? path : `/${path}`;
 
@@ -159,7 +171,10 @@ export function isPathAllowed(path: string, robotsTxtContent: string, targetAgen
   return bestVerdict;
 }
 
-export function parseCrawlDelay(robotsTxtContent: string, targetAgent: string = '*'): number | null {
+export function parseCrawlDelay(
+  robotsTxtContent: string,
+  targetAgent: string = '*',
+): number | null {
   return parseRobotsDirectives(robotsTxtContent, targetAgent).crawlDelaySeconds;
 }
 
@@ -179,12 +194,20 @@ export function evaluateRobotsPolicy(options: {
       // 403 on robots.txt in strict crawler mode means disallow all
       return { verdict: 'disallowed', crawlDelaySeconds: null, reason: 'robots_txt_forbidden_403' };
     }
-    return { verdict: 'allowed', crawlDelaySeconds: null, reason: `robots_txt_missing_status_${status}` };
+    return {
+      verdict: 'allowed',
+      crawlDelaySeconds: null,
+      reason: `robots_txt_missing_status_${status}`,
+    };
   }
 
   // 5xx Server Error or unreachable -> fail-closed unconfirmed
   if (status >= 500 || options.robotsTxtContent === null) {
-    return { verdict: 'unconfirmed', crawlDelaySeconds: null, reason: `robots_txt_unavailable_status_${status}` };
+    return {
+      verdict: 'unconfirmed',
+      crawlDelaySeconds: null,
+      reason: `robots_txt_unavailable_status_${status}`,
+    };
   }
 
   const content = options.robotsTxtContent ?? '';

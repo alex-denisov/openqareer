@@ -20,9 +20,7 @@ import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
  */
 
 /** Пул в том виде, в каком его читает расчёт ролей. */
-function observations(
-  matched: readonly MatchedVacancyItem[],
-): RoleObservation[] {
+function observations(matched: readonly MatchedVacancyItem[]): RoleObservation[] {
   return matched.map((item) => ({
     canonicalTitle: item.cluster.canonicalTitle,
     firstObservedAt: item.cluster.firstObservedAt,

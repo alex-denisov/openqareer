@@ -155,8 +155,16 @@ describe('politeScheduler', () => {
       expect(scheduler.getScheduleInfo('src-1', NOW).adaptedIntervalMinutes).toBe(30);
 
       // Multiple syncs with 0 new items
-      scheduler.recordAttempt('src-1', { success: true, newItemsCount: 0, nowMs: NOW + 30 * 60_000 });
-      scheduler.recordAttempt('src-1', { success: true, newItemsCount: 0, nowMs: NOW + 60 * 60_000 });
+      scheduler.recordAttempt('src-1', {
+        success: true,
+        newItemsCount: 0,
+        nowMs: NOW + 30 * 60_000,
+      });
+      scheduler.recordAttempt('src-1', {
+        success: true,
+        newItemsCount: 0,
+        nowMs: NOW + 60 * 60_000,
+      });
       // Now unchanged count is 2 -> adapted interval = 45 min
       expect(scheduler.getScheduleInfo('src-1', NOW + 60 * 60_000).adaptedIntervalMinutes).toBe(45);
 
@@ -170,8 +178,14 @@ describe('politeScheduler', () => {
       expect(nowDue.due).toBe(true);
 
       // Successful sync with new items resets back to 30 min!
-      scheduler.recordAttempt('src-1', { success: true, newItemsCount: 3, nowMs: NOW + 106 * 60_000 });
-      expect(scheduler.getScheduleInfo('src-1', NOW + 106 * 60_000).adaptedIntervalMinutes).toBe(30);
+      scheduler.recordAttempt('src-1', {
+        success: true,
+        newItemsCount: 3,
+        nowMs: NOW + 106 * 60_000,
+      });
+      expect(scheduler.getScheduleInfo('src-1', NOW + 106 * 60_000).adaptedIntervalMinutes).toBe(
+        30,
+      );
     });
 
     it('exports and imports state faithfully across restarts', () => {
