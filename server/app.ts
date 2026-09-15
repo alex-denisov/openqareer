@@ -33,10 +33,7 @@ import { registerConnectorRoutes } from './routes/connectorRoutes';
 import { registerVacancyRoutes } from './routes/vacancyRoutes';
 import { registerCompanyRoutes } from './routes/companiesRoute';
 import { registerVacancyCatalogRoutes } from './routes/vacancyCatalogRoutes';
-import {
-  registerErrorHandler,
-  registerStaticDelivery,
-} from './routes/runtime';
+import { registerErrorHandler, registerStaticDelivery } from './routes/runtime';
 
 interface BuildAppOptions {
   config: ServerConfig;
@@ -51,6 +48,13 @@ interface BuildAppOptions {
   vacancyIntelligenceService?: VacancyIntelligenceService;
   multiSourceVacancyEngine?: MultiSourceVacancyEngine;
   hhCrawlSettings?: import('./vacancies/hhCrawlSettings').HhCrawlSettingsStore;
+  /** Память и пауза опросов для `/api/v1/health` — сторож памяти (B220). */
+  runtimeMemory?: () => {
+    readonly ingestPaused: boolean;
+    readonly heapUsedMb: number;
+    readonly heapLimitMb: number;
+    readonly poolSize: number;
+  };
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
   roleNamer?: RoleNamer;
@@ -127,6 +131,7 @@ function loggerOptions(
 async function createFastifyBase(
   config: ServerConfig,
   logDestination?: { write(line: string): void },
+  runtimeMemory?: BuildAppOptions['runtimeMemory'],
 ): Promise<FastifyInstance> {
   const app = Fastify({
     trustProxy: '127.0.0.1',
@@ -172,6 +177,9 @@ async function createFastifyBase(
     data: {
       status: 'ok',
       release: config.release,
+      // Память и пауза опросов видны снаружи: остановка пула — не тишина, а
+      // названный факт с цифрой (B220).
+      ...(runtimeMemory ? { memory: runtimeMemory() } : {}),
     },
   }));
 
@@ -200,6 +208,17 @@ function attachCandidateStore(authService: SessionAuth, candidateStore: Candidat
   }
 }
 
+/**
+ * Части файла живут только до сборки документа: незаконченная загрузка —
+ * это не документ кандидата (INC-031).
+ */
+function createUploadStaging(): UploadStaging {
+  return new UploadStaging({
+    maxBytes: Math.ceil(DOCUMENT_MAX_BYTES * 1.4),
+    ttlMs: 10 * 60_000,
+  });
+}
+
 export async function buildApp({
   config,
   coachProvider,
@@ -207,6 +226,7 @@ export async function buildApp({
   authService,
   serveStatic = true,
   hhCrawlSettings,
+  runtimeMemory,
   searchVacancies = searchHhVacancies,
   searchRemotive = searchRemotiveVacancies,
   importProfile = importPublicProfileUrl,
@@ -227,17 +247,11 @@ export async function buildApp({
     searchVacancies: searchVacancies ?? searchHhVacancies,
     searchRemotive: searchRemotive ?? searchRemotiveVacancies,
   });
-
   const deps: RouteDeps = {
     config,
     authService,
     candidateStore,
-    // Части файла живут только до сборки документа: незаконченная загрузка —
-    // это не документ кандидата (INC-031).
-    uploadStaging: new UploadStaging({
-      maxBytes: Math.ceil(DOCUMENT_MAX_BYTES * 1.4),
-      ttlMs: 10 * 60_000,
-    }),
+    uploadStaging: createUploadStaging(),
     coachProvider,
     importProfile,
     resumeStructurer,
@@ -249,11 +263,9 @@ export async function buildApp({
     ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
     ...services,
   };
-
-  const app = await createFastifyBase(config, logDestination);
+  const app = await createFastifyBase(config, logDestination, runtimeMemory);
   await registerApiRoutes(app, deps);
   registerErrorHandler(app);
   await registerStaticDelivery(app, config, serveStatic);
-
   return app;
 }

@@ -100,6 +100,23 @@ describe('OpenQareer API boundary', () => {
       data: { status: 'ok', release: 'test-release' },
     });
 
+    // Сторож памяти (B220) виден снаружи, когда подключён.
+    const withMemory = await createApp(successProvider, undefined, undefined, {
+      runtimeMemory: () => ({
+        ingestPaused: true,
+        heapUsedMb: 1200,
+        heapLimitMb: 1536,
+        poolSize: 134557,
+      }),
+    });
+    const memoryHealth = await withMemory.inject({ method: 'GET', url: '/api/v1/health' });
+    expect(memoryHealth.json().data.memory).toEqual({
+      ingestPaused: true,
+      heapUsedMb: 1200,
+      heapLimitMb: 1536,
+      poolSize: 134557,
+    });
+
     const unauthorized = await app.inject({
       method: 'GET',
       url: '/api/v1/provider/status',
@@ -373,9 +390,7 @@ describe('OpenQareer API boundary', () => {
       headers: { authorization },
     });
     expect(snapshot.json().data.assessments).toHaveLength(1);
-    expect(snapshot.json().data.assessments[0].submission.successMeasure).toBe(
-      'delivery-date',
-    );
+    expect(snapshot.json().data.assessments[0].submission.successMeasure).toBe('delivery-date');
 
     const invalid = await app.inject({
       method: 'POST',
@@ -453,4 +468,3 @@ describe('OpenQareer API boundary', () => {
     expect(snapshot.json().data.germanyMarket.result.caveat).toMatch(/не юридическое решение/i);
   });
 });
-

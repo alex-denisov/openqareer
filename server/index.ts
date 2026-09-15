@@ -28,6 +28,7 @@ import { buildMultiSourceFetcher, fetchRobotsTxt } from './vacancies/multiSource
 import { SqliteVacancyPoolStore } from './vacancies/sqliteVacancyPoolStore';
 import { createHhCrawlSettings } from './vacancies/hhCrawlSettings';
 import { HhCrawlCoordinator } from './vacancies/hhCrawlCoordinator';
+import { MemoryGuard, readProcessHeap } from './vacancies/memoryGuard';
 import { buildHhPageFetcher } from './vacancies/hhSearchTransport';
 import { SqliteRoleNamingCache } from './data/sqliteRoleNamingCache';
 
@@ -151,6 +152,15 @@ const app = await buildApp({
   vacancyIntelligenceService,
   multiSourceVacancyEngine: multiSourceEngine,
   hhCrawlSettings,
+  runtimeMemory: () => {
+    const heap = readProcessHeap();
+    return {
+      ingestPaused: memoryGuard.isPaused,
+      heapUsedMb: Math.round(heap.heapUsedBytes / (1024 * 1024)),
+      heapLimitMb: Math.round(heap.heapLimitBytes / (1024 * 1024)),
+      poolSize: multiSourceEngine.rawVacancyCount,
+    };
+  },
   careerCommandExecutor,
   resumeStructurer: buildResumeStructurer({
     personalProvider: personalProviderId,
@@ -205,8 +215,23 @@ function runVacancyRefresh(): void {
 // слилось бы с полупустым срезом и записало его в базу как полный (B219).
 let vacancyPoolRestored = false;
 
+// Пул живёт в куче; выше порога опросы замирают, а не роняют службу (B220).
+const memoryGuard = new MemoryGuard(readProcessHeap);
+
 function runMultiSourceSync(): void {
   if (!vacancyPoolRestored) return;
+  const memory = memoryGuard.check();
+  if (memory.changed) {
+    app.log[memory.paused ? 'warn' : 'info'](
+      {
+        heapUsedMb: memory.heapUsedMb,
+        heapLimitMb: memory.heapLimitMb,
+        poolSize: multiSourceEngine.rawVacancyCount,
+      },
+      memory.paused ? 'multi-source-sync-paused-memory' : 'multi-source-sync-resumed-memory',
+    );
+  }
+  if (memory.paused) return;
   void multiSourceEngine
     .syncDue()
     .then((outcomes) => {

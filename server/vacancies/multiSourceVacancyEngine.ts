@@ -391,6 +391,11 @@ export class MultiSourceVacancyEngine {
    * Одна запись целиком: список отдаётся кратким видом внутри байтового бюджета
    * маршрута (INC-032), а полный текст поста читает карточка.
    */
+  /** Сколько сырых записей держит куча — без копирования пула (B220). */
+  public get rawVacancyCount(): number {
+    return this.rawVacancies.size;
+  }
+
   public getVacancy(id: string): UnifiedVacancy | undefined {
     return this.rawVacancies.get(id);
   }

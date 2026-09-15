@@ -82,6 +82,7 @@ export async function createApp(
   provider: CoachProvider = successProvider,
   searchVacancies?: Parameters<typeof buildApp>[0]['searchVacancies'],
   importProfile?: Parameters<typeof buildApp>[0]['importProfile'],
+  extra: Partial<Pick<Parameters<typeof buildApp>[0], 'runtimeMemory'>> = {},
 ) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',
@@ -99,6 +100,7 @@ export async function createApp(
     serveStatic: false,
     searchVacancies,
     importProfile,
+    ...extra,
   });
   apps.push(app);
   stores.push(candidateStore);
@@ -115,4 +117,3 @@ export const validPayload = {
 export function candidateAuthorization(app: Awaited<ReturnType<typeof buildApp>>): string {
   return `Bearer ${candidateTokens.get(app)}`;
 }
-
