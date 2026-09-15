@@ -14,6 +14,7 @@ async function loadHarness() {
       resolveDir: process.cwd(), loader: 'ts',
     }, outfile, bundle: true, platform: 'node', format: 'esm', target: 'node24',
     banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
+    external: ['playwright', 'playwright-core', 'fsevents', 'chromium-bidi'],
   });
   harness = await import(pathToFileURL(outfile).href);
   return harness;

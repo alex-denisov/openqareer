@@ -21,7 +21,8 @@ export class ObscuraRunner {
       return this.context;
     }
 
-    const { chromium } = await import('playwright');
+    const playwrightModule = 'playwright';
+    const { chromium } = (await import(playwrightModule)) as typeof import('playwright');
     const args = buildObscuraLaunchArgs(this.config);
     const viewport = getRandomizedViewport();
     const userAgent = getRandomizedUserAgent();
