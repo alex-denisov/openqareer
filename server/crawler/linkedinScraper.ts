@@ -53,7 +53,7 @@ export function resolveLinkedinProxyUrl(explicitProxy?: string): string | undefi
 }
 
 export class LinkedinScraper {
-  private readonly pool: LinkedinAccountPool;
+  public readonly pool: LinkedinAccountPool;
   private readonly navigator: PageNavigator;
   private readonly minDelayMs: number;
   private readonly maxDelayMs: number;

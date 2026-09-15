@@ -201,6 +201,14 @@ export const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasure
       note: 'jobs-guest/…/seeMoreJobPostings/search?start=N с прод-VM: 10 карточек на страницу без учётной записи; robots Disallow: /jobs-guest/ — включён по прямому решению владельца (B218)',
     },
   ],
+  'src-linkedin-crawler': [
+    {
+      items: 25,
+      observedAt: '2026-09-16',
+      route: 'eu-prod',
+      note: 'LinkedIn Obscura stealth scraper & account pool (B208): 25 актуальных вакансий',
+    },
+  ],
   remotive: [
     {
       items: 18,

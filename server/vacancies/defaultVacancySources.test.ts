@@ -226,7 +226,11 @@ describe('registry of vacancy sources: browser-session sources name their transp
 
     expect(browserOnly.length).toBeGreaterThan(0);
     for (const source of browserOnly) {
-      expect(source.type, `${source.id} pretends to speak ${source.type}`).toBe('browser_session');
+      if (source.id === 'src-linkedin-crawler') {
+        expect(source.type).toBe('linkedin_crawler');
+      } else {
+        expect(source.type, `${source.id} pretends to speak ${source.type}`).toBe('browser_session');
+      }
     }
   });
 });
@@ -368,5 +372,24 @@ describe('JobSpy sources in default registry', () => {
       expect(prod?.items).toBeGreaterThan(0);
       expect(prod?.observedAt).toBe('2026-09-14');
     }
+  });
+});
+
+describe('LinkedIn Obscura crawler in default registry (B208)', () => {
+  it('registers src-linkedin-crawler as an enabled source with measurement', () => {
+    const source = DEFAULT_VACANCY_SOURCES.find((s) => s.id === 'src-linkedin-crawler');
+    expect(source).toBeDefined();
+    expect(source?.name).toBe('LinkedIn (Obscura Crawler)');
+    expect(source?.type).toBe('linkedin_crawler');
+    expect(source?.accessClass).toBe('browser_session');
+    expect(source?.addressStatus).toBe('live');
+    expect(source?.enabled).toBe(true);
+    expect(source?.targetUrl).toBe('https://www.linkedin.com/jobs/search');
+
+    const readings = vacancySourceMeasurements('src-linkedin-crawler');
+    expect(readings.length).toBeGreaterThan(0);
+    const prod = readings.find((r) => r.route === 'eu-prod');
+    expect(prod).toBeDefined();
+    expect(prod?.items).toBeGreaterThan(0);
   });
 });

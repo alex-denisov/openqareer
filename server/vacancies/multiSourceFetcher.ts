@@ -18,6 +18,10 @@ import {
   normalizeBaytHtml,
 } from './jobspyAdapters';
 import { baytHeaders } from './jobspyEndpoints';
+import {
+  fetchLinkedinCrawler,
+  type LinkedinCrawlerDeps,
+} from '../crawler/linkedinIngestRunner';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -368,6 +372,8 @@ export interface MultiSourceFetcherDeps {
   readonly sleep?: (ms: number) => Promise<void>;
   readonly now?: () => number;
   readonly fetchWithStealth?: typeof fetchWithStealthFallback;
+  readonly linkedinCrawlerDeps?: LinkedinCrawlerDeps;
+  readonly fetchLinkedinCrawler?: (deps?: LinkedinCrawlerDeps) => Promise<SourceReading>;
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -467,6 +473,13 @@ export function buildMultiSourceFetcher(
       return fetchJsonOrCareerSite(source, options, deps, sleep, now);
     }
     if (source.type === 'hh_search') return fetchHhSearchBatch(crawlCoordinator);
+    if (source.type === 'linkedin_crawler' || source.id === 'src-linkedin-crawler') {
+      const runner = deps.fetchLinkedinCrawler ?? fetchLinkedinCrawler;
+      return runner({
+        ...deps.linkedinCrawlerDeps,
+        ...(options?.query ? { query: options.query } : {}),
+      });
+    }
     // An unimplemented source type has not been measured, so it must not report
     // a successful empty reading (B161).
     throw new Error(`vacancy_source_type_unsupported: ${source.type}`);

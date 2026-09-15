@@ -20,7 +20,8 @@ export type VacancySourceType =
   // зарегистрирован, но серверный сборщик обязан на нём падать, а не
   // возвращать пустой успех (B199).
   | 'browser_session'
-  | 'direct';
+  | 'direct'
+  | 'linkedin_crawler';
 
 export interface VacancySalary {
   from?: number;
