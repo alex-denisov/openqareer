@@ -338,13 +338,15 @@ process.once('SIGTERM', () => void shutdown('SIGTERM'));
 try {
   await app.listen({ host: config.host, port: config.port });
   // Сервер слушает и отвечает на /health мгновенно (<10 мс).
-  // Восстановление 120k+ вакансий из SQLite и сведение кластеров запускаются
-  // через 30 секунд в фоне без блокировки event loop через restoreAsync / reclusterAsync (B218).
+  // Восстановление вакансий из SQLite и кластеров запускаются
+  // через 30 секунд в фоне без блокировки event loop через restoreAsync (B218, B221).
   setTimeout(async () => {
     try {
       const startedAt = Date.now();
       const restored = await multiSourceEngine.restoreAsync();
-      await multiSourceEngine.reclusterAsync();
+      if (multiSourceEngine.getActiveClusters().length === 0 && multiSourceEngine.poolSize > 0) {
+        await multiSourceEngine.reclusterAsync();
+      }
       app.log.info(
         {
           restored: restored.restored,

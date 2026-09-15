@@ -166,3 +166,115 @@ describe('B221 · фоновое сведение', () => {
     }
   });
 });
+
+describe('B221 · чистый запуск без кучи и предсуществующие кластеры (срез 4)', () => {
+  it('старт с предсуществующими кластерами в SQLite мгновенен и восстанавливает их без повторного сведения', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pool-startup-'));
+    directories.push(directory);
+    const path = join(directory, 'pool.db');
+
+    // 1. Создаем начальную базу с вакансиями и кластерами
+    const initialPool = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(initialPool);
+    const initialEngine = new MultiSourceVacancyEngine({ sources: [SOURCE], pool: initialPool });
+    initialPool.replaceSourceSlice(SOURCE.id, [
+      vacancy('v1'),
+      { ...vacancy('v2'), company: 'Globex' },
+    ]);
+    initialEngine.recluster();
+    expect(initialPool.countClusters()).toBe(2);
+    initialPool.close();
+
+    // 2. Симулируем перезапуск сервера (новый процесс с чистой кучей)
+    const restartedPool = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(restartedPool);
+    const restartedEngine = new MultiSourceVacancyEngine({ sources: [SOURCE], pool: restartedPool });
+
+    const iterateSpy = vi.spyOn(restartedPool, 'iterateClusterInput');
+    const reclusterSpy = vi.spyOn(restartedEngine, 'reclusterAsync');
+
+    // Процедура старта сервера (как в server/index.ts)
+    const startedAt = Date.now();
+    const restored = await restartedEngine.restoreAsync();
+    if (restartedEngine.getActiveClusters().length === 0 && restartedEngine.poolSize > 0) {
+      await restartedEngine.reclusterAsync();
+    }
+    const elapsedMs = Date.now() - startedAt;
+
+    expect(restored.restored).toBe(2);
+    expect(restartedEngine.getActiveClusters()).toHaveLength(2);
+    expect(restartedEngine.clusterRebuildCount).toBe(0);
+    expect(reclusterSpy).not.toHaveBeenCalled();
+    expect(iterateSpy).not.toHaveBeenCalled();
+    expect(elapsedMs).toBeLessThan(500);
+  });
+
+  it('старт без сохранённых кластеров при наличии вакансий запускает первичное сведение и сохраняет их', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pool-startup-empty-clusters-'));
+    directories.push(directory);
+    const path = join(directory, 'pool.db');
+
+    // 1. Заполняем вакансии напрямую в базу без создания кластеров
+    const pool = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(pool);
+    pool.replaceSourceSlice(SOURCE.id, [
+      vacancy('v1'),
+      { ...vacancy('v2'), company: 'Globex' },
+    ]);
+    expect(pool.countClusters()).toBe(0);
+
+    const engine = new MultiSourceVacancyEngine({
+      sources: [SOURCE],
+      pool,
+      recluster: { mode: 'background', minIntervalMs: 60_000 },
+    });
+    const reclusterSpy = vi.spyOn(engine, 'reclusterAsync');
+    const iterateSpy = vi.spyOn(pool, 'iterateClusterInput');
+
+    // Процедура старта сервера (как в server/index.ts)
+    const restored = await engine.restoreAsync();
+    if (engine.getActiveClusters().length === 0 && engine.poolSize > 0) {
+      await engine.reclusterAsync();
+    }
+
+    expect(restored.restored).toBe(2);
+    expect(reclusterSpy).toHaveBeenCalledTimes(1);
+    expect(iterateSpy).toHaveBeenCalledTimes(1);
+    expect(engine.getActiveClusters()).toHaveLength(2);
+    expect(pool.countClusters()).toBe(2);
+  });
+
+  it('движок не держит массивы вакансий в памяти процесса: poolSize и выборка идут из базы', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pool-memory-'));
+    directories.push(directory);
+    const path = join(directory, 'pool.db');
+
+    const pool = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(pool);
+    pool.replaceSourceSlice(SOURCE.id, [vacancy('v1'), { ...vacancy('v2'), company: 'Globex' }]);
+
+    const engine = new MultiSourceVacancyEngine({ sources: [SOURCE], pool });
+    await engine.restoreAsync();
+    if (engine.getActiveClusters().length === 0 && engine.poolSize > 0) {
+      await engine.reclusterAsync();
+    }
+
+    // В инстансе движка нет массивов полных вакансий
+    const engineInternals = engine as unknown as Record<string, unknown>;
+    expect(engineInternals.pendingVacancies).toEqual([]);
+    expect(engineInternals).not.toHaveProperty('vacancies');
+
+    // poolSize и getVacancies обращаются в хранилище
+    const countSpy = vi.spyOn(pool, 'countVacancies');
+    const querySpy = vi.spyOn(pool, 'queryVacancies');
+
+    expect(engine.poolSize).toBe(2);
+    expect(countSpy).toHaveBeenCalled();
+
+    const result = engine.getVacancies({ query: 'Globex' });
+    expect(querySpy).toHaveBeenCalled();
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].id).toBe('v2');
+  });
+});
+
