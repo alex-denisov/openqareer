@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
+import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
 import type { VacancyPoolStore } from './vacancyPoolStore';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 
@@ -51,20 +52,13 @@ function vacancy(id: string, sourceId = 'src-test'): UnifiedVacancy {
 
 function recordingPool(): { pool: VacancyPoolStore; buried: Array<[readonly string[], string]> } {
   const buried: Array<[readonly string[], string]> = [];
-  return {
-    buried,
-    pool: {
-      loadVacancies: () => [],
-      loadSourceStates: () => [],
-      replaceSourceSlice: () => undefined,
-      saveSourceState: () => undefined,
-      prune: () => undefined,
-      markExpired: (ids, atIso) => {
-        buried.push([ids, atIso]);
-        return ids.length;
-      },
-    },
-  };
+  class RecordingPool extends MemoryVacancyPoolStore {
+    override markExpired(ids: readonly string[], atIso: string): number {
+      buried.push([ids, atIso]);
+      return super.markExpired(ids, atIso);
+    }
+  }
+  return { buried, pool: new RecordingPool() };
 }
 
 describe('B200 · обход ссылок площадки в движке', () => {
@@ -77,7 +71,12 @@ describe('B200 · обход ссылок площадки в движке', () 
       linkProbe: async (url) => (url.endsWith('/b') ? { status: 404 } : { status: 200 }),
     });
     await engine.syncSource('src-test', undefined, NOW);
-    expect(engine.getVacancies().items.map((v) => v.id).sort()).toEqual(['a', 'b']);
+    expect(
+      engine
+        .getVacancies()
+        .items.map((v) => v.id)
+        .sort(),
+    ).toEqual(['a', 'b']);
 
     const census = await engine.probeSourceLinks('src-test', NOW);
 
@@ -131,10 +130,7 @@ describe('B200 · обход ссылок площадки в движке', () 
     await engine.probeDueLinks(NOW);
     await engine.probeDueLinks(NOW + 60_000);
 
-    expect(probed).toEqual([
-      'https://example.test/src-test-a',
-      'https://example.test/src-two-a',
-    ]);
+    expect(probed).toEqual(['https://example.test/src-test-a', 'https://example.test/src-two-a']);
   });
 
   it('не обходит ссылки выключенной площадки', async () => {

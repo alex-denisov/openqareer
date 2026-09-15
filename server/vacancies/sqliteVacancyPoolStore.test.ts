@@ -4,15 +4,15 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
+import { MIGRATION_23 } from '../data/sqliteSchema';
+import { freshnessWindow } from './vacancyPoolQuery';
 
 const directories: string[] = [];
 const stores: SqliteVacancyPoolStore[] = [];
 
 afterEach(() => {
   stores.splice(0).forEach((store) => store.close());
-  directories.splice(0).forEach((directory) =>
-    rmSync(directory, { recursive: true, force: true }),
-  );
+  directories.splice(0).forEach((directory) => rmSync(directory, { recursive: true, force: true }));
 });
 
 function openStore(): { store: SqliteVacancyPoolStore; path: string } {
@@ -305,5 +305,109 @@ describe('SqliteVacancyPoolStore · снятое объявление', () => {
     store.replaceSourceSlice('src', [card('v1')]);
     expect(store.markExpired(['v1'], '2026-09-07T09:00:00.000Z')).toBe(1);
     expect(store.loadVacancies()).toEqual([]);
+  });
+  it('дочитывает колонки запросов у строк, записанных до B221, порциями', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'vacancy-pool-b221-'));
+    directories.push(directory);
+    const path = join(directory, 'pool.db');
+    const legacy = new DatabaseSync(path);
+    legacy.exec(MIGRATION_23);
+    const insert = legacy.prepare(
+      'INSERT INTO vacancy_pool (id, source_id, published_at, stored_at, payload) VALUES (?, ?, ?, ?, ?)',
+    );
+    for (const id of ['v1', 'v2', 'v3']) {
+      insert.run(
+        id,
+        'src',
+        '2026-09-01T10:00:00.000Z',
+        '2026-09-01T10:00:00.000Z',
+        JSON.stringify(card(id)),
+      );
+    }
+    insert.run(
+      'broken',
+      'src',
+      '2026-09-01T10:00:00.000Z',
+      '2026-09-01T10:00:00.000Z',
+      '{"id":"broken"}',
+    );
+    legacy.close();
+
+    const store = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(store);
+    const window = freshnessWindow(Date.parse('2026-09-02T00:00:00.000Z'));
+    // До дочитывания база не знает дат: ответ пустой, а не выдуманный.
+    expect(store.pendingBackfill()).toBe(4);
+    expect(store.countVacancies(window)).toBe(0);
+
+    expect(store.backfillStep(2)).toBe(2);
+    expect(store.backfillStep(2)).toBe(2);
+    expect(store.backfillStep(2)).toBe(0);
+    expect(store.pendingBackfill()).toBe(0);
+    expect(store.countVacancies(window)).toBe(3);
+    // Нечитаемая строка ушла из базы: вакансией она не была.
+    expect(store.hasVacancy('broken')).toBe(false);
+    expect(store.queryVacancies({ window, query: 'company', offset: 0, limit: 10 }).total).toBe(3);
+  });
+  it('замена среза и повторное чтение не воскрешают строки, ещё не дошедшие до индекса', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'vacancy-pool-b221-drift-'));
+    directories.push(directory);
+    const path = join(directory, 'pool.db');
+    const legacy = new DatabaseSync(path);
+    legacy.exec(MIGRATION_23);
+    legacy.exec('ALTER TABLE vacancy_pool ADD COLUMN expired_at TEXT;');
+    const insert = legacy.prepare(
+      'INSERT INTO vacancy_pool (id, source_id, published_at, stored_at, payload, expired_at) VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    const at = '2026-09-01T10:00:00.000Z';
+    insert.run('stale', 'src', at, at, JSON.stringify(card('stale')), null);
+    insert.run('buried', 'src', at, at, JSON.stringify(card('buried')), at);
+    legacy.close();
+
+    const store = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(store);
+    // Проход ещё не шёл, а площадка уже прочитана заново: прежний срез снят,
+    // похороненное остаётся похороненным даже если пришло снова.
+    store.replaceSourceSlice('src', [card('fresh'), card('buried')]);
+    expect(store.hasVacancy('fresh')).toBe(true);
+    expect(store.hasVacancy('buried')).toBe(false);
+    while (store.backfillStep(1) > 0) {
+      /* до конца */
+    }
+    expect(store.hasVacancy('stale')).toBe(false);
+    expect(store.hasVacancy('buried')).toBe(false);
+    expect(
+      store
+        .loadVacancies()
+        .map((v) => v.id)
+        .sort(),
+    ).toEqual(['fresh']);
+  });
+
+  it('проход не зацикливается на строке, чей текст называет другой идентификатор', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'vacancy-pool-b221-loop-'));
+    directories.push(directory);
+    const path = join(directory, 'pool.db');
+    const legacy = new DatabaseSync(path);
+    legacy.exec(MIGRATION_23);
+    legacy
+      .prepare(
+        'INSERT INTO vacancy_pool (id, source_id, published_at, stored_at, payload) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run(
+        'row-id',
+        'src',
+        '2026-09-01T10:00:00.000Z',
+        '2026-09-01T10:00:00.000Z',
+        JSON.stringify(card('other-id')),
+      );
+    legacy.close();
+
+    const store = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(store);
+    expect(store.backfillStep(10)).toBe(1);
+    expect(store.backfillStep(10)).toBe(0);
+    expect(store.pendingBackfill()).toBe(0);
+    expect(store.hasVacancy('row-id')).toBe(true);
   });
 });

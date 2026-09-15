@@ -4,6 +4,7 @@ import type { AuthPrincipal, SessionAuth } from './auth/authService';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import type { UnifiedVacancy, VacancySourceConfig } from './domain/unifiedVacancy';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
+import { MemoryVacancyPoolStore } from './vacancies/memoryVacancyPoolStore';
 import { ADMIN_VACANCY_PAGE_BYTE_BUDGET } from './vacancies/adminVacancyPage';
 import { apps, config, noSessions, stores, successProvider } from './appTestHarness';
 
@@ -74,17 +75,9 @@ const adminSessions: SessionAuth = {
 
 async function createAdminApp(poolSize: number) {
   const vacancies = Array.from({ length: poolSize }, (_, index) => vacancy(index));
-  const engine = new MultiSourceVacancyEngine({
-    sources: [SOURCE],
-    pool: {
-      loadVacancies: () => vacancies,
-      loadSourceStates: () => [],
-      replaceSourceSlice: () => {},
-      saveSourceState: () => {},
-      prune: () => {},
-      markExpired: () => 0,
-    },
-  });
+  const pool = new MemoryVacancyPoolStore();
+  pool.replaceSourceSlice(SOURCE.id, vacancies);
+  const engine = new MultiSourceVacancyEngine({ sources: [SOURCE], pool });
   engine.restore();
 
   const candidateStore = new SqliteCandidateStore({

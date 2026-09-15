@@ -343,7 +343,7 @@ export function clusterVacancies(vacancies: UnifiedVacancy[]): VacancyCluster[] 
 }
 
 export async function clusterVacanciesAsync(
-  vacancies: UnifiedVacancy[],
+  vacancies: Iterable<UnifiedVacancy>,
   chunkSize = 500,
 ): Promise<VacancyCluster[]> {
   const clusters: VacancyCluster[] = [];

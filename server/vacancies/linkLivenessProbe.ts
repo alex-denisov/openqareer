@@ -108,7 +108,10 @@ export function isPublicHttpUrl(raw: string): boolean {
   return !PRIVATE_HOST_PATTERNS.some((pattern) => pattern.test(host));
 }
 
-function hasProbableLink(vacancy: UnifiedVacancy): boolean {
+/** Обходу нужны только идентификатор и адрес; остальная запись в куче не нужна (B221). */
+export type ProbeableVacancy = Pick<UnifiedVacancy, 'id' | 'url'>;
+
+function hasProbableLink(vacancy: ProbeableVacancy): boolean {
   return isPublicHttpUrl(vacancy.url?.trim() ?? '');
 }
 
@@ -117,17 +120,17 @@ function hasProbableLink(vacancy: UnifiedVacancy): boolean {
  * начало ленты — самые свежие объявления, и по ним доля открывающихся ссылок
  * всегда была бы выше, чем по площадке в целом.
  */
-export function sampleForLinkCheck(
-  vacancies: readonly UnifiedVacancy[],
+export function sampleForLinkCheck<T extends ProbeableVacancy>(
+  vacancies: readonly T[],
   size: number,
-): UnifiedVacancy[] {
+): T[] {
   const withLink = vacancies.filter(hasProbableLink);
   const wanted = Math.max(0, Math.floor(size));
   if (wanted === 0) return [];
   if (withLink.length <= wanted) return [...withLink];
 
   const step = Math.floor(withLink.length / wanted);
-  const sample: UnifiedVacancy[] = [];
+  const sample: T[] = [];
   for (let index = 0; index < withLink.length && sample.length < wanted; index += step) {
     sample.push(withLink[index]!);
   }
@@ -148,7 +151,7 @@ export interface LinkProbeReport {
 
 /** Обходит выборку ссылок площадки и считает, сколько из них ещё открывается. */
 export async function probeVacancyLinks(
-  vacancies: readonly UnifiedVacancy[],
+  vacancies: readonly ProbeableVacancy[],
   probe: LinkProbe,
   options: LinkProbeOptions = {},
 ): Promise<LinkProbeReport> {
