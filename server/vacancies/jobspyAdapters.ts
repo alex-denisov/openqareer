@@ -133,14 +133,15 @@ function parseBdjobsDate(job: JsonRecord): string {
 
 function parseBdjobsJob(item: unknown, context: JsonAdapterContext, sourceId: string): UnifiedVacancy {
   const job = record(item);
-  const externalId = text(job.JobId) || text(job.job_id) || text(job.id);
-  const title = text(job.JobTitle) || text(job.job_title) || text(job.title);
+  const externalId = text(job.JobId) || text(job.job_id) || text(job.jobid) || text(job.id);
+  const title = text(job.JobTitle) || text(job.job_title) || text(job.jobtitle) || text(job.title);
   const company =
     text(job.CompnayName) ||
     text(job.CompanyName) ||
     text(job.company_name) ||
+    text(job.companyname) ||
     text(job.company);
-  const location = text(job.JobLocation) || text(job.location) || undefined;
+  const location = text(job.JobLocation) || text(job.job_location) || text(job.location) || undefined;
   const url =
     text(job.url) ||
     text(job.job_url) ||
@@ -184,13 +185,13 @@ export function normalizeBdjobsJobs(
 }
 
 function parseZipRecruiterSalary(job: JsonRecord): ParsedSalary | undefined {
-  const from = numeric(job.compensation_min);
-  const to = numeric(job.compensation_max);
+  const from = numeric(job.compensation_min) ?? numeric(job.salary_min);
+  const to = numeric(job.compensation_max) ?? numeric(job.salary_max);
   if (from === undefined && to === undefined) return undefined;
   return {
     from,
     to,
-    currency: text(job.compensation_currency) || 'USD',
+    currency: text(job.compensation_currency) || text(job.salary_currency) || 'USD',
   };
 }
 
