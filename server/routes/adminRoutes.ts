@@ -338,19 +338,6 @@ function registerCrawlFilter(app: FastifyInstance, deps: RouteDeps): void {
  * Размер кучи и пула — устройство инфраструктуры; наружу в `/health` его не
  * отдаём, читает только администратор (B220, ревью безопасности).
  */
-/**
- * Список идёт запросом к базе по всему пулу (B221): частота ограничена, чтобы
- * серия поисков админа не заняла цикл событий у всех остальных.
- */
-function registerVacancyList(app: FastifyInstance, deps: RouteDeps): void {
-  app.get(
-    '/api/v1/admin/vacancies',
-    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
-    withDeps(deps, handleGetVacancies),
-  );
-  app.get('/api/v1/admin/vacancies/:vacancyId', withDeps(deps, handleGetVacancy));
-}
-
 function registerRuntimeMemory(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/admin/runtime-memory', async (request, reply) => {
     const principal = requireAdmin(deps, request, reply);
@@ -381,7 +368,14 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
   app.delete('/api/v1/admin/users/:userId', withDeps(deps, handleDeleteUser));
   app.get('/api/v1/admin/audit', withDeps(deps, handleListAudit));
 
-  registerVacancyList(app, deps);
+  // Список идёт запросом к базе по всему пулу (B221): частота ограничена,
+  // чтобы серия поисков админа не заняла цикл событий у всех остальных.
+  app.get(
+    '/api/v1/admin/vacancies',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    withDeps(deps, handleGetVacancies),
+  );
+  app.get('/api/v1/admin/vacancies/:vacancyId', withDeps(deps, handleGetVacancy));
   app.get('/api/v1/admin/vacancy-sources', async (request, reply) => {
     const principal = requireAdmin(deps, request, reply);
     if (!principal) return;
