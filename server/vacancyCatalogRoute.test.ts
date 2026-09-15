@@ -4,7 +4,7 @@ import { buildApp } from './app';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
 import type { UnifiedVacancy } from './domain/unifiedVacancy';
-import { MemoryVacancyPoolStore } from './vacancies/memoryVacancyPoolStore';
+import type { VacancyPoolStore } from './vacancies/vacancyPoolStore';
 
 function vacancy(index: number, overrides: Partial<UnifiedVacancy> = {}): UnifiedVacancy {
   return {
@@ -13,8 +13,7 @@ function vacancy(index: number, overrides: Partial<UnifiedVacancy> = {}): Unifie
     title: 'Frontend Developer',
     // Разные работодатели: одинаковые слились бы в один кластер, и список не
     // набрал бы порога публикации.
-    company:
-      ['Acme', 'Globex', 'Initech', 'Umbrella', 'Hooli', 'Vandelay'][index] ?? `Company ${index}`,
+    company: ['Acme', 'Globex', 'Initech', 'Umbrella', 'Hooli', 'Vandelay'][index] ?? `Company ${index}`,
     location: 'Berlin',
     isRemote: false,
     description: `Полное описание вакансии номер ${index}. `.repeat(20),
@@ -44,13 +43,14 @@ function vacancy(index: number, overrides: Partial<UnifiedVacancy> = {}): Unifie
  * с движком, чей пул уже наполнен.
  */
 async function appWithPool(vacancies: readonly UnifiedVacancy[]) {
-  const pool = new MemoryVacancyPoolStore();
-  for (const sourceId of new Set(vacancies.map((v) => v.provenance.sourceId))) {
-    pool.replaceSourceSlice(
-      sourceId,
-      vacancies.filter((v) => v.provenance.sourceId === sourceId),
-    );
-  }
+  const pool: VacancyPoolStore = {
+    loadVacancies: () => [...vacancies],
+    loadSourceStates: () => [],
+    replaceSourceSlice: () => {},
+    saveSourceState: () => {},
+    prune: () => {},
+    markExpired: () => 0,
+  };
   const engine = new MultiSourceVacancyEngine({ pool });
   engine.restore();
   const candidateStore = new SqliteCandidateStore({
@@ -75,9 +75,7 @@ describe('B209: публичный каталог вакансий', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('text/html');
     expect(response.body.startsWith('<!doctype html>')).toBe(true);
-    expect(response.body).toContain(
-      '<link rel="canonical" href="https://openqareer.com/vacancies">',
-    );
+    expect(response.body).toContain('<link rel="canonical" href="https://openqareer.com/vacancies">');
     expect(response.body).toContain('"@type":"ItemList"');
   });
 
@@ -117,9 +115,7 @@ describe('B209: публичный каталог вакансий', () => {
     for (const url of ['/vacancies/page/abc', '/vacancies/page/-2', '/vacancies/page/0']) {
       const response = await app.inject({ method: 'GET', url });
       expect(response.statusCode, url).toBe(200);
-      expect(response.body).toContain(
-        '<link rel="canonical" href="https://openqareer.com/vacancies">',
-      );
+      expect(response.body).toContain('<link rel="canonical" href="https://openqareer.com/vacancies">');
     }
   });
 

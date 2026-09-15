@@ -678,45 +678,6 @@ ALTER TABLE vacancy_pool ADD COLUMN expired_at TEXT;
 `;
 
 /**
- * B221 — пул читается из базы, а не из кучи. Узкая таблица рядом с
- * `vacancy_pool`: всё, по чему хранилище отвечает на вопросы движка без
- * разбора `payload` — окно свежести, срез площадки по дате наблюдения (B219),
- * доля активных, флаг удалёнки, ссылка для обхода живости, поисковая строка
- * админки и признак похороненности.
- *
- * ЗАЧЕМ ОТДЕЛЬНАЯ ТАБЛИЦА. Колонка, добавленная в `vacancy_pool` после
- * `payload`, лежит в строке за ним, и любой фильтр по ней читает всю таблицу
- * вместе с текстами: на 100 000 записей это 1,2 ГБ и 7 с на запрос (замер
- * 2026-09-15). Узкая строка читается целиком за десятки миллисекунд, а
- * `payload` берётся точечно только для выбранной страницы.
- *
- * `expired` дублирует `expired_at` основной таблицы по той же причине — та
- * колонка тоже лежит за `payload`. Обе меняются в одной транзакции.
- * Регистр поисковой строки снят на стороне JavaScript: `lower()` SQLite знает
- * только латиницу. Строки, записанные до B221, дочитываются из `payload`
- * фоновым проходом при старте.
- */
-export const VACANCY_POOL_INDEX_TABLE = `
-CREATE TABLE IF NOT EXISTS vacancy_pool_index (
-  id TEXT PRIMARY KEY,
-  source_id TEXT NOT NULL,
-  published_ms INTEGER,
-  observed_ms INTEGER,
-  is_active INTEGER NOT NULL,
-  is_remote INTEGER,
-  url TEXT NOT NULL,
-  search_text TEXT NOT NULL,
-  expired INTEGER NOT NULL DEFAULT 0
-) STRICT;
-CREATE INDEX IF NOT EXISTS vacancy_pool_index_fresh
-  ON vacancy_pool_index(published_ms, id) WHERE expired = 0;
-CREATE INDEX IF NOT EXISTS vacancy_pool_index_source
-  ON vacancy_pool_index(source_id, observed_ms) WHERE expired = 0;
-CREATE INDEX IF NOT EXISTS vacancy_pool_index_source_fresh
-  ON vacancy_pool_index(source_id, published_ms) WHERE expired = 0;
-`;
-
-/**
  * B180 срез 2 — выбранная роль как версионированный объект «Стратегия».
  *
  * Одна строка на кандидата: текущая версия и вся история решений лежат в одном

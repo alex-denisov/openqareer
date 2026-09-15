@@ -131,7 +131,7 @@ const hhCrawlCoordinator: HhCrawlCoordinator = new HhCrawlCoordinator(hhCrawlSet
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   // Быстрый проход останавливается на странице, где пул всё уже знает (B219).
   // Движок собирается ниже, поэтому спрашивается через замыкание, а не значением.
-  isKnown: (id: string): boolean => multiSourceEngine.hasVacancy(id),
+  isKnown: (id: string): boolean => multiSourceEngine.getVacancy(id) !== undefined,
 });
 const multiSourceEngine: MultiSourceVacancyEngine = new MultiSourceVacancyEngine({
   fetcher: buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies, hhCrawlCoordinator),
@@ -158,7 +158,7 @@ const app = await buildApp({
       ingestPaused: memoryGuard.isPaused,
       heapUsedMb: Math.round(heap.heapUsedBytes / (1024 * 1024)),
       heapLimitMb: Math.round(heap.heapLimitBytes / (1024 * 1024)),
-      poolSize: multiSourceEngine.poolSize,
+      poolSize: multiSourceEngine.rawVacancyCount,
     };
   },
   careerCommandExecutor,
@@ -215,8 +215,7 @@ function runVacancyRefresh(): void {
 // слилось бы с полупустым срезом и записало его в базу как полный (B219).
 let vacancyPoolRestored = false;
 
-// Выше порога кучи опросы замирают, а не роняют службу (B220). Пул с B221
-// живёт в базе; в куче остаются кластеры и вход сведения на время сборки.
+// Пул живёт в куче; выше порога опросы замирают, а не роняют службу (B220).
 const memoryGuard = new MemoryGuard(readProcessHeap);
 
 function runMultiSourceSync(): void {
@@ -227,7 +226,7 @@ function runMultiSourceSync(): void {
       {
         heapUsedMb: memory.heapUsedMb,
         heapLimitMb: memory.heapLimitMb,
-        poolSize: multiSourceEngine.poolSize,
+        poolSize: multiSourceEngine.rawVacancyCount,
       },
       memory.paused ? 'multi-source-sync-paused-memory' : 'multi-source-sync-resumed-memory',
     );

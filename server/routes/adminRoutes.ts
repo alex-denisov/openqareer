@@ -182,19 +182,21 @@ async function handleGetVacancies(deps: RouteDeps, request: FastifyRequest, repl
   if (!principal) return;
   const query = adminVacancyQuerySchema.parse(request.query ?? {});
   // Целиком выборка до консоли не доезжает: маршрут рвёт ответ примерно на
-  // 20 220 байтах при любом `limit` (INC-032). Фильтры считает хранилище, а
-  // в кучу поднимается только запрошенная страница (B221); наружу уходит её
-  // краткий вид внутри доказанного бюджета.
-  const { total, items, statsBySource } = deps.multiSourceEngine.getVacancies(query);
-  const page = buildAdminVacancyPage(items, 0, query.limit);
-  const nextOffset = query.offset + page.items.length;
+  // 20 220 байтах при любом `limit` (INC-032). Фильтры считаются по всему пулу,
+  // а наружу уходит страница краткого вида внутри доказанного бюджета.
+  const { total, items, statsBySource } = deps.multiSourceEngine.getVacancies({
+    ...query,
+    offset: 0,
+    limit: Number.MAX_SAFE_INTEGER,
+  });
+  const page = buildAdminVacancyPage(items, query.offset, query.limit);
   return {
     data: {
       total,
       items: page.items,
       statsBySource,
-      offset: query.offset,
-      nextOffset: nextOffset < total ? nextOffset : null,
+      offset: page.offset,
+      nextOffset: page.nextOffset,
     },
     meta: { requestId: request.id },
   };
@@ -368,13 +370,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
   app.delete('/api/v1/admin/users/:userId', withDeps(deps, handleDeleteUser));
   app.get('/api/v1/admin/audit', withDeps(deps, handleListAudit));
 
-  // Список идёт запросом к базе по всему пулу (B221): частота ограничена,
-  // чтобы серия поисков админа не заняла цикл событий у всех остальных.
-  app.get(
-    '/api/v1/admin/vacancies',
-    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
-    withDeps(deps, handleGetVacancies),
-  );
+  app.get('/api/v1/admin/vacancies', withDeps(deps, handleGetVacancies));
   app.get('/api/v1/admin/vacancies/:vacancyId', withDeps(deps, handleGetVacancy));
   app.get('/api/v1/admin/vacancy-sources', async (request, reply) => {
     const principal = requireAdmin(deps, request, reply);

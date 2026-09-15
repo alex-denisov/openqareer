@@ -1,23 +1,14 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
+import { DatabaseSync } from 'node:sqlite';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import {
   MIGRATION_23,
   VACANCY_POOL_EXPIRED_AT_COLUMN,
-  VACANCY_POOL_INDEX_TABLE,
   VACANCY_SOURCE_OBSERVATIONS_COLUMN,
 } from '../data/sqliteSchema';
 import type { SourceObservations } from './sourceHealthVerdict';
-import {
-  normalizeQuery,
-  parseMs,
-  searchTextOf,
-  type FreshnessWindow,
-  type VacancyPoolPage,
-  type VacancyPoolQuery,
-} from './vacancyPoolQuery';
-import type { StoredSourceState, VacancyLink, VacancyPoolStore } from './vacancyPoolStore';
+import type { StoredSourceState, VacancyPoolStore } from './vacancyPoolStore';
 
 interface VacancyRow {
   payload: string;
@@ -35,15 +26,6 @@ interface SourceStateRow {
 
 const SOURCE_STATUSES = new Set(['healthy', 'degraded', 'error']);
 
-/** Сколько строк дочитывается из `payload` за один шаг фонового прохода. */
-export const BACKFILL_CHUNK = 2_000;
-
-/** Живые строки индекса: похороненная запись из пула не отдаётся (B200 срез 2). */
-const ALIVE = 'i.expired = 0';
-const FRESH = `${ALIVE} AND i.published_ms BETWEEN ? AND ?`;
-/** Запись целиком по живой строке индекса. */
-const PAYLOAD_OF = 'SELECT p.payload FROM vacancy_pool_index i JOIN vacancy_pool p ON p.id = i.id';
-
 /**
  * Наблюдения лежат одним JSON-значением, как `payload` у самой вакансии.
  * Запись, которую не удалось прочитать, наблюдением не считается: обнулённая
@@ -60,41 +42,13 @@ function parseObservations(raw: string | null): SourceObservations | undefined {
   }
 }
 
-function flag(value: boolean | undefined): number | null {
-  return value === undefined ? null : value ? 1 : 0;
-}
-
-/**
- * Строка индекса записи (B221). Считается один раз при записи — теми же
- * функциями, которыми пул в памяти отвечает на запросы, чтобы обе реализации
- * не разошлись.
- */
-function indexColumns(vacancy: UnifiedVacancy, sourceId: string): SQLInputValue[] {
-  return [
-    vacancy.id,
-    sourceId,
-    parseMs(vacancy.publishedAt) ?? null,
-    parseMs(vacancy.provenance.observedAt) ?? null,
-    vacancy.status === 'active' ? 1 : 0,
-    flag(vacancy.isRemote),
-    typeof vacancy.url === 'string' ? vacancy.url : '',
-    searchTextOf(vacancy),
-  ];
-}
-
 /**
  * The vacancy pool on disk. Opens its own connection to the same file the
  * candidate store uses, the way the auth service does, so the tables are
  * created by the process that actually owns the pool (B164).
- *
- * Since B221 the engine reads the pool from here instead of a copy in the
- * heap: counts, pages and point lookups are SQL, and memory follows the size
- * of a request rather than the size of the pool.
  */
 export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private readonly database: DatabaseSync;
-  /** Докуда дошёл фоновый проход по `rowid`: каждый шаг начинает с него, а не с начала таблицы. */
-  private backfillCursor = 0;
 
   constructor(options: { databasePath: string }) {
     if (options.databasePath !== ':memory:') {
@@ -104,97 +58,21 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec('PRAGMA journal_mode = WAL;');
     this.database.exec('PRAGMA foreign_keys = ON;');
     this.database.exec(MIGRATION_23);
-    this.ensureColumn('vacancy_source_state', 'observations', VACANCY_SOURCE_OBSERVATIONS_COLUMN);
-    this.ensureColumn('vacancy_pool', 'expired_at', VACANCY_POOL_EXPIRED_AT_COLUMN);
-    this.database.exec(VACANCY_POOL_INDEX_TABLE);
+    this.ensureObservationsColumn();
+    this.ensureExpiredAtColumn();
   }
 
   /**
-   * Достраивает колонку на базе, созданной раньше неё. `MIGRATION_23` обязан
-   * оставаться идемпотентным, а `ADD COLUMN IF NOT EXISTS` в SQLite нет —
-   * поэтому наличие колонки проверяется явно.
+   * Снятое объявление из пула не отдаётся, но и не удаляется: строка с датой
+   * смерти — доказательство, что мы его видели и что его больше нет (B200
+   * срез 2).
    */
-  private ensureColumn(table: string, column: string, ddl: string): void {
-    const columns = this.database.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{
-      name: string;
-    }>;
-    if (columns.some((existing) => existing.name === column)) return;
-    this.database.exec(ddl);
-  }
-
-  /**
-   * Сколько записей ещё без строки индекса: сделанные до B221. Ноль — база
-   * готова отвечать на запросы целиком.
-   */
-  pendingBackfill(): number {
-    const row = this.database
-      .prepare(
-        `SELECT count(*) AS n FROM vacancy_pool p
-          WHERE NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = p.id)`,
-      )
-      .get() as { n: number };
-    return row.n;
-  }
-
-  /**
-   * Один шаг дочитывания: разбирает `payload` у порции записей без строки
-   * индекса и заводит её. Возвращает, сколько строк обработано; ноль — всё
-   * готово. Идёт порциями, чтобы вызывающий мог уступать цикл событий между
-   * шагами: на проде это 170 000 строк, и целиком они заняли бы окно проверки
-   * здоровья.
-   */
-  backfillStep(chunk: number = BACKFILL_CHUNK): number {
-    // Курсор по `rowid`: без него каждый шаг заново перебирал бы уже
-    // проиндексированные строки, и проход был бы квадратным.
-    const rows = this.database
-      .prepare(
-        `SELECT p.rowid AS rowid, p.id, p.source_id, p.payload, p.expired_at
-           FROM vacancy_pool p
-          WHERE p.rowid > ?
-            AND NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = p.id)
-          ORDER BY p.rowid LIMIT ?`,
-      )
-      .all(this.backfillCursor, chunk) as unknown as Array<{
-      rowid: number;
-      id: string;
-      source_id: string;
-      payload: string;
-      expired_at: string | null;
-    }>;
-    if (rows.length === 0) {
-      this.backfillCursor = 0;
-      return 0;
-    }
-    const insert = this.prepareIndexUpsert();
-    const remove = this.database.prepare('DELETE FROM vacancy_pool WHERE id = ?');
-    this.inTransaction(() => {
-      for (const row of rows) {
-        // Строка, которую нельзя прочитать или проиндексировать, вакансией не
-        // является — раньше её молча пропускал `restore`, теперь она уходит из
-        // базы. Ключ индекса — ключ строки, а не поле из текста: иначе строка,
-        // чей текст называет другой идентификатор, оставалась бы без индекса
-        // навсегда, и проход не кончался бы.
-        const vacancy = parseVacancy(row.payload);
-        if (!vacancy) {
-          remove.run(row.id);
-          continue;
-        }
-        // Любая другая ошибка — не повод тихо удалять строку: она всплывает
-        // в лог старта, а проход повторится на следующем запуске.
-        insert.run(
-          ...indexColumns({ ...vacancy, id: row.id }, row.source_id),
-          row.expired_at === null ? 0 : 1,
-        );
-      }
-    });
-    this.backfillCursor = rows[rows.length - 1]!.rowid;
-    return rows.length;
-  }
-
-  private readVacancies(sql: string, params: SQLInputValue[]): UnifiedVacancy[] {
-    const statement = this.database.prepare(sql);
+  loadVacancies(): UnifiedVacancy[] {
+    const statement = this.database.prepare(
+      'SELECT payload FROM vacancy_pool WHERE expired_at IS NULL',
+    );
     const vacancies: UnifiedVacancy[] = [];
-    for (const row of statement.iterate(...params) as IterableIterator<VacancyRow>) {
+    for (const row of statement.iterate() as IterableIterator<VacancyRow>) {
       const parsed = parseVacancy(row.payload);
       // A row we cannot read back is not a vacancy we may serve: dropping it
       // keeps the pool honest instead of surfacing a half-decoded card.
@@ -203,106 +81,29 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return vacancies;
   }
 
-  loadVacancies(window?: FreshnessWindow): UnifiedVacancy[] {
-    return window
-      ? this.readVacancies(`${PAYLOAD_OF} WHERE ${FRESH}`, [window.fromMs, window.toMs])
-      : this.readVacancies(`${PAYLOAD_OF} WHERE ${ALIVE}`, []);
+  /**
+   * Достраивает колонку наблюдений на базе, созданной до B200. `MIGRATION_23`
+   * обязан оставаться идемпотентным, а `ADD COLUMN IF NOT EXISTS` в SQLite
+   * нет — поэтому наличие колонки проверяется явно.
+   */
+  private ensureObservationsColumn(): void {
+    const columns = this.database
+      .prepare('PRAGMA table_info(vacancy_source_state)')
+      .all() as unknown as Array<{ name: string }>;
+    if (columns.some((column) => column.name === 'observations')) return;
+    this.database.exec(VACANCY_SOURCE_OBSERVATIONS_COLUMN);
   }
 
   /**
-   * Свежие записи по одной: курсор базы остаётся открытым, пока сведение идёт
-   * и уступает цикл событий, а в куче в каждый момент — одна разобранная
-   * запись сверх того, что держит само сведение.
+   * Достраивает колонку даты смерти на базе, созданной до среза 2 — по той же
+   * причине, что и колонку наблюдений: `ADD COLUMN IF NOT EXISTS` в SQLite нет.
    */
-  *iterateVacancies(window: FreshnessWindow): IterableIterator<UnifiedVacancy> {
-    const statement = this.database.prepare(`${PAYLOAD_OF} WHERE ${FRESH}`);
-    for (const row of statement.iterate(
-      window.fromMs,
-      window.toMs,
-    ) as IterableIterator<VacancyRow>) {
-      const parsed = parseVacancy(row.payload);
-      if (parsed) yield parsed;
-    }
-  }
-
-  getVacancy(id: string): UnifiedVacancy | undefined {
-    return this.readVacancies(`${PAYLOAD_OF} WHERE i.id = ? AND ${ALIVE}`, [id])[0];
-  }
-
-  hasVacancy(id: string): boolean {
-    return (
-      this.database
-        .prepare(`SELECT 1 FROM vacancy_pool_index i WHERE i.id = ? AND ${ALIVE}`)
-        .get(id) !== undefined
-    );
-  }
-
-  countVacancies(window: FreshnessWindow): number {
-    const row = this.database
-      .prepare(`SELECT count(*) AS n FROM vacancy_pool_index i WHERE ${FRESH}`)
-      .get(window.fromMs, window.toMs) as { n: number };
-    return row.n;
-  }
-
-  countBySource(window: FreshnessWindow): ReadonlyMap<string, number> {
-    const rows = this.database
-      .prepare(
-        // Окно свежести обычно накрывает весь пул, а планировщик считает его
-        // узким и лезет за каждой строкой: покрывающий индекс называется явно.
-        `SELECT i.source_id, count(*) AS n
-           FROM vacancy_pool_index i INDEXED BY vacancy_pool_index_source_fresh
-          WHERE ${FRESH} GROUP BY i.source_id`,
-      )
-      .all(window.fromMs, window.toMs) as unknown as Array<{ source_id: string; n: number }>;
-    return new Map(rows.map((row) => [row.source_id, row.n]));
-  }
-
-  countSourceSlice(sourceId: string): { total: number; active: number } {
-    const row = this.database
-      .prepare(
-        `SELECT count(*) AS total, coalesce(sum(i.is_active), 0) AS active
-           FROM vacancy_pool_index i WHERE i.source_id = ? AND ${ALIVE}`,
-      )
-      .get(sourceId) as { total: number; active: number };
-    return { total: row.total, active: row.active };
-  }
-
-  queryVacancies(query: VacancyPoolQuery): VacancyPoolPage {
-    if (query.sourceIds && query.sourceIds.length === 0) return { total: 0, items: [] };
-    const where: string[] = [FRESH];
-    const params: SQLInputValue[] = [query.window.fromMs, query.window.toMs];
-    if (query.sourceIds) {
-      where.push(`i.source_id IN (${query.sourceIds.map(() => '?').join(', ')})`);
-      params.push(...query.sourceIds);
-    }
-    if (query.isRemote !== undefined) {
-      where.push('i.is_remote = ?');
-      params.push(query.isRemote ? 1 : 0);
-    }
-    const needle = normalizeQuery(query.query);
-    if (needle !== undefined) {
-      where.push('instr(i.search_text, ?) > 0');
-      params.push(needle);
-    }
-    const condition = where.join(' AND ');
-    const total = (
-      this.database
-        .prepare(`SELECT count(*) AS n FROM vacancy_pool_index i WHERE ${condition}`)
-        .get(...params) as { n: number }
-    ).n;
-    // Фильтр и порядок — по узкому индексу; тексты читаются только у страницы.
-    const items = this.readVacancies(
-      `${PAYLOAD_OF} WHERE ${condition}
-        ORDER BY i.published_ms DESC, i.id ASC LIMIT ? OFFSET ?`,
-      [...params, query.limit, query.offset],
-    );
-    return { total, items };
-  }
-
-  loadSourceLinks(sourceId: string): VacancyLink[] {
-    return this.database
-      .prepare(`SELECT i.id, i.url FROM vacancy_pool_index i WHERE i.source_id = ? AND ${ALIVE}`)
-      .all(sourceId) as unknown as VacancyLink[];
+  private ensureExpiredAtColumn(): void {
+    const columns = this.database
+      .prepare('PRAGMA table_info(vacancy_pool)')
+      .all() as unknown as Array<{ name: string }>;
+    if (columns.some((column) => column.name === 'expired_at')) return;
+    this.database.exec(VACANCY_POOL_EXPIRED_AT_COLUMN);
   }
 
   /**
@@ -312,17 +113,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    */
   markExpired(vacancyIds: readonly string[], atIso: string): number {
     if (vacancyIds.length === 0) return 0;
-    const bury = this.database.prepare(
+    const statement = this.database.prepare(
       'UPDATE vacancy_pool SET expired_at = ? WHERE id = ? AND expired_at IS NULL',
-    );
-    const mark = this.database.prepare(
-      'UPDATE vacancy_pool_index SET expired = 1 WHERE id = ? AND expired = 0',
     );
     let buried = 0;
     this.inTransaction(() => {
       for (const id of vacancyIds) {
-        buried += Number(bury.run(atIso, id).changes);
-        mark.run(id);
+        buried += Number(statement.run(atIso, id).changes);
       }
     });
     return buried;
@@ -351,12 +148,14 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     }));
   }
 
-  /**
-   * Запись обновляется целиком, кроме даты смерти: похороненное объявление,
-   * которое площадка показала снова, остаётся похороненным (B200 срез 2).
-   */
-  private prepareUpsert() {
-    return this.database.prepare(
+  replaceSourceSlice(sourceId: string, vacancies: UnifiedVacancy[]): void {
+    const storedAt = new Date().toISOString();
+    // Похороненная запись переживает замену среза: иначе доказательство
+    // смерти стиралось бы следующим же опросом площадки (B200 срез 2).
+    const remove = this.database.prepare(
+      'DELETE FROM vacancy_pool WHERE source_id = ? AND expired_at IS NULL',
+    );
+    const insert = this.database.prepare(
       `INSERT INTO vacancy_pool (id, source_id, published_at, stored_at, payload)
        VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
@@ -365,78 +164,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
          stored_at = excluded.stored_at,
          payload = excluded.payload`,
     );
-  }
-
-  /**
-   * Строка индекса при повторе обновляется так же — кроме признака
-   * похороненности. Первичная запись берёт его у строки пула: та уже может
-   * быть похоронена, но ещё не проиндексирована (проход после B221 идёт).
-   */
-  private prepareIndexUpsert() {
-    return this.database.prepare(
-      `INSERT INTO vacancy_pool_index (
-         id, source_id, published_ms, observed_ms, is_active, is_remote, url, search_text, expired
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, coalesce(
-         (SELECT p.expired_at IS NOT NULL FROM vacancy_pool p WHERE p.id = ?1), ?9))
-       ON CONFLICT(id) DO UPDATE SET
-         source_id = excluded.source_id,
-         published_ms = excluded.published_ms,
-         observed_ms = excluded.observed_ms,
-         is_active = excluded.is_active,
-         is_remote = excluded.is_remote,
-         url = excluded.url,
-         search_text = excluded.search_text`,
-    );
-  }
-
-  private upsertAll(sourceId: string, vacancies: readonly UnifiedVacancy[]): void {
-    const storedAt = new Date().toISOString();
-    const insert = this.prepareUpsert();
-    const index = this.prepareIndexUpsert();
-    for (const vacancy of vacancies) {
-      insert.run(vacancy.id, sourceId, vacancy.publishedAt, storedAt, JSON.stringify(vacancy));
-      index.run(...indexColumns(vacancy, sourceId), 0);
-    }
-  }
-
-  replaceSourceSlice(sourceId: string, vacancies: readonly UnifiedVacancy[]): void {
-    // Похороненная запись переживает замену среза: иначе доказательство
-    // смерти стиралось бы следующим же опросом площадки (B200 срез 2).
-    // Срез снимается по собственным колонкам пула, а не по индексу: строка,
-    // ещё не дошедшая до индекса (проход после B221), иначе пережила бы замену.
-    const removeIndex = this.database.prepare(
-      `DELETE FROM vacancy_pool_index WHERE id IN
-         (SELECT id FROM vacancy_pool WHERE source_id = ? AND expired_at IS NULL)`,
-    );
-    const remove = this.database.prepare(
-      'DELETE FROM vacancy_pool WHERE source_id = ? AND expired_at IS NULL',
-    );
     this.inTransaction(() => {
-      removeIndex.run(sourceId);
       remove.run(sourceId);
-      this.upsertAll(sourceId, vacancies);
-    });
-  }
-
-  mergeSourceSlice(
-    sourceId: string,
-    vacancies: readonly UnifiedVacancy[],
-    dropObservedBefore?: string,
-  ): void {
-    const dropBeforeMs = parseMs(dropObservedBefore);
-    this.inTransaction(() => {
-      this.upsertAll(sourceId, vacancies);
-      if (dropBeforeMs === undefined) return;
-      // Полное перечисление, растянутое на тики, закончилось: запись, которую
-      // не видел ни один тик с его начала, площадка больше не показывает (B219).
-      const gone = `SELECT i.id FROM vacancy_pool_index i WHERE i.source_id = ? AND ${ALIVE}
-             AND (i.observed_ms IS NULL OR i.observed_ms < ?)`;
-      this.database
-        .prepare(`DELETE FROM vacancy_pool WHERE id IN (${gone})`)
-        .run(sourceId, dropBeforeMs);
-      this.database
-        .prepare(`DELETE FROM vacancy_pool_index WHERE id IN (${gone})`)
-        .run(sourceId, dropBeforeMs);
+      for (const vacancy of vacancies) {
+        insert.run(
+          vacancy.id,
+          sourceId,
+          vacancy.publishedAt,
+          storedAt,
+          JSON.stringify(vacancy),
+        );
+      }
     });
   }
 
@@ -474,19 +212,16 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       const placeholders = knownSourceIds.map(() => '?').join(', ');
       if (knownSourceIds.length === 0) {
         this.database.exec('DELETE FROM vacancy_pool');
-        this.database.exec('DELETE FROM vacancy_pool_index');
         this.database.exec('DELETE FROM vacancy_source_state');
         return;
       }
       this.database
         .prepare(`DELETE FROM vacancy_pool WHERE source_id NOT IN (${placeholders})`)
         .run(...knownSourceIds);
-      // Индекс следует за таблицей: строка без записи — это не запись.
-      this.database.exec(
-        `DELETE FROM vacancy_pool_index WHERE id NOT IN (SELECT id FROM vacancy_pool)`,
-      );
       this.database
-        .prepare(`DELETE FROM vacancy_source_state WHERE source_id NOT IN (${placeholders})`)
+        .prepare(
+          `DELETE FROM vacancy_source_state WHERE source_id NOT IN (${placeholders})`,
+        )
         .run(...knownSourceIds);
     });
   }

@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { getEmailError, getNameError, getPasswordError } from '../../shared/accountValidation';
+import {
+  getEmailError,
+  getNameError,
+  getPasswordError,
+} from '../../shared/accountValidation';
 import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
 import { parseProfileUrl } from '../connectors/profileUrlImport';
 import { hhApplicationExecutionTargetSchema } from '../orchestration/careerCommandPlanner';
@@ -109,34 +113,33 @@ export const documentPartSchema = z.object({
     .regex(/^[A-Za-z0-9+/]+={0,2}$/u),
 });
 
-export const candidateDocumentSchema = z
-  .object({
-    kind: z.enum(['resume', 'cover_letter', 'certificate', 'portfolio', 'profile_export', 'other']),
-    source: z.enum(['upload', 'generated', 'import']),
-    fileName: z
-      .string()
-      .trim()
-      .min(1)
-      .max(240)
-      .refine((value) => !hasUnsafeFileNameCharacter(value)),
-    mimeType: z.enum([
-      'application/pdf',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/plain',
-      'application/json',
-    ]),
-    // Либо файл целиком, либо идентификатор загрузки, собранной из частей.
-    contentBase64: z
-      .string()
-      .min(4)
-      .max(7_100_000)
-      .regex(/^[A-Za-z0-9+/]+={0,2}$/u)
-      .optional(),
-    uploadId: z.string().uuid().optional(),
-    extractedText: z.string().trim().max(200_000).optional(),
-    parseStatus: z.enum(['pending', 'ready', 'failed', 'not_applicable']),
-    replacesDocumentId: z.string().uuid().optional(),
-  })
+export const candidateDocumentSchema = z.object({
+  kind: z.enum(['resume', 'cover_letter', 'certificate', 'portfolio', 'profile_export', 'other']),
+  source: z.enum(['upload', 'generated', 'import']),
+  fileName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(240)
+    .refine((value) => !hasUnsafeFileNameCharacter(value)),
+  mimeType: z.enum([
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
+    'application/json',
+  ]),
+  // Либо файл целиком, либо идентификатор загрузки, собранной из частей.
+  contentBase64: z
+    .string()
+    .min(4)
+    .max(7_100_000)
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/u)
+    .optional(),
+  uploadId: z.string().uuid().optional(),
+  extractedText: z.string().trim().max(200_000).optional(),
+  parseStatus: z.enum(['pending', 'ready', 'failed', 'not_applicable']),
+  replacesDocumentId: z.string().uuid().optional(),
+})
   .refine(
     (value) => Boolean(value.contentBase64) !== Boolean(value.uploadId),
     'Нужен либо файл целиком, либо идентификатор собранной загрузки.',
@@ -181,9 +184,7 @@ export const adminUserPasswordResetSchema = z.object({
 export const adminVacancyQuerySchema = z.object({
   sourceId: z.string().optional(),
   type: z.string().optional(),
-  // Поиск — линейный проход по поисковой строке всего пула в базе (B221);
-  // длина иглы ограничена, чтобы один запрос админа не занял процесс.
-  query: z.string().trim().max(80).optional(),
+  query: z.string().optional(),
   isRemote: z
     .enum(['true', 'false'])
     .transform((v) => v === 'true')
@@ -319,10 +320,10 @@ export const resumeImportSchema = z
         value.sourceReceipt.platform === 'hh'
           ? url.hostname === 'hh.ru' && url.pathname.startsWith('/resume/')
           : (url.hostname === 'linkedin.com' ||
-              url.hostname.endsWith('.linkedin.com') ||
-              url.hostname === 'linkedin.cn' ||
-              url.hostname.endsWith('.linkedin.cn')) &&
-            url.pathname.startsWith('/in/');
+                url.hostname.endsWith('.linkedin.com') ||
+                url.hostname === 'linkedin.cn' ||
+                url.hostname.endsWith('.linkedin.cn')) &&
+              url.pathname.startsWith('/in/');
       if (!matchesPlatform) {
         context.addIssue({
           code: 'custom',
