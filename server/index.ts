@@ -144,9 +144,6 @@ const multiSourceEngine = new MultiSourceVacancyEngine({
   // срез 2).
   linkProbe: createHttpLinkProbe(),
 });
-// The pool the previous process filled is served immediately, so a restart no
-// longer empties «Возможности» until the scheduler's next run (B164).
-const restoredPool = multiSourceEngine.restore();
 const app = await buildApp({
   config,
   coachProvider,
@@ -303,16 +300,20 @@ process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
 try {
   await app.listen({ host: config.host, port: config.port });
-  app.log.info(restoredPool, 'vacancy-pool-restored');
-  // Кластеры собираются уже после того, как сервер начал отвечать: на большом
-  // пуле сборка занимает секунды, и держать ею проверку здоровья выката
-  // нельзя (B218). До сборки чтение пула соберёт их по требованию.
+  // Пул и кластеры восстанавливаются уже после того, как сервер начал отвечать:
+  // на большом пуле (120k+ вакансий) чтение и сведение занимают время, и держать
+  // ими проверку здоровья выката нельзя (B218).
   setImmediate(() => {
     const startedAt = Date.now();
+    const restored = multiSourceEngine.restore();
     multiSourceEngine.recluster();
     app.log.info(
-      { ms: Date.now() - startedAt, clusters: multiSourceEngine.getActiveClusters().length },
-      'vacancy-pool-clustered',
+      {
+        restored: restored.restored,
+        ms: Date.now() - startedAt,
+        clusters: multiSourceEngine.getActiveClusters().length,
+      },
+      'vacancy-pool-restored-and-clustered',
     );
   });
   runVacancyRefresh();

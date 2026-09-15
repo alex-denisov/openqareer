@@ -68,11 +68,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * срез 2).
    */
   loadVacancies(): UnifiedVacancy[] {
-    const rows = this.database
-      .prepare('SELECT payload FROM vacancy_pool WHERE expired_at IS NULL')
-      .all() as unknown as VacancyRow[];
+    const statement = this.database.prepare(
+      'SELECT payload FROM vacancy_pool WHERE expired_at IS NULL',
+    );
     const vacancies: UnifiedVacancy[] = [];
-    for (const row of rows) {
+    for (const row of statement.iterate() as IterableIterator<VacancyRow>) {
       const parsed = parseVacancy(row.payload);
       // A row we cannot read back is not a vacancy we may serve: dropping it
       // keeps the pool honest instead of surfacing a half-decoded card.
