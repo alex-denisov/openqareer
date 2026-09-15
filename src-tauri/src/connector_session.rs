@@ -102,6 +102,47 @@ pub fn is_allowed_session_url(platform: &str, url: &str) -> bool {
     }
 }
 
+/// WebKit asks the navigation delegate about child-frame bootstrap documents
+/// as well as top-level provider pages. Rejecting `about:blank` prevents a
+/// platform-owned CAPTCHA iframe from constructing its document and leaves the
+/// candidate on a permanently blank security check. Entry URLs stay governed
+/// by the stricter `is_allowed_session_url` boundary above.
+pub fn is_allowed_session_navigation_url(platform: &str, url: &str) -> bool {
+    if url == "about:blank" || is_allowed_session_url(platform, url) {
+        return true;
+    }
+    if platform != "linkedin" {
+        return false;
+    }
+    let Ok(parsed) = Url::parse(url) else {
+        return false;
+    };
+    if parsed.scheme() != "https" {
+        return false;
+    }
+    matches!(
+        parsed.host_str().map(str::to_ascii_lowercase).as_deref(),
+        Some("accounts.google.com")
+            | Some("www.google.com")
+            | Some("www.recaptcha.net")
+            | Some("li.protechts.net")
+    )
+}
+
+fn allow_session_navigation(platform: &str, url: &Url) -> bool {
+    let allowed = is_allowed_session_navigation_url(platform, url.as_str());
+    if !allowed {
+        // Host and scheme are enough to maintain the allowlist. Never log the
+        // path, query or fragment: challenge URLs may carry account-bound data.
+        eprintln!(
+            "connector_navigation_rejected platform={platform} scheme={} host={}",
+            url.scheme(),
+            url.host_str().unwrap_or("-")
+        );
+    }
+    allowed
+}
+
 /// LinkedIn is unreachable from some routes, but a proxy that nothing listens on
 /// is worse than no proxy: every request fails at connect time (B149 §4).
 pub fn should_route_through_tunnel(url: &str, tunnel_running: bool) -> bool {
@@ -220,7 +261,7 @@ pub async fn open_session_window(
         .decorations(false)
         .resizable(false)
         .skip_taskbar(true)
-        .on_navigation(move |next_url| is_allowed_session_url(&platform, next_url.as_str()));
+        .on_navigation(move |next_url| allow_session_navigation(&platform, next_url));
 
     builder = match builder.parent(&main_window) {
         Ok(parented) => parented,
@@ -334,9 +375,7 @@ pub async fn reset_session_window(app: &AppHandle, platform: &str) -> bool {
     let Some(label) = session_window_label(platform) else {
         return false;
     };
-    if app.get_webview(label).is_none()
-        && !open_hidden_session_window(app, platform, label).await
-    {
+    if app.get_webview(label).is_none() && !open_hidden_session_window(app, platform, label).await {
         return false;
     }
     let Some(webview) = app.get_webview(label) else {
@@ -361,7 +400,7 @@ async fn open_hidden_session_window(app: &AppHandle, platform: &str, label: &str
         .inner_size(480.0, 360.0)
         .visible(false)
         .skip_taskbar(true)
-        .on_navigation(move |next| is_allowed_session_url(&allowed, next.as_str()))
+        .on_navigation(move |next| allow_session_navigation(&allowed, next))
         .build();
     built.is_ok() && await_registered_window(app, label).await
 }
@@ -595,6 +634,37 @@ mod tests {
         assert!(is_allowed_session_url(
             "hh",
             "https://spb.hh.ru/applicant/resumes"
+        ));
+    }
+
+    #[test]
+    fn allows_an_embedded_blank_document_without_weakening_session_entry_urls() {
+        assert!(is_allowed_session_navigation_url("linkedin", "about:blank"));
+        assert!(!is_allowed_session_url("linkedin", "about:blank"));
+    }
+
+    #[test]
+    fn allows_only_linkedins_measured_sign_in_and_challenge_frame_origins() {
+        for url in [
+            "https://accounts.google.com/gsi/fedcm/listaccounts",
+            "https://www.google.com/recaptcha/api2/anchor",
+            "https://www.recaptcha.net/recaptcha/api2/anchor",
+            "https://li.protechts.net/challenge",
+        ] {
+            assert!(is_allowed_session_navigation_url("linkedin", url));
+            assert!(!is_allowed_session_url("linkedin", url));
+        }
+        for url in [
+            "https://google.com/search",
+            "https://accounts.google.com.evil.tld/",
+            "https://www.google.com.evil.tld/recaptcha",
+            "https://evil.protechts.net/challenge",
+        ] {
+            assert!(!is_allowed_session_navigation_url("linkedin", url));
+        }
+        assert!(!is_allowed_session_navigation_url(
+            "hh",
+            "https://www.google.com/recaptcha/api2/anchor"
         ));
     }
 

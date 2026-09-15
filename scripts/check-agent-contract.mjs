@@ -106,9 +106,9 @@ if (!existsSync(agRule)) {
   problems.push(".agents/rules/00-agents-contract.md отсутствует — current Antigravity не загрузит контракт автоматически");
 }
 
-const deliverySkill = path.join(ROOT, ".agents/skills/openqareer-delivery/SKILL.md");
-if (!existsSync(deliverySkill)) {
-  problems.push("нет openqareer-delivery skill — Antigravity может остановиться после кода или unit-тестов");
+const releaseContract = path.join(ROOT, "docs/agents/project-release.md");
+if (!existsSync(releaseContract)) {
+  problems.push("нет docs/agents/project-release.md — release-задачи потеряют OpenQareer-specific evidence gates");
 }
 
 const legacyAgRule = path.join(ROOT, ".antigravity/rules/00-agents-contract.md");
