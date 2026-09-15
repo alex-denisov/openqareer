@@ -367,7 +367,9 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
         skills: [],
         employmentType,
         url: text(job.url) || `https://${board}.breezy.hr/p/${id}`,
-        publishedAt: fromLooseDate(job.published_at ?? job.updated_at ?? job.created_at),
+        publishedAt: fromLooseDate(
+          job.published_date ?? job.published_at ?? job.updated_at ?? job.created_at,
+        ),
       });
     }),
 
