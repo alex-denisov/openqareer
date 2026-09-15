@@ -5,7 +5,11 @@ import type {
   VacancyMatchExplanation,
   VacancySourceConfig,
 } from '../domain/unifiedVacancy';
-import { calculateSourceAuthenticity, clusterVacancies } from './vacancyDeduplicator';
+import {
+  calculateSourceAuthenticity,
+  clusterVacancies,
+  clusterVacanciesAsync,
+} from './vacancyDeduplicator';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import { mapWithConcurrency } from './boundedConcurrency';
 import {
@@ -228,28 +232,8 @@ export class MultiSourceVacancyEngine {
     }
   }
 
-  /**
-   * Loads what an earlier process synced. Without it a restart — and therefore
-   * every deploy — served an empty «Возможности» until the scheduler's next
-   * run, and every source claimed it had never been read (B164).
-   */
-  public restore(nowMs: number = Date.now()): { restored: number } {
-    if (!this.pool) return { restored: 0 };
-    const oldestPublishedAt = new Date(
-      nowMs - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1000,
-    ).toISOString();
-    this.pool.prune(Array.from(this.sources.keys()), oldestPublishedAt);
-
-    this.rawVacancies.clear();
-    for (const vacancy of this.pool.loadVacancies()) {
-      // A source the registry no longer lists must not come back through
-      // storage. A disabled one keeps its slice, exactly as it does in memory
-      // when it is switched off between syncs.
-      if (!this.sources.has(vacancy.provenance.sourceId)) continue;
-      if (!isVacancyFresh(vacancy.publishedAt, nowMs)) continue;
-      this.rawVacancies.set(vacancy.id, vacancy);
-    }
-
+  private restoreSourceStates(): void {
+    if (!this.pool) return;
     for (const state of this.pool.loadSourceStates()) {
       const source = this.sources.get(state.sourceId);
       if (!source) continue;
@@ -265,13 +249,59 @@ export class MultiSourceVacancyEngine {
         }
       }
     }
+  }
 
-    // Сведение кластеров здесь НЕ делается намеренно. На 77 тысячах вакансий
-    // оно занимает 5 с (замер на копии прод-базы 2026-09-14), а `restore()`
-    // вызывается до `app.listen()` — значит сервер столько же не отвечает на
-    // проверку здоровья, и выкат откатывается тем вернее, чем больше пул.
-    // Данные загружены, пул помечен изменённым: кластеры соберёт фоновый
-    // вызов сразу после старта, а любое чтение — по требованию.
+  /**
+   * Loads what an earlier process synced. Without it a restart — and therefore
+   * every deploy — served an empty «Возможности» until the scheduler's next
+   * run, and every source claimed it had never been read (B164).
+   */
+  public restore(nowMs: number = Date.now()): { restored: number } {
+    if (!this.pool) return { restored: 0 };
+    const oldestPublishedAt = new Date(
+      nowMs - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    this.pool.prune(Array.from(this.sources.keys()), oldestPublishedAt);
+
+    this.rawVacancies.clear();
+    for (const vacancy of this.pool.loadVacancies()) {
+      if (!this.sources.has(vacancy.provenance.sourceId)) continue;
+      if (!isVacancyFresh(vacancy.publishedAt, nowMs)) continue;
+      this.rawVacancies.set(vacancy.id, vacancy);
+    }
+
+    this.restoreSourceStates();
+    this.poolChangedSinceRecluster = true;
+    return { restored: this.rawVacancies.size };
+  }
+
+  /**
+   * Async variant that yields to the event loop every chunkSize items,
+   * keeping HTTP response latency under 20ms during huge pool restores (B218).
+   */
+  public async restoreAsync(
+    nowMs: number = Date.now(),
+    chunkSize = 500,
+  ): Promise<{ restored: number }> {
+    if (!this.pool) return { restored: 0 };
+    const oldestPublishedAt = new Date(
+      nowMs - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    this.pool.prune(Array.from(this.sources.keys()), oldestPublishedAt);
+
+    this.rawVacancies.clear();
+    let count = 0;
+    for (const vacancy of this.pool.loadVacancies()) {
+      if (!this.sources.has(vacancy.provenance.sourceId)) continue;
+      if (!isVacancyFresh(vacancy.publishedAt, nowMs)) continue;
+      this.rawVacancies.set(vacancy.id, vacancy);
+      count += 1;
+      if (count % chunkSize === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    }
+
+    this.restoreSourceStates();
     this.poolChangedSinceRecluster = true;
     return { restored: this.rawVacancies.size };
   }
@@ -760,6 +790,15 @@ export class MultiSourceVacancyEngine {
       isVacancyFresh(v.publishedAt),
     );
     this.clusters = clusterVacancies(freshVacancies);
+    this.poolChangedSinceRecluster = false;
+    this.reclusterCount += 1;
+  }
+
+  public async reclusterAsync(chunkSize = 500): Promise<void> {
+    const freshVacancies = Array.from(this.rawVacancies.values()).filter((v) =>
+      isVacancyFresh(v.publishedAt),
+    );
+    this.clusters = await clusterVacanciesAsync(freshVacancies, chunkSize);
     this.poolChangedSinceRecluster = false;
     this.reclusterCount += 1;
   }

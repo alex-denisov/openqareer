@@ -302,24 +302,31 @@ try {
   await app.listen({ host: config.host, port: config.port });
   // Сервер слушает и отвечает на /health мгновенно (<10 мс).
   // Восстановление 120k+ вакансий из SQLite и сведение кластеров запускаются
-  // через 5 секунд в фоне, не блокируя проверку здоровья выката (B218).
-  setTimeout(() => {
-    const startedAt = Date.now();
-    const restored = multiSourceEngine.restore();
-    multiSourceEngine.recluster();
-    app.log.info(
-      {
-        restored: restored.restored,
-        ms: Date.now() - startedAt,
-        clusters: multiSourceEngine.getActiveClusters().length,
-      },
-      'vacancy-pool-restored-and-clustered',
-    );
-    runVacancyRefresh();
-    runMultiSourceSync();
-    runDocumentRetentionPurge();
-    runRetentionSweep();
-  }, 5_000)?.unref();
+  // через 30 секунд в фоне без блокировки event loop через restoreAsync / reclusterAsync (B218).
+  setTimeout(async () => {
+    try {
+      const startedAt = Date.now();
+      const restored = await multiSourceEngine.restoreAsync();
+      await multiSourceEngine.reclusterAsync();
+      app.log.info(
+        {
+          restored: restored.restored,
+          ms: Date.now() - startedAt,
+          clusters: multiSourceEngine.getActiveClusters().length,
+        },
+        'vacancy-pool-restored-and-clustered',
+      );
+      runVacancyRefresh();
+      runMultiSourceSync();
+      runDocumentRetentionPurge();
+      runRetentionSweep();
+    } catch (err) {
+      app.log.error(
+        { err: err instanceof Error ? err.message : String(err) },
+        'vacancy-pool-restore-failed',
+      );
+    }
+  }, 30_000)?.unref();
   vacancyRefreshTimer = setInterval(runVacancyRefresh, 5 * 60 * 1_000);
   vacancyRefreshTimer.unref();
   // Each source carries its own interval; the tick only asks which are due.

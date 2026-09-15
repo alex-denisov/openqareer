@@ -102,6 +102,15 @@ describe('vacancy pool persistence (B164)', () => {
     );
     expect(restarted.getSource(SOURCE.id)?.lastStatus).toBe('healthy');
     expect(restarted.getSource(SOURCE.id)?.itemsFoundTotal).toBe(2);
+
+    const asyncRestarted = new MultiSourceVacancyEngine({
+      sources: [SOURCE],
+      pool: openStore(path),
+    });
+    const asyncOutcome = await asyncRestarted.restoreAsync(undefined, 1);
+    expect(asyncOutcome.restored).toBe(2);
+    await asyncRestarted.reclusterAsync(1);
+    expect(asyncRestarted.getActiveClusters().length).toBe(2);
   });
 
   it('does not re-serve a vacancy the source stopped returning', async () => {

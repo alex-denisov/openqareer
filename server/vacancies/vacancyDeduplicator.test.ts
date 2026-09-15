@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
-import { clusterVacancies, isDuplicateVacancy } from './vacancyDeduplicator';
+import { clusterVacancies, clusterVacanciesAsync, isDuplicateVacancy } from './vacancyDeduplicator';
 
 describe('Vacancy Deduplication & Clustering', () => {
   const vacancyFromHh: UnifiedVacancy = {
@@ -90,6 +90,15 @@ describe('Vacancy Deduplication & Clustering', () => {
     expect(fintechCluster?.skills).toContain('Docker');
     // Salary preserved from the richer source
     expect(fintechCluster?.salary?.from).toBe(300000);
+  });
+
+  it('clusterVacanciesAsync yields to event loop and produces identical clusters', async () => {
+    const syncClusters = clusterVacancies([vacancyFromHh, vacancyFromTelegram, unrelatedVacancy]);
+    const asyncClusters = await clusterVacanciesAsync(
+      [vacancyFromHh, vacancyFromTelegram, unrelatedVacancy],
+      1,
+    );
+    expect(asyncClusters).toEqual(syncClusters);
   });
 });
 

@@ -305,32 +305,57 @@ function push(map: Map<string, number[]>, key: string, index: number): void {
   else map.set(key, [index]);
 }
 
+function addVacancyToClusterIndex(
+  vacancy: UnifiedVacancy,
+  clusters: VacancyCluster[],
+  prepared: PreparedVacancy[],
+  index: ClusterIndex,
+): void {
+  const candidate = prepareVacancy(vacancy);
+  const match = index
+    .candidates(candidate)
+    .find((position) => isDuplicatePrepared(candidate, prepared[position]!));
+
+  if (match !== undefined) {
+    mergeVacancyIntoCluster(clusters[match]!, vacancy);
+    const representative = prepareCluster(clusters[match]!);
+    prepared[match] = representative;
+    index.add(match, representative);
+  } else {
+    const cluster = createClusterFromVacancy(vacancy);
+    clusters.push(cluster);
+    const representative = prepareCluster(cluster);
+    prepared.push(representative);
+    index.add(clusters.length - 1, representative);
+  }
+}
+
 export function clusterVacancies(vacancies: UnifiedVacancy[]): VacancyCluster[] {
   const clusters: VacancyCluster[] = [];
-  // Представитель кластера разбирается один раз и переразбирается только когда
-  // слияние меняет его каноническое название, работодателя или ссылку.
   const prepared: PreparedVacancy[] = [];
   const index = new ClusterIndex();
 
   for (const vacancy of vacancies) {
-    const candidate = prepareVacancy(vacancy);
-    const match = index
-      .candidates(candidate)
-      .find((position) => isDuplicatePrepared(candidate, prepared[position]!));
+    addVacancyToClusterIndex(vacancy, clusters, prepared, index);
+  }
 
-    if (match !== undefined) {
-      mergeVacancyIntoCluster(clusters[match]!, vacancy);
-      const representative = prepareCluster(clusters[match]!);
-      prepared[match] = representative;
-      // Слияние могло сменить каноническую ссылку или работодателя: новые ключи
-      // добавляются к старым, чтобы кластер находился по любому из них.
-      index.add(match, representative);
-    } else {
-      const cluster = createClusterFromVacancy(vacancy);
-      clusters.push(cluster);
-      const representative = prepareCluster(cluster);
-      prepared.push(representative);
-      index.add(clusters.length - 1, representative);
+  return clusters;
+}
+
+export async function clusterVacanciesAsync(
+  vacancies: UnifiedVacancy[],
+  chunkSize = 500,
+): Promise<VacancyCluster[]> {
+  const clusters: VacancyCluster[] = [];
+  const prepared: PreparedVacancy[] = [];
+  const index = new ClusterIndex();
+
+  let count = 0;
+  for (const vacancy of vacancies) {
+    addVacancyToClusterIndex(vacancy, clusters, prepared, index);
+    count += 1;
+    if (count % chunkSize === 0) {
+      await new Promise((resolve) => setImmediate(resolve));
     }
   }
 
