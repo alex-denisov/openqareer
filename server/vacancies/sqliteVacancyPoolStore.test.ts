@@ -448,3 +448,112 @@ describe('SqliteVacancyPoolStore · снятое объявление', () => {
     expect(store.hasVacancy('v2')).toBe(false);
   });
 });
+
+describe('SqliteVacancyPoolStore · queryMatchCandidates (B221 срез 2)', () => {
+  function card(
+    id: string,
+    overrides: Partial<Parameters<SqliteVacancyPoolStore['replaceSourceSlice']>[1][number]> = {},
+  ) {
+    return {
+      id,
+      fingerprint: `fp-${id}`,
+      title: 'Role',
+      company: 'Company',
+      description: '',
+      requiredSkills: [],
+      url: `https://example.test/${id}`,
+      provenance: {
+        sourceType: 'json_api' as const,
+        sourceId: 'src',
+        sourceUrl: `https://example.test/${id}`,
+        observedAt: '2026-09-01T10:00:00.000Z',
+      },
+      publishedAt: '2026-09-01T10:00:00.000Z',
+      status: 'active' as const,
+      ...overrides,
+    };
+  }
+
+  it('отбирает только активные, непохороненные записи в окне свежести', () => {
+    const { store } = openStore();
+    const nowMs = Date.parse('2026-09-02T10:00:00.000Z');
+    store.replaceSourceSlice('src', [
+      card('v1', { title: 'Backend Developer' }),
+      card('v2', { title: 'Backend Developer', status: 'archived' }),
+      card('v3', { title: 'Backend Developer', publishedAt: '2026-07-01T10:00:00.000Z' }),
+      card('v4', { title: 'Backend Developer' }),
+    ]);
+    store.markExpired(['v4'], '2026-09-02T00:00:00.000Z');
+
+    const result = store.queryMatchCandidates(
+      { candidateId: 'c1', targetRoles: ['Backend Developer'], confirmedSkills: [], confirmedFacts: [] },
+      { nowMs },
+    );
+    expect(result.map((v) => v.id)).toEqual(['v1']);
+  });
+
+  it('находит целевую роль и токены в search_text', () => {
+    const { store } = openStore();
+    const nowMs = Date.parse('2026-09-02T10:00:00.000Z');
+    store.replaceSourceSlice('src', [
+      card('v1', { title: 'Lead Frontend Engineer' }),
+      card('v2', { title: 'DevOps Specialist' }),
+    ]);
+
+    const result = store.queryMatchCandidates(
+      { candidateId: 'c1', targetRoles: ['Frontend Engineer'], confirmedSkills: [], confirmedFacts: [] },
+      { nowMs, limit: 10 },
+    );
+    expect(result.map((v) => v.id)).toContain('v1');
+  });
+
+  it('предпочитает удалёнку при preferredRemote = true', () => {
+    const { store } = openStore();
+    const nowMs = Date.parse('2026-09-02T10:00:00.000Z');
+    store.replaceSourceSlice('src', [
+      card('v-office', { title: 'Developer', isRemote: false, publishedAt: '2026-09-02T09:00:00.000Z' }),
+      card('v-remote', { title: 'Developer', isRemote: true, publishedAt: '2026-09-01T09:00:00.000Z' }),
+    ]);
+
+    const result = store.queryMatchCandidates(
+      { candidateId: 'c1', targetRoles: ['Developer'], confirmedSkills: [], confirmedFacts: [], preferredRemote: true },
+      { nowMs, limit: 10 },
+    );
+    expect(result.map((v) => v.id)).toEqual(['v-remote', 'v-office']);
+  });
+
+  it('добирает до лимита свежими активными вакансиями', () => {
+    const { store } = openStore();
+    const nowMs = Date.parse('2026-09-02T10:00:00.000Z');
+    store.replaceSourceSlice('src', [
+      card('v-role', { title: 'Go Developer', publishedAt: '2026-09-01T08:00:00.000Z' }),
+      card('v-other-1', { title: 'Accountant', publishedAt: '2026-09-02T08:00:00.000Z' }),
+      card('v-other-2', { title: 'HR Manager', publishedAt: '2026-09-02T07:00:00.000Z' }),
+    ]);
+
+    const result = store.queryMatchCandidates(
+      { candidateId: 'c1', targetRoles: ['Go Developer'], confirmedSkills: [], confirmedFacts: [] },
+      { nowMs, limit: 3 },
+    );
+    expect(result).toHaveLength(3);
+    expect(result[0].id).toBe('v-role');
+    expect(new Set(result.map((v) => v.id))).toEqual(
+      new Set(['v-role', 'v-other-1', 'v-other-2']),
+    );
+  });
+
+  it('ищет по навыкам при пустых целевых ролях', () => {
+    const { store } = openStore();
+    const nowMs = Date.parse('2026-09-02T10:00:00.000Z');
+    store.replaceSourceSlice('src', [
+      card('v-skill', { title: 'Software Engineer', requiredSkills: ['Kubernetes'] }),
+      card('v-no-skill', { title: 'Designer', requiredSkills: ['Figma'] }),
+    ]);
+
+    const result = store.queryMatchCandidates(
+      { candidateId: 'c1', targetRoles: [], confirmedSkills: ['Kubernetes'], confirmedFacts: [] },
+      { nowMs, limit: 1 },
+    );
+    expect(result.map((v) => v.id)).toEqual(['v-skill']);
+  });
+});

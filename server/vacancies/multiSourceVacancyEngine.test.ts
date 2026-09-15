@@ -184,4 +184,102 @@ describe('MultiSourceVacancyEngine', () => {
     expect(clusters.some((c) => c.canonicalTitle === 'Fresh React Developer')).toBe(true);
     expect(clusters.some((c) => c.canonicalTitle === 'Stale React Developer')).toBe(false);
   });
+
+  it('uses store.queryMatchCandidates in getMatchedVacancies when available', async () => {
+    let queryMatchCalled = false;
+    const mockPool = {
+      loadVacancies: () => [],
+      iterateClusterInput: function* () {},
+      getVacancy: () => undefined,
+      hasVacancy: () => false,
+      countVacancies: () => 1,
+      countBySource: () => new Map(),
+      countSourceSlice: () => ({ total: 1, active: 1 }),
+      queryVacancies: () => ({ total: 0, items: [] }),
+      loadSourceLinks: () => [],
+      mergeSourceSlice: () => {},
+      loadSourceStates: () => [],
+      replaceSourceSlice: () => {},
+      saveSourceState: () => {},
+      markExpired: () => 0,
+      prune: () => {},
+      queryMatchCandidates: (cand: CandidateMatchProfile) => {
+        queryMatchCalled = true;
+        return [
+          {
+            id: 'mock-1',
+            fingerprint: 'fp-mock-1',
+            title: cand.targetRoles[0] ?? 'Mock Role',
+            company: 'Mock Corp',
+            isRemote: true,
+            description: 'Mock description with TypeScript',
+            requiredSkills: ['TypeScript'],
+            url: 'https://example.test/mock-1',
+            provenance: {
+              sourceType: 'json_api' as const,
+              sourceId: 'mock-src',
+              sourceUrl: 'https://example.test/mock-1',
+              observedAt: new Date().toISOString(),
+            },
+            publishedAt: new Date().toISOString(),
+            status: 'active' as const,
+          },
+        ];
+      },
+    };
+
+    const engine = new MultiSourceVacancyEngine({
+      sources: [],
+      pool: mockPool,
+    });
+
+    const candidate: CandidateMatchProfile = {
+      candidateId: 'cand-mock',
+      targetRoles: ['Lead Engineer'],
+      confirmedSkills: ['TypeScript'],
+      confirmedFacts: [],
+      preferredRemote: true,
+    };
+
+    const matched = engine.getMatchedVacancies(candidate);
+    expect(queryMatchCalled).toBe(true);
+    expect(matched).toHaveLength(1);
+    expect(matched[0].cluster.canonicalTitle).toBe('Lead Engineer');
+  });
+
+  it('falls back to getActiveClusters when store does not implement queryMatchCandidates', async () => {
+    const fallbackPool = {
+      loadVacancies: () => [],
+      iterateClusterInput: function* () {},
+      getVacancy: () => undefined,
+      hasVacancy: () => false,
+      countVacancies: () => 0,
+      countBySource: () => new Map(),
+      countSourceSlice: () => ({ total: 0, active: 0 }),
+      queryVacancies: () => ({ total: 0, items: [] }),
+      loadSourceLinks: () => [],
+      mergeSourceSlice: () => {},
+      loadSourceStates: () => [],
+      replaceSourceSlice: () => {},
+      saveSourceState: () => {},
+      markExpired: () => 0,
+      prune: () => {},
+      // Notice: queryMatchCandidates is explicitly undefined
+    };
+
+    const engine = new MultiSourceVacancyEngine({
+      sources: [],
+      pool: fallbackPool,
+    });
+
+    const candidate: CandidateMatchProfile = {
+      candidateId: 'cand-fallback',
+      targetRoles: ['QA Engineer'],
+      confirmedSkills: [],
+      confirmedFacts: [],
+    };
+
+    const matched = engine.getMatchedVacancies(candidate);
+    expect(matched).toEqual([]);
+  });
 });

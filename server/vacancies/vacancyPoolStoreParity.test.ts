@@ -299,4 +299,24 @@ describe.each(implementations)('VacancyPoolStore parity: %s', (_name, open) => {
     store.replaceSourceSlice('mirror', []);
     expect(store.countSourceSlice('mirror').total).toBe(0);
   });
+
+  it('pre-filters candidate match pool with remote preference and fill (B221 срез 2)', () => {
+    const store = open();
+    seed(store);
+
+    const candidates = store.queryMatchCandidates?.(
+      {
+        candidateId: 'cand-1',
+        targetRoles: ['React Developer'],
+        confirmedSkills: [],
+        confirmedFacts: [],
+        preferredRemote: true,
+      },
+      { nowMs: NOW, limit: 5 },
+    );
+
+    // b1 matches target role and is remote, c1 is remote and fills
+    // b2 is archived (excluded), b3 is old (excluded), b4 is future (excluded)
+    expect(candidates?.map((c) => c.id)).toEqual(['b1', 'c1']);
+  });
 });

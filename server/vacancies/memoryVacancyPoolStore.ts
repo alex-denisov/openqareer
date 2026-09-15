@@ -1,10 +1,16 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import type { CandidateMatchProfile } from './vacancyMatcher';
 import {
   clusterProjectionOf,
+  DEFAULT_MATCH_CANDIDATE_LIMIT,
+  extractMatchTerms,
+  freshnessWindow,
   isWithin,
   pageOf,
   parseMs,
+  searchTextOf,
   type FreshnessWindow,
+  type MatchCandidateQueryOptions,
   type VacancyPoolPage,
   type VacancyPoolQuery,
 } from './vacancyPoolQuery';
@@ -23,6 +29,18 @@ interface StoredRow {
  * рядом (B221). Похороненная запись остаётся строкой с датой смерти, как в
  * базе, чтобы «снято» не превращалось в «никогда не видели» (B200 срез 2).
  */
+function compareCandidates(a: UnifiedVacancy, b: UnifiedVacancy, preferRemote: boolean): number {
+  if (preferRemote) {
+    const remoteA = a.isRemote ? 1 : 0;
+    const remoteB = b.isRemote ? 1 : 0;
+    if (remoteB !== remoteA) return remoteB - remoteA;
+  }
+  const timeA = parseMs(a.publishedAt) ?? 0;
+  const timeB = parseMs(b.publishedAt) ?? 0;
+  if (timeB !== timeA) return timeB - timeA;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
 export class MemoryVacancyPoolStore implements VacancyPoolStore {
   private rows: Map<string, StoredRow> = new Map();
   private states: Map<string, StoredSourceState> = new Map();
@@ -87,6 +105,49 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
       rows.map((row) => row.vacancy),
       { ...query, sourceIds: undefined },
     );
+  }
+
+  queryMatchCandidates(
+    candidate: CandidateMatchProfile,
+    options?: MatchCandidateQueryOptions,
+  ): UnifiedVacancy[] {
+    const limit = options?.limit ?? DEFAULT_MATCH_CANDIDATE_LIMIT;
+    if (limit <= 0) return [];
+    const window = freshnessWindow(options?.nowMs);
+    const preferRemote = Boolean(candidate.preferredRemote);
+    const terms = extractMatchTerms(candidate);
+
+    const activeRows = Array.from(this.aliveRows()).filter(
+      (row) =>
+        row.vacancy.status === 'active' &&
+        isWithin(parseMs(row.vacancy.publishedAt), window),
+    );
+
+    const results: UnifiedVacancy[] = [];
+    const seenIds = new Set<string>();
+
+    if (terms.length > 0) {
+      const matched = activeRows.filter((row) => {
+        const text = searchTextOf(row.vacancy);
+        return terms.some((term) => text.includes(term));
+      });
+      matched.sort((a, b) => compareCandidates(a.vacancy, b.vacancy, preferRemote));
+      for (const row of matched.slice(0, limit)) {
+        results.push(clusterProjectionOf(row.vacancy));
+        seenIds.add(row.vacancy.id);
+      }
+    }
+
+    if (results.length < limit) {
+      const remaining = activeRows.filter((row) => !seenIds.has(row.vacancy.id));
+      remaining.sort((a, b) => compareCandidates(a.vacancy, b.vacancy, preferRemote));
+      for (const row of remaining.slice(0, limit - results.length)) {
+        results.push(clusterProjectionOf(row.vacancy));
+        seenIds.add(row.vacancy.id);
+      }
+    }
+
+    return results;
   }
 
   loadSourceLinks(sourceId: string): VacancyLink[] {

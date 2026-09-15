@@ -10,12 +10,17 @@ import {
   VACANCY_SOURCE_OBSERVATIONS_COLUMN,
 } from '../data/sqliteSchema';
 import type { SourceObservations } from './sourceHealthVerdict';
+import type { CandidateMatchProfile } from './vacancyMatcher';
 import {
   clusterProjectionOf,
+  DEFAULT_MATCH_CANDIDATE_LIMIT,
+  extractMatchTerms,
+  freshnessWindow,
   normalizeQuery,
   parseMs,
   searchTextOf,
   type FreshnessWindow,
+  type MatchCandidateQueryOptions,
   type VacancyPoolPage,
   type VacancyPoolQuery,
 } from './vacancyPoolQuery';
@@ -311,6 +316,85 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       [...params, query.limit, query.offset],
     );
     return { total, items };
+  }
+
+  private queryTermMatches(
+    terms: readonly string[],
+    window: FreshnessWindow,
+    orderClause: string,
+    limit: number,
+  ): UnifiedVacancy[] {
+    const termClauses = terms.map(() => 'i.search_text LIKE ?').join(' OR ');
+    const sql = `SELECT c.cluster_json AS payload
+      FROM vacancy_pool_index i
+      JOIN vacancy_cluster_input c ON c.id = i.id
+      WHERE ${ALIVE} AND i.is_active = 1 AND i.published_ms BETWEEN ? AND ?
+        AND (${termClauses})
+      ${orderClause} LIMIT ?`;
+    const params: SQLInputValue[] = [
+      window.fromMs,
+      window.toMs,
+      ...terms.map((t) => `%${t}%`),
+      limit,
+    ];
+    return this.readVacancies(sql, params);
+  }
+
+  private queryRecentFill(
+    seenIds: ReadonlySet<string>,
+    window: FreshnessWindow,
+    orderClause: string,
+    limit: number,
+  ): UnifiedVacancy[] {
+    const notIn =
+      seenIds.size > 0 ? `AND i.id NOT IN (${Array.from(seenIds).map(() => '?').join(', ')})` : '';
+    const sql = `SELECT c.cluster_json AS payload
+      FROM vacancy_pool_index i
+      JOIN vacancy_cluster_input c ON c.id = i.id
+      WHERE ${ALIVE} AND i.is_active = 1 AND i.published_ms BETWEEN ? AND ? ${notIn}
+      ${orderClause} LIMIT ?`;
+    const params: SQLInputValue[] = [
+      window.fromMs,
+      window.toMs,
+      ...(seenIds.size > 0 ? Array.from(seenIds) : []),
+      limit,
+    ];
+    return this.readVacancies(sql, params);
+  }
+
+  queryMatchCandidates(
+    candidate: CandidateMatchProfile,
+    options?: MatchCandidateQueryOptions,
+  ): UnifiedVacancy[] {
+    const limit = options?.limit ?? DEFAULT_MATCH_CANDIDATE_LIMIT;
+    if (limit <= 0) return [];
+    const window = freshnessWindow(options?.nowMs);
+    const preferRemote = Boolean(candidate.preferredRemote);
+    const remoteOrder = preferRemote ? '(CASE WHEN i.is_remote = 1 THEN 1 ELSE 0 END) DESC, ' : '';
+    const orderClause = `ORDER BY ${remoteOrder}i.published_ms DESC, i.id ASC`;
+    const terms = extractMatchTerms(candidate);
+
+    const results: UnifiedVacancy[] = [];
+    const seenIds = new Set<string>();
+
+    if (terms.length > 0) {
+      for (const item of this.queryTermMatches(terms, window, orderClause, limit)) {
+        results.push(item);
+        seenIds.add(item.id);
+      }
+    }
+
+    if (results.length < limit) {
+      const remaining = limit - results.length;
+      for (const item of this.queryRecentFill(seenIds, window, orderClause, remaining)) {
+        if (!seenIds.has(item.id)) {
+          results.push(item);
+          seenIds.add(item.id);
+        }
+      }
+    }
+
+    return results;
   }
 
   loadSourceLinks(sourceId: string): VacancyLink[] {

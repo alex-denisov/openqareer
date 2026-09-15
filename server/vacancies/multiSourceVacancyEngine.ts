@@ -858,10 +858,15 @@ export class MultiSourceVacancyEngine {
   }
 
   public getMatchedVacancies(candidate: CandidateMatchProfile): MatchedVacancyItem[] {
-    const active = this.getActiveClusters();
-    const matched: MatchedVacancyItem[] = [];
+    const clusters =
+      typeof this.pool.queryMatchCandidates === 'function'
+        ? clusterVacancies(this.pool.queryMatchCandidates(candidate)).filter(
+            (c) => c.status === 'active',
+          )
+        : this.getActiveClusters();
 
-    for (const cluster of active) {
+    const matched: MatchedVacancyItem[] = [];
+    for (const cluster of clusters) {
       const explanation = matchCandidateWithVacancy(candidate, cluster);
       matched.push({ cluster, explanation });
     }

@@ -1,6 +1,15 @@
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import type { SourceObservations } from './sourceHealthVerdict';
-import type { FreshnessWindow, VacancyPoolPage, VacancyPoolQuery } from './vacancyPoolQuery';
+import type { CandidateMatchProfile } from './vacancyMatcher';
+import type {
+  ClusterProjection,
+  FreshnessWindow,
+  MatchCandidateQueryOptions,
+  VacancyPoolPage,
+  VacancyPoolQuery,
+} from './vacancyPoolQuery';
+
+export type { ClusterProjection, MatchCandidateQueryOptions };
 
 /** What a source's last reading recorded, kept apart from the source's config. */
 export interface StoredSourceState {
@@ -47,6 +56,15 @@ export interface VacancyPoolStore {
   countSourceSlice(sourceId: string): { total: number; active: number };
   queryVacancies(query: VacancyPoolQuery): VacancyPoolPage;
   loadSourceLinks(sourceId: string): VacancyLink[];
+  /**
+   * Подвыборка записей для подбора кандидату (B221 срез 2).
+   * Отбирает компактные проекции сразу из хранилища по целевым ролям, навыкам
+   * и удалёнке, добирая до лимита свежими активными вакансиями.
+   */
+  queryMatchCandidates?(
+    candidate: CandidateMatchProfile,
+    options?: MatchCandidateQueryOptions,
+  ): UnifiedVacancy[];
   /**
    * Один шаг дочитывания колонок запросов у записей, сделанных до B221.
    * Возвращает, сколько строк обработано; ноль — дочитывать нечего. Пул в
