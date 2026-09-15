@@ -13,14 +13,40 @@ import type { RegisteredVacancySource, VacancySourceMeasurement } from './defaul
  * место, публичная ссылка собирается из адреса сайта. Полный текст — отдельный
  * запрос на каждую вакансию, и на 1 744 вакансиях NVIDIA это отдельный срез.
  *
- * Статус компаний, ранее предполагавшихся на Workday (B216/B218):
- * - Snap и Sony подтверждены на Workday (snapchat/snap и sonyglobal/SonyGlobalCareers).
- * - AMD использует iCIMS (careers-amd.icims.com).
- * - Dell использует Oracle Cloud HCM.
- * - Cisco использует Phenom People.
- * - JPMC использует Oracle Cloud HCM.
- * - VMware поглощена Broadcom (уже активна под Broadcom).
+ * Статус 9 компаний, ранее предполагавшихся на Workday и дававших 422 (B216/B217):
+ * - Qualcomm: Eightfold AI (careers.qualcomm.com), интегрирован как источник src-qualcomm-careers.
+ * - Snap: Workday (snapchat/snap), подтверждён и подключен в MEASURED_WORKDAY_TENANTS.
+ * - Sony: Workday (sonyglobal/SonyGlobalCareers), подтверждён и подключен в MEASURED_WORKDAY_TENANTS.
+ * - VMware: поглощена Broadcom, активна под доской Broadcom Workday (ats-workday-broadcom).
+ * - AMD: использует iCIMS (careers-amd.icims.com), не Workday.
+ * - Dell: использует Oracle Cloud HCM, не Workday.
+ * - Cisco: использует Phenom People (jobs.cisco.com), не Workday.
+ * - JPMC: использует Oracle Cloud HCM, не Workday.
+ * - IBM: использует IBM Kenexa / BrassRing (ibm.com/careers), не Workday.
  */
+
+const UNRESOLVED_WORKDAY_COMPANY_STATUS: Readonly<Record<string, string>> = {
+  amd: 'Uses iCIMS (careers-amd.icims.com), not Workday',
+  dell: 'Uses Oracle Cloud HCM, not Workday',
+  cisco: 'Uses Phenom People (jobs.cisco.com), not Workday',
+  jpmc: 'Uses Oracle Cloud HCM, not Workday',
+  jpmorgan: 'Uses Oracle Cloud HCM, not Workday',
+  'jp morgan': 'Uses Oracle Cloud HCM, not Workday',
+  'jp morgan chase': 'Uses Oracle Cloud HCM, not Workday',
+  ibm: 'Uses IBM Kenexa / BrassRing (ibm.com/careers), not Workday',
+  qualcomm: 'Uses Eightfold AI (careers.qualcomm.com), integrated as src-qualcomm-careers, not Workday',
+  vmware: "Acquired by Broadcom; active under Broadcom's Workday board (ats-workday-broadcom)",
+};
+
+/**
+ * Возвращает проверенную причину, по которой компания не подключена как отдельный тенант Workday,
+ * чтобы будущие интеграции не подбирали невалидные адреса Workday с ошибками 422.
+ */
+export function getUnresolvedWorkdayCompanyStatus(company: string): string | undefined {
+  const normalized = company.trim().toLowerCase();
+  return UNRESOLVED_WORKDAY_COMPANY_STATUS[normalized];
+}
+
 export interface MeasuredWorkdayTenant {
   readonly company: string;
   readonly tenant: string;
