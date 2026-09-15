@@ -13,9 +13,18 @@ import type { VacancySample } from '../domain/vacancy';
 import type { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyIntelligenceService } from '../vacancies/vacancyIntelligenceService';
 
+export interface RuntimeMemoryReport {
+  readonly ingestPaused: boolean;
+  readonly heapUsedMb: number;
+  readonly heapLimitMb: number;
+  readonly poolSize: number;
+}
+
 export interface RouteDeps {
   /** Настройки веера обхода hh.ru: набор ролей выбирает владелец (B214). */
   hhCrawlSettings?: import('../vacancies/hhCrawlSettings').HhCrawlSettingsStore;
+  /** Память и пауза опросов — только администратору (B220). */
+  runtimeMemory?: () => RuntimeMemoryReport;
   config: ServerConfig;
   authService: SessionAuth;
   candidateStore: CandidateStore;

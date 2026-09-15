@@ -119,7 +119,11 @@ async function handleBlockUser(deps: RouteDeps, request: FastifyRequest, reply: 
   }
 }
 
-async function handleResetUserPassword(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+async function handleResetUserPassword(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
   const principal = requireAdmin(deps, request, reply);
   if (!principal) return;
   const { userId } = request.params as { userId: string };
@@ -332,8 +336,31 @@ function registerCrawlFilter(app: FastifyInstance, deps: RouteDeps): void {
   });
 }
 
+/**
+ * Размер кучи и пула — устройство инфраструктуры; наружу в `/health` его не
+ * отдаём, читает только администратор (B220, ревью безопасности).
+ */
+function registerRuntimeMemory(app: FastifyInstance, deps: RouteDeps): void {
+  app.get('/api/v1/admin/runtime-memory', async (request, reply) => {
+    const principal = requireAdmin(deps, request, reply);
+    if (!principal) return;
+    if (!deps.runtimeMemory) {
+      return sendError(
+        reply,
+        request,
+        404,
+        'runtime_memory_unavailable',
+        'Сторож памяти не подключён.',
+        false,
+      );
+    }
+    return { data: deps.runtimeMemory(), meta: { requestId: request.id } };
+  });
+}
+
 export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   registerCrawlFilter(app, deps);
+  registerRuntimeMemory(app, deps);
   app.get('/api/v1/admin/users', withDeps(deps, handleListUsers));
   app.get('/api/v1/admin/users/:userId', withDeps(deps, handleGetUser));
   app.patch('/api/v1/admin/users/:userId', withDeps(deps, handlePatchUser));

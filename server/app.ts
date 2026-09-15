@@ -48,13 +48,8 @@ interface BuildAppOptions {
   vacancyIntelligenceService?: VacancyIntelligenceService;
   multiSourceVacancyEngine?: MultiSourceVacancyEngine;
   hhCrawlSettings?: import('./vacancies/hhCrawlSettings').HhCrawlSettingsStore;
-  /** Память и пауза опросов для `/api/v1/health` — сторож памяти (B220). */
-  runtimeMemory?: () => {
-    readonly ingestPaused: boolean;
-    readonly heapUsedMb: number;
-    readonly heapLimitMb: number;
-    readonly poolSize: number;
-  };
+  /** Память и пауза опросов — админский маршрут, сторож памяти (B220). */
+  runtimeMemory?: RouteDeps['runtimeMemory'];
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
   roleNamer?: RoleNamer;
@@ -131,7 +126,6 @@ function loggerOptions(
 async function createFastifyBase(
   config: ServerConfig,
   logDestination?: { write(line: string): void },
-  runtimeMemory?: BuildAppOptions['runtimeMemory'],
 ): Promise<FastifyInstance> {
   const app = Fastify({
     trustProxy: '127.0.0.1',
@@ -177,9 +171,6 @@ async function createFastifyBase(
     data: {
       status: 'ok',
       release: config.release,
-      // Память и пауза опросов видны снаружи: остановка пула — не тишина, а
-      // названный факт с цифрой (B220).
-      ...(runtimeMemory ? { memory: runtimeMemory() } : {}),
     },
   }));
 
@@ -261,9 +252,10 @@ export async function buildApp({
     roleNamingFailures: new RoleNamingFailureLog(),
     searchVacancies: searchVacancies ?? searchHhVacancies,
     ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
+    ...(runtimeMemory ? { runtimeMemory } : {}),
     ...services,
   };
-  const app = await createFastifyBase(config, logDestination, runtimeMemory);
+  const app = await createFastifyBase(config, logDestination);
   await registerApiRoutes(app, deps);
   registerErrorHandler(app);
   await registerStaticDelivery(app, config, serveStatic);

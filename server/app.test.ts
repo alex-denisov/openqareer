@@ -100,7 +100,7 @@ describe('OpenQareer API boundary', () => {
       data: { status: 'ok', release: 'test-release' },
     });
 
-    // Сторож памяти (B220) виден снаружи, когда подключён.
+    // Размер кучи и пула — не для публичного `/health`: только администратору (B220).
     const withMemory = await createApp(successProvider, undefined, undefined, {
       runtimeMemory: () => ({
         ingestPaused: true,
@@ -110,12 +110,12 @@ describe('OpenQareer API boundary', () => {
       }),
     });
     const memoryHealth = await withMemory.inject({ method: 'GET', url: '/api/v1/health' });
-    expect(memoryHealth.json().data.memory).toEqual({
-      ingestPaused: true,
-      heapUsedMb: 1200,
-      heapLimitMb: 1536,
-      poolSize: 134557,
+    expect(memoryHealth.json().data.memory).toBeUndefined();
+    const memoryAnon = await withMemory.inject({
+      method: 'GET',
+      url: '/api/v1/admin/runtime-memory',
     });
+    expect(memoryAnon.statusCode).toBe(401);
 
     const unauthorized = await app.inject({
       method: 'GET',
