@@ -263,14 +263,25 @@ describe.each(implementations)('VacancyPoolStore parity: %s', (_name, open) => {
     expect(store.loadSourceStates()).toEqual([]);
   });
 
-  it('iterates fresh vacancies one by one, same set as loadVacancies', () => {
+  it('streams the cluster input: fresh records as compact projections', () => {
     const store = open();
-    seed(store);
-    expect(
-      Array.from(store.iterateVacancies(WINDOW))
-        .map((v) => v.id)
-        .sort(),
-    ).toEqual(['b1', 'b2', 'c1']);
+    store.replaceSourceSlice('board', [
+      vacancy('b1', 'board', {
+        description: `${'x'.repeat(400)} see https://boards.greenhouse.io/acme/jobs/123`,
+        fullDescription: 'y'.repeat(5000),
+        responsibilities: ['a'],
+      }),
+      vacancy('b3', 'board', { publishedAt: daysAgo(40) }),
+    ]);
+    const input = Array.from(store.iterateClusterInput(WINDOW));
+    expect(input.map((v) => v.id)).toEqual(['b1']);
+    const [projected] = input;
+    expect(projected?.fullDescription).toBeUndefined();
+    expect(projected?.responsibilities).toBeUndefined();
+    // Сводка урезана до 300 знаков, но ATS-ссылка из хвоста текста сохранена.
+    expect(projected?.description.length).toBeLessThan(400);
+    expect(projected?.description).toContain('https://boards.greenhouse.io/acme/jobs/123');
+    expect(projected?.title).toBe('Role b1');
   });
 
   it('keys the slice on the source it was written for, not on the payload', () => {

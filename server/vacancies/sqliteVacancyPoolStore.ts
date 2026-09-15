@@ -5,11 +5,13 @@ import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import {
   MIGRATION_23,
   VACANCY_POOL_EXPIRED_AT_COLUMN,
+  VACANCY_POOL_INDEX_CLUSTER_COLUMN,
   VACANCY_POOL_INDEX_TABLE,
   VACANCY_SOURCE_OBSERVATIONS_COLUMN,
 } from '../data/sqliteSchema';
 import type { SourceObservations } from './sourceHealthVerdict';
 import {
+  clusterProjectionOf,
   normalizeQuery,
   parseMs,
   searchTextOf,
@@ -79,6 +81,7 @@ function indexColumns(vacancy: UnifiedVacancy, sourceId: string): SQLInputValue[
     flag(vacancy.isRemote),
     typeof vacancy.url === 'string' ? vacancy.url : '',
     searchTextOf(vacancy),
+    JSON.stringify(clusterProjectionOf(vacancy)),
   ];
 }
 
@@ -107,6 +110,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.ensureColumn('vacancy_source_state', 'observations', VACANCY_SOURCE_OBSERVATIONS_COLUMN);
     this.ensureColumn('vacancy_pool', 'expired_at', VACANCY_POOL_EXPIRED_AT_COLUMN);
     this.database.exec(VACANCY_POOL_INDEX_TABLE);
+    this.ensureColumn('vacancy_pool_index', 'cluster_json', VACANCY_POOL_INDEX_CLUSTER_COLUMN);
   }
 
   /**
@@ -130,7 +134,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const row = this.database
       .prepare(
         `SELECT count(*) AS n FROM vacancy_pool p
-          WHERE NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = p.id)`,
+          WHERE NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = p.id AND i.cluster_json IS NOT NULL)`,
       )
       .get() as { n: number };
     return row.n;
@@ -151,7 +155,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         `SELECT p.rowid AS rowid, p.id, p.source_id, p.payload, p.expired_at
            FROM vacancy_pool p
           WHERE p.rowid > ?
-            AND NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = p.id)
+            AND NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = p.id AND i.cluster_json IS NOT NULL)
           ORDER BY p.rowid LIMIT ?`,
       )
       .all(this.backfillCursor, chunk) as unknown as Array<{
@@ -166,6 +170,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       return 0;
     }
     const insert = this.prepareIndexUpsert();
+    // Строка индекса с выката 1 уже есть — ей не хватает только проекции;
+    // переписывать её целиком (и все её индексы) впятеро дороже.
+    const addProjection = this.database.prepare(
+      'UPDATE vacancy_pool_index SET cluster_json = ? WHERE id = ? AND cluster_json IS NULL',
+    );
     const remove = this.database.prepare('DELETE FROM vacancy_pool WHERE id = ?');
     this.inTransaction(() => {
       for (const row of rows) {
@@ -177,6 +186,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         const vacancy = parseVacancy(row.payload);
         if (!vacancy) {
           remove.run(row.id);
+          continue;
+        }
+        const projected = { ...vacancy, id: row.id };
+        if (addProjection.run(JSON.stringify(clusterProjectionOf(projected)), row.id).changes > 0) {
           continue;
         }
         // Любая другая ошибка — не повод тихо удалять строку: она всплывает
@@ -210,12 +223,16 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   /**
-   * Свежие записи по одной: курсор базы остаётся открытым, пока сведение идёт
-   * и уступает цикл событий, а в куче в каждый момент — одна разобранная
-   * запись сверх того, что держит само сведение.
+   * Вход сведения по одной записи из узкой таблицы индекса — без join с
+   * `vacancy_pool` и без полных текстов. Курсор базы остаётся открытым, пока
+   * сведение идёт и уступает цикл событий; в куче в каждый момент — одна
+   * проекция сверх того, что держит само сведение.
    */
-  *iterateVacancies(window: FreshnessWindow): IterableIterator<UnifiedVacancy> {
-    const statement = this.database.prepare(`${PAYLOAD_OF} WHERE ${FRESH}`);
+  *iterateClusterInput(window: FreshnessWindow): IterableIterator<UnifiedVacancy> {
+    const statement = this.database.prepare(
+      `SELECT i.cluster_json AS payload FROM vacancy_pool_index i
+        WHERE ${FRESH} AND i.cluster_json IS NOT NULL`,
+    );
     for (const row of statement.iterate(
       window.fromMs,
       window.toMs,
@@ -375,9 +392,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private prepareIndexUpsert() {
     return this.database.prepare(
       `INSERT INTO vacancy_pool_index (
-         id, source_id, published_ms, observed_ms, is_active, is_remote, url, search_text, expired
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, coalesce(
-         (SELECT p.expired_at IS NOT NULL FROM vacancy_pool p WHERE p.id = ?1), ?9))
+         id, source_id, published_ms, observed_ms, is_active, is_remote, url, search_text,
+         cluster_json, expired
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, coalesce(
+         (SELECT p.expired_at IS NOT NULL FROM vacancy_pool p WHERE p.id = ?1), ?10))
        ON CONFLICT(id) DO UPDATE SET
          source_id = excluded.source_id,
          published_ms = excluded.published_ms,
@@ -385,7 +403,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
          is_active = excluded.is_active,
          is_remote = excluded.is_remote,
          url = excluded.url,
-         search_text = excluded.search_text`,
+         search_text = excluded.search_text,
+         cluster_json = excluded.cluster_json`,
     );
   }
 

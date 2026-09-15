@@ -201,6 +201,7 @@ export class MultiSourceVacancyEngine {
   private reclusterInFlight?: Promise<void>;
   /** Когда фоновая сборка закончилась в последний раз (мс). */
   private reclusterFinishedAt = 0;
+  private lastReclusterMs = 0;
   private reclusterTimer?: ReturnType<typeof setTimeout>;
 
   /**
@@ -295,7 +296,9 @@ export class MultiSourceVacancyEngine {
    */
   public async restoreAsync(
     nowMs: number = Date.now(),
-    chunkSize = 2_000,
+    // 250 строк — около 0,6 с на VM прода (0,2 мс на строку локально, прод
+    // медленнее в ~12 раз): дольше держать цикл событий на старте нельзя.
+    chunkSize = 250,
   ): Promise<{ restored: number }> {
     this.pruneStore(nowMs);
     while ((this.pool.backfillStep?.(chunkSize) ?? 0) > 0) {
@@ -768,20 +771,41 @@ export class MultiSourceVacancyEngine {
   public recluster(): void {
     // По одной записи из базы, не массивом: массив на 173 000 записей — это
     // гигабайт мусора после каждой волны опроса (прод 2026-09-15, B221).
-    const freshVacancies = this.pool.iterateVacancies(freshnessWindow());
+    const startedAt = Date.now();
+    const freshVacancies = this.pool.iterateClusterInput(freshnessWindow());
     this.clusters = clusterVacancies(freshVacancies);
-    this.poolChangedSinceRecluster = false;
-    this.reclusterCount += 1;
+    this.finishRecluster(startedAt);
   }
 
   public async reclusterAsync(chunkSize = 500): Promise<void> {
     // Записи читаются из базы по одной по мере сведения и уступают цикл
     // событий вместе с ним: целиком поднятый срез блокировал бы старт на
     // время разбора всего пула (B218).
-    const freshVacancies = this.pool.iterateVacancies(freshnessWindow());
+    const startedAt = Date.now();
+    const freshVacancies = this.pool.iterateClusterInput(freshnessWindow());
     this.clusters = await clusterVacanciesAsync(freshVacancies, chunkSize);
+    this.finishRecluster(startedAt);
+  }
+
+  private finishRecluster(startedAt: number): void {
     this.poolChangedSinceRecluster = false;
     this.reclusterCount += 1;
+    this.lastReclusterMs = Date.now() - startedAt;
+  }
+
+  /** Что видно снаружи о сведении: для замера на проде без профилировщика (B221). */
+  public get reclusterStats(): {
+    clusters: number;
+    rebuilds: number;
+    lastReclusterMs: number;
+    inFlight: boolean;
+  } {
+    return {
+      clusters: this.clusters.length,
+      rebuilds: this.reclusterCount,
+      lastReclusterMs: this.lastReclusterMs,
+      inFlight: this.reclusterInFlight !== undefined,
+    };
   }
 
   /**

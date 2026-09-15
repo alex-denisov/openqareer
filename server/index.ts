@@ -165,6 +165,7 @@ const app = await buildApp({
       heapUsedMb: Math.round(heap.heapUsedBytes / (1024 * 1024)),
       heapLimitMb: Math.round(heap.heapLimitBytes / (1024 * 1024)),
       poolSize: multiSourceEngine.poolSize,
+      recluster: multiSourceEngine.reclusterStats,
     };
   },
   careerCommandExecutor,
