@@ -612,11 +612,12 @@ async function executeHeadlessObscuraFetch(
   options: StealthFetchOptions = {},
 ): Promise<StealthFetchResult> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obscura-'));
-  const runner = new ObscuraRunner({
-    userDataDir: tempDir,
-    headless: true,
-  });
+  let runner: ObscuraRunner | undefined;
   try {
+    runner = new ObscuraRunner({
+      userDataDir: tempDir,
+      headless: true,
+    });
     const isPost = options.method === 'POST' || options.body !== undefined;
     if (isPost) {
       const origin = new URL(url).origin;
@@ -630,10 +631,10 @@ async function executeHeadlessObscuraFetch(
       return { status: evaluated.status, body: evaluated.body, usedStealth: true };
     }
     const page = await runner.openPage(url);
-    const content = await page.content();
-    return { status: 200, body: content, usedStealth: true };
+    const body = await page.content();
+    return { status: 200, body, usedStealth: true };
   } finally {
-    await runner.close();
+    if (runner) await runner.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
