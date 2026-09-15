@@ -118,20 +118,6 @@ function isVacancyFresh(publishedAt: string, nowMs: number = Date.now()): boolea
  */
 export const SYNC_BATCH_LIMIT = 12;
 
-/**
- * Как движок пересобирает кластеры после волны опроса.
- *
- * `sync` — сразу и в этом же вызове: тесты и маленькие пулы. `background` —
- * асинхронно, уступая цикл событий, и не чаще раза в `minIntervalMs`; чтение
- * никогда не ждёт сборки и отдаёт текущие кластеры. На проде разбор 173 000
- * записей из базы стоит 1–2 минуты процессора: синхронная сборка на каждую
- * пятиминутную волну держала службу без ответа и была откачена
- * (2026-09-15, B221). Полная пересборка уходит со срезом 3.
- */
-export type ReclusterMode = { mode: 'sync' } | { mode: 'background'; minIntervalMs: number };
-
-export const DEFAULT_RECLUSTER_MIN_INTERVAL_MS = 15 * 60 * 1000;
-
 function lastSyncMs(source: VacancySourceConfig): number {
   if (!source.lastSyncAt) return 0;
   const parsed = Date.parse(source.lastSyncAt);
@@ -196,12 +182,6 @@ export class MultiSourceVacancyEngine {
   /** Принесла ли волна что-то новое в пул с последней пересборки кластеров. */
   private poolChangedSinceRecluster = false;
   private reclusterCount = 0;
-  private readonly reclusterMode: ReclusterMode;
-  /** Идущая фоновая сборка; вторая параллельно не запускается. */
-  private reclusterInFlight?: Promise<void>;
-  /** Когда фоновая сборка закончилась в последний раз (мс). */
-  private reclusterFinishedAt = 0;
-  private reclusterTimer?: ReturnType<typeof setTimeout>;
 
   /**
    * Кто спрашивает у площадки её `robots.txt`. Без него право берётся из
@@ -222,9 +202,7 @@ export class MultiSourceVacancyEngine {
     pool?: VacancyPoolStore;
     robots?: RobotsPolicyLoader;
     linkProbe?: LinkProbe;
-    recluster?: ReclusterMode;
   }) {
-    this.reclusterMode = options?.recluster ?? { mode: 'sync' };
     const initial = options?.sources ?? DEFAULT_VACANCY_SOURCES;
     for (const src of initial) {
       this.sources.set(src.id, { ...src });
@@ -388,12 +366,11 @@ export class MultiSourceVacancyEngine {
   }
 
   /**
-   * Собирает кластеры, если пул менялся с прошлой сборки — только в режиме
-   * `sync`. В фоновом режиме чтение отдаёт то, что есть: одно «медленное
-   * чтение» на проде — это минуты без ответа для всех (B221).
+   * Собирает кластеры, если пул менялся с прошлой сборки. Страховка для
+   * чтения, которое случилось раньше фоновой сборки после старта: лучше одно
+   * медленное чтение, чем пустая выдача (B218).
    */
   private ensureClusters(): void {
-    if (this.reclusterMode.mode !== 'sync') return;
     if (this.poolChangedSinceRecluster) this.recluster();
   }
 
@@ -766,9 +743,7 @@ export class MultiSourceVacancyEngine {
    * среза 3 (кластеры в таблице, инкрементально).
    */
   public recluster(): void {
-    // По одной записи из базы, не массивом: массив на 173 000 записей — это
-    // гигабайт мусора после каждой волны опроса (прод 2026-09-15, B221).
-    const freshVacancies = this.pool.iterateVacancies(freshnessWindow());
+    const freshVacancies = this.pool.loadVacancies(freshnessWindow());
     this.clusters = clusterVacancies(freshVacancies);
     this.poolChangedSinceRecluster = false;
     this.reclusterCount += 1;
@@ -795,42 +770,7 @@ export class MultiSourceVacancyEngine {
 
   /** Пересобирает пул, только если волна что-то в него принесла. */
   private reclusterIfChanged(): void {
-    if (!this.poolChangedSinceRecluster) return;
-    if (this.reclusterMode.mode === 'sync') {
-      this.recluster();
-      return;
-    }
-    this.requestBackgroundRecluster(this.reclusterMode.minIntervalMs);
-  }
-
-  /**
-   * Фоновая сборка: одна за раз и не чаще, чем раз в `minIntervalMs`. Волна,
-   * пришедшая раньше срока, ставит одну отложенную сборку; поздняя — ждёт
-   * окончания текущей и запускается следом, если пул успел измениться.
-   */
-  private requestBackgroundRecluster(minIntervalMs: number): void {
-    if (this.reclusterInFlight || this.reclusterTimer) return;
-    const dueInMs = this.reclusterFinishedAt + minIntervalMs - Date.now();
-    if (dueInMs > 0) {
-      this.reclusterTimer = setTimeout(() => {
-        this.reclusterTimer = undefined;
-        this.requestBackgroundRecluster(minIntervalMs);
-      }, dueInMs);
-      this.reclusterTimer.unref?.();
-      return;
-    }
-    this.reclusterInFlight = this.reclusterAsync()
-      .catch(() => undefined)
-      .finally(() => {
-        this.reclusterInFlight = undefined;
-        this.reclusterFinishedAt = Date.now();
-        if (this.poolChangedSinceRecluster) this.requestBackgroundRecluster(minIntervalMs);
-      });
-  }
-
-  /** Идущая фоновая сборка, если есть — чтобы дождаться её в тестах и при остановке. */
-  public get backgroundRecluster(): Promise<void> | undefined {
-    return this.reclusterInFlight;
+    if (this.poolChangedSinceRecluster) this.recluster();
   }
 
   public getMatchedVacancies(candidate: CandidateMatchProfile): MatchedVacancyItem[] {

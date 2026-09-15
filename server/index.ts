@@ -21,10 +21,7 @@ import { searchRemotiveVacancies } from './connectors/remotiveVacancySearch';
 import { VacancyIntelligenceService } from './vacancies/vacancyIntelligenceService';
 import { CareerCommandConnectorRouter } from './connectors/careerCommandConnectorRouter';
 import { HhConnector } from './connectors/hh/hhConnector';
-import {
-  MultiSourceVacancyEngine,
-  DEFAULT_RECLUSTER_MIN_INTERVAL_MS,
-} from './vacancies/multiSourceVacancyEngine';
+import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
 import { createHttpLinkProbe } from './vacancies/linkLivenessProbe';
 import { RobotsPolicyLoader } from './vacancies/robotsPolicyLoader';
 import { buildMultiSourceFetcher, fetchRobotsTxt } from './vacancies/multiSourceFetcher';
@@ -146,9 +143,6 @@ const multiSourceEngine: MultiSourceVacancyEngine = new MultiSourceVacancyEngine
   // может отдавать свежие даты у вакансий, которых на сайте уже нет (B200
   // срез 2).
   linkProbe: createHttpLinkProbe(),
-  // Сведение после волны — в фоне и не чаще раза в 15 минут: синхронная
-  // сборка из базы держала прод без ответа минутами (B221).
-  recluster: { mode: 'background', minIntervalMs: DEFAULT_RECLUSTER_MIN_INTERVAL_MS },
 });
 const app = await buildApp({
   config,
