@@ -330,7 +330,7 @@ function addVacancyToClusterIndex(
   }
 }
 
-export function clusterVacancies(vacancies: UnifiedVacancy[]): VacancyCluster[] {
+export function clusterVacancies(vacancies: Iterable<UnifiedVacancy>): VacancyCluster[] {
   const clusters: VacancyCluster[] = [];
   const prepared: PreparedVacancy[] = [];
   const index = new ClusterIndex();
