@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MIGRATION_23 } from '../data/sqliteSchema';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
@@ -122,5 +122,47 @@ describe('B221 · пул читается из хранилища, а не из 
     expect(await engine.restoreAsync(Date.now(), 2)).toEqual({ restored: 3 });
     expect(pool.pendingBackfill()).toBe(0);
     expect(engine.getVacancies({ query: 'role b' }).items.map((v) => v.id)).toEqual(['b']);
+  });
+});
+
+describe('B221 · фоновое сведение', () => {
+  function engineWith(minIntervalMs: number, reading: () => UnifiedVacancy[]) {
+    return new MultiSourceVacancyEngine({
+      sources: [SOURCE],
+      fetcher: async () => reading(),
+      recluster: { mode: 'background', minIntervalMs },
+    });
+  }
+
+  it('чтение не ждёт сборки, а сборка идёт в фоне один раз', async () => {
+    const engine = engineWith(0, () => [vacancy('a'), { ...vacancy('b'), company: 'Globex' }]);
+    await engine.syncAll();
+    // Волна не сводит сама: сборка идёт отдельной фоновой задачей.
+    await engine.backgroundRecluster;
+    expect(engine.getActiveClusters()).toHaveLength(2);
+    expect(engine.clusterRebuildCount).toBe(1);
+  });
+
+  it('волна раньше срока не запускает вторую сборку сразу, а откладывает её', async () => {
+    vi.useFakeTimers();
+    try {
+      const reading = { items: [vacancy('a')] };
+      const engine = engineWith(60_000, () => reading.items);
+      await engine.syncAll();
+      await engine.backgroundRecluster;
+      expect(engine.clusterRebuildCount).toBe(1);
+
+      reading.items = [vacancy('a'), { ...vacancy('b'), company: 'Globex' }];
+      await engine.syncAll();
+      expect(engine.backgroundRecluster).toBeUndefined();
+      expect(engine.getActiveClusters()).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      await engine.backgroundRecluster;
+      expect(engine.clusterRebuildCount).toBe(2);
+      expect(engine.getActiveClusters()).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
