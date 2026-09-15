@@ -18,6 +18,13 @@ export interface RuntimeMemoryReport {
   readonly heapUsedMb: number;
   readonly heapLimitMb: number;
   readonly poolSize: number;
+  /** Сведение: кластеры, сборки, длительность последней, идёт ли сейчас (B221). */
+  readonly recluster?: {
+    clusters: number;
+    rebuilds: number;
+    lastReclusterMs: number;
+    inFlight: boolean;
+  };
 }
 
 export interface RouteDeps {

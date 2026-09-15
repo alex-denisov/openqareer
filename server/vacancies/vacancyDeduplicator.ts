@@ -35,7 +35,7 @@ function normalizeRoleTitle(title: string): string {
     .replace(/\b(back[- ]?end|бэкенд)\b/gi, 'backend');
 }
 
-function extractAtsLink(text?: string): string | null {
+export function extractAtsLink(text?: string): string | null {
   if (!text) return null;
   const match = ATS_URL_REGEX.exec(text);
   if (!match) return null;

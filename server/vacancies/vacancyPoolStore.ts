@@ -33,8 +33,11 @@ export interface VacancyLink {
 export interface VacancyPoolStore {
   /** Непохороненные записи; с окном — только свежие (вход сведения кластеров). */
   loadVacancies(window?: FreshnessWindow): UnifiedVacancy[];
-  /** То же по одной записи, без подъёма всего среза в кучу разом. */
-  iterateVacancies(window: FreshnessWindow): IterableIterator<UnifiedVacancy>;
+  /**
+   * Вход сведения по одной записи: компактная проекция (`clusterProjectionOf`),
+   * а не запись целиком — без подъёма среза и полных текстов в кучу.
+   */
+  iterateClusterInput(window: FreshnessWindow): IterableIterator<UnifiedVacancy>;
   /** Одна запись целиком, похороненная не отдаётся. */
   getVacancy(id: string): UnifiedVacancy | undefined;
   hasVacancy(id: string): boolean;

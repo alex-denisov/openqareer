@@ -696,6 +696,11 @@ ALTER TABLE vacancy_pool ADD COLUMN expired_at TEXT;
  * только латиницу. Строки, записанные до B221, дочитываются из `payload`
  * фоновым проходом при старте.
  */
+/** Проекция для сведения на индексе, созданном выкатом 1 без неё. */
+export const VACANCY_POOL_INDEX_CLUSTER_COLUMN = `
+ALTER TABLE vacancy_pool_index ADD COLUMN cluster_json TEXT;
+`;
+
 export const VACANCY_POOL_INDEX_TABLE = `
 CREATE TABLE IF NOT EXISTS vacancy_pool_index (
   id TEXT PRIMARY KEY,
@@ -706,7 +711,8 @@ CREATE TABLE IF NOT EXISTS vacancy_pool_index (
   is_remote INTEGER,
   url TEXT NOT NULL,
   search_text TEXT NOT NULL,
-  expired INTEGER NOT NULL DEFAULT 0
+  expired INTEGER NOT NULL DEFAULT 0,
+  cluster_json TEXT
 ) STRICT;
 CREATE INDEX IF NOT EXISTS vacancy_pool_index_fresh
   ON vacancy_pool_index(published_ms, id) WHERE expired = 0;

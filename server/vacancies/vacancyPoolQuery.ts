@@ -1,4 +1,5 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import { extractAtsLink } from './vacancyDeduplicator';
 
 /**
  * B221 — вопросы к пулу, на которые хранилище отвечает само, не поднимая пул в
@@ -64,6 +65,43 @@ export function searchTextOf(vacancy: UnifiedVacancy): string {
   return [vacancy.title, vacancy.company ?? '', ...skills, vacancy.description ?? '']
     .join('\n')
     .toLowerCase();
+}
+
+/** Столько знаков описания несёт кластер (`descriptionSummary`). */
+export const CLUSTER_SUMMARY_CHARS = 300;
+
+/**
+ * Вход сведения: та часть записи, которую кластеры читают на самом деле.
+ * Полные тексты объявления сведению не нужны, а разбирать их на каждую
+ * сборку — 1,2 ГБ мусора на 173 000 записей: на VM прода этого хватало,
+ * чтобы сборщик мусора останавливал процесс на десятки секунд (B221, выкат
+ * 2026-09-15). Проекция считается один раз при записи и лежит в узкой
+ * таблице индекса.
+ *
+ * Описание урезано до сводки кластера; ATS-ссылка, если она была дальше в
+ * тексте, дописывается за сводкой, чтобы правило «одна и та же вакансия по
+ * ATS-ссылке» продолжало работать.
+ */
+export function clusterProjectionOf(vacancy: UnifiedVacancy): UnifiedVacancy {
+  const description = vacancy.description ?? '';
+  const summary = description.slice(0, CLUSTER_SUMMARY_CHARS);
+  const atsLink = extractAtsLink(description);
+  const skills = Array.isArray(vacancy.requiredSkills) ? vacancy.requiredSkills : [];
+  return {
+    id: vacancy.id,
+    fingerprint: vacancy.fingerprint,
+    title: vacancy.title,
+    company: vacancy.company ?? '',
+    ...(vacancy.location === undefined ? {} : { location: vacancy.location }),
+    ...(vacancy.isRemote === undefined ? {} : { isRemote: vacancy.isRemote }),
+    ...(vacancy.salary === undefined ? {} : { salary: vacancy.salary }),
+    description: atsLink && !summary.includes(atsLink) ? `${summary}\n${atsLink}` : summary,
+    requiredSkills: [...skills],
+    url: typeof vacancy.url === 'string' ? vacancy.url : '',
+    provenance: vacancy.provenance,
+    publishedAt: vacancy.publishedAt,
+    status: vacancy.status,
+  };
 }
 
 export function normalizeQuery(query: string | undefined): string | undefined {

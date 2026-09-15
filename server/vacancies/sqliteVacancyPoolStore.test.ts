@@ -410,4 +410,41 @@ describe('SqliteVacancyPoolStore · снятое объявление', () => {
     expect(store.pendingBackfill()).toBe(0);
     expect(store.hasVacancy('row-id')).toBe(true);
   });
+  it('дочитывает проекцию сведения на индексе, созданном выкатом 1 без неё', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'vacancy-pool-b221-idx-'));
+    directories.push(directory);
+    const path = join(directory, 'pool.db');
+    const legacy = new DatabaseSync(path);
+    legacy.exec(MIGRATION_23);
+    legacy.exec('ALTER TABLE vacancy_pool ADD COLUMN expired_at TEXT;');
+    legacy.exec(`CREATE TABLE vacancy_pool_index (
+      id TEXT PRIMARY KEY, source_id TEXT NOT NULL, published_ms INTEGER, observed_ms INTEGER,
+      is_active INTEGER NOT NULL, is_remote INTEGER, url TEXT NOT NULL, search_text TEXT NOT NULL,
+      expired INTEGER NOT NULL DEFAULT 0) STRICT;`);
+    const at = '2026-09-01T10:00:00.000Z';
+    const pool = legacy.prepare(
+      'INSERT INTO vacancy_pool (id, source_id, published_at, stored_at, payload, expired_at) VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    const index = legacy.prepare(
+      'INSERT INTO vacancy_pool_index (id, source_id, published_ms, observed_ms, is_active, is_remote, url, search_text, expired) VALUES (?, ?, ?, ?, 1, NULL, ?, ?, ?)',
+    );
+    pool.run('v1', 'src', at, at, JSON.stringify(card('v1')), null);
+    index.run('v1', 'src', Date.parse(at), Date.parse(at), 'https://example.test/v1', 'role', 0);
+    pool.run('v2', 'src', at, at, JSON.stringify(card('v2')), at);
+    index.run('v2', 'src', Date.parse(at), Date.parse(at), 'https://example.test/v2', 'role', 1);
+    legacy.close();
+
+    const store = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(store);
+    const window = freshnessWindow(Date.parse('2026-09-02T00:00:00.000Z'));
+    expect(store.pendingBackfill()).toBe(2);
+    expect(Array.from(store.iterateClusterInput(window))).toEqual([]);
+    while (store.backfillStep(1) > 0) {
+      /* до конца */
+    }
+    expect(store.pendingBackfill()).toBe(0);
+    // Похороненная строка остаётся похороненной и после дочитывания проекции.
+    expect(Array.from(store.iterateClusterInput(window)).map((v) => v.id)).toEqual(['v1']);
+    expect(store.hasVacancy('v2')).toBe(false);
+  });
 });

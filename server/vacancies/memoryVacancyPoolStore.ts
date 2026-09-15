@@ -1,5 +1,6 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import {
+  clusterProjectionOf,
   isWithin,
   pageOf,
   parseMs,
@@ -41,8 +42,8 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     return window ? alive.filter((v) => isWithin(parseMs(v.publishedAt), window)) : alive;
   }
 
-  *iterateVacancies(window: FreshnessWindow): IterableIterator<UnifiedVacancy> {
-    for (const vacancy of this.loadVacancies(window)) yield vacancy;
+  *iterateClusterInput(window: FreshnessWindow): IterableIterator<UnifiedVacancy> {
+    for (const vacancy of this.loadVacancies(window)) yield clusterProjectionOf(vacancy);
   }
 
   getVacancy(id: string): UnifiedVacancy | undefined {
