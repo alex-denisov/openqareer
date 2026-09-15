@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildCrawlPlan, HH_PAGE_SIZE, HH_RESULT_CAP, planQueryUrl } from './hhCrawlPlan';
+import {
+  buildCrawlPlan,
+  HH_EMPLOYMENT_VALUES,
+  HH_PAGE_SIZE,
+  HH_RESULT_CAP,
+  HH_SCHEDULE_VALUES,
+  planQueryUrl,
+} from './hhCrawlPlan';
 
 describe('planQueryUrl', () => {
   it('собирает адрес запроса из роли, опыта, региона и периода', () => {
@@ -15,11 +22,32 @@ describe('planQueryUrl', () => {
     expect(url.searchParams.get('order_by')).toBe('publication_time');
   });
 
+  it('добавляет график и тип занятости в параметры запроса, если они указаны', () => {
+    const url = new URL(
+      planQueryUrl(
+        {
+          roleId: '96',
+          experience: 'between1And3',
+          areaId: '1',
+          schedule: 'remote',
+          employment: 'part',
+        },
+        30,
+        0,
+      ),
+    );
+
+    expect(url.searchParams.get('schedule')).toBe('remote');
+    expect(url.searchParams.get('employment')).toBe('part');
+  });
+
   it('без опыта и региона эти параметры не ставятся вовсе', () => {
     const url = new URL(planQueryUrl({ roleId: '96' }, 30, 0));
 
     expect(url.searchParams.has('experience')).toBe(false);
     expect(url.searchParams.has('area')).toBe(false);
+    expect(url.searchParams.has('schedule')).toBe(false);
+    expect(url.searchParams.has('employment')).toBe(false);
   });
 });
 
@@ -136,6 +164,51 @@ describe('buildCrawlPlan', () => {
     expect(plan.expectedPages).toBe(4);
   });
 
+  it('когда опыт и регион исчерпаны, часть сверх потолка дробится по графику', async () => {
+    const count = vi.fn(async (q: { experience?: string; schedule?: string }) => {
+      if (q.experience === undefined) return 9000;
+      if (q.schedule === undefined) return q.experience === 'between1And3' ? 2500 : 100;
+      return 500;
+    });
+
+    const plan = await buildCrawlPlan(['96'], {
+      countResults: count,
+      searchPeriodDays: 30,
+      areaChildren: () => [],
+    });
+
+    const scheduleParts = plan.queries.filter((q) => q.experience === 'between1And3');
+    expect(scheduleParts).toHaveLength(5);
+    expect(scheduleParts.map((q) => q.schedule).sort()).toEqual([...HH_SCHEDULE_VALUES].sort());
+    expect(plan.truncatedQueries).toBe(0);
+    expect(scheduleParts.every((q) => !q.truncated)).toBe(true);
+  });
+
+  it('когда график исчерпан, но часть всё ещё сверх потолка, она дробится по занятости', async () => {
+    const count = vi.fn(
+      async (q: { experience?: string; schedule?: string; employment?: string }) => {
+        if (q.experience === undefined) return 9000;
+        if (q.schedule === undefined) return q.experience === 'between1And3' ? 3000 : 100;
+        if (q.employment === undefined) return q.schedule === 'fullDay' ? 2500 : 200;
+        return 500;
+      },
+    );
+
+    const plan = await buildCrawlPlan(['96'], {
+      countResults: count,
+      searchPeriodDays: 30,
+      areaChildren: () => [],
+    });
+
+    const employmentParts = plan.queries.filter(
+      (q) => q.experience === 'between1And3' && q.schedule === 'fullDay',
+    );
+    expect(employmentParts).toHaveLength(5);
+    expect(employmentParts.map((q) => q.employment).sort()).toEqual([...HH_EMPLOYMENT_VALUES].sort());
+    expect(plan.truncatedQueries).toBe(0);
+    expect(employmentParts.every((q) => !q.truncated)).toBe(true);
+  });
+
   it('часть, которую не делит ни один срез, берётся до потолка и признаётся усечённой', async () => {
     const plan = await buildCrawlPlan(['96'], {
       countResults: async () => 9000,
@@ -143,9 +216,11 @@ describe('buildCrawlPlan', () => {
       areaChildren: () => [],
     });
 
-    expect(plan.queries).toHaveLength(4);
+    // 4 диапазона опыта * 5 графиков * 5 типов занятости = 100 запросов
+    expect(plan.queries).toHaveLength(100);
     expect(plan.queries[0].pages).toBe(HH_RESULT_CAP / HH_PAGE_SIZE);
-    expect(plan.truncatedQueries).toBe(4);
+    expect(plan.truncatedQueries).toBe(100);
+    expect(plan.queries.every((q) => q.truncated)).toBe(true);
   });
 });
 

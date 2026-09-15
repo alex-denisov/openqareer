@@ -37,10 +37,34 @@ export const HH_EXPERIENCE_VALUES = [
 
 export type HhExperience = (typeof HH_EXPERIENCE_VALUES)[number];
 
+/** Значения графика работы в фильтре площадки — третья ось дробления (B219). */
+export const HH_SCHEDULE_VALUES = [
+  'fullDay',
+  'shift',
+  'flexible',
+  'remote',
+  'flyInFlyOut',
+] as const;
+
+export type HhSchedule = (typeof HH_SCHEDULE_VALUES)[number];
+
+/** Значения типа занятости в фильтре площадки — четвёртая ось дробления (B219). */
+export const HH_EMPLOYMENT_VALUES = [
+  'full',
+  'part',
+  'project',
+  'volunteer',
+  'probation',
+] as const;
+
+export type HhEmployment = (typeof HH_EMPLOYMENT_VALUES)[number];
+
 export interface HhCrawlQuery {
   readonly roleId: string;
   readonly experience?: HhExperience;
   readonly areaId?: string;
+  readonly schedule?: HhSchedule;
+  readonly employment?: HhEmployment;
 }
 
 export interface HhPlannedQuery extends HhCrawlQuery {
@@ -85,6 +109,8 @@ export function planQueryUrl(query: HhCrawlQuery, searchPeriodDays: number, page
   url.searchParams.set('professional_role', query.roleId);
   if (query.experience) url.searchParams.set('experience', query.experience);
   if (query.areaId) url.searchParams.set('area', query.areaId);
+  if (query.schedule) url.searchParams.set('schedule', query.schedule);
+  if (query.employment) url.searchParams.set('employment', query.employment);
   url.searchParams.set('search_period', String(searchPeriodDays));
   // Свежие первыми: обход должен добирать новое, а не перечитывать старое ядро.
   url.searchParams.set('order_by', 'publication_time');
@@ -105,9 +131,30 @@ function planned(query: HhCrawlQuery, totalResults: number): HhPlannedQuery {
   };
 }
 
+function chooseSplitAxis(
+  query: HhCrawlQuery,
+  deps: CrawlPlanDeps,
+): readonly Partial<HhCrawlQuery>[] {
+  if (query.experience === undefined) {
+    return HH_EXPERIENCE_VALUES.map((experience) => ({ experience }));
+  }
+  const children = deps.areaChildren?.(query.areaId);
+  if (children && children.length > 0) {
+    return children.map((areaId) => ({ areaId }));
+  }
+  if (query.schedule === undefined) {
+    return HH_SCHEDULE_VALUES.map((schedule) => ({ schedule }));
+  }
+  if (query.employment === undefined) {
+    return HH_EMPLOYMENT_VALUES.map((employment) => ({ employment }));
+  }
+  return [];
+}
+
 /**
  * Дробит одну часть, пока она не влезет в потолок: сначала по опыту, потом по
- * регионам. Часть, которую не делит ни одна ось, возвращается усечённой.
+ * регионам, затем по графику и занятости (B219). Часть, которую не делит ни одна ось,
+ * возвращается усечённой.
  */
 async function splitQuery(
   query: HhCrawlQuery,
@@ -118,11 +165,7 @@ async function splitQuery(
     return totalResults > 0 ? [planned(query, totalResults)] : [];
   }
 
-  const axis: readonly Partial<HhCrawlQuery>[] =
-    query.experience === undefined
-      ? HH_EXPERIENCE_VALUES.map((experience) => ({ experience }))
-      : (deps.areaChildren?.(query.areaId) ?? []).map((areaId) => ({ areaId }));
-
+  const axis = chooseSplitAxis(query, deps);
   // Ось кончилась — делить больше нечем. Часть берётся до потолка, и это
   // записано в плане, а не скрыто.
   if (axis.length === 0) return [planned(query, totalResults)];
