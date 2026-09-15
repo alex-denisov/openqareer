@@ -1,7 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
-import type { Page } from 'playwright';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { htmlToFeedText } from '../connectors/feedText';
 import { ObscuraRunner } from '../crawler/obscuraRunner';
@@ -585,58 +581,21 @@ function buildDirectRequestInit(options: StealthFetchOptions): RequestInit {
   };
 }
 
-interface PageFetchParams {
-  readonly reqUrl: string;
-  readonly method: string;
-  readonly headers?: Record<string, string>;
-  readonly body?: unknown;
-}
-
-async function evaluatePageFetch(
-  page: Page,
-  params: PageFetchParams,
-): Promise<{ status: number; body: string }> {
-  return page.evaluate(async ({ reqUrl, method, headers, body }) => {
-    const res = await window.fetch(reqUrl, {
-      method,
-      headers,
-      body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
-    });
-    const text = await res.text();
-    return { status: res.status, body: text };
-  }, params);
-}
-
 async function executeHeadlessObscuraFetch(
   url: string,
   options: StealthFetchOptions = {},
 ): Promise<StealthFetchResult> {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obscura-'));
-  let runner: ObscuraRunner | undefined;
-  try {
-    runner = new ObscuraRunner({
-      userDataDir: tempDir,
-      headless: true,
-    });
-    const isPost = options.method === 'POST' || options.body !== undefined;
-    if (isPost) {
-      const origin = new URL(url).origin;
-      const page = await runner.openPage(origin);
-      const evaluated = await evaluatePageFetch(page, {
-        reqUrl: url,
-        method: options.method ?? 'POST',
-        headers: options.headers,
-        body: options.body,
-      });
-      return { status: evaluated.status, body: evaluated.body, usedStealth: true };
-    }
-    const page = await runner.openPage(url);
-    const body = await page.content();
+  const runner = new ObscuraRunner();
+  const userAgent = options.headers?.['User-Agent'] ?? options.headers?.['user-agent'];
+  const isPost = options.method === 'POST' || options.body !== undefined;
+
+  if (isPost) {
+    const body = await runner.fetchOriginal(url, { userAgent });
     return { status: 200, body, usedStealth: true };
-  } finally {
-    if (runner) await runner.close();
-    fs.rmSync(tempDir, { recursive: true, force: true });
   }
+
+  const body = await runner.fetchHtml(url, { userAgent });
+  return { status: 200, body, usedStealth: true };
 }
 
 /**

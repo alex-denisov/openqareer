@@ -38,6 +38,7 @@ screenshots/
 output/
 
 # Runtime and local tooling
+bin/
 *.log
 *.pid
 .DS_Store
