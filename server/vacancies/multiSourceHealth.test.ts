@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
-import type { StoredSourceState, VacancyPoolStore } from './vacancyPoolStore';
+import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
+import type { VacancyPoolStore } from './vacancyPoolStore';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 
 /**
@@ -136,17 +137,8 @@ describe('B200 · здоровье площадок в движке', () => {
   });
 
   it('переносит наблюдения через перезапуск процесса', async () => {
-    const states = new Map<string, StoredSourceState>();
-    const pool: VacancyPoolStore = {
-      loadVacancies: () => [],
-      loadSourceStates: () => Array.from(states.values()),
-      replaceSourceSlice: () => undefined,
-      saveSourceState: (state) => {
-        states.set(state.sourceId, state);
-      },
-      prune: () => undefined,
-      markExpired: () => 0,
-    };
+    // Один пул на два процесса: наблюдения переживают перезапуск в нём.
+    const pool: VacancyPoolStore = new MemoryVacancyPoolStore();
 
     const first = new MultiSourceVacancyEngine({
       sources: [source()],

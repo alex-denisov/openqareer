@@ -31,6 +31,8 @@ import {
   type SourceObservations,
 } from './sourceHealthVerdict';
 import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancyMatcher';
+import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
+import { freshnessWindow, isWithin, parseMs, MAX_VACANCY_AGE_DAYS } from './vacancyPoolQuery';
 import type { VacancyPoolStore } from './vacancyPoolStore';
 
 import { PoliteScheduler, type SourceScheduleInfo } from './politeScheduler';
@@ -102,17 +104,8 @@ export interface VacancyQueryResult {
   statsBySource: Array<{ sourceId: string; sourceName: string; count: number }>;
 }
 
-const MAX_VACANCY_AGE_DAYS = 30;
-
-function isVacancyFresh(
-  publishedAt: string,
-  nowMs: number = Date.now(),
-  maxAgeDays: number = MAX_VACANCY_AGE_DAYS,
-): boolean {
-  const pubTime = new Date(publishedAt).getTime();
-  if (Number.isNaN(pubTime)) return false;
-  const ageMs = nowMs - pubTime;
-  return ageMs >= 0 && ageMs <= maxAgeDays * 24 * 60 * 60 * 1000;
+function isVacancyFresh(publishedAt: string, nowMs: number = Date.now()): boolean {
+  return isWithin(parseMs(publishedAt), freshnessWindow(nowMs));
 }
 
 /**
@@ -168,11 +161,14 @@ function extractErrorHttpDetails(err: unknown): { statusCode?: number; retryAfte
 
 export class MultiSourceVacancyEngine {
   private sources: Map<string, VacancySourceConfig> = new Map();
-  private rawVacancies: Map<string, UnifiedVacancy> = new Map();
   private clusters: VacancyCluster[] = [];
   private fetcher?: SourceFetcher;
-  /** Where the pool survives a restart. Absent means memory only (tests). */
-  private readonly pool?: VacancyPoolStore;
+  /**
+   * Где лежит пул. Движок не держит копию в куче: каждое чтение — вопрос к
+   * хранилищу, и память следует за размером запроса, а не пула (B221). Без
+   * базы (тесты) это пул в памяти с теми же ответами.
+   */
+  private readonly pool: VacancyPoolStore;
   /** In-flight syncs, so a slow source cannot be started twice at once. */
   private running: Map<string, Promise<SourceSyncOutcome>> = new Map();
   /** Что опросы установили про каждую площадку — вход живости и доверия (B200). */
@@ -214,7 +210,7 @@ export class MultiSourceVacancyEngine {
       this.configureSourcePoliteness(src);
     }
     this.fetcher = options?.fetcher;
-    this.pool = options?.pool;
+    this.pool = options?.pool ?? new MemoryVacancyPoolStore();
     this.robots = options?.robots;
     this.linkProbe = options?.linkProbe;
   }
@@ -235,7 +231,6 @@ export class MultiSourceVacancyEngine {
   }
 
   private restoreSourceStates(): void {
-    if (!this.pool) return;
     for (const state of this.pool.loadSourceStates()) {
       const source = this.sources.get(state.sourceId);
       if (!source) continue;
@@ -257,55 +252,47 @@ export class MultiSourceVacancyEngine {
    * Loads what an earlier process synced. Without it a restart — and therefore
    * every deploy — served an empty «Возможности» until the scheduler's next
    * run, and every source claimed it had never been read (B164).
+   *
+   * Since B221 nothing is lifted into the heap: the store is pruned, source
+   * states are read back, and the pool is served from the store as it is.
    */
   public restore(nowMs: number = Date.now()): { restored: number } {
-    if (!this.pool) return { restored: 0 };
-    const oldestPublishedAt = new Date(
-      nowMs - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1000,
-    ).toISOString();
-    this.pool.prune(Array.from(this.sources.keys()), oldestPublishedAt);
-
-    this.rawVacancies.clear();
-    for (const vacancy of this.pool.loadVacancies()) {
-      if (!this.sources.has(vacancy.provenance.sourceId)) continue;
-      if (!isVacancyFresh(vacancy.publishedAt, nowMs)) continue;
-      this.rawVacancies.set(vacancy.id, vacancy);
+    this.pruneStore(nowMs);
+    // Синхронный вариант дочитывает базу до конца: он для тестов и для
+    // процесса, которому некому уступать цикл событий.
+    while ((this.pool.backfillStep?.() ?? 0) > 0) {
+      /* следующий шаг */
     }
-
-    this.restoreSourceStates();
-    this.poolChangedSinceRecluster = true;
-    return { restored: this.rawVacancies.size };
+    return this.finishRestore(nowMs);
   }
 
   /**
-   * Async variant that yields to the event loop every chunkSize items,
-   * keeping HTTP response latency under 20ms during huge pool restores (B218).
+   * Async variant that yields to the event loop between backfill steps,
+   * keeping HTTP response latency low while a pool written before B221 is
+   * being read through once (B218, B221).
    */
   public async restoreAsync(
     nowMs: number = Date.now(),
-    chunkSize = 500,
+    chunkSize = 2_000,
   ): Promise<{ restored: number }> {
-    if (!this.pool) return { restored: 0 };
+    this.pruneStore(nowMs);
+    while ((this.pool.backfillStep?.(chunkSize) ?? 0) > 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    return this.finishRestore(nowMs);
+  }
+
+  private pruneStore(nowMs: number): void {
     const oldestPublishedAt = new Date(
       nowMs - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1000,
     ).toISOString();
     this.pool.prune(Array.from(this.sources.keys()), oldestPublishedAt);
+  }
 
-    this.rawVacancies.clear();
-    let count = 0;
-    for (const vacancy of this.pool.loadVacancies()) {
-      if (!this.sources.has(vacancy.provenance.sourceId)) continue;
-      if (!isVacancyFresh(vacancy.publishedAt, nowMs)) continue;
-      this.rawVacancies.set(vacancy.id, vacancy);
-      count += 1;
-      if (count % chunkSize === 0) {
-        await new Promise((resolve) => setImmediate(resolve));
-      }
-    }
-
+  private finishRestore(nowMs: number): { restored: number } {
     this.restoreSourceStates();
     this.poolChangedSinceRecluster = true;
-    return { restored: this.rawVacancies.size };
+    return { restored: this.pool.countVacancies(freshnessWindow(nowMs)) };
   }
 
   public getSources(): VacancySourceConfig[] {
@@ -391,62 +378,51 @@ export class MultiSourceVacancyEngine {
    * Одна запись целиком: список отдаётся кратким видом внутри байтового бюджета
    * маршрута (INC-032), а полный текст поста читает карточка.
    */
-  /** Сколько сырых записей держит куча — без копирования пула (B220). */
-  public get rawVacancyCount(): number {
-    return this.rawVacancies.size;
+  /** Сколько свежих записей в пуле — счёт по хранилищу, не по куче (B220, B221). */
+  public get poolSize(): number {
+    return this.pool.countVacancies(freshnessWindow());
   }
 
   public getVacancy(id: string): UnifiedVacancy | undefined {
-    return this.rawVacancies.get(id);
+    return this.pool.getVacancy(id);
+  }
+
+  /** Есть ли запись в пуле — по индексу, без чтения текста (быстрый проход hh, B219). */
+  public hasVacancy(id: string): boolean {
+    return this.pool.hasVacancy(id);
   }
 
   public getVacancies(filter: VacancyQueryFilter = {}): VacancyQueryResult {
-    let all = Array.from(this.rawVacancies.values()).filter((v) => isVacancyFresh(v.publishedAt));
-
-    const statsMap = new Map<string, number>();
-    for (const v of all) {
-      const sId = v.provenance?.sourceId ?? 'unknown';
-      statsMap.set(sId, (statsMap.get(sId) ?? 0) + 1);
-    }
+    const window = freshnessWindow();
+    const counts = this.pool.countBySource(window);
     const statsBySource = Array.from(this.sources.values()).map((s) => ({
       sourceId: s.id,
       sourceName: s.name,
-      count: statsMap.get(s.id) ?? 0,
+      count: counts.get(s.id) ?? 0,
     }));
 
-    if (filter.sourceId) {
-      all = all.filter((v) => v.provenance?.sourceId === filter.sourceId);
+    // Тип площадки хранилище не знает — это свойство реестра, а не записи.
+    // Фильтр по типу переводится в список площадок этого типа.
+    let sourceIds: string[] | undefined;
+    if (filter.type !== undefined) {
+      sourceIds = Array.from(this.sources.values())
+        .filter((s) => s.type === filter.type)
+        .map((s) => s.id);
     }
-    if (filter.type) {
-      all = all.filter((v) => v.provenance?.sourceType === filter.type);
-    }
-    if (filter.isRemote !== undefined) {
-      all = all.filter((v) => v.isRemote === filter.isRemote);
-    }
-    if (filter.query) {
-      const q = filter.query.toLowerCase();
-      all = all.filter(
-        (v) =>
-          v.title.toLowerCase().includes(q) ||
-          v.company.toLowerCase().includes(q) ||
-          (v.description && v.description.toLowerCase().includes(q)) ||
-          v.requiredSkills.some((s) => s.toLowerCase().includes(q)),
-      );
+    if (filter.sourceId !== undefined) {
+      sourceIds = (sourceIds ?? [filter.sourceId]).filter((id) => id === filter.sourceId);
     }
 
-    // Sort newest first
-    all.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+    const page = this.pool.queryVacancies({
+      window,
+      ...(sourceIds === undefined ? {} : { sourceIds }),
+      ...(filter.isRemote === undefined ? {} : { isRemote: filter.isRemote }),
+      ...(filter.query === undefined ? {} : { query: filter.query }),
+      offset: filter.offset ?? 0,
+      limit: filter.limit ?? 20,
+    });
 
-    const total = all.length;
-    const offset = filter.offset ?? 0;
-    const limit = filter.limit ?? 20;
-    const items = all.slice(offset, offset + limit);
-
-    return {
-      total,
-      items,
-      statsBySource,
-    };
+    return { total: page.total, items: page.items, statsBySource };
   }
 
   public async syncSource(
@@ -498,7 +474,7 @@ export class MultiSourceVacancyEngine {
       atMs: nowMs,
     });
 
-    const newItemsCount = fetched.filter((v) => !this.rawVacancies.has(v.id)).length;
+    const newItemsCount = fetched.filter((v) => !this.pool.hasVacancy(v.id)).length;
     this.scheduler.recordAttempt(source.id, {
       success: true,
       statusCode: 200,
@@ -589,9 +565,9 @@ export class MultiSourceVacancyEngine {
     // выдачи и про остальное ничего не сказал, поэтому «нет в улове» здесь не
     // значит «снято». Срез дополняется, а устаревшее убирает тридцатидневная
     // уборка и проверка живости ссылок (B214).
-    const slice = partial
-      ? this.mergeSourceSlice(source.id, freshFetched, dropObservedBefore)
-      : this.replaceSourceSlice(source.id, freshFetched);
+    if (partial) this.pool.mergeSourceSlice(source.id, freshFetched, dropObservedBefore);
+    else this.pool.replaceSourceSlice(source.id, freshFetched);
+    const slice = this.pool.countSourceSlice(source.id);
 
     // The clock of the run, so the next due check measures the same instant
     // the scheduler used rather than drifting against wall time.
@@ -600,8 +576,8 @@ export class MultiSourceVacancyEngine {
     source.lastErrorMessage = undefined;
     // Счётчик называет размер среза, а не размер одного чтения: после
     // частичного прохода «найдено 1 464» при 36 376 в пуле было бы неправдой.
-    source.itemsFoundTotal = slice.length;
-    source.itemsActiveTotal = slice.filter((v) => v.status === 'active').length;
+    source.itemsFoundTotal = slice.total;
+    source.itemsActiveTotal = slice.active;
     this.persistSourceState(source);
 
     // Пересборка кластеров — работа по всему пулу, и внутри волны она
@@ -609,52 +585,6 @@ export class MultiSourceVacancyEngine {
     // все ответы прочитаны (прод 2026-09-06).
     this.poolChangedSinceRecluster = true;
     return freshFetched.length;
-  }
-
-  /**
-   * Swaps everything this source contributed for what it just returned. Other
-   * sources are untouched, so one shrinking feed cannot empty the pool.
-   */
-  private replaceSourceSlice(sourceId: string, vacancies: UnifiedVacancy[]): UnifiedVacancy[] {
-    for (const [id, vacancy] of this.rawVacancies) {
-      if (vacancy.provenance?.sourceId === sourceId) this.rawVacancies.delete(id);
-    }
-    for (const vacancy of vacancies) {
-      this.rawVacancies.set(vacancy.id, vacancy);
-    }
-    this.pool?.replaceSourceSlice(sourceId, vacancies);
-    return vacancies;
-  }
-
-  /**
-   * Дополняет срез источника частичным чтением: прежние записи остаются,
-   * прочитанные заново — обновляются. Хранилище знает только «заменить срез»,
-   * поэтому в него уходит объединение целиком.
-   */
-  private mergeSourceSlice(
-    sourceId: string,
-    vacancies: UnifiedVacancy[],
-    dropObservedBefore?: string,
-  ): UnifiedVacancy[] {
-    for (const vacancy of vacancies) {
-      this.rawVacancies.set(vacancy.id, vacancy);
-    }
-    // Полное перечисление, растянутое на тики, закончилось: запись, которую
-    // не видел ни один тик с его начала, площадка больше не показывает (B219).
-    const dropBeforeMs =
-      dropObservedBefore === undefined ? undefined : Date.parse(dropObservedBefore);
-    if (dropBeforeMs !== undefined && Number.isFinite(dropBeforeMs)) {
-      for (const [id, vacancy] of this.rawVacancies) {
-        if (vacancy.provenance?.sourceId !== sourceId) continue;
-        const observedMs = Date.parse(vacancy.provenance.observedAt ?? '');
-        if (!Number.isFinite(observedMs) || observedMs < dropBeforeMs) this.rawVacancies.delete(id);
-      }
-    }
-    const slice = Array.from(this.rawVacancies.values()).filter(
-      (vacancy) => vacancy.provenance?.sourceId === sourceId,
-    );
-    this.pool?.replaceSourceSlice(sourceId, slice);
-    return slice;
   }
 
   /**
@@ -674,12 +604,12 @@ export class MultiSourceVacancyEngine {
     const source = this.sources.get(sourceId);
     if (!source || !source.enabled) return undefined;
 
-    const slice = [...this.rawVacancies.values()].filter(
-      (vacancy) => vacancy.provenance?.sourceId === sourceId,
-    );
-    if (slice.length === 0) return undefined;
+    // Обходу нужны только адреса: срез hh.ru в сотни тысяч записей целиком в
+    // куче ради выборки из десятка ссылок — это то, от чего уходит B221.
+    const links = this.pool.loadSourceLinks(sourceId);
+    if (links.length === 0) return undefined;
 
-    const { census, goneVacancyIds } = await probeVacancyLinks(slice, this.linkProbe, {
+    const { census, goneVacancyIds } = await probeVacancyLinks(links, this.linkProbe, {
       sample: DEFAULT_LINK_SAMPLE,
       nowMs,
     });
@@ -691,8 +621,7 @@ export class MultiSourceVacancyEngine {
     this.linkCheckedAt.set(sourceId, nowMs);
 
     if (goneVacancyIds.length > 0) {
-      for (const id of goneVacancyIds) this.rawVacancies.delete(id);
-      this.pool?.markExpired(goneVacancyIds, census.checkedAt);
+      this.pool.markExpired(goneVacancyIds, census.checkedAt);
       this.poolChangedSinceRecluster = true;
       this.reclusterIfChanged();
     }
@@ -709,7 +638,7 @@ export class MultiSourceVacancyEngine {
     if (!this.linkProbe) return undefined;
     const candidates = [...this.sources.values()].filter((source) => {
       if (!source.enabled) return false;
-      return [...this.rawVacancies.values()].some((v) => v.provenance?.sourceId === source.id);
+      return this.pool.countSourceSlice(source.id).total > 0;
     });
     if (candidates.length === 0) return undefined;
 
@@ -724,7 +653,7 @@ export class MultiSourceVacancyEngine {
   private persistSourceState(source: VacancySourceConfig): void {
     const observations = this.observations.get(source.id);
     const schedule = this.scheduler.exportState()[source.id] ?? null;
-    this.pool?.saveSourceState({
+    this.pool.saveSourceState({
       sourceId: source.id,
       ...(observations ? { observations: { ...observations, schedule } } : {}),
       ...(source.lastSyncAt ? { lastSyncAt: source.lastSyncAt } : {}),
@@ -807,19 +736,24 @@ export class MultiSourceVacancyEngine {
     return outcomes;
   }
 
+  /**
+   * Вход сведения читается из хранилища и живёт в куче только на время
+   * сборки: кластеры не держат ссылок на записи, поэтому после сборки пул
+   * снова занимает ноль байт кучи (B221). Полная пересборка остаётся до
+   * среза 3 (кластеры в таблице, инкрементально).
+   */
   public recluster(): void {
-    const freshVacancies = Array.from(this.rawVacancies.values()).filter((v) =>
-      isVacancyFresh(v.publishedAt),
-    );
+    const freshVacancies = this.pool.loadVacancies(freshnessWindow());
     this.clusters = clusterVacancies(freshVacancies);
     this.poolChangedSinceRecluster = false;
     this.reclusterCount += 1;
   }
 
   public async reclusterAsync(chunkSize = 500): Promise<void> {
-    const freshVacancies = Array.from(this.rawVacancies.values()).filter((v) =>
-      isVacancyFresh(v.publishedAt),
-    );
+    // Записи читаются из базы по одной по мере сведения и уступают цикл
+    // событий вместе с ним: целиком поднятый срез блокировал бы старт на
+    // время разбора всего пула (B218).
+    const freshVacancies = this.pool.iterateVacancies(freshnessWindow());
     this.clusters = await clusterVacanciesAsync(freshVacancies, chunkSize);
     this.poolChangedSinceRecluster = false;
     this.reclusterCount += 1;
