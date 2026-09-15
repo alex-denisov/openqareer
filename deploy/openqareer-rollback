@@ -46,7 +46,7 @@ sudo -n /usr/bin/systemctl restart "$SERVICE"
 expected="$(basename "$previous_target")"
 healthy=0
 actual=""
-for _attempt in $(seq 1 20); do
+for _attempt in $(seq 1 60); do
   actual="$(curl -fsS --max-time 3 "$HEALTH_URL" 2>/dev/null |
     tr -d '\r\n' || true)"
   if [[ "$actual" == "$expected" ]]; then

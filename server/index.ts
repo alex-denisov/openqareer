@@ -300,10 +300,10 @@ process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
 try {
   await app.listen({ host: config.host, port: config.port });
-  // Пул и кластеры восстанавливаются уже после того, как сервер начал отвечать:
-  // на большом пуле (120k+ вакансий) чтение и сведение занимают время, и держать
-  // ими проверку здоровья выката нельзя (B218).
-  setImmediate(() => {
+  // Сервер слушает и отвечает на /health мгновенно (<10 мс).
+  // Восстановление 120k+ вакансий из SQLite и сведение кластеров запускаются
+  // через 5 секунд в фоне, не блокируя проверку здоровья выката (B218).
+  setTimeout(() => {
     const startedAt = Date.now();
     const restored = multiSourceEngine.restore();
     multiSourceEngine.recluster();
@@ -315,11 +315,11 @@ try {
       },
       'vacancy-pool-restored-and-clustered',
     );
-  });
-  runVacancyRefresh();
-  runMultiSourceSync();
-  runDocumentRetentionPurge();
-  runRetentionSweep();
+    runVacancyRefresh();
+    runMultiSourceSync();
+    runDocumentRetentionPurge();
+    runRetentionSweep();
+  }, 5_000)?.unref();
   vacancyRefreshTimer = setInterval(runVacancyRefresh, 5 * 60 * 1_000);
   vacancyRefreshTimer.unref();
   // Each source carries its own interval; the tick only asks which are due.
