@@ -2,9 +2,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { LinkedinAccountPool } from '../../server/crawler/linkedinAccountPool';
-import { LinkedinScraper } from '../../server/crawler/linkedinScraper';
+import { LinkedinScraper, resolveLinkedinProxyUrl } from '../../server/crawler/linkedinScraper';
+import { parseEnvironmentFile } from '../../server/connectors/hh/hhTestAccountEnvironment';
+import { resolveLocalEnvironmentFilePath } from '../../server/localEnvironmentFile';
 
 const DEFAULT_POOL_ROOT = path.resolve(process.cwd(), 'data/crawlers/linkedin');
+
+function loadLocalEnvIfPresent(): void {
+  try {
+    const envPath = resolveLocalEnvironmentFilePath();
+    if (fs.existsSync(envPath)) {
+      const parsed = parseEnvironmentFile(fs.readFileSync(envPath, 'utf8'));
+      for (const [k, v] of Object.entries(parsed)) {
+        if (!process.env[k]) {
+          process.env[k] = v;
+        }
+      }
+    }
+  } catch {
+    // Ignore when env file is absent
+  }
+}
 
 function printStatus(pool: LinkedinAccountPool): void {
   const summary = pool.getPoolSummary();
@@ -34,12 +52,19 @@ function getCliArg(flag: string): string | undefined {
   return idx !== -1 && process.argv[idx + 1] ? process.argv[idx + 1] : undefined;
 }
 
+function describeProxy(explicitProxy?: string): string {
+  const resolved = resolveLinkedinProxyUrl(explicitProxy);
+  if (!resolved) return 'none (direct)';
+  if (resolved.includes('webshare.io')) return 'webshare.io (rotating backbone)';
+  return 'custom proxy';
+}
+
 async function runScrapePosts(pool: LinkedinAccountPool): Promise<void> {
   const keywords = getCliArg('--keywords') ?? '#hiring';
   const proxyUrl = getCliArg('--proxy');
   const scraper = new LinkedinScraper({ pool, proxyUrl });
 
-  console.log(`[scrape-posts] Scraping with keywords: "${keywords}" (proxy: ${proxyUrl ?? 'none'})...`);
+  console.log(`[scrape-posts] Scraping with keywords: "${keywords}" (proxy: ${describeProxy(proxyUrl)})...`);
   const result = await scraper.scrapePosts({ keywords });
   console.log(`[scrape-posts] Status: ${result.status}, account: ${result.accountId ?? 'none'}, found: ${result.vacancies.length}`);
 
@@ -55,7 +80,7 @@ async function runScrapeJobs(pool: LinkedinAccountPool): Promise<void> {
   const proxyUrl = getCliArg('--proxy');
   const scraper = new LinkedinScraper({ pool, proxyUrl });
 
-  console.log(`[scrape-jobs] Scraping: "${keywords}" in "${location}" (proxy: ${proxyUrl ?? 'none'})...`);
+  console.log(`[scrape-jobs] Scraping: "${keywords}" in "${location}" (proxy: ${describeProxy(proxyUrl)})...`);
   const result = await scraper.scrapeJobs({ keywords, location });
   console.log(`[scrape-jobs] Status: ${result.status}, account: ${result.accountId ?? 'none'}, found: ${result.vacancies.length}`);
 
@@ -65,6 +90,7 @@ async function runScrapeJobs(pool: LinkedinAccountPool): Promise<void> {
 }
 
 async function main() {
+  loadLocalEnvIfPresent();
   const command = process.argv[2] ?? 'status';
 
   if (!fs.existsSync(DEFAULT_POOL_ROOT)) {

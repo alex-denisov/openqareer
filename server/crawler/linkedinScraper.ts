@@ -41,6 +41,17 @@ export interface LinkedinScraperOptions {
   readonly proxyUrl?: string;
 }
 
+export function resolveLinkedinProxyUrl(explicitProxy?: string): string | undefined {
+  if (explicitProxy) return explicitProxy;
+  if (process.env.LINKEDIN_PROXY_URL) return process.env.LINKEDIN_PROXY_URL;
+  if (process.env.WEBSHARE_LOGIN && process.env.WEBSHARE_PASSWORD) {
+    const user = encodeURIComponent(`${process.env.WEBSHARE_LOGIN}-rotate`);
+    const pass = encodeURIComponent(process.env.WEBSHARE_PASSWORD);
+    return `http://${user}:${pass}@p.webshare.io:80`;
+  }
+  return undefined;
+}
+
 export class LinkedinScraper {
   private readonly pool: LinkedinAccountPool;
   private readonly navigator: PageNavigator;
@@ -58,7 +69,7 @@ export class LinkedinScraper {
         const runner = new ObscuraRunner({
           userDataDir: storagePath,
           headless: true,
-          proxyUrl: options.proxyUrl ?? process.env.LINKEDIN_PROXY_URL,
+          proxyUrl: resolveLinkedinProxyUrl(options.proxyUrl),
         });
         try {
           const page = await runner.openPage(targetUrl);

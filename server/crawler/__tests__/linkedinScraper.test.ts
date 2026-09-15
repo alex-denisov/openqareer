@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LinkedinScraper, type PageNavigator } from '../linkedinScraper';
+import { LinkedinScraper, resolveLinkedinProxyUrl, type PageNavigator } from '../linkedinScraper';
 import { LinkedinAccountPool } from '../linkedinAccountPool';
 
 describe('LinkedinScraper with Obscura pool rotation', () => {
@@ -161,6 +161,29 @@ describe('LinkedinScraper with Obscura pool rotation', () => {
     expect(result.vacancies[0]?.title).toContain('Senior Full Stack Engineer');
     expect(result.vacancies[0]?.company).toBe('TechCorp');
     expect(result.vacancies[0]?.provenance.sourceId).toBe('src-linkedin-posts');
+  });
+
+  it('resolves proxy URL prioritizing explicit proxy, then LINKEDIN_PROXY_URL, then Webshare', () => {
+    const origEnv = { ...process.env };
+    try {
+      delete process.env.LINKEDIN_PROXY_URL;
+      delete process.env.WEBSHARE_LOGIN;
+      delete process.env.WEBSHARE_PASSWORD;
+
+      expect(resolveLinkedinProxyUrl()).toBeUndefined();
+
+      expect(resolveLinkedinProxyUrl('http://custom:8080')).toBe('http://custom:8080');
+
+      process.env.LINKEDIN_PROXY_URL = 'http://env-proxy:9000';
+      expect(resolveLinkedinProxyUrl()).toBe('http://env-proxy:9000');
+
+      delete process.env.LINKEDIN_PROXY_URL;
+      process.env.WEBSHARE_LOGIN = 'myuser';
+      process.env.WEBSHARE_PASSWORD = 'mypassword';
+      expect(resolveLinkedinProxyUrl()).toBe('http://myuser-rotate:mypassword@p.webshare.io:80');
+    } finally {
+      process.env = origEnv;
+    }
   });
 });
 
