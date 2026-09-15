@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 import { freshnessWindow } from './vacancyPoolQuery';
@@ -318,5 +318,46 @@ describe.each(implementations)('VacancyPoolStore parity: %s', (_name, open) => {
     // b1 matches target role and is remote, c1 is remote and fills
     // b2 is archived (excluded), b3 is old (excluded), b4 is future (excluded)
     expect(candidates?.map((c) => c.id)).toEqual(['b1', 'c1']);
+  });
+
+  it('implements cluster storage with full parity (save, load, upsert, delete, count)', () => {
+    const store = open();
+    expect(store.countClusters()).toBe(0);
+    expect(store.loadClusters()).toEqual([]);
+
+    const c1: VacancyCluster = {
+      id: 'cluster-p1',
+      canonicalTitle: 'Platform Engineer',
+      canonicalCompany: 'Aurora',
+      isRemote: true,
+      descriptionSummary: 'Platform role',
+      skills: ['Go'],
+      primaryUrl: 'https://example.test/p1',
+      sources: [
+        {
+          sourceType: 'json_api',
+          sourceId: 'src',
+          sourceUrl: 'https://example.test/p1',
+          observedAt: daysAgo(1),
+        },
+      ],
+      firstObservedAt: daysAgo(2),
+      lastSeenAt: daysAgo(1),
+      status: 'active',
+      vacanciesCount: 1,
+    };
+
+    store.saveClusters([c1]);
+    expect(store.countClusters()).toBe(1);
+    expect(store.loadClusters()[0].canonicalTitle).toBe('Platform Engineer');
+
+    store.upsertCluster({ ...c1, canonicalTitle: 'Lead Platform Engineer', vacanciesCount: 2 });
+    expect(store.countClusters()).toBe(1);
+    expect(store.loadClusters()[0].canonicalTitle).toBe('Lead Platform Engineer');
+    expect(store.loadClusters()[0].vacanciesCount).toBe(2);
+
+    store.deleteCluster('cluster-p1');
+    expect(store.countClusters()).toBe(0);
+    expect(store.loadClusters()).toEqual([]);
   });
 });

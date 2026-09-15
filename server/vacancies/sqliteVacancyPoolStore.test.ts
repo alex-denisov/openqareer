@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 import { MIGRATION_23 } from '../data/sqliteSchema';
 import { freshnessWindow } from './vacancyPoolQuery';
+import type { VacancyCluster } from '../domain/unifiedVacancy';
 
 const directories: string[] = [];
 const stores: SqliteVacancyPoolStore[] = [];
@@ -555,5 +556,86 @@ describe('SqliteVacancyPoolStore · queryMatchCandidates (B221 срез 2)', () 
       { nowMs, limit: 1 },
     );
     expect(result.map((v) => v.id)).toEqual(['v-skill']);
+  });
+
+  describe('Cluster storage (B221 slice 3)', () => {
+    const sampleCluster: VacancyCluster = {
+      id: 'cluster-v1',
+      canonicalTitle: 'Senior TypeScript Developer',
+      canonicalCompany: 'Tech Corp',
+      canonicalLocation: 'Berlin',
+      isRemote: true,
+      salary: { from: 80000, to: 100000, currency: 'EUR' },
+      descriptionSummary: 'Great role',
+      skills: ['TypeScript', 'Node.js'],
+      primaryUrl: 'https://example.test/v1',
+      sources: [
+        {
+          sourceType: 'json_api',
+          sourceId: 'src1',
+          sourceUrl: 'https://example.test/v1',
+          observedAt: '2026-09-01T10:00:00.000Z',
+        },
+      ],
+      firstObservedAt: '2026-09-01T10:00:00.000Z',
+      lastSeenAt: '2026-09-02T10:00:00.000Z',
+      status: 'active',
+      vacanciesCount: 1,
+    };
+
+    it('saves, counts, and loads clusters', () => {
+      const { store } = openStore();
+      expect(store.countClusters()).toBe(0);
+      expect(store.loadClusters()).toEqual([]);
+
+      store.saveClusters([sampleCluster]);
+      expect(store.countClusters()).toBe(1);
+      const loaded = store.loadClusters();
+      expect(loaded).toHaveLength(1);
+      expect(loaded[0].id).toBe('cluster-v1');
+      expect(loaded[0].canonicalTitle).toBe('Senior TypeScript Developer');
+      expect(loaded[0].skills).toEqual(['TypeScript', 'Node.js']);
+    });
+
+    it('upserts an existing cluster', () => {
+      const { store } = openStore();
+      store.saveClusters([sampleCluster]);
+
+      const updatedCluster: VacancyCluster = {
+        ...sampleCluster,
+        canonicalTitle: 'Lead TypeScript Developer',
+        vacanciesCount: 2,
+      };
+      store.upsertCluster(updatedCluster);
+
+      expect(store.countClusters()).toBe(1);
+      const loaded = store.loadClusters();
+      expect(loaded[0].canonicalTitle).toBe('Lead TypeScript Developer');
+      expect(loaded[0].vacanciesCount).toBe(2);
+    });
+
+    it('deletes a cluster by id', () => {
+      const { store } = openStore();
+      store.saveClusters([sampleCluster]);
+      expect(store.countClusters()).toBe(1);
+
+      store.deleteCluster('cluster-v1');
+      expect(store.countClusters()).toBe(0);
+      expect(store.loadClusters()).toEqual([]);
+    });
+
+    it('persists clusters across closing and reopening database', () => {
+      const { store, path } = openStore();
+      store.saveClusters([sampleCluster]);
+      store.close();
+
+      const reopenedStore = new SqliteVacancyPoolStore({ databasePath: path });
+      stores.push(reopenedStore);
+
+      expect(reopenedStore.countClusters()).toBe(1);
+      const loaded = reopenedStore.loadClusters();
+      expect(loaded[0].id).toBe('cluster-v1');
+      expect(loaded[0].canonicalCompany).toBe('Tech Corp');
+    });
   });
 });

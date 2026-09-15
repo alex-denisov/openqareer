@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { UnifiedVacancy } from '../domain/unifiedVacancy';
-import { clusterVacancies, clusterVacanciesAsync, isDuplicateVacancy } from './vacancyDeduplicator';
+import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
+import {
+  clusterVacancies,
+  clusterVacanciesAsync,
+  IncrementalClusterBuilder,
+  isDuplicateVacancy,
+  mergeVacanciesIntoClusters,
+} from './vacancyDeduplicator';
 
 describe('Vacancy Deduplication & Clustering', () => {
   const vacancyFromHh: UnifiedVacancy = {
@@ -324,5 +330,120 @@ describe('B205: Cross-source deduplication across five platforms into one card',
     const tgAuth = calculateSourceAuthenticity('tg_relocation_jobs', clusters);
     expect(tgAuth.originalShare).toEqual({ counted: 0, of: 1 });
     expect(tgAuth.reprintShare).toEqual({ counted: 1, of: 1 });
+  });
+
+  describe('Incremental clustering (B221 slice 3)', () => {
+    const vHh: UnifiedVacancy = {
+      id: 'hh-101',
+      fingerprint: 'fp-101',
+      title: 'Senior Backend Go Developer',
+      company: 'Fintech Solutions',
+      location: 'Москва',
+      isRemote: true,
+      salary: { from: 300000, to: 450000, currency: 'RUR', gross: true },
+      description: 'Go dev',
+      requiredSkills: ['Go', 'PostgreSQL'],
+      url: 'https://hh.ru/vacancy/101',
+      provenance: {
+        sourceType: 'hh',
+        sourceId: 'hh',
+        sourceUrl: 'https://hh.ru/vacancy/101',
+        observedAt: '2026-08-18T00:00:00.000Z',
+      },
+      publishedAt: '2026-08-17T12:00:00.000Z',
+      status: 'active',
+    };
+
+    const vTg: UnifiedVacancy = {
+      id: 'tg-999',
+      fingerprint: 'fp-tg-999',
+      title: 'Senior Go Developer',
+      company: 'Fintech Solutions LLC',
+      location: 'Удалённо',
+      isRemote: true,
+      description: 'Go dev in telegram',
+      requiredSkills: ['Golang', 'PostgreSQL', 'Kafka'],
+      url: 'https://t.me/job_feed/999',
+      provenance: {
+        sourceType: 'telegram',
+        sourceId: 'tg-job-feed',
+        sourceUrl: 'https://t.me/job_feed/999',
+        channelName: 'job_feed',
+        observedAt: '2026-08-18T01:00:00.000Z',
+      },
+      publishedAt: '2026-08-17T14:00:00.000Z',
+      status: 'active',
+    };
+
+    const vUnrelated: UnifiedVacancy = {
+      id: 'remotive-55',
+      fingerprint: 'fp-rem-55',
+      title: 'Staff Frontend Engineer (React)',
+      company: 'Global SaaS Co',
+      location: 'Worldwide',
+      isRemote: true,
+      description: 'Lead React',
+      requiredSkills: ['React', 'TypeScript'],
+      url: 'https://remotive.com/jobs/55',
+      provenance: {
+        sourceType: 'remotive',
+        sourceId: 'remotive',
+        sourceUrl: 'https://remotive.com/jobs/55',
+        observedAt: '2026-08-18T00:30:00.000Z',
+      },
+      publishedAt: '2026-08-16T10:00:00.000Z',
+      status: 'active',
+    };
+
+    it('merges new vacancies into existing clusters or creates new clusters', () => {
+      const existingCluster: VacancyCluster = {
+        id: 'cluster-hh-101',
+        canonicalTitle: 'Senior Backend Go Developer',
+        canonicalCompany: 'Fintech Solutions',
+        canonicalLocation: 'Москва',
+        isRemote: true,
+        salary: { from: 300000, to: 450000, currency: 'RUR', gross: true },
+        descriptionSummary: 'Go-разработчик',
+        skills: ['Go', 'PostgreSQL'],
+        primaryUrl: 'https://hh.ru/vacancy/101',
+        sources: [
+          {
+            sourceType: 'hh',
+            sourceId: 'hh',
+            sourceUrl: 'https://hh.ru/vacancy/101',
+            observedAt: '2026-08-18T00:00:00.000Z',
+          },
+        ],
+        firstObservedAt: '2026-08-17T12:00:00.000Z',
+        lastSeenAt: '2026-08-18T00:00:00.000Z',
+        status: 'active',
+        vacanciesCount: 1,
+      };
+
+      const builder = new IncrementalClusterBuilder([existingCluster]);
+      expect(builder.getClusters()).toHaveLength(1);
+
+      // vTg duplicates existingCluster, vUnrelated creates a new cluster
+      const result = builder.addVacancies([vTg, vUnrelated]);
+
+      expect(result.updatedClusters).toHaveLength(1);
+      expect(result.updatedClusters[0].id).toBe('cluster-hh-101');
+      expect(result.updatedClusters[0].vacanciesCount).toBe(2);
+      expect(result.updatedClusters[0].skills).toContain('Kafka');
+
+      expect(result.newClusters).toHaveLength(1);
+      expect(result.newClusters[0].canonicalCompany).toBe('Global SaaS Co');
+
+      expect(builder.getClusters()).toHaveLength(2);
+    });
+
+    it('mergeVacanciesIntoClusters helper matches IncrementalClusterBuilder', () => {
+      const clusters: VacancyCluster[] = [];
+      const result = mergeVacanciesIntoClusters(clusters, [vHh, vTg]);
+
+      expect(result.newClusters).toHaveLength(1);
+      expect(result.newClusters[0].vacanciesCount).toBe(2);
+      expect(clusters).toHaveLength(1);
+    });
   });
 });

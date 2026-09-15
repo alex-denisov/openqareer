@@ -1,9 +1,10 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
-import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import {
   MIGRATION_23,
+  VACANCY_CLUSTERS_TABLE,
   VACANCY_POOL_EXPIRED_AT_COLUMN,
   VACANCY_CLUSTER_INPUT_TABLE,
   VACANCY_POOL_INDEX_TABLE,
@@ -115,6 +116,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.ensureColumn('vacancy_pool', 'expired_at', VACANCY_POOL_EXPIRED_AT_COLUMN);
     this.database.exec(VACANCY_POOL_INDEX_TABLE);
     this.database.exec(VACANCY_CLUSTER_INPUT_TABLE);
+    this.database.exec(VACANCY_CLUSTERS_TABLE);
   }
 
   /**
@@ -583,6 +585,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         this.database.exec('DELETE FROM vacancy_pool');
         this.database.exec('DELETE FROM vacancy_pool_index');
         this.database.exec('DELETE FROM vacancy_cluster_input');
+        this.database.exec('DELETE FROM vacancy_clusters');
         this.database.exec('DELETE FROM vacancy_source_state');
         return;
       }
@@ -602,8 +605,88 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     });
   }
 
+  private prepareClusterUpsert() {
+    return this.database.prepare(
+      `INSERT INTO vacancy_clusters (
+         id, fingerprint, title, company, cluster_json, items_count, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         fingerprint = excluded.fingerprint,
+         title = excluded.title,
+         company = excluded.company,
+         cluster_json = excluded.cluster_json,
+         items_count = excluded.items_count,
+         updated_at = excluded.updated_at`,
+    );
+  }
+
+  saveClusters(clusters: VacancyCluster[]): void {
+    if (clusters.length === 0) return;
+    const upsert = this.prepareClusterUpsert();
+    const now = Date.now();
+    this.inTransaction(() => {
+      for (const cluster of clusters) {
+        upsert.run(
+          cluster.id,
+          cluster.id,
+          cluster.canonicalTitle,
+          cluster.canonicalCompany,
+          JSON.stringify(cluster),
+          cluster.vacanciesCount,
+          now,
+        );
+      }
+    });
+  }
+
+  loadClusters(): VacancyCluster[] {
+    const rows = this.database
+      .prepare('SELECT cluster_json FROM vacancy_clusters ORDER BY updated_at DESC, id ASC')
+      .all() as unknown as Array<{ cluster_json: string }>;
+    const clusters: VacancyCluster[] = [];
+    for (const row of rows) {
+      try {
+        const parsed = JSON.parse(row.cluster_json) as VacancyCluster;
+        if (parsed && typeof parsed.id === 'string') {
+          clusters.push(parsed);
+        }
+      } catch {
+        // Пропускаем повреждённую строку
+      }
+    }
+    return clusters;
+  }
+
+  upsertCluster(cluster: VacancyCluster): void {
+    const upsert = this.prepareClusterUpsert();
+    upsert.run(
+      cluster.id,
+      cluster.id,
+      cluster.canonicalTitle,
+      cluster.canonicalCompany,
+      JSON.stringify(cluster),
+      cluster.vacanciesCount,
+      Date.now(),
+    );
+  }
+
+  deleteCluster(clusterId: string): void {
+    this.database.prepare('DELETE FROM vacancy_clusters WHERE id = ?').run(clusterId);
+  }
+
+  countClusters(): number {
+    const row = this.database
+      .prepare('SELECT count(*) AS n FROM vacancy_clusters')
+      .get() as { n: number };
+    return row.n;
+  }
+
   close(): void {
-    this.database.close();
+    try {
+      this.database.close();
+    } catch {
+      // Идемпотентное закрытие базы
+    }
   }
 
   private inTransaction(operation: () => void): void {

@@ -9,6 +9,7 @@ import {
   calculateSourceAuthenticity,
   clusterVacancies,
   clusterVacanciesAsync,
+  IncrementalClusterBuilder,
 } from './vacancyDeduplicator';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import { mapWithConcurrency } from './boundedConcurrency';
@@ -176,6 +177,8 @@ function extractErrorHttpDetails(err: unknown): { statusCode?: number; retryAfte
 export class MultiSourceVacancyEngine {
   private sources: Map<string, VacancySourceConfig> = new Map();
   private clusters: VacancyCluster[] = [];
+  private clusterBuilder?: IncrementalClusterBuilder;
+  private pendingVacancies: UnifiedVacancy[] = [];
   private fetcher?: SourceFetcher;
   /**
    * Где лежит пул. Движок не держит копию в куче: каждое чтение — вопрос к
@@ -312,11 +315,41 @@ export class MultiSourceVacancyEngine {
       nowMs - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1000,
     ).toISOString();
     this.pool.prune(Array.from(this.sources.keys()), oldestPublishedAt);
+    this.pruneClusters(oldestPublishedAt);
+  }
+
+  private pruneClusters(oldestPublishedAt: string): void {
+    if (
+      this.clusters.length === 0 &&
+      typeof this.pool.countClusters === 'function' &&
+      this.pool.countClusters() > 0
+    ) {
+      this.clusters = typeof this.pool.loadClusters === 'function' ? this.pool.loadClusters() : [];
+    }
+    const initialLen = this.clusters.length;
+    this.clusters = this.clusters.filter((cluster) => {
+      if (cluster.lastSeenAt < oldestPublishedAt) {
+        if (typeof this.pool.deleteCluster === 'function') {
+          this.pool.deleteCluster(cluster.id);
+        }
+        return false;
+      }
+      return true;
+    });
+    if (this.clusters.length !== initialLen || !this.clusterBuilder) {
+      this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);
+    }
   }
 
   private finishRestore(nowMs: number): { restored: number } {
     this.restoreSourceStates();
-    this.poolChangedSinceRecluster = true;
+    if (typeof this.pool.countClusters === 'function' && this.pool.countClusters() > 0) {
+      this.clusters = typeof this.pool.loadClusters === 'function' ? this.pool.loadClusters() : [];
+      this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);
+      this.poolChangedSinceRecluster = false;
+    } else {
+      this.poolChangedSinceRecluster = true;
+    }
     return { restored: this.pool.countVacancies(freshnessWindow(nowMs)) };
   }
 
@@ -396,6 +429,16 @@ export class MultiSourceVacancyEngine {
    * чтение» на проде — это минуты без ответа для всех (B221).
    */
   private ensureClusters(): void {
+    if (
+      this.clusters.length === 0 &&
+      typeof this.pool.countClusters === 'function' &&
+      this.pool.countClusters() > 0
+    ) {
+      this.clusters = typeof this.pool.loadClusters === 'function' ? this.pool.loadClusters() : [];
+      this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);
+      this.poolChangedSinceRecluster = false;
+      return;
+    }
     if (this.reclusterMode.mode !== 'sync') return;
     if (this.poolChangedSinceRecluster) this.recluster();
   }
@@ -606,11 +649,42 @@ export class MultiSourceVacancyEngine {
     source.itemsActiveTotal = slice.active;
     this.persistSourceState(source);
 
-    // Пересборка кластеров — работа по всему пулу, и внутри волны она
-    // повторялась на каждую площадку. Волна пересобирает пул один раз, когда
-    // все ответы прочитаны (прод 2026-09-06).
+    if (freshFetched.length > 0) {
+      this.pendingVacancies.push(...freshFetched);
+    }
     this.poolChangedSinceRecluster = true;
     return freshFetched.length;
+  }
+
+  private ensureLoadedClusters(): void {
+    if (
+      this.clusters.length === 0 &&
+      typeof this.pool.countClusters === 'function' &&
+      this.pool.countClusters() > 0
+    ) {
+      this.clusters = typeof this.pool.loadClusters === 'function' ? this.pool.loadClusters() : [];
+      this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);
+    }
+  }
+
+  private getOrCreateClusterBuilder(): IncrementalClusterBuilder {
+    if (!this.clusterBuilder) {
+      this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);
+    }
+    return this.clusterBuilder;
+  }
+
+  private applyPendingVacancies(): void {
+    if (this.pendingVacancies.length === 0) return;
+    const pending = this.pendingVacancies;
+    this.pendingVacancies = [];
+    const builder = this.getOrCreateClusterBuilder();
+    const { updatedClusters, newClusters } = builder.addVacancies(pending);
+    this.clusters = builder.getClusters();
+    const affected = [...updatedClusters, ...newClusters];
+    if (affected.length > 0 && typeof this.pool.saveClusters === 'function') {
+      this.pool.saveClusters(affected);
+    }
   }
 
   /**
@@ -648,11 +722,42 @@ export class MultiSourceVacancyEngine {
 
     if (goneVacancyIds.length > 0) {
       this.pool.markExpired(goneVacancyIds, census.checkedAt);
+      this.handleExpiredVacancies(goneVacancyIds);
       this.poolChangedSinceRecluster = true;
       this.reclusterIfChanged();
     }
     this.persistSourceState(source);
     return census;
+  }
+
+  private handleExpiredVacancies(goneVacancyIds: readonly string[]): void {
+    if (this.clusters.length === 0 && this.pool.countClusters() > 0) {
+      this.clusters = this.pool.loadClusters();
+    }
+    const goneSet = new Set(goneVacancyIds);
+    let clustersChanged = false;
+    for (const cluster of this.clusters) {
+      const match =
+        goneSet.has(cluster.id.replace(/^cluster-/, '')) ||
+        cluster.sources.some(
+          (s) =>
+            (s.externalId && goneSet.has(s.externalId)) ||
+            (s.sourceUrl && goneSet.has(s.sourceUrl)),
+        );
+      if (!match) continue;
+      if (cluster.vacanciesCount <= 1) {
+        cluster.status = 'archived';
+        this.pool.upsertCluster(cluster);
+        clustersChanged = true;
+      } else {
+        cluster.vacanciesCount -= 1;
+        this.pool.upsertCluster(cluster);
+        clustersChanged = true;
+      }
+    }
+    if (clustersChanged) {
+      this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);
+    }
   }
 
   /**
@@ -769,25 +874,46 @@ export class MultiSourceVacancyEngine {
    * среза 3 (кластеры в таблице, инкрементально).
    */
   public recluster(): void {
-    // По одной записи из базы, не массивом: массив на 173 000 записей — это
-    // гигабайт мусора после каждой волны опроса (прод 2026-09-15, B221).
     const startedAt = Date.now();
-    const freshVacancies = this.pool.iterateClusterInput(freshnessWindow());
-    this.clusters = clusterVacancies(freshVacancies);
-    this.finishRecluster(startedAt);
+    this.ensureLoadedClusters();
+    if (
+      this.clusters.length === 0 &&
+      this.pool.countVacancies(freshnessWindow()) > this.pendingVacancies.length
+    ) {
+      const freshVacancies = this.pool.iterateClusterInput(freshnessWindow());
+      this.clusters = clusterVacancies(freshVacancies);
+      this.pendingVacancies = [];
+      this.finishRecluster(startedAt, true);
+    } else {
+      this.applyPendingVacancies();
+      this.finishRecluster(startedAt, false);
+    }
   }
 
   public async reclusterAsync(chunkSize = 500): Promise<void> {
-    // Записи читаются из базы по одной по мере сведения и уступают цикл
-    // событий вместе с ним: целиком поднятый срез блокировал бы старт на
-    // время разбора всего пула (B218).
     const startedAt = Date.now();
-    const freshVacancies = this.pool.iterateClusterInput(freshnessWindow());
-    this.clusters = await clusterVacanciesAsync(freshVacancies, chunkSize);
-    this.finishRecluster(startedAt);
+    this.ensureLoadedClusters();
+    if (
+      this.clusters.length === 0 &&
+      this.pool.countVacancies(freshnessWindow()) > this.pendingVacancies.length
+    ) {
+      const freshVacancies = this.pool.iterateClusterInput(freshnessWindow());
+      this.clusters = await clusterVacanciesAsync(freshVacancies, chunkSize);
+      this.pendingVacancies = [];
+      this.finishRecluster(startedAt, true);
+    } else {
+      this.applyPendingVacancies();
+      this.finishRecluster(startedAt, false);
+    }
   }
 
-  private finishRecluster(startedAt: number): void {
+  private finishRecluster(startedAt: number, didFullRecluster = false): void {
+    if (didFullRecluster) {
+      this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);
+      if (typeof this.pool.saveClusters === 'function') {
+        this.pool.saveClusters(this.clusters);
+      }
+    }
     this.poolChangedSinceRecluster = false;
     this.reclusterCount += 1;
     this.lastReclusterMs = Date.now() - startedAt;

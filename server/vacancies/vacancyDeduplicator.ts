@@ -230,7 +230,7 @@ function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluster {
  * «Роспотребнадзора», «ФАКТОР» внутри «Лидфактор», «Сбер» внутри
  * «СберЛизинг». Индекс их больше не сводит, и это правильнее старого.
  */
-class ClusterIndex {
+export class ClusterIndex {
   private readonly byFingerprint = new Map<string, number>();
   private readonly byUrl = new Map<string, number[]>();
   private readonly byAtsLink = new Map<string, number[]>();
@@ -373,6 +373,72 @@ function prepareCluster(cluster: VacancyCluster): PreparedVacancy {
     roleTitleTokens: tokenize(normalizeRoleTitle(cluster.canonicalTitle)),
     normalizedTitle: normalizeTextForComparison(cluster.canonicalTitle),
   };
+}
+
+export interface IncrementalClusterResult {
+  readonly updatedClusters: VacancyCluster[];
+  readonly newClusters: VacancyCluster[];
+}
+
+export class IncrementalClusterBuilder {
+  private readonly clusters: VacancyCluster[];
+  private readonly prepared: PreparedVacancy[] = [];
+  private readonly index: ClusterIndex = new ClusterIndex();
+
+  constructor(existingClusters: VacancyCluster[] = []) {
+    this.clusters = existingClusters;
+    for (let i = 0; i < existingClusters.length; i++) {
+      const rep = prepareCluster(existingClusters[i]!);
+      this.prepared.push(rep);
+      this.index.add(i, rep);
+    }
+  }
+
+  public getClusters(): VacancyCluster[] {
+    return this.clusters;
+  }
+
+  public addVacancies(newVacancies: Iterable<UnifiedVacancy>): IncrementalClusterResult {
+    const updatedIndices = new Set<number>();
+    const newClusters: VacancyCluster[] = [];
+    const initialCount = this.clusters.length;
+
+    for (const vacancy of newVacancies) {
+      const candidate = prepareVacancy(vacancy);
+      const match = this.index
+        .candidates(candidate)
+        .find((position) => isDuplicatePrepared(candidate, this.prepared[position]!));
+
+      if (match !== undefined) {
+        mergeVacancyIntoCluster(this.clusters[match]!, vacancy);
+        const representative = prepareCluster(this.clusters[match]!);
+        this.prepared[match] = representative;
+        this.index.add(match, representative);
+        if (match < initialCount) {
+          updatedIndices.add(match);
+        }
+      } else {
+        const cluster = createClusterFromVacancy(vacancy);
+        const newIndex = this.clusters.length;
+        this.clusters.push(cluster);
+        newClusters.push(cluster);
+        const representative = prepareCluster(cluster);
+        this.prepared.push(representative);
+        this.index.add(newIndex, representative);
+      }
+    }
+
+    const updatedClusters = Array.from(updatedIndices).map((idx) => this.clusters[idx]!);
+    return { updatedClusters, newClusters };
+  }
+}
+
+export function mergeVacanciesIntoClusters(
+  existingClusters: VacancyCluster[],
+  newVacancies: Iterable<UnifiedVacancy>,
+): IncrementalClusterResult {
+  const builder = new IncrementalClusterBuilder(existingClusters);
+  return builder.addVacancies(newVacancies);
 }
 
 export interface SourceAuthenticityResult {

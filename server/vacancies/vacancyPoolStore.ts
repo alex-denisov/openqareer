@@ -1,4 +1,4 @@
-import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
+import type { UnifiedVacancy, VacancyCluster, VacancySourceConfig } from '../domain/unifiedVacancy';
 import type { SourceObservations } from './sourceHealthVerdict';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 import type {
@@ -92,4 +92,12 @@ export interface VacancyPoolStore {
   markExpired(vacancyIds: readonly string[], atIso: string): number;
   /** Drops rows of sources the registry no longer knows and stale readings. */
   prune(knownSourceIds: readonly string[], oldestPublishedAt: string): void;
+  /**
+   * Устойчивое хранение и инкрементальное обновление кластеров (B221 срез 3).
+   */
+  saveClusters(clusters: VacancyCluster[]): void;
+  loadClusters(): VacancyCluster[];
+  upsertCluster(cluster: VacancyCluster): void;
+  deleteCluster(clusterId: string): void;
+  countClusters(): number;
 }

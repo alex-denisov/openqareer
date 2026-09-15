@@ -712,6 +712,19 @@ CREATE TABLE IF NOT EXISTS vacancy_cluster_input (
 ) STRICT;
 `;
 
+export const VACANCY_CLUSTERS_TABLE = `
+CREATE TABLE IF NOT EXISTS vacancy_clusters (
+  id TEXT PRIMARY KEY,
+  fingerprint TEXT NOT NULL,
+  title TEXT NOT NULL,
+  company TEXT NOT NULL,
+  cluster_json TEXT NOT NULL,
+  items_count INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS vacancy_clusters_fingerprint ON vacancy_clusters(fingerprint);
+`;
+
 export const VACANCY_POOL_INDEX_TABLE = `
 CREATE TABLE IF NOT EXISTS vacancy_pool_index (
   id TEXT PRIMARY KEY,

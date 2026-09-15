@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
+import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
 import type { CandidateMatchProfile } from './vacancyMatcher';
+import type { VacancyCluster } from '../domain/unifiedVacancy';
 
 describe('MultiSourceVacancyEngine', () => {
   it('aggregates vacancies from multiple simulated sources, deduplicates them and matches candidate profile', async () => {
@@ -203,6 +205,11 @@ describe('MultiSourceVacancyEngine', () => {
       saveSourceState: () => {},
       markExpired: () => 0,
       prune: () => {},
+      saveClusters: () => {},
+      loadClusters: () => [],
+      upsertCluster: () => {},
+      deleteCluster: () => {},
+      countClusters: () => 0,
       queryMatchCandidates: (cand: CandidateMatchProfile) => {
         queryMatchCalled = true;
         return [
@@ -264,6 +271,11 @@ describe('MultiSourceVacancyEngine', () => {
       saveSourceState: () => {},
       markExpired: () => 0,
       prune: () => {},
+      saveClusters: () => {},
+      loadClusters: () => [],
+      upsertCluster: () => {},
+      deleteCluster: () => {},
+      countClusters: () => 0,
       // Notice: queryMatchCandidates is explicitly undefined
     };
 
@@ -281,5 +293,114 @@ describe('MultiSourceVacancyEngine', () => {
 
     const matched = engine.getMatchedVacancies(candidate);
     expect(matched).toEqual([]);
+  });
+
+  it('restores clusters from pool if available instead of full recluster pass', () => {
+    const storedCluster: VacancyCluster = {
+      id: 'cluster-stored-1',
+      canonicalTitle: 'Staff Platform Engineer',
+      canonicalCompany: 'Cloud Scale Inc',
+      isRemote: true,
+      descriptionSummary: 'Lead platform initiatives',
+      skills: ['Go', 'Kubernetes'],
+      primaryUrl: 'https://example.test/jobs/1',
+      sources: [
+        {
+          sourceType: 'direct',
+          sourceId: 'src-1',
+          sourceUrl: 'https://example.test/jobs/1',
+          observedAt: '2026-09-01T10:00:00.000Z',
+        },
+      ],
+      firstObservedAt: '2026-09-01T10:00:00.000Z',
+      lastSeenAt: '2026-09-02T10:00:00.000Z',
+      status: 'active',
+      vacanciesCount: 1,
+    };
+
+    const mockPool = {
+      loadVacancies: () => [],
+      iterateClusterInput: function* () {},
+      getVacancy: () => undefined,
+      hasVacancy: () => false,
+      countVacancies: () => 1,
+      countBySource: () => new Map(),
+      countSourceSlice: () => ({ total: 1, active: 1 }),
+      queryVacancies: () => ({ total: 0, items: [] }),
+      loadSourceLinks: () => [],
+      mergeSourceSlice: () => {},
+      loadSourceStates: () => [],
+      replaceSourceSlice: () => {},
+      saveSourceState: () => {},
+      markExpired: () => 0,
+      prune: () => {},
+      saveClusters: () => {},
+      loadClusters: () => [storedCluster],
+      upsertCluster: () => {},
+      deleteCluster: () => {},
+      countClusters: () => 1,
+    };
+
+    const engine = new MultiSourceVacancyEngine({
+      sources: [],
+      pool: mockPool,
+    });
+
+    const result = engine.restore();
+    expect(result.restored).toBe(1);
+    expect(engine.clusterRebuildCount).toBe(0);
+    const active = engine.getActiveClusters();
+    expect(active).toHaveLength(1);
+    expect(active[0].canonicalTitle).toBe('Staff Platform Engineer');
+  });
+
+  it('updates clusters incrementally and persists them to pool on source sync', async () => {
+    const savedClusters: VacancyCluster[] = [];
+    const memoryPool = new MemoryVacancyPoolStore();
+    memoryPool.saveClusters = (clusters: VacancyCluster[]) => {
+      savedClusters.push(...clusters);
+    };
+
+    const engine = new MultiSourceVacancyEngine({
+      sources: [
+        {
+          id: 'test-src',
+          name: 'Direct Source',
+          type: 'direct',
+          enabled: true,
+          targetUrl: 'https://example.test',
+          refreshIntervalMinutes: 60,
+          itemsFoundTotal: 0,
+          itemsActiveTotal: 0,
+        },
+      ],
+      pool: memoryPool,
+      fetcher: async () => [
+        {
+          id: 'dir-1',
+          fingerprint: 'fp-dir-1',
+          title: 'Principal Architect',
+          company: 'HyperGrowth AI',
+          isRemote: true,
+          description: 'Design distributed architectures.',
+          requiredSkills: ['Distributed Systems'],
+          url: 'https://example.test/1',
+          provenance: {
+            sourceType: 'direct',
+            sourceId: 'test-src',
+            sourceUrl: 'https://example.test/1',
+            observedAt: new Date().toISOString(),
+          },
+          publishedAt: new Date().toISOString(),
+          status: 'active',
+        },
+      ],
+    });
+
+    await engine.syncAll();
+
+    expect(savedClusters.length).toBeGreaterThan(0);
+    expect(savedClusters[0].canonicalTitle).toBe('Principal Architect');
+    expect(engine.getActiveClusters()).toHaveLength(1);
   });
 });

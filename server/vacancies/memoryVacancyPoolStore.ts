@@ -1,4 +1,4 @@
-import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 import {
   clusterProjectionOf,
@@ -44,6 +44,7 @@ function compareCandidates(a: UnifiedVacancy, b: UnifiedVacancy, preferRemote: b
 export class MemoryVacancyPoolStore implements VacancyPoolStore {
   private rows: Map<string, StoredRow> = new Map();
   private states: Map<string, StoredSourceState> = new Map();
+  private clusters: Map<string, VacancyCluster> = new Map();
 
   private *aliveRows(): IterableIterator<StoredRow> {
     for (const row of this.rows.values()) {
@@ -217,5 +218,30 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     for (const sourceId of this.states.keys()) {
       if (!known.has(sourceId)) this.states.delete(sourceId);
     }
+    if (knownSourceIds.length === 0) {
+      this.clusters.clear();
+    }
+  }
+
+  saveClusters(clusters: VacancyCluster[]): void {
+    for (const cluster of clusters) {
+      this.clusters.set(cluster.id, cluster);
+    }
+  }
+
+  loadClusters(): VacancyCluster[] {
+    return Array.from(this.clusters.values());
+  }
+
+  upsertCluster(cluster: VacancyCluster): void {
+    this.clusters.set(cluster.id, cluster);
+  }
+
+  deleteCluster(clusterId: string): void {
+    this.clusters.delete(clusterId);
+  }
+
+  countClusters(): number {
+    return this.clusters.size;
   }
 }
