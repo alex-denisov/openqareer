@@ -1,4 +1,4 @@
-import { chromium, type BrowserContext, type Page } from 'playwright';
+import type { BrowserContext, Page } from 'playwright';
 import {
   buildObscuraLaunchArgs,
   buildObscuraStealthScript,
@@ -21,6 +21,7 @@ export class ObscuraRunner {
       return this.context;
     }
 
+    const { chromium } = await import('playwright');
     const args = buildObscuraLaunchArgs(this.config);
     const viewport = getRandomizedViewport();
     const userAgent = getRandomizedUserAgent();

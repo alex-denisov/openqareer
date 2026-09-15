@@ -21,4 +21,5 @@ await build({
       'const require = __createRequire(import.meta.url);',
     ].join('\n'),
   },
+  external: ['playwright', 'playwright-core', 'fsevents', 'chromium-bidi'],
 });
