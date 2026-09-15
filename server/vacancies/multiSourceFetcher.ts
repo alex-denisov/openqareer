@@ -212,10 +212,15 @@ async function fetchPagedJsonApi(
 }
 
 /** LinkedIn — гостевой список, свой HTML-разбор и вежливый темп (B218). */
-async function fetchLinkedinGuestSource(sleep: (ms: number) => Promise<void>): Promise<SourceReading> {
+async function fetchLinkedinGuestSource(
+  sleep: (ms: number) => Promise<void>,
+): Promise<SourceReading> {
   return fetchLinkedinGuest({
     fetchPage: async (url, headers) => {
-      const res = await fetch(url, { headers, signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS) });
+      const res = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
+      });
       return { status: res.status, body: res.ok ? await res.text() : '' };
     },
     sleep,
@@ -387,7 +392,56 @@ function mergeHeaders(
 /** Пауза ±25 % от базовой: обход не должен идти ровным тактом (B218). */
 function jitter(baseMs: number, now: () => number): number {
   const spread = baseMs * 0.5;
-  return Math.round(baseMs - spread / 2 + (now() % 1000) / 1000 * spread);
+  return Math.round(baseMs - spread / 2 + ((now() % 1000) / 1000) * spread);
+}
+
+/**
+ * Веер обхода hh.ru. Координатор сам решает, быстрый это тик или глубокий, и
+ * отдаёт улов одним пакетом: пересобирать пул на каждой странице нельзя — на
+ * сорока тысячах записей это четыре секунды за раз (замер B214).
+ *
+ * Любой тик — частичное чтение: быстрый видит только свежие сутки, а глубокий
+ * отдаёт лишь то, что успел прочитать за тик. Иначе каждые двадцать минут пул
+ * схлопывался бы до одного чтения — ровно это и случилось на проде (B214).
+ * Снятие невиденного делает последний тик глубокого прохода через
+ * `dropObservedBefore` (B219).
+ */
+async function fetchHhSearchBatch(coordinator?: HhCrawlCoordinator): Promise<SourceReading> {
+  if (!coordinator) {
+    // Источник включён, а обход не собран: это поломка сборки, а не пустая
+    // выдача. Молчаливый ноль здесь спрятал бы причину (B199).
+    throw new Error('hh_crawl_coordinator_missing');
+  }
+  const result = await coordinator.collect();
+  return {
+    vacancies: [...result.vacancies],
+    partial: true,
+    ...(result.dropObservedBefore ? { dropObservedBefore: result.dropObservedBefore } : {}),
+  };
+}
+
+async function fetchJsonOrCareerSite(
+  source: VacancySourceConfig,
+  options: { query?: string } | undefined,
+  deps: MultiSourceFetcherDeps,
+  sleep: (ms: number) => Promise<void>,
+  now: () => number,
+): Promise<UnifiedVacancy[] | SourceReading> {
+  if (source.type === 'career_site' && source.id === BAYT_SOURCE_ID) {
+    return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
+  }
+  if (source.type === 'json_api') {
+    if (source.id === CROSSOVER_SOURCE_ID) return fetchCrossoverSource(source);
+    if (source.id === LINKEDIN_SOURCE_ID) return fetchLinkedinGuestSource(sleep);
+    if (source.id === BAYT_SOURCE_ID) {
+      return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
+    }
+    if (pagingPlanFor(source.id)) {
+      return fetchPagedJsonApi(source, sleep, now, deps.fetchWithStealth);
+    }
+    return fetchJsonApi(source, options);
+  }
+  throw new Error(`vacancy_source_type_unsupported: ${source.type}`);
 }
 
 export function buildMultiSourceFetcher(
@@ -407,44 +461,12 @@ export function buildMultiSourceFetcher(
       const sample = await remotive({ text: options?.query || 'Engineer', perPage: 20 });
       return remotiveSampleToUnified(sample, source.id);
     }
-    if (source.type === 'telegram') {
-      return fetchTelegramChannel(source);
+    if (source.type === 'telegram') return fetchTelegramChannel(source);
+    if (source.type === 'rss') return fetchRssFeed(source, options);
+    if (source.type === 'career_site' || source.type === 'json_api') {
+      return fetchJsonOrCareerSite(source, options, deps, sleep, now);
     }
-    if (source.type === 'rss') {
-      return fetchRssFeed(source, options);
-    }
-    if (source.type === 'career_site') {
-      if (source.id === BAYT_SOURCE_ID) {
-        return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
-      }
-    }
-    if (source.type === 'json_api') {
-      if (source.id === CROSSOVER_SOURCE_ID) return fetchCrossoverSource(source);
-      if (source.id === LINKEDIN_SOURCE_ID) return fetchLinkedinGuestSource(sleep);
-      if (source.id === BAYT_SOURCE_ID) {
-        return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
-      }
-      if (pagingPlanFor(source.id)) {
-        return fetchPagedJsonApi(source, sleep, now, deps.fetchWithStealth);
-      }
-      return fetchJsonApi(source, options);
-    }
-    if (source.type === 'hh_search') {
-      // Веер обхода hh.ru. Координатор сам решает, быстрый это проход или
-      // глубокий, и отдаёт весь улов одним пакетом: пересобирать пул на каждой
-      // странице нельзя — на сорока тысячах записей это четыре секунды за раз
-      // (замер B214).
-      if (!crawlCoordinator) {
-        // Источник включён, а обход не собран: это поломка сборки, а не пустая
-        // выдача. Молчаливый ноль здесь спрятал бы причину (B199).
-        throw new Error('hh_crawl_coordinator_missing');
-      }
-      const result = await crawlCoordinator.collect();
-      // Быстрый проход видит только свежие сутки: он дополняет срез, а не
-      // заменяет его. Иначе каждые двадцать минут пул схлопывался бы до
-      // выдачи одного дня — ровно это и случилось на проде (B214).
-      return { vacancies: [...result.vacancies], partial: result.mode === 'fresh' };
-    }
+    if (source.type === 'hh_search') return fetchHhSearchBatch(crawlCoordinator);
     // An unimplemented source type has not been measured, so it must not report
     // a successful empty reading (B161).
     throw new Error(`vacancy_source_type_unsupported: ${source.type}`);

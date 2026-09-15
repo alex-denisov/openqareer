@@ -811,3 +811,36 @@ CREATE TABLE IF NOT EXISTS hh_crawl_settings (
   updated_at TEXT NOT NULL
 ) STRICT;
 `;
+
+/**
+ * B219 — курсор глубокого прохода hh.ru. Одна строка: план прохода и место,
+ * до которого он дочитан.
+ *
+ * ЗАЧЕМ. Глубокий проход идёт часы, а служба перезапускается на каждом
+ * выкате: 14.09 — одиннадцать стартов. Без курсора каждый старт начинал
+ * проход с нуля, и отметка полного прохода не ставилась ни разу. План лежит
+ * здесь же, чтобы после перезапуска не повторять замеры размера частей.
+ */
+export const MIGRATION_31 = `
+CREATE TABLE IF NOT EXISTS hh_crawl_progress (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  phase TEXT NOT NULL,
+  role_ids TEXT NOT NULL,
+  search_period_days INTEGER NOT NULL,
+  plan_json TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  role_index INTEGER NOT NULL,
+  query_index INTEGER NOT NULL,
+  page INTEGER NOT NULL,
+  pages_read INTEGER NOT NULL,
+  errors INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS hh_crawl_plan_cache (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  role_ids TEXT NOT NULL,
+  search_period_days INTEGER NOT NULL,
+  plan_json TEXT NOT NULL,
+  planned_at TEXT NOT NULL
+) STRICT;
+`;

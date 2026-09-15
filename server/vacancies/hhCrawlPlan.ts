@@ -50,6 +50,12 @@ export interface HhPlannedQuery extends HhCrawlQuery {
   readonly pages: number;
   /** True, если часть не влезла в потолок и будет прочитана не целиком. */
   readonly truncated: boolean;
+  /**
+   * Правило быстрого прохода (B219): начиная с этой страницы часть обрывается,
+   * как только на странице не нашлось ни одного неизвестного пулу id. Выдача
+   * идёт от свежих к старым, поэтому ниже страницы без нового — только старое.
+   */
+  readonly stopWhenNothingNewAfter?: number;
 }
 
 export interface HhCrawlPlan {

@@ -33,10 +33,7 @@ import {
 import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancyMatcher';
 import type { VacancyPoolStore } from './vacancyPoolStore';
 
-import {
-  PoliteScheduler,
-  type SourceScheduleInfo,
-} from './politeScheduler';
+import { PoliteScheduler, type SourceScheduleInfo } from './politeScheduler';
 
 /**
  * Улов одного опроса. Простой список означает полное чтение: площадка показала
@@ -50,6 +47,12 @@ import {
 export interface SourceReading {
   readonly vacancies: UnifiedVacancy[];
   readonly partial: boolean;
+  /**
+   * Итог растянутого на тики полного перечисления (B219): записи этого
+   * источника, которых ни один тик не видел с этого момента, площадка больше
+   * не показывает — они снимаются. Только вместе с `partial: true`.
+   */
+  readonly dropObservedBefore?: string;
 }
 
 export type SourceFetcher = (
@@ -143,8 +146,7 @@ function extractErrorHttpDetails(err: unknown): { statusCode?: number; retryAfte
   const headers =
     (obj.headers as { get?: (k: string) => string | null } | undefined) ??
     ((obj.response as Record<string, unknown> | undefined)?.headers as
-      | { get?: (k: string) => string | null }
-      | undefined);
+      { get?: (k: string) => string | null } | undefined);
 
   let retryAfterHeader =
     typeof headers?.get === 'function' ? headers.get('retry-after') : undefined;
@@ -394,9 +396,7 @@ export class MultiSourceVacancyEngine {
   }
 
   public getVacancies(filter: VacancyQueryFilter = {}): VacancyQueryResult {
-    let all = Array.from(this.rawVacancies.values()).filter((v) =>
-      isVacancyFresh(v.publishedAt),
-    );
+    let all = Array.from(this.rawVacancies.values()).filter((v) => isVacancyFresh(v.publishedAt));
 
     const statsMap = new Map<string, number>();
     for (const v of all) {
@@ -482,6 +482,7 @@ export class MultiSourceVacancyEngine {
     const reading = await this.fetcher!(source, query ? { query } : undefined);
     const fetched: UnifiedVacancy[] = Array.isArray(reading) ? reading : reading.vacancies;
     const partial = Array.isArray(reading) ? false : reading.partial;
+    const dropObservedBefore = Array.isArray(reading) ? undefined : reading.dropObservedBefore;
 
     // Перепись улова считается по тому, что площадка отдала, — до фильтра
     // свежести. Пул хранит только 30 дней, поэтому по нему доля «свежее 180
@@ -500,7 +501,7 @@ export class MultiSourceVacancyEngine {
       nowMs,
     });
 
-    const kept = this.acceptReading(source, fetched, nowMs, partial);
+    const kept = this.acceptReading(source, fetched, nowMs, partial, dropObservedBefore);
     return { sourceId: source.id, status: 'healthy', fetched: fetched.length, kept };
   }
 
@@ -565,6 +566,7 @@ export class MultiSourceVacancyEngine {
     fetched: readonly UnifiedVacancy[],
     nowMs: number,
     partial = false,
+    dropObservedBefore?: string,
   ): number {
     // Название площадки едет вместе с записью: на экране кандидат читает
     // источник, а не тип адаптера (PRB-017).
@@ -583,7 +585,7 @@ export class MultiSourceVacancyEngine {
     // значит «снято». Срез дополняется, а устаревшее убирает тридцатидневная
     // уборка и проверка живости ссылок (B214).
     const slice = partial
-      ? this.mergeSourceSlice(source.id, freshFetched)
+      ? this.mergeSourceSlice(source.id, freshFetched, dropObservedBefore)
       : this.replaceSourceSlice(source.id, freshFetched);
 
     // The clock of the run, so the next due check measures the same instant
@@ -624,9 +626,24 @@ export class MultiSourceVacancyEngine {
    * прочитанные заново — обновляются. Хранилище знает только «заменить срез»,
    * поэтому в него уходит объединение целиком.
    */
-  private mergeSourceSlice(sourceId: string, vacancies: UnifiedVacancy[]): UnifiedVacancy[] {
+  private mergeSourceSlice(
+    sourceId: string,
+    vacancies: UnifiedVacancy[],
+    dropObservedBefore?: string,
+  ): UnifiedVacancy[] {
     for (const vacancy of vacancies) {
       this.rawVacancies.set(vacancy.id, vacancy);
+    }
+    // Полное перечисление, растянутое на тики, закончилось: запись, которую
+    // не видел ни один тик с его начала, площадка больше не показывает (B219).
+    const dropBeforeMs =
+      dropObservedBefore === undefined ? undefined : Date.parse(dropObservedBefore);
+    if (dropBeforeMs !== undefined && Number.isFinite(dropBeforeMs)) {
+      for (const [id, vacancy] of this.rawVacancies) {
+        if (vacancy.provenance?.sourceId !== sourceId) continue;
+        const observedMs = Date.parse(vacancy.provenance.observedAt ?? '');
+        if (!Number.isFinite(observedMs) || observedMs < dropBeforeMs) this.rawVacancies.delete(id);
+      }
     }
     const slice = Array.from(this.rawVacancies.values()).filter(
       (vacancy) => vacancy.provenance?.sourceId === sourceId,
@@ -828,7 +845,6 @@ export class MultiSourceVacancyEngine {
 
     return matched.sort(compareMatchedVacancies);
   }
-
 
   public async testSource(
     sourceId: string,

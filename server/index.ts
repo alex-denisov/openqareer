@@ -125,16 +125,15 @@ const roleNamingCache = new SqliteRoleNamingCache({
 // Настройки веера обхода hh.ru: набор ролей выбирает владелец, отметка
 // глубокого прохода переживает выкат (B214).
 const hhCrawlSettings = createHhCrawlSettings({ databasePath: config.databasePath });
-const hhCrawlCoordinator = new HhCrawlCoordinator(hhCrawlSettings, {
+const hhCrawlCoordinator: HhCrawlCoordinator = new HhCrawlCoordinator(hhCrawlSettings, {
   fetchPage: buildHhPageFetcher(),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  // Быстрый проход останавливается на странице, где пул всё уже знает (B219).
+  // Движок собирается ниже, поэтому спрашивается через замыкание, а не значением.
+  isKnown: (id: string): boolean => multiSourceEngine.getVacancy(id) !== undefined,
 });
-const multiSourceEngine = new MultiSourceVacancyEngine({
-  fetcher: buildMultiSourceFetcher(
-    searchHhVacancies,
-    searchRemotiveVacancies,
-    hhCrawlCoordinator,
-  ),
+const multiSourceEngine: MultiSourceVacancyEngine = new MultiSourceVacancyEngine({
+  fetcher: buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies, hhCrawlCoordinator),
   pool: vacancyPoolStore,
   // Право обхода спрашивается у самой площадки, а не берётся из записи,
   // сделанной когда-то руками; `Crawl-delay` тоже приходит оттуда (B204).
@@ -202,7 +201,12 @@ function runVacancyRefresh(): void {
  * caller of a sync was the admin route, so a fresh process — and therefore
  * every deploy — served an empty «Возможности» (B161 review §2).
  */
+// Пока пул не восстановлен из базы, опросы не идут: частичное чтение hh.ru
+// слилось бы с полупустым срезом и записало его в базу как полный (B219).
+let vacancyPoolRestored = false;
+
 function runMultiSourceSync(): void {
+  if (!vacancyPoolRestored) return;
   void multiSourceEngine
     .syncDue()
     .then((outcomes) => {
@@ -316,6 +320,7 @@ try {
         },
         'vacancy-pool-restored-and-clustered',
       );
+      vacancyPoolRestored = true;
       runVacancyRefresh();
       runMultiSourceSync();
       runDocumentRetentionPurge();

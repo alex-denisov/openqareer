@@ -1,6 +1,6 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { parseHhSearchState } from './hhSearchState';
-import { planQueryUrl, type HhCrawlPlan } from './hhCrawlPlan';
+import { HH_PAGE_SIZE, HH_RESULT_CAP, planQueryUrl, type HhCrawlPlan } from './hhCrawlPlan';
 import type { HhSearchTransportResult } from './hhSearchFetcher';
 
 /**
@@ -15,6 +15,12 @@ import type { HhSearchTransportResult } from './hhSearchFetcher';
  * площадка закрылась — продолжать значит напрашиваться на блокировку адреса.
  * Одиночный сбой страницы при этом проход не отменяет: он считается и идёт
  * в отчёт, потому что «собрано меньше» обязано иметь названную причину.
+ *
+ * ПРОХОД УМЕЕТ ОСТАНАВЛИВАТЬСЯ И ПРОДОЛЖАТЬСЯ (B219). Глубокий проход по 133
+ * ролям идёт часы, а служба перезапускается на каждом выкате. Поэтому проход
+ * начинается с переданного курсора, после каждой страницы называет следующий
+ * и прекращается по бюджету времени, не считая это отказом: `finished`
+ * говорит, дочитан ли план, `cursor` — откуда читать дальше.
  */
 
 export const HH_CRAWL_ABANDONED = 'hh_crawl_abandoned';
@@ -31,6 +37,12 @@ export interface HhCrawlProgress {
   readonly vacanciesFound: number;
 }
 
+/** Место в плане: какая часть и какая её страница читается следующей. */
+export interface HhCrawlCursor {
+  readonly queryIndex: number;
+  readonly page: number;
+}
+
 export interface HhCrawlDeps {
   readonly fetchPage: (url: string) => Promise<HhSearchTransportResult>;
   readonly sleep: (ms: number) => Promise<void>;
@@ -41,6 +53,16 @@ export interface HhCrawlDeps {
   readonly onProgress?: (progress: HhCrawlProgress) => void;
   readonly sourceName?: string;
   readonly now?: () => string;
+  /** Откуда продолжать; без курсора — с начала плана. */
+  readonly start?: HhCrawlCursor;
+  /** Часы для бюджета, миллисекунды; по умолчанию `Date.now`. */
+  readonly clock?: () => number;
+  /** Момент по `clock`, после которого страницы больше не читаются. */
+  readonly deadlineMs?: number;
+  /** Вызывается после каждой прочитанной страницы: курсор можно сохранить. */
+  readonly onCursor?: (cursor: HhCrawlCursor, pagesRead: number, errors: number) => void;
+  /** Знает ли пул запись с таким id — для правила остановки быстрого прохода. */
+  readonly isKnown?: (id: string) => boolean;
 }
 
 export interface HhCrawlResult {
@@ -48,7 +70,12 @@ export interface HhCrawlResult {
   readonly pagesRead: number;
   readonly duplicatesSkipped: number;
   readonly errors: number;
+  /** Проход остановлен отменой снаружи. */
   readonly stoppedEarly: boolean;
+  /** План дочитан до конца: ни отмены, ни бюджета не случилось. */
+  readonly finished: boolean;
+  /** Откуда читать дальше; после дочитанного плана — за его концом. */
+  readonly cursor: HhCrawlCursor;
 }
 
 interface SweepState {
@@ -62,14 +89,34 @@ interface SweepState {
 /** Что делать дальше после одной страницы. */
 type PageOutcome = 'continue' | 'end-query';
 
-function absorb(parsedVacancies: readonly UnifiedVacancy[], state: SweepState): void {
+interface PageReading {
+  readonly outcome: PageOutcome;
+  /** Сколько записей было на странице; полная страница — признак, что выдача не кончилась. */
+  readonly itemsOnPage: number;
+}
+
+/** Потолок площадки в страницах: страница 40 отвечает `404`. */
+const HH_MAX_PAGES = HH_RESULT_CAP / HH_PAGE_SIZE;
+
+/** Сколько записей страницы проход видит впервые — и не знает их пул. */
+function absorb(
+  parsedVacancies: readonly UnifiedVacancy[],
+  state: SweepState,
+  isKnown: (id: string) => boolean,
+): number {
+  let unseen = 0;
   for (const vacancy of parsedVacancies) {
+    // «Новое» меряется по пулу, а не по улову тика: вакансия с двумя ролями,
+    // уже пойманная через первую роль, всё ещё неизвестна пулу — и правило
+    // остановки у второй роли не должно считать её старой.
+    if (!isKnown(vacancy.id)) unseen += 1;
     if (state.collected.has(vacancy.fingerprint)) {
       state.duplicatesSkipped += 1;
       continue;
     }
     state.collected.set(vacancy.fingerprint, vacancy);
   }
+  return unseen;
 }
 
 async function readPage(
@@ -78,9 +125,18 @@ async function readPage(
   deps: HhCrawlDeps,
   observedAt: string,
   refusalLimit: number,
-): Promise<PageOutcome> {
-  const response = await deps.fetchPage(url);
+  stopWhenNothingNew: boolean,
+): Promise<PageReading> {
+  let response = await deps.fetchPage(url);
   await deps.sleep(deps.delayMs ?? DEFAULT_DELAY_MS);
+
+  // Одиночный сбой страницы повторяется один раз: непрочитанная страница —
+  // это до 50 живых вакансий, которых проход «не видел», а по итогам
+  // полного прохода невиденное снимается (B219). Повтор дешевле потери.
+  if (response.status !== 200 || !response.body) {
+    response = await deps.fetchPage(url);
+    await deps.sleep(deps.delayMs ?? DEFAULT_DELAY_MS);
+  }
 
   if (response.status !== 200 || !response.body) {
     state.errors += 1;
@@ -88,7 +144,7 @@ async function readPage(
     if (state.refusalsInARow >= refusalLimit) {
       throw new Error(`${HH_CRAWL_ABANDONED}: ${response.status}`);
     }
-    return 'continue';
+    return { outcome: 'continue', itemsOnPage: 0 };
   }
   state.refusalsInARow = 0;
   state.pagesRead += 1;
@@ -103,12 +159,62 @@ async function readPage(
     // Капча или смена разметки: страница пришла с кодом 200 и выглядит
     // обычной, но выдачи в ней нет. Это сбой, а не пустая выдача.
     state.errors += 1;
-    return 'continue';
+    return { outcome: 'continue', itemsOnPage: 0 };
   }
 
-  absorb(parsed.vacancies, state);
+  const unseen = absorb(parsed.vacancies, state, deps.isKnown ?? (() => false));
+  const itemsOnPage = parsed.vacancies.length;
   // Выдача кончилась раньше плана — площадка пересчитала её, пока шёл обход.
-  return parsed.vacancies.length === 0 ? 'end-query' : 'continue';
+  if (itemsOnPage === 0) return { outcome: 'end-query', itemsOnPage };
+  // Страница без единой новой записи: ниже по выдаче «свежие первыми» лежит
+  // только то, что пул уже видел (B219).
+  return { outcome: stopWhenNothingNew && unseen === 0 ? 'end-query' : 'continue', itemsOnPage };
+}
+
+async function crawlQueryPages(
+  query: HhCrawlPlan['queries'][number],
+  queryIndex: number,
+  startPage: number,
+  state: SweepState,
+  deps: HhCrawlDeps,
+  plan: HhCrawlPlan,
+  observedAt: string,
+  refusalLimit: number,
+  clock: () => number,
+): Promise<{ cursor: HhCrawlCursor; stopped: boolean }> {
+  let page = startPage;
+  // Число страниц в плане — оценка на момент замера. План живёт до недели, и
+  // часть могла подрасти: пока последняя плановая страница полная, чтение
+  // продолжается до потолка площадки, иначе невиденные живые записи были бы
+  // сняты по итогам прохода (B219).
+  let limit = query.pages;
+  const stopAfter = query.stopWhenNothingNewAfter;
+
+  while (page < limit) {
+    if (deps.signal?.aborted || (deps.deadlineMs !== undefined && clock() >= deps.deadlineMs)) {
+      return { cursor: { queryIndex, page }, stopped: true };
+    }
+
+    const url = planQueryUrl(query, deps.searchPeriodDays, page);
+    const stopWhenNothingNew = stopAfter !== undefined && page + 1 >= stopAfter;
+    const reading = await readPage(url, state, deps, observedAt, refusalLimit, stopWhenNothingNew);
+    page += 1;
+
+    deps.onProgress?.({
+      pagesRead: state.pagesRead,
+      pagesPlanned: plan.expectedPages,
+      vacanciesFound: state.collected.size,
+    });
+
+    if (reading.outcome === 'end-query') page = limit;
+    else if (page === limit && reading.itemsOnPage >= HH_PAGE_SIZE && limit < HH_MAX_PAGES) {
+      limit += 1;
+    }
+    const cursor = page < limit ? { queryIndex, page } : nextQuery({ queryIndex, page });
+    deps.onCursor?.(cursor, state.pagesRead, state.errors);
+  }
+
+  return { cursor: nextQuery({ queryIndex, page: 0 }), stopped: false };
 }
 
 export async function runHhCrawl(plan: HhCrawlPlan, deps: HhCrawlDeps): Promise<HhCrawlResult> {
@@ -124,29 +230,38 @@ export async function runHhCrawl(plan: HhCrawlPlan, deps: HhCrawlDeps): Promise<
     errors: 0,
     refusalsInARow: 0,
   };
+  const clock = deps.clock ?? Date.now;
+  let cursor: HhCrawlCursor = deps.start ?? { queryIndex: 0, page: 0 };
   let stoppedEarly = false;
 
-  for (const query of plan.queries) {
-    if (stoppedEarly) break;
+  while (cursor.queryIndex < plan.queries.length) {
+    const query = plan.queries[cursor.queryIndex]!;
+    // Часть без страниц (или курсор за её концом) пропускается, иначе цикл
+    // стоял бы на ней вечно.
+    if (cursor.page >= query.pages) {
+      cursor = nextQuery(cursor);
+      continue;
+    }
 
-    for (let page = 0; page < query.pages; page += 1) {
-      if (deps.signal?.aborted) {
-        stoppedEarly = true;
-        break;
-      }
-
-      const url = planQueryUrl(query, deps.searchPeriodDays, page);
-      const outcome = await readPage(url, state, deps, observedAt, refusalLimit);
-
-      deps.onProgress?.({
-        pagesRead: state.pagesRead,
-        pagesPlanned: plan.expectedPages,
-        vacanciesFound: state.collected.size,
-      });
-
-      if (outcome === 'end-query') break;
+    const outcome = await crawlQueryPages(
+      query,
+      cursor.queryIndex,
+      cursor.page,
+      state,
+      deps,
+      plan,
+      observedAt,
+      refusalLimit,
+      clock,
+    );
+    cursor = outcome.cursor;
+    if (outcome.stopped) {
+      stoppedEarly = Boolean(deps.signal?.aborted);
+      break;
     }
   }
+
+  const finished = cursor.queryIndex >= plan.queries.length;
 
   return {
     vacancies: [...state.collected.values()],
@@ -154,5 +269,11 @@ export async function runHhCrawl(plan: HhCrawlPlan, deps: HhCrawlDeps): Promise<
     duplicatesSkipped: state.duplicatesSkipped,
     errors: state.errors,
     stoppedEarly,
+    finished,
+    cursor,
   };
+}
+
+function nextQuery(cursor: HhCrawlCursor): HhCrawlCursor {
+  return { queryIndex: cursor.queryIndex + 1, page: 0 };
 }
