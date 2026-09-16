@@ -32,6 +32,19 @@ describe('evidence engine', () => {
     expect(result.questions.length).toBeGreaterThan(0);
   });
 
+  it('deduplicates identical repeated bullet points or statements in candidate facts (B178)', () => {
+    const duplicateResume = `
+Руководитель продукта
+- Запустил B2B-платформу для 12 корпоративных клиентов и увеличил выручку направления на 24%.
+- Запустил B2B-платформу для 12 корпоративных клиентов и увеличил выручку направления на 24%.
+- Управлял кросс-функциональной командой из 9 человек: продукт, дизайн, аналитика и разработка.
+    `;
+    const result = extractEvidenceCandidates(duplicateResume);
+    expect(result.items.length).toBe(2);
+    expect(result.items[0].statement).toContain('Запустил B2B-платформу');
+    expect(result.items[1].statement).toContain('Управлял кросс-функциональной командой');
+  });
+
   it('joins visual PDF line wraps but does not turn section headings into claims', () => {
     const wrapped = [
       'Опыт',

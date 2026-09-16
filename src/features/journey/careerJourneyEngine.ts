@@ -291,6 +291,22 @@ export function buildCareerJourney(
   };
 }
 
+function deduplicateProfileEvidence(
+  items: readonly CanonicalProfileMemory[],
+): CanonicalProfileMemory[] {
+  const seen = new Map<string, CanonicalProfileMemory>();
+  for (const item of items) {
+    const key = (item.statement ?? '').trim().toLowerCase().replace(/\s+/gu, ' ') || item.id;
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, item);
+    } else if (existing.status === 'proposed' && item.status !== 'proposed') {
+      seen.set(key, item);
+    }
+  }
+  return Array.from(seen.values());
+}
+
 export function applyCanonicalProfileToJourney(
   journey: CareerJourney,
   memory: CanonicalProfileMemory[],
@@ -299,7 +315,9 @@ export function applyCanonicalProfileToJourney(
   constraints: string = '',
   observations?: Record<PoolMarketGeography, PoolMarketObservation[]>,
 ): CareerJourney {
-  const profileEvidence = memory.filter((item) => item.kind !== 'open-question');
+  const profileEvidence = deduplicateProfileEvidence(
+    memory.filter((item) => item.kind !== 'open-question'),
+  );
   const confirmedEvidence = profileEvidence.filter((item) => item.status !== 'proposed');
   const proposedEvidence = profileEvidence.filter((item) => item.status === 'proposed');
   const openQuestions = memory
@@ -450,7 +468,8 @@ function buildCanonicalRoleMarketMap(
   now: string,
   observations?: Record<PoolMarketGeography, PoolMarketObservation[]>,
 ) {
-  const evidence = memory.flatMap((item): EvidenceItem[] => {
+  const uniqueMemory = deduplicateProfileEvidence(memory);
+  const evidence = uniqueMemory.flatMap((item): EvidenceItem[] => {
     const statement = item.statement?.trim();
     if (
       !statement ||

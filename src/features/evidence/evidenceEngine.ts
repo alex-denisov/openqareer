@@ -58,7 +58,15 @@ export function extractEvidenceCandidates(
   resumeText: string,
 ): EvidenceExtraction {
   const excerpts = splitIntoExcerpts(resumeText);
-  const items = excerpts.slice(0, 8).map((sourceExcerpt, index) => ({
+  const seen = new Set<string>();
+  const uniqueExcerpts: string[] = [];
+  for (const excerpt of excerpts) {
+    const normalized = excerpt.trim().toLowerCase().replace(/\s+/gu, ' ');
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    uniqueExcerpts.push(excerpt);
+  }
+  const items = uniqueExcerpts.slice(0, 8).map((sourceExcerpt, index) => ({
     id: `ev-${String(index + 1).padStart(2, '0')}`,
     kind: classifyEvidence(sourceExcerpt),
     sourceExcerpt,

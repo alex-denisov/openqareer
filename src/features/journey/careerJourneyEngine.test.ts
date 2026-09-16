@@ -648,4 +648,33 @@ describe('review-evidence next action source attribution (B162)', () => {
         'Импорт резюме и диалог добавили выводы в профиль, но вы ещё не подтвердили их точность.',
     });
   });
+
+  it('deduplicates identical proposed claims in candidate facts review queue (B178)', () => {
+    const journey = buildCanonicalProfileJourney(
+      undefined,
+      [
+        {
+          id: 'imp-1',
+          statement: 'Руководил продуктовой командой из 9 человек.',
+          kind: 'fact',
+          domain: 'responsibility',
+          status: 'proposed',
+          sourceMessageIds: [],
+        },
+        {
+          id: 'imp-2',
+          statement: 'Руководил продуктовой командой из 9 человек.',
+          kind: 'fact',
+          domain: 'responsibility',
+          status: 'proposed',
+          sourceMessageIds: [],
+        },
+      ],
+      'Руководитель продукта',
+      '2026-08-28T00:00:00.000Z',
+    );
+
+    expect(journey.profile.proposedEvidence).toBe(1);
+  });
 });
+
