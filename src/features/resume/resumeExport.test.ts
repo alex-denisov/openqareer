@@ -4,18 +4,18 @@ import { exportResumeAsJson, exportResumeAsPlainText, resumeExportFileName } fro
 
 function minimalDocument(overrides?: Partial<ResumeDocument>): ResumeDocument {
   return {
-    variant: 'master',
-    conventions: null,
-    candidate: {
+    kind: 'master',
+    targetRole: null,
+    contact: {
       fullName: null,
       email: null,
       phone: null,
       telegram: null,
       location: null,
-      about: null,
-      photoUrl: null,
+      links: [],
     },
-    targetRole: null,
+    about: null,
+    photoUrl: null,
     experience: [],
     skills: [],
     education: [],
@@ -25,7 +25,16 @@ function minimalDocument(overrides?: Partial<ResumeDocument>): ResumeDocument {
     languages: [],
     additional: null,
     unknowns: [],
-    lengthEstimate: { pages: 1, bulletCount: 0, overflowRisk: 'safe' },
+    conventions: {
+      country: null,
+      packVersion: null,
+      reverseChronological: true,
+      maxPages: null,
+      recommendedBulletsPerRole: null,
+      photo: 'omitted',
+      discriminatoryPii: 'omitted',
+    },
+    length: { lines: 0, pages: 1, linesPerPage: 45 },
     ...overrides,
   };
 }
@@ -39,15 +48,15 @@ describe('resumeExport', () => {
 
   it('generates a clean ATS text representation with contacts and sections', () => {
     const doc = minimalDocument({
-      candidate: {
-        fullName: { value: 'Алексей Смирнов', memoryId: 'm-1', sourceMessageIds: [], reviewFlags: [] },
-        email: { value: 'alex@example.com', memoryId: 'm-2', sourceMessageIds: [], reviewFlags: [] },
-        phone: { value: '+7 999 123-45-67', memoryId: 'm-3', sourceMessageIds: [], reviewFlags: [] },
-        telegram: { value: '@alexsmirnov', memoryId: 'm-4', sourceMessageIds: [], reviewFlags: [] },
-        location: { value: 'Москва', memoryId: 'm-5', sourceMessageIds: [], reviewFlags: [] },
-        about: 'Опытный технический лидер с фокусом на масштабирование инфраструктуры.',
-        photoUrl: null,
+      contact: {
+        fullName: 'Алексей Смирнов',
+        email: 'alex@example.com',
+        phone: '+7 999 123-45-67',
+        telegram: '@alexsmirnov',
+        location: 'Москва',
+        links: [],
       },
+      about: 'Опытный технический лидер с фокусом на масштабирование инфраструктуры.',
       targetRole: 'Head of Infrastructure / Lead DevOps',
       experience: [
         {
@@ -112,21 +121,20 @@ describe('resumeExport', () => {
     const json = exportResumeAsJson(doc);
     const parsed = JSON.parse(json);
     expect(parsed.targetRole).toBe('Backend Engineer');
-    expect(parsed.variant).toBe('master');
+    expect(parsed.kind).toBe('master');
   });
 
   it('builds a safe file name slug with variant and name', () => {
     const doc = minimalDocument({
-      candidate: {
-        fullName: { value: 'Иван Иванов', memoryId: 'm-1', sourceMessageIds: [], reviewFlags: [] },
+      contact: {
+        fullName: 'Иван Иванов',
         email: null,
         phone: null,
         telegram: null,
         location: null,
-        about: null,
-        photoUrl: null,
+        links: [],
       },
-      variant: 'germany',
+      kind: 'country-role',
     });
 
     const txtName = resumeExportFileName(doc, 'txt');

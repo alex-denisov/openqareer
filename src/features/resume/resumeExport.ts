@@ -15,7 +15,7 @@ export function exportResumeAsPlainText(doc: ResumeDocument): string {
   const header = buildHeader(doc);
   if (header) sections.push(header);
 
-  const about = doc.candidate.about?.trim();
+  const about = doc.about?.trim();
   if (about) {
     sections.push(`ОБО МНЕ\n${about}`);
   }
@@ -26,7 +26,7 @@ export function exportResumeAsPlainText(doc: ResumeDocument): string {
   const education = buildEducationSection(doc.education);
   if (education) sections.push(education);
 
-  const skills = doc.skills.map((s) => s.name.trim()).filter(Boolean);
+  const skills = (doc.skills ?? []).map((s) => s.name?.trim()).filter((s): s is string => Boolean(s));
   if (skills.length > 0) {
     sections.push(`НАВЫКИ\n${skills.join(', ')}`);
   }
@@ -45,17 +45,17 @@ export function exportResumeAsPlainText(doc: ResumeDocument): string {
 
 function buildHeader(doc: ResumeDocument): string {
   const lines: string[] = [];
-  const name = doc.candidate.fullName?.value?.trim();
+  const name = doc.contact.fullName?.trim();
   if (name) lines.push(name.toUpperCase());
 
   const role = doc.targetRole?.trim();
   if (role) lines.push(role);
 
   const contacts = [
-    doc.candidate.location?.value?.trim(),
-    doc.candidate.email?.value?.trim(),
-    doc.candidate.phone?.value?.trim(),
-    doc.candidate.telegram?.value?.trim(),
+    doc.contact.location?.trim(),
+    doc.contact.email?.trim(),
+    doc.contact.phone?.trim(),
+    doc.contact.telegram?.trim(),
   ].filter((item): item is string => Boolean(item));
 
   if (contacts.length > 0) {
@@ -127,10 +127,11 @@ function buildLanguagesSection(doc: ResumeDocument): string {
 }
 
 function buildCoursesSection(doc: ResumeDocument): string {
-  if (!doc.courses.length) return '';
+  if (!doc.courses?.length) return '';
   const items = doc.courses
     .map((c) => {
-      const parts = [c.name.trim(), c.institution?.trim(), c.year?.trim()].filter(Boolean);
+      const yearStr = c.year !== undefined ? String(c.year).trim() : '';
+      const parts = [c.name.trim(), c.institution?.trim(), yearStr].filter(Boolean);
       return parts.join(' | ');
     })
     .filter(Boolean);
@@ -139,11 +140,14 @@ function buildCoursesSection(doc: ResumeDocument): string {
 }
 
 function buildRecommendationsSection(doc: ResumeDocument): string {
-  if (!doc.recommendations.length) return '';
+  if (!doc.recommendations?.length) return '';
   const items = doc.recommendations
     .map((r) => {
-      const author = [r.author.trim(), r.role?.trim(), r.company?.trim()].filter(Boolean).join(', ');
-      return `${author}\n${r.text.trim()}`;
+      const authorName = (r.author ?? r.recommender ?? '').trim();
+      const author = [authorName, r.role?.trim(), r.organization?.trim()].filter(Boolean).join(', ');
+      const text = (r.text ?? '').trim();
+      if (!author && !text) return '';
+      return author && text ? `${author}\n${text}` : (author || text);
     })
     .filter(Boolean);
 
@@ -161,8 +165,8 @@ export function exportResumeAsJson(doc: ResumeDocument): string {
  * Generates a URL/filesystem-safe file name for export.
  */
 export function resumeExportFileName(doc: ResumeDocument, ext: 'txt' | 'json' | 'pdf'): string {
-  const variant = doc.variant === 'germany' ? 'germany' : 'master';
-  const rawName = doc.candidate.fullName?.value?.trim();
+  const variant = doc.kind === 'country-role' ? 'germany' : 'master';
+  const rawName = doc.contact.fullName?.trim();
   const slug = rawName ? slugifyLatin(rawName) : 'resume';
   return `resume-${variant}-${slug}.${ext}`;
 }

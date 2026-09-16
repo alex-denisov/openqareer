@@ -294,17 +294,20 @@ export function buildCareerJourney(
 function deduplicateProfileEvidence(
   items: readonly CanonicalProfileMemory[],
 ): CanonicalProfileMemory[] {
-  const seen = new Map<string, CanonicalProfileMemory>();
+  const seenProposed = new Set<string>();
+  const result: CanonicalProfileMemory[] = [];
+
   for (const item of items) {
-    const key = (item.statement ?? '').trim().toLowerCase().replace(/\s+/gu, ' ') || item.id;
-    const existing = seen.get(key);
-    if (!existing) {
-      seen.set(key, item);
-    } else if (existing.status === 'proposed' && item.status !== 'proposed') {
-      seen.set(key, item);
+    if (item.status === 'proposed') {
+      const key = (item.statement ?? '').trim().toLowerCase().replace(/\s+/gu, ' ');
+      if (key) {
+        if (seenProposed.has(key)) continue;
+        seenProposed.add(key);
+      }
     }
+    result.push(item);
   }
-  return Array.from(seen.values());
+  return result;
 }
 
 export function applyCanonicalProfileToJourney(

@@ -95,6 +95,7 @@ function useResumeVariant(
  * Presentational surface, separated so every state can be asserted without a
  * network. Editing turns on only when a draft owner supplies `onDraftChange`.
  */
+// eslint-disable-next-line max-lines-per-function
 export function ResumeStudioSurface(props: ResumeStudioSurfaceProps) {
   const { view, draft, memory = [], regions = [], error, onRetry, onDraftChange } = props;
   const { loading = false, saving = false, saveError, onSave } = props;

@@ -13,6 +13,7 @@ const session: AuthUser = {
   displayName: 'Тестовый Кандидат',
   role: 'candidate',
   isTest: false,
+  candidateId: 'cand-1',
 };
 
 const workspace: CandidateWorkspace = {
