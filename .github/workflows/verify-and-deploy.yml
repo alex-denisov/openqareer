@@ -146,7 +146,7 @@ jobs:
             # One request carries both facts; `|| true` keeps a transport
             # failure inside the diagnosis below instead of dying under
             # pipefail before the printf explains which file broke.
-            response="$(curl -sS --compressed --max-time 60 \
+            response="$(curl -sS --compressed --max-time 60 --retry 3 --retry-all-errors \
               -H 'Cache-Control: no-cache' \
               -o "$probe" -w '%{http_code}|%{content_type}' \
               "https://openqareer.com${root_path}" || true)"
@@ -178,7 +178,7 @@ jobs:
           /admin.html|text/html
           ROOT_FILES
           release_index="$(mktemp)"
-          curl --compressed -fsS --max-time 30 \
+          curl --compressed -fsS --max-time 30 --retry 3 --retry-all-errors \
             -H 'Cache-Control: no-cache' \
             "https://openqareer.com/?release=$GITHUB_SHA" > "$release_index"
           # The entry is the module script, not merely the first /assets/*.js in
@@ -196,7 +196,7 @@ jobs:
               ;;
           esac
           release_asset="$(mktemp)"
-          curl --compressed -fsS --max-time 60 \
+          curl --compressed -fsS --max-time 60 --retry 3 --retry-all-errors \
             "https://openqareer.com$entry_asset" > "$release_asset"
           grep -Fq "$GITHUB_SHA" "$release_asset"
           part_prefix="$(sed -nE 's#^const PREFIX="([^"]+)";#\1#p' \
@@ -209,7 +209,7 @@ jobs:
               ;;
           esac
           first_part="$(mktemp)"
-          curl -fsS --max-time 20 \
+          curl -fsS --max-time 30 --retry 3 --retry-all-errors \
             "https://openqareer.com${part_prefix}000.js" > "$first_part"
           first_part_bytes="$(wc -c < "$first_part")"
           if [ "$first_part_bytes" -gt 12288 ]; then
@@ -230,7 +230,7 @@ jobs:
             [ -n "$sheet_path" ] || continue
             sheet_count=$((sheet_count + 1))
             sheet="$(mktemp)"
-            curl -fsS --max-time 20 "https://openqareer.com$sheet_path" > "$sheet"
+            curl -fsS --max-time 30 --retry 3 --retry-all-errors "https://openqareer.com$sheet_path" > "$sheet"
             sheet_bytes="$(wc -c < "$sheet")"
             rm -f "$sheet"
             if [ "$sheet_bytes" -gt 12288 ]; then
@@ -249,25 +249,25 @@ jobs:
           # it answered with the entry document instead, the split-bundle
           # loader read an HTML page as a bundle part and dead-ended on
           # "bad part length" (B168, and INC-018 before it).
-          missing_status="$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' \
+          missing_status="$(curl -sS --max-time 30 --retry 3 --retry-all-errors -o /dev/null -w '%{http_code}' \
             "https://openqareer.com${part_prefix}999.js")"
           if [ "$missing_status" != "404" ]; then
             printf 'missing build asset answered %s, expected 404\n' \
               "$missing_status" >&2
             exit 1
           fi
-          curl -fsSI --max-time 10 https://openqareer.com/ |
+          curl -fsSI --max-time 30 --retry 3 --retry-all-errors https://openqareer.com/ |
             grep -Eiq '^content-security-policy:'
-          curl -fsSI --max-time 10 https://openqareer.com/ |
+          curl -fsSI --max-time 30 --retry 3 --retry-all-errors https://openqareer.com/ |
             grep -Eiq '^x-openqareer-origin: eu-1'
           root_headers="$(mktemp)"
-          curl -fsSI --max-time 10 https://openqareer.com/ > "$root_headers"
+          curl -fsSI --max-time 30 --retry 3 --retry-all-errors https://openqareer.com/ > "$root_headers"
           grep -Eiq '^cache-control:.*no-store' "$root_headers"
           if grep -Eiq '^(etag|last-modified):' "$root_headers"; then
             printf 'entry HTML exposes a release-agnostic cache validator\n' >&2
             exit 1
           fi
-          conditional_status="$(curl -sS --max-time 10 -o /dev/null \
+          conditional_status="$(curl -sS --max-time 30 --retry 3 --retry-all-errors -o /dev/null \
             -w '%{http_code}' -H 'If-None-Match: W/"legacy-release"' \
             https://openqareer.com/)"
           if [ "$conditional_status" != "200" ]; then
