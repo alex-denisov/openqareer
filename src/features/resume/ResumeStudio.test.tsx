@@ -395,3 +395,21 @@ describe('ResumeStudioSurface', () => {
     expect(html).not.toMatch(/В источнике не было/u);
   });
 });
+
+describe('ResumeStudio export actions (B086 step 4)', () => {
+  it('renders ATS text, PDF print and JSON export buttons in the header', () => {
+    const html = render(
+      <ResumeStudioSurface
+        view={viewOf()}
+        draft={populatedDraft}
+        memory={populatedMemory}
+      />,
+    );
+
+    expect(html).toContain('TXT (ATS)');
+    expect(html).toContain('Печать / PDF');
+    expect(html).toContain('JSON');
+    expect(html).toContain('career-resume-export-group');
+  });
+});
+

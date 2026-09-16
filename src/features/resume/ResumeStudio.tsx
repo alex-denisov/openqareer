@@ -128,6 +128,7 @@ export function ResumeStudioSurface(props: ResumeStudioSurfaceProps) {
     saveError,
     unknownCount: document.unknowns.length + summary.staleEvidence,
     activePane,
+    document,
     onVariant: setVariant,
     onPane: setPane,
     onSave,

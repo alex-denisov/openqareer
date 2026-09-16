@@ -1,7 +1,14 @@
-import { FloppyDisk } from '@phosphor-icons/react';
+import { FloppyDisk, Printer, FileText, FileCode } from '@phosphor-icons/react';
 import { VARIANT_LABELS, VARIANT_SHORT_LABELS } from './resumeLabels';
 import type { ResumeStatusSummary } from './resumeStudioModel';
-import type { ResumeStudioView, ResumeVariantId } from './resumeTypes';
+import type { ResumeDocument, ResumeStudioView, ResumeVariantId } from './resumeTypes';
+import {
+  exportResumeAsPlainText,
+  exportResumeAsJson,
+  resumeExportFileName,
+  triggerFileDownload,
+  triggerResumePrint,
+} from './resumeExport';
 
 interface ResumeStudioHeadProps {
   readonly variant: ResumeVariantId;
@@ -12,6 +19,7 @@ interface ResumeStudioHeadProps {
   readonly saveError?: string;
   readonly unknownCount: number;
   readonly activePane: 'unknowns' | 'document';
+  readonly document?: ResumeDocument;
   readonly onVariant: (variant: ResumeVariantId) => void;
   readonly onPane: (pane: 'unknowns' | 'document') => void;
   readonly onSave?: () => void;
@@ -30,6 +38,7 @@ export function ResumeStudioHead({
   saveError,
   unknownCount,
   activePane,
+  document,
   onVariant,
   onPane,
   onSave,
@@ -45,6 +54,7 @@ export function ResumeStudioHead({
 
       <div className="career-resume-actions">
         <VariantSwitch variant={variant} variants={variants} onVariant={onVariant} />
+        {document ? <ResumeExportActions document={document} /> : null}
         {onSave ? (
           <button
             className="career-primary-button"
@@ -170,3 +180,50 @@ function formatMoment(value: string): string {
     minute: '2-digit',
   }).format(parsed);
 }
+
+function ResumeExportActions({ document }: { readonly document: ResumeDocument }) {
+  const handleExportText = () => {
+    const text = exportResumeAsPlainText(document);
+    const fileName = resumeExportFileName(document, 'txt');
+    triggerFileDownload(fileName, text, 'text/plain;charset=utf-8');
+  };
+
+  const handleExportJson = () => {
+    const json = exportResumeAsJson(document);
+    const fileName = resumeExportFileName(document, 'json');
+    triggerFileDownload(fileName, json, 'application/json;charset=utf-8');
+  };
+
+  return (
+    <div className="career-resume-export-group" role="group" aria-label="Экспорт резюме">
+      <button
+        type="button"
+        className="career-resume-export-button"
+        onClick={handleExportText}
+        title="Скачать резюме в текстовом формате для ATS"
+      >
+        <FileText size={15} />
+        TXT (ATS)
+      </button>
+      <button
+        type="button"
+        className="career-resume-export-button"
+        onClick={triggerResumePrint}
+        title="Распечатать или сохранить в PDF"
+      >
+        <Printer size={15} />
+        Печать / PDF
+      </button>
+      <button
+        type="button"
+        className="career-resume-export-button"
+        onClick={handleExportJson}
+        title="Скачать структурированные данные резюме в JSON"
+      >
+        <FileCode size={15} />
+        JSON
+      </button>
+    </div>
+  );
+}
+
