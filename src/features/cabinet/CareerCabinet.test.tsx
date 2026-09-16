@@ -89,11 +89,13 @@ describe('CareerCabinet composition', () => {
   // «Пульт»: «Главная» — это сам кандидат. Слева профиль из разобранного
   // резюме, справа оценка и позиционирование. Ни очереди подтверждения, ни
   // карточки следующего шага макет не держит (B179).
-  it('gives «Главная» the candidate profile beside the assessment', () => {
+  it('gives «Главная» the candidate profile beside the assessment, next action and ATS readability (B103, B105)', () => {
     const html = renderCabinet('today');
 
     expect(html).toContain('Разделы профиля');
     expect(html).toContain('Оценка профиля');
+    expect(html).toContain('Следующее действие');
+    expect(html).toContain('ATS-читаемость');
     expect(html).not.toContain('Следующий шаг');
     expect(html).not.toContain('Подтвердить все');
     expect(html).not.toContain('Рынок и следующие шаги');

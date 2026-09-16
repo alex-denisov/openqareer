@@ -21,6 +21,7 @@ import type { CareerStrategyRead } from './useCareerStrategy';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { ProposedRole } from '../../../shared/roleProposals';
 import type { CareerCabinetView } from './cabinetViews';
+import { NextAction, AtsReadability } from './CareerIntelligencePanelParts';
 
 /**
  * «Главная» — кандидат и его факты слева, оценка, позиционирование и вход к
@@ -132,11 +133,13 @@ function HomeRail({
 
   return (
     <aside className="career-home-rail" aria-label="Оценка и позиционирование">
+      <NextAction journey={journey} onNavigate={onNavigate} />
       <AssessmentPanel
         snapshot={snapshot}
         targetDirection={targetDirection}
         importing={importing}
       />
+      <AtsReadability journey={journey} onNavigate={onNavigate} />
       <RolesMarketPanel
         journey={journey}
         proposedRoles={proposedRoles}
