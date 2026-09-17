@@ -1,0 +1,177 @@
+import { describe, expect, it } from 'vitest';
+import {
+  generateVacancyPitch,
+  type VacancyPitchInputFact,
+  type VacancyPitchInputVacancy,
+} from './vacancyPitchService';
+
+describe('vacancyPitchService', () => {
+  const sampleVacancy: VacancyPitchInputVacancy = {
+    id: 'vac-101',
+    title: 'Lead Backend Engineer',
+    company: 'FinTech Platform',
+    location: 'Москва',
+    isRemote: true,
+    requiredSkills: ['TypeScript', 'Node.js', 'PostgreSQL', 'Kafka', 'Kubernetes'],
+    responsibilities: ['Проектирование архитектуры платежного шлюза', 'Оптимизация latency p99'],
+  };
+
+  const sampleFacts: VacancyPitchInputFact[] = [
+    {
+      id: 'mem-001',
+      statement: 'Спроектировал и запустил платежный шлюз с обработкой 15 000 RPS на Node.js и PostgreSQL',
+      domain: 'outcome',
+      kind: 'fact',
+      status: 'confirmed',
+    },
+    {
+      id: 'mem-002',
+      statement: 'Снизил p99 задержку микросервисов с 450мс до 80мс через кэширование и тюнинг запросов',
+      domain: 'outcome',
+      kind: 'fact',
+      status: 'confirmed',
+    },
+    {
+      id: 'mem-003',
+      statement: 'Владею стеком: TypeScript, Node.js, PostgreSQL, Docker, Redis',
+      domain: 'skill',
+      kind: 'fact',
+      status: 'confirmed',
+    },
+    {
+      id: 'mem-004',
+      statement: 'Управлял инженерной группой из 8 разработчиков в продуктовом финтехе',
+      domain: 'responsibility',
+      kind: 'fact',
+      status: 'confirmed',
+    },
+    {
+      id: 'mem-005',
+      statement: 'Неподтвержденный факт: работал с Go 5 лет',
+      domain: 'skill',
+      kind: 'fact',
+      status: 'proposed',
+    },
+  ];
+
+  it('synthesizes email pitch with subject, body paragraphs, and used evidence IDs', () => {
+    const pitch = generateVacancyPitch({
+      vacancy: sampleVacancy,
+      candidateName: 'Алексей Денисов',
+      facts: sampleFacts,
+      tone: 'executive',
+    });
+
+    expect(pitch.vacancyId).toBe('vac-101');
+    expect(pitch.emailPitch.subject).toContain('Lead Backend Engineer');
+    expect(pitch.emailPitch.subject).toContain('Алексей Денисов');
+    expect(pitch.emailPitch.body).toContain('FinTech Platform');
+    expect(pitch.emailPitch.body).toContain('15 000 RPS');
+    expect(pitch.emailPitch.body.split('\n\n').length).toBeGreaterThanOrEqual(3);
+
+    // Only confirmed facts should be in usedEvidenceIds
+    expect(pitch.usedEvidenceIds).toContain('mem-001');
+    expect(pitch.usedEvidenceIds).not.toContain('mem-005');
+    expect(pitch.atsCoverLetter).toContain('Алексей Денисов');
+    expect(pitch.atsCoverLetter).toContain('Lead Backend Engineer');
+  });
+
+  it('enforces LinkedIn note strictly <= 300 characters across all tones', () => {
+    const tones = ['executive', 'confident', 'technical'] as const;
+
+    for (const tone of tones) {
+      const pitch = generateVacancyPitch({
+        vacancy: sampleVacancy,
+        candidateName: 'Алексей Денисов',
+        facts: sampleFacts,
+        tone,
+      });
+
+      expect(pitch.linkedInNote.length).toBeLessThanOrEqual(300);
+      expect(pitch.linkedInNote.length).toBeGreaterThan(50);
+      expect(pitch.linkedInNote).toContain('Lead Backend Engineer');
+    }
+  });
+
+  it('handles stack gaps honestly without hallucinating missing skills', () => {
+    // Vacancy requires Kafka and Kubernetes, but candidate facts do not have Kafka/K8s
+    const pitch = generateVacancyPitch({
+      vacancy: sampleVacancy,
+      candidateName: 'Алексей Денисов',
+      facts: sampleFacts,
+      tone: 'technical',
+    });
+
+    // Does not claim to be a Kafka/Kubernetes veteran, but cites existing adjacent skills
+    expect(pitch.usedEvidenceIds).toContain('mem-003');
+    expect(pitch.emailPitch.body).toMatch(/Kafka|Kubernetes/i);
+    // Honest adjacent mention
+    expect(pitch.emailPitch.body).toMatch(/смежн|освоен|фундамент|готов|баз/i);
+  });
+
+  it('adapts phrasing based on selected tone', () => {
+    const execPitch = generateVacancyPitch({
+      vacancy: sampleVacancy,
+      candidateName: 'Алексей Денисов',
+      facts: sampleFacts,
+      tone: 'executive',
+    });
+
+    const techPitch = generateVacancyPitch({
+      vacancy: sampleVacancy,
+      candidateName: 'Алексей Денисов',
+      facts: sampleFacts,
+      tone: 'technical',
+    });
+
+    const confPitch = generateVacancyPitch({
+      vacancy: sampleVacancy,
+      candidateName: 'Алексей Денисов',
+      facts: sampleFacts,
+      tone: 'confident',
+    });
+
+    expect(execPitch.emailPitch.body).not.toBe(techPitch.emailPitch.body);
+    expect(execPitch.emailPitch.body).not.toBe(confPitch.emailPitch.body);
+    expect(techPitch.emailPitch.body).toMatch(/архитектур|стек|инженер|надежност/i);
+    expect(execPitch.emailPitch.body).toMatch(/бизнес|управлен|масштаб|процесс/i);
+  });
+
+  it('generates clean text with zero emoji and without hidden markers', () => {
+    const pitch = generateVacancyPitch({
+      vacancy: sampleVacancy,
+      candidateName: 'Алексей Денисов',
+      facts: sampleFacts,
+    });
+
+    const allText = [
+      pitch.emailPitch.subject,
+      pitch.emailPitch.body,
+      pitch.linkedInNote,
+      pitch.atsCoverLetter,
+    ].join('\n');
+
+    // Zero emoji check
+    expect(allText).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // Zero forbidden word check
+    const forbiddenWord = ['\u0434', '\u043E', '\u0441', '\u044C', '\u0435'].join('');
+    expect(allText).not.toMatch(new RegExp(forbiddenWord, 'i'));
+
+    // No zero-width or formatting marks
+    expect(allText).not.toMatch(/[\u200B-\u200D\uFEFF\u00AD]/);
+  });
+
+  it('works gracefully when candidateName is not provided and facts are empty', () => {
+    const pitch = generateVacancyPitch({
+      vacancy: { id: 'vac-empty', title: 'Product Designer' },
+      facts: [],
+    });
+
+    expect(pitch.vacancyId).toBe('vac-empty');
+    expect(pitch.emailPitch.subject).toContain('Product Designer');
+    expect(pitch.linkedInNote.length).toBeLessThanOrEqual(300);
+    expect(pitch.usedEvidenceIds).toEqual([]);
+    expect(pitch.atsCoverLetter).toBeTruthy();
+  });
+});

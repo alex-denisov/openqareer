@@ -105,10 +105,59 @@ export function ResumeDocumentView(props: ResumeDocumentViewProps) {
   );
 }
 
+function StanfordHeader({
+  fullName,
+  targetRole,
+  location,
+  contactParts,
+}: {
+  fullName: string;
+  targetRole: string;
+  location?: string | null;
+  contactParts: readonly string[];
+}) {
+  return (
+    <div className="career-resume-stanford-header">
+      <h1 className="career-resume-stanford-name">{fullName}</h1>
+      <div className="career-resume-stanford-subtitle">
+        <span>{targetRole}</span>
+        {location ? <span> | {location}</span> : null}
+        <span> | Remote</span>
+      </div>
+      <div className="career-resume-stanford-contacts">
+        {contactParts.length > 0 ? (
+          <span>{contactParts.join('   ∙   ')}</span>
+        ) : (
+          <span className="career-resume-dim">Контакты не указаны</span>
+        )}
+      </div>
+      <div className="career-resume-stanford-eligibility">
+        <span>Eligible to work in EU</span>
+      </div>
+    </div>
+  );
+}
+
 function IdentitySection({ draft, document, editor }: SectionProps) {
   const contact = draft.candidate.contact;
+  const contactParts = [
+    contact?.location ?? document.contact.location,
+    contact?.phone ?? document.contact.phone,
+    contact?.email ?? document.contact.email,
+    contact?.links?.[0] ?? document.contact.links?.[0],
+  ]
+    .map((item) => item?.trim())
+    .filter((item): item is string => Boolean(item));
+
   return (
     <section className="career-resume-identity">
+      <StanfordHeader
+        fullName={draft.candidate.fullName || document.contact.fullName || 'Имя Фамилия'}
+        targetRole={draft.targetRole || document.targetRole || 'Целевая роль'}
+        location={contact?.location}
+        contactParts={contactParts}
+      />
+
       <Field
         label="Имя и фамилия"
         value={draft.candidate.fullName ?? ''}
@@ -125,13 +174,16 @@ function IdentitySection({ draft, document, editor }: SectionProps) {
         onChange={(value) => editor?.onTargetRole(value)}
       />
       <ContactGrid contact={contact} photoUrl={draft.candidate.photoUrl} editor={editor} />
-      <TextAreaField
-        label="О себе"
-        value={draft.candidate.about ?? ''}
-        placeholder="Краткое резюме опыта, ключевых компетенций и профессиональных приоритетов..."
-        readOnly={!editor}
-        onChange={(value) => editor?.onCandidate({ about: value })}
-      />
+      <div className="career-resume-section">
+        <h3 id="career-resume-summary">SUMMARY</h3>
+        <TextAreaField
+          label="О себе"
+          value={draft.candidate.about ?? ''}
+          placeholder="Краткое резюме опыта, ключевых компетенций и профессиональных приоритетов..."
+          readOnly={!editor}
+          onChange={(value) => editor?.onCandidate({ about: value })}
+        />
+      </div>
       <EntryUnknowns unknowns={document.unknowns.filter((item) => !item.entryId)} />
     </section>
   );
@@ -207,7 +259,7 @@ function ExperienceSection({
   const statements = new Map(evidence.map((item) => [item.id, item.statement]));
   return (
     <section className="career-resume-section" aria-labelledby="career-resume-experience">
-      <h3 id="career-resume-experience">Опыт работы</h3>
+      <h3 id="career-resume-experience">PROFESSIONAL EXPERIENCE</h3>
       {rows.length === 0 ? (
         <p className="career-resume-empty">
           Ни одной роли. Добавьте её из подтверждённого факта — резюме не
@@ -250,7 +302,7 @@ function SkillsSection({ draft, editor }: SectionProps) {
 
   return (
     <section className="career-resume-section" aria-labelledby="career-resume-skills">
-      <h3 id="career-resume-skills">Ключевые навыки</h3>
+      <h3 id="career-resume-skills">SKILLS</h3>
       {skills.length === 0 ? (
         <p className="career-resume-empty">Навыки не указаны.</p>
       ) : (
@@ -308,7 +360,7 @@ function EducationSection({ draft, document, available, editor }: SectionProps) 
   const rows = mergeEducation(draft, document);
   return (
     <section className="career-resume-section" aria-labelledby="career-resume-education">
-      <h3 id="career-resume-education">Образование</h3>
+      <h3 id="career-resume-education">EDUCATION AND CERTIFICATIONS</h3>
       {rows.length === 0 ? <p className="career-resume-empty">Не указано.</p> : null}
       {rows.map((entry) => (
         <EducationRow
@@ -599,7 +651,7 @@ function LanguagesSection({ draft, document, available, editor }: SectionProps) 
   const rows = mergeLanguages(draft, document);
   return (
     <section className="career-resume-section" aria-labelledby="career-resume-languages">
-      <h3 id="career-resume-languages">Языки</h3>
+      <h3 id="career-resume-languages">LANGUAGES</h3>
       {rows.length === 0 ? <p className="career-resume-empty">Не указаны.</p> : null}
       {rows.map((entry) => (
         <LanguageRow

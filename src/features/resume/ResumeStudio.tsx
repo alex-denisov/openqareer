@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { ArrowClockwise } from '@phosphor-icons/react';
 import type { CandidateMemory, ImportedSourceSummary } from '../coach/coachApi';
-import { ResumeControlRail } from './ResumeControlRail';
+import { ResumeDossierRail } from './ResumeDossierRail';
 import { ResumeDocumentView } from './ResumeDocumentView';
+import { ResumeAtsView } from './ResumeAtsView';
+import { ResumeLinkedInPackView } from './ResumeLinkedInPackView';
 import { ResumeStudioHead } from './ResumeStudioHead';
 import type { CandidateRegion } from '../workspace/candidateRegions';
 import { buildResumeEditor } from './resumeEditor';
@@ -19,6 +21,7 @@ import { importedSourceOf, type ImportedSource } from './resumeSourceCoverage';
 import { useResumeStudio } from './useResumeStudio';
 import type {
   ResumeDraft,
+  ResumeFormatMode,
   ResumeStudioProjection,
   ResumeStudioView,
   ResumeVariantId,
@@ -67,6 +70,7 @@ interface ResumeStudioSurfaceProps {
   readonly error?: string;
   readonly saveError?: string;
   readonly initialVariant?: ResumeVariantId;
+  readonly initialFormat?: ResumeFormatMode;
   readonly importedSource?: ImportedSource;
   readonly onRetry?: () => void;
   readonly onDraftChange?: (draft: ResumeDraft) => void;
@@ -100,7 +104,8 @@ export function ResumeStudioSurface(props: ResumeStudioSurfaceProps) {
   const { view, draft, memory = [], regions = [], error, onRetry, onDraftChange } = props;
   const { loading = false, saving = false, saveError, onSave } = props;
   const { variant, variants, setVariant } = useResumeVariant(regions, props.initialVariant);
-  const [pane, setPane] = useState<'unknowns' | 'document'>();
+  const [format, setFormat] = useState<ResumeFormatMode>(props.initialFormat ?? 'stanford-pdf');
+  const [pane, setPane] = useState<'dossier' | 'document'>();
   const available = useMemo(() => eligibleEvidence(memory), [memory]);
   const activeDraft = draft ?? (view ? draftOf(view) : undefined);
   // Both documents are rebuilt from the draft in hand, so an unknown closes the
@@ -118,30 +123,36 @@ export function ResumeStudioSurface(props: ResumeStudioSurfaceProps) {
   const stale = view.evidenceFreshness.stale.length;
   const document = selectDocument(projection, variant);
   const summary = summarizeResumeStudio(projection, variant, stale);
-  const activePane = pane ?? defaultMobilePane(projection, variant, stale);
+  const activePane =
+    pane ?? (defaultMobilePane(projection, variant, stale) === 'unknowns' ? 'dossier' : 'document');
   const editor = onDraftChange ? buildResumeEditor(activeDraft, onDraftChange) : undefined;
   const head = {
     variant,
     variants,
+    format,
     summary,
     savedAt: view.savedAt,
     saving,
     saveError,
     unknownCount: document.unknowns.length + summary.staleEvidence,
+    dossierCount: memory.length,
     activePane,
     document,
     onVariant: setVariant,
+    onFormat: setFormat,
     onPane: setPane,
     onSave,
   };
+  const paneClass = activePane === 'dossier' ? 'is-pane-dossier is-pane-unknowns' : 'is-pane-document';
   return (
-    <section className={`career-resume-studio is-pane-${activePane}`}>
+    <section className={`career-resume-studio ${paneClass} is-format-${format}`}>
       <ResumeStudioHead {...head} />
       <ResumeStudioBody
         view={view}
         projection={projection}
         draft={activeDraft}
         document={document}
+        format={format}
         evidence={available}
         memory={memory}
         editor={editor}
@@ -152,44 +163,83 @@ export function ResumeStudioSurface(props: ResumeStudioSurfaceProps) {
   );
 }
 
+interface ResumeStudioBodyProps {
+  readonly view: ResumeStudioView;
+  readonly projection: ResumeStudioProjection;
+  readonly draft: ResumeDraft;
+  readonly document: ReturnType<typeof selectDocument>;
+  readonly format: ResumeFormatMode;
+  readonly evidence: readonly CandidateMemory[];
+  readonly memory: readonly CandidateMemory[];
+  readonly editor?: ReturnType<typeof buildResumeEditor>;
+  readonly importedSource?: ImportedSource;
+  readonly documentEdited: boolean;
+}
 
-function ResumeStudioBody({
-  view,
-  projection,
+function ResumeFormatMain({
+  format,
   draft,
   document,
   evidence,
-  memory,
   editor,
-  importedSource,
-  documentEdited,
 }: {
-  view: ResumeStudioView;
-  projection: ResumeStudioProjection;
-  draft: ResumeDraft;
-  document: ReturnType<typeof selectDocument>;
-  evidence: readonly CandidateMemory[];
-  memory: readonly CandidateMemory[];
-  editor?: ReturnType<typeof buildResumeEditor>;
-  importedSource?: ImportedSource;
-  documentEdited: boolean;
+  readonly format: ResumeFormatMode;
+  readonly draft: ResumeDraft;
+  readonly document: ReturnType<typeof selectDocument>;
+  readonly evidence: readonly CandidateMemory[];
+  readonly editor?: ReturnType<typeof buildResumeEditor>;
 }) {
   return (
+    <main className="career-resume-format-container">
+      {format === 'stanford-pdf' && (
+        <ResumeDocumentView
+          draft={draft}
+          document={document}
+          evidence={evidence}
+          editor={editor}
+        />
+      )}
+      {format === 'ats-text' && (
+        <ResumeAtsView document={document} draft={draft} />
+      )}
+      {format === 'linkedin-pack' && (
+        <ResumeLinkedInPackView document={document} draft={draft} />
+      )}
+    </main>
+  );
+}
+
+function ResumeStudioBody(props: ResumeStudioBodyProps) {
+  const {
+    view,
+    projection,
+    draft,
+    document,
+    format,
+    evidence,
+    memory,
+    editor,
+    importedSource,
+    documentEdited,
+  } = props;
+
+  return (
     <div className="career-resume-body">
-      <ResumeDocumentView
+      <ResumeDossierRail
+        memory={memory}
+        draft={draft}
+        document={document}
+        freshness={view.evidenceFreshness}
+        excludedEvidenceIds={projection.excludedEvidenceIds}
+        importedSource={importedSource}
+        documentEdited={documentEdited}
+      />
+      <ResumeFormatMain
+        format={format}
         draft={draft}
         document={document}
         evidence={evidence}
         editor={editor}
-      />
-      <ResumeControlRail
-        freshness={view.evidenceFreshness}
-        excludedEvidenceIds={projection.excludedEvidenceIds}
-        document={document}
-        draft={draft}
-        memory={memory}
-        importedSource={importedSource}
-        documentEdited={documentEdited}
       />
     </div>
   );

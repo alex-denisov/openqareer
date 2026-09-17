@@ -413,3 +413,81 @@ describe('ResumeStudio export actions (B086 step 4)', () => {
   });
 });
 
+describe('ResumeStudio canonical positioning formats and layout (B086 step 5)', () => {
+  it('renders format selector buttons in the header', () => {
+    const html = render(
+      <ResumeStudioSurface
+        view={viewOf()}
+        draft={populatedDraft}
+        memory={populatedMemory}
+      />,
+    );
+
+    expect(html).toContain('Stanford PDF');
+    expect(html).toContain('ATS Plain Text');
+    expect(html).toContain('Профиль LinkedIn');
+    expect(html).toContain('career-resume-formats');
+  });
+
+  it('renders Stanford PDF document view by default', () => {
+    const html = render(
+      <ResumeStudioSurface
+        view={viewOf()}
+        draft={populatedDraft}
+        memory={populatedMemory}
+        initialFormat="stanford-pdf"
+      />,
+    );
+
+    expect(html).toContain('career-resume-document');
+    expect(html).toContain('SUMMARY');
+    expect(html).toContain('PROFESSIONAL EXPERIENCE');
+    expect(html).toContain('Eligible to work in EU');
+  });
+
+  it('renders ATS Plain Text view when ats-text format is selected', () => {
+    const html = render(
+      <ResumeStudioSurface
+        view={viewOf()}
+        draft={populatedDraft}
+        memory={populatedMemory}
+        initialFormat="ats-text"
+      />,
+    );
+
+    expect(html).toContain('career-resume-ats-view');
+    expect(html).toContain('=== WORK EXPERIENCE ===');
+    expect(html).toContain('Копировать ATS-текст');
+  });
+
+  it('renders LinkedIn Pack view when linkedin-pack format is selected', () => {
+    const html = render(
+      <ResumeStudioSurface
+        view={viewOf()}
+        draft={populatedDraft}
+        memory={populatedMemory}
+        initialFormat="linkedin-pack"
+      />,
+    );
+
+    expect(html).toContain('career-resume-linkedin-pack');
+    expect(html).toContain('Заголовок профиля (Headline)');
+    expect(html).toContain('О себе (About)');
+    expect(html).toContain('Копировать заголовок');
+  });
+
+  it('renders two-column layout with ResumeDossierRail on the left and format container on the right', () => {
+    const html = render(
+      <ResumeStudioSurface
+        view={viewOf()}
+        draft={populatedDraft}
+        memory={populatedMemory}
+      />,
+    );
+
+    expect(html).toContain('career-resume-dossier-rail');
+    expect(html).toContain('career-resume-format-container');
+    expect(html).toContain('Подтверждённые факты');
+  });
+});
+

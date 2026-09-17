@@ -50,4 +50,9 @@ export interface RouteDeps {
   /** Окно последних отказов ступеней называния — для администратора (INC-035). */
   roleNamingFailures: RoleNamingFailureLog;
   searchRemotive?: (input: { text: string; perPage?: number }) => Promise<VacancySample>;
+  /** Репозиторий контактов рекрутеров и нанимателей (B223). */
+  recruiterContactsRepo?: import('../data/sqliteRecruiterContactsRepository').SqliteRecruiterContactsRepository;
+  /** Репозиторий аудита репутации и цифрового следа кандидата (B224). */
+  candidateReputationRepo?: import('../data/sqliteCandidateReputationRepository').SqliteCandidateReputationRepository;
 }
+

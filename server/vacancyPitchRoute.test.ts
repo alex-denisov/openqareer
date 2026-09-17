@@ -1,0 +1,209 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { buildApp } from './app';
+import type { ServerConfig } from './config';
+import { SqliteCandidateStore } from './data/sqliteCandidateStore';
+import type { CoachProvider } from './providers/coachProvider';
+import { AuthService } from './auth/authService';
+import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
+import { MemoryVacancyPoolStore } from './vacancies/memoryVacancyPoolStore';
+import type { VacancyCluster } from './domain/unifiedVacancy';
+
+const resources: Array<{
+  app: Awaited<ReturnType<typeof buildApp>>;
+  auth: AuthService;
+  candidates: SqliteCandidateStore;
+  directory: string;
+}> = [];
+
+const dummyProvider: CoachProvider = {
+  async createTurn() {
+    throw new Error('not_used');
+  },
+};
+
+afterEach(async () => {
+  for (const r of resources.splice(0)) {
+    await r.app.close();
+    r.auth.close();
+    r.candidates.close();
+    rmSync(r.directory, { recursive: true, force: true });
+  }
+});
+
+async function createApp(clusters: VacancyCluster[] = []) {
+  const directory = mkdtempSync(join(tmpdir(), 'openqareer-pitch-routes-'));
+  const databasePath = join(directory, 'app.db');
+  const candidates = new SqliteCandidateStore({
+    databasePath,
+    encryptionKey: Buffer.alloc(32, 8),
+  });
+  const auth = new AuthService({ databasePath });
+  await auth.seedAccounts(
+    [
+      {
+        username: 'candidate.pitch',
+        password: 'candidate-pitch-password',
+        role: 'candidate',
+      },
+    ],
+    candidates,
+  );
+
+  const poolStore = new MemoryVacancyPoolStore();
+  const multiSourceEngine = new MultiSourceVacancyEngine({
+    pool: poolStore,
+    recluster: { mode: 'sync' },
+  });
+
+  if (clusters.length > 0) {
+    (multiSourceEngine as unknown as { clusters: VacancyCluster[] }).clusters = clusters;
+  }
+
+  const config: ServerConfig = {
+    host: '127.0.0.1',
+    port: 3210,
+    openAIKey: 'not-used',
+    openRouterKey: 'not-used',
+    previewToken: 'preview-token-that-is-at-least-thirty-two-characters',
+    dataEncryptionKey: Buffer.alloc(32, 8),
+    databasePath,
+    model: 'gpt-5.6-sol',
+    staticRoot: directory,
+    release: 'test',
+    logLevel: 'fatal',
+    secureCookies: false,
+    allowedOrigins: ['http://localhost:3000'],
+    seedAccounts: [],
+  };
+
+  const app = await buildApp({
+    config,
+    coachProvider: dummyProvider,
+    candidateStore: candidates,
+    authService: auth,
+    multiSourceVacancyEngine: multiSourceEngine,
+    serveStatic: false,
+  });
+
+  resources.push({ app, auth, candidates, directory });
+  return { app, candidates };
+}
+
+async function login(app: Awaited<ReturnType<typeof buildApp>>) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    headers: { origin: 'http://localhost:3000' },
+    payload: {
+      username: 'candidate.pitch',
+      password: 'candidate-pitch-password',
+    },
+  });
+  const cookie = String(response.headers['set-cookie']).split(';')[0];
+  const candidateId = response.json().data.candidateId;
+  return { cookie, candidateId };
+}
+
+describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
+  const sampleCluster: VacancyCluster = {
+    id: 'cluster-99',
+    canonicalTitle: 'Senior Platform Engineer',
+    canonicalCompany: 'CloudScale Inc',
+    canonicalLocation: 'Remote',
+    isRemote: true,
+    descriptionSummary: 'Разработка высоконагруженной платформы на Node.js и Kubernetes',
+    skills: ['Node.js', 'TypeScript', 'Kubernetes', 'PostgreSQL'],
+    primaryUrl: 'https://example.com/vacancies/99',
+    sources: [],
+    firstObservedAt: '2026-09-17T00:00:00.000Z',
+    lastSeenAt: '2026-09-17T00:00:00.000Z',
+    status: 'active',
+    vacanciesCount: 1,
+  };
+
+  it('rejects unauthenticated requests with 401 or redirection', async () => {
+    const { app } = await createApp([sampleCluster]);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { origin: 'http://localhost:3000' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('rejects unsafe origin with 403', async () => {
+    const { app } = await createApp([sampleCluster]);
+    const { cookie } = await login(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://malicious.site' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  it('returns 404 when vacancy is not found and no override provided', async () => {
+    const { app } = await createApp([]);
+    const { cookie } = await login(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/non-existent/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('generates pitch with 3 formats using confirmed candidate facts', async () => {
+    const { app, candidates } = await createApp([sampleCluster]);
+    const { cookie, candidateId } = await login(app);
+
+    // Add confirmed facts to candidate
+    candidates.importResumeEvidence(candidateId, {
+      sourceLabel: 'test-import',
+      entries: [
+        {
+          memoryId: 'mem-101',
+          domain: 'outcome',
+          statement: 'Увеличил пропускную способность API в 4 раза, снизил p99 latency до 45мс',
+        },
+        {
+          memoryId: 'mem-102',
+          domain: 'skill',
+          statement: 'Владею TypeScript, Node.js, PostgreSQL, Redis',
+        },
+      ],
+    });
+    candidates.reviewMemories(candidateId, ['mem-101', 'mem-102'], 'confirm');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: { tone: 'technical' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const json = response.json();
+    expect(json.data).toMatchObject({
+      vacancyId: 'cluster-99',
+      emailPitch: {
+        subject: expect.stringContaining('Senior Platform Engineer'),
+        body: expect.stringContaining('CloudScale Inc'),
+      },
+      linkedInNote: expect.any(String),
+      atsCoverLetter: expect.stringContaining('Senior Platform Engineer'),
+      usedEvidenceIds: expect.arrayContaining(['mem-101']),
+    });
+
+    expect(json.data.linkedInNote.length).toBeLessThanOrEqual(300);
+  });
+});

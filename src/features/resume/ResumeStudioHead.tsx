@@ -1,7 +1,12 @@
 import { FloppyDisk, Printer, FileText, FileCode } from '@phosphor-icons/react';
-import { VARIANT_LABELS, VARIANT_SHORT_LABELS } from './resumeLabels';
+import { FORMAT_LABELS, VARIANT_LABELS, VARIANT_SHORT_LABELS } from './resumeLabels';
 import type { ResumeStatusSummary } from './resumeStudioModel';
-import type { ResumeDocument, ResumeStudioView, ResumeVariantId } from './resumeTypes';
+import type {
+  ResumeDocument,
+  ResumeFormatMode,
+  ResumeStudioView,
+  ResumeVariantId,
+} from './resumeTypes';
 import {
   exportResumeAsPlainText,
   exportResumeAsJson,
@@ -13,15 +18,18 @@ import {
 interface ResumeStudioHeadProps {
   readonly variant: ResumeVariantId;
   readonly variants: readonly ResumeVariantId[];
+  readonly format?: ResumeFormatMode;
   readonly summary: ResumeStatusSummary;
   readonly savedAt: ResumeStudioView['savedAt'];
   readonly saving: boolean;
   readonly saveError?: string;
   readonly unknownCount: number;
-  readonly activePane: 'unknowns' | 'document';
+  readonly dossierCount?: number;
+  readonly activePane: 'dossier' | 'document' | 'unknowns';
   readonly document?: ResumeDocument;
   readonly onVariant: (variant: ResumeVariantId) => void;
-  readonly onPane: (pane: 'unknowns' | 'document') => void;
+  readonly onFormat?: (format: ResumeFormatMode) => void;
+  readonly onPane: (pane: 'dossier' | 'document') => void;
   readonly onSave?: () => void;
 }
 
@@ -29,20 +37,48 @@ interface ResumeStudioHeadProps {
  * On a phone only the first screen is reliably read, so the header carries the
  * whole decision: how long the document is, what blocks it, and what to do next.
  */
-export function ResumeStudioHead({
-  variant,
-  variants,
-  summary,
+function ResumeSaveStatus({
   savedAt,
-  saving,
   saveError,
-  unknownCount,
-  activePane,
-  document,
-  onVariant,
-  onPane,
-  onSave,
-}: ResumeStudioHeadProps) {
+}: {
+  readonly savedAt?: ResumeStudioView['savedAt'];
+  readonly saveError?: string;
+}) {
+  return (
+    <>
+      <p className="career-resume-saved">
+        {savedAt
+          ? `Черновик сохранён ${formatMoment(savedAt.updatedAt)}. Сохранение фиксирует список доказательств.`
+          : 'Черновик ещё не сохранён. Сохранение фиксирует список доказательств, на которые вы опираетесь.'}
+      </p>
+      {saveError ? (
+        <p className="career-resume-error" role="alert">
+          {saveError}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+export function ResumeStudioHead(props: ResumeStudioHeadProps) {
+  const {
+    variant,
+    variants,
+    format = 'stanford-pdf',
+    summary,
+    savedAt,
+    saving,
+    saveError,
+    unknownCount,
+    dossierCount = unknownCount,
+    activePane,
+    document,
+    onVariant,
+    onFormat,
+    onPane,
+    onSave,
+  } = props;
+
   return (
     <header className="career-resume-head">
       <div className="career-resume-head-title">
@@ -53,6 +89,7 @@ export function ResumeStudioHead({
       <StatusStrip summary={summary} />
 
       <div className="career-resume-actions">
+        {onFormat ? <FormatSwitch format={format} onFormat={onFormat} /> : null}
         <VariantSwitch variant={variant} variants={variants} onVariant={onVariant} />
         {document ? <ResumeExportActions document={document} /> : null}
         {onSave ? (
@@ -68,19 +105,35 @@ export function ResumeStudioHead({
         ) : null}
       </div>
 
-      <p className="career-resume-saved">
-        {savedAt
-          ? `Черновик сохранён ${formatMoment(savedAt.updatedAt)}. Сохранение фиксирует список доказательств.`
-          : 'Черновик ещё не сохранён. Сохранение фиксирует список доказательств, на которые вы опираетесь.'}
-      </p>
-      {saveError ? (
-        <p className="career-resume-error" role="alert">
-          {saveError}
-        </p>
-      ) : null}
+      <ResumeSaveStatus savedAt={savedAt} saveError={saveError} />
 
-      <PaneSwitch activePane={activePane} unknownCount={unknownCount} onPane={onPane} />
+      <PaneSwitch activePane={activePane} dossierCount={dossierCount} onPane={onPane} />
     </header>
+  );
+}
+
+function FormatSwitch({
+  format,
+  onFormat,
+}: {
+  format: ResumeFormatMode;
+  onFormat: (format: ResumeFormatMode) => void;
+}) {
+  const formats: readonly ResumeFormatMode[] = ['stanford-pdf', 'ats-text', 'linkedin-pack'];
+  return (
+    <div className="career-resume-formats" role="group" aria-label="Формат позиционирования">
+      {formats.map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          className={format === mode ? 'is-active' : ''}
+          aria-pressed={format === mode}
+          onClick={() => onFormat(mode)}
+        >
+          {FORMAT_LABELS[mode]}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -115,22 +168,23 @@ function VariantSwitch({
 
 function PaneSwitch({
   activePane,
-  unknownCount,
+  dossierCount,
   onPane,
 }: {
-  activePane: 'unknowns' | 'document';
-  unknownCount: number;
-  onPane: (pane: 'unknowns' | 'document') => void;
+  activePane: 'dossier' | 'document' | 'unknowns';
+  dossierCount: number;
+  onPane: (pane: 'dossier' | 'document') => void;
 }) {
+  const isDossier = activePane === 'dossier' || activePane === 'unknowns';
   return (
     <div className="career-resume-panes" role="group" aria-label="Что показать">
       <button
         type="button"
-        className={activePane === 'unknowns' ? 'is-active' : ''}
-        aria-pressed={activePane === 'unknowns'}
-        onClick={() => onPane('unknowns')}
+        className={isDossier ? 'is-active' : ''}
+        aria-pressed={isDossier}
+        onClick={() => onPane('dossier')}
       >
-        Уточнить ({unknownCount})
+        Факты ({dossierCount})
       </button>
       <button
         type="button"
@@ -138,7 +192,7 @@ function PaneSwitch({
         aria-pressed={activePane === 'document'}
         onClick={() => onPane('document')}
       >
-        Документ
+        Документ и форматы
       </button>
     </div>
   );

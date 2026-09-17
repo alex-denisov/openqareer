@@ -207,4 +207,43 @@ describe('VacancyBoard · ручной отклик', () => {
     expect(html).toContain('✈️ Релокация');
     expect(html).toContain('💵 Валюта');
   });
+
+  it('рендерит кнопку «Подготовить отклик» в действиях строки вакансии', () => {
+    const html = renderToStaticMarkup(
+      <VacancyBoard
+        pool={{
+          matched: [item],
+          total: 1,
+          poolTotal: 1,
+          loading: false,
+          failed: false,
+          complete: true,
+        }}
+        applications={[]}
+      />,
+    );
+
+    expect(html).toContain('career-vacancy-pitch-btn');
+    expect(html).toContain('Подготовить отклик');
+  });
+
+  it('рендерит кнопку «К интервью» для подготовки к собеседованию', () => {
+    const html = renderToStaticMarkup(
+      <VacancyBoard
+        pool={{
+          matched: [item],
+          total: 1,
+          poolTotal: 1,
+          loading: false,
+          failed: false,
+          complete: true,
+        }}
+        applications={[]}
+      />,
+    );
+
+    expect(html).toContain('career-vacancy-prep-btn');
+    expect(html).toContain('К интервью');
+  });
 });
+

@@ -1,5 +1,6 @@
 import type { CandidateMemory } from '../coach/coachApi';
 import type {
+  ResumeFormatMode,
   ResumeReviewFlag,
   ResumeUnknownCode,
   ResumeVariantId,
@@ -14,6 +15,18 @@ export const VARIANT_LABELS: Record<ResumeVariantId, string> = {
 export const VARIANT_SHORT_LABELS: Record<ResumeVariantId, string> = {
   master: 'Мастер',
   germany: 'Германия',
+};
+
+export const FORMAT_LABELS: Record<ResumeFormatMode, string> = {
+  'stanford-pdf': 'Stanford PDF',
+  'ats-text': 'ATS Plain Text',
+  'linkedin-pack': 'Профиль LinkedIn',
+};
+
+export const FORMAT_SHORT_LABELS: Record<ResumeFormatMode, string> = {
+  'stanford-pdf': 'PDF',
+  'ats-text': 'ATS',
+  'linkedin-pack': 'LinkedIn',
 };
 
 const REVIEW_FLAG_LABELS: Record<ResumeReviewFlag, string> = {

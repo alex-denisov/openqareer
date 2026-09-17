@@ -34,6 +34,10 @@ import { registerVacancyRoutes } from './routes/vacancyRoutes';
 import { registerCompanyRoutes } from './routes/companiesRoute';
 import { registerVacancyCatalogRoutes } from './routes/vacancyCatalogRoutes';
 import { registerErrorHandler, registerStaticDelivery } from './routes/runtime';
+import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContactsRepository';
+import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
+import { registerReputationAuditRoutes } from './routes/reputationAuditRoutes';
+
 
 interface BuildAppOptions {
   config: ServerConfig;
@@ -53,6 +57,10 @@ interface BuildAppOptions {
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
   roleNamer?: RoleNamer;
+  recruiterContactsRepo?: SqliteRecruiterContactsRepository;
+  candidateReputationRepo?: SqliteCandidateReputationRepository;
+
+
   /**
    * Куда пишет логгер. Прод пишет в stdout, а тест читает то же самое, что
    * увидит оператор: причина молчания ступени называния — часть контракта
@@ -188,7 +196,9 @@ async function registerApiRoutes(app: FastifyInstance, deps: RouteDeps): Promise
   await registerCompanyRoutes(app);
   // Публичный каталог вакансий: без сессии, HTML собирается на запросе (B209).
   registerVacancyCatalogRoutes(app, deps);
+  registerReputationAuditRoutes(app, deps);
 }
+
 
 /** Аутентификация части реализаций читает кандидатов из того же хранилища. */
 function attachCandidateStore(authService: SessionAuth, candidateStore: CandidateStore): void {
@@ -210,35 +220,23 @@ function createUploadStaging(): UploadStaging {
   });
 }
 
-export async function buildApp({
-  config,
-  coachProvider,
-  candidateStore,
-  authService,
-  serveStatic = true,
-  hhCrawlSettings,
-  runtimeMemory,
-  searchVacancies = searchHhVacancies,
-  searchRemotive = searchRemotiveVacancies,
-  importProfile = importPublicProfileUrl,
-  careerCommandExecutor,
-  vacancyIntelligenceService,
-  multiSourceVacancyEngine,
-  resumeStructurer,
-  roleNamer,
-  logDestination,
-}: BuildAppOptions): Promise<FastifyInstance> {
-  attachCandidateStore(authService, candidateStore);
-  const services = createServices({
+function assembleRouteDeps(options: BuildAppOptions, services: AppServices): RouteDeps {
+  const {
     config,
+    authService,
     candidateStore,
-    careerCommandExecutor,
-    vacancyIntelligenceService,
-    multiSourceVacancyEngine,
-    searchVacancies: searchVacancies ?? searchHhVacancies,
-    searchRemotive: searchRemotive ?? searchRemotiveVacancies,
-  });
-  const deps: RouteDeps = {
+    coachProvider,
+    importProfile = importPublicProfileUrl,
+    resumeStructurer,
+    roleNamer,
+    recruiterContactsRepo,
+    candidateReputationRepo,
+    searchVacancies = searchHhVacancies,
+    hhCrawlSettings,
+    runtimeMemory,
+  } = options;
+
+  return {
     config,
     authService,
     candidateStore,
@@ -247,14 +245,45 @@ export async function buildApp({
     importProfile,
     resumeStructurer,
     roleNamer,
-    // Окно живёт столько же, сколько процесс: это диагностика молчания
-    // ступени, а не хранилище (INC-035).
+    recruiterContactsRepo:
+      recruiterContactsRepo ??
+      new SqliteRecruiterContactsRepository({ databasePath: config.databasePath }),
+    candidateReputationRepo:
+      candidateReputationRepo ??
+      new SqliteCandidateReputationRepository({ databasePath: config.databasePath }),
     roleNamingFailures: new RoleNamingFailureLog(),
-    searchVacancies: searchVacancies ?? searchHhVacancies,
+
+    searchVacancies,
     ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
     ...(runtimeMemory ? { runtimeMemory } : {}),
     ...services,
   };
+}
+
+export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
+  const {
+    config,
+    candidateStore,
+    authService,
+    serveStatic = true,
+    searchVacancies = searchHhVacancies,
+    searchRemotive = searchRemotiveVacancies,
+    careerCommandExecutor,
+    vacancyIntelligenceService,
+    multiSourceVacancyEngine,
+    logDestination,
+  } = options;
+  attachCandidateStore(authService, candidateStore);
+  const services = createServices({
+    config,
+    candidateStore,
+    careerCommandExecutor,
+    vacancyIntelligenceService,
+    multiSourceVacancyEngine,
+    searchVacancies,
+    searchRemotive,
+  });
+  const deps = assembleRouteDeps(options, services);
   const app = await createFastifyBase(config, logDestination);
   await registerApiRoutes(app, deps);
   registerErrorHandler(app);

@@ -8,6 +8,7 @@ import { SearchCampaign } from '../search/SearchCampaign';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { VacancyBoard } from '../vacancies/VacancyBoard';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
+import { useVacancyApplications } from '../vacancies/useVacancyApplications';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { useCareerCabinetData } from './useCareerCabinetData';
 import {
@@ -21,6 +22,7 @@ import { useRoleHypotheses } from '../career-map/useRoleHypotheses';
 import { useCareerStrategy, type CareerStrategyRead } from './useCareerStrategy';
 import { useWorkPreferences, type WorkPreferencesState } from './useWorkPreferences';
 import type { ProposedRole } from '../../../shared/roleProposals';
+import type { VacancyApplication } from '../../../shared/vacancyApplication';
 import type { CareerCabinetView } from './cabinetViews';
 
 export type { CareerCabinetView } from './cabinetViews';
@@ -79,6 +81,7 @@ export function CareerCabinet({
   const strategy = useCareerStrategy();
   // Задания меняют порядок ролей, а не их состав (B180, срез 3).
   const workPreferences = useWorkPreferences();
+  const vacancyApplications = useVacancyApplications();
   const journey = useMemo(
     () =>
       cabinetJourney({
@@ -134,6 +137,7 @@ export function CareerCabinet({
           strategy={strategy}
           workPreferences={workPreferences}
           pool={pool}
+          applications={vacancyApplications.applications}
           data={data}
           onNavigate={onNavigate}
           onUpdateWorkspace={onUpdateWorkspace}
@@ -159,6 +163,7 @@ function CabinetSection({
   strategy,
   workPreferences,
   pool,
+  applications,
   data,
   onNavigate,
   onUpdateWorkspace,
@@ -176,6 +181,7 @@ function CabinetSection({
   strategy: CareerStrategyRead;
   workPreferences: WorkPreferencesState;
   pool: ReturnType<typeof useMatchedPool>;
+  applications?: readonly VacancyApplication[];
   data: ReturnType<typeof useCareerCabinetData>;
   onNavigate: (view: CareerCabinetView) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
@@ -201,6 +207,7 @@ function CabinetSection({
         poolTotal={pool.poolTotal}
         loading={data.loading}
         importing={importing}
+        applications={applications}
         onRefresh={data.refresh}
         onNavigate={onNavigate}
         onUpdateWorkspace={onUpdateWorkspace}
@@ -252,6 +259,8 @@ function CabinetSection({
       defaultQuery={targetDirection || undefined}
       onRefresh={data.refresh}
       pool={pool}
+      applications={applications}
+      candidateFacts={data.snapshot?.memory ?? []}
     />
   );
 }

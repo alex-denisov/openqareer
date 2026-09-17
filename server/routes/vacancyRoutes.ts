@@ -27,6 +27,8 @@ import { MatchedPoolSnapshots } from '../vacancies/matchedPoolSnapshot';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { buildRoleProposals, confirmChosenTitle } from '../vacancies/roleHypotheses';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
+import { generateVacancyPitch } from '../domain/vacancyPitchService';
+import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
@@ -765,6 +767,63 @@ const handleDeleteSubscription: Handler = async (deps, request, reply) => {
   return reply.code(204).send();
 };
 
+const vacancyPitchInputSchema = z
+  .object({
+    tone: z.enum(['executive', 'confident', 'technical']).optional(),
+    vacancy: z
+      .object({
+        title: z.string().trim().min(1).optional(),
+        company: z.string().trim().optional(),
+        description: z.string().optional(),
+        requiredSkills: z.array(z.string()).optional(),
+        responsibilities: z.array(z.string()).optional(),
+        location: z.string().optional(),
+        isRemote: z.boolean().optional(),
+      })
+      .optional(),
+  })
+  .optional();
+
+const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config, multiSourceEngine } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+
+  const vacancyId = (request.params as { id: string }).id;
+  const body = vacancyPitchInputSchema.parse(request.body ?? {});
+
+  const cluster = multiSourceEngine.getActiveClusters().find((c) => c.id === vacancyId);
+  const poolVacancy = !cluster ? multiSourceEngine.getVacancy?.(vacancyId) : undefined;
+
+  const title = body?.vacancy?.title ?? cluster?.canonicalTitle ?? poolVacancy?.title;
+  if (!title) {
+    return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  }
+
+  const snapshot = candidateStore.getSnapshot(candidate.id);
+  const pitch = generateVacancyPitch({
+    vacancy: {
+      id: vacancyId,
+      title,
+      company: body?.vacancy?.company ?? cluster?.canonicalCompany ?? poolVacancy?.company,
+      description: body?.vacancy?.description ?? cluster?.descriptionSummary ?? poolVacancy?.description,
+      requiredSkills: body?.vacancy?.requiredSkills ?? cluster?.skills ?? poolVacancy?.requiredSkills ?? [],
+      responsibilities: body?.vacancy?.responsibilities ?? poolVacancy?.responsibilities ?? [],
+      location: body?.vacancy?.location ?? cluster?.canonicalLocation ?? poolVacancy?.location,
+      isRemote: body?.vacancy?.isRemote ?? cluster?.isRemote ?? poolVacancy?.isRemote ?? false,
+    },
+    candidateName: snapshot?.resume?.draft?.candidate?.fullName,
+    facts: snapshot?.memory ?? [],
+    tone: body?.tone ?? 'executive',
+  });
+
+  return {
+    data: pitch,
+    meta: { requestId: request.id },
+  };
+};
+
 /** Ручной отклик (B165, срез 1) — свои два маршрута, чтение и запись. */
 function registerVacancyApplicationRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/candidate/vacancy-applications', withDeps(deps, handleListVacancyApplications));
@@ -772,6 +831,33 @@ function registerVacancyApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
     '/api/v1/candidate/vacancy-applications',
     { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },
     withDeps(deps, handleRecordVacancyApplication),
+  );
+}
+
+/** Подписки на поисковые выборки (B175, B181). */
+function registerVacancySubscriptionRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  app.get('/api/v1/candidate/vacancy-subscriptions', withDeps(deps, handleListSubscriptions));
+  app.post(
+    '/api/v1/candidate/vacancy-subscriptions',
+    { config: { rateLimit: { max: 12, timeWindow: '1 hour' } } },
+    withDeps(deps, handleCreateSubscription),
+  );
+  app.get(
+    '/api/v1/candidate/vacancy-subscriptions/:subscriptionId/vacancies',
+    withDeps(deps, handleSubscriptionVacancies),
+  );
+  app.patch(
+    '/api/v1/candidate/vacancy-subscriptions/:subscriptionId',
+    withDeps(deps, handleSetSubscriptionStatus),
+  );
+  app.post(
+    '/api/v1/candidate/vacancy-subscriptions/:subscriptionId/refresh',
+    { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
+    withDeps(deps, handleRefreshSubscription),
+  );
+  app.delete(
+    '/api/v1/candidate/vacancy-subscriptions/:subscriptionId',
+    withDeps(deps, handleDeleteSubscription),
   );
 }
 
@@ -797,28 +883,11 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
     withDeps(deps, handleChooseStrategy),
   );
   app.get('/api/v1/candidate/vacancy-sources', withDeps(deps, handleListSources));
-  app.get('/api/v1/candidate/vacancy-subscriptions', withDeps(deps, handleListSubscriptions));
-
+  registerVacancySubscriptionRoutes(app, deps);
+  registerRecruiterIntelligenceRoutes(app, deps);
   app.post(
-    '/api/v1/candidate/vacancy-subscriptions',
-    { config: { rateLimit: { max: 12, timeWindow: '1 hour' } } },
-    withDeps(deps, handleCreateSubscription),
-  );
-  app.get(
-    '/api/v1/candidate/vacancy-subscriptions/:subscriptionId/vacancies',
-    withDeps(deps, handleSubscriptionVacancies),
-  );
-  app.patch(
-    '/api/v1/candidate/vacancy-subscriptions/:subscriptionId',
-    withDeps(deps, handleSetSubscriptionStatus),
-  );
-  app.post(
-    '/api/v1/candidate/vacancy-subscriptions/:subscriptionId/refresh',
-    { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
-    withDeps(deps, handleRefreshSubscription),
-  );
-  app.delete(
-    '/api/v1/candidate/vacancy-subscriptions/:subscriptionId',
-    withDeps(deps, handleDeleteSubscription),
+    '/api/v1/candidate/vacancies/:id/pitch',
+    { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
+    withDeps(deps, handleGenerateVacancyPitch),
   );
 }

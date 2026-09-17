@@ -20,8 +20,9 @@ import type { WorkPreferencesState } from './useWorkPreferences';
 import type { CareerStrategyRead } from './useCareerStrategy';
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { ProposedRole } from '../../../shared/roleProposals';
+import type { VacancyApplication } from '../../../shared/vacancyApplication';
 import type { CareerCabinetView } from './cabinetViews';
-import { NextAction, AtsReadability } from './CareerIntelligencePanelParts';
+import { NextAction, AtsReadability, FollowUpActionCard } from './CareerIntelligencePanelParts';
 
 /**
  * «Главная» — кандидат и его факты слева, оценка, позиционирование и вход к
@@ -52,6 +53,7 @@ interface CareerHomeProps {
   readonly poolTotal?: number;
   readonly loading: boolean;
   readonly importing?: boolean;
+  readonly applications?: readonly VacancyApplication[];
   readonly onRefresh: () => Promise<void>;
   readonly onNavigate: (view: CareerCabinetView) => void;
   readonly onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
@@ -110,6 +112,7 @@ function HomeRail({
   poolComplete,
   poolTotal,
   importing,
+  applications,
   onNavigate,
   onOpenExpert,
 }: {
@@ -123,6 +126,7 @@ function HomeRail({
   poolComplete?: boolean;
   poolTotal?: number;
   importing: boolean;
+  applications?: readonly VacancyApplication[];
   onNavigate: (view: CareerCabinetView) => void;
   onOpenExpert: () => void;
 }) {
@@ -133,6 +137,10 @@ function HomeRail({
 
   return (
     <aside className="career-home-rail" aria-label="Оценка и позиционирование">
+      <FollowUpActionCard
+        applications={applications}
+        onOpenVacancy={() => onNavigate('opportunities')}
+      />
       <NextAction journey={journey} onNavigate={onNavigate} />
       <AssessmentPanel
         snapshot={snapshot}

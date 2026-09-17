@@ -32,8 +32,9 @@ import {
   ProfileExperience,
   ProfileSkills,
 } from './ProfileSections';
+import { CandidateReputationAuditView } from '../reputation/CandidateReputationAuditView';
 
-type ProfileTab = 'about' | 'experience' | 'skills' | 'education' | 'portfolio';
+type ProfileTab = 'about' | 'experience' | 'skills' | 'education' | 'portfolio' | 'reputation';
 
 interface CareerProfileSurfaceProps {
   account?: AccountSnapshot;
@@ -54,7 +55,9 @@ const profileTabs: Array<{ id: ProfileTab; label: string }> = [
   { id: 'skills', label: 'Навыки' },
   { id: 'education', label: 'Образование' },
   { id: 'portfolio', label: 'Портфолио' },
+  { id: 'reputation', label: 'Цифровой след' },
 ];
+
 
 /**
  * «Главная» из макета «Пульт»: карточка кандидата, вкладки и разделы, собранные
@@ -302,7 +305,11 @@ export function CareerProfileSurface({
             />
           </>
         ) : null}
+        {activeTab === 'reputation' ? (
+          <CandidateReputationAuditView candidateId={session.candidateId ?? undefined} />
+        ) : null}
         {notice ? <p className="career-cabinet-notice">{notice}</p> : null}
+
         {error ? (
           <p className="career-cabinet-error" role="alert">
             {error}

@@ -1,7 +1,13 @@
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { useMemo, useState } from 'react';
-import { ArrowSquareOut, ListDashes, MapPin } from '@phosphor-icons/react';
+import { ArrowSquareOut, ListDashes, MapPin, Sparkle, Target, Users } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
+import type { RecruiterContact } from '../../../shared/recruiterContact';
+import { VacancyPitchModal } from './VacancyPitchModal';
+import { DesktopOutreachModal } from '../outreach/DesktopOutreachModal';
+import { InterviewPrepModal } from '../interview/InterviewPrepModal';
+import type { CandidateMemory } from '../coach/coachApi';
+import { RecruiterContactsBlock } from './RecruiterContactsBlock';
 import { employerLabel } from '../../../shared/employerLabel';
 import {
   filterVacancies,
@@ -49,6 +55,8 @@ export function VacancyBoard({
   onRefresh,
   pool,
   applications,
+  initialContactsByVacancyId,
+  candidateFacts,
 }: {
   /** Регулярные выборки кандидата: заводятся здесь же, в панели фильтров (B181). */
   readonly subscriptions?: readonly VacancySubscription[];
@@ -58,6 +66,10 @@ export function VacancyBoard({
   readonly pool?: MatchedPool;
   /** Ручные отклики кандидата (B165, срез 1); передаются в тестах и с сервера. */
   readonly applications?: readonly VacancyApplication[];
+  /** Начальные контакты нанимателей по id кластера вакансии (B223). */
+  readonly initialContactsByVacancyId?: Record<string, readonly RecruiterContact[]>;
+  /** Подтверждённые факты кандидата для подготовки к интервью (B226). */
+  readonly candidateFacts?: readonly CandidateMemory[];
 } = {}) {
   const { matched, total, poolTotal, loading, failed } = useMatchedPool(pool);
   const vacancyApplications = useVacancyApplications(applications);
@@ -67,6 +79,9 @@ export function VacancyBoard({
   const state = <VacancyBoardState loading={loading} failed={failed} empty={matched.length === 0} />;
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [filters, setFilters] = useState<VacancyFilters>({});
+  const [pitchVacancy, setPitchVacancy] = useState<MatchedVacancyItem['cluster'] | null>(null);
+  const [outreachVacancy, setOutreachVacancy] = useState<MatchedVacancyItem['cluster'] | null>(null);
+  const [prepVacancy, setPrepVacancy] = useState<MatchedVacancyItem['cluster'] | null>(null);
   // Момент расчёта возраста берётся один раз на прочитанный пул: пересчёт на
   // каждый рендер сдвигал бы возраст записей под курсором.
   const poolKey = `${matched.length}:${matched.at(-1)?.cluster.id ?? ''}`;
@@ -160,6 +175,10 @@ export function VacancyBoard({
                   item={item}
                   now={now}
                   applications={vacancyApplications}
+                  onPreparePitch={setPitchVacancy}
+                  onOpenOutreach={setOutreachVacancy}
+                  onPrepareInterview={setPrepVacancy}
+                  initialContacts={initialContactsByVacancyId?.[item.cluster.id]}
                 />
               ))}
             </ol>
@@ -179,6 +198,56 @@ export function VacancyBoard({
           </div>
         )}
       </div>
+      {pitchVacancy ? (
+        <VacancyPitchModal
+          isOpen={Boolean(pitchVacancy)}
+          onClose={() => setPitchVacancy(null)}
+          onOpenOutreach={() => {
+            const cur = pitchVacancy;
+            setPitchVacancy(null);
+            setOutreachVacancy(cur);
+          }}
+          vacancy={{
+            id: pitchVacancy.id,
+            title: pitchVacancy.canonicalTitle,
+            company: pitchVacancy.canonicalCompany,
+            location: pitchVacancy.canonicalLocation,
+            isRemote: pitchVacancy.isRemote,
+            skills: pitchVacancy.skills,
+            descriptionSummary: pitchVacancy.descriptionSummary,
+          }}
+        />
+      ) : null}
+      {outreachVacancy ? (
+        <DesktopOutreachModal
+          isOpen={Boolean(outreachVacancy)}
+          onClose={() => setOutreachVacancy(null)}
+          vacancy={{
+            id: outreachVacancy.id,
+            title: outreachVacancy.canonicalTitle,
+            company: outreachVacancy.canonicalCompany,
+            location: outreachVacancy.canonicalLocation,
+            isRemote: outreachVacancy.isRemote,
+            skills: outreachVacancy.skills,
+          }}
+        />
+      ) : null}
+      {prepVacancy ? (
+        <InterviewPrepModal
+          isOpen={Boolean(prepVacancy)}
+          onClose={() => setPrepVacancy(null)}
+          vacancy={{
+            id: prepVacancy.id,
+            title: prepVacancy.canonicalTitle,
+            company: prepVacancy.canonicalCompany,
+            location: prepVacancy.canonicalLocation,
+            isRemote: prepVacancy.isRemote,
+            skills: prepVacancy.skills,
+            descriptionSummary: prepVacancy.descriptionSummary,
+          }}
+          facts={candidateFacts}
+        />
+      ) : null}
     </div>
   );
 }
@@ -526,10 +595,18 @@ function VacancyRow({
   item,
   now,
   applications,
+  onPreparePitch,
+  onOpenOutreach,
+  onPrepareInterview,
+  initialContacts,
 }: {
   item: MatchedVacancyItem;
   now: string;
   applications: VacancyApplications;
+  onPreparePitch?: (cluster: MatchedVacancyItem['cluster']) => void;
+  onOpenOutreach?: (cluster: MatchedVacancyItem['cluster']) => void;
+  onPrepareInterview?: (cluster: MatchedVacancyItem['cluster']) => void;
+  initialContacts?: readonly RecruiterContact[];
 }) {
   const { cluster, explanation } = item;
   const age = vacancyAge(cluster, now);
@@ -586,6 +663,39 @@ function VacancyRow({
         )}
       </span>
       <div className="career-vacancy-actions">
+        {onPreparePitch ? (
+          <button
+            type="button"
+            className="career-vacancy-pitch-btn"
+            onClick={() => onPreparePitch(cluster)}
+            title="Подготовить контекстное сопроводительное письмо и питч"
+          >
+            <Sparkle size={14} aria-hidden="true" />
+            <span>Подготовить отклик</span>
+          </button>
+        ) : null}
+        {onOpenOutreach ? (
+          <button
+            type="button"
+            className="career-vacancy-outreach-btn"
+            onClick={() => onOpenOutreach(cluster)}
+            title="Поиск связей и прямой аутрич через LinkedIn"
+          >
+            <Users size={14} aria-hidden="true" />
+            <span>Нетворкинг</span>
+          </button>
+        ) : null}
+        {onPrepareInterview ? (
+          <button
+            type="button"
+            className="career-vacancy-prep-btn"
+            onClick={() => onPrepareInterview(cluster)}
+            title="Подготовка к интервью по методу STAR"
+          >
+            <Target size={14} aria-hidden="true" />
+            <span>К интервью</span>
+          </button>
+        ) : null}
         <a
           className="career-vacancy-open"
           href={cluster.primaryUrl}
@@ -614,6 +724,17 @@ function VacancyRow({
           </span>
         ) : null}
       </div>
+      <RecruiterContactsBlock
+        vacancyId={cluster.id}
+        initialContacts={initialContacts}
+        vacancyPayload={{
+          id: cluster.id,
+          title: cluster.canonicalTitle,
+          company: cluster.canonicalCompany ?? '',
+          url: cluster.primaryUrl,
+          description: cluster.descriptionSummary,
+        }}
+      />
     </li>
   );
 }

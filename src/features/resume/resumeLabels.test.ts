@@ -69,3 +69,12 @@ describe('what the candidate reads instead of an internal record number', () => 
     );
   });
 });
+
+describe('resume format mode labels', () => {
+  it('defines labels for all three canonical positioning formats', async () => {
+    const { FORMAT_LABELS } = await import('./resumeLabels');
+    expect(FORMAT_LABELS['stanford-pdf']).toBe('Stanford PDF');
+    expect(FORMAT_LABELS['ats-text']).toBe('ATS Plain Text');
+    expect(FORMAT_LABELS['linkedin-pack']).toBe('Профиль LinkedIn');
+  });
+});

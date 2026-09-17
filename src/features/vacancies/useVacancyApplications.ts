@@ -8,6 +8,7 @@ import { getVacancyApplications, recordVacancyApplication } from '../coach/coach
 import { mergeApplication, optimisticApplication } from './vacancyApplicationState';
 
 export interface VacancyApplications {
+  readonly applications: readonly VacancyApplication[];
   readonly byCluster: ReadonlyMap<string, VacancyApplication>;
   /** Записи, которые не удалось сохранить: строка обязана сказать это вслух. */
   readonly unsaved: ReadonlySet<string>;
@@ -76,7 +77,7 @@ export function useVacancyApplications(
     [applications],
   );
 
-  return { byCluster, unsaved, record };
+  return { applications, byCluster, unsaved, record };
 }
 
 function without(current: ReadonlySet<string>, clusterId: string): ReadonlySet<string> {

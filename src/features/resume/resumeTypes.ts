@@ -44,3 +44,5 @@ export interface ResumeStudioView {
 }
 
 export type ResumeVariantId = 'master' | 'germany';
+
+export type ResumeFormatMode = 'stanford-pdf' | 'ats-text' | 'linkedin-pack';

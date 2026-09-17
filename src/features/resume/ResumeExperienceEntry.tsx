@@ -30,8 +30,28 @@ export function ResumeExperienceEntry({
   available,
   editor,
 }: ResumeExperienceEntryProps) {
+  const title = projected?.title?.value ?? entry.title;
+  const employer = projected?.employer?.value ?? entry.employer;
+  const start = projected?.startDate?.value ?? entry.startDate;
+  const end = (projected?.current?.value ?? entry.current)
+    ? 'настоящее время'
+    : (projected?.endDate?.value ?? entry.endDate);
+  const period = start && end ? `${start} — ${end}` : (start || end);
+
   return (
     <div className="career-resume-entry">
+      <header className="career-resume-stanford-entry-header">
+        <div className="career-resume-stanford-role-dates">
+          <strong className="career-resume-stanford-title">{title || 'Должность не указана'}</strong>
+          {period ? <span className="career-resume-stanford-dates">{period}</span> : null}
+        </div>
+        <div className="career-resume-stanford-employer-location">
+          <span className="career-resume-stanford-employer">{employer || 'Работодатель не указан'}</span>
+          {entry.location ? (
+            <span className="career-resume-stanford-location">{entry.location}</span>
+          ) : null}
+        </div>
+      </header>
       <ExperienceFields entry={entry} editor={editor} />
       {anchor ? <p className="career-resume-anchor">Опора роли: {anchor}</p> : null}
       <ExperienceBullets entry={entry} projected={projected} editor={editor} />
@@ -169,9 +189,20 @@ function BulletRow({
   bullet: ResumeExperience['bullets'][number];
   onDetach?: () => void;
 }) {
+  const clusterMatch = bullet.value.match(/^([A-Za-z0-9\s-]+:)\s*(.*)$/u);
+
   return (
     <li>
-      <p>{bullet.value}</p>
+      <p>
+        {clusterMatch ? (
+          <>
+            <strong className="career-resume-bullet-cluster">{clusterMatch[1]}</strong>{' '}
+            {clusterMatch[2]}
+          </>
+        ) : (
+          bullet.value
+        )}
+      </p>
       <div className="career-resume-bullet-meta">
         <EvidenceChip memoryId={bullet.memoryId} />
         {bullet.reviewFlags.map((flag) => (
