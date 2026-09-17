@@ -34,6 +34,8 @@ import { HhCrawlCoordinator } from './vacancies/hhCrawlCoordinator';
 import { MemoryGuard, readProcessHeap } from './vacancies/memoryGuard';
 import { buildHhPageFetcher } from './vacancies/hhSearchTransport';
 import { SqliteRoleNamingCache } from './data/sqliteRoleNamingCache';
+import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContactsRepository';
+import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
 
 const config = readServerConfig(process.env);
 const candidateStore = new SqliteCandidateStore({
@@ -126,6 +128,12 @@ const roleNamingCache = new SqliteRoleNamingCache({
   databasePath: config.databasePath,
   encryptionKey: config.dataEncryptionKey,
 });
+const recruiterContactsRepo = new SqliteRecruiterContactsRepository({
+  databasePath: config.databasePath,
+});
+const candidateReputationRepo = new SqliteCandidateReputationRepository({
+  databasePath: config.databasePath,
+});
 // Настройки веера обхода hh.ru: набор ролей выбирает владелец, отметка
 // глубокого прохода переживает выкат (B214).
 const hhCrawlSettings = createHhCrawlSettings({ databasePath: config.databasePath });
@@ -158,6 +166,8 @@ const app = await buildApp({
   vacancyIntelligenceService,
   multiSourceVacancyEngine: multiSourceEngine,
   hhCrawlSettings,
+  recruiterContactsRepo,
+  candidateReputationRepo,
   runtimeMemory: () => {
     const heap = readProcessHeap();
     return {
@@ -329,6 +339,8 @@ async function shutdown(signal: string): Promise<void> {
   candidateStore.close();
   authService.close();
   vacancyPoolStore.close();
+  recruiterContactsRepo.close();
+  candidateReputationRepo.close();
   process.exit(0);
 }
 

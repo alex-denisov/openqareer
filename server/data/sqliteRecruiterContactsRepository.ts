@@ -157,4 +157,8 @@ export class SqliteRecruiterContactsRepository {
       .prepare('DELETE FROM recruiter_contacts WHERE vacancy_id = ?')
       .run(vacancyId);
   }
+
+  close(): void {
+    this.database.close();
+  }
 }

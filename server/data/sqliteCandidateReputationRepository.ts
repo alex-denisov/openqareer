@@ -128,4 +128,8 @@ export class SqliteCandidateReputationRepository {
     const row = stmt.get(candidateId) as unknown as CandidateReputationAuditRow | undefined;
     return row ? toAudit(row) : null;
   }
+
+  close(): void {
+    this.database.close();
+  }
 }
