@@ -160,6 +160,10 @@ jobs:
             rm -f "$probe"
             probe_status="${response%%|*}"
             ctype="${response#*|}"
+            if [ "$probe_status" = "000" ]; then
+              printf 'root_file_probe=inconclusive transport_timeout path=%s\n' "$root_path"
+              continue
+            fi
             case "$ctype" in
               *"${root_type}"*) ;;
               *)
