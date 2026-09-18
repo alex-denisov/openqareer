@@ -112,6 +112,28 @@ function isVacancyFresh(publishedAt: string, nowMs: number = Date.now()): boolea
   return isWithin(parseMs(publishedAt), freshnessWindow(nowMs));
 }
 
+function vacancyMembershipFields(vacancy: UnifiedVacancy): string {
+  return JSON.stringify({
+    title: vacancy.title,
+    company: vacancy.company,
+    description: vacancy.description,
+    requiredSkills: vacancy.requiredSkills,
+    url: vacancy.url,
+    location: vacancy.location,
+    salary: vacancy.salary,
+  });
+}
+
+function hasChangedExistingMembership(
+  pool: VacancyPoolStore,
+  vacancies: readonly UnifiedVacancy[],
+): boolean {
+  return vacancies.some((vacancy) => {
+    const previous = pool.getVacancy(vacancy.id);
+    return previous !== undefined && vacancyMembershipFields(previous) !== vacancyMembershipFields(vacancy);
+  });
+}
+
 /**
  * Сколько площадок плановый опрос берёт за один такт (такт — 5 минут,
  * `server/index.ts`). Доски работодателей исчисляются сотнями и после запуска
@@ -630,27 +652,7 @@ export class MultiSourceVacancyEngine {
       .map((v) =>
         v.provenance ? { ...v, provenance: { ...v.provenance, sourceName: source.name } } : v,
       );
-    const changedExistingMembership = partial && freshFetched.some((vacancy) => {
-      const previous = this.pool.getVacancy(vacancy.id);
-      if (!previous) return false;
-      return JSON.stringify({
-        title: previous.title,
-        company: previous.company,
-        description: previous.description,
-        requiredSkills: previous.requiredSkills,
-        url: previous.url,
-        location: previous.location,
-        salary: previous.salary,
-      }) !== JSON.stringify({
-        title: vacancy.title,
-        company: vacancy.company,
-        description: vacancy.description,
-        requiredSkills: vacancy.requiredSkills,
-        url: vacancy.url,
-        location: vacancy.location,
-        salary: vacancy.salary,
-      });
-    });
+    const changedExistingMembership = partial && hasChangedExistingMembership(this.pool, freshFetched);
 
     // A successful sync replaces this source's slice. Merging instead meant a
     // vacancy the employer took down an hour after one reading stayed
