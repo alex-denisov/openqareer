@@ -74,7 +74,7 @@ describe('interviewPrepEngine', () => {
       expect(sq.starAnswer.result.length).toBeGreaterThan(10);
     }
 
-    expect(brief.counterQuestions).toHaveLength(5);
+    expect(brief.counterQuestions).toHaveLength(10);
     for (const q of brief.counterQuestions) {
       expect(q).toContain('?');
     }

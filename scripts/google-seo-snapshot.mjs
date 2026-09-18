@@ -13,7 +13,7 @@
  *   node scripts/google-seo-snapshot.mjs --mock
  */
 import crypto from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -21,6 +21,8 @@ const ENV_FILE = process.env.OPENQAREER_ENV_FILE ?? join(homedir(), '.openqareer
 const SITE_URL = 'https://openqareer.com/';
 const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
+const SNAPSHOT_DIR =
+  process.env.GOOGLE_SEO_SNAPSHOT_DIR ?? join(process.cwd(), 'docs/v1-release/seo/google-snapshots');
 
 function readEnvFile(file) {
   if (!existsSync(file)) return {};
@@ -144,6 +146,78 @@ async function querySitemaps(accessToken, siteUrl) {
   return response.json();
 }
 
+function parseSitemapUrls(xml) {
+  return [...xml.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/giu)].map((match) => match[1]);
+}
+
+function sampleEvenly(values, limit) {
+  if (values.length <= limit) return values;
+  const step = (values.length - 1) / Math.max(1, limit - 1);
+  return Array.from({ length: limit }, (_, index) => values[Math.round(index * step)]);
+}
+
+async function fetchSitemapUrls(sitemapUrl) {
+  const response = await fetch(sitemapUrl, { headers: { 'User-Agent': 'openqareer-seo-audit/1.0' } });
+  if (!response.ok) throw new Error(`sitemap fetch HTTP ${response.status}`);
+  return parseSitemapUrls(await response.text());
+}
+
+async function inspectUrl(accessToken, siteUrl, inspectedUrl) {
+  const response = await fetch('https://searchconsole.googleapis.com/v1/urlInspection/index:inspect', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ inspectionUrl: inspectedUrl, siteUrl }),
+  });
+  if (!response.ok) return { url: inspectedUrl, status: `http_${response.status}` };
+  const result = (await response.json()).inspectionResult?.indexStatusResult ?? {};
+  return {
+    url: inspectedUrl,
+    status: result.verdict ?? 'unknown',
+    coverageState: result.coverageState ?? null,
+    lastCrawlTime: result.lastCrawlTime ?? null,
+    robotsTxtState: result.robotsTxtState ?? null,
+    indexingState: result.indexingState ?? null,
+  };
+}
+
+async function auditJobPosting(urls) {
+  const required = ['datePosted', 'validThrough', 'hiringOrganization', 'jobLocation', 'title', 'description'];
+  const rows = [];
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, { headers: { 'User-Agent': 'openqareer-seo-audit/1.0' } });
+      const html = await response.text();
+      const jsonLd = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/giu)]
+        .flatMap((match) => {
+          try {
+            const parsed = JSON.parse(match[1]);
+            return Array.isArray(parsed) ? parsed : [parsed];
+          } catch {
+            return [];
+          }
+        })
+        .find((item) => item && (item['@type'] === 'JobPosting' || item['@type']?.includes?.('JobPosting')));
+      const missing = jsonLd ? required.filter((field) => jsonLd[field] === undefined || jsonLd[field] === null || jsonLd[field] === '') : required;
+      rows.push({ url, httpStatus: response.status, jobPosting: Boolean(jsonLd), missing });
+    } catch (error) {
+      rows.push({ url, httpStatus: null, jobPosting: false, missing: required, error: error.message });
+    }
+  }
+  return {
+    sampled: rows.length,
+    valid: rows.filter((row) => row.httpStatus === 200 && row.jobPosting && row.missing.length === 0).length,
+    gone410: rows.filter((row) => row.httpStatus === 410).length,
+    rows,
+  };
+}
+
+function persistSnapshot(snapshot) {
+  mkdirSync(SNAPSHOT_DIR, { recursive: true });
+  const path = join(SNAPSHOT_DIR, `${snapshot.today}.json`);
+  writeFileSync(path, JSON.stringify(snapshot, null, 2) + '\n', { mode: 0o600 });
+  return path;
+}
+
 function formatCtr(ctr) {
   if (ctr === undefined || ctr === null || Number(ctr) === 0) return '0%';
   const num = Number(ctr);
@@ -185,12 +259,22 @@ function runMock() {
     sitemapStatus: 'synthetic fixture; состояние sitemap не измерялось',
     mode: 'synthetic_fixture',
   });
+  return {
+    today,
+    mode: 'synthetic_fixture',
+    siteUrl: SITE_URL,
+    searchAnalytics: { clicks: 0, impressions: 0, ctr: 0, position: 0 },
+    indexInspection: { sampled: 0, indexed: 0, excluded: 0, note: 'synthetic fixture; Google API не вызывался' },
+    jobPostingAudit: { sampled: 0, valid: 0, gone410: 0, rows: [] },
+  };
 }
 
+// eslint-disable-next-line max-lines-per-function
 async function main() {
   const isMock = process.argv.includes('--mock');
   if (isMock) {
-    runMock();
+    const snapshot = runMock();
+    process.stdout.write(`  snapshot: ${persistSnapshot(snapshot)}\n`);
     return;
   }
 
@@ -218,6 +302,32 @@ async function main() {
     : 'sitemap.xml не найдена в аккаунте';
 
   const today = new Date().toISOString().slice(0, 10);
+  const inspectionLimit = Number(process.env.GOOGLE_SEO_INSPECTION_LIMIT ?? 20);
+  const sitemapUrls = mainSitemap?.path ? await fetchSitemapUrls(mainSitemap.path) : [];
+  const sampledUrls = sampleEvenly(sitemapUrls, inspectionLimit);
+  const inspections = [];
+  for (const url of sampledUrls) inspections.push(await inspectUrl(accessToken, SITE_URL, url));
+  const jobPostingAudit = await auditJobPosting(sampledUrls);
+  const snapshot = {
+    today,
+    mode: 'official_api',
+    siteUrl: SITE_URL,
+    searchAnalytics: {
+      clicks: topRow.clicks ?? 0,
+      impressions: topRow.impressions ?? 0,
+      ctr: topRow.ctr ?? 0,
+      position: topRow.position ?? 0,
+    },
+    sitemap: { submitted: mainSitemap?.path ?? null, urls: sitemapUrls.length, sampled: sampledUrls.length },
+    indexInspection: {
+      sampled: inspections.length,
+      indexed: inspections.filter((item) => item.status === 'PASS').length,
+      excluded: inspections.filter((item) => item.status !== 'PASS').length,
+      rows: inspections,
+    },
+    jobPostingAudit,
+  };
+  const snapshotPath = persistSnapshot(snapshot);
   printSnapshot({
     today,
     clicks: topRow.clicks ?? 0,
@@ -227,6 +337,9 @@ async function main() {
     sitemapStatus,
     mode: 'official_api',
   });
+  process.stdout.write(`  URL Inspection: ${snapshot.indexInspection.indexed}/${snapshot.indexInspection.sampled} indexed\n`);
+  process.stdout.write(`  JobPosting: ${jobPostingAudit.valid}/${jobPostingAudit.sampled} valid, 410 Gone: ${jobPostingAudit.gone410}\n`);
+  process.stdout.write(`  snapshot: ${snapshotPath}\n`);
 }
 
 main().catch((err) => {

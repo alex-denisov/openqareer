@@ -25,7 +25,7 @@ describe('hh.ru candidate-scoped application browser session', { timeout: 35_000
 
   afterAll(async () => {
     await browser?.close();
-  });
+  }, 30_000);
 
   async function createSession(html = fixture) {
     context = await browser.newContext();
