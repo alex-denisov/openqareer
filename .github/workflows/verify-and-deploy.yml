@@ -255,7 +255,11 @@ jobs:
           # it answered with the entry document instead, the split-bundle
           # loader read an HTML page as a bundle part and dead-ended on
           # "bad part length" (B168, and INC-018 before it).
-          missing_status="$(curl -sS --max-time 30 --retry 3 --retry-all-errors -o /dev/null -w '%{http_code}' \
+          # Probe headers only: the external h1 route can stall while
+          # forwarding an empty 404 body even when the status is available.
+          # The release contract here is that an unpublished asset is a 404;
+          # HEAD verifies that contract without depending on body delivery.
+          missing_status="$(curl -sS -I --max-time 30 --retry 3 --retry-all-errors -o /dev/null -w '%{http_code}' \
             "https://openqareer.com${part_prefix}999.js")"
           if [ "$missing_status" != "404" ]; then
             printf 'missing build asset answered %s, expected 404\n' \
