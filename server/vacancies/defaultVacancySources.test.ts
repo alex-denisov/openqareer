@@ -376,14 +376,17 @@ describe('JobSpy sources in default registry', () => {
 });
 
 describe('LinkedIn Obscura crawler in default registry (B208)', () => {
-  it('registers src-linkedin-crawler as an enabled source with measurement', () => {
+  it('keeps the crawler disabled until a real account pool is configured', () => {
     const source = DEFAULT_VACANCY_SOURCES.find((s) => s.id === 'src-linkedin-crawler');
     expect(source).toBeDefined();
     expect(source?.name).toBe('LinkedIn (Obscura Crawler)');
     expect(source?.type).toBe('linkedin_crawler');
     expect(source?.accessClass).toBe('browser_session');
     expect(source?.addressStatus).toBe('live');
-    expect(source?.enabled).toBe(true);
+    expect(source?.enabled).toBe(Boolean(process.env.LINKEDIN_ACCOUNT_IDS));
+    if (!process.env.LINKEDIN_ACCOUNT_IDS) {
+      expect(source?.disabledReason).toContain('account_pool_unconfigured');
+    }
     expect(source?.targetUrl).toBe('https://www.linkedin.com/jobs/search');
 
     const readings = vacancySourceMeasurements('src-linkedin-crawler');

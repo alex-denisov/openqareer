@@ -3,6 +3,12 @@ import { ATS_BOARD_MEASUREMENTS, ATS_BOARD_SOURCES } from './atsBoardSources';
 import { WORKDAY_BOARD_MEASUREMENTS, WORKDAY_BOARD_SOURCES } from './workdayBoardSources';
 import { MEASUREMENTS } from './vacancySourceMeasurementData';
 
+const linkedInCrawlerAccountIds = (process.env.LINKEDIN_ACCOUNT_IDS ?? '')
+  .split(',')
+  .map((id) => id.trim())
+  .filter(Boolean);
+const linkedInCrawlerEnabled = linkedInCrawlerAccountIds.length > 0;
+
 /**
  * The three access classes the owner named for B164: what may be read from the
  * open web without hard limits, what has a working official interface, and
@@ -580,7 +586,10 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     accessClass: 'browser_session',
     market: 'US, EU, MENA, APAC, LATAM, СНГ, Россия, удалёнка (серверный сбор Obscura)',
     addressStatus: 'live',
-    enabled: true,
+    enabled: linkedInCrawlerEnabled,
+    ...(linkedInCrawlerEnabled
+      ? {}
+      : { disabledReason: 'account_pool_unconfigured: LINKEDIN_ACCOUNT_IDS не задан' }),
     targetUrl: 'https://www.linkedin.com/jobs/search',
     refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,
