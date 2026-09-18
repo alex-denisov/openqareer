@@ -14,6 +14,14 @@ import type { MeasuredAtsBoard } from './atsBoardSources';
  */
 export const MEASURED_ATS_BOARDS: readonly MeasuredAtsBoard[] = [
   {
+    company: 'Personio',
+    provider: 'personio',
+    board: 'personio',
+    jobs: 1,
+    observedAt: '2026-09-18',
+    lists: ['public-personio-xml-probe'],
+  },
+  {
     company: '1Password',
     provider: 'ashby',
     board: '1password',

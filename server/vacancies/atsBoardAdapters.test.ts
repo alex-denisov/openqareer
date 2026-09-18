@@ -52,6 +52,9 @@ describe('ats board source id', () => {
     expect(atsBoardEndpoint('pinpoint', 'pinpoint')).toBe(
       'https://pinpoint.pinpointhq.com/postings.json',
     );
+    expect(atsBoardEndpoint('personio', 'personio')).toBe(
+      'https://personio.jobs.personio.de/xml',
+    );
   });
 
   it('разрешает SmartRecruiters, Breezy HR и Pinpoint в контрактах', () => {
@@ -73,6 +76,7 @@ describe('ats board source id', () => {
       'smartrecruiters',
       'breezy',
       'pinpoint',
+      'personio',
     ]);
   });
 });
@@ -346,6 +350,39 @@ describe('ats board adapters', () => {
       externalId: '12345',
       observedAt: OBSERVED_AT,
     });
+  });
+
+  it('читает Personio XML и строит публичную ссылку на вакансию', () => {
+    const [vacancy] = normalizeAtsBoard(
+      'ats-personio-personio',
+      `<?xml version="1.0" encoding="UTF-8"?>
+       <workzag-jobs><position>
+         <id>1834171</id>
+         <subcompany>Personio SE &amp; Co. KG</subcompany>
+         <office>Munich</office>
+         <additionalOffices><office>Berlin</office></additionalOffices>
+         <department>Product and Tech</department>
+         <recruitingCategory>Engineering</recruitingCategory>
+         <name>Staff Software Engineer, Data Platform</name>
+         <employmentType>permanent</employmentType>
+         <seniority>experienced</seniority>
+         <schedule>full-time</schedule>
+         <yearsOfExperience>7-10</yearsOfExperience>
+         <createdAt>2024-11-13T14:10:41+00:00</createdAt>
+       </position></workzag-jobs>`,
+      { observedAt: OBSERVED_AT, sourceName: 'Personio' },
+    );
+
+    expect(vacancy).toMatchObject({
+      title: 'Staff Software Engineer, Data Platform',
+      company: 'Personio SE & Co. KG',
+      location: 'Munich, Berlin',
+      employmentType: 'permanent · full-time',
+      experienceLevel: 'experienced',
+      url: 'https://personio.jobs.personio.de/job/1834171',
+    });
+    expect(vacancy?.description).toContain('Product and Tech');
+    expect(vacancy?.publishedAt).toBe(new Date('2024-11-13T14:10:41+00:00').toISOString());
   });
 
   it('читает массив вакансий от Pinpoint', () => {

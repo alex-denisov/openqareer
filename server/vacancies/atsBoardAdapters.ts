@@ -35,7 +35,8 @@ export type AtsProvider =
   | 'recruitee'
   | 'smartrecruiters'
   | 'breezy'
-  | 'pinpoint';
+  | 'pinpoint'
+  | 'personio';
 
 /**
  * Что площадка разрешила словами в своём `robots.txt` на 2026-09-05. Запрет —
@@ -133,6 +134,15 @@ export const ATS_PROVIDERS: readonly AtsProviderContract[] = [
     crawlPermission: 'allowed',
     robotsNote: 'Публичная JSON-лента вакансий компании (замер 2026-09-14)',
     measuredAt: '2026-09-14',
+  },
+  {
+    provider: 'personio',
+    name: 'Personio',
+    endpoint: (board) => `https://${board}.jobs.personio.de/xml`,
+    boardUrl: (board) => `https://${board}.jobs.personio.de/`,
+    crawlPermission: 'allowed',
+    robotsNote: 'robots.txt отсутствует (404), запрета словами нет (замер 2026-09-18)',
+    measuredAt: '2026-09-18',
   },
 ];
 
@@ -408,7 +418,68 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
         publishedAt: fromLooseDate(job.published_at ?? job.created_at ?? job.updated_at),
       });
     }),
+
+  personio: (payload, context, sourceId, board) => {
+    const xml = typeof payload === 'string' ? payload : '';
+    if (!/<workzag-jobs\b/i.test(xml)) throw new Error(UNREADABLE);
+    return [...xml.matchAll(/<position\b[^>]*>([\s\S]*?)<\/position>/gi)].map((match) => {
+      const position = match[1] ?? '';
+      const id = xmlTag(position, 'id');
+      const title = xmlTag(position, 'name');
+      const company = xmlTag(position, 'subcompany') || employer('', context, board);
+      const offices = [xmlTag(position, 'office'), ...xmlTags(position, 'office')]
+        .map((office) => office.trim())
+        .filter((office, index, all) => office.length > 0 && all.indexOf(office) === index);
+      const description = [
+        xmlTag(position, 'department'),
+        xmlTag(position, 'recruitingCategory'),
+        xmlTag(position, 'seniority'),
+        xmlTag(position, 'yearsOfExperience'),
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      return buildJsonVacancy({
+        sourceId,
+        context,
+        externalId: id,
+        title,
+        company,
+        location: offices.join(', ') || undefined,
+        isRemote: offices.some((office) => /remote|remotely|удалён/i.test(office)),
+        description: description || title,
+        skills: [],
+        employmentType: [xmlTag(position, 'employmentType'), xmlTag(position, 'schedule')]
+          .filter(Boolean)
+          .join(' · ') || undefined,
+        experienceLevel: xmlTag(position, 'seniority') || undefined,
+        url: id ? `https://${board}.jobs.personio.de/job/${id}` : '',
+        publishedAt: fromIso(xmlTag(position, 'createdAt')),
+      });
+    });
+  },
 };
+
+function xmlTags(xml: string, tag: string): string[] {
+  return [...xml.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi'))].map(
+    (match) => cleanXmlText(match[1] ?? ''),
+  );
+}
+
+function xmlTag(xml: string, tag: string): string {
+  return xmlTags(xml, tag)[0] ?? '';
+}
+
+function cleanXmlText(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function placeOf(city: string, country: string): string | undefined {
   const parts = [city, country].map((part) => part.trim()).filter((part) => part.length > 0);

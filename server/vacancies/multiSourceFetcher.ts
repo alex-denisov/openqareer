@@ -1,5 +1,6 @@
 import { parseRssJobFeed } from '../connectors/rssFeedParser';
 import { normalizeJsonSource } from './jsonSourceAdapters';
+import { parseAtsBoardSourceId } from './atsBoardAdapters';
 import { parseTelegramChannelHtml } from '../connectors/telegramChannelParser';
 import type { HhVacancySample } from '../connectors/hhVacancySearch';
 import type { VacancySample } from '../domain/vacancy';
@@ -120,7 +121,24 @@ async function fetchJsonApi(
   options?: { query?: string },
 ): Promise<UnifiedVacancy[]> {
   const url = withQuery(source, options?.query);
+  if (parseAtsBoardSourceId(source.id)?.provider === 'personio') {
+    return fetchXmlAtsBoard(source, url);
+  }
   return readJsonPage(source, { url });
+}
+
+async function fetchXmlAtsBoard(source: VacancySourceConfig, url: string): Promise<UnifiedVacancy[]> {
+  const res = await fetch(url, {
+    headers: { ...FETCH_HEADERS, Accept: 'application/xml, text/xml' },
+    signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
+  const observedAt = new Date().toISOString();
+  return normalizeJsonSource(source.id, await res.text(), {
+    observedAt,
+    sourceName: source.name,
+    sourceUrl: url,
+  });
 }
 
 async function readJsonPage(
