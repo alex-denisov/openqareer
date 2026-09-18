@@ -187,7 +187,10 @@ async function crawlQueryPages(
   // часть могла подрасти: пока последняя плановая страница полная, чтение
   // продолжается до потолка площадки, иначе невиденные живые записи были бы
   // сняты по итогам прохода (B219).
-  let limit = query.pages;
+  // A persisted continuation may point exactly at the original estimate after
+  // a full page extended the effective limit. Keep that pending page in the
+  // local boundary for this invocation (PRB-026).
+  let limit = Math.max(query.pages, startPage + 1);
   const stopAfter = query.stopWhenNothingNewAfter;
 
   while (page < limit) {
@@ -238,7 +241,10 @@ export async function runHhCrawl(plan: HhCrawlPlan, deps: HhCrawlDeps): Promise<
     const query = plan.queries[cursor.queryIndex]!;
     // Часть без страниц (или курсор за её концом) пропускается, иначе цикл
     // стоял бы на ней вечно.
-    if (cursor.page >= query.pages) {
+    // A budget stop can persist the first page beyond the estimate when the
+    // last planned page was full and the query was dynamically extended. That
+    // page is real pending work, not a completed query (PRB-026).
+    if (query.pages <= 0 && cursor.page === 0) {
       cursor = nextQuery(cursor);
       continue;
     }

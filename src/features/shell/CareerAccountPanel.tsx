@@ -38,6 +38,7 @@ import { initialsFor } from './accountIdentity';
 import { LEGAL_DOCS, LEGAL_PACK_VERSION_ID, legalPath } from '../../../shared/legalRegistry';
 import { appVersionLine } from './appVersion';
 import { buildFreshnessLine } from './buildFreshness';
+import { clearOutreachStore } from '../outreach/outreachTrackingStore';
 import { useBuildFreshness } from './useBuildFreshness';
 
 interface CareerAccountPanelProps {
@@ -311,6 +312,7 @@ export function CareerAccountPanel({
     setError(undefined);
     try {
       await deleteCandidateAccount();
+      clearOutreachStore(user?.candidateId ?? undefined);
       onIdentityChange(null);
       setUser(null);
       onClose();
@@ -326,6 +328,7 @@ export function CareerAccountPanel({
     setError(undefined);
     try {
       await logout();
+      clearOutreachStore(user?.candidateId ?? undefined);
       onIdentityChange(null);
       setUser(null);
       setMode('choose');

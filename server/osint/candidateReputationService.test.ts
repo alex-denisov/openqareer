@@ -283,11 +283,9 @@ describe('candidateReputationService', () => {
 
       expect(audit.candidateId).toBe('cand-777');
       expect(audit.status).toBe('completed');
-      expect(audit.overallStatus).toBe('safe');
-      expect(audit.score).toBe(100);
-      expect(audit.consentAction).toBe(
-        'Запуск аудита цифрового следа по инициативе кандидата согласно 152-ФЗ / GDPR',
-      );
+      expect(audit.overallStatus).toBe('not_scanned');
+      expect(audit.score).toBe(0);
+      expect(audit.consentAction).toContain('Источники цифрового следа не подключены');
       expect(audit.startedAt).toBeDefined();
       expect(audit.completedAt).toBeDefined();
     });

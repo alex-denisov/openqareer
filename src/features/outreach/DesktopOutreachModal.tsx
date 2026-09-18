@@ -16,7 +16,6 @@ import {
   getOutreachQuota,
   searchDecisionMakers,
   sendDesktopConnectionRequest,
-  buildSyntheticProfiles,
   type DecisionMakerProfile,
   type DecisionMakerRoleCategory,
   type OutreachDailyQuota,
@@ -38,6 +37,7 @@ export interface DesktopOutreachModalProps {
     readonly isRemote?: boolean;
     readonly skills?: readonly string[];
   };
+  readonly candidateId?: string;
   readonly initialNote?: string;
   readonly initialProfiles?: readonly DecisionMakerProfile[];
   readonly onSent?: (record: OutreachRecord) => void;
@@ -450,11 +450,12 @@ function useOutreachModalState(
   vacancy: DesktopOutreachModalProps['vacancy'],
   initialNote?: string,
   initialProfiles?: readonly DecisionMakerProfile[],
+  candidateId?: string,
 ) {
   const [filter, setFilter] = useState<RoleFilter>('all');
   const defaultList = useMemo(
-    () => (initialProfiles ? [...initialProfiles] : buildSyntheticProfiles(vacancy.company ?? '')),
-    [initialProfiles, vacancy.company],
+    () => (initialProfiles ? [...initialProfiles] : []),
+    [initialProfiles],
   );
   const [profiles, setProfiles] = useState<DecisionMakerProfile[]>(defaultList);
   const [selectedId, setSelectedId] = useState<string>(defaultList[0]?.id ?? '');
@@ -462,21 +463,21 @@ function useOutreachModalState(
     initialNote ||
       `Здравствуйте! Заинтересовала позиция ${vacancy.title} в компании ${vacancy.company ?? ''}. Буду рад знакомству и диалогу.`,
   );
-  const [quota, setQuota] = useState<OutreachDailyQuota>(getOutreachQuota());
+  const [quota, setQuota] = useState<OutreachDailyQuota>(getOutreachQuota(undefined, candidateId));
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
-    setQuota(getOutreachQuota());
+    setQuota(getOutreachQuota(undefined, candidateId));
     void searchDecisionMakers({ company: vacancy.company ?? '' }).then((res) => {
       setProfiles(res);
       if (res.length > 0 && !selectedId) {
         setSelectedId(res[0].id);
       }
     });
-  }, [isOpen, vacancy.company, selectedId]);
+  }, [candidateId, isOpen, vacancy.company, selectedId]);
 
   return {
     filter,
@@ -497,10 +498,12 @@ function useOutreachModalState(
   };
 }
 
+// eslint-disable-next-line max-lines-per-function
 function useOutreachSendHandler({
   selectedProfile,
   note,
   vacancy,
+  candidateId,
   setSending,
   setSendError,
   setQuota,
@@ -509,6 +512,7 @@ function useOutreachSendHandler({
   readonly selectedProfile?: DecisionMakerProfile;
   readonly note: string;
   readonly vacancy: DesktopOutreachModalProps['vacancy'];
+  readonly candidateId?: string;
   readonly setSending: (val: boolean) => void;
   readonly setSendError: (val: string | null) => void;
   readonly setQuota: (quota: OutreachDailyQuota) => void;
@@ -522,6 +526,7 @@ function useOutreachSendHandler({
       const result = await sendDesktopConnectionRequest({
         profile: selectedProfile,
         note,
+        candidateId,
       });
       if (!result.success) {
         setSendError(result.errorReason || 'Сбой при отправке запроса.');
@@ -529,13 +534,14 @@ function useOutreachSendHandler({
         return;
       }
       const record = recordOutreachInvite({
+        candidateId,
         vacancyId: vacancy.id,
         company: vacancy.company ?? selectedProfile.company,
         contactName: selectedProfile.fullName,
         contactProfileUrl: selectedProfile.profileUrl,
         connectionNote: note,
       });
-      setQuota(getOutreachQuota());
+      setQuota(getOutreachQuota(undefined, candidateId));
       onSent?.(record);
     } catch (err) {
       setSendError(err instanceof Error ? err.message : 'Неизвестная ошибка.');
@@ -597,8 +603,9 @@ function useDesktopOutreachController(
   cardRef: React.RefObject<HTMLDivElement | null>,
 ) {
   const { isOpen, onClose, vacancy, initialNote, initialProfiles, onSent } = props;
+  const candidateId = props.candidateId;
   const isDesktop = useMemo(() => isTauriEnvironment(), []);
-  const state = useOutreachModalState(isOpen, vacancy, initialNote, initialProfiles);
+  const state = useOutreachModalState(isOpen, vacancy, initialNote, initialProfiles, candidateId);
   useModalA11y(isOpen, onClose, cardRef);
 
   const counts = useMemo(() => calculateCategoryCounts(state.profiles), [state.profiles]);
@@ -614,8 +621,8 @@ function useDesktopOutreachController(
     [state.profiles, state.selectedId],
   );
   const historyRecords = useMemo(
-    () => (isOpen ? getOutreachRecords(vacancy.id) : []),
-    [isOpen, vacancy.id],
+    () => (isOpen ? getOutreachRecords(candidateId, vacancy.id) : []),
+    [candidateId, isOpen, vacancy.id],
   );
 
   const handleCopy = useCopyAction(state.setCopied);
@@ -624,6 +631,7 @@ function useDesktopOutreachController(
     selectedProfile,
     note: state.note,
     vacancy,
+    candidateId,
     setSending: state.setSending,
     setSendError: state.setSendError,
     setQuota: state.setQuota,

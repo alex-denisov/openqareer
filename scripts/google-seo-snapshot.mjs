@@ -156,11 +156,12 @@ function formatPosition(pos) {
   return Number(pos).toFixed(1);
 }
 
-function printSnapshot({ today, clicks, impressions, ctr, position, sitemapStatus }) {
+function printSnapshot({ today, clicks, impressions, ctr, position, sitemapStatus, mode }) {
   const ctrStr = formatCtr(ctr);
   const posStr = formatPosition(position);
 
   process.stdout.write(`Замер ${today}, Google Search Console, ${SITE_URL}\n`);
+  process.stdout.write(`  режим: ${mode}\n`);
   process.stdout.write(`  клики: ${clicks}\n`);
   process.stdout.write(`  показы: ${impressions}\n`);
   process.stdout.write(`  CTR: ${ctrStr}\n`);
@@ -169,7 +170,7 @@ function printSnapshot({ today, clicks, impressions, ctr, position, sitemapStatu
 
   process.stdout.write('\nСтрока для журнала:\n');
   process.stdout.write(
-    `| ${today} | клики / показы (Google) | ${clicks} / ${impressions} (CTR: ${ctrStr}) | Google Search Console API | |\n`,
+    `| ${today} | клики / показы (Google) | ${clicks} / ${impressions} (CTR: ${ctrStr}) | ${mode === 'official_api' ? 'Google Search Console API' : 'synthetic fixture — не замер Google'} | |\n`,
   );
 }
 
@@ -181,7 +182,8 @@ function runMock() {
     impressions: 0,
     ctr: 0,
     position: 0,
-    sitemapStatus: 'https://openqareer.com/sitemap.xml (обработана: 2 770 URL, ошибок 0)',
+    sitemapStatus: 'synthetic fixture; состояние sitemap не измерялось',
+    mode: 'synthetic_fixture',
   });
 }
 
@@ -223,6 +225,7 @@ async function main() {
     ctr: topRow.ctr ?? 0,
     position: topRow.position ?? 0,
     sitemapStatus,
+    mode: 'official_api',
   });
 }
 

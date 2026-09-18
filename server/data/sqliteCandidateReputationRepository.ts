@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS candidate_reputation_audits (
   id TEXT PRIMARY KEY,
   candidate_id TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('pending', 'completed', 'failed')),
-  overall_status TEXT NOT NULL CHECK (overall_status IN ('safe', 'attention', 'critical_risk')),
+  overall_status TEXT NOT NULL CHECK (overall_status IN ('safe', 'attention', 'critical_risk', 'not_scanned')),
   score INTEGER NOT NULL,
   consistency_findings_json TEXT NOT NULL,
   reputation_findings_json TEXT NOT NULL,
@@ -101,6 +101,35 @@ export class SqliteCandidateReputationRepository {
       this.database.exec('PRAGMA foreign_keys = ON;');
     }
     this.database.exec(CANDIDATE_REPUTATION_AUDITS_SCHEMA);
+    const tableSql = this.database
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'candidate_reputation_audits'")
+      .get() as { sql?: string } | undefined;
+    if (tableSql?.sql && !tableSql.sql.includes('not_scanned')) {
+      this.database.exec('DROP INDEX IF EXISTS idx_candidate_reputation_audits_candidate');
+      this.database.exec('ALTER TABLE candidate_reputation_audits RENAME TO candidate_reputation_audits_legacy');
+      this.database.exec(CANDIDATE_REPUTATION_AUDITS_SCHEMA);
+      this.database.exec(`
+        INSERT INTO candidate_reputation_audits
+          (id, candidate_id, status, overall_status, score,
+           consistency_findings_json, reputation_findings_json, consent_action,
+           started_at, completed_at)
+        SELECT id, candidate_id, status,
+          CASE WHEN overall_status IN ('safe', 'attention', 'critical_risk')
+            THEN overall_status ELSE 'not_scanned' END,
+          score, consistency_findings_json, reputation_findings_json,
+          consent_action, started_at, completed_at
+        FROM candidate_reputation_audits_legacy
+      `);
+      this.database.exec('DROP TABLE candidate_reputation_audits_legacy');
+    }
+    const columns = this.database
+      .prepare('PRAGMA table_info(candidate_reputation_audits)')
+      .all() as unknown as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'candidate_id')) {
+      this.database.exec(
+        "ALTER TABLE candidate_reputation_audits ADD COLUMN candidate_id TEXT NOT NULL DEFAULT ''",
+      );
+    }
   }
 
   saveAudit(audit: CandidateReputationAudit): void {
@@ -127,6 +156,14 @@ export class SqliteCandidateReputationRepository {
     `);
     const row = stmt.get(candidateId) as unknown as CandidateReputationAuditRow | undefined;
     return row ? toAudit(row) : null;
+  }
+
+  deleteAuditsByCandidateId(candidateId: string): number {
+    return Number(
+      this.database
+        .prepare('DELETE FROM candidate_reputation_audits WHERE candidate_id = ?')
+        .run(candidateId).changes,
+    );
   }
 
   close(): void {

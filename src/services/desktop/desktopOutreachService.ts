@@ -31,7 +31,7 @@ export interface OutreachDailyQuota {
 
 export interface OutreachActionResult {
   success: boolean;
-  status: 'sent' | 'limit_exceeded' | 'desktop_required' | 'failed';
+  status: 'sent' | 'limit_exceeded' | 'desktop_required' | 'failed' | 'unsupported';
   actionId?: string;
   executedAt?: string;
   errorReason?: string;
@@ -52,6 +52,10 @@ export interface SearchDecisionMakersParams {
 export const DEFAULT_DAILY_OUTREACH_LIMIT = 15;
 const STORAGE_KEY = 'openqareer_outreach_quota_v1';
 
+function quotaStorageKey(candidateId?: string): string {
+  return STORAGE_KEY + ':' + (candidateId || 'unscoped');
+}
+
 let inMemoryQuota: { date: string; usedToday: number } | null = null;
 
 function getTodayString(customDate?: string): string {
@@ -65,12 +69,12 @@ function getNextDayIso(dateStr: string): string {
   return date.toISOString();
 }
 
-function readStorage(): { date: string; usedToday: number } | null {
+function readStorage(candidateId?: string): { date: string; usedToday: number } | null {
   if (typeof window === 'undefined' || !window.localStorage) {
     return inMemoryQuota;
   }
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(quotaStorageKey(candidateId));
     if (!raw) return inMemoryQuota;
     return JSON.parse(raw) as { date: string; usedToday: number };
   } catch {
@@ -78,32 +82,32 @@ function readStorage(): { date: string; usedToday: number } | null {
   }
 }
 
-function writeStorage(val: { date: string; usedToday: number }): void {
+function writeStorage(val: { date: string; usedToday: number }, candidateId?: string): void {
   inMemoryQuota = val;
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(val));
+      window.localStorage.setItem(quotaStorageKey(candidateId), JSON.stringify(val));
     } catch {
       // safe fallback to in-memory
     }
   }
 }
 
-export function resetOutreachQuota(customDate?: string): void {
+export function resetOutreachQuota(customDate?: string, candidateId?: string): void {
   const date = getTodayString(customDate);
   inMemoryQuota = { date, usedToday: 0 };
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
-      window.localStorage.removeItem(STORAGE_KEY);
+      window.localStorage.removeItem(quotaStorageKey(candidateId));
     } catch {
       // ignore
     }
   }
 }
 
-export function getOutreachQuota(customDate?: string): OutreachDailyQuota {
+export function getOutreachQuota(customDate?: string, candidateId?: string): OutreachDailyQuota {
   const today = getTodayString(customDate);
-  const stored = readStorage();
+  const stored = readStorage(candidateId);
   const usedToday = stored && stored.date === today ? stored.usedToday : 0;
   const remaining = Math.max(0, DEFAULT_DAILY_OUTREACH_LIMIT - usedToday);
   const allowed = remaining > 0;
@@ -119,14 +123,14 @@ export function getOutreachQuota(customDate?: string): OutreachDailyQuota {
   };
 }
 
-export function canSendInvite(customDate?: string): {
+export function canSendInvite(customDate?: string, candidateId?: string): {
   allowed: boolean;
   remaining: number;
   resetsAt: string;
   usedToday: number;
   dailyLimit: number;
 } {
-  const q = getOutreachQuota(customDate);
+  const q = getOutreachQuota(customDate, candidateId);
   return {
     allowed: q.allowed,
     remaining: q.remaining,
@@ -136,11 +140,11 @@ export function canSendInvite(customDate?: string): {
   };
 }
 
-export function recordSentInvite(customDate?: string): OutreachDailyQuota {
-  const current = getOutreachQuota(customDate);
+export function recordSentInvite(customDate?: string, candidateId?: string): OutreachDailyQuota {
+  const current = getOutreachQuota(customDate, candidateId);
   const updatedUsed = current.usedToday + 1;
-  writeStorage({ date: current.date, usedToday: updatedUsed });
-  return getOutreachQuota(customDate);
+  writeStorage({ date: current.date, usedToday: updatedUsed }, candidateId);
+  return getOutreachQuota(customDate, candidateId);
 }
 
 export function getOutreachJitterMs(min = 1000, max = 3000): number {
@@ -159,12 +163,13 @@ function generateActionId(): string {
   return `outreach_${Date.now()}_${rand}`;
 }
 
+// eslint-disable-next-line max-lines-per-function
 export async function sendDesktopConnectionRequest({
   profile,
   note,
   candidateId,
 }: SendOutreachRequestParams): Promise<OutreachActionResult> {
-  const quota = canSendInvite();
+  const quota = canSendInvite(undefined, candidateId);
   if (!quota.allowed) {
     return {
       success: false,
@@ -197,16 +202,18 @@ export async function sendDesktopConnectionRequest({
     candidate_id: candidateId,
   });
 
-  if (!localResult || localResult.status === 'failed') {
+  if (!localResult || localResult.status !== 'provider_confirmed') {
     return {
       success: false,
-      status: 'failed',
+      status: localResult ? 'unsupported' : 'failed',
       actionId,
-      errorReason: 'Локальное действие в десктопной сессии не удалось.',
+      errorReason: localResult
+        ? 'Десктопная сессия не вернула подтверждение отправки от провайдера.'
+        : 'Локальное действие в десктопной сессии не удалось.',
     };
   }
 
-  recordSentInvite();
+  recordSentInvite(undefined, candidateId);
 
   return {
     success: true,
@@ -266,7 +273,9 @@ export async function searchDecisionMakers({
   company,
   roleCategory,
 }: SearchDecisionMakersParams): Promise<DecisionMakerProfile[]> {
-  const list = buildSyntheticProfiles(company);
-  if (!roleCategory) return list;
-  return list.filter((item) => item.roleCategory === roleCategory);
+  void company;
+  void roleCategory;
+  // A real provider/session adapter is not wired yet. Fixtures are test-only
+  // and must never be shown as observed people (PRB-029).
+  return [];
 }

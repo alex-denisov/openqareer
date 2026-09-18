@@ -403,4 +403,45 @@ describe('MultiSourceVacancyEngine', () => {
     expect(savedClusters[0].canonicalTitle).toBe('Principal Architect');
     expect(engine.getActiveClusters()).toHaveLength(1);
   });
+
+  it('removes replaced vacancies from clusters and keeps repeated membership stable', async () => {
+    let round = 0;
+    const vacancy = {
+      id: 'stable-1',
+      fingerprint: 'stable-fp',
+      title: 'Stable Engineer',
+      company: 'Stable Co',
+      description: 'A role',
+      requiredSkills: ['TypeScript'],
+      url: 'https://stable.test/1',
+      provenance: {
+        sourceType: 'direct' as const,
+        sourceId: 'stable-source',
+        sourceUrl: 'https://stable.test/1',
+        externalId: 'stable-1',
+        observedAt: new Date().toISOString(),
+      },
+      publishedAt: new Date().toISOString(),
+      status: 'active' as const,
+    };
+    const engine = new MultiSourceVacancyEngine({
+      sources: [{
+        id: 'stable-source', name: 'Stable', type: 'direct', enabled: true,
+        targetUrl: 'https://stable.test', refreshIntervalMinutes: 1,
+        itemsFoundTotal: 0, itemsActiveTotal: 0,
+      }],
+      recluster: { mode: 'sync' },
+      fetcher: async () => {
+        round += 1;
+        return round < 3 ? [vacancy] : [];
+      },
+    });
+
+    await engine.syncSource('stable-source');
+    expect(engine.getActiveClusters()[0]?.vacanciesCount).toBe(1);
+    await engine.syncSource('stable-source');
+    expect(engine.getActiveClusters()[0]?.vacanciesCount).toBe(1);
+    await engine.syncSource('stable-source');
+    expect(engine.getActiveClusters()).toEqual([]);
+  });
 });

@@ -50,6 +50,7 @@ const FRESHNESS_CHOICES: ReadonlyArray<{ label: string; days?: number }> = [
 // файлам только спрятало бы порядок колонок.
 // eslint-disable-next-line max-lines-per-function
 export function VacancyBoard({
+  candidateId,
   subscriptions = [],
   defaultQuery,
   onRefresh,
@@ -58,6 +59,7 @@ export function VacancyBoard({
   initialContactsByVacancyId,
   candidateFacts,
 }: {
+  readonly candidateId?: string;
   /** Регулярные выборки кандидата: заводятся здесь же, в панели фильтров (B181). */
   readonly subscriptions?: readonly VacancySubscription[];
   readonly defaultQuery?: string;
@@ -222,6 +224,7 @@ export function VacancyBoard({
         <DesktopOutreachModal
           isOpen={Boolean(outreachVacancy)}
           onClose={() => setOutreachVacancy(null)}
+          candidateId={candidateId}
           vacancy={{
             id: outreachVacancy.id,
             title: outreachVacancy.canonicalTitle,
@@ -770,4 +773,3 @@ function salaryLabel(salary: MatchedVacancyItem['cluster']['salary']): string {
   const to = salary.to ? `до ${salary.to.toLocaleString('ru-RU')}` : '';
   return `${[from, to].filter(Boolean).join(' ')} ${currency}`.trim();
 }
-

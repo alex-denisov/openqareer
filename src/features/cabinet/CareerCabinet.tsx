@@ -255,6 +255,7 @@ function CabinetSection({
   }
   return (
     <VacancyBoard
+      candidateId={session.candidateId}
       subscriptions={data.snapshot?.vacancySubscriptions ?? []}
       defaultQuery={targetDirection || undefined}
       onRefresh={data.refresh}

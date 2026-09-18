@@ -46,6 +46,8 @@ function statusBadgeProps(status: ReputationOverallStatus): {
   icon: typeof ShieldCheck;
 } {
   switch (status) {
+    case 'not_scanned':
+      return { label: 'Не проверено', className: 'is-attention', icon: Info };
     case 'safe':
       return { label: 'Безопасно', className: 'is-safe', icon: ShieldCheck };
     case 'attention':
@@ -73,7 +75,11 @@ function AuditScoreBanner({
       </div>
       <div className="career-reputation-score-wrap">
         <span className="career-reputation-score-label">Оценка репутации:</span>
-        <strong className="career-reputation-score-value">{audit.score} / 100</strong>
+        <strong className="career-reputation-score-value">
+          {audit.overallStatus === 'not_scanned'
+            ? 'Нет данных'
+            : String(audit.score) + ' / 100'}
+        </strong>
       </div>
       <button
         type="button"
@@ -115,14 +121,14 @@ function DiscrepancyCard({ item }: { item: ConsistencyDiscrepancy }) {
   );
 }
 
-function AuditDiscrepanciesBlock({ items }: { items: ConsistencyDiscrepancy[] }) {
+function AuditDiscrepanciesBlock({ items, scanned }: { items: ConsistencyDiscrepancy[]; scanned: boolean }) {
   return (
     <section className="career-reputation-section" aria-labelledby="consistency-heading">
       <h3 id="consistency-heading">Согласованность истории (Cross-Source)</h3>
       {items.length === 0 ? (
         <div className="career-reputation-empty-box">
           <ShieldCheck size={18} />
-          <span>Расхождений в датах и должностях между внешними профилями не обнаружено.</span>
+          <span>{scanned ? 'Расхождений в датах и должностях между внешними профилями не обнаружено.' : 'Источники профилей не подключены, поэтому согласованность не оценивалась.'}</span>
         </div>
       ) : (
         <ul className="career-reputation-list">
@@ -161,14 +167,14 @@ function RiskCard({ item }: { item: ReputationRiskItem }) {
   );
 }
 
-function AuditRisksBlock({ items }: { items: ReputationRiskItem[] }) {
+function AuditRisksBlock({ items, scanned }: { items: ReputationRiskItem[]; scanned: boolean }) {
   return (
     <section className="career-reputation-section" aria-labelledby="risks-heading">
       <h3 id="risks-heading">Репутационные риски и публикации</h3>
       {items.length === 0 ? (
         <div className="career-reputation-empty-box">
           <ShieldCheck size={18} />
-          <span>Потенциально компрометирующих публикаций и токсичных высказываний не обнаружено.</span>
+          <span>{scanned ? 'Потенциально компрометирующих публикаций и токсичных высказываний не обнаружено.' : 'Публичные публикации не сканировались.'}</span>
         </div>
       ) : (
         <ul className="career-reputation-list">
@@ -245,8 +251,8 @@ function AuditResultsView({
         running={running}
         onRecheck={onRecheck}
       />
-      <AuditDiscrepanciesBlock items={audit.consistencyDiscrepancies} />
-      <AuditRisksBlock items={audit.reputationRisks} />
+      <AuditDiscrepanciesBlock items={audit.consistencyDiscrepancies} scanned={audit.overallStatus !== 'not_scanned'} />
+      <AuditRisksBlock items={audit.reputationRisks} scanned={audit.overallStatus !== 'not_scanned'} />
       <footer className="career-reputation-footer">
         <small>
           {audit.consentAction}. Аудит начат: {audit.startedAt}
@@ -258,6 +264,7 @@ function AuditResultsView({
 }
 
 function useCandidateReputationAudit(
+  candidateId: string | undefined,
   initialAudit: CandidateReputationAudit | null | undefined,
   initialRunning: boolean,
   initialError?: string,
@@ -277,10 +284,11 @@ function useCandidateReputationAudit(
   }, []);
 
   useEffect(() => {
+    setAudit(initialAudit ?? null);
     if (initialAudit === undefined) {
       void loadAudit();
     }
-  }, [initialAudit, loadAudit]);
+  }, [candidateId, initialAudit, loadAudit]);
 
   const handleStartAudit = useCallback(
     async (options?: StartAuditOptions) => {
@@ -303,12 +311,14 @@ function useCandidateReputationAudit(
 }
 
 export function CandidateReputationAuditView({
-  initialAudit = null,
+  candidateId,
+  initialAudit,
   initialRunning = false,
   initialError,
   onAuditCompleted,
 }: CandidateReputationAuditViewProps) {
   const { audit, running, error, handleStartAudit } = useCandidateReputationAudit(
+    candidateId,
     initialAudit,
     initialRunning,
     initialError,
@@ -355,4 +365,3 @@ export function CandidateReputationAuditView({
     </div>
   );
 }
-

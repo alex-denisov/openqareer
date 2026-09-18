@@ -139,7 +139,7 @@ describe('ResumeStudioSurface', () => {
     expect(html).not.toMatch(/Укажите имя для заголовка резюме/u);
   });
 
-  it('states the German conventions the document actually follows', () => {
+  it('keeps the current flow on the canonical master format', () => {
     const html = render(
       <ResumeStudioSurface
         view={viewOf()}
@@ -149,11 +149,9 @@ describe('ResumeStudioSurface', () => {
         initialVariant="germany"
       />,
     );
-    expect(html).toMatch(/Германия/u);
-    expect(html).toMatch(/обратная хронология/iu);
-    expect(html).toMatch(/2 страниц/u);
-    expect(html).toMatch(/без фото/iu);
-    expect(html).toMatch(/DE-CV-2026\.1/u);
+    expect(html).toMatch(/Мастер-резюме/u);
+    expect(html).not.toMatch(/Германия/u);
+    expect(html).not.toMatch(/DE-CV-2026\.1/u);
   });
 
   it('does not offer a country pack to a candidate who never chose that region (B158)', () => {
@@ -249,7 +247,7 @@ describe('ResumeStudioSurface', () => {
     expect(html).toMatch(/Повторить/u);
   });
 
-  it('offers both variants as an explicit switch once the candidate chose the EU region', () => {
+  it('does not expose cancelled country variants even for legacy EU data', () => {
     const html = render(
       <ResumeStudioSurface
         view={viewOf()}
@@ -258,8 +256,8 @@ describe('ResumeStudioSurface', () => {
         regions={['eu']}
       />,
     );
-    expect(html).toMatch(/Мастер/u);
-    expect(html).toMatch(/Германия/u);
+    expect(html).toMatch(/Мастер-резюме/u);
+    expect(html).not.toMatch(/Германия/u);
   });
 
   it('renders all full resume sections: about, photo, telegram, skills, courses, tests, and recommendations', () => {
@@ -442,7 +440,7 @@ describe('ResumeStudio canonical positioning formats and layout (B086 step 5)', 
     expect(html).toContain('career-resume-document');
     expect(html).toContain('SUMMARY');
     expect(html).toContain('PROFESSIONAL EXPERIENCE');
-    expect(html).toContain('Eligible to work in EU');
+    expect(html).not.toContain('Eligible to work in EU');
   });
 
   it('renders ATS Plain Text view when ats-text format is selected', () => {
@@ -490,4 +488,3 @@ describe('ResumeStudio canonical positioning formats and layout (B086 step 5)', 
     expect(html).toContain('Подтверждённые факты');
   });
 });
-

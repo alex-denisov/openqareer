@@ -73,6 +73,15 @@ function downloadTxtFile(filename: string, content: string): void {
   URL.revokeObjectURL(url);
 }
 
+function movePitchSelection<T extends string>(
+  items: readonly { id: T }[],
+  current: T,
+  delta: number,
+): T {
+  const index = items.findIndex((item) => item.id === current);
+  return items[(index + delta + items.length) % items.length]!.id;
+}
+
 function PitchHeader({
   title,
   company,
@@ -102,6 +111,7 @@ function PitchHeader({
   );
 }
 
+// eslint-disable-next-line max-lines-per-function
 function PitchControls({
   tone,
   tab,
@@ -124,6 +134,16 @@ function PitchControls({
             aria-checked={tone === t.id}
             className={`career-tab-btn ${tone === t.id ? 'is-active' : ''}`}
             onClick={() => onToneChange(t.id)}
+            tabIndex={tone === t.id ? 0 : -1}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                event.preventDefault();
+                onToneChange(movePitchSelection(TONES, tone, 1));
+              } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                onToneChange(movePitchSelection(TONES, tone, -1));
+              }
+            }}
             title={t.desc}
           >
             <span>{t.label}</span>
@@ -141,6 +161,17 @@ function PitchControls({
               aria-selected={tab === t.id}
               className={`career-tab-btn ${tab === t.id ? 'is-active' : ''}`}
               onClick={() => onTabChange(t.id)}
+              tabIndex={tab === t.id ? 0 : -1}
+              aria-controls="career-pitch-panel"
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  onTabChange(movePitchSelection(FORMAT_TABS, tab, 1));
+                } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  onTabChange(movePitchSelection(FORMAT_TABS, tab, -1));
+                }
+              }}
             >
               <Icon size={14} aria-hidden="true" />
               <span>{t.label}</span>
@@ -560,7 +591,7 @@ export function VacancyPitchModal(props: VacancyPitchModalProps) {
         <PitchHeader title={vacancy.title} company={vacancy.company} onClose={onClose} />
         <PitchControls tone={c.tone} tab={c.tab} onToneChange={c.setTone} onTabChange={c.setTab} />
         {c.pitch ? <PitchMetaBar evidenceCount={c.pitch.usedEvidenceIds.length} /> : null}
-        <main className="career-pitch-body">
+        <main id="career-pitch-panel" className="career-pitch-body" role="tabpanel" tabIndex={0}>
           <PitchMainView
             loading={c.loading}
             error={c.error}

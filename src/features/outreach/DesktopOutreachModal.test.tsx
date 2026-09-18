@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DesktopOutreachModal } from './DesktopOutreachModal';
 import * as desktopBridge from '../../services/desktop/desktopBridge';
 import { resetOutreachQuota } from '../../services/desktop/desktopOutreachService';
+import { buildSyntheticProfiles } from '../../services/desktop/desktopOutreachService';
 import { clearOutreachStore } from './outreachTrackingStore';
 
 describe('DesktopOutreachModal', () => {
@@ -39,6 +40,7 @@ describe('DesktopOutreachModal', () => {
         isOpen={true}
         onClose={vi.fn()}
         vacancy={sampleVacancy}
+        initialProfiles={buildSyntheticProfiles('FinTech Group')}
       />,
     );
 
@@ -83,6 +85,7 @@ describe('DesktopOutreachModal', () => {
         isOpen={true}
         onClose={vi.fn()}
         vacancy={sampleVacancy}
+        initialProfiles={buildSyntheticProfiles('FinTech Group')}
       />,
     );
 

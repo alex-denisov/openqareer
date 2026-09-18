@@ -13,7 +13,6 @@ import {
   draftOf,
   eligibleEvidence,
   previewProjection,
-  resumeVariantsFor,
   selectDocument,
   summarizeResumeStudio,
 } from './resumeStudioModel';
@@ -83,14 +82,16 @@ interface ResumeStudioSurfaceProps {
  * rendering a country pack nobody asked for (B158).
  */
 function useResumeVariant(
-  regions: readonly CandidateRegion[],
-  initial: ResumeVariantId | undefined,
+  _regions: readonly CandidateRegion[],
+  _initial: ResumeVariantId | undefined,
 ) {
-  const [chosen, setVariant] = useState<ResumeVariantId>(initial ?? 'master');
-  const variants = useMemo(() => resumeVariantsFor(regions), [regions]);
+  // Country packs were cancelled in the current owner-approved flow. Keep the
+  // legacy type for stored data, but expose only the three canonical formats.
+  const [chosen, setVariant] = useState<ResumeVariantId>('master');
+  const variants = useMemo(() => ['master'] as const, []);
   return {
     variants,
-    variant: variants.includes(chosen) ? chosen : 'master',
+    variant: chosen === 'master' ? chosen : 'master',
     setVariant,
   };
 }

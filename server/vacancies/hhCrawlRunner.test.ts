@@ -266,6 +266,34 @@ describe('runHhCrawl', () => {
       expect(result.finished).toBe(false);
       expect(result.cursor).toEqual({ queryIndex: 0, page: 1 });
     });
+
+    it('после остановки на расширенной границе дочитывает хвост при продолжении', async () => {
+      const full = Array.from({ length: 50 }, (_, i) => i + 1);
+      const fetchPage = vi
+        .fn()
+        .mockResolvedValueOnce({ status: 200, body: statePage(full) })
+        .mockResolvedValueOnce({ status: 200, body: statePage(full.map((i) => i + 50)) })
+        .mockResolvedValueOnce({ status: 200, body: statePage([101]) });
+      const controller = new AbortController();
+      const first = await runHhCrawl(plan(1), {
+        fetchPage,
+        sleep: async () => controller.abort(),
+        searchPeriodDays: 30,
+        signal: controller.signal,
+      });
+      expect(first.finished).toBe(false);
+      expect(first.cursor).toEqual({ queryIndex: 0, page: 1 });
+
+      const second = await runHhCrawl(plan(1), {
+        fetchPage,
+        sleep,
+        searchPeriodDays: 30,
+        start: { queryIndex: 0, page: 1 },
+      });
+      expect(second.finished).toBe(true);
+      expect(fetchPage).toHaveBeenCalledTimes(3);
+      expect(second.vacancies.length).toBeGreaterThan(0);
+    });
   });
 
   describe('быстрый проход: стоп на странице без новых id (B219)', () => {

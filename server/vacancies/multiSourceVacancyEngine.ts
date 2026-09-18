@@ -1,3 +1,6 @@
+/* eslint-disable max-lines -- source synchronization and membership lifecycle
+   are intentionally kept together so replacement, expiry and reclustering share
+   one transaction boundary. */
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import type {
   UnifiedVacancy,
@@ -179,6 +182,8 @@ export class MultiSourceVacancyEngine {
   private clusters: VacancyCluster[] = [];
   private clusterBuilder?: IncrementalClusterBuilder;
   private pendingVacancies: UnifiedVacancy[] = [];
+  /** A complete source replacement invalidates the old cluster membership. */
+  private requiresFullRecluster = false;
   private fetcher?: SourceFetcher;
   /**
    * Где лежит пул. Движок не держит копию в куче: каждое чтение — вопрос к
@@ -635,7 +640,11 @@ export class MultiSourceVacancyEngine {
     // значит «снято». Срез дополняется, а устаревшее убирает тридцатидневная
     // уборка и проверка живости ссылок (B214).
     if (partial) this.pool.mergeSourceSlice(source.id, freshFetched, dropObservedBefore);
-    else this.pool.replaceSourceSlice(source.id, freshFetched);
+    else {
+      this.pool.replaceSourceSlice(source.id, freshFetched);
+      this.requiresFullRecluster = true;
+    }
+    if (dropObservedBefore) this.requiresFullRecluster = true;
     const slice = this.pool.countSourceSlice(source.id);
 
     // The clock of the run, so the next due check measures the same instant
@@ -876,6 +885,11 @@ export class MultiSourceVacancyEngine {
   public recluster(): void {
     const startedAt = Date.now();
     this.ensureLoadedClusters();
+    if (this.requiresFullRecluster) {
+      this.rebuildClustersFromPool();
+      this.finishRecluster(startedAt, true);
+      return;
+    }
     if (
       this.clusters.length === 0 &&
       this.pool.countVacancies(freshnessWindow()) > this.pendingVacancies.length
@@ -893,6 +907,13 @@ export class MultiSourceVacancyEngine {
   public async reclusterAsync(chunkSize = 500): Promise<void> {
     const startedAt = Date.now();
     this.ensureLoadedClusters();
+    if (this.requiresFullRecluster) {
+      const freshVacancies = this.pool.iterateClusterInput(freshnessWindow());
+      this.clusters = await clusterVacanciesAsync(freshVacancies, chunkSize);
+      this.pendingVacancies = [];
+      this.finishRecluster(startedAt, true);
+      return;
+    }
     if (
       this.clusters.length === 0 &&
       this.pool.countVacancies(freshnessWindow()) > this.pendingVacancies.length
@@ -913,10 +934,23 @@ export class MultiSourceVacancyEngine {
       if (typeof this.pool.saveClusters === 'function') {
         this.pool.saveClusters(this.clusters);
       }
+      this.requiresFullRecluster = false;
     }
     this.poolChangedSinceRecluster = false;
     this.reclusterCount += 1;
     this.lastReclusterMs = Date.now() - startedAt;
+  }
+
+  private rebuildClustersFromPool(): void {
+    const previous = this.clusters;
+    this.clusters = clusterVacancies(this.pool.iterateClusterInput(freshnessWindow()));
+    this.pendingVacancies = [];
+    const currentIds = new Set(this.clusters.map((cluster) => cluster.id));
+    if (typeof this.pool.deleteCluster === 'function') {
+      for (const cluster of previous) {
+        if (!currentIds.has(cluster.id)) this.pool.deleteCluster(cluster.id);
+      }
+    }
   }
 
   /** Что видно снаружи о сведении: для замера на проде без профилировщика (B221). */

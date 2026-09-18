@@ -239,6 +239,22 @@ export function performCandidateReputationAudit(
     input.externalProfiles ?? [],
   );
   const risks = classifyReputationRisks(input.publicPosts ?? []);
+  if ((input.externalProfiles?.length ?? 0) === 0 && (input.publicPosts?.length ?? 0) === 0) {
+    const completedAt = new Date().toISOString();
+    return {
+      id: randomUUID(),
+      candidateId: input.candidateId,
+      status: 'completed',
+      overallStatus: 'not_scanned',
+      score: 0,
+      consistencyDiscrepancies: discrepancies,
+      reputationRisks: risks,
+      consentAction:
+        'Источники цифрового следа не подключены: результат не является оценкой безопасности.',
+      startedAt,
+      completedAt,
+    };
+  }
   const { score, overallStatus } = calculateReputationScore(discrepancies, risks);
   const completedAt = new Date().toISOString();
 

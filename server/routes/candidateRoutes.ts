@@ -213,16 +213,18 @@ const handleGetMessages: Handler = async (
 };
 
 const handleDeleteCandidate: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, config } = deps;
+  const { authService, candidateStore, candidateReputationRepo, recruiterContactsRepo, config } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   candidateStore.deleteCandidate(candidate.id);
+  candidateReputationRepo?.deleteAuditsByCandidateId(candidate.id);
+  recruiterContactsRepo?.deleteContactsByCandidateId(candidate.id);
   return reply.code(204).send();
 };
 
 const handleExportCandidate: Handler = async (
-  { authService, candidateStore, config },
+  { authService, candidateStore, candidateReputationRepo, config },
   request,
   reply,
 ) => {
@@ -230,7 +232,10 @@ const handleExportCandidate: Handler = async (
   if (!candidate) return undefined;
   reply.header('Content-Disposition', 'attachment; filename="openqareer-candidate-export.json"');
   return {
-    data: candidateStore.exportCandidate(candidate.id),
+    data: {
+      ...candidateStore.exportCandidate(candidate.id),
+      reputationAudit: candidateReputationRepo?.getLatestAudit(candidate.id) ?? null,
+    },
     meta: { requestId: request.id, exportedAt: new Date().toISOString() },
   };
 };

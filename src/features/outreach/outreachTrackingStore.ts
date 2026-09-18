@@ -7,6 +7,7 @@ export type OutreachStatus =
 
 export interface OutreachRecord {
   id: string;
+  candidateId?: string;
   vacancyId?: string;
   company: string;
   contactName: string;
@@ -18,6 +19,7 @@ export interface OutreachRecord {
 }
 
 export interface RecordOutreachInviteParams {
+  candidateId?: string;
   vacancyId?: string;
   company: string;
   contactName: string;
@@ -28,14 +30,18 @@ export interface RecordOutreachInviteParams {
 
 const STORAGE_KEY = 'openqareer_outreach_records_v1';
 
+function storageKey(candidateId?: string): string {
+  return STORAGE_KEY + ':' + (candidateId || 'unscoped');
+}
+
 let inMemoryRecords: OutreachRecord[] = [];
 
-function readRecordsFromStorage(): OutreachRecord[] {
+function readRecordsFromStorage(candidateId?: string): OutreachRecord[] {
   if (typeof window === 'undefined' || !window.localStorage) {
     return inMemoryRecords;
   }
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey(candidateId));
     if (!raw) return inMemoryRecords;
     return JSON.parse(raw) as OutreachRecord[];
   } catch {
@@ -43,32 +49,35 @@ function readRecordsFromStorage(): OutreachRecord[] {
   }
 }
 
-function writeRecordsToStorage(records: OutreachRecord[]): void {
+function writeRecordsToStorage(records: OutreachRecord[], candidateId?: string): void {
   inMemoryRecords = records;
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    window.localStorage.setItem(storageKey(candidateId), JSON.stringify(records));
     } catch {
       // In-memory fallback
     }
   }
 }
 
-export function clearOutreachStore(): void {
+export function clearOutreachStore(candidateId?: string): void {
   inMemoryRecords = [];
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
-      window.localStorage.removeItem(STORAGE_KEY);
+    window.localStorage.removeItem(storageKey(candidateId));
     } catch {
       // ignore
     }
   }
 }
 
-export function getOutreachRecords(vacancyId?: string): OutreachRecord[] {
-  const records = readRecordsFromStorage();
-  if (!vacancyId) return records;
-  return records.filter((r) => r.vacancyId === vacancyId);
+export function getOutreachRecords(candidateId?: string, vacancyId?: string): OutreachRecord[] {
+  const scoped = vacancyId !== undefined;
+  const actualCandidateId = scoped ? candidateId : undefined;
+  const actualVacancyId = scoped ? vacancyId : candidateId;
+  const records = readRecordsFromStorage(actualCandidateId);
+  if (!actualVacancyId) return records;
+  return records.filter((r) => r.vacancyId === actualVacancyId);
 }
 
 export function getOutreachRecordById(id: string): OutreachRecord | undefined {
@@ -84,12 +93,13 @@ function generateRecordId(): string {
 export function recordOutreachInvite(
   params: RecordOutreachInviteParams,
 ): OutreachRecord {
-  const records = readRecordsFromStorage();
+  const records = readRecordsFromStorage(params.candidateId);
   const now = new Date().toISOString();
   const status = params.status ?? 'invite_sent';
 
   const newRecord: OutreachRecord = {
     id: generateRecordId(),
+    candidateId: params.candidateId,
     vacancyId: params.vacancyId,
     company: params.company,
     contactName: params.contactName,
@@ -101,7 +111,7 @@ export function recordOutreachInvite(
   };
 
   const updatedList = [newRecord, ...records];
-  writeRecordsToStorage(updatedList);
+  writeRecordsToStorage(updatedList, params.candidateId);
   return newRecord;
 }
 

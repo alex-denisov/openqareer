@@ -101,4 +101,11 @@ describe('SqliteCandidateReputationRepository', () => {
     repo.saveAudit(sampleAudit1);
     expect(repo.getLatestAudit('cand-100')).toEqual(sampleAudit1);
   });
+
+  it('удаляет все аудиты кандидата по lifecycle-команде', () => {
+    const { repo } = createRepo();
+    repo.saveAudit(sampleAudit1);
+    expect(repo.deleteAuditsByCandidateId('cand-100')).toBe(1);
+    expect(repo.getLatestAudit('cand-100')).toBeNull();
+  });
 });

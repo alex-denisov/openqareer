@@ -115,7 +115,7 @@ describe('desktopOutreachService', () => {
         action_id: 'outreach-act-1',
         capability: 'outreach.send_connection_request',
         platform: 'linkedin',
-        status: 'completed',
+        status: 'provider_confirmed',
         provider_reference: 'req-98765',
         executed_at: '2026-09-17T12:00:00Z',
         pacing_duration_ms: 1850,
@@ -155,8 +155,9 @@ describe('desktopOutreachService', () => {
       vi.spyOn(desktopBridge, 'isTauriEnvironment').mockReturnValue(true);
       const executeSpy = vi.spyOn(desktopBridge, 'executeLocalAction');
 
+      const today = new Date().toISOString().slice(0, 10);
       for (let i = 0; i < 15; i += 1) {
-        recordSentInvite('2026-09-17');
+        recordSentInvite(today);
       }
 
       const result = await sendDesktopConnectionRequest({
@@ -184,26 +185,18 @@ describe('desktopOutreachService', () => {
   });
 
   describe('searchDecisionMakers', () => {
-    it('returns structured profiles filtered by company and role category', async () => {
+    it('fails closed until an authorized provider session is connected', async () => {
       const results = await searchDecisionMakers({
         company: 'FinTech Corp',
         roleCategory: 'engineering_lead',
       });
 
-      expect(Array.isArray(results)).toBe(true);
-      expect(results.length).toBeGreaterThan(0);
-      for (const profile of results) {
-        expect(profile.company.toLowerCase()).toContain('fintech');
-        expect(profile.roleCategory).toBe('engineering_lead');
-        expect(['1st', '2nd', '3rd+']).toContain(profile.connectionDegree);
-      }
+      expect(results).toEqual([]);
     });
 
-    it('returns all roles when no roleCategory filter is provided', async () => {
+    it('does not present synthetic people as observed results', async () => {
       const results = await searchDecisionMakers({ company: 'FinTech Corp' });
-      expect(results.length).toBeGreaterThan(0);
-      const categories = new Set(results.map((r) => r.roleCategory));
-      expect(categories.size).toBeGreaterThan(1);
+      expect(results).toEqual([]);
     });
   });
 });

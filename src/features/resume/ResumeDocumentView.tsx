@@ -122,7 +122,6 @@ function StanfordHeader({
       <div className="career-resume-stanford-subtitle">
         <span>{targetRole}</span>
         {location ? <span> | {location}</span> : null}
-        <span> | Remote</span>
       </div>
       <div className="career-resume-stanford-contacts">
         {contactParts.length > 0 ? (
@@ -130,9 +129,6 @@ function StanfordHeader({
         ) : (
           <span className="career-resume-dim">Контакты не указаны</span>
         )}
-      </div>
-      <div className="career-resume-stanford-eligibility">
-        <span>Eligible to work in EU</span>
       </div>
     </div>
   );

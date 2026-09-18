@@ -520,9 +520,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const remove = this.database.prepare(
       'DELETE FROM vacancy_pool WHERE source_id = ? AND expired_at IS NULL',
     );
+    const removeProjection = this.database.prepare(
+      `DELETE FROM vacancy_cluster_input WHERE id NOT IN (SELECT id FROM vacancy_pool)`,
+    );
     this.inTransaction(() => {
       removeIndex.run(sourceId);
       remove.run(sourceId);
+      removeProjection.run();
       this.upsertAll(sourceId, vacancies);
     });
   }
@@ -546,6 +550,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       this.database
         .prepare(`DELETE FROM vacancy_pool_index WHERE id IN (${gone})`)
         .run(sourceId, dropBeforeMs);
+      this.database.exec(
+        'DELETE FROM vacancy_cluster_input WHERE id NOT IN (SELECT id FROM vacancy_pool_index)',
+      );
     });
   }
 

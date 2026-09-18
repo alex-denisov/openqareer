@@ -23,7 +23,7 @@ async function copyToClipboard(text: string, setCopied: (v: boolean) => void) {
 }
 
 function buildDefaultHeadline(draft: ResumeDraft, document: ResumeDocument): string {
-  const role = draft.targetRole ?? document.targetRole ?? 'Product Leader';
+  const role = (draft.targetRole ?? document.targetRole ?? '').trim();
   const topSkills = (draft.skills ?? document.skills ?? [])
     .slice(0, 4)
     .map((s) => s.name.trim())
@@ -32,7 +32,8 @@ function buildDefaultHeadline(draft: ResumeDraft, document: ResumeDocument): str
 
   const parts = [role];
   if (topSkills.length > 0) parts.push(topSkills.join(' | '));
-  if (lastEmployer) parts.push(`Ex-${lastEmployer}`);
+  const current = document.experience[0]?.current?.value ?? draft.experience[0]?.current;
+  if (lastEmployer && !current) parts.push('Ex-' + lastEmployer);
   const full = parts.join(' | ');
   return full.length > HEADLINE_MAX ? full.slice(0, HEADLINE_MAX) : full;
 }

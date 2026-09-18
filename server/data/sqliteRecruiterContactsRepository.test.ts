@@ -106,4 +106,15 @@ describe('SqliteRecruiterContactsRepository', () => {
     repo.saveContacts('vac-1', [sampleContact1]);
     expect(repo.getContactsByVacancyId('vac-1')).toHaveLength(1);
   });
+
+  it('изолирует записи одинаковой вакансии между кандидатами', () => {
+    const { repo } = createRepo();
+    repo.saveContacts('candidate-a', 'vac-101', [sampleContact1]);
+    repo.saveContacts('candidate-b', 'vac-101', [{ ...sampleContact1, id: 'rc-b', telegram: '@other' }]);
+
+    expect(repo.getContactsByVacancyId('candidate-a', 'vac-101')[0]?.telegram).toBe('@elena_recruiter');
+    expect(repo.getContactsByVacancyId('candidate-b', 'vac-101')[0]?.telegram).toBe('@other');
+    expect(repo.deleteContactsByCandidateId('candidate-a')).toBe(1);
+    expect(repo.getContactsByVacancyId('candidate-b', 'vac-101')).toHaveLength(1);
+  });
 });

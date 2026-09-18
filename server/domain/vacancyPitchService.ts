@@ -44,7 +44,7 @@ const LINKEDIN_NOTE_LIMIT = 300;
 
 function filterConfirmedFacts(facts: readonly VacancyPitchInputFact[]): VacancyPitchInputFact[] {
   return facts.filter(
-    (fact) => !fact.status || fact.status === 'confirmed' || fact.status === 'corrected',
+    (fact) => fact.status === 'confirmed' || fact.status === 'corrected',
   );
 }
 
@@ -86,14 +86,14 @@ function buildIntroParagraph(
   company: string | undefined,
   tone: PitchTone,
 ): string {
-  const target = company ? `компании ${company}` : 'вашей команды';
-  if (tone === 'technical') {
-    return `Здравствуйте! Заинтересовала вакансия ${title} в ${target}. В инженерной практике фокусируюсь на надежности систем, архитектуре и высокой производительности сервисов.`;
-  }
-  if (tone === 'confident') {
-    return `Здравствуйте! Направляю отклик на вакансию ${title} в ${target}. Мой подтверждённый опыт напрямую отвечает ключевым задачам роли, готов сразу включиться в решение приоритетов.`;
-  }
-  return `Здравствуйте! Заинтересовала позиция ${title} в ${target}. В управлении процессами опираюсь на системный подход, масштабирование команд и достижение измеримых бизнес-результатов.`;
+  const target = company ? 'компании ' + company : 'вашей команды';
+  const opening =
+    tone === 'confident'
+      ? 'Направляю отклик и буду рад обсудить задачи роли.'
+      : tone === 'technical'
+        ? 'Буду рад обсудить технический контекст и ожидания команды.'
+        : 'Буду рад узнать больше о целях и приоритетах роли.';
+  return 'Здравствуйте! Заинтересовала вакансия ' + title + ' в ' + target + '. ' + opening;
 }
 
 function buildEvidenceParagraph(
@@ -101,7 +101,7 @@ function buildEvidenceParagraph(
   usedIds: Set<string>,
 ): string {
   if (facts.length === 0) {
-    return 'Обладаю практическим опытом решения аналогичных задач и готов применить свои навыки для усиления команды.';
+    return 'Подтверждённые факты профиля для этого письма не выбраны. Добавьте их перед отправкой.';
   }
   const metricFact = facts.find(
     (f) => f.domain === 'outcome' || /\d+/u.test(f.statement),
@@ -123,13 +123,10 @@ function buildStackParagraph(
   vacancy: VacancyPitchInputVacancy,
   facts: readonly VacancyPitchInputFact[],
   usedIds: Set<string>,
-  tone: PitchTone,
 ): string {
   const reqSkills = vacancy.requiredSkills ?? [];
   if (reqSkills.length === 0) {
-    return tone === 'technical'
-      ? 'Готов перенести инженерные стандарты и архитектурные решения в контекст задач продукта.'
-      : 'Готов перенести проверенные управленческие и продуктовые практики на задачи проекта.';
+    return 'Требования вакансии не сопоставлены с подтверждёнными фактами профиля.';
   }
 
   const matchedSkills: string[] = [];
@@ -178,7 +175,7 @@ function buildClosingParagraph(tone: PitchTone): string {
   if (tone === 'confident') {
     return 'Предлагаю созвониться на 15 минут, чтобы предметно обсудить задачи и взаимные ожидания.';
   }
-  return 'Буду рад обсудить цели роли и приоритеты бизнеса на коротком звонке. Резюме во вложении.';
+  return 'Буду рад обсудить цели роли и приоритеты бизнеса на коротком звонке.';
 }
 
 function buildLinkedInNote(
@@ -251,7 +248,7 @@ export function generateVacancyPitch(
 
   const intro = buildIntroParagraph(vacancy.title, vacancy.company, tone);
   const evidence = buildEvidenceParagraph(confirmedFacts, usedEvidenceIds);
-  const stack = buildStackParagraph(vacancy, confirmedFacts, usedEvidenceIds, tone);
+  const stack = buildStackParagraph(vacancy, confirmedFacts, usedEvidenceIds);
   const closing = buildClosingParagraph(tone);
 
   const emailBody = [intro, evidence, stack, closing].join('\n\n');

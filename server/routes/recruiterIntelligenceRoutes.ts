@@ -8,6 +8,7 @@ import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
   csrfError,
+  sendError,
   hasSafeMutationOrigin,
   withDeps,
 } from './helpers';
@@ -30,7 +31,6 @@ const enrichBodySchema = z
 
 function buildVacancyInput(
   vacancyId: string,
-  bodyVacancy: Partial<UnifiedVacancyInput> | undefined,
   deps: RouteDeps,
 ): UnifiedVacancyInput {
   const cluster = deps.multiSourceEngine?.getActiveClusters?.()?.find((c) => c.id === vacancyId);
@@ -38,12 +38,12 @@ function buildVacancyInput(
 
   return {
     id: vacancyId,
-    title: bodyVacancy?.title ?? cluster?.canonicalTitle ?? poolVacancy?.title,
-    company: bodyVacancy?.company ?? cluster?.canonicalCompany ?? poolVacancy?.company,
-    url: bodyVacancy?.url ?? cluster?.primaryUrl ?? poolVacancy?.url,
-    description: bodyVacancy?.description ?? cluster?.descriptionSummary ?? poolVacancy?.description,
-    fullDescription: bodyVacancy?.fullDescription ?? poolVacancy?.fullDescription,
-    contactInfo: bodyVacancy?.contactInfo ?? poolVacancy?.contactInfo,
+    title: cluster?.canonicalTitle ?? poolVacancy?.title,
+    company: cluster?.canonicalCompany ?? poolVacancy?.company,
+    url: cluster?.primaryUrl ?? poolVacancy?.url,
+    description: cluster?.descriptionSummary ?? poolVacancy?.description,
+    fullDescription: poolVacancy?.fullDescription,
+    contactInfo: poolVacancy?.contactInfo,
   };
 }
 
@@ -63,12 +63,17 @@ async function handleEnrichContacts(
 
   const vacancyId = (request.params as { id: string }).id;
   const parsed = enrichBodySchema.safeParse(request.body ?? {});
-  const bodyVacancy = parsed.success ? parsed.data?.vacancy : undefined;
-  const vacancyInput = buildVacancyInput(vacancyId, bodyVacancy, deps);
+  if (!parsed.success) {
+    return sendError(reply, request, 400, 'invalid_request', 'Данные вакансии должны поступать из серверного пула.', false);
+  }
+  const vacancyInput = buildVacancyInput(vacancyId, deps);
+  if (!vacancyInput.title) {
+    return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена в серверном пуле.', false);
+  }
 
   const contacts = await discoverRecruiterContacts(vacancyInput);
   if (recruiterContactsRepo) {
-    recruiterContactsRepo.saveContacts(vacancyId, contacts);
+    recruiterContactsRepo.saveContacts(candidate.id, vacancyId, contacts);
   }
 
   return {
@@ -80,9 +85,13 @@ async function handleEnrichContacts(
 async function handleGetContacts(
   deps: RouteDeps,
   request: FastifyRequest,
+  reply: FastifyReply,
 ): Promise<unknown> {
+  const { authService, candidateStore, config } = deps;
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
   const vacancyId = (request.params as { id: string }).id;
-  const contacts = deps.recruiterContactsRepo?.getContactsByVacancyId(vacancyId) ?? [];
+  const contacts = deps.recruiterContactsRepo?.getContactsByVacancyId(candidate.id, vacancyId) ?? [];
 
   return {
     data: { contacts },

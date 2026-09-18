@@ -52,7 +52,10 @@ pub async fn execute_candidate_action_safely(
         action_id: request.action_id,
         capability: request.capability,
         platform: request.platform,
-        status: "completed_with_receipt".to_string(),
+        // No authenticated provider session is attached to this worker, so it
+        // cannot prove an invitation was submitted. Do not mint a receipt that
+        // the UI could mistake for a real external action (PRB-029).
+        status: "unsupported".to_string(),
         provider_reference: receipt_id,
         executed_at: Utc::now().to_rfc3339(),
         pacing_duration_ms: pacing_ms,
@@ -80,7 +83,7 @@ mod tests {
         assert_eq!(result.action_id, "act-test-101");
         assert_eq!(result.capability, "application.submit");
         assert_eq!(result.platform, "linkedin");
-        assert_eq!(result.status, "completed_with_receipt");
+        assert_eq!(result.status, "unsupported");
         assert!(result
             .provider_reference
             .starts_with("receipt-loc-linkedin-"));

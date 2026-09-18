@@ -271,7 +271,10 @@ async function resolveEmailAndStatus(
       const ok = await validateSmtp(directEmail, mxList[0].exchange, { timeoutMs: ctx.options?.smtpTimeoutMs });
       if (ok) return { email: directEmail, status: 'verified', confidence: 0.95 };
     }
-    return { email: directEmail, status: 'verified', confidence: 0.9 };
+    // Presence in source text and a syntactically valid domain do not prove
+    // deliverability. Without positive MX plus SMTP evidence this is merely an
+    // observed, unverified address (PRB-034).
+    return { email: directEmail, status: 'unverified', confidence: 0.5 };
   }
 
   if (person && ctx.domain) {

@@ -1,4 +1,4 @@
-export type ReputationOverallStatus = 'safe' | 'attention' | 'critical_risk';
+export type ReputationOverallStatus = 'safe' | 'attention' | 'critical_risk' | 'not_scanned';
 export type ReputationAuditStatus = 'pending' | 'completed' | 'failed';
 
 export interface ConsistencyDiscrepancy {

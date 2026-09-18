@@ -176,7 +176,7 @@ function ErrorContactsNotice({
 
 function useRecruiterContacts({
   vacancyId,
-  vacancyPayload,
+  vacancyPayload: _vacancyPayload,
   initialContacts,
   initialSearched = false,
   onContactsLoaded,
@@ -196,7 +196,7 @@ function useRecruiterContacts({
     setLoading(true);
     setError(null);
     try {
-      const result = await enrichRecruiterContacts(vacancyId, vacancyPayload);
+      const result = await enrichRecruiterContacts(vacancyId);
       setContacts(result);
       setHasSearched(true);
       onContactsLoaded?.(result);
@@ -205,7 +205,7 @@ function useRecruiterContacts({
     } finally {
       setLoading(false);
     }
-  }, [vacancyId, vacancyPayload, onContactsLoaded]);
+  }, [vacancyId, onContactsLoaded]);
 
   return { contacts, hasSearched, loading, error, handleEnrich };
 }

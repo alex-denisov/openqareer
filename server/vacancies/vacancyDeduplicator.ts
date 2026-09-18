@@ -161,17 +161,23 @@ function updateClusterLocation(cluster: VacancyCluster, location?: string): void
 }
 
 function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: UnifiedVacancy) {
-  cluster.vacanciesCount += 1;
+  const existingSourceIndex = cluster.sources.findIndex((source) => {
+    if (source.sourceId !== vacancy.provenance.sourceId) return false;
+    if (source.externalId && vacancy.provenance.externalId) {
+      return source.externalId === vacancy.provenance.externalId;
+    }
+    return source.sourceUrl === vacancy.provenance.sourceUrl;
+  });
+  const isNewMembership = existingSourceIndex === -1;
+  if (isNewMembership) cluster.vacanciesCount += 1;
   pickHigherPrioritySource(cluster, vacancy);
 
-  const alreadyHasSource = cluster.sources.some(
-    (s) =>
-      s.sourceId === vacancy.provenance.sourceId &&
-      s.sourceType === vacancy.provenance.sourceType &&
-      s.sourceUrl === vacancy.provenance.sourceUrl,
-  );
-  if (!alreadyHasSource) {
+  if (existingSourceIndex === -1) {
     cluster.sources.push(vacancy.provenance);
+  } else {
+    // Re-observation updates provenance and last-seen without creating a new
+    // membership. This keeps counts and source buckets stable on every poll.
+    cluster.sources[existingSourceIndex] = vacancy.provenance;
   }
 
   const skillSet = new Set([...cluster.skills, ...vacancy.requiredSkills]);

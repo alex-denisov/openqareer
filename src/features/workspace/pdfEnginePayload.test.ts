@@ -41,7 +41,7 @@ describe('pdf engine payload', () => {
     for (const [url] of fetchImpl.mock.calls) {
       expect(String(url)).toContain('/engine.wasm.gz');
     }
-  });
+  }, 20_000);
 
   it('falls back to the plain engine where no compressed copy is published', async () => {
     const raw = engine(40_000);

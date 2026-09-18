@@ -19,7 +19,7 @@ export async function getRecruiterContacts(vacancyId: string): Promise<Recruiter
 
 export async function enrichRecruiterContacts(
   vacancyId: string,
-  vacancy?: EnrichVacancyPayload,
+  _vacancy?: EnrichVacancyPayload,
 ): Promise<RecruiterContact[]> {
   const response = await apiFetch(
     `/api/v1/vacancies/${encodeURIComponent(vacancyId)}/enrich-contacts`,
@@ -28,7 +28,7 @@ export async function enrichRecruiterContacts(
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ vacancy }),
+      body: JSON.stringify({}),
     },
   );
   const data = await readData<{ contacts: RecruiterContact[] }>(response);

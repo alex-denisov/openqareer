@@ -6,6 +6,7 @@ import type { EmailStatus, RecruiterContact } from '../../shared/recruiterContac
 export const RECRUITER_CONTACTS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS recruiter_contacts (
   id TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL DEFAULT '',
   vacancy_id TEXT NOT NULL,
   company_name TEXT NOT NULL,
   full_name TEXT NOT NULL,
@@ -28,6 +29,7 @@ CREATE INDEX IF NOT EXISTS idx_recruiter_contacts_vacancy ON recruiter_contacts(
 
 interface RecruiterContactRow {
   id: string;
+  candidate_id: string;
   vacancy_id: string;
   company_name: string;
   full_name: string;
@@ -109,26 +111,44 @@ export class SqliteRecruiterContactsRepository {
       this.database.exec('PRAGMA foreign_keys = ON;');
     }
     this.database.exec(RECRUITER_CONTACTS_SCHEMA);
+    const columns = this.database
+      .prepare('PRAGMA table_info(recruiter_contacts)')
+      .all() as unknown as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'candidate_id')) {
+      this.database.exec(
+        "ALTER TABLE recruiter_contacts ADD COLUMN candidate_id TEXT NOT NULL DEFAULT ''",
+      );
+    }
   }
 
-  saveContacts(vacancyId: string, contacts: RecruiterContact[]): void {
+  saveContacts(candidateId: string, vacancyId: string, contacts: RecruiterContact[]): void;
+  saveContacts(vacancyId: string, contacts: RecruiterContact[]): void;
+  saveContacts(
+    candidateIdOrVacancyId: string,
+    vacancyIdOrContacts: string | RecruiterContact[],
+    maybeContacts?: RecruiterContact[],
+  ): void {
+    const scoped = maybeContacts !== undefined;
+    const candidateId = scoped ? candidateIdOrVacancyId : '';
+    const vacancyId = scoped ? String(vacancyIdOrContacts) : candidateIdOrVacancyId;
+    const contacts = (maybeContacts ?? vacancyIdOrContacts) as RecruiterContact[];
     const deleteStmt = this.database.prepare(
-      'DELETE FROM recruiter_contacts WHERE vacancy_id = ?',
+      'DELETE FROM recruiter_contacts WHERE candidate_id = ? AND vacancy_id = ?',
     );
     const insertStmt = this.database.prepare(`
       INSERT INTO recruiter_contacts (
-        id, vacancy_id, company_name, full_name, role_title,
+        id, candidate_id, vacancy_id, company_name, full_name, role_title,
         email, email_status, phone, telegram, whatsapp,
         linkedin_url, github_url, twitter_url, source_type,
         confidence, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.database.exec('BEGIN TRANSACTION');
     try {
-      deleteStmt.run(vacancyId);
+        deleteStmt.run(candidateId, vacancyId);
       for (const contact of contacts) {
-        insertStmt.run(...contactToParams(contact, vacancyId));
+        insertStmt.run(contact.id, candidateId, ...contactToParams(contact, vacancyId).slice(1));
       }
       this.database.exec('COMMIT');
     } catch (err) {
@@ -137,25 +157,41 @@ export class SqliteRecruiterContactsRepository {
     }
   }
 
-  getContactsByVacancyId(vacancyId: string): RecruiterContact[] {
+  getContactsByVacancyId(candidateId: string, vacancyId: string): RecruiterContact[];
+  getContactsByVacancyId(vacancyId: string): RecruiterContact[];
+  getContactsByVacancyId(candidateIdOrVacancyId: string, maybeVacancyId?: string): RecruiterContact[] {
+    const scoped = maybeVacancyId !== undefined;
+    const candidateId = scoped ? candidateIdOrVacancyId : '';
+    const vacancyId = maybeVacancyId ?? candidateIdOrVacancyId;
     const stmt = this.database.prepare(`
       SELECT
-        id, vacancy_id, company_name, full_name, role_title,
+        id, candidate_id, vacancy_id, company_name, full_name, role_title,
         email, email_status, phone, telegram, whatsapp,
         linkedin_url, github_url, twitter_url, source_type,
         confidence, created_at, updated_at
       FROM recruiter_contacts
-      WHERE vacancy_id = ?
+      WHERE candidate_id = ? AND vacancy_id = ?
       ORDER BY confidence DESC, created_at ASC
     `);
-    const rows = stmt.all(vacancyId) as unknown as RecruiterContactRow[];
+    const rows = stmt.all(candidateId, vacancyId) as unknown as RecruiterContactRow[];
     return rows.map(toContact);
   }
 
-  deleteContactsByVacancyId(vacancyId: string): void {
+  deleteContactsByVacancyId(candidateId: string, vacancyId: string): void;
+  deleteContactsByVacancyId(vacancyId: string): void;
+  deleteContactsByVacancyId(candidateIdOrVacancyId: string, maybeVacancyId?: string): void {
+    const scoped = maybeVacancyId !== undefined;
+    const candidateId = scoped ? candidateIdOrVacancyId : '';
+    const vacancyId = maybeVacancyId ?? candidateIdOrVacancyId;
     this.database
-      .prepare('DELETE FROM recruiter_contacts WHERE vacancy_id = ?')
-      .run(vacancyId);
+      .prepare('DELETE FROM recruiter_contacts WHERE candidate_id = ? AND vacancy_id = ?')
+      .run(candidateId, vacancyId);
+  }
+
+  deleteContactsByCandidateId(candidateId: string): number {
+    return Number(
+      this.database.prepare('DELETE FROM recruiter_contacts WHERE candidate_id = ?').run(candidateId).changes,
+    );
   }
 
   close(): void {
