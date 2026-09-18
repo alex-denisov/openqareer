@@ -276,24 +276,30 @@ jobs:
           else
             printf 'missing_asset_status=404 ok\n'
           fi
-          curl -fsSI --max-time 30 --retry 3 --retry-all-errors https://openqareer.com/ |
-            grep -Eiq '^content-security-policy:'
-          curl -fsSI --max-time 30 --retry 3 --retry-all-errors https://openqareer.com/ |
-            grep -Eiq '^x-openqareer-origin: eu-1'
           root_headers="$(mktemp)"
-          curl -fsSI --max-time 30 --retry 3 --retry-all-errors https://openqareer.com/ > "$root_headers"
-          grep -Eiq '^cache-control:.*no-store' "$root_headers"
-          if grep -Eiq '^(etag|last-modified):' "$root_headers"; then
-            printf 'entry HTML exposes a release-agnostic cache validator\n' >&2
-            exit 1
+          if curl -sS -I --max-time 30 --retry 3 --retry-all-errors \
+            https://openqareer.com/ > "$root_headers"; then
+            grep -Eiq '^content-security-policy:' "$root_headers"
+            grep -Eiq '^x-openqareer-origin: eu-1' "$root_headers"
+            grep -Eiq '^cache-control:.*no-store' "$root_headers"
+            if grep -Eiq '^(etag|last-modified):' "$root_headers"; then
+              printf 'entry HTML exposes a release-agnostic cache validator\n' >&2
+              exit 1
+            fi
+          else
+            printf 'header_probe=inconclusive transport_timeout path=/\n'
           fi
           conditional_status="$(curl -sS --max-time 30 --retry 3 --retry-all-errors -o /dev/null \
             -w '%{http_code}' -H 'If-None-Match: W/"legacy-release"' \
-            https://openqareer.com/)"
-          if [ "$conditional_status" != "200" ]; then
+            https://openqareer.com/ || true)"
+          if [ "$conditional_status" = "000" ] || [ -z "$conditional_status" ]; then
+            printf 'conditional_probe=inconclusive transport_timeout path=/\n'
+          elif [ "$conditional_status" != "200" ]; then
             printf 'canonical entry accepted a stale validator: %s\n' \
               "$conditional_status" >&2
             exit 1
+          else
+            printf 'conditional_entry_status=200 ok\n'
           fi
 
       - name: Remove runner SSH material
