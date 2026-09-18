@@ -52,7 +52,7 @@ describe('reputation audit API routes', () => {
     expect(json.data.audit).toBeNull();
   });
 
-  it('успешно запускает аудит и возвращает результат с сохранением', async () => {
+  it('ignores client-supplied source rows and does not score them as evidence', async () => {
     const app = await createApp();
     const startRes = await app.inject({
       method: 'POST',
@@ -96,12 +96,10 @@ describe('reputation audit API routes', () => {
     const startJson = startRes.json();
     expect(startJson.data.audit).toBeDefined();
     expect(startJson.data.audit.status).toBe('completed');
-    expect(startJson.data.audit.overallStatus).toBe('critical_risk');
-    expect(startJson.data.audit.consistencyDiscrepancies.length).toBeGreaterThan(0);
-    expect(startJson.data.audit.reputationRisks.length).toBeGreaterThan(0);
-    expect(startJson.data.audit.consentAction).toBe(
-      'Запуск аудита цифрового следа по инициативе кандидата согласно 152-ФЗ / GDPR',
-    );
+    expect(startJson.data.audit.overallStatus).toBe('not_scanned');
+    expect(startJson.data.audit.consistencyDiscrepancies).toEqual([]);
+    expect(startJson.data.audit.reputationRisks).toEqual([]);
+    expect(startJson.data.audit.consentAction).toContain('не является оценкой безопасности');
 
     // Проверяем последующий GET
     const getRes = await app.inject({

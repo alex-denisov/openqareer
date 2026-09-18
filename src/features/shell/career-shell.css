@@ -9580,7 +9580,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 12px;
   border: 1px solid var(--career-line-strong);
   border-radius: 10px;
@@ -9760,8 +9760,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--career-radius-sm);
   border: 1px solid transparent;
   background: transparent;
@@ -10833,8 +10833,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--career-radius-sm);
   border: 1px solid transparent;
   background: transparent;
@@ -11554,8 +11554,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--career-radius-sm);
   border: 1px solid transparent;
   background: transparent;

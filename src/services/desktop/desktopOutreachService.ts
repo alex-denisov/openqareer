@@ -56,7 +56,11 @@ function quotaStorageKey(candidateId?: string): string {
   return STORAGE_KEY + ':' + (candidateId || 'unscoped');
 }
 
-let inMemoryQuota: { date: string; usedToday: number } | null = null;
+const inMemoryQuota = new Map<string, { date: string; usedToday: number }>();
+
+function inMemoryQuotaKey(candidateId?: string): string {
+  return candidateId || 'unscoped';
+}
 
 function getTodayString(customDate?: string): string {
   if (customDate) return customDate;
@@ -71,19 +75,21 @@ function getNextDayIso(dateStr: string): string {
 
 function readStorage(candidateId?: string): { date: string; usedToday: number } | null {
   if (typeof window === 'undefined' || !window.localStorage) {
-    return inMemoryQuota;
+    return inMemoryQuota.get(inMemoryQuotaKey(candidateId)) ?? null;
   }
   try {
     const raw = window.localStorage.getItem(quotaStorageKey(candidateId));
-    if (!raw) return inMemoryQuota;
-    return JSON.parse(raw) as { date: string; usedToday: number };
+    if (!raw) return inMemoryQuota.get(inMemoryQuotaKey(candidateId)) ?? null;
+    const value = JSON.parse(raw) as { date: string; usedToday: number };
+    inMemoryQuota.set(inMemoryQuotaKey(candidateId), value);
+    return value;
   } catch {
-    return inMemoryQuota;
+    return inMemoryQuota.get(inMemoryQuotaKey(candidateId)) ?? null;
   }
 }
 
 function writeStorage(val: { date: string; usedToday: number }, candidateId?: string): void {
-  inMemoryQuota = val;
+  inMemoryQuota.set(inMemoryQuotaKey(candidateId), val);
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       window.localStorage.setItem(quotaStorageKey(candidateId), JSON.stringify(val));
@@ -95,7 +101,7 @@ function writeStorage(val: { date: string; usedToday: number }, candidateId?: st
 
 export function resetOutreachQuota(customDate?: string, candidateId?: string): void {
   const date = getTodayString(customDate);
-  inMemoryQuota = { date, usedToday: 0 };
+  inMemoryQuota.set(inMemoryQuotaKey(candidateId), { date, usedToday: 0 });
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       window.localStorage.removeItem(quotaStorageKey(candidateId));
@@ -202,7 +208,15 @@ export async function sendDesktopConnectionRequest({
     candidate_id: candidateId,
   });
 
-  if (!localResult || localResult.status !== 'provider_confirmed') {
+  if (
+    !localResult ||
+    localResult.status !== 'provider_confirmed' ||
+    localResult.action_id !== actionId ||
+    localResult.capability !== 'outreach.send_connection_request' ||
+    localResult.platform !== 'linkedin' ||
+    !localResult.provider_reference ||
+    !localResult.executed_at
+  ) {
     return {
       success: false,
       status: localResult ? 'unsupported' : 'failed',

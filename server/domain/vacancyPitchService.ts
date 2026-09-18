@@ -7,6 +7,8 @@ export interface VacancyPitchInputFact {
   readonly statement: string;
   readonly domain?: string;
   readonly kind?: string;
+  readonly sourceMessageIds?: readonly string[];
+  readonly sensitive?: boolean;
   readonly status?: 'proposed' | 'confirmed' | 'corrected';
 }
 
@@ -42,9 +44,19 @@ export interface VacancyPitchResponse {
 
 const LINKEDIN_NOTE_LIMIT = 300;
 
+function isNegativeStatement(statement: string): boolean {
+  return /(не\s+(имею|работал|владею|знаю)|нет\s+опыта|без\s+опыта|никогда\s+не)/iu.test(statement);
+}
+
 function filterConfirmedFacts(facts: readonly VacancyPitchInputFact[]): VacancyPitchInputFact[] {
   return facts.filter(
-    (fact) => fact.status === 'confirmed' || fact.status === 'corrected',
+    (fact) =>
+      (fact.status === 'confirmed' || fact.status === 'corrected') &&
+      fact.kind === 'fact' &&
+      fact.sensitive !== true &&
+      Boolean(fact.statement.trim()) &&
+      !isNegativeStatement(fact.statement) &&
+      (fact.sourceMessageIds?.length ?? 0) > 0,
   );
 }
 
@@ -58,13 +70,6 @@ function truncateSafely(text: string, maxLen: number): string {
   return `${trimmed}${punct}`;
 }
 
-function extractSkillWords(fact: VacancyPitchInputFact): string[] {
-  return fact.statement
-    .split(/[,;:|/•·\n]/u)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 1 && s.length < 40);
-}
-
 function buildSubject(
   title: string,
   candidateName: string,
@@ -72,12 +77,12 @@ function buildSubject(
   metricHighlight?: string,
 ): string {
   if (tone === 'technical') {
-    return `${title} — ${candidateName} | Инженерная экспертиза и стек`;
+    return `${title} — ${candidateName} | Технический контекст роли`;
   }
   if (tone === 'confident') {
-    return `Отклик на позицию ${title}: ${candidateName} — подтверждённый опыт и результаты`;
+    return `Отклик на позицию ${title}: ${candidateName} — обсуждение задач роли`;
   }
-  const suffix = metricHighlight ? `Результаты и масштаб` : 'Масштабирование процессов и результаты';
+  const suffix = metricHighlight ? 'Подтверждённые результаты' : 'Цели и задачи роли';
   return `${title} — ${candidateName} | ${suffix}`;
 }
 
@@ -116,7 +121,21 @@ function buildEvidenceParagraph(
   const statements = [metricFact?.statement, ...otherFacts.map((f) => f.statement)].filter(
     (s): s is string => Boolean(s),
   );
-  return `В подтверждённом опыте опираюсь на измеримые результаты: ${statements.join('. ')}.`;
+  return `В профиле зафиксированы следующие подтверждённые факты: ${statements.join('. ')}.`;
+}
+
+function hasPositiveSkillEvidence(fact: VacancyPitchInputFact, requirement: string): boolean {
+  if (fact.domain !== 'skill') return false;
+  const statement = fact.statement.toLocaleLowerCase('ru-RU');
+  const skill = requirement.toLocaleLowerCase('ru-RU');
+  if (!new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(skill)}([^\\p{L}\\p{N}]|$)`, 'iu').test(statement)) {
+    return false;
+  }
+  return !isNegativeStatement(statement);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
 function buildStackParagraph(
@@ -133,9 +152,7 @@ function buildStackParagraph(
   const missingSkills: string[] = [];
 
   for (const req of reqSkills) {
-    const matchedFact = facts.find((f) =>
-      f.statement.toLocaleLowerCase('ru-RU').includes(req.toLocaleLowerCase('ru-RU')),
-    );
+    const matchedFact = facts.find((f) => hasPositiveSkillEvidence(f, req));
     if (matchedFact) {
       matchedSkills.push(req);
       usedIds.add(matchedFact.id);
@@ -150,19 +167,8 @@ function buildStackParagraph(
   }
 
   if (missingSkills.length > 0) {
-    const candidateSkillsFact = facts.find((f) => f.domain === 'skill') ?? facts[0];
-    let adjacentLabel = 'смежные технологии';
-    if (candidateSkillsFact) {
-      usedIds.add(candidateSkillsFact.id);
-      const words = extractSkillWords(candidateSkillsFact);
-      if (words.length > 0) {
-        adjacentLabel = words.slice(0, 3).join(', ');
-      }
-    }
     const missingSample = missingSkills.slice(0, 3).join(', ');
-    parts.push(
-      `В отношении требований к ${missingSample} опираюсь на релевантный смежный фундамент (${adjacentLabel}) и готов к быстрому освоению специфики инфраструктуры`,
-    );
+    parts.push(`В профиле нет подтверждённых фактов по требованиям: ${missingSample}`);
   }
 
   return `${parts.join('. ')}.`;

@@ -245,12 +245,33 @@ export class ClusterIndex {
   private readonly representatives: PreparedVacancy[] = [];
 
   public add(index: number, prepared: PreparedVacancy): void {
+    const previous = this.representatives[index];
+    if (previous) this.remove(index, previous);
     this.representatives[index] = prepared;
     this.byFingerprint.set(prepared.fingerprint, index);
     if (prepared.url) push(this.byUrl, prepared.url, index);
     if (prepared.atsLink) push(this.byAtsLink, prepared.atsLink, index);
     for (const token of prepared.companyTokens) push(this.byCompanyToken, token, index);
     for (const token of prepared.roleTitleTokens) push(this.byTitleToken, token, index);
+  }
+
+  private remove(index: number, prepared: PreparedVacancy): void {
+    if (this.byFingerprint.get(prepared.fingerprint) === index) {
+      this.byFingerprint.delete(prepared.fingerprint);
+    }
+    this.removeFromBucket(this.byUrl, prepared.url, index);
+    if (prepared.atsLink) this.removeFromBucket(this.byAtsLink, prepared.atsLink, index);
+    for (const token of prepared.companyTokens) this.removeFromBucket(this.byCompanyToken, token, index);
+    for (const token of prepared.roleTitleTokens) this.removeFromBucket(this.byTitleToken, token, index);
+  }
+
+  private removeFromBucket(map: Map<string, number[]>, key: string, index: number): void {
+    if (!key) return;
+    const bucket = map.get(key);
+    if (!bucket) return;
+    const filtered = bucket.filter((candidate) => candidate !== index);
+    if (filtered.length === 0) map.delete(key);
+    else map.set(key, filtered);
   }
 
   /** Индексы кластеров, с которыми запись вообще может совпасть, по возрастанию. */
@@ -390,6 +411,7 @@ export class IncrementalClusterBuilder {
   private readonly clusters: VacancyCluster[];
   private readonly prepared: PreparedVacancy[] = [];
   private readonly index: ClusterIndex = new ClusterIndex();
+  private readonly vacancyToCluster = new Map<string, number>();
 
   constructor(existingClusters: VacancyCluster[] = []) {
     this.clusters = existingClusters;
@@ -397,6 +419,9 @@ export class IncrementalClusterBuilder {
       const rep = prepareCluster(existingClusters[i]!);
       this.prepared.push(rep);
       this.index.add(i, rep);
+      if (existingClusters[i]?.id.startsWith('cluster-')) {
+        this.vacancyToCluster.set(existingClusters[i]!.id.slice('cluster-'.length), i);
+      }
     }
   }
 
@@ -410,6 +435,22 @@ export class IncrementalClusterBuilder {
     const initialCount = this.clusters.length;
 
     for (const vacancy of newVacancies) {
+      const directMatch = this.vacancyToCluster.get(vacancy.id);
+      if (directMatch !== undefined) {
+        const current = this.clusters[directMatch]!;
+        if (current.vacanciesCount === 1 && current.id === `cluster-${vacancy.id}`) {
+          const replacement = createClusterFromVacancy(vacancy);
+          this.clusters[directMatch] = replacement;
+          this.prepared[directMatch] = prepareCluster(replacement);
+          this.index.add(directMatch, this.prepared[directMatch]!);
+        } else {
+          mergeVacancyIntoCluster(current, vacancy);
+          this.prepared[directMatch] = prepareCluster(current);
+          this.index.add(directMatch, this.prepared[directMatch]!);
+        }
+        if (directMatch < initialCount) updatedIndices.add(directMatch);
+        continue;
+      }
       const candidate = prepareVacancy(vacancy);
       const match = this.index
         .candidates(candidate)
@@ -420,6 +461,7 @@ export class IncrementalClusterBuilder {
         const representative = prepareCluster(this.clusters[match]!);
         this.prepared[match] = representative;
         this.index.add(match, representative);
+        this.vacancyToCluster.set(vacancy.id, match);
         if (match < initialCount) {
           updatedIndices.add(match);
         }
@@ -431,6 +473,7 @@ export class IncrementalClusterBuilder {
         const representative = prepareCluster(cluster);
         this.prepared.push(representative);
         this.index.add(newIndex, representative);
+        this.vacancyToCluster.set(vacancy.id, newIndex);
       }
     }
 

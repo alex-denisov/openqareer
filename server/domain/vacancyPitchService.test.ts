@@ -22,6 +22,8 @@ describe('vacancyPitchService', () => {
       statement: 'Спроектировал и запустил платежный шлюз с обработкой 15 000 RPS на Node.js и PostgreSQL',
       domain: 'outcome',
       kind: 'fact',
+      sourceMessageIds: ['m1'],
+      sensitive: false,
       status: 'confirmed',
     },
     {
@@ -29,6 +31,8 @@ describe('vacancyPitchService', () => {
       statement: 'Снизил p99 задержку микросервисов с 450мс до 80мс через кэширование и тюнинг запросов',
       domain: 'outcome',
       kind: 'fact',
+      sourceMessageIds: ['m2'],
+      sensitive: false,
       status: 'confirmed',
     },
     {
@@ -36,6 +40,8 @@ describe('vacancyPitchService', () => {
       statement: 'Владею стеком: TypeScript, Node.js, PostgreSQL, Docker, Redis',
       domain: 'skill',
       kind: 'fact',
+      sourceMessageIds: ['m3'],
+      sensitive: false,
       status: 'confirmed',
     },
     {
@@ -43,6 +49,8 @@ describe('vacancyPitchService', () => {
       statement: 'Управлял инженерной группой из 8 разработчиков в продуктовом финтехе',
       domain: 'responsibility',
       kind: 'fact',
+      sourceMessageIds: ['m4'],
+      sensitive: false,
       status: 'confirmed',
     },
     {
@@ -50,6 +58,8 @@ describe('vacancyPitchService', () => {
       statement: 'Неподтвержденный факт: работал с Go 5 лет',
       domain: 'skill',
       kind: 'fact',
+      sourceMessageIds: ['m5'],
+      sensitive: false,
       status: 'proposed',
     },
   ];
@@ -105,8 +115,8 @@ describe('vacancyPitchService', () => {
     // Does not claim to be a Kafka/Kubernetes veteran, but cites existing adjacent skills
     expect(pitch.usedEvidenceIds).toContain('mem-003');
     expect(pitch.emailPitch.body).toMatch(/Kafka|Kubernetes/i);
-    // Honest adjacent mention
-    expect(pitch.emailPitch.body).toMatch(/смежн|освоен|фундамент|готов|баз/i);
+    // Honest coverage gap, without an invented adjacent-fit claim.
+    expect(pitch.emailPitch.body).toContain('нет подтверждённых фактов');
   });
 
   it('adapts phrasing based on selected tone', () => {
@@ -173,5 +183,62 @@ describe('vacancyPitchService', () => {
     expect(pitch.linkedInNote.length).toBeLessThanOrEqual(300);
     expect(pitch.usedEvidenceIds).toEqual([]);
     expect(pitch.atsCoverLetter).toBeTruthy();
+  });
+
+  it('does not invent adjacent fit or measured experience for an empty or negative dossier', () => {
+    const empty = generateVacancyPitch({
+      vacancy: { id: 'vac-empty', title: 'Бухгалтер', requiredSkills: ['Excel'] },
+      facts: [],
+    });
+    expect(empty.emailPitch.body).toContain('нет подтверждённых фактов');
+    expect(empty.emailPitch.body).not.toContain('смежный фундамент');
+    expect(empty.emailPitch.body).not.toContain('быстрому освоению');
+
+    const negative = generateVacancyPitch({
+      vacancy: { id: 'vac-negative', title: 'Бухгалтер', requiredSkills: ['Excel'] },
+      facts: [
+        {
+          id: 'negative-excel',
+          statement: 'Не имею опыта работы с Excel',
+          domain: 'skill',
+          kind: 'fact',
+          sourceMessageIds: ['m-negative'],
+          sensitive: false,
+          status: 'confirmed',
+        },
+      ],
+    });
+    expect(negative.emailPitch.body).not.toContain('подтверждён практический опыт работы со стеком: Excel');
+    expect(negative.usedEvidenceIds).toEqual([]);
+  });
+
+  it('never turns sensitive or unproven memories into external copy', () => {
+    const pitch = generateVacancyPitch({
+      vacancy: { id: 'vac-sensitive', title: 'Product Manager' },
+      facts: [
+        {
+          id: 'private',
+          statement: 'PRIVATE_SYNTHETIC_HEALTH_FACT',
+          domain: 'fact',
+          kind: 'fact',
+          sourceMessageIds: ['m-private'],
+          sensitive: true,
+          status: 'confirmed',
+        },
+        {
+          id: 'hypothesis',
+          statement: 'Предполагаемый опыт в стратегии',
+          domain: 'skill',
+          kind: 'hypothesis',
+          sourceMessageIds: ['m-hypothesis'],
+          sensitive: false,
+          status: 'confirmed',
+        },
+      ],
+    });
+    const text = `${pitch.emailPitch.body}\n${pitch.linkedInNote}\n${pitch.atsCoverLetter}`;
+    expect(text).not.toContain('PRIVATE_SYNTHETIC_HEALTH_FACT');
+    expect(text).not.toContain('Предполагаемый опыт');
+    expect(pitch.usedEvidenceIds).toEqual([]);
   });
 });

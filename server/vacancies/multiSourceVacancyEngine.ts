@@ -630,6 +630,27 @@ export class MultiSourceVacancyEngine {
       .map((v) =>
         v.provenance ? { ...v, provenance: { ...v.provenance, sourceName: source.name } } : v,
       );
+    const changedExistingMembership = partial && freshFetched.some((vacancy) => {
+      const previous = this.pool.getVacancy(vacancy.id);
+      if (!previous) return false;
+      return JSON.stringify({
+        title: previous.title,
+        company: previous.company,
+        description: previous.description,
+        requiredSkills: previous.requiredSkills,
+        url: previous.url,
+        location: previous.location,
+        salary: previous.salary,
+      }) !== JSON.stringify({
+        title: vacancy.title,
+        company: vacancy.company,
+        description: vacancy.description,
+        requiredSkills: vacancy.requiredSkills,
+        url: vacancy.url,
+        location: vacancy.location,
+        salary: vacancy.salary,
+      });
+    });
 
     // A successful sync replaces this source's slice. Merging instead meant a
     // vacancy the employer took down an hour after one reading stayed
@@ -645,6 +666,7 @@ export class MultiSourceVacancyEngine {
       this.requiresFullRecluster = true;
     }
     if (dropObservedBefore) this.requiresFullRecluster = true;
+    if (changedExistingMembership) this.requiresFullRecluster = true;
     const slice = this.pool.countSourceSlice(source.id);
 
     // The clock of the run, so the next due check measures the same instant
@@ -931,8 +953,14 @@ export class MultiSourceVacancyEngine {
   private finishRecluster(startedAt: number, didFullRecluster = false): void {
     if (didFullRecluster) {
       this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);
-      if (typeof this.pool.saveClusters === 'function') {
+      if (typeof this.pool.replaceClusters === 'function') {
+        this.pool.replaceClusters(this.clusters);
+      } else if (typeof this.pool.saveClusters === 'function') {
         this.pool.saveClusters(this.clusters);
+        const currentIds = new Set(this.clusters.map((cluster) => cluster.id));
+        for (const persisted of this.pool.loadClusters()) {
+          if (!currentIds.has(persisted.id)) this.pool.deleteCluster(persisted.id);
+        }
       }
       this.requiresFullRecluster = false;
     }

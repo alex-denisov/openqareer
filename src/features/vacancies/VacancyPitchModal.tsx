@@ -82,6 +82,20 @@ function movePitchSelection<T extends string>(
   return items[(index + delta + items.length) % items.length]!.id;
 }
 
+function movePitchBoundary<T extends string>(
+  items: readonly { id: T }[],
+  boundary: 'first' | 'last',
+): T {
+  return boundary === 'first' ? items[0]!.id : items[items.length - 1]!.id;
+}
+
+function focusPitchSelection(event: React.KeyboardEvent<HTMLButtonElement>, id: string): void {
+  const button = event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
+    `[data-pitch-value="${id}"]`,
+  );
+  button?.focus();
+}
+
 function PitchHeader({
   title,
   company,
@@ -131,17 +145,27 @@ function PitchControls({
             key={t.id}
             type="button"
             role="radio"
+            data-pitch-value={t.id}
             aria-checked={tone === t.id}
             className={`career-tab-btn ${tone === t.id ? 'is-active' : ''}`}
             onClick={() => onToneChange(t.id)}
             tabIndex={tone === t.id ? 0 : -1}
             onKeyDown={(event) => {
-              if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+              if (event.key === 'Home' || event.key === 'End') {
                 event.preventDefault();
-                onToneChange(movePitchSelection(TONES, tone, 1));
+                const next = movePitchBoundary(TONES, event.key === 'Home' ? 'first' : 'last');
+                onToneChange(next);
+                focusPitchSelection(event, next);
+              } else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                event.preventDefault();
+                const next = movePitchSelection(TONES, tone, 1);
+                onToneChange(next);
+                focusPitchSelection(event, next);
               } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
                 event.preventDefault();
-                onToneChange(movePitchSelection(TONES, tone, -1));
+                const next = movePitchSelection(TONES, tone, -1);
+                onToneChange(next);
+                focusPitchSelection(event, next);
               }
             }}
             title={t.desc}
@@ -158,18 +182,29 @@ function PitchControls({
               key={t.id}
               type="button"
               role="tab"
+              id={`career-pitch-tab-${t.id}`}
+              data-pitch-value={t.id}
               aria-selected={tab === t.id}
               className={`career-tab-btn ${tab === t.id ? 'is-active' : ''}`}
               onClick={() => onTabChange(t.id)}
               tabIndex={tab === t.id ? 0 : -1}
               aria-controls="career-pitch-panel"
               onKeyDown={(event) => {
-                if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                if (event.key === 'Home' || event.key === 'End') {
                   event.preventDefault();
-                  onTabChange(movePitchSelection(FORMAT_TABS, tab, 1));
+                  const next = movePitchBoundary(FORMAT_TABS, event.key === 'Home' ? 'first' : 'last');
+                  onTabChange(next);
+                  focusPitchSelection(event, next);
+                } else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  const next = movePitchSelection(FORMAT_TABS, tab, 1);
+                  onTabChange(next);
+                  focusPitchSelection(event, next);
                 } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
                   event.preventDefault();
-                  onTabChange(movePitchSelection(FORMAT_TABS, tab, -1));
+                  const next = movePitchSelection(FORMAT_TABS, tab, -1);
+                  onTabChange(next);
+                  focusPitchSelection(event, next);
                 }
               }}
             >
@@ -456,6 +491,27 @@ function useModalAccessibility(
       if (e.key === 'Escape') {
         e.stopPropagation();
         onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusable = Array.from(
+        containerRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"]),'
+            + ' [contenteditable="true"]',
+        ) ?? [],
+      );
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -591,7 +647,13 @@ export function VacancyPitchModal(props: VacancyPitchModalProps) {
         <PitchHeader title={vacancy.title} company={vacancy.company} onClose={onClose} />
         <PitchControls tone={c.tone} tab={c.tab} onToneChange={c.setTone} onTabChange={c.setTab} />
         {c.pitch ? <PitchMetaBar evidenceCount={c.pitch.usedEvidenceIds.length} /> : null}
-        <main id="career-pitch-panel" className="career-pitch-body" role="tabpanel" tabIndex={0}>
+        <main
+          id="career-pitch-panel"
+          className="career-pitch-body"
+          role="tabpanel"
+          aria-labelledby={`career-pitch-tab-${c.tab}`}
+          tabIndex={0}
+        >
           <PitchMainView
             loading={c.loading}
             error={c.error}

@@ -1,5 +1,4 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { z } from 'zod';
 import { runCandidateFootprintAudit } from '../osint/candidateFootprintWorker';
 import type { RouteDeps } from './deps';
 import {
@@ -8,50 +7,6 @@ import {
   hasSafeMutationOrigin,
   withDeps,
 } from './helpers';
-
-const startAuditBodySchema = z
-  .object({
-    options: z
-      .object({
-        experience: z
-          .array(
-            z.object({
-              id: z.string(),
-              company: z.string(),
-              role: z.string(),
-              startDate: z.string(),
-              endDate: z.string().optional(),
-              current: z.boolean().optional(),
-            }),
-          )
-          .optional(),
-        externalProfiles: z
-          .array(
-            z.object({
-              platform: z.string(),
-              company: z.string(),
-              role: z.string(),
-              startDate: z.string(),
-              endDate: z.string().optional(),
-              current: z.boolean().optional(),
-            }),
-          )
-          .optional(),
-        publicPosts: z
-          .array(
-            z.object({
-              id: z.string(),
-              sourcePlatform: z.string(),
-              sourceUrl: z.string().optional(),
-              publishedAt: z.string().optional(),
-              content: z.string(),
-            }),
-          )
-          .optional(),
-      })
-      .optional(),
-  })
-  .optional();
 
 async function handleStartAudit(
   deps: RouteDeps,
@@ -73,8 +28,11 @@ async function handleStartAudit(
     return undefined;
   }
 
-  const parsed = startAuditBodySchema.safeParse(request.body ?? {});
-  const options = parsed.success ? parsed.data?.options : undefined;
+  // Client-supplied source rows are test fixtures, not evidence. Production
+  // audits must use server-owned retrieval receipts and candidate profile data;
+  // accepting arbitrary publicPosts here made a fabricated post sufficient for
+  // a completed safe score.
+  const options = undefined;
 
   const audit = await runCandidateFootprintAudit({
     candidateId: candidate.id,
@@ -106,7 +64,7 @@ async function handleGetAudit(
     return undefined;
   }
 
-  const audit = candidateReputationRepo?.getLatestAudit(candidate.id) ?? null;
+  const audit = candidateReputationRepo?.getLatestAudit(candidate.id, { trustedOnly: true }) ?? null;
 
   return {
     data: { audit },

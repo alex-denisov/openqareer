@@ -72,6 +72,15 @@ describe('desktopOutreachService', () => {
       expect(nextDayCheck.remaining).toBe(15);
       expect(nextDayCheck.usedToday).toBe(0);
     });
+
+    it('keeps in-memory quota isolated between candidates', () => {
+      resetOutreachQuota('2026-09-17', 'candidate-a');
+      resetOutreachQuota('2026-09-17', 'candidate-b');
+      recordSentInvite('2026-09-17', 'candidate-a');
+
+      expect(getOutreachQuota('2026-09-17', 'candidate-a').usedToday).toBe(1);
+      expect(getOutreachQuota('2026-09-17', 'candidate-b').usedToday).toBe(0);
+    });
   });
 
   describe('Human-like jitter', () => {
@@ -111,16 +120,18 @@ describe('desktopOutreachService', () => {
 
     it('executes local action in desktop runtime without sending cookies', async () => {
       vi.spyOn(desktopBridge, 'isTauriEnvironment').mockReturnValue(true);
-      const executeSpy = vi.spyOn(desktopBridge, 'executeLocalAction').mockResolvedValue({
-        action_id: 'outreach-act-1',
-        capability: 'outreach.send_connection_request',
-        platform: 'linkedin',
-        status: 'provider_confirmed',
-        provider_reference: 'req-98765',
-        executed_at: '2026-09-17T12:00:00Z',
-        pacing_duration_ms: 1850,
-        environment_descriptor: 'tauri_isolated_webview',
-      });
+      const executeSpy = vi
+        .spyOn(desktopBridge, 'executeLocalAction')
+        .mockImplementation(async (request) => ({
+          action_id: request.action_id,
+          capability: request.capability,
+          platform: request.platform,
+          status: 'provider_confirmed',
+          provider_reference: 'req-98765',
+          executed_at: '2026-09-17T12:00:00Z',
+          pacing_duration_ms: 1850,
+          environment_descriptor: 'tauri_isolated_webview',
+        }));
 
       const result = await sendDesktopConnectionRequest({
         profile: mockProfile,
@@ -149,6 +160,28 @@ describe('desktopOutreachService', () => {
       expect(payloadKeys).not.toContain('auth');
       expect(payloadKeys).not.toContain('authorization');
       expect(payloadKeys).not.toContain('session');
+    });
+
+    it('rejects a provider receipt bound to a different action id', async () => {
+      vi.spyOn(desktopBridge, 'isTauriEnvironment').mockReturnValue(true);
+      vi.spyOn(desktopBridge, 'executeLocalAction').mockImplementation(async (request) => ({
+        action_id: `${request.action_id}-other`,
+        capability: request.capability,
+        platform: request.platform,
+        status: 'provider_confirmed',
+        provider_reference: 'req-forged',
+        executed_at: '2026-09-17T12:00:00Z',
+        pacing_duration_ms: 1,
+        environment_descriptor: 'test',
+      }));
+
+      const result = await sendDesktopConnectionRequest({
+        profile: mockProfile,
+        candidateId: 'cand-001',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.status).toBe('unsupported');
     });
 
     it('prevents sending and records no quota when daily limit is exhausted', async () => {

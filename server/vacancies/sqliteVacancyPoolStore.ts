@@ -646,6 +646,33 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     });
   }
 
+  replaceClusters(clusters: VacancyCluster[]): void {
+    const upsert = this.prepareClusterUpsert();
+    const now = Date.now();
+    const currentIds = new Set(clusters.map((cluster) => cluster.id));
+    this.inTransaction(() => {
+      const existing = this.database
+        .prepare('SELECT id FROM vacancy_clusters')
+        .all() as unknown as Array<{ id: string }>;
+      for (const row of existing) {
+        if (!currentIds.has(row.id)) {
+          this.database.prepare('DELETE FROM vacancy_clusters WHERE id = ?').run(row.id);
+        }
+      }
+      for (const cluster of clusters) {
+        upsert.run(
+          cluster.id,
+          cluster.id,
+          cluster.canonicalTitle,
+          cluster.canonicalCompany,
+          JSON.stringify(cluster),
+          cluster.vacanciesCount,
+          now,
+        );
+      }
+    });
+  }
+
   loadClusters(): VacancyCluster[] {
     const rows = this.database
       .prepare('SELECT cluster_json FROM vacancy_clusters ORDER BY updated_at DESC, id ASC')

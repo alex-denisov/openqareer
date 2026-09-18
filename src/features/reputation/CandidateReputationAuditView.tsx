@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowClockwise,
   CircleNotch,
@@ -263,6 +263,7 @@ function AuditResultsView({
   );
 }
 
+// eslint-disable-next-line max-lines-per-function
 function useCandidateReputationAudit(
   candidateId: string | undefined,
   initialAudit: CandidateReputationAudit | null | undefined,
@@ -272,42 +273,55 @@ function useCandidateReputationAudit(
 ) {
   const [audit, setAudit] = useState<CandidateReputationAudit | null>(initialAudit ?? null);
   const [running, setRunning] = useState(initialRunning);
+  const [loading, setLoading] = useState(initialAudit === undefined);
   const [error, setError] = useState<string | undefined>(initialError);
+  const generationRef = useRef(0);
 
-  const loadAudit = useCallback(async () => {
+  const loadAudit = useCallback(async (generation: number) => {
     try {
       const data = await getLatestReputationAudit();
-      if (data) setAudit(data);
+      if (generation !== generationRef.current) return;
+      setAudit(data);
     } catch (err) {
+      if (generation !== generationRef.current) return;
       setError(err instanceof Error ? err.message : 'Не удалось загрузить аудит');
+    } finally {
+      if (generation === generationRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    const generation = ++generationRef.current;
     setAudit(initialAudit ?? null);
+    setRunning(initialRunning);
+    setError(initialError);
+    setLoading(initialAudit === undefined);
     if (initialAudit === undefined) {
-      void loadAudit();
+      void loadAudit(generation);
     }
-  }, [candidateId, initialAudit, loadAudit]);
+  }, [candidateId, initialAudit, initialRunning, initialError, loadAudit]);
 
   const handleStartAudit = useCallback(
     async (options?: StartAuditOptions) => {
+      const generation = ++generationRef.current;
       setRunning(true);
       setError(undefined);
       try {
         const result = await startReputationAudit(options);
+        if (generation !== generationRef.current) return;
         setAudit(result);
         onAuditCompleted?.(result);
       } catch (err) {
+        if (generation !== generationRef.current) return;
         setError(err instanceof Error ? err.message : 'Ошибка при проведении аудита');
       } finally {
-        setRunning(false);
+        if (generation === generationRef.current) setRunning(false);
       }
     },
     [onAuditCompleted],
   );
 
-  return { audit, running, error, handleStartAudit };
+  return { audit, running, loading, error, handleStartAudit };
 }
 
 export function CandidateReputationAuditView({
@@ -317,7 +331,7 @@ export function CandidateReputationAuditView({
   initialError,
   onAuditCompleted,
 }: CandidateReputationAuditViewProps) {
-  const { audit, running, error, handleStartAudit } = useCandidateReputationAudit(
+  const { audit, running, loading, error, handleStartAudit } = useCandidateReputationAudit(
     candidateId,
     initialAudit,
     initialRunning,
@@ -341,14 +355,14 @@ export function CandidateReputationAuditView({
         </div>
       ) : null}
 
-      {running && !audit ? (
+      {(loading || running) && !audit ? (
         <div className="career-reputation-running-card">
           <CircleNotch size={24} className="spin" />
           <p>Серверный анализ открытых источников и сверка профилей...</p>
         </div>
       ) : null}
 
-      {!audit && !running ? (
+      {!audit && !loading && !running ? (
         <AuditUnstartedView
           running={running}
           onStart={() => void handleStartAudit()}

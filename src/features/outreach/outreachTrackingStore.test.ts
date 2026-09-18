@@ -101,4 +101,17 @@ describe('outreachTrackingStore', () => {
     const result = updateOutreachStatus('non-existent-id', 'connected');
     expect(result).toBeNull();
   });
+
+  it('does not leak records through the in-memory fallback between candidates', () => {
+    const record = recordOutreachInvite({
+      candidateId: 'candidate-a',
+      vacancyId: 'shared-vacancy',
+      company: 'Private Co',
+      contactName: 'Private Contact',
+      contactProfileUrl: 'https://example.test/private',
+    });
+
+    expect(getOutreachRecords('candidate-b', 'shared-vacancy')).toEqual([]);
+    expect(getOutreachRecords('candidate-a', 'shared-vacancy')).toEqual([record]);
+  });
 });

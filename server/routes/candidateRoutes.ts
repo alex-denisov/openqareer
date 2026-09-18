@@ -234,7 +234,9 @@ const handleExportCandidate: Handler = async (
   return {
     data: {
       ...candidateStore.exportCandidate(candidate.id),
-      reputationAudit: candidateReputationRepo?.getLatestAudit(candidate.id) ?? null,
+      reputationAudits: candidateReputationRepo?.listAudits(candidate.id, { trustedOnly: true }) ?? [],
+      // Keep the singular key for clients that have not migrated yet.
+      reputationAudit: candidateReputationRepo?.getLatestAudit(candidate.id, { trustedOnly: true }) ?? null,
     },
     meta: { requestId: request.id, exportedAt: new Date().toISOString() },
   };

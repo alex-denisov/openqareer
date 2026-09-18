@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Check, Copy } from '@phosphor-icons/react';
 import type { ResumeDocument, ResumeDraft, ResumeExperience } from './resumeTypes';
 
@@ -33,7 +33,7 @@ function buildDefaultHeadline(draft: ResumeDraft, document: ResumeDocument): str
   const parts = [role];
   if (topSkills.length > 0) parts.push(topSkills.join(' | '));
   const current = document.experience[0]?.current?.value ?? draft.experience[0]?.current;
-  if (lastEmployer && !current) parts.push('Ex-' + lastEmployer);
+  if (lastEmployer && current === false) parts.push('Ex-' + lastEmployer);
   const full = parts.join(' | ');
   return full.length > HEADLINE_MAX ? full.slice(0, HEADLINE_MAX) : full;
 }
@@ -48,6 +48,7 @@ function LinkedInHeadlineCard({
   const defaultHeadline = useMemo(() => buildDefaultHeadline(draft, document), [draft, document]);
   const [headline, setHeadline] = useState(defaultHeadline);
   const [copied, setCopied] = useState(false);
+  useEffect(() => setHeadline(defaultHeadline), [defaultHeadline]);
 
   return (
     <section className="career-resume-linkedin-card">
@@ -98,6 +99,7 @@ function LinkedInAboutCard({
   );
   const [about, setAbout] = useState(defaultAbout);
   const [copied, setCopied] = useState(false);
+  useEffect(() => setAbout(defaultAbout), [defaultAbout]);
 
   return (
     <section className="career-resume-linkedin-card">

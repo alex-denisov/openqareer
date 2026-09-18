@@ -64,7 +64,7 @@ describe('interviewPrepEngine', () => {
     expect(brief.interviewerFocus.recommendations.length).toBeGreaterThanOrEqual(2);
     expect(brief.interviewerFocus.keyThemes.length).toBeGreaterThanOrEqual(2);
 
-    expect(brief.starQuestions.length).toBeGreaterThanOrEqual(3);
+    expect(brief.starQuestions).toHaveLength(10);
     for (const sq of brief.starQuestions) {
       expect(['behavioral', 'technical', 'motivation']).toContain(sq.category);
       expect(sq.question.length).toBeGreaterThan(10);

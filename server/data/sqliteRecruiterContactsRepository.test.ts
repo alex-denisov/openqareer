@@ -117,4 +117,15 @@ describe('SqliteRecruiterContactsRepository', () => {
     expect(repo.deleteContactsByCandidateId('candidate-a')).toBe(1);
     expect(repo.getContactsByVacancyId('candidate-b', 'vac-101')).toHaveLength(1);
   });
+
+  it('cascades contacts when the shared candidates row is deleted', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(`CREATE TABLE candidates (id TEXT PRIMARY KEY); INSERT INTO candidates VALUES ('candidate-a');`);
+    const repo = new SqliteRecruiterContactsRepository(db);
+    repo.saveContacts('candidate-a', 'vac-101', [sampleContact1]);
+
+    db.exec("DELETE FROM candidates WHERE id = 'candidate-a'");
+
+    expect(repo.getContactsByVacancyId('candidate-a', 'vac-101')).toEqual([]);
+  });
 });

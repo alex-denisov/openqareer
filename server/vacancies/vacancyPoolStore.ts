@@ -96,6 +96,8 @@ export interface VacancyPoolStore {
    * Устойчивое хранение и инкрементальное обновление кластеров (B221 срез 3).
    */
   saveClusters(clusters: VacancyCluster[]): void;
+  /** Atomically replaces the persisted cluster snapshot, including an empty snapshot. */
+  replaceClusters?(clusters: VacancyCluster[]): void;
   loadClusters(): VacancyCluster[];
   upsertCluster(cluster: VacancyCluster): void;
   deleteCluster(clusterId: string): void;

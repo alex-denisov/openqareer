@@ -165,6 +165,32 @@ describe('B221 · фоновое сведение', () => {
       vi.useRealTimers();
     }
   });
+
+  it('background recluster removes persisted clusters after an empty full replacement', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pool-empty-recluster-'));
+    directories.push(directory);
+    const path = join(directory, 'pool.db');
+    const pool = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(pool);
+    let reading = [vacancy('a')];
+    const engine = new MultiSourceVacancyEngine({
+      sources: [SOURCE],
+      pool,
+      fetcher: async () => reading,
+      recluster: { mode: 'background', minIntervalMs: 0 },
+    });
+    await engine.syncSource(SOURCE.id);
+    await engine.backgroundRecluster;
+    expect(pool.countClusters()).toBe(1);
+
+    reading = [];
+    await engine.syncSource(SOURCE.id);
+    await engine.backgroundRecluster;
+
+    expect(pool.loadVacancies()).toHaveLength(0);
+    expect(pool.countClusters()).toBe(0);
+    expect(engine.getActiveClusters()).toEqual([]);
+  });
 });
 
 describe('B221 · чистый запуск без кучи и предсуществующие кластеры (срез 4)', () => {
@@ -277,4 +303,3 @@ describe('B221 · чистый запуск без кучи и предсуще�
     expect(result.items[0].id).toBe('v2');
   });
 });
-

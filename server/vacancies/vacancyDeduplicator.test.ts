@@ -445,5 +445,46 @@ describe('B205: Cross-source deduplication across five platforms into one card',
       expect(result.newClusters[0].vacanciesCount).toBe(2);
       expect(clusters).toHaveLength(1);
     });
+
+    it('replaces a re-observation with the same vacancy id instead of merging stale fields', () => {
+      const first = {
+        ...vHh,
+        id: 'stable-id',
+        fingerprint: 'stable-fingerprint',
+        title: 'Backend Engineer',
+        description: 'Original description',
+        requiredSkills: ['TypeScript'],
+      };
+      const edited = {
+        ...first,
+        fingerprint: 'edited-fingerprint',
+        title: 'Director of Finance',
+        description: 'Edited description',
+        requiredSkills: ['Excel'],
+        url: 'https://hh.ru/vacancy/stable-id-edited',
+        provenance: { ...first.provenance, sourceUrl: 'https://hh.ru/vacancy/stable-id-edited' },
+      };
+
+      const clusters: VacancyCluster[] = [];
+      mergeVacanciesIntoClusters(clusters, [first]);
+      mergeVacanciesIntoClusters(clusters, [edited]);
+
+      expect(clusters).toHaveLength(1);
+      expect(clusters[0]?.vacanciesCount).toBe(1);
+      expect(clusters[0]?.canonicalTitle).toBe('Director of Finance');
+      expect(clusters[0]?.descriptionSummary).toBe('Edited description');
+      expect(clusters[0]?.skills).toEqual(['Excel']);
+    });
+
+    it('does not grow index buckets for repeated observations', () => {
+      const repeated = Array.from({ length: 100 }, () => vHh);
+      const clusters: VacancyCluster[] = [];
+      const builder = new IncrementalClusterBuilder(clusters);
+      builder.addVacancies(repeated);
+
+      const index = (builder as unknown as { index: { byUrl: Map<string, number[]> } }).index;
+      expect(index.byUrl.get(vHh.url)).toHaveLength(1);
+      expect(builder.getClusters()[0]?.vacanciesCount).toBe(1);
+    });
   });
 });

@@ -27,6 +27,11 @@ CREATE TABLE IF NOT EXISTS recruiter_contacts (
 CREATE INDEX IF NOT EXISTS idx_recruiter_contacts_vacancy ON recruiter_contacts(vacancy_id);
 `;
 
+const RECRUITER_CONTACTS_SCHEMA_WITH_FK = RECRUITER_CONTACTS_SCHEMA.replace(
+  '  updated_at TEXT NOT NULL\n) STRICT;',
+  '  updated_at TEXT NOT NULL,\n  FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE\n) STRICT;',
+);
+
 interface RecruiterContactRow {
   id: string;
   candidate_id: string;
@@ -110,6 +115,7 @@ export class SqliteRecruiterContactsRepository {
       this.database.exec('PRAGMA journal_mode = WAL;');
       this.database.exec('PRAGMA foreign_keys = ON;');
     }
+    this.database.exec('PRAGMA foreign_keys = ON;');
     this.database.exec(RECRUITER_CONTACTS_SCHEMA);
     const columns = this.database
       .prepare('PRAGMA table_info(recruiter_contacts)')
@@ -119,6 +125,38 @@ export class SqliteRecruiterContactsRepository {
         "ALTER TABLE recruiter_contacts ADD COLUMN candidate_id TEXT NOT NULL DEFAULT ''",
       );
     }
+    this.ensureCandidateForeignKey();
+  }
+
+  private ensureCandidateForeignKey(): void {
+    const hasCandidates = this.database
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'candidates'")
+      .get() !== undefined;
+    if (!hasCandidates) return;
+    const tableSql = this.database
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'recruiter_contacts'")
+      .get() as { sql?: string } | undefined;
+    if (tableSql?.sql?.includes('REFERENCES candidates')) return;
+
+    this.database.exec('DROP INDEX IF EXISTS idx_recruiter_contacts_vacancy');
+    this.database.exec('ALTER TABLE recruiter_contacts RENAME TO recruiter_contacts_legacy_fk');
+    this.database.exec(RECRUITER_CONTACTS_SCHEMA_WITH_FK);
+    this.database.exec(`
+      INSERT INTO recruiter_contacts (
+        id, candidate_id, vacancy_id, company_name, full_name, role_title,
+        email, email_status, phone, telegram, whatsapp,
+        linkedin_url, github_url, twitter_url, source_type,
+        confidence, created_at, updated_at
+      )
+      SELECT old.id, old.candidate_id, old.vacancy_id, old.company_name,
+        old.full_name, old.role_title, old.email, old.email_status, old.phone,
+        old.telegram, old.whatsapp, old.linkedin_url, old.github_url,
+        old.twitter_url, old.source_type, old.confidence, old.created_at,
+        old.updated_at
+      FROM recruiter_contacts_legacy_fk old
+      WHERE EXISTS (SELECT 1 FROM candidates c WHERE c.id = old.candidate_id)
+    `);
+    this.database.exec('DROP TABLE recruiter_contacts_legacy_fk');
   }
 
   saveContacts(candidateId: string, vacancyId: string, contacts: RecruiterContact[]): void;

@@ -229,6 +229,11 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     }
   }
 
+  replaceClusters(clusters: VacancyCluster[]): void {
+    this.clusters.clear();
+    this.saveClusters(clusters);
+  }
+
   loadClusters(): VacancyCluster[] {
     return Array.from(this.clusters.values());
   }

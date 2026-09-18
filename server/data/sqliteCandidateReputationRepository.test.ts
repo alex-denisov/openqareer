@@ -82,6 +82,24 @@ describe('SqliteCandidateReputationRepository', () => {
     expect(result).toEqual(sampleAudit2);
   });
 
+  it('lists the full candidate audit history for export', () => {
+    const { repo } = createRepo();
+    repo.saveAudit(sampleAudit1);
+    repo.saveAudit(sampleAudit2);
+
+    expect(repo.listAudits('cand-100').map((audit) => audit.id)).toEqual(['audit-2', 'audit-1']);
+  });
+
+  it('downgrades legacy safe/100 rows without trusted source coverage', () => {
+    const { repo } = createRepo();
+    repo.saveAudit({ ...sampleAudit1, id: 'legacy-safe-100', score: 100, overallStatus: 'safe' });
+
+    expect(repo.getLatestAudit('cand-100', { trustedOnly: true })).toMatchObject({
+      overallStatus: 'not_scanned',
+      score: 0,
+    });
+  });
+
   it('изолирует аудиты разных кандидатов', () => {
     const { repo } = createRepo();
     repo.saveAudit(sampleAudit1);
@@ -106,6 +124,17 @@ describe('SqliteCandidateReputationRepository', () => {
     const { repo } = createRepo();
     repo.saveAudit(sampleAudit1);
     expect(repo.deleteAuditsByCandidateId('cand-100')).toBe(1);
+    expect(repo.getLatestAudit('cand-100')).toBeNull();
+  });
+
+  it('cascades audits when the shared candidates row is deleted', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(`CREATE TABLE candidates (id TEXT PRIMARY KEY); INSERT INTO candidates VALUES ('cand-100');`);
+    const repo = new SqliteCandidateReputationRepository(db);
+    repo.saveAudit(sampleAudit1);
+
+    db.exec("DELETE FROM candidates WHERE id = 'cand-100'");
+
     expect(repo.getLatestAudit('cand-100')).toBeNull();
   });
 });

@@ -26,6 +26,11 @@ CREATE INDEX IF NOT EXISTS idx_candidate_reputation_audits_candidate
   ON candidate_reputation_audits(candidate_id, started_at);
 `;
 
+const CANDIDATE_REPUTATION_AUDITS_SCHEMA_WITH_FK = CANDIDATE_REPUTATION_AUDITS_SCHEMA.replace(
+  '  completed_at TEXT\n) STRICT;',
+  '  completed_at TEXT,\n  FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE\n) STRICT;',
+);
+
 interface CandidateReputationAuditRow {
   id: string;
   candidate_id: string;
@@ -71,6 +76,16 @@ function toAudit(row: CandidateReputationAuditRow): CandidateReputationAudit {
   };
 }
 
+function sanitizeUntrustedSafeScore(audit: CandidateReputationAudit): CandidateReputationAudit {
+  if (audit.overallStatus !== 'safe' || audit.score !== 100) return audit;
+  return {
+    ...audit,
+    overallStatus: 'not_scanned',
+    score: 0,
+    consentAction: 'Источники цифрового следа не подключены: результат не является оценкой безопасности.',
+  };
+}
+
 function auditToParams(audit: CandidateReputationAudit): SQLInputValue[] {
   return [
     audit.id,
@@ -100,6 +115,7 @@ export class SqliteCandidateReputationRepository {
       this.database.exec('PRAGMA journal_mode = WAL;');
       this.database.exec('PRAGMA foreign_keys = ON;');
     }
+    this.database.exec('PRAGMA foreign_keys = ON;');
     this.database.exec(CANDIDATE_REPUTATION_AUDITS_SCHEMA);
     const tableSql = this.database
       .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'candidate_reputation_audits'")
@@ -130,6 +146,35 @@ export class SqliteCandidateReputationRepository {
         "ALTER TABLE candidate_reputation_audits ADD COLUMN candidate_id TEXT NOT NULL DEFAULT ''",
       );
     }
+    this.ensureCandidateForeignKey();
+  }
+
+  private ensureCandidateForeignKey(): void {
+    const hasCandidates = this.database
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'candidates'")
+      .get() !== undefined;
+    if (!hasCandidates) return;
+    const tableSql = this.database
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'candidate_reputation_audits'")
+      .get() as { sql?: string } | undefined;
+    if (tableSql?.sql?.includes('REFERENCES candidates')) return;
+
+    this.database.exec('DROP INDEX IF EXISTS idx_candidate_reputation_audits_candidate');
+    this.database.exec('ALTER TABLE candidate_reputation_audits RENAME TO candidate_reputation_audits_legacy_fk');
+    this.database.exec(CANDIDATE_REPUTATION_AUDITS_SCHEMA_WITH_FK);
+    this.database.exec(`
+      INSERT INTO candidate_reputation_audits (
+        id, candidate_id, status, overall_status, score,
+        consistency_findings_json, reputation_findings_json,
+        consent_action, started_at, completed_at
+      )
+      SELECT old.id, old.candidate_id, old.status, old.overall_status, old.score,
+        old.consistency_findings_json, old.reputation_findings_json,
+        old.consent_action, old.started_at, old.completed_at
+      FROM candidate_reputation_audits_legacy_fk old
+      WHERE EXISTS (SELECT 1 FROM candidates c WHERE c.id = old.candidate_id)
+    `);
+    this.database.exec('DROP TABLE candidate_reputation_audits_legacy_fk');
   }
 
   saveAudit(audit: CandidateReputationAudit): void {
@@ -143,7 +188,7 @@ export class SqliteCandidateReputationRepository {
     stmt.run(...auditToParams(audit));
   }
 
-  getLatestAudit(candidateId: string): CandidateReputationAudit | null {
+  getLatestAudit(candidateId: string, options?: { trustedOnly?: boolean }): CandidateReputationAudit | null {
     const stmt = this.database.prepare(`
       SELECT
         id, candidate_id, status, overall_status, score,
@@ -155,7 +200,9 @@ export class SqliteCandidateReputationRepository {
       LIMIT 1
     `);
     const row = stmt.get(candidateId) as unknown as CandidateReputationAuditRow | undefined;
-    return row ? toAudit(row) : null;
+    if (!row) return null;
+    const audit = toAudit(row);
+    return options?.trustedOnly ? sanitizeUntrustedSafeScore(audit) : audit;
   }
 
   deleteAuditsByCandidateId(candidateId: string): number {
@@ -163,6 +210,22 @@ export class SqliteCandidateReputationRepository {
       this.database
         .prepare('DELETE FROM candidate_reputation_audits WHERE candidate_id = ?')
         .run(candidateId).changes,
+    );
+  }
+
+  listAudits(candidateId: string, options?: { trustedOnly?: boolean }): CandidateReputationAudit[] {
+    const rows = this.database
+      .prepare(`
+        SELECT id, candidate_id, status, overall_status, score,
+          consistency_findings_json, reputation_findings_json,
+          consent_action, started_at, completed_at
+        FROM candidate_reputation_audits
+        WHERE candidate_id = ?
+        ORDER BY started_at DESC, id DESC
+      `)
+      .all(candidateId) as unknown as CandidateReputationAuditRow[];
+    return rows.map(toAudit).map((audit) =>
+      options?.trustedOnly ? sanitizeUntrustedSafeScore(audit) : audit,
     );
   }
 

@@ -1,4 +1,5 @@
 import type { CandidateMemory } from '../coach/coachApi';
+import { isResumeEvidenceEligible } from '../../../server/domain/resumeEvidenceEligibility';
 
 export interface InterviewVacancyTarget {
   readonly id: string;
@@ -138,7 +139,7 @@ function buildStarQuestions(
   vacancy: InterviewVacancyTarget,
   facts: readonly CandidateMemory[],
 ): readonly StarQuestion[] {
-  const confirmed = facts.filter((f) => f.status === 'confirmed' || f.status === 'corrected');
+  const confirmed = facts.filter(isResumeEvidenceEligible);
   const achieveFact = confirmed.find((f) => f.domain === 'outcome') ?? confirmed[0];
   const expFact =
     confirmed.find(
@@ -148,11 +149,39 @@ function buildStarQuestions(
     confirmed.find((f) => f.domain === 'skill' && f.id !== achieveFact?.id && f.id !== expFact?.id) ??
     confirmed[2];
 
-  return [
+  const core = [
     buildTechnicalQuestion(vacancy, achieveFact),
     buildBehavioralQuestion(vacancy, expFact),
     buildMotivationQuestion(vacancy, skillFact),
   ];
+  const likelyQuestions = [
+    'Какой результат этой роли вы считаете самым важным в первые месяцы?',
+    'Как вы принимаете решения, когда данных недостаточно?',
+    'Расскажите о ситуации, когда пришлось менять план после обратной связи.',
+    'Как вы оцениваете качество своей работы?',
+    'Как выстраиваете взаимодействие с коллегами и заказчиками?',
+    'Какие ограничения или риски вы учитываете в этой роли?',
+    'Какой навык вы развивали в последнее время и зачем?',
+  ];
+  return [
+    ...core,
+    ...likelyQuestions.map((question, index) => ({
+      id: `star-q${index + 4}-likely`,
+      category: index % 2 === 0 ? ('behavioral' as const) : ('motivation' as const),
+      question,
+      starAnswer: unknownStarAnswer(),
+      usedEvidenceIds: [],
+    })),
+  ];
+}
+
+function unknownStarAnswer(): StarAnswer {
+  return {
+    situation: 'Контекст ситуации в подтверждённых данных не зафиксирован; выберите собственный пример.',
+    task: 'Задача и критерии успеха в подтверждённых данных не зафиксированы; уточните их перед встречей.',
+    action: 'Действия кандидата в профиле не зафиксированы; не подставляйте шаблонный ответ.',
+    result: 'Результат в подтверждённых данных не зафиксирован; добавьте его только после подтверждения.',
+  };
 }
 
 function buildTechnicalQuestion(
@@ -185,18 +214,7 @@ function buildTechnicalQuestion(
     id: 'star-q1-tech',
     category: 'technical',
     question,
-    starAnswer: {
-      situation: engineering
-        ? 'В практике разработки возникают вызовы, требующие оптимизации системных параметров.'
-        : 'Контекст профессиональной ситуации в профиле не зафиксирован; выберите реальный пример.',
-      task: engineering
-        ? 'Локализовать причину замедления и сформировать план технических улучшений.'
-        : 'Сформулировать задачу и критерии успеха для выбранного профессионального примера.',
-      action: engineering
-        ? 'Провести профилирование, выявить критические участки и применить проверенные инженерные паттерны.'
-        : 'Опишите только действия, которые действительно выполняли, и добавьте подтверждающий источник.',
-      result: 'Добавьте в профиль подтверждённые факты и результат; без них ответ не считается доказанным.',
-    },
+    starAnswer: unknownStarAnswer(),
     usedEvidenceIds: [],
   };
 }
@@ -223,12 +241,7 @@ function buildBehavioralQuestion(
     id: 'star-q2-behavioral',
     category: 'behavioral',
     question: `Расскажите о ситуации, когда вам пришлось согласовывать сложное решение или координировать команду.`,
-    starAnswer: {
-      situation: `При совместной разработке неизбежны расхождения в оценке архитектурных компромиссов.`,
-      task: `Организовать конструктивный диалог и прийти к согласованному плану действий.`,
-      action: `Собрать объективные аргументы, провести открытое обсуждение и зафиксировать договоренности.`,
-      result: `Внесите в профиль подтверждённые факты командной работы и лидерства для наглядности вашего опыта.`,
-    },
+    starAnswer: unknownStarAnswer(),
     usedEvidenceIds: [],
   };
 }
@@ -256,12 +269,7 @@ function buildMotivationQuestion(
     id: 'star-q3-motivation',
     category: 'motivation',
     question: `Почему вам интересна позиция «${vacancy.title}» в ${company}?`,
-    starAnswer: {
-      situation: `Слежу за развитием продуктовой сферы и технологическими вызовами ${company}.`,
-      task: `Найти применение своим сильным сторонам в решении задач компании.`,
-      action: `Погрузиться в специфику домена и применить современный стек на реальных нагрузках.`,
-      result: `Внесите в профиль подтверждённые карьерные цели и навыки для точной калибровки интереса.`,
-    },
+    starAnswer: unknownStarAnswer(),
     usedEvidenceIds: [],
   };
 }

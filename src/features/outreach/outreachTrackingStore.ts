@@ -34,23 +34,29 @@ function storageKey(candidateId?: string): string {
   return STORAGE_KEY + ':' + (candidateId || 'unscoped');
 }
 
-let inMemoryRecords: OutreachRecord[] = [];
+const inMemoryRecords = new Map<string, OutreachRecord[]>();
+
+function inMemoryKey(candidateId?: string): string {
+  return candidateId || 'unscoped';
+}
 
 function readRecordsFromStorage(candidateId?: string): OutreachRecord[] {
   if (typeof window === 'undefined' || !window.localStorage) {
-    return inMemoryRecords;
+    return inMemoryRecords.get(inMemoryKey(candidateId)) ?? [];
   }
   try {
     const raw = window.localStorage.getItem(storageKey(candidateId));
-    if (!raw) return inMemoryRecords;
-    return JSON.parse(raw) as OutreachRecord[];
+    if (!raw) return inMemoryRecords.get(inMemoryKey(candidateId)) ?? [];
+    const records = JSON.parse(raw) as OutreachRecord[];
+    inMemoryRecords.set(inMemoryKey(candidateId), records);
+    return records;
   } catch {
-    return inMemoryRecords;
+    return inMemoryRecords.get(inMemoryKey(candidateId)) ?? [];
   }
 }
 
 function writeRecordsToStorage(records: OutreachRecord[], candidateId?: string): void {
-  inMemoryRecords = records;
+  inMemoryRecords.set(inMemoryKey(candidateId), records);
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
     window.localStorage.setItem(storageKey(candidateId), JSON.stringify(records));
@@ -61,7 +67,7 @@ function writeRecordsToStorage(records: OutreachRecord[], candidateId?: string):
 }
 
 export function clearOutreachStore(candidateId?: string): void {
-  inMemoryRecords = [];
+  inMemoryRecords.delete(inMemoryKey(candidateId));
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
     window.localStorage.removeItem(storageKey(candidateId));
@@ -80,8 +86,8 @@ export function getOutreachRecords(candidateId?: string, vacancyId?: string): Ou
   return records.filter((r) => r.vacancyId === actualVacancyId);
 }
 
-export function getOutreachRecordById(id: string): OutreachRecord | undefined {
-  const records = readRecordsFromStorage();
+export function getOutreachRecordById(id: string, candidateId?: string): OutreachRecord | undefined {
+  const records = readRecordsFromStorage(candidateId);
   return records.find((r) => r.id === id);
 }
 
@@ -118,8 +124,9 @@ export function recordOutreachInvite(
 export function updateOutreachStatus(
   id: string,
   status: OutreachStatus,
+  candidateId?: string,
 ): OutreachRecord | null {
-  const records = readRecordsFromStorage();
+  const records = readRecordsFromStorage(candidateId);
   const targetIndex = records.findIndex((r) => r.id === id);
   if (targetIndex === -1) return null;
 
@@ -135,6 +142,6 @@ export function updateOutreachStatus(
 
   const updatedList = [...records];
   updatedList[targetIndex] = updated;
-  writeRecordsToStorage(updatedList);
+  writeRecordsToStorage(updatedList, candidateId);
   return updated;
 }
