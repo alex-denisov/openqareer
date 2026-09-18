@@ -137,6 +137,12 @@ jobs:
             fi
             sleep 5
           done
+          # Activation switches the immutable pointer atomically, but the
+          # origin may need a short bounded warm-up before the entry document
+          # and its compressed assets are served from the new release. Health
+          # remains the readiness gate; this pause only prevents a transient
+          # first-index timeout from marking an already active release failed.
+          sleep 15
           # INC-018: a gate that only proves /health cannot notice a
           # half-published release. Root-level published files must come back
           # as themselves; the SPA fallback answers with text/html.
@@ -178,7 +184,7 @@ jobs:
           /admin.html|text/html
           ROOT_FILES
           release_index="$(mktemp)"
-          curl --compressed -fsS --max-time 30 --retry 3 --retry-all-errors \
+          curl --compressed -fsS --max-time 90 --retry 5 --retry-all-errors \
             -H 'Cache-Control: no-cache' \
             "https://openqareer.com/?release=$GITHUB_SHA" > "$release_index"
           # The entry is the module script, not merely the first /assets/*.js in
