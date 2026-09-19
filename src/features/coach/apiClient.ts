@@ -81,6 +81,7 @@ export function getApiBaseUrl(): string {
   return '';
 }
 
+// eslint-disable-next-line max-lines-per-function
 export async function apiFetch(
   input: string,
   init: RequestInit = {},
@@ -114,7 +115,13 @@ export async function apiFetch(
         });
       }
     } catch {
-      if (init.signal?.aborted) throw new CoachApiError('Загрузка прервана.', 'network_error', true);
+      if (init.signal?.aborted) {
+        throw new CoachApiError(
+          'Не удалось связаться с сервисом. Проверьте соединение и повторите.',
+          'network_error',
+          true,
+        );
+      }
       // Fallback to browser fetch below
     }
   }

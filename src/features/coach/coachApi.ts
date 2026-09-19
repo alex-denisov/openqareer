@@ -16,6 +16,7 @@ import type {
 import type { WorkspaceInput } from '../workspace/workspaceStorage';
 type UserRole = 'candidate' | 'admin';
 type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'targeting';
+const AUTH_REQUEST_TIMEOUT_MS = 8_000;
 import {
   CoachApiError as CoachApiErrorClass,
   apiFetch,
@@ -382,6 +383,7 @@ export async function login(username: string, password: string): Promise<AuthUse
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
+    signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
   });
   return readDataObject<AuthUser>(response);
 }
@@ -397,6 +399,7 @@ export async function register(input: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
+    signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
   });
   return readDataObject<AuthUser>(response);
 }
@@ -888,4 +891,3 @@ export async function chooseCareerStrategyRole(input: {
   });
   return readDataObject<CareerStrategy>(response);
 }
-
