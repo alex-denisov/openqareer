@@ -64,7 +64,7 @@ export default function App() {
   const [state, setState] = useState<AppState>({ invalidStorage: false });
   const [storageError, setStorageError] = useState<string>();
   const [sessionError, setSessionError] = useState<string>();
-  const SESSION_CHECK_TIMEOUT_MS = 8_000;
+  const SESSION_CHECK_TIMEOUT_MS = 2_000;
 
   const navigate = useCallback((path: string) => {
     if (typeof window !== 'undefined') {
@@ -114,7 +114,7 @@ export default function App() {
       const sessionExpired =
         error instanceof CoachApiError &&
         /^(?:http_401|http_403|unauthorized|invalid_session|session_expired)$/i.test(error.code);
-      if (isDesktop && sessionExpired) {
+      if (isDesktop && (sessionExpired || getStoredSessionToken())) {
         setStoredSessionToken(null);
         setState({ session: null, invalidStorage: false });
         setIsResolvingSession(false);

@@ -103,12 +103,8 @@ export async function apiFetch(
     try {
       const method = init.method ?? 'GET';
       const body = typeof init.body === 'string' ? init.body : undefined;
-      const nativeRes = await desktopNativeFetch({
-        url: fullUrl,
-        method,
-        headers,
-        body,
-      });
+      const nativeRequest = desktopNativeFetch({ url: fullUrl, method, headers, body });
+      const nativeRes = await raceWithAbort(nativeRequest, init.signal);
 
       if (nativeRes) {
         return new Response(nativeRes.body, {
@@ -136,6 +132,30 @@ export async function apiFetch(
       true,
     );
   }
+}
+
+/** Tauri IPC has no AbortSignal parameter; race it so a hung native request
+ * cannot keep the desktop shell in its session gate forever. */
+function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
 }
 
 export async function readData<T>(response: Response): Promise<T> {
