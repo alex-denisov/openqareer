@@ -355,7 +355,7 @@ try {
   setTimeout(async () => {
     try {
       const startedAt = Date.now();
-      const restored = await multiSourceEngine.restoreAsync();
+      const restored = await multiSourceEngine.restoreAsync(Date.now(), 250, { prune: false });
       if (
         multiSourceEngine.getPublicCatalogClusters(1).length === 0 &&
         multiSourceEngine.poolSize > 0

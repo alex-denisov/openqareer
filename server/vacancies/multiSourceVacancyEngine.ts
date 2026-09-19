@@ -329,8 +329,12 @@ export class MultiSourceVacancyEngine {
     // 250 строк — около 0,6 с на VM прода (0,2 мс на строку локально, прод
     // медленнее в ~12 раз): дольше держать цикл событий на старте нельзя.
     chunkSize = 250,
+    options: { prune?: boolean } = {},
   ): Promise<{ restored: number }> {
-    this.pruneStore(nowMs);
+    // A large SQLite pool may need a write-side maintenance pass. Production
+    // readiness must not wait for that pass; callers can keep the historical
+    // pruning behavior for small/test stores with the default.
+    if (options.prune !== false) this.pruneStore(nowMs);
     while ((this.pool.backfillStep?.(chunkSize) ?? 0) > 0) {
       await new Promise((resolve) => setImmediate(resolve));
     }
