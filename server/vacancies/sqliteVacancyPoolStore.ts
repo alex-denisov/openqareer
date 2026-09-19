@@ -712,14 +712,18 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   pruneClustersBefore(oldestPublishedAt: string): number {
+    const cutoffMs = Date.parse(oldestPublishedAt);
+    if (!Number.isFinite(cutoffMs)) return 0;
+    // `cluster_json` can be hundreds of thousands of rows. Parsing JSON in a
+    // synchronous startup statement blocks Fastify's event loop for minutes.
+    // `updated_at` is a cheap numeric snapshot freshness guard; exact
+    // lastSeenAt reconciliation belongs to the bounded maintenance pass, never
+    // to the readiness path.
     const result = this.database
       .prepare(
-        `DELETE FROM vacancy_clusters
-          WHERE json_valid(cluster_json) = 1
-            AND json_type(cluster_json, '$.lastSeenAt') = 'text'
-            AND json_extract(cluster_json, '$.lastSeenAt') < ?`,
+        'DELETE FROM vacancy_clusters WHERE updated_at < ?',
       )
-      .run(oldestPublishedAt);
+      .run(cutoffMs);
     return Number(result.changes);
   }
 
