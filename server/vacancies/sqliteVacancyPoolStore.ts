@@ -76,6 +76,12 @@ interface CatalogEntrySqlRow {
   last_seen_ms: number;
 }
 
+interface CatalogProjectionStatements {
+  readonly upsert: { run(...values: SQLInputValue[]): unknown };
+  readonly markSeen: { run(...values: SQLInputValue[]): unknown };
+  readonly remove: { run(...values: SQLInputValue[]): unknown };
+}
+
 const SOURCE_STATUSES = new Set(['healthy', 'degraded', 'error']);
 
 /** Сколько строк дочитывается из `payload` за один шаг фонового прохода. */
@@ -759,28 +765,35 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     );
   }
 
-  private markCatalogSeen(clusterId: string, processedAt = Date.now()): void {
-    this.database
-      .prepare(
+  private markCatalogSeen(
+    clusterId: string,
+    processedAt = Date.now(),
+    statement?: CatalogProjectionStatements['markSeen'],
+  ): void {
+    const markSeen =
+      statement ??
+      this.database.prepare(
         `INSERT INTO catalog_entries_seen (cluster_id, processed_at) VALUES (?, ?)
          ON CONFLICT(cluster_id) DO UPDATE SET processed_at = excluded.processed_at`,
-      )
-      .run(clusterId, processedAt);
+      );
+    markSeen.run(clusterId, processedAt);
   }
 
-  private upsertCatalogEntry(cluster: VacancyCluster): void {
+  private writeCatalogEntry(
+    cluster: VacancyCluster,
+    statements: CatalogProjectionStatements,
+  ): void {
     const entry = catalogEntryRowOfCluster(cluster);
     if (!entry) {
       // An unaddressable role is intentionally absent from the public catalog,
       // but still marked as inspected so it cannot hold the backfill open.
-      this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?').run(cluster.id);
-      this.markCatalogSeen(cluster.id);
+      statements.remove.run(cluster.id);
+      this.markCatalogSeen(cluster.id, Date.now(), statements.markSeen);
       return;
     }
     const publishedMs = Date.parse(entry.publishedAt);
     const lastSeenMs = Date.parse(entry.lastSeenAt);
-    const upsert = this.prepareCatalogEntryUpsert();
-    upsert.run(
+    statements.upsert.run(
       entry.clusterId,
       entry.key,
       entry.path,
@@ -804,27 +817,46 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       Number.isFinite(publishedMs) ? publishedMs : 0,
       Number.isFinite(lastSeenMs) ? lastSeenMs : 0,
     );
-    this.markCatalogSeen(cluster.id);
+    this.markCatalogSeen(cluster.id, Date.now(), statements.markSeen);
+  }
+
+  private upsertCatalogEntry(cluster: VacancyCluster): void {
+    this.writeCatalogEntry(cluster, {
+      upsert: this.prepareCatalogEntryUpsert(),
+      markSeen: this.database.prepare(
+        `INSERT INTO catalog_entries_seen (cluster_id, processed_at) VALUES (?, ?)
+         ON CONFLICT(cluster_id) DO UPDATE SET processed_at = excluded.processed_at`,
+      ),
+      remove: this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?'),
+    });
   }
 
   private persistCatalogProjectionBatch(
     rows: ReadonlyArray<{ rowid: number; id: string; cluster_json: string }>,
   ): void {
+    const statements: CatalogProjectionStatements = {
+      upsert: this.prepareCatalogEntryUpsert(),
+      markSeen: this.database.prepare(
+        `INSERT INTO catalog_entries_seen (cluster_id, processed_at) VALUES (?, ?)
+         ON CONFLICT(cluster_id) DO UPDATE SET processed_at = excluded.processed_at`,
+      ),
+      remove: this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?'),
+    };
     this.inTransaction(() => {
       for (const row of rows) {
         try {
           const parsed = JSON.parse(row.cluster_json) as VacancyCluster;
           if (parsed && typeof parsed.id === 'string') {
-            this.upsertCatalogEntry(parsed);
+            this.writeCatalogEntry(parsed, statements);
           } else {
-            this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?').run(row.id);
-            this.markCatalogSeen(row.id);
+            statements.remove.run(row.id);
+            this.markCatalogSeen(row.id, Date.now(), statements.markSeen);
           }
         } catch {
           // A corrupt cluster is not a public entry. Marking its row seen keeps
           // one bad snapshot from preventing the projection from completing.
-          this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?').run(row.id);
-          this.markCatalogSeen(row.id);
+          statements.remove.run(row.id);
+          this.markCatalogSeen(row.id, Date.now(), statements.markSeen);
         }
       }
       this.database
