@@ -711,6 +711,18 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return clusters;
   }
 
+  pruneClustersBefore(oldestPublishedAt: string): number {
+    const result = this.database
+      .prepare(
+        `DELETE FROM vacancy_clusters
+          WHERE json_valid(cluster_json) = 1
+            AND json_type(cluster_json, '$.lastSeenAt') = 'text'
+            AND json_extract(cluster_json, '$.lastSeenAt') < ?`,
+      )
+      .run(oldestPublishedAt);
+    return Number(result.changes);
+  }
+
   upsertCluster(cluster: VacancyCluster): void {
     const upsert = this.prepareClusterUpsert();
     upsert.run(

@@ -346,6 +346,15 @@ export class MultiSourceVacancyEngine {
   }
 
   private pruneClusters(oldestPublishedAt: string): void {
+    if (typeof this.pool.pruneClustersBefore === 'function') {
+      this.pool.pruneClustersBefore(oldestPublishedAt);
+      // SQLite-backed production reads remain page-sized after a restart. The
+      // in-memory snapshot is intentionally empty until an explicit rebuild or
+      // point lookup asks for more data.
+      this.clusters = [];
+      this.clusterBuilder = new IncrementalClusterBuilder([]);
+      return;
+    }
     if (
       this.clusters.length === 0 &&
       typeof this.pool.countClusters === 'function' &&
@@ -370,7 +379,15 @@ export class MultiSourceVacancyEngine {
 
   private finishRestore(nowMs: number): { restored: number } {
     this.restoreSourceStates();
-    if (typeof this.pool.countClusters === 'function' && this.pool.countClusters() > 0) {
+    const persistedClusterCount = this.pool.countClusters();
+    if (typeof this.pool.loadClustersPage === 'function') {
+      // A disk-backed store already has the durable snapshot. Do not hydrate
+      // every cluster just to answer the next public request; that was the
+      // production OOM path. Public routes use loadClustersPage instead.
+      this.clusters = [];
+      this.clusterBuilder = new IncrementalClusterBuilder([]);
+      this.poolChangedSinceRecluster = persistedClusterCount === 0;
+    } else if (persistedClusterCount > 0) {
       this.clusters = typeof this.pool.loadClusters === 'function' ? this.pool.loadClusters() : [];
       this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);
       this.poolChangedSinceRecluster = false;

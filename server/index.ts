@@ -356,14 +356,17 @@ try {
     try {
       const startedAt = Date.now();
       const restored = await multiSourceEngine.restoreAsync();
-      if (multiSourceEngine.getActiveClusters().length === 0 && multiSourceEngine.poolSize > 0) {
+      if (
+        multiSourceEngine.getPublicCatalogClusters(1).length === 0 &&
+        multiSourceEngine.poolSize > 0
+      ) {
         await multiSourceEngine.reclusterAsync();
       }
       app.log.info(
         {
           restored: restored.restored,
           ms: Date.now() - startedAt,
-          clusters: multiSourceEngine.getActiveClusters().length,
+          clusters: multiSourceEngine.getPublicCatalogClusters().length,
         },
         'vacancy-pool-restored-and-clustered',
       );

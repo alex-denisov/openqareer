@@ -101,6 +101,8 @@ export interface VacancyPoolStore {
   loadClusters(): VacancyCluster[];
   /** Bounded cluster page for public catalog reads; must not hydrate the pool. */
   loadClustersPage?(limit: number, offset?: number): VacancyCluster[];
+  /** Removes stale persisted clusters without loading their JSON into the heap. */
+  pruneClustersBefore?(oldestPublishedAt: string): number;
   upsertCluster(cluster: VacancyCluster): void;
   deleteCluster(clusterId: string): void;
   countClusters(): number;

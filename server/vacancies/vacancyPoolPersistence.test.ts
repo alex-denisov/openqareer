@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
@@ -72,6 +72,25 @@ function vacancy(id: string): UnifiedVacancy {
 }
 
 describe('vacancy pool persistence (B164)', () => {
+  it('restores a persisted catalog page without hydrating every cluster', async () => {
+    const path = databasePath();
+    const first = new MultiSourceVacancyEngine({
+      sources: [SOURCE],
+      pool: openStore(path),
+      fetcher: async () => [vacancy('a'), vacancy('b')],
+    });
+    await first.syncSource(SOURCE.id);
+
+    const restartedPool = openStore(path);
+    const loadAllSpy = vi.spyOn(restartedPool, 'loadClusters');
+    const restarted = new MultiSourceVacancyEngine({ sources: [SOURCE], pool: restartedPool });
+
+    await restarted.restoreAsync();
+
+    expect(loadAllSpy).not.toHaveBeenCalled();
+    expect(restarted.getPublicCatalogClusters(1)).toHaveLength(1);
+  });
+
   it('serves the vacancies of the previous process after a restart, without any fetcher', async () => {
     const path = databasePath();
     const syncedAt = Date.parse('2026-08-30T10:00:00.000Z');

@@ -238,6 +238,16 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     return Array.from(this.clusters.values());
   }
 
+  pruneClustersBefore(oldestPublishedAt: string): number {
+    let removed = 0;
+    for (const [id, cluster] of this.clusters) {
+      if (cluster.lastSeenAt >= oldestPublishedAt) continue;
+      this.clusters.delete(id);
+      removed += 1;
+    }
+    return removed;
+  }
+
   upsertCluster(cluster: VacancyCluster): void {
     this.clusters.set(cluster.id, cluster);
   }
