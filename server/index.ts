@@ -230,6 +230,8 @@ function runVacancyRefresh(): void {
  */
 // Пока пул не восстановлен из базы, опросы не идут: частичное чтение hh.ru
 // слилось бы с полупустым срезом и записало его в базу как полный (B219).
+// The catalog can serve directly from indexed storage while the bounded
+// maintenance worker is paused; source sync must not infer readiness from it.
 const vacancyPoolRestored = false;
 
 // Выше порога кучи опросы замирают, а не роняют службу (B220). Пул с B221
