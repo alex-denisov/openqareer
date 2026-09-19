@@ -207,6 +207,12 @@ let linkLivenessTimer: NodeJS.Timeout | undefined;
 let documentRetentionTimer: NodeJS.Timeout | undefined;
 let retentionSweepTimer: NodeJS.Timeout | undefined;
 let catalogMaintenanceTimer: NodeJS.Timeout | undefined;
+/**
+ * Catalog projection maintenance is opt-in until it runs in its own worker.
+ * Running synchronous SQLite JSON work on this HTTP process can stall even
+ * `/health` while the first bounded pass catches up on a large production DB.
+ */
+const catalogMaintenanceEnabled = process.env.OPENQAREER_ENABLE_CATALOG_MAINTENANCE === 'true';
 
 function runVacancyRefresh(): void {
   void vacancyIntelligenceService
@@ -402,8 +408,15 @@ try {
   // Сроки измеряются годами и месяцами, поэтому час — достаточная частота.
   retentionSweepTimer = setInterval(runRetentionSweep, 60 * 60 * 1_000);
   retentionSweepTimer.unref();
-  catalogMaintenanceTimer = setInterval(runCatalogMaintenance, 1_000);
-  catalogMaintenanceTimer.unref();
+  if (catalogMaintenanceEnabled) {
+    catalogMaintenanceTimer = setInterval(runCatalogMaintenance, 1_000);
+    catalogMaintenanceTimer.unref();
+  } else {
+    app.log.info(
+      { mode: 'http-safe', maintenance: 'paused' },
+      'vacancy-catalog-maintenance-paused',
+    );
+  }
 } catch (error) {
   app.log.fatal(
     { errorName: error instanceof Error ? error.name : 'UnknownError' },
