@@ -27,6 +27,19 @@ const PLATFORM_PLACEHOLDER: &str = "__OPENQAREER_PLATFORM__";
 const HH_MARKER_PLACEHOLDER: &str = "__OPENQAREER_HH_MARKER__";
 /// Full provider DOM must never cross IPC without a hard upper bound.
 const MAX_SESSION_PAGE_BODY_CHARS: usize = 2_000_000;
+/// LinkedIn keeps the UI language in `_locale`; a URL query alone loses to an
+/// existing German cookie after the first challenge redirect. Set both the
+/// host-only and parent-domain forms before LinkedIn's own scripts run. The
+/// script is scoped to LinkedIn by the browser's cookie rules and is harmless
+/// in the challenge's Google/Protechs frames.
+const LINKEDIN_LOCALE_INITIALIZATION_SCRIPT: &str = r#"
+(function () {
+  try {
+    document.cookie = '_locale=en_US; Path=/; Max-Age=31536000; Secure; SameSite=Lax';
+    document.cookie = '_locale=en_US; Domain=.linkedin.com; Path=/; Max-Age=31536000; Secure; SameSite=Lax';
+  } catch (_) {}
+})();
+"#;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -272,6 +285,12 @@ pub async fn open_session_window(
         .skip_taskbar(true)
         .on_navigation(move |next_url| allow_session_navigation(&platform, next_url));
 
+    if request.platform == "linkedin" {
+        builder = builder.initialization_script_for_all_frames(
+            LINKEDIN_LOCALE_INITIALIZATION_SCRIPT,
+        );
+    }
+
     builder = match builder.parent(&main_window) {
         Ok(parented) => parented,
         Err(error) => {
@@ -404,13 +423,18 @@ async fn open_hidden_session_window(app: &AppHandle, platform: &str, label: &str
         return false;
     };
     let allowed = platform.to_string();
-    let built = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
+    let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
         .title(format!("OpenQareer · {}", platform_name(platform)))
         .inner_size(480.0, 360.0)
         .visible(false)
         .skip_taskbar(true)
-        .on_navigation(move |next| allow_session_navigation(&allowed, next))
-        .build();
+        .on_navigation(move |next| allow_session_navigation(&allowed, next));
+    if platform == "linkedin" {
+        builder = builder.initialization_script_for_all_frames(
+            LINKEDIN_LOCALE_INITIALIZATION_SCRIPT,
+        );
+    }
+    let built = builder.build();
     built.is_ok() && await_registered_window(app, label).await
 }
 
