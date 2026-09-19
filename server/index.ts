@@ -230,7 +230,7 @@ function runVacancyRefresh(): void {
  */
 // Пока пул не восстановлен из базы, опросы не идут: частичное чтение hh.ru
 // слилось бы с полупустым срезом и записало его в базу как полный (B219).
-let vacancyPoolRestored = false;
+const vacancyPoolRestored = false;
 
 // Выше порога кучи опросы замирают, а не роняют службу (B220). Пул с B221
 // живёт в базе; в куче остаются кластеры и вход сведения на время сборки.
@@ -281,6 +281,7 @@ function runMultiSourceSync(): void {
  * следующей замены среза (B200 срез 2).
  */
 function runLinkLivenessProbe(): void {
+  if (!vacancyPoolRestored) return;
   void multiSourceEngine
     .probeDueLinks()
     .then((census) => {
@@ -352,14 +353,14 @@ try {
   // Сервер слушает и отвечает на /health мгновенно (<10 мс).
   // The public catalog is already lazy and reads indexed pages directly. A
   // multi-gigabyte SQLite history must not be replayed on this event loop:
-  // restoration/reclustering belongs to a bounded maintenance worker. Mark
-  // the read path ready after the same short warm-up, then start only work
-  // whose own storage queries are bounded (B218, B221).
+  // restoration/reclustering and source sync belong to a bounded maintenance
+  // worker. The public read path is ready after the same short warm-up, while
+  // the live pool worker stays paused until that maintenance run is enabled.
   setTimeout(() => {
-    vacancyPoolRestored = true;
-    app.log.info({ mode: 'lazy-read', clusters: 'deferred' }, 'vacancy-pool-ready');
-    runVacancyRefresh();
-    runMultiSourceSync();
+    app.log.info(
+      { mode: 'lazy-read', clusters: 'deferred', sourceSync: 'paused' },
+      'vacancy-pool-ready',
+    );
     runDocumentRetentionPurge();
     runRetentionSweep();
   }, 30_000)?.unref();
