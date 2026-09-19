@@ -104,7 +104,7 @@ export async function apiFetch(
       const method = init.method ?? 'GET';
       const body = typeof init.body === 'string' ? init.body : undefined;
       const nativeRequest = desktopNativeFetch({ url: fullUrl, method, headers, body });
-      const nativeRes = await raceWithAbort(nativeRequest, init.signal);
+      const nativeRes = await raceWithAbort(nativeRequest, init.signal ?? undefined);
 
       if (nativeRes) {
         return new Response(nativeRes.body, {
