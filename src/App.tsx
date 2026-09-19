@@ -19,7 +19,10 @@ import { LandingPage } from './features/site/LandingPage';
 import { LegalDocumentPage } from './features/legal/LegalDocumentPage';
 import { legalSlugFromPath } from '../shared/legalRegistry';
 import { LoginPage, SignupPage, ResetPasswordPage } from './features/site/AuthPages';
-import { resolvedDesktopSessionPath } from './features/site/desktopSessionRouting';
+import {
+  desktopSessionFailureRequiresSignOut,
+  resolvedDesktopSessionPath,
+} from './features/site/desktopSessionRouting';
 import { isTauriEnvironment } from './services/desktop/desktopBridge';
 import {
   clearWorkspace,
@@ -111,10 +114,8 @@ export default function App() {
         if (resolvedPath) navigate(resolvedPath);
       }
     } catch (error) {
-      const sessionExpired =
-        error instanceof CoachApiError &&
-        /^(?:http_401|http_403|unauthorized|invalid_session|session_expired)$/i.test(error.code);
-      if (isDesktop && (sessionExpired || getStoredSessionToken())) {
+      const sessionErrorCode = error instanceof CoachApiError ? error.code : undefined;
+      if (desktopSessionFailureRequiresSignOut(isDesktop, sessionErrorCode)) {
         setStoredSessionToken(null);
         setState({ session: null, invalidStorage: false });
         setIsResolvingSession(false);
