@@ -584,13 +584,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   private pruneStaleVacancies(oldestPublishedAt: string): void {
     const oldestMs = Date.parse(oldestPublishedAt);
-    const oldestPredicate = Number.isFinite(oldestMs)
-      ? `((i.published_ms IS NOT NULL AND i.published_ms < ?) OR
-           (i.id IS NULL AND p.published_at < ?))`
-      : 'i.id IS NULL AND p.published_at < ?';
-    const oldestParams: SQLInputValue[] = Number.isFinite(oldestMs)
-      ? [oldestMs, oldestPublishedAt]
-      : [oldestPublishedAt];
+    if (!Number.isFinite(oldestMs)) return;
     // A full-table DELETE made the first post-deploy restore hold the event
     // loop for minutes on the production pool. Each restart may retire a
     // bounded batch; the indexed pool read remains available throughout.
@@ -598,14 +592,15 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       .prepare(
         `DELETE FROM vacancy_pool
           WHERE id IN (
-            SELECT p.id
-              FROM vacancy_pool p
-              LEFT JOIN vacancy_pool_index i ON i.id = p.id
-             WHERE ${oldestPredicate}
+            SELECT i.id
+              FROM vacancy_pool_index i INDEXED BY vacancy_pool_index_fresh
+             WHERE i.expired = 0
+               AND i.published_ms IS NOT NULL
+               AND i.published_ms < ?
              LIMIT 1000
           )`,
       )
-      .run(...oldestParams);
+      .run(oldestMs);
   }
 
   private pruneUnknownSources(knownSourceIds: readonly string[]): void {
