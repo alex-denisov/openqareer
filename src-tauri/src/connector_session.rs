@@ -125,6 +125,7 @@ pub fn is_allowed_session_navigation_url(platform: &str, url: &str) -> bool {
         Some("accounts.google.com")
             | Some("www.google.com")
             | Some("www.recaptcha.net")
+            | Some("www.gstatic.com")
             | Some("li.protechts.net")
     )
 }
@@ -159,6 +160,14 @@ pub fn should_route_through_tunnel(url: &str, tunnel_running: bool) -> bool {
         || host_belongs_to(host, "licdn.com")
         || host_belongs_to(host, "lnkd.in")
         || host_belongs_to(host, "linkedin.cn")
+        || matches!(
+            host,
+            "accounts.google.com"
+                | "www.google.com"
+                | "www.recaptcha.net"
+                | "www.gstatic.com"
+                | "li.protechts.net"
+        )
 }
 
 fn validate(request: &SessionWindowRequest) -> Result<(&'static str, Url), String> {
@@ -649,6 +658,7 @@ mod tests {
             "https://accounts.google.com/gsi/fedcm/listaccounts",
             "https://www.google.com/recaptcha/api2/anchor",
             "https://www.recaptcha.net/recaptcha/api2/anchor",
+            "https://www.gstatic.com/recaptcha/releases/test.js",
             "https://li.protechts.net/challenge",
         ] {
             assert!(is_allowed_session_navigation_url("linkedin", url));
@@ -721,6 +731,15 @@ mod tests {
             "https://static.licdn.com/x.js",
             true
         ));
+        for url in [
+            "https://www.google.com/recaptcha/api2/anchor",
+            "https://www.recaptcha.net/recaptcha/api2/anchor",
+            "https://www.gstatic.com/recaptcha/releases/test.js",
+            "https://li.protechts.net/challenge",
+        ] {
+            assert!(should_route_through_tunnel(url, true));
+        }
+        assert!(!should_route_through_tunnel("https://www.google.com/recaptcha", false));
     }
 
     #[test]

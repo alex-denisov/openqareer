@@ -40,7 +40,7 @@ import {
 } from './linkedinProtectedRoute';
 
 const SESSION_POLL_INTERVAL_MS = 750;
-const LINKEDIN_LOGIN_URL = 'https://www.linkedin.com/login';
+const LINKEDIN_LOGIN_URL = 'https://www.linkedin.com/login?locale=en_US';
 
 export interface LinkedInConnectModalProps {
   readonly isOpen: boolean;
@@ -332,14 +332,11 @@ export function LinkedInConnectModal({
   // The step is never silent: while the route and the window come up there is
   // nothing to poll yet, and silence is what an undetected sign-in looks like.
   const status: LinkedInWaitingNotice | undefined =
-    step === 'opening'
-      ? {
-          text: routeStarting
-            ? 'Готовим защищённый маршрут, окно входа откроется следом…'
-            : 'Открываем окно входа LinkedIn…',
-          stuck: false,
-        }
-      : waiting;
+    step === 'opening' && !routeStarting
+      ? { text: 'Открываем окно входа LinkedIn…', stuck: false }
+      : step === 'opening'
+        ? undefined
+        : waiting;
   const sessionActive = step !== 'idle';
 
   return (

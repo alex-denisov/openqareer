@@ -115,7 +115,16 @@ export async function startTunnel(config: TunnelConfig): Promise<TunnelStatusRep
     local_socks_endpoint: '127.0.0.1:10885',
     local_http_endpoint: '127.0.0.1:10886',
     active_protocol: 'SSH restricted egress',
-    split_proxied_domains: ['linkedin.com', 'licdn.com', 'lnkd.in'],
+    split_proxied_domains: [
+      'linkedin.com',
+      'licdn.com',
+      'lnkd.in',
+      'accounts.google.com',
+      'www.google.com',
+      'www.recaptcha.net',
+      'www.gstatic.com',
+      'li.protechts.net',
+    ],
     split_direct_domains: ['hh.ru', 'openqareer.com'],
     error_message: 'desktop_runtime_unavailable',
   };

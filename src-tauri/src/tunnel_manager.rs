@@ -116,6 +116,7 @@ pub fn generate_singbox_split_config(c: &TunnelConfig) -> Result<serde_json::Val
       ],
       "route":{"rules":[
         {"domain_suffix":["linkedin.com","licdn.com","linkedin.cn","lnkd.in"],"outbound":"linkedin-proxy-out"},
+        {"domain":["accounts.google.com","www.google.com","www.recaptcha.net","www.gstatic.com","li.protechts.net"],"outbound":"linkedin-proxy-out"},
         {"domain_suffix":["hh.ru","headhunter.ru","openqareer.com"],"outbound":"direct-out"},
         {"ip_is_private":true,"outbound":"direct-out"}
       ],"final":"block-out","auto_detect_interface":true}
@@ -167,6 +168,11 @@ impl TunnelManager {
                 "linkedin.com".into(),
                 "licdn.com".into(),
                 "lnkd.in".into(),
+                "accounts.google.com".into(),
+                "www.google.com".into(),
+                "www.recaptcha.net".into(),
+                "www.gstatic.com".into(),
+                "li.protechts.net".into(),
             ],
             split_direct_domains: vec!["hh.ru".into(), "openqareer.com".into()],
             started_at: self.started_at.lock().await.clone(),
@@ -311,9 +317,38 @@ mod tests {
         assert_eq!(j["outbounds"][0]["type"], "ssh");
         assert_eq!(j["outbounds"][1]["type"], "http");
         assert_eq!(j["outbounds"][1]["detour"], "ssh-eu-out");
-        assert_eq!(j["route"]["rules"][1]["outbound"], "direct-out");
+        assert!(j["route"]["rules"]
+            .as_array()
+            .expect("route rules")
+            .iter()
+            .any(|rule| rule["outbound"] == "direct-out"));
         assert!(j["inbounds"][0].get("sniff").is_none());
         assert!(j["inbounds"][1].get("sniff").is_none());
+    }
+
+    #[test]
+    fn routes_linkedin_security_challenge_dependencies_through_eu() {
+        let j = generate_singbox_split_config(&valid()).expect("config");
+        let rules = j["route"]["rules"].as_array().expect("route rules");
+        let challenge_rule = rules
+            .iter()
+            .find(|rule| {
+                rule["outbound"] == "linkedin-proxy-out" && rule.get("domain").is_some()
+            })
+            .expect("challenge dependency rule");
+        for host in [
+            "accounts.google.com",
+            "www.google.com",
+            "www.recaptcha.net",
+            "www.gstatic.com",
+            "li.protechts.net",
+        ] {
+            assert!(challenge_rule["domain"]
+                .as_array()
+                .expect("exact challenge domains")
+                .iter()
+                .any(|value| value == host));
+        }
     }
     #[tokio::test]
     async fn never_reports_running_without_a_live_proxy() {
