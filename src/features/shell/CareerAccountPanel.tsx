@@ -45,6 +45,7 @@ interface CareerAccountPanelProps {
   initialUser?: AuthUser | null;
   onClose: () => void;
   onIdentityChange: (session: AuthUser | null) => void;
+  onDataChanged?: () => void;
 }
 
 type AuthMode = 'choose' | 'login' | 'register' | 'forgot' | 'reset';
@@ -71,6 +72,7 @@ export function CareerAccountPanel({
   initialUser,
   onClose,
   onIdentityChange,
+  onDataChanged,
 }: CareerAccountPanelProps) {
   const resetToken = resetTokenFromLocation();
   const [user, setUser] = useState<AuthUser | null | undefined>(initialUser);
@@ -385,6 +387,7 @@ export function CareerAccountPanel({
             onDownloadExport={downloadExport}
             onDeleteAccount={deleteAccount}
             onSignOut={signOut}
+            onDataChanged={onDataChanged}
           />
         ) : null}
 
@@ -607,6 +610,7 @@ function AuthenticatedAccount({
   onDownloadExport,
   onDeleteAccount,
   onSignOut,
+  onDataChanged,
 }: {
   user: AuthUser;
   account?: AccountSnapshot;
@@ -618,6 +622,7 @@ function AuthenticatedAccount({
   onDownloadExport: () => Promise<void>;
   onDeleteAccount: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
   onSignOut: () => Promise<void>;
+  onDataChanged?: () => void;
 }) {
   return (
     <>
@@ -648,7 +653,9 @@ function AuthenticatedAccount({
       </nav>
       <p className="career-account-section-lead">{ACCOUNT_SECTION_LEADS[section]}</p>
 
-      {section === 'connections' ? <AccountConnectionsManager /> : null}
+      {section === 'connections' ? (
+        <AccountConnectionsManager onDataChanged={onDataChanged} />
+      ) : null}
 
       {section === 'security' ? (
         <div className="career-account-section-stack">

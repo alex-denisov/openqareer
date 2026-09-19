@@ -579,6 +579,7 @@ export function CareerWorkspaceShell({
             initialUser={session}
             onClose={closeAccount}
             onIdentityChange={resetForAccount}
+            onDataChanged={() => setCabinetRevision((revision) => revision + 1)}
           />
         </>
       ) : null}

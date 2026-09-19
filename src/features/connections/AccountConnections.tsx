@@ -27,6 +27,7 @@ interface AccountConnectionsProps {
   isDesktop?: boolean;
   onDisconnect: (platform: ConnectionPlatform) => void;
   onSessionImport?: (platform: ConnectionPlatform) => void;
+  onDataChanged?: () => void;
 }
 
 /**
@@ -36,7 +37,7 @@ interface AccountConnectionsProps {
  * This panel therefore offers session import, never an official-connect
  * button that could only end in "not configured".
  */
-export function AccountConnectionsManager() {
+export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: () => void }) {
   const [connections, setConnections] = useState<CandidateConnection[]>();
   const [busyPlatform, setBusyPlatform] = useState<ConnectionPlatform>();
   const [notice, setNotice] = useState<string>();
@@ -81,6 +82,7 @@ export function AccountConnectionsManager() {
       setNotice(
         `Резюме hh.ru сохранено в профиль: ${persisted.connection.factCount} фактов.`,
       );
+      onDataChanged?.();
     } catch (error) {
       setNotice(hhSessionImportError(error));
       throw error;
@@ -103,6 +105,7 @@ export function AccountConnectionsManager() {
       setNotice(
         `Профиль LinkedIn сохранён: ${persisted.connection.factCount} фактов.`,
       );
+      onDataChanged?.();
     } catch (error) {
       setNotice(nativeSessionImportError('linkedin', error));
       throw error;
