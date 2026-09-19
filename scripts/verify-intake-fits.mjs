@@ -103,6 +103,7 @@ async function walkDesktopSourceStep(browser, baseUrl, viewport, outputDirectory
   await page.addInitScript(() => {
     // What `isTauriEnvironment()` reads to decide it is inside the app.
     window.__TAURI_INTERNALS__ = {};
+    localStorage.setItem('openqareer_session_token', 'desktop-intake-fits-session');
   });
   await stubApi(page, { signedIn: true });
   await page.goto(`${baseUrl}app`, { waitUntil: 'load' });
