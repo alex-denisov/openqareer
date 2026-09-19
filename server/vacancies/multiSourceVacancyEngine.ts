@@ -436,7 +436,11 @@ export class MultiSourceVacancyEngine {
 
   private healthOf(sourceId: string, nowMs: number): SourceHealth {
     const rawObs = this.observations.get(sourceId) ?? emptySourceObservations();
-    this.ensureClusters();
+    // Health is called by the scheduler for every source. A disk-backed pool
+    // must not hydrate the complete cluster snapshot just to render a verdict;
+    // the observation ledger is the durable signal until an explicit matching
+    // or rebuild operation asks for the full in-memory view.
+    this.ensureClusters({ hydrateDisk: false });
     const authenticity =
       this.clusters.length > 0
         ? calculateSourceAuthenticity(sourceId, this.clusters)
@@ -489,12 +493,15 @@ export class MultiSourceVacancyEngine {
    * `sync`. В фоновом режиме чтение отдаёт то, что есть: одно «медленное
    * чтение» на проде — это минуты без ответа для всех (B221).
    */
-  private ensureClusters(): void {
+  private ensureClusters(options: { hydrateDisk?: boolean } = {}): void {
     if (
       this.clusters.length === 0 &&
       typeof this.pool.countClusters === 'function' &&
       this.pool.countClusters() > 0
     ) {
+      if (options.hydrateDisk === false && typeof this.pool.loadClustersPage === 'function') {
+        return;
+      }
       this.clusters = typeof this.pool.loadClusters === 'function' ? this.pool.loadClusters() : [];
       this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);
       this.poolChangedSinceRecluster = false;

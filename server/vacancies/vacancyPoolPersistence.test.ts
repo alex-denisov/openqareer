@@ -89,6 +89,8 @@ describe('vacancy pool persistence (B164)', () => {
 
     expect(loadAllSpy).not.toHaveBeenCalled();
     expect(restarted.getPublicCatalogClusters(1)).toHaveLength(1);
+    expect(restarted.getSourceHealthReport()).toHaveLength(1);
+    expect(loadAllSpy).not.toHaveBeenCalled();
   });
 
   it('serves the vacancies of the previous process after a restart, without any fetcher', async () => {
