@@ -552,7 +552,7 @@ export class MultiSourceVacancyEngine {
     const processed = this.pool.backfillCatalogEntriesStep(chunk);
     return {
       processed,
-      pending: this.pool.pendingCatalogEntries?.() ?? 0,
+      pending: processed === 0 ? 0 : (this.pool.pendingCatalogEntries?.() ?? 0),
     };
   }
 

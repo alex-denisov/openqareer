@@ -307,7 +307,7 @@ function runLinkLivenessProbe(): void {
 function runCatalogMaintenance(): void {
   try {
     const result = multiSourceEngine.runCatalogMaintenanceStep(500);
-    if (result && (result.processed > 0 || result.pending === 0)) {
+    if (result && result.processed > 0) {
       app.log.info(result, 'vacancy-catalog-maintenance-tick');
     }
   } catch (error: unknown) {
