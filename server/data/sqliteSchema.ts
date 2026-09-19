@@ -723,6 +723,7 @@ CREATE TABLE IF NOT EXISTS vacancy_clusters (
   updated_at INTEGER NOT NULL
 ) STRICT;
 CREATE INDEX IF NOT EXISTS vacancy_clusters_fingerprint ON vacancy_clusters(fingerprint);
+CREATE INDEX IF NOT EXISTS vacancy_clusters_freshness ON vacancy_clusters(updated_at DESC, id ASC);
 `;
 
 export const VACANCY_POOL_INDEX_TABLE = `

@@ -719,9 +719,15 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     // `updated_at` is a cheap numeric snapshot freshness guard; exact
     // lastSeenAt reconciliation belongs to the bounded maintenance pass, never
     // to the readiness path.
+    // Keep each startup pass bounded. The next scheduled maintenance pass can
+    // continue from the indexed order without turning readiness into a full
+    // table operation.
     const result = this.database
       .prepare(
-        'DELETE FROM vacancy_clusters WHERE updated_at < ?',
+        `DELETE FROM vacancy_clusters
+          WHERE rowid IN (
+            SELECT rowid FROM vacancy_clusters WHERE updated_at < ? LIMIT 1000
+          )`,
       )
       .run(cutoffMs);
     return Number(result.changes);
