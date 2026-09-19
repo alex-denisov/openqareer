@@ -96,7 +96,7 @@ function filtersFor(
 }
 
 async function handleCatalog(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
-  const clusters = deps.multiSourceEngine.getActiveClusters();
+  const clusters = deps.multiSourceEngine.getPublicCatalogClusters();
   const page = buildCatalogPage(clusters, pageNumber(request));
   return sendDocument(reply, renderCatalogDocument(page, filtersFor(catalogEntries(clusters))));
 }
@@ -108,7 +108,7 @@ async function handleCatalog(deps: RouteDeps, request: FastifyRequest, reply: Fa
  */
 async function handleListing(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const listing = parseListingPath(request.url);
-  const clusters = deps.multiSourceEngine.getActiveClusters();
+  const clusters = deps.multiSourceEngine.getPublicCatalogClusters();
   const entries = catalogEntries(clusters);
   const summary = listing
     ? catalogListings(entries).find(
@@ -145,7 +145,7 @@ async function handleListing(deps: RouteDeps, request: FastifyRequest, reply: Fa
  */
 async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const key = parseVacancyPath(request.url);
-  const clusters = deps.multiSourceEngine.getActiveClusters();
+  const clusters = deps.multiSourceEngine.getPublicCatalogClusters();
   const found = key ? clusters.find((cluster) => vacancyKey(cluster.id) === key) : undefined;
   // Кластер несёт только первые 300 знаков описания. Полный текст лежит у
   // исходной вакансии — её идентификатор и есть хвост идентификатора кластера
@@ -168,7 +168,7 @@ async function handleSitemap(deps: RouteDeps, _request: FastifyRequest, reply: F
   return reply
     .header('Content-Type', 'application/xml; charset=utf-8')
     .header('Cache-Control', 'public, max-age=900')
-    .send(buildCatalogSitemap(deps.multiSourceEngine.getActiveClusters()));
+    .send(buildCatalogSitemap(deps.multiSourceEngine.getPublicCatalogClusters()));
 }
 
 export function registerVacancyCatalogRoutes(app: FastifyInstance, deps: RouteDeps): void {

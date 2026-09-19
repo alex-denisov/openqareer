@@ -451,6 +451,19 @@ export class MultiSourceVacancyEngine {
   }
 
   /**
+   * Public catalog reads must stay bounded. Hydrating every persisted cluster
+   * for an SEO request defeated B221's disk-backed pool and eventually OOMed
+   * the production Node process. Internal matching keeps its full path; only
+   * public HTML gets this deliberate freshness-bounded page.
+   */
+  public getPublicCatalogClusters(limit = 2_000): VacancyCluster[] {
+    if (typeof this.pool.loadClustersPage === 'function') {
+      return this.pool.loadClustersPage(limit).filter((cluster) => cluster.status === 'active');
+    }
+    return this.getActiveClusters().slice(0, limit);
+  }
+
+  /**
    * Собирает кластеры, если пул менялся с прошлой сборки — только в режиме
    * `sync`. В фоновом режиме чтение отдаёт то, что есть: одно «медленное
    * чтение» на проде — это минуты без ответа для всех (B221).

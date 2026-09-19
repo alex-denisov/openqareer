@@ -99,6 +99,8 @@ export interface VacancyPoolStore {
   /** Atomically replaces the persisted cluster snapshot, including an empty snapshot. */
   replaceClusters?(clusters: VacancyCluster[]): void;
   loadClusters(): VacancyCluster[];
+  /** Bounded cluster page for public catalog reads; must not hydrate the pool. */
+  loadClustersPage?(limit: number, offset?: number): VacancyCluster[];
   upsertCluster(cluster: VacancyCluster): void;
   deleteCluster(clusterId: string): void;
   countClusters(): number;

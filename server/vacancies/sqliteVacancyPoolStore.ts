@@ -691,6 +691,26 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return clusters;
   }
 
+  loadClustersPage(limit: number, offset = 0): VacancyCluster[] {
+    const boundedLimit = Math.max(1, Math.min(Math.trunc(limit), 2_000));
+    const boundedOffset = Math.max(0, Math.trunc(offset));
+    const rows = this.database
+      .prepare(
+        'SELECT cluster_json FROM vacancy_clusters ORDER BY updated_at DESC, id ASC LIMIT ? OFFSET ?',
+      )
+      .all(boundedLimit, boundedOffset) as unknown as Array<{ cluster_json: string }>;
+    const clusters: VacancyCluster[] = [];
+    for (const row of rows) {
+      try {
+        const parsed = JSON.parse(row.cluster_json) as VacancyCluster;
+        if (parsed && typeof parsed.id === 'string') clusters.push(parsed);
+      } catch {
+        // Ignore one malformed public row without aborting the whole page.
+      }
+    }
+    return clusters;
+  }
+
   upsertCluster(cluster: VacancyCluster): void {
     const upsert = this.prepareClusterUpsert();
     upsert.run(
