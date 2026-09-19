@@ -26,6 +26,29 @@ export interface ReputationSourceReceiptInput {
   readonly sourceUrl: string;
 }
 
+export type CandidateDeclaredIdentifierType = 'email' | 'phone' | 'profile_url';
+
+/**
+ * A receipt for an identifier the candidate explicitly declared as theirs.
+ * The value itself never enters the receipt: only a deterministic digest is
+ * retained so a controlled run can be audited without persisting PII.
+ */
+export interface CandidateDeclaredIdentifierReceipt {
+  readonly id: string;
+  readonly candidateId: string;
+  readonly identifierType: CandidateDeclaredIdentifierType;
+  readonly identifierSha256: string;
+  readonly observedAt: string;
+  readonly identityBinding: 'candidate_declared_identifier';
+  readonly coverage: 'declaration_only';
+}
+
+export interface CandidateDeclaredIdentifierInput {
+  readonly candidateId: string;
+  readonly identifierType: CandidateDeclaredIdentifierType;
+  readonly value: string;
+}
+
 export interface ReputationReceiptFetcher {
   fetch?: typeof fetch;
   now?: () => string;
@@ -55,6 +78,46 @@ export function normalizeReputationSourceUrl(rawUrl: string): string {
   if (!isAllowedHost(url.hostname)) throw new Error('reputation_source_host_not_allowed');
   url.hash = '';
   return url.toString();
+}
+
+function canonicalDeclaredIdentifier(input: CandidateDeclaredIdentifierInput): string {
+  const value = input.value.trim();
+  if (!value) throw new Error('candidate_identifier_required');
+
+  if (input.identifierType === 'email') {
+    const email = value.toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      throw new Error('candidate_identifier_email_invalid');
+    }
+    return email;
+  }
+
+  if (input.identifierType === 'phone') {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length < 10 || digits.length > 15) {
+      throw new Error('candidate_identifier_phone_invalid');
+    }
+    return digits;
+  }
+
+  return normalizeReputationSourceUrl(value);
+}
+
+export function createCandidateDeclaredIdentifierReceipt(
+  input: CandidateDeclaredIdentifierInput,
+  options: { now?: () => string } = {},
+): CandidateDeclaredIdentifierReceipt {
+  if (!input.candidateId.trim()) throw new Error('reputation_receipt_candidate_required');
+  const canonical = canonicalDeclaredIdentifier(input);
+  return {
+    id: randomUUID(),
+    candidateId: input.candidateId,
+    identifierType: input.identifierType,
+    identifierSha256: createHash('sha256').update(canonical).digest('hex'),
+    observedAt: (options.now ?? (() => new Date().toISOString()))(),
+    identityBinding: 'candidate_declared_identifier',
+    coverage: 'declaration_only',
+  };
 }
 
 function receiptBase(

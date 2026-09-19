@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeReputationSourceUrl, retrieveReputationSourceReceipt } from './reputationSourceReceipt';
+import {
+  createCandidateDeclaredIdentifierReceipt,
+  normalizeReputationSourceUrl,
+  retrieveReputationSourceReceipt,
+} from './reputationSourceReceipt';
 
 describe('reputationSourceReceipt', () => {
   it('allows declared public source hosts and strips fragments', () => {
@@ -49,5 +53,33 @@ describe('reputationSourceReceipt', () => {
     expect(receipt.status).toBe('blocked');
     expect(receipt.coverage).toBe('blocked');
     expect(receipt.httpStatus).toBe(403);
+  });
+
+  it('records declared identifiers as digests without retaining their values', () => {
+    const receipt = createCandidateDeclaredIdentifierReceipt(
+      {
+        candidateId: 'candidate-test',
+        identifierType: 'email',
+        value: 'Alexey.Denisov@example.com',
+      },
+      { now: () => '2026-09-19T00:00:00.000Z' },
+    );
+
+    expect(receipt).toMatchObject({
+      candidateId: 'candidate-test',
+      identifierType: 'email',
+      observedAt: '2026-09-19T00:00:00.000Z',
+      identityBinding: 'candidate_declared_identifier',
+      coverage: 'declaration_only',
+    });
+    expect(receipt.identifierSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(receipt)).not.toContain('alexey');
+    expect(() =>
+      createCandidateDeclaredIdentifierReceipt({
+        candidateId: 'candidate-test',
+        identifierType: 'phone',
+        value: 'not-a-phone',
+      }),
+    ).toThrow('candidate_identifier_phone_invalid');
   });
 });
