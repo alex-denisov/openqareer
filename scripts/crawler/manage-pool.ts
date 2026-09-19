@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { LinkedinAccountPool } from '../../server/crawler/linkedinAccountPool';
 import { LinkedinScraper, resolveLinkedinProxyUrl } from '../../server/crawler/linkedinScraper';
+import { configuredLinkedinAccountIds } from '../../server/crawler/linkedinAccountConfig';
 import { parseEnvironmentFile } from '../../server/connectors/hh/hhTestAccountEnvironment';
 import { resolveLocalEnvironmentFilePath } from '../../server/localEnvironmentFile';
 
@@ -102,10 +103,13 @@ async function main() {
     .filter((entry) => entry.isDirectory() && entry.name.startsWith('account-'))
     .map((entry) => entry.name);
 
+  const configuredIds = configuredLinkedinAccountIds();
   const accountIds =
-    existingEntries.length > 0
-      ? existingEntries
-      : ['account-1', 'account-2', 'account-3', 'account-4', 'account-5'];
+    configuredIds.length > 0
+      ? configuredIds
+      : existingEntries.length > 0
+        ? existingEntries
+        : ['account-1', 'account-2', 'account-3', 'account-4', 'account-5'];
 
   const pool = new LinkedinAccountPool({
     accountIds,

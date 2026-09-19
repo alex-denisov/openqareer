@@ -1,6 +1,7 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import type { SourceReading } from '../vacancies/multiSourceVacancyEngine';
 import { LinkedinAccountPool } from './linkedinAccountPool';
+import { configuredLinkedinAccountIds } from './linkedinAccountConfig';
 import { LinkedinScraper, resolveLinkedinProxyUrl } from './linkedinScraper';
 
 export const LINKEDIN_CRAWLER_SOURCE_ID = 'src-linkedin-crawler';
@@ -16,10 +17,7 @@ export interface LinkedinCrawlerDeps {
 }
 
 function createDefaultAccountPool(): LinkedinAccountPool {
-  const envIds = process.env.LINKEDIN_ACCOUNT_IDS;
-  const accountIds = envIds
-    ? envIds.split(',').map((id) => id.trim()).filter(Boolean)
-    : [];
+  const accountIds = configuredLinkedinAccountIds();
   const storageRoot =
     process.env.LINKEDIN_STORAGE_ROOT || '/tmp/openqareer-linkedin-pool';
   return new LinkedinAccountPool({
