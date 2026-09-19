@@ -40,7 +40,7 @@
       /(подтвердите[^.]{0,80}(?:робот|человек)|captcha)/i.test(text.slice(0, 2000));
     var hhMarker = q(hhMarkerSelector) || path === '/applicant/resumes';
     var linkedinMarker = q(
-      'a[href*="/logout"],a[href*="/m/logout"],[data-view-name="navigation-profile"],.global-nav__me-photo,button[aria-label="Me"],button[aria-label="Вы"]',
+      'a[href*="/logout"],a[href*="/m/logout"],[data-view-name="navigation-profile"],[data-test-id="nav-profile"],[data-test-global-nav-me],a[href*="/in/"][aria-label],.global-nav__me-photo,button[aria-label="Me"],button[aria-label="Вы"],button[aria-label*="Me" i],button[aria-label*="Профиль" i]',
     );
     var marker = platform === 'linkedin' ? linkedinMarker : hhMarker;
     return {

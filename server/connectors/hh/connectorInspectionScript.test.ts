@@ -33,4 +33,34 @@ describe('shared connector inspection script', () => {
       fillConnectorInspectionScript('__OPENQAREER_PLATFORM__', 'hh'),
     ).toThrow('connector_inspection_script_placeholders_missing');
   });
+
+  it('recognises the modern LinkedIn profile navigation marker after login', () => {
+    const script = connectorInspectionScript('linkedin');
+    const inspect = new Function(
+      'document',
+      'location',
+      `return (${script});`,
+    ) as (
+      document: {
+        readyState: string;
+        title: string;
+        body: { innerText: string };
+        querySelector: (selector: string) => object | null;
+      },
+      location: { pathname: string; href: string },
+    ) => { signedInApplicant: boolean };
+
+    const report = inspect(
+      {
+        readyState: 'complete',
+        title: 'LinkedIn',
+        body: { innerText: 'Alexey Denisov' },
+        querySelector: (selector) =>
+          selector.includes('data-test-id="nav-profile"') ? {} : null,
+      },
+      { pathname: '/in/me/', href: 'https://www.linkedin.com/in/me/' },
+    );
+
+    expect(report.signedInApplicant).toBe(true);
+  });
 });
