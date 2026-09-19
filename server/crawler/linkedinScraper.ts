@@ -8,6 +8,8 @@ export interface PageNavigationResult {
   readonly status: number;
   readonly url: string;
   readonly content: string;
+  /** Present for the real Obscura navigator; test navigators may omit it. */
+  readonly authenticated?: boolean;
 }
 
 export type PageNavigator = (
@@ -27,7 +29,7 @@ export interface ScrapePostsQuery {
 }
 
 export interface ScrapeResult {
-  readonly status: 'success' | 'no_accounts_available' | 'exhausted_retries';
+  readonly status: 'success' | 'no_accounts_available' | 'exhausted_retries' | 'session_required';
   readonly accountId?: string;
   readonly vacancies: readonly UnifiedVacancy[];
   readonly waitMs?: number;
@@ -75,7 +77,16 @@ export class LinkedinScraper {
           const page = await runner.openPage(targetUrl);
           const content = await page.content();
           const currentUrl = page.url();
-          return { status: 200, url: currentUrl, content };
+          let authenticated: boolean | undefined;
+          try {
+            const cookies = await runner.fetchCookies(targetUrl);
+            authenticated = cookies.some((cookie) => cookie.name === 'li_at' && cookie.value.length > 0);
+          } catch {
+            // A cookie read failure should not turn a successful page read into
+            // a transport error; the caller will keep the optional signal
+            // unknown and preserve injected navigator compatibility.
+          }
+          return { status: 200, url: currentUrl, content, authenticated };
         } finally {
           await runner.close();
         }
@@ -100,12 +111,14 @@ export class LinkedinScraper {
     return this.executeScrapeWithPool(searchUrl, parseLinkedinPostCards);
   }
 
+  // eslint-disable-next-line max-lines-per-function
   private async executeScrapeWithPool(
     targetUrl: string,
     parser: (content: string, context: { observedAt: string }) => readonly UnifiedVacancy[],
   ): Promise<ScrapeResult> {
     const totalAccounts = this.pool.getPoolSummary().total;
     const maxAttempts = Math.max(1, totalAccounts);
+    let sessionRequired = false;
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const account = this.pool.getAvailableAccount();
@@ -121,6 +134,15 @@ export class LinkedinScraper {
 
       try {
         const result = await this.navigator(targetUrl, account.storagePath);
+
+        // A page can contain guest job cards while still showing LinkedIn's
+        // login form. That is not an authenticated account scrape: do not
+        // count guest cards as a successful read from the account pool.
+        if (result.authenticated === false) {
+          sessionRequired = true;
+          this.pool.recordChallenge(account.id, 'authenticated_session_required');
+          continue;
+        }
 
         // Detect security checkpoint / captcha / bot challenge
         if (
@@ -154,7 +176,7 @@ export class LinkedinScraper {
     }
 
     return {
-      status: 'exhausted_retries',
+      status: sessionRequired ? 'session_required' : 'exhausted_retries',
       vacancies: [],
       waitMs: this.pool.getMinWaitTimeMs(),
     };

@@ -112,6 +112,30 @@ describe('LinkedinScraper with Obscura pool rotation', () => {
     expect(result.vacancies).toHaveLength(0);
   });
 
+  it('does not count guest cards when the account has no authenticated session', async () => {
+    const pool = new LinkedinAccountPool({
+      accountIds: ['acc-1'],
+      storageRoot: '/tmp/test-crawlers',
+    });
+    const scraper = new LinkedinScraper({
+      pool,
+      navigator: async () => ({
+        status: 200,
+        url: 'https://www.linkedin.com/jobs/search',
+        authenticated: false,
+        content: '<input autocomplete="username"><li data-occludable-job-id="guest">',
+      }),
+      minDelayMs: 0,
+      maxDelayMs: 0,
+    });
+
+    const result = await scraper.scrapeJobs({ keywords: 'Rust', location: 'Remote' });
+
+    expect(result.status).toBe('session_required');
+    expect(result.vacancies).toHaveLength(0);
+    expect(pool.getPoolSummary().checkpointRequired).toBe(1);
+  });
+
   it('scrapes #hiring posts from LinkedIn content search feed', async () => {
     const pool = new LinkedinAccountPool({
       accountIds: ['acc-1'],
@@ -186,4 +210,3 @@ describe('LinkedinScraper with Obscura pool rotation', () => {
     }
   });
 });
-
