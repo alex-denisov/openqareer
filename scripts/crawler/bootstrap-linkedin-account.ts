@@ -141,20 +141,43 @@ async function main(): Promise<void> {
     proxyUrl: useDirectTransport() ? undefined : resolveLinkedinProxyUrl(),
   });
   let stage = 'login';
-  let loginHtml: string;
-  try {
-    loginHtml = await runner.fetchHtml('https://www.linkedin.com/login', {
-      timeoutMs: 60_000,
-      evalScript: loginEval(credentials.login, credentials.password),
-    });
-  } catch (error) {
-    const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : 'unknown';
-    const signal = typeof error === 'object' && error !== null && 'signal' in error ? String(error.signal) : 'none';
-    throw new Error(`linkedin_bootstrap_failed_stage_${stage}_code_${code}_signal_${signal}`);
+  let loginHtml = '';
+  let loginSlot = 'login';
+  const loginCandidates = [
+    { slot: 'login', value: credentials.login },
+    ...(credentials.emailLogin && credentials.emailLogin !== credentials.login
+      ? [{ slot: 'email_login', value: credentials.emailLogin }]
+      : []),
+  ];
+  for (const candidate of loginCandidates) {
+    loginSlot = candidate.slot;
+    stage = `login_${candidate.slot}`;
+    try {
+      loginHtml = await runner.fetchHtml('https://www.linkedin.com/login', {
+        timeoutMs: 60_000,
+        evalScript: loginEval(candidate.value!, credentials.password),
+      });
+    } catch (error) {
+      const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : 'unknown';
+      const signal = typeof error === 'object' && error !== null && 'signal' in error ? String(error.signal) : 'none';
+      throw new Error(`linkedin_bootstrap_failed_stage_${stage}_code_${code}_signal_${signal}`);
+    }
+    const loginFormVisible = /autocomplete=["']username|autocomplete=["']current-password/i.test(loginHtml);
+    const loginRejected = /incorrect|unable to sign in|try again|wrong password|invalid password/i.test(loginHtml);
+    const otpPrompt = hasOtpPrompt(loginHtml);
+    console.log(JSON.stringify({ phase: 'login_result', slot: candidate.slot, loginFormVisible, loginRejected, otpPrompt }));
+    if (!loginFormVisible || !loginRejected || otpPrompt) break;
+  }
+
+  const loginFormVisible = /autocomplete=["']username|autocomplete=["']current-password/i.test(loginHtml);
+  const loginRejected = /incorrect|unable to sign in|try again|wrong password|invalid password/i.test(loginHtml);
+  const otpPrompt = hasOtpPrompt(loginHtml);
+  if (loginFormVisible && loginRejected) {
+    throw new Error(`linkedin_login_rejected_${loginSlot}`);
   }
 
   let otpUsed = false;
-  if (hasOtpPrompt(loginHtml) && credentials.twoFactorKey) {
+  if (otpPrompt && credentials.twoFactorKey) {
     otpUsed = true;
     stage = 'otp';
     let otpHtml: string;
@@ -203,7 +226,7 @@ async function main(): Promise<void> {
 main().catch((error) => {
   // Never print the child command: it contains the evaluated login script and
   // may contain proxy credentials in its argument list.
-  const code = error instanceof Error && /checkpoint|2fa|session_not_confirmed|failed_stage_/i.test(error.message)
+  const code = error instanceof Error && /checkpoint|2fa|session_not_confirmed|login_rejected|failed_stage_/i.test(error.message)
     ? error.message
     : 'linkedin_bootstrap_transport_failed';
   console.error(code);
