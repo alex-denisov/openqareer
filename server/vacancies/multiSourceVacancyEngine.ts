@@ -456,7 +456,7 @@ export class MultiSourceVacancyEngine {
    * the production Node process. Internal matching keeps its full path; only
    * public HTML gets this deliberate freshness-bounded page.
    */
-  public getPublicCatalogClusters(limit = 100): VacancyCluster[] {
+  public getPublicCatalogClusters(limit = 24): VacancyCluster[] {
     if (typeof this.pool.loadClustersPage === 'function') {
       return this.pool.loadClustersPage(limit).filter((cluster) => cluster.status === 'active');
     }
