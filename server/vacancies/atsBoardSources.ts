@@ -30,6 +30,20 @@ const ATS_REFRESH_INTERVAL_MINUTES = 720;
 export function atsBoardSource(measured: MeasuredAtsBoard): RegisteredVacancySource {
   const contract = atsBoardContract(measured.provider);
   const forbidden = contract.crawlPermission === 'robots_forbidden';
+  // SmartRecruiters publishes a documented public Job Postings API, but its
+  // robots.txt blocks generic agents. The owner explicitly authorized this
+  // product to read that API, so the exception must travel with each source
+  // into MultiSourceVacancyEngine rather than living only in the provider
+  // contract (B202/B217).
+  const robotsOverride =
+    measured.provider === 'smartrecruiters'
+      ? {
+          grantedBy: 'owner' as const,
+          grantedOn: '2026-09-19',
+          basis:
+            'Владелец разрешил читать публичный SmartRecruiters Job Postings API для вакансий работодателей; API возвращает только публичный каталог и сохраняет ссылку на источник.',
+        }
+      : undefined;
   return {
     id: atsBoardSourceId(measured.provider, measured.board),
     // Имя источника — имя работодателя. Lever и Ashby не публикуют компанию в
@@ -49,6 +63,7 @@ export function atsBoardSource(measured: MeasuredAtsBoard): RegisteredVacancySou
     refreshIntervalMinutes: ATS_REFRESH_INTERVAL_MINUTES,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
+    ...(robotsOverride ? { robotsOverride } : {}),
   };
 }
 

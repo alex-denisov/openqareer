@@ -42,6 +42,10 @@ describe('доска работодателя как источник', () => {
     expect(source.targetUrl).toBe(
       'https://api.smartrecruiters.com/v1/companies/BoschGroup/postings?limit=100',
     );
+    expect(source.robotsOverride).toMatchObject({
+      grantedBy: 'owner',
+      grantedOn: '2026-09-19',
+    });
   });
 
   it('каждый зарегистрированный источник опирается на замер и умеет разбираться', () => {
