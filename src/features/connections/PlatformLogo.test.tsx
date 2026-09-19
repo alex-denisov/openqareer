@@ -17,6 +17,7 @@ describe('PlatformLogo', () => {
     const html = renderToStaticMarkup(<PlatformLogo platform="hh" title="hh.ru" />);
 
     expect(html).toContain('#D6001C');
+    expect(html).toContain('<circle');
     expect(html).toContain('is-hh');
   });
 
