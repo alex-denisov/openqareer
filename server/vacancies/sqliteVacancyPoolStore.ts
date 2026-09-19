@@ -582,11 +582,67 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       );
   }
 
+  private pruneStaleVacancies(oldestPublishedAt: string): void {
+    const oldestMs = Date.parse(oldestPublishedAt);
+    const oldestPredicate = Number.isFinite(oldestMs)
+      ? `((i.published_ms IS NOT NULL AND i.published_ms < ?) OR
+           (i.id IS NULL AND p.published_at < ?))`
+      : 'i.id IS NULL AND p.published_at < ?';
+    const oldestParams: SQLInputValue[] = Number.isFinite(oldestMs)
+      ? [oldestMs, oldestPublishedAt]
+      : [oldestPublishedAt];
+    // A full-table DELETE made the first post-deploy restore hold the event
+    // loop for minutes on the production pool. Each restart may retire a
+    // bounded batch; the indexed pool read remains available throughout.
+    this.database
+      .prepare(
+        `DELETE FROM vacancy_pool
+          WHERE id IN (
+            SELECT p.id
+              FROM vacancy_pool p
+              LEFT JOIN vacancy_pool_index i ON i.id = p.id
+             WHERE ${oldestPredicate}
+             LIMIT 1000
+          )`,
+      )
+      .run(...oldestParams);
+  }
+
+  private pruneUnknownSources(knownSourceIds: readonly string[]): void {
+    const placeholders = knownSourceIds.map(() => '?').join(', ');
+    this.database
+      .prepare(
+        `DELETE FROM vacancy_pool
+          WHERE rowid IN (
+            SELECT rowid FROM vacancy_pool
+             WHERE source_id NOT IN (${placeholders})
+             LIMIT 1000
+          )`,
+      )
+      .run(...knownSourceIds);
+  }
+
+  private pruneOrphanIndexes(): void {
+    // Индекс следует за таблицей: строка без записи — это не запись.
+    this.database.exec(`
+      DELETE FROM vacancy_pool_index
+       WHERE rowid IN (
+         SELECT i.rowid FROM vacancy_pool_index i
+         LEFT JOIN vacancy_pool p ON p.id = i.id
+         WHERE p.id IS NULL LIMIT 1000
+       )`);
+    this.database.exec(`
+      DELETE FROM vacancy_cluster_input
+       WHERE rowid IN (
+         SELECT c.rowid FROM vacancy_cluster_input c
+         LEFT JOIN vacancy_pool_index i ON i.id = c.id
+         WHERE i.id IS NULL LIMIT 1000
+       )`);
+  }
+
   prune(knownSourceIds: readonly string[], oldestPublishedAt: string): void {
     this.inTransaction(() => {
-      this.database
-        .prepare('DELETE FROM vacancy_pool WHERE published_at < ?')
-        .run(oldestPublishedAt);
+      this.pruneStaleVacancies(oldestPublishedAt);
       const placeholders = knownSourceIds.map(() => '?').join(', ');
       if (knownSourceIds.length === 0) {
         this.database.exec('DELETE FROM vacancy_pool');
@@ -596,16 +652,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         this.database.exec('DELETE FROM vacancy_source_state');
         return;
       }
-      this.database
-        .prepare(`DELETE FROM vacancy_pool WHERE source_id NOT IN (${placeholders})`)
-        .run(...knownSourceIds);
-      // Индекс следует за таблицей: строка без записи — это не запись.
-      this.database.exec(
-        `DELETE FROM vacancy_pool_index WHERE id NOT IN (SELECT id FROM vacancy_pool)`,
-      );
-      this.database.exec(
-        `DELETE FROM vacancy_cluster_input WHERE id NOT IN (SELECT id FROM vacancy_pool_index)`,
-      );
+      this.pruneUnknownSources(knownSourceIds);
+      this.pruneOrphanIndexes();
       this.database
         .prepare(`DELETE FROM vacancy_source_state WHERE source_id NOT IN (${placeholders})`)
         .run(...knownSourceIds);
