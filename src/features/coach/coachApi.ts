@@ -372,8 +372,8 @@ export interface CandidateSnapshot {
   vacancySubscriptions: VacancySubscription[];
 }
 
-export async function getSession(): Promise<AuthUser | null> {
-  const response = await apiFetch('/api/v1/auth/me');
+export async function getSession(signal?: AbortSignal): Promise<AuthUser | null> {
+  const response = await apiFetch('/api/v1/auth/me', signal ? { signal } : {});
   return readData<AuthUser | null>(response);
 }
 
@@ -888,5 +888,4 @@ export async function chooseCareerStrategyRole(input: {
   });
   return readDataObject<CareerStrategy>(response);
 }
-
 

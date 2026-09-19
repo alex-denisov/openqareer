@@ -49,6 +49,7 @@ interface CareerWorkspaceShellProps {
   sessionPending?: boolean;
   sessionError?: string;
   onRetrySession?: () => void;
+  onOpenLogin?: () => void;
   onSessionChange?: (session: AuthUser | null) => void;
 }
 
@@ -111,6 +112,7 @@ export function CareerWorkspaceShell({
   sessionPending = false,
   sessionError,
   onRetrySession = () => undefined,
+  onOpenLogin = () => undefined,
   onSessionChange = () => undefined,
 }: CareerWorkspaceShellProps) {
   const [activeView, setActiveView] = useState<ShellView>('today');
@@ -427,10 +429,24 @@ export function CareerWorkspaceShell({
                   <p className="career-expert-error" role="alert">
                     {sessionError}
                   </p>
+                  <div className="career-session-gate-actions">
+                    <button className="career-quiet-button" type="button" onClick={onRetrySession}>
+                      Повторить проверку
+                    </button>
+                    <button className="career-quiet-button" type="button" onClick={onOpenLogin}>
+                      Открыть вход
+                    </button>
+                  </div>
+                </>
+              ) : sessionWaitIsLong ? (
+                <div className="career-session-gate-actions">
                   <button className="career-quiet-button" type="button" onClick={onRetrySession}>
                     Повторить проверку
                   </button>
-                </>
+                  <button className="career-quiet-button" type="button" onClick={onOpenLogin}>
+                    Открыть вход
+                  </button>
+                </div>
               ) : null}
             </section>
           ) : !sessionPending && invalidStorage ? (

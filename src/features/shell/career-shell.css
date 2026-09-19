@@ -1141,6 +1141,13 @@
   line-height: 1.6;
 }
 
+.career-session-gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
 .career-profile-import-result {
   display: grid;
   gap: 14px;

@@ -59,6 +59,7 @@ export default function App() {
   const [state, setState] = useState<AppState>({ invalidStorage: false });
   const [storageError, setStorageError] = useState<string>();
   const [sessionError, setSessionError] = useState<string>();
+  const SESSION_CHECK_TIMEOUT_MS = 8_000;
 
   const navigate = useCallback((path: string) => {
     if (typeof window !== 'undefined') {
@@ -71,7 +72,7 @@ export default function App() {
   const resolveSession = useCallback(async () => {
     setSessionError(undefined);
     try {
-      const session = await getSession();
+      const session = await getSession(AbortSignal.timeout(SESSION_CHECK_TIMEOUT_MS));
       const result = loadWorkspace(
         window.localStorage,
         session?.candidateId ?? null,
@@ -273,6 +274,7 @@ export default function App() {
       sessionPending={sessionPending}
       sessionError={sessionError}
       onRetrySession={() => void resolveSession()}
+      onOpenLogin={() => navigate('/login')}
       onSessionChange={handleSessionChange}
     />
   );

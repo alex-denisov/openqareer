@@ -125,6 +125,7 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('Проверяем защищённую сессию');
     expect(html).toContain('Не удалось проверить аккаунт');
     expect(html).toContain('Повторить проверку');
+    expect(html).toContain('Открыть вход');
   });
 
   it('does not repeat the active navigation item in the top bar', () => {
