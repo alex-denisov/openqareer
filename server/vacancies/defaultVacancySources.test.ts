@@ -82,11 +82,18 @@ describe('registry of vacancy sources', () => {
     expect(remotive?.type).toBe('json_api');
     expect(remotive?.robotsOverride?.grantedBy).toBe('owner');
     expect(remotive?.refreshIntervalMinutes).toBeGreaterThanOrEqual(360);
-    // Разрешение поверх robots — только явное, у Remotive и LinkedIn (B217, B218).
+    // Разрешение поверх robots — только явное: owner-grants для API Remotive,
+    // Indeed, гостевого LinkedIn и измеренных досок SmartRecruiters.
     const overridden = DEFAULT_VACANCY_SOURCES.filter((s) => s.robotsOverride)
       .map((s) => s.id)
       .sort();
-    expect(overridden).toEqual(['remotive', 'src-indeed', 'src-linkedin-guest']);
+    expect(overridden).toEqual([
+      'ats-smartrecruiters-BoschGroup',
+      'ats-smartrecruiters-visa',
+      'remotive',
+      'src-indeed',
+      'src-linkedin-guest',
+    ]);
   });
 });
 
