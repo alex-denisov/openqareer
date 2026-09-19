@@ -37,6 +37,41 @@ export interface CatalogFilterGroup {
   readonly links: readonly CatalogFilterLink[];
 }
 
+/**
+ * SQL-backed catalog reads already have these summaries grouped by the
+ * materialized projection. Keep the presentation rules in one place without
+ * rebuilding every CatalogEntry merely to print navigation links.
+ */
+export function catalogFilterGroupsFromListings(
+  listings: readonly CatalogListingSummary[],
+  current?: Pick<CatalogListing, 'place' | 'role'>,
+): CatalogFilterGroup[] {
+  const places = listings.filter((listing) => !listing.role);
+  const roles = listings.filter((listing) => listing.role);
+  const placeLabel = current?.place
+    ? places.find((listing) => listing.place === current.place)?.placeLabel
+    : undefined;
+  const split: Split = { places, roles, ...(placeLabel ? { placeLabel } : {}) };
+
+  if (current?.place && current.role) {
+    return roleGroups(split, { place: current.place, role: current.role });
+  }
+  if (current?.place) return placeGroups(split, current.place);
+
+  return [
+    ...group(
+      'places',
+      'Места',
+      places.map((listing) => link(listing, listing.placeLabel)),
+    ),
+    ...group(
+      'roles',
+      'Роли',
+      roles.map((listing) => link(listing, `${listing.roleLabel} — ${listing.placeLabel}`)),
+    ),
+  ];
+}
+
 function link(listing: CatalogListingSummary, label: string): CatalogFilterLink {
   return { path: listing.path, label, count: listing.count };
 }
@@ -108,29 +143,5 @@ export function catalogFilterGroups(
   entries: readonly CatalogEntry[],
   current?: Pick<CatalogListing, 'place' | 'role'>,
 ): CatalogFilterGroup[] {
-  const listings = catalogListings(entries);
-  const places = listings.filter((listing) => !listing.role);
-  const roles = listings.filter((listing) => listing.role);
-  const placeLabel = current?.place
-    ? places.find((listing) => listing.place === current.place)?.placeLabel
-    : undefined;
-  const split: Split = { places, roles, ...(placeLabel ? { placeLabel } : {}) };
-
-  if (current?.place && current.role) {
-    return roleGroups(split, { place: current.place, role: current.role });
-  }
-  if (current?.place) return placeGroups(split, current.place);
-
-  return [
-    ...group(
-      'places',
-      'Места',
-      places.map((listing) => link(listing, listing.placeLabel)),
-    ),
-    ...group(
-      'roles',
-      'Роли',
-      roles.map((listing) => link(listing, `${listing.roleLabel} — ${listing.placeLabel}`)),
-    ),
-  ];
+  return catalogFilterGroupsFromListings(catalogListings(entries), current);
 }

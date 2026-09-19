@@ -88,6 +88,17 @@ describe('B209: публичный каталог вакансий', () => {
     expect(response.body).toContain('<!doctype html>');
   });
 
+  it('передаёт страницу 2 курсором materialized catalog, а не OFFSET', async () => {
+    const app = await appWithPool(Array.from({ length: 30 }, (_, index) => vacancy(index)));
+    const first = await app.inject({ method: 'GET', url: '/vacancies' });
+    const next = /href="(\/vacancies\/page\/2\?after=[^"]+)"/u.exec(first.body)?.[1];
+    expect(next).toBeTruthy();
+
+    const second = await app.inject({ method: 'GET', url: next! });
+    expect(second.statusCode).toBe(200);
+    expect(second.body).toContain('Страница 2 из 2');
+  });
+
   /**
    * Пропавшая вакансия обязана отвечать `410`: только по нему поисковик
    * выбрасывает адрес из индекса сразу, а не копит мёртвые ссылки на домене.

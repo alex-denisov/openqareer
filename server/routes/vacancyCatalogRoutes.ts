@@ -19,12 +19,26 @@ import type { VacancyCluster } from '../domain/unifiedVacancy';
 import {
   CATALOG_PAGE_SIZE,
   buildCatalogPage,
+  buildCatalogPageFromEntries,
   buildListingPage,
+  buildListingPageFromEntries,
   buildVacancyDetail,
   catalogEntries,
 } from '../vacancies/vacancyCatalogPage';
-import { catalogListings, listingEntries } from '../vacancies/vacancyCatalogFacets';
-import { catalogFilterGroups } from '../vacancies/vacancyCatalogFilters';
+import {
+  catalogListings,
+  listingEntries,
+  type CatalogListingSummary,
+} from '../vacancies/vacancyCatalogFacets';
+import {
+  catalogFilterGroups,
+  catalogFilterGroupsFromListings,
+} from '../vacancies/vacancyCatalogFilters';
+import {
+  decodeCatalogCursor,
+  encodeCatalogCursor,
+  type CatalogEntriesPage,
+} from '../vacancies/vacancyCatalogProjection';
 import {
   renderCatalogDocument,
   renderGoneDocument,
@@ -66,13 +80,30 @@ export function buildCatalogSitemap(clusters: readonly VacancyCluster[]): string
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`;
 }
 
+/** Sitemap variant backed by the narrow projection and keyset page. */
+export function buildCatalogSitemapFromProjection(
+  entries: readonly import('../vacancies/vacancyCatalogProjection').CatalogEntryRow[],
+  listings: readonly CatalogListingSummary[],
+): string {
+  const urls = [
+    urlEntry('/'),
+    ...LEGAL_DOCS.map((doc) => urlEntry(legalPath(doc.slug), LEGAL_PACK_PUBLISHED_AT)),
+    urlEntry(CATALOG_ROOT),
+    ...listings.map((listing) => urlEntry(listing.path)),
+    ...entries.map((entry) => urlEntry(entry.path, entry.lastSeenAt.slice(0, 10))),
+  ].slice(0, SITEMAP_URL_LIMIT);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`;
+}
+
 function sendDocument(reply: FastifyReply, html: string, status = 200): FastifyReply {
-  return reply
-    .status(status)
-    .header('Content-Type', 'text/html; charset=utf-8')
-    // Пул обновляется опросом, поэтому страница живёт минуты, а не год.
-    .header('Cache-Control', 'public, max-age=300')
-    .send(html);
+  return (
+    reply
+      .status(status)
+      .header('Content-Type', 'text/html; charset=utf-8')
+      // Пул обновляется опросом, поэтому страница живёт минуты, а не год.
+      .header('Cache-Control', 'public, max-age=300')
+      .send(html)
+  );
 }
 
 function pageNumber(request: FastifyRequest): number {
@@ -95,7 +126,73 @@ function filtersFor(
   return catalogFilterGroups(entries, current);
 }
 
+function filtersForListings(
+  listings: readonly CatalogListingSummary[],
+  current?: { place: string; role?: string },
+) {
+  return catalogFilterGroupsFromListings(listings, current);
+}
+
+function queryValue(request: FastifyRequest, name: string): unknown {
+  return (request.query as Record<string, unknown> | undefined)?.[name];
+}
+
+function cursorOf(request: FastifyRequest) {
+  return decodeCatalogCursor(queryValue(request, 'after'));
+}
+
+function withCursor(path: string, cursor: ReturnType<typeof decodeCatalogCursor>): string {
+  return cursor ? `${path}?after=${encodeCatalogCursor(cursor)}` : path;
+}
+
+function projectedPage(
+  page: CatalogEntriesPage,
+  requestedPage: number,
+  listing?: CatalogListingSummary,
+) {
+  if (listing) {
+    const built = buildListingPageFromEntries(
+      page.items,
+      {
+        place: listing.place,
+        placeLabel: listing.placeLabel,
+        ...(listing.role ? { role: listing.role, roleLabel: listing.roleLabel } : {}),
+        path: listing.path,
+        count: listing.count,
+      },
+      requestedPage,
+      page.total,
+    );
+    return page.nextCursor
+      ? {
+          ...built,
+          nextPath: withCursor(built.nextPath ?? listing.path, page.nextCursor),
+        }
+      : built;
+  }
+  const built = buildCatalogPageFromEntries(page.items, requestedPage, page.total);
+  return page.nextCursor
+    ? { ...built, nextPath: withCursor(built.nextPath ?? CATALOG_ROOT, page.nextCursor) }
+    : built;
+}
+
 async function handleCatalog(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+  const cursor = cursorOf(request);
+  const projected = deps.multiSourceEngine.getPublicCatalogEntriesPage({
+    limit: CATALOG_PAGE_SIZE,
+    ...(cursor ? { after: cursor } : {}),
+  });
+  const projectedListings = deps.multiSourceEngine.getPublicCatalogListings();
+  if (projected && projectedListings) {
+    const requestedPage = cursor ? pageNumber(request) : 1;
+    return sendDocument(
+      reply,
+      renderCatalogDocument(
+        projectedPage(projected, requestedPage),
+        filtersForListings(projectedListings),
+      ),
+    );
+  }
   const clusters = deps.multiSourceEngine.getPublicCatalogClusters();
   const page = buildCatalogPage(clusters, pageNumber(request));
   return sendDocument(reply, renderCatalogDocument(page, filtersFor(catalogEntries(clusters))));
@@ -106,8 +203,45 @@ async function handleCatalog(deps: RouteDeps, request: FastifyRequest, reply: Fa
  * публикации, отвечает `410`, а не пустой страницей: адрес, который мы сами же
  * перестали печатать, должен уйти из индекса, а не копиться.
  */
+function handleProjectedListing(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  listing: ReturnType<typeof parseListingPath>,
+): FastifyReply | undefined {
+  if (!listing) return undefined;
+  const projectedListings = deps.multiSourceEngine.getPublicCatalogListings();
+  if (!projectedListings) return undefined;
+  const summary = projectedListings.find(
+    (candidate) =>
+      candidate.place === listing.place && (candidate.role ?? undefined) === listing.role,
+  );
+  if (!summary) return undefined;
+  const cursor = cursorOf(request);
+  const projected = deps.multiSourceEngine.getPublicCatalogEntriesPage({
+    limit: CATALOG_PAGE_SIZE,
+    ...(cursor ? { after: cursor } : {}),
+    place: listing.place,
+    ...(listing.role ? { role: listing.role } : {}),
+  });
+  if (!projected) return undefined;
+  const requestedPage = cursor ? (listing.page ?? 1) : 1;
+  return sendDocument(
+    reply,
+    renderCatalogDocument(
+      projectedPage(projected, requestedPage, summary),
+      filtersForListings(projectedListings, {
+        place: listing.place,
+        ...(listing.role ? { role: listing.role } : {}),
+      }),
+    ),
+  );
+}
+
 async function handleListing(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const listing = parseListingPath(request.url);
+  const projectedReply = handleProjectedListing(deps, request, reply, listing);
+  if (projectedReply) return projectedReply;
   const clusters = deps.multiSourceEngine.getPublicCatalogClusters();
   const entries = catalogEntries(clusters);
   const summary = listing
@@ -145,6 +279,23 @@ async function handleListing(deps: RouteDeps, request: FastifyRequest, reply: Fa
  */
 async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const key = parseVacancyPath(request.url);
+  const projected = key ? deps.multiSourceEngine.getPublicCatalogEntry(key) : undefined;
+  if (projected) {
+    const found = deps.multiSourceEngine.getPublicCatalogCluster(projected.clusterId);
+    const sourceId = found?.id.startsWith('cluster-')
+      ? found.id.slice('cluster-'.length)
+      : undefined;
+    const full = sourceId ? deps.multiSourceEngine.getVacancy(sourceId) : undefined;
+    const detail = found
+      ? buildVacancyDetail(found, full?.fullDescription ?? full?.description, full)
+      : null;
+    if (detail) return sendDocument(reply, renderVacancyDocument(detail));
+    return sendDocument(
+      reply,
+      renderGoneDocument(buildCatalogPageFromEntries([projected], 1, 1)),
+      410,
+    );
+  }
   const clusters = deps.multiSourceEngine.getPublicCatalogClusters();
   const found = key ? clusters.find((cluster) => vacancyKey(cluster.id) === key) : undefined;
   // Кластер несёт только первые 300 знаков описания. Полный текст лежит у
@@ -165,6 +316,16 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
 }
 
 async function handleSitemap(deps: RouteDeps, _request: FastifyRequest, reply: FastifyReply) {
+  const projected = deps.multiSourceEngine.getPublicCatalogEntriesPage({
+    limit: SITEMAP_URL_LIMIT,
+  });
+  const listings = deps.multiSourceEngine.getPublicCatalogListings();
+  if (projected && listings) {
+    return reply
+      .header('Content-Type', 'application/xml; charset=utf-8')
+      .header('Cache-Control', 'public, max-age=900')
+      .send(buildCatalogSitemapFromProjection(projected.items, listings));
+  }
   return reply
     .header('Content-Type', 'application/xml; charset=utf-8')
     .header('Cache-Control', 'public, max-age=900')

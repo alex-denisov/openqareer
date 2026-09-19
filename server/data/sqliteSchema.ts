@@ -747,6 +747,60 @@ CREATE INDEX IF NOT EXISTS vacancy_pool_index_source_fresh
 `;
 
 /**
+ * B229 — materialized public catalog. Listing requests must not parse
+ * `vacancy_clusters.cluster_json`: the row below contains only the fields
+ * needed for a public card and for SQL facets. `cluster_id` points back to the
+ * durable cluster for the one-row detail path.
+ */
+export const VACANCY_CATALOG_ENTRIES_TABLE = `
+CREATE TABLE IF NOT EXISTS catalog_entries (
+  cluster_id TEXT PRIMARY KEY,
+  entry_key TEXT NOT NULL UNIQUE,
+  path TEXT NOT NULL,
+  title TEXT NOT NULL,
+  company TEXT NOT NULL,
+  location TEXT,
+  is_remote INTEGER NOT NULL CHECK (is_remote IN (0, 1)),
+  salary_label TEXT,
+  summary TEXT NOT NULL,
+  skills_json TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  source_name TEXT,
+  published_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  source_count INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('active', 'archived')),
+  place_slug TEXT,
+  place_label TEXT,
+  role_slug TEXT,
+  role_label TEXT,
+  published_ms INTEGER NOT NULL,
+  last_seen_ms INTEGER NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS catalog_entries_order
+  ON catalog_entries(status, published_ms DESC, entry_key ASC);
+CREATE INDEX IF NOT EXISTS catalog_entries_place
+  ON catalog_entries(status, place_slug, published_ms DESC, entry_key ASC);
+CREATE INDEX IF NOT EXISTS catalog_entries_role
+  ON catalog_entries(status, role_slug, place_slug, published_ms DESC, entry_key ASC);
+CREATE INDEX IF NOT EXISTS catalog_entries_path
+  ON catalog_entries(status, path);
+
+CREATE TABLE IF NOT EXISTS catalog_entries_seen (
+  cluster_id TEXT PRIMARY KEY,
+  processed_at INTEGER NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS catalog_projection_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  cursor_rowid INTEGER NOT NULL DEFAULT 0,
+  completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
+  updated_at INTEGER NOT NULL
+) STRICT;
+INSERT OR IGNORE INTO catalog_projection_state (id, cursor_rowid, completed, updated_at)
+  VALUES (1, 0, 0, strftime('%s', 'now'));
+`;
+
+/**
  * B180 срез 2 — выбранная роль как версионированный объект «Стратегия».
  *
  * Одна строка на кандидата: текущая версия и вся история решений лежат в одном

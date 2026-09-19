@@ -206,6 +206,7 @@ let multiSourceSyncTimer: NodeJS.Timeout | undefined;
 let linkLivenessTimer: NodeJS.Timeout | undefined;
 let documentRetentionTimer: NodeJS.Timeout | undefined;
 let retentionSweepTimer: NodeJS.Timeout | undefined;
+let catalogMaintenanceTimer: NodeJS.Timeout | undefined;
 
 function runVacancyRefresh(): void {
   void vacancyIntelligenceService
@@ -297,6 +298,26 @@ function runLinkLivenessProbe(): void {
     });
 }
 
+/**
+ * B229 materializes a bounded slice of the public catalog at a time. It is
+ * deliberately independent of source sync: the read-only projection can
+ * finish while ingest remains paused, and each tick yields between SQLite
+ * transactions instead of replaying the cluster snapshot on the HTTP loop.
+ */
+function runCatalogMaintenance(): void {
+  try {
+    const result = multiSourceEngine.runCatalogMaintenanceStep(500);
+    if (result && (result.processed > 0 || result.pending === 0)) {
+      app.log.info(result, 'vacancy-catalog-maintenance-tick');
+    }
+  } catch (error: unknown) {
+    app.log.error(
+      { errorName: error instanceof Error ? error.name : 'UnknownError' },
+      'vacancy-catalog-maintenance-failed',
+    );
+  }
+}
+
 function runDocumentRetentionPurge(): void {
   try {
     const purged = candidateStore.purgeExpiredDocuments(new Date().toISOString(), 100);
@@ -338,6 +359,7 @@ async function shutdown(signal: string): Promise<void> {
   if (linkLivenessTimer) clearInterval(linkLivenessTimer);
   if (documentRetentionTimer) clearInterval(documentRetentionTimer);
   if (retentionSweepTimer) clearInterval(retentionSweepTimer);
+  if (catalogMaintenanceTimer) clearInterval(catalogMaintenanceTimer);
   await app.close();
   candidateStore.close();
   authService.close();
@@ -380,6 +402,8 @@ try {
   // Сроки измеряются годами и месяцами, поэтому час — достаточная частота.
   retentionSweepTimer = setInterval(runRetentionSweep, 60 * 60 * 1_000);
   retentionSweepTimer.unref();
+  catalogMaintenanceTimer = setInterval(runCatalogMaintenance, 1_000);
+  catalogMaintenanceTimer.unref();
 } catch (error) {
   app.log.fatal(
     { errorName: error instanceof Error ? error.name : 'UnknownError' },

@@ -8,8 +8,15 @@ import type {
   VacancyPoolPage,
   VacancyPoolQuery,
 } from './vacancyPoolQuery';
+import type {
+  CatalogCursor,
+  CatalogEntriesPage,
+  CatalogEntriesQuery,
+  CatalogEntryRow,
+} from './vacancyCatalogProjection';
 
 export type { ClusterProjection, MatchCandidateQueryOptions };
+export type { CatalogCursor, CatalogEntriesPage, CatalogEntriesQuery, CatalogEntryRow };
 
 /** What a source's last reading recorded, kept apart from the source's config. */
 export interface StoredSourceState {
@@ -106,4 +113,21 @@ export interface VacancyPoolStore {
   upsertCluster(cluster: VacancyCluster): void;
   deleteCluster(clusterId: string): void;
   countClusters(): number;
+  /** Materialized public catalog (B229); absent while its bounded backfill runs. */
+  loadCatalogEntriesPage?(query: CatalogEntriesQuery): CatalogEntriesPage;
+  loadCatalogListings?(): Array<{
+    place: string;
+    placeLabel: string;
+    role?: string;
+    roleLabel?: string;
+    path: string;
+    count: number;
+  }>;
+  getCatalogEntry?(key: string): CatalogEntryRow | undefined;
+  getCluster?(clusterId: string): VacancyCluster | undefined;
+  catalogProjectionReady?(): boolean;
+  /** One bounded maintenance tick; returns rows inspected. */
+  backfillCatalogEntriesStep?(chunk?: number): number;
+  /** Number of cluster rows still absent from the projection marker. */
+  pendingCatalogEntries?(): number;
 }

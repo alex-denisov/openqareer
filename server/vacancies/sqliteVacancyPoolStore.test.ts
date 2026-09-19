@@ -487,7 +487,12 @@ describe('SqliteVacancyPoolStore · queryMatchCandidates (B221 срез 2)', () 
     store.markExpired(['v4'], '2026-09-02T00:00:00.000Z');
 
     const result = store.queryMatchCandidates(
-      { candidateId: 'c1', targetRoles: ['Backend Developer'], confirmedSkills: [], confirmedFacts: [] },
+      {
+        candidateId: 'c1',
+        targetRoles: ['Backend Developer'],
+        confirmedSkills: [],
+        confirmedFacts: [],
+      },
       { nowMs },
     );
     expect(result.map((v) => v.id)).toEqual(['v1']);
@@ -502,7 +507,12 @@ describe('SqliteVacancyPoolStore · queryMatchCandidates (B221 срез 2)', () 
     ]);
 
     const result = store.queryMatchCandidates(
-      { candidateId: 'c1', targetRoles: ['Frontend Engineer'], confirmedSkills: [], confirmedFacts: [] },
+      {
+        candidateId: 'c1',
+        targetRoles: ['Frontend Engineer'],
+        confirmedSkills: [],
+        confirmedFacts: [],
+      },
       { nowMs, limit: 10 },
     );
     expect(result.map((v) => v.id)).toContain('v1');
@@ -512,12 +522,26 @@ describe('SqliteVacancyPoolStore · queryMatchCandidates (B221 срез 2)', () 
     const { store } = openStore();
     const nowMs = Date.parse('2026-09-02T10:00:00.000Z');
     store.replaceSourceSlice('src', [
-      card('v-office', { title: 'Developer', isRemote: false, publishedAt: '2026-09-02T09:00:00.000Z' }),
-      card('v-remote', { title: 'Developer', isRemote: true, publishedAt: '2026-09-01T09:00:00.000Z' }),
+      card('v-office', {
+        title: 'Developer',
+        isRemote: false,
+        publishedAt: '2026-09-02T09:00:00.000Z',
+      }),
+      card('v-remote', {
+        title: 'Developer',
+        isRemote: true,
+        publishedAt: '2026-09-01T09:00:00.000Z',
+      }),
     ]);
 
     const result = store.queryMatchCandidates(
-      { candidateId: 'c1', targetRoles: ['Developer'], confirmedSkills: [], confirmedFacts: [], preferredRemote: true },
+      {
+        candidateId: 'c1',
+        targetRoles: ['Developer'],
+        confirmedSkills: [],
+        confirmedFacts: [],
+        preferredRemote: true,
+      },
       { nowMs, limit: 10 },
     );
     expect(result.map((v) => v.id)).toEqual(['v-remote', 'v-office']);
@@ -538,9 +562,7 @@ describe('SqliteVacancyPoolStore · queryMatchCandidates (B221 срез 2)', () 
     );
     expect(result).toHaveLength(3);
     expect(result[0].id).toBe('v-role');
-    expect(new Set(result.map((v) => v.id))).toEqual(
-      new Set(['v-role', 'v-other-1', 'v-other-2']),
-    );
+    expect(new Set(result.map((v) => v.id))).toEqual(new Set(['v-role', 'v-other-1', 'v-other-2']));
   });
 
   it('ищет по навыкам при пустых целевых ролях', () => {
@@ -636,6 +658,74 @@ describe('SqliteVacancyPoolStore · queryMatchCandidates (B221 срез 2)', () 
       const loaded = reopenedStore.loadClusters();
       expect(loaded[0].id).toBe('cluster-v1');
       expect(loaded[0].canonicalCompany).toBe('Tech Corp');
+    });
+
+    it('serves the materialized catalog with a keyset cursor and SQL facets', () => {
+      const { store } = openStore();
+      store.saveClusters([
+        sampleCluster,
+        {
+          ...sampleCluster,
+          id: 'cluster-v2',
+          canonicalTitle: 'TypeScript Developer',
+          firstObservedAt: '2026-09-01T09:00:00.000Z',
+          lastSeenAt: '2026-09-02T09:00:00.000Z',
+        },
+        {
+          ...sampleCluster,
+          id: 'cluster-v3',
+          canonicalTitle: 'Data Analyst',
+          firstObservedAt: '2026-09-01T08:00:00.000Z',
+          lastSeenAt: '2026-09-02T08:00:00.000Z',
+        },
+        { ...sampleCluster, id: 'cluster-v4', status: 'archived' },
+      ]);
+
+      expect(store.catalogProjectionReady()).toBe(true);
+      expect(store.pendingCatalogEntries()).toBe(0);
+      const first = store.loadCatalogEntriesPage({ limit: 1 });
+      expect(first.total).toBe(3);
+      expect(first.items).toHaveLength(1);
+      expect(first.items[0]?.title).toBe('Senior TypeScript Developer');
+      expect(first.nextCursor).toBeDefined();
+
+      const second = store.loadCatalogEntriesPage({ limit: 1, after: first.nextCursor });
+      expect(second.items.map((entry) => entry.title)).toEqual(['TypeScript Developer']);
+      expect(second.nextCursor).toBeDefined();
+
+      const listings = store.loadCatalogListings();
+      expect(listings.find((listing) => listing.place === 'berlin')?.count).toBe(3);
+      expect(store.getCatalogEntry(first.items[0]!.key)?.clusterId).toBe('cluster-v1');
+    });
+
+    it('backfills legacy cluster rows in bounded steps without loading the snapshot', () => {
+      const { store, path } = openStore();
+      const database = new DatabaseSync(path);
+      database
+        .prepare(
+          `INSERT INTO vacancy_clusters
+             (id, fingerprint, title, company, cluster_json, items_count, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          sampleCluster.id,
+          sampleCluster.id,
+          sampleCluster.canonicalTitle,
+          sampleCluster.canonicalCompany,
+          JSON.stringify(sampleCluster),
+          sampleCluster.vacanciesCount,
+          Date.now(),
+        );
+      database.close();
+
+      expect(store.pendingCatalogEntries()).toBe(1);
+      expect(store.catalogProjectionReady()).toBe(false);
+      expect(store.backfillCatalogEntriesStep(1)).toBe(1);
+      expect(store.pendingCatalogEntries()).toBe(0);
+      expect(store.catalogProjectionReady()).toBe(true);
+      expect(store.loadCatalogEntriesPage({ limit: 10 }).items[0]?.clusterId).toBe(
+        sampleCluster.id,
+      );
     });
   });
 });

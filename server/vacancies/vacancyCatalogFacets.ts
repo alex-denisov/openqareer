@@ -45,14 +45,14 @@ export interface CatalogListingSummary {
 const TITLE_NOISE =
   /\b(senior|middle|junior|lead|principal|staff|intern|sr|jr|ведущий|старший|младший|главный|стаж[её]р|remote|удал[её]нно|гибрид|hybrid|onsite|full[- ]?time|part[- ]?time)\b/giu;
 
-function placeOf(entry: CatalogEntry): { slug: string; label: string } | null {
+export function catalogPlaceOf(entry: CatalogEntry): { slug: string; label: string } | null {
   const city = normalizeCityLabel(entry.location?.split(',')[0]);
   const slug = city ? latinCityName(city) : undefined;
   if (slug && city) return { slug, label: city };
   return entry.isRemote ? { slug: REMOTE_PLACE, label: 'Удалённо' } : null;
 }
 
-function roleOf(entry: CatalogEntry): { slug: string; label: string } | null {
+export function catalogRoleOf(entry: CatalogEntry): { slug: string; label: string } | null {
   const slug = buildVacancySlug(entry.title.replace(TITLE_NOISE, ' '));
   if (!slug) return null;
   const label = slug
@@ -78,9 +78,9 @@ export function catalogListings(entries: readonly CatalogEntry[]): CatalogListin
   const buckets = new Map<string, Bucket>();
 
   for (const entry of entries) {
-    const place = placeOf(entry);
+    const place = catalogPlaceOf(entry);
     if (!place) continue;
-    const role = roleOf(entry);
+    const role = catalogRoleOf(entry);
 
     const placeId = `p:${place.slug}`;
     const placeBucket = buckets.get(placeId) ?? {
@@ -127,10 +127,10 @@ export function listingEntries(
   listing: CatalogListing,
 ): CatalogEntry[] {
   return entries.filter((entry) => {
-    const place = placeOf(entry);
+    const place = catalogPlaceOf(entry);
     if (!place || place.slug !== listing.place) return false;
     if (!listing.role) return true;
-    const role = roleOf(entry);
+    const role = catalogRoleOf(entry);
     return role?.slug === listing.role;
   });
 }

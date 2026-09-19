@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- pool persistence and its bounded public projection
+   share one SQLite transaction boundary. */
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
@@ -7,6 +9,7 @@ import {
   VACANCY_CLUSTERS_TABLE,
   VACANCY_POOL_EXPIRED_AT_COLUMN,
   VACANCY_CLUSTER_INPUT_TABLE,
+  VACANCY_CATALOG_ENTRIES_TABLE,
   VACANCY_POOL_INDEX_TABLE,
   VACANCY_SOURCE_OBSERVATIONS_COLUMN,
 } from '../data/sqliteSchema';
@@ -26,6 +29,13 @@ import {
   type VacancyPoolQuery,
 } from './vacancyPoolQuery';
 import type { StoredSourceState, VacancyLink, VacancyPoolStore } from './vacancyPoolStore';
+import {
+  catalogEntryRowOfCluster,
+  type CatalogEntriesPage,
+  type CatalogEntriesQuery,
+  type CatalogEntryRow,
+} from './vacancyCatalogProjection';
+import type { CatalogListingSummary } from './vacancyCatalogFacets';
 
 interface VacancyRow {
   payload: string;
@@ -41,10 +51,37 @@ interface SourceStateRow {
   observations: string | null;
 }
 
+interface CatalogEntrySqlRow {
+  cluster_id: string;
+  entry_key: string;
+  path: string;
+  title: string;
+  company: string;
+  location: string | null;
+  is_remote: number;
+  salary_label: string | null;
+  summary: string;
+  skills_json: string;
+  source_url: string;
+  source_name: string | null;
+  published_at: string;
+  last_seen_at: string;
+  source_count: number;
+  status: 'active' | 'archived';
+  place_slug: string | null;
+  place_label: string | null;
+  role_slug: string | null;
+  role_label: string | null;
+  published_ms: number;
+  last_seen_ms: number;
+}
+
 const SOURCE_STATUSES = new Set(['healthy', 'degraded', 'error']);
 
 /** Сколько строк дочитывается из `payload` за один шаг фонового прохода. */
 export const BACKFILL_CHUNK = 2_000;
+/** Public catalog projection is intentionally smaller than the legacy index pass. */
+export const CATALOG_BACKFILL_CHUNK = 100;
 
 /** Живые строки индекса: похороненная запись из пула не отдаётся (B200 срез 2). */
 const ALIVE = 'i.expired = 0';
@@ -103,6 +140,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private readonly database: DatabaseSync;
   /** Докуда дошёл фоновый проход по `rowid`: каждый шаг начинает с него, а не с начала таблицы. */
   private backfillCursor = 0;
+  /** Докуда дошёл bounded materialized-catalog pass. */
+  private catalogBackfillCursor = 0;
 
   constructor(options: { databasePath: string }) {
     if (options.databasePath !== ':memory:') {
@@ -117,6 +156,12 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_POOL_INDEX_TABLE);
     this.database.exec(VACANCY_CLUSTER_INPUT_TABLE);
     this.database.exec(VACANCY_CLUSTERS_TABLE);
+    this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
+    const projectionState = this.database
+      .prepare('SELECT cursor_rowid, completed FROM catalog_projection_state WHERE id = 1')
+      .get() as { cursor_rowid: number; completed: number } | undefined;
+    this.catalogBackfillCursor =
+      projectionState?.completed === 1 ? 0 : (projectionState?.cursor_rowid ?? 0);
   }
 
   /**
@@ -349,7 +394,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     limit: number,
   ): UnifiedVacancy[] {
     const notIn =
-      seenIds.size > 0 ? `AND i.id NOT IN (${Array.from(seenIds).map(() => '?').join(', ')})` : '';
+      seenIds.size > 0
+        ? `AND i.id NOT IN (${Array.from(seenIds)
+            .map(() => '?')
+            .join(', ')})`
+        : '';
     const sql = `SELECT c.cluster_json AS payload
       FROM vacancy_pool_index i
       JOIN vacancy_cluster_input c ON c.id = i.id
@@ -644,6 +693,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         this.database.exec('DELETE FROM vacancy_pool_index');
         this.database.exec('DELETE FROM vacancy_cluster_input');
         this.database.exec('DELETE FROM vacancy_clusters');
+        this.database.exec('DELETE FROM catalog_entries');
+        this.database.exec('DELETE FROM catalog_entries_seen');
+        this.database.exec(
+          `UPDATE catalog_projection_state
+              SET cursor_rowid = 0, completed = 1, updated_at = ${Date.now()}
+            WHERE id = 1`,
+        );
         this.database.exec('DELETE FROM vacancy_source_state');
         return;
       }
@@ -670,6 +726,167 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     );
   }
 
+  private prepareCatalogEntryUpsert() {
+    return this.database.prepare(
+      `INSERT INTO catalog_entries (
+         cluster_id, entry_key, path, title, company, location, is_remote,
+         salary_label, summary, skills_json, source_url, source_name,
+         published_at, last_seen_at, source_count, status,
+         place_slug, place_label, role_slug, role_label, published_ms, last_seen_ms
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(cluster_id) DO UPDATE SET
+         entry_key = excluded.entry_key,
+         path = excluded.path,
+         title = excluded.title,
+         company = excluded.company,
+         location = excluded.location,
+         is_remote = excluded.is_remote,
+         salary_label = excluded.salary_label,
+         summary = excluded.summary,
+         skills_json = excluded.skills_json,
+         source_url = excluded.source_url,
+         source_name = excluded.source_name,
+         published_at = excluded.published_at,
+         last_seen_at = excluded.last_seen_at,
+         source_count = excluded.source_count,
+         status = excluded.status,
+         place_slug = excluded.place_slug,
+         place_label = excluded.place_label,
+         role_slug = excluded.role_slug,
+         role_label = excluded.role_label,
+         published_ms = excluded.published_ms,
+         last_seen_ms = excluded.last_seen_ms`,
+    );
+  }
+
+  private markCatalogSeen(clusterId: string, processedAt = Date.now()): void {
+    this.database
+      .prepare(
+        `INSERT INTO catalog_entries_seen (cluster_id, processed_at) VALUES (?, ?)
+         ON CONFLICT(cluster_id) DO UPDATE SET processed_at = excluded.processed_at`,
+      )
+      .run(clusterId, processedAt);
+  }
+
+  private upsertCatalogEntry(cluster: VacancyCluster): void {
+    const entry = catalogEntryRowOfCluster(cluster);
+    if (!entry) {
+      // An unaddressable role is intentionally absent from the public catalog,
+      // but still marked as inspected so it cannot hold the backfill open.
+      this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?').run(cluster.id);
+      this.markCatalogSeen(cluster.id);
+      return;
+    }
+    const publishedMs = Date.parse(entry.publishedAt);
+    const lastSeenMs = Date.parse(entry.lastSeenAt);
+    const upsert = this.prepareCatalogEntryUpsert();
+    upsert.run(
+      entry.clusterId,
+      entry.key,
+      entry.path,
+      entry.title,
+      entry.company,
+      entry.location ?? null,
+      entry.isRemote ? 1 : 0,
+      entry.salaryLabel ?? null,
+      entry.summary,
+      JSON.stringify(entry.skills),
+      entry.sourceUrl,
+      entry.sourceName ?? null,
+      entry.publishedAt,
+      entry.lastSeenAt,
+      entry.sourceCount,
+      entry.status,
+      entry.placeSlug ?? null,
+      entry.placeLabel ?? null,
+      entry.roleSlug ?? null,
+      entry.roleLabel ?? null,
+      Number.isFinite(publishedMs) ? publishedMs : 0,
+      Number.isFinite(lastSeenMs) ? lastSeenMs : 0,
+    );
+    this.markCatalogSeen(cluster.id);
+  }
+
+  private persistCatalogProjectionBatch(
+    rows: ReadonlyArray<{ rowid: number; id: string; cluster_json: string }>,
+  ): void {
+    this.inTransaction(() => {
+      for (const row of rows) {
+        try {
+          const parsed = JSON.parse(row.cluster_json) as VacancyCluster;
+          if (parsed && typeof parsed.id === 'string') {
+            this.upsertCatalogEntry(parsed);
+          } else {
+            this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?').run(row.id);
+            this.markCatalogSeen(row.id);
+          }
+        } catch {
+          // A corrupt cluster is not a public entry. Marking its row seen keeps
+          // one bad snapshot from preventing the projection from completing.
+          this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?').run(row.id);
+          this.markCatalogSeen(row.id);
+        }
+      }
+      this.database
+        .prepare(
+          `UPDATE catalog_projection_state
+              SET cursor_rowid = ?, completed = 0, updated_at = ?
+            WHERE id = 1`,
+        )
+        .run(rows[rows.length - 1]!.rowid, Date.now());
+    });
+  }
+
+  /** One bounded pass over durable cluster JSON; public reads never call this. */
+  backfillCatalogEntriesStep(chunk: number = CATALOG_BACKFILL_CHUNK): number {
+    const boundedChunk = Math.max(1, Math.min(Math.trunc(chunk), 1_000));
+    const rows = this.database
+      .prepare(
+        `SELECT rowid, id, cluster_json
+           FROM vacancy_clusters
+          WHERE rowid > ?
+          ORDER BY rowid ASC
+          LIMIT ?`,
+      )
+      .all(this.catalogBackfillCursor, boundedChunk) as unknown as Array<{
+      rowid: number;
+      id: string;
+      cluster_json: string;
+    }>;
+
+    if (rows.length === 0) {
+      this.catalogBackfillCursor = 0;
+      this.database
+        .prepare(
+          `UPDATE catalog_projection_state
+              SET cursor_rowid = 0, completed = 1, updated_at = ?
+            WHERE id = 1`,
+        )
+        .run(Date.now());
+      return 0;
+    }
+
+    this.persistCatalogProjectionBatch(rows);
+    this.catalogBackfillCursor = rows[rows.length - 1]!.rowid;
+    return rows.length;
+  }
+
+  pendingCatalogEntries(): number {
+    const row = this.database
+      .prepare(
+        `SELECT count(*) AS n
+           FROM vacancy_clusters c
+           LEFT JOIN catalog_entries_seen s ON s.cluster_id = c.id
+          WHERE s.cluster_id IS NULL`,
+      )
+      .get() as { n: number };
+    return row.n;
+  }
+
+  catalogProjectionReady(): boolean {
+    return this.pendingCatalogEntries() === 0;
+  }
+
   saveClusters(clusters: VacancyCluster[]): void {
     if (clusters.length === 0) return;
     const upsert = this.prepareClusterUpsert();
@@ -685,6 +902,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
           cluster.vacanciesCount,
           now,
         );
+        this.upsertCatalogEntry(cluster);
       }
     });
   }
@@ -700,6 +918,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       for (const row of existing) {
         if (!currentIds.has(row.id)) {
           this.database.prepare('DELETE FROM vacancy_clusters WHERE id = ?').run(row.id);
+          this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?').run(row.id);
+          this.database
+            .prepare('DELETE FROM catalog_entries_seen WHERE cluster_id = ?')
+            .run(row.id);
         }
       }
       for (const cluster of clusters) {
@@ -712,6 +934,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
           cluster.vacanciesCount,
           now,
         );
+        this.upsertCatalogEntry(cluster);
       }
     });
   }
@@ -777,27 +1000,192 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   upsertCluster(cluster: VacancyCluster): void {
-    const upsert = this.prepareClusterUpsert();
-    upsert.run(
-      cluster.id,
-      cluster.id,
-      cluster.canonicalTitle,
-      cluster.canonicalCompany,
-      JSON.stringify(cluster),
-      cluster.vacanciesCount,
-      Date.now(),
-    );
+    this.inTransaction(() => {
+      const upsert = this.prepareClusterUpsert();
+      upsert.run(
+        cluster.id,
+        cluster.id,
+        cluster.canonicalTitle,
+        cluster.canonicalCompany,
+        JSON.stringify(cluster),
+        cluster.vacanciesCount,
+        Date.now(),
+      );
+      this.upsertCatalogEntry(cluster);
+    });
   }
 
   deleteCluster(clusterId: string): void {
-    this.database.prepare('DELETE FROM vacancy_clusters WHERE id = ?').run(clusterId);
+    this.inTransaction(() => {
+      this.database.prepare('DELETE FROM vacancy_clusters WHERE id = ?').run(clusterId);
+      this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?').run(clusterId);
+      this.database.prepare('DELETE FROM catalog_entries_seen WHERE cluster_id = ?').run(clusterId);
+    });
   }
 
   countClusters(): number {
-    const row = this.database
-      .prepare('SELECT count(*) AS n FROM vacancy_clusters')
-      .get() as { n: number };
+    const row = this.database.prepare('SELECT count(*) AS n FROM vacancy_clusters').get() as {
+      n: number;
+    };
     return row.n;
+  }
+
+  private catalogEntryFromRow(row: CatalogEntrySqlRow): CatalogEntryRow {
+    let skills: string[] = [];
+    try {
+      const parsed: unknown = JSON.parse(row.skills_json);
+      if (Array.isArray(parsed))
+        skills = parsed.filter((skill): skill is string => typeof skill === 'string');
+    } catch {
+      // A malformed compact field is an empty list, never a reason to hydrate
+      // the source cluster during a public request.
+    }
+    return {
+      clusterId: row.cluster_id,
+      key: row.entry_key,
+      path: row.path,
+      title: row.title,
+      company: row.company,
+      ...(row.location ? { location: row.location } : {}),
+      isRemote: row.is_remote === 1,
+      ...(row.salary_label ? { salaryLabel: row.salary_label } : {}),
+      summary: row.summary,
+      skills,
+      sourceUrl: row.source_url,
+      ...(row.source_name ? { sourceName: row.source_name } : {}),
+      publishedAt: row.published_at,
+      lastSeenAt: row.last_seen_at,
+      sourceCount: row.source_count,
+      status: row.status as CatalogEntryRow['status'],
+      ...(row.place_slug ? { placeSlug: row.place_slug } : {}),
+      ...(row.place_label ? { placeLabel: row.place_label } : {}),
+      ...(row.role_slug ? { roleSlug: row.role_slug } : {}),
+      ...(row.role_label ? { roleLabel: row.role_label } : {}),
+    };
+  }
+
+  loadCatalogEntriesPage(query: CatalogEntriesQuery): CatalogEntriesPage {
+    const limit = Math.max(1, Math.min(Math.trunc(query.limit), 50_000));
+    const where = ["status = 'active'", "path <> ''"];
+    const filterParams: SQLInputValue[] = [];
+    if (query.place) {
+      where.push('place_slug = ?');
+      filterParams.push(query.place);
+    }
+    if (query.role) {
+      where.push('role_slug = ?');
+      filterParams.push(query.role);
+    }
+    const condition = where.join(' AND ');
+    const total = (
+      this.database
+        .prepare(`SELECT count(*) AS n FROM catalog_entries WHERE ${condition}`)
+        .get(...filterParams) as { n: number }
+    ).n;
+
+    const pageWhere = [...where];
+    const pageParams = [...filterParams];
+    if (query.after) {
+      pageWhere.push('(published_ms < ? OR (published_ms = ? AND entry_key > ?))');
+      pageParams.push(query.after.publishedMs, query.after.publishedMs, query.after.key);
+    }
+    pageParams.push(limit + 1);
+    const rows = this.database
+      .prepare(
+        `SELECT cluster_id, entry_key, path, title, company, location, is_remote,
+                salary_label, summary, skills_json, source_url, source_name,
+                published_at, last_seen_at, source_count, status,
+                place_slug, place_label, role_slug, role_label, published_ms, last_seen_ms
+           FROM catalog_entries
+          WHERE ${pageWhere.join(' AND ')}
+          ORDER BY published_ms DESC, entry_key ASC
+          LIMIT ?`,
+      )
+      .all(...pageParams) as unknown as CatalogEntrySqlRow[];
+    const hasNext = rows.length > limit;
+    const selected = hasNext ? rows.slice(0, limit) : rows;
+    const last = selected.at(-1);
+    return {
+      items: selected.map((row) => this.catalogEntryFromRow(row)),
+      total,
+      ...(hasNext && last
+        ? { nextCursor: { publishedMs: last.published_ms, key: last.entry_key } }
+        : {}),
+    };
+  }
+
+  loadCatalogListings(): CatalogListingSummary[] {
+    const rows = this.database
+      .prepare(
+        `SELECT place_slug, max(place_label) AS place_label,
+                NULL AS role_slug, NULL AS role_label, count(*) AS count
+           FROM catalog_entries
+          WHERE status = 'active' AND path <> '' AND place_slug IS NOT NULL
+          GROUP BY place_slug
+         HAVING count(*) >= 3
+          UNION ALL
+         SELECT place_slug, max(place_label) AS place_label,
+                role_slug, max(role_label) AS role_label, count(*) AS count
+           FROM catalog_entries
+          WHERE status = 'active' AND path <> ''
+            AND place_slug IS NOT NULL AND role_slug IS NOT NULL
+          GROUP BY place_slug, role_slug
+         HAVING count(*) >= 3
+          ORDER BY count DESC, place_slug ASC, role_slug ASC`,
+      )
+      .all() as unknown as Array<{
+      place_slug: string;
+      place_label: string;
+      role_slug: string | null;
+      role_label: string | null;
+      count: number;
+    }>;
+    // Importing the path helper here would make the table's SQL shape leak
+    // into the route. The values are already validated slugs from the same
+    // helper that created the projection, so constructing the route is safe.
+    return rows.flatMap((row) => {
+      const path = row.role_slug
+        ? `/vacancies/${row.place_slug}/${row.role_slug}`
+        : `/vacancies/${row.place_slug}`;
+      return [
+        {
+          place: row.place_slug,
+          placeLabel: row.place_label,
+          ...(row.role_slug
+            ? { role: row.role_slug, roleLabel: row.role_label ?? row.role_slug }
+            : {}),
+          path,
+          count: row.count,
+        },
+      ];
+    });
+  }
+
+  getCatalogEntry(key: string): CatalogEntryRow | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT cluster_id, entry_key, path, title, company, location, is_remote,
+                salary_label, summary, skills_json, source_url, source_name,
+                published_at, last_seen_at, source_count, status,
+                place_slug, place_label, role_slug, role_label, published_ms, last_seen_ms
+           FROM catalog_entries
+          WHERE entry_key = ? AND status = 'active' AND path <> ''`,
+      )
+      .get(key) as CatalogEntrySqlRow | undefined;
+    return row ? this.catalogEntryFromRow(row) : undefined;
+  }
+
+  getCluster(clusterId: string): VacancyCluster | undefined {
+    const row = this.database
+      .prepare('SELECT cluster_json FROM vacancy_clusters WHERE id = ?')
+      .get(clusterId) as { cluster_json: string } | undefined;
+    if (!row) return undefined;
+    try {
+      const parsed = JSON.parse(row.cluster_json) as VacancyCluster;
+      return parsed && typeof parsed.id === 'string' ? parsed : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   close(): void {

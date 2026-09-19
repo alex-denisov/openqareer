@@ -182,6 +182,18 @@ export function buildCatalogPage(
   const page = requestedPage >= 1 && requestedPage <= pageCount ? Math.trunc(requestedPage) : 1;
   const slice = entries.slice((page - 1) * pageSize, page * pageSize);
 
+  return buildCatalogPageFromEntries(slice, page, entries.length, pageSize);
+}
+
+/** Build a page from a SQL/keyset slice without sorting or hydrating clusters. */
+export function buildCatalogPageFromEntries(
+  entries: readonly CatalogEntry[],
+  requestedPage: number,
+  total: number,
+  pageSize: number = CATALOG_PAGE_SIZE,
+): CatalogPage {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const page = requestedPage >= 1 && requestedPage <= pageCount ? Math.trunc(requestedPage) : 1;
   return {
     heading: 'Вакансии',
     documentTitle:
@@ -189,14 +201,14 @@ export function buildCatalogPage(
         ? `Вакансии — страница ${page} · openqareer`
         : 'Вакансии с досок работодателей и открытых площадок · openqareer',
     description:
-      entries.length === 0
+      total === 0
         ? 'Каталог вакансий openqareer: сейчас в нём нет ни одной записи с публичным адресом.'
-        : `${entries.length} вакансий, собранных с досок работодателей и открытых площадок. ` +
+        : `${total} вакансий, собранных с досок работодателей и открытых площадок. ` +
           'Каждая карточка называет источник и дату наблюдения.',
     page,
     pageCount,
-    total: entries.length,
-    entries: slice,
+    total,
+    entries,
     canonicalPath: catalogPagePath(page),
     ...(page > 1 ? { previousPath: catalogPagePath(page - 1) } : {}),
     ...(page < pageCount ? { nextPath: catalogPagePath(page + 1) } : {}),
@@ -206,8 +218,8 @@ export function buildCatalogPage(
         {
           '@type': 'ItemList',
           name: 'Вакансии в openqareer',
-          numberOfItems: slice.length,
-          itemListElement: slice.map((entry, index) => ({
+          numberOfItems: entries.length,
+          itemListElement: entries.map((entry, index) => ({
             '@type': 'ListItem',
             position: (page - 1) * pageSize + index + 1,
             url: `${SITE_ORIGIN}${entry.path}`,
@@ -327,21 +339,34 @@ export function buildListingPage(
   const pageCount = Math.max(1, Math.ceil(entries.length / pageSize));
   const page = requestedPage >= 1 && requestedPage <= pageCount ? Math.trunc(requestedPage) : 1;
   const slice = entries.slice((page - 1) * pageSize, page * pageSize);
+
+  return buildListingPageFromEntries(slice, summary, page, entries.length, pageSize);
+}
+
+/** Build a filtered page from the materialized catalog projection. */
+export function buildListingPageFromEntries(
+  entries: readonly CatalogEntry[],
+  summary: ListingSummary,
+  requestedPage: number,
+  total: number,
+  pageSize: number = CATALOG_PAGE_SIZE,
+): CatalogPage {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const page = requestedPage >= 1 && requestedPage <= pageCount ? Math.trunc(requestedPage) : 1;
   const heading = listingHeading(summary);
   const canonicalPath = listingPath(summary.place, summary.role, page) ?? summary.path;
-
   return {
     heading,
     documentTitle:
       page > 1 ? `${heading} — страница ${page} · openqareer` : `${heading} · openqareer`,
     description:
-      `${entries.length} вакансий: ${heading.toLowerCase()}. ` +
+      `${total} вакансий: ${heading.toLowerCase()}. ` +
       'Каждая карточка называет работодателя, источник и дату наблюдения, ' +
       'а отклик подаётся на площадке работодателя.',
     page,
     pageCount,
-    total: entries.length,
-    entries: slice,
+    total,
+    entries,
     canonicalPath,
     ...(page > 1
       ? { previousPath: listingPath(summary.place, summary.role, page - 1) ?? summary.path }
@@ -355,8 +380,8 @@ export function buildListingPage(
         {
           '@type': 'ItemList',
           name: heading,
-          numberOfItems: slice.length,
-          itemListElement: slice.map((entry, index) => ({
+          numberOfItems: entries.length,
+          itemListElement: entries.map((entry, index) => ({
             '@type': 'ListItem',
             position: (page - 1) * pageSize + index + 1,
             url: `${SITE_ORIGIN}${entry.path}`,

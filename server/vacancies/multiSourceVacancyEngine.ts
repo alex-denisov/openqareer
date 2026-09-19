@@ -38,6 +38,12 @@ import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancy
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
 import { freshnessWindow, isWithin, parseMs, MAX_VACANCY_AGE_DAYS } from './vacancyPoolQuery';
 import type { VacancyPoolStore } from './vacancyPoolStore';
+import type {
+  CatalogEntriesPage,
+  CatalogEntriesQuery,
+  CatalogEntryRow,
+} from './vacancyCatalogProjection';
+import type { CatalogListingSummary } from './vacancyCatalogFacets';
 
 import { PoliteScheduler, type SourceScheduleInfo } from './politeScheduler';
 
@@ -130,7 +136,10 @@ function hasChangedExistingMembership(
 ): boolean {
   return vacancies.some((vacancy) => {
     const previous = pool.getVacancy(vacancy.id);
-    return previous !== undefined && vacancyMembershipFields(previous) !== vacancyMembershipFields(vacancy);
+    return (
+      previous !== undefined &&
+      vacancyMembershipFields(previous) !== vacancyMembershipFields(vacancy)
+    );
   });
 }
 
@@ -489,6 +498,65 @@ export class MultiSourceVacancyEngine {
   }
 
   /**
+   * Read the materialized public catalog when its bounded backfill is complete.
+   * Memory stores first build their tiny in-process snapshot; SQLite stores do
+   * not hydrate any cluster JSON here.
+   */
+  public getPublicCatalogEntriesPage(query: CatalogEntriesQuery): CatalogEntriesPage | undefined {
+    if (typeof this.pool.loadCatalogEntriesPage !== 'function') return undefined;
+    if (
+      typeof this.pool.catalogProjectionReady === 'function' &&
+      !this.pool.catalogProjectionReady()
+    ) {
+      return undefined;
+    }
+    if (typeof this.pool.loadClustersPage !== 'function') this.ensureClusters();
+    return this.pool.loadCatalogEntriesPage(query);
+  }
+
+  public getPublicCatalogListings(): CatalogListingSummary[] | undefined {
+    if (typeof this.pool.loadCatalogListings !== 'function') return undefined;
+    if (
+      typeof this.pool.catalogProjectionReady === 'function' &&
+      !this.pool.catalogProjectionReady()
+    ) {
+      return undefined;
+    }
+    if (typeof this.pool.loadClustersPage !== 'function') this.ensureClusters();
+    return this.pool.loadCatalogListings();
+  }
+
+  public getPublicCatalogEntry(key: string): CatalogEntryRow | undefined {
+    if (typeof this.pool.getCatalogEntry !== 'function') return undefined;
+    if (
+      typeof this.pool.catalogProjectionReady === 'function' &&
+      !this.pool.catalogProjectionReady()
+    ) {
+      return undefined;
+    }
+    if (typeof this.pool.loadClustersPage !== 'function') this.ensureClusters();
+    return this.pool.getCatalogEntry(key);
+  }
+
+  public getPublicCatalogCluster(clusterId: string): VacancyCluster | undefined {
+    if (typeof this.pool.getCluster === 'function') return this.pool.getCluster(clusterId);
+    this.ensureClusters();
+    return this.clusters.find((cluster) => cluster.id === clusterId);
+  }
+
+  /** One event-loop-sized materialization tick for B229. */
+  public runCatalogMaintenanceStep(
+    chunk?: number,
+  ): { processed: number; pending: number } | undefined {
+    if (typeof this.pool.backfillCatalogEntriesStep !== 'function') return undefined;
+    const processed = this.pool.backfillCatalogEntriesStep(chunk);
+    return {
+      processed,
+      pending: this.pool.pendingCatalogEntries?.() ?? 0,
+    };
+  }
+
+  /**
    * Собирает кластеры, если пул менялся с прошлой сборки — только в режиме
    * `sync`. В фоновом режиме чтение отдаёт то, что есть: одно «медленное
    * чтение» на проде — это минуты без ответа для всех (B221).
@@ -693,7 +761,8 @@ export class MultiSourceVacancyEngine {
       .map((v) =>
         v.provenance ? { ...v, provenance: { ...v.provenance, sourceName: source.name } } : v,
       );
-    const changedExistingMembership = partial && hasChangedExistingMembership(this.pool, freshFetched);
+    const changedExistingMembership =
+      partial && hasChangedExistingMembership(this.pool, freshFetched);
 
     // A successful sync replaces this source's slice. Merging instead meant a
     // vacancy the employer took down an hour after one reading stayed

@@ -15,6 +15,13 @@ import {
   type VacancyPoolQuery,
 } from './vacancyPoolQuery';
 import type { StoredSourceState, VacancyLink, VacancyPoolStore } from './vacancyPoolStore';
+import {
+  catalogEntryRowOfCluster,
+  type CatalogEntriesPage,
+  type CatalogEntriesQuery,
+  type CatalogEntryRow,
+} from './vacancyCatalogProjection';
+import { catalogListings } from './vacancyCatalogFacets';
 
 interface StoredRow {
   readonly vacancy: UnifiedVacancy;
@@ -120,8 +127,7 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
 
     const activeRows = Array.from(this.aliveRows()).filter(
       (row) =>
-        row.vacancy.status === 'active' &&
-        isWithin(parseMs(row.vacancy.publishedAt), window),
+        row.vacancy.status === 'active' && isWithin(parseMs(row.vacancy.publishedAt), window),
     );
 
     const results: UnifiedVacancy[] = [];
@@ -258,5 +264,77 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
 
   countClusters(): number {
     return this.clusters.size;
+  }
+
+  loadCatalogEntriesPage(query: CatalogEntriesQuery): CatalogEntriesPage {
+    const rows = Array.from(this.clusters.values())
+      .filter((cluster) => cluster.status === 'active')
+      .map(catalogEntryRowOfCluster)
+      .filter((entry): entry is CatalogEntryRow => entry !== null)
+      .filter((entry) => !query.place || entry.placeSlug === query.place)
+      .filter((entry) => !query.role || entry.roleSlug === query.role)
+      .sort(
+        (a, b) =>
+          (parseMs(b.publishedAt) ?? 0) - (parseMs(a.publishedAt) ?? 0) ||
+          a.key.localeCompare(b.key),
+      );
+    const total = rows.length;
+    const after = query.after;
+    const filtered = after
+      ? rows.filter((entry) => {
+          const publishedMs = parseMs(entry.publishedAt) ?? 0;
+          return (
+            publishedMs < after.publishedMs ||
+            (publishedMs === after.publishedMs && entry.key > after.key)
+          );
+        })
+      : rows;
+    const limit = Math.max(1, Math.min(Math.trunc(query.limit), 50_000));
+    const selected = filtered.slice(0, limit);
+    return {
+      items: selected,
+      total,
+      ...(filtered.length > limit && selected.length > 0
+        ? {
+            nextCursor: {
+              publishedMs: parseMs(selected[selected.length - 1]!.publishedAt) ?? 0,
+              key: selected[selected.length - 1]!.key,
+            },
+          }
+        : {}),
+    };
+  }
+
+  loadCatalogListings() {
+    return catalogListings(
+      Array.from(this.clusters.values())
+        .filter((cluster) => cluster.status === 'active')
+        .map(catalogEntryRowOfCluster)
+        .filter((entry): entry is CatalogEntryRow => entry !== null),
+    );
+  }
+
+  getCatalogEntry(key: string): CatalogEntryRow | undefined {
+    for (const cluster of this.clusters.values()) {
+      const entry = catalogEntryRowOfCluster(cluster);
+      if (entry?.status === 'active' && entry.key === key) return entry;
+    }
+    return undefined;
+  }
+
+  getCluster(clusterId: string): VacancyCluster | undefined {
+    return this.clusters.get(clusterId);
+  }
+
+  catalogProjectionReady(): boolean {
+    return true;
+  }
+
+  backfillCatalogEntriesStep(): number {
+    return 0;
+  }
+
+  pendingCatalogEntries(): number {
+    return 0;
   }
 }
