@@ -43,10 +43,7 @@ function LinkedInMark({ size, title }: { size: number; title?: string }) {
   );
 }
 
-/**
- * hh.ru prints its mark as a red tile carrying two block "h" letterforms; it is
- * reconstructed here from plain rectangles so it stays crisp at every size.
- */
+/** hh.ru uses a red circle with a white lowercase `hh` monogram. */
 function HeadHunterMark({ size, title }: { size: number; title?: string }) {
   return (
     <svg
@@ -59,15 +56,11 @@ function HeadHunterMark({ size, title }: { size: number; title?: string }) {
       aria-hidden={title ? undefined : true}
       focusable="false"
     >
-      <rect width="24" height="24" rx="4.4" fill="#D6001C" />
-      <g fill="#FFFFFF">
-        <rect x="4" y="5" width="2.3" height="14" rx="0.5" />
-        <rect x="6.3" y="10.4" width="2.3" height="2.3" />
-        <rect x="8.6" y="10.4" width="2.3" height="8.6" rx="0.5" />
-        <rect x="13.1" y="5" width="2.3" height="14" rx="0.5" />
-        <rect x="15.4" y="10.4" width="2.3" height="2.3" />
-        <rect x="17.7" y="10.4" width="2.3" height="8.6" rx="0.5" />
-      </g>
+      <circle cx="12" cy="12" r="12" fill="#D6001C" />
+      <path
+        fill="#FFFFFF"
+        d="M4.4 5.4h2.8v4.8c.7-.8 1.6-1.2 2.7-1.2 2.2 0 3.3 1.4 3.3 4.1V18h-2.8v-4.6c0-1-.3-1.6-1.2-1.6-.9 0-1.3.6-1.3 1.6V18H4.4V5.4Zm8.9 0h2.8v4.8c.7-.8 1.6-1.2 2.7-1.2 2.2 0 3.3 1.4 3.3 4.1V18h-2.8v-4.6c0-1-.3-1.6-1.2-1.6-.9 0-1.3.6-1.3 1.6V18h-2.8V5.4Z"
+      />
     </svg>
   );
 }

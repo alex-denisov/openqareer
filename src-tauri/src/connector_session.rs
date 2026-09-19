@@ -124,6 +124,24 @@ pub fn is_allowed_session_navigation_url(platform: &str, url: &str) -> bool {
     if url == "about:blank" || is_allowed_session_url(platform, url) {
         return true;
     }
+    if platform == "hh" {
+        let Ok(parsed) = Url::parse(url) else {
+            return false;
+        };
+        if parsed.scheme() != "https" {
+            return false;
+        }
+        if let Some(host) = parsed.host_str() {
+            if host == "mc.yandex.ru"
+                || host_belongs_to(host, "yandex.ru")
+                || host_belongs_to(host, "yastatic.net")
+                || host_belongs_to(host, "yandexcloud.net")
+            {
+                return true;
+            }
+        }
+        return false;
+    }
     if platform != "linkedin" {
         return false;
     }
@@ -699,6 +717,22 @@ mod tests {
         assert!(!is_allowed_session_navigation_url(
             "hh",
             "https://www.google.com/recaptcha/api2/anchor"
+        ));
+    }
+
+    #[test]
+    fn allows_hh_captcha_and_static_dependency_origins_only_for_hh() {
+        for url in [
+            "https://mc.yandex.ru/watch/1",
+            "https://yastatic.net/smartcaptcha/captcha.js",
+            "https://smartcaptcha.yandexcloud.net/captcha.js",
+        ] {
+            assert!(is_allowed_session_navigation_url("hh", url));
+            assert!(!is_allowed_session_navigation_url("linkedin", url));
+        }
+        assert!(!is_allowed_session_navigation_url(
+            "hh",
+            "https://evil.yandex.ru.example/captcha"
         ));
     }
 

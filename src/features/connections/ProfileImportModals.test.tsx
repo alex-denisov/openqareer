@@ -71,9 +71,10 @@ describe('ProfileImportModals', () => {
     expect(html).toContain('сам загрузит профиль и закроет окно');
     expect(html).toContain('на странице самого LinkedIn, в вашей собственной');
     expect(html).not.toContain('Логин и пароль остаются');
-    // Before any probe has answered, the step says it is measuring — it must
-    // not refuse a route it has not measured and is about to route around.
-    expect(html).toContain('Проверяем доступность LinkedIn');
+    // Route diagnostics stay out of the connector surface; the candidate only
+    // needs the provider sign-in window here.
+    expect(html).not.toContain('Проверяем доступность LinkedIn');
+    expect(html).not.toContain('Защищённый EU-маршрут LinkedIn');
     expect(html).not.toContain('окно входа останется пустым');
   });
 });

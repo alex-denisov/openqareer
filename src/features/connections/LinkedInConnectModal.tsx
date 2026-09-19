@@ -1,21 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowSquareOut, SpinnerGap, WarningCircle } from '@phosphor-icons/react';
-import { isTauriEnvironment, probeNetworkStatus } from '../../services/desktop/desktopBridge';
+import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import { setStoredSessionToken } from '../coach/apiClient';
 import type { ParsedResume } from '../workspace/resumeParser';
 import { ImportModalShell } from './ImportModalShell';
 import { PlatformLogo } from './PlatformLogo';
-import { RouteNoticeLine } from './RouteNoticeLine';
 import {
   closeConnectorSession,
   inspectSessionPage,
   openConnectorSession,
-  platformRouteNotice,
   readSessionPage,
   resizeConnectorSession,
   sessionCheckFailure,
   type ConnectorSessionStep,
-  type RouteNotice,
 } from './connectorSession';
 import {
   nextAnimationFrame,
@@ -65,9 +62,6 @@ export function LinkedInConnectModal({
   const [error, setError] = useState<string>();
   // `undefined` while the probe is in flight, `null` when there is no
   // measurement to report at all (B167).
-  const [probe, setProbe] = useState<{ accessible: boolean } | null>();
-  const [tunnelActive, setTunnelActive] = useState(false);
-  const [routeStarting, setRouteStarting] = useState(false);
   const [autoPollPaused, setAutoPollPaused] = useState(false);
   const [waiting, setWaiting] = useState<LinkedInWaitingNotice>();
   const webviewHost = useRef<HTMLDivElement>(null);
@@ -127,18 +121,12 @@ export function LinkedInConnectModal({
     }
     setStep('idle');
     setError(undefined);
-    setProbe(undefined);
-    setTunnelActive(false);
-    setRouteStarting(false);
     setAutoPollPaused(false);
     setWaiting(undefined);
     signedIn.current = false;
     unrecognisedPolls.current = 0;
     unreadablePolls.current = 0;
     sessionFlow.current = undefined;
-    void probeNetworkStatus()
-      .then((status) => setProbe(status ? status.linkedin : null))
-      .catch(() => setProbe(null));
   }, [isOpen]);
 
   /**
@@ -178,14 +166,10 @@ export function LinkedInConnectModal({
     unreadablePolls.current = 0;
     setStep('opening');
     if (isTauriEnvironment()) {
-      setRouteStarting(true);
       try {
         const route = await startLinkedInProtectedRoute();
-        setProbe(route.probe);
-        setTunnelActive(route.tunnelActive);
         tunnelRaised.current = route.tunnelActive;
       } catch (reason) {
-        setRouteStarting(false);
         if (reason instanceof ProtectedRouteError && reason.code === 'session_expired') {
           setStoredSessionToken(null);
           closeModal();
@@ -197,7 +181,6 @@ export function LinkedInConnectModal({
         setError(protectedRouteFailureMessage(reason));
         return;
       }
-      setRouteStarting(false);
     }
     const started = await startConnectorSession({
       platform: 'linkedin',
@@ -321,22 +304,7 @@ export function LinkedInConnectModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, step, autoPollPaused]);
 
-  const route: RouteNotice = routeStarting
-    ? { tone: 'pending', text: 'Поднимаем защищённый EU-маршрут LinkedIn…' }
-    : platformRouteNotice('linkedin', probe, {
-        // Only the desktop companion carries the protected route; in the web
-        // build a closed direct path really is the end of this flow.
-        protectedRouteAvailable: isTauriEnvironment(),
-        protectedRouteActive: tunnelActive,
-      });
-  // The step is never silent: while the route and the window come up there is
-  // nothing to poll yet, and silence is what an undetected sign-in looks like.
-  const status: LinkedInWaitingNotice | undefined =
-    step === 'opening' && !routeStarting
-      ? { text: 'Открываем окно входа LinkedIn…', stuck: false }
-      : step === 'opening'
-        ? undefined
-        : waiting;
+  const status: LinkedInWaitingNotice | undefined = step === 'opening' ? undefined : waiting;
   const sessionActive = step !== 'idle';
 
   return (
@@ -349,24 +317,14 @@ export function LinkedInConnectModal({
       wide={isTauriEnvironment() && sessionActive}
     >
       <div className={`career-modal-body${sessionActive ? ' is-connector-session' : ''}`}>
-        {sessionActive ? (
-          /* The toolbar states the route and nothing else. «Проверить вход»
-             duplicated the poll that already runs every 750 ms, and «Выйти из
-             LinkedIn» hid the sign-out inside a dialog the candidate opens to
-             sign *in*; it now lives on the platform card, next to the connection
-             it ends (owner report, 2026-08-26). */
-          <div className="career-connector-session-toolbar">
-            <RouteNoticeLine notice={route} compact />
-          </div>
-        ) : (
+        {!sessionActive ? (
           <>
-            <RouteNoticeLine notice={route} />
             <p className="career-modal-intro">
               Вход проходит на странице самого LinkedIn, в вашей собственной
               сессии. После входа OpenQareer сам загрузит профиль и закроет окно.
             </p>
           </>
-        )}
+        ) : null}
 
         {step === 'idle' ? (
           <button
