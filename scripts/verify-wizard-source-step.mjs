@@ -273,6 +273,7 @@ async function desktopWalk(browser, baseUrl, viewport) {
   await page.addInitScript(() => {
     // What `isTauriEnvironment()` reads to decide it is inside the app.
     window.__TAURI_INTERNALS__ = { invoke: async () => null };
+    localStorage.setItem('openqareer_session_token', 'desktop-wizard-source-session');
   });
   await stubApi(page, {
     signedIn: true,
