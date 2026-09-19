@@ -726,6 +726,9 @@ describe('SqliteVacancyPoolStore · queryMatchCandidates (B221 срез 2)', () 
       expect(store.loadCatalogEntriesPage({ limit: 10 }).items[0]?.clusterId).toBe(
         sampleCluster.id,
       );
+      // Completion is sticky: the next timer tick must not rewrite the first
+      // row from cursor 0 over and over.
+      expect(store.backfillCatalogEntriesStep(1)).toBe(0);
     });
   });
 });

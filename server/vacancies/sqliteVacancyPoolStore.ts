@@ -872,6 +872,23 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   /** One bounded pass over durable cluster JSON; public reads never call this. */
   backfillCatalogEntriesStep(chunk: number = CATALOG_BACKFILL_CHUNK): number {
     const boundedChunk = Math.max(1, Math.min(Math.trunc(chunk), 1_000));
+    // Completion is sticky. Without this guard a timer tick reset the cursor
+    // to zero and rewrote the first 500 clusters forever, eventually starving
+    // the production HTTP event loop (B229).
+    if (this.pendingCatalogEntries() === 0) {
+      const maxRow = this.database
+        .prepare('SELECT coalesce(max(rowid), 0) AS rowid FROM vacancy_clusters')
+        .get() as { rowid: number };
+      this.catalogBackfillCursor = maxRow.rowid;
+      this.database
+        .prepare(
+          `UPDATE catalog_projection_state
+              SET cursor_rowid = ?, completed = 1, updated_at = ?
+            WHERE id = 1`,
+        )
+        .run(maxRow.rowid, Date.now());
+      return 0;
+    }
     const rows = this.database
       .prepare(
         `SELECT rowid, id, cluster_json
@@ -887,14 +904,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     }>;
 
     if (rows.length === 0) {
-      this.catalogBackfillCursor = 0;
+      const maxRow = this.database
+        .prepare('SELECT coalesce(max(rowid), 0) AS rowid FROM vacancy_clusters')
+        .get() as { rowid: number };
+      this.catalogBackfillCursor = maxRow.rowid;
       this.database
         .prepare(
           `UPDATE catalog_projection_state
-              SET cursor_rowid = 0, completed = 1, updated_at = ?
+              SET cursor_rowid = ?, completed = 1, updated_at = ?
             WHERE id = 1`,
         )
-        .run(Date.now());
+        .run(maxRow.rowid, Date.now());
       return 0;
     }
 
