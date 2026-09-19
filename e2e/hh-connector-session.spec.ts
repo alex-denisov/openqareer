@@ -44,6 +44,7 @@ interface BridgeOptions {
 async function stubDesktopBridge(page: Page, options: BridgeOptions = {}): Promise<void> {
   await page.addInitScript(
     ({ listBody, detailBody, missingWindowReads }) => {
+      localStorage.setItem('openqareer_session_token', 'desktop-e2e-session');
       const calls: string[] = [];
       let sessionOpen = false;
       let missingLeft = missingWindowReads;

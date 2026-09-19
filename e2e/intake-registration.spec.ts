@@ -110,6 +110,7 @@ test.describe('B141 diagnostic survives registration', () => {
     await page.addInitScript(() => {
       (window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }).__TAURI_INTERNALS__ =
         {};
+      localStorage.setItem('openqareer_session_token', 'desktop-e2e-session');
     });
     await stubAuth(page);
     // The native companion is a protected workspace. Its platform connectors
