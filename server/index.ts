@@ -350,37 +350,18 @@ process.once('SIGTERM', () => void shutdown('SIGTERM'));
 try {
   await app.listen({ host: config.host, port: config.port });
   // Сервер слушает и отвечает на /health мгновенно (<10 мс).
-  // Восстановление вакансий из SQLite и кластеров запускаются
-  // через 30 секунд в фоне без блокировки event loop через restoreAsync (B218, B221).
-  setTimeout(async () => {
-    try {
-      const startedAt = Date.now();
-      const restored = await multiSourceEngine.restoreAsync(Date.now(), 250, { prune: false });
-      if (
-        multiSourceEngine.getPublicCatalogClusters(1).length === 0 &&
-        multiSourceEngine.poolSize > 0
-      ) {
-        await multiSourceEngine.reclusterAsync();
-      }
-      app.log.info(
-        {
-          restored: restored.restored,
-          ms: Date.now() - startedAt,
-          clusters: multiSourceEngine.getPublicCatalogClusters().length,
-        },
-        'vacancy-pool-restored-and-clustered',
-      );
-      vacancyPoolRestored = true;
-      runVacancyRefresh();
-      runMultiSourceSync();
-      runDocumentRetentionPurge();
-      runRetentionSweep();
-    } catch (err) {
-      app.log.error(
-        { err: err instanceof Error ? err.message : String(err) },
-        'vacancy-pool-restore-failed',
-      );
-    }
+  // The public catalog is already lazy and reads indexed pages directly. A
+  // multi-gigabyte SQLite history must not be replayed on this event loop:
+  // restoration/reclustering belongs to a bounded maintenance worker. Mark
+  // the read path ready after the same short warm-up, then start only work
+  // whose own storage queries are bounded (B218, B221).
+  setTimeout(() => {
+    vacancyPoolRestored = true;
+    app.log.info({ mode: 'lazy-read', clusters: 'deferred' }, 'vacancy-pool-ready');
+    runVacancyRefresh();
+    runMultiSourceSync();
+    runDocumentRetentionPurge();
+    runRetentionSweep();
   }, 30_000)?.unref();
   vacancyRefreshTimer = setInterval(runVacancyRefresh, 5 * 60 * 1_000);
   vacancyRefreshTimer.unref();
