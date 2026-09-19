@@ -6,6 +6,11 @@ import {
   putCandidateWorkspace,
   type AuthUser,
 } from './features/coach/coachApi';
+import {
+  CoachApiError,
+  getStoredSessionToken,
+  setStoredSessionToken,
+} from './features/coach/apiClient';
 import { resolveCandidateWorkspace } from './features/workspace/workspaceHydration';
 import { prepareCareerWorkspace } from './features/journey/careerJourneyEngine';
 import { CareerWorkspaceShell } from './features/shell/CareerWorkspaceShell';
@@ -71,6 +76,16 @@ export default function App() {
 
   const resolveSession = useCallback(async () => {
     setSessionError(undefined);
+    // The desktop companion has no useful anonymous workspace: its only
+    // session credential is the bearer token stored by auth responses. Do not
+    // wait on a network request when that credential is absent; route straight
+    // to the account form so a fresh install is usable immediately.
+    if (isDesktop && !getStoredSessionToken()) {
+      setState({ session: null, invalidStorage: false });
+      setIsResolvingSession(false);
+      if (currentPath !== '/login' && currentPath !== '/signup') navigate('/login');
+      return;
+    }
     try {
       const session = await getSession(AbortSignal.timeout(SESSION_CHECK_TIMEOUT_MS));
       const result = loadWorkspace(
@@ -95,7 +110,17 @@ export default function App() {
         const resolvedPath = resolvedDesktopSessionPath(currentPath, Boolean(session?.candidateId));
         if (resolvedPath) navigate(resolvedPath);
       }
-    } catch {
+    } catch (error) {
+      const sessionExpired =
+        error instanceof CoachApiError &&
+        /^(?:http_401|http_403|unauthorized|invalid_session|session_expired)$/i.test(error.code);
+      if (isDesktop && sessionExpired) {
+        setStoredSessionToken(null);
+        setState({ session: null, invalidStorage: false });
+        setIsResolvingSession(false);
+        navigate('/login');
+        return;
+      }
       setSessionError(
         'Не удалось проверить аккаунт. Локальные карьерные данные скрыты до восстановления связи.',
       );
