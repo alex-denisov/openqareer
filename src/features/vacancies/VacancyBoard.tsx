@@ -666,6 +666,9 @@ function VacancyRow({
       <span className="career-vacancy-salary">{salaryLabel(cluster.salary)}</span>
       <span className="career-vacancy-location">
         {cluster.canonicalLocation || (cluster.isRemote ? 'Удалённо' : 'Не указана')}
+        {explanation.outsideGeography ? (
+          <small className="career-vacancy-outside">вне вашей географии</small>
+        ) : null}
       </span>
       <span className="career-vacancy-age">{age.label}</span>
       <span className="career-vacancy-coverage">

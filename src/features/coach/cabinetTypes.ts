@@ -189,6 +189,8 @@ interface VacancyMatchExplanation {
    * Настоящее число совпавших и недостающих требований. Списки приходят
    * обрезанными до видимых трёх (INC-029), поэтому покрытие считается отсюда.
    */
+  /** Вакансия вне рынков кампании кандидата (PRB-040): подписана, но не скрыта. */
+  outsideGeography?: boolean;
   matchingCount?: number;
   missingCount?: number;
   summary: string;

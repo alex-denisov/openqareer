@@ -302,4 +302,17 @@ describe('VacancyBoard · страница из 20 записей', () => {
     expect(html).toContain('Показать ещё 20');
     expect(html).toContain('показано 20 из 96');
   });
+
+  /** PRB-040: запись вне рынков кампании подписана, а не спрятана. */
+  it('подписывает вакансию вне географии кампании', () => {
+    const first = pool.matched[0];
+    const outside = {
+      ...first,
+      explanation: { ...first.explanation, outsideGeography: true },
+    } as unknown as MatchedVacancyItem;
+    const html = renderToStaticMarkup(
+      <VacancyBoard pool={{ ...pool, matched: [outside] }} />,
+    );
+    expect(html).toContain('вне вашей географии');
+  });
 });

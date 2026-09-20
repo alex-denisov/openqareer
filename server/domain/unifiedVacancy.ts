@@ -118,6 +118,11 @@ export interface VacancyMatchExplanation {
    */
   matchingCount?: number;
   missingCount?: number;
+  /**
+   * Вакансия вне рынков кампании кандидата (PRB-040). Такая запись стоит после
+   * остальных и подписана, но не скрыта: источник мог назвать страну неточно.
+   */
+  outsideGeography?: boolean;
   summary: string;
   calculatedAt: string;
 }

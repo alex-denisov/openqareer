@@ -8694,6 +8694,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Запись вне рынков кампании подписана словами, не цветом (PRB-040). */
+.career-vacancy-outside {
+  display: block;
+  color: var(--career-warning);
+  font-size: var(--career-text-xs);
+}
+
 /* Числа — моноширинным (design-system §4): зарплата, возраст, покрытие. */
 .career-vacancy-salary,
 .career-vacancy-age,

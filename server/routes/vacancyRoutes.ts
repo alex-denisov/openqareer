@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
 import { resolveRoleNameLanguage, type RoleNameLanguage } from '../domain/roleNameLanguage';
 import { dropOrganisationTitles } from '../domain/roleNaming';
+import { markGeography } from '../vacancies/vacancyGeography';
 import { vacancySubscriptionInputSchema } from '../domain/vacancy';
 import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
 import type { NamedRole, ProposedRole } from '../../shared/roleProposals';
@@ -615,7 +616,16 @@ const handleMatchedVacancies: Handler = async (
 
   // Подбор считается один раз на чтение: страницы одного чтения обязаны
   // приходить из одного списка, иначе смещение указывает не на ту запись.
-  const matched = await readMatchedSnapshot(multiSourceEngine, candidate.id, confirmedSkills, targetRoles);
+  const snapshot = await readMatchedSnapshot(multiSourceEngine, candidate.id, confirmedSkills, targetRoles);
+  // SQL добирает кандидатов до лимита любыми свежими записями; при названной
+  // роли в подбор идут только совпавшие с ней, и счётчик считает их же.
+  // Записи вне рынков кампании помечены и стоят после остальных (PRB-040).
+  const matched = markGeography(
+    targetRoles.length > 0
+      ? snapshot.filter((item) => item.explanation.roleMatch !== 'none')
+      : snapshot,
+    readSearchRegions(candidateStore, candidate.id),
+  );
 
   // Весь подбор одним телом не доходит: маршрут рвёт ответ примерно на 20 460
   // байт (INC-029). Экран забирает пул страницами внутри доказанного бюджета.
