@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AdminConsole } from './features/admin/AdminConsole';
 import {
   getCandidateWorkspace,
@@ -67,7 +67,7 @@ export default function App() {
   const [state, setState] = useState<AppState>({ invalidStorage: false });
   const [storageError, setStorageError] = useState<string>();
   const [sessionError, setSessionError] = useState<string>();
-  const SESSION_CHECK_TIMEOUT_MS = 2_000;
+  const sessionRevision = useRef(0);
 
   const navigate = useCallback((path: string) => {
     if (typeof window !== 'undefined') {
@@ -78,6 +78,9 @@ export default function App() {
   }, []);
 
   const resolveSession = useCallback(async () => {
+    const revision = ++sessionRevision.current;
+    const token = getStoredSessionToken();
+    const isCurrent = () => revision === sessionRevision.current && token === getStoredSessionToken();
     setSessionError(undefined);
     // The desktop companion has no useful anonymous workspace: its only
     // session credential is the bearer token stored by auth responses. Do not
@@ -90,7 +93,8 @@ export default function App() {
       return;
     }
     try {
-      const session = await getSession(AbortSignal.timeout(SESSION_CHECK_TIMEOUT_MS));
+      const session = await getSession();
+      if (!isCurrent()) return;
       const result = loadWorkspace(
         window.localStorage,
         session?.candidateId ?? null,
@@ -103,6 +107,7 @@ export default function App() {
         session?.candidateId && result.status !== 'ready'
           ? await getCandidateWorkspace().catch(() => null)
           : null;
+      if (!isCurrent()) return;
       const workspace = resolveCandidateWorkspace({ local: result, remote });
       setState({
         session,
@@ -114,6 +119,7 @@ export default function App() {
         if (resolvedPath) navigate(resolvedPath);
       }
     } catch (error) {
+      if (!isCurrent()) return;
       const sessionErrorCode = error instanceof CoachApiError ? error.code : undefined;
       if (desktopSessionFailureRequiresSignOut(isDesktop, sessionErrorCode)) {
         setStoredSessionToken(null);
@@ -127,13 +133,14 @@ export default function App() {
       );
       setState({ invalidStorage: false });
     } finally {
-      setIsResolvingSession(false);
+      if (isCurrent()) setIsResolvingSession(false);
     }
   }, [currentPath, isDesktop, navigate]);
 
   useEffect(() => {
     document.getElementById('root')?.removeAttribute('aria-busy');
     void resolveSession();
+    return () => { sessionRevision.current += 1; };
   }, [resolveSession]);
 
   useEffect(() => {
@@ -249,6 +256,9 @@ export default function App() {
   }
 
   function handleSessionChange(session: AuthUser | null) {
+    // A delayed restore must never replace a login/logout completed after it.
+    sessionRevision.current += 1;
+    setIsResolvingSession(false);
     const result = session?.candidateId
       ? loadWorkspace(window.localStorage, session.candidateId)
       : { status: 'empty' as const };

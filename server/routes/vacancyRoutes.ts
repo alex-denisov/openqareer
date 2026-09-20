@@ -209,13 +209,7 @@ async function readRoleContext(
   // ничего не назвал» там, где на самом деле некого спрашивать (B161).
   if (confirmedSkills.length === 0 && targetRoles.length === 0) return null;
 
-  const matched = multiSourceEngine.getMatchedVacancies({
-    candidateId,
-    targetRoles,
-    confirmedSkills,
-    confirmedFacts: confirmedSkills,
-    preferredRemote: true,
-  });
+  const matched = await readMatchedSnapshot(multiSourceEngine, candidateId, confirmedSkills, targetRoles);
 
   // Имя роли даёт модель, читающая факты кандидата; пул приписывает к нему
   // доказательство или честное «пока не найдено» (B180, срез 1в). Роль без
@@ -549,7 +543,25 @@ function candidateFacts(
  * них стоил и времени, и правды: между страницами проходит опрос площадок, и
  * то же смещение указывает уже на другую запись (B211).
  */
-const matchedPoolSnapshots = new MatchedPoolSnapshots();
+const matchedPoolSnapshots = new WeakMap<RouteDeps['multiSourceEngine'], MatchedPoolSnapshots>();
+
+function readMatchedSnapshot(
+  engine: RouteDeps['multiSourceEngine'],
+  candidateId: string,
+  confirmedSkills: string[],
+  targetRoles: string[],
+): Promise<MatchedVacancyItem[]> {
+  let snapshots = matchedPoolSnapshots.get(engine);
+  if (!snapshots) {
+    snapshots = new MatchedPoolSnapshots();
+    matchedPoolSnapshots.set(engine, snapshots);
+  }
+  return snapshots.readAsync(candidateId, matchProfileKey(confirmedSkills, targetRoles), () =>
+    engine.getMatchedVacanciesAsync({
+      candidateId, targetRoles, confirmedSkills, confirmedFacts: confirmedSkills, preferredRemote: true,
+    }),
+  );
+}
 
 const handleMatchedVacancies: Handler = async (
   { authService, candidateStore, config, multiSourceEngine },
@@ -584,18 +596,7 @@ const handleMatchedVacancies: Handler = async (
 
   // Подбор считается один раз на чтение: страницы одного чтения обязаны
   // приходить из одного списка, иначе смещение указывает не на ту запись.
-  const matched = matchedPoolSnapshots.read(
-    candidate.id,
-    matchProfileKey(confirmedSkills, targetRoles),
-    () =>
-      multiSourceEngine.getMatchedVacancies({
-        candidateId: candidate.id,
-        targetRoles,
-        confirmedSkills,
-        confirmedFacts: confirmedSkills,
-        preferredRemote: true,
-      }),
-  );
+  const matched = await readMatchedSnapshot(multiSourceEngine, candidate.id, confirmedSkills, targetRoles);
 
   // Весь подбор одним телом не доходит: маршрут рвёт ответ примерно на 20 460
   // байт (INC-029). Экран забирает пул страницами внутри доказанного бюджета.

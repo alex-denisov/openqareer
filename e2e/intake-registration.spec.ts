@@ -1,4 +1,6 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { expect, test, type Page } from '@playwright/test';
+import { installDesktopApiTestBridge } from '../scripts/desktop-api-test-bridge.mjs';
 
 /**
  * B141 — the owner reached step «Что уже есть?», chose hh.ru, registered the
@@ -107,6 +109,7 @@ test.describe('B141 diagnostic survives registration', () => {
   });
 
   test('the profile import option shows platform cards in desktop mode', async ({ page }) => {
+    await page.addInitScript(installDesktopApiTestBridge);
     await page.addInitScript(() => {
       (window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }).__TAURI_INTERNALS__ =
         {};
@@ -185,5 +188,112 @@ test.describe('B141 diagnostic survives registration', () => {
     await expect(page.getByRole('heading', { name: 'С чем разобраться?' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Хочу найти работу' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Карьерный кабинет' })).toHaveCount(0);
+  });
+});
+
+test.describe('B229 desktop session recovery', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(installDesktopApiTestBridge);
+    await page.addInitScript(() => {
+      (window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }).__TAURI_INTERNALS__ =
+        {};
+      if (!localStorage.getItem('openqareer_session_token')) {
+        localStorage.setItem('openqareer_session_token', 'desktop-restored-session');
+      }
+    });
+    await page.route('**/api/v1/candidate/workspace', (route) =>
+      route.fulfill({ json: { data: null } }),
+    );
+  });
+
+  test('restores a session taking more than two seconds, including after reload', async ({
+    page,
+  }) => {
+    let reads = 0;
+    await page.route('**/api/v1/auth/me', async (route) => {
+      reads++;
+      // Deliberate server latency exercises the former two-second abort.
+      await delay(2_500);
+      await route.fulfill({ json: { data: REGISTERED_CANDIDATE } });
+    });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    for (const reload of [false, true]) {
+      if (reload) await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(page.getByRole('heading', { name: 'С чем разобраться?' })).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(page.getByRole('button', { name: 'Открыть аккаунт' }).first()).toBeEnabled();
+      await expect(page.getByText('Не удалось проверить аккаунт.', { exact: false })).toHaveCount(
+        0,
+      );
+      await expect(page.getByRole('heading', { name: 'Вход в кабинет' })).toHaveCount(0);
+      await expect(page).toHaveURL(/\/app$/);
+    }
+    expect(reads).toBeGreaterThanOrEqual(2);
+    expect(await page.evaluate(() => localStorage.getItem('openqareer_session_token'))).toBe(
+      'desktop-restored-session',
+    );
+  });
+
+  test('a delayed old session cannot replace a newly signed-in account', async ({ page }) => {
+    const nextCandidate = {
+      ...REGISTERED_CANDIDATE,
+      candidateId: 'candidate-b229-next',
+      displayName: 'Новый кандидат',
+      email: 'next@example.test',
+    };
+    let signedIn = false;
+    let holdOldRead = false;
+    let releaseOldRead!: () => void;
+    let reportOldRead!: () => void;
+    const oldReadStarted = new Promise<void>((resolve) => {
+      reportOldRead = resolve;
+    });
+    const oldReadGate = new Promise<void>((resolve) => {
+      releaseOldRead = resolve;
+    });
+    await page.route('**/api/v1/auth/me', async (route) => {
+      const data = signedIn ? nextCandidate : REGISTERED_CANDIDATE;
+      if (holdOldRead && !signedIn) {
+        reportOldRead();
+        await oldReadGate;
+      }
+      await route.fulfill({ json: { data } });
+    });
+    await page.route('**/api/v1/auth/login', async (route) => {
+      signedIn = true;
+      await route.fulfill({
+        json: { data: { ...nextCandidate, sessionToken: 'desktop-next-session' } },
+      });
+    });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'С чем разобраться?' })).toBeVisible();
+    holdOldRead = true;
+    // Simulate navigation while a restore still carries the old bearer token.
+    await page.evaluate(() => {
+      history.pushState(null, '', '/login');
+      dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await oldReadStarted;
+    await page.getByLabel('Email или логин').fill(nextCandidate.email);
+    await page.getByLabel('Пароль', { exact: true }).fill('synthetic-passphrase-2026');
+    await page.getByRole('button', { name: 'Войти в кабинет' }).click();
+    await expect(page).toHaveURL(/\/app$/);
+    // Narrow viewports print initials («НК») instead of the full name;
+    // both differ from the old account's «Диагностика» / «Д».
+    const newAccount = /Новый кандидат|^НК$/u;
+    await expect(page.getByRole('button', { name: 'Открыть аккаунт' }).first()).toHaveText(
+      newAccount,
+    );
+    const staleResponse = page.waitForResponse('**/api/v1/auth/me');
+    releaseOldRead();
+    await (await staleResponse).finished();
+    await waitForLiveApp(page);
+    await expect(page.getByRole('button', { name: 'Открыть аккаунт' }).first()).toHaveText(
+      newAccount,
+    );
+    expect(await page.evaluate(() => localStorage.getItem('openqareer_session_token'))).toBe(
+      'desktop-next-session',
+    );
   });
 });

@@ -43,7 +43,7 @@ function pool(prefix: string, size: number): MatchedVacancyItem[] {
   })) as unknown as MatchedVacancyItem[];
 }
 
-async function createPagingApp() {
+async function createPagingApp(waitForMatching?: Promise<void>) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',
     encryptionKey: config.dataEncryptionKey,
@@ -59,8 +59,9 @@ async function createPagingApp() {
 
   let call = 0;
   const engine = {
-    getMatchedVacancies: () => {
+    getMatchedVacanciesAsync: async () => {
       call += 1;
+      await waitForMatching;
       // Каждый пересчёт возвращает другой пул: так видно, из скольких списков
       // собралось одно чтение.
       return pool(`пул-${call}`, 40);
@@ -82,6 +83,24 @@ async function createPagingApp() {
 }
 
 describe('чтение подбора страницами', () => {
+  it('serves session and connections while a matching read is still running', async () => {
+    let finish!: () => void;
+    const waiting = new Promise<void>((resolve) => { finish = resolve; });
+    const { app, authorization, calls } = await createPagingApp(waiting);
+    const matched = app.inject({ url: '/api/v1/candidate/matched-vacancies', headers: { authorization } }).then((response) => response);
+    // Give Fastify the request; matching must remain pending during both reads.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    try {
+      expect(calls()).toBe(1);
+      const session = await app.inject({ url: '/api/v1/auth/me' });
+      const connections = await app.inject({ url: '/api/v1/candidate/connections', headers: { authorization } });
+      expect(session.statusCode).toBe(200);
+      expect(connections.statusCode).toBe(200);
+      expect(Array.isArray(connections.json().data)).toBe(true);
+    } finally { finish(); }
+    expect((await matched).statusCode).toBe(200);
+  });
+
   it('все страницы одного чтения приходят из одного снимка', async () => {
     const { app, authorization, calls } = await createPagingApp();
 

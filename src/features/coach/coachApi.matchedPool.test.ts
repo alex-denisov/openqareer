@@ -87,7 +87,7 @@ describe('отказ чтения подбора называется отказ
     expect(items).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/candidate/matched-vacancies?offset=0',
-      expect.objectContaining({ signal: undefined }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 });

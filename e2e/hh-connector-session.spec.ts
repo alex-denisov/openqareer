@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { installDesktopApiTestBridge } from '../scripts/desktop-api-test-bridge.mjs';
 
 /**
  * B157, owner report 2026-08-26 — «Импортировать выбранное резюме не удалось».
@@ -42,6 +43,7 @@ interface BridgeOptions {
  * test: whether a sign-in window exists when the chosen resume is read.
  */
 async function stubDesktopBridge(page: Page, options: BridgeOptions = {}): Promise<void> {
+  await page.addInitScript(installDesktopApiTestBridge);
   await page.addInitScript(
     ({ listBody, detailBody, missingWindowReads }) => {
       localStorage.setItem('openqareer_session_token', 'desktop-e2e-session');

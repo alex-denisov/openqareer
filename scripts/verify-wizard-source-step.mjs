@@ -269,6 +269,7 @@ async function desktopWalk(browser, baseUrl, viewport) {
     viewport: { width: viewport.width, height: viewport.height },
   });
   const page = await context.newPage();
+  await page.addInitScript(installDesktopApiTestBridge);
   watch(page, `desktop/${viewport.name}`);
   await page.addInitScript(() => {
     // What `isTauriEnvironment()` reads to decide it is inside the app.
@@ -309,3 +310,4 @@ process.stdout.write(
   problems.length === 0 ? 'wizard-source-step: pass\n' : 'wizard-source-step: FAIL\n',
 );
 process.exit(problems.length === 0 ? 0 : 1);
+import { installDesktopApiTestBridge } from './desktop-api-test-bridge.mjs';

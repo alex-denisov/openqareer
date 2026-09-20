@@ -72,6 +72,11 @@ export interface VacancyPoolStore {
     candidate: CandidateMatchProfile,
     options?: MatchCandidateQueryOptions,
   ): UnifiedVacancy[];
+  /** File-backed matching runs outside the HTTP event loop. */
+  queryMatchCandidatesAsync?(
+    candidate: CandidateMatchProfile,
+    options?: MatchCandidateQueryOptions,
+  ): Promise<UnifiedVacancy[]>;
   /**
    * Один шаг дочитывания колонок запросов у записей, сделанных до B221.
    * Возвращает, сколько строк обработано; ноль — дочитывать нечего. Пул в

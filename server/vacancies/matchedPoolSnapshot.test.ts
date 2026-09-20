@@ -80,4 +80,28 @@ describe('MatchedPoolSnapshots', () => {
     });
     expect(recomputed).toBe(1);
   });
+
+  it('coalesces concurrent role and vacancy reads while keeping candidate scope', async () => {
+    const snapshots = new MatchedPoolSnapshots();
+    let resolve!: (items: MatchedVacancyItem[]) => void;
+    let calls = 0;
+    const compute = () => { calls++; return new Promise<MatchedVacancyItem[]>((done) => { resolve = done; }); };
+    const first = snapshots.readAsync('one', 'profile', compute);
+    const second = snapshots.readAsync('one', 'profile', compute);
+    const other = snapshots.readAsync('two', 'profile', async () => [item('private-two')]);
+    await Promise.resolve();
+    expect(calls).toBe(1);
+    resolve([item('private-one')]);
+    expect(await first).toBe(await second);
+    expect((await other)[0].cluster.id).toBe('private-two');
+  });
+
+  it('does not cache failures or expire a snapshot before its computation completes', async () => {
+    let now = 0;
+    const snapshots = new MatchedPoolSnapshots({ ttlMs: 10, clock: () => now });
+    await expect(snapshots.readAsync('one', 'profile', async () => { throw new Error('unavailable'); })).rejects.toThrow('unavailable');
+    const first = await snapshots.readAsync('one', 'profile', async () => { now = 100; return [item('one')]; });
+    expect(await snapshots.readAsync('one', 'profile', async () => [item('wrong')])).toBe(first);
+    expect((await snapshots.readAsync('one', 'changed', async () => [item('changed')]))[0].cluster.id).toBe('changed');
+  });
 });

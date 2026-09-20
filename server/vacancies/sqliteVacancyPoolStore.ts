@@ -13,6 +13,8 @@ import {
   VACANCY_POOL_INDEX_TABLE,
   VACANCY_SOURCE_OBSERVATIONS_COLUMN,
 } from '../data/sqliteSchema';
+import { MATCH_ORDER_SCHEMA } from './vacancyMatchIndex';
+import { VacancyMatchReader, type MatchRowReader } from './vacancyMatchReader';
 import type { SourceObservations } from './sourceHealthVerdict';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 import {
@@ -144,6 +146,8 @@ function indexColumns(vacancy: UnifiedVacancy, sourceId: string): SQLInputValue[
  */
 export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private readonly database: DatabaseSync;
+  private readonly databasePath: string;
+  private matchReader?: MatchRowReader;
   /** Докуда дошёл фоновый проход по `rowid`: каждый шаг начинает с него, а не с начала таблицы. */
   private backfillCursor = 0;
   /** Докуда дошёл bounded materialized-catalog pass. */
@@ -151,10 +155,12 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   /** Completion is durable and makes later timer ticks pure no-ops. */
   private catalogBackfillComplete = false;
 
-  constructor(options: { databasePath: string }) {
+  constructor(options: { databasePath: string; matchReader?: MatchRowReader }) {
+    this.matchReader = options.matchReader;
     if (options.databasePath !== ':memory:') {
       mkdirSync(dirname(options.databasePath), { recursive: true });
     }
+    this.databasePath = options.databasePath;
     this.database = new DatabaseSync(options.databasePath);
     this.database.exec('PRAGMA journal_mode = WAL;');
     this.database.exec('PRAGMA foreign_keys = ON;');
@@ -162,6 +168,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.ensureColumn('vacancy_source_state', 'observations', VACANCY_SOURCE_OBSERVATIONS_COLUMN);
     this.ensureColumn('vacancy_pool', 'expired_at', VACANCY_POOL_EXPIRED_AT_COLUMN);
     this.database.exec(VACANCY_POOL_INDEX_TABLE);
+    // Match LIMIT must stop in index order; CASE remote sorting previously
+    // joined and sorted the entire fresh pool, including every wide payload.
+    this.database.exec(MATCH_ORDER_SCHEMA);
     this.database.exec(VACANCY_CLUSTER_INPUT_TABLE);
     this.database.exec(VACANCY_CLUSTERS_TABLE);
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
@@ -373,52 +382,42 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return { total, items };
   }
 
-  private queryTermMatches(
+  private matchQuery(
     terms: readonly string[],
-    window: FreshnessWindow,
-    orderClause: string,
-    limit: number,
-  ): UnifiedVacancy[] {
-    const termClauses = terms.map(() => 'i.search_text LIKE ?').join(' OR ');
-    const sql = `SELECT c.cluster_json AS payload
-      FROM vacancy_pool_index i
-      JOIN vacancy_cluster_input c ON c.id = i.id
-      WHERE ${ALIVE} AND i.is_active = 1 AND i.published_ms BETWEEN ? AND ?
-        AND (${termClauses})
-      ${orderClause} LIMIT ?`;
-    const params: SQLInputValue[] = [
-      window.fromMs,
-      window.toMs,
-      ...terms.map((t) => `%${t}%`),
-      limit,
-    ];
-    return this.readVacancies(sql, params);
-  }
-
-  private queryRecentFill(
     seenIds: ReadonlySet<string>,
     window: FreshnessWindow,
-    orderClause: string,
+    preferRemote: boolean,
     limit: number,
-  ): UnifiedVacancy[] {
-    const notIn =
-      seenIds.size > 0
-        ? `AND i.id NOT IN (${Array.from(seenIds)
-            .map(() => '?')
-            .join(', ')})`
-        : '';
-    const sql = `SELECT c.cluster_json AS payload
-      FROM vacancy_pool_index i
-      JOIN vacancy_cluster_input c ON c.id = i.id
-      WHERE ${ALIVE} AND i.is_active = 1 AND i.published_ms BETWEEN ? AND ? ${notIn}
-      ${orderClause} LIMIT ?`;
-    const params: SQLInputValue[] = [
-      window.fromMs,
-      window.toMs,
-      ...(seenIds.size > 0 ? Array.from(seenIds) : []),
-      limit,
-    ];
-    return this.readVacancies(sql, params);
+  ): { sql: string; params: SQLInputValue[] } {
+    const remote = '(CASE WHEN i.is_remote = 1 THEN 1 ELSE 0 END)';
+    const order = `${preferRemote ? `${remote} DESC, ` : ''}i.published_ms DESC, i.id ASC`;
+    const termFilter = terms.length
+      ? `AND (${terms.map(() => 'i.search_text LIKE ?').join(' OR ')})`
+      : '';
+    const exclusion = seenIds.size
+      ? `AND i.id NOT IN (${[...seenIds].map(() => '?').join(',')})`
+      : '';
+    const index = preferRemote ? 'vacancy_pool_match_remote' : 'vacancy_pool_match_recent';
+    return {
+      // Only selected IDs join wide cluster JSON. MATERIALIZED is intentional:
+      // SQLite otherwise flattens the subquery back into the unbounded join.
+      sql: `WITH selected AS MATERIALIZED (
+        SELECT i.id, i.published_ms, ${remote} AS remote_order
+        FROM vacancy_pool_index i INDEXED BY ${index}
+        WHERE ${ALIVE} AND i.is_active = 1 AND i.published_ms BETWEEN ? AND ?
+          ${termFilter} ${exclusion}
+        ORDER BY ${order} LIMIT ?
+      ) SELECT c.cluster_json AS payload FROM selected s
+        JOIN vacancy_cluster_input c ON c.id = s.id
+        ORDER BY ${preferRemote ? 's.remote_order DESC, ' : ''}s.published_ms DESC, s.id ASC`,
+      params: [
+        window.fromMs,
+        window.toMs,
+        ...terms.map((term) => `%${term}%`),
+        ...seenIds,
+        limit,
+      ],
+    };
   }
 
   queryMatchCandidates(
@@ -429,15 +428,14 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     if (limit <= 0) return [];
     const window = freshnessWindow(options?.nowMs);
     const preferRemote = Boolean(candidate.preferredRemote);
-    const remoteOrder = preferRemote ? '(CASE WHEN i.is_remote = 1 THEN 1 ELSE 0 END) DESC, ' : '';
-    const orderClause = `ORDER BY ${remoteOrder}i.published_ms DESC, i.id ASC`;
     const terms = extractMatchTerms(candidate);
 
     const results: UnifiedVacancy[] = [];
     const seenIds = new Set<string>();
 
     if (terms.length > 0) {
-      for (const item of this.queryTermMatches(terms, window, orderClause, limit)) {
+      const query = this.matchQuery(terms, seenIds, window, preferRemote, limit);
+      for (const item of this.readVacancies(query.sql, query.params)) {
         results.push(item);
         seenIds.add(item.id);
       }
@@ -445,7 +443,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
     if (results.length < limit) {
       const remaining = limit - results.length;
-      for (const item of this.queryRecentFill(seenIds, window, orderClause, remaining)) {
+      const query = this.matchQuery([], seenIds, window, preferRemote, remaining);
+      for (const item of this.readVacancies(query.sql, query.params)) {
         if (!seenIds.has(item.id)) {
           results.push(item);
           seenIds.add(item.id);
@@ -454,6 +453,58 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     }
 
     return results;
+  }
+
+  async queryMatchCandidatesAsync(
+    candidate: CandidateMatchProfile,
+    options?: MatchCandidateQueryOptions,
+  ): Promise<UnifiedVacancy[]> {
+    // An in-memory store cannot be reopened by a worker; production is file-backed.
+    if (this.databasePath === ':memory:') return this.queryMatchCandidates(candidate, options);
+    const limit = options?.limit ?? DEFAULT_MATCH_CANDIDATE_LIMIT;
+    if (limit <= 0) return [];
+    const window = freshnessWindow(options?.nowMs);
+    const preferRemote = Boolean(candidate.preferredRemote);
+    const terms = extractMatchTerms(candidate);
+    this.matchReader ??= new VacancyMatchReader(this.databasePath);
+    const results: UnifiedVacancy[] = [];
+    const seenIds = new Set<string>();
+    for (const phase of terms.length ? [terms, []] : [[]]) {
+      if (results.length >= limit) break;
+      const query = this.matchQuery(phase, seenIds, window, preferRemote, limit - results.length);
+      const rows = await this.readMatchRows(query, phase.length > 0);
+      for (const row of rows) {
+        const item = parseVacancy(row.payload);
+        if (item && !seenIds.has(item.id)) {
+          results.push(item);
+          seenIds.add(item.id);
+        }
+      }
+    }
+    return results;
+  }
+
+  /** Роль, которой нет ни в одной записи, заставляет обойти весь пул — на
+   * проде это ~20 с, дольше бюджета читателя. Такой отказ фазы по терминам
+   * не отменяет подбор: кандидат получает свежие записи из фазы дополнения,
+   * а отказ самой фазы дополнения остаётся отказом чтения. */
+  private async readMatchRows(
+    query: { sql: string; params: SQLInputValue[] },
+    termPhase: boolean,
+  ): Promise<{ payload: string }[]> {
+    const reader = (this.matchReader ??= new VacancyMatchReader(this.databasePath));
+    try {
+      return await reader.read(query.sql, query.params);
+    } catch (error) {
+      if (!termPhase) throw error;
+      console.warn(
+        JSON.stringify({
+          event: 'vacancy-match-term-phase-skipped',
+          reason: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      return [];
+    }
   }
 
   loadSourceLinks(sourceId: string): VacancyLink[] {
@@ -1246,6 +1297,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   close(): void {
+    this.matchReader?.close();
     try {
       this.database.close();
     } catch {

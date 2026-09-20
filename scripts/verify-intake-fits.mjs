@@ -100,6 +100,7 @@ async function walkDesktopSourceStep(browser, baseUrl, viewport, outputDirectory
     viewport: { width: viewport.width, height: viewport.height },
   });
   const page = await context.newPage();
+  await page.addInitScript(installDesktopApiTestBridge);
   await page.addInitScript(() => {
     // What `isTauriEnvironment()` reads to decide it is inside the app.
     window.__TAURI_INTERNALS__ = {};
@@ -168,3 +169,4 @@ async function run() {
 }
 
 await run();
+import { installDesktopApiTestBridge } from './desktop-api-test-bridge.mjs';

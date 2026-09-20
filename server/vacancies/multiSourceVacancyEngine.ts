@@ -1174,6 +1174,21 @@ export class MultiSourceVacancyEngine {
     return matched.sort(compareMatchedVacancies);
   }
 
+  public async getMatchedVacanciesAsync(
+    candidate: CandidateMatchProfile,
+  ): Promise<MatchedVacancyItem[]> {
+    if (!this.pool.queryMatchCandidatesAsync) return this.getMatchedVacancies(candidate);
+    const clusters = clusterVacancies(await this.pool.queryMatchCandidatesAsync(candidate)).filter(
+      (cluster) => cluster.status === 'active',
+    );
+    return clusters
+      .map((cluster) => ({
+        cluster,
+        explanation: matchCandidateWithVacancy(candidate, cluster),
+      }))
+      .sort(compareMatchedVacancies);
+  }
+
   public async testSource(
     sourceId: string,
     query?: string,

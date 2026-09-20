@@ -38,6 +38,7 @@ export interface MatchedPoolSnapshotsOptions {
 
 export class MatchedPoolSnapshots {
   private readonly entries = new Map<string, Snapshot>();
+  private readonly pending = new Map<string, Promise<MatchedVacancyItem[]>>();
   private readonly ttlMs: number;
   private readonly maxEntries: number;
   private readonly clock: () => number;
@@ -73,6 +74,29 @@ export class MatchedPoolSnapshots {
     this.entries.set(key, { items, storedAt: now });
     this.evict(now);
     return items;
+  }
+
+  /** Role hypotheses and paged vacancies share one asynchronous computation.
+   * A failed read never becomes a cached empty pool; TTL starts on completion. */
+  async readAsync(
+    candidateId: string,
+    profileKey: string,
+    compute: () => Promise<MatchedVacancyItem[]>,
+  ): Promise<MatchedVacancyItem[]> {
+    const key = `${candidateId} ${profileKey}`;
+    const stored = this.entries.get(key);
+    if (stored && this.clock() - stored.storedAt < this.ttlMs) return stored.items;
+    const running = this.pending.get(key);
+    if (running) return running;
+    if (this.pending.size >= this.maxEntries) throw new Error('vacancy_match_queue_full');
+    const computation = Promise.resolve().then(compute).then((items) => {
+      const now = this.clock();
+      this.entries.set(key, { items, storedAt: now });
+      this.evict(now);
+      return items;
+    }).finally(() => { this.pending.delete(key); });
+    this.pending.set(key, computation);
+    return computation;
   }
 
   private evict(now: number): void {

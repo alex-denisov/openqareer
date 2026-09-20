@@ -732,3 +732,78 @@ describe('SqliteVacancyPoolStore · queryMatchCandidates (B221 срез 2)', () 
     });
   });
 });
+
+describe('SqliteVacancyPoolStore · queryMatchCandidatesAsync (B229)', () => {
+  function card(id: string, title: string) {
+    return {
+      id,
+      fingerprint: `fp-${id}`,
+      title,
+      company: 'Company',
+      description: '',
+      requiredSkills: [],
+      url: `https://example.test/${id}`,
+      provenance: {
+        sourceType: 'json_api' as const,
+        sourceId: 'src',
+        sourceUrl: `https://example.test/${id}`,
+        observedAt: '2026-09-01T10:00:00.000Z',
+      },
+      publishedAt: '2026-09-01T10:00:00.000Z',
+      status: 'active' as const,
+    };
+  }
+  const nowMs = Date.parse('2026-09-02T10:00:00.000Z');
+
+  it('reads through the isolated worker and matches the synchronous result', async () => {
+    const { store } = openStore();
+    store.replaceSourceSlice('src', [card('v1', 'Lead Frontend Engineer'), card('v2', 'DevOps Specialist')]);
+    const profile = { candidateId: 'c1', targetRoles: ['Frontend Engineer'], confirmedSkills: [], confirmedFacts: [] };
+    const sync = store.queryMatchCandidates(profile, { nowMs, limit: 10 });
+    const async = await store.queryMatchCandidatesAsync(profile, { nowMs, limit: 10 });
+    expect(async.map((v) => v.id)).toEqual(sync.map((v) => v.id));
+    expect(async.map((v) => v.id)).toEqual(['v1', 'v2']);
+  });
+
+  it('falls back to the recent fill when the term phase times out', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'vacancy-pool-store-'));
+    directories.push(directory);
+    const path = join(directory, 'pool.db');
+    const seed = new SqliteVacancyPoolStore({ databasePath: path });
+    seed.replaceSourceSlice('src', [card('v1', 'Lead Frontend Engineer')]);
+    seed.close();
+    const raw = new DatabaseSync(path, { readOnly: true });
+    let calls = 0;
+    const store = new SqliteVacancyPoolStore({
+      databasePath: path,
+      matchReader: {
+        read: (sql, params) => {
+          calls += 1;
+          if (calls === 1) return Promise.reject(new Error('vacancy_match_timeout'));
+          return Promise.resolve(raw.prepare(sql).all(...params) as { payload: string }[]);
+        },
+        close: () => raw.close(),
+      },
+    });
+    stores.push(store);
+    const result = await store.queryMatchCandidatesAsync(
+      { candidateId: 'c1', targetRoles: ['Nonexistent Role'], confirmedSkills: [], confirmedFacts: [] },
+      { nowMs, limit: 10 },
+    );
+    expect(calls).toBe(2);
+    expect(result.map((v) => v.id)).toEqual(['v1']);
+  });
+
+  it('still fails when the fill phase itself fails', async () => {
+    const { store: seedStore, path } = openStore();
+    seedStore.replaceSourceSlice('src', [card('v1', 'Lead Frontend Engineer')]);
+    const store = new SqliteVacancyPoolStore({
+      databasePath: path,
+      matchReader: { read: () => Promise.reject(new Error('vacancy_match_reader_busy')), close: () => {} },
+    });
+    stores.push(store);
+    await expect(
+      store.queryMatchCandidatesAsync({ candidateId: 'c1', targetRoles: [], confirmedSkills: [], confirmedFacts: [] }, { nowMs }),
+    ).rejects.toThrow('vacancy_match_reader_busy');
+  });
+});

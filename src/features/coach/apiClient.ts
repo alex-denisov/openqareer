@@ -37,6 +37,7 @@ export class CoachApiError extends Error {
 }
 
 export const SESSION_TOKEN_STORAGE_KEY = 'openqareer_session_token';
+export const API_READ_TIMEOUT_MS = 20_000;
 
 export function getStoredSessionToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -81,7 +82,6 @@ export function getApiBaseUrl(): string {
   return '';
 }
 
-// eslint-disable-next-line max-lines-per-function
 export async function apiFetch(
   input: string,
   init: RequestInit = {},
@@ -89,6 +89,11 @@ export async function apiFetch(
   const baseUrl = getApiBaseUrl();
   const fullUrl = input.startsWith('http') ? input : `${baseUrl}${input}`;
   const token = getStoredSessionToken();
+  const method = (init.method ?? 'GET').toUpperCase();
+  const signal = init.signal ?? (
+    method === 'GET' || method === 'HEAD' ? AbortSignal.timeout(API_READ_TIMEOUT_MS) : undefined
+  );
+  if (signal?.aborted) throw networkError();
 
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -102,28 +107,25 @@ export async function apiFetch(
   // If in desktop Tauri environment, perform native request via Rust to bypass browser CORS & preflights
   if (isTauriEnvironment() && typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
     try {
-      const method = init.method ?? 'GET';
       const body = typeof init.body === 'string' ? init.body : undefined;
       const nativeRequest = desktopNativeFetch({ url: fullUrl, method, headers, body });
-      const nativeRes = await raceWithAbort(nativeRequest, init.signal ?? undefined);
+      const nativeRes = await raceWithAbort(nativeRequest, signal);
 
       if (nativeRes) {
-        return new Response(nativeRes.body, {
+        // Fetch forbids a body on these statuses, including an empty string.
+        // Throwing here used to replay successful logout/deletion in WebKit.
+        return new Response([204, 205, 304].includes(nativeRes.status) ? null : nativeRes.body, {
           status: nativeRes.status,
           statusText: nativeRes.ok ? 'OK' : 'Error',
           headers: new Headers(nativeRes.headers),
         });
       }
     } catch {
-      if (init.signal?.aborted) {
-        throw new CoachApiError(
-          'Не удалось связаться с сервисом. Проверьте соединение и повторите.',
-          'network_error',
-          true,
-        );
-      }
-      // Fallback to browser fetch below
+      throw networkError();
     }
+    // A native failure is not permission to replay a potentially completed
+    // mutation using a second transport. Keep the saved session for recovery.
+    throw networkError();
   }
 
   try {
@@ -131,14 +133,19 @@ export async function apiFetch(
       ...init,
       credentials: 'include',
       headers,
+      signal,
     });
   } catch {
-    throw new CoachApiError(
-      'Не удалось связаться с сервисом. Проверьте соединение и повторите.',
-      'network_error',
-      true,
-    );
+    throw networkError();
   }
+}
+
+function networkError(): CoachApiError {
+  return new CoachApiError(
+    'Не удалось связаться с сервисом. Проверьте соединение и повторите.',
+    'network_error',
+    true,
+  );
 }
 
 /** Tauri IPC has no AbortSignal parameter; race it so a hung native request
