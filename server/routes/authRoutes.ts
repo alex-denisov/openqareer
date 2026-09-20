@@ -9,6 +9,7 @@ import {
   hasAllowedOrigin,
   publicPrincipal,
   sendError,
+  sessionCameFromCookie,
   setSessionCookie,
   withDeps,
 } from './helpers';
@@ -112,10 +113,15 @@ async function handleLogin(deps: RouteDeps, request: FastifyRequest, reply: Fast
   };
 }
 
-async function handleAuthMe(deps: RouteDeps, request: FastifyRequest, _reply: FastifyReply) {
+async function handleAuthMe(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = authenticateSession(request, deps.authService, deps.config);
   if (!principal) {
     return { data: null, meta: { requestId: request.id } };
+  }
+  // Сервер уже продлил сессию; браузерная cookie продлевается здесь же, иначе
+  // она умирала бы по своему сроку при живой серверной сессии (PRB-038).
+  if (sessionCameFromCookie(request, deps.config)) {
+    setSessionCookie(reply, extractSessionToken(request, deps.config), deps.config.secureCookies);
   }
   return { data: publicPrincipal(principal), meta: { requestId: request.id } };
 }

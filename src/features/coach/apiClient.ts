@@ -37,6 +37,11 @@ export class CoachApiError extends Error {
 }
 
 export const SESSION_TOKEN_STORAGE_KEY = 'openqareer_session_token';
+/**
+ * Истёкшая сессия — событие для всего приложения, не для экрана, который
+ * первым получил `401` (PRB-038). App слушает его и уводит на вход один раз.
+ */
+export const SESSION_EXPIRED_EVENT = 'openqareer:session-expired';
 export const API_READ_TIMEOUT_MS = 20_000;
 
 export function getStoredSessionToken(): string | null {
@@ -248,6 +253,9 @@ export async function throwApiError(response: Response): Promise<never> {
     envelope = (await response.json()) as ApiErrorEnvelope;
   } catch {
     // The stable fallback below intentionally ignores untrusted response text.
+  }
+  if (response.status === 401 && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
   }
   throw new CoachApiError(
     envelope.error?.message ?? 'Сервис не завершил действие. Попробуйте ещё раз.',

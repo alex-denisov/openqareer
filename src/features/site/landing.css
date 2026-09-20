@@ -902,6 +902,17 @@
   margin-bottom: 16px;
 }
 
+/* Почему кандидат снова на входе — статус, не ошибка (PRB-038). */
+.auth-notice {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-small);
+  background: var(--surface-soft);
+  color: var(--text-main);
+  font-size: 0.875rem;
+}
+
 .auth-field-error {
   font-size: 0.8rem;
   color: oklch(75% 0.18 28);

@@ -9,6 +9,7 @@ import {
 import {
   CoachApiError,
   getStoredSessionToken,
+  SESSION_EXPIRED_EVENT,
   setStoredSessionToken,
 } from './features/coach/apiClient';
 import { resolveCandidateWorkspace } from './features/workspace/workspaceHydration';
@@ -67,6 +68,9 @@ export default function App() {
   const [state, setState] = useState<AppState>({ invalidStorage: false });
   const [storageError, setStorageError] = useState<string>();
   const [sessionError, setSessionError] = useState<string>();
+  // Почему кандидат снова видит форму входа — одной фразой на самой форме
+  // (PRB-038); без неё выброс на вход посреди работы выглядит поломкой.
+  const [signInNotice, setSignInNotice] = useState<string>();
   const sessionRevision = useRef(0);
 
   const navigate = useCallback((path: string) => {
@@ -142,6 +146,28 @@ export default function App() {
     void resolveSession();
     return () => { sessionRevision.current += 1; };
   }, [resolveSession]);
+
+  // Первый `401` с кандидатского маршрута при показанном профиле: сессия истекла
+  // на сервере, пока кабинет был открыт. Уходим на вход целиком и один раз —
+  // иначе каждый экран пишет своё «нужна сессия» поверх живого профиля (PRB-038).
+  // Слушатель стоит всегда: первый 401 приходит ещё при старте, до того как
+  // ответ `/auth/me` попал в state. `null` — кандидат уже разлогинен, молчим.
+  const sessionRef = useRef(state.session);
+  sessionRef.current = state.session;
+  useEffect(() => {
+    const handleExpired = () => {
+      if (sessionRef.current === null) return;
+      sessionRevision.current += 1;
+      setStoredSessionToken(null);
+      setIsResolvingSession(false);
+      setState({ session: null, invalidStorage: false });
+      setSessionError(undefined);
+      setSignInNotice('Сессия закончилась. Войдите снова, чтобы продолжить.');
+      navigate('/login');
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleExpired);
+  }, [navigate]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -268,6 +294,7 @@ export default function App() {
       invalidStorage: result.status === 'invalid',
     });
     setSessionError(undefined);
+    setSignInNotice(undefined);
     if (session === null) {
       navigate(isDesktop ? '/login' : '/');
     }
@@ -280,6 +307,7 @@ export default function App() {
           onNavigate={navigate}
           onSessionChange={handleSessionChange}
           nextPath="/app"
+          notice={signInNotice}
         />
       );
     }
@@ -387,6 +415,7 @@ export default function App() {
               onNavigate={navigate}
               onSessionChange={handleSessionChange}
               nextPath="/app"
+              notice={signInNotice}
             />
           </div>
         </div>

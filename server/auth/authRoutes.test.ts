@@ -760,3 +760,41 @@ describe('registration without a login field (B139)', () => {
     db.close();
   });
 });
+
+/**
+ * PRB-038. Cookie жила 12 часов и не переиздавалась, так что браузерная сессия
+ * умирала раньше серверной. Теперь она живёт столько же, сколько скользящая
+ * сессия, и каждое открытие приложения (`/auth/me`) выдаёт её заново.
+ */
+describe('sliding session cookie (PRB-038)', () => {
+  it('issues a thirty-day cookie and reissues it on /auth/me', async () => {
+    const app = await createApp();
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      headers: { origin: 'http://localhost:3000' },
+      payload: {
+        email: 'sliding@example.com',
+        displayName: 'Скользящая Сессия',
+        password: 'candidate-password-for-tests',
+        legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
+      },
+    });
+    const issued = String(registered.headers['set-cookie']);
+    expect(issued).toContain('Max-Age=2592000');
+    const cookie = issued.split(';')[0];
+
+    const me = await app.inject({ method: 'GET', url: '/api/v1/auth/me', headers: { cookie } });
+    expect(me.statusCode).toBe(200);
+    expect(me.json().data.username).toBe('sliding');
+    const reissued = String(me.headers['set-cookie']);
+    expect(reissued.split(';')[0]).toBe(cookie);
+    expect(reissued).toContain('Max-Age=2592000');
+  });
+
+  it('does not set a cookie on /auth/me for a bearer or anonymous caller', async () => {
+    const app = await createApp();
+    const anonymous = await app.inject({ method: 'GET', url: '/api/v1/auth/me' });
+    expect(anonymous.headers['set-cookie']).toBeUndefined();
+  });
+});

@@ -58,7 +58,14 @@ import {
 } from './adminUserManager';
 
 const scrypt = promisify(scryptCallback);
-const SESSION_HOURS = 12;
+/**
+ * Сессия скользящая: каждый аутентифицированный запрос продлевает её на этот
+ * срок, и истекает она только по бездействию (PRB-038, решение владельца
+ * 2026-09-20). Привязки к IP нет: смена сети у ноутбука и туннель LinkedIn
+ * меняют адрес, не кандидата.
+ */
+export const SESSION_IDLE_DAYS = 30;
+const SESSION_IDLE_MS = SESSION_IDLE_DAYS * 24 * 60 * 60 * 1_000;
 const PASSWORD_RESET_HOURS = 1;
 
 export type {
@@ -288,7 +295,7 @@ export class AuthService implements SessionAuth {
 
     const sessionToken = `oqs_${randomBytes(32).toString('base64url')}`;
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + SESSION_HOURS * 60 * 60 * 1_000);
+    const expiresAt = new Date(now.getTime() + SESSION_IDLE_MS);
     this.database.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now.toISOString());
     this.database
       .prepare(
@@ -323,9 +330,10 @@ export class AuthService implements SessionAuth {
     if (!row) {
       return null;
     }
+    const slidTo = new Date(Date.now() + SESSION_IDLE_MS).toISOString();
     this.database
-      .prepare('UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?')
-      .run(now, hashToken(sessionToken));
+      .prepare('UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?')
+      .run(now, slidTo, hashToken(sessionToken));
     return principalFromRow(row);
   }
 
@@ -393,7 +401,7 @@ export class AuthService implements SessionAuth {
 
     const sessionToken = `oqs_${randomBytes(32).toString('base64url')}`;
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + SESSION_HOURS * 60 * 60 * 1_000);
+    const expiresAt = new Date(now.getTime() + SESSION_IDLE_MS);
     this.database
       .prepare(
         `INSERT INTO sessions (token_hash, user_id, expires_at, created_at, last_seen_at)

@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
-import type { AuthPrincipal, SessionAuth } from '../auth/authService';
+import { SESSION_IDLE_DAYS, type AuthPrincipal, type SessionAuth } from '../auth/authService';
 import type { ServerConfig } from '../config';
 import type { CandidateIdentity, CandidateStore } from '../data/candidateStore';
 
@@ -106,8 +106,20 @@ export function setSessionCookie(reply: FastifyReply, sessionToken: string, secu
     httpOnly: true,
     secure,
     sameSite: 'strict',
-    maxAge: 12 * 60 * 60,
+    // Cookie живёт столько же, сколько скользящая сессия (PRB-038); её
+    // переиздаёт каждый `/auth/me`, так что бездействие меряется одинаково
+    // на сервере и в браузере.
+    maxAge: SESSION_IDLE_DAYS * 24 * 60 * 60,
   });
+}
+
+/** Сессия пришла в cookie, а не в Bearer десктопа — значит, cookie есть что продлевать. */
+export function sessionCameFromCookie(request: FastifyRequest, config: ServerConfig): boolean {
+  const authorization = request.headers.authorization;
+  if (authorization?.startsWith('Bearer ') && !authorization.slice('Bearer '.length).trim().startsWith('oqc_')) {
+    return false;
+  }
+  return Boolean(request.cookies[sessionCookieName(config.secureCookies)]);
 }
 
 export function clearSessionCookie(reply: FastifyReply, secure: boolean): void {

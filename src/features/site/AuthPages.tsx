@@ -19,6 +19,8 @@ interface AuthPageProps {
   onNavigate: (path: string) => void;
   onSessionChange?: (session: AuthUser | null) => void;
   nextPath?: string;
+  /** Почему кандидат видит вход: например, сессия истекла (PRB-038). */
+  notice?: string;
 }
 
 function AuthCardHeader({
@@ -255,12 +257,17 @@ function LoginForm({
   );
 }
 
-export function LoginPage({ onNavigate, onSessionChange, nextPath = '/app' }: AuthPageProps) {
+export function LoginPage({ onNavigate, onSessionChange, nextPath = '/app', notice }: AuthPageProps) {
   const isDesktop = isTauriEnvironment();
   return (
     <div className="auth-page-container">
       <div className="auth-card">
         <AuthCardHeader title="Вход в кабинет" subtitle="Введите ваш email или логин для доступа к профилю" onNavigate={onNavigate} />
+        {notice ? (
+          <p className="auth-notice" role="status">
+            {notice}
+          </p>
+        ) : null}
         <LoginForm onNavigate={onNavigate} onSessionChange={onSessionChange} nextPath={nextPath} />
         <div className="auth-links">
           <span>Ещё нет аккаунта? <button type="button" onClick={() => onNavigate('/signup')}>Зарегистрироваться</button></span>

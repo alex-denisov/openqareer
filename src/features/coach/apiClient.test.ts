@@ -5,6 +5,7 @@ import {
   getApiBaseUrl,
   getStoredSessionToken,
   readData,
+  SESSION_EXPIRED_EVENT,
   SESSION_TOKEN_STORAGE_KEY,
   setStoredSessionToken,
 } from './apiClient';
@@ -124,6 +125,45 @@ describe('apiClient', () => {
 
       expect(reason).toBeInstanceOf(CoachApiError);
       expect((reason as CoachApiError).message).not.toContain('did not match');
+    });
+  });
+
+  /**
+   * PRB-038. Каждый экран отвечал на свой `401` своим красным текстом, а профиль
+   * из кэша оставалось на месте. Истёкшая сессия — одно событие для всего
+   * приложения, и App решает, что показать.
+   */
+  describe('an unauthorized response (PRB-038)', () => {
+    it('announces the expired session once for the whole app', async () => {
+      const dispatched: string[] = [];
+      (globalThis as unknown as { window: { dispatchEvent: (event: Event) => boolean } }).window
+        .dispatchEvent = (event: Event) => {
+        dispatched.push(event.type);
+        return true;
+      };
+      const response = new Response(
+        JSON.stringify({ error: { code: 'unauthorized', message: 'Нужна действующая сессия.' } }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } },
+      );
+
+      await expect(readData(response)).rejects.toMatchObject({ code: 'unauthorized' });
+      expect(dispatched).toEqual([SESSION_EXPIRED_EVENT]);
+    });
+
+    it('stays silent for other failures', async () => {
+      const dispatched: string[] = [];
+      (globalThis as unknown as { window: { dispatchEvent: (event: Event) => boolean } }).window
+        .dispatchEvent = (event: Event) => {
+        dispatched.push(event.type);
+        return true;
+      };
+      const response = new Response(JSON.stringify({ error: { code: 'not_found' } }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      await expect(readData(response)).rejects.toMatchObject({ code: 'not_found' });
+      expect(dispatched).toEqual([]);
     });
   });
 });

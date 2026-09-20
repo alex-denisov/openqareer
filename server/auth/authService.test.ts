@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { AuthService } from './authService';
 
@@ -142,5 +142,47 @@ describe('role and session authentication', () => {
     expect(second?.principal.candidate?.id).toBe(
       first?.principal.candidate?.id,
     );
+  });
+});
+
+/**
+ * PRB-038. Сессия жила ровно 12 часов с момента входа: кандидат работал в
+ * приложении, а к вечеру профиль оставался на экране при `401` на каждом
+ * кандидатском маршруте. Решение владельца (2026-09-20): сессия скользящая,
+ * истекает только по 30 дням бездействия; привязки к IP нет.
+ */
+describe('sliding session expiry (PRB-038)', () => {
+  const DAY = 24 * 60 * 60 * 1_000;
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('extends the session on every authenticated request', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-20T10:00:00.000Z'));
+    const { auth, candidates } = createServices();
+    const { sessionToken } = await auth.register('sliding', 'candidate-password-for-tests', candidates);
+
+    const issued = auth.getAccount(sessionToken)?.sessions.find((session) => session.current);
+    expect(issued?.expiresAt).toBe('2026-10-20T10:00:00.000Z');
+
+    vi.setSystemTime(new Date('2026-10-10T10:00:00.000Z'));
+    expect(auth.authenticate(sessionToken)?.username).toBe('sliding');
+    const extended = auth.getAccount(sessionToken)?.sessions.find((session) => session.current);
+    expect(extended?.expiresAt).toBe('2026-11-09T10:00:00.000Z');
+  });
+
+  it('expires only after thirty idle days', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-20T10:00:00.000Z'));
+    const { auth, candidates } = createServices();
+    const { sessionToken } = await auth.register('idle', 'candidate-password-for-tests', candidates);
+
+    vi.setSystemTime(new Date(Date.now() + 29 * DAY));
+    expect(auth.authenticate(sessionToken)).not.toBeNull();
+
+    vi.setSystemTime(new Date(Date.now() + 31 * DAY));
+    expect(auth.authenticate(sessionToken)).toBeNull();
   });
 });
