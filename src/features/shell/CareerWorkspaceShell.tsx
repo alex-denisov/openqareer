@@ -88,7 +88,14 @@ const pageNames: Record<ShellView, string> = {
  * explanation immediately turned that into a flash of a full-height heading on
  * every mount, so the screen only explains itself once the wait is real.
  */
-const SESSION_GATE_DELAY_MS = 400;
+/**
+ * Пока сервер отвечает на `/auth/me`, экран молчит: ни заголовка, ни
+ * объяснения — только тихая заглушка на месте будущего профиля. Владелец
+ * (2026-09-20): «проверяем защищённую сессию» на старте быть не должно, профиль
+ * либо открывается, либо кандидат оказывается на входе. Слова появляются
+ * только когда ждать стало по-настоящему долго или проверка сорвалась.
+ */
+const SESSION_GATE_DELAY_MS = 6_000;
 
 /** Remembers whether the rail is open, so the choice survives a reload. */
 const RAIL_EXPANDED_KEY = 'openqareer.rail.expanded';
@@ -419,37 +426,14 @@ export function CareerWorkspaceShell({
         aria-hidden={expertOpen || accountOpen ? true : undefined}
       >
         <AppErrorBoundary>
-          {sessionPending && (sessionWaitIsLong || sessionError) ? (
-            <section className="career-session-gate" aria-live="polite" aria-busy="true">
-              <p className="career-eyebrow">Защита данных</p>
-              <h1>Проверяем защищённую сессию</h1>
-              <p>Карьерные данные появятся только после проверки аккаунта этого браузера.</p>
-              {sessionError ? (
-                <>
-                  <p className="career-expert-error" role="alert">
-                    {sessionError}
-                  </p>
-                  <div className="career-session-gate-actions">
-                    <button className="career-quiet-button" type="button" onClick={onRetrySession}>
-                      Повторить проверку
-                    </button>
-                    <button className="career-quiet-button" type="button" onClick={onOpenLogin}>
-                      Открыть вход
-                    </button>
-                  </div>
-                </>
-              ) : sessionWaitIsLong ? (
-                <div className="career-session-gate-actions">
-                  <button className="career-quiet-button" type="button" onClick={onRetrySession}>
-                    Повторить проверку
-                  </button>
-                  <button className="career-quiet-button" type="button" onClick={onOpenLogin}>
-                    Открыть вход
-                  </button>
-                </div>
-              ) : null}
-            </section>
-          ) : !sessionPending && invalidStorage ? (
+          {sessionPending ? (
+            <SessionGate
+              error={sessionError}
+              waitIsLong={sessionWaitIsLong}
+              onRetry={onRetrySession}
+              onOpenLogin={onOpenLogin}
+            />
+          ) : invalidStorage ? (
             <div className="career-storage-warning" role="alert">
               <div>
                 <strong>Сохранённый профиль не удалось прочитать</strong>
@@ -621,5 +605,47 @@ function NavigationButton({
       <ItemIcon size={22} active={active} />
       <span>{item.label}</span>
     </button>
+  );
+}
+
+function SessionGate({
+  error,
+  waitIsLong,
+  onRetry,
+  onOpenLogin,
+}: {
+  error?: string;
+  waitIsLong: boolean;
+  onRetry: () => void;
+  onOpenLogin: () => void;
+}) {
+  const showActions = Boolean(error) || waitIsLong;
+  return (
+    <section className="career-session-gate" aria-live="polite" aria-busy={!error}>
+      {!showActions ? (
+        <div className="career-cabinet-skeleton" aria-hidden="true">
+          <span className="career-skeleton-line is-wide" />
+          <span className="career-skeleton-line" />
+          <span className="career-skeleton-line is-short" />
+        </div>
+      ) : null}
+      {error ? (
+        <p className="career-expert-error" role="alert">
+          {error}
+        </p>
+      ) : waitIsLong ? (
+        <p className="career-session-gate-note">Сервер отвечает дольше обычного.</p>
+      ) : null}
+      {showActions ? (
+        <div className="career-session-gate-actions">
+          <button className="career-quiet-button" type="button" onClick={onRetry}>
+            Повторить проверку
+          </button>
+          <button className="career-quiet-button" type="button" onClick={onOpenLogin}>
+            Открыть вход
+          </button>
+        </div>
+      ) : null}
+    </section>
   );
 }

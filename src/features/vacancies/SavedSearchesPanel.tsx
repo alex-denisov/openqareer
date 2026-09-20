@@ -221,9 +221,9 @@ function SavedSearchForm({
           </option>
         ))}
       </select>
-      {selectedSource ? (
+      {selectedSource && selectedSource.health.status !== 'healthy' ? (
         <p className={`career-source-health is-${selectedSource.health.status}`}>
-          {sourceHealthLabel(selectedSource.health.status)} · {selectedSource.searchCoverage}
+          {selectedSource.name}: {sourceHealthLabel(selectedSource.health.status)}
         </p>
       ) : null}
       <label htmlFor="career-saved-search-query">Роль или поисковый запрос</label>

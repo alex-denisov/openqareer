@@ -1,3 +1,5 @@
+import { apiFetch, readData } from '../coach/apiClient';
+
 export interface VacancyPitchPayload {
   readonly tone?: 'executive' | 'confident' | 'technical';
   readonly vacancy?: {
@@ -23,25 +25,22 @@ export interface VacancyPitchResult {
   readonly generatedAt: string;
 }
 
+/**
+ * Через `apiFetch`, как все запросы кабинета: голый `fetch('/api/…')` в
+ * десктопном WebKit падал на относительном адресе («The string did not match
+ * the expected pattern») и не нёс ни токена, ни Origin (PRB-041).
+ */
 export async function requestVacancyPitch(
   vacancyId: string,
   payload?: VacancyPitchPayload,
 ): Promise<VacancyPitchResult> {
-  const response = await fetch(`/api/v1/candidate/vacancies/${encodeURIComponent(vacancyId)}/pitch`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await apiFetch(
+    `/api/v1/candidate/vacancies/${encodeURIComponent(vacancyId)}/pitch`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload ?? {}),
     },
-    body: JSON.stringify(payload ?? {}),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => null);
-    throw new Error(
-      errorBody?.error?.message ?? 'Не удалось сгенерировать материалы отклика.',
-    );
-  }
-
-  const json = (await response.json()) as { data: VacancyPitchResult };
-  return json.data;
+  );
+  return readData<VacancyPitchResult>(response);
 }

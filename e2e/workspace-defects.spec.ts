@@ -80,18 +80,25 @@ test.describe('B140 workspace shell and intake defects', () => {
     expect(await sessionGateWasSeen(page)).toBe(false);
   });
 
-  test('a slow session check still explains why the workspace is empty', async ({ page }) => {
-    // The gate appears 400 ms into a pending check and leaves the moment the
-    // answer lands. A 1.5 s stub left barely a second to catch it, and the test
-    // failed whenever the machine was busy — the window is now wide enough that
-    // a failure means the gate is really missing.
+  test('a slow session check stays silent, then offers a retry without the «checking» headline', async ({
+    page,
+  }) => {
+    // Владелец 2026-09-20: на старте никакого «проверяем защищённую сессию».
+    // Пока ответ идёт — тихая заглушка; через 6 с — только две кнопки и одна
+    // строка о долгом ответе. Стаб держит ответ 12 с, чтобы окно было широким.
+    await watchForSessionGate(page);
     await page.route('**/api/v1/auth/**', async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 8_000));
+      await new Promise((resolve) => setTimeout(resolve, 12_000));
       await route.fulfill({ json: { data: null } });
     });
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByText(SESSION_GATE_TEXT)).toBeVisible({ timeout: 6_000 });
+    await expect(page.locator('.career-session-gate')).toBeVisible({ timeout: 4_000 });
+    await expect(page.locator('.career-session-gate h1')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Повторить проверку' })).toBeVisible({
+      timeout: 9_000,
+    });
+    expect(await sessionGateWasSeen(page)).toBe(false);
   });
 
   test('the topbar does not repeat the active navigation item', async ({ page }) => {

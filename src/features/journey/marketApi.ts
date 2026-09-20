@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { apiFetch } from '../coach/apiClient';
 import type { MarketVacancySample } from '../workspace/workspaceStorage';
 
 const responseSchema = z.object({
@@ -32,9 +33,8 @@ export async function fetchHhMarketSample(
   text: string,
 ): Promise<MarketVacancySample> {
   const query = new URLSearchParams({ text, perPage: '12' });
-  const response = await fetch(`/api/v1/market/hh?${query}`, {
-    headers: { Accept: 'application/json' },
-  });
+  // Через `apiFetch`: голый `fetch` не работает на tauri-origin (PRB-041).
+  const response = await apiFetch(`/api/v1/market/hh?${query}`);
   if (!response.ok) {
     throw new Error('hh_market_unavailable');
   }

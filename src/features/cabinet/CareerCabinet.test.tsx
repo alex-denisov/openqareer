@@ -1,8 +1,47 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CareerCabinet } from './CareerCabinet';
 import { CareerRoutePremises } from '../search/RoutePremises';
 import type { CareerCabinetView } from './cabinetViews';
+import type { CandidateSnapshot } from '../coach/coachApi';
+import type { CareerCabinetData } from './useCareerCabinetData';
+
+// Разделы читают три источника одним хуком; здесь он отвечает сразу, чтобы
+// проверять состав экрана, а не сеть. Первый тест ниже переключает его в
+// «ещё читаем» — до первого ответа профиль не рисуется вовсе.
+const cabinetData = vi.hoisted(() => ({ current: undefined as unknown as CareerCabinetData }));
+vi.mock('./useCareerCabinetData', () => ({
+  useCareerCabinetData: () => cabinetData.current,
+}));
+
+const loadedSnapshot = {
+  candidate: { id: 'cand-1', dataClass: 'synthetic', locale: 'ru-RU', createdAt: '2026-09-01T00:00:00.000Z' },
+  messages: [],
+  memory: [],
+  turns: [],
+  dossier: { sections: [], confirmedCount: 0, proposedCount: 0, readiness: { complete: false, unresolvedQuestions: 0, checks: [] } },
+  assessments: [],
+  germanyMarket: null,
+  resume: null,
+  documents: [],
+  vacancySubscriptions: [],
+} as unknown as CandidateSnapshot;
+
+function loadedData(): CareerCabinetData {
+  return {
+    account: undefined,
+    snapshot: loadedSnapshot,
+    resume: undefined,
+    loading: false,
+    refresh: async () => undefined,
+    setAccount: () => undefined,
+    setSnapshot: () => undefined,
+  };
+}
+
+beforeEach(() => {
+  cabinetData.current = loadedData();
+});
 
 const session = {
   username: 'test.candidate',
@@ -65,6 +104,42 @@ describe('CareerCabinet route premises', () => {
 });
 
 describe('CareerCabinet composition', () => {
+  // Владелец 2026-09-20: на старте на мгновение виден пустой профиль с именем
+  // из сессии, а данные импорта подъезжают следом. До первого ответа
+  // сервера экран не рисует ни имени, ни вкладок — только тихую заглушку.
+  it('renders nothing of the profile before the first reading arrives', () => {
+    cabinetData.current = { ...loadedData(), snapshot: undefined, loading: true };
+    const html = renderCabinet('today');
+
+    expect(html).toContain('career-cabinet-skeleton');
+    expect(html).toContain('aria-busy="true"');
+    expect(html).not.toContain('Разделы профиля');
+    expect(html).not.toContain('Оценка профиля');
+    expect(html).not.toContain('Тестовый Кандидат');
+  });
+
+  it('keeps the profile on screen while a later refresh is running', () => {
+    cabinetData.current = { ...loadedData(), loading: true };
+    const html = renderCabinet('today');
+
+    expect(html).not.toContain('career-cabinet-skeleton');
+    expect(html).toContain('Разделы профиля');
+  });
+
+  it('shows the reading error with a retry when the first reading failed', () => {
+    cabinetData.current = {
+      ...loadedData(),
+      snapshot: undefined,
+      loading: false,
+      error: 'Не удалось загрузить профиль кандидата. Повторите запрос.',
+    };
+    const html = renderCabinet('today');
+
+    expect(html).not.toContain('career-cabinet-skeleton');
+    expect(html).toContain('Не удалось загрузить профиль кандидата');
+    expect(html).toContain('Повторить');
+  });
+
   it('projects the regions the candidate chose instead of an empty geography (B158, B160)', () => {
     const html = renderCabinet('career');
 

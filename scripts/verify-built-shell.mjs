@@ -977,7 +977,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: пул вакансий не отрисовался (${await vacancyRows.count()})`,
   );
   // Возраст и покрытие — счётные, без процентов и без выдуманной даты публикации.
-  await page.getByText('в базе 2 дня', { exact: true }).waitFor();
+  await page.locator('.career-vacancy-age', { hasText: '2 дня' }).first().waitFor();
   await page.getByText('3 из 4', { exact: true }).waitFor();
   await page.getByText('Работодатель не указан', { exact: false }).first().waitFor();
   // Фильтр свежести обязан отсечь запись девятнадцатидневной давности.
@@ -1029,8 +1029,16 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // Регулярные выборки живут в панели фильтров «Вакансий» (B181): источник,
   // здоровье источника и создание проверяются здесь же, рядом с пулом.
   await page.getByRole('combobox', { name: 'Источник вакансий' }).waitFor();
-  // The source registry loads asynchronously, so wait for the honest health
-  // line instead of counting a DOM that may not have rendered yet.
+  // Реестр приходит асинхронно; по умолчанию выбрана первая отвечающая
+  // площадка (PRB-042), а закрытая hh.ru честно называет причину, когда её
+  // выбирают руками.
+  const sourceSelect = page.getByRole('combobox', { name: 'Источник вакансий' });
+  await page.getByRole('link', { name: 'Источник: Remotive' }).waitFor({ timeout: 10_000 });
+  assert(
+    (await page.getByText('нужен официальный доступ', { exact: false }).count()) === 0,
+    `${viewport.name}: healthy default source still shows the hh.ru refusal`,
+  );
+  await sourceSelect.selectOption('hh');
   const officialAccessNotice = page
     .getByText('нужен официальный доступ', { exact: false })
     .first();
@@ -1039,12 +1047,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   } catch {
     assert(false, `${viewport.name}: official access requirement is hidden`);
   }
-  await page.getByRole('combobox', { name: 'Источник вакансий' }).selectOption(
-    'remotive',
-  );
-  await page
-    .getByText('Совпадения в общей выборке до 50 remote-вакансий', { exact: false })
-    .waitFor();
+  await sourceSelect.selectOption('remotive');
   await page.getByRole('link', { name: 'Источник: Remotive' }).waitFor();
   await mkdir('output/playwright', { recursive: true });
   await page.screenshot({

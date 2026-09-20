@@ -579,6 +579,18 @@ export class MultiSourceVacancyEngine {
     return this.clusters.find((cluster) => cluster.id === clusterId);
   }
 
+  /**
+   * Один активный кластер по идентификатору для действий над одной вакансией
+   * (отклик, контакты). `getActiveClusters().find(...)` на проде поднимал все
+   * кластеры с диска и держал цикл событий минуты — сервер переставал
+   * отвечать после одного нажатия (PRB-041).
+   */
+  public getActiveCluster(clusterId: string): VacancyCluster | undefined {
+    const inHeap = this.clusters.find((cluster) => cluster.id === clusterId);
+    const cluster = inHeap ?? this.getPublicCatalogCluster(clusterId);
+    return cluster?.status === 'active' ? cluster : undefined;
+  }
+
   /** One event-loop-sized materialization tick for B229. */
   /**
    * Один шаг заполнения `vacancy_cluster_keys` по кластерам, записанным до

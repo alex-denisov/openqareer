@@ -179,8 +179,8 @@ export function VacancyBoard({
               <span>вакансия</span>
               <span>зарплата</span>
               <span>локация</span>
-              <span>возраст</span>
-              <span>покрытие</span>
+              <span>в базе</span>
+              <span>требования</span>
             </div>
             <ol className="career-vacancy-list">
               {visible.map((item) => (
@@ -677,7 +677,7 @@ function VacancyRow({
             <span
               className="career-measure-track"
               role="img"
-              aria-label={`Покрытие требований: ${coverage.covered} из ${coverage.total}`}
+              aria-label={`Совпало требований: ${coverage.covered} из ${coverage.total}`}
             >
               <span
                 className="career-measure-fill"
@@ -691,7 +691,7 @@ function VacancyRow({
             </strong>
           </>
         ) : (
-          <small>сравнивать не с чем</small>
+          <small>требования не разобраны</small>
         )}
       </span>
       <div className="career-vacancy-actions">
@@ -700,7 +700,7 @@ function VacancyRow({
             type="button"
             className="career-vacancy-pitch-btn"
             onClick={() => onPreparePitch(cluster)}
-            title="Подготовить контекстное сопроводительное письмо и питч"
+            title="Сопроводительное письмо и короткий питч под эту вакансию"
           >
             <Sparkle size={14} aria-hidden="true" />
             <span>Подготовить отклик</span>
@@ -711,10 +711,10 @@ function VacancyRow({
             type="button"
             className="career-vacancy-outreach-btn"
             onClick={() => onOpenOutreach(cluster)}
-            title="Поиск связей и прямой аутрич через LinkedIn"
+            title="Найти общих знакомых в LinkedIn и написать напрямую"
           >
             <Users size={14} aria-hidden="true" />
-            <span>Нетворкинг</span>
+            <span>Связи в LinkedIn</span>
           </button>
         ) : null}
         {onPrepareInterview ? (
@@ -735,7 +735,7 @@ function VacancyRow({
           rel="noreferrer"
           onClick={() => applications.record(cluster.id, 'opened', snapshot)}
         >
-          Открыть <ArrowSquareOut size={14} />
+          Открыть на {openTargetLabel(cluster.sources)} <ArrowSquareOut size={14} />
         </a>
         {application?.status === 'applied' ? (
           <span className="career-vacancy-applied">
@@ -802,4 +802,13 @@ function salaryLabel(salary: MatchedVacancyItem['cluster']['salary']): string {
   const to = salary.to ? `до ${salary.to.toLocaleString('ru-RU')}` : '';
   // Неразрывный пробел: в узкой колонке «₽» отрывался на свою строку (B232).
   return `${[from, to].filter(Boolean).join(' ')}\u00a0${currency}`.trim();
+}
+
+/**
+ * Куда ведёт «Открыть»: на площадку по имени, если оно короткое, иначе просто
+ * «на сайте». Голое «Открыть» владелец не понял (2026-09-20).
+ */
+function openTargetLabel(sources: MatchedVacancyItem['cluster']['sources']): string {
+  const name = vacancySourceLabels(sources)[0];
+  return name && name.length <= 14 ? name : 'сайте';
 }

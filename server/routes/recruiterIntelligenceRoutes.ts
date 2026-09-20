@@ -33,7 +33,7 @@ function buildVacancyInput(
   vacancyId: string,
   deps: RouteDeps,
 ): UnifiedVacancyInput {
-  const cluster = deps.multiSourceEngine?.getActiveClusters?.()?.find((c) => c.id === vacancyId);
+  const cluster = deps.multiSourceEngine?.getActiveCluster?.(vacancyId);
   const poolVacancy = !cluster ? deps.multiSourceEngine?.getVacancy?.(vacancyId) : undefined;
 
   return {

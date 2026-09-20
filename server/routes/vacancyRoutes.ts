@@ -823,7 +823,7 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   const vacancyId = (request.params as { id: string }).id;
   const body = vacancyPitchInputSchema.parse(request.body ?? {});
 
-  const cluster = multiSourceEngine.getActiveClusters().find((c) => c.id === vacancyId);
+  const cluster = multiSourceEngine.getActiveCluster(vacancyId);
   const poolVacancy = !cluster ? multiSourceEngine.getVacancy?.(vacancyId) : undefined;
 
   const title = body?.vacancy?.title ?? cluster?.canonicalTitle ?? poolVacancy?.title;

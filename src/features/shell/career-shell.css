@@ -1177,6 +1177,50 @@
   line-height: 1.6;
 }
 
+.career-session-gate-note {
+  margin: 0;
+  color: var(--career-text-soft);
+}
+
+/* Тихая заглушка первого чтения: три полосы на месте карточки личности,
+   без слов. Дышит мягко; при reduced-motion стоит. */
+.career-cabinet-skeleton {
+  display: grid;
+  gap: 12px;
+  max-width: 40rem;
+  padding-top: 8px;
+}
+
+.career-skeleton-line {
+  display: block;
+  height: 14px;
+  width: 60%;
+  border-radius: 7px;
+  background: var(--career-surface-raised);
+  animation: career-skeleton-breathe 1.6s ease-in-out infinite;
+}
+
+.career-skeleton-line.is-wide {
+  width: 100%;
+  height: 28px;
+}
+
+.career-skeleton-line.is-short {
+  width: 35%;
+}
+
+@keyframes career-skeleton-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-skeleton-line {
+    animation: none;
+  }
+}
+
 .career-session-gate-actions {
   display: flex;
   flex-wrap: wrap;
@@ -8493,6 +8537,11 @@
   background: var(--career-surface);
   position: sticky;
   top: 18px;
+  /* Панель выше окна: липкий блок без своей прокрутки не долистывался, пока
+     не кончится список справа (владелец, 2026-09-20). */
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .career-vacancy-filters > header {
@@ -8814,6 +8863,8 @@
 
   .career-vacancy-filters {
     position: static;
+    max-height: none;
+    overflow: visible;
   }
 
   .career-vacancy-row {
@@ -10071,10 +10122,16 @@
   color: var(--career-text-dim);
 }
 
+.career-pitch-header,
+.career-pitch-controls {
+  flex-shrink: 0;
+}
+
 .career-pitch-body {
   padding: 20px;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -11855,6 +11912,15 @@
   flex-direction: column;
   gap: 18px;
   flex: 1;
+  /* Тело прокручивается само; без `min-height: 0` длинный список STAR
+     сжимал шапку и вкладки до полоски — «элементы исчезают» (владелец,
+     2026-09-20). */
+  min-height: 0;
+}
+
+.career-interview-header,
+.career-interview-tabs {
+  flex-shrink: 0;
 }
 
 .career-interview-overview {

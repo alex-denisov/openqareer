@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { CandidateSnapshot } from '../coach/coachApi';
 import { CareerMapView, OpportunitiesView } from '../journey/CareerJourneyViews';
 import { buildCareerJourney, prepareCareerWorkspace } from '../journey/careerJourneyEngine';
 import { createActionPackage } from '../action/actionPackageEngine';
@@ -12,6 +13,29 @@ import { recordOutcome } from '../outcome/outcomeEngine';
 import { CareerWorkspaceShell } from './CareerWorkspaceShell';
 import { CareerTariffsView } from './CareerTariffsView';
 import { CURRENT_PLAN } from './tariffPackages';
+
+// Кабинет не рисует профиль до первого ответа сервера; здесь ответ приходит
+// сразу, чтобы проверять состав оболочки, а не сеть.
+vi.mock('../cabinet/useCareerCabinetData', () => ({
+  useCareerCabinetData: () => ({
+    snapshot: {
+      candidate: { id: 'candidate-1', dataClass: 'synthetic', locale: 'ru-RU', createdAt: '2026-09-01T00:00:00.000Z' },
+      messages: [],
+      memory: [],
+      turns: [],
+      dossier: { sections: [], confirmedCount: 0, proposedCount: 0, readiness: { complete: false, unresolvedQuestions: 0, checks: [] } },
+      assessments: [],
+      germanyMarket: null,
+      resume: null,
+      documents: [],
+      vacancySubscriptions: [],
+    } as unknown as CandidateSnapshot,
+    loading: false,
+    refresh: async () => undefined,
+    setAccount: () => undefined,
+    setSnapshot: () => undefined,
+  }),
+}));
 
 describe('CareerWorkspaceShell', () => {
   it('opens the authenticated candidate on a briefing that recommends one next step', () => {
@@ -107,14 +131,18 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    // The wait is normally tens of milliseconds, so the first paint stays
-    // silent; the explanation appears only once the wait becomes real.
+    // Владелец 2026-09-20: «проверяем защищённую сессию» на старте быть не
+    // должно — профиль либо открывается, либо кандидат оказывается на входе.
+    // Пока ответ идёт, экран молчит: тихая заглушка без заголовков и текста.
     expect(html).not.toContain('Проверяем защищённую сессию');
+    expect(html).not.toContain('Защита данных');
+    expect(html).toContain('career-session-gate');
+    expect(html).toContain('aria-busy="true"');
     expect(html).not.toContain('Синтетический профиль кандидата');
     expect(html).not.toContain('С чем разобраться?');
   });
 
-  it('explains a session check that failed instead of waiting silently', () => {
+  it('explains a session check that failed without the «checking» headline', () => {
     const html = renderToStaticMarkup(
       <CareerWorkspaceShell
         sessionPending
@@ -122,7 +150,8 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    expect(html).toContain('Проверяем защищённую сессию');
+    expect(html).not.toContain('Проверяем защищённую сессию');
+    expect(html).not.toContain('Защита данных');
     expect(html).toContain('Не удалось проверить аккаунт');
     expect(html).toContain('Повторить проверку');
     expect(html).toContain('Открыть вход');

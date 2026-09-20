@@ -121,10 +121,16 @@ export function CareerCabinet({
       <div className={`career-cabinet career-cabinet-view-${view}`}>
         <CabinetHeader
           view={view}
-          loading={data.loading}
+          loading={data.loading && Boolean(data.snapshot)}
           error={data.error}
           onRetry={() => void data.refresh()}
         />
+        {/* До первого ответа сервера экран не рисует ни имени из сессии, ни
+            пустых вкладок: профиль появляется целиком и один раз, а не
+            «пустой, потом с данными импорта» (владелец, 2026-09-20). */}
+        {data.loading && !data.snapshot ? (
+          <CabinetSkeleton />
+        ) : (
         <CabinetSection
           view={view}
           session={session}
@@ -144,8 +150,19 @@ export function CareerCabinet({
           onOpenAccount={onOpenAccount}
           onOpenExpert={onOpenExpert}
         />
+        )}
       </div>
     </AppErrorBoundary>
+  );
+}
+
+function CabinetSkeleton() {
+  return (
+    <div className="career-cabinet-skeleton" aria-busy="true" aria-label="Читаем ваш профиль">
+      <span className="career-skeleton-line is-wide" />
+      <span className="career-skeleton-line" />
+      <span className="career-skeleton-line is-short" />
+    </div>
   );
 }
 

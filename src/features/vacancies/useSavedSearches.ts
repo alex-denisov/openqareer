@@ -11,7 +11,9 @@ import {
   type VacancySubscription,
   type VacancySubscriptionView,
 } from '../coach/coachApi';
+import { CoachApiError } from '../coach/apiClient';
 import { intelligenceError } from '../cabinet/CareerIntelligencePanelParts';
+import { seededQuery } from './savedSearchQuery';
 
 /**
  * Состояние регулярных выборок отделено от разметки: панель фильтров рисует
@@ -31,21 +33,35 @@ export function useSavedSearches({
 }) {
   const [activeId, setActiveId] = useState<string>();
   const [view, setView] = useState<VacancySubscriptionView>();
-  const [query, setQuery] = useState(defaultQuery ?? '');
+  const [query, setQueryState] = useState(defaultQuery ?? '');
+  // Кандидат уже трогал поле: роль профиля больше не подставляется.
+  const [touched, setTouched] = useState(false);
+  const setQuery = (value: string) => {
+    setTouched(true);
+    setQueryState(value);
+  };
   const [source, setSource] = useState<VacancySourceId>('hh');
   const [sources, setSources] = useState<VacancySourceRegistryEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
-    if (!query && defaultQuery) setQuery(defaultQuery);
-  }, [defaultQuery, query]);
+    const seeded = seededQuery({ query, defaultQuery, touched });
+    if (seeded !== query) setQueryState(seeded);
+  }, [defaultQuery, query, touched]);
 
   useEffect(() => {
     let active = true;
     void getVacancySources()
       .then((result) => {
-        if (active) setSources(Array.isArray(result) ? result : []);
+        if (!active) return;
+        const list = Array.isArray(result) ? result : [];
+        setSources(list);
+        // Первой предлагается площадка, которая сейчас отвечает: заведомо
+        // закрытая hh.ru по умолчанию встречала кандидата предупреждением
+        // «нужен официальный доступ» (владелец, 2026-09-20).
+        const healthy = list.find((item) => item.health.status === 'healthy');
+        if (healthy) setSource((current) => (current === 'hh' ? healthy.id : current));
       })
       .catch((reason) => {
         if (active) setError(intelligenceError(reason));
@@ -71,7 +87,17 @@ export function useSavedSearches({
         if (active) setView(result);
       })
       .catch((reason) => {
-        if (active) setError(intelligenceError(reason));
+        if (!active) return;
+        // Выборка из снимка кабинета, которой на сервере уже нет (удалена в
+        // другом окне или снимок устарел): это не ошибка кандидата, а повод
+        // перечитать список. «Поисковое направление не найдено» на первом
+        // экране «Вакансий» — жалоба владельца 2026-09-20.
+        if (reason instanceof CoachApiError && reason.code === 'vacancy_subscription_not_found') {
+          setView(undefined);
+          void onRefresh();
+          return;
+        }
+        setError(intelligenceError(reason));
       });
     return () => {
       active = false;

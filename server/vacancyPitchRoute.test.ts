@@ -33,7 +33,7 @@ afterEach(async () => {
   }
 });
 
-async function createApp(clusters: VacancyCluster[] = []) {
+async function createApp(clusters: VacancyCluster[] = [], options: { persisted?: boolean } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-pitch-routes-'));
   const databasePath = join(directory, 'app.db');
   const candidates = new SqliteCandidateStore({
@@ -58,7 +58,16 @@ async function createApp(clusters: VacancyCluster[] = []) {
     recluster: { mode: 'sync' },
   });
 
-  if (clusters.length > 0) {
+  if (options.persisted) {
+    // Прод (B229/B230): кластеры лежат на диске, в куче процесса их нет, и
+    // любой `loadClusters()` — это чтение всего пула на минуты (память
+    // «prod-full-pool-read-costs-minutes»). Отклик по одной вакансии обязан
+    // читать один кластер.
+    poolStore.saveClusters(clusters);
+    poolStore.loadClusters = () => {
+      throw new Error('full cluster hydration on a single-vacancy request');
+    };
+  } else if (clusters.length > 0) {
     (multiSourceEngine as unknown as { clusters: VacancyCluster[] }).clusters = clusters;
   }
 
@@ -162,6 +171,23 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     expect(response.statusCode).toBe(404);
   });
 
+  // Владелец 2026-09-20: «Подготовить отклик» в .app — ошибка, а прод после
+  // нажатия перестаёт отвечать. Маршрут искал кластер через
+  // `getActiveClusters().find(...)`, то есть поднимал все 120K кластеров.
+  it('reads one persisted cluster instead of hydrating the whole pool (PRB-041)', async () => {
+    const { app } = await createApp([sampleCluster], { persisted: true });
+    const { cookie } = await login(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.emailPitch.subject).toContain('Senior Platform Engineer');
+  });
+
   it('generates pitch with 3 formats using confirmed candidate facts', async () => {
     const { app, candidates } = await createApp([sampleCluster]);
     const { cookie, candidateId } = await login(app);
@@ -205,5 +231,39 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     });
 
     expect(json.data.linkedInNote.length).toBeLessThanOrEqual(300);
+  });
+});
+
+describe('POST /api/v1/vacancies/:id/enrich-contacts', () => {
+  const cluster: VacancyCluster = {
+    id: 'cluster-77',
+    canonicalTitle: 'Product Manager',
+    canonicalCompany: 'Acme',
+    canonicalLocation: 'Berlin',
+    isRemote: false,
+    descriptionSummary: 'Контакты: рекрутер Анна Семенова, a.semenova@acme-corp.com',
+    skills: [],
+    primaryUrl: 'https://careers.acme-corp.com/jobs/77',
+    sources: [],
+    firstObservedAt: '2026-09-17T00:00:00.000Z',
+    lastSeenAt: '2026-09-17T00:00:00.000Z',
+    status: 'active',
+    vacanciesCount: 1,
+  };
+
+  // Та же причина, что у отклика: «Найти прямые контакты» поднимало весь пул
+  // кластеров ради одной записи (владелец 2026-09-20, PRB-041).
+  it('reads one persisted cluster instead of hydrating the whole pool (PRB-041)', async () => {
+    const { app } = await createApp([cluster], { persisted: true });
+    const { cookie } = await login(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/vacancies/cluster-77/enrich-contacts',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(Array.isArray(response.json().data.contacts)).toBe(true);
   });
 });

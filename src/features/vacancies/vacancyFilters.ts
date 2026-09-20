@@ -23,14 +23,16 @@ export interface VacancyAge {
 /**
  * Возраст записи — узел 15 пути пилота.
  *
- * Кластер знает только, когда его впервые увидел сбор, поэтому продукт говорит
- * «в базе N дней». Написать «опубликована N дней назад» было бы подменой: даты
- * публикации в кластере нет, и у части источников её нет вовсе.
+ * Кластер знает только, когда его впервые увидел сбор, поэтому колонка
+ * называется «в базе», а значение — «N дней». Написать «опубликована N дней
+ * назад» было бы подменой: даты публикации в кластере нет, и у части
+ * источников её нет вовсе. «Возраст» как заголовок владелец не понял
+ * (2026-09-20).
  */
 export function vacancyAge(cluster: VacancyCluster, now: string): VacancyAge {
   const firstSeen = Date.parse(cluster.firstObservedAt ?? '');
   if (Number.isNaN(firstSeen)) {
-    return { days: null, label: 'дата сбора неизвестна' };
+    return { days: null, label: 'дата неизвестна' };
   }
 
   const days = Math.max(
@@ -41,8 +43,8 @@ export function vacancyAge(cluster: VacancyCluster, now: string): VacancyAge {
     days,
     label:
       days === 0
-        ? 'в базе сегодня'
-        : `в базе ${pluralRu(days, ['день', 'дня', 'дней'])}`,
+        ? 'сегодня'
+        : pluralRu(days, ['день', 'дня', 'дней']),
   };
 }
 

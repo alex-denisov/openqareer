@@ -60,20 +60,20 @@ describe('vacancyAge', () => {
   it('считает дни с первого наблюдения', () => {
     expect(vacancyAge(item('c1').cluster, NOW)).toEqual({
       days: 2,
-      label: 'в базе 2 дня',
+      label: '2 дня',
     });
   });
 
   it('говорит «сегодня» про запись того же дня', () => {
     const fresh = item('c2', { firstObservedAt: '2026-09-01T06:00:00.000Z' });
-    expect(vacancyAge(fresh.cluster, NOW).label).toBe('в базе сегодня');
+    expect(vacancyAge(fresh.cluster, NOW).label).toBe('сегодня');
   });
 
   it('не выдумывает возраст без даты наблюдения', () => {
     const undated = item('c3', { firstObservedAt: '' });
     expect(vacancyAge(undated.cluster, NOW)).toEqual({
       days: null,
-      label: 'дата сбора неизвестна',
+      label: 'дата неизвестна',
     });
   });
 });
