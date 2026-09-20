@@ -188,6 +188,26 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     expect(response.json().data.emailPitch.subject).toContain('Senior Platform Engineer');
   });
 
+  // Прод 2026-09-21: id кластера — это ключ источника с полным адресом
+  // (`cluster-src-himalayas-api:https://himalayas.app/companies/…/jobs/…`),
+  // 130+ символов; Fastify по умолчанию режет параметр на 100 и отвечает 414
+  // без текста сервера — кандидат видел «Сервис не завершил действие».
+  it('accepts a long source-keyed cluster id in the path (PRB-041)', async () => {
+    const longId =
+      'cluster-src-himalayas-api:https://himalayas.app/companies/bright-vision-technologies/jobs/solutions-architect-and-platform-lead';
+    const { app } = await createApp([{ ...sampleCluster, id: longId }], { persisted: true });
+    const { cookie } = await login(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/vacancies/${encodeURIComponent(longId)}/pitch`,
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.vacancyId).toBe(longId);
+  });
+
   it('generates pitch with 3 formats using confirmed candidate facts', async () => {
     const { app, candidates } = await createApp([sampleCluster]);
     const { cookie, candidateId } = await login(app);

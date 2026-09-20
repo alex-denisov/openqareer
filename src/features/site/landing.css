@@ -8,14 +8,14 @@
   color: var(--career-text, oklch(95% 0.008 255));
   font-family: var(--career-font, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif);
   --brand-ink: var(--career-text, #ffffff);
-  --brand-core: var(--career-accent, #0a70e0);
+  --brand-core: var(--career-accent, #6fb1fb);
 }
 
 .site-layout .brand-lockup,
 .auth-page-container .brand-lockup,
 .auth-card .brand-lockup {
   --brand-ink: var(--career-text, #ffffff);
-  --brand-core: var(--career-accent, #0a70e0);
+  --brand-core: var(--career-accent, #6fb1fb);
 }
 
 .site-header {
@@ -104,8 +104,8 @@
 }
 
 .site-btn.is-primary {
-  background: var(--career-accent, #0a70e0);
-  color: #ffffff;
+  background: var(--career-accent, #6fb1fb);
+  color: var(--career-accent-ink, #0b1730);
   border-color: oklch(70% 0.15 255 / 0.4);
   box-shadow: 0 4px 16px oklch(50% 0.15 255 / 0.25);
 }
@@ -259,7 +259,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--career-accent, #0a70e0);
+  color: var(--career-accent, #6fb1fb);
   margin-bottom: 10px;
 }
 
@@ -314,7 +314,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--career-accent, #0a70e0);
+  color: var(--career-accent, #6fb1fb);
 }
 
 .site-pillar-tag {
@@ -361,7 +361,7 @@
 }
 
 .site-pillar-bullets li svg {
-  color: var(--career-accent, #0a70e0);
+  color: var(--career-accent, #6fb1fb);
   flex-shrink: 0;
   margin-top: 2px;
 }
@@ -407,7 +407,7 @@
   padding: 4px 12px;
   border-radius: 999px;
   background: oklch(26% 0.04 255 / 0.6);
-  color: var(--career-accent, #0a70e0);
+  color: var(--career-accent, #6fb1fb);
   border: 1px solid oklch(60% 0.14 255 / 0.35);
 }
 
@@ -420,7 +420,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--career-accent, #0a70e0);
+  color: var(--career-accent, #6fb1fb);
 }
 
 .site-service-card h3 {
@@ -456,7 +456,7 @@
 }
 
 .site-service-points li svg {
-  color: var(--career-accent, #0a70e0);
+  color: var(--career-accent, #6fb1fb);
   flex-shrink: 0;
   margin-top: 2px;
 }
@@ -496,7 +496,7 @@
   border-radius: 11px;
   background: oklch(27% 0.06 255 / 0.8);
   border: 1px solid oklch(60% 0.14 255 / 0.4);
-  color: var(--career-accent, #0a70e0);
+  color: var(--career-accent, #6fb1fb);
   font-size: 0.96rem;
   font-weight: 800;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -546,8 +546,8 @@
   position: absolute;
   top: -12px;
   right: 28px;
-  background: var(--career-accent, #0a70e0);
-  color: #fff;
+  background: var(--career-accent, #6fb1fb);
+  color: var(--career-accent-ink, #0b1730);
   font-size: 0.76rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -721,7 +721,7 @@
 
 .site-copyright {
   font-size: 0.8rem;
-  color: var(--career-text-dim, oklch(52% 0.02 255));
+  color: var(--career-text-dim, oklch(63% 0.024 255));
   margin-top: 8px;
   display: block;
 }
@@ -762,7 +762,7 @@
 
 .link-group a:hover,
 .link-group .link-btn:hover {
-  color: var(--career-accent, #0a70e0);
+  color: var(--career-accent, #6fb1fb);
 }
 
 /* Auth Pages (Login / Signup / Reset) */
@@ -775,7 +775,7 @@
   padding: 32px 16px;
   background: var(--career-bg, oklch(14% 0.015 255));
   --brand-ink: var(--career-text, #ffffff);
-  --brand-core: var(--career-accent, #0a70e0);
+  --brand-core: var(--career-accent, #6fb1fb);
 }
 
 .auth-card {
@@ -848,7 +848,7 @@
 
 .auth-field input:focus {
   outline: none;
-  border-color: var(--career-accent, #0a70e0);
+  border-color: var(--career-accent, #6fb1fb);
   box-shadow: 0 0 0 3px oklch(60% 0.15 255 / 0.25);
 }
 
@@ -895,7 +895,7 @@
 
 .auth-reveal-button:hover,
 .auth-reveal-button[aria-pressed='true'] {
-  color: var(--career-accent, #0a70e0);
+  color: var(--career-accent, #6fb1fb);
 }
 
 .auth-form-error {
@@ -939,7 +939,7 @@
 .auth-links button {
   background: none;
   border: none;
-  color: var(--career-accent, #0a70e0);
+  color: var(--career-accent, #6fb1fb);
   text-decoration: none;
   cursor: pointer;
 }
@@ -1137,7 +1137,7 @@
 }
 
 .legal-nav a {
-  color: var(--career-accent, #0a70e0);
+  color: var(--career-accent, #6fb1fb);
 }
 
 .legal-nav [aria-current='page'] {
@@ -1188,7 +1188,7 @@
 
 .auth-legal-consent a,
 .career-account-legal a {
-  color: var(--career-accent, #0a70e0);
+  color: var(--career-accent, #6fb1fb);
 }
 
 .auth-legal-consent .auth-field-error,

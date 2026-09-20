@@ -88,7 +88,7 @@ import {
   type CandidateRow,
   type SqliteStoreOptions,
 } from './store/shared';
-import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
+import { SQLITE_HTTP_BUSY_TIMEOUT_MS, applySqliteBusyTimeout } from './sqliteBusyTimeout';
 
 export { CandidateNotFoundError, CandidateStoreConflictError, CandidateDocumentRetentionError };
 
@@ -148,7 +148,7 @@ export class SqliteCandidateStore implements CandidateStore {
       PRAGMA secure_delete = ON;
       PRAGMA trusted_schema = OFF;
     `);
-    applySqliteBusyTimeout(this.database);
+    applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
     applyMigrations(this.database, (operation) => this.transaction(operation));
     this.careerCommandRepository.recoverInterruptedProcessing(
       new Date().toISOString(),

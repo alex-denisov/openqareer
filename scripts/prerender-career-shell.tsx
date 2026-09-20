@@ -87,10 +87,17 @@ export function assertSitemapUrlPolicy(urls: readonly string[]): void {
 
 const EMPTY_ROOT = '<div id="root"></div>';
 
-function bootstrapRoot(markup: string): string {
+/**
+ * Первый кадр до JavaScript. Лендинг и правовые страницы — настоящие ссылки:
+ * они обязаны работать сразу, пока части приложения ещё едут (на медленном
+ * маршруте это 10–17 с, и владелец 2026-09-20 не мог нажать «Войти»). `inert`
+ * остаётся только у консоли, где до гидратации нечего нажимать.
+ */
+function bootstrapRoot(markup: string, options: { inert?: boolean } = {}): string {
+  const inert = options.inert ? ' inert' : '';
   return (
     `<div id="root" aria-busy="true">` +
-    `<div class="career-bootstrap-shell" data-bootstrap-shell="true" inert>` +
+    `<div class="career-bootstrap-shell" data-bootstrap-shell="true"${inert}>` +
     markup +
     '</div></div>'
   );
@@ -129,7 +136,7 @@ export async function prerenderShells(
     adminPath,
     html.replace(
       EMPTY_ROOT,
-      bootstrapRoot(renderToStaticMarkup(<AdminConsole sessionPending />)),
+      bootstrapRoot(renderToStaticMarkup(<AdminConsole sessionPending />), { inert: true }),
     ),
   );
   // Each legal document is its own indexed page with its own first paint, so a

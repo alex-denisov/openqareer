@@ -182,6 +182,16 @@ function respondKnownError(
   return null;
 }
 
+/** `SQLITE_BUSY` (errcode 5) из node:sqlite после истечения busy_timeout. */
+export function isSqliteBusy(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const details = error as Error & { code?: string; errcode?: number; errstr?: string };
+  return (
+    details.code === 'ERR_SQLITE_ERROR' &&
+    (details.errcode === 5 || /database is locked/iu.test(details.errstr ?? error.message))
+  );
+}
+
 function handleRouteError(
   error: unknown,
   request: FastifyRequest,
@@ -204,6 +214,20 @@ function handleRouteError(
     );
   }
 
+  if (isSqliteBusy(error)) {
+    // База занята обслуживателем дольше busy_timeout (PRB-043): это не поломка,
+    // а очередь на запись — кандидату честно называем причину и просим
+    // повторить через секунды, а не «позже».
+    request.log.warn({ errorCode: getErrorCode(error) }, 'request-waited-out-db-lock');
+    return sendError(
+      reply,
+      request,
+      503,
+      'storage_busy',
+      'Хранилище занято обновлением вакансий. Повторите через несколько секунд.',
+      true,
+    );
+  }
   request.log.error(
     {
       errorName: error instanceof Error ? error.name : 'UnknownError',

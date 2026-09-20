@@ -16,7 +16,13 @@ const DEFAULT_PART_BYTES = 12 * 1024;
  * matters is one delivery part — the same bound every part obeys (B168).
  */
 const MAX_BOOTSTRAP_BYTES = 12 * 1024;
-const FETCH_CONCURRENCY = 2;
+/**
+ * Частей ~86 по 12 КБ; при двух потоках на маршруте с RTT ~170 мс приложение
+ * собиралось 15–17 с, и до этого лендинг был нерабочим (владелец, 2026-09-20).
+ * Шесть параллельных запросов укладываются в лимит HTTP/2 и режут время в три
+ * раза; размер части (B168) не трогаем.
+ */
+const FETCH_CONCURRENCY = 6;
 /** Prerendered documents that share the entry bundle with `index.html`. */
 const ADDITIONAL_SURFACES = [
   'admin.html',

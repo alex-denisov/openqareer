@@ -37,9 +37,10 @@ describe('production career shell prerender', () => {
 
     const html = readFileSync(indexPath, 'utf8');
     expect(html).toContain('id="root" aria-busy="true"');
-    expect(html).toContain(
-      'class="career-bootstrap-shell" data-bootstrap-shell="true" inert',
-    );
+    // Ссылки лендинга живут до гидратации: `inert` здесь запрещён (PRB-044).
+    expect(html).toContain('class="career-bootstrap-shell" data-bootstrap-shell="true">');
+    expect(html).not.toContain('data-bootstrap-shell="true" inert');
+    expect(html).toContain('href="/login"');
     expect(html).toContain('Карьерная операционная система кандидата');
     expect(html).toContain('Бесплатный доступ');
     expect(html).toContain('Профиль по фактам');

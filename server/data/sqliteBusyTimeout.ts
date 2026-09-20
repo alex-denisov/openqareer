@@ -10,7 +10,21 @@ import type { DatabaseSync } from 'node:sqlite';
  */
 export const SQLITE_BUSY_TIMEOUT_MS = 5_000;
 
+/**
+ * Сколько ждут соединения HTTP-процесса (сессии, анкеты, отклики).
+ *
+ * Замена среза большого источника обслуживателем держит write-lock дольше
+ * пяти секунд: 2026-09-20 20:35 UTC три входа подряд упали с
+ * `ERR_SQLITE_ERROR` ровно через 5 с каждый, и владелец вошёл с третьей
+ * попытки (PRB-043). Кандидату лучше подождать, чем получить «сервис не
+ * завершил запрос»; уменьшение самих транзакций — вторая половина PRB-043.
+ */
+export const SQLITE_HTTP_BUSY_TIMEOUT_MS = 20_000;
+
 /** Ставится сразу после открытия, до первой записи — включая миграции. */
-export function applySqliteBusyTimeout(database: DatabaseSync): void {
-  database.exec(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS};`);
+export function applySqliteBusyTimeout(
+  database: DatabaseSync,
+  timeoutMs: number = SQLITE_BUSY_TIMEOUT_MS,
+): void {
+  database.exec(`PRAGMA busy_timeout = ${timeoutMs};`);
 }

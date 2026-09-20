@@ -799,8 +799,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
   const shellMs = Math.round(performance.now() - startedAt);
 
   assert(
-    (await page.locator('[data-bootstrap-shell="true"]').getAttribute('inert')) !== null,
+    (await page.locator('[data-bootstrap-shell="true"]').count()) === 1,
     `${viewport.name}: shared shell was not prerendered before JavaScript`,
+  );
+  // PRB-044: до гидратации ссылка «Войти» — обычная ссылка и ничем не накрыта.
+  assert(
+    (await page.locator('[data-bootstrap-shell="true"]').getAttribute('inert')) === null,
+    `${viewport.name}: landing links are inert before hydration`,
   );
   assert(
     (await page.getByRole('heading', { name: 'Карьерная операционная система кандидата' }).count()) === 1,

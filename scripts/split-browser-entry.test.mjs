@@ -90,7 +90,7 @@ describe('split browser entry delivery', () => {
     );
     assert.ok(bootstrap.includes('crypto.subtle.digest'));
     assert.ok(bootstrap.includes('AbortSignal.timeout(45000)'));
-    assert.ok(bootstrap.includes('const FETCH_CONCURRENCY=2'));
+    assert.ok(bootstrap.includes('const FETCH_CONCURRENCY=6'));
     assert.ok(bootstrap.includes('await Promise.all(workers)'));
     assert.equal(
       bootstrap.includes(

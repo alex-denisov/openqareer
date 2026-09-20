@@ -140,6 +140,9 @@ async function createFastifyBase(
     logger: loggerOptions(config, logDestination),
     bodyLimit: 256 * 1_024,
     requestTimeout: 190_000,
+    // Id кластера — ключ источника с полным адресом вакансии (130+ символов);
+    // порог Fastify по умолчанию (100) отвечал 414 на отклик и контакты (PRB-041).
+    maxParamLength: 2_048,
   });
 
   await app.register(cookie);

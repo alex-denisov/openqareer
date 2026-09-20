@@ -6,7 +6,11 @@ import { Worker } from 'node:worker_threads';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SqliteVacancyPoolStore } from '../vacancies/sqliteVacancyPoolStore';
 import { SqliteCandidateStore } from './sqliteCandidateStore';
-import { SQLITE_BUSY_TIMEOUT_MS, applySqliteBusyTimeout } from './sqliteBusyTimeout';
+import {
+  SQLITE_BUSY_TIMEOUT_MS,
+  SQLITE_HTTP_BUSY_TIMEOUT_MS,
+  applySqliteBusyTimeout,
+} from './sqliteBusyTimeout';
 
 const HOLD_LOCK_MS = 700;
 
@@ -91,5 +95,18 @@ describe('sqlite busy_timeout (B230)', () => {
     pool.close();
     candidates.close();
     await worker.terminate();
+  });
+});
+
+describe('HTTP-side busy_timeout (PRB-043)', () => {
+  it('waits out a slice replacement instead of failing a login', () => {
+    // Логин падал ровно через 5 с при замене среза большого источника.
+    expect(SQLITE_HTTP_BUSY_TIMEOUT_MS).toBeGreaterThanOrEqual(15_000);
+    const path = join(mkdtempSync(join(tmpdir(), 'busy-http-')), 'db.sqlite');
+    const db = new DatabaseSync(path);
+    applySqliteBusyTimeout(db, SQLITE_HTTP_BUSY_TIMEOUT_MS);
+    const row = db.prepare('PRAGMA busy_timeout').get() as { timeout: number };
+    expect(row.timeout).toBe(SQLITE_HTTP_BUSY_TIMEOUT_MS);
+    db.close();
   });
 });
