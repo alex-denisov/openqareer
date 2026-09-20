@@ -317,4 +317,71 @@ describe('candidate platform connections', () => {
       { stage: 'gemini:gemini-3.6-flash', kind: 'http_error', status: 429, at: expect.any(String) },
     ]);
   });
+
+  // PRB-039: модель назвала ролями работодателей из LinkedIn-профиля. Маршрут
+  // знает организации из резюме и не пропускает их на экран как должности.
+  it('не выдаёт работодателя кандидата за гипотезу роли', async () => {
+    const candidateStore = new SqliteCandidateStore({
+      databasePath: ':memory:',
+      encryptionKey: config.dataEncryptionKey,
+    });
+    const candidate = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+    candidateStore.saveResumeDraft(
+      candidate.id,
+      {
+        ...EMPTY_RESUME_DRAFT,
+        targetRole: 'Xray Technician',
+        experience: [
+          {
+            id: 'exp-1',
+            chronologyMemoryId: 'm-1',
+            title: 'Account Executive',
+            employer: 'Accessibility Talent Solutions',
+            current: true,
+            bulletMemoryIds: [],
+          },
+          {
+            id: 'exp-2',
+            chronologyMemoryId: 'm-2',
+            title: 'Consultant',
+            employer: 'LinkedIn · Marketing Solutions',
+            current: false,
+            bulletMemoryIds: [],
+          },
+        ],
+      },
+      [],
+    );
+    const app = await buildApp({
+      config: { ...config, logLevel: 'warn' },
+      coachProvider: successProvider,
+      candidateStore,
+      authService: noSessions,
+      serveStatic: false,
+      roleNamer: {
+        async nameRoles() {
+          return {
+            roles: [
+              { title: 'Accessibility Talent Solutions', reason: 'работал там', evidenceRefs: ['memory:1'] },
+              { title: 'Marketing Solutions', reason: 'вёл продукт', evidenceRefs: ['memory:2'] },
+              { title: 'Xray Technician', reason: 'семь лет в рентген-кабинете', evidenceRefs: ['memory:3'] },
+            ],
+            stage: 'test',
+          };
+        },
+      },
+    });
+    apps.push(app);
+    stores.push(candidateStore);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/role-hypotheses',
+      headers: { authorization: `Bearer ${candidate.accessToken}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const titles = (response.json().data as Array<{ title: string }>).map((role) => role.title);
+    expect(titles).toEqual(['Xray Technician']);
+  });
 });

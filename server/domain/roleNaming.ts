@@ -40,8 +40,11 @@ export function roleNamingInstructions(language: RoleNameLanguage): string {
           'Названия ролей давай по-английски — так, как их пишут в вакансиях.',
         ]),
     'Каждая роль — короткое название должности (до 60 символов).',
+    'Название компании, продукта, подразделения или бренда из фактов — не роль:',
+    'работодатель кандидата никогда не становится названием должности.',
     'Для каждой роли объясни в одном предложении, что именно в фактах кандидата',
     'её породило, и перечисли ссылки на эти факты из поля ref.',
+    'Обоснование пиши по-русски независимо от языка названия роли.',
     'Запрещено: любые числа, проценты, оценки востребованности, зарплаты,',
     'слова «подходит», «не подходит», «уровень», «балл».',
     'Порядок ролей не важен: его определяет не ты.',
@@ -107,3 +110,32 @@ export const ROLE_NAMING_JSON_SCHEMA = {
     },
   },
 } as const;
+
+/**
+ * Модель инструкции не всегда слушает: для профиля из LinkedIn она назвала
+ * ролями «Accessibility Talent Solutions» и «Marketing Solutions» — продукты и
+ * работодателей кандидата (PRB-039). Роль, чьё название совпадает с
+ * организацией из резюме или содержит её целиком, до экрана не доходит.
+ */
+export function dropOrganisationTitles<T extends { readonly title: string }>(
+  roles: readonly T[],
+  organisations: readonly string[],
+): T[] {
+  const known = organisations
+    .flatMap((organisation) => organisation.split(/\s*[·|/,]\s*/u))
+    .map(normaliseName)
+    .filter((name) => name.length >= 3);
+  if (known.length === 0) return [...roles];
+  return roles.filter((role) => {
+    const title = normaliseName(role.title);
+    return !known.some((name) => title === name || title.includes(name));
+  });
+}
+
+function normaliseName(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[«»"'()]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}

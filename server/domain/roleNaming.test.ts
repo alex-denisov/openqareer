@@ -1,19 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { roleNamingInstructions } from './roleNaming';
+import { dropOrganisationTitles, roleNamingInstructions } from './roleNaming';
 
-describe('инструкция называния ролей', () => {
-  it('называет язык прямо, а не оставляет его на усмотрение модели', () => {
-    expect(roleNamingInstructions('en')).toContain('английск');
-    expect(roleNamingInstructions('ru')).toContain('русск');
+/**
+ * PRB-039. Для профиля из LinkedIn модель назвала роли «Accessibility Talent
+ * Solutions» и «Marketing Solutions» — это работодатели и продукты кандидата,
+ * не должности. Инструкция это запрещает, а код не верит инструкции: роль с
+ * названием организации из резюме выбрасывается до экрана.
+ */
+describe('role naming without organisation names (PRB-039)', () => {
+  const organisations = ['Accessibility Talent Solutions', 'LinkedIn · Marketing Solutions'];
+
+  it('drops a role whose title is an employer or a product of the candidate', () => {
+    const roles = [
+      { title: 'Accessibility Talent Solutions', reason: 'работал там', evidenceRefs: ['memory:1'] },
+      { title: 'marketing solutions', reason: 'вёл продукт', evidenceRefs: ['memory:2'] },
+      { title: 'Xray Technician', reason: 'семь лет в рентген-кабинете', evidenceRefs: ['memory:3'] },
+      { title: 'Solutions Engineer', reason: 'внедрял решения клиентам', evidenceRefs: ['memory:4'] },
+    ];
+    expect(dropOrganisationTitles(roles, organisations).map((role) => role.title)).toEqual([
+      'Xray Technician',
+      'Solutions Engineer',
+    ]);
   });
 
-  it('запрещает переводить название, которого на русском рынке нет', () => {
-    // Правило владельца: DevOps в РФ чаще всего не переводится, а «Инженер
-    // доступности» — это уже другая роль, а не перевод (B180, 2026-09-03).
-    expect(roleNamingInstructions('ru')).toContain('не переводи');
+  it('keeps every role when the candidate has no organisations on record', () => {
+    const roles = [{ title: 'Marketing Solutions', reason: 'r', evidenceRefs: ['memory:1'] }];
+    expect(dropOrganisationTitles(roles, [])).toEqual(roles);
   });
 
-  it('английская инструкция не просит русских названий', () => {
-    expect(roleNamingInstructions('en')).not.toContain('по-русски');
+  it('tells the model that organisations are not roles and asks for a Russian reason', () => {
+    const instructions = roleNamingInstructions('en');
+    expect(instructions).toMatch(/компани/iu);
+    expect(instructions).toMatch(/не роль/u);
+    expect(instructions).toMatch(/Обоснование пиши по-русски/u);
   });
 });

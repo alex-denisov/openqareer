@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
 import { resolveRoleNameLanguage, type RoleNameLanguage } from '../domain/roleNameLanguage';
+import { dropOrganisationTitles } from '../domain/roleNaming';
 import { vacancySubscriptionInputSchema } from '../domain/vacancy';
 import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
 import type { NamedRole, ProposedRole } from '../../shared/roleProposals';
@@ -228,6 +229,11 @@ async function readRoleContext(
     ? await roleNamer.nameRoles(facts, language)
     : { roles: [] as NamedRole[] };
   reportRoleNamingFailures(request, roleNamingFailures, naming.failures ?? []);
+  // Работодатель из резюме — не роль, что бы модель ни ответила (PRB-039).
+  const named = dropOrganisationTitles(
+    naming.roles,
+    candidateOrganisations(candidateStore, candidateId),
+  );
 
   // Ответы на задания меняют порядок ролей одного яруса и никогда — состав
   // (B180, срез 3). Прогон по прежней версии ключа в счёт не идёт: смена
@@ -239,7 +245,7 @@ async function readRoleContext(
   return {
     proposals: buildRoleProposals({
       matched,
-      named: naming.roles,
+      named,
       candidateSkills: confirmedSkills,
       ...(preferences ? { preferences } : {}),
     }),
@@ -527,6 +533,19 @@ function readSearchRegions(
 }
 
 /** Факты, по которым модель называет роль: своя ссылка у каждого. */
+/** Организации кандидата по сохранённому резюме: работодатели и вузы. */
+function candidateOrganisations(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+): string[] {
+  const draft = candidateStore.getSnapshot(candidateId)?.resume?.draft;
+  if (!draft) return [];
+  return [
+    ...draft.experience.map((entry) => entry.employer ?? ''),
+    ...draft.education.map((entry) => entry.institution ?? ''),
+  ].filter((name) => name.trim().length > 0);
+}
+
 function candidateFacts(
   candidateStore: RouteDeps['candidateStore'],
   candidateId: string,
