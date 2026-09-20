@@ -30,7 +30,7 @@ export interface SyncWaveReport {
   readonly synced: number;
   readonly failed: readonly string[];
   readonly kept: number;
-  readonly skipped?: 'stopped' | 'memory' | 'busy' | 'keys';
+  readonly skipped?: 'stopped' | 'memory' | 'keys';
 }
 
 export interface MaintenanceIntervals {
@@ -39,6 +39,14 @@ export interface MaintenanceIntervals {
   readonly catalogMs: number;
   readonly reportMs: number;
 }
+
+/**
+ * Сколько `stop()` ждёт текущую волну. Обход hh.ru (B219) — это часы, и он
+ * возобновляется с сохранённого курсора, поэтому ждать его целиком нельзя:
+ * после этого срока волна бросается, хранилища закрываются, процесс выходит.
+ * `TimeoutStopSec` юнита — 120 с — страховка сверху.
+ */
+export const DEFAULT_STOP_GRACE_MS = 60_000;
 
 export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   syncMs: 5 * 60 * 1_000,
@@ -59,8 +67,10 @@ export const CLUSTER_KEYS_STEP_CHUNK = 500;
  * каталога тиками, проверяет живость ссылок и раз в минуту пишет в журнал,
  * сколько памяти занял. HTTP-процесс ничего из этого больше не делает.
  *
- * Волны не пересекаются: одна за раз, следующая ждёт. На SIGTERM `stop()`
- * дожидается текущей волны и запрещает новые — база закрывается после.
+ * Волны могут пересекаться: обход hh.ru (B219) длится часами, и за это время
+ * остальные площадки обязаны опрашиваться — движок сам не запускает одну
+ * площадку дважды. На SIGTERM `stop()` ждёт идущие волны не дольше срока и
+ * запрещает новые — база закрывается после.
  */
 export class MaintenanceWorker {
   private readonly engine: MaintenanceEngine;
@@ -69,7 +79,7 @@ export class MaintenanceWorker {
   private readonly memoryGuard: MemoryGuard;
   private readonly readHeap: () => HeapReading;
   private readonly timers: NodeJS.Timeout[] = [];
-  private inFlight: Promise<unknown> | undefined;
+  private readonly inFlight = new Set<Promise<unknown>>();
   private stopped = false;
 
   constructor(options: {
@@ -134,7 +144,6 @@ export class MaintenanceWorker {
   async runSyncWave(): Promise<SyncWaveReport> {
     if (this.stopped) return { synced: 0, failed: [], kept: 0, skipped: 'stopped' };
     if (!this.engine.clusterKeysReady) return { synced: 0, failed: [], kept: 0, skipped: 'keys' };
-    if (this.inFlight) return { synced: 0, failed: [], kept: 0, skipped: 'busy' };
     const memory = this.memoryGuard.check();
     if (memory.changed) {
       this.log[memory.paused ? 'warn' : 'info'](
@@ -167,7 +176,7 @@ export class MaintenanceWorker {
 
   /** Обходит ссылки одной площадки — той, которую проверяли дольше всех (B200). */
   async runLivenessProbe(): Promise<LinkCheckCensus | undefined> {
-    if (this.stopped || this.inFlight) return undefined;
+    if (this.stopped) return undefined;
     const probe = this.engine.probeDueLinks().then((census) => {
       if (census) this.log.info({ ...census }, 'vacancy-link-liveness-checked');
       return census;
@@ -219,11 +228,28 @@ export class MaintenanceWorker {
     void this.runSyncWave();
   }
 
-  /** Гасит таймеры и ждёт текущую волну: базу закрывать только после. */
-  async stop(): Promise<void> {
+  /**
+   * Гасит таймеры и ждёт текущую волну, но не дольше `graceMs`: базу
+   * закрывать только после. Возвращает, дождались ли.
+   */
+  async stop(graceMs = DEFAULT_STOP_GRACE_MS): Promise<{ waveFinished: boolean }> {
     this.stopped = true;
     for (const timer of this.timers.splice(0)) clearInterval(timer);
-    if (this.inFlight) await this.inFlight.catch(() => undefined);
+    if (this.inFlight.size === 0) return { waveFinished: true };
+    let timer: NodeJS.Timeout | undefined;
+    const deadline = new Promise<'timeout'>((resolve) => {
+      timer = setTimeout(() => resolve('timeout'), graceMs);
+    });
+    const outcome = await Promise.race([
+      Promise.allSettled(Array.from(this.inFlight)).then(() => 'finished' as const),
+      deadline,
+    ]);
+    if (timer) clearTimeout(timer);
+    if (outcome === 'timeout') {
+      this.log.warn({ graceMs }, 'maintenance-stop-wave-abandoned');
+      return { waveFinished: false };
+    }
+    return { waveFinished: true };
   }
 
   private track<T>(work: Promise<T>, failureMessage: string, fallback: T): Promise<T> {
@@ -233,9 +259,9 @@ export class MaintenanceWorker {
         return fallback;
       })
       .finally(() => {
-        if (this.inFlight === tracked) this.inFlight = undefined;
+        this.inFlight.delete(tracked);
       });
-    this.inFlight = tracked;
+    this.inFlight.add(tracked);
     return tracked;
   }
 }

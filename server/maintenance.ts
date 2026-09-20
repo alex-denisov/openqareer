@@ -24,9 +24,9 @@ async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info({ signal }, 'maintenance-shutdown-started');
-  await worker.stop();
+  const { waveFinished } = await worker.stop();
   composed.close();
-  log.info({ signal }, 'maintenance-shutdown-finished');
+  log.info({ signal, waveFinished }, 'maintenance-shutdown-finished');
   process.exit(0);
 }
 process.once('SIGINT', () => void shutdown('SIGINT'));

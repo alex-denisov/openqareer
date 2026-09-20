@@ -5,12 +5,13 @@ import { createHhCrawlSettings, type SqliteHhCrawlSettings } from './hhCrawlSett
 import { buildHhPageFetcher } from './hhSearchTransport';
 import { createHttpLinkProbe } from './linkLivenessProbe';
 import { buildMultiSourceFetcher, fetchRobotsTxt } from './multiSourceFetcher';
+import type { LinkProbe } from './linkLivenessProbe';
 import {
   MultiSourceVacancyEngine,
   type ReclusterMode,
   type SourceFetcher,
 } from './multiSourceVacancyEngine';
-import { RobotsPolicyLoader } from './robotsPolicyLoader';
+import { RobotsPolicyLoader, type RobotsFetcher } from './robotsPolicyLoader';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 
 export interface ComposedVacancyEngine {
@@ -23,8 +24,10 @@ export interface ComposedVacancyEngine {
 
 export interface ComposeVacancyEngineOptions {
   readonly databasePath: string;
-  /** Подмена сети в тестах: по умолчанию — настоящие площадки. */
+  /** Подмена сети в тестах: по умолчанию — настоящие площадки, robots и ссылки. */
   readonly fetcher?: SourceFetcher;
+  readonly fetchRobots?: RobotsFetcher;
+  readonly linkProbe?: LinkProbe;
   readonly recluster?: ReclusterMode;
 }
 
@@ -53,11 +56,11 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
     pool,
     // Право обхода спрашивается у самой площадки, а не берётся из записи,
     // сделанной когда-то руками; `Crawl-delay` тоже приходит оттуда (B204).
-    robots: new RobotsPolicyLoader({ fetchRobots: fetchRobotsTxt }),
+    robots: new RobotsPolicyLoader({ fetchRobots: options.fetchRobots ?? fetchRobotsTxt }),
     // Открывается ли ещё ссылка объявления — отдельное доказательство: лента
     // может отдавать свежие даты у вакансий, которых на сайте уже нет (B200
     // срез 2).
-    linkProbe: createHttpLinkProbe(),
+    linkProbe: options.linkProbe ?? createHttpLinkProbe(),
     ...(options.recluster ? { recluster: options.recluster } : {}),
   });
   return {

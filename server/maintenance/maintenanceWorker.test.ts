@@ -95,6 +95,9 @@ function startConcurrentWriter(databasePath: string): {
   };
 }
 
+/** Тесты не ходят за robots.txt: «не подтверждено» — площадка опрашивается. */
+const offline = async () => ({ status: 0, body: null });
+
 describe('MaintenanceWorker (B230)', () => {
   const directories: string[] = [];
   afterEach(() => {
@@ -108,6 +111,7 @@ describe('MaintenanceWorker (B230)', () => {
     const databasePath = join(directory, 'db.sqlite');
     const composed = composeVacancyEngine({
       databasePath,
+      fetchRobots: offline,
       fetcher: async (source) => Array.from({ length: 300 }, (_, i) => vacancy(source, i)),
       recluster: { mode: 'keyed', batchSize: 100 },
     });
@@ -137,6 +141,7 @@ describe('MaintenanceWorker (B230)', () => {
     directories.push(directory);
     const composed = composeVacancyEngine({
       databasePath: join(directory, 'db.sqlite'),
+      fetchRobots: offline,
       fetcher: async (source) => {
         await new Promise((resolve) => setTimeout(resolve, 50));
         return [vacancy(source, 1)];
@@ -146,7 +151,7 @@ describe('MaintenanceWorker (B230)', () => {
     const worker = new MaintenanceWorker({ engine: composed.engine, log: silentLog() });
     await worker.restore();
     const wave = worker.runSyncWave();
-    await worker.stop();
+    await expect(worker.stop()).resolves.toEqual({ waveFinished: true });
     await expect(wave).resolves.toMatchObject({ failed: [] });
     await expect(worker.runSyncWave()).resolves.toEqual({
       synced: 0,
@@ -174,6 +179,7 @@ describe('MaintenanceWorker (B230)', () => {
 
     const composed = composeVacancyEngine({
       databasePath,
+      fetchRobots: offline,
       fetcher: async () => [],
       recluster: { mode: 'keyed', batchSize: 100 },
     });
@@ -195,6 +201,64 @@ describe('MaintenanceWorker (B230)', () => {
         },
       ]),
     ).toHaveLength(1);
+    composed.close();
+  });
+
+  it('a stuck source does not block the next wave for the other sources', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'maintenance-worker-'));
+    directories.push(directory);
+    let calls = 0;
+    const composed = composeVacancyEngine({
+      databasePath: join(directory, 'db.sqlite'),
+      fetchRobots: offline,
+      fetcher: (s) => {
+        calls += 1;
+        // Первая площадка волны висит как обход hh.ru; остальные отвечают.
+        if (calls === 1) return new Promise(() => undefined);
+        return Promise.resolve([vacancy(s, calls)]);
+      },
+      recluster: { mode: 'keyed', batchSize: 100 },
+    });
+    const worker = new MaintenanceWorker({ engine: composed.engine, log: silentLog() });
+    await worker.restore();
+    const healthy = () =>
+      composed.pool.loadSourceStates().filter((state) => state.lastStatus === 'healthy').length;
+
+    // Волна с зависшей площадкой не завершается, но её остальные площадки прочитаны.
+    void worker.runSyncWave();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const afterFirst = healthy();
+    expect(afterFirst).toBeGreaterThan(0);
+
+    // Следующая волна не ждёт предыдущую: новые площадки читаются.
+    void worker.runSyncWave();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(healthy()).toBeGreaterThan(afterFirst);
+
+    await expect(worker.stop(100)).resolves.toEqual({ waveFinished: false });
+    composed.close();
+  }, 30_000);
+
+  it('stop abandons a wave that outlives the grace period', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'maintenance-worker-'));
+    directories.push(directory);
+    const composed = composeVacancyEngine({
+      databasePath: join(directory, 'db.sqlite'),
+      // Площадка, которая никогда не отвечает: как многочасовой обход hh.ru.
+      fetcher: () => new Promise(() => undefined),
+      recluster: { mode: 'keyed', batchSize: 100 },
+    });
+    const log = silentLog();
+    const worker = new MaintenanceWorker({ engine: composed.engine, log });
+    await worker.restore();
+    void worker.runSyncWave();
+
+    const started = Date.now();
+    const result = await worker.stop(200);
+
+    expect(result).toEqual({ waveFinished: false });
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(log.entries.some((e) => e.msg === 'maintenance-stop-wave-abandoned')).toBe(true);
     composed.close();
   });
 

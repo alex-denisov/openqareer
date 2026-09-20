@@ -9,6 +9,9 @@ import { composeVacancyEngine } from './composeVacancyEngine';
  * наборы площадок разойдутся, админка покажет одно, а опросы пойдут по
  * другому — поэтому снимок конфигурации из двух сборок обязан совпадать.
  */
+/** Тесты не ходят за robots.txt: «не подтверждено» — площадка опрашивается. */
+const offline = async () => ({ status: 0, body: null });
+
 describe('composeVacancyEngine (B230)', () => {
   const directories: string[] = [];
   afterEach(() => {
@@ -22,8 +25,18 @@ describe('composeVacancyEngine (B230)', () => {
     const databasePath = join(directory, 'db.sqlite');
     const fetcher = async () => [];
 
-    const http = composeVacancyEngine({ databasePath, fetcher, recluster: { mode: 'sync' } });
-    const maintenance = composeVacancyEngine({ databasePath, fetcher, recluster: { mode: 'off' } });
+    const http = composeVacancyEngine({
+      databasePath,
+      fetchRobots: offline,
+      fetcher,
+      recluster: { mode: 'sync' },
+    });
+    const maintenance = composeVacancyEngine({
+      databasePath,
+      fetchRobots: offline,
+      fetcher,
+      recluster: { mode: 'off' },
+    });
 
     const snapshot = (sources: ReturnType<typeof http.engine.getSources>) =>
       sources.map((s) => ({ id: s.id, type: s.type, enabled: s.enabled, url: s.targetUrl }));
@@ -40,9 +53,17 @@ describe('composeVacancyEngine (B230)', () => {
     const directory = mkdtempSync(join(tmpdir(), 'compose-engine-'));
     directories.push(directory);
     const databasePath = join(directory, 'db.sqlite');
-    const first = composeVacancyEngine({ databasePath, fetcher: async () => [] });
+    const first = composeVacancyEngine({
+      databasePath,
+      fetchRobots: offline,
+      fetcher: async () => [],
+    });
     first.close();
-    const second = composeVacancyEngine({ databasePath, fetcher: async () => [] });
+    const second = composeVacancyEngine({
+      databasePath,
+      fetchRobots: offline,
+      fetcher: async () => [],
+    });
     expect(second.engine.poolSize).toBe(0);
     second.close();
   });
