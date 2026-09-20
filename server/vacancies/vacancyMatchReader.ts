@@ -6,7 +6,7 @@ import type { SQLInputValue } from 'node:sqlite';
 const WORKER_SOURCE = `
 const { DatabaseSync } = require('node:sqlite');
 const db = new DatabaseSync(process.argv[1], { readOnly: true });
-db.exec('PRAGMA query_only = ON; PRAGMA busy_timeout = 1000;');
+db.exec('PRAGMA query_only = ON; PRAGMA busy_timeout = 5000;');
 process.on('message', ({ id, sql, params }) => {
   try { process.send({ id, rows: db.prepare(sql).all(...params) }); }
   catch { process.send({ id, error: 'vacancy_match_query_failed' }); }

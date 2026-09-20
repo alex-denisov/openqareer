@@ -38,6 +38,7 @@ import {
   type CatalogEntryRow,
 } from './vacancyCatalogProjection';
 import type { CatalogListingSummary } from './vacancyCatalogFacets';
+import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 
 interface VacancyRow {
   payload: string;
@@ -163,6 +164,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.databasePath = options.databasePath;
     this.database = new DatabaseSync(options.databasePath);
     this.database.exec('PRAGMA journal_mode = WAL;');
+    applySqliteBusyTimeout(this.database);
     this.database.exec('PRAGMA foreign_keys = ON;');
     this.database.exec(MIGRATION_23);
     this.ensureColumn('vacancy_source_state', 'observations', VACANCY_SOURCE_OBSERVATIONS_COLUMN);

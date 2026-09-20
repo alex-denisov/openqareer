@@ -162,8 +162,20 @@ export const SYNC_BATCH_LIMIT = 12;
  * записей из базы стоит 1–2 минуты процессора: синхронная сборка на каждую
  * пятиминутную волну держала службу без ответа и была откачена
  * (2026-09-15, B221). Полная пересборка уходит со срезом 3.
+ *
+ * `off` — запрет полной пересборки (B230): пул и состояние площадок пишутся,
+ * кластеры не трогаются ни синхронно, ни в фоне, а явный вызов бросает
+ * ошибку. Это режим обслуживателя на проде, где весь пул в кучу не входит.
  */
-export type ReclusterMode = { mode: 'sync' } | { mode: 'background'; minIntervalMs: number };
+export type ReclusterMode =
+  { mode: 'sync' } | { mode: 'background'; minIntervalMs: number } | { mode: 'off' };
+
+export class ReclusterDisabledError extends Error {
+  constructor() {
+    super('recluster is off: full cluster rebuild is banned in this process');
+    this.name = 'ReclusterDisabledError';
+  }
+}
 
 export const DEFAULT_RECLUSTER_MIN_INTERVAL_MS = 15 * 60 * 1000;
 
@@ -1017,6 +1029,7 @@ export class MultiSourceVacancyEngine {
    * среза 3 (кластеры в таблице, инкрементально).
    */
   public recluster(): void {
+    if (this.reclusterMode.mode === 'off') throw new ReclusterDisabledError();
     const startedAt = Date.now();
     this.ensureLoadedClusters();
     if (this.requiresFullRecluster) {
@@ -1039,6 +1052,7 @@ export class MultiSourceVacancyEngine {
   }
 
   public async reclusterAsync(chunkSize = 500): Promise<void> {
+    if (this.reclusterMode.mode === 'off') throw new ReclusterDisabledError();
     const startedAt = Date.now();
     this.ensureLoadedClusters();
     if (this.requiresFullRecluster) {
@@ -1120,6 +1134,7 @@ export class MultiSourceVacancyEngine {
   /** Пересобирает пул, только если волна что-то в него принесла. */
   private reclusterIfChanged(): void {
     if (!this.poolChangedSinceRecluster) return;
+    if (this.reclusterMode.mode === 'off') return;
     if (this.reclusterMode.mode === 'sync') {
       this.recluster();
       return;

@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 readonly RELEASE_ROOT=/srv/openqareer
 readonly SERVICE=openqareer-static.service
+readonly MAINTENANCE_SERVICE=openqareer-maintenance.service
 readonly HEALTH_URL=http://127.0.0.1:3210/health
 
 fail() {
@@ -69,6 +70,7 @@ if [[ ! -d "$release_dir" ]]; then
   tar -xzf "$archive" --no-same-owner --no-same-permissions -C "$temp_dir"
   [[ -f "$temp_dir/index.html" ]] || fail "index.html is missing"
   [[ -f "$temp_dir/server.mjs" ]] || fail "server.mjs is missing"
+  [[ -f "$temp_dir/maintenance.mjs" ]] || fail "maintenance.mjs is missing"
   [[ -f "$temp_dir/health" ]] || fail "health marker is missing"
   [[ "$(tr -d '\r\n' < "$temp_dir/health")" == "$release_sha" ]] ||
     fail "health marker does not match release"
@@ -80,6 +82,7 @@ if [[ ! -d "$release_dir" ]]; then
 fi
 [[ -f "$release_dir/index.html" ]] || fail "existing release has no index.html"
 [[ -f "$release_dir/server.mjs" ]] || fail "existing release has no server.mjs"
+[[ -f "$release_dir/maintenance.mjs" ]] || fail "existing release has no maintenance.mjs"
 [[ "$(tr -d '\r\n' < "$release_dir/health")" == "$release_sha" ]] ||
   fail "existing release health marker does not match"
 
@@ -116,6 +119,14 @@ if [[ "$healthy" != "1" ]]; then
 fi
 
 rm -f -- "$archive"
+
+# Обслуживатель пула (B230) перезапускается после того, как HTTP подтвердил
+# релиз: он не участвует в /health и не может откатить выкат, но обязан
+# работать из того же `current`, что и сервер.
+if ! sudo -n /usr/bin/systemctl restart "$MAINTENANCE_SERVICE"; then
+  printf 'openqareer-activate: warning: %s restart failed; check journalctl -u %s\n' \
+    "$MAINTENANCE_SERVICE" "$MAINTENANCE_SERVICE" >&2
+fi
 
 current_target="$(readlink current)"
 previous_target="$(readlink previous 2>/dev/null || true)"

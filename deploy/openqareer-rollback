@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 readonly RELEASE_ROOT=/srv/openqareer
 readonly SERVICE=openqareer-static.service
+readonly MAINTENANCE_SERVICE=openqareer-maintenance.service
 readonly HEALTH_URL=http://127.0.0.1:3210/health
 
 fail() {
@@ -62,5 +63,8 @@ if [[ "$healthy" != "1" ]]; then
   sudo -n /usr/bin/systemctl restart "$SERVICE"
   fail "rollback health failed; original current release restored"
 fi
+
+sudo -n /usr/bin/systemctl restart "$MAINTENANCE_SERVICE" ||
+  printf 'openqareer-rollback: warning: %s restart failed\n' "$MAINTENANCE_SERVICE" >&2
 
 printf 'rollback=%s previous=%s health=ok\n' "$previous_target" "$current_target"

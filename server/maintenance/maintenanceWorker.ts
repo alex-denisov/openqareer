@@ -1,0 +1,212 @@
+import type { VacancySourceConfig } from '../domain/unifiedVacancy';
+import type { LinkCheckCensus } from '../vacancies/linkLivenessProbe';
+import { MemoryGuard, readProcessHeap, type HeapReading } from '../vacancies/memoryGuard';
+import type { SourceSyncOutcome } from '../vacancies/multiSourceVacancyEngine';
+
+/** Тот же контракт, что у `fastify.log`: объект контекста, потом сообщение. */
+export interface MaintenanceLog {
+  info(context: Record<string, unknown>, message: string): void;
+  warn(context: Record<string, unknown>, message: string): void;
+  error(context: Record<string, unknown>, message: string): void;
+}
+
+/** Ровно то, что обслуживатель просит у движка — остальное ему не нужно. */
+export interface MaintenanceEngine {
+  getSources(): VacancySourceConfig[];
+  restoreAsync(
+    nowMs?: number,
+    chunkSize?: number,
+    options?: { prune?: boolean },
+  ): Promise<{ restored: number }>;
+  syncDue(nowMs?: number): Promise<SourceSyncOutcome[]>;
+  probeDueLinks(nowMs?: number): Promise<LinkCheckCensus | undefined>;
+  runCatalogMaintenanceStep(chunk?: number): { processed: number; pending: number } | undefined;
+  readonly poolSize: number;
+}
+
+export interface SyncWaveReport {
+  readonly synced: number;
+  readonly failed: readonly string[];
+  readonly kept: number;
+  readonly skipped?: 'stopped' | 'memory' | 'busy';
+}
+
+export interface MaintenanceIntervals {
+  readonly syncMs: number;
+  readonly livenessMs: number;
+  readonly catalogMs: number;
+  readonly reportMs: number;
+}
+
+export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
+  syncMs: 5 * 60 * 1_000,
+  livenessMs: 15 * 60 * 1_000,
+  catalogMs: 1_000,
+  reportMs: 60 * 1_000,
+};
+
+/** Столько строк проекции каталога за один такт: одна короткая транзакция. */
+export const CATALOG_STEP_CHUNK = 500;
+
+/**
+ * Цикл обслуживания пула вакансий (B230, срез 1). Живёт в своём процессе с
+ * малой кучей: опрашивает площадки по расписанию, достраивает проекцию
+ * каталога тиками, проверяет живость ссылок и раз в минуту пишет в журнал,
+ * сколько памяти занял. HTTP-процесс ничего из этого больше не делает.
+ *
+ * Волны не пересекаются: одна за раз, следующая ждёт. На SIGTERM `stop()`
+ * дожидается текущей волны и запрещает новые — база закрывается после.
+ */
+export class MaintenanceWorker {
+  private readonly engine: MaintenanceEngine;
+  private readonly log: MaintenanceLog;
+  private readonly intervals: MaintenanceIntervals;
+  private readonly memoryGuard: MemoryGuard;
+  private readonly readHeap: () => HeapReading;
+  private readonly timers: NodeJS.Timeout[] = [];
+  private inFlight: Promise<unknown> | undefined;
+  private stopped = false;
+
+  constructor(options: {
+    engine: MaintenanceEngine;
+    log: MaintenanceLog;
+    intervals?: Partial<MaintenanceIntervals>;
+    readHeap?: () => HeapReading;
+  }) {
+    this.engine = options.engine;
+    this.log = options.log;
+    this.intervals = { ...DEFAULT_MAINTENANCE_INTERVALS, ...options.intervals };
+    this.readHeap = options.readHeap ?? readProcessHeap;
+    this.memoryGuard = new MemoryGuard(this.readHeap);
+  }
+
+  /**
+   * Читает состояние площадок и обрезает пул порциями. С пустым набором
+   * площадок `prune` стирает весь пул — такую сборку обслуживатель не
+   * принимает вовсе.
+   */
+  async restore(): Promise<{ restored: number }> {
+    if (this.engine.getSources().length === 0) {
+      throw new Error('maintenance refuses to restore an engine without sources');
+    }
+    const startedAt = Date.now();
+    const result = await this.engine.restoreAsync(Date.now(), 250, { prune: true });
+    this.log.info(
+      { restored: result.restored, poolSize: this.engine.poolSize, ms: Date.now() - startedAt },
+      'maintenance-restored',
+    );
+    return result;
+  }
+
+  /** Одна волна опросов: только площадки, у которых подошёл срок. */
+  async runSyncWave(): Promise<SyncWaveReport> {
+    if (this.stopped) return { synced: 0, failed: [], kept: 0, skipped: 'stopped' };
+    if (this.inFlight) return { synced: 0, failed: [], kept: 0, skipped: 'busy' };
+    const memory = this.memoryGuard.check();
+    if (memory.changed) {
+      this.log[memory.paused ? 'warn' : 'info'](
+        {
+          heapUsedMb: memory.heapUsedMb,
+          heapLimitMb: memory.heapLimitMb,
+          poolSize: this.engine.poolSize,
+        },
+        memory.paused ? 'multi-source-sync-paused-memory' : 'multi-source-sync-resumed-memory',
+      );
+    }
+    if (memory.paused) return { synced: 0, failed: [], kept: 0, skipped: 'memory' };
+    const wave = this.engine.syncDue().then((outcomes) => this.reportWave(outcomes));
+    return this.track(wave, 'multi-source-sync-failed', { synced: 0, failed: [], kept: 0 });
+  }
+
+  private reportWave(outcomes: SourceSyncOutcome[]): SyncWaveReport {
+    const synced = outcomes.filter((outcome) => outcome.status === 'healthy');
+    const failed = outcomes.filter((outcome) => outcome.status === 'error');
+    const report = {
+      synced: synced.length,
+      failed: failed.map((outcome) => outcome.sourceId),
+      kept: synced.reduce((sum, outcome) => sum + outcome.kept, 0),
+    };
+    if (outcomes.length > 0) {
+      this.log.info({ ...report, poolSize: this.engine.poolSize }, 'multi-source-sync-completed');
+    }
+    return report;
+  }
+
+  /** Обходит ссылки одной площадки — той, которую проверяли дольше всех (B200). */
+  async runLivenessProbe(): Promise<LinkCheckCensus | undefined> {
+    if (this.stopped || this.inFlight) return undefined;
+    const probe = this.engine.probeDueLinks().then((census) => {
+      if (census) this.log.info({ ...census }, 'vacancy-link-liveness-checked');
+      return census;
+    });
+    return this.track(probe, 'vacancy-link-liveness-failed', undefined);
+  }
+
+  /** Один такт проекции каталога: короткая транзакция, потом уступить (B229). */
+  runCatalogStep(): { processed: number; pending: number } | undefined {
+    if (this.stopped) return undefined;
+    try {
+      const result = this.engine.runCatalogMaintenanceStep(CATALOG_STEP_CHUNK);
+      if (result && result.processed > 0) {
+        this.log.info({ ...result }, 'vacancy-catalog-maintenance-tick');
+      }
+      return result;
+    } catch (error: unknown) {
+      this.log.error({ errorName: errorName(error) }, 'vacancy-catalog-maintenance-failed');
+      return undefined;
+    }
+  }
+
+  /** Раз в минуту — сколько занято: без этого `MemoryMax` срабатывает молча. */
+  reportMemory(): void {
+    const heap = this.readHeap();
+    const rss = process.memoryUsage().rss;
+    this.log.info(
+      {
+        heapUsedMb: Math.round(heap.heapUsedBytes / (1024 * 1024)),
+        heapLimitMb: Math.round(heap.heapLimitBytes / (1024 * 1024)),
+        rssMb: Math.round(rss / (1024 * 1024)),
+        poolSize: this.engine.poolSize,
+        ingestPaused: this.memoryGuard.isPaused,
+      },
+      'maintenance-memory',
+    );
+  }
+
+  /** Заводит таймеры; первая волна — сразу, остальное по расписанию. */
+  start(): void {
+    const every = (ms: number, tick: () => unknown) => {
+      const timer = setInterval(() => void tick(), ms);
+      this.timers.push(timer);
+    };
+    every(this.intervals.syncMs, () => this.runSyncWave());
+    every(this.intervals.livenessMs, () => this.runLivenessProbe());
+    every(this.intervals.catalogMs, () => this.runCatalogStep());
+    every(this.intervals.reportMs, () => this.reportMemory());
+    void this.runSyncWave();
+  }
+
+  /** Гасит таймеры и ждёт текущую волну: базу закрывать только после. */
+  async stop(): Promise<void> {
+    this.stopped = true;
+    for (const timer of this.timers.splice(0)) clearInterval(timer);
+    if (this.inFlight) await this.inFlight.catch(() => undefined);
+  }
+
+  private track<T>(work: Promise<T>, failureMessage: string, fallback: T): Promise<T> {
+    const tracked = work
+      .catch((error: unknown) => {
+        this.log.error({ errorName: errorName(error) }, failureMessage);
+        return fallback;
+      })
+      .finally(() => {
+        if (this.inFlight === tracked) this.inFlight = undefined;
+      });
+    this.inFlight = tracked;
+    return tracked;
+  }
+}
+
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : 'UnknownError';
+}

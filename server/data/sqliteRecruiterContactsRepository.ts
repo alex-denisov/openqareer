@@ -2,6 +2,7 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { dirname } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import type { EmailStatus, RecruiterContact } from '../../shared/recruiterContact';
+import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
 
 export const RECRUITER_CONTACTS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS recruiter_contacts (
@@ -113,6 +114,7 @@ export class SqliteRecruiterContactsRepository {
       }
       this.database = new DatabaseSync(options.databasePath);
       this.database.exec('PRAGMA journal_mode = WAL;');
+    applySqliteBusyTimeout(this.database);
       this.database.exec('PRAGMA foreign_keys = ON;');
     }
     this.database.exec('PRAGMA foreign_keys = ON;');

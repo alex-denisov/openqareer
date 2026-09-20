@@ -8,6 +8,7 @@ import type {
   ReputationOverallStatus,
   ReputationRiskItem,
 } from '../../shared/candidateReputation';
+import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
 
 export const CANDIDATE_REPUTATION_AUDITS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS candidate_reputation_audits (
@@ -113,6 +114,7 @@ export class SqliteCandidateReputationRepository {
       }
       this.database = new DatabaseSync(options.databasePath);
       this.database.exec('PRAGMA journal_mode = WAL;');
+    applySqliteBusyTimeout(this.database);
       this.database.exec('PRAGMA foreign_keys = ON;');
     }
     this.database.exec('PRAGMA foreign_keys = ON;');

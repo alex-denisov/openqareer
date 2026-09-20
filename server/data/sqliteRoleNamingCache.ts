@@ -5,6 +5,7 @@ import type { NamedRole } from '../../shared/roleProposals';
 import type { RoleNamingCacheEntry, RoleNamingCacheStore } from '../providers/roleNamer';
 import { MIGRATION_27 } from './sqliteSchema';
 import { SealedText } from './sealedText';
+import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
 
 /**
  * Названные роли между рестартами.
@@ -26,6 +27,7 @@ export class SqliteRoleNamingCache implements RoleNamingCacheStore {
     }
     this.database = new DatabaseSync(options.databasePath);
     this.database.exec('PRAGMA journal_mode = WAL;');
+    applySqliteBusyTimeout(this.database);
     this.database.exec('PRAGMA foreign_keys = ON;');
     this.database.exec(MIGRATION_27);
     this.sealedText = new SealedText(options.encryptionKey);

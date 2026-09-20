@@ -83,6 +83,7 @@ export {
   AuthInvalidPasswordError,
   AuthInvalidResetTokenError,
 } from './authErrors';
+import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 
 interface AuthServiceOptions {
   databasePath: string;
@@ -136,6 +137,7 @@ export class AuthService implements SessionAuth {
       defensive: true,
     });
     this.database.exec('PRAGMA journal_mode = WAL;');
+    applySqliteBusyTimeout(this.database);
     this.migrate();
   }
 

@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { MIGRATION_30, MIGRATION_31 } from '../data/sqliteSchema';
 import { DEFAULT_SELECTED_ROLE_IDS, keepKnownRoleIds } from './hhRoleCatalog';
 import type { HhCrawlPlan } from './hhCrawlPlan';
+import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 
 /**
  * Настройки веера обхода hh.ru: какие роли собирать и за какой срок (B214).
@@ -79,6 +80,11 @@ export interface HhCrawlSettingsStore {
 
 export class SqliteHhCrawlSettings implements HhCrawlSettingsStore {
   constructor(private readonly database: DatabaseSync) {}
+
+  /** Обслуживатель закрывает свои соединения на SIGTERM (B230). */
+  close(): void {
+    this.database.close();
+  }
 
   public read(): HhCrawlSettingsValue {
     const row = this.database
@@ -336,6 +342,7 @@ export function createHhCrawlSettings(options: { databasePath: string }): Sqlite
   }
   const database = new DatabaseSync(options.databasePath);
   database.exec('PRAGMA journal_mode = WAL;');
+  applySqliteBusyTimeout(database);
   database.exec(MIGRATION_30);
   database.exec(MIGRATION_31);
   return new SqliteHhCrawlSettings(database);

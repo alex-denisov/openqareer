@@ -2,9 +2,7 @@ import { build } from 'esbuild';
 
 const release = process.env.VITE_OPENQAREER_RELEASE || 'local';
 
-await build({
-  entryPoints: ['server/index.ts'],
-  outfile: 'dist/server.mjs',
+const shared = {
   bundle: true,
   platform: 'node',
   format: 'esm',
@@ -22,4 +20,9 @@ await build({
     ].join('\n'),
   },
   external: ['playwright', 'playwright-core', 'fsevents', 'chromium-bidi'],
-});
+};
+
+// Два входа из одного кода: HTTP-сервер и обслуживатель пула (B230). Оба
+// лежат в dist и уезжают в релизный tarball одним архивом.
+await build({ ...shared, entryPoints: ['server/index.ts'], outfile: 'dist/server.mjs' });
+await build({ ...shared, entryPoints: ['server/maintenance.ts'], outfile: 'dist/maintenance.mjs' });

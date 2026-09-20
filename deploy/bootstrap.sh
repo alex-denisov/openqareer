@@ -216,6 +216,9 @@ install -o root -g root -m 0755 \
 install -o root -g root -m 0644 \
   "$SCRIPT_DIR/openqareer-static.service" \
   /etc/systemd/system/openqareer-static.service
+install -o root -g root -m 0644 \
+  "$SCRIPT_DIR/openqareer-maintenance.service" \
+  /etc/systemd/system/openqareer-maintenance.service
 
 authorized_keys_temp="$(mktemp "$RELEASE_ROOT/.ssh/.authorized_keys.XXXXXX")"
 awk -v blob="$public_key_blob" '$2 != blob && $3 != blob { print }' \
@@ -227,6 +230,7 @@ chown -R "$DEPLOY_USER:$DEPLOY_USER" "$RELEASE_ROOT/.ssh"
 
 cat > /etc/sudoers.d/openqareer-deploy <<'EOF'
 openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-static.service
+openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-maintenance.service
 EOF
 chmod 0440 /etc/sudoers.d/openqareer-deploy
 visudo -cf /etc/sudoers.d/openqareer-deploy >/dev/null
@@ -240,11 +244,14 @@ visudo -cf /etc/sudoers.d/openqareer-deploy >/dev/null
 
 systemctl daemon-reload
 systemd-analyze verify /etc/systemd/system/openqareer-static.service
+systemd-analyze verify /etc/systemd/system/openqareer-maintenance.service
 systemctl enable openqareer-static.service
+systemctl enable openqareer-maintenance.service
 systemctl restart openqareer-static.service
 expected_health="$(basename "$(readlink "$RELEASE_ROOT/current")")"
 wait_for_application_health "$expected_health" ||
   fail "application service health failed after restart"
+systemctl restart openqareer-maintenance.service
 
 install_caddy_configuration
 systemctl is-active --quiet openqareer-static.service ||
