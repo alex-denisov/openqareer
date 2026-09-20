@@ -881,6 +881,11 @@ async function verifyViewport(browser, baseUrl, viewport) {
 
   // B169 §8 — the strategist opens from the screen that has a reason to open
   // it. «Пульт» оставил этот вход на «Главной», рядом с профилем (B179).
+  // Вход к консультанту свёрнут под профилем (B233): сначала раскрыть.
+  await page
+    .locator('.career-home-fold', { hasText: 'Карьерный консультант' })
+    .locator('summary')
+    .click();
   await page.getByRole('button', { name: /(Начать|Продолжить) разговор/u }).click();
   const expert = page.getByRole('dialog', { name: 'Карьерный эксперт' });
   await expert.waitFor({ state: 'visible' });
