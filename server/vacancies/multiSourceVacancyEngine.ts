@@ -804,7 +804,9 @@ export class MultiSourceVacancyEngine {
     source.itemsActiveTotal = slice.active;
     this.persistSourceState(source);
 
-    if (freshFetched.length > 0) {
+    // В режиме `off` очередь на сведение не копится: её никто не разберёт, а
+    // на проде за сутки волн она перевесила бы кучу обслуживателя (B230).
+    if (freshFetched.length > 0 && this.reclusterMode.mode !== 'off') {
       this.pendingVacancies.push(...freshFetched);
     }
     this.poolChangedSinceRecluster = true;
@@ -1110,12 +1112,14 @@ export class MultiSourceVacancyEngine {
   /** Что видно снаружи о сведении: для замера на проде без профилировщика (B221). */
   public get reclusterStats(): {
     clusters: number;
+    pending: number;
     rebuilds: number;
     lastReclusterMs: number;
     inFlight: boolean;
   } {
     return {
       clusters: this.clusters.length,
+      pending: this.pendingVacancies.length,
       rebuilds: this.reclusterCount,
       lastReclusterMs: this.lastReclusterMs,
       inFlight: this.reclusterInFlight !== undefined,

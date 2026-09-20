@@ -21,6 +21,8 @@ export interface RuntimeMemoryReport {
   /** Сведение: кластеры, сборки, длительность последней, идёт ли сейчас (B221). */
   readonly recluster?: {
     clusters: number;
+    /** Записей в очереди на сведение — ноль в режиме `off` (B230). */
+    pending: number;
     rebuilds: number;
     lastReclusterMs: number;
     inFlight: boolean;
@@ -55,4 +57,3 @@ export interface RouteDeps {
   /** Репозиторий аудита репутации и цифрового следа кандидата (B224). */
   candidateReputationRepo?: import('../data/sqliteCandidateReputationRepository').SqliteCandidateReputationRepository;
 }
-

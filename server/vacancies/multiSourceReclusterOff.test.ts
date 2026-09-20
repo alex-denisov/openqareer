@@ -56,6 +56,8 @@ describe('recluster mode off (B230)', () => {
     expect(engine.clusterRebuildCount).toBe(0);
     expect(engine.backgroundRecluster).toBeUndefined();
     expect(engine.reclusterStats.inFlight).toBe(false);
+    // Очередь на сведение не растёт: в этом процессе её некому разобрать.
+    expect(engine.reclusterStats.pending).toBe(0);
   });
 
   it('explicit recluster calls are refused', async () => {
