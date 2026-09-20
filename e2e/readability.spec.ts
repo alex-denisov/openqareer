@@ -122,7 +122,10 @@ async function mockSignedInCabinet(page: Page): Promise<string[]> {
     }
     if (path.endsWith('/candidate/me')) {
       return route.fulfill({
-        json: { data: candidateSnapshot, meta: { memory: { nextOffset: null }, turns: { nextOffset: null } } },
+        json: {
+          data: candidateSnapshot,
+          meta: { memory: { nextOffset: null }, turns: { nextOffset: null } },
+        },
       });
     }
     if (path.endsWith('/account')) {
@@ -143,7 +146,10 @@ async function mockSignedInCabinet(page: Page): Promise<string[]> {
         json: {
           data: {
             draft: candidateSnapshot.resume.draft,
-            savedAt: { createdAt: candidateSnapshot.resume.createdAt, updatedAt: candidateSnapshot.resume.updatedAt },
+            savedAt: {
+              createdAt: candidateSnapshot.resume.createdAt,
+              updatedAt: candidateSnapshot.resume.updatedAt,
+            },
             projection: { variants: [] },
             evidenceFreshness: { stale: false, staleMemoryIds: [] },
           },
@@ -151,7 +157,9 @@ async function mockSignedInCabinet(page: Page): Promise<string[]> {
       });
     }
     if (path.endsWith('/candidate/matched-vacancies')) {
-      return route.fulfill({ json: matchedVacancyPage(Number(url.searchParams.get('offset') ?? 0)) });
+      return route.fulfill({
+        json: matchedVacancyPage(Number(url.searchParams.get('offset') ?? 0)),
+      });
     }
     if (
       path.endsWith('/candidate/vacancy-subscriptions') ||

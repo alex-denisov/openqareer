@@ -100,7 +100,8 @@ export const matchedVacancies = Array.from({ length: 96 }, (_, index) => {
         index % 3 === 0
           ? { from: 350_000 + index * 1_000, to: 520_000 + index * 1_000, currency: '₽' }
           : undefined,
-      descriptionSummary: 'Отвечать за платёжный продукт, метрики роста и команду из восьми человек.',
+      descriptionSummary:
+        'Отвечать за платёжный продукт, метрики роста и команду из восьми человек.',
       skills: ['Product discovery', 'SQL', 'A/B-тестирование', 'Юнит-экономика'],
       primaryUrl: `https://example.test/vacancy/${index}`,
       sources: [
@@ -168,10 +169,22 @@ function memory(
 }
 
 export const candidateMemory = [
-  memory('m-resp-1', 'responsibility', 'Вела платёжный продукт FinCloud для малого бизнеса: 1,2 млн активных клиентов.'),
-  memory('m-resp-2', 'responsibility', 'Отвечала за витрину поиска и рекомендаций Ozon: A/B-платформа, 60 экспериментов в квартал.'),
+  memory(
+    'm-resp-1',
+    'responsibility',
+    'Вела платёжный продукт FinCloud для малого бизнеса: 1,2 млн активных клиентов.',
+  ),
+  memory(
+    'm-resp-2',
+    'responsibility',
+    'Отвечала за витрину поиска и рекомендаций Ozon: A/B-платформа, 60 экспериментов в квартал.',
+  ),
   memory('m-out-1', 'outcome', 'Рост выручки платёжного продукта на 38 % за год.'),
-  memory('m-out-2', 'outcome', 'Онбординг за 4 минуты вместо 20; конверсия в первую операцию с 31 до 52 %.'),
+  memory(
+    'm-out-2',
+    'outcome',
+    'Онбординг за 4 минуты вместо 20; конверсия в первую операцию с 31 до 52 %.',
+  ),
   memory('m-out-3', 'outcome', 'NPS раздела поиска Ozon вырос на 11 пунктов.', 'proposed'),
   memory('m-skill-1', 'skill', 'Product discovery и JTBD-интервью'),
   memory('m-skill-2', 'skill', 'SQL и Python для продуктовой аналитики'),
@@ -187,13 +200,21 @@ export const candidateSnapshot = {
   importedSources: [
     { platform: 'linkedin', connectedAt: memoryAt, lastImportedAt: memoryAt, factCount: 11 },
   ],
-  candidate: { id: candidate.candidateId, dataClass: 'personal', locale: 'ru-RU', createdAt: memoryAt },
+  candidate: {
+    id: candidate.candidateId,
+    dataClass: 'personal',
+    locale: 'ru-RU',
+    createdAt: memoryAt,
+  },
   messages: [],
   memory: candidateMemory,
   turns: [],
   dossier: {
     sections: [
-      { domain: 'responsibility', items: candidateMemory.filter((m) => m.domain === 'responsibility') },
+      {
+        domain: 'responsibility',
+        items: candidateMemory.filter((m) => m.domain === 'responsibility'),
+      },
       { domain: 'outcome', items: candidateMemory.filter((m) => m.domain === 'outcome') },
       { domain: 'skill', items: candidateMemory.filter((m) => m.domain === 'skill') },
     ].map((section) => ({
@@ -227,7 +248,10 @@ export const candidateSnapshot = {
       candidate: {
         fullName: 'Мария Соколова',
         about: 'Руководитель продукта в финтехе: платежи, онбординг, рост выручки.',
-        contact: { location: 'Москва', links: ['https://www.linkedin.com/in/maria-sokolova-example'] },
+        contact: {
+          location: 'Москва',
+          links: ['https://www.linkedin.com/in/maria-sokolova-example'],
+        },
       },
       targetRole: 'Head of Product',
       experience: [
@@ -292,7 +316,8 @@ export const roleHypotheses = [
     id: 'role-1',
     title: 'Head of Product, Payments',
     origin: 'model',
-    reason: 'Платёжный продукт, рост выручки и команда из 14 человек — прямое совпадение с целевой ролью.',
+    reason:
+      'Платёжный продукт, рост выручки и команда из 14 человек — прямое совпадение с целевой ролью.',
     evidenceRefs: ['m-resp-1', 'm-out-1'],
     confirmation: { state: 'too-few', sampleSize: 4 },
     family: 'product',
