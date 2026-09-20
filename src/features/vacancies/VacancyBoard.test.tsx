@@ -247,3 +247,59 @@ describe('VacancyBoard · ручной отклик', () => {
   });
 });
 
+
+/**
+ * B232. Подбор из 96–397 записей рендерился целиком: 5 108 текстовых узлов
+ * на одном экране. Список показывает первые 20 и предлагает следующие 20.
+ */
+describe('VacancyBoard · страница из 20 записей', () => {
+  const pool = {
+    matched: Array.from({ length: 96 }, (_, index) => ({
+      cluster: {
+        id: `c${index}`,
+        canonicalTitle: `Вакансия ${index}`,
+        canonicalCompany: 'FinCloud',
+        canonicalLocation: 'Удалённо',
+        isRemote: true,
+        descriptionSummary: '',
+        skills: [],
+        primaryUrl: `https://example.test/${index}`,
+        sources: [
+          {
+            sourceType: 'rss',
+            sourceId: 'himalayas',
+            sourceName: 'Himalayas',
+            sourceUrl: `https://example.test/${index}`,
+            observedAt: '2026-09-01T10:00:00.000Z',
+          },
+        ],
+        firstObservedAt: '2026-09-01T10:00:00.000Z',
+        lastSeenAt: '2026-09-01T10:00:00.000Z',
+        status: 'active',
+        vacanciesCount: 1,
+      },
+      explanation: {
+        clusterId: `c${index}`,
+        roleMatch: 'target',
+        matchingPoints: [],
+        missingPoints: [],
+        summary: '',
+        calculatedAt: '2026-09-01T10:00:00.000Z',
+      },
+    })) as unknown as MatchedVacancyItem[],
+    total: 96,
+    poolTotal: 96,
+    loading: false,
+    failed: false,
+    complete: true,
+  };
+
+  it('рендерит 20 строк из 96 и называет, сколько осталось', () => {
+    const html = renderToStaticMarkup(<VacancyBoard pool={pool} />);
+    expect(html.match(/class="career-vacancy-row"/g)).toHaveLength(20);
+    expect(html).toContain('Вакансия 19');
+    expect(html).not.toContain('Вакансия 20<');
+    expect(html).toContain('Показать ещё 20');
+    expect(html).toContain('показано 20 из 96');
+  });
+});

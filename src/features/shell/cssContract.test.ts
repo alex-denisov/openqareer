@@ -174,3 +174,45 @@ describe('CSS contract', () => {
     expect(found).toEqual(KNOWN_DUPLICATES);
   });
 });
+
+/**
+ * B232. Кабинет копил кегли по одной фиче за раз: 59 разных `font-size` и 76
+ * объявлений мельче 11 px в одном файле, 40–55 % текста на экране мельче
+ * 12 px. Шкала из шести токенов — единственный источник размера текста; литерал
+ * в `font-size` возвращает ту же россыпь через две фичи.
+ */
+describe('B232 typography scale', () => {
+  const shellCss = fs.readFileSync(path.join(SRC_DIR, 'features/shell/career-shell.css'), 'utf8');
+  const TEXT_TOKENS = ['xs', 'sm', 'md', 'lg', 'xl', 'display'] as const;
+
+  it('declares the six text tokens with a 13 px floor', () => {
+    const declared = Object.fromEntries(
+      TEXT_TOKENS.map((name) => [
+        name,
+        shellCss.match(new RegExp(`--career-text-${name}:\\s*([^;]+);`))?.[1]?.trim(),
+      ]),
+    );
+    expect(declared).toEqual({
+      xs: '0.8125rem',
+      sm: '0.875rem',
+      md: '1rem',
+      lg: '1.25rem',
+      xl: '1.75rem',
+      display: '2.5rem',
+    });
+  });
+
+  it('declares the 4 px spacing scale', () => {
+    const steps = [1, 2, 3, 4, 5, 6, 7, 8].map(
+      (step) => shellCss.match(new RegExp(`--career-space-${step}:\\s*([^;]+);`))?.[1]?.trim(),
+    );
+    expect(steps).toEqual(['4px', '8px', '12px', '16px', '20px', '24px', '28px', '32px']);
+  });
+
+  it('sets every font-size in the shell from a text token', () => {
+    const literals = [...shellCss.matchAll(/font-size:\s*([^;]+);/g)]
+      .map((match) => match[1].trim())
+      .filter((value) => !/^var\(--career-text-(xs|sm|md|lg|xl|display)\)( !important)?$/.test(value));
+    expect(literals).toEqual([]);
+  });
+});

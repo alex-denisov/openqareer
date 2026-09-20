@@ -7,7 +7,7 @@
   --career-line-strong: oklch(91% 0.012 255 / 0.23);
   --career-text: oklch(95% 0.008 255);
   --career-text-soft: oklch(76% 0.02 255);
-  --career-text-dim: oklch(61% 0.024 255);
+  --career-text-dim: oklch(63% 0.024 255);
   --career-accent: oklch(79% 0.145 255);
   --career-accent-ink: oklch(18% 0.042 255);
   --career-accent-soft: oklch(25% 0.055 255);
@@ -20,6 +20,24 @@
   --career-radius-sm: 10px;
   --career-radius-md: 16px;
   --career-radius-lg: 24px;
+  /* B232 — одна шкала текста на весь кабинет. Шесть кеглей, пол 13 px:
+     аудит 2026-09-20 насчитал 59 значений font-size и 40–55 % текста мельче
+     12 px. Литерал в font-size запрещён контрактом (cssContract.test.ts). */
+  --career-text-xs: 0.8125rem;
+  --career-text-sm: 0.875rem;
+  --career-text-md: 1rem;
+  --career-text-lg: 1.25rem;
+  --career-text-xl: 1.75rem;
+  --career-text-display: 2.5rem;
+  /* Ритм отступов с шагом 4 px (B232). */
+  --career-space-1: 4px;
+  --career-space-2: 8px;
+  --career-space-3: 12px;
+  --career-space-4: 16px;
+  --career-space-5: 20px;
+  --career-space-6: 24px;
+  --career-space-7: 28px;
+  --career-space-8: 32px;
   /* B169 §7 — the rail is the only chrome on desktop, and it opens to show
      what its icons mean. Width is a token so the grid and the rail cannot
      disagree about it mid-transition. */
@@ -40,9 +58,17 @@
   box-sizing: border-box;
 }
 
-.career-shell button,
-.career-shell input,
-.career-shell textarea {
+/* Браузерный `smaller` у small/sub/sup давал бы седьмой кегль мимо шкалы. */
+.career-shell small,
+.career-shell sub,
+.career-shell sup {
+  font-size: var(--career-text-xs);
+}
+
+/* Сброс с нулевой специфичностью: `.career-shell button` (0,1,1) молча
+   перебивал font-size любой одноклассовой кнопки, и ~35 «токенизированных»
+   правил не применялись (B232, ревью designer). */
+:where(.career-shell) :where(button, input, textarea) {
   font: inherit;
 }
 
@@ -238,7 +264,7 @@
   padding: 4px 8px;
   color: var(--career-text-soft);
   background: var(--career-surface-raised);
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
   font-weight: 720;
 }
 
@@ -292,12 +318,12 @@
 
 .career-account-field-error {
   color: var(--career-danger);
-  font-size: 0.79rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-account-panel .career-account-field-hint {
   color: var(--career-text-dim);
-  font-size: 0.79rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-brand-mark {
@@ -489,13 +515,13 @@
 }
 
 .career-plan-text > b {
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
 }
 
 .career-plan-text > span {
   color: var(--career-text-dim);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -518,7 +544,7 @@
   border-radius: 10px;
   color: var(--career-accent-ink);
   background: linear-gradient(150deg, oklch(82% 0.13 255), oklch(56% 0.16 255));
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -534,7 +560,7 @@
 }
 
 .career-account-identity > b {
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -543,7 +569,7 @@
 
 .career-account-identity > span {
   color: var(--career-text-dim);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -593,7 +619,7 @@
   clip: auto;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 0.86rem;
+  font-size: var(--career-text-sm);
   font-weight: 600;
 }
 
@@ -605,7 +631,7 @@
   border: 1px solid var(--career-accent);
   border-radius: 6px;
   color: var(--career-accent);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   text-decoration: none;
 }
@@ -644,7 +670,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.44em;
-  font-size: 1.06rem;
+  font-size: var(--career-text-md);
   font-weight: 720;
   letter-spacing: -0.028em;
   line-height: 1;
@@ -687,7 +713,7 @@
 .career-mobile-tariffs {
   display: none;
   color: var(--career-text-soft);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
 }
 
@@ -773,13 +799,13 @@
 
 .career-start-status span {
   color: var(--career-text-dim);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .career-start-status strong {
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-start-note {
@@ -802,12 +828,12 @@
 
 .career-start-note strong {
   color: var(--career-text);
-  font-size: 0.86rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-start-note span {
   color: var(--career-text-soft);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
 }
 
 @keyframes career-view-enter {
@@ -824,8 +850,8 @@
 .career-eyebrow {
   margin: 0 0 12px;
   color: var(--career-accent);
-  font-size: 0.72rem;
-  font-weight: 780;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -842,7 +868,7 @@
 .career-view h1,
 .career-intake h1 {
   margin-bottom: 14px;
-  font-size: 2.65rem;
+  font-size: var(--career-text-display);
   line-height: 1.04;
   letter-spacing: -0.045em;
 }
@@ -856,7 +882,7 @@
   max-width: 42rem;
   margin-bottom: 0;
   color: var(--career-text-soft);
-  font-size: 1.02rem;
+  font-size: var(--career-text-md);
   line-height: 1.58;
 }
 
@@ -877,6 +903,15 @@
     background 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Служебная подпись кабинета («3 места», «96 в подборе», «обновлён»): у
+   класса не было правила, и он наследовал 16 px поверх заголовков в 14 (B232). */
+.career-cabinet-tag {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.45;
+}
+
 /* Shared surface primitives used by the newly added resume, pitch and
    LinkedIn panels. Keeping one primitive prevents native browser buttons from
    leaking into a modal and gives every action the same focus/disabled states. */
@@ -894,6 +929,7 @@
   color: var(--career-text-soft);
   background: var(--career-surface);
   font: inherit;
+  font-size: var(--career-text-sm);
   font-weight: 650;
   cursor: pointer;
   transition: color 150ms ease, background 150ms ease, border-color 150ms ease,
@@ -988,7 +1024,7 @@
   border-radius: 50%;
   color: var(--career-text-dim);
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-intake-progress li.is-current {
@@ -1027,12 +1063,12 @@
 
 .career-intent-list strong {
   color: var(--career-text);
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
 }
 
 .career-intent-list small {
   color: var(--career-text-dim);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -1064,7 +1100,7 @@
   border-right: 1px solid var(--career-line);
   color: var(--career-text-soft);
   background: transparent;
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
 }
 
@@ -1102,7 +1138,7 @@
 .career-source-lock > span {
   flex: 1 1 260px;
   min-width: 0;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
   color: var(--career-text-soft);
 }
@@ -1210,7 +1246,7 @@
 .career-profile-fact-review legend {
   padding: 0 5px;
   color: var(--career-text-soft);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   font-weight: 720;
 }
 
@@ -1282,7 +1318,7 @@
 }
 
 .career-source-select-label {
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   font-weight: 600;
   color: var(--career-text, #f0f3f6);
 }
@@ -1300,7 +1336,7 @@
   border: 1px solid var(--career-line, oklch(93% 0.015 255 / 0.18));
   border-radius: var(--career-radius-md, 10px);
   color: var(--career-text, #f0f3f6);
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
   font-weight: 500;
   outline: none;
   cursor: pointer;
@@ -1351,7 +1387,7 @@
   padding: 0 18px;
   border-radius: 8px;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: var(--career-text-sm);
   white-space: nowrap;
 }
 
@@ -1366,11 +1402,11 @@
   border: 1px solid rgba(34, 197, 94, 0.4);
   color: #22c55e;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-source-disclaimer {
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim, oklch(65% 0.02 255));
   margin: 0;
   line-height: 1.45;
@@ -1385,7 +1421,7 @@
   background: rgba(234, 179, 8, 0.12);
   border: 1px solid rgba(234, 179, 8, 0.35);
   color: #eab308;
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   line-height: 1.4;
 }
 
@@ -1413,7 +1449,7 @@
 .career-expert-login label > span,
 .career-expert-composer > label {
   color: var(--career-text-soft);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   font-weight: 720;
 }
 
@@ -1469,7 +1505,7 @@
 
 .career-context-form label small {
   color: var(--career-text-dim);
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-segmented-control,
@@ -1502,7 +1538,7 @@
 .career-intake-error {
   margin: 20px 0 0;
   color: var(--career-danger);
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-intake-actions {
@@ -1560,7 +1596,7 @@
   max-width: 42rem;
   margin-top: 18px;
   color: var(--career-text-soft);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-action-explanation summary {
@@ -1585,8 +1621,8 @@
 
 .career-now-marker > span {
   color: var(--career-accent);
-  font-size: 0.7rem;
-  font-weight: 760;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
@@ -1594,13 +1630,13 @@
 .career-now-marker strong {
   display: block;
   margin-top: 8px;
-  font-size: 1.1rem;
+  font-size: var(--career-text-md);
 }
 
 .career-now-marker p {
   margin: 8px 0 0;
   color: var(--career-text-soft);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
@@ -1619,13 +1655,13 @@
 
 .career-diagnostic-intro h2 {
   margin-bottom: 12px;
-  font-size: 1.4rem;
+  font-size: var(--career-text-lg);
 }
 
 .career-diagnostic-goal {
   margin: -2px 0 10px;
   color: var(--career-text);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   font-weight: 680;
 }
 
@@ -1654,21 +1690,21 @@
 
 .career-diagnostic-findings span {
   color: var(--career-warning);
-  font-size: 0.68rem;
-  font-weight: 760;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .career-diagnostic-findings strong {
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   line-height: 1.4;
 }
 
 .career-diagnostic-findings p {
   margin: 0;
   color: var(--career-text-soft);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
@@ -1702,18 +1738,18 @@
 
 .career-picture-ribbon span {
   color: var(--career-text-dim);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
 .career-picture-ribbon strong {
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
 }
 
 .career-picture-ribbon small {
   color: var(--career-text-soft);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-resume-note {
@@ -1736,12 +1772,12 @@
 
 .career-resume-note strong {
   color: var(--career-text);
-  font-size: 0.86rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-resume-note span {
   color: var(--career-text-soft);
-  font-size: 0.75rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-resume-note button,
@@ -1785,7 +1821,7 @@
   border-radius: 17px;
   color: var(--career-accent);
   background: var(--career-accent-soft);
-  font-size: 1.1rem;
+  font-size: var(--career-text-md);
   font-weight: 800;
 }
 
@@ -1798,7 +1834,7 @@
 .career-profile-overview span {
   overflow-wrap: anywhere;
   color: var(--career-text-soft);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -1811,7 +1847,7 @@
   align-items: center;
   border-radius: 999px;
   padding: 5px 9px;
-  font-size: 0.67rem;
+  font-size: var(--career-text-xs);
   font-weight: 740;
 }
 
@@ -1855,12 +1891,12 @@
 
 .career-section-heading h2 {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: var(--career-text-lg);
 }
 
 .career-section-heading > span {
   color: var(--career-text-dim);
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-evidence-list {
@@ -1911,7 +1947,7 @@
   padding: 0 10px;
   color: var(--career-text-soft);
   background: transparent;
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-evidence-actions button.is-confirmed {
@@ -1961,7 +1997,7 @@
 }
 
 .career-open-questions h2 {
-  font-size: 1.08rem;
+  font-size: var(--career-text-md);
   line-height: 1.3;
 }
 
@@ -1971,7 +2007,7 @@
   margin: 18px 0;
   padding-left: 20px;
   color: var(--career-text-soft);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
@@ -2000,7 +2036,7 @@
   display: grid;
   gap: 8px;
   color: var(--career-text-soft);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   font-weight: 720;
 }
 
@@ -2029,7 +2065,7 @@
 .career-role-index {
   color: var(--career-text-dim);
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-role-name {
@@ -2039,7 +2075,7 @@
 
 .career-role-name small {
   color: var(--career-text-soft);
-  font-size: 0.75rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -2050,13 +2086,13 @@
 
 .career-role-row > div:not(.career-role-name) span {
   color: var(--career-text-dim);
-  font-size: 0.66rem;
+  font-size: var(--career-text-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .career-role-row > div:not(.career-role-name) strong {
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -2077,7 +2113,7 @@
 .career-market-routes article p {
   margin: 5px 0 0;
   color: var(--career-text-soft);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -2093,7 +2129,7 @@
 .career-market-error,
 .career-market-caveat {
   color: var(--career-text-soft);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
@@ -2140,7 +2176,7 @@
 
 .career-market-vacancies small {
   color: var(--career-text-soft);
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-market-caveat {
@@ -2152,7 +2188,7 @@
   align-items: center;
   gap: 10px;
   color: var(--career-text-dim);
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-market-sample-actions button {
@@ -2222,12 +2258,12 @@
 .career-track li p {
   margin: 0;
   color: var(--career-text-soft);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-track li > small {
   color: var(--career-text-dim);
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-opportunity-start {
@@ -2279,7 +2315,7 @@
 .career-opportunity-title p {
   margin: 0 0 4px;
   color: var(--career-text-soft);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-opportunity-title h2 {
@@ -2292,7 +2328,7 @@
   padding: 6px 10px;
   color: var(--career-warning);
   background: var(--career-warning-soft);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   font-weight: 720;
 }
 
@@ -2319,7 +2355,7 @@
 
 .career-opportunity-reasons span {
   color: var(--career-text-dim);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   text-transform: uppercase;
 }
 
@@ -2331,7 +2367,7 @@
 
 .career-opportunity-explanation h3 {
   margin: 5px 0 0;
-  font-size: clamp(1.05rem, 1.8vw, 1.3rem);
+  font-size: var(--career-text-md);
 }
 
 .career-opportunity-route,
@@ -2371,7 +2407,7 @@
 
 .career-opportunity-comparison article small {
   color: var(--career-text-dim);
-  font-size: 0.67rem;
+  font-size: var(--career-text-xs);
   font-weight: 720;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2390,7 +2426,7 @@
 
 .career-opportunity-support strong {
   color: var(--career-warning);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-opportunity-comparison article[data-state='matched'] .career-opportunity-support strong {
@@ -2399,7 +2435,7 @@
 
 .career-opportunity-support span {
   color: var(--career-text-soft);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -2418,7 +2454,7 @@
 
 .career-opportunity-decision label > span {
   color: var(--career-text-soft);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-opportunity-choices {
@@ -2446,7 +2482,7 @@
 }
 
 .career-opportunity-choices button small {
-  font-size: 0.6rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-opportunity-saved-decision {
@@ -2477,7 +2513,7 @@
   color: var(--career-text);
   background: color-mix(in srgb, var(--career-background) 72%, transparent);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   line-height: 1.55;
   white-space: pre-wrap;
 }
@@ -2501,7 +2537,7 @@
 .career-action-package li span {
   margin-top: 3px;
   color: var(--career-text-soft);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-outcome-loop {
@@ -2514,13 +2550,13 @@
 
 .career-outcome-loop h4 {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--career-text-md);
 }
 
 .career-outcome-loop > p:not(.career-eyebrow) {
   margin: 0;
   color: var(--career-text-soft);
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   line-height: 1.55;
 }
 
@@ -2541,7 +2577,7 @@
 
 .career-follow-up-date label span {
   color: var(--career-text-soft);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-follow-up-date button,
@@ -2563,7 +2599,7 @@
 .career-opportunity-caveat {
   margin: 16px 0 0;
   color: var(--career-text-dim);
-  font-size: 0.75rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-source-readiness > div:last-child {
@@ -2587,7 +2623,7 @@
 
 .career-source-readiness article span {
   color: var(--career-text-soft);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-source-readiness article small {
@@ -2628,7 +2664,7 @@
 
 .career-paid-moment strong {
   color: var(--career-text);
-  font-size: 0.84rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-paid-moment small {
@@ -2703,7 +2739,7 @@
 
 .career-expert-identity small {
   color: var(--career-text-dim);
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-close-button {
@@ -2742,8 +2778,8 @@
   align-items: center;
   gap: 6px;
   color: var(--career-accent);
-  font-size: 0.69rem;
-  font-weight: 760;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
@@ -2758,7 +2794,7 @@
 .career-expert-auth p {
   margin: 8px 0 0;
   color: var(--career-text-soft);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   line-height: 1.55;
 }
 
@@ -2792,8 +2828,8 @@
 .career-track-card > span,
 .career-action-proposals > span {
   color: var(--career-accent);
-  font-size: 0.67rem;
-  font-weight: 760;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -2804,7 +2840,7 @@
 .career-role-coverage p {
   margin: 6px 0 0;
   color: var(--career-text-soft);
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
@@ -2834,7 +2870,7 @@
 .career-track-card > strong {
   display: block;
   margin-top: 8px;
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-track-card ol {
@@ -2848,7 +2884,7 @@
 
 .career-track-card li b {
   color: var(--career-text);
-  font-size: 0.79rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-track-card li small,
@@ -2856,7 +2892,7 @@
   display: block;
   margin-top: 5px;
   color: var(--career-text-dim);
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
   line-height: 1.4;
 }
 
@@ -2875,13 +2911,13 @@
 
 .career-action-proposals article strong {
   color: var(--career-text);
-  font-size: 0.79rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-action-proposals article div small {
   max-width: 145px;
   color: var(--career-text-dim);
-  font-size: 0.66rem;
+  font-size: var(--career-text-xs);
   line-height: 1.35;
   text-align: right;
 }
@@ -2943,7 +2979,7 @@
 .career-expert-loading {
   padding: 22px 0;
   color: var(--career-text-dim);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-expert-login {
@@ -2986,7 +3022,7 @@
   margin: 0;
   padding: 10px 18px 16px;
   color: var(--career-danger);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-plan-layout {
@@ -3039,18 +3075,18 @@
 .career-plan-time {
   margin-bottom: 8px;
   color: var(--career-accent);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   font-weight: 740;
   text-transform: uppercase;
 }
 
 .career-plan-detail h2 {
   margin-bottom: 8px;
-  font-size: 1.7rem;
+  font-size: var(--career-text-xl);
 }
 
 .career-plan-price {
-  font-size: 1.2rem;
+  font-size: var(--career-text-lg);
 }
 
 .career-plan-detail ul {
@@ -3076,7 +3112,7 @@
   max-width: 38rem;
   margin-bottom: 0;
   color: var(--career-text-dim);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.55;
 }
 
@@ -3186,7 +3222,7 @@
     border: 0;
     border-radius: 0;
     padding: 7px 2px;
-    font-size: 0.64rem;
+    font-size: var(--career-text-xs);
   }
 
   .career-mobile-nav .career-nav-button > span {
@@ -3209,7 +3245,7 @@
   .career-view h1,
   .career-intake h1,
   .career-start h1 {
-    font-size: 2rem;
+    font-size: var(--career-text-xl);
     line-height: 1.07;
   }
 
@@ -3247,7 +3283,7 @@
   }
 
   .career-lead {
-    font-size: 0.94rem;
+    font-size: var(--career-text-md);
   }
 
   .career-intake-header {
@@ -3571,7 +3607,7 @@
 
 .career-cabinet-header h1 {
   margin: 4px 0 5px;
-  font-size: clamp(1.42rem, 2.2vw, 2rem);
+  font-size: var(--career-text-xl);
   line-height: 1.08;
   letter-spacing: -0.035em;
 }
@@ -3579,14 +3615,14 @@
 .career-cabinet-header p {
   margin: 0;
   color: var(--career-text-soft);
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
 .career-cabinet-kicker {
   color: var(--career-accent);
-  font-size: 0.66rem;
-  font-weight: 780;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -3607,7 +3643,7 @@
   padding: 0 11px;
   color: var(--career-success);
   background: var(--career-success-soft);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   font-weight: 720;
 }
 
@@ -3621,7 +3657,7 @@
   border: 0;
   color: var(--career-accent);
   background: transparent;
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-cabinet-global-error {
@@ -3631,7 +3667,7 @@
   padding: 11px 13px;
   color: var(--career-danger);
   background: var(--career-danger-soft);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-command-center {
@@ -3682,7 +3718,7 @@
 
 .career-cabinet-panel-heading h2 {
   margin: 4px 0 0;
-  font-size: 1rem;
+  font-size: var(--career-text-md);
   line-height: 1.2;
   letter-spacing: -0.02em;
 }
@@ -3694,7 +3730,7 @@
   align-items: center;
   gap: 6px;
   color: var(--career-success);
-  font-size: 0.65rem;
+  font-size: var(--career-text-xs);
   white-space: nowrap;
 }
 
@@ -3717,14 +3753,14 @@
 .career-profile-context-strip > span,
 .career-coach-composer-inline > label {
   color: var(--career-text-dim);
-  font-size: 0.64rem;
-  font-weight: 720;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .career-coach-topic strong {
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   line-height: 1.4;
 }
 
@@ -3759,7 +3795,7 @@
 
 .career-coach-starter strong {
   color: var(--career-text);
-  font-size: 0.79rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-coach-starter p,
@@ -3769,7 +3805,7 @@
   max-width: 100%;
   margin: 0;
   color: var(--career-text-soft);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   line-height: 1.58;
   overflow-wrap: anywhere;
 }
@@ -3784,7 +3820,7 @@
   align-items: center;
   gap: 7px;
   color: var(--career-accent);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   font-weight: 760;
 }
 
@@ -3804,7 +3840,7 @@
 
 .career-coach-next-question span {
   color: var(--career-accent);
-  font-size: 0.65rem;
+  font-size: var(--career-text-xs);
   font-weight: 760;
 }
 
@@ -3828,7 +3864,7 @@
   border-radius: 999px;
   padding: 5px 8px;
   color: var(--career-text-soft);
-  font-size: 0.62rem;
+  font-size: var(--career-text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3848,7 +3884,7 @@
 .career-coach-composer-inline textarea {
   min-height: 96px;
   padding: 12px 48px 12px 12px;
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
@@ -3868,14 +3904,14 @@
 
 .career-coach-composer-inline > small {
   color: var(--career-text-dim);
-  font-size: 0.61rem;
+  font-size: var(--career-text-xs);
   line-height: 1.4;
 }
 
 .career-cabinet-loading {
   margin: 0;
   color: var(--career-text-dim);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-profile-surface {
@@ -3902,7 +3938,7 @@
   border-radius: 50%;
   color: var(--career-accent);
   background: linear-gradient(145deg, oklch(31% 0.05 255), oklch(21% 0.022 255));
-  font-size: 1rem;
+  font-size: var(--career-text-md);
   font-weight: 790;
   letter-spacing: 0.02em;
   box-shadow: inset 0 1px 0 oklch(98% 0.01 255 / 0.12);
@@ -3915,14 +3951,14 @@
 .career-profile-identity-copy h1 {
   margin: 5px 0;
   overflow-wrap: anywhere;
-  font-size: clamp(1.28rem, 2vw, 1.65rem);
+  font-size: var(--career-text-lg);
   letter-spacing: -0.035em;
 }
 
 .career-profile-identity-copy > p {
   margin: 0;
   color: var(--career-text-soft);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -3938,7 +3974,7 @@
   align-items: center;
   gap: 5px;
   color: var(--career-text-dim);
-  font-size: 0.66rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-profile-update-state {
@@ -3953,12 +3989,12 @@
   align-items: center;
   gap: 5px;
   color: var(--career-success);
-  font-size: 0.65rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-profile-update-state small {
   color: var(--career-text-dim);
-  font-size: 0.6rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-profile-update-state button,
@@ -3972,7 +4008,7 @@
   padding: 0;
   color: var(--career-accent);
   background: transparent;
-  font-size: 0.69rem;
+  font-size: var(--career-text-xs);
   font-weight: 720;
 }
 
@@ -3992,7 +4028,7 @@
   padding: 0;
   color: var(--career-text-dim);
   background: transparent;
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
 }
 
@@ -4041,7 +4077,7 @@
 .career-document-vault h2,
 .career-role-hypotheses h3 {
   margin: 0;
-  font-size: 0.94rem;
+  font-size: var(--career-text-md);
   letter-spacing: -0.02em;
 }
 
@@ -4049,7 +4085,7 @@
 .career-profile-review-queue > header > span,
 .career-role-hypotheses > header > span {
   color: var(--career-text-dim);
-  font-size: 0.66rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-profile-facts > div {
@@ -4066,7 +4102,7 @@
 .career-profile-facts article > p,
 .career-profile-review-queue article p {
   margin: 0;
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   line-height: 1.52;
 }
 
@@ -4080,7 +4116,7 @@
 .career-profile-facts article footer small,
 .career-profile-review-queue article small {
   color: var(--career-text-dim);
-  font-size: 0.61rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-profile-facts article footer > div {
@@ -4096,7 +4132,7 @@
   padding: 0 9px;
   color: var(--career-text-soft);
   background: transparent;
-  font-size: 0.63rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-memory-status {
@@ -4105,7 +4141,7 @@
   padding: 4px 7px;
   color: var(--career-success);
   background: var(--career-success-soft);
-  font-size: 0.59rem;
+  font-size: var(--career-text-xs);
   font-weight: 730;
 }
 
@@ -4131,7 +4167,7 @@
 .career-profile-empty {
   margin: 0;
   color: var(--career-text-dim);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
@@ -4166,7 +4202,7 @@
   border-radius: 10px;
   background: var(--career-bg);
   color: var(--career-success);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   cursor: pointer;
 }
 
@@ -4187,7 +4223,7 @@
 
 .career-profile-open-questions > strong {
   color: var(--career-text-soft);
-  font-size: 0.67rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-profile-open-questions article:last-child {
@@ -4205,7 +4241,7 @@
   max-width: 46rem;
   margin: 5px 0 0;
   color: var(--career-text-dim);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -4220,7 +4256,7 @@
   padding: 0 12px;
   color: var(--career-accent);
   background: var(--career-surface);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   font-weight: 720;
   cursor: pointer;
 }
@@ -4257,14 +4293,14 @@
 
 .career-document-list strong {
   overflow: hidden;
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .career-document-list small {
   color: var(--career-text-dim);
-  font-size: 0.61rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-document-actions {
@@ -4324,7 +4360,7 @@
   padding: 9px 11px;
   color: var(--career-success);
   background: var(--career-success-soft);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -4360,8 +4396,8 @@
 .career-market-watch > header span,
 .career-next-action-card > span {
   color: var(--career-text-dim);
-  font-size: 0.64rem;
-  font-weight: 720;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -4370,7 +4406,7 @@
 .career-market-watch h3,
 .career-next-action-card h3 {
   margin: 6px 0 0;
-  font-size: 0.92rem;
+  font-size: var(--career-text-sm);
   line-height: 1.35;
   letter-spacing: -0.018em;
 }
@@ -4392,7 +4428,7 @@
 .career-ats-card dt,
 .career-market-metrics dt {
   color: var(--career-text-soft);
-  font-size: 0.66rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-ats-card dd,
@@ -4400,7 +4436,7 @@
   max-width: 58%;
   margin: 0;
   color: var(--career-text);
-  font-size: 0.65rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
   text-align: right;
 }
@@ -4417,7 +4453,7 @@
 .career-market-empty {
   margin: 12px 0;
   color: var(--career-text-dim);
-  font-size: 0.69rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
@@ -4426,7 +4462,7 @@
   padding: 5px 8px;
   color: var(--career-success) !important;
   background: var(--career-success-soft);
-  font-size: 0.58rem !important;
+  font-size: var(--career-text-xs) !important;
   letter-spacing: 0 !important;
   text-transform: none !important;
 }
@@ -4451,7 +4487,7 @@
   padding: 0 9px;
   color: var(--career-text-dim);
   background: transparent;
-  font-size: 0.6rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-search-switcher button.is-active {
@@ -4479,14 +4515,14 @@
 
 .career-market-query-row strong {
   overflow: hidden;
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .career-market-query-row small {
   color: var(--career-text-dim);
-  font-size: 0.58rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-market-query-row > div:last-child {
@@ -4516,7 +4552,7 @@
 .career-market-freshness {
   margin: 8px 0 0;
   color: var(--career-text-dim);
-  font-size: 0.58rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -4545,7 +4581,7 @@
 .career-cabinet-vacancies strong {
   overflow: hidden;
   color: var(--career-text);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4553,7 +4589,7 @@
 .career-cabinet-vacancies small {
   overflow: hidden;
   color: var(--career-text-dim);
-  font-size: 0.58rem;
+  font-size: var(--career-text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4566,7 +4602,7 @@
 
 .career-market-create label {
   color: var(--career-text-soft);
-  font-size: 0.67rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
 }
 
@@ -4579,7 +4615,7 @@
 .career-market-create input {
   min-height: 42px;
   padding: 9px 10px;
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-market-create select {
@@ -4591,13 +4627,13 @@
   color: var(--career-text);
   background: var(--career-bg-elevated);
   font: inherit;
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-source-health {
   margin: -2px 0 3px;
   color: var(--career-text-dim);
-  font-size: 0.6rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -4616,7 +4652,7 @@
   width: fit-content;
   margin-inline-end: 12px;
   color: var(--career-text-dim);
-  font-size: 0.58rem;
+  font-size: var(--career-text-xs);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -4631,13 +4667,13 @@
   padding: 0 10px;
   color: var(--career-accent-ink);
   background: var(--career-accent);
-  font-size: 0.66rem;
+  font-size: var(--career-text-xs);
   font-weight: 760;
 }
 
 .career-market-create > small {
   color: var(--career-text-dim);
-  font-size: 0.6rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -4651,7 +4687,7 @@
 .career-next-action-card p {
   margin: 9px 0 15px;
   color: var(--career-text-soft);
-  font-size: 0.69rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
@@ -4667,7 +4703,7 @@
   padding: 0 12px;
   color: var(--career-accent-ink);
   background: var(--career-accent);
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
   font-weight: 780;
   text-align: left;
 }
@@ -4687,7 +4723,7 @@
 .career-next-action-effect strong,
 .career-next-action-alternatives > strong {
   color: var(--career-text);
-  font-size: 0.66rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-next-action-alternatives > div {
@@ -4703,7 +4739,7 @@
   border: 1px solid var(--career-line);
   background: var(--career-surface);
   color: var(--career-text-soft);
-  font-size: 0.64rem;
+  font-size: var(--career-text-xs);
   font-weight: 680;
 }
 
@@ -4711,7 +4747,7 @@
   display: block;
   margin: 2px 0 12px;
   color: var(--career-text-dim);
-  font-size: 0.61rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -4759,7 +4795,7 @@
 
 .career-track-board > header h2 {
   margin: 5px 0 0;
-  font-size: 1.35rem;
+  font-size: var(--career-text-lg);
   letter-spacing: -0.03em;
 }
 
@@ -4799,7 +4835,7 @@
   color: var(--career-accent);
   background: var(--career-accent-soft);
   font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-track-timeline article > div {
@@ -4808,21 +4844,21 @@
 }
 
 .career-track-timeline strong {
-  font-size: 0.83rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-track-timeline p,
 .career-role-hypotheses p {
   margin: 0;
   color: var(--career-text-soft);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
 .career-track-timeline small,
 .career-role-hypotheses small {
   color: var(--career-text-dim);
-  font-size: 0.62rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-route-premises {
@@ -4844,7 +4880,7 @@
 
 .career-route-premises h3 {
   margin: 3px 0 0;
-  font-size: 0.86rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-route-premises > header button {
@@ -4854,7 +4890,7 @@
   padding: 0 10px;
   color: var(--career-text);
   background: transparent;
-  font-size: 0.65rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
 }
 
@@ -4875,20 +4911,20 @@
 
 .career-route-premises dt {
   color: var(--career-text-dim);
-  font-size: 0.59rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-route-premises dd {
   margin: 0;
   color: var(--career-text);
-  font-size: 0.69rem;
+  font-size: var(--career-text-xs);
   font-weight: 680;
 }
 
 .career-route-premises > p {
   margin: 0;
   color: var(--career-text-soft);
-  font-size: 0.65rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -4916,7 +4952,7 @@
 .career-route-premises-field > legend {
   padding: 0;
   color: var(--career-text-dim);
-  font-size: 0.62rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
 }
 
@@ -4930,7 +4966,7 @@
   padding: 0 11px;
   color: var(--career-text);
   background: var(--career-bg-elevated);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-route-premises-regions {
@@ -4949,21 +4985,21 @@
   padding: 0 12px;
   color: var(--career-text);
   background: var(--career-bg-elevated);
-  font-size: 0.66rem;
+  font-size: var(--career-text-xs);
   font-weight: 650;
 }
 
 .career-route-premises-hint {
   margin: 0;
   color: var(--career-text-soft);
-  font-size: 0.63rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
 .career-route-premises-error {
   margin: 0;
   color: var(--career-danger);
-  font-size: 0.66rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-route-premises-actions {
@@ -4992,7 +5028,7 @@
 
 .career-role-hypotheses article strong {
   color: var(--career-text);
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
 }
 
 /* Complete account lifecycle */
@@ -5038,7 +5074,7 @@
   border-radius: 13px;
   color: var(--career-accent-ink);
   background: linear-gradient(150deg, oklch(82% 0.13 255), oklch(56% 0.16 255));
-  font-size: 0.92rem;
+  font-size: var(--career-text-sm);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -5077,13 +5113,13 @@
 }
 
 .career-account-link-btn strong {
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   font-weight: 650;
   color: var(--career-text, #f0f3f8);
 }
 
 .career-account-link-btn small {
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim, #94a3b8);
 }
 
@@ -5101,7 +5137,7 @@
   padding: 0 4px;
   color: var(--career-text-dim);
   background: transparent;
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
 }
 
@@ -5117,14 +5153,14 @@
 
 .career-account-form p {
   color: var(--career-text-soft);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
 .career-account-form label > span,
 .career-account-delete-form label > span {
   color: var(--career-text-soft);
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
 }
 
@@ -5158,7 +5194,7 @@
 .career-account-delete-form p {
   margin: 0;
   color: var(--career-text-dim);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
@@ -5171,7 +5207,7 @@
   padding: 0 12px;
   color: var(--career-accent);
   background: transparent;
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
   font-weight: 720;
 }
 
@@ -5280,11 +5316,11 @@
   }
 
   .career-cabinet-header h1 {
-    font-size: 1.48rem;
+    font-size: var(--career-text-lg);
   }
 
   .career-cabinet-header p {
-    font-size: 0.72rem;
+    font-size: var(--career-text-xs);
   }
 
   .career-cabinet-header-state {
@@ -5309,7 +5345,7 @@
   }
 
   .career-profile-identity-copy h1 {
-    font-size: 1.18rem;
+    font-size: var(--career-text-lg);
   }
 
   .career-profile-update-state {
@@ -5318,9 +5354,23 @@
     text-align: left;
   }
 
+  /* Таргеты касания ≥ 44 px (DESIGN.md): кнопки строки вакансии и чипы
+     фильтров были 28 px высотой (B232, ревью designer). */
+  .career-vacancy-actions > *,
+  .career-vacancy-chips button,
+  .career-vacancy-active-filters button,
+  .career-profile-update-state button,
+  .career-job-improve-btn {
+    min-height: 44px;
+  }
+
+  /* На телефоне вкладки переносятся: шесть подписей в одну строку уходили за
+     край на 144 px, и «Цифровой след» существовал только на ощупь (B232). */
   .career-profile-tabs {
-    gap: 20px;
+    flex-wrap: wrap;
+    gap: 0 20px;
     padding-inline: 16px;
+    overflow-x: visible;
   }
 
   .career-profile-surface-body {
@@ -5439,7 +5489,7 @@
 
 .career-resume-head-title h2 {
   margin: 4px 0 0;
-  font-size: 1.42rem;
+  font-size: var(--career-text-lg);
   line-height: 1.1;
 }
 
@@ -5463,7 +5513,7 @@
 
 .career-resume-status dt {
   color: var(--career-text-dim);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -5471,7 +5521,7 @@
 .career-resume-status dd {
   margin: 0;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 1.16rem;
+  font-size: var(--career-text-lg);
   font-weight: 700;
 }
 
@@ -5553,7 +5603,7 @@
 .career-resume-error {
   margin: 0;
   color: var(--career-text-dim);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-resume-error {
@@ -5606,7 +5656,7 @@
   margin: 0;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--career-line);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--career-text-dim);
@@ -5620,7 +5670,7 @@
 
 .career-resume-field > span {
   color: var(--career-text-dim);
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
   letter-spacing: 0.05em;
 }
 
@@ -5643,7 +5693,7 @@
 
 .career-resume-field.is-large input {
   min-height: 52px;
-  font-size: 1.2rem;
+  font-size: var(--career-text-lg);
   font-weight: 700;
 }
 
@@ -5677,7 +5727,7 @@
   gap: 9px;
   min-height: 44px;
   color: var(--career-text-soft);
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-resume-checkbox input {
@@ -5691,7 +5741,7 @@
 .career-resume-anchor {
   margin: 0;
   color: var(--career-text-dim);
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-resume-bullets {
@@ -5725,7 +5775,7 @@
   align-items: center;
   gap: 5px;
   color: var(--career-text-dim);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-resume-evidence code,
@@ -5743,7 +5793,7 @@
   padding: 3px 9px;
   color: var(--career-warning);
   background: var(--career-warning-soft);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-resume-detach,
@@ -5757,7 +5807,7 @@
   padding: 0 12px;
   background: transparent;
   color: var(--career-text-soft);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-resume-remove {
@@ -5780,7 +5830,7 @@
   gap: 8px;
   align-items: start;
   color: var(--career-text-soft);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-resume-inline-unknowns > li.is-blocking {
@@ -5790,7 +5840,7 @@
 .career-resume-empty {
   margin: 0;
   color: var(--career-text-dim);
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-resume-picker {
@@ -5803,7 +5853,7 @@
 .career-resume-picker > span {
   grid-column: 1 / -1;
   color: var(--career-text-dim);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-resume-rail {
@@ -5825,13 +5875,13 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
 }
 
 .career-resume-rail-block p {
   margin: 0;
   color: var(--career-text-soft);
-  font-size: 0.83rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-resume-rail-block.is-alert {
@@ -5869,7 +5919,7 @@
   border-left: 2px solid var(--career-line-strong);
   padding-left: 10px;
   color: var(--career-text-soft);
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-resume-unknowns > li.is-blocking {
@@ -5878,7 +5928,7 @@
 
 .career-resume-unknown-mark {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.66rem;
+  font-size: var(--career-text-xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--career-text-dim);
@@ -5891,7 +5941,7 @@
 .career-resume-unknown-group,
 .career-resume-unknowns > li > code,
 .career-resume-excluded > li > code {
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
   overflow-wrap: anywhere;
 }
@@ -5899,19 +5949,19 @@
 .career-resume-stale > li {
   display: grid;
   gap: 2px;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
 }
 
 .career-resume-evidence-line {
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
   overflow-wrap: anywhere;
 }
 
 .career-resume-conventions > li {
   color: var(--career-text-soft);
-  font-size: 0.83rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-resume-target-vacancies {
@@ -5948,19 +5998,19 @@
 
 .career-resume-target-header strong {
   display: block;
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text, #fff);
 }
 
 .career-resume-target-header small {
   display: block;
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft, #94a3b8);
   margin-top: 2px;
 }
 
 .career-match-badge {
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   padding: 3px 8px;
   border-radius: 999px;
@@ -5995,7 +6045,7 @@
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.35;
 }
 
@@ -6021,7 +6071,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   color: var(--career-accent, #60a5fa);
   text-decoration: none;
 }
@@ -6035,7 +6085,7 @@
   border: 1px solid var(--career-line, rgba(255, 255, 255, 0.15));
   border-radius: 4px;
   color: var(--career-text-soft, #cbd5e1);
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
   padding: 3px 8px;
   cursor: pointer;
   display: inline-flex;
@@ -6080,7 +6130,7 @@
 
 .career-resume-facts-header h3 {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   letter-spacing: 0.05em;
   color: var(--career-text);
 }
@@ -6106,7 +6156,7 @@
   border-radius: var(--career-radius-sm);
   background: var(--career-bg);
   color: var(--career-text);
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   outline: none;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
@@ -6134,7 +6184,7 @@
   padding: 4px 10px;
   background: var(--career-bg-elevated);
   color: var(--career-text-soft);
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
@@ -6172,7 +6222,7 @@
   border: 1px dashed var(--career-line);
   border-radius: var(--career-radius-sm);
   color: var(--career-text-dim);
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   text-align: center;
 }
 
@@ -6210,7 +6260,7 @@
 
 .career-resume-fact-statement {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
   color: var(--career-text);
 }
@@ -6226,7 +6276,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   font-weight: 500;
   padding: 2px 7px;
   border-radius: 999px;
@@ -6320,26 +6370,26 @@
 
 .career-resume-stanford-name {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: var(--career-text-xl);
   font-weight: 700;
   letter-spacing: 0.03em;
   color: var(--career-text);
 }
 
 .career-resume-stanford-subtitle {
-  font-size: 0.92rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text-soft);
   font-weight: 500;
 }
 
 .career-resume-stanford-contacts {
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
   letter-spacing: 0.02em;
 }
 
 .career-resume-stanford-eligibility {
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   color: var(--career-accent);
   letter-spacing: 0.03em;
@@ -6362,13 +6412,13 @@
 }
 
 .career-resume-stanford-title {
-  font-size: 0.98rem;
+  font-size: var(--career-text-md);
   font-weight: 700;
   color: var(--career-text);
 }
 
 .career-resume-stanford-dates {
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   font-weight: 600;
   color: var(--career-text-soft);
   font-family: var(--font-mono, ui-monospace, monospace);
@@ -6381,7 +6431,7 @@
   align-items: baseline;
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 0.86rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text-soft);
 }
 
@@ -6391,7 +6441,7 @@
 
 .career-resume-stanford-location {
   color: var(--career-text-dim);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-resume-bullet-cluster {
@@ -6421,13 +6471,13 @@
 
 .career-resume-ats-info h3 {
   margin: 0 0 4px;
-  font-size: 1.1rem;
+  font-size: var(--career-text-md);
   color: var(--career-text);
 }
 
 .career-resume-ats-info p {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
 }
 
@@ -6448,7 +6498,7 @@
 .career-resume-ats-pre {
   margin: 0;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   line-height: 1.65;
   color: var(--career-text);
   white-space: pre-wrap;
@@ -6469,13 +6519,13 @@
 
 .career-resume-linkedin-head h3 {
   margin: 0 0 4px;
-  font-size: 1.1rem;
+  font-size: var(--career-text-md);
   color: var(--career-text);
 }
 
 .career-resume-linkedin-head p {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
 }
 
@@ -6509,13 +6559,13 @@
 
 .career-resume-linkedin-title-wrap h4 {
   margin: 0;
-  font-size: 0.94rem;
+  font-size: var(--career-text-md);
   color: var(--career-text);
 }
 
 .career-resume-char-counter {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   padding: 2px 7px;
   border-radius: 999px;
   background: var(--career-surface);
@@ -6528,13 +6578,13 @@
 }
 
 .career-resume-card-kicker {
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
 }
 
 .career-resume-linkedin-desc {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
   line-height: 1.4;
 }
@@ -6547,7 +6597,7 @@
   color: var(--career-text);
   padding: 10px 12px;
   font-family: inherit;
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   line-height: 1.5;
   resize: vertical;
 }
@@ -6578,18 +6628,18 @@
 
 .career-resume-linkedin-role-header h5 {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text);
 }
 
 .career-resume-linkedin-employer {
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
   font-style: italic;
 }
 
 .career-resume-linkedin-period {
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   font-family: var(--font-mono, ui-monospace, monospace);
   color: var(--career-text-dim);
 }
@@ -6600,7 +6650,7 @@
   list-style: none;
   display: grid;
   gap: 6px;
-  font-size: 0.84rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
   line-height: 1.45;
 }
@@ -6622,7 +6672,7 @@
   }
 
   .career-resume-head-title h2 {
-    font-size: 1.24rem;
+    font-size: var(--career-text-lg);
   }
 
   /* One row of four keeps the whole verdict — length, blockers, gaps, revoked
@@ -6636,12 +6686,12 @@
   }
 
   .career-resume-status dt {
-    font-size: 0.58rem;
+    font-size: var(--career-text-xs);
     letter-spacing: 0.02em;
   }
 
   .career-resume-status dd {
-    font-size: 0.94rem;
+    font-size: var(--career-text-md);
     white-space: nowrap;
   }
 
@@ -6716,14 +6766,14 @@
 .career-error-boundary-card h2 {
   margin: 0;
   color: var(--career-text);
-  font-size: 1.15rem;
+  font-size: var(--career-text-lg);
   font-weight: 700;
 }
 
 .career-error-boundary-card p {
   margin: 0;
   color: var(--career-text-soft);
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   line-height: 1.5;
 }
 
@@ -6733,7 +6783,7 @@
   border-radius: 8px;
   padding: 8px 12px;
   background: oklch(12% 0.015 255 / 0.5);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
 }
 
@@ -6809,13 +6859,13 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 1.05rem;
+  font-size: var(--career-text-md);
   font-weight: 600;
   color: var(--career-text, #ffffff);
 }
 
 .career-platform-card-badge {
-  font-size: 0.75rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   padding: 3px 8px;
   border-radius: 6px;
@@ -6831,7 +6881,7 @@
 }
 
 .career-platform-card-desc {
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text-dim, #94a3b8);
   line-height: 1.4;
   margin-bottom: 14px;
@@ -6863,13 +6913,13 @@
 
 .career-web-desktop-content strong {
   display: block;
-  font-size: 1rem;
+  font-size: var(--career-text-md);
   color: #93c5fd;
   margin-bottom: 6px;
 }
 
 .career-web-desktop-content p {
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text-dim, #cbd5e1);
   line-height: 1.45;
   margin-bottom: 14px;
@@ -6890,7 +6940,7 @@
 }
 
 .career-hh-resumes-selector label {
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   font-weight: 500;
   color: var(--career-text-dim, #94a3b8);
 }
@@ -6911,7 +6961,7 @@
   background: rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.15);
   color: var(--career-text, #ffffff);
-  font-size: 0.92rem;
+  font-size: var(--career-text-sm);
   outline: none;
 }
 
@@ -6987,7 +7037,7 @@
 }
 
 .career-modal-header h2 {
-  font-size: 1.15rem;
+  font-size: var(--career-text-lg);
   font-weight: 600;
   color: var(--career-text, #ffffff);
   margin: 0;
@@ -7019,7 +7069,7 @@
 }
 
 .career-modal-intro {
-  font-size: 0.9rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text-dim, #94a3b8);
   line-height: 1.45;
   margin: 0;
@@ -7032,7 +7082,7 @@
 }
 
 .career-modal-field span {
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   font-weight: 500;
   color: var(--career-text, #ffffff);
 }
@@ -7044,7 +7094,7 @@
   background: rgba(15, 23, 42, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.16);
   color: #ffffff;
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
   outline: none;
   transition: border-color 0.15s ease;
 }
@@ -7063,7 +7113,7 @@
   background: rgba(239, 68, 68, 0.12);
   border: 1px solid rgba(239, 68, 68, 0.3);
   color: #fca5a5;
-  font-size: 0.84rem;
+  font-size: var(--career-text-xs);
   margin: 0;
 }
 
@@ -7118,7 +7168,7 @@
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim, #94a3b8);
   margin: 0;
 }
@@ -7177,7 +7227,7 @@
   gap: 8px;
   padding: 8px 12px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--career-text-xs);
   line-height: 1.4;
   color: var(--career-text-soft);
   background: var(--career-surface);
@@ -7196,7 +7246,7 @@
   margin: 0;
   padding: 24px;
   max-width: 42ch;
-  font-size: 13px;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
   color: #4a5568;
 }
@@ -7237,7 +7287,7 @@
 
 .career-today-action h2 {
   margin: 0;
-  font-size: clamp(1.35rem, 2.4vw, 1.8rem);
+  font-size: var(--career-text-lg);
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
@@ -7254,7 +7304,7 @@
   align-items: flex-start;
   gap: 8px;
   color: var(--career-accent);
-  font-size: 0.9rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-today-expected svg {
@@ -7308,20 +7358,20 @@
 }
 
 .career-today-loop > button strong {
-  font-size: 1.6rem;
+  font-size: var(--career-text-lg);
   font-weight: 750;
   letter-spacing: -0.03em;
   line-height: 1;
 }
 
 .career-today-loop > button span {
-  font-size: 0.86rem;
+  font-size: var(--career-text-sm);
   font-weight: 650;
   color: var(--career-text);
 }
 
 .career-today-loop > button small {
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
   line-height: 1.35;
 }
@@ -7329,7 +7379,7 @@
 .career-today-loop-note {
   grid-column: 1 / -1;
   margin: 0;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   color: var(--career-warning);
 }
 
@@ -7355,7 +7405,7 @@
 
 .career-today-attention h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--career-text-md);
 }
 
 .career-today-attention ul {
@@ -7364,7 +7414,7 @@
   display: grid;
   gap: 6px;
   color: var(--career-text-soft);
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   line-height: 1.5;
 }
 
@@ -7375,7 +7425,7 @@
 /* Honest cabinet header state (B148 §5) */
 
 .career-cabinet-header-state .is-loading {
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
 }
 
@@ -7418,19 +7468,19 @@
    not compete with the page title behind it. */
 .career-account-connections h2,
 .career-account-form h2 {
-  font-size: 0.98rem;
+  font-size: var(--career-text-md);
   font-weight: 680;
   letter-spacing: -0.01em;
 }
 
 .career-account-connections > div:first-child p {
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
 .career-account-section-lead {
   margin: 12px 0 4px;
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
   color: var(--career-text-dim);
 }
@@ -7470,18 +7520,18 @@
 }
 
 .career-import-summary strong {
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
   color: var(--career-text);
 }
 
 .career-import-summary span {
-  font-size: 0.84rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
   color: var(--career-text-soft);
 }
 
 .career-import-summary em {
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   font-style: normal;
   color: var(--career-warning);
 }
@@ -7498,7 +7548,7 @@
 }
 
 .career-pdf-source-row small {
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
 }
 
@@ -7582,7 +7632,7 @@
 }
 
 .admin-test-vacancy-meta {
-  font-size: 0.84rem;
+  font-size: var(--career-text-xs);
   color: var(--text-muted);
   margin: 4px 0;
 }
@@ -7599,7 +7649,7 @@
 }
 
 .admin-test-link-wrap .admin-primary-link {
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
 }
 
 .admin-note.is-empty-note {
@@ -7703,7 +7753,7 @@
 .career-resume-quote {
   margin: 6px 0 0 0;
   font-style: italic;
-  font-size: 13px;
+  font-size: var(--career-text-xs);
   opacity: 0.85;
 }
 
@@ -7759,13 +7809,13 @@
 
 .career-quiz-dialog-title {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--career-text-lg);
   font-weight: 650;
 }
 
 .career-quiz-intro-text {
   color: var(--text-muted, #9ca3af);
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   margin-bottom: 24px;
   line-height: 1.55;
 }
@@ -7794,18 +7844,18 @@
 
 .career-quiz-item-title {
   display: block;
-  font-size: 0.98rem;
+  font-size: var(--career-text-md);
   margin-bottom: 4px;
 }
 
 .career-quiz-item-meta {
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   color: var(--text-dim, #9ca3af);
 }
 
 .career-quiz-start-btn {
   padding: 8px 18px;
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   border-radius: 10px;
 }
 
@@ -7821,14 +7871,14 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-quiz-counter {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   color: var(--text-muted, #9ca3af);
 }
 
@@ -7837,7 +7887,7 @@
 }
 
 .career-quiz-question-title {
-  font-size: 1.08rem;
+  font-size: var(--career-text-md);
   font-weight: 600;
   margin-bottom: 18px;
   line-height: 1.45;
@@ -7856,7 +7906,7 @@
   border: 1px solid var(--line, rgba(255, 255, 255, 0.1));
   color: var(--text-main, #f3f4f6);
   cursor: pointer;
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   line-height: 1.45;
   transition: all 0.15s ease;
 }
@@ -7906,7 +7956,7 @@
 }
 
 .career-quiz-result-title {
-  font-size: 1.2rem;
+  font-size: var(--career-text-lg);
   margin: 0 0 8px;
 }
 
@@ -7920,7 +7970,7 @@
 
 .career-quiz-result-text {
   margin: 0;
-  font-size: 0.94rem;
+  font-size: var(--career-text-md);
 }
 
 .career-quiz-badge-wrap {
@@ -7932,13 +7982,13 @@
   border: 1px solid oklch(75% 0.14 154 / 0.4);
   border-radius: 24px;
   margin-top: 16px;
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   font-weight: 650;
   color: var(--primary-success, #22c55e);
 }
 
 .career-quiz-review-heading {
-  font-size: 0.96rem;
+  font-size: var(--career-text-md);
   margin-bottom: 14px;
   font-weight: 650;
 }
@@ -7956,7 +8006,7 @@
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-quiz-review-question {
@@ -7993,7 +8043,7 @@
 .career-account-version {
   margin: 18px 0 0;
   color: var(--career-text-dim);
-  font-size: 0.75rem;
+  font-size: var(--career-text-xs);
 }
 
 /* B159: отставшая сборка читается как предупреждение, а не как подпись. */
@@ -8054,14 +8104,14 @@
 
 .career-roles-list strong,
 .career-market-list > li > span:first-child {
-  font-size: 0.9rem;
+  font-size: var(--career-text-sm);
   letter-spacing: -0.01em;
 }
 
 .career-roles-list small,
 .career-market-list small {
   color: var(--career-text-dim);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.4;
 }
 
@@ -8083,7 +8133,7 @@
 
 .career-roles-change label {
   color: var(--career-text-dim);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.4;
 }
 
@@ -8095,7 +8145,7 @@
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   resize: vertical;
 }
 
@@ -8117,7 +8167,7 @@
 
 .career-strategy-review h3 {
   margin: 0;
-  font-size: 0.98rem;
+  font-size: var(--career-text-md);
   letter-spacing: -0.01em;
 }
 
@@ -8139,7 +8189,7 @@
 
 .career-signal-list small {
   color: var(--career-text-dim);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.4;
 }
 
@@ -8159,7 +8209,7 @@
 
 .career-work-preferences small {
   color: var(--career-text-dim);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.4;
 }
 
@@ -8170,7 +8220,7 @@
 
 .career-work-task-prompt {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--career-text-sm);
   line-height: 1.4;
 }
 
@@ -8184,7 +8234,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 0.84rem;
+  font-size: var(--career-text-xs);
   line-height: 1.35;
 }
 
@@ -8208,13 +8258,13 @@
 
 .career-strategy small {
   color: var(--career-text-dim);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.4;
 }
 
 .career-strategy-history summary {
   color: var(--career-text-dim);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   cursor: pointer;
 }
 
@@ -8224,11 +8274,11 @@
   margin: 6px 0 0;
   padding-left: 18px;
   color: var(--career-text-dim);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-market-sample {
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-market-sample.is-unknown {
@@ -8244,14 +8294,14 @@
 
 .career-home-panel h3 {
   margin: 0;
-  font-size: 0.98rem;
+  font-size: var(--career-text-md);
   letter-spacing: -0.01em;
 }
 
 .career-home-empty {
   margin: 0;
   color: var(--career-text-dim);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
@@ -8268,7 +8318,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-measure-head > span {
@@ -8333,7 +8383,7 @@
 .career-measure > p {
   margin: 6px 0 0;
   color: var(--career-text-dim);
-  font-size: 0.75rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -8345,14 +8395,14 @@
 
 .career-home-facts dt {
   color: var(--career-text-dim);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
 .career-home-facts dd {
   margin: 3px 0 0;
-  font-size: 0.9rem;
+  font-size: var(--career-text-sm);
   font-weight: 600;
 }
 
@@ -8369,7 +8419,7 @@
   padding: 4px 10px;
   border: 1px solid var(--career-line-strong, oklch(93% 0.015 255 / 0.24));
   border-radius: 999px;
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-home-quote {
@@ -8379,7 +8429,7 @@
   border-radius: var(--career-radius-md, 14px);
   background: var(--career-surface-soft, oklch(27% 0.018 255 / 0.4));
   color: var(--career-text-soft);
-  font-size: 0.84rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
   /* Ответ советника бывает длинным; панель не должна тянуть страницу. */
   max-height: 11.5em;
@@ -8433,7 +8483,7 @@
 
 .career-vacancy-filters h3 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
 }
 
 /* Регулярные выборки стоят первым блоком панели фильтров: кандидат заводит
@@ -8454,8 +8504,8 @@
 
 .career-saved-searches > header span:first-child {
   color: var(--career-text-dim);
-  font-size: 0.64rem;
-  font-weight: 720;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -8468,7 +8518,7 @@
 
 .career-saved-searches h3 {
   margin: 6px 0 0;
-  font-size: 0.92rem;
+  font-size: var(--career-text-sm);
   line-height: 1.35;
   letter-spacing: -0.018em;
 }
@@ -8482,7 +8532,7 @@
 .career-vacancy-filters legend {
   padding: 0 0 7px;
   color: var(--career-text-dim);
-  font-size: 0.71rem;
+  font-size: var(--career-text-xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -8494,7 +8544,7 @@
 
 .career-vacancy-search > span {
   color: var(--career-text-dim);
-  font-size: 0.71rem;
+  font-size: var(--career-text-xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -8507,7 +8557,7 @@
   color: var(--career-text);
   background: var(--career-surface-soft, oklch(27% 0.018 255 / 0.4));
   font: inherit;
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-vacancy-chips {
@@ -8523,7 +8573,7 @@
   color: var(--career-text-muted);
   background: transparent;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-vacancy-chips button.is-active {
@@ -8552,7 +8602,7 @@
   color: var(--career-text-muted);
   background: transparent;
   font: inherit;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   text-align: left;
 }
 
@@ -8575,7 +8625,7 @@
 .career-vacancy-count {
   margin: 0;
   color: var(--career-text-muted);
-  font-size: 0.84rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-vacancy-count strong {
@@ -8593,13 +8643,22 @@
 
 .career-vacancy-row {
   display: grid;
-  grid-template-columns: minmax(0, 2.2fr) 0.9fr 0.9fr 0.9fr 1fr auto;
+  /* B232: каждая колонка умеет сжиматься — `0.9fr` без minmax(0, …) держал
+     ширину содержимого, и строка выезжала за окно на 125 px. Действия живут
+     своей строкой под колонками: пять кнопок в шестой колонке не помещались
+     ни на одной ширине окна десктопа. */
+  grid-template-columns:
+    minmax(0, 2.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1fr);
   align-items: center;
-  gap: 14px;
-  padding: 13px 15px;
+  gap: var(--career-space-2) var(--career-space-4);
+  padding: var(--career-space-3) var(--career-space-4);
   border: 1px solid var(--career-line);
   border-radius: var(--career-radius-md, 14px);
   background: var(--career-surface);
+}
+
+.career-vacancy-row > * {
+  min-width: 0;
 }
 
 .career-vacancy-title {
@@ -8613,25 +8672,37 @@
   display: grid;
   gap: 2px;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .career-vacancy-title strong {
-  font-size: 0.92rem;
+  font-size: var(--career-text-sm);
   font-weight: 600;
 }
 
 .career-vacancy-title small,
 .career-vacancy-coverage small {
   color: var(--career-text-dim);
-  font-size: 0.73rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-vacancy-salary,
 .career-vacancy-location,
 .career-vacancy-age {
   color: var(--career-text-muted);
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   font-variant-numeric: tabular-nums;
+}
+
+/* Числа — моноширинным (design-system §4): зарплата, возраст, покрытие. */
+.career-vacancy-salary,
+.career-vacancy-age,
+.career-vacancy-coverage strong,
+.career-vacancy-more-count,
+.career-profile-update-state small,
+.career-funnel-value,
+.career-job-period {
+  font-family: var(--font-mono);
 }
 
 .career-vacancy-coverage {
@@ -8641,7 +8712,7 @@
 }
 
 .career-vacancy-coverage strong {
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -8653,7 +8724,7 @@
   border: 1px solid var(--career-line-strong, oklch(93% 0.015 255 / 0.24));
   border-radius: 10px;
   color: var(--career-text);
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -8666,22 +8737,39 @@
 /* Ручной отклик (B165, срез 1): «Открыть» уводит на площадку, подтверждение
    стоит рядом. Подтверждённый отклик говорит датой, а не значком. */
 .career-vacancy-actions {
+  grid-column: 1 / -1;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  white-space: nowrap;
+  gap: var(--career-space-2) var(--career-space-3);
+}
+
+/* Страница списка: «показано 20 из 96» и кнопка на следующие 20 (B232). */
+.career-vacancy-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-2) var(--career-space-4);
+  padding: var(--career-space-2) var(--career-space-4) 0;
+}
+
+.career-vacancy-more-count {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .career-vacancy-applied {
   color: var(--career-text-muted);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
 }
 
 /* Отклик, который не сохранился, назван словами: молчание сделало бы его
    неотличимым от записанного (B165). */
 .career-vacancy-unsaved {
   color: var(--career-warning);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
 }
 
 /* Узкий экран: сам пул идёт первым, строка вакансии складывается в карточку.
@@ -8701,19 +8789,12 @@
   }
 
   .career-vacancy-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     row-gap: 8px;
   }
 
   .career-vacancy-title {
     grid-column: 1 / -1;
-  }
-
-  /* Отклик занимает свою строку: рядом с колонками он съедал ширину зарплаты
-     и возраста, и «от 240 000 до 300 000 ₽» разваливалось по словам (B165). */
-  .career-vacancy-actions {
-    grid-column: 1 / -1;
-    justify-content: flex-end;
   }
 }
 
@@ -8726,7 +8807,7 @@
   border-radius: 999px;
   color: var(--career-accent);
   background: var(--career-accent-soft);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   font-style: normal;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -8738,14 +8819,14 @@
   padding-top: 10px;
   border-top: 1px solid var(--career-line);
   color: var(--career-text-dim);
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
 .career-plan-payment-state {
   margin: 6px 0 0;
   color: var(--career-text-dim);
-  font-size: 0.84rem;
+  font-size: var(--career-text-xs);
 }
 
 /* ==========================================================================
@@ -8768,7 +8849,7 @@
 
 .career-profile-role {
   color: var(--career-accent);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
 }
 
@@ -8781,7 +8862,7 @@
   align-items: center;
   gap: 5px;
   color: var(--career-text-soft);
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-profile-identity-actions {
@@ -8795,8 +8876,8 @@
   gap: 5px;
   border-radius: 7px;
   padding: 3px 9px;
-  font-size: 0.62rem;
-  font-weight: 700;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -8837,14 +8918,14 @@
 
 .career-profile-block h3 {
   margin: 0;
-  font-size: 0.86rem;
+  font-size: var(--career-text-sm);
   font-weight: 700;
 }
 
 .career-profile-about {
   margin: 0;
   color: var(--career-text-soft);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.6;
 }
 
@@ -8863,7 +8944,7 @@
   padding: 5px 10px;
   color: var(--career-text-soft);
   background: var(--career-surface-raised);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-job-list {
@@ -8925,7 +9006,7 @@
   border-radius: 10px;
   color: var(--career-accent);
   background: var(--career-accent-soft);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   font-weight: 800;
 }
 
@@ -8939,13 +9020,13 @@
 
 .career-job-title strong {
   overflow-wrap: anywhere;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   font-weight: 650;
 }
 
 .career-job-period {
   color: var(--career-text-soft);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -8962,7 +9043,7 @@
   display: flex;
   gap: 9px;
   color: var(--career-text-soft);
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
@@ -8996,7 +9077,7 @@
   padding: 6px 13px;
   color: var(--career-accent-ink);
   background: var(--career-accent);
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
 }
 
@@ -9004,7 +9085,7 @@
 .career-job-gap {
   margin: 10px 0 0;
   color: var(--career-text-dim);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-job-gap {
@@ -9023,7 +9104,7 @@
 .career-score p {
   margin: 0;
   color: var(--career-text-soft);
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
 }
 
@@ -9040,15 +9121,37 @@
   stroke-linecap: round;
 }
 
+.career-score-ring {
+  position: relative;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  width: 96px;
+  height: 96px;
+  flex: none;
+}
+
+.career-score-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
 .career-score-number {
-  fill: var(--career-text);
-  font-size: 27px;
+  position: relative;
+  color: var(--career-text);
+  font-size: var(--career-text-lg);
+  font-weight: 700;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
 .career-score-caption {
-  fill: var(--career-text-dim);
-  font-size: 9px;
+  position: relative;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.2;
 }
 
 /* ==========================================================================
@@ -9071,14 +9174,14 @@
 
 .career-campaign-head h2 {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: var(--career-text-lg);
   letter-spacing: -0.02em;
 }
 
 .career-campaign-head p {
   margin: 4px 0 0;
   color: var(--career-text-soft);
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-campaign-tiles {
@@ -9098,7 +9201,7 @@
 }
 
 .career-campaign-tile strong {
-  font-size: 1.5rem;
+  font-size: var(--career-text-lg);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.03em;
 }
@@ -9109,7 +9212,7 @@
 
 .career-campaign-tile small {
   color: var(--career-text-dim);
-  font-size: 0.62rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-activity-chart {
@@ -9210,7 +9313,7 @@
 }
 
 .career-funnel-value {
-  font-size: 1.05rem;
+  font-size: var(--career-text-lg);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: var(--career-accent);
@@ -9222,7 +9325,7 @@
 
 .career-funnel-label {
   color: var(--career-text-soft);
-  font-size: 0.6rem;
+  font-size: var(--career-text-xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -9256,7 +9359,7 @@
   justify-content: space-between;
   gap: 12px;
   color: var(--career-text-soft);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-job-card.is-plain {
@@ -9321,7 +9424,7 @@
   padding: 4px 10px;
   color: var(--career-accent);
   background: var(--career-accent-soft);
-  font-size: 0.68rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
 }
 
@@ -9337,12 +9440,13 @@
 
 .career-vacancy-columns {
   display: grid;
-  grid-template-columns: minmax(0, 2.2fr) 0.9fr 0.9fr 0.9fr 1fr auto;
-  gap: 14px;
-  padding: 4px 15px 8px;
+  grid-template-columns:
+    minmax(0, 2.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1fr);
+  gap: var(--career-space-4);
+  padding: var(--career-space-1) var(--career-space-4) var(--career-space-2);
   border-bottom: 1px solid var(--career-line);
   color: var(--career-text-dim);
-  font-size: 0.6rem;
+  font-size: var(--career-text-xs);
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
@@ -9375,7 +9479,9 @@
 
 .career-vacancy-view-switcher {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
+  max-width: 100%;
   background: var(--career-bg-card);
   border: 1px solid var(--career-line);
   border-radius: var(--career-radius-sm);
@@ -9395,7 +9501,7 @@
   align-items: center;
   gap: 4px;
   padding: 2px 6px;
-  font-size: 0.65rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   border-radius: 4px;
   border: 1px solid var(--career-line);
@@ -9495,7 +9601,7 @@
 }
 
 .career-map-label {
-  font-size: 11px;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   fill: var(--career-text);
   paint-order: stroke;
@@ -9520,7 +9626,7 @@
   background: var(--career-accent-soft);
   border: 1px solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-map-cards-grid {
@@ -9542,13 +9648,13 @@
 
 .career-map-card-head h4 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
   font-weight: 600;
   line-height: 1.3;
 }
 
 .career-map-card-company {
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
 }
 
@@ -9556,7 +9662,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  font-size: 0.75rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-map-card-features {
@@ -9593,7 +9699,7 @@
   border-radius: 10px;
   background: var(--career-surface);
   color: var(--career-text);
-  font-size: 13px;
+  font-size: var(--career-text-xs);
   font-weight: 560;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -9675,7 +9781,7 @@
   border: 1px solid var(--career-accent-soft);
   background: var(--career-bg-elevated);
   color: var(--career-accent);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -9751,7 +9857,7 @@
 
 .career-pitch-title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--career-text-md);
   font-weight: 600;
   color: var(--career-text);
   line-height: 1.35;
@@ -9759,7 +9865,7 @@
 
 .career-pitch-subtitle {
   margin: 4px 0 0;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
 }
 
@@ -9825,7 +9931,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-pitch-evidence-tag {
@@ -9870,13 +9976,13 @@
 }
 
 .career-pitch-field-label {
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   font-weight: 500;
   color: var(--career-text-soft);
 }
 
 .career-pitch-char-counter {
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   color: var(--career-text-dim);
   font-variant-numeric: tabular-nums;
@@ -9899,7 +10005,7 @@
   background: var(--career-bg);
   border: 1px solid var(--career-line);
   color: var(--career-text);
-  font-size: 0.86rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-pitch-input:focus-visible {
@@ -9914,7 +10020,7 @@
   background: var(--career-bg);
   border: 1px solid var(--career-line);
   color: var(--career-text);
-  font-size: 0.86rem;
+  font-size: var(--career-text-sm);
   line-height: 1.5;
   resize: vertical;
 }
@@ -9926,7 +10032,7 @@
 
 .career-pitch-monospace {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   white-space: pre-wrap;
 }
 
@@ -9949,7 +10055,7 @@
   padding: 24px;
   gap: 12px;
   color: var(--career-text-soft);
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-pitch-error {
@@ -10080,7 +10186,7 @@
 
 .career-recruiter-person strong {
   display: block;
-  font-size: 0.92rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text);
   line-height: 1.25;
   overflow: hidden;
@@ -10090,7 +10196,7 @@
 
 .career-recruiter-person small {
   display: block;
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
   line-height: 1.2;
   overflow: hidden;
@@ -10103,7 +10209,7 @@
   align-items: center;
   padding: 3px 8px;
   border-radius: var(--career-radius-sm);
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -10157,7 +10263,7 @@
   border: 1px solid var(--career-line);
   background: var(--career-surface-raised);
   color: var(--career-text);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   text-decoration: none;
   cursor: pointer;
   min-width: 0;
@@ -10241,7 +10347,7 @@
   background: var(--career-bg);
   border: 1px solid var(--career-line-strong);
   color: var(--career-text);
-  font-size: 0.7rem;
+  font-size: var(--career-text-xs);
   padding: 2px 6px;
   border-radius: 4px;
   white-space: nowrap;
@@ -10254,7 +10360,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   padding: 6px 12px;
   border-radius: var(--career-radius-sm);
 }
@@ -10319,14 +10425,14 @@
 
 .career-reputation-header h2 {
   margin: 0 0 6px;
-  font-size: 1.25rem;
+  font-size: var(--career-text-lg);
   font-weight: 700;
   color: var(--career-text);
 }
 
 .career-reputation-intro {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text-soft);
 }
 
@@ -10339,7 +10445,7 @@
   background: var(--career-danger-soft);
   border: 1px solid var(--career-danger);
   color: var(--career-danger);
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-reputation-unstarted-card {
@@ -10364,7 +10470,7 @@
 
 .career-reputation-unstarted-header h3 {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: var(--career-text-lg);
   font-weight: 700;
   color: var(--career-text);
 }
@@ -10372,7 +10478,7 @@
 .career-reputation-unstarted-desc {
   max-width: 560px;
   margin: 0;
-  font-size: 0.92rem;
+  font-size: var(--career-text-sm);
   line-height: 1.5;
   color: var(--career-text-soft);
 }
@@ -10384,7 +10490,7 @@
   gap: 8px;
   min-height: 44px;
   padding: 10px 24px;
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
   font-weight: 600;
   border-radius: var(--career-radius-sm);
   border: 1px solid var(--career-accent);
@@ -10415,7 +10521,7 @@
 .career-reputation-disclaimer {
   max-width: 580px;
   margin: 8px 0 0;
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
   color: var(--career-text-dim);
 }
@@ -10434,7 +10540,7 @@
 
 .career-reputation-running-card p {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text-soft);
 }
 
@@ -10476,7 +10582,7 @@
   align-items: center;
   gap: 8px;
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: var(--career-text-md);
 }
 
 .career-reputation-score-banner.is-safe .career-reputation-status-badge {
@@ -10495,12 +10601,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
   color: var(--career-text);
 }
 
 .career-reputation-score-value {
-  font-size: 1.15rem;
+  font-size: var(--career-text-lg);
   font-weight: 800;
   color: var(--career-text);
 }
@@ -10511,7 +10617,7 @@
   gap: 6px;
   min-height: 36px;
   padding: 6px 14px;
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   font-weight: 600;
   border-radius: var(--career-radius-sm);
   border: 1px solid var(--career-line);
@@ -10542,7 +10648,7 @@
 
 .career-reputation-section h3 {
   margin: 0 0 12px;
-  font-size: 1.05rem;
+  font-size: var(--career-text-md);
   font-weight: 700;
   color: var(--career-text);
 }
@@ -10556,7 +10662,7 @@
   border: 1px solid var(--career-line);
   background: var(--career-surface);
   color: var(--career-success);
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
 }
 
 .career-reputation-list {
@@ -10594,13 +10700,13 @@
 }
 
 .career-reputation-item-title {
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
   font-weight: 700;
   color: var(--career-text);
 }
 
 .career-reputation-pill {
-  font-size: 0.75rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   padding: 2px 8px;
   border-radius: var(--career-radius-sm);
@@ -10618,7 +10724,7 @@
 }
 
 .career-reputation-platform-pill {
-  font-size: 0.75rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   padding: 2px 8px;
   border-radius: var(--career-radius-sm);
@@ -10631,7 +10737,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text-soft);
 }
 
@@ -10640,7 +10746,7 @@
   border-radius: 4px;
   background: var(--career-bg-elevated);
   color: var(--career-text);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-reputation-sublabel {
@@ -10653,13 +10759,13 @@
   padding: 8px 12px;
   border-left: 3px solid var(--career-accent);
   background: var(--career-bg-elevated);
-  font-size: 0.86rem;
+  font-size: var(--career-text-sm);
   font-style: italic;
   color: var(--career-text);
 }
 
 .career-reputation-source-link {
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   color: var(--career-accent);
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -10681,7 +10787,7 @@
   border-radius: var(--career-radius-sm);
   background: var(--career-surface-raised);
   border: 1px solid var(--career-line);
-  font-size: 0.84rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
 }
 
@@ -10693,7 +10799,7 @@
 
 .career-reputation-footer {
   margin-top: 12px;
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
   line-height: 1.4;
 }
@@ -10719,7 +10825,7 @@
   border: 1px solid var(--career-line-strong);
   background: var(--career-bg-elevated);
   color: var(--career-text-soft);
-  font-size: 0.76rem;
+  font-size: var(--career-text-xs);
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -10802,7 +10908,7 @@
 
 .career-outreach-title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--career-text-md);
   font-weight: 600;
   color: var(--career-text);
   line-height: 1.35;
@@ -10814,7 +10920,7 @@
   gap: 5px;
   padding: 2px 8px;
   border-radius: var(--career-radius-sm);
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
   font-weight: 500;
 }
 
@@ -10832,7 +10938,7 @@
 
 .career-outreach-subtitle {
   margin: 4px 0 0;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
 }
 
@@ -10887,7 +10993,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-outreach-quota-label {
@@ -10904,7 +11010,7 @@
 }
 
 .career-outreach-quota-safe-tag {
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   padding: 2px 6px;
   border-radius: 4px;
   background: var(--career-surface-raised);
@@ -10944,7 +11050,7 @@
 
 .career-outreach-quota-alert {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   color: var(--career-warning);
   line-height: 1.4;
 }
@@ -11025,12 +11131,12 @@
 }
 
 .career-outreach-name-row strong {
-  font-size: 0.9rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text);
 }
 
 .career-outreach-degree-badge {
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   font-weight: 500;
   padding: 1px 6px;
   border-radius: 4px;
@@ -11048,7 +11154,7 @@
 
 .career-outreach-headline {
   margin: 2px 0 0;
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
   line-height: 1.35;
 }
@@ -11061,7 +11167,7 @@
 }
 
 .career-outreach-mutual-count {
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
 }
 
@@ -11069,7 +11175,7 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
   color: var(--career-accent);
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -11084,7 +11190,7 @@
 }
 
 .career-outreach-select-pill {
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
   font-weight: 500;
   padding: 4px 10px;
   border-radius: var(--career-radius-sm);
@@ -11118,13 +11224,13 @@
 }
 
 .career-outreach-field-label {
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   font-weight: 500;
   color: var(--career-text);
 }
 
 .career-outreach-char-count {
-  font-size: 0.74rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
 }
 
@@ -11135,7 +11241,7 @@
 
 .career-outreach-recipient-badge {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
 }
 
@@ -11150,7 +11256,7 @@
   background: var(--career-danger-soft);
   border: 1px solid var(--career-danger);
   color: var(--career-danger);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-outreach-web-notice {
@@ -11163,7 +11269,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
   line-height: 1.4;
 }
@@ -11184,7 +11290,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
   cursor: pointer;
 }
@@ -11204,7 +11310,7 @@
 
 .career-outreach-history-title {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   color: var(--career-text);
 }
@@ -11223,7 +11329,7 @@
   padding: 6px 10px;
   border-radius: var(--career-radius-sm);
   background: var(--career-bg-elevated);
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
 }
 
 .career-outreach-history-name {
@@ -11232,7 +11338,7 @@
 }
 
 .career-outreach-status-pill {
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -11259,7 +11365,7 @@
 }
 
 .career-outreach-history-date {
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-dim);
 }
 
@@ -11339,7 +11445,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.75rem;
+  font-size: var(--career-text-xs);
   font-weight: 500;
   color: var(--career-text-soft);
   text-transform: uppercase;
@@ -11347,7 +11453,7 @@
 }
 
 .career-followup-badge {
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
@@ -11368,7 +11474,7 @@
 
 .career-followup-headline {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
   font-weight: 600;
   color: var(--career-text);
   line-height: 1.35;
@@ -11376,7 +11482,7 @@
 
 .career-followup-vacancy {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
 }
 
@@ -11389,7 +11495,7 @@
 
 .career-followup-message-preview {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   line-height: 1.45;
   color: var(--career-text-soft);
   white-space: pre-wrap;
@@ -11413,7 +11519,7 @@
   border: 1px solid var(--career-line);
   background: var(--career-surface-raised);
   color: var(--career-text);
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -11448,7 +11554,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   color: var(--career-accent);
   text-decoration: none;
   background: none;
@@ -11466,7 +11572,7 @@
   align-items: center;
   gap: 5px;
   padding: 4px 10px;
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
   font-weight: 500;
   color: var(--career-accent);
   background: var(--career-accent-soft);
@@ -11545,7 +11651,7 @@
 
 .career-interview-title {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--career-text-md);
   font-weight: 600;
   color: var(--career-text);
   line-height: 1.35;
@@ -11553,7 +11659,7 @@
 
 .career-interview-subtitle {
   margin: 4px 0 0;
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text-soft);
 }
 
@@ -11599,7 +11705,7 @@
   border: 1px solid transparent;
   background: transparent;
   color: var(--career-text-muted);
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -11643,14 +11749,14 @@
 
 .career-interview-section h3 {
   margin: 0 0 8px;
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
   font-weight: 600;
   color: var(--career-text);
 }
 
 .career-interview-summary {
   margin: 0 0 10px;
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text-soft);
   line-height: 1.45;
 }
@@ -11662,7 +11768,7 @@
 }
 
 .career-interview-chip {
-  font-size: 0.75rem;
+  font-size: var(--career-text-xs);
   padding: 3px 8px;
   border-radius: 999px;
   background: var(--career-surface-raised);
@@ -11679,7 +11785,7 @@
 }
 
 .career-interview-list li {
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   line-height: 1.4;
   color: var(--career-text-soft);
 }
@@ -11714,7 +11820,7 @@
 }
 
 .career-star-category-badge {
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
@@ -11724,7 +11830,7 @@
 }
 
 .career-star-evidence-tag {
-  font-size: 0.72rem;
+  font-size: var(--career-text-xs);
   color: var(--career-success);
   background: var(--career-success-soft);
   padding: 2px 8px;
@@ -11734,7 +11840,7 @@
 
 .career-star-question-title {
   margin: 0;
-  font-size: 0.98rem;
+  font-size: var(--career-text-md);
   font-weight: 600;
   color: var(--career-text);
   line-height: 1.35;
@@ -11758,7 +11864,7 @@
 }
 
 .career-star-step dt {
-  font-size: 0.75rem;
+  font-size: var(--career-text-xs);
   font-weight: 700;
   color: var(--career-accent);
   text-transform: uppercase;
@@ -11767,7 +11873,7 @@
 
 .career-star-step dd {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   line-height: 1.45;
   color: var(--career-text-soft);
 }
@@ -11786,7 +11892,7 @@
   border: 1px solid var(--career-line);
   background: var(--career-surface-raised);
   color: var(--career-text);
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -11820,14 +11926,14 @@
 
 .career-interview-section-header h3 {
   margin: 0 0 4px;
-  font-size: 0.95rem;
+  font-size: var(--career-text-md);
   font-weight: 600;
   color: var(--career-text);
 }
 
 .career-interview-section-header p {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: var(--career-text-sm);
   color: var(--career-text-soft);
 }
 
@@ -11852,7 +11958,7 @@
 
 .career-interview-question-text {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: var(--career-text-sm);
   line-height: 1.4;
   color: var(--career-text);
   flex: 1;
@@ -11867,7 +11973,7 @@
   border: 1px solid var(--career-line);
   background: var(--career-surface-raised);
   color: var(--career-text-soft);
-  font-size: 0.75rem;
+  font-size: var(--career-text-xs);
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;

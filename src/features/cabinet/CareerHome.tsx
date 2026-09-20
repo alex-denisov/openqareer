@@ -245,30 +245,32 @@ function ScoreRing({ score }: { score: ProfileScore }) {
   const circumference = 264;
   return (
     <div className="career-score">
-      <svg
-        width="96"
-        height="96"
-        viewBox="0 0 100 100"
+      <div
+        className="career-score-ring"
         role="img"
         aria-label={`Профиль: пройдено ${score.checks} проверок из ${score.total}`}
       >
-        <circle className="career-score-track" cx="50" cy="50" r="42" />
-        <circle
-          className="career-score-value"
-          cx="50"
-          cy="50"
-          r="42"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference - (circumference * score.value) / 100}
-          transform="rotate(-90 50 50)"
-        />
-        <text className="career-score-number" x="50" y="47" textAnchor="middle">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <circle className="career-score-track" cx="50" cy="50" r="42" />
+          <circle
+            className="career-score-value"
+            cx="50"
+            cy="50"
+            r="42"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference - (circumference * score.value) / 100}
+            transform="rotate(-90 50 50)"
+          />
+        </svg>
+        {/* Число и подпись — в HTML, не в SVG: текст в viewBox масштабируется
+            вместе с кольцом и на 96 px выходил 6 px высотой (B232). */}
+        <strong className="career-score-number" aria-hidden="true">
           {score.value}
-        </text>
-        <text className="career-score-caption" x="50" y="63" textAnchor="middle">
-          ИЗ 100
-        </text>
-      </svg>
+        </strong>
+        <span className="career-score-caption" aria-hidden="true">
+          из 100
+        </span>
+      </div>
       <p>
         Пройдено {score.checks} проверок из {score.total}. Каждая проверка ниже
         называет, из чего сложено число.

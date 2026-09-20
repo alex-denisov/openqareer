@@ -40,6 +40,9 @@ import {
  * источника, выборки и даты — отдельная находка аудита B178, и повторять её
  * здесь нельзя.
  */
+/** Страница списка вакансий (B232): 20 строк, дальше — по просьбе. */
+const VACANCY_PAGE_SIZE = 20;
+
 const FRESHNESS_CHOICES: ReadonlyArray<{ label: string; days?: number }> = [
   { label: 'до 7 дней', days: 7 },
   { label: 'до 30 дней', days: 30 },
@@ -95,6 +98,16 @@ export function VacancyBoard({
     [matched, filters, now],
   );
   const sources = useMemo(() => vacancySourceNames(matched), [matched]);
+  // Страница списка: подбор в 96–397 записей, отрисованный целиком, давал
+  // 5 108 текстовых узлов на одном экране (B232). Смена фильтров возвращает
+  // к первой странице — иначе «показано 40 из 12» после сужения выборки.
+  const [visibleCount, setVisibleCount] = useState(VACANCY_PAGE_SIZE);
+  const applyFilters = (next: VacancyFilters) => {
+    setFilters(next);
+    setVisibleCount(VACANCY_PAGE_SIZE);
+  };
+  const visible = useMemo(() => shown.slice(0, visibleCount), [shown, visibleCount]);
+  const remaining = Math.max(0, shown.length - visible.length);
 
   // Панель фильтров стоит на экране всегда: регулярные выборки живут в ней, и
   // пустой пул — ровно тот случай, когда кандидату надо завести первую (B181).
@@ -103,8 +116,8 @@ export function VacancyBoard({
       filters={filters}
       facets={facets}
       sources={sources}
-      onChange={setFilters}
-      onReset={() => setFilters({})}
+      onChange={applyFilters}
+      onReset={() => applyFilters({})}
       subscriptions={subscriptions}
       defaultQuery={defaultQuery}
       onRefresh={onRefresh}
@@ -152,13 +165,13 @@ export function VacancyBoard({
               <span>На карте ({facets.onMap.count} из {facets.total})</span>
             </button>
           </div>
-          <VacancyChips filters={filters} onChange={setFilters} />
+          <VacancyChips filters={filters} onChange={applyFilters} />
         </header>
         {viewMode === 'map' ? (
           <VacancyMapView
             items={shown}
             selectedCity={filters.city}
-            onSelectCity={(city) => setFilters({ ...filters, city })}
+            onSelectCity={(city) => applyFilters({ ...filters, city })}
           />
         ) : (
           <div className="career-vacancy-table">
@@ -168,10 +181,9 @@ export function VacancyBoard({
               <span>локация</span>
               <span>возраст</span>
               <span>покрытие</span>
-              <span />
             </div>
             <ol className="career-vacancy-list">
-              {shown.map((item) => (
+              {visible.map((item) => (
                 <VacancyRow
                   key={item.cluster.id}
                   item={item}
@@ -188,6 +200,20 @@ export function VacancyBoard({
               <p className="career-market-empty">
                 Под эти фильтры не подходит ни одна запись пула.
               </p>
+            ) : null}
+            {remaining > 0 ? (
+              <div className="career-vacancy-more">
+                <span className="career-vacancy-more-count" aria-live="polite">
+                  показано {visible.length} из {shown.length}
+                </span>
+                <button
+                  type="button"
+                  className="career-btn career-btn-secondary"
+                  onClick={() => setVisibleCount((count) => count + VACANCY_PAGE_SIZE)}
+                >
+                  Показать ещё {Math.min(VACANCY_PAGE_SIZE, remaining)}
+                </button>
+              </div>
             ) : null}
             <footer className="career-vacancy-foot">
               <span className="career-cabinet-tag">
@@ -771,5 +797,6 @@ function salaryLabel(salary: MatchedVacancyItem['cluster']['salary']): string {
   const currency = salary.currency ?? '';
   const from = salary.from ? `от ${salary.from.toLocaleString('ru-RU')}` : '';
   const to = salary.to ? `до ${salary.to.toLocaleString('ru-RU')}` : '';
-  return `${[from, to].filter(Boolean).join(' ')} ${currency}`.trim();
+  // Неразрывный пробел: в узкой колонке «₽» отрывался на свою строку (B232).
+  return `${[from, to].filter(Boolean).join(' ')}\u00a0${currency}`.trim();
 }

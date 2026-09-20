@@ -40,6 +40,16 @@ navigation; tariffs remain a visible top action.
 - Phosphor icons only. Icons supplement labels and never replace an unfamiliar
   action label.
 - System font stack; operational labels and numbers may use the mono token.
+- Type scale (B232): six tokens and nothing else — `--career-text-xs` 13 px,
+  `-sm` 14, `-md` 16, `-lg` 20, `-xl` 28, `-display` 40. No text below 13 px,
+  no literal `font-size` in `career-shell.css` (`cssContract.test.ts`), at most
+  six computed sizes on any cabinet screen (`e2e/readability.spec.ts`).
+- Type roles on the scale: page title `xl`, card title `sm`/`md`, body `xs`
+  (13 px), label/eyebrow `xs` at weight 600 (never heavier than the title
+  below it), metric `lg` in `--font-mono`. Numbers — salary, dates, counters —
+  are always mono.
+- Spacing rhythm: `--career-space-1…8` = 4…32 px in 4 px steps; new rules use
+  the tokens rather than raw pixel values.
 - Motion is 180–200 ms opacity plus a small transform and is disabled by
   `prefers-reduced-motion`.
 
@@ -57,8 +67,12 @@ navigation; tariffs remain a visible top action.
 
 ## Responsive and accessibility rules
 
-- Primary design widths: 390 px and 1440 px. The document must never overflow
-  horizontally at 320 px or wider.
+- Primary design widths: 390 px and 1440 px; the desktop app window (1176 px
+  content) and the `tauri.conf.json` size (1280 px) are gated too. The document
+  must never overflow horizontally at 320 px or wider, and text boxes never
+  overlap (`e2e/readability.spec.ts`).
+- Long lists render a page of 20 and grow on request; a 400-row list is never
+  painted at once.
 - Touch targets are at least 44×44 px. Bottom navigation respects safe-area
   insets.
 - Every interactive element has a visible focus state. The skip link targets
