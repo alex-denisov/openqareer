@@ -3,7 +3,6 @@ import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import { updateAccountProfile, type AuthUser } from '../coach/coachApi';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { CareerHome } from './CareerHome';
-import { CareerIntelligencePanel } from './CareerIntelligencePanel';
 import { SearchCampaign } from '../search/SearchCampaign';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { VacancyBoard } from '../vacancies/VacancyBoard';
@@ -240,16 +239,9 @@ function CabinetSection({
           onSavePremises={onSavePremises}
           onOpenVacancies={() => onNavigate('opportunities')}
         />
-        {/* Регулярные выборки переехали в панель фильтров «Вакансий» — туда,
-            где кандидат смотрит сам пул (решение владельца 2026-09-02, B181).
-            Здесь остались читаемость резюме и следующий шаг. */}
-        <CareerIntelligencePanel
-          snapshot={data.snapshot}
-          journey={journey}
-          loading={data.loading}
-          onNavigate={onNavigate}
-          onOpenExpert={onOpenExpert}
-        />
+        {/* Регулярные выборки переехали в панель фильтров «Вакансий» (B181), а
+            «ATS-читаемость» и «Следующее действие» живут на Главной: здесь тот
+            же блок стоял целиком второй раз (B233, аудит 2026-09-20). */}
       </div>
     );
   }

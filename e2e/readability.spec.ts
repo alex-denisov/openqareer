@@ -40,7 +40,11 @@ function measure(minFontPx: number): ReadabilityFacts {
     const ownText = [...element.childNodes].some(
       (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
     );
-    return ownText && getComputedStyle(element).visibility !== 'hidden';
+    if (!ownText || getComputedStyle(element).visibility === 'hidden') return false;
+    // Содержимое закрытого <details> Chromium прячет через content-visibility:
+    // боксы у него есть, на экране его нет.
+    const fold = element.closest('details:not([open])');
+    return !fold || element.closest('summary') !== null;
   });
   const sizes = new Map<number, number>();
   const under13: string[] = [];
@@ -269,5 +273,59 @@ test.describe('B232 readability gate', () => {
     await expect(page.getByRole('button', { name: /Показать ещё/ })).toHaveCount(0);
     await page.getByLabel('Название или работодатель').fill('');
     await expect(rows).toHaveCount(20);
+  });
+
+  /**
+   * B233 — одна ведущая вещь. На Главной глазу некуда было сесть: правая
+   * колонка из четырёх равных блоков на полтора экрана и три акцентные заливки
+   * («Проверить факты», «Начать разговор», «Улучшить блок»×N). Первое место —
+   * одно, и это следующее действие кандидата; правая колонка не длиннее левой.
+   */
+  test('the home screen has one accent-filled action and a right column no taller than the left', async ({
+    page,
+  }, info) => {
+    test.skip(info.project.name !== 'desktop-1440', 'desktop composition only');
+    await mockSignedInCabinet(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await openSection(page, 'Главная');
+
+    const composition = await page.evaluate(() => {
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--career-accent');
+      const main = document.querySelector('main') ?? document.body;
+      const probe = document.createElement('span');
+      probe.style.color = `var(--career-accent)`;
+      main.append(probe);
+      const accentRgb = getComputedStyle(probe).color;
+      probe.remove();
+      const filled = [...main.querySelectorAll<HTMLElement>('button, a')]
+        .filter((element) => getComputedStyle(element).backgroundColor === accentRgb)
+        .filter((element) => !element.closest('.career-rail, .career-mobile-nav'))
+        .map((element) => element.textContent?.trim().slice(0, 40) ?? '');
+      const left = document.querySelector('.career-home-main')?.getBoundingClientRect().height ?? 0;
+      const right =
+        document.querySelector('.career-home-rail')?.getBoundingClientRect().height ?? 0;
+      return { accent: accent.trim(), filled, left: Math.round(left), right: Math.round(right) };
+    });
+    expect(composition.filled, JSON.stringify(composition)).toHaveLength(1);
+    // Допуск в один шаг сетки: колонки заканчиваются вместе, а не «правая
+    // на полтора экрана длиннее», как было в аудите (3 005 против 733 px).
+    expect(composition.right, JSON.stringify(composition)).toBeLessThanOrEqual(
+      composition.left + 24,
+    );
+
+    // Остальные разделы не исчезли — они свёрнуты под профилем.
+    const folds = page.locator('.career-home-fold > summary');
+    await expect(folds).toHaveText([
+      'ATS-читаемость',
+      'Роли и рынок',
+      'Позиционирование',
+      'Карьерный консультант',
+    ]);
+    await folds.first().scrollIntoViewIfNeeded();
+    await folds.first().click();
+    await expect(page.locator('.career-home-fold[open] .career-ats-card')).toBeVisible();
+    await page.screenshot({ path: info.outputPath('Главная-folds-1280.png') });
   });
 });

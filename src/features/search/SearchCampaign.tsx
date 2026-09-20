@@ -130,8 +130,10 @@ export function SearchCampaign({
 
       <div className="career-campaign-body">
         <div className="career-campaign-column">
-          <FunnelPanel campaign={campaign} />
+          {/* Ведущая вещь Поиска — очередь на сегодня; воронка объясняет её,
+              а не предваряет (B233). */}
           <QueuePanel campaign={campaign} loading={loading} onOpenVacancies={onOpenVacancies} />
+          <FunnelPanel campaign={campaign} />
         </div>
         <div className="career-campaign-column">
           {/* Сигналы пересмотра стратегии стоят рядом с воронкой, по которой
@@ -251,7 +253,7 @@ function QueueRow({ entry }: { entry: MatchedVacancyItem }) {
       <div className="career-job-head">
         <div className="career-job-title">
           <strong>{entry.cluster.canonicalTitle}</strong>
-          <span className="career-job-period">
+          <span className="career-job-meta">
             {entry.cluster.canonicalCompany || 'Работодатель не указан'} ·{' '}
             {entry.cluster.canonicalLocation || (entry.cluster.isRemote ? 'Удалённо' : 'Локация не указана')}
           </span>

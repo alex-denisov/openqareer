@@ -149,6 +149,9 @@ test('candidate confirms one saved command and sees an honest queued state', asy
   // B169 §8 — the strategist is opened from the place that has a reason to
   // open it. The contextless «Эксперт» button in the top bar is gone; на
   // «Главной» вход к нему держит карточка консультанта (B179).
+  // Вход к консультанту свёрнут под профилем (B233): сначала раскрыть.
+  const consultantFold = page.locator('.career-home-fold', { hasText: 'Карьерный консультант' });
+  await consultantFold.locator('summary').click();
   await page.getByRole('button', { name: /(Начать|Продолжить) разговор/u }).click();
   const dialog = page.getByRole('dialog', { name: 'Карьерный эксперт' });
   await expect(dialog.getByText('Ничего не отправлено')).toBeVisible();

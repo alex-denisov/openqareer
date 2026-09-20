@@ -343,7 +343,7 @@ function MarketSamples({ markets }: { readonly markets: RoleMarketMap['markets']
         <li key={market.id}>
           <span>{market.label}</span>
           {market.certainty === 'fact' && market.lastObservedAt ? (
-            <span className="career-market-sample">
+            <span className="career-market-sample-note">
               <strong>
                 {pluralRu(market.sampleSize, ['вакансия', 'вакансии', 'вакансий'])}
               </strong>{' '}
@@ -351,7 +351,7 @@ function MarketSamples({ markets }: { readonly markets: RoleMarketMap['markets']
               {formatDay(market.lastObservedAt)}
             </span>
           ) : (
-            <span className="career-market-sample is-unknown">
+            <span className="career-market-sample-note is-unknown">
               Выборки не хватает{market.sampleSize > 0 ? `: собрано ${market.sampleSize}` : ''}
             </span>
           )}

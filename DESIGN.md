@@ -88,6 +88,12 @@ navigation; tariffs remain a visible top action.
 - `CareerPictureRibbon` — compact, traceable state of evidence, roles and market.
 - `CareerExpertPanel` — reasoned next action plus protected model conversation.
 - `CareerTrack` — revisable dependency path, not course completion.
+- `career-home-fold` (B233) — a collapsed `<details>` under the profile on
+  «Главная» for everything that is not the next action or the assessment:
+  a 44 px summary names the section, the first inner heading is hidden as a
+  duplicate, later headings stay. One thing leads: exactly one accent-filled
+  action per screen («Проверить факты» on Home), the rest are outlined; the
+  right column never runs longer than the left (`e2e/readability.spec.ts`).
 - `SourceCapability` — honest `available`, `prepared`, or future connector state.
 
 Any new surface must reuse this vocabulary or record why a new pattern is

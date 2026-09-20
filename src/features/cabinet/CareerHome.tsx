@@ -91,17 +91,59 @@ export function CareerHome(props: CareerHomeProps) {
           onOpenExpert={onOpenExpert}
           onOpenResume={() => onNavigate('resume')}
         />
+        <HomeFolds {...props} regions={workspace?.regions ?? []} />
       </div>
 
-      <HomeRail {...props} regions={workspace?.regions ?? []} importing={importing} />
+      <HomeRail {...props} importing={importing} />
     </div>
   );
 }
 
-// Правый рельс — четыре панели подряд: оценка, роли, позиционирование и вход
-// к консультанту. Разнесение их по файлам спрятало бы порядок рельса.
-// eslint-disable-next-line max-lines-per-function
+// Правый рельс — только то, что ведёт: следующее действие и оценка. Всё
+// остальное (B233) стоит свёрнутым под профилем слева: четыре равных блока
+// справа тянулись на полтора экрана, и глазу было некуда сесть.
 function HomeRail({
+  snapshot,
+  targetDirection,
+  journey,
+  strategy,
+  importing,
+  applications,
+  onNavigate,
+}: {
+  snapshot?: CandidateSnapshot;
+  targetDirection: string;
+  journey?: CareerJourney;
+  strategy?: CareerStrategyRead;
+  importing: boolean;
+  applications?: readonly VacancyApplication[];
+  onNavigate: (view: CareerCabinetView) => void;
+}) {
+  return (
+    <aside className="career-home-rail" aria-label="Оценка и следующее действие">
+      <FollowUpActionCard
+        applications={applications}
+        onOpenVacancy={() => onNavigate('opportunities')}
+      />
+      <NextAction journey={journey} onNavigate={onNavigate} />
+      <AssessmentPanel
+        snapshot={snapshot}
+        targetDirection={targetDirection}
+        importing={importing}
+      />
+      {strategy?.error ? (
+        <p className="career-cabinet-error" role="alert">
+          {strategy.error}
+        </p>
+      ) : null}
+    </aside>
+  );
+}
+
+// Свёрнутые разделы под профилем: читаемость, роли и рынок, позиционирование,
+// консультант. Порядок тот же, что был на рельсе, — файл держит его целиком.
+// eslint-disable-next-line max-lines-per-function
+function HomeFolds({
   snapshot,
   regions,
   targetDirection,
@@ -111,8 +153,6 @@ function HomeRail({
   workPreferences,
   poolComplete,
   poolTotal,
-  importing,
-  applications,
   onNavigate,
   onOpenExpert,
 }: {
@@ -125,8 +165,6 @@ function HomeRail({
   workPreferences?: WorkPreferencesState;
   poolComplete?: boolean;
   poolTotal?: number;
-  importing: boolean;
-  applications?: readonly VacancyApplication[];
   onNavigate: (view: CareerCabinetView) => void;
   onOpenExpert: () => void;
 }) {
@@ -136,51 +174,48 @@ function HomeRail({
     ?.result?.careerTrack;
 
   return (
-    <aside className="career-home-rail" aria-label="Оценка и позиционирование">
-      <FollowUpActionCard
-        applications={applications}
-        onOpenVacancy={() => onNavigate('opportunities')}
-      />
-      <NextAction journey={journey} onNavigate={onNavigate} />
-      <AssessmentPanel
-        snapshot={snapshot}
-        targetDirection={targetDirection}
-        importing={importing}
-      />
-      <AtsReadability journey={journey} onNavigate={onNavigate} />
-      <RolesMarketPanel
-        journey={journey}
-        proposedRoles={proposedRoles}
-        poolComplete={poolComplete}
-        poolTotal={poolTotal}
-        {...(strategy ? { choice: roleChoice(strategy) } : {})}
-        onNavigate={onNavigate}
-      />
-      {/* Выбранная роль стоит рядом с тем местом, где её выбирают: версия,
-          дата, кто назвал и что говорил пул в момент выбора (B180, срез 2). */}
-      {strategy ? (
-        <CareerStrategyPanel
-          strategy={strategy.strategy}
-          loading={strategy.loading}
-          failed={strategy.failed}
+    <div className="career-home-folds">
+      <details className="career-home-fold">
+        <summary>ATS-читаемость</summary>
+        <AtsReadability journey={journey} onNavigate={onNavigate} />
+      </details>
+      <details className="career-home-fold">
+        <summary>Роли и рынок</summary>
+        <RolesMarketPanel
+          journey={journey}
+          proposedRoles={proposedRoles}
+          poolComplete={poolComplete}
+          poolTotal={poolTotal}
+          {...(strategy ? { choice: roleChoice(strategy) } : {})}
+          onNavigate={onNavigate}
         />
-      ) : null}
-      {/* Задания стоят под ролями: они уточняют порядок уже найденных ролей,
-          а не находят их (B180, срез 3). */}
-      {workPreferences ? <WorkPreferencesPanel state={workPreferences} /> : null}
-      {strategy?.error ? (
-        <p className="career-cabinet-error" role="alert">
-          {strategy.error}
-        </p>
-      ) : null}
-      <PositioningPanel
-        targetDirection={targetDirection}
-        regions={regions}
-        alternatives={latestTrack?.alternatives}
-        onNavigate={onNavigate}
-      />
-      <ConsultantPanel snapshot={snapshot} onOpenExpert={onOpenExpert} />
-    </aside>
+        {/* Выбранная роль стоит рядом с тем местом, где её выбирают: версия,
+            дата, кто назвал и что говорил пул в момент выбора (B180, срез 2). */}
+        {strategy ? (
+          <CareerStrategyPanel
+            strategy={strategy.strategy}
+            loading={strategy.loading}
+            failed={strategy.failed}
+          />
+        ) : null}
+        {/* Задания стоят под ролями: они уточняют порядок уже найденных ролей,
+            а не находят их (B180, срез 3). */}
+        {workPreferences ? <WorkPreferencesPanel state={workPreferences} /> : null}
+      </details>
+      <details className="career-home-fold">
+        <summary>Позиционирование</summary>
+        <PositioningPanel
+          targetDirection={targetDirection}
+          regions={regions}
+          alternatives={latestTrack?.alternatives}
+          onNavigate={onNavigate}
+        />
+      </details>
+      <details className="career-home-fold">
+        <summary>Карьерный консультант</summary>
+        <ConsultantPanel snapshot={snapshot} onOpenExpert={onOpenExpert} />
+      </details>
+    </div>
   );
 }
 
@@ -228,8 +263,9 @@ function AssessmentPanel({
               <MeasureRow key={measure.id} measure={measure} />
             ))}
           </ul>
+          {/* Версия метода — служебная; кандидату она ничего не говорит (B233). */}
           <p className="career-cabinet-tag">
-            посчитано по вашему профилю · метод {assessment.methodVersion}
+            посчитано по вашему профилю
           </p>
         </>
       )}
@@ -407,7 +443,7 @@ function ConsultantPanel({
           них читается, а что нет.
         </p>
       )}
-      <button className="career-primary-button" type="button" onClick={onOpenExpert}>
+      <button className="career-btn career-btn-secondary" type="button" onClick={onOpenExpert}>
         <ChatCircleDots size={17} />
         {lastAnswer ? 'Продолжить разговор' : 'Начать разговор'}
       </button>

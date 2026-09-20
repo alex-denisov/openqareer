@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { CareerHome } from './CareerHome';
+import type { CandidateSnapshot } from '../coach/coachApi';
 import { buildCanonicalProfileJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import type { AuthUser } from '../coach/coachApi';
@@ -139,5 +140,53 @@ describe('CareerHome HomeRail integration (B103, B105)', () => {
     expect(html).toContain('Следующее действие');
     expect(html).toContain('career-ats-card');
     expect(html).toContain('ATS-читаемость');
+  });
+
+  // B233: служебный идентификатор метода «profile-assessment-resume-v2» стоял
+  // в подписи кандидату (аудит 2026-09-20, находка 10).
+  it('names the assessment method without a service identifier (B233)', () => {
+    const snapshot = {
+      candidate: { id: 'c1', dataClass: 'synthetic', locale: 'ru-RU', createdAt: '2026-09-01T00:00:00.000Z' },
+      messages: [],
+      memory: [],
+      turns: [],
+      dossier: { sections: [], confirmedCount: 0, proposedCount: 0, readiness: { complete: false, unresolvedQuestions: 0, checks: [] } },
+      assessments: [],
+      germanyMarket: null,
+      resume: {
+        draft: {
+          candidate: { fullName: 'Тест' },
+          targetRole: 'Руководитель продукта',
+          experience: [
+            { id: 'e1', chronologyMemoryId: 'm1', title: 'PM', employer: 'X', current: true, bulletMemoryIds: [] },
+          ],
+          skills: [],
+          education: [],
+          languages: [],
+        },
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      },
+      documents: [],
+      vacancySubscriptions: [],
+    } as unknown as CandidateSnapshot;
+    const html = renderToStaticMarkup(
+      <CareerHome
+        session={session}
+        snapshot={snapshot}
+        workspace={workspace}
+        targetDirection="Руководитель продукта"
+        journey={createTestJourney()}
+        loading={false}
+        onRefresh={vi.fn(async () => undefined)}
+        onNavigate={vi.fn()}
+        onUpdateWorkspace={vi.fn()}
+        onOpenAccount={vi.fn()}
+        onOpenExpert={vi.fn()}
+      />,
+    );
+    expect(html).toContain('посчитано по вашему профилю');
+    expect(html).not.toMatch(/-v\d\b/u);
+    expect(html).not.toContain('profile-assessment');
   });
 });

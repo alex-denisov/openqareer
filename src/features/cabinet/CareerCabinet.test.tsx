@@ -101,6 +101,16 @@ describe('CareerCabinet composition', () => {
     expect(html).not.toContain('Рынок и следующие шаги');
   });
 
+  // B233: «ATS-читаемость» и «Следующее действие» живут на Главной; на Поиске
+  // тот же блок стоял целиком второй раз (аудит 2026-09-20, находка 6).
+  it('does not repeat the ATS readability and next action block on «Поиск» (B233)', () => {
+    const html = renderCabinet('career');
+
+    expect(html).toContain('Кампания поиска');
+    expect(html).not.toContain('ATS-читаемость');
+    expect(html).not.toContain('Следующее действие');
+  });
+
   it('keeps the strategist dialogue out of every section, it lives in «Эксперт»', () => {
     for (const view of ['today', 'profile', 'career', 'opportunities'] as const) {
       expect(renderCabinet(view)).not.toContain('Диалог со стратегом');

@@ -1801,7 +1801,12 @@
 }
 
 .career-view-heading h1 {
+  /* Заголовок раздела — тот же кегль, что у «Главной» и «Поиска»
+     (`.career-cabinet-header h1`): Тарифы были третьим стилем (B233). */
   margin: 0;
+  font-size: var(--career-text-xl);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
 }
 
 .career-profile-overview {
@@ -3574,6 +3579,10 @@
     animation: none;
   }
 
+  .career-home-fold > summary::after {
+    transition: none;
+  }
+
   .career-primary-button,
   .career-nav-button {
     transition: none;
@@ -4773,7 +4782,9 @@
 }
 
 .career-profile-surface.is-expanded .career-profile-surface-body {
-  min-height: 540px;
+  /* Раньше 540 px держали левую колонку рядом с длинным рельсом; теперь под
+     профилем стоят свёрнутые разделы, и пустой запас только рвёт их от него (B233). */
+  min-height: 0;
 }
 
 .career-intelligence-panel.is-expanded .career-market-watch {
@@ -5315,7 +5326,8 @@
     padding: 0 4px 16px;
   }
 
-  .career-cabinet-header h1 {
+  .career-cabinet-header h1,
+  .career-view-heading h1 {
     font-size: var(--career-text-lg);
   }
 
@@ -5360,7 +5372,7 @@
   .career-vacancy-chips button,
   .career-vacancy-active-filters button,
   .career-profile-update-state button,
-  .career-job-improve-btn {
+  .career-job-improve {
     min-height: 44px;
   }
 
@@ -8160,9 +8172,10 @@
 
 .career-strategy-review > header {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  gap: 4px 10px;
 }
 
 .career-strategy-review h3 {
@@ -8171,10 +8184,11 @@
   letter-spacing: -0.01em;
 }
 
+/* Один список, а не пять равных плиток: пять карточек одного веса справа
+   спорили с очередью слева (B233, аудит 2026-09-20, находка 4). */
 .career-signal-list {
   display: grid;
-  gap: 8px;
-  margin: 0;
+  margin: var(--career-space-2) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -8182,9 +8196,13 @@
 .career-signal-list li {
   display: grid;
   gap: 3px;
-  padding: 10px 12px;
-  border: 1px solid var(--career-line);
-  border-radius: var(--career-radius-md);
+  padding: var(--career-space-2) 0 var(--career-space-2) var(--career-space-3);
+  border-top: 1px solid var(--career-line);
+  border-left: 2px solid transparent;
+}
+
+.career-signal-list li:first-child {
+  border-top: 0;
 }
 
 .career-signal-list small {
@@ -8193,8 +8211,9 @@
   line-height: 1.4;
 }
 
+/* Сработавший сигнал отмечен кромкой и словом, не рамкой на всю карточку. */
 .career-signal-list li.is-fired {
-  border-color: var(--career-warning);
+  border-left-color: var(--career-warning);
 }
 
 .career-signal-list li.is-untracked {
@@ -8277,11 +8296,13 @@
   font-size: var(--career-text-xs);
 }
 
-.career-market-sample {
+/* Подпись выборки в «Ролях и рынке» — своё имя: `.career-market-sample`
+   принадлежит секции «Карты» с margin-top 48 px, и подпись наследовала дыру (B233). */
+.career-market-sample-note {
   font-size: var(--career-text-xs);
 }
 
-.career-market-sample.is-unknown {
+.career-market-sample-note.is-unknown {
   color: var(--career-text-dim);
 }
 
@@ -9037,6 +9058,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Работодатель и место в очереди — слова, не числа: без mono (B233). */
+.career-job-meta {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
 .career-job-bullets {
   display: grid;
   gap: 6px;
@@ -9079,13 +9106,102 @@
   align-items: center;
   gap: 7px;
   min-height: 32px;
-  border: 0;
+  /* Контур, не заливка: единственная акцентная заливка Главной — «Проверить
+     факты» (B233, одна ведущая вещь). */
+  border: 1px solid var(--career-line-strong);
   border-radius: 10px;
   padding: 6px 13px;
-  color: var(--career-accent-ink);
-  background: var(--career-accent);
+  color: var(--career-accent);
+  background: transparent;
   font-size: var(--career-text-xs);
   font-weight: 700;
+}
+
+/* Свёрнутые разделы под профилем на Главной (B233). Заголовок раздела внутри
+   не повторяется: его называет summary. */
+.career-home-folds {
+  display: grid;
+  gap: var(--career-space-2);
+  margin-top: var(--career-space-4);
+}
+
+.career-home-fold {
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.career-home-fold > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: var(--career-space-2) var(--career-space-4);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.career-home-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.career-home-fold > summary::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--career-text-dim);
+  border-bottom: 2px solid var(--career-text-dim);
+  transform: rotate(45deg);
+  transition: transform 180ms ease;
+}
+
+.career-home-fold[open] > summary::after {
+  transform: rotate(-135deg);
+}
+
+.career-home-fold > summary:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: -2px;
+}
+
+.career-home-fold > section {
+  border: 0;
+  border-top: 1px solid var(--career-line);
+  border-radius: 0;
+  padding: var(--career-space-4);
+  background: transparent;
+}
+
+/* Summary называет раздел; дубль заголовка прячется только у первой секции,
+   остальные (Стратегия, задания) остаются с именами (ревью designer). */
+.career-home-fold > section:first-of-type.career-home-panel > header > h3,
+.career-home-fold > .career-ats-card > header span {
+  display: none;
+}
+
+/* Содержимое рельса на 745 px: списки колонками, кнопки не на всю ширину. */
+.career-home-fold .career-roles-list,
+.career-home-fold .career-market-list {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.career-home-fold .career-quiet-button,
+.career-home-fold .career-btn {
+  width: auto;
+  justify-self: start;
+}
+
+.career-job-improve:hover {
+  border-color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.career-job-improve:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
 }
 
 .career-job-empty,
