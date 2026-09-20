@@ -14,7 +14,12 @@ import {
   type VacancyPoolPage,
   type VacancyPoolQuery,
 } from './vacancyPoolQuery';
-import type { StoredSourceState, VacancyLink, VacancyPoolStore } from './vacancyPoolStore';
+import type {
+  MergeSliceResult,
+  StoredSourceState,
+  VacancyLink,
+  VacancyPoolStore,
+} from './vacancyPoolStore';
 import {
   catalogEntryRowOfCluster,
   type CatalogEntriesPage,
@@ -192,15 +197,20 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     sourceId: string,
     vacancies: readonly UnifiedVacancy[],
     dropObservedBefore?: string,
-  ): void {
+  ): MergeSliceResult {
     for (const vacancy of vacancies) this.upsert(sourceId, vacancy);
     const dropBeforeMs = parseMs(dropObservedBefore);
-    if (dropBeforeMs === undefined) return;
+    const dropped: VacancyLink[] = [];
+    if (dropBeforeMs === undefined) return { dropped };
     for (const [id, row] of this.rows) {
       if (row.expiredAt !== undefined || row.sourceId !== sourceId) continue;
       const observedMs = parseMs(row.vacancy.provenance.observedAt);
-      if (observedMs === undefined || observedMs < dropBeforeMs) this.rows.delete(id);
+      if (observedMs === undefined || observedMs < dropBeforeMs) {
+        dropped.push({ id, url: row.vacancy.url });
+        this.rows.delete(id);
+      }
     }
+    return { dropped };
   }
 
   markExpired(vacancyIds: readonly string[], atIso: string): number {

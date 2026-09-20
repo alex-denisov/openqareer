@@ -967,3 +967,32 @@ CREATE TABLE IF NOT EXISTS hh_crawl_plan_cache (
   planned_at TEXT NOT NULL
 ) STRICT;
 `;
+
+/**
+ * Ключи кластеров для сведения без полной пересборки (B230). Виды — те же,
+ * что у `ClusterIndex` в куче, плюс `member` для точечного снятия записи.
+ * `cluster_keys_backfill_state` — курсор резюмируемого заполнения по
+ * существующим кластерам, по образцу `catalog_projection_state`.
+ */
+export const VACANCY_CLUSTER_KEYS_TABLE = `
+CREATE TABLE IF NOT EXISTS vacancy_cluster_keys (
+  kind TEXT NOT NULL,
+  key TEXT NOT NULL,
+  cluster_id TEXT NOT NULL,
+  PRIMARY KEY (kind, key, cluster_id)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS vacancy_cluster_keys_by_cluster
+  ON vacancy_cluster_keys(cluster_id, kind, key);
+CREATE TABLE IF NOT EXISTS cluster_keys_backfill_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  cursor_rowid INTEGER NOT NULL DEFAULT 0,
+  completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO cluster_keys_backfill_state (id) VALUES (1);
+`;
+
+/** Представитель кластера для сравнения без чтения `cluster_json` (B230). */
+export const VACANCY_CLUSTER_REPRESENTATIVE_COLUMN = `
+ALTER TABLE vacancy_clusters ADD COLUMN representative TEXT;
+`;

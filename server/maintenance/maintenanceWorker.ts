@@ -21,6 +21,8 @@ export interface MaintenanceEngine {
   syncDue(nowMs?: number): Promise<SourceSyncOutcome[]>;
   probeDueLinks(nowMs?: number): Promise<LinkCheckCensus | undefined>;
   runCatalogMaintenanceStep(chunk?: number): { processed: number; pending: number } | undefined;
+  runClusterKeysBackfillStep(chunk?: number): number;
+  readonly clusterKeysReady: boolean;
   readonly poolSize: number;
 }
 
@@ -28,7 +30,7 @@ export interface SyncWaveReport {
   readonly synced: number;
   readonly failed: readonly string[];
   readonly kept: number;
-  readonly skipped?: 'stopped' | 'memory' | 'busy';
+  readonly skipped?: 'stopped' | 'memory' | 'busy' | 'keys';
 }
 
 export interface MaintenanceIntervals {
@@ -47,6 +49,9 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
 
 /** Столько строк проекции каталога за один такт: одна короткая транзакция. */
 export const CATALOG_STEP_CHUNK = 500;
+
+/** Кластеров за один шаг заполнения ключей: ~5 000 строк ключей в транзакции. */
+export const CLUSTER_KEYS_STEP_CHUNK = 500;
 
 /**
  * Цикл обслуживания пула вакансий (B230, срез 1). Живёт в своём процессе с
@@ -95,12 +100,40 @@ export class MaintenanceWorker {
       { restored: result.restored, poolSize: this.engine.poolSize, ms: Date.now() - startedAt },
       'maintenance-restored',
     );
+    await this.backfillClusterKeys();
     return result;
+  }
+
+  /**
+   * Ключи кластеров должны покрыть все старые кластеры до первой волны: иначе
+   * сведение по ключам не найдёт соседей и наплодит дублей (B230). Шаг — одна
+   * транзакция, между шагами цикл событий отпускается.
+   */
+  private async backfillClusterKeys(): Promise<void> {
+    if (this.engine.clusterKeysReady) return;
+    const startedAt = Date.now();
+    let clusters = 0;
+    let steps = 0;
+    while (!this.stopped) {
+      const processed = this.engine.runClusterKeysBackfillStep(CLUSTER_KEYS_STEP_CHUNK);
+      if (processed === 0) break;
+      clusters += processed;
+      steps += 1;
+      if (steps % 50 === 0) {
+        this.log.info({ clusters, ms: Date.now() - startedAt }, 'cluster-keys-backfill-progress');
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    this.log.info(
+      { clusters, ms: Date.now() - startedAt, ready: this.engine.clusterKeysReady },
+      'cluster-keys-backfill-finished',
+    );
   }
 
   /** Одна волна опросов: только площадки, у которых подошёл срок. */
   async runSyncWave(): Promise<SyncWaveReport> {
     if (this.stopped) return { synced: 0, failed: [], kept: 0, skipped: 'stopped' };
+    if (!this.engine.clusterKeysReady) return { synced: 0, failed: [], kept: 0, skipped: 'keys' };
     if (this.inFlight) return { synced: 0, failed: [], kept: 0, skipped: 'busy' };
     const memory = this.memoryGuard.check();
     if (memory.changed) {

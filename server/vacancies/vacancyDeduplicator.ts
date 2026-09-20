@@ -89,7 +89,7 @@ function cleanCompanyName(company: string): string {
  * выкат откатывался. Правила сравнения те же — меняется только то, что разбор
  * делается один раз на запись, а не миллионы раз на пару.
  */
-interface PreparedVacancy {
+export interface PreparedVacancy {
   readonly fingerprint: string;
   readonly url: string;
   readonly atsLink: string | null;
@@ -99,7 +99,7 @@ interface PreparedVacancy {
   readonly normalizedTitle: string;
 }
 
-function prepareVacancy(vacancy: UnifiedVacancy): PreparedVacancy {
+export function prepareVacancy(vacancy: UnifiedVacancy): PreparedVacancy {
   const company = cleanCompanyName(vacancy.company);
   return {
     fingerprint: vacancy.fingerprint,
@@ -112,7 +112,7 @@ function prepareVacancy(vacancy: UnifiedVacancy): PreparedVacancy {
   };
 }
 
-function isDuplicatePrepared(a: PreparedVacancy, b: PreparedVacancy): boolean {
+export function isDuplicatePrepared(a: PreparedVacancy, b: PreparedVacancy): boolean {
   if (a.fingerprint === b.fingerprint) return true;
   if (a.url && b.url && a.url === b.url) return true;
   if (a.atsLink && b.atsLink && a.atsLink === b.atsLink) return true;
@@ -160,7 +160,7 @@ function updateClusterLocation(cluster: VacancyCluster, location?: string): void
   }
 }
 
-function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: UnifiedVacancy) {
+export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: UnifiedVacancy): void {
   const existingSourceIndex = cluster.sources.findIndex((source) => {
     if (source.sourceId !== vacancy.provenance.sourceId) return false;
     if (source.externalId && vacancy.provenance.externalId) {
@@ -199,7 +199,7 @@ function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: UnifiedVacanc
   }
 }
 
-function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluster {
+export function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluster {
   return {
     id: `cluster-${vacancy.id}`,
     canonicalTitle: vacancy.title,
@@ -261,8 +261,10 @@ export class ClusterIndex {
     }
     this.removeFromBucket(this.byUrl, prepared.url, index);
     if (prepared.atsLink) this.removeFromBucket(this.byAtsLink, prepared.atsLink, index);
-    for (const token of prepared.companyTokens) this.removeFromBucket(this.byCompanyToken, token, index);
-    for (const token of prepared.roleTitleTokens) this.removeFromBucket(this.byTitleToken, token, index);
+    for (const token of prepared.companyTokens)
+      this.removeFromBucket(this.byCompanyToken, token, index);
+    for (const token of prepared.roleTitleTokens)
+      this.removeFromBucket(this.byTitleToken, token, index);
   }
 
   private removeFromBucket(map: Map<string, number[]>, key: string, index: number): void {
@@ -389,7 +391,7 @@ export async function clusterVacanciesAsync(
   return clusters;
 }
 
-function prepareCluster(cluster: VacancyCluster): PreparedVacancy {
+export function prepareCluster(cluster: VacancyCluster): PreparedVacancy {
   const company = cleanCompanyName(cluster.canonicalCompany);
   return {
     fingerprint: cluster.id,
@@ -547,4 +549,148 @@ export function calculateSourceAuthenticity(
     originalShare: { counted: originals, of: total },
     reprintShare: { counted: reprints, of: total },
   };
+}
+
+/**
+ * Ключи кластера для поиска соседей в SQL (B230).
+ *
+ * `ClusterIndex` держит пять словарей в куче — по отпечатку, ссылке,
+ * ATS-ссылке, токенам работодателя и токенам названия. Те же ключи, положенные
+ * в таблицу `vacancy_cluster_keys`, позволяют брать из базы только кластеры,
+ * с которыми партия новых записей вообще может совпасть, — вместо всех
+ * 380 000. Правила склейки не меняются: меняется только, откуда берутся
+ * соседи. Шестой вид, `member`, — то, по чему запись находит свой кластер при
+ * снятии с площадки: `externalId` и `sourceUrl` каждого источника.
+ */
+export type ClusterKeyKind =
+  'fingerprint' | 'url' | 'ats' | 'company_token' | 'title_token' | 'member';
+
+export interface ClusterKey {
+  readonly kind: ClusterKeyKind;
+  readonly key: string;
+}
+
+export function clusterKeys(cluster: VacancyCluster): ClusterKey[] {
+  const prepared = prepareCluster(cluster);
+  const keys: ClusterKey[] = [{ kind: 'fingerprint', key: prepared.fingerprint }];
+  if (prepared.url) keys.push({ kind: 'url', key: prepared.url });
+  if (prepared.atsLink) keys.push({ kind: 'ats', key: prepared.atsLink });
+  for (const token of prepared.companyTokens) keys.push({ kind: 'company_token', key: token });
+  for (const token of prepared.roleTitleTokens) keys.push({ kind: 'title_token', key: token });
+  // Членство — только по источникам: основатель тоже лежит в `sources`, а
+  // после снятия его id в имени кластера не должен находить кластер.
+  const members = new Set<string>();
+  for (const source of cluster.sources) {
+    if (source.externalId) members.add(source.externalId);
+    if (source.sourceUrl) members.add(source.sourceUrl);
+  }
+  for (const member of members) keys.push({ kind: 'member', key: member });
+  return keys;
+}
+
+/**
+ * Чем запись ищет соседей: прямые ключи (любое совпадение — сосед) и две
+ * группы токенов, из которых сосед обязан задеть по одному из каждой — ровно
+ * как `ClusterIndex.sameCompanyAndTitle`.
+ */
+export interface VacancyClusterLookup {
+  readonly direct: readonly ClusterKey[];
+  readonly companyTokens: readonly string[];
+  readonly titleTokens: readonly string[];
+}
+
+export function vacancyClusterLookup(vacancy: UnifiedVacancy): VacancyClusterLookup {
+  const prepared = prepareVacancy(vacancy);
+  const direct: ClusterKey[] = [{ kind: 'fingerprint', key: prepared.fingerprint }];
+  if (prepared.url) direct.push({ kind: 'url', key: prepared.url });
+  if (prepared.atsLink) direct.push({ kind: 'ats', key: prepared.atsLink });
+  for (const member of memberKeysOf(vacancy)) direct.push({ kind: 'member', key: member });
+  return {
+    direct,
+    companyTokens: Array.from(prepared.companyTokens),
+    titleTokens: Array.from(prepared.roleTitleTokens),
+  };
+}
+
+/** Чем запись находит свой кластер: id, ссылка, `externalId`, `sourceUrl`. */
+export interface VacancyMemberRef {
+  readonly id: string;
+  readonly url?: string;
+  readonly provenance?: { readonly externalId?: string; readonly sourceUrl?: string };
+}
+
+export function memberKeysOf(vacancy: VacancyMemberRef): string[] {
+  const keys = new Set<string>([vacancy.id]);
+  if (vacancy.url) keys.add(vacancy.url);
+  if (vacancy.provenance?.externalId) keys.add(vacancy.provenance.externalId);
+  if (vacancy.provenance?.sourceUrl) keys.add(vacancy.provenance.sourceUrl);
+  return Array.from(keys);
+}
+
+/**
+ * Представитель кластера — то, что `prepareCluster` даёт по JSON, в компактной
+ * строке колонки `vacancy_clusters.representative`. Партия сравнивается с
+ * кандидатами по представителям, а кластер целиком читается только для того,
+ * с кем запись совпала (B230).
+ */
+export interface ClusterRepresentative {
+  readonly clusterId: string;
+  readonly prepared: PreparedVacancy;
+  readonly members: ReadonlySet<string>;
+}
+
+interface SerializedRepresentative {
+  readonly f: string;
+  readonly u: string;
+  readonly a: string | null;
+  readonly c: string;
+  readonly t: string;
+  readonly ct: readonly string[];
+  readonly tt: readonly string[];
+  readonly m: readonly string[];
+}
+
+export function serializeRepresentative(cluster: VacancyCluster): string {
+  const prepared = prepareCluster(cluster);
+  const members = new Set<string>();
+  for (const source of cluster.sources) {
+    if (source.externalId) members.add(source.externalId);
+    if (source.sourceUrl) members.add(source.sourceUrl);
+  }
+  const serialized: SerializedRepresentative = {
+    f: prepared.fingerprint,
+    u: prepared.url,
+    a: prepared.atsLink,
+    c: prepared.company,
+    t: prepared.normalizedTitle,
+    ct: Array.from(prepared.companyTokens),
+    tt: Array.from(prepared.roleTitleTokens),
+    m: Array.from(members),
+  };
+  return JSON.stringify(serialized);
+}
+
+export function parseRepresentative(
+  clusterId: string,
+  serialized: string,
+): ClusterRepresentative | undefined {
+  try {
+    const raw = JSON.parse(serialized) as SerializedRepresentative;
+    if (!raw || typeof raw.f !== 'string') return undefined;
+    return {
+      clusterId,
+      prepared: {
+        fingerprint: raw.f,
+        url: raw.u ?? '',
+        atsLink: raw.a ?? null,
+        company: raw.c ?? '',
+        normalizedTitle: raw.t ?? '',
+        companyTokens: new Set(raw.ct ?? []),
+        roleTitleTokens: new Set(raw.tt ?? []),
+      },
+      members: new Set(raw.m ?? []),
+    };
+  } catch {
+    return undefined;
+  }
 }

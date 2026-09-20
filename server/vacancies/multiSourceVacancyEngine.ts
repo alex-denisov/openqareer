@@ -37,7 +37,12 @@ import {
 import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancyMatcher';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
 import { freshnessWindow, isWithin, parseMs, MAX_VACANCY_AGE_DAYS } from './vacancyPoolQuery';
-import type { VacancyPoolStore } from './vacancyPoolStore';
+import type { VacancyLink, VacancyPoolStore } from './vacancyPoolStore';
+import {
+  clusterBatchByKeys,
+  detachVacanciesByKeys,
+  type KeyedClusterStore,
+} from './keyedClusterer';
 import type {
   CatalogEntriesPage,
   CatalogEntriesQuery,
@@ -165,10 +170,26 @@ export const SYNC_BATCH_LIMIT = 12;
  *
  * `off` — запрет полной пересборки (B230): пул и состояние площадок пишутся,
  * кластеры не трогаются ни синхронно, ни в фоне, а явный вызов бросает
- * ошибку. Это режим обслуживателя на проде, где весь пул в кучу не входит.
+ * ошибку. Это режим HTTP-процесса на проде, где весь пул в кучу не входит.
+ *
+ * `keyed` — сведение по ключам (B230): каждый улов сводится партиями с
+ * кластерами, которые задели его ключи в `vacancy_cluster_keys`; ушедшие из
+ * среза записи снимаются с кластеров точечно. Полная пересборка запрещена
+ * так же, как в `off`. Это режим обслуживателя.
  */
 export type ReclusterMode =
-  { mode: 'sync' } | { mode: 'background'; minIntervalMs: number } | { mode: 'off' };
+  | { mode: 'sync' }
+  | { mode: 'background'; minIntervalMs: number }
+  | { mode: 'off' }
+  | { mode: 'keyed'; batchSize: number };
+
+/** Сколько записей одной партии сведения по ключам (B230): партия × соседи в куче. */
+export const DEFAULT_KEYED_BATCH_SIZE = 500;
+
+/** Режимы, в которых полная пересборка кластеров запрещена. */
+function forbidsFullRecluster(mode: ReclusterMode): boolean {
+  return mode.mode === 'off' || mode.mode === 'keyed';
+}
 
 export class ReclusterDisabledError extends Error {
   constructor() {
@@ -227,6 +248,8 @@ export class MultiSourceVacancyEngine {
   private pendingVacancies: UnifiedVacancy[] = [];
   /** A complete source replacement invalidates the old cluster membership. */
   private requiresFullRecluster = false;
+  /** Сколько уловов сведено по ключам (B230) — для журнала обслуживателя. */
+  private keyedClusterings = 0;
   private fetcher?: SourceFetcher;
   /**
    * Где лежит пул. Движок не держит копию в куче: каждое чтение — вопрос к
@@ -557,6 +580,18 @@ export class MultiSourceVacancyEngine {
   }
 
   /** One event-loop-sized materialization tick for B229. */
+  /**
+   * Один шаг заполнения `vacancy_cluster_keys` по кластерам, записанным до
+   * B230; ноль — заполнять нечего. Хранилище без ключей — сразу готово.
+   */
+  public runClusterKeysBackfillStep(chunk?: number): number {
+    return this.pool.backfillClusterKeysStep?.(chunk) ?? 0;
+  }
+
+  public get clusterKeysReady(): boolean {
+    return this.pool.clusterKeysReady?.() ?? true;
+  }
+
   public runCatalogMaintenanceStep(
     chunk?: number,
   ): { processed: number; pending: number } | undefined {
@@ -784,13 +819,18 @@ export class MultiSourceVacancyEngine {
     // выдачи и про остальное ничего не сказал, поэтому «нет в улове» здесь не
     // значит «снято». Срез дополняется, а устаревшее убирает тридцатидневная
     // уборка и проверка живости ссылок (B214).
-    if (partial) this.pool.mergeSourceSlice(source.id, freshFetched, dropObservedBefore);
-    else {
+    if (this.reclusterMode.mode === 'keyed') {
+      this.acceptReadingKeyed(source, freshFetched, partial, dropObservedBefore);
+    } else if (partial) {
+      this.pool.mergeSourceSlice(source.id, freshFetched, dropObservedBefore);
+    } else {
       this.pool.replaceSourceSlice(source.id, freshFetched);
       this.requiresFullRecluster = true;
     }
-    if (dropObservedBefore) this.requiresFullRecluster = true;
-    if (changedExistingMembership) this.requiresFullRecluster = true;
+    if (this.reclusterMode.mode !== 'keyed') {
+      if (dropObservedBefore) this.requiresFullRecluster = true;
+      if (changedExistingMembership) this.requiresFullRecluster = true;
+    }
     const slice = this.pool.countSourceSlice(source.id);
 
     // The clock of the run, so the next due check measures the same instant
@@ -804,13 +844,60 @@ export class MultiSourceVacancyEngine {
     source.itemsActiveTotal = slice.active;
     this.persistSourceState(source);
 
-    // В режиме `off` очередь на сведение не копится: её никто не разберёт, а
-    // на проде за сутки волн она перевесила бы кучу обслуживателя (B230).
-    if (freshFetched.length > 0 && this.reclusterMode.mode !== 'off') {
+    // В режимах `off` и `keyed` очередь на сведение не копится: `off` её не
+    // разберёт, `keyed` уже свёл партию, а на проде за сутки волн она
+    // перевесила бы кучу обслуживателя (B230).
+    if (freshFetched.length > 0 && !forbidsFullRecluster(this.reclusterMode)) {
       this.pendingVacancies.push(...freshFetched);
     }
     this.poolChangedSinceRecluster = true;
     return freshFetched.length;
+  }
+
+  /**
+   * Приём улова в режиме `keyed` (B230): срез пишется как обычно, ушедшие
+   * записи снимаются с кластеров точечно, новые сводятся партиями с соседями
+   * по ключам. В куче — партия и её соседи, а не пул.
+   */
+  private acceptReadingKeyed(
+    source: VacancySourceConfig,
+    freshFetched: readonly UnifiedVacancy[],
+    partial: boolean,
+    dropObservedBefore?: string,
+  ): void {
+    const store = this.keyedStore();
+    let gone: readonly VacancyLink[];
+    if (partial) {
+      gone = this.pool.mergeSourceSlice(source.id, freshFetched, dropObservedBefore).dropped;
+    } else {
+      const fetchedIds = new Set(freshFetched.map((vacancy) => vacancy.id));
+      gone = this.pool.loadSourceLinks(source.id).filter((link) => !fetchedIds.has(link.id));
+      this.pool.replaceSourceSlice(source.id, freshFetched);
+    }
+    if (gone.length > 0) detachVacanciesByKeys(store, gone);
+    const batchSize =
+      this.reclusterMode.mode === 'keyed' ? this.reclusterMode.batchSize : DEFAULT_KEYED_BATCH_SIZE;
+    for (let offset = 0; offset < freshFetched.length; offset += batchSize) {
+      clusterBatchByKeys(store, freshFetched.slice(offset, offset + batchSize));
+    }
+    this.keyedClusterings += 1;
+  }
+
+  private keyedStore(): KeyedClusterStore {
+    const pool = this.pool;
+    const loadClustersByKeys = pool.loadClustersByKeys?.bind(pool);
+    const loadClusterRepresentatives = pool.loadClusterRepresentatives?.bind(pool);
+    const getCluster = pool.getCluster?.bind(pool);
+    if (!loadClustersByKeys || !loadClusterRepresentatives || !getCluster) {
+      throw new Error('recluster mode keyed needs a store with vacancy_cluster_keys');
+    }
+    return {
+      loadClustersByKeys,
+      loadClusterRepresentatives,
+      getCluster,
+      saveClusters: (clusters) => pool.saveClusters(clusters),
+      deleteCluster: (id) => pool.deleteCluster(id),
+    };
   }
 
   private ensureLoadedClusters(): void {
@@ -879,9 +966,19 @@ export class MultiSourceVacancyEngine {
 
     if (goneVacancyIds.length > 0) {
       this.pool.markExpired(goneVacancyIds, census.checkedAt);
-      this.handleExpiredVacancies(goneVacancyIds);
-      this.poolChangedSinceRecluster = true;
-      this.reclusterIfChanged();
+      if (this.reclusterMode.mode === 'keyed') {
+        // Снятая ссылка уходит из своего кластера по ключу члена, без чтения
+        // всех кластеров в кучу (B230). Ссылки уже в руках — из выборки обхода.
+        const goneSet = new Set(goneVacancyIds);
+        detachVacanciesByKeys(
+          this.keyedStore(),
+          links.filter((link) => goneSet.has(link.id)),
+        );
+      } else {
+        this.handleExpiredVacancies(goneVacancyIds);
+        this.poolChangedSinceRecluster = true;
+        this.reclusterIfChanged();
+      }
     }
     this.persistSourceState(source);
     return census;
@@ -1031,7 +1128,7 @@ export class MultiSourceVacancyEngine {
    * среза 3 (кластеры в таблице, инкрементально).
    */
   public recluster(): void {
-    if (this.reclusterMode.mode === 'off') throw new ReclusterDisabledError();
+    if (forbidsFullRecluster(this.reclusterMode)) throw new ReclusterDisabledError();
     const startedAt = Date.now();
     this.ensureLoadedClusters();
     if (this.requiresFullRecluster) {
@@ -1054,7 +1151,7 @@ export class MultiSourceVacancyEngine {
   }
 
   public async reclusterAsync(chunkSize = 500): Promise<void> {
-    if (this.reclusterMode.mode === 'off') throw new ReclusterDisabledError();
+    if (forbidsFullRecluster(this.reclusterMode)) throw new ReclusterDisabledError();
     const startedAt = Date.now();
     this.ensureLoadedClusters();
     if (this.requiresFullRecluster) {
@@ -1113,6 +1210,7 @@ export class MultiSourceVacancyEngine {
   public get reclusterStats(): {
     clusters: number;
     pending: number;
+    keyedClusterings: number;
     rebuilds: number;
     lastReclusterMs: number;
     inFlight: boolean;
@@ -1120,6 +1218,7 @@ export class MultiSourceVacancyEngine {
     return {
       clusters: this.clusters.length,
       pending: this.pendingVacancies.length,
+      keyedClusterings: this.keyedClusterings,
       rebuilds: this.reclusterCount,
       lastReclusterMs: this.lastReclusterMs,
       inFlight: this.reclusterInFlight !== undefined,
@@ -1138,11 +1237,11 @@ export class MultiSourceVacancyEngine {
   /** Пересобирает пул, только если волна что-то в него принесла. */
   private reclusterIfChanged(): void {
     if (!this.poolChangedSinceRecluster) return;
-    if (this.reclusterMode.mode === 'off') return;
     if (this.reclusterMode.mode === 'sync') {
       this.recluster();
       return;
     }
+    if (this.reclusterMode.mode !== 'background') return;
     this.requestBackgroundRecluster(this.reclusterMode.minIntervalMs);
   }
 

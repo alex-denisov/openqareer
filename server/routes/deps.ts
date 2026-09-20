@@ -23,6 +23,8 @@ export interface RuntimeMemoryReport {
     clusters: number;
     /** Записей в очереди на сведение — ноль в режиме `off` (B230). */
     pending: number;
+    /** Уловов, сведённых по ключам (B230). */
+    keyedClusterings: number;
     rebuilds: number;
     lastReclusterMs: number;
     inFlight: boolean;

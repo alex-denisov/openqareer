@@ -1,4 +1,5 @@
 import type { UnifiedVacancy, VacancyCluster, VacancySourceConfig } from '../domain/unifiedVacancy';
+import type { ClusterRepresentative, VacancyClusterLookup } from './vacancyDeduplicator';
 import type { SourceObservations } from './sourceHealthVerdict';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 import type {
@@ -32,6 +33,11 @@ export interface StoredSourceState {
    * деплой объявлял бы любую площадку «ещё ни разу не опрошенной» (B200).
    */
   readonly observations?: SourceObservations;
+}
+
+/** Что снял `mergeSourceSlice`: по этим ссылкам записи покидают кластеры (B230). */
+export interface MergeSliceResult {
+  readonly dropped: readonly VacancyLink[];
 }
 
 /** Ссылка объявления без остальной записи — всё, что нужно обходу живости. */
@@ -92,7 +98,7 @@ export interface VacancyPoolStore {
     sourceId: string,
     vacancies: readonly UnifiedVacancy[],
     dropObservedBefore?: string,
-  ): void;
+  ): MergeSliceResult;
   loadSourceStates(): StoredSourceState[];
   /** Swaps everything this source contributed for what it just returned. */
   replaceSourceSlice(sourceId: string, vacancies: readonly UnifiedVacancy[]): void;
@@ -118,6 +124,14 @@ export interface VacancyPoolStore {
   upsertCluster(cluster: VacancyCluster): void;
   deleteCluster(clusterId: string): void;
   countClusters(): number;
+  /**
+   * Сведение по ключам (B230): соседи партии из `vacancy_cluster_keys`,
+   * резюмируемое заполнение ключей по старым кластерам и его готовность.
+   */
+  loadClustersByKeys?(lookups: readonly VacancyClusterLookup[]): VacancyCluster[];
+  loadClusterRepresentatives?(lookups: readonly VacancyClusterLookup[]): ClusterRepresentative[];
+  backfillClusterKeysStep?(chunk?: number): number;
+  clusterKeysReady?(): boolean;
   /** Materialized public catalog (B229); absent while its bounded backfill runs. */
   loadCatalogEntriesPage?(query: CatalogEntriesQuery): CatalogEntriesPage;
   loadCatalogListings?(): Array<{

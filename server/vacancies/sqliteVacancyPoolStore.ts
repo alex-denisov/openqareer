@@ -10,6 +10,8 @@ import {
   VACANCY_POOL_EXPIRED_AT_COLUMN,
   VACANCY_CLUSTER_INPUT_TABLE,
   VACANCY_CATALOG_ENTRIES_TABLE,
+  VACANCY_CLUSTER_KEYS_TABLE,
+  VACANCY_CLUSTER_REPRESENTATIVE_COLUMN,
   VACANCY_POOL_INDEX_TABLE,
   VACANCY_SOURCE_OBSERVATIONS_COLUMN,
 } from '../data/sqliteSchema';
@@ -30,7 +32,12 @@ import {
   type VacancyPoolPage,
   type VacancyPoolQuery,
 } from './vacancyPoolQuery';
-import type { StoredSourceState, VacancyLink, VacancyPoolStore } from './vacancyPoolStore';
+import type {
+  MergeSliceResult,
+  StoredSourceState,
+  VacancyLink,
+  VacancyPoolStore,
+} from './vacancyPoolStore';
 import {
   catalogEntryRowOfCluster,
   type CatalogEntriesPage,
@@ -38,6 +45,13 @@ import {
   type CatalogEntryRow,
 } from './vacancyCatalogProjection';
 import type { CatalogListingSummary } from './vacancyCatalogFacets';
+import {
+  clusterKeys,
+  parseRepresentative,
+  serializeRepresentative,
+  type ClusterRepresentative,
+  type VacancyClusterLookup,
+} from './vacancyDeduplicator';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 
 interface VacancyRow {
@@ -91,6 +105,9 @@ const SOURCE_STATUSES = new Set(['healthy', 'degraded', 'error']);
 export const BACKFILL_CHUNK = 2_000;
 /** Public catalog projection is intentionally smaller than the legacy index pass. */
 export const CATALOG_BACKFILL_CHUNK = 100;
+
+/** Дальше этого корзина ключа не считается: сторона и так «большая» (B230). */
+const BUCKET_SIZE_CAP = 2_000;
 
 /** Живые строки индекса: похороненная запись из пула не отдаётся (B200 срез 2). */
 const ALIVE = 'i.expired = 0';
@@ -155,6 +172,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private catalogBackfillCursor = 0;
   /** Completion is durable and makes later timer ticks pure no-ops. */
   private catalogBackfillComplete = false;
+  /** Докуда дошло заполнение `vacancy_cluster_keys` по старым кластерам (B230). */
+  private clusterKeysBackfillCursor = 0;
+  private clusterKeysBackfillComplete = false;
 
   constructor(options: { databasePath: string; matchReader?: MatchRowReader }) {
     this.matchReader = options.matchReader;
@@ -176,6 +196,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CLUSTER_INPUT_TABLE);
     this.database.exec(VACANCY_CLUSTERS_TABLE);
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
+    this.database.exec(VACANCY_CLUSTER_KEYS_TABLE);
+    this.ensureColumn('vacancy_clusters', 'representative', VACANCY_CLUSTER_REPRESENTATIVE_COLUMN);
+    const keysState = this.database
+      .prepare('SELECT cursor_rowid, completed FROM cluster_keys_backfill_state WHERE id = 1')
+      .get() as { cursor_rowid: number; completed: number } | undefined;
+    this.clusterKeysBackfillComplete = keysState?.completed === 1;
+    this.clusterKeysBackfillCursor = keysState?.cursor_rowid ?? 0;
     const projectionState = this.database
       .prepare('SELECT cursor_rowid, completed FROM catalog_projection_state WHERE id = 1')
       .get() as { cursor_rowid: number; completed: number } | undefined;
@@ -412,13 +439,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       ) SELECT c.cluster_json AS payload FROM selected s
         JOIN vacancy_cluster_input c ON c.id = s.id
         ORDER BY ${preferRemote ? 's.remote_order DESC, ' : ''}s.published_ms DESC, s.id ASC`,
-      params: [
-        window.fromMs,
-        window.toMs,
-        ...terms.map((term) => `%${term}%`),
-        ...seenIds,
-        limit,
-      ],
+      params: [window.fromMs, window.toMs, ...terms.map((term) => `%${term}%`), ...seenIds, limit],
     };
   }
 
@@ -630,13 +651,16 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const remove = this.database.prepare(
       'DELETE FROM vacancy_pool WHERE source_id = ? AND expired_at IS NULL',
     );
+    // Проекция снимается по срезу, а не сверкой всей таблицы: `NOT IN` по
+    // 560 000 записей прода держал write-lock секундами на каждую замену (B230).
     const removeProjection = this.database.prepare(
-      `DELETE FROM vacancy_cluster_input WHERE id NOT IN (SELECT id FROM vacancy_pool)`,
+      `DELETE FROM vacancy_cluster_input WHERE id IN
+         (SELECT id FROM vacancy_pool WHERE source_id = ? AND expired_at IS NULL)`,
     );
     this.inTransaction(() => {
+      removeProjection.run(sourceId);
       removeIndex.run(sourceId);
       remove.run(sourceId);
-      removeProjection.run();
       this.upsertAll(sourceId, vacancies);
     });
   }
@@ -645,8 +669,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     sourceId: string,
     vacancies: readonly UnifiedVacancy[],
     dropObservedBefore?: string,
-  ): void {
+  ): MergeSliceResult {
     const dropBeforeMs = parseMs(dropObservedBefore);
+    let dropped: VacancyLink[] = [];
     this.inTransaction(() => {
       this.upsertAll(sourceId, vacancies);
       if (dropBeforeMs === undefined) return;
@@ -654,16 +679,24 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       // не видел ни один тик с его начала, площадка больше не показывает (B219).
       const gone = `SELECT i.id FROM vacancy_pool_index i WHERE i.source_id = ? AND ${ALIVE}
              AND (i.observed_ms IS NULL OR i.observed_ms < ?)`;
+      dropped = this.database
+        .prepare(
+          `SELECT i.id AS id, i.url AS url FROM vacancy_pool_index i
+                   WHERE i.source_id = ? AND ${ALIVE}
+                     AND (i.observed_ms IS NULL OR i.observed_ms < ?)`,
+        )
+        .all(sourceId, dropBeforeMs) as unknown as VacancyLink[];
+      this.database
+        .prepare(`DELETE FROM vacancy_cluster_input WHERE id IN (${gone})`)
+        .run(sourceId, dropBeforeMs);
       this.database
         .prepare(`DELETE FROM vacancy_pool WHERE id IN (${gone})`)
         .run(sourceId, dropBeforeMs);
       this.database
         .prepare(`DELETE FROM vacancy_pool_index WHERE id IN (${gone})`)
         .run(sourceId, dropBeforeMs);
-      this.database.exec(
-        'DELETE FROM vacancy_cluster_input WHERE id NOT IN (SELECT id FROM vacancy_pool_index)',
-      );
     });
+    return { dropped };
   }
 
   saveSourceState(state: StoredSourceState): void {
@@ -775,15 +808,16 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private prepareClusterUpsert() {
     return this.database.prepare(
       `INSERT INTO vacancy_clusters (
-         id, fingerprint, title, company, cluster_json, items_count, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)
+         id, fingerprint, title, company, cluster_json, items_count, updated_at, representative
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          fingerprint = excluded.fingerprint,
          title = excluded.title,
          company = excluded.company,
          cluster_json = excluded.cluster_json,
          items_count = excluded.items_count,
-         updated_at = excluded.updated_at`,
+         updated_at = excluded.updated_at,
+         representative = excluded.representative`,
     );
   }
 
@@ -1011,10 +1045,241 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
           JSON.stringify(cluster),
           cluster.vacanciesCount,
           now,
+          serializeRepresentative(cluster),
         );
         this.upsertCatalogEntry(cluster);
+        this.writeClusterKeys(cluster);
       }
     });
+  }
+
+  private prepareClusterKeyStatements() {
+    return {
+      clear: this.database.prepare('DELETE FROM vacancy_cluster_keys WHERE cluster_id = ?'),
+      insert: this.database.prepare(
+        'INSERT OR IGNORE INTO vacancy_cluster_keys (kind, key, cluster_id) VALUES (?, ?, ?)',
+      ),
+    };
+  }
+
+  /** Ключи следуют за кластером: каждая запись кластера переписывает их целиком. */
+  private writeClusterKeys(
+    cluster: VacancyCluster,
+    statements = this.prepareClusterKeyStatements(),
+  ): void {
+    statements.clear.run(cluster.id);
+    for (const { kind, key } of clusterKeys(cluster)) statements.insert.run(kind, key, cluster.id);
+  }
+
+  private deleteClusterKeys(clusterId: string): void {
+    this.database.prepare('DELETE FROM vacancy_cluster_keys WHERE cluster_id = ?').run(clusterId);
+  }
+
+  /**
+   * Кластеры, которые задели ключи партии (B230): любое прямое совпадение
+   * (отпечаток, ссылка, ATS, член) или общий токен работодателя И общий
+   * токен названия — ровно то, что `ClusterIndex.candidates` находит в куче.
+   * Возвращает в порядке создания, как и индекс: при нескольких кандидатах
+   * побеждает старший.
+   */
+  loadClustersByKeys(lookups: readonly VacancyClusterLookup[]): VacancyCluster[] {
+    return this.loadClustersByIds(this.candidateClusterIds(lookups));
+  }
+
+  /**
+   * Представители кандидатов без чтения JSON: строки ключей, сгруппированные по
+   * кластеру. Партия сравнивается с ними, и только совпавший кластер читается
+   * целиком (`getCluster`) — куча растёт с числом совпадений, не кандидатов.
+   */
+  loadClusterRepresentatives(lookups: readonly VacancyClusterLookup[]): ClusterRepresentative[] {
+    const ids = this.candidateClusterIds(lookups);
+    const found = new Map<string, ClusterRepresentative>();
+    const chunk = 500;
+    for (let offset = 0; offset < ids.length; offset += chunk) {
+      const slice = ids.slice(offset, offset + chunk);
+      const marks = slice.map(() => '?').join(', ');
+      const rows = this.database
+        .prepare(`SELECT id, representative FROM vacancy_clusters WHERE id IN (${marks})`)
+        .all(...slice) as unknown as Array<{ id: string; representative: string | null }>;
+      for (const row of rows) {
+        if (!row.representative) continue;
+        const parsed = parseRepresentative(row.id, row.representative);
+        if (parsed) found.set(row.id, parsed);
+      }
+    }
+    // Порядок создания, как у индекса в куче: при нескольких кандидатах — старший.
+    return ids.filter((id) => found.has(id)).map((id) => found.get(id)!);
+  }
+
+  /** Id кластеров-кандидатов в порядке `rowid` — порядке создания. */
+  private candidateClusterIds(lookups: readonly VacancyClusterLookup[]): string[] {
+    const ids = new Set<string>();
+    const bucketSizes = new Map<string, number>();
+    const direct = this.database.prepare(
+      'SELECT cluster_id FROM vacancy_cluster_keys WHERE kind = ? AND key = ?',
+    );
+    for (const lookup of lookups) {
+      for (const { kind, key } of lookup.direct) {
+        for (const row of direct.all(kind, key) as unknown as Array<{ cluster_id: string }>) {
+          ids.add(row.cluster_id);
+        }
+      }
+      if (lookup.companyTokens.length === 0 || lookup.titleTokens.length === 0) continue;
+      for (const row of this.clustersSharingCompanyAndTitle(lookup, bucketSizes)) {
+        ids.add(row.cluster_id);
+      }
+    }
+    return this.orderByCreation(Array.from(ids));
+  }
+
+  private orderByCreation(ids: readonly string[]): string[] {
+    const ordered: Array<{ rowid: number; id: string }> = [];
+    const chunk = 500;
+    for (let offset = 0; offset < ids.length; offset += chunk) {
+      const slice = ids.slice(offset, offset + chunk);
+      const marks = slice.map(() => '?').join(', ');
+      const rows = this.database
+        .prepare(`SELECT rowid, id FROM vacancy_clusters WHERE id IN (${marks})`)
+        .all(...slice) as unknown as Array<{ rowid: number; id: string }>;
+      ordered.push(...rows);
+    }
+    return ordered.sort((a, b) => a.rowid - b.rowid).map((row) => row.id);
+  }
+
+  /**
+   * «Общий токен работодателя И общий токен названия» — обход со стороны
+   * меньшего множества, как в `ClusterIndex.sameCompanyAndTitle`: у крупного
+   * работодателя тысячи кластеров, а токен «dev» есть у половины пула.
+   * `INTERSECT` считал бы обе стороны целиком на каждую запись.
+   */
+  private clustersSharingCompanyAndTitle(
+    lookup: VacancyClusterLookup,
+    bucketSizes: Map<string, number>,
+  ): Array<{ cluster_id: string }> {
+    const size = (kind: string, keys: readonly string[]): number =>
+      keys.reduce((total, key) => total + this.bucketSize(kind, key, bucketSizes), 0);
+    const companySide = size('company_token', lookup.companyTokens);
+    if (companySide === 0) return [];
+    const titleSide = size('title_token', lookup.titleTokens);
+    if (titleSide === 0) return [];
+    const [outerKind, outerKeys, innerKind, innerKeys] =
+      companySide <= titleSide
+        ? (['company_token', lookup.companyTokens, 'title_token', lookup.titleTokens] as const)
+        : (['title_token', lookup.titleTokens, 'company_token', lookup.companyTokens] as const);
+    const outerMarks = outerKeys.map(() => '?').join(', ');
+    const innerMarks = innerKeys.map(() => '?').join(', ');
+    return this.database
+      .prepare(
+        `SELECT DISTINCT o.cluster_id AS cluster_id FROM vacancy_cluster_keys o
+          WHERE o.kind = ? AND o.key IN (${outerMarks})
+            AND EXISTS (
+              SELECT 1 FROM vacancy_cluster_keys i
+               WHERE i.cluster_id = o.cluster_id AND i.kind = ? AND i.key IN (${innerMarks})
+            )`,
+      )
+      .all(outerKind, ...outerKeys, innerKind, ...innerKeys) as unknown as Array<{
+      cluster_id: string;
+    }>;
+  }
+
+  /**
+   * Размер корзины ключа — по индексу, с кэшем на время одной партии и с
+   * потолком: чтобы выбрать меньшую сторону, точный счёт корзины «dev» на
+   * сотни тысяч записей не нужен.
+   */
+  private bucketSize(kind: string, key: string, cache: Map<string, number>): number {
+    const cacheKey = `${kind}\u0000${key}`;
+    const cached = cache.get(cacheKey);
+    if (cached !== undefined) return cached;
+    const row = this.database
+      .prepare(
+        `SELECT count(*) AS n FROM (
+           SELECT 1 FROM vacancy_cluster_keys WHERE kind = ? AND key = ? LIMIT ${BUCKET_SIZE_CAP}
+         )`,
+      )
+      .get(kind, key) as { n: number };
+    cache.set(cacheKey, row.n);
+    return row.n;
+  }
+
+  private loadClustersByIds(ids: readonly string[]): VacancyCluster[] {
+    const clusters: VacancyCluster[] = [];
+    const chunk = 500;
+    for (let offset = 0; offset < ids.length; offset += chunk) {
+      const slice = ids.slice(offset, offset + chunk);
+      const marks = slice.map(() => '?').join(', ');
+      const rows = this.database
+        .prepare(
+          `SELECT rowid, cluster_json FROM vacancy_clusters WHERE id IN (${marks}) ORDER BY rowid ASC`,
+        )
+        .all(...slice) as unknown as Array<{ rowid: number; cluster_json: string }>;
+      for (const row of rows) {
+        try {
+          const parsed = JSON.parse(row.cluster_json) as VacancyCluster;
+          if (parsed && typeof parsed.id === 'string') clusters.push(parsed);
+        } catch {
+          // Повреждённая строка — не сосед.
+        }
+      }
+    }
+    return clusters;
+  }
+
+  /**
+   * Один шаг заполнения ключей по кластерам, записанным до B230. Резюмируем и
+   * идемпотентен: курсор — `rowid`, шаг — одна транзакция.
+   */
+  backfillClusterKeysStep(chunk = CATALOG_BACKFILL_CHUNK): number {
+    if (this.clusterKeysBackfillComplete) return 0;
+    const boundedChunk = Math.max(1, Math.min(Math.trunc(chunk), 1_000));
+    const rows = this.database
+      .prepare(
+        `SELECT rowid, cluster_json FROM vacancy_clusters
+          WHERE rowid > ? ORDER BY rowid ASC LIMIT ?`,
+      )
+      .all(this.clusterKeysBackfillCursor, boundedChunk) as unknown as Array<{
+      rowid: number;
+      cluster_json: string;
+    }>;
+    if (rows.length === 0) {
+      this.clusterKeysBackfillComplete = true;
+      this.database
+        .prepare(
+          'UPDATE cluster_keys_backfill_state SET completed = 1, updated_at = ? WHERE id = 1',
+        )
+        .run(Date.now());
+      return 0;
+    }
+    const statements = this.prepareClusterKeyStatements();
+    const representative = this.database.prepare(
+      'UPDATE vacancy_clusters SET representative = ? WHERE rowid = ?',
+    );
+    this.inTransaction(() => {
+      for (const row of rows) {
+        try {
+          const parsed = JSON.parse(row.cluster_json) as VacancyCluster;
+          if (parsed && typeof parsed.id === 'string') {
+            this.writeClusterKeys(parsed, statements);
+            representative.run(serializeRepresentative(parsed), row.rowid);
+          }
+        } catch {
+          // Повреждённый кластер ключей не получает; проекция каталога его тоже пропускает.
+        }
+      }
+      const last = rows[rows.length - 1]!.rowid;
+      this.database
+        .prepare(
+          'UPDATE cluster_keys_backfill_state SET cursor_rowid = ?, updated_at = ? WHERE id = 1',
+        )
+        .run(last, Date.now());
+      this.clusterKeysBackfillCursor = last;
+    });
+    return rows.length;
+  }
+
+  /** Ключи покрывают все кластеры: сведение по ключам можно включать. */
+  clusterKeysReady(): boolean {
+    return this.clusterKeysBackfillComplete;
   }
 
   replaceClusters(clusters: VacancyCluster[]): void {
@@ -1032,8 +1297,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
           this.database
             .prepare('DELETE FROM catalog_entries_seen WHERE cluster_id = ?')
             .run(row.id);
+          this.deleteClusterKeys(row.id);
         }
       }
+      const keyStatements = this.prepareClusterKeyStatements();
       for (const cluster of clusters) {
         upsert.run(
           cluster.id,
@@ -1043,8 +1310,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
           JSON.stringify(cluster),
           cluster.vacanciesCount,
           now,
+          serializeRepresentative(cluster),
         );
         this.upsertCatalogEntry(cluster);
+        this.writeClusterKeys(cluster, keyStatements);
       }
     });
   }
@@ -1106,6 +1375,15 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
           )`,
       )
       .run(cutoffMs);
+    // Ключи без кластера — не соседи; чистятся той же порцией (B230).
+    this.database.exec(
+      `DELETE FROM vacancy_cluster_keys
+        WHERE cluster_id IN (
+          SELECT k.cluster_id FROM vacancy_cluster_keys k
+          LEFT JOIN vacancy_clusters c ON c.id = k.cluster_id
+          WHERE c.id IS NULL LIMIT 1000
+        )`,
+    );
     return Number(result.changes);
   }
 
@@ -1120,13 +1398,16 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         JSON.stringify(cluster),
         cluster.vacanciesCount,
         Date.now(),
+        serializeRepresentative(cluster),
       );
       this.upsertCatalogEntry(cluster);
+      this.writeClusterKeys(cluster);
     });
   }
 
   deleteCluster(clusterId: string): void {
     this.inTransaction(() => {
+      this.deleteClusterKeys(clusterId);
       this.database.prepare('DELETE FROM vacancy_clusters WHERE id = ?').run(clusterId);
       this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?').run(clusterId);
       this.database.prepare('DELETE FROM catalog_entries_seen WHERE cluster_id = ?').run(clusterId);

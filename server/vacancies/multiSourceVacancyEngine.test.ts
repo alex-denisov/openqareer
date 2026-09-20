@@ -199,7 +199,7 @@ describe('MultiSourceVacancyEngine', () => {
       countSourceSlice: () => ({ total: 1, active: 1 }),
       queryVacancies: () => ({ total: 0, items: [] }),
       loadSourceLinks: () => [],
-      mergeSourceSlice: () => {},
+      mergeSourceSlice: () => ({ dropped: [] }),
       loadSourceStates: () => [],
       replaceSourceSlice: () => {},
       saveSourceState: () => {},
@@ -265,7 +265,7 @@ describe('MultiSourceVacancyEngine', () => {
       countSourceSlice: () => ({ total: 0, active: 0 }),
       queryVacancies: () => ({ total: 0, items: [] }),
       loadSourceLinks: () => [],
-      mergeSourceSlice: () => {},
+      mergeSourceSlice: () => ({ dropped: [] }),
       loadSourceStates: () => [],
       replaceSourceSlice: () => {},
       saveSourceState: () => {},
@@ -328,7 +328,7 @@ describe('MultiSourceVacancyEngine', () => {
       countSourceSlice: () => ({ total: 1, active: 1 }),
       queryVacancies: () => ({ total: 0, items: [] }),
       loadSourceLinks: () => [],
-      mergeSourceSlice: () => {},
+      mergeSourceSlice: () => ({ dropped: [] }),
       loadSourceStates: () => [],
       replaceSourceSlice: () => {},
       saveSourceState: () => {},
@@ -425,11 +425,18 @@ describe('MultiSourceVacancyEngine', () => {
       status: 'active' as const,
     };
     const engine = new MultiSourceVacancyEngine({
-      sources: [{
-        id: 'stable-source', name: 'Stable', type: 'direct', enabled: true,
-        targetUrl: 'https://stable.test', refreshIntervalMinutes: 1,
-        itemsFoundTotal: 0, itemsActiveTotal: 0,
-      }],
+      sources: [
+        {
+          id: 'stable-source',
+          name: 'Stable',
+          type: 'direct',
+          enabled: true,
+          targetUrl: 'https://stable.test',
+          refreshIntervalMinutes: 1,
+          itemsFoundTotal: 0,
+          itemsActiveTotal: 0,
+        },
+      ],
       recluster: { mode: 'sync' },
       fetcher: async () => {
         round += 1;

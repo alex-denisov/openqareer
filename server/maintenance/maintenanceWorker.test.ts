@@ -1,10 +1,13 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { Worker } from 'node:worker_threads';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import { composeVacancyEngine } from '../vacancies/composeVacancyEngine';
+import { SqliteVacancyPoolStore } from '../vacancies/sqliteVacancyPoolStore';
+import { clusterVacancies } from '../vacancies/vacancyDeduplicator';
 import { MaintenanceWorker, type MaintenanceLog } from './maintenanceWorker';
 
 /**
@@ -13,12 +16,25 @@ import { MaintenanceWorker, type MaintenanceLog } from './maintenanceWorker';
  * `SQLITE_BUSY`, и ни одна чужая запись не ждала дольше секунды — значит,
  * транзакции волны короче секунды.
  */
+function source(id: string): VacancySourceConfig {
+  return {
+    id,
+    name: id,
+    type: 'json_api',
+    enabled: true,
+    targetUrl: `https://${id}.example/jobs`,
+    refreshIntervalMinutes: 60,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  };
+}
+
 function vacancy(source: VacancySourceConfig, index: number): UnifiedVacancy {
   return {
     id: `${source.id}:${index}`,
     fingerprint: `${source.id}:${index}`,
     title: `Engineer ${index}`,
-    company: `Company ${index % 50}`,
+    company: `Firm ${index}Q`,
     description: 'React, TypeScript '.repeat(20),
     requiredSkills: ['React'],
     url: `${source.targetUrl}/${index}`,
@@ -93,7 +109,7 @@ describe('MaintenanceWorker (B230)', () => {
     const composed = composeVacancyEngine({
       databasePath,
       fetcher: async (source) => Array.from({ length: 300 }, (_, i) => vacancy(source, i)),
-      recluster: { mode: 'off' },
+      recluster: { mode: 'keyed', batchSize: 100 },
     });
     const log = silentLog();
     const worker = new MaintenanceWorker({ engine: composed.engine, log });
@@ -110,6 +126,9 @@ describe('MaintenanceWorker (B230)', () => {
     expect(stats.writes).toBeGreaterThan(0);
     expect(stats.maxWaitMs).toBeLessThan(1000);
     expect(log.entries.some((e) => e.msg === 'multi-source-sync-completed')).toBe(true);
+    // Волна свела улов по ключам, а не отложила его.
+    expect(composed.pool.countClusters()).toBeGreaterThan(0);
+    expect(composed.engine.reclusterStats.rebuilds).toBe(0);
     composed.close();
   }, 60_000);
 
@@ -138,6 +157,47 @@ describe('MaintenanceWorker (B230)', () => {
     composed.close();
   }, 60_000);
 
+  it('restore backfills cluster keys of pre-B230 clusters before any wave', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'maintenance-worker-'));
+    directories.push(directory);
+    const databasePath = join(directory, 'db.sqlite');
+    const seed = new SqliteVacancyPoolStore({ databasePath });
+    seed.replaceClusters(
+      clusterVacancies(Array.from({ length: 1_100 }, (_, i) => vacancy(source('seed'), i))),
+    );
+    seed.close();
+    const stripped = new DatabaseSync(databasePath);
+    stripped.exec(
+      'DELETE FROM vacancy_cluster_keys; UPDATE cluster_keys_backfill_state SET cursor_rowid = 0, completed = 0',
+    );
+    stripped.close();
+
+    const composed = composeVacancyEngine({
+      databasePath,
+      fetcher: async () => [],
+      recluster: { mode: 'keyed', batchSize: 100 },
+    });
+    const log = silentLog();
+    const worker = new MaintenanceWorker({ engine: composed.engine, log });
+    expect(composed.engine.clusterKeysReady).toBe(false);
+    expect(await worker.runSyncWave()).toMatchObject({ skipped: 'keys' });
+
+    await worker.restore();
+
+    expect(composed.engine.clusterKeysReady).toBe(true);
+    expect(log.entries.some((e) => e.msg === 'cluster-keys-backfill-finished')).toBe(true);
+    expect(
+      composed.pool.loadClustersByKeys([
+        {
+          direct: [{ kind: 'url', key: 'https://seed.example/jobs/7' }],
+          companyTokens: [],
+          titleTokens: [],
+        },
+      ]),
+    ).toHaveLength(1);
+    composed.close();
+  });
+
   it('refuses to restore an engine without sources (prune would wipe the pool)', async () => {
     const worker = new MaintenanceWorker({
       engine: {
@@ -146,6 +206,8 @@ describe('MaintenanceWorker (B230)', () => {
         syncDue: async () => [],
         probeDueLinks: async () => undefined,
         runCatalogMaintenanceStep: () => undefined,
+        runClusterKeysBackfillStep: () => 0,
+        clusterKeysReady: true,
         poolSize: 0,
       },
       log: silentLog(),
