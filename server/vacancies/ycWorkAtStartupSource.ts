@@ -111,10 +111,33 @@ function listOfStrings(value: unknown): string[] {
 function absoluteJobUrl(value: string | undefined): string {
   if (!value) return '';
   try {
-    return new URL(value, YC_ORIGIN).toString();
+    const url = new URL(value, YC_ORIGIN);
+    return /^https?:$/i.test(url.protocol) ? url.toString() : '';
   } catch {
     return '';
   }
+}
+
+function isUsableYcJob(job: YcJobPosting, title: string, company: string, url: string): boolean {
+  return (
+    title.length > 0 &&
+    company.length > 0 &&
+    url.length > 0 &&
+    (typeof job.id === 'string' || typeof job.id === 'number') &&
+    String(job.id).trim().length > 0
+  );
+}
+
+function ycJobDetails(job: YcJobPosting): string {
+  return [
+    job.companyOneLiner,
+    job.prettyRole,
+    job.roleSpecificType,
+    job.minExperience,
+    job.salaryRange,
+  ]
+    .filter((part): part is string => Boolean(part?.trim()))
+    .join(' · ');
 }
 
 function buildVacancy(
@@ -126,18 +149,10 @@ function buildVacancy(
   const title = htmlToFeedText(job.title ?? '').trim();
   const company = htmlToFeedText(job.companyName ?? '').trim();
   const url = absoluteJobUrl(job.url);
-  if (!title || !company || !url || job.id === undefined) return undefined;
+  if (!isUsableYcJob(job, title, company, url)) return undefined;
 
   const skills = listOfStrings(job.skills);
-  const details = [
-    job.companyOneLiner,
-    job.prettyRole,
-    job.roleSpecificType,
-    job.minExperience,
-    job.salaryRange,
-  ]
-    .filter((part): part is string => Boolean(part?.trim()))
-    .join(' · ');
+  const details = ycJobDetails(job);
   const id = `${source.id}:${String(job.id)}`;
 
   return {
