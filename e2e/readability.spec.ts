@@ -378,6 +378,8 @@ test.describe('B232 readability gate', () => {
 
     await expect(page.locator('.career-automation-list')).toHaveCount(0);
     await page.getByRole('button', { name: 'Посмотреть тарифы', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Сколько делать за вас', exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Сколько делать за вас', exact: true }),
+    ).toBeVisible();
   });
 });
