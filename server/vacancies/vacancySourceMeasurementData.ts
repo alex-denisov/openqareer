@@ -181,8 +181,8 @@ export const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasure
     {
       items: 138,
       observedAt: '2026-09-21',
-      route: 'ru-owner',
-      note: 'Пять публичных role pages: jobs, product, recruiting/HR, sales и operations; source остаётся выключенным до production-route probe и B1 gate.',
+      route: 'eu-prod',
+      note: 'Пять публичных role pages с production VM: jobs, product, recruiting/HR, sales и operations; robots Allow: /. Включён только для bounded source wave по решению владельца.',
     },
   ],
   'src-crossover': [
