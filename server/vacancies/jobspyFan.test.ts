@@ -15,6 +15,22 @@ import {
  * поиска, которого нет.
  */
 describe('веер рынков (B218)', () => {
+  it('не дублирует термины и содержит C-Level и middle-management coverage (B235)', () => {
+    expect(new Set(FAN_TERMS).size).toBe(FAN_TERMS.length);
+    for (const term of [
+      'ceo',
+      'chief technology officer',
+      'head of product',
+      'director of engineering',
+      'engineering manager',
+      'product lead',
+      'program manager',
+    ]) {
+      expect(FAN_TERMS).toContain(term);
+    }
+    expect(FAN_TERMS.length).toBeGreaterThan(60);
+  });
+
   it('покрывает каждый регион, который платформа спрашивает у кандидата', () => {
     const covered = new Set(fanRegions());
     for (const region of CANDIDATE_REGIONS) {

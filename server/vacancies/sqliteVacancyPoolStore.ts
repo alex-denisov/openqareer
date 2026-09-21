@@ -434,6 +434,20 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return { total: row.total, active: row.active };
   }
 
+  countAllSourceSlices(): ReadonlyMap<string, { total: number; active: number }> {
+    const rows = this.database
+      .prepare(
+        `SELECT i.source_id, count(*) AS total, coalesce(sum(i.expired = 0), 0) AS active
+           FROM vacancy_pool_index i
+          GROUP BY i.source_id
+          ORDER BY i.source_id`,
+      )
+      .all() as unknown as Array<{ source_id: string; total: number; active: number }>;
+    return new Map(
+      rows.map((row) => [row.source_id, { total: row.total, active: row.active }]),
+    );
+  }
+
   queryVacancies(query: VacancyPoolQuery): VacancyPoolPage {
     if (query.sourceIds && query.sourceIds.length === 0) return { total: 0, items: [] };
     const where: string[] = [FRESH];

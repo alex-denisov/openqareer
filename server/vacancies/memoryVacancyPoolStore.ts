@@ -110,6 +110,17 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     return { total, active };
   }
 
+  countAllSourceSlices(): ReadonlyMap<string, { total: number; active: number }> {
+    const counts = new Map<string, { total: number; active: number }>();
+    for (const row of this.rows.values()) {
+      const current = counts.get(row.sourceId) ?? { total: 0, active: 0 };
+      current.total += 1;
+      if (row.expiredAt === undefined) current.active += 1;
+      counts.set(row.sourceId, current);
+    }
+    return counts;
+  }
+
   queryVacancies(query: VacancyPoolQuery): VacancyPoolPage {
     const rows = Array.from(this.aliveRows()).filter(
       (row) => !query.sourceIds || query.sourceIds.includes(row.sourceId),

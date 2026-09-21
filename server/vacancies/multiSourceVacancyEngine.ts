@@ -131,6 +131,17 @@ export interface VacancyQueryResult {
   statsBySource: Array<{ sourceId: string; sourceName: string; count: number }>;
 }
 
+export interface SourceOwnershipAudit {
+  readonly totalStoredRows: number;
+  readonly activeRows: number;
+  readonly registeredSourcesWithRows: number;
+  readonly orphaned: readonly {
+    sourceId: string;
+    total: number;
+    active: number;
+  }[];
+}
+
 function isVacancyFresh(publishedAt: string, nowMs: number = Date.now()): boolean {
   return isWithin(parseMs(publishedAt), freshnessWindow(nowMs));
 }
@@ -806,6 +817,30 @@ export class MultiSourceVacancyEngine {
     });
 
     return { total: page.total, items: page.items, statsBySource };
+  }
+
+  /**
+   * Compares persisted source ownership with the bounded registry without
+   * loading vacancy payloads. This is the B235 orphan audit and is intentionally
+   * a summary, so an admin request cannot dump the production pool.
+   */
+  public auditSourceOwnership(): SourceOwnershipAudit {
+    const counts = this.pool.countAllSourceSlices?.() ?? new Map();
+    let totalStoredRows = 0;
+    let activeRows = 0;
+    let registeredSourcesWithRows = 0;
+    const orphaned: Array<{ sourceId: string; total: number; active: number }> = [];
+    for (const [sourceId, count] of counts) {
+      totalStoredRows += count.total;
+      activeRows += count.active;
+      if (this.sources.has(sourceId)) {
+        if (count.active > 0) registeredSourcesWithRows += 1;
+      } else {
+        orphaned.push({ sourceId, total: count.total, active: count.active });
+      }
+    }
+    orphaned.sort((left, right) => left.sourceId.localeCompare(right.sourceId));
+    return { totalStoredRows, activeRows, registeredSourcesWithRows, orphaned };
   }
 
   public async syncSource(

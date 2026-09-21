@@ -414,6 +414,25 @@ describe('GET /api/v1/admin/vacancy-sources', () => {
       expect(source.health.trust.authenticity).toEqual({ measured: false, blockedBy: 'B205' });
     }
   });
+
+  it('returns a bounded source-ownership audit for B235', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/vacancy-sources/audit',
+      headers: { cookie: adminCookie },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({
+      totalStoredRows: 0,
+      activeRows: 0,
+      registeredSourcesWithRows: 0,
+      orphaned: [],
+    });
+  });
 });
 
 describe('DELETE /api/v1/admin/users/:userId', () => {
