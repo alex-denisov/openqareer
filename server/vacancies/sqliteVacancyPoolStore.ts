@@ -165,9 +165,11 @@ function indexColumns(vacancy: UnifiedVacancy, sourceId: string): SQLInputValue[
 /**
  * Порция записи пула (PRB-043 срез 2). Контракт обслуживателя B230: ни одна
  * транзакция не держит write-lock дольше секунды, иначе HTTP-процесс ждёт
- * его на входе кандидата. 250 строк — порядка сотни миллисекунд на VM прода.
+ * его на входе кандидата. Замер на проде 2026-09-21 (`pool-slice-written`,
+ * Indeed, 7 292 строки): 250 строк — до 1 196 мс, около 5 мс на строку;
+ * локальный бенч давал 0,3 мс и не считается. 100 строк — с запасом вдвое.
  */
-export const DEFAULT_POOL_WRITE_CHUNK = 250;
+export const DEFAULT_POOL_WRITE_CHUNK = 100;
 
 export type PoolWriteEvent =
   | {
