@@ -158,11 +158,6 @@ describe('MaintenanceWorker (B230)', () => {
       fetcher,
       recluster: { mode: 'off' },
     });
-    const request = httpEngine.requestSourceSync('manual', '2026-09-21T10:00:00.000Z');
-    expect(request).toEqual({ sourceId: 'manual', requestedAt: '2026-09-21T10:00:00.000Z' });
-    await expect(httpEngine.syncSource('manual')).rejects.toThrow(/maintenance process/);
-    httpPool.close();
-
     const workerPool = new SqliteVacancyPoolStore({ databasePath });
     const workerEngine = new MultiSourceVacancyEngine({
       sources: [source('manual')],
@@ -172,7 +167,12 @@ describe('MaintenanceWorker (B230)', () => {
     });
     const worker = new MaintenanceWorker({ engine: workerEngine, log: silentLog() });
 
+    // The worker is already alive when the HTTP process creates the request;
+    // this is the production ordering that the first implementation missed.
     await worker.restore();
+    const request = httpEngine.requestSourceSync('manual', '2026-09-21T10:00:00.000Z');
+    expect(request).toEqual({ sourceId: 'manual', requestedAt: '2026-09-21T10:00:00.000Z' });
+    await expect(httpEngine.syncSource('manual')).rejects.toThrow(/maintenance process/);
     await expect(worker.runManualSyncWave()).resolves.toMatchObject({
       synced: 1,
       failed: [],
@@ -181,6 +181,7 @@ describe('MaintenanceWorker (B230)', () => {
     expect(workerEngine.getRequestedSourceSyncs()).toEqual([]);
     expect(workerPool.loadSourceStates()[0]?.syncRequestedAt).toBeUndefined();
     expect(workerPool.countClusters()).toBe(1);
+    httpPool.close();
     workerPool.close();
   }, 60_000);
 

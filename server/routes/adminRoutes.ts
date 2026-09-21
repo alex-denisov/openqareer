@@ -355,6 +355,7 @@ function registerVacancyList(app: FastifyInstance, deps: RouteDeps): void {
 async function handleListSources(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireAdmin(deps, request, reply);
   if (!principal) return;
+  deps.multiSourceEngine.refreshPersistedSourceState();
   // Живость и доверие едут вместе с самой площадкой: администратор читает
   // «жива ли она» и «можно ли ей верить» как две разные вещи (B200).
   const health = new Map(
