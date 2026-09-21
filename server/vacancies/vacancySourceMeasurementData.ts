@@ -177,6 +177,14 @@ export const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasure
       note: 'Hacker News "Who is hiring?" monthly thread (September 2026, story 49522897)',
     },
   ],
+  'src-yc-work-at-startup': [
+    {
+      items: 138,
+      observedAt: '2026-09-21',
+      route: 'ru-owner',
+      note: 'Пять публичных role pages: jobs, product, recruiting/HR, sales и operations; source остаётся выключенным до production-route probe и B1 gate.',
+    },
+  ],
   'src-crossover': [
     {
       items: 99,
