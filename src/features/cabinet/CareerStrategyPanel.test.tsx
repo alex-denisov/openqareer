@@ -48,7 +48,7 @@ describe('CareerStrategyPanel', () => {
 
   it('до выбора зовёт выбрать роль, а не показывает пустое место', () => {
     const markup = renderToStaticMarkup(<CareerStrategyPanel strategy={null} />);
-    expect(markup).toContain('Роль ещё не выбрана');
+    expect(markup).toContain('Роль не выбрана');
   });
 
   it('поломку маршрута не выдаёт за отсутствие выбора', () => {

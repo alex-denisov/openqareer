@@ -58,7 +58,7 @@ export interface SearchCampaignInput {
 }
 
 const SENT_STATUSES = new Set(['queued', 'sent', 'executing', 'completed_with_receipt']);
-const UNTRACKED = 'не отслеживается';
+const UNTRACKED = 'не отслеживаем: площадки не сообщают';
 
 export function buildSearchCampaign({
   pool,

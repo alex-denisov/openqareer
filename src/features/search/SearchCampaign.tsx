@@ -17,7 +17,7 @@ import { collectMatchedPool, withDeadline } from '../vacancies/vacancyRead';
 import { CareerRoutePremisesEditor } from '../cabinet/CareerRoutePremisesEditor';
 import { CareerRoutePremises } from './RoutePremises';
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
-import { CURRENT_PLAN, tariffPackages } from '../shell/tariffPackages';
+import { CURRENT_PLAN } from '../shell/tariffPackages';
 import {
   buildSearchCampaign,
   type CampaignTile,
@@ -42,6 +42,7 @@ export function SearchCampaign({
   premisesLoading,
   onSavePremises,
   onOpenVacancies,
+  onOpenTariffs,
 }: {
   readonly targetDirection: string;
   /**
@@ -55,6 +56,7 @@ export function SearchCampaign({
   readonly premisesLoading: boolean;
   readonly onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
   readonly onOpenVacancies: () => void;
+  readonly onOpenTariffs: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -125,7 +127,7 @@ export function SearchCampaign({
           <TileCard key={tile.id} tile={tile} loading={loading} />
         ))}
         <div className="career-campaign-tile">
-          <span className="career-cabinet-tag">приход записей за 14 дней</span>
+          <span className="career-cabinet-tag">Собрано по дням, 14 дней</span>
           <ActivityChart activity={campaign.activity} />
         </div>
       </div>
@@ -141,7 +143,7 @@ export function SearchCampaign({
           {/* Сигналы пересмотра стратегии стоят рядом с воронкой, по которой
               они считаются (B180, срез 4). */}
           <StrategyReviewPanel strategy={strategy} pool={pool} commands={commands} now={now} />
-          <AutomationPanel />
+          <AutomationPanel onOpenTariffs={onOpenTariffs} />
         </div>
       </div>
     </section>
@@ -153,7 +155,7 @@ function FunnelPanel({ campaign }: { campaign: SearchCampaignView }) {
     <section className="career-home-panel">
       <header>
         <h3>Воронка кампании</h3>
-        <span className="career-cabinet-tag">по вашему пулу</span>
+        <span className="career-cabinet-tag">сверено с нашими источниками</span>
       </header>
       <ol className="career-funnel">
         {campaign.funnel.map((step) => (
@@ -166,9 +168,8 @@ function FunnelPanel({ campaign }: { campaign: SearchCampaignView }) {
         ))}
       </ol>
       <p className="career-cabinet-tag">
-        «Открыто» — переходы на площадку, «отклик» — только то, что кандидат подтвердил сам.
-        Просмотр, ответ и интервью продукт не отслеживает — их некому сообщить, поэтому на их месте
-        прочерк, а не ноль.
+        «Открыто» — переход на площадку, «отклик» — ваша отметка. Просмотры, ответы и интервью не
+        отслеживаем: площадки не сообщают эти данные.
       </p>
     </section>
   );
@@ -230,7 +231,7 @@ function ActivityChart({ activity }: { activity: readonly number[] }) {
     <ol
       className="career-activity-chart"
       role="img"
-      aria-label={`Приход записей по дням за две недели, максимум ${peak} за день`}
+      aria-label={`Собрано вакансий по дням за две недели, максимум ${peak} за день`}
     >
       {activity.map((count, index) => (
         <li key={index}>
@@ -273,30 +274,19 @@ function QueueRow({ entry }: { entry: MatchedVacancyItem }) {
 }
 
 /** Что уже работает и что стоит денег — по тем же планам, что в «Тарифах». */
-function AutomationPanel() {
+function AutomationPanel({ onOpenTariffs }: { onOpenTariffs: () => void }) {
   return (
     <section className="career-home-panel career-automation-panel">
       <header>
         <h3>Автоматизация</h3>
         <span className="career-pill is-muted">план «{CURRENT_PLAN.name}»</span>
       </header>
-      <ul className="career-automation-list">
-        {tariffPackages.flatMap((plan) =>
-          plan.points.map((point) => (
-            <li key={`${plan.id}-${point}`}>
-              <span>{point}</span>
-              {plan.id === CURRENT_PLAN.id ? (
-                <span className="career-pill is-good">вкл</span>
-              ) : (
-                <span className="career-pill is-warn">{plan.name}</span>
-              )}
-            </li>
-          )),
-        )}
-      </ul>
       <p className="career-cabinet-tag">
-        Платные тарифы пока не продаются — они показаны, чтобы вы видели, что появится.
+        Текущий план: «{CURRENT_PLAN.name}». Платные тарифы пока не продаются.
       </p>
+      <button type="button" className="career-quiet-button" onClick={onOpenTariffs}>
+        Посмотреть тарифы <ArrowRight size={15} aria-hidden="true" />
+      </button>
     </section>
   );
 }

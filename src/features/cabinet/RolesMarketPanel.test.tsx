@@ -155,7 +155,7 @@ describe('RolesMarketPanel: роль называет модель, пул по�
 
     expect(html).toContain('Head of Growth');
     expect(html).toContain('Пока не найдено в наших источниках');
-    expect(html).toContain('шире фильтр');
+    expect(html).toContain('расширьте регион');
   });
 
   it('не выдаёт названное моделью за наблюдение рынка', () => {
@@ -230,20 +230,20 @@ describe('RolesMarketPanel: выбор роли в «Стратегию» (B180 
 
   it('первый выбор предлагает кнопкой, без вопроса о причине', () => {
     const html = render({ onChoose: () => undefined });
-    expect(html).toContain('Выбрать эту роль');
+    expect(html).toContain('Искать по этой роли');
     expect(html).not.toContain('Почему меняете');
   });
 
   it('выбранную роль помечает и второй раз выбрать не предлагает', () => {
     const html = render({ chosenTitle: 'head of product', onChoose: () => undefined });
-    expect(html).toContain('ваша роль');
-    expect(html).not.toContain('Выбрать эту роль');
-    expect(html).not.toContain('Сменить роль на эту');
+    expect(html).toContain('выбрана для поиска');
+    expect(html).not.toContain('Искать по этой роли');
+    expect(html).not.toContain('Перейти на эту роль');
   });
 
   it('при уже выбранной другой роли зовёт сменить, а не выбрать', () => {
     const html = render({ chosenTitle: 'Product Manager', onChoose: () => undefined });
-    expect(html).toContain('Сменить роль на эту');
-    expect(html).not.toContain('Выбрать эту роль');
+    expect(html).toContain('Перейти на эту роль');
+    expect(html).not.toContain('Искать по этой роли');
   });
 });

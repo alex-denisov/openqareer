@@ -467,6 +467,7 @@ export function CareerWorkspaceShell({
               workspace={visibleWorkspace}
               importing={importing}
               onNavigate={navigate}
+              onOpenTariffs={() => navigate('tariffs')}
               onUpdateWorkspace={onUpdateWorkspace}
               onOpenAccount={() => setAccountOpen(true)}
               onOpenExpert={openExpert}

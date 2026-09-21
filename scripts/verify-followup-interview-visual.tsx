@@ -214,7 +214,7 @@ function renderCareerHomeSurface(pending: PendingFollowUp[]) {
       <aside class="career-home-rail" aria-label="Оценка и позиционирование">
         ${followUpHtml}
         <section class="career-home-panel">
-          <h3 style="margin: 0 0 6px 0; font-size: 16px;">Следующее действие</h3>
+          <h3 style="margin: 0 0 6px 0; font-size: 16px;">Один шаг на сегодня</h3>
           <p style="margin: 0; font-size: 13px; color: var(--career-text-muted);">
             Отправьте повторные сообщения по 2 активным откликам для поддержания контакта с нанимателями.
           </p>

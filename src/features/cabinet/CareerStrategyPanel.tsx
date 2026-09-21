@@ -20,8 +20,8 @@ export function CareerStrategyPanel({
   return (
     <section className="career-home-panel career-strategy" aria-labelledby="career-strategy-title">
       <header>
-        <h3 id="career-strategy-title">Стратегия</h3>
-        <span className="career-cabinet-tag">выбранная роль</span>
+        <h3 id="career-strategy-title">Роль в поиске</h3>
+        <span className="career-cabinet-tag">выбрана для поиска</span>
       </header>
       <StrategyBody strategy={strategy} loading={loading} failed={failed} />
     </section>
@@ -45,8 +45,7 @@ function StrategyBody({
   if (!strategy) {
     return (
       <p className="career-home-empty">
-        Роль ещё не выбрана. Выберите её в «Ролях и рынке» — кампания «Поиск» пойдёт
-        по ней, а не по свободной строке анкеты.
+        Роль не выбрана. Выберите выше, и подбор пойдёт по ней.
       </p>
     );
   }
@@ -63,7 +62,7 @@ function StrategyBody({
       {view.reasonLine ? <small>{view.reasonLine}</small> : null}
       {view.history.length ? (
         <details className="career-strategy-history">
-          <summary>Прежние решения ({view.history.length})</summary>
+          <summary>Прежние роли ({view.history.length})</summary>
           <ol>
             {view.history.map((line) => (
               <li key={line}>{line}</li>

@@ -65,7 +65,7 @@ describe('buildSearchCampaign', () => {
     const answers = campaign.tiles.find((tile) => tile.id === 'answers');
 
     expect(answers?.value).toBeUndefined();
-    expect(answers?.note).toBe('не отслеживается');
+    expect(answers?.note).toBe('не отслеживаем: площадки не сообщают');
   });
 
   it('отклики берёт из подтверждённых команд, а не из воздуха', () => {

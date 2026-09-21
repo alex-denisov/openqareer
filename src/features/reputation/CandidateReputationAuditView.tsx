@@ -342,7 +342,7 @@ export function CandidateReputationAuditView({
   return (
     <div className="career-reputation-surface">
       <header className="career-reputation-header">
-        <h2>Репутационный аудит и цифровой след</h2>
+        <h2>Что о вас находят открытые источники</h2>
         <p className="career-reputation-intro">
           Объективная оценка профиля глазами службы безопасности и нанимателя.
         </p>

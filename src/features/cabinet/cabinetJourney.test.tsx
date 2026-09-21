@@ -64,11 +64,11 @@ describe('cabinetJourney on the screens that read it', () => {
     });
 
     const ats = renderToStaticMarkup(<AtsReadability journey={journey} onNavigate={() => undefined} />);
-    expect(ats).toContain('проверок с фактом');
+    expect(ats).toContain('проверок по вашему файлу');
     expect(ats).not.toContain('Нужен исходный CV');
 
     const next = renderToStaticMarkup(<NextAction journey={journey} onNavigate={() => undefined} />);
-    expect(next).toContain('Следующее действие');
+    expect(next).toContain('Один шаг на сегодня');
     expect(next).not.toContain('Уточнить основу профиля');
   });
 });

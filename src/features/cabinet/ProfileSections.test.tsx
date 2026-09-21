@@ -53,7 +53,7 @@ describe('ProfileExperience', () => {
   it('называет счёт измеримых пунктов, а не рисует оценку блока', () => {
     const html = renderToStaticMarkup(<ProfileExperience view={view} onImprove={() => undefined} />);
 
-    expect(html).toContain('1 из 2 пунктов с измеримым результатом');
+    expect(html).toContain('1 из 2 пунктов с числом');
   });
 
   it('пустой опыт не выдаёт себя за заполненный', () => {

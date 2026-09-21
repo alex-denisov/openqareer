@@ -10,6 +10,7 @@ import {
   X,
 } from '@phosphor-icons/react';
 import { requestVacancyPitch, type VacancyPitchResult } from './vacancyPitchApi';
+import { CareerTooltip } from '../shell/CareerTooltip';
 
 export type PitchFormatTab = 'email' | 'linkedin' | 'ats';
 export type PitchTone = 'executive' | 'confident' | 'technical';
@@ -141,8 +142,8 @@ function PitchControls({
     <section className="career-pitch-controls">
       <div className="career-pitch-tone-selector" role="radiogroup" aria-label="Тональность отклика">
         {TONES.map((t) => (
-          <button
-            key={t.id}
+          <CareerTooltip key={t.id} content={t.desc}>
+            <button
             type="button"
             role="radio"
             data-pitch-value={t.id}
@@ -168,10 +169,10 @@ function PitchControls({
                 focusPitchSelection(event, next);
               }
             }}
-            title={t.desc}
-          >
-            <span>{t.label}</span>
-          </button>
+            >
+              <span>{t.label}</span>
+            </button>
+          </CareerTooltip>
         ))}
       </div>
       <div className="career-pitch-format-tabs" role="tablist" aria-label="Формат сопроводительных материалов">
@@ -318,15 +319,16 @@ function LinkedInNoteActions({
         <span>{isCopied ? 'Скопировано в буфер' : 'Копировать сообщение'}</span>
       </button>
       {onOpenOutreach ? (
-        <button
-          type="button"
-          className="career-btn career-btn-secondary"
-          onClick={onOpenOutreach}
-          title="Открыть модуль нетворкинга и отправить запрос"
-        >
-          <Users size={16} aria-hidden="true" />
-          <span>Открыть в нетворкинге</span>
-        </button>
+        <CareerTooltip content="Откроем контакты в компании и подставим эту заметку.">
+          <button
+            type="button"
+            className="career-btn career-btn-secondary"
+            onClick={onOpenOutreach}
+          >
+            <Users size={16} aria-hidden="true" />
+            <span>Кому отправить</span>
+          </button>
+        </CareerTooltip>
       ) : null}
     </div>
   );
@@ -349,7 +351,7 @@ function LinkedInNoteTab({
       <div className="career-pitch-field-group">
         <div className="career-pitch-field-header">
           <label htmlFor="pitch-linkedin-text" className="career-pitch-field-label">
-            Заметка к Connection Request:
+            Заметка к запросу в контакты
           </label>
           <span className={`career-pitch-char-counter ${note.length > 300 ? 'is-overflow' : ''}`}>
             {note.length} / 300
@@ -389,7 +391,7 @@ function AtsCoverLetterTab({
     <div className="career-pitch-content-tab">
       <div className="career-pitch-field-group">
         <label htmlFor="pitch-ats-text" className="career-pitch-field-label">
-          Структурированное письмо для систем отклика (ATS):
+          Cover letter для формы отклика (ATS)
         </label>
         <textarea
           id="pitch-ats-text"
@@ -461,7 +463,7 @@ function usePitchFetcher(
       })
       .catch((err) => {
         if (isMounted) {
-          setError(err instanceof Error ? err.message : 'Ошибка генерации материалов.');
+          setError(err instanceof Error ? err.message : 'Не удалось сгенерировать. Попробуйте ещё раз.');
           setLoading(false);
         }
       });
@@ -540,7 +542,7 @@ function PitchMainView(props: PitchMainViewProps) {
   if (loading) {
     return (
       <div className="career-pitch-loading" aria-busy="true">
-        <p>Синтезируем точечные материалы под требования вакансии...</p>
+          <p>Пишем тексты под требования вакансии…</p>
       </div>
     );
   }

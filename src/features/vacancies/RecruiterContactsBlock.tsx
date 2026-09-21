@@ -11,6 +11,7 @@ import {
   User,
 } from '@phosphor-icons/react';
 import type { EmailStatus, RecruiterContact } from '../../../shared/recruiterContact';
+import { CareerTooltip } from '../shell/CareerTooltip';
 import {
   enrichRecruiterContacts,
   type EnrichVacancyPayload,
@@ -41,14 +42,11 @@ function ContactBadge({ status }: { readonly status: EmailStatus }) {
   const copy = EMAIL_STATUS_COPY[status];
 
   return (
-    <span
-      className="career-recruiter-badge"
-      data-status={status}
-      role="status"
-      title={copy.hint}
-    >
-      {copy.label}
-    </span>
+    <CareerTooltip content={copy.hint}>
+      <span className="career-recruiter-badge" data-status={status} role="status">
+        {copy.label}
+      </span>
+    </CareerTooltip>
   );
 }
 
@@ -240,15 +238,12 @@ export function RecruiterContactsTrigger({
     return null;
   }
   return (
-    <button
-      type="button"
-      className={className}
-      onClick={state.handleEnrich}
-      title="Найти в открытых источниках, кто ведёт вакансию: рекрутер или hiring manager. Почта — с пометкой «проверена» или «гипотеза»."
-    >
-      <AddressBook size={14} aria-hidden="true" />
-      <span>Рекрутер</span>
-    </button>
+    <CareerTooltip content="Найти того, кто ведёт вакансию. Почта будет отмечена как проверенная или гипотеза.">
+      <button type="button" className={className} onClick={state.handleEnrich}>
+        <AddressBook size={14} aria-hidden="true" />
+        <span>Рекрутер</span>
+      </button>
+    </CareerTooltip>
   );
 }
 

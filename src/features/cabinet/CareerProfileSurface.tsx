@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import {
   ArrowClockwise,
+  ArrowRight,
   DownloadSimple,
   FileArrowUp,
   FilePdf,
@@ -33,6 +34,7 @@ import {
   ProfileSkills,
 } from './ProfileSections';
 import { CandidateReputationAuditView } from '../reputation/CandidateReputationAuditView';
+import { CareerTooltip } from '../shell/CareerTooltip';
 
 type ProfileTab = 'about' | 'experience' | 'skills' | 'education' | 'portfolio' | 'reputation';
 
@@ -48,14 +50,15 @@ interface CareerProfileSurfaceProps {
   onOpenAccount: () => void;
   onOpenExpert: () => void;
   onOpenResume: () => void;
+  onOpenCareer?: () => void;
 }
 const profileTabs: Array<{ id: ProfileTab; label: string }> = [
   { id: 'about', label: 'О себе' },
   { id: 'experience', label: 'Опыт' },
   { id: 'skills', label: 'Навыки' },
   { id: 'education', label: 'Образование' },
-  { id: 'portfolio', label: 'Портфолио' },
-  { id: 'reputation', label: 'Цифровой след' },
+  { id: 'portfolio', label: 'Документы' },
+  { id: 'reputation', label: 'Вы в поиске' },
 ];
 
 
@@ -80,6 +83,7 @@ export function CareerProfileSurface({
   onOpenAccount,
   onOpenExpert,
   onOpenResume,
+  onOpenCareer,
 }: CareerProfileSurfaceProps) {
   const [activeTab, setActiveTab] = useState<ProfileTab>('experience');
   const [busyId, setBusyId] = useState<string>();
@@ -234,9 +238,17 @@ export function CareerProfileSurface({
         <div className="career-profile-identity-copy">
           <h1 id="career-profile-surface-title">{name}</h1>
           <div className="career-profile-identity-line">
-            <span className="career-profile-role">
-              {view.targetRole ?? account?.profile.headline ?? 'Целевая роль не названа'}
-            </span>
+            {view.targetRole ?? account?.profile.headline ? (
+              <span className="career-profile-role">
+                {view.targetRole ?? account?.profile.headline}
+              </span>
+            ) : onOpenCareer ? (
+              <button type="button" className="career-profile-role-link" onClick={onOpenCareer}>
+                Роль для поиска не выбрана <ArrowRight size={13} aria-hidden="true" />
+              </button>
+            ) : (
+              <span className="career-profile-role">Роль для поиска не выбрана</span>
+            )}
             <span className="career-profile-dot" aria-hidden="true">
               ·
             </span>
@@ -250,14 +262,21 @@ export function CareerProfileSurface({
           </div>
         </div>
         <div className="career-profile-update-state">
-          <span className="career-cabinet-tag">обновлён</span>
-          <small>{lastChangeLabel(account, snapshot)}</small>
+          {lastChangeLabel(account, snapshot) ? (
+            <small>{lastChangeLabel(account, snapshot)}</small>
+          ) : null}
           <div className="career-profile-identity-actions">
-            <button type="button" onClick={() => void onRefresh()}>
-              <ArrowClockwise size={14} /> Обновить
-            </button>
+            <CareerTooltip content="Перечитать профиль с сервера">
+              <button
+                type="button"
+                aria-label="Перечитать профиль с сервера"
+                onClick={() => void onRefresh()}
+              >
+                <ArrowClockwise size={14} aria-hidden="true" />
+              </button>
+            </CareerTooltip>
             <button type="button" onClick={onOpenAccount}>
-              Изменить данные
+              Изменить имя, роль, регион
             </button>
           </div>
         </div>
@@ -293,7 +312,7 @@ export function CareerProfileSurface({
         {activeTab === 'portfolio' ? (
           <>
             <button type="button" className="career-quiet-button" onClick={onOpenResume}>
-              Открыть мастер-резюме
+              Собрать резюме из профиля
             </button>
             <DocumentVault
               documents={snapshot?.documents ?? []}
@@ -342,8 +361,8 @@ function DocumentVault({
     <section className="career-document-vault">
       <header>
         <div>
-          <h2>Защищённое хранилище</h2>
-          <p>CV и экспорты зашифрованы; в LLM передаётся только нужный текстовый контекст.</p>
+          <h2>Ваши файлы</h2>
+          <p>Хранятся зашифрованными. Модели уходит текст резюме, сам файл остаётся у вас.</p>
         </div>
         <label className="career-document-upload-button">
           <FileArrowUp size={17} /> {uploading ? 'Сохраняем…' : 'Добавить файл'}
@@ -412,7 +431,7 @@ function DocumentVault({
         >
           <FileArrowUp size={24} />
           <span>
-            <strong>Добавьте CV или экспорт профиля</strong>
+            <strong>Добавьте резюме или выгрузку профиля</strong>
             <small>
               PDF, DOCX, TXT или JSON · до {megabytes(DOCUMENT_MAX_BYTES)} МБ
             </small>
@@ -460,7 +479,7 @@ function readFileBase64(file: File): Promise<string> {
 function lastChangeLabel(account?: AccountSnapshot, snapshot?: CandidateSnapshot): string {
   const value = latestChange(account, snapshot);
   if (!value) return '';
-  return `Изменён ${new Intl.DateTimeFormat('ru-RU', {
+  return `Факты обновлены ${new Intl.DateTimeFormat('ru-RU', {
     day: 'numeric',
     month: 'long',
     hour: '2-digit',
@@ -492,10 +511,10 @@ function initials(name: string) {
 function workModeLabel(mode?: AccountSnapshot['profile']['workMode']) {
   if (!mode) return 'Формат не указан';
   const labels = {
-    office: 'Офис',
-    hybrid: 'Гибрид',
-    remote: 'Удалённо',
-    flexible: 'Гибко',
+    office: 'Формат: офис',
+    hybrid: 'Формат: гибрид',
+    remote: 'Формат: удалённо',
+    flexible: 'Формат: гибко',
   };
   return labels[mode];
 }

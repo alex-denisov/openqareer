@@ -130,7 +130,7 @@ function OutreachQuotaBanner({ quota }: { readonly quota: OutreachDailyQuota }) 
       </div>
       {!quota.allowed && (
         <p className="career-outreach-quota-alert" role="alert">
-          {quota.dailyLimit} из {quota.dailyLimit} на сегодня. Больше — риск блокировки. Продолжить можно завтра.
+          {quota.dailyLimit} из {quota.dailyLimit} на сегодня. Больше опасно: площадка может заблокировать аккаунт. Продолжить можно завтра.
         </p>
       )}
     </div>
@@ -140,7 +140,7 @@ function OutreachQuotaBanner({ quota }: { readonly quota: OutreachDailyQuota }) 
 const ROLE_TABS: ReadonlyArray<{ id: RoleFilter; label: string }> = [
   { id: 'all', label: 'Все' },
   { id: 'recruiter', label: 'Рекрутеры' },
-  { id: 'engineering_lead', label: 'Руководители' },
+  { id: 'engineering_lead', label: 'Hiring managers' },
   { id: 'executive', label: 'C-Level' },
   { id: 'peer', label: 'Коллеги' },
 ];
@@ -180,7 +180,11 @@ function DecisionMakerInfo({ profile }: { readonly profile: DecisionMakerProfile
       <div className="career-outreach-name-row">
         <strong>{profile.fullName}</strong>
         <span className={`career-outreach-degree-badge ${degreeClass}`}>
-          {profile.connectionDegree} degree
+          {profile.connectionDegree === '1st'
+            ? '1-й круг'
+            : profile.connectionDegree === '2nd'
+              ? '2-й круг'
+              : '3-й круг'}
         </span>
       </div>
       <p className="career-outreach-headline">{profile.headline}</p>
@@ -188,7 +192,7 @@ function DecisionMakerInfo({ profile }: { readonly profile: DecisionMakerProfile
         <span className="career-outreach-mutual-count">
           {profile.mutualConnectionsCount > 0
             ? pluralizeMutual(profile.mutualConnectionsCount)
-            : 'Прямой контакт'}
+            : 'Ваш контакт'}
         </span>
         <a
           href={profile.profileUrl}
@@ -257,8 +261,8 @@ function WebModeNotice({
       <div className="career-outreach-web-notice-head">
         <WarningCircle size={18} aria-hidden="true" />
         <p>
-          В веб-версии отправить нельзя — скопируйте и вставьте на площадке. В приложении
-          для компьютера отправка идёт из вашей сессии; пароль и сессия к нам не попадают.
+          В веб-версии отправить нельзя. Скопируйте текст и вставьте его на площадке. В приложении
+          отправка идёт из вашей сессии; пароль и сессия к нам не попадают.
         </p>
       </div>
       <button
@@ -295,7 +299,7 @@ function DesktopSendAction({
           onChange={onToggleConfirm}
           disabled={disabled || sending}
         />
-        <span>Отправить от моего имени из моего аккаунта на LinkedIn</span>
+        <span>Отправить от моего имени из моего аккаунта на площадке</span>
       </label>
       <button
         type="button"
@@ -306,12 +310,12 @@ function DesktopSendAction({
         {sending ? (
           <>
             <CircleNotch size={16} className="career-spin" aria-hidden="true" />
-            <span>Отправляем в сессии...</span>
+            <span>Отправляем из приложения…</span>
           </>
         ) : (
           <>
             <PaperPlaneTilt size={16} aria-hidden="true" />
-            <span>Отправить в LinkedIn</span>
+            <span>Отправить с площадки</span>
           </>
         )}
       </button>
@@ -336,7 +340,7 @@ function OutreachNoteInputs({
     <>
       <div className="career-outreach-form-header">
         <label htmlFor="outreach-note-textarea" className="career-outreach-field-label">
-          Заметка к Connection Request:
+          Заметка к запросу в контакты
         </label>
         <span className={`career-outreach-char-count ${isOverflow ? 'is-overflow' : ''}`}>
           {note.length} / 300
@@ -353,7 +357,7 @@ function OutreachNoteInputs({
         value={note}
         onChange={(e) => onNoteChange(e.target.value)}
         className="career-pitch-textarea"
-        placeholder="Персонализированное сообщение при добавлении в контакты..."
+        placeholder="Кто вы, почему пишете и что хотите узнать. 2-3 предложения"
       />
       {sendError ? (
         <p className="career-outreach-error-banner" role="alert">
@@ -421,7 +425,7 @@ function OutreachRecordsHistory({ records }: { readonly records: readonly Outrea
   return (
     <div className="career-outreach-history">
       <h3 className="career-outreach-history-title">
-        История контактов ({records.length})
+        Кому писали ({records.length})
       </h3>
       <div className="career-outreach-history-list">
         {records.map((r) => (
@@ -429,11 +433,11 @@ function OutreachRecordsHistory({ records }: { readonly records: readonly Outrea
             <span className="career-outreach-history-name">{r.contactName}</span>
             <span className={`career-outreach-status-pill is-${r.status}`}>
               {r.status === 'invite_sent'
-                ? 'Запрос отправлен'
+                ? 'Отправлено'
                 : r.status === 'connected'
-                  ? 'Контакт принят'
+                  ? 'Принял'
                   : r.status === 'dialogue_started'
-                    ? 'Диалог начат'
+                    ? 'Ответил'
                     : r.status}
             </span>
             <small className="career-outreach-history-date">

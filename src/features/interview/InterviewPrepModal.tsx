@@ -65,6 +65,10 @@ export function InterviewPrepModal(props: InterviewPrepModalProps) {
         ref={cardRef}
       >
         <InterviewHeader title={vacancy.title} company={vacancy.company} onClose={onClose} />
+        <p className="career-cabinet-tag career-interview-source-note">
+          Справка собрана по тексту вакансии и открытым источникам. Ответы взяты из фактов профиля.
+          Это заготовки, не скрипт.
+        </p>
         <InterviewTabNav tab={tab} onTabChange={setTab} />
         <main className="career-interview-body">
           <InterviewTabContent tab={tab} brief={brief} />
@@ -103,7 +107,7 @@ function InterviewHeader({
     <header className="career-interview-header">
       <div className="career-interview-title-block">
         <h2 id="career-interview-title" className="career-interview-title">
-          Подготовка к интервью: {title}
+          Интервью: «{title}»
         </h2>
         {company ? <p className="career-interview-subtitle">{company}</p> : null}
       </div>
@@ -120,9 +124,9 @@ function InterviewHeader({
 }
 
 const TAB_CONFIG = [
-  { id: 'overview' as const, label: 'Справка о компании и фокус', icon: Buildings },
-  { id: 'star' as const, label: 'Вопросы и ответы (STAR)', icon: Target },
-  { id: 'questions' as const, label: 'Вопросы работодателю', icon: ChatCircleDots },
+  { id: 'overview' as const, label: 'Компания и что им важно', icon: Buildings },
+  { id: 'star' as const, label: 'Вопросы к вам (STAR)', icon: Target },
+  { id: 'questions' as const, label: 'Ваши вопросы им', icon: ChatCircleDots },
 ] as const;
 
 function InterviewTabNav({
@@ -165,7 +169,7 @@ function OverviewTab({
   return (
     <div className="career-interview-overview">
       <section className="career-interview-section">
-        <h3>Справка и технологический контекст</h3>
+        <h3>Чем занимаются и на чём работают</h3>
         <p className="career-interview-summary">{overview.summary}</p>
         <div className="career-interview-chips">
           {overview.techStack.map((tech) => (
@@ -177,7 +181,7 @@ function OverviewTab({
       </section>
 
       <section className="career-interview-section">
-        <h3>Ожидаемые вызовы</h3>
+        <h3>С чем придётся иметь дело</h3>
         <ul className="career-interview-list">
           {overview.challenges.map((c) => (
             <li key={c}>{c}</li>
@@ -186,7 +190,7 @@ function OverviewTab({
       </section>
 
       <section className="career-interview-section">
-        <h3>Рекомендации для встречи</h3>
+        <h3>На что сделать упор</h3>
         <ul className="career-interview-list">
           {focus.recommendations.map((r) => (
             <li key={r}>{r}</li>
@@ -195,7 +199,7 @@ function OverviewTab({
       </section>
 
       <section className="career-interview-section">
-        <h3>Ключевые темы обсуждения</h3>
+        <h3>О чём спросят вероятнее всего</h3>
         <ul className="career-interview-list">
           {focus.keyThemes.map((t) => (
             <li key={t}>{t}</li>
@@ -227,6 +231,9 @@ function StarTab({ questions }: { readonly questions: readonly StarQuestion[] })
 
   return (
     <div className="career-interview-star-list">
+      <p className="career-cabinet-tag">
+        STAR: ситуация → задача → что сделали вы → результат в цифрах.
+      </p>
       {questions.map((q) => (
         <StarQuestionCard
           key={q.id}
@@ -302,7 +309,7 @@ function StarQuestionCard({
           aria-label="Скопировать ответ по структуре STAR"
         >
           {isCopied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-          <span>{isCopied ? 'Ответ скопирован!' : 'Копировать ответ'}</span>
+          <span>{isCopied ? 'Скопировано' : 'Скопировать'}</span>
         </button>
       </footer>
     </article>
@@ -323,8 +330,8 @@ function QuestionsTab({ questions }: { readonly questions: readonly string[] }) 
   return (
     <div className="career-interview-questions">
       <header className="career-interview-section-header">
-        <h3>Встречные вопросы кандидату для работодателя</h3>
-        <p>Задавайте эти вопросы в конце интервью для демонстрации глубины и оценки инженерной культуры.</p>
+        <h3>Ваши вопросы им</h3>
+        <p>Задайте их в конце интервью, чтобы понять задачи и культуру команды.</p>
       </header>
       <ol className="career-interview-questions-list">
         {questions.map((q, idx) => (
@@ -337,7 +344,7 @@ function QuestionsTab({ questions }: { readonly questions: readonly string[] }) 
               aria-label="Скопировать вопрос"
             >
               {copiedIdx === idx ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-              <span>{copiedIdx === idx ? 'Скопировано!' : 'Копировать вопрос'}</span>
+              <span>{copiedIdx === idx ? 'Скопировано' : 'Скопировать'}</span>
             </button>
           </li>
         ))}

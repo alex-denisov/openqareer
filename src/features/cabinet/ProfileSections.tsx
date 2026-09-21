@@ -9,7 +9,12 @@ import type { CandidateProfileView, ProfileExperienceEntry } from './profileView
 
 export function ProfileAbout({ view }: { view: CandidateProfileView }) {
   if (!view.about && view.languages.length === 0) {
-    return <p className="career-profile-empty">Расскажите о себе — этот блок читают первым.</p>;
+    return (
+      <p className="career-profile-empty">
+        Блок «О себе» пуст. Его читают первым: добавьте 3-4 предложения о том, кто вы, в чём сильны
+        и что ищете.
+      </p>
+    );
   }
 
   return (
@@ -64,7 +69,8 @@ export function ProfileExperience({
       </ol>
       {view.education.length === 0 ? (
         <p className="career-job-gap">
-          Образование не заполнено — его спрашивает часть вакансий вашей выборки.
+          Образование не заполнено. Часть вакансий в подборе требует его обязательным полем, без
+          него отклик на площадке может не пройти.
         </p>
       ) : null}
     </section>
@@ -105,7 +111,8 @@ function JobCard({
         <JobBullets entry={entry} onImprove={onImprove} />
       ) : (
         <p className="career-job-empty">
-          В этом месте работы нет ни одного пункта — расскажите, что вы там сделали.
+          Ни одного пункта: рекрутер увидит только должность. Добавьте 2-3 строки о том, что
+          сделали и что изменилось.
         </p>
       )}
     </li>
@@ -132,10 +139,10 @@ function JobBullets({
       </ul>
       <div className="career-job-foot">
         <span className="career-cabinet-tag">
-          {entry.measurableBullets} из {total} {bulletNoun(total)} с измеримым результатом
+          {entry.measurableBullets} из {total} {bulletNoun(total)} с числом
         </span>
         <button type="button" className="career-job-improve" onClick={onImprove}>
-          <Sparkle size={14} weight="fill" /> Улучшить блок
+          <Sparkle size={14} weight="fill" /> Переписать с консультантом
         </button>
       </div>
     </>
@@ -201,14 +208,14 @@ function carriesNumber(text: string): boolean {
 }
 
 /**
- * Ярлык блока — это пересказ счёта, а не оценка: «сильный блок» стоит там, где
- * величину называет большинство пунктов, и нигде больше.
+ * Ярлык блока — это пересказ счёта, а не оценка: показываем, сколько пунктов
+ * содержит число, а не называем опыт сильным или слабым.
  */
 function jobQuality(measured: number, total: number): { tone: string; label: string } {
-  if (total === 0) return { tone: 'muted', label: 'нет пунктов' };
-  if (measured === 0) return { tone: 'warn', label: 'нет величин' };
-  if (measured * 2 >= total) return { tone: 'good', label: 'сильный блок' };
-  return { tone: 'warn', label: 'мало величин' };
+  if (total === 0) return { tone: 'muted', label: 'пусто' };
+  if (measured === 0) return { tone: 'warn', label: 'без цифр' };
+  if (measured * 2 >= total) return { tone: 'good', label: 'результаты в цифрах' };
+  return { tone: 'warn', label: 'мало цифр' };
 }
 
 function bulletNoun(count: number): string {
