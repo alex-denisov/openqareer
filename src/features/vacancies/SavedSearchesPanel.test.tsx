@@ -38,8 +38,11 @@ function render(subscriptions: VacancySubscription[]) {
 }
 
 describe('SavedSearchesPanel', () => {
-  it('называет раздел так же, как кандидат его ищет — регулярные выборки', () => {
-    expect(render([])).toContain('Регулярные выборки');
+  // B234: заголовок «Регулярные выборки / Настройте направление» ушёл — блок
+  // живёт под «сохранённые» в панели фильтров, заголовок даёт панель.
+  it('не повторяет заголовок панели фильтров', () => {
+    expect(render([])).not.toContain('Настройте направление');
+    expect(render([subscription])).not.toContain('Регулярные выборки</span>');
   });
 
   it('без выборок предлагает завести первую прямо в панели фильтров', () => {
@@ -53,6 +56,6 @@ describe('SavedSearchesPanel', () => {
     const html = render([subscription]);
     expect(html).toContain('Руководитель продукта');
     expect(html).toContain('41');
-    expect(html).toContain('Активен');
+    expect(html).toContain('Активна');
   });
 });

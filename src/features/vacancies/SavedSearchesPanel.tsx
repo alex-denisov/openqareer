@@ -5,7 +5,6 @@ import type {
   VacancySubscription,
 } from '../coach/coachApi';
 import {
-  MarketAnalytics,
   SourceAttribution,
   cadenceLabel,
   fallbackSources,
@@ -29,27 +28,29 @@ export function SavedSearchesPanel(props: {
   readonly subscriptions: readonly VacancySubscription[];
   readonly defaultQuery?: string;
   readonly onRefresh: () => Promise<void>;
+  /** Форма новой выборки раскрыта «+» в панели фильтров (B234). */
+  readonly createOpen?: boolean;
+  /** Выборка заведена — панель фильтров закрывает форму. */
+  readonly onCreated?: () => void;
 }) {
   const state = useSavedSearches(props);
   const { active } = state;
+  const showForm = props.createOpen || !active;
 
   return (
-    <section className="career-saved-searches" aria-labelledby="career-saved-searches-title">
-      <header>
-        <div>
-          <span>Регулярные выборки</span>
-          <h3 id="career-saved-searches-title">
-            {active ? `${active.analytics.sampleSize} вакансий в выборке` : 'Настройте направление'}
-          </h3>
-        </div>
-        {active ? (
+    <section className="career-saved-searches" aria-label="Регулярные выборки">
+      {active && !showForm ? (
+        <header>
+          <div>
+            <h3 id="career-saved-searches-title">{active.analytics.sampleSize} в выборке</h3>
+          </div>
           <span className={`career-search-status is-${active.status}`}>
-            {active.status === 'active' ? 'Активен' : 'На паузе'}
+            {active.status === 'active' ? 'Активна' : 'На паузе'}
           </span>
-        ) : null}
-      </header>
+        </header>
+      ) : null}
 
-      {props.subscriptions.length > 1 ? (
+      {!showForm && props.subscriptions.length > 1 ? (
         <SavedSearchSwitcher
           subscriptions={props.subscriptions}
           activeId={state.activeId}
@@ -58,7 +59,7 @@ export function SavedSearchesPanel(props: {
         />
       ) : null}
 
-      {active ? (
+      {active && !showForm ? (
         <SavedSearchDetails
           subscription={active}
           source={state.activeSource}
@@ -76,7 +77,11 @@ export function SavedSearchesPanel(props: {
           busy={state.busy}
           onQuery={state.setQuery}
           onSource={state.setSource}
-          onSubmit={() => void state.create()}
+          onSubmit={() =>
+            void state.create().then((created) => {
+              if (created) props.onCreated?.();
+            })
+          }
         />
       )}
 
@@ -167,8 +172,6 @@ function SavedSearchDetails({
           </button>
         </div>
       </div>
-
-      <MarketAnalytics subscription={subscription} />
 
       {subscription.lastErrorCode ? (
         <p className="career-market-empty">{sourceFailureMessage(subscription.lastErrorCode)}</p>

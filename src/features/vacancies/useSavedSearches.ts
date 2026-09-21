@@ -104,13 +104,16 @@ export function useSavedSearches({
     };
   }, [activeId, subscriptions]);
 
-  async function guard(work: () => Promise<void>) {
+  /** `true`, если работа дошла до конца; ошибка остаётся в `error`. */
+  async function guard(work: () => Promise<void>): Promise<boolean> {
     setBusy(true);
     setError(undefined);
     try {
       await work();
+      return true;
     } catch (reason) {
       setError(intelligenceError(reason));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -120,9 +123,7 @@ export function useSavedSearches({
   // «Настройте направление»: выбор по эффекту приходит только вторым кадром, и
   // кандидат успевал увидеть предложение завести то, что у него уже есть.
   const active =
-    view?.subscription ??
-    subscriptions.find((item) => item.id === activeId) ??
-    subscriptions[0];
+    view?.subscription ?? subscriptions.find((item) => item.id === activeId) ?? subscriptions[0];
 
   return {
     active,
@@ -137,10 +138,10 @@ export function useSavedSearches({
     setActiveId,
     setQuery,
     setSource,
-    create: async () => {
+    create: async (): Promise<boolean> => {
       const clean = query.trim();
-      if (clean.length < 2) return;
-      await guard(async () => {
+      if (clean.length < 2) return false;
+      return guard(async () => {
         const created = await createVacancySubscription({
           source,
           query: clean,

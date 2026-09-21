@@ -12,6 +12,10 @@ export interface VacancyFilters extends VacancyFacetFilters {
   readonly source?: string;
   readonly remoteOnly?: boolean;
   readonly query?: string;
+  /** Подстрока названия роли; работодатель не участвует (B234). */
+  readonly role?: string;
+  /** Страна работодателя из обогащения (`companyFeatures.country`). */
+  readonly country?: string;
 }
 
 export interface VacancyAge {
@@ -35,16 +39,10 @@ export function vacancyAge(cluster: VacancyCluster, now: string): VacancyAge {
     return { days: null, label: 'дата неизвестна' };
   }
 
-  const days = Math.max(
-    0,
-    Math.floor((Date.parse(now) - firstSeen) / 86_400_000),
-  );
+  const days = Math.max(0, Math.floor((Date.parse(now) - firstSeen) / 86_400_000));
   return {
     days,
-    label:
-      days === 0
-        ? 'сегодня'
-        : pluralRu(days, ['день', 'дня', 'дней']),
+    label: days === 0 ? 'сегодня' : pluralRu(days, ['день', 'дня', 'дней']),
   };
 }
 
@@ -61,9 +59,7 @@ export interface VacancyCoverage {
  * попадают ещё и совпадение роли с форматом работы, и «7 из 11» получалось при
  * пяти требованиях в вакансии (PRB-016).
  */
-export function vacancyCoverage(
-  explanation: VacancyExplanation,
-): VacancyCoverage | undefined {
+export function vacancyCoverage(explanation: VacancyExplanation): VacancyCoverage | undefined {
   const requirements = explanation.requirements;
   if (!requirements || requirements.total === 0) return undefined;
   return { covered: requirements.matched, total: requirements.total };
@@ -76,9 +72,12 @@ export function filterVacancies(
 ): MatchedVacancyItem[] {
   const facetFiltered = filterVacanciesByFacets(items, filters);
   const query = filters.query?.trim().toLocaleLowerCase('ru-RU');
+  const role = filters.role?.trim().toLocaleLowerCase('ru-RU');
 
   return facetFiltered.filter(({ cluster }) => {
     if (filters.remoteOnly && !cluster.isRemote) return false;
+    if (filters.country && cluster.companyFeatures?.country !== filters.country) return false;
+    if (role && !cluster.canonicalTitle.toLocaleLowerCase('ru-RU').includes(role)) return false;
     if (filters.source && !clusterSources(cluster).includes(filters.source)) {
       return false;
     }
@@ -88,10 +87,9 @@ export function filterVacancies(
       if (days === null || days > filters.freshness) return false;
     }
     if (query) {
-      const haystack =
-        `${cluster.canonicalTitle} ${cluster.canonicalCompany}`.toLocaleLowerCase(
-          'ru-RU',
-        );
+      const haystack = `${cluster.canonicalTitle} ${cluster.canonicalCompany}`.toLocaleLowerCase(
+        'ru-RU',
+      );
       if (!haystack.includes(query)) return false;
     }
     return true;
@@ -116,4 +114,18 @@ export function vacancySourceNames(
 /** Названия площадок кластера без повторов — по ним и фильтр, и подпись. */
 function clusterSources(cluster: VacancyCluster): string[] {
   return vacancySourceLabels(cluster.sources);
+}
+
+/** Страны работодателей со счётом записей — для фильтра «страна» (B234). */
+export function vacancyCountries(
+  items: readonly MatchedVacancyItem[],
+): Array<{ country: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const { cluster } of items) {
+    const country = cluster.companyFeatures?.country?.trim();
+    if (country) counts.set(country, (counts.get(country) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([country, count]) => ({ country, count }))
+    .sort((a, b) => b.count - a.count || a.country.localeCompare(b.country, 'ru-RU'));
 }

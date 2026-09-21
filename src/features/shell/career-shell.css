@@ -8560,9 +8560,44 @@
    источник там же, где смотрит пул (B181). */
 .career-saved-searches {
   display: grid;
-  gap: 12px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--career-line);
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* B234: панель по макету — «сохранённые» пилюлями, роль как поле фильтра. */
+.career-vacancy-saved-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid oklch(79% 0.145 255 / 0.34);
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.career-vacancy-role {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--career-line-strong, oklch(93% 0.015 255 / 0.24));
+  border-radius: 11px;
+  color: var(--career-text);
+  background: var(--career-surface-soft, oklch(27% 0.018 255 / 0.4));
+  font: inherit;
+  font-size: var(--career-text-sm);
+}
+
+.career-vacancy-role::placeholder,
+.career-vacancy-search input::placeholder {
+  color: var(--career-text-dim);
+}
+
+.career-vacancy-filters .career-market-query-row {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0;
 }
 
 .career-saved-searches > header {

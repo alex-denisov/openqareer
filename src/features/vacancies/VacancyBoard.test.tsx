@@ -18,7 +18,8 @@ describe('VacancyBoard filters', () => {
       />,
     );
     expect(html).toContain('Фильтры');
-    expect(html).toContain('Регулярные выборки');
+    expect(html).toContain('Сохранённые');
+    expect(html).toContain('Новая регулярная выборка');
   });
 
   /**
@@ -202,10 +203,11 @@ describe('VacancyBoard · ручной отклик', () => {
 
     expect(html).toContain('Список (1)');
     expect(html).toContain('На карте (1 из 1)');
-    expect(html).toContain('Релокация (1 из 1)');
-    expect(html).toContain('Валюта (1 из 1)');
-    expect(html).toContain('✈️ Релокация');
-    expect(html).toContain('💵 Валюта');
+    expect(html).toContain('<span>Помощь с переездом</span><strong>1</strong>');
+    expect(html).toContain('<span>Валютная удалёнка</span><strong>1</strong>');
+    expect(html).toContain('помощь с переездом');
+    expect(html).toContain('валютная удалёнка');
+    expect(html).not.toMatch(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
   });
 
   it('рендерит кнопку «Подготовить отклик» в действиях строки вакансии', () => {
@@ -246,7 +248,6 @@ describe('VacancyBoard · ручной отклик', () => {
     expect(html).toContain('К интервью');
   });
 });
-
 
 /**
  * B232. Подбор из 96–397 записей рендерился целиком: 5 108 текстовых узлов
@@ -310,9 +311,7 @@ describe('VacancyBoard · страница из 20 записей', () => {
       ...first,
       explanation: { ...first.explanation, outsideGeography: true },
     } as unknown as MatchedVacancyItem;
-    const html = renderToStaticMarkup(
-      <VacancyBoard pool={{ ...pool, matched: [outside] }} />,
-    );
+    const html = renderToStaticMarkup(<VacancyBoard pool={{ ...pool, matched: [outside] }} />);
     expect(html).toContain('вне вашей географии');
   });
 });

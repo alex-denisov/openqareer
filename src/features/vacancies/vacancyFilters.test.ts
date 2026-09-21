@@ -3,6 +3,7 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import {
   filterVacancies,
   vacancyAge,
+  vacancyCountries,
   vacancyCoverage,
   vacancySourceNames,
 } from './vacancyFilters';
@@ -109,11 +110,15 @@ describe('vacancyCoverage', () => {
   });
 
   it('не считает покрытие, когда вакансия не перечислила требований', () => {
-    const empty = item('c1', {}, {
-      matchingPoints: [],
-      missingPoints: [],
-      requirements: undefined,
-    });
+    const empty = item(
+      'c1',
+      {},
+      {
+        matchingPoints: [],
+        missingPoints: [],
+        requirements: undefined,
+      },
+    );
     expect(vacancyCoverage(empty.explanation)).toBeUndefined();
   });
 });
@@ -141,19 +146,17 @@ describe('filterVacancies', () => {
   ];
 
   it('оставляет только свежие, когда так попросили', () => {
-    const ids = filterVacancies(pool, { freshness: 7 }, NOW).map(
-      (found) => found.cluster.id,
-    );
+    const ids = filterVacancies(pool, { freshness: 7 }, NOW).map((found) => found.cluster.id);
     expect(ids).toEqual(['fresh', 'office']);
   });
 
   it('ищет по названию и работодателю', () => {
-    expect(
-      filterVacancies(pool, { query: 'банк' }, NOW).map((f) => f.cluster.id),
-    ).toEqual(['office']);
-    expect(
-      filterVacancies(pool, { query: 'данных' }, NOW).map((f) => f.cluster.id),
-    ).toEqual(['old']);
+    expect(filterVacancies(pool, { query: 'банк' }, NOW).map((f) => f.cluster.id)).toEqual([
+      'office',
+    ]);
+    expect(filterVacancies(pool, { query: 'данных' }, NOW).map((f) => f.cluster.id)).toEqual([
+      'old',
+    ]);
   });
 
   it('фильтрует по источнику и по удалённой работе', () => {
@@ -161,9 +164,10 @@ describe('filterVacancies', () => {
       // Фильтр называет площадку, а не тип адаптера (PRB-017).
       filterVacancies(pool, { source: 'hh.ru' }, NOW).map((f) => f.cluster.id),
     ).toEqual(['office']);
-    expect(
-      filterVacancies(pool, { remoteOnly: true }, NOW).map((f) => f.cluster.id),
-    ).toEqual(['fresh', 'old']);
+    expect(filterVacancies(pool, { remoteOnly: true }, NOW).map((f) => f.cluster.id)).toEqual([
+      'fresh',
+      'old',
+    ]);
   });
 
   it('без фильтров возвращает пул как есть', () => {
@@ -176,9 +180,15 @@ describe('filterVacancies', () => {
     });
     const testPool = [...pool, itemWithReloc];
 
-    expect(filterVacancies(testPool, { relocationOnly: true }, NOW).map((f) => f.cluster.id)).toEqual(['reloc']);
-    expect(filterVacancies(testPool, { currencyRemoteOnly: true }, NOW).map((f) => f.cluster.id)).toEqual(['reloc']);
-    expect(filterVacancies(testPool, { city: 'Берлин' }, NOW).map((f) => f.cluster.id)).toEqual(['reloc']);
+    expect(
+      filterVacancies(testPool, { relocationOnly: true }, NOW).map((f) => f.cluster.id),
+    ).toEqual(['reloc']);
+    expect(
+      filterVacancies(testPool, { currencyRemoteOnly: true }, NOW).map((f) => f.cluster.id),
+    ).toEqual(['reloc']);
+    expect(filterVacancies(testPool, { city: 'Берлин' }, NOW).map((f) => f.cluster.id)).toEqual([
+      'reloc',
+    ]);
   });
 });
 
@@ -202,6 +212,41 @@ describe('vacancySourceNames', () => {
     expect(counted).toEqual([
       { source: 'Telegram-каналы', count: 2 },
       { source: 'hh.ru', count: 1 },
+    ]);
+  });
+});
+
+// B234: панель фильтров по макету — поле «роль» ищет по названию, «страна»
+// берётся из обогащения работодателя. Владелец (2026-09-20): поле роли в
+// «Вакансиях» — это фильтр, а не заведение выборки.
+describe('role and country filters (B234)', () => {
+  const pool = [
+    item('a', { canonicalTitle: 'Product Manager', canonicalCompany: 'Analyst House' }),
+    item('b', {
+      canonicalTitle: 'Data Analyst',
+      canonicalCompany: 'Berlin GmbH',
+      companyFeatures: { country: 'Германия' } as MatchedVacancyItem['cluster']['companyFeatures'],
+    }),
+    item('c', {
+      canonicalTitle: 'Product Analyst',
+      companyFeatures: { country: 'Россия' } as MatchedVacancyItem['cluster']['companyFeatures'],
+    }),
+  ];
+
+  it('matches the role text against the title only, not the employer', () => {
+    const ids = filterVacancies(pool, { role: 'analyst' }, NOW).map((x) => x.cluster.id);
+    expect(ids).toEqual(['b', 'c']);
+  });
+
+  it('keeps records of one country and drops the rest', () => {
+    const ids = filterVacancies(pool, { country: 'Германия' }, NOW).map((x) => x.cluster.id);
+    expect(ids).toEqual(['b']);
+  });
+
+  it('counts countries with the same denominator as the pool', () => {
+    expect(vacancyCountries(pool)).toEqual([
+      { country: 'Германия', count: 1 },
+      { country: 'Россия', count: 1 },
     ]);
   });
 });

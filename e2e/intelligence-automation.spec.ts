@@ -198,7 +198,7 @@ test.describe('B156 truthful market intelligence boundary', () => {
     await openOpportunities(page);
 
     const marketSearch = page.locator('.career-saved-searches').filter({
-      has: page.getByRole('heading', { name: '12 вакансий в выборке' }),
+      has: page.getByRole('heading', { name: '12 в выборке' }),
     });
     await expect(marketSearch).toBeVisible();
     await expect(marketSearch.getByText('Senior Software Engineer', { exact: true })).toBeVisible();
@@ -241,10 +241,14 @@ test.describe('B156 truthful market intelligence boundary', () => {
     await waitForLiveApp(page);
     await openOpportunities(page);
 
+    // B234: форма новой выборки — за «+» в блоке «Сохранённые».
+    await page.getByRole('button', { name: 'Новая регулярная выборка' }).click();
     const create = page.locator('.career-market-create');
     await expect(create).toBeVisible();
     // B175 / INC-022: hh.ru answers 403 to the unauthenticated search, so the
     // candidate reads that before choosing it — not «ещё не проверен».
+    // PRB-042: по умолчанию стоит отвечающая площадка; hh.ru выбирают руками.
+    await create.getByRole('combobox', { name: 'Источник вакансий' }).selectOption('hh');
     const health = create.locator('.career-source-health');
     await expect(health).toHaveClass(/is-official_access_required/);
     await expect(health).toContainText('нужен официальный доступ');

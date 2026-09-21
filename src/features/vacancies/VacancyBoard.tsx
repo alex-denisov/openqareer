@@ -12,6 +12,7 @@ import { employerLabel } from '../../../shared/employerLabel';
 import {
   filterVacancies,
   vacancyAge,
+  vacancyCountries,
   vacancyCoverage,
   vacancySourceNames,
   type VacancyFilters,
@@ -19,13 +20,10 @@ import {
 import { useMatchedPool, type MatchedPool } from './useMatchedPool';
 import { useVacancyApplications, type VacancyApplications } from './useVacancyApplications';
 import type { VacancyApplication } from '../../../shared/vacancyApplication';
-import { SavedSearchesPanel } from './SavedSearchesPanel';
+import { VacancyFilterPanel } from './VacancyFilterPanel';
 import type { VacancySubscription } from '../coach/coachApi';
 import { VacancyMapView } from './VacancyMapView';
-import {
-  calculateVacancyFacets,
-  type VacancyFacetCounts,
-} from './vacancyFacets';
+import { calculateVacancyFacets } from './vacancyFacets';
 
 /**
  * «Вакансии» — весь собранный пул с фильтрами («Пульт»).
@@ -42,12 +40,6 @@ import {
  */
 /** Страница списка вакансий (B232): 20 строк, дальше — по просьбе. */
 const VACANCY_PAGE_SIZE = 20;
-
-const FRESHNESS_CHOICES: ReadonlyArray<{ label: string; days?: number }> = [
-  { label: 'до 7 дней', days: 7 },
-  { label: 'до 30 дней', days: 30 },
-  { label: 'любая', days: undefined },
-];
 
 // Экран пула — одна таблица с фильтрами: разнесение шапки, строк и подвала по
 // файлам только спрятало бы порядок колонок.
@@ -81,11 +73,15 @@ export function VacancyBoard({
   // Пока пул дочитывается, счётчик называет прочитанное, а не обещанное.
   const counted = total || matched.length;
   const filling = total === 0 && matched.length > 0;
-  const state = <VacancyBoardState loading={loading} failed={failed} empty={matched.length === 0} />;
+  const state = (
+    <VacancyBoardState loading={loading} failed={failed} empty={matched.length === 0} />
+  );
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [filters, setFilters] = useState<VacancyFilters>({});
   const [pitchVacancy, setPitchVacancy] = useState<MatchedVacancyItem['cluster'] | null>(null);
-  const [outreachVacancy, setOutreachVacancy] = useState<MatchedVacancyItem['cluster'] | null>(null);
+  const [outreachVacancy, setOutreachVacancy] = useState<MatchedVacancyItem['cluster'] | null>(
+    null,
+  );
   const [prepVacancy, setPrepVacancy] = useState<MatchedVacancyItem['cluster'] | null>(null);
   // Момент расчёта возраста берётся один раз на прочитанный пул: пересчёт на
   // каждый рендер сдвигал бы возраст записей под курсором.
@@ -93,11 +89,9 @@ export function VacancyBoard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const now = useMemo(() => new Date().toISOString(), [poolKey]);
   const facets = useMemo(() => calculateVacancyFacets(matched), [matched]);
-  const shown = useMemo(
-    () => filterVacancies(matched, filters, now),
-    [matched, filters, now],
-  );
+  const shown = useMemo(() => filterVacancies(matched, filters, now), [matched, filters, now]);
   const sources = useMemo(() => vacancySourceNames(matched), [matched]);
+  const countries = useMemo(() => vacancyCountries(matched), [matched]);
   // Страница списка: подбор в 96–397 записей, отрисованный целиком, давал
   // 5 108 текстовых узлов на одном экране (B232). Смена фильтров возвращает
   // к первой странице — иначе «показано 40 из 12» после сужения выборки.
@@ -116,6 +110,7 @@ export function VacancyBoard({
       filters={filters}
       facets={facets}
       sources={sources}
+      countries={countries}
       onChange={applyFilters}
       onReset={() => applyFilters({})}
       subscriptions={subscriptions}
@@ -143,7 +138,11 @@ export function VacancyBoard({
             <strong>{freshToday(matched, now)}</strong> собрано сегодня ·{' '}
             <strong>{shown.length}</strong> после фильтров
           </p>
-          <div className="career-vacancy-view-switcher" role="radiogroup" aria-label="Режим отображения">
+          <div
+            className="career-vacancy-view-switcher"
+            role="radiogroup"
+            aria-label="Режим отображения"
+          >
             <button
               type="button"
               role="radio"
@@ -162,7 +161,9 @@ export function VacancyBoard({
               onClick={() => setViewMode('map')}
             >
               <MapPin size={14} aria-hidden="true" />
-              <span>На карте ({facets.onMap.count} из {facets.total})</span>
+              <span>
+                На карте ({facets.onMap.count} из {facets.total})
+              </span>
             </button>
           </div>
           <VacancyChips filters={filters} onChange={applyFilters} />
@@ -301,230 +302,21 @@ function VacancyBoardState({
   if (failed) {
     return (
       <p className="career-expert-error" role="alert">
-        Пул вакансий сейчас не читается — источник не ответил. Данные профиля не
-        затронуты, повторите позже.
+        Пул вакансий сейчас не читается — источник не ответил. Данные профиля не затронуты,
+        повторите позже.
       </p>
     );
   }
   if (empty) {
     return (
       <p className="career-market-empty">
-        Пул пуст для вашего профиля. Подбор работает по подтверждённым навыкам и
-        названной роли: пока их нет, продукт не показывает вакансии, чтобы не
-        выдавать случайные записи за подходящие.
+        Пул пуст для вашего профиля. Подбор работает по подтверждённым навыкам и названной роли:
+        пока их нет, продукт не показывает вакансии, чтобы не выдавать случайные записи за
+        подходящие.
       </p>
     );
   }
   return null;
-}
-
-function VacancyFilterPanel({
-  filters,
-  facets,
-  sources,
-  onChange,
-  onReset,
-  subscriptions,
-  defaultQuery,
-  onRefresh,
-}: {
-  filters: VacancyFilters;
-  facets: VacancyFacetCounts;
-  sources: ReadonlyArray<{ source: string; count: number }>;
-  onChange: (filters: VacancyFilters) => void;
-  onReset: () => void;
-  subscriptions: readonly VacancySubscription[];
-  defaultQuery?: string;
-  onRefresh?: () => Promise<void>;
-}) {
-  return (
-    <aside className="career-vacancy-filters" aria-label="Фильтры вакансий">
-      <SavedSearchesPanel
-        subscriptions={subscriptions}
-        defaultQuery={defaultQuery}
-        onRefresh={onRefresh ?? (async () => undefined)}
-      />
-
-      <header>
-        <h3>Фильтры</h3>
-        <button className="career-inline-link" type="button" onClick={onReset}>
-          Сбросить
-        </button>
-      </header>
-
-      <VacancyQueryFilter filters={filters} onChange={onChange} />
-
-      <FreshnessFilter filters={filters} onChange={onChange} />
-
-      <RemoteFormatFilter
-        remoteOnly={filters.remoteOnly}
-        onToggle={() => onChange({ ...filters, remoteOnly: !filters.remoteOnly })}
-      />
-
-      <FeatureFacetsFilter filters={filters} facets={facets} onChange={onChange} />
-
-      <SourceFilter filters={filters} sources={sources} onChange={onChange} />
-    </aside>
-  );
-}
-
-function FeatureFacetsFilter({
-  filters,
-  facets,
-  onChange,
-}: {
-  filters: VacancyFilters;
-  facets: VacancyFacetCounts;
-  onChange: (filters: VacancyFilters) => void;
-}) {
-  return (
-    <fieldset>
-      <legend>Фишки работодателей</legend>
-      <div className="career-vacancy-chips">
-        <button
-          type="button"
-          className={filters.relocationOnly ? 'is-active' : ''}
-          aria-pressed={Boolean(filters.relocationOnly)}
-          onClick={() => onChange({ ...filters, relocationOnly: !filters.relocationOnly })}
-        >
-          Релокация ({facets.relocation.count} из {facets.total})
-        </button>
-        <button
-          type="button"
-          className={filters.currencyRemoteOnly ? 'is-active' : ''}
-          aria-pressed={Boolean(filters.currencyRemoteOnly)}
-          onClick={() => onChange({ ...filters, currencyRemoteOnly: !filters.currencyRemoteOnly })}
-        >
-          Валюта ({facets.currencyRemote.count} из {facets.total})
-        </button>
-        <button
-          type="button"
-          className={filters.russianAbroadOnly ? 'is-active' : ''}
-          aria-pressed={Boolean(filters.russianAbroadOnly)}
-          onClick={() => onChange({ ...filters, russianAbroadOnly: !filters.russianAbroadOnly })}
-        >
-          Рос. за рубежом ({facets.russianAbroad.count} из {facets.total})
-        </button>
-      </div>
-    </fieldset>
-  );
-}
-
-function RemoteFormatFilter({
-  remoteOnly,
-  onToggle,
-}: {
-  remoteOnly?: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <fieldset>
-      <legend>Формат</legend>
-      <div className="career-vacancy-chips">
-        <button
-          type="button"
-          className={remoteOnly ? 'is-active' : ''}
-          aria-pressed={Boolean(remoteOnly)}
-          onClick={onToggle}
-        >
-          Только удалённо
-        </button>
-      </div>
-    </fieldset>
-  );
-}
-
-function VacancyQueryFilter({
-  filters,
-  onChange,
-}: {
-  filters: VacancyFilters;
-  onChange: (filters: VacancyFilters) => void;
-}) {
-  return (
-    <label className="career-vacancy-search">
-      <span>Название или работодатель</span>
-      <input
-        type="search"
-        value={filters.query ?? ''}
-        onChange={(event) => onChange({ ...filters, query: event.target.value })}
-        placeholder="Аналитик, FinCloud…"
-      />
-    </label>
-  );
-}
-
-/**
- * Свежесть — узел 15 пути пилота. Подпись обязана называть, от чего считается
- * возраст: даты публикации источники отдают не всегда, поэтому счёт идёт от
- * первого сбора записи, и выдавать одно за другое нельзя.
- */
-function FreshnessFilter({
-  filters,
-  onChange,
-}: {
-  filters: VacancyFilters;
-  onChange: (filters: VacancyFilters) => void;
-}) {
-  return (
-    <fieldset>
-      <legend>Свежесть</legend>
-      <div className="career-vacancy-chips">
-        {FRESHNESS_CHOICES.map((choice) => (
-          <button
-            key={choice.label}
-            type="button"
-            className={filters.freshness === choice.days ? 'is-active' : ''}
-            aria-pressed={filters.freshness === choice.days}
-            onClick={() => onChange({ ...filters, freshness: choice.days })}
-          >
-            {choice.label}
-          </button>
-        ))}
-      </div>
-      <p className="career-cabinet-tag">
-        Считается от первого сбора записи, а не от даты публикации — её источники
-        отдают не всегда.
-      </p>
-    </fieldset>
-  );
-}
-
-/** Источники со счётчиками: фильтр обязан говорить, сколько за ним записей. */
-function SourceFilter({
-  filters,
-  sources,
-  onChange,
-}: {
-  filters: VacancyFilters;
-  sources: ReadonlyArray<{ source: string; count: number }>;
-  onChange: (filters: VacancyFilters) => void;
-}) {
-  return (
-    <fieldset>
-      <legend>Источник</legend>
-      <ul className="career-vacancy-sources">
-        {sources.map(({ source, count }) => (
-          <li key={source}>
-            <button
-              type="button"
-              className={filters.source === source ? 'is-active' : ''}
-              aria-pressed={filters.source === source}
-              onClick={() =>
-                onChange({
-                  ...filters,
-                  source: filters.source === source ? undefined : source,
-                })
-              }
-            >
-              <span>{source}</span>
-              <strong>{count}</strong>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </fieldset>
-  );
 }
 
 /** Активные фильтры — чипами, каждый снимается по себе (макет «Пульт»). */
@@ -537,15 +329,18 @@ function VacancyChips({
 }) {
   const chips: Array<{ key: keyof VacancyFilters; label: string }> = [];
   if (filters.query) chips.push({ key: 'query', label: filters.query });
+  if (filters.role) chips.push({ key: 'role', label: `Роль: ${filters.role}` });
+  if (filters.country) chips.push({ key: 'country', label: filters.country });
   if (filters.source) {
     chips.push({ key: 'source', label: filters.source });
   }
-  if (filters.remoteOnly) chips.push({ key: 'remoteOnly', label: 'Только удалённо' });
+  if (filters.remoteOnly) chips.push({ key: 'remoteOnly', label: 'Удалённо' });
   if (filters.freshness !== undefined) {
     chips.push({ key: 'freshness', label: `до ${filters.freshness} дней` });
   }
-  if (filters.relocationOnly) chips.push({ key: 'relocationOnly', label: 'Релокация' });
-  if (filters.currencyRemoteOnly) chips.push({ key: 'currencyRemoteOnly', label: 'Валютная удалёнка' });
+  if (filters.relocationOnly) chips.push({ key: 'relocationOnly', label: 'Помощь с переездом' });
+  if (filters.currencyRemoteOnly)
+    chips.push({ key: 'currencyRemoteOnly', label: 'Валютная удалёнка' });
   if (filters.russianAbroadOnly) chips.push({ key: 'russianAbroadOnly', label: 'Рос. за рубежом' });
   if (filters.city) chips.push({ key: 'city', label: `Город: ${filters.city}` });
   if (filters.industry) chips.push({ key: 'industry', label: `Индустрия: ${filters.industry}` });
@@ -571,8 +366,7 @@ function VacancyChips({
 /** Сколько записей пул собрал сегодня — по дате первого сбора, не публикации. */
 function freshToday(items: readonly MatchedVacancyItem[], now: string): number {
   const today = now.slice(0, 10);
-  return items.filter((item) => (item.cluster.firstObservedAt ?? '').slice(0, 10) === today)
-    .length;
+  return items.filter((item) => (item.cluster.firstObservedAt ?? '').slice(0, 10) === today).length;
 }
 
 function lastCollected(items: readonly MatchedVacancyItem[]): string {
@@ -601,9 +395,11 @@ function VacancyFeatureBadges({
 }) {
   if (!features) return null;
   const badges: string[] = [];
-  if (features.relocation) badges.push('✈️ Релокация');
-  if (features.currencyRemote) badges.push('💵 Валюта');
-  if (features.russianAbroad) badges.push('🌍 Рос. за рубежом');
+  // Словами, без эмодзи: пиктограмма-эмодзи читается как машинный текст и
+  // не проходит контракт дизайна.
+  if (features.relocation) badges.push('помощь с переездом');
+  if (features.currencyRemote) badges.push('валютная удалёнка');
+  if (features.russianAbroad) badges.push('российская компания за рубежом');
   if (features.atsProvider) badges.push(`ATS: ${features.atsProvider}`);
   if (badges.length === 0) return null;
 
@@ -655,12 +451,12 @@ function VacancyRow({
           {employerInitials(cluster.canonicalCompany)}
         </span>
         <span>
-        <strong>{cluster.canonicalTitle}</strong>
-        <small>
-          {employerLabel(cluster.canonicalCompany)} ·{' '}
-          {vacancySourceLabels(cluster.sources).join(', ')}
-        </small>
-        <VacancyFeatureBadges features={cluster.companyFeatures} />
+          <strong>{cluster.canonicalTitle}</strong>
+          <small>
+            {employerLabel(cluster.canonicalCompany)} ·{' '}
+            {vacancySourceLabels(cluster.sources).join(', ')}
+          </small>
+          <VacancyFeatureBadges features={cluster.companyFeatures} />
         </span>
       </div>
       <span className="career-vacancy-salary">{salaryLabel(cluster.salary)}</span>
