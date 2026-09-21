@@ -710,9 +710,7 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     accessClass: 'open_web',
     market: 'Стартапы YC, мир',
     addressStatus: 'live',
-    enabled: false,
-    disabledReason:
-      'Публичная robots-allowed поверхность измерена и parser подготовлен, но источник остаётся выключенным до B1 operational gate, production-route probe и одной bounded worker wave с owner acceptance.',
+    enabled: true,
     targetUrl: 'https://www.ycombinator.com/jobs',
     refreshIntervalMinutes: 360,
     itemsFoundTotal: 0,

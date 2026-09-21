@@ -197,6 +197,15 @@ describe('registry of vacancy sources: routes and address status (B199)', () => 
     expect(himalayasApi?.enabled).toBe(true);
   });
 
+  it('enables the YC source only after a production-route probe', () => {
+    const source = DEFAULT_VACANCY_SOURCES.find((entry) => entry.id === 'src-yc-work-at-startup');
+    expect(source?.enabled).toBe(true);
+    expect(source?.type).toBe('career_site');
+    expect(vacancySourceMeasurements('src-yc-work-at-startup')).toEqual([
+      expect.objectContaining({ route: 'eu-prod', items: 138 }),
+    ]);
+  });
+
   it('подключает постраничные площадки и карьерные сайты B216 с замером с прод-маршрута', () => {
     const enabledIds = DEFAULT_VACANCY_SOURCES.filter((source) => source.enabled).map(
       (source) => source.id,
