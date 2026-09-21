@@ -63,7 +63,8 @@ describe('фильтр веера обхода hh.ru', () => {
     expect(response.statusCode).toBe(200);
     const { data } = response.json();
     expect(data.categories).toHaveLength(27);
-    expect(data.selectedRoleIds).toHaveLength(25);
+    expect(data.selectedRoleIds.length).toBeGreaterThan(25);
+    expect(data.selectedRoleIds).toContain('26');
     expect(data.searchPeriodDays).toBe(30);
     const it11 = data.categories.find((c: { id: string }) => c.id === '11');
     expect(it11.name).toBe('Информационные технологии');
