@@ -8435,6 +8435,8 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
+  row-gap: var(--career-space-2);
 }
 
 .career-home-panel h3 {
