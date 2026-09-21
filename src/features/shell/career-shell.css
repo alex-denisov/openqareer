@@ -8858,9 +8858,10 @@
   min-height: 36px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  /* Шесть кнопок в один ряд на 1176 px окна .app: при 10–12 px «Интервью»
+  /* Шесть кнопок в один ряд на 1176 px окна .app (карточка минус её отступы —
+     703 px): при отступах 10–12 px, зазоре 6 px и весе 600 «Интервью»
      переносилось (приёмка B236, 2026-09-21). */
+  gap: 5px;
   padding: 0 8px;
   border: 1px solid var(--career-line-strong, oklch(93% 0.015 255 / 0.24));
   border-radius: 10px;
@@ -8868,7 +8869,7 @@
   color: var(--career-text-soft);
   font: inherit;
   font-size: var(--career-text-xs);
-  font-weight: 600;
+  font-weight: 500;
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
@@ -8918,9 +8919,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  /* Шесть кнопок в один ряд на 1176 px окна .app: с зазором 12 px ряд
+  /* Шесть кнопок в один ряд на 1176 px окна .app: с зазором 12 и 8 px ряд
      переносил «Интервью» (приёмка B236, 2026-09-21). */
-  gap: var(--career-space-2);
+  gap: var(--career-space-2) 6px;
 }
 
 /* Страница списка: «показано 20 из 96» и кнопка на следующие 20 (B232). */
