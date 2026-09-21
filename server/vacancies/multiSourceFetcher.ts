@@ -19,10 +19,8 @@ import {
   normalizeBaytHtml,
 } from './jobspyAdapters';
 import { baytHeaders } from './jobspyEndpoints';
-import {
-  fetchLinkedinCrawler,
-  type LinkedinCrawlerDeps,
-} from '../crawler/linkedinIngestRunner';
+import { fetchLinkedinCrawler, type LinkedinCrawlerDeps } from '../crawler/linkedinIngestRunner';
+import { fetchYcWorkAtStartup, YC_WORK_AT_STARTUP_SOURCE_ID } from './ycWorkAtStartupSource';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -127,7 +125,10 @@ async function fetchJsonApi(
   return readJsonPage(source, { url });
 }
 
-async function fetchXmlAtsBoard(source: VacancySourceConfig, url: string): Promise<UnifiedVacancy[]> {
+async function fetchXmlAtsBoard(
+  source: VacancySourceConfig,
+  url: string,
+): Promise<UnifiedVacancy[]> {
   const res = await fetch(url, {
     headers: { ...FETCH_HEADERS, Accept: 'application/xml, text/xml' },
     signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
@@ -451,6 +452,9 @@ async function fetchJsonOrCareerSite(
   sleep: (ms: number) => Promise<void>,
   now: () => number,
 ): Promise<UnifiedVacancy[] | SourceReading> {
+  if (source.type === 'career_site' && source.id === YC_WORK_AT_STARTUP_SOURCE_ID) {
+    return fetchYcWorkAtStartup(source);
+  }
   if (source.type === 'career_site' && source.id === BAYT_SOURCE_ID) {
     return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
   }
