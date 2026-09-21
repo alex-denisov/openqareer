@@ -182,7 +182,7 @@ async function openOpportunities(page: Page): Promise<void> {
   // bottom bar; `:visible` picks whichever one this viewport shows.
   // Регулярные выборки живут в панели фильтров «Вакансий» с B181.
   await page.locator('button[aria-label="Вакансии"]:visible').first().click();
-  await expect(page.locator('.career-saved-searches')).toBeVisible();
+  await expect(page.locator('.career-vacancy-saved')).toBeVisible();
 }
 
 test.describe('B156 truthful market intelligence boundary', () => {
