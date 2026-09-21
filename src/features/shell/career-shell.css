@@ -9720,6 +9720,14 @@
   background: var(--career-bg-elevated);
 }
 
+/* Подсказка к заголовку колонки — иконка говорит, что объяснение есть (B236 §4.2). */
+.career-vacancy-column-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: help;
+}
+
 .career-vacancy-columns {
   display: grid;
   grid-template-columns: minmax(0, 2.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(

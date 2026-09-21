@@ -4,6 +4,7 @@ import {
   ArrowSquareOut,
   ChalkboardTeacher,
   CheckCircle,
+  Info,
   ListDashes,
   MapPin,
   PencilSimpleLine,
@@ -196,7 +197,9 @@ export function VacancyBoard({
               <span>вакансия</span>
               <span>зарплата</span>
               <span>локация</span>
-              <span title={IN_BASE_HINT}>в базе</span>
+              <span className="career-vacancy-column-hint" title={IN_BASE_HINT}>
+                в базе <Info size={12} aria-hidden="true" />
+              </span>
               <span title={REQUIREMENTS_HINT}>требования</span>
             </div>
             <ol className="career-vacancy-list">

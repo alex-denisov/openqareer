@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus } from '@phosphor-icons/react';
+import { Info, Plus } from '@phosphor-icons/react';
 import type { VacancySubscription } from '../coach/coachApi';
 import { SavedSearchesPanel } from './SavedSearchesPanel';
 import type { VacancyFacetCounts } from './vacancyFacets';
@@ -262,7 +262,9 @@ function FreshnessFilter({
 }) {
   return (
     <fieldset>
-      <legend title={IN_BASE_HINT}>В базе</legend>
+      <legend className="career-vacancy-column-hint" title={IN_BASE_HINT}>
+        В базе <Info size={12} aria-hidden="true" />
+      </legend>
       <div className="career-vacancy-chips">
         {FRESHNESS_CHOICES.map((choice) => (
           <button
