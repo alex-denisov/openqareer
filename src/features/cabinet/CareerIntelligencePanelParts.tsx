@@ -198,12 +198,28 @@ export function NextAction({
           <p>{journey.nextAction.expectedChange}</p>
         </div>
       ) : null}
-      <button type="button" onClick={() => onNavigate(destination)}>
+      <button
+        type="button"
+        onClick={() => openOrNavigatePrimary(reasonedAction, destination, onOpenExpert, onNavigate)}
+      >
         {reasonedAction?.label ?? journey?.nextAction.label ?? 'Открыть профиль'}{' '}
         <ArrowRight size={16} />
       </button>
     </section>
   );
+}
+
+function openOrNavigatePrimary(
+  action: ReasonedCareerAction | undefined,
+  destination: IntelligenceDestination,
+  onOpenExpert: (() => void) | undefined,
+  onNavigate: (view: IntelligenceDestination) => void,
+): void {
+  if (action && ['coach', 'evidence'].includes(action.destination)) {
+    onOpenExpert?.();
+    return;
+  }
+  onNavigate(destination);
 }
 
 function ReasonedActionDetails({
