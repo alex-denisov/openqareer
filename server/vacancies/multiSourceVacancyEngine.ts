@@ -510,6 +510,10 @@ export class MultiSourceVacancyEngine {
   }
 
   public getRequestedSourceSyncs(): RequestedSourceSync[] {
+    // The HTTP process can enqueue a request after the worker was started.
+    // Source state is tiny and bounded by the registry, so refresh it before
+    // every worker tick instead of keeping a stale in-memory queue (B231).
+    this.restoreSourceStates();
     return Array.from(this.sources.values())
       .filter((source): source is VacancySourceConfig & { syncRequestedAt: string } =>
         typeof source.syncRequestedAt === 'string',
@@ -561,6 +565,11 @@ export class MultiSourceVacancyEngine {
       requestedAt: source.syncRequestedAt,
       ...(source.syncStartedAt ? { startedAt: source.syncStartedAt } : {}),
     };
+  }
+
+  /** Refreshes only the bounded source-state registry; it never hydrates pool rows. */
+  public refreshPersistedSourceState(): void {
+    this.restoreSourceStates();
   }
 
   public addOrUpdateSource(source: VacancySourceConfig): void {
