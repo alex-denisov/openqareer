@@ -21,6 +21,8 @@ const BROWSER_WALK_MESSAGES = [
 
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
+  // Окно .app: 1176 px — шесть кнопок строки обязаны стоять в один ряд (B236).
+  { name: 'app-window', width: 1176, height: 800 },
   { name: 'mobile', width: 390, height: 844 },
 ];
 
@@ -1042,12 +1044,12 @@ async function verifyViewport(browser, baseUrl, viewport) {
   const sourceSelect = page.getByRole('combobox', { name: 'Источник вакансий' });
   await page.getByRole('link', { name: 'Источник: Remotive' }).waitFor({ timeout: 10_000 });
   assert(
-    (await page.getByText('нужен официальный доступ', { exact: false }).count()) === 0,
+    (await page.getByText('площадка закрыла доступ', { exact: false }).count()) === 0,
     `${viewport.name}: healthy default source still shows the hh.ru refusal`,
   );
   await sourceSelect.selectOption('hh');
   const officialAccessNotice = page
-    .getByText('нужен официальный доступ', { exact: false })
+    .getByText('площадка закрыла доступ', { exact: false })
     .first();
   try {
     await officialAccessNotice.waitFor({ state: 'visible', timeout: 10_000 });

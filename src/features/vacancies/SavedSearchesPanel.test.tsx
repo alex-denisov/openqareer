@@ -56,6 +56,19 @@ describe('SavedSearchesPanel', () => {
     const html = render([subscription]);
     expect(html).toContain('Руководитель продукта');
     expect(html).toContain('41');
-    expect(html).toContain('Активна');
+    expect(html).toContain('Собирается');
+  });
+});
+
+describe('sourceFailureMessage (B236, приёмка владельца 2026-09-21)', () => {
+  it('не обещает отсутствие вакансий hh.ru: их приносит регулярный обход', async () => {
+    const { sourceFailureMessage } = await import('../cabinet/CareerIntelligencePanelParts');
+    const hh = sourceFailureMessage('official_access_required', 'hh');
+    expect(hh).toContain('приходят в подбор из регулярного обхода');
+    expect(hh).not.toContain('новых вакансий с неё не будет');
+    expect(hh).not.toContain('Направление');
+    expect(sourceFailureMessage('official_access_required', 'remotive')).toContain(
+      'новых вакансий по нему не будет',
+    );
   });
 });

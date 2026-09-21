@@ -1,8 +1,4 @@
-import {
-  ArrowRight,
-  CheckCircle,
-  WarningCircle,
-} from '@phosphor-icons/react';
+import { ArrowRight, CheckCircle, WarningCircle } from '@phosphor-icons/react';
 import {
   CoachApiError,
   type VacancySubscription,
@@ -11,7 +7,6 @@ import {
 import type { CareerJourney } from '../journey/careerJourneyEngine';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import { diagnosticActionDestination } from '../diagnostic/careerDiagnostic';
-
 
 export const fallbackSources = [
   { id: 'hh', name: 'hh.ru', market: 'Россия и СНГ' },
@@ -35,25 +30,34 @@ export function SourceAttribution({ source }: { source: VacancySourceRegistryEnt
 
 export function sourceHealthLabel(status?: VacancySourceRegistryEntry['health']['status']) {
   return {
-    healthy: 'источник доступен',
-    degraded: 'временные ошибки',
-    unavailable: 'временно недоступен',
-    official_access_required: 'нужен официальный доступ',
-    not_checked: 'ещё не проверен',
+    healthy: 'работает',
+    degraded: 'сбоит, повторим',
+    unavailable: 'не отвечает',
+    official_access_required: 'площадка закрыла доступ',
+    not_checked: 'не проверяли',
   }[status ?? 'not_checked'];
 }
 
-export function sourceFailureMessage(errorCode: string) {
+/**
+ * Что случилось с сохранённым запросом — словами кандидата и без вранья про
+ * подбор: hh.ru закрыл поиск по запросу (INC-022), но вакансии hh.ru всё равно
+ * приходят в подбор из регулярного обхода площадки (B219). Надпись «новых
+ * вакансий с неё не будет» владелец прочёл как противоречие тому, что видел
+ * в таблице (2026-09-21).
+ */
+export function sourceFailureMessage(errorCode: string, sourceId?: string) {
   if (errorCode === 'source_replaced_review_required') {
-    return 'Площадка перестала отвечать, сбор переключён на Remotive. Проверьте направление и нажмите «Собрать сейчас».';
+    return 'Площадка перестала отвечать, сбор переключён на Remotive. Проверьте запрос и нажмите «Собрать сейчас».';
   }
   if (errorCode === 'official_access_required') {
-    return 'Площадка закрыла API. Направление сохранено, новых вакансий с неё не будет, пока доступ не появится.';
+    return sourceId === 'hh'
+      ? 'hh.ru закрыл поиск по запросу без официального доступа. Запрос сохранён, но сам вакансий не принесёт: вакансии hh.ru приходят в подбор из регулярного обхода площадки.'
+      : 'Площадка закрыла поиск по запросу без официального доступа. Запрос сохранён, новых вакансий по нему не будет, пока доступ не появится.';
   }
   if (errorCode === 'source_rate_limited') {
     return 'Площадка попросила подождать (rate limit). Повторим автоматически.';
   }
-  return 'Источник сейчас недоступен. Поиск сохранён и повторится по расписанию.';
+  return 'Площадка сейчас не отвечает. Запрос сохранён и повторится по расписанию.';
 }
 
 export function AtsReadability({
@@ -165,14 +169,12 @@ export function NextAction({
   const reasonedAction = journey?.reasonedAction;
   const destination = reasonedAction
     ? reasonedDestination(reasonedAction.destination)
-    : journey?.nextAction.destination ?? 'profile';
+    : (journey?.nextAction.destination ?? 'profile');
   return (
     <section className="career-next-action-card">
       <span>Следующее действие</span>
       <h3>
-        {reasonedAction?.headline ??
-          journey?.nextAction.headline ??
-          'Уточнить основу профиля'}
+        {reasonedAction?.headline ?? journey?.nextAction.headline ?? 'Уточнить основу профиля'}
       </h3>
       <p>
         {reasonedAction?.rationale ??
@@ -230,15 +232,15 @@ function ReasonedActionDetails({
 function reasonedDestination(
   destination: ReasonedCareerAction['destination'],
 ): IntelligenceDestination {
-  return ({
-    coach: 'today',
-    profile: 'profile',
-    evidence: 'profile',
-    career: 'career',
-    search: 'opportunities',
-  } satisfies Record<ReasonedCareerAction['destination'], IntelligenceDestination>)[
-    destination
-  ];
+  return (
+    {
+      coach: 'today',
+      profile: 'profile',
+      evidence: 'profile',
+      career: 'career',
+      search: 'opportunities',
+    } satisfies Record<ReasonedCareerAction['destination'], IntelligenceDestination>
+  )[destination];
 }
 
 function salaryMedian(currency: VacancySubscription['analytics']['currencies'][number]) {

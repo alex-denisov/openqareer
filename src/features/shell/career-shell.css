@@ -932,7 +932,10 @@
   font-size: var(--career-text-sm);
   font-weight: 650;
   cursor: pointer;
-  transition: color 150ms ease, background 150ms ease, border-color 150ms ease,
+  transition:
+    color 150ms ease,
+    background 150ms ease,
+    border-color 150ms ease,
     transform 150ms ease;
 }
 
@@ -5621,7 +5624,9 @@
   color: var(--career-text-soft);
   font-weight: 620;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .career-resume-variants button:hover,
@@ -6214,7 +6219,9 @@
   color: var(--career-text);
   font-size: var(--career-text-xs);
   outline: none;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .career-resume-rail-search:hover {
@@ -6242,7 +6249,10 @@
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .career-resume-fact-tabs button:hover {
@@ -6294,7 +6304,9 @@
   background: var(--career-bg-elevated);
   display: grid;
   gap: 8px;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .career-resume-fact-card:hover {
@@ -8760,8 +8772,10 @@
      ширину содержимого, и строка выезжала за окно на 125 px. Действия живут
      своей строкой под колонками: пять кнопок в шестой колонке не помещались
      ни на одной ширине окна десктопа. */
-  grid-template-columns:
-    minmax(0, 2.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(
+      0,
+      1fr
+    );
   align-items: center;
   gap: var(--career-space-2) var(--career-space-4);
   padding: var(--career-space-3) var(--career-space-4);
@@ -8845,7 +8859,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 12px;
+  /* Шесть кнопок в один ряд на 1176 px окна .app: при 10–12 px «Интервью»
+     переносилось (приёмка B236, 2026-09-21). */
+  padding: 0 8px;
   border: 1px solid var(--career-line-strong, oklch(93% 0.015 255 / 0.24));
   border-radius: 10px;
   background: var(--career-bg-elevated);
@@ -8856,7 +8872,10 @@
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
-  transition: color 150ms ease, background 150ms ease, border-color 150ms ease,
+  transition:
+    color 150ms ease,
+    background 150ms ease,
+    border-color 150ms ease,
     transform 150ms ease;
 }
 
@@ -8899,7 +8918,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--career-space-2) var(--career-space-3);
+  /* Шесть кнопок в один ряд на 1176 px окна .app: с зазором 12 px ряд
+     переносил «Интервью» (приёмка B236, 2026-09-21). */
+  gap: var(--career-space-2);
 }
 
 /* Страница списка: «показано 20 из 96» и кнопка на следующие 20 (B232). */
@@ -9700,8 +9721,10 @@
 
 .career-vacancy-columns {
   display: grid;
-  grid-template-columns:
-    minmax(0, 2.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(
+      0,
+      1fr
+    );
   gap: var(--career-space-4);
   padding: var(--career-space-1) var(--career-space-4) var(--career-space-2);
   border-bottom: 1px solid var(--career-line);
@@ -9962,7 +9985,9 @@
   font-size: var(--career-text-xs);
   font-weight: 560;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .career-resume-export-button:hover {
@@ -10053,7 +10078,9 @@
   background: var(--career-surface);
   border: 1px solid var(--career-line-strong);
   border-radius: var(--career-radius-md);
-  box-shadow: 0 24px 48px -12px oklch(0% 0 255 / 0.6), 0 0 0 1px var(--career-line);
+  box-shadow:
+    0 24px 48px -12px oklch(0% 0 255 / 0.6),
+    0 0 0 1px var(--career-line);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -10104,7 +10131,10 @@
   background: transparent;
   color: var(--career-text-soft);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
   flex-shrink: 0;
 }
 
@@ -10445,19 +10475,19 @@
   text-transform: uppercase;
 }
 
-.career-recruiter-badge[data-status="verified"] {
+.career-recruiter-badge[data-status='verified'] {
   color: var(--career-success);
   background: var(--career-success-soft);
   border: 1px solid var(--career-success);
 }
 
-.career-recruiter-badge[data-status="hypothesis"] {
+.career-recruiter-badge[data-status='hypothesis'] {
   color: var(--career-warning);
   background: var(--career-warning-soft);
   border: 1px solid var(--career-warning);
 }
 
-.career-recruiter-badge[data-status="unverified"] {
+.career-recruiter-badge[data-status='unverified'] {
   color: var(--career-text-dim);
   background: var(--career-surface-raised);
   border: 1px solid var(--career-line);
@@ -10538,8 +10568,8 @@
   cursor: not-allowed;
 }
 
-.career-recruiter-btn[data-selected="true"],
-.career-recruiter-link[data-selected="true"] {
+.career-recruiter-btn[data-selected='true'],
+.career-recruiter-link[data-selected='true'] {
   background: var(--career-accent-soft);
   border-color: var(--career-accent);
   color: var(--career-accent);
@@ -10727,7 +10757,10 @@
   color: var(--career-accent-ink);
   background: var(--career-accent);
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.1s ease;
 }
 
 .career-reputation-primary-button:hover:not(:disabled) {
@@ -10854,7 +10887,9 @@
   color: var(--career-text);
   background: var(--career-surface-raised);
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .career-reputation-recheck-button:hover:not(:disabled) {
@@ -11067,7 +11102,9 @@
   background: var(--career-surface);
   border: 1px solid var(--career-line-strong);
   border-radius: var(--career-radius-md);
-  box-shadow: 0 24px 48px -12px oklch(0% 0 255 / 0.6), 0 0 0 1px var(--career-line);
+  box-shadow:
+    0 24px 48px -12px oklch(0% 0 255 / 0.6),
+    0 0 0 1px var(--career-line);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -11147,7 +11184,9 @@
   background: transparent;
   color: var(--career-text-soft);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .career-outreach-close-btn:hover {
@@ -11226,17 +11265,39 @@
   transition: width 0.3s ease;
 }
 
-.career-outreach-progress-fill[data-share='0'] { width: 0%; }
-.career-outreach-progress-fill[data-share='10'] { width: 10%; }
-.career-outreach-progress-fill[data-share='20'] { width: 20%; }
-.career-outreach-progress-fill[data-share='30'] { width: 30%; }
-.career-outreach-progress-fill[data-share='40'] { width: 40%; }
-.career-outreach-progress-fill[data-share='50'] { width: 50%; }
-.career-outreach-progress-fill[data-share='60'] { width: 60%; }
-.career-outreach-progress-fill[data-share='70'] { width: 70%; }
-.career-outreach-progress-fill[data-share='80'] { width: 80%; }
-.career-outreach-progress-fill[data-share='90'] { width: 90%; }
-.career-outreach-progress-fill[data-share='100'] { width: 100%; }
+.career-outreach-progress-fill[data-share='0'] {
+  width: 0%;
+}
+.career-outreach-progress-fill[data-share='10'] {
+  width: 10%;
+}
+.career-outreach-progress-fill[data-share='20'] {
+  width: 20%;
+}
+.career-outreach-progress-fill[data-share='30'] {
+  width: 30%;
+}
+.career-outreach-progress-fill[data-share='40'] {
+  width: 40%;
+}
+.career-outreach-progress-fill[data-share='50'] {
+  width: 50%;
+}
+.career-outreach-progress-fill[data-share='60'] {
+  width: 60%;
+}
+.career-outreach-progress-fill[data-share='70'] {
+  width: 70%;
+}
+.career-outreach-progress-fill[data-share='80'] {
+  width: 80%;
+}
+.career-outreach-progress-fill[data-share='90'] {
+  width: 90%;
+}
+.career-outreach-progress-fill[data-share='100'] {
+  width: 100%;
+}
 
 .career-outreach-quota-banner.is-exhausted .career-outreach-progress-fill {
   background: var(--career-warning);
@@ -11274,7 +11335,9 @@
   justify-content: space-between;
   gap: 12px;
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .career-outreach-card:hover {
@@ -11614,7 +11677,9 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .career-followup-card:hover {
@@ -11782,7 +11847,9 @@
   background: var(--career-surface);
   border: 1px solid var(--career-line-strong);
   border-radius: var(--career-radius-md);
-  box-shadow: 0 24px 48px -12px oklch(0% 0 255 / 0.6), 0 0 0 1px var(--career-line);
+  box-shadow:
+    0 24px 48px -12px oklch(0% 0 255 / 0.6),
+    0 0 0 1px var(--career-line);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -11869,7 +11936,10 @@
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .career-interview-tabs .career-tab-btn:hover {

@@ -3,7 +3,7 @@ import { Plus } from '@phosphor-icons/react';
 import type { VacancySubscription } from '../coach/coachApi';
 import { SavedSearchesPanel } from './SavedSearchesPanel';
 import type { VacancyFacetCounts } from './vacancyFacets';
-import type { VacancyFilters } from './vacancyFilters';
+import { IN_BASE_HINT, type VacancyFilters } from './vacancyFilters';
 import { VACANCY_CONDITIONS } from './vacancyConditions';
 
 /**
@@ -248,9 +248,10 @@ function RelocationFilter({
 }
 
 /**
- * Свежесть — узел 15 пути пилота. Подпись обязана называть, от чего считается
- * возраст: даты публикации источники отдают не всегда, поэтому счёт идёт от
- * первого сбора записи, и выдавать одно за другое нельзя.
+ * «В базе» — узел 15 пути пилота. От чего считается число, сказано один раз
+ * в подсказке легенды (`IN_BASE_HINT`): даты публикации источники отдают не
+ * всегда, поэтому счёт идёт от первого сбора записи, и выдавать одно за
+ * другое нельзя.
  */
 function FreshnessFilter({
   filters,
@@ -261,7 +262,7 @@ function FreshnessFilter({
 }) {
   return (
     <fieldset>
-      <legend>В базе</legend>
+      <legend title={IN_BASE_HINT}>В базе</legend>
       <div className="career-vacancy-chips">
         {FRESHNESS_CHOICES.map((choice) => (
           <button
@@ -275,9 +276,6 @@ function FreshnessFilter({
           </button>
         ))}
       </div>
-      <p className="career-cabinet-tag">
-        От первого попадания в базу: дату публикации площадки отдают не всегда.
-      </p>
     </fieldset>
   );
 }

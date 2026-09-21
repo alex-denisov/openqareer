@@ -198,20 +198,16 @@ test.describe('B156 truthful market intelligence boundary', () => {
     await openOpportunities(page);
 
     const marketSearch = page.locator('.career-saved-searches').filter({
-      has: page.getByRole('heading', { name: '12 в выборке' }),
+      has: page.getByRole('heading', { name: '12 найдено' }),
     });
     await expect(marketSearch).toBeVisible();
     await expect(marketSearch.getByText('Senior Software Engineer', { exact: true })).toBeVisible();
     // Сам список найденного отсюда убран: таблица пула стоит на том же экране,
     // и дублировать её ссылками — показывать одни и те же вакансии дважды (B181).
     await expect(marketSearch.getByRole('link', { name: 'Источник: hh.ru' })).toBeVisible();
-    await expect(marketSearch.getByRole('button', { name: 'Обновить выборку' })).toBeVisible();
-    await expect(
-      marketSearch.getByRole('button', { name: 'Поставить поиск на паузу' }),
-    ).toBeVisible();
-    await expect(
-      marketSearch.getByRole('button', { name: 'Удалить поисковое направление' }),
-    ).toBeVisible();
+    await expect(marketSearch.getByRole('button', { name: 'Собрать сейчас' })).toBeVisible();
+    await expect(marketSearch.getByRole('button', { name: 'Остановить сбор' })).toBeVisible();
+    await expect(marketSearch.getByRole('button', { name: 'Удалить запрос' })).toBeVisible();
 
     for (const fabricatedOutcome of [
       'Авто-поднятие резюме',
@@ -251,7 +247,7 @@ test.describe('B156 truthful market intelligence boundary', () => {
     await create.getByRole('combobox', { name: 'Источник вакансий' }).selectOption('hh');
     const health = create.locator('.career-source-health');
     await expect(health).toHaveClass(/is-official_access_required/);
-    await expect(health).toContainText('нужен официальный доступ');
-    await expect(health).not.toContainText('ещё не проверен');
+    await expect(health).toContainText('площадка закрыла доступ');
+    await expect(health).not.toContainText('не проверяли');
   });
 });

@@ -38,14 +38,14 @@ export function SavedSearchesPanel(props: {
   const showForm = props.createOpen || !active;
 
   return (
-    <section className="career-saved-searches" aria-label="Регулярные выборки">
+    <section className="career-saved-searches" aria-label="Сохранённые запросы">
       {active && !showForm ? (
         <header>
           <div>
-            <h3 id="career-saved-searches-title">{active.analytics.sampleSize} в выборке</h3>
+            <h3 id="career-saved-searches-title">{active.analytics.sampleSize} найдено</h3>
           </div>
           <span className={`career-search-status is-${active.status}`}>
-            {active.status === 'active' ? 'Активна' : 'На паузе'}
+            {active.status === 'active' ? 'Собирается' : 'На паузе'}
           </span>
         </header>
       ) : null}
@@ -147,34 +147,31 @@ function SavedSearchDetails({
           <strong>{subscription.query}</strong>
           <small>
             {source?.name ?? subscription.source} · {sourceHealthLabel(source?.health.status)} ·
-            каждые {cadenceLabel(subscription.cadenceMinutes)}
+            обновляется каждые {cadenceLabel(subscription.cadenceMinutes)}
           </small>
         </div>
         <div>
-          <button type="button" disabled={busy} onClick={onRefresh} aria-label="Обновить выборку">
+          <button type="button" disabled={busy} onClick={onRefresh} aria-label="Собрать сейчас">
             <ArrowClockwise size={16} />
           </button>
           <button
             type="button"
             disabled={busy}
             onClick={onToggle}
-            aria-label={paused ? 'Возобновить поиск' : 'Поставить поиск на паузу'}
+            aria-label={paused ? 'Возобновить сбор' : 'Остановить сбор'}
           >
             {paused ? <Play size={16} /> : <Pause size={16} />}
           </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onRemove}
-            aria-label="Удалить поисковое направление"
-          >
+          <button type="button" disabled={busy} onClick={onRemove} aria-label="Удалить запрос">
             <Trash size={16} />
           </button>
         </div>
       </div>
 
       {subscription.lastErrorCode ? (
-        <p className="career-market-empty">{sourceFailureMessage(subscription.lastErrorCode)}</p>
+        <p className="career-market-empty">
+          {sourceFailureMessage(subscription.lastErrorCode, subscription.source)}
+        </p>
       ) : null}
       {source ? <SourceAttribution source={source} /> : null}
     </>

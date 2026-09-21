@@ -22,6 +22,8 @@ import {
 } from './RecruiterContactsBlock';
 import { employerLabel } from '../../../shared/employerLabel';
 import {
+  IN_BASE_HINT,
+  REQUIREMENTS_HINT,
   filterVacancies,
   vacancyAge,
   vacancyCountries,
@@ -194,8 +196,8 @@ export function VacancyBoard({
               <span>вакансия</span>
               <span>зарплата</span>
               <span>локация</span>
-              <span>в базе</span>
-              <span>требования</span>
+              <span title={IN_BASE_HINT}>в базе</span>
+              <span title={REQUIREMENTS_HINT}>требования</span>
             </div>
             <ol className="career-vacancy-list">
               {visible.map((item) => (
