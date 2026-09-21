@@ -128,4 +128,34 @@ describe('SqliteRecruiterContactsRepository', () => {
 
     expect(repo.getContactsByVacancyId('candidate-a', 'vac-101')).toEqual([]);
   });
+
+  it('persists a candidate-scoped enrichment job and requeues completed work', () => {
+    const { repo } = createRepo();
+    const queued = repo.enqueueJob('candidate-a', 'vac-101', '2026-09-22T10:00:00.000Z');
+    expect(queued).toMatchObject({
+      candidateId: 'candidate-a',
+      vacancyId: 'vac-101',
+      status: 'queued',
+      requestedAt: '2026-09-22T10:00:00.000Z',
+    });
+
+    const claimed = repo.claimJobs(1, '2026-09-22T10:00:01.000Z');
+    expect(claimed[0]).toMatchObject({ status: 'running', startedAt: '2026-09-22T10:00:01.000Z' });
+
+    repo.finishJob(queued.id, 'ready');
+    expect(repo.getJob('candidate-a', 'vac-101')?.status).toBe('ready');
+
+    const requeued = repo.enqueueJob('candidate-a', 'vac-101', '2026-09-22T10:05:00.000Z');
+    expect(requeued.id).toBe(queued.id);
+    expect(requeued.status).toBe('queued');
+  });
+
+  it('does not claim a running job twice', () => {
+    const { repo } = createRepo();
+    const job = repo.enqueueJob('candidate-a', 'vac-101');
+    expect(repo.claimJobs()).toHaveLength(1);
+    expect(repo.claimJobs()).toEqual([]);
+    repo.finishJob(job.id, 'failed', 'vacancy_not_found');
+    expect(repo.getJob('candidate-a', 'vac-101')?.errorCode).toBe('vacancy_not_found');
+  });
 });

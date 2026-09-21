@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   AddressBook,
   ArrowSquareOut,
@@ -14,8 +14,11 @@ import type { EmailStatus, RecruiterContact } from '../../../shared/recruiterCon
 import { CareerTooltip } from '../shell/CareerTooltip';
 import {
   enrichRecruiterContacts,
+  getRecruiterContacts,
+  type RecruiterContactsResponse,
   type EnrichVacancyPayload,
 } from './recruiterContactsApi';
+import type { RecruiterContactJob } from '../../../shared/recruiterContact';
 
 export interface RecruiterContactsBlockProps {
   readonly vacancyId: string;
@@ -199,17 +202,31 @@ export function useRecruiterContacts({
 }) {
   const [contacts, setContacts] = useState<readonly RecruiterContact[]>(initialContacts ?? []);
   const [hasSearched, setHasSearched] = useState(initialSearched || Boolean(initialContacts?.length));
+  const [job, setJob] = useState<RecruiterContactJob | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const refreshState = useCallback(async (): Promise<RecruiterContactsResponse> => {
+    const result = await getRecruiterContacts(vacancyId);
+    setContacts(result.contacts);
+    setJob(result.job);
+    if (result.job?.status === 'ready' || result.job?.status === 'failed') {
+      setHasSearched(true);
+    }
+    return result;
+  }, [vacancyId]);
+
+  useRecruiterContactJobPolling(job, refreshState, setError);
 
   const handleEnrich = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const result = await enrichRecruiterContacts(vacancyId);
-      setContacts(result);
-      setHasSearched(true);
-      onContactsLoaded?.(result);
+      setContacts(result.contacts);
+      setJob(result.job);
+      setHasSearched(result.job?.status === 'ready');
+      if (result.job?.status === 'ready') onContactsLoaded?.(result.contacts);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Поиск не удался. Попробуйте ещё раз.');
     } finally {
@@ -217,7 +234,23 @@ export function useRecruiterContacts({
     }
   }, [vacancyId, onContactsLoaded]);
 
-  return { contacts, hasSearched, loading, error, handleEnrich };
+  return { contacts, hasSearched, loading, error, job, handleEnrich };
+}
+
+function useRecruiterContactJobPolling(
+  job: RecruiterContactJob | null,
+  refreshState: () => Promise<RecruiterContactsResponse>,
+  setError: (error: string | null) => void,
+): void {
+  useEffect(() => {
+    if (!job || !['queued', 'running'].includes(job.status)) return undefined;
+    const timer = window.setInterval(() => {
+      void refreshState().catch((reason) => {
+        setError(reason instanceof Error ? reason.message : 'Не удалось обновить состояние поиска.');
+      });
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [job, refreshState, setError]);
 }
 
 export type RecruiterContactsState = ReturnType<typeof useRecruiterContacts>;
@@ -234,7 +267,14 @@ export function RecruiterContactsTrigger({
   readonly state: RecruiterContactsState;
   readonly className?: string;
 }) {
-  if (state.loading || state.error || state.hasSearched || state.contacts.length > 0) {
+  if (
+    state.loading ||
+    state.error ||
+    state.job?.status === 'queued' ||
+    state.job?.status === 'running' ||
+    state.hasSearched ||
+    state.contacts.length > 0
+  ) {
     return null;
   }
   return (
@@ -248,18 +288,20 @@ export function RecruiterContactsTrigger({
 }
 
 export function RecruiterContactsResults({ state }: { readonly state: RecruiterContactsState }) {
-  const { contacts, hasSearched, loading, error, handleEnrich } = state;
+  const { contacts, hasSearched, loading, error, job, handleEnrich } = state;
 
-  if (loading) {
+  if (loading || job?.status === 'queued' || job?.status === 'running') {
     return (
       <div className="career-recruiter-loading" aria-busy="true">
         <CircleNotch size={18} className="career-spin" aria-hidden="true" />
-        <span>Ищем, кто ведёт вакансию…</span>
+        <span>{job?.status === 'queued' ? 'Запрос поставлен в очередь…' : 'Ищем, кто ведёт вакансию…'}</span>
       </div>
     );
   }
 
-  if (error) return <ErrorContactsNotice error={error} onRetry={handleEnrich} />;
+  if (error || job?.status === 'failed') {
+    return <ErrorContactsNotice error={error ?? 'Поиск контактов не завершился. Попробуйте ещё раз.'} onRetry={handleEnrich} />;
+  }
   if (hasSearched && contacts.length === 0) return <EmptyContactsNotice onRetry={handleEnrich} />;
   if (contacts.length > 0) {
     return (

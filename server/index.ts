@@ -26,6 +26,8 @@ import { readProcessHeap } from './vacancies/memoryGuard';
 import { SqliteRoleNamingCache } from './data/sqliteRoleNamingCache';
 import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContactsRepository';
 import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
+import { buildRecruiterVacancyInput } from './outreach/recruiterIntelligenceInput';
+import { runRecruiterIntelligenceJobs } from './outreach/recruiterIntelligenceWorker';
 
 const config = readServerConfig(process.env);
 const candidateStore = new SqliteCandidateStore({
@@ -172,6 +174,7 @@ const app = await buildApp({
 });
 
 let vacancyRefreshTimer: NodeJS.Timeout | undefined;
+let recruiterIntelligenceTimer: NodeJS.Timeout | undefined;
 let documentRetentionTimer: NodeJS.Timeout | undefined;
 let retentionSweepTimer: NodeJS.Timeout | undefined;
 
@@ -187,6 +190,23 @@ function runVacancyRefresh(): void {
       app.log.error(
         { errorName: error instanceof Error ? error.name : 'UnknownError' },
         'vacancy-refresh-failed',
+      );
+    });
+}
+
+function runRecruiterIntelligence(): void {
+  void runRecruiterIntelligenceJobs({
+    repository: recruiterContactsRepo,
+    resolveVacancy: (vacancyId) => buildRecruiterVacancyInput(vacancyId, { multiSourceEngine }),
+    maxJobs: 1,
+  })
+    .then((result) => {
+      if (result.claimed > 0) app.log.info(result, 'recruiter-intelligence-completed');
+    })
+    .catch((error: unknown) => {
+      app.log.error(
+        { errorName: error instanceof Error ? error.name : 'UnknownError' },
+        'recruiter-intelligence-failed',
       );
     });
 }
@@ -231,6 +251,7 @@ function runRetentionSweep(): void {
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, 'shutdown-started');
   if (vacancyRefreshTimer) clearInterval(vacancyRefreshTimer);
+  if (recruiterIntelligenceTimer) clearInterval(recruiterIntelligenceTimer);
   if (documentRetentionTimer) clearInterval(documentRetentionTimer);
   if (retentionSweepTimer) clearInterval(retentionSweepTimer);
   await app.close();
@@ -260,6 +281,8 @@ try {
   }, 30_000)?.unref();
   vacancyRefreshTimer = setInterval(runVacancyRefresh, 5 * 60 * 1_000);
   vacancyRefreshTimer.unref();
+  recruiterIntelligenceTimer = setInterval(runRecruiterIntelligence, 5_000);
+  recruiterIntelligenceTimer.unref();
   documentRetentionTimer = setInterval(runDocumentRetentionPurge, 5 * 60 * 1_000);
   documentRetentionTimer.unref();
   // Сроки измеряются годами и месяцами, поэтому час — достаточная частота.

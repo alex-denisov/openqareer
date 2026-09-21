@@ -220,6 +220,7 @@ const handleDeleteCandidate: Handler = async (deps, request, reply) => {
   candidateStore.deleteCandidate(candidate.id);
   candidateReputationRepo?.deleteAuditsByCandidateId(candidate.id);
   recruiterContactsRepo?.deleteContactsByCandidateId(candidate.id);
+  recruiterContactsRepo?.deleteJobsByCandidateId(candidate.id);
   return reply.code(204).send();
 };
 
