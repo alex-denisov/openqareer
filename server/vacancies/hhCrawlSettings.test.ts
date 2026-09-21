@@ -16,7 +16,9 @@ describe('SqliteHhCrawlSettings', () => {
     const settings = store().read();
 
     expect(settings.roleIds).toEqual([...DEFAULT_SELECTED_ROLE_IDS]);
-    expect(settings.roleIds.length).toBe(25);
+    expect(settings.roleIds.length).toBeGreaterThan(25);
+    expect(new Set(settings.roleIds).size).toBe(settings.roleIds.length);
+    expect(settings.roleIds).toEqual(expect.arrayContaining(['26', '125', '157']));
     expect(settings.searchPeriodDays).toBe(30);
     expect(settings.lastFullSweepAt).toBeUndefined();
   });
@@ -82,7 +84,7 @@ describe('SqliteHhCrawlSettings', () => {
     s.requestFullSweep();
 
     expect(s.read().lastFullSweepAt).toBeUndefined();
-    expect(s.read().roleIds.length).toBe(25);
+    expect(s.read().roleIds.length).toBeGreaterThan(25);
   });
 
   it('отметка прохода не стирает выбор ролей', () => {

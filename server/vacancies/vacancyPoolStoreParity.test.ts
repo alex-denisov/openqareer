@@ -123,6 +123,15 @@ describe.each(implementations)('VacancyPoolStore parity: %s', (_name, open) => {
     expect(store.countSourceSlice('none')).toEqual({ total: 0, active: 0 });
   });
 
+  it('counts every persisted source for the B235 ownership audit', () => {
+    const store = open();
+    seed(store);
+    expect(Object.fromEntries(store.countAllSourceSlices?.() ?? [])).toEqual({
+      board: { total: 4, active: 4 },
+      channel: { total: 1, active: 1 },
+    });
+  });
+
   it('pages newest first with a stable tie-break', () => {
     const store = open();
     seed(store);

@@ -10,7 +10,9 @@
  * ФИЛЬТР — НАСТРОЙКА ВЛАДЕЛЬЦА, А НЕ РЕШЕНИЕ АГЕНТА. Здесь лежат все 27
  * категорий и 304 роли площадки, а не только ИТ: владелец выбирает набор
  * множественным выбором и может расширить его в любой момент, не трогая код.
- * Выбранный по умолчанию набор — категория «Информационные технологии».
+ * Выбранный по умолчанию набор — категории «Информационные технологии» и
+ * «Высший и средний менеджмент»: C-Level и руководители не должны исчезать
+ * только потому, что кандидат ещё не открыл ручной фильтр (B235).
  */
 
 export interface HhRole {
@@ -494,10 +496,12 @@ export const HH_ROLE_CATEGORIES: readonly HhRoleCategory[] = [
 /** Категория «Информационные технологии» — набор ролей по умолчанию. */
 export const HH_IT_CATEGORY_ID = '11';
 
-export const DEFAULT_SELECTED_ROLE_IDS: readonly string[] =
-  HH_ROLE_CATEGORIES.find((category) => category.id === HH_IT_CATEGORY_ID)?.roles.map(
-    (role) => role.id,
-  ) ?? [];
+export const DEFAULT_SELECTED_ROLE_IDS: readonly string[] = [
+  ...new Set(
+    HH_ROLE_CATEGORIES.filter((category) => category.id === HH_IT_CATEGORY_ID || category.id === '26')
+      .flatMap((category) => category.roles.map((role) => role.id)),
+  ),
+];
 
 const ROLE_INDEX: ReadonlyMap<string, HhRole> = new Map(
   HH_ROLE_CATEGORIES.flatMap((category) => category.roles.map((role) => [role.id, role])),

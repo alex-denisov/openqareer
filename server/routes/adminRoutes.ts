@@ -390,6 +390,19 @@ async function handleListSources(deps: RouteDeps, request: FastifyRequest, reply
   };
 }
 
+async function handleSourceOwnershipAudit(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const principal = requireAdmin(deps, request, reply);
+  if (!principal) return;
+  return {
+    data: deps.multiSourceEngine.auditSourceOwnership(),
+    meta: { requestId: request.id },
+  };
+}
+
 function registerRuntimeMemory(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/admin/runtime-memory', async (request, reply) => {
     const principal = requireAdmin(deps, request, reply);
@@ -422,6 +435,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
 
   registerVacancyList(app, deps);
   app.get('/api/v1/admin/vacancy-sources', withDeps(deps, handleListSources));
+  app.get('/api/v1/admin/vacancy-sources/audit', withDeps(deps, handleSourceOwnershipAudit));
   app.post('/api/v1/admin/vacancy-sources/:sourceId/test', withDeps(deps, testSource));
   app.post('/api/v1/admin/vacancy-sources/sync-all', withDeps(deps, syncAllSources));
   app.post('/api/v1/admin/vacancy-sources/:sourceId/sync', withDeps(deps, syncSource));

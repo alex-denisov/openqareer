@@ -69,6 +69,8 @@ export interface VacancyPoolStore {
   countBySource(window: FreshnessWindow): ReadonlyMap<string, number>;
   /** Срез площадки как он лежит: сколько записей и сколько из них активных. */
   countSourceSlice(sourceId: string): { total: number; active: number };
+  /** Все source_id, включая записи, которых нет в текущем registry (B235). */
+  countAllSourceSlices?(): ReadonlyMap<string, { total: number; active: number }>;
   queryVacancies(query: VacancyPoolQuery): VacancyPoolPage;
   loadSourceLinks(sourceId: string): VacancyLink[];
   /**
