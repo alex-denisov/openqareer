@@ -275,7 +275,7 @@ function QueueRow({ entry }: { entry: MatchedVacancyItem }) {
 /** Что уже работает и что стоит денег — по тем же планам, что в «Тарифах». */
 function AutomationPanel() {
   return (
-    <section className="career-home-panel">
+    <section className="career-home-panel career-automation-panel">
       <header>
         <h3>Автоматизация</h3>
         <span className="career-pill is-muted">план «{CURRENT_PLAN.name}»</span>
