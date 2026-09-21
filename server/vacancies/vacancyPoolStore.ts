@@ -27,6 +27,8 @@ export interface StoredSourceState {
   readonly lastErrorMessage?: string;
   readonly itemsFoundTotal: number;
   readonly itemsActiveTotal: number;
+  readonly syncRequestedAt?: string;
+  readonly syncStartedAt?: string;
   /**
    * Что опросы установили про площадку. Живость считается по наблюдениям,
    * которые копятся днями, а процесс живёт часы: без записи на диск каждый
@@ -100,6 +102,12 @@ export interface VacancyPoolStore {
     dropObservedBefore?: string,
   ): MergeSliceResult;
   loadSourceStates(): StoredSourceState[];
+  /** Queues an out-of-band source read for the maintenance process (B231). */
+  requestSourceSync?(sourceId: string, requestedAt: string): void;
+  /** Marks the same request as running without overwriting a newer request. */
+  markSourceSyncStarted?(sourceId: string, requestedAt: string, startedAt: string): boolean;
+  /** Clears a request only when it is still the request that was processed. */
+  clearSourceSyncRequest?(sourceId: string, requestedAt: string): boolean;
   /** Swaps everything this source contributed for what it just returned. */
   replaceSourceSlice(sourceId: string, vacancies: readonly UnifiedVacancy[]): void;
   saveSourceState(state: StoredSourceState): void;

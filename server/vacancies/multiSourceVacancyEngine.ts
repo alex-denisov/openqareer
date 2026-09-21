@@ -92,6 +92,18 @@ export interface SourceSyncOutcome {
   readonly message?: string;
 }
 
+export interface RequestedSourceSync {
+  readonly sourceId: string;
+  readonly requestedAt: string;
+  readonly startedAt?: string;
+}
+
+export interface ManualSourceSyncState {
+  readonly status: 'ready' | 'queued' | 'running';
+  readonly requestedAt?: string;
+  readonly startedAt?: string;
+}
+
 export interface MatchedVacancyItem {
   cluster: VacancyCluster;
   explanation: VacancyMatchExplanation;
@@ -191,9 +203,14 @@ function forbidsFullRecluster(mode: ReclusterMode): boolean {
   return mode.mode === 'off' || mode.mode === 'keyed';
 }
 
+/** HTTP `off` never contacts a source; the maintenance process owns fetches. */
+function forbidsDirectSourceSync(mode: ReclusterMode): boolean {
+  return mode.mode === 'off';
+}
+
 export class ReclusterDisabledError extends Error {
-  constructor() {
-    super('recluster is off: full cluster rebuild is banned in this process');
+  constructor(message = 'recluster is off: full cluster rebuild is banned in this process') {
+    super(message);
     this.name = 'ReclusterDisabledError';
   }
 }
@@ -310,6 +327,10 @@ export class MultiSourceVacancyEngine {
     this.pool = options?.pool ?? new MemoryVacancyPoolStore();
     this.robots = options?.robots;
     this.linkProbe = options?.linkProbe;
+    // Source state is a small bounded registry, unlike the vacancy/cluster
+    // pool. Load it immediately so the HTTP admin surface can show a durable
+    // manual-sync request without hydrating any pool rows (B231).
+    this.restoreSourceStates();
   }
 
   private configureSourcePoliteness(source: VacancySourceConfig): void {
@@ -336,6 +357,8 @@ export class MultiSourceVacancyEngine {
       source.lastErrorMessage = state.lastErrorMessage;
       source.itemsFoundTotal = state.itemsFoundTotal;
       source.itemsActiveTotal = state.itemsActiveTotal;
+      source.syncRequestedAt = state.syncRequestedAt;
+      source.syncStartedAt = state.syncStartedAt;
       if (state.observations) {
         this.observations.set(state.sourceId, state.observations);
         if (state.observations.schedule) {
@@ -451,6 +474,93 @@ export class MultiSourceVacancyEngine {
 
   public getSource(id: string): VacancySourceConfig | undefined {
     return this.sources.get(id);
+  }
+
+  /**
+   * Админский маршрут пишет только durable намерение. Сам fetcher вызывается
+   * обслуживателем, иначе HTTP-процесс снова начнёт писать пул в режиме off.
+   */
+  public requestSourceSync(
+    sourceId: string,
+    requestedAt: string = new Date().toISOString(),
+  ): RequestedSourceSync {
+    const source = this.sources.get(sourceId);
+    if (!source) throw new Error(`Источник вакансий ${sourceId} не найден`);
+    if (!source.syncRequestedAt || source.syncRequestedAt < requestedAt) {
+      source.syncRequestedAt = requestedAt;
+      if (this.pool.requestSourceSync) {
+        this.pool.requestSourceSync(sourceId, requestedAt);
+      } else {
+        this.persistSourceState(source);
+      }
+    }
+    return {
+      sourceId,
+      requestedAt: source.syncRequestedAt,
+      ...(source.syncStartedAt ? { startedAt: source.syncStartedAt } : {}),
+    };
+  }
+
+  public requestAllSourceSyncs(
+    requestedAt: string = new Date().toISOString(),
+  ): RequestedSourceSync[] {
+    return Array.from(this.sources.values())
+      .filter((source) => source.enabled)
+      .map((source) => this.requestSourceSync(source.id, requestedAt));
+  }
+
+  public getRequestedSourceSyncs(): RequestedSourceSync[] {
+    return Array.from(this.sources.values())
+      .filter((source): source is VacancySourceConfig & { syncRequestedAt: string } =>
+        typeof source.syncRequestedAt === 'string',
+      )
+      .map((source) => ({
+        sourceId: source.id,
+        requestedAt: source.syncRequestedAt,
+        ...(source.syncStartedAt ? { startedAt: source.syncStartedAt } : {}),
+      }));
+  }
+
+  public markSourceSyncStarted(
+    request: RequestedSourceSync,
+    startedAt = new Date().toISOString(),
+  ): boolean {
+    const source = this.sources.get(request.sourceId);
+    if (!source || source.syncRequestedAt !== request.requestedAt) return false;
+    const marked = this.pool.markSourceSyncStarted?.(
+      request.sourceId,
+      request.requestedAt,
+      startedAt,
+    );
+    if (marked === false) return false;
+    source.syncStartedAt = startedAt;
+    if (marked === undefined) this.persistSourceState(source);
+    return true;
+  }
+
+  public clearSourceSyncRequest(request: RequestedSourceSync): boolean {
+    const source = this.sources.get(request.sourceId);
+    if (!source || source.syncRequestedAt !== request.requestedAt) return false;
+    const cleared = this.pool.clearSourceSyncRequest?.(request.sourceId, request.requestedAt) ?? false;
+    if (!cleared && this.pool.requestSourceSync === undefined) {
+      source.syncRequestedAt = undefined;
+      source.syncStartedAt = undefined;
+      return true;
+    }
+    if (!cleared) return false;
+    source.syncRequestedAt = undefined;
+    source.syncStartedAt = undefined;
+    return true;
+  }
+
+  public getManualSourceSyncState(sourceId: string): ManualSourceSyncState {
+    const source = this.sources.get(sourceId);
+    if (!source?.syncRequestedAt) return { status: 'ready' };
+    return {
+      status: source.syncStartedAt ? 'running' : 'queued',
+      requestedAt: source.syncRequestedAt,
+      ...(source.syncStartedAt ? { startedAt: source.syncStartedAt } : {}),
+    };
   }
 
   public addOrUpdateSource(source: VacancySourceConfig): void {
@@ -694,6 +804,9 @@ export class MultiSourceVacancyEngine {
     query?: string,
     nowMs: number = Date.now(),
   ): Promise<SourceSyncOutcome> {
+    if (forbidsDirectSourceSync(this.reclusterMode)) {
+      throw new ReclusterDisabledError('source sync is owned by the maintenance process');
+    }
     const started = this.syncOne(sourceId, query, nowMs).then((outcome) => {
       // Одиночный опрос сам оставляет пул пересобранным: волна делает это один
       // раз за всю партию (прод 2026-09-06).
@@ -1058,6 +1171,8 @@ export class MultiSourceVacancyEngine {
       ...(source.lastErrorMessage ? { lastErrorMessage: source.lastErrorMessage } : {}),
       itemsFoundTotal: source.itemsFoundTotal,
       itemsActiveTotal: source.itemsActiveTotal,
+      ...(source.syncRequestedAt ? { syncRequestedAt: source.syncRequestedAt } : {}),
+      ...(source.syncStartedAt ? { syncStartedAt: source.syncStartedAt } : {}),
     });
   }
 
@@ -1125,6 +1240,9 @@ export class MultiSourceVacancyEngine {
    * на проде 2026-09-06 (B202, B204).
    */
   public async syncAll(query?: string): Promise<SourceSyncOutcome[]> {
+    if (forbidsDirectSourceSync(this.reclusterMode)) {
+      throw new ReclusterDisabledError('source sync is owned by the maintenance process');
+    }
     const enabled = Array.from(this.sources.values()).filter((s) => s.enabled);
     const outcomes = await mapWithConcurrency(enabled, SYNC_BATCH_LIMIT, (source) =>
       this.syncOne(source.id, query, Date.now()),

@@ -14,6 +14,8 @@ import {
   VACANCY_CLUSTER_REPRESENTATIVE_COLUMN,
   VACANCY_POOL_INDEX_TABLE,
   VACANCY_SOURCE_OBSERVATIONS_COLUMN,
+  VACANCY_SOURCE_SYNC_REQUESTED_AT_COLUMN,
+  VACANCY_SOURCE_SYNC_STARTED_AT_COLUMN,
 } from '../data/sqliteSchema';
 import { MATCH_ORDER_SCHEMA } from './vacancyMatchIndex';
 import { VacancyMatchReader, type MatchRowReader } from './vacancyMatchReader';
@@ -66,6 +68,8 @@ interface SourceStateRow {
   items_found_total: number;
   items_active_total: number;
   observations: string | null;
+  sync_requested_at: string | null;
+  sync_started_at: string | null;
 }
 
 interface CatalogEntrySqlRow {
@@ -229,6 +233,16 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec('PRAGMA foreign_keys = ON;');
     this.database.exec(MIGRATION_23);
     this.ensureColumn('vacancy_source_state', 'observations', VACANCY_SOURCE_OBSERVATIONS_COLUMN);
+    this.ensureColumn(
+      'vacancy_source_state',
+      'sync_requested_at',
+      VACANCY_SOURCE_SYNC_REQUESTED_AT_COLUMN,
+    );
+    this.ensureColumn(
+      'vacancy_source_state',
+      'sync_started_at',
+      VACANCY_SOURCE_SYNC_STARTED_AT_COLUMN,
+    );
     this.ensureColumn('vacancy_pool', 'expired_at', VACANCY_POOL_EXPIRED_AT_COLUMN);
     this.database.exec(VACANCY_POOL_INDEX_TABLE);
     // Match LIMIT must stop in index order; CASE remote sorting previously
@@ -604,7 +618,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const rows = this.database
       .prepare(
         `SELECT source_id, last_sync_at, last_status, last_error_message,
-                items_found_total, items_active_total, observations
+                items_found_total, items_active_total, observations,
+                sync_requested_at, sync_started_at
            FROM vacancy_source_state`,
       )
       .all() as unknown as SourceStateRow[];
@@ -617,6 +632,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       ...(row.last_error_message ? { lastErrorMessage: row.last_error_message } : {}),
       itemsFoundTotal: row.items_found_total,
       itemsActiveTotal: row.items_active_total,
+      ...(row.sync_requested_at ? { syncRequestedAt: row.sync_requested_at } : {}),
+      ...(row.sync_started_at ? { syncStartedAt: row.sync_started_at } : {}),
       ...(parseObservations(row.observations) === undefined
         ? {}
         : { observations: parseObservations(row.observations) as SourceObservations }),
@@ -820,15 +837,34 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       .prepare(
         `INSERT INTO vacancy_source_state (
            source_id, last_sync_at, last_status, last_error_message,
-           items_found_total, items_active_total, observations
-         ) VALUES (?, ?, ?, ?, ?, ?, ?)
+           items_found_total, items_active_total, observations,
+           sync_requested_at, sync_started_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(source_id) DO UPDATE SET
            last_sync_at = excluded.last_sync_at,
            last_status = excluded.last_status,
            last_error_message = excluded.last_error_message,
            items_found_total = excluded.items_found_total,
            items_active_total = excluded.items_active_total,
-           observations = excluded.observations`,
+           observations = excluded.observations,
+           sync_requested_at = CASE
+             WHEN vacancy_source_state.sync_requested_at IS NULL
+             THEN excluded.sync_requested_at
+             WHEN excluded.sync_requested_at IS NULL
+             THEN vacancy_source_state.sync_requested_at
+             WHEN vacancy_source_state.sync_requested_at >= excluded.sync_requested_at
+             THEN vacancy_source_state.sync_requested_at
+             ELSE excluded.sync_requested_at
+           END,
+           sync_started_at = CASE
+             WHEN vacancy_source_state.sync_requested_at IS NOT NULL
+               AND excluded.sync_requested_at IS NOT NULL
+               AND vacancy_source_state.sync_requested_at > excluded.sync_requested_at
+             THEN vacancy_source_state.sync_started_at
+             WHEN excluded.sync_started_at IS NULL
+             THEN vacancy_source_state.sync_started_at
+             ELSE excluded.sync_started_at
+           END`,
       )
       .run(
         state.sourceId,
@@ -838,7 +874,49 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         state.itemsFoundTotal,
         state.itemsActiveTotal,
         state.observations ? JSON.stringify(state.observations) : null,
+        state.syncRequestedAt ?? null,
+        state.syncStartedAt ?? null,
       );
+  }
+
+  requestSourceSync(sourceId: string, requestedAt: string): void {
+    this.database
+      .prepare(
+        `INSERT INTO vacancy_source_state (
+           source_id, items_found_total, items_active_total, sync_requested_at
+         ) VALUES (?, 0, 0, ?)
+         ON CONFLICT(source_id) DO UPDATE SET
+           sync_requested_at = CASE
+             WHEN vacancy_source_state.sync_requested_at IS NULL
+               OR vacancy_source_state.sync_requested_at < excluded.sync_requested_at
+             THEN excluded.sync_requested_at
+             ELSE vacancy_source_state.sync_requested_at
+           END`,
+      )
+      .run(sourceId, requestedAt);
+  }
+
+  markSourceSyncStarted(sourceId: string, requestedAt: string, startedAt: string): boolean {
+    const result = this.database
+      .prepare(
+        `UPDATE vacancy_source_state
+            SET sync_started_at = ?
+          WHERE source_id = ? AND sync_requested_at = ?`,
+      )
+      .run(startedAt, sourceId, requestedAt);
+    return Number(result.changes) === 1;
+  }
+
+  clearSourceSyncRequest(sourceId: string, requestedAt: string): boolean {
+    const result = this.database
+      .prepare(
+        `UPDATE vacancy_source_state
+            SET sync_requested_at = NULL,
+                sync_started_at = NULL
+          WHERE source_id = ? AND sync_requested_at = ?`,
+      )
+      .run(sourceId, requestedAt);
+    return Number(result.changes) === 1;
   }
 
   private pruneStaleVacancies(oldestPublishedAt: string): void {

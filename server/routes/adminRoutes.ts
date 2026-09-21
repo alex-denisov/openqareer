@@ -225,25 +225,25 @@ async function testSource(deps: RouteDeps, request: FastifyRequest, reply: Fasti
 async function syncAllSources(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireAdmin(deps, request, reply);
   if (!principal) return;
-  // Per source, not one blanket flag: a run where every source failed used to
-  // answer `success: true` with the size of the previous pool (B161 review §3).
-  const outcomes = await deps.multiSourceEngine.syncAll();
-  return {
+  // B230 moved source writes out of HTTP. Keep the all-sources action useful by
+  // queuing one durable request per enabled source instead of pretending that
+  // the HTTP process has already contacted every external platform.
+  const requests = deps.multiSourceEngine.requestAllSourceSyncs();
+  return reply.code(202).send({
     data: {
-      success: outcomes.every((outcome) => outcome.status !== 'error'),
-      count: deps.multiSourceEngine.getVacancies().total,
-      outcomes,
+      queued: true,
+      count: requests.length,
+      sources: requests,
     },
     meta: { requestId: request.id },
-  };
+  });
 }
 
 async function syncSource(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireAdmin(deps, request, reply);
   if (!principal) return;
   const { sourceId } = request.params as { sourceId: string };
-  const outcome = await deps.multiSourceEngine.syncSource(sourceId);
-  if (outcome.status === 'unknown_source') {
+  if (!deps.multiSourceEngine.getSource(sourceId)) {
     return sendError(
       reply,
       request,
@@ -253,10 +253,11 @@ async function syncSource(deps: RouteDeps, request: FastifyRequest, reply: Fasti
       false,
     );
   }
-  return {
-    data: { success: outcome.status === 'healthy', outcome },
+  const requestState = deps.multiSourceEngine.requestSourceSync(sourceId);
+  return reply.code(202).send({
+    data: { queued: true, source: requestState },
     meta: { requestId: request.id },
-  };
+  });
 }
 
 async function toggleSource(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
@@ -351,6 +352,43 @@ function registerVacancyList(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/admin/vacancies/:vacancyId', withDeps(deps, handleGetVacancy));
 }
 
+async function handleListSources(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+  const principal = requireAdmin(deps, request, reply);
+  if (!principal) return;
+  // Живость и доверие едут вместе с самой площадкой: администратор читает
+  // «жива ли она» и «можно ли ей верить» как две разные вещи (B200).
+  const health = new Map(
+    deps.multiSourceEngine.getSourceHealthReport().map((item) => [item.sourceId, item]),
+  );
+  // Расписание B204 админ не видел вовсе, и «почему площадку не опрашивают»
+  // оставалось вопросом без ответа. Сводка короткая намеренно: тот же
+  // маршрут уже рвался на 20 220 байтах (INC-032).
+  const scheduler = deps.multiSourceEngine.getScheduler();
+  const sources = deps.multiSourceEngine.getSources().map((source) => {
+    const measured = health.get(source.id);
+    const schedule = toAdminSourceSchedule(
+      scheduler.getScheduleInfo(source.id, Date.now(), source.refreshIntervalMinutes),
+    );
+    const manualSync = deps.multiSourceEngine.getManualSourceSyncState(source.id);
+    return measured
+      ? { ...source, schedule, manualSync, health: { liveness: measured.liveness, trust: measured.trust } }
+      : { ...source, schedule, manualSync };
+  });
+  // Весь реестр со здоровьем — 29 788 байт, а прод рвёт тело на 20 220
+  // (INC-032). Экран забирает список страницами внутри доказанного бюджета.
+  const offset = Number((request.query as { offset?: string } | undefined)?.offset ?? 0);
+  const page = buildAdminSourcePage(sources, Number.isFinite(offset) ? offset : 0);
+  return {
+    data: {
+      items: page.items,
+      total: page.total,
+      offset: page.offset,
+      nextOffset: page.nextOffset,
+    },
+    meta: { requestId: request.id },
+  };
+}
+
 function registerRuntimeMemory(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/admin/runtime-memory', async (request, reply) => {
     const principal = requireAdmin(deps, request, reply);
@@ -382,41 +420,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
   app.get('/api/v1/admin/audit', withDeps(deps, handleListAudit));
 
   registerVacancyList(app, deps);
-  app.get('/api/v1/admin/vacancy-sources', async (request, reply) => {
-    const principal = requireAdmin(deps, request, reply);
-    if (!principal) return;
-    // Живость и доверие едут вместе с самой площадкой: администратор читает
-    // «жива ли она» и «можно ли ей верить» как две разные вещи (B200).
-    const health = new Map(
-      deps.multiSourceEngine.getSourceHealthReport().map((item) => [item.sourceId, item]),
-    );
-    // Расписание B204 админ не видел вовсе, и «почему площадку не опрашивают»
-    // оставалось вопросом без ответа. Сводка короткая намеренно: тот же
-    // маршрут уже рвался на 20 220 байтах (INC-032).
-    const scheduler = deps.multiSourceEngine.getScheduler();
-    const sources = deps.multiSourceEngine.getSources().map((source) => {
-      const measured = health.get(source.id);
-      const schedule = toAdminSourceSchedule(
-        scheduler.getScheduleInfo(source.id, Date.now(), source.refreshIntervalMinutes),
-      );
-      return measured
-        ? { ...source, schedule, health: { liveness: measured.liveness, trust: measured.trust } }
-        : { ...source, schedule };
-    });
-    // Весь реестр со здоровьем — 29 788 байт, а прод рвёт тело на 20 220
-    // (INC-032). Экран забирает список страницами внутри доказанного бюджета.
-    const offset = Number((request.query as { offset?: string } | undefined)?.offset ?? 0);
-    const page = buildAdminSourcePage(sources, Number.isFinite(offset) ? offset : 0);
-    return {
-      data: {
-        items: page.items,
-        total: page.total,
-        offset: page.offset,
-        nextOffset: page.nextOffset,
-      },
-      meta: { requestId: request.id },
-    };
-  });
+  app.get('/api/v1/admin/vacancy-sources', withDeps(deps, handleListSources));
   app.post('/api/v1/admin/vacancy-sources/:sourceId/test', withDeps(deps, testSource));
   app.post('/api/v1/admin/vacancy-sources/sync-all', withDeps(deps, syncAllSources));
   app.post('/api/v1/admin/vacancy-sources/:sourceId/sync', withDeps(deps, syncSource));

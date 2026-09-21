@@ -1,7 +1,12 @@
 import type { VacancySourceConfig } from '../domain/unifiedVacancy';
+import { mapWithConcurrency } from '../vacancies/boundedConcurrency';
 import type { LinkCheckCensus } from '../vacancies/linkLivenessProbe';
 import { MemoryGuard, readProcessHeap, type HeapReading } from '../vacancies/memoryGuard';
-import type { SourceSyncOutcome } from '../vacancies/multiSourceVacancyEngine';
+import {
+  SYNC_BATCH_LIMIT,
+  type RequestedSourceSync,
+  type SourceSyncOutcome,
+} from '../vacancies/multiSourceVacancyEngine';
 
 /** Тот же контракт, что у `fastify.log`: объект контекста, потом сообщение. */
 export interface MaintenanceLog {
@@ -18,7 +23,11 @@ export interface MaintenanceEngine {
     chunkSize?: number,
     options?: { prune?: boolean },
   ): Promise<{ restored: number }>;
+  syncSource(sourceId: string): Promise<SourceSyncOutcome>;
   syncDue(nowMs?: number): Promise<SourceSyncOutcome[]>;
+  getRequestedSourceSyncs(): RequestedSourceSync[];
+  markSourceSyncStarted(request: RequestedSourceSync, startedAt?: string): boolean;
+  clearSourceSyncRequest(request: RequestedSourceSync): boolean;
   probeDueLinks(nowMs?: number): Promise<LinkCheckCensus | undefined>;
   runCatalogMaintenanceStep(chunk?: number): { processed: number; pending: number } | undefined;
   runClusterKeysBackfillStep(chunk?: number): number;
@@ -34,6 +43,7 @@ export interface SyncWaveReport {
 }
 
 export interface MaintenanceIntervals {
+  readonly manualSyncMs: number;
   readonly syncMs: number;
   readonly livenessMs: number;
   readonly catalogMs: number;
@@ -49,6 +59,7 @@ export interface MaintenanceIntervals {
 export const DEFAULT_STOP_GRACE_MS = 60_000;
 
 export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
+  manualSyncMs: 5 * 1_000,
   syncMs: 5 * 60 * 1_000,
   livenessMs: 15 * 60 * 1_000,
   catalogMs: 1_000,
@@ -80,6 +91,7 @@ export class MaintenanceWorker {
   private readonly readHeap: () => HeapReading;
   private readonly timers: NodeJS.Timeout[] = [];
   private readonly inFlight = new Set<Promise<unknown>>();
+  private readonly manualInFlight = new Set<string>();
   private stopped = false;
 
   constructor(options: {
@@ -221,11 +233,67 @@ export class MaintenanceWorker {
       const timer = setInterval(() => void tick(), ms);
       this.timers.push(timer);
     };
+    every(this.intervals.manualSyncMs, () => this.runManualSyncWave());
     every(this.intervals.syncMs, () => this.runSyncWave());
     every(this.intervals.livenessMs, () => this.runLivenessProbe());
     every(this.intervals.catalogMs, () => this.runCatalogStep());
     every(this.intervals.reportMs, () => this.reportMemory());
+    void this.runManualSyncWave();
     void this.runSyncWave();
+  }
+
+  /**
+   * Выполняет только durable ручные отметки. Отметка очищается сравнением с
+   * исходным timestamp, поэтому новый клик во время долгого обхода не теряется.
+   */
+  async runManualSyncWave(): Promise<SyncWaveReport> {
+    if (this.stopped) return { synced: 0, failed: [], kept: 0, skipped: 'stopped' };
+    const memory = this.memoryGuard.check();
+    if (memory.paused) return { synced: 0, failed: [], kept: 0, skipped: 'memory' };
+    const requests = this.engine.getRequestedSourceSyncs().slice(0, SYNC_BATCH_LIMIT);
+    if (requests.length === 0) return { synced: 0, failed: [], kept: 0 };
+
+    const work = mapWithConcurrency(requests, SYNC_BATCH_LIMIT, (request) =>
+      this.runRequestedSourceSync(request),
+    )
+      .then((outcomes) =>
+        outcomes.filter((outcome): outcome is SourceSyncOutcome => outcome !== undefined),
+      )
+      .then((outcomes) => {
+        const report = this.reportWave(outcomes);
+        this.log.info({ ...report }, 'manual-source-sync-completed');
+        return report;
+      });
+    return this.track(work, 'manual-source-sync-failed', { synced: 0, failed: [], kept: 0 });
+  }
+
+  private async runRequestedSourceSync(
+    request: RequestedSourceSync,
+  ): Promise<SourceSyncOutcome | undefined> {
+    if (this.manualInFlight.has(request.sourceId)) return undefined;
+    this.manualInFlight.add(request.sourceId);
+    if (!this.engine.markSourceSyncStarted(request)) {
+      this.manualInFlight.delete(request.sourceId);
+      return undefined;
+    }
+    try {
+      return await this.engine.syncSource(request.sourceId);
+    } catch (error: unknown) {
+      this.log.error(
+        { sourceId: request.sourceId, errorName: errorName(error) },
+        'manual-source-sync-source-failed',
+      );
+      return {
+        sourceId: request.sourceId,
+        status: 'error',
+        fetched: 0,
+        kept: 0,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      this.engine.clearSourceSyncRequest(request);
+      this.manualInFlight.delete(request.sourceId);
+    }
   }
 
   /**

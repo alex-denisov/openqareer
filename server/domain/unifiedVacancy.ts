@@ -139,6 +139,10 @@ export interface VacancySourceConfig {
   lastErrorMessage?: string;
   itemsFoundTotal: number;
   itemsActiveTotal: number;
+  /** Администратор попросил обслуживатель выполнить внеплановый опрос (B231). */
+  syncRequestedAt?: string;
+  /** Обслуживатель уже выполняет отмеченный ручной опрос (B231). */
+  syncStartedAt?: string;
   /** Правомерность и доступность адреса площадки из реестра (B199/B200/B204). */
   addressStatus?: import('../vacancies/defaultVacancySources').VacancyAddressStatus;
   /**
