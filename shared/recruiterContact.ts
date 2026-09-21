@@ -9,6 +9,19 @@
 
 export type EmailStatus = 'verified' | 'hypothesis' | 'unverified';
 
+export type RecruiterContactJobStatus = 'queued' | 'running' | 'ready' | 'failed';
+
+export interface RecruiterContactJob {
+  readonly id: string;
+  readonly candidateId: string;
+  readonly vacancyId: string;
+  readonly status: RecruiterContactJobStatus;
+  readonly errorCode: string | null;
+  readonly requestedAt: string;
+  readonly startedAt: string | null;
+  readonly finishedAt: string | null;
+}
+
 export interface RecruiterContact {
   readonly id: string;
   readonly vacancyId: string;
