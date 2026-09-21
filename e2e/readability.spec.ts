@@ -268,10 +268,10 @@ test.describe('B232 readability gate', () => {
     await expect(rows).toHaveCount(40);
 
     // Смена фильтра возвращает к первой странице: «показано 40 из 12» — ложь.
-    await page.getByLabel('Название или работодатель').fill('Merchant');
+    await page.getByPlaceholder('Роль, вакансия или компания…').fill('Merchant');
     await expect(rows).toHaveCount(16);
     await expect(page.getByRole('button', { name: /Показать ещё/ })).toHaveCount(0);
-    await page.getByLabel('Название или работодатель').fill('');
+    await page.getByPlaceholder('Роль, вакансия или компания…').fill('');
     await expect(rows).toHaveCount(20);
   });
 

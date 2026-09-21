@@ -208,7 +208,7 @@ export function CareerExpertPanel({
       className="career-expert-panel"
       role="dialog"
       aria-modal="true"
-      aria-label="Карьерный консультант"
+      aria-label="Карьерный эксперт"
     >
       <header>
         <div className="career-expert-identity">
