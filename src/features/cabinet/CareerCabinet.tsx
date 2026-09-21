@@ -131,25 +131,25 @@ export function CareerCabinet({
         {data.loading && !data.snapshot ? (
           <CabinetSkeleton />
         ) : (
-        <CabinetSection
-          view={view}
-          session={session}
-          workspace={workspace}
-          importing={importing}
-          targetDirection={targetDirection}
-          journey={journey}
-          proposedRoles={proposedRoles}
-          strategy={strategy}
-          workPreferences={workPreferences}
-          pool={pool}
-          applications={vacancyApplications.applications}
-          data={data}
-          onNavigate={onNavigate}
-          onUpdateWorkspace={onUpdateWorkspace}
-          onSavePremises={savePremises}
-          onOpenAccount={onOpenAccount}
-          onOpenExpert={onOpenExpert}
-        />
+          <CabinetSection
+            view={view}
+            session={session}
+            workspace={workspace}
+            importing={importing}
+            targetDirection={targetDirection}
+            journey={journey}
+            proposedRoles={proposedRoles}
+            strategy={strategy}
+            workPreferences={workPreferences}
+            pool={pool}
+            applications={vacancyApplications.applications}
+            data={data}
+            onNavigate={onNavigate}
+            onUpdateWorkspace={onUpdateWorkspace}
+            onSavePremises={savePremises}
+            onOpenAccount={onOpenAccount}
+            onOpenExpert={onOpenExpert}
+          />
         )}
       </div>
     </AppErrorBoundary>
@@ -333,9 +333,11 @@ const VIEW_TITLE: Record<CareerCabinetView, string> = {
 const VIEW_DESCRIPTION: Record<CareerCabinetView, string> = {
   today: 'Ваш профиль по фактам, роли с опорой на опыт и один шаг на сегодня.',
   profile: 'Ваш профиль по фактам, роли с опорой на опыт и один шаг на сегодня.',
-  resume: 'Основное резюме и вариант под страну — только из подтверждённых фактов; пробелы видны.',
+  resume:
+    'Основное резюме и три формата позиционирования — только из подтверждённых фактов; пробелы видны.',
   career: 'Кампания: по какой роли ищем, что откликнуть сегодня, как идёт воронка.',
-  opportunities: 'Все подобранные вакансии из наших источников: фильтры, отклик, нетворкинг, контакты.',
+  opportunities:
+    'Все вакансии по вашей роли из наших источников: фильтры, направления поиска и действия по каждой.',
 };
 
 function todayLabel(): string {

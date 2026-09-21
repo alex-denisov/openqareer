@@ -73,7 +73,7 @@ describe('CareerHome HomeRail integration (B103, B105)', () => {
     expect(html).toContain('Следующее действие');
     expect(html).toContain('career-ats-card');
     expect(html).toContain('ATS-читаемость');
-    expect(html).toContain('Оценка профиля');
+    expect(html).toContain('Готовность профиля');
   });
 
   it('calls onNavigate with reasoned destination when clicking next action button', () => {
@@ -102,9 +102,7 @@ describe('CareerHome HomeRail integration (B103, B105)', () => {
 
     const nextActionNode = railChildren.find(
       (child) =>
-        Boolean(child) &&
-        typeof child.type === 'function' &&
-        child.type.name === 'NextAction',
+        Boolean(child) && typeof child.type === 'function' && child.type.name === 'NextAction',
     );
     expect(nextActionNode).toBeDefined();
 
@@ -146,11 +144,21 @@ describe('CareerHome HomeRail integration (B103, B105)', () => {
   // в подписи кандидату (аудит 2026-09-20, находка 10).
   it('names the assessment method without a service identifier (B233)', () => {
     const snapshot = {
-      candidate: { id: 'c1', dataClass: 'synthetic', locale: 'ru-RU', createdAt: '2026-09-01T00:00:00.000Z' },
+      candidate: {
+        id: 'c1',
+        dataClass: 'synthetic',
+        locale: 'ru-RU',
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
       messages: [],
       memory: [],
       turns: [],
-      dossier: { sections: [], confirmedCount: 0, proposedCount: 0, readiness: { complete: false, unresolvedQuestions: 0, checks: [] } },
+      dossier: {
+        sections: [],
+        confirmedCount: 0,
+        proposedCount: 0,
+        readiness: { complete: false, unresolvedQuestions: 0, checks: [] },
+      },
       assessments: [],
       germanyMarket: null,
       resume: {
@@ -158,7 +166,14 @@ describe('CareerHome HomeRail integration (B103, B105)', () => {
           candidate: { fullName: 'Тест' },
           targetRole: 'Руководитель продукта',
           experience: [
-            { id: 'e1', chronologyMemoryId: 'm1', title: 'PM', employer: 'X', current: true, bulletMemoryIds: [] },
+            {
+              id: 'e1',
+              chronologyMemoryId: 'm1',
+              title: 'PM',
+              employer: 'X',
+              current: true,
+              bulletMemoryIds: [],
+            },
           ],
           skills: [],
           education: [],
@@ -185,7 +200,7 @@ describe('CareerHome HomeRail integration (B103, B105)', () => {
         onOpenExpert={vi.fn()}
       />,
     );
-    expect(html).toContain('посчитано по вашему профилю');
+    expect(html).toContain('Это заполненность, не сила резюме');
     expect(html).not.toMatch(/-v\d\b/u);
     expect(html).not.toContain('profile-assessment');
   });

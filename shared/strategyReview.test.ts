@@ -36,8 +36,8 @@ describe('reviewStrategy', () => {
     const stall = signal(result, 'transport-stall');
     expect(stall.state).toBe('fired');
     // Прямое требование: чинить транспорт, не трогая гипотезу роли.
-    expect(stall.whatToChange).toEqual(['транспорт']);
-    expect(stall.note).toContain('не стратегия');
+    expect(stall.whatToChange).toEqual(['канал отклика']);
+    expect(stall.note).toContain('Роль ни при чём');
   });
 
   it('свежие отклики аварию не поднимают', () => {
@@ -76,12 +76,12 @@ describe('reviewStrategy', () => {
       expect(item.state).toBe('untracked');
       // Ноль означал бы «посмотрели и не нашли»; мы не смотрели вовсе.
       expect(item.measure).toBeUndefined();
-      expect(item.note).toContain('не отслеживается');
+      expect(item.note).toContain('не сообщает');
     }
   });
 
   it('порядок изменений идёт от дешёвого к дорогому и заканчивается ролью', () => {
-    expect(CHANGE_ORDER[0]).toBe('маршрут');
+    expect(CHANGE_ORDER[0]).toBe('канал отклика');
     expect(CHANGE_ORDER[CHANGE_ORDER.length - 1]).toBe('роль');
     expect(reviewStrategy(input()).oneVariableAtATime).toBe(true);
   });

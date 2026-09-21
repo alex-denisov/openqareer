@@ -1,14 +1,6 @@
 import { useMemo, useState } from 'react';
-import {
-  ArrowRight,
-  Briefcase,
-  Check,
-  Compass,
-  Sparkle,
-} from '@phosphor-icons/react';
-import {
-  type EvidenceItem,
-} from '../../evidence/evidenceEngine';
+import { ArrowRight, Briefcase, Check, Compass, Sparkle } from '@phosphor-icons/react';
+import { type EvidenceItem } from '../../evidence/evidenceEngine';
 import {
   analyzeOpportunity,
   createOpportunityRecord,
@@ -20,11 +12,7 @@ import {
   createActionPackage,
   getActionChecklist,
 } from '../../action/actionPackageEngine';
-import {
-  recommendNextAction,
-  recordOutcome,
-  type OutcomeType,
-} from '../../outcome/outcomeEngine';
+import { recommendNextAction, recordOutcome, type OutcomeType } from '../../outcome/outcomeEngine';
 
 import { JourneyViewProps, SourceCapability, ViewHeader } from './_shared';
 export function OpportunitiesView({
@@ -41,8 +29,7 @@ export function OpportunitiesView({
   const [followUpDate, setFollowUpDate] = useState('');
   const opportunity = workspace.opportunity;
   const decisionLabel = useMemo(() => {
-    const value =
-      opportunity?.decision?.choice ?? opportunity?.analysis?.recommendation;
+    const value = opportunity?.decision?.choice ?? opportunity?.analysis?.recommendation;
     if (value === 'apply') return 'Откликаться';
     if (value === 'network') return 'Сначала найти контакт';
     if (value === 'watch') return 'Наблюдать';
@@ -55,10 +42,7 @@ export function OpportunitiesView({
       (workspace.analysis?.evidenceItems ?? []).map((item) => [item.id, item]),
     );
     const matches = new Map(
-      opportunity.analysis.matches.map((match) => [
-        match.opportunityItemId,
-        match,
-      ]),
+      opportunity.analysis.matches.map((match) => [match.opportunityItemId, match]),
     );
     const gapIds = new Set(opportunity.analysis.gapItemIds);
 
@@ -81,18 +65,13 @@ export function OpportunitiesView({
     () =>
       opportunity
         ? workspace.outcomes.filter(
-            (event) =>
-              event.opportunityId === opportunity.id &&
-              event.undoneAt === undefined,
+            (event) => event.opportunityId === opportunity.id && event.undoneAt === undefined,
           )
         : [],
     [opportunity, workspace.outcomes],
   );
   const outcomeNextAction = useMemo(
-    () =>
-      opportunity
-        ? recommendNextAction(opportunity.id, workspace.outcomes)
-        : undefined,
+    () => (opportunity ? recommendNextAction(opportunity.id, workspace.outcomes) : undefined),
     [opportunity, workspace.outcomes],
   );
 
@@ -109,11 +88,7 @@ export function OpportunitiesView({
     const analyzed = workspace.analysis
       ? {
           ...record,
-          analysis: analyzeOpportunity(
-            record,
-            workspace.analysis.evidenceItems,
-            'unknown',
-          ),
+          analysis: analyzeOpportunity(record, workspace.analysis.evidenceItems, 'unknown'),
         }
       : record;
     onUpdateWorkspace({
@@ -126,11 +101,7 @@ export function OpportunitiesView({
   }
 
   function decide(choice: OpportunityChoice) {
-    if (
-      !opportunity?.analysis ||
-      !workspace.analysis ||
-      decisionReason.trim().length < 10
-    ) {
+    if (!opportunity?.analysis || !workspace.analysis || decisionReason.trim().length < 10) {
       return;
     }
     const decided = recordOpportunityDecision(
@@ -140,11 +111,7 @@ export function OpportunitiesView({
     );
     const actionPackage =
       choice === 'apply' || choice === 'network'
-        ? createActionPackage(
-            decided,
-            workspace.analysis.evidenceItems,
-            workspace.targetDirection,
-          )
+        ? createActionPackage(decided, workspace.analysis.evidenceItems, workspace.targetDirection)
         : undefined;
     onUpdateWorkspace({
       ...workspace,
@@ -194,7 +161,7 @@ export function OpportunitiesView({
       <ViewHeader
         eyebrow="Вакансии, компании, контакты"
         title="Возможности"
-        action="Настроить со стратегом"
+        action="Настроить с консультантом"
         onAction={onOpenExpert}
       />
 
@@ -204,8 +171,8 @@ export function OpportunitiesView({
             <Compass size={28} />
             <h2>Начнём с одной реальной вакансии</h2>
             <p>
-              Это ещё не анализ рынка. Одна вакансия покажет, какие факты
-              профиля работают, что неизвестно и какой маршрут действия разумен.
+              Это ещё не анализ рынка. Одна вакансия покажет, какие факты профиля работают, что
+              неизвестно и какой маршрут действия разумен.
             </p>
           </section>
           <div className="career-opportunity-form">
@@ -229,7 +196,9 @@ export function OpportunitiesView({
             <button
               className="career-primary-button"
               type="button"
-              disabled={title.trim().length < 2 || company.trim().length < 2 || text.trim().length < 80}
+              disabled={
+                title.trim().length < 2 || company.trim().length < 2 || text.trim().length < 80
+              }
               onClick={analyze}
             >
               Проверить возможность
@@ -266,20 +235,14 @@ export function OpportunitiesView({
               <section className="career-opportunity-route">
                 <p className="career-eyebrow">Рекомендация, а не решение за вас</p>
                 <h3>Почему такой маршрут</h3>
-                <p>
-                  {explainOpportunityRecommendation(
-                    opportunity.analysis.recommendation,
-                  )}
-                </p>
+                <p>{explainOpportunityRecommendation(opportunity.analysis.recommendation)}</p>
               </section>
 
               <section aria-labelledby="opportunity-comparison-title">
                 <div className="career-section-heading">
                   <div>
                     <p className="career-eyebrow">Вакансия ↔ профиль</p>
-                    <h3 id="opportunity-comparison-title">
-                      Что подтверждено, а что ещё нет
-                    </h3>
+                    <h3 id="opportunity-comparison-title">Что подтверждено, а что ещё нет</h3>
                   </div>
                 </div>
                 <div className="career-opportunity-comparison">
@@ -298,9 +261,7 @@ export function OpportunitiesView({
                               : 'Нужно проверить'}
                         </strong>
                         {evidence.map((itemEvidence) => (
-                          <span key={itemEvidence.id}>
-                            {itemEvidence.statement}
-                          </span>
+                          <span key={itemEvidence.id}>{itemEvidence.statement}</span>
                         ))}
                       </div>
                     </article>
@@ -333,26 +294,24 @@ export function OpportunitiesView({
                     />
                   </label>
                   <div className="career-opportunity-choices">
-                    {(['apply', 'network', 'watch', 'skip'] as const).map(
-                      (choice) => (
-                        <button
-                          key={choice}
-                          type="button"
-                          disabled={decisionReason.trim().length < 10}
-                          className={
-                            opportunity.analysis?.recommendation === choice
-                              ? 'is-recommended'
-                              : undefined
-                          }
-                          onClick={() => decide(choice)}
-                        >
-                          {opportunityChoiceLabel(choice)}
-                          {opportunity.analysis?.recommendation === choice ? (
-                            <small>Рекомендуется</small>
-                          ) : null}
-                        </button>
-                      ),
-                    )}
+                    {(['apply', 'network', 'watch', 'skip'] as const).map((choice) => (
+                      <button
+                        key={choice}
+                        type="button"
+                        disabled={decisionReason.trim().length < 10}
+                        className={
+                          opportunity.analysis?.recommendation === choice
+                            ? 'is-recommended'
+                            : undefined
+                        }
+                        onClick={() => decide(choice)}
+                      >
+                        {opportunityChoiceLabel(choice)}
+                        {opportunity.analysis?.recommendation === choice ? (
+                          <small>Рекомендуется</small>
+                        ) : null}
+                      </button>
+                    ))}
                   </div>
                 </section>
               ) : (
@@ -379,9 +338,7 @@ export function OpportunitiesView({
                   <strong>{workspace.actionPackage.positioningLine}</strong>
                   <pre>{composeMessage(workspace.actionPackage)}</pre>
                   <ol>
-                    {getActionChecklist(
-                      workspace.actionPackage.decisionChoice,
-                    ).map((item) => (
+                    {getActionChecklist(workspace.actionPackage.decisionChoice).map((item) => (
                       <li key={item.id}>
                         <strong>{item.label}</strong>
                         <span>{item.detail}</span>
@@ -394,8 +351,8 @@ export function OpportunitiesView({
                         <p className="career-eyebrow">Результат ещё не записан</p>
                         <h4>Отправка остаётся вашим действием</h4>
                         <p>
-                          После отправки в официальном интерфейсе отметьте факт
-                          здесь. До этого openqareer не считает действие выполненным.
+                          После отправки в официальном интерфейсе отметьте факт здесь. До этого
+                          openqareer не считает действие выполненным.
                         </p>
                         <button
                           className="career-primary-button"
@@ -424,12 +381,8 @@ export function OpportunitiesView({
                               <input
                                 type="date"
                                 value={followUpDate}
-                                min={new Date(Date.now() + 86_400_000)
-                                  .toISOString()
-                                  .slice(0, 10)}
-                                onChange={(event) =>
-                                  setFollowUpDate(event.target.value)
-                                }
+                                min={new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)}
+                                onChange={(event) => setFollowUpDate(event.target.value)}
                               />
                             </label>
                             <button
@@ -437,13 +390,10 @@ export function OpportunitiesView({
                               disabled={!followUpDate}
                               onClick={() =>
                                 addOutcome(
-                                  workspace.actionPackage?.decisionChoice ===
-                                    'apply'
+                                  workspace.actionPackage?.decisionChoice === 'apply'
                                     ? 'applied'
                                     : 'contacted',
-                                  new Date(
-                                    `${followUpDate}T12:00:00`,
-                                  ).toISOString(),
+                                  new Date(`${followUpDate}T12:00:00`).toISOString(),
                                 )
                               }
                             >
@@ -452,28 +402,16 @@ export function OpportunitiesView({
                           </div>
                         ) : null}
                         <div className="career-outcome-choices">
-                          <button
-                            type="button"
-                            onClick={() => addOutcome('positive-reply')}
-                          >
+                          <button type="button" onClick={() => addOutcome('positive-reply')}>
                             Получен положительный ответ
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => addOutcome('negative-reply')}
-                          >
+                          <button type="button" onClick={() => addOutcome('negative-reply')}>
                             Получен отказ
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => addOutcome('interview')}
-                          >
+                          <button type="button" onClick={() => addOutcome('interview')}>
                             Назначено интервью
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => addOutcome('offer')}
-                          >
+                          <button type="button" onClick={() => addOutcome('offer')}>
                             Получен оффер
                           </button>
                         </div>
@@ -485,8 +423,7 @@ export function OpportunitiesView({
             </div>
           ) : null}
           <p className="career-opportunity-caveat">
-            Это сравнение с одной вакансией, не оценка всего рынка и не гарантия
-            прохождения отбора.
+            Это сравнение с одной вакансией, не оценка всего рынка и не гарантия прохождения отбора.
           </p>
         </section>
       )}
@@ -524,9 +461,7 @@ export function OpportunitiesView({
 
       <section
         className={`career-paid-moment ${
-          journey.commercialBoundary.state === 'free-route-incomplete'
-            ? 'is-free-route'
-            : ''
+          journey.commercialBoundary.state === 'free-route-incomplete' ? 'is-free-route' : ''
         }`}
       >
         <div>
@@ -544,9 +479,7 @@ export function OpportunitiesView({
           type="button"
           onClick={() =>
             onNavigate(
-              journey.commercialBoundary.state === 'assisted-setup-eligible'
-                ? 'tariffs'
-                : 'career',
+              journey.commercialBoundary.state === 'assisted-setup-eligible' ? 'tariffs' : 'career',
             )
           }
         >
@@ -585,7 +518,6 @@ function explainOpportunityRecommendation(choice: OpportunityChoice) {
   }
   return 'Обнаружен подтверждённый конфликт с важным ограничением кандидата.';
 }
-
 
 function outcomeNote(type: OutcomeType) {
   if (type === 'applied') return 'Отклик отправлен кандидатом.';

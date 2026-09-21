@@ -1,15 +1,7 @@
 import { ArrowRight, ChatCircleDots } from '@phosphor-icons/react';
-import type {
-  AccountSnapshot,
-  AuthUser,
-  CandidateSnapshot,
-  CoachResult,
-} from '../coach/coachApi';
+import type { AccountSnapshot, AuthUser, CandidateSnapshot, CoachResult } from '../coach/coachApi';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
-import {
-  candidateRegionLabels,
-  type CandidateRegion,
-} from '../workspace/candidateRegions';
+import { candidateRegionLabels, type CandidateRegion } from '../workspace/candidateRegions';
 import { CareerProfileSurface } from './CareerProfileSurface';
 import { assessProfile, type ProfileMeasure, type ProfileScore } from './profileAssessment';
 import { buildProfileView } from './profileView';
@@ -170,8 +162,7 @@ function HomeFolds({
 }) {
   const latestTrack = [...(snapshot?.turns ?? [])]
     .reverse()
-    .find((turn) => turn.status === 'completed' && turn.result?.careerTrack)
-    ?.result?.careerTrack;
+    .find((turn) => turn.status === 'completed' && turn.result?.careerTrack)?.result?.careerTrack;
 
   return (
     <div className="career-home-folds">
@@ -242,7 +233,10 @@ function AssessmentPanel({
   return (
     <section className="career-home-panel" aria-labelledby="career-assessment-title">
       <header>
-        <h3 id="career-assessment-title">Оценка профиля</h3>
+        <h3 id="career-assessment-title">Готовность профиля</h3>
+        <span className="career-cabinet-tag" title="Это заполненность, не сила резюме">
+          Заполненность, не сила
+        </span>
         {assessment.measuredAt && !importing ? (
           <span className="career-cabinet-tag">
             факты обновлены {formatDay(assessment.measuredAt)}
@@ -263,10 +257,6 @@ function AssessmentPanel({
               <MeasureRow key={measure.id} measure={measure} />
             ))}
           </ul>
-          {/* Версия метода — служебная; кандидату она ничего не говорит (B233). */}
-          <p className="career-cabinet-tag">
-            посчитано по вашему профилю
-          </p>
         </>
       )}
     </section>
@@ -308,8 +298,8 @@ function ScoreRing({ score }: { score: ProfileScore }) {
         </span>
       </div>
       <p>
-        Пройдено {score.checks} проверок из {score.total}. Каждая проверка ниже
-        называет, из чего сложено число.
+        Пройдено {score.checks} проверок из {score.total}. Каждая проверка ниже называет, из чего
+        сложено число.
       </p>
     </div>
   );
@@ -378,11 +368,7 @@ function PositioningPanel({
         </div>
       </dl>
       <StrategistNames alternatives={alternatives} />
-      <button
-        className="career-quiet-button"
-        type="button"
-        onClick={() => onNavigate('career')}
-      >
+      <button className="career-quiet-button" type="button" onClick={() => onNavigate('career')}>
         Перейти в «Поиск» <ArrowRight size={16} aria-hidden="true" />
       </button>
     </section>
@@ -398,14 +384,13 @@ function StrategistNames({
   if (!alternatives?.length) {
     return (
       <p className="career-home-empty">
-        Смежные названия появятся после разбора со стратегом. Своего словаря
-        ролей у продукта нет.
+        Смежные названия роли появятся после разговора с консультантом.
       </p>
     );
   }
   return (
     <>
-      <p className="career-cabinet-tag">стратег держит рядом</p>
+      <p className="career-cabinet-tag">Смежные названия роли</p>
       <ul className="career-home-pills">
         {alternatives.map((alternative) => (
           <li key={alternative.label}>{alternative.label}</li>
@@ -439,8 +424,8 @@ function ConsultantPanel({
         <blockquote className="career-home-quote">{lastAnswer.content}</blockquote>
       ) : (
         <p className="career-home-empty">
-          Разговора ещё не было. Консультант разбирает факты и объясняет, что в
-          них читается, а что нет.
+          Разговора ещё не было. Консультант разбирает факты и объясняет, что в них читается, а что
+          нет.
         </p>
       )}
       <button className="career-btn career-btn-secondary" type="button" onClick={onOpenExpert}>

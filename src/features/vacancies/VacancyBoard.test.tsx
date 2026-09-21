@@ -326,6 +326,7 @@ describe('VacancyBoard · страница из 20 записей', () => {
     expect(html).not.toContain('Вакансия 20<');
     expect(html).toContain('Показать ещё 20');
     expect(html).toContain('показано 20 из 96');
+    expect(html).toContain('источник в подборе');
   });
 
   /** PRB-040: запись вне рынков кампании подписана, а не спрятана. */

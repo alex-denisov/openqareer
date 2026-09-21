@@ -875,7 +875,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // периодом и счётом измеримых пунктов, а не очередь подтверждения (B179).
   await page.getByText('Продуктовый аналитик · FinCloud', { exact: true }).waitFor();
   await page.getByText(/1 из 2 пунктов с измеримым результатом/u).waitFor();
-  await page.getByRole('heading', { name: 'Оценка профиля' }).waitFor();
+  await page.getByRole('heading', { name: 'Готовность профиля' }).waitFor();
   assert(
     (await page.getByText('Следующий шаг', { exact: true }).count()) === 0,
     `${viewport.name}: the confirmation card the mockup dropped is still on «Главной»`,

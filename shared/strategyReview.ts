@@ -18,7 +18,7 @@ const DAY_MS = 86_400_000;
 
 /** Порядок изменений: от дешёвого и быстро измеримого к дорогому и медленному. */
 export const CHANGE_ORDER = [
-  'маршрут',
+  'канал отклика',
   'материалы и скрининговые ответы',
   'грейд',
   'география',
@@ -103,7 +103,7 @@ function transportStall(input: StrategyReviewInput): StrategySignal {
     .map((command) => Date.parse(command.deliveredAt as string))
     .filter((time) => Number.isFinite(time));
   const queued = input.commands.length > 0 || input.pool.size > 0;
-  const title = 'Отклики не доходят';
+  const title = '7 дней без откликов';
 
   if (!queued) {
     return {
@@ -117,7 +117,7 @@ function transportStall(input: StrategyReviewInput): StrategySignal {
 
   const days = delivered.length
     ? Math.floor((Date.parse(input.now) - Math.max(...delivered)) / DAY_MS)
-    : daysSince(input.strategyDecidedAt, input.now) ?? TRANSPORT_STALL_DAYS;
+    : (daysSince(input.strategyDecidedAt, input.now) ?? TRANSPORT_STALL_DAYS);
 
   if (days < TRANSPORT_STALL_DAYS) {
     return {
@@ -134,9 +134,13 @@ function transportStall(input: StrategyReviewInput): StrategySignal {
     id: 'transport-stall',
     title,
     state: 'fired',
-    measure: measure(days, TRANSPORT_STALL_DAYS, 'дней без доставленного отклика при непустой очереди'),
-    whatToChange: ['транспорт'],
-    note: 'Это не стратегия, это авария: проверять транспорт и право на отклик, гипотезу роли не трогать.',
+    measure: measure(
+      days,
+      TRANSPORT_STALL_DAYS,
+      'дней без доставленного отклика при непустой очереди',
+    ),
+    whatToChange: ['канал отклика'],
+    note: 'Роль ни при чём. Проверьте канал отклика, сессию, лимиты и резюме, затем пройдите очередь.',
   };
 }
 
@@ -144,7 +148,7 @@ function transportStall(input: StrategyReviewInput): StrategySignal {
 function demandSampleAge(input: StrategyReviewInput): StrategySignal {
   const newest = input.pool.newestObservedAt;
   const days = daysSince(newest, input.now);
-  const title = 'Возраст выборки вакансий';
+  const title = 'Подбор устарел';
 
   if (input.pool.size === 0 || days === null) {
     return {
@@ -152,7 +156,7 @@ function demandSampleAge(input: StrategyReviewInput): StrategySignal {
       title,
       state: 'not-enough-data',
       whatToChange: [],
-      note: 'Выборки нет — возраст считать не по чему.',
+      note: 'Подбора нет — свежесть считать не по чему.',
     };
   }
 
@@ -161,15 +165,15 @@ function demandSampleAge(input: StrategyReviewInput): StrategySignal {
         id: 'demand-sample-age',
         title,
         state: 'fired',
-        measure: measure(days, DEMAND_SAMPLE_DAYS, 'дней самому свежему наблюдению пула'),
-        whatToChange: ['пересчёт спроса'],
-        note: 'Спрос пересчитывается до любого нового вывода: старая выборка отвечает про прошлый месяц.',
+        measure: measure(days, DEMAND_SAMPLE_DAYS, 'дней с последней собранной вакансии'),
+        whatToChange: ['новый сбор'],
+        note: `Самая свежая вакансия собрана ${days} дней назад (порог ${DEMAND_SAMPLE_DAYS}). Дождитесь нового сбора, прежде чем судить о спросе.`,
       }
     : {
         id: 'demand-sample-age',
         title,
         state: 'quiet',
-        measure: measure(days, DEMAND_SAMPLE_DAYS, 'дней самому свежему наблюдению пула'),
+        measure: measure(days, DEMAND_SAMPLE_DAYS, 'дней с последней собранной вакансии'),
         whatToChange: [],
         note: 'Выборка свежая.',
       };
@@ -189,21 +193,21 @@ function untrackedSignals(): StrategySignal[] {
       title: 'Много просмотрено, мало подходящих',
       state: 'untracked',
       whatToChange: ['география', 'грейд'],
-      note: 'Просмотренные кластеры не отслеживается ничем, поэтому сигнал не считается.',
+      note: 'Просмотры площадка не сообщает, поэтому их нельзя считать.',
     },
     {
       id: 'no-human-answer',
       title: 'Отклики доходят, ответов нет',
       state: 'untracked',
-      whatToChange: ['маршрут', 'материалы и скрининговые ответы', 'грейд'],
-      note: 'Человеческие ответы не отслеживается ничем, поэтому сигнал не считается.',
+      whatToChange: ['канал отклика', 'материалы и скрининговые ответы', 'грейд'],
+      note: 'Ответы площадка не сообщает, поэтому их нельзя считать.',
     },
     {
       id: 'first-conversation',
       title: 'Ответы есть, разговоров нет',
       state: 'untracked',
       whatToChange: ['скрининговые ответы', 'доказательства опыта'],
-      note: 'Разговоры и интервью не отслеживается ничем, поэтому сигнал не считается.',
+      note: 'Интервью площадка не сообщает, поэтому их нельзя считать.',
     },
   ];
 }

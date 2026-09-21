@@ -179,7 +179,7 @@ export function NextAction({
       <p>
         {reasonedAction?.rationale ??
           journey?.nextAction.reason ??
-          'Добавьте CV или ответьте стратегу: следующий шаг появится только после проверяемого факта.'}
+          'Добавьте резюме или ответьте консультанту: следующий шаг появится после проверяемого факта.'}
       </p>
       {reasonedAction ? (
         <ReasonedActionDetails action={reasonedAction} onNavigate={onNavigate} />
