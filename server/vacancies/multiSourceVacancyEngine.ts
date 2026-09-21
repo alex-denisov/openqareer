@@ -526,8 +526,9 @@ export class MultiSourceVacancyEngine {
     // every worker tick instead of keeping a stale in-memory queue (B231).
     this.restoreSourceStates();
     return Array.from(this.sources.values())
-      .filter((source): source is VacancySourceConfig & { syncRequestedAt: string } =>
-        typeof source.syncRequestedAt === 'string',
+      .filter(
+        (source): source is VacancySourceConfig & { syncRequestedAt: string } =>
+          typeof source.syncRequestedAt === 'string',
       )
       .map((source) => ({
         sourceId: source.id,
@@ -556,7 +557,8 @@ export class MultiSourceVacancyEngine {
   public clearSourceSyncRequest(request: RequestedSourceSync): boolean {
     const source = this.sources.get(request.sourceId);
     if (!source || source.syncRequestedAt !== request.requestedAt) return false;
-    const cleared = this.pool.clearSourceSyncRequest?.(request.sourceId, request.requestedAt) ?? false;
+    const cleared =
+      this.pool.clearSourceSyncRequest?.(request.sourceId, request.requestedAt) ?? false;
     if (!cleared && this.pool.requestSourceSync === undefined) {
       source.syncRequestedAt = undefined;
       source.syncStartedAt = undefined;
@@ -903,7 +905,7 @@ export class MultiSourceVacancyEngine {
       nowMs,
     });
 
-    const kept = this.acceptReading(source, fetched, nowMs, partial, dropObservedBefore);
+    const kept = await this.acceptReading(source, fetched, nowMs, partial, dropObservedBefore);
     return { sourceId: source.id, status: 'healthy', fetched: fetched.length, kept };
   }
 
@@ -963,13 +965,13 @@ export class MultiSourceVacancyEngine {
    * состояние источника переписывается по этому же чтению. Возвращает, сколько
    * записей пул оставил.
    */
-  private acceptReading(
+  private async acceptReading(
     source: VacancySourceConfig,
     fetched: readonly UnifiedVacancy[],
     nowMs: number,
     partial = false,
     dropObservedBefore?: string,
-  ): number {
+  ): Promise<number> {
     // Название площадки едет вместе с записью: на экране кандидат читает
     // источник, а не тип адаптера (PRB-017).
     const freshFetched = fetched
@@ -989,11 +991,19 @@ export class MultiSourceVacancyEngine {
     // значит «снято». Срез дополняется, а устаревшее убирает тридцатидневная
     // уборка и проверка живости ссылок (B214).
     if (this.reclusterMode.mode === 'keyed') {
-      this.acceptReadingKeyed(source, freshFetched, partial, dropObservedBefore);
+      await this.acceptReadingKeyed(source, freshFetched, partial, dropObservedBefore);
     } else if (partial) {
-      this.pool.mergeSourceSlice(source.id, freshFetched, dropObservedBefore);
+      if (this.pool.mergeSourceSliceAsync) {
+        await this.pool.mergeSourceSliceAsync(source.id, freshFetched, dropObservedBefore);
+      } else {
+        this.pool.mergeSourceSlice(source.id, freshFetched, dropObservedBefore);
+      }
     } else {
-      this.pool.replaceSourceSlice(source.id, freshFetched);
+      if (this.pool.replaceSourceSliceAsync) {
+        await this.pool.replaceSourceSliceAsync(source.id, freshFetched);
+      } else {
+        this.pool.replaceSourceSlice(source.id, freshFetched);
+      }
       this.requiresFullRecluster = true;
     }
     if (this.reclusterMode.mode !== 'keyed') {
@@ -1028,25 +1038,33 @@ export class MultiSourceVacancyEngine {
    * записи снимаются с кластеров точечно, новые сводятся партиями с соседями
    * по ключам. В куче — партия и её соседи, а не пул.
    */
-  private acceptReadingKeyed(
+  private async acceptReadingKeyed(
     source: VacancySourceConfig,
     freshFetched: readonly UnifiedVacancy[],
     partial: boolean,
     dropObservedBefore?: string,
-  ): void {
+  ): Promise<void> {
     const store = this.keyedStore();
     let gone: readonly VacancyLink[];
     if (partial) {
-      gone = this.pool.mergeSourceSlice(source.id, freshFetched, dropObservedBefore).dropped;
+      const result = this.pool.mergeSourceSliceAsync
+        ? await this.pool.mergeSourceSliceAsync(source.id, freshFetched, dropObservedBefore)
+        : this.pool.mergeSourceSlice(source.id, freshFetched, dropObservedBefore);
+      gone = result.dropped;
     } else {
       const fetchedIds = new Set(freshFetched.map((vacancy) => vacancy.id));
       gone = this.pool.loadSourceLinks(source.id).filter((link) => !fetchedIds.has(link.id));
-      this.pool.replaceSourceSlice(source.id, freshFetched);
+      if (this.pool.replaceSourceSliceAsync) {
+        await this.pool.replaceSourceSliceAsync(source.id, freshFetched);
+      } else {
+        this.pool.replaceSourceSlice(source.id, freshFetched);
+      }
     }
     if (gone.length > 0) detachVacanciesByKeys(store, gone);
     const batchSize =
       this.reclusterMode.mode === 'keyed' ? this.reclusterMode.batchSize : DEFAULT_KEYED_BATCH_SIZE;
     for (let offset = 0; offset < freshFetched.length; offset += batchSize) {
+      if (offset > 0) await new Promise<void>((resolve) => setImmediate(resolve));
       clusterBatchByKeys(store, freshFetched.slice(offset, offset + batchSize));
     }
     this.keyedClusterings += 1;

@@ -103,6 +103,12 @@ export interface VacancyPoolStore {
     vacancies: readonly UnifiedVacancy[],
     dropObservedBefore?: string,
   ): MergeSliceResult;
+  /** Async bounded-write variants used by the maintenance worker (B230). */
+  mergeSourceSliceAsync?(
+    sourceId: string,
+    vacancies: readonly UnifiedVacancy[],
+    dropObservedBefore?: string,
+  ): Promise<MergeSliceResult>;
   loadSourceStates(): StoredSourceState[];
   /** Queues an out-of-band source read for the maintenance process (B231). */
   requestSourceSync?(sourceId: string, requestedAt: string): void;
@@ -112,6 +118,8 @@ export interface VacancyPoolStore {
   clearSourceSyncRequest?(sourceId: string, requestedAt: string): boolean;
   /** Swaps everything this source contributed for what it just returned. */
   replaceSourceSlice(sourceId: string, vacancies: readonly UnifiedVacancy[]): void;
+  /** Async bounded-write variant that yields between SQLite transactions. */
+  replaceSourceSliceAsync?(sourceId: string, vacancies: readonly UnifiedVacancy[]): Promise<void>;
   saveSourceState(state: StoredSourceState): void;
   /**
    * Помечает снятые объявления датой смерти, оставляя их в базе. Возвращает,
