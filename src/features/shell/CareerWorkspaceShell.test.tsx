@@ -19,11 +19,21 @@ import { CURRENT_PLAN } from './tariffPackages';
 vi.mock('../cabinet/useCareerCabinetData', () => ({
   useCareerCabinetData: () => ({
     snapshot: {
-      candidate: { id: 'candidate-1', dataClass: 'synthetic', locale: 'ru-RU', createdAt: '2026-09-01T00:00:00.000Z' },
+      candidate: {
+        id: 'candidate-1',
+        dataClass: 'synthetic',
+        locale: 'ru-RU',
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
       messages: [],
       memory: [],
       turns: [],
-      dossier: { sections: [], confirmedCount: 0, proposedCount: 0, readiness: { complete: false, unresolvedQuestions: 0, checks: [] } },
+      dossier: {
+        sections: [],
+        confirmedCount: 0,
+        proposedCount: 0,
+        readiness: { complete: false, unresolvedQuestions: 0, checks: [] },
+      },
       assessments: [],
       germanyMarket: null,
       resume: null,
@@ -65,7 +75,7 @@ describe('CareerWorkspaceShell', () => {
 
     // «Главная» держит самого кандидата: профиль слева, оценка справа (B179).
     expect(html).toContain('Разделы профиля');
-    expect(html).toContain('Оценка профиля');
+    expect(html).toContain('Готовность профиля');
     expect(html).not.toContain('Следующий шаг');
     expect(html).not.toContain('Диалог со стратегом');
     expect(html).not.toContain('Рынок и следующие шаги');
@@ -158,9 +168,7 @@ describe('CareerWorkspaceShell', () => {
   });
 
   it('does not repeat the active navigation item in the top bar', () => {
-    const html = renderToStaticMarkup(
-      <CareerWorkspaceShell onSaveWorkspace={() => undefined} />,
-    );
+    const html = renderToStaticMarkup(<CareerWorkspaceShell onSaveWorkspace={() => undefined} />);
 
     expect(html).not.toContain('career-page-name');
     expect(html).toContain('career-topbar');
@@ -274,7 +282,7 @@ describe('CareerWorkspaceShell', () => {
 
     expect(html).toContain('Доступно сейчас');
     expect(html).toContain('Ручное сопровождение');
-    expect(html).toContain('Автопилот пока недоступен');
+    expect(html).toContain('Автоматизация пока недоступна');
   });
 
   it('labels an old saved market sample as stale rather than fresh', () => {
@@ -539,10 +547,7 @@ describe('CareerWorkspaceShell brand chrome', () => {
      */
     it('keeps the handle inside the rail rather than floating over the page', () => {
       const html = renderToStaticMarkup(firstTime);
-      const bottom = html.slice(
-        html.indexOf('career-rail-bottom'),
-        html.indexOf('</aside>'),
-      );
+      const bottom = html.slice(html.indexOf('career-rail-bottom'), html.indexOf('</aside>'));
 
       expect(bottom).toContain('career-rail-toggle');
       expect(bottom).toContain('career-account-button');
@@ -556,11 +561,13 @@ describe('CareerWorkspaceShell brand chrome', () => {
     it('styles the administrator link with a class, not a blocked attribute', () => {
       const html = renderToStaticMarkup(
         <CareerWorkspaceShell
-          session={{
-            username: 'root',
-            role: 'admin',
-            candidateId: 'candidate-1',
-          } as never}
+          session={
+            {
+              username: 'root',
+              role: 'admin',
+              candidateId: 'candidate-1',
+            } as never
+          }
           onClearWorkspace={() => undefined}
           onSaveWorkspace={() => undefined}
           onUpdateWorkspace={() => undefined}
@@ -614,9 +621,9 @@ describe('рельс «Пульт»', () => {
   }
 
   it('даёт каждому разделу свою иконку, а не один глиф на всех', () => {
-    const paths = [
-      ...railHtml().matchAll(/<button class="career-nav-button[^]*?<\/button>/gu),
-    ].map((match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'));
+    const paths = [...railHtml().matchAll(/<button class="career-nav-button[^]*?<\/button>/gu)].map(
+      (match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'),
+    );
 
     // Три раздела макета, каждый нарисован дважды: рельс и нижняя панель на
     // узком экране. Важно, что рисунков ровно три разных (B179).
@@ -634,9 +641,7 @@ describe('рельс «Пульт»', () => {
 
   it('не тратит пункт меню на ручку раскрытия', () => {
     const html = railHtml();
-    const railToggle = html.match(
-      /<button class="career-rail-toggle"[^]*?<\/button>/u,
-    );
+    const railToggle = html.match(/<button class="career-rail-toggle"[^]*?<\/button>/u);
 
     expect(railToggle).not.toBeNull();
     expect(railToggle![0]).not.toContain('career-nav-button');

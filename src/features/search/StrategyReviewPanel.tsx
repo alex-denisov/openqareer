@@ -1,4 +1,5 @@
 import type { CareerCommand } from '../coach/coachApi';
+import { EyeSlash } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CareerStrategy } from '../../../shared/careerStrategy';
 import {
@@ -53,11 +54,12 @@ export function StrategyReviewPanel({
   return (
     <section className="career-strategy-review" aria-labelledby="career-strategy-review-title">
       <header>
-        <h3 id="career-strategy-review-title">Когда менять стратегию</h3>
-        <span className="career-cabinet-tag">по одной переменной за раз</span>
+        <h3 id="career-strategy-review-title">Что менять, если не работает</h3>
+        <span className="career-cabinet-tag">по одному изменению за раз</span>
       </header>
       <ChangeOrderLine />
-      <SignalList signals={review.signals} />
+      <SignalList signals={review.signals.filter((signal) => signal.state !== 'untracked')} />
+      <UntrackedBlock />
       {strategy ? <BarrierLine barrier={barrier} /> : null}
     </section>
   );
@@ -66,10 +68,25 @@ export function StrategyReviewPanel({
 function ChangeOrderLine() {
   return (
     <p className="career-home-empty">
-      Порядок изменений — от дешёвого и быстро измеримого к дорогому:{' '}
-      {CHANGE_ORDER.join(' → ')}. Две переменные сразу делают результат
-      неинтерпретируемым.
+      От дешёвого к дорогому: {CHANGE_ORDER.join(' → ')}. Два изменения сразу — не поймёте, что
+      сработало.
     </p>
+  );
+}
+
+function UntrackedBlock() {
+  return (
+    <div className="career-strategy-untracked">
+      <EyeSlash size={16} aria-hidden="true" />
+      <div>
+        <strong>Чего мы не видим</strong>
+        <p>
+          Площадки не сообщают просмотры, ответы и интервью. Ориентир: 2–3 недели откликов без
+          ответов — проверьте письмо и скрининговые ответы; ответы есть, интервью нет — откройте «К
+          интервью».
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -85,7 +102,6 @@ function SignalList({ signals }: { readonly signals: readonly StrategySignal[] }
     </ul>
   );
 }
-
 
 function rank(signal: StrategySignal): number {
   const order = { fired: 0, 'not-enough-data': 1, quiet: 2, untracked: 3 } as const;

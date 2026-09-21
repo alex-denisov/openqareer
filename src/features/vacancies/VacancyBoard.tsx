@@ -152,8 +152,8 @@ export function VacancyBoard({
         <header className="career-vacancy-head">
           <p className="career-vacancy-count">
             <strong>{counted}</strong> подобрано{filling ? ` из ${poolTotal}, загружаем` : ''} ·{' '}
-            <strong>{freshToday(matched, now)}</strong> новых сегодня ·{' '}
-            показано <strong>{shown.length}</strong>
+            <strong>{freshToday(matched, now)}</strong> новых сегодня · показано{' '}
+            <strong>{shown.length}</strong>
           </p>
           <div
             className="career-vacancy-view-switcher"
@@ -237,11 +237,9 @@ export function VacancyBoard({
             ) : null}
             <footer className="career-vacancy-foot">
               <span className="career-cabinet-tag">
-                {sources.length} {sourceNoun(sources.length)}
+                {sources.length} {sourceNoun(sources.length)} в подборе
               </span>
-              <span className="career-cabinet-tag">
-                последний сбор {lastCollected(matched)}
-              </span>
+              <span className="career-cabinet-tag">последний сбор {lastCollected(matched)}</span>
             </footer>
           </div>
         )}
@@ -321,17 +319,16 @@ function VacancyBoardState({
   if (failed) {
     return (
       <p className="career-expert-error" role="alert">
-        Не удалось загрузить вакансии — сервер не ответил. Профиль цел. Повторите через
-        минуту.
+        Не удалось загрузить вакансии — сервер не ответил. Профиль цел. Повторите через минуту.
       </p>
     );
   }
   if (empty) {
     return (
       <p className="career-market-empty">
-        Подходящих вакансий пока нет. Подбор идёт по выбранной роли и подтверждённым навыкам:
-        пока их нет в профиле, мы не показываем случайные вакансии как подходящие. Выберите
-        роль на Главной или добавьте резюме.
+        Подходящих вакансий пока нет. Подбор идёт по выбранной роли и подтверждённым навыкам: пока
+        их нет в профиле, мы не показываем случайные вакансии как подходящие. Выберите роль на
+        Главной или добавьте резюме.
       </p>
     );
   }

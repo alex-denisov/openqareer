@@ -115,8 +115,8 @@ export function SearchCampaign({
 
       {failed ? (
         <p className="career-cabinet-error" role="alert">
-          Пул не прочитан, поэтому числа кампании не показаны: пустая кампания и
-          недоступный источник — разные вещи.
+          Пул не прочитан, поэтому числа кампании не показаны: пустая кампания и недоступный
+          источник — разные вещи.
         </p>
       ) : null}
 
@@ -142,15 +142,6 @@ export function SearchCampaign({
               они считаются (B180, срез 4). */}
           <StrategyReviewPanel strategy={strategy} pool={pool} commands={commands} now={now} />
           <AutomationPanel />
-          <section className="career-home-panel">
-            <header>
-              <h3>Интервью и диалоги</h3>
-            </header>
-            <p className="career-home-empty">
-              Продукт пока не ведёт переписку и не хранит интервью. Как только
-              отклики будут уходить через платформу, они появятся здесь.
-            </p>
-          </section>
         </div>
       </div>
     </section>
@@ -175,9 +166,9 @@ function FunnelPanel({ campaign }: { campaign: SearchCampaignView }) {
         ))}
       </ol>
       <p className="career-cabinet-tag">
-        «Открыто» — переходы на площадку, «отклик» — только то, что кандидат
-        подтвердил сам. Просмотр, ответ и интервью продукт не отслеживает — их
-        некому сообщить, поэтому на их месте прочерк, а не ноль.
+        «Открыто» — переходы на площадку, «отклик» — только то, что кандидат подтвердил сам.
+        Просмотр, ответ и интервью продукт не отслеживает — их некому сообщить, поэтому на их месте
+        прочерк, а не ноль.
       </p>
     </section>
   );
@@ -259,7 +250,8 @@ function QueueRow({ entry }: { entry: MatchedVacancyItem }) {
           <strong>{entry.cluster.canonicalTitle}</strong>
           <span className="career-job-meta">
             {entry.cluster.canonicalCompany || 'Работодатель не указан'} ·{' '}
-            {entry.cluster.canonicalLocation || (entry.cluster.isRemote ? 'Удалённо' : 'Локация не указана')}
+            {entry.cluster.canonicalLocation ||
+              (entry.cluster.isRemote ? 'Удалённо' : 'Локация не указана')}
           </span>
         </div>
         <span className="career-cabinet-tag">
@@ -303,8 +295,7 @@ function AutomationPanel() {
         )}
       </ul>
       <p className="career-cabinet-tag">
-        Оплата не подключена: платные планы нельзя купить, поэтому здесь они
-        стоят как ориентир, а не как предложение.
+        Платные тарифы пока не продаются — они показаны, чтобы вы видели, что появится.
       </p>
     </section>
   );

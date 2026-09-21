@@ -37,9 +37,7 @@ export function CareerExpertPanel({
   onClose,
 }: CareerExpertPanelProps) {
   const [user, setUser] = useState<AuthUser | null>(initialUser);
-  const [snapshot, setSnapshot] = useState<CandidateSnapshot | undefined>(
-    initialSnapshot,
-  );
+  const [snapshot, setSnapshot] = useState<CandidateSnapshot | undefined>(initialSnapshot);
   const [liveResult, setLiveResult] = useState<CoachResult>();
   const [liveTurnIdempotencyKey, setLiveTurnIdempotencyKey] = useState<string>();
   const [loadingSnapshot, setLoadingSnapshot] = useState(Boolean(initialUser));
@@ -50,15 +48,19 @@ export function CareerExpertPanel({
   const [sending, setSending] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState<string>();
   const [error, setError] = useState<string>();
-  const pendingOperation = useRef<{ user: AuthUser; content: string; marketQuery?: string; idempotencyKey: string; messageId: string }>();
+  const pendingOperation = useRef<{
+    user: AuthUser;
+    content: string;
+    marketQuery?: string;
+    idempotencyKey: string;
+    messageId: string;
+  }>();
   const panel = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const returnFocusTo =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeButton.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -143,13 +145,27 @@ export function CareerExpertPanel({
     let delivered = false;
     try {
       const query = marketQuery?.trim() || undefined;
-      if (!pendingOperation.current || pendingOperation.current.user !== user ||
-        pendingOperation.current.content !== clean || pendingOperation.current.marketQuery !== query) {
-        pendingOperation.current = { user, content: clean, marketQuery: query,
-          idempotencyKey: crypto.randomUUID(), messageId: crypto.randomUUID() };
+      if (
+        !pendingOperation.current ||
+        pendingOperation.current.user !== user ||
+        pendingOperation.current.content !== clean ||
+        pendingOperation.current.marketQuery !== query
+      ) {
+        pendingOperation.current = {
+          user,
+          content: clean,
+          marketQuery: query,
+          idempotencyKey: crypto.randomUUID(),
+          messageId: crypto.randomUUID(),
+        };
       }
       const { idempotencyKey, messageId } = pendingOperation.current;
-      const result = await sendCoachTurn({ content: clean, marketQuery: query, idempotencyKey, messageId });
+      const result = await sendCoachTurn({
+        content: clean,
+        marketQuery: query,
+        idempotencyKey,
+        messageId,
+      });
       pendingOperation.current = undefined;
       setLiveResult(result);
       setLiveTurnIdempotencyKey(idempotencyKey);
@@ -173,9 +189,11 @@ export function CareerExpertPanel({
     }
   }
 
-  const showLiveMessage = liveResult && !snapshot?.messages.some(
-    (message) => message.role === 'assistant' && message.content === liveResult.message,
-  );
+  const showLiveMessage =
+    liveResult &&
+    !snapshot?.messages.some(
+      (message) => message.role === 'assistant' && message.content === liveResult.message,
+    );
   const latestStoredTurn = [...(snapshot?.turns ?? [])]
     .reverse()
     .find((turn) => turn.status === 'completed' && turn.result);
@@ -194,10 +212,12 @@ export function CareerExpertPanel({
     >
       <header>
         <div className="career-expert-identity">
-          <span><Sparkle size={18} weight="fill" /></span>
+          <span>
+            <Sparkle size={18} weight="fill" />
+          </span>
           <div>
             <strong>Карьерный советник</strong>
-            <small>{user ? 'Персональный AI-ассистент по стратегии' : 'Защищённый диалог'}</small>
+            <small>{user ? 'Персональный карьерный консультант' : 'Защищённый диалог'}</small>
           </div>
         </div>
         <button
@@ -224,22 +244,21 @@ export function CareerExpertPanel({
         {snapshot?.messages.length || showLiveMessage ? (
           <div className="career-dialogue-history" aria-label="История диалога">
             {snapshot?.messages.map((message) => (
-              <article
-                className={`career-dialogue-turn is-${message.role}`}
-                key={message.id}
-              >
+              <article className={`career-dialogue-turn is-${message.role}`} key={message.id}>
                 <span>{message.role === 'user' ? 'Вы' : 'Карьерный советник'}</span>
-                {message.content.split('\n').map((paragraph, index) =>
-                  paragraph ? <p key={`${message.id}-${index}`}>{paragraph}</p> : null,
-                )}
+                {message.content
+                  .split('\n')
+                  .map((paragraph, index) =>
+                    paragraph ? <p key={`${message.id}-${index}`}>{paragraph}</p> : null,
+                  )}
               </article>
             ))}
             {showLiveMessage ? (
               <article className="career-dialogue-turn is-assistant" aria-live="polite">
                 <span>Карьерный советник</span>
-                {liveResult.message.split('\n').map((paragraph, index) =>
-                  paragraph ? <p key={index}>{paragraph}</p> : null,
-                )}
+                {liveResult.message
+                  .split('\n')
+                  .map((paragraph, index) => (paragraph ? <p key={index}>{paragraph}</p> : null))}
               </article>
             ) : null}
           </div>
@@ -263,10 +282,7 @@ export function CareerExpertPanel({
             <ShieldCheck size={24} />
             <div>
               <strong>Персональный ответ требует входа</strong>
-              <p>
-                Так память кандидатов не смешивается, а ключи моделей не
-                попадают в браузер.
-              </p>
+              <p>Так память кандидатов не смешивается, а ключи моделей не попадают в браузер.</p>
             </div>
             <button type="button" onClick={() => setLoginOpen(true)}>
               Войти в аккаунт
@@ -314,14 +330,22 @@ export function CareerExpertPanel({
               placeholder="Например: как лучше усилить позиционирование для целевой роли?"
               rows={3}
             />
-            <button type="submit" disabled={!content.trim() || sending} aria-label="Отправить вопрос">
+            <button
+              type="submit"
+              disabled={!content.trim() || sending}
+              aria-label="Отправить вопрос"
+            >
               {sending ? <Spinner size={18} /> : <PaperPlaneTilt size={18} weight="fill" />}
             </button>
           </div>
         </form>
       ) : null}
 
-      {error ? <p className="career-expert-error" role="alert">{error}</p> : null}
+      {error ? (
+        <p className="career-expert-error" role="alert">
+          {error}
+        </p>
+      ) : null}
     </aside>
   );
 }
@@ -334,16 +358,12 @@ export function CareerExpertPanel({
  */
 export function ExpertWaitingRow({ question }: { question: string }) {
   return (
-    <article
-      className="career-dialogue-turn is-user"
-      aria-live="polite"
-      aria-busy="true"
-    >
+    <article className="career-dialogue-turn is-user" aria-live="polite" aria-busy="true">
       <span>Вы</span>
       <p>{question}</p>
       <p>
-        <Spinner size={16} /> Советник читает ваши факты и рынок — ответ занимает
-        до полутора минут. Не закрывайте панель.
+        <Spinner size={16} /> Советник читает ваши факты и рынок — ответ занимает до полутора минут.
+        Не закрывайте панель.
       </p>
     </article>
   );
@@ -367,7 +387,9 @@ export function CareerIntelligenceSummary({
               <li key={`${milestone.label}-${milestone.measureAfter}`}>
                 <b>{milestone.label}</b>
                 <p>{milestone.successCriterion}</p>
-                <small>Проверка {formatDate(milestone.measureAfter)} · {milestone.expectedSignal}</small>
+                <small>
+                  Проверка {formatDate(milestone.measureAfter)} · {milestone.expectedSignal}
+                </small>
               </li>
             ))}
           </ol>

@@ -18,7 +18,7 @@ export function EvidenceChip({ memoryId }: { memoryId: string }) {
 
 function evidenceOriginLabel(memoryId: string): string {
   if (/^imp[A-Za-z0-9]*-/u.test(memoryId)) return 'импортированное резюме';
-  return 'разговор со стратегом';
+  return 'разговор с консультантом';
 }
 
 export function EntryUnknowns({ unknowns }: { unknowns: readonly ResumeUnknown[] }) {
@@ -54,8 +54,8 @@ export function EvidencePicker({
   if (options.length === 0) {
     return (
       <p className="career-resume-empty">
-        Свободных подтверждённых фактов нет. Подтвердите факт в разговоре с
-        экспертом — резюме берёт только их.
+        Свободных подтверждённых фактов нет. Подтвердите факт в разговоре с экспертом — резюме берёт
+        только их.
       </p>
     );
   }
@@ -80,13 +80,7 @@ export function EvidencePicker({
   );
 }
 
-export function RemoveButton({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: () => void;
-}) {
+export function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button type="button" className="career-resume-remove" onClick={onClick}>
       <Trash size={14} />
@@ -117,9 +111,7 @@ export function Field({
   type?: string;
 }) {
   return (
-    <label
-      className={`career-resume-field ${large ? 'is-large' : ''} ${mono ? 'is-mono' : ''}`}
-    >
+    <label className={`career-resume-field ${large ? 'is-large' : ''} ${mono ? 'is-mono' : ''}`}>
       <span>{label}</span>
       <input
         type={type}

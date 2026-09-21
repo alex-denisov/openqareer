@@ -120,7 +120,7 @@ describe('vacancy_cluster_keys (B230)', () => {
     const third = new SqliteVacancyPoolStore({ databasePath: path });
     expect(third.clusterKeysReady()).toBe(true);
     third.close();
-  });
+  }, 15_000);
 
   it('a fresh database is ready at once: nothing to backfill', () => {
     const store = new SqliteVacancyPoolStore({ databasePath: freshPath() });

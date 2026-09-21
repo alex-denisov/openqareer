@@ -6,8 +6,7 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CareerStrategy } from '../../../shared/careerStrategy';
 
 const NOW = '2026-09-20T12:00:00.000Z';
-const daysAgo = (days: number) =>
-  new Date(Date.parse(NOW) - days * 86_400_000).toISOString();
+const daysAgo = (days: number) => new Date(Date.parse(NOW) - days * 86_400_000).toISOString();
 
 const strategy: CareerStrategy = {
   current: {
@@ -51,15 +50,16 @@ function render(options: {
 describe('StrategyReviewPanel', () => {
   it('называет порядок изменений и правило одной переменной', () => {
     const markup = render({});
-    expect(markup).toContain('маршрут → материалы и скрининговые ответы');
-    expect(markup).toContain('по одной переменной за раз');
+    expect(markup).toContain('канал отклика → материалы и скрининговые ответы');
+    expect(markup).toContain('по одному изменению за раз');
     // Наращивать объём откликов запрещено как ответ на любой сигнал.
     expect(markup).not.toContain('больше откликов');
   });
 
   it('неотслеживаемое называет словами, а не нулём', () => {
     const markup = render({});
-    expect(markup).toContain('не отслеживается ничем');
+    expect(markup).toContain('Чего мы не видим');
+    expect(markup).toContain('Площадки не сообщают просмотры, ответы и интервью');
     expect(markup).not.toContain('0 из 30');
   });
 
@@ -72,8 +72,8 @@ describe('StrategyReviewPanel', () => {
       },
       commands: [{ status: 'queued', execution: null } as unknown as CareerCommand],
     });
-    expect(markup).toContain('Это не стратегия, это авария');
-    expect(markup).toContain('Менять: транспорт');
+    expect(markup).toContain('Роль ни при чём');
+    expect(markup).toContain('Менять: канал отклика');
   });
 
   it('барьер смены роли показывает числами со знаменателями', () => {

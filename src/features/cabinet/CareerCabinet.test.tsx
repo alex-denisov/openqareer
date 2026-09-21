@@ -15,11 +15,21 @@ vi.mock('./useCareerCabinetData', () => ({
 }));
 
 const loadedSnapshot = {
-  candidate: { id: 'cand-1', dataClass: 'synthetic', locale: 'ru-RU', createdAt: '2026-09-01T00:00:00.000Z' },
+  candidate: {
+    id: 'cand-1',
+    dataClass: 'synthetic',
+    locale: 'ru-RU',
+    createdAt: '2026-09-01T00:00:00.000Z',
+  },
   messages: [],
   memory: [],
   turns: [],
-  dossier: { sections: [], confirmedCount: 0, proposedCount: 0, readiness: { complete: false, unresolvedQuestions: 0, checks: [] } },
+  dossier: {
+    sections: [],
+    confirmedCount: 0,
+    proposedCount: 0,
+    readiness: { complete: false, unresolvedQuestions: 0, checks: [] },
+  },
   assessments: [],
   germanyMarket: null,
   resume: null,
@@ -168,7 +178,7 @@ describe('CareerCabinet composition', () => {
     const html = renderCabinet('today');
 
     expect(html).toContain('Разделы профиля');
-    expect(html).toContain('Оценка профиля');
+    expect(html).toContain('Готовность профиля');
     expect(html).toContain('Следующее действие');
     expect(html).toContain('ATS-читаемость');
     expect(html).not.toContain('Следующий шаг');
@@ -198,7 +208,7 @@ describe('CareerCabinet composition', () => {
     const html = renderCabinet('profile');
 
     expect(html).toContain('Разделы профиля');
-    expect(html).toContain('Оценка профиля');
+    expect(html).toContain('Готовность профиля');
     expect(html).not.toContain('Рынок и следующие шаги');
   });
 

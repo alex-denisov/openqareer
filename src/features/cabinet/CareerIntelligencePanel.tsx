@@ -31,7 +31,10 @@ export function CareerIntelligencePanel({
   onOpenExpert,
 }: CareerIntelligencePanelProps) {
   return (
-    <aside className="career-intelligence-panel is-expanded" aria-labelledby="career-intelligence-title">
+    <aside
+      className="career-intelligence-panel is-expanded"
+      aria-labelledby="career-intelligence-title"
+    >
       <header className="career-cabinet-panel-heading">
         <div>
           <span className="career-cabinet-kicker">Аналитика</span>
@@ -40,7 +43,7 @@ export function CareerIntelligencePanel({
         {/* B169 §8 — every screen that can use the strategist offers it here,
             with a reason attached. The contextless top-bar button is gone. */}
         <button className="career-quiet-button" type="button" onClick={onOpenExpert}>
-          Настроить со стратегом
+          Настроить с консультантом
         </button>
       </header>
 
