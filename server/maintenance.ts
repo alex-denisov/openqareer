@@ -24,10 +24,17 @@ const composed = composeVacancyEngine({
 const worker = new MaintenanceWorker({ engine: composed.engine, log });
 
 let shuttingDown = false;
+let restoreInFlight: Promise<unknown> | undefined;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info({ signal }, 'maintenance-shutdown-started');
+  // `restoreAsync` reads the large SQLite pool in bounded chunks, but a
+  // single restore can still take more than the old systemd stop window on
+  // production. Wait for it before closing the shared database; otherwise a
+  // deploy can interrupt restore between its chunks and close the connection
+  // underneath the still-running promise.
+  await restoreInFlight?.catch(() => undefined);
   const { waveFinished } = await worker.stop();
   composed.close();
   log.info({ signal, waveFinished }, 'maintenance-shutdown-finished');
@@ -37,7 +44,9 @@ process.once('SIGINT', () => void shutdown('SIGINT'));
 process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
 try {
-  await worker.restore();
+  restoreInFlight = worker.restore();
+  await restoreInFlight;
+  restoreInFlight = undefined;
   worker.reportMemory();
   worker.start();
   log.info({ sources: composed.engine.getSources().length }, 'maintenance-started');
