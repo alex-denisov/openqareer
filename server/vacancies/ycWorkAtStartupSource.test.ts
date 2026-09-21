@@ -97,6 +97,17 @@ describe('YC Work at a Startup source', () => {
     expect(vacancy).toBeUndefined();
   });
 
+  it('drops a job link that leaves the official YC host', () => {
+    const [vacancy] = parseYcWorkAtStartupPage(
+      page([{ ...JOB, url: '//internal.example.test/job' }]),
+      SOURCE,
+      SOURCE.targetUrl,
+      '2026-09-21T12:00:00.000Z',
+    );
+
+    expect(vacancy).toBeUndefined();
+  });
+
   it('reads a bounded set of role pages and deduplicates a repeated job', async () => {
     const seen: string[] = [];
     const reading = await fetchYcWorkAtStartup(SOURCE, async (url) => {
@@ -108,5 +119,15 @@ describe('YC Work at a Startup source', () => {
     expect(reading.partial).toBe(false);
     expect(reading.vacancies).toHaveLength(1);
     expect(reading.vacancies[0]?.provenance.sourceType).toBe('career_site');
+  });
+
+  it('does not let a changed registry target redirect the adapter', async () => {
+    const seen: string[] = [];
+    await fetchYcWorkAtStartup({ ...SOURCE, targetUrl: 'https://internal.example.test/jobs' }, async (url) => {
+      seen.push(url);
+      return new Response(page([]), { status: 200, headers: { 'content-type': 'text/html' } });
+    });
+
+    expect(seen).toEqual(YC_JOB_PATHS.map((path) => `https://www.ycombinator.com/${path}`));
   });
 });

@@ -19,6 +19,7 @@ export const YC_JOB_PATHS = [
 ] as const;
 
 const YC_ORIGIN = 'https://www.ycombinator.com';
+const YC_HOST = 'www.ycombinator.com';
 const YC_SOURCE_TIMEOUT_MS = 20_000;
 
 interface YcJobPosting {
@@ -112,7 +113,7 @@ function absoluteJobUrl(value: string | undefined): string {
   if (!value) return '';
   try {
     const url = new URL(value, YC_ORIGIN);
-    return /^https?:$/i.test(url.protocol) ? url.toString() : '';
+    return url.protocol === 'https:' && url.hostname === YC_HOST ? url.toString() : '';
   } catch {
     return '';
   }
@@ -208,7 +209,11 @@ export async function fetchYcWorkAtStartup(
 ): Promise<SourceReading> {
   const vacancies = new Map<string, UnifiedVacancy>();
   for (const path of YC_JOB_PATHS) {
-    const url = new URL(`/${path}`, new URL(source.targetUrl).origin).toString();
+    // The registry target is descriptive configuration, not an authority to
+    // redirect this adapter to another host. Keep every request on the
+    // provider origin and let a changed target fail through the normal source
+    // health path rather than turning it into an SSRF primitive.
+    const url = new URL(`/${path}`, YC_ORIGIN).toString();
     const response = await fetchPage(url, {
       headers: {
         Accept: 'text/html,application/xhtml+xml',
