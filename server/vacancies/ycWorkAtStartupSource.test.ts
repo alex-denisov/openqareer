@@ -86,6 +86,17 @@ describe('YC Work at a Startup source', () => {
     ).toThrow('vacancy_source_payload_unreadable');
   });
 
+  it('drops a job whose external link is not http(s)', () => {
+    const [vacancy] = parseYcWorkAtStartupPage(
+      page([{ ...JOB, url: 'javascript:alert(1)' }]),
+      SOURCE,
+      SOURCE.targetUrl,
+      '2026-09-21T12:00:00.000Z',
+    );
+
+    expect(vacancy).toBeUndefined();
+  });
+
   it('reads a bounded set of role pages and deduplicates a repeated job', async () => {
     const seen: string[] = [];
     const reading = await fetchYcWorkAtStartup(SOURCE, async (url) => {
