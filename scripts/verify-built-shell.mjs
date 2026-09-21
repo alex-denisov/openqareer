@@ -930,7 +930,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     dialogueContainment.contained,
     `${viewport.name}: long dialogue text escaped the expert drawer ${JSON.stringify(dialogueContainment)}`,
   );
-  await expert.getByRole('button', { name: 'Закрыть карьерного советника' }).click();
+  await expert.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
   await expert.waitFor({ state: 'hidden' });
 
   await page.locator('button[aria-label="Поиск"]:visible').click();
