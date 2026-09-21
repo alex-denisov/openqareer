@@ -11,8 +11,29 @@ fail() {
   exit 1
 }
 
+assert_maintenance_stop_timeout() {
+  local timeout_value timeout_number
+  timeout_value="$(systemctl show "$MAINTENANCE_SERVICE" -p TimeoutStopUSec --value)"
+  case "$timeout_value" in
+    infinity)
+      return 0
+      ;;
+    *min)
+      timeout_number="${timeout_value%min}"
+      [[ "$timeout_number" =~ ^[0-9]+$ && "$timeout_number" -ge 5 ]] && return 0
+      ;;
+    *s)
+      timeout_number="${timeout_value%s}"
+      [[ "$timeout_number" =~ ^[0-9]+$ && "$timeout_number" -ge 300 ]] && return 0
+      ;;
+  esac
+  fail "maintenance service TimeoutStopSec must be at least 5 minutes (effective: ${timeout_value:-unknown})"
+}
+
 [[ "$(id -un)" == "openqareer-deploy" ]] ||
   fail "must run as openqareer-deploy"
+
+assert_maintenance_stop_timeout
 
 exec 9>"$RELEASE_ROOT/.deploy.lock"
 flock -n 9 || fail "another deploy or rollback is in progress"
