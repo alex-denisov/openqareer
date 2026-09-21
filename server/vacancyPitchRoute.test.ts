@@ -283,7 +283,11 @@ describe('POST /api/v1/vacancies/:id/enrich-contacts', () => {
       payload: {},
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(Array.isArray(response.json().data.contacts)).toBe(true);
+    expect(response.statusCode).toBe(202);
+    expect(response.json().data.job).toMatchObject({
+      candidateId: expect.any(String),
+      vacancyId: 'cluster-77',
+      status: 'queued',
+    });
   });
 });
