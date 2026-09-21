@@ -70,7 +70,7 @@ describe('CareerHome HomeRail integration (B103, B105)', () => {
     );
 
     expect(html).toContain('career-next-action-card');
-    expect(html).toContain('Следующее действие');
+    expect(html).toContain('Один шаг на сегодня');
     expect(html).toContain('career-ats-card');
     expect(html).toContain('ATS-читаемость');
     expect(html).toContain('Готовность профиля');
@@ -135,7 +135,7 @@ describe('CareerHome HomeRail integration (B103, B105)', () => {
     );
 
     expect(html).toContain('career-next-action-card');
-    expect(html).toContain('Следующее действие');
+    expect(html).toContain('Один шаг на сегодня');
     expect(html).toContain('career-ats-card');
     expect(html).toContain('ATS-читаемость');
   });

@@ -874,7 +874,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // «Главная» показывает сам профиль: место работы из разобранного резюме с
   // периодом и счётом измеримых пунктов, а не очередь подтверждения (B179).
   await page.getByText('Продуктовый аналитик · FinCloud', { exact: true }).waitFor();
-  await page.getByText(/1 из 2 пунктов с измеримым результатом/u).waitFor();
+  await page.getByText(/1 из 2 пунктов с числом/u).waitFor();
   await page.getByRole('heading', { name: 'Готовность профиля' }).waitFor();
   assert(
     (await page.getByText('Следующий шаг', { exact: true }).count()) === 0,
@@ -959,11 +959,12 @@ async function verifyViewport(browser, baseUrl, viewport) {
   const untracked = await page.locator('.career-funnel li.is-untracked').count();
   assert(
     untracked === 3 &&
-      /не отслеживает/iu.test(await page.locator('.career-campaign').innerText()),
+      /не отслеживаем/iu.test(await page.locator('.career-campaign').innerText()),
     `${viewport.name}: кампания выдаёт неизмеренное за ноль (${untracked})`,
   );
   const campaignQueue =
-    (await page.locator('.career-automation-list li').count()) >= 3;
+    (await page.getByRole('heading', { name: 'Автоматизация', exact: true }).count()) === 1 &&
+    (await page.getByRole('button', { name: 'Посмотреть тарифы', exact: true }).count()) === 1;
   assert(
     campaignQueue,
     `${viewport.name}: автоматизация по тарифу не отрисовалась`,
@@ -1096,10 +1097,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
     profileFactReview,
     `${viewport.name}: candidate profile surface missing on «Главной»`,
   );
-  // Раздела «Резюме» в рельсе больше нет — макет его не держит. Мастер-резюме
-  // открывается из «Портфолио» на «Главной» (B179).
-  await page.getByRole('button', { name: 'Портфолио' }).click();
-  await page.getByRole('button', { name: 'Открыть мастер-резюме' }).click();
+  // Раздела «Резюме» в рельсе больше нет — макет его не держит. Сборка
+  // резюме открывается из «Документы» на «Главной» (B179).
+  await page.getByRole('button', { name: 'Документы' }).click();
+  await page.getByRole('button', { name: 'Собрать резюме из профиля' }).click();
   await page.getByRole('heading', { name: 'Resume Studio' }).waitFor().catch(() => undefined);
   // The candidate must read what the connected platform gave the document and
   // what it never held — an empty section with no source named reads as our

@@ -32,6 +32,7 @@ interface CareerCabinetProps {
   workspace?: CandidateWorkspace;
   importing?: boolean;
   onNavigate: (view: CareerCabinetView) => void;
+  onOpenTariffs?: () => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
   onOpenAccount: () => void;
   onOpenExpert: () => void;
@@ -51,6 +52,7 @@ export function CareerCabinet({
   workspace,
   importing = false,
   onNavigate,
+  onOpenTariffs,
   onUpdateWorkspace,
   onOpenAccount,
   onOpenExpert,
@@ -149,6 +151,7 @@ export function CareerCabinet({
             onSavePremises={savePremises}
             onOpenAccount={onOpenAccount}
             onOpenExpert={onOpenExpert}
+            onOpenTariffs={onOpenTariffs}
           />
         )}
       </div>
@@ -186,6 +189,7 @@ function CabinetSection({
   onSavePremises,
   onOpenAccount,
   onOpenExpert,
+  onOpenTariffs,
 }: {
   view: CareerCabinetView;
   session: AuthUser & { candidateId: string };
@@ -204,6 +208,7 @@ function CabinetSection({
   onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
   onOpenAccount: () => void;
   onOpenExpert: () => void;
+  onOpenTariffs?: () => void;
 }) {
   // «Главная» держит кандидата и его факты: отдельный раздел «Профиль» показывал
   // бы то же самое второй раз, поэтому его прежний адрес ведёт сюда же.
@@ -255,6 +260,7 @@ function CabinetSection({
           premisesLoading={data.loading}
           onSavePremises={onSavePremises}
           onOpenVacancies={() => onNavigate('opportunities')}
+          onOpenTariffs={onOpenTariffs ?? (() => undefined)}
         />
         {/* Регулярные выборки переехали в панель фильтров «Вакансий» (B181), а
             «ATS-читаемость» и «Следующее действие» живут на Главной: здесь тот

@@ -171,7 +171,7 @@ describe('VacancyBoard · ручной отклик', () => {
     );
 
     expect(html).toContain('Отклик 2 сент.');
-    expect(html).toContain('title="Отклик отмечен 2 сентября"');
+    expect(html).toContain('Отклик отмечен 2 сентября');
     expect(html).not.toContain('>Откликнулся<');
     expect(html).not.toContain('Отклик подтверждён');
   });
@@ -265,11 +265,10 @@ describe('VacancyBoard · ручной отклик', () => {
     );
 
     expect(html).toContain('Копируете и отправляете сами');
-    expect(html).toContain('Тёплый отклик читают чаще холодного');
-    expect(html).toContain('рекрутер или hiring manager');
-    expect(html).toContain('Отметим переход в воронке');
-    expect(html).toContain('только так мы узнаём об отклике');
-    expect(html).toContain('STAR-ответы по вашему опыту');
+    expect(html).toContain('Кому написать в компании');
+    expect(html).toContain('Переход попадёт в воронку');
+    expect(html).toContain('Отметьте после отклика на площадке');
+    expect(html).toContain('ответы STAR по вашему опыту');
   });
 });
 

@@ -69,7 +69,7 @@ function LinkedInHeadlineCard({
           onClick={() => copyToClipboard(headline, setCopied)}
         >
           {copied ? <Check size={14} /> : <Copy size={14} />}
-          {copied ? 'Скопировано!' : 'Копировать заголовок'}
+          {copied ? 'Скопировано' : 'Копировать заголовок'}
         </button>
       </div>
       <p className="career-resume-linkedin-desc">
@@ -120,7 +120,7 @@ function LinkedInAboutCard({
           onClick={() => copyToClipboard(about, setCopied)}
         >
           {copied ? <Check size={14} /> : <Copy size={14} />}
-          {copied ? 'Скопировано!' : 'Копировать About'}
+          {copied ? 'Скопировано' : 'Копировать About'}
         </button>
       </div>
       <p className="career-resume-linkedin-desc">
@@ -181,7 +181,7 @@ function LinkedInExperienceCard({
           onClick={() => copyToClipboard(experienceText, setCopied)}
         >
           {copied ? <Check size={14} /> : <Copy size={14} />}
-          {copied ? 'Скопировано!' : 'Копировать опыт'}
+          {copied ? 'Скопировано' : 'Копировать опыт'}
         </button>
       </div>
       <p className="career-resume-linkedin-desc">
@@ -222,7 +222,7 @@ function LinkedInSkillsCard({
           onClick={() => copyToClipboard(skillsList.join(', '), setCopied)}
         >
           {copied ? <Check size={14} /> : <Copy size={14} />}
-          {copied ? 'Скопировано!' : 'Копировать навыки'}
+          {copied ? 'Скопировано' : 'Копировать навыки'}
         </button>
       </div>
       <p className="career-resume-linkedin-desc">

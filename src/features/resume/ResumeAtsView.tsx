@@ -35,7 +35,7 @@ function ResumeAtsActionBar({
           {copied ? (
             <>
               <Check size={14} aria-hidden />
-              Скопировано!
+              Скопировано
             </>
           ) : (
             <>

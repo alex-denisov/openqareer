@@ -43,7 +43,7 @@ describe('RecruiterContactsBlock', () => {
       <RecruiterContactsBlock vacancyId="vac-1" />,
     );
     expect(html).toContain('>Рекрутер<');
-    expect(html).toContain('рекрутер или hiring manager');
+    expect(html).toContain('Найти того, кто ведёт вакансию');
     expect(html).not.toContain('Найти прямые контакты');
   });
 

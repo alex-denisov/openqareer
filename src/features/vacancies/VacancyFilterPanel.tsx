@@ -5,6 +5,7 @@ import { SavedSearchesPanel } from './SavedSearchesPanel';
 import type { VacancyFacetCounts } from './vacancyFacets';
 import { IN_BASE_HINT, type VacancyFilters } from './vacancyFilters';
 import { VACANCY_CONDITIONS } from './vacancyConditions';
+import { CareerTooltip } from '../shell/CareerTooltip';
 
 /**
  * Панель фильтров «Вакансий» по макету «Пульт» (B234).
@@ -131,16 +132,17 @@ function SavedSearchesFold({
             {subscription.query}
           </span>
         ))}
-        <button
-          type="button"
-          className={open ? 'is-active' : ''}
-          aria-pressed={open}
-          aria-label="Новый запрос к площадке"
-          title="Новый запрос к площадке: повторяется сам и пополняет подбор"
-          onClick={() => setOpen((value) => !value)}
-        >
-          <Plus size={12} aria-hidden="true" />
-        </button>
+        <CareerTooltip content="Новый запрос к площадке. Он повторяется сам и пополняет подбор.">
+          <button
+            type="button"
+            className={open ? 'is-active' : ''}
+            aria-pressed={open}
+            aria-label="Новый запрос к площадке"
+            onClick={() => setOpen((value) => !value)}
+          >
+            <Plus size={12} aria-hidden="true" />
+          </button>
+        </CareerTooltip>
       </div>
       {subscriptions.length === 0 && !open ? (
         <p className="career-cabinet-tag">
@@ -178,21 +180,21 @@ function CountryFilter({
       <legend>Страна</legend>
       <div className="career-vacancy-chips">
         {visible.map(({ country, count }) => (
-          <button
-            key={country}
-            type="button"
-            className={filters.country === country ? 'is-active' : ''}
-            aria-pressed={filters.country === country}
-            title={`${count} в пуле`}
-            onClick={() =>
-              onChange({
-                ...filters,
-                country: filters.country === country ? undefined : country,
-              })
-            }
-          >
-            {country}
-          </button>
+          <CareerTooltip key={country} content={`${count} вакансий в подборе`}>
+            <button
+              type="button"
+              className={filters.country === country ? 'is-active' : ''}
+              aria-pressed={filters.country === country}
+              onClick={() =>
+                onChange({
+                  ...filters,
+                  country: filters.country === country ? undefined : country,
+                })
+              }
+            >
+              {country}
+            </button>
+          </CareerTooltip>
         ))}
         {hidden > 0 ? (
           <button
@@ -262,8 +264,12 @@ function FreshnessFilter({
 }) {
   return (
     <fieldset>
-      <legend className="career-vacancy-column-hint" title={IN_BASE_HINT}>
-        В базе <Info size={12} aria-hidden="true" />
+      <legend>
+        <CareerTooltip content={IN_BASE_HINT}>
+          <span className="career-vacancy-column-hint">
+            В базе <Info size={12} aria-hidden="true" />
+          </span>
+        </CareerTooltip>
       </legend>
       <div className="career-vacancy-chips">
         {FRESHNESS_CHOICES.map((choice) => (

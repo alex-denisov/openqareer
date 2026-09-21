@@ -91,8 +91,8 @@ describe('DesktopOutreachModal', () => {
 
     expect(html).toContain('Анна Воронова');
     expect(html).toContain('Михаил Соколов');
-    expect(html).toContain('1st degree');
-    expect(html).toContain('2nd degree');
+    expect(html).toContain('1-й круг');
+    expect(html).toContain('2-й круг');
     expect(html).toContain('общих контактов');
   });
 
@@ -106,7 +106,7 @@ describe('DesktopOutreachModal', () => {
       />,
     );
 
-    expect(html).toContain('Заметка к Connection Request');
+    expect(html).toContain('Заметка к запросу в контакты');
     expect(html).toContain('Здравствуйте, Анна!');
     expect(html).toContain('/ 300');
   });

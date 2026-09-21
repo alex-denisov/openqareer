@@ -15,6 +15,7 @@ import type { ProposedRole } from '../../../shared/roleProposals';
 import type { VacancyApplication } from '../../../shared/vacancyApplication';
 import type { CareerCabinetView } from './cabinetViews';
 import { NextAction, AtsReadability, FollowUpActionCard } from './CareerIntelligencePanelParts';
+import { CareerTooltip } from '../shell/CareerTooltip';
 
 /**
  * «Главная» — кандидат и его факты слева, оценка, позиционирование и вход к
@@ -82,6 +83,7 @@ export function CareerHome(props: CareerHomeProps) {
           onOpenAccount={onOpenAccount}
           onOpenExpert={onOpenExpert}
           onOpenResume={() => onNavigate('resume')}
+          onOpenCareer={() => onNavigate('career')}
         />
         <HomeFolds {...props} regions={workspace?.regions ?? []} />
       </div>
@@ -234,9 +236,9 @@ function AssessmentPanel({
     <section className="career-home-panel" aria-labelledby="career-assessment-title">
       <header>
         <h3 id="career-assessment-title">Готовность профиля</h3>
-        <span className="career-cabinet-tag" title="Это заполненность, не сила резюме">
-          Заполненность, не сила
-        </span>
+        <CareerTooltip content="Это заполненность, не сила резюме.">
+          <span className="career-cabinet-tag">Заполненность, не сила</span>
+        </CareerTooltip>
         {assessment.measuredAt && !importing ? (
           <span className="career-cabinet-tag">
             факты обновлены {formatDay(assessment.measuredAt)}
@@ -359,11 +361,11 @@ function PositioningPanel({
       </header>
       <dl className="career-home-facts">
         <div>
-          <dt>Как называть роль</dt>
+          <dt>Название роли в резюме и откликах</dt>
           <dd>{targetDirection.trim() || 'Не названа'}</dd>
         </div>
         <div>
-          <dt>Регион поиска</dt>
+          <dt>Где ищете</dt>
           <dd>{regionLabel || 'Не выбран'}</dd>
         </div>
       </dl>
@@ -384,7 +386,8 @@ function StrategistNames({
   if (!alternatives?.length) {
     return (
       <p className="career-home-empty">
-        Смежные названия роли появятся после разговора с консультантом.
+        Смежные названия, как ту же роль называют другие компании, появятся после разговора с
+        консультантом.
       </p>
     );
   }

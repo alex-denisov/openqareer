@@ -38,6 +38,9 @@
   --career-space-6: 24px;
   --career-space-7: 28px;
   --career-space-8: 32px;
+  --career-control-min: 24px;
+  --career-tooltip-max: 320px;
+  --career-shadow-tooltip: 0 8px 24px oklch(10% 0.02 255 / 0.28);
   /* B169 §7 — the rail is the only chrome on desktop, and it opens to show
      what its icons mean. Width is a token so the grid and the rail cannot
      disagree about it mid-transition. */
@@ -910,6 +913,70 @@
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
   line-height: 1.45;
+}
+
+/* Candidate-facing explanations are available on hover and keyboard focus.
+   The wrapper stays a flex item so tooltips do not change table/action widths. */
+.career-tooltip {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.career-tooltip-content {
+  position: absolute;
+  display: none;
+  z-index: 40;
+  inset-block-end: calc(100% + var(--career-space-2));
+  inset-inline-start: 50%;
+  inline-size: max-content;
+  max-inline-size: min(var(--career-tooltip-max), calc(100vw - (var(--career-space-4) * 2)));
+  padding: var(--career-space-2) var(--career-space-3);
+  border: 1px solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  background: var(--career-surface-raised);
+  box-shadow: var(--career-shadow-tooltip);
+  font-size: var(--career-text-xs);
+  font-weight: 500;
+  line-height: 1.35;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, var(--career-space-1));
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease,
+    visibility 150ms ease;
+}
+
+.career-tooltip[data-open='true'] .career-tooltip-content {
+  display: block;
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+@media (max-width: 600px) {
+  .career-tooltip-content {
+    position: fixed;
+    inset-block-end: auto;
+    inset-inline-start: var(--career-space-4);
+    inset-block-start: var(--career-space-4);
+    max-inline-size: calc(100vw - (var(--career-space-4) * 2));
+    transform: translateY(var(--career-space-1));
+  }
+
+  .career-tooltip[data-open='true'] .career-tooltip-content {
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-tooltip-content {
+    transition: none;
+  }
 }
 
 /* Shared surface primitives used by the newly added resume, pitch and
@@ -5416,6 +5483,7 @@
   /* Таргеты касания ≥ 44 px (DESIGN.md): кнопки строки вакансии и чипы
      фильтров были 28 px высотой (B232, ревью designer). */
   .career-vacancy-actions > *,
+  .career-vacancy-actions > .career-tooltip > .career-vacancy-action,
   .career-vacancy-chips button,
   .career-vacancy-active-filters button,
   .career-profile-update-state button,
@@ -8924,6 +8992,14 @@
   gap: var(--career-space-2) 6px;
 }
 
+.career-vacancy-actions > .career-tooltip {
+  min-height: 36px;
+}
+
+.career-vacancy-actions > .career-tooltip > .career-vacancy-action {
+  min-height: 36px;
+}
+
 /* Страница списка: «показано 20 из 96» и кнопка на следующие 20 (B232). */
 .career-vacancy-more {
   display: flex;
@@ -9038,6 +9114,26 @@
   color: var(--career-accent);
   font-size: var(--career-text-xs);
   font-weight: 700;
+}
+
+.career-profile-role-link {
+  min-height: var(--career-control-min);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  border: 0;
+  padding: 0;
+  color: var(--career-accent);
+  background: transparent;
+  font: inherit;
+  font-size: var(--career-text-xs);
+  font-weight: 700;
+  text-align: start;
+}
+
+.career-profile-role-link:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 3px;
 }
 
 .career-profile-dot {
@@ -9768,6 +9864,12 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-height: var(--career-control-min);
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
   cursor: help;
 }
 
@@ -9784,6 +9886,10 @@
   font-size: var(--career-text-xs);
   letter-spacing: 0.09em;
   text-transform: uppercase;
+}
+
+.career-vacancy-columns > .career-tooltip {
+  min-width: 0;
 }
 
 .career-vacancy-coverage .career-measure-track {

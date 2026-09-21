@@ -126,7 +126,7 @@ function FollowUpFooter({
         aria-label="Скопировать сообщение повторного касания"
       >
         {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-        <span>{copied ? 'Скопировано!' : 'Скопировать сообщение'}</span>
+        <span>{copied ? 'Скопировано' : 'Скопировать сообщение'}</span>
       </button>
 
       {item.application.vacancy.url ? (

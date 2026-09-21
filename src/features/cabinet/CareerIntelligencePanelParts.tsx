@@ -75,11 +75,11 @@ export function AtsReadability({
     <section className="career-ats-card" aria-labelledby="career-ats-title">
       <header>
         <div>
-          <span>ATS-читаемость</span>
+          <span>ATS: как читается файл</span>
           <h3 id="career-ats-title">
             {findings.length
-              ? `${known} из ${findings.length} проверок с фактом`
-              : 'Нужен исходный CV'}
+              ? `${known} из ${findings.length} проверок по вашему файлу`
+              : 'Нужен файл резюме'}
           </h3>
         </div>
         {findings.some((finding) => finding.status === 'issue') ? (
@@ -98,7 +98,7 @@ export function AtsReadability({
           ))}
         </dl>
       ) : (
-        <p>Загрузите PDF или DOCX: без исходной вёрстки нельзя честно оценить порядок чтения.</p>
+        <p>ATS парсит файл, а не текст: без PDF или DOCX нельзя проверить порядок блоков и извлечение.</p>
       )}
       <DiagnosticAction journey={journey} onNavigate={onNavigate} />
     </section>
@@ -172,7 +172,7 @@ export function NextAction({
     : (journey?.nextAction.destination ?? 'profile');
   return (
     <section className="career-next-action-card">
-      <span>Следующее действие</span>
+      <span>Один шаг на сегодня</span>
       <h3>
         {reasonedAction?.headline ?? journey?.nextAction.headline ?? 'Уточнить основу профиля'}
       </h3>
@@ -185,7 +185,7 @@ export function NextAction({
         <ReasonedActionDetails action={reasonedAction} onNavigate={onNavigate} />
       ) : journey?.nextAction.expectedChange ? (
         <div className="career-next-action-effect">
-          <strong>Что изменится</strong>
+      <strong>Что изменится</strong>
           <p>{journey.nextAction.expectedChange}</p>
         </div>
       ) : null}

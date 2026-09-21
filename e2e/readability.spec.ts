@@ -328,4 +328,56 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('.career-home-fold[open] .career-ats-card')).toBeVisible();
     await page.screenshot({ path: info.outputPath('Главная-folds-1280.png') });
   });
+
+  test('vacancy actions expose focus tooltips and the pitch modal keeps keyboard focus', async ({
+    page,
+  }, info) => {
+    const unmatched = await mockSignedInCabinet(page);
+    await page.route('**/api/v1/candidate/vacancies/*/pitch', async (route) => {
+      await route.fulfill({
+        json: {
+          data: {
+            emailPitch: { subject: 'Отклик', body: 'Текст отклика.' },
+            linkedInNote: 'Здравствуйте! Рад знакомству.',
+            atsCoverLetter: 'Cover letter',
+            usedEvidenceIds: ['fact-1'],
+          },
+        },
+      });
+    });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await openSection(page, 'Вакансии');
+
+    const pitchAction = page.getByRole('button', { name: 'Отклик', exact: true }).first();
+    await pitchAction.focus();
+    await expect(
+      page.getByRole('tooltip').filter({ hasText: 'Сопроводительное письмо' }),
+    ).toBeVisible();
+    await expect(pitchAction).toHaveAttribute('aria-describedby', /.+/u);
+    await page.screenshot({ path: info.outputPath('b236-tooltip-focused.png') });
+
+    await pitchAction.click();
+    const dialog = page.getByRole('dialog', { name: /Подготовка отклика/u });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('tab', { name: 'LinkedIn Note' }).click();
+    await expect(dialog.getByRole('button', { name: 'Кому отправить' })).toBeVisible();
+    await page.screenshot({ path: info.outputPath('b236-pitch-modal.png') });
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(pitchAction).toBeFocused();
+    expect(unmatched).toEqual([]);
+  });
+
+  test('search keeps tariff detail behind an explicit link', async ({ page }) => {
+    await mockSignedInCabinet(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await openSection(page, 'Поиск');
+
+    await expect(page.locator('.career-automation-list')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Посмотреть тарифы', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Сколько делать за вас', exact: true })).toBeVisible();
+  });
 });

@@ -66,7 +66,7 @@ export function RolesMarketPanel({
     <section className="career-home-panel career-roles-market" aria-labelledby="career-roles-title">
       <header>
         <h3 id="career-roles-title">Роли и рынок</h3>
-        <span className="career-cabinet-tag">по вашему пулу</span>
+        <span className="career-cabinet-tag">сверено с нашими источниками</span>
       </header>
 
       {proposedRoles ? (
@@ -140,8 +140,8 @@ function ProposedRoleList({
             ))}
           </ol>
           <p className="career-home-empty">
-            Это названия ролей по вашему опыту, а не наблюдение рынка. Чтобы они
-            подтвердились, нужен шире фильтр, больше источников или ещё один сбор.
+            Гипотезы по вашему опыту, не спрос рынка. Они подтвердятся, когда найдутся вакансии:
+            расширьте регион или дождитесь следующего сбора.
           </p>
         </div>
       ) : null}
@@ -160,7 +160,7 @@ function RoleRow({
   return (
     <li>
       <strong>{role.title}</strong>
-      {isChosen ? <span className="career-cabinet-tag">ваша роль</span> : null}
+      {isChosen ? <span className="career-cabinet-tag">выбрана для поиска</span> : null}
       <small>{originLabel(role)}</small>
       <ConfirmationLine confirmation={role.confirmation} />
       {role.confirmation.state === 'observed' && role.confirmation.repeatedRequirements.length ? (
@@ -202,7 +202,7 @@ function ChooseRoleAction({
         disabled={saving}
         onClick={() => onChoose(title)}
       >
-        Выбрать эту роль
+        Искать по этой роли
       </button>
     );
   }
@@ -215,7 +215,7 @@ function ChooseRoleAction({
         disabled={saving}
         onClick={() => setExplaining(true)}
       >
-        Сменить роль на эту
+        Перейти на эту роль
       </button>
     );
   }

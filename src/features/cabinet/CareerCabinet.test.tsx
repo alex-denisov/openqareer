@@ -179,7 +179,7 @@ describe('CareerCabinet composition', () => {
 
     expect(html).toContain('Разделы профиля');
     expect(html).toContain('Готовность профиля');
-    expect(html).toContain('Следующее действие');
+    expect(html).toContain('Один шаг на сегодня');
     expect(html).toContain('ATS-читаемость');
     expect(html).not.toContain('Следующий шаг');
     expect(html).not.toContain('Подтвердить все');
@@ -193,7 +193,7 @@ describe('CareerCabinet composition', () => {
 
     expect(html).toContain('Кампания поиска');
     expect(html).not.toContain('ATS-читаемость');
-    expect(html).not.toContain('Следующее действие');
+    expect(html).not.toContain('Один шаг на сегодня');
   });
 
   it('keeps the strategist dialogue out of every section, it lives in «Эксперт»', () => {
@@ -239,7 +239,7 @@ describe('CareerCabinet composition', () => {
 
     // Неизмеряемое стоит прочерком и словами, а не нулём: ноль означал бы,
     // что мы посмотрели и не нашли (B179).
-    expect(html).toContain('не отслеживается');
+    expect(html).toContain('не отслеживаем: площадки не сообщают');
     expect(html).not.toContain('Индекс соответствия');
     expect(html).not.toContain('Авто-поднятие резюме');
     expect(html).not.toContain('откликов отправлено');

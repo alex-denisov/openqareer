@@ -99,7 +99,7 @@ describe('VacancyPitchModal', () => {
       />,
     );
 
-    expect(html).toContain('Открыть в нетворкинге');
+    expect(html).toContain('Кому отправить');
   });
 
   it('renders ATS cover letter tab with copy and txt download buttons', () => {

@@ -64,9 +64,9 @@ describe('InterviewPrepModal', () => {
     expect(html).toContain('aria-labelledby="career-interview-title"');
     expect(html).toContain('Lead Frontend Engineer');
     expect(html).toContain('FinTech Group');
-    expect(html).toContain('Справка о компании и фокус');
-    expect(html).toContain('Вопросы и ответы (STAR)');
-    expect(html).toContain('Вопросы работодателю');
+    expect(html).toContain('Компания и что им важно');
+    expect(html).toContain('Вопросы к вам (STAR)');
+    expect(html).toContain('Ваши вопросы им');
   });
 
   it('рендерит справку о компании и фокус интервьюера во вкладке overview', () => {
@@ -83,8 +83,8 @@ describe('InterviewPrepModal', () => {
     expect(html).toContain('FinTech Group');
     expect(html).toContain('React');
     expect(html).toContain('TypeScript');
-    expect(html).toContain('Рекомендации для встречи');
-    expect(html).toContain('Ключевые темы обсуждения');
+    expect(html).toContain('На что сделать упор');
+    expect(html).toContain('О чём спросят вероятнее всего');
   });
 
   it('рендерит вопросы и ответы по формуле STAR во вкладке star', () => {
@@ -102,7 +102,7 @@ describe('InterviewPrepModal', () => {
     expect(html).toContain('Задача:');
     expect(html).toContain('Действие:');
     expect(html).toContain('Результат:');
-    expect(html).toContain('Копировать ответ');
+    expect(html).toContain('Скопировать');
     expect(html).toContain('45%');
   });
 
@@ -117,9 +117,9 @@ describe('InterviewPrepModal', () => {
       />,
     );
 
-    expect(html).toContain('Встречные вопросы');
+    expect(html).toContain('Ваши вопросы им');
     expect(html).toContain('первые 3-6 месяцев');
-    expect(html).toContain('Копировать вопрос');
+    expect(html).toContain('Скопировать');
   });
 
   it('не содержит эмодзи ни в одном элементе разметки', () => {

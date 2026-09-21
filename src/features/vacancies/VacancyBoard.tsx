@@ -41,6 +41,7 @@ import { VacancyMapView } from './VacancyMapView';
 import { calculateVacancyFacets } from './vacancyFacets';
 import { VACANCY_CONDITIONS, VacancyConditionBadges } from './vacancyConditions';
 import { openTargetLabel } from './vacancyOpenTarget';
+import { CareerTooltip } from '../shell/CareerTooltip';
 
 /**
  * «Вакансии» — весь собранный пул с фильтрами («Пульт»).
@@ -193,14 +194,20 @@ export function VacancyBoard({
           />
         ) : (
           <div className="career-vacancy-table">
-            <div className="career-vacancy-columns" aria-hidden="true">
+            <div className="career-vacancy-columns">
               <span>вакансия</span>
               <span>зарплата</span>
               <span>локация</span>
-              <span className="career-vacancy-column-hint" title={IN_BASE_HINT}>
-                в базе <Info size={12} aria-hidden="true" />
-              </span>
-              <span title={REQUIREMENTS_HINT}>требования</span>
+              <CareerTooltip content={IN_BASE_HINT}>
+                <button type="button" className="career-vacancy-column-hint">
+                  в базе <Info size={12} aria-hidden="true" />
+                </button>
+              </CareerTooltip>
+              <CareerTooltip content={REQUIREMENTS_HINT}>
+                <button type="button" className="career-vacancy-column-hint">
+                  требования
+                </button>
+              </CareerTooltip>
             </div>
             <ol className="career-vacancy-list">
               {visible.map((item) => (
@@ -487,9 +494,9 @@ function VacancyRow({
             </strong>
           </>
         ) : (
-          <small title="Из текста вакансии не удалось выделить требования — сравнивать не с чем">
-            требования не выделены
-          </small>
+          <CareerTooltip content="Из текста вакансии не удалось выделить требования. Сравнивать не с чем.">
+            <small>требования не выделены</small>
+          </CareerTooltip>
         )}
       </span>
       {/* Порядок — по ходу действий: подготовить → тёплый вход → контакт →
@@ -498,68 +505,72 @@ function VacancyRow({
           объяснение — в тултипе. */}
       <div className="career-vacancy-actions">
         {onPreparePitch ? (
-          <button
-            type="button"
-            className="career-vacancy-action"
-            onClick={() => onPreparePitch(cluster)}
-            title="Сопроводительное письмо, LinkedIn-заметка и cover letter для ATS — по фактам профиля под требования вакансии. Копируете и отправляете сами."
-          >
-            <PencilSimpleLine size={14} aria-hidden="true" />
-            <span>Отклик</span>
-          </button>
+          <CareerTooltip content="Сопроводительное письмо, LinkedIn-заметка и cover letter для ATS по фактам профиля. Копируете и отправляете сами.">
+            <button
+              type="button"
+              className="career-vacancy-action"
+              onClick={() => onPreparePitch(cluster)}
+            >
+              <PencilSimpleLine size={14} aria-hidden="true" />
+              <span>Отклик</span>
+            </button>
+          </CareerTooltip>
         ) : null}
         {onOpenOutreach ? (
-          <button
-            type="button"
-            className="career-vacancy-action"
-            onClick={() => onOpenOutreach(cluster)}
-            title="Ваши контакты на площадках, кто работает в компании или знает нанимающего. Тёплый отклик читают чаще холодного."
-          >
-            <Users size={14} aria-hidden="true" />
-            <span>Нетворкинг</span>
-          </button>
+          <CareerTooltip content="Кому написать в компании и какую заметку использовать. В веб-версии текст можно скопировать.">
+            <button
+              type="button"
+              className="career-vacancy-action"
+              onClick={() => onOpenOutreach(cluster)}
+            >
+              <Users size={14} aria-hidden="true" />
+              <span>Нетворкинг</span>
+            </button>
+          </CareerTooltip>
         ) : null}
         <RecruiterContactsTrigger state={recruiter} className="career-vacancy-action" />
-        <a
-          className="career-vacancy-action is-lead"
-          href={cluster.primaryUrl}
-          target="_blank"
-          rel="noreferrer"
-          onClick={() => applications.record(cluster.id, 'opened', snapshot)}
-          title="Страница вакансии на площадке в новой вкладке. Отметим переход в воронке."
-        >
-          <ArrowSquareOut size={14} aria-hidden="true" />
-          <span>Открыть на {openTargetLabel(cluster.sources)}</span>
-        </a>
+        <CareerTooltip content="Страница вакансии на площадке в новой вкладке. Переход попадёт в воронку.">
+          <a
+            className="career-vacancy-action is-lead"
+            href={cluster.primaryUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => applications.record(cluster.id, 'opened', snapshot)}
+          >
+            <ArrowSquareOut size={14} aria-hidden="true" />
+            <span>Открыть на {openTargetLabel(cluster.sources)}</span>
+          </a>
+        </CareerTooltip>
         {application?.status === 'applied' ? (
-          <span
-            className="career-vacancy-applied"
-            title={`Отклик отмечен ${confirmedOn(application.appliedAt, 'long')}`}
-          >
-            <CheckCircle size={14} weight="fill" aria-hidden="true" />
-            <span>Отклик {confirmedOn(application.appliedAt, 'short')}</span>
-          </span>
+          <CareerTooltip content={`Отклик отмечен ${confirmedOn(application.appliedAt, 'long')}`}>
+            <span className="career-vacancy-applied">
+              <CheckCircle size={14} weight="fill" aria-hidden="true" />
+              <span>Отклик {confirmedOn(application.appliedAt, 'short')}</span>
+            </span>
+          </CareerTooltip>
         ) : (
-          <button
-            type="button"
-            className="career-vacancy-action"
-            onClick={() => applications.record(cluster.id, 'applied', snapshot)}
-            title="Отметьте после отклика на площадке — только так мы узнаём об отклике. Дата пойдёт в воронку и follow-up."
-          >
-            <CheckCircle size={14} aria-hidden="true" />
-            <span>Откликнулся</span>
-          </button>
+          <CareerTooltip content="Отметьте после отклика на площадке. Только так мы узнаём об отклике, а дата попадёт в воронку и follow-up.">
+            <button
+              type="button"
+              className="career-vacancy-action"
+              onClick={() => applications.record(cluster.id, 'applied', snapshot)}
+            >
+              <CheckCircle size={14} aria-hidden="true" />
+              <span>Откликнулся</span>
+            </button>
+          </CareerTooltip>
         )}
         {onPrepareInterview ? (
-          <button
-            type="button"
-            className="career-vacancy-action"
-            onClick={() => onPrepareInterview(cluster)}
-            title="Справка о компании, STAR-ответы по вашему опыту и вопросы работодателю."
-          >
-            <ChalkboardTeacher size={14} aria-hidden="true" />
-            <span>Интервью</span>
-          </button>
+          <CareerTooltip content="Справка о компании, ответы STAR по вашему опыту и вопросы работодателю.">
+            <button
+              type="button"
+              className="career-vacancy-action"
+              onClick={() => onPrepareInterview(cluster)}
+            >
+              <ChalkboardTeacher size={14} aria-hidden="true" />
+              <span>Интервью</span>
+            </button>
+          </CareerTooltip>
         ) : null}
         {applications.unsaved.has(cluster.id) ? (
           <span className="career-vacancy-unsaved" role="status">
