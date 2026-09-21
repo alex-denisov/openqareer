@@ -9660,11 +9660,31 @@
 
 .career-automation-list li {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
+}
+
+.career-automation-list li > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.career-automation-panel > header {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.career-automation-panel > header > *,
+.career-automation-panel .career-pill {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .career-job-card.is-plain {
