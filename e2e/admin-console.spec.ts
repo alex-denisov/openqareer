@@ -159,4 +159,49 @@ test.describe('B089 administrator console', () => {
     );
     expect(overflow).toBeLessThanOrEqual(0);
   });
+
+  test('the source screen names a queued manual sync instead of claiming it is complete', async ({
+    page,
+  }) => {
+    await stubSession(page, ADMINISTRATOR);
+    await page.route('**/api/v1/admin/users*', async (route) => {
+      await route.fulfill({ json: { data: DIRECTORY } });
+    });
+    await page.route('**/api/v1/admin/vacancy-sources?offset=*', async (route) => {
+      await route.fulfill({
+        json: {
+          data: {
+            items: [
+              {
+                id: 'source-test',
+                name: 'Тестовая площадка',
+                type: 'rss',
+                enabled: true,
+                targetUrl: 'https://example.com/jobs',
+                refreshIntervalMinutes: 60,
+                itemsFoundTotal: 12,
+                itemsActiveTotal: 8,
+                manualSync: { status: 'queued' },
+              },
+            ],
+            total: 1,
+            offset: 0,
+            nextOffset: null,
+          },
+        },
+      });
+    });
+    await page.route('**/api/v1/admin/vacancy-sources/source-test/sync', async (route) => {
+      await route.fulfill({ status: 202, json: { data: { queued: true } } });
+    });
+
+    await page.goto('/admin', { waitUntil: 'domcontentloaded' });
+    await waitForLiveApp(page);
+    await page.getByRole('button', { name: 'Источники вакансий' }).click();
+
+    await expect(page.getByRole('status')).toContainText('В очереди');
+    await expect(page.getByRole('status')).toContainText('Обслуживатель заберёт запрос');
+    await page.getByRole('button', { name: 'Синхронизировать' }).click();
+    await expect(page.getByRole('status')).toContainText('В очереди');
+  });
 });

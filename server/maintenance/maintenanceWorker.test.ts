@@ -6,6 +6,7 @@ import { Worker } from 'node:worker_threads';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import { composeVacancyEngine } from '../vacancies/composeVacancyEngine';
+import { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
 import { SqliteVacancyPoolStore } from '../vacancies/sqliteVacancyPoolStore';
 import { clusterVacancies } from '../vacancies/vacancyDeduplicator';
 import { MaintenanceWorker, type MaintenanceLog } from './maintenanceWorker';
@@ -140,6 +141,49 @@ describe('MaintenanceWorker (B230)', () => {
     composed.close();
   }, 60_000);
 
+  it('consumes a durable admin request in the maintenance process, not HTTP', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'maintenance-manual-sync-'));
+    directories.push(directory);
+    const databasePath = join(directory, 'db.sqlite');
+    let fetches = 0;
+    const fetcher = async (requestedSource: VacancySourceConfig) => {
+      fetches += 1;
+      return [vacancy(requestedSource, fetches)];
+    };
+
+    const httpPool = new SqliteVacancyPoolStore({ databasePath });
+    const httpEngine = new MultiSourceVacancyEngine({
+      sources: [source('manual')],
+      pool: httpPool,
+      fetcher,
+      recluster: { mode: 'off' },
+    });
+    const request = httpEngine.requestSourceSync('manual', '2026-09-21T10:00:00.000Z');
+    expect(request).toEqual({ sourceId: 'manual', requestedAt: '2026-09-21T10:00:00.000Z' });
+    await expect(httpEngine.syncSource('manual')).rejects.toThrow(/maintenance process/);
+    httpPool.close();
+
+    const workerPool = new SqliteVacancyPoolStore({ databasePath });
+    const workerEngine = new MultiSourceVacancyEngine({
+      sources: [source('manual')],
+      pool: workerPool,
+      fetcher,
+      recluster: { mode: 'keyed', batchSize: 100 },
+    });
+    const worker = new MaintenanceWorker({ engine: workerEngine, log: silentLog() });
+
+    await worker.restore();
+    await expect(worker.runManualSyncWave()).resolves.toMatchObject({
+      synced: 1,
+      failed: [],
+    });
+    expect(fetches).toBe(1);
+    expect(workerEngine.getRequestedSourceSyncs()).toEqual([]);
+    expect(workerPool.loadSourceStates()[0]?.syncRequestedAt).toBeUndefined();
+    expect(workerPool.countClusters()).toBe(1);
+    workerPool.close();
+  }, 60_000);
+
   it('stop waits for the running wave and then rejects new ones', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'maintenance-worker-'));
     directories.push(directory);
@@ -271,7 +315,16 @@ describe('MaintenanceWorker (B230)', () => {
       engine: {
         getSources: () => [],
         restoreAsync: async () => ({ restored: 0 }),
+        syncSource: async () => ({
+          sourceId: 'none',
+          status: 'unknown_source',
+          fetched: 0,
+          kept: 0,
+        }),
         syncDue: async () => [],
+        getRequestedSourceSyncs: () => [],
+        markSourceSyncStarted: () => false,
+        clearSourceSyncRequest: () => false,
         probeDueLinks: async () => undefined,
         runCatalogMaintenanceStep: () => undefined,
         runClusterKeysBackfillStep: () => 0,

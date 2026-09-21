@@ -173,7 +173,51 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
   }
 
   saveSourceState(state: StoredSourceState): void {
-    this.states.set(state.sourceId, state);
+    const current = this.states.get(state.sourceId);
+    const requestedAt = [current?.syncRequestedAt, state.syncRequestedAt]
+      .filter((value): value is string => typeof value === 'string')
+      .sort()
+      .at(-1);
+    this.states.set(state.sourceId, {
+      ...state,
+      ...(requestedAt ? { syncRequestedAt: requestedAt } : {}),
+      ...(current?.syncRequestedAt &&
+      requestedAt === current.syncRequestedAt &&
+      current.syncStartedAt
+        ? { syncStartedAt: current.syncStartedAt }
+        : state.syncStartedAt
+          ? { syncStartedAt: state.syncStartedAt }
+          : {}),
+    });
+  }
+
+  requestSourceSync(sourceId: string, requestedAt: string): void {
+    const current = this.states.get(sourceId);
+    this.states.set(sourceId, {
+      sourceId,
+      itemsFoundTotal: current?.itemsFoundTotal ?? 0,
+      itemsActiveTotal: current?.itemsActiveTotal ?? 0,
+      ...(current ?? {}),
+      syncRequestedAt:
+        !current?.syncRequestedAt || current.syncRequestedAt < requestedAt
+          ? requestedAt
+          : current.syncRequestedAt,
+    });
+  }
+
+  markSourceSyncStarted(sourceId: string, requestedAt: string, startedAt: string): boolean {
+    const current = this.states.get(sourceId);
+    if (!current || current.syncRequestedAt !== requestedAt) return false;
+    this.states.set(sourceId, { ...current, syncStartedAt: startedAt });
+    return true;
+  }
+
+  clearSourceSyncRequest(sourceId: string, requestedAt: string): boolean {
+    const current = this.states.get(sourceId);
+    if (!current || current.syncRequestedAt !== requestedAt) return false;
+    const { syncRequestedAt: _requestedAt, syncStartedAt: _startedAt, ...rest } = current;
+    this.states.set(sourceId, rest);
+    return true;
   }
 
   /** Как в базе: обновляется запись, но не дата смерти. */

@@ -130,6 +130,27 @@ function SourceSchedule({ schedule }: { schedule?: AdminSourceSchedule }) {
   );
 }
 
+function ManualSyncStatus({
+  status,
+}: {
+  status?: AdminVacancySource['manualSync'];
+}) {
+  if (!status || status.status === 'ready') return null;
+  const running = status.status === 'running';
+  return (
+    <p className="admin-source-schedule" role="status" aria-live="polite">
+      <span className={`admin-badge ${running ? 'is-warning' : 'is-muted'}`}>
+        {running ? 'Выполняется' : 'В очереди'}
+      </span>
+      <span>
+        {running
+          ? 'Обслуживатель уже опрашивает площадку.'
+          : 'Обслуживатель заберёт запрос в ближайшем такте.'}
+      </span>
+    </p>
+  );
+}
+
 function SourceHealthPanel({ health }: { health?: AdminSourceHealth }) {
   if (!health) {
     return (
@@ -310,6 +331,7 @@ function SourceCard({
       <p className="admin-source-url">{source.targetUrl}</p>
 
       <SourceSchedule schedule={source.schedule} />
+      <ManualSyncStatus status={source.manualSync} />
       <SourceHealthPanel health={source.health} />
 
       <div className="admin-source-stats">

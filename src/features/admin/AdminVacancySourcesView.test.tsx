@@ -246,6 +246,22 @@ describe('AdminVacancySourcesView', () => {
     expect(html).not.toContain('admin-source-health-reasons');
   });
 
+  it('называет ручной опрос очередью, пока обслуживатель его не выполнил', () => {
+    const html = renderToStaticMarkup(
+      <AdminVacancySourcesView
+        state={sourcesLoaded([
+          { ...sampleSources[0], manualSync: { status: 'queued' } },
+        ])}
+        onRefresh={vi.fn()}
+        onSync={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('В очереди');
+    expect(html).toContain('Обслуживатель заберёт запрос');
+    expect(html).toContain('aria-live="polite"');
+  });
+
   /**
    * B207 — отказ загрузки обязан быть назван. Раньше провал маршрута выглядел
    * ровно как честный ответ «источников нет»: пустая сетка и ничего больше.

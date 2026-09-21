@@ -670,6 +670,20 @@ ALTER TABLE vacancy_source_state ADD COLUMN observations TEXT;
 `;
 
 /**
+ * B231 — ручная кнопка админки только ставит durable отметку. Обслуживатель
+ * подхватывает её из той же SQLite-базы, поэтому HTTP-процесс не ходит к
+ * площадке и не пишет пул в режиме `recluster: off`.
+ */
+export const VACANCY_SOURCE_SYNC_REQUESTED_AT_COLUMN = `
+ALTER TABLE vacancy_source_state ADD COLUMN sync_requested_at TEXT;
+`;
+
+/** Текущий ручной опрос нужен экрану админки, чтобы не выдавать «готово». */
+export const VACANCY_SOURCE_SYNC_STARTED_AT_COLUMN = `
+ALTER TABLE vacancy_source_state ADD COLUMN sync_started_at TEXT;
+`;
+
+/**
  * Дата смерти объявления (B200 срез 2). Отсутствие записи неотличимо от
  * «никогда не видели», поэтому снятое объявление не удаляется, а помечается.
  */

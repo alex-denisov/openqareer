@@ -196,6 +196,11 @@ export interface AdminVacancySource {
   lastErrorMessage?: string;
   itemsFoundTotal: number;
   itemsActiveTotal: number;
+  manualSync?: {
+    status: 'ready' | 'queued' | 'running';
+    requestedAt?: string;
+    startedAt?: string;
+  };
   /** Отсутствует у площадки, которую этот сервер ещё ни разу не опрашивал. */
   health?: AdminSourceHealth;
   schedule?: AdminSourceSchedule;
@@ -378,17 +383,21 @@ export async function listAdminVacancySources(signal?: AbortSignal): Promise<Adm
   return collected;
 }
 
-export async function syncAllAdminVacancySources(): Promise<{ success: boolean; count: number }> {
+export async function syncAllAdminVacancySources(): Promise<{
+  queued: boolean;
+  count: number;
+}> {
   const response = await apiFetch('/api/v1/admin/vacancy-sources/sync-all', {
     method: 'POST',
   });
-  return readData<{ success: boolean; count: number }>(response);
+  return readData<{ queued: boolean; count: number }>(response);
 }
 
-export async function syncAdminVacancySource(sourceId: string): Promise<void> {
-  await apiFetch(`/api/v1/admin/vacancy-sources/${encodeURIComponent(sourceId)}/sync`, {
+export async function syncAdminVacancySource(sourceId: string): Promise<{ queued: boolean }> {
+  const response = await apiFetch(`/api/v1/admin/vacancy-sources/${encodeURIComponent(sourceId)}/sync`, {
     method: 'POST',
   });
+  return readData<{ queued: boolean }>(response);
 }
 
 export async function testAdminVacancySource(

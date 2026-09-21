@@ -181,13 +181,9 @@ describe('GET /api/v1/admin/users', () => {
     expect(data.total).toBe(3);
     expect(data.users).toHaveLength(3);
     expect(data.users[0].displayName).toBe('Мария');
-    expect(data.users.map((user: { username: string }) => user.username)).toContain(
-      ADMIN.username,
-    );
+    expect(data.users.map((user: { username: string }) => user.username)).toContain(ADMIN.username);
 
-    const administrator = data.users.find(
-      (user: { role: string }) => user.role === 'admin',
-    );
+    const administrator = data.users.find((user: { role: string }) => user.role === 'admin');
     expect(administrator.candidateId).toBeNull();
     expect(administrator.activeSessions).toBe(1);
   });
@@ -336,6 +332,53 @@ describe('POST /api/v1/admin/vacancy-sources/:sourceId/test', () => {
   });
 });
 
+describe('POST /api/v1/admin/vacancy-sources/:sourceId/sync', () => {
+  it('queues the source and does not run the external fetch in HTTP', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+
+    const queued = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/vacancy-sources/hh/sync',
+      headers: { cookie: adminCookie },
+    });
+
+    expect(queued.statusCode).toBe(202);
+    expect(queued.json().data.queued).toBe(true);
+    expect(queued.json().data.source.sourceId).toBe('hh');
+
+    let offset = 0;
+    let hh: { manualSync: { status: string } } | undefined;
+    do {
+      const sources = await app.inject({
+        method: 'GET',
+        url: `/api/v1/admin/vacancy-sources?offset=${offset}`,
+        headers: { cookie: adminCookie },
+      });
+      const page = sources.json().data;
+      hh = page.items.find((item: { id: string }) => item.id === 'hh');
+      offset = page.nextOffset ?? offset;
+      if (hh || page.nextOffset === null) break;
+    } while (offset > 0);
+    expect(hh).toBeDefined();
+    expect(hh?.manualSync.status).toBe('queued');
+  });
+
+  it('rejects an unknown source without creating a queue row', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/vacancy-sources/not-registered/sync',
+      headers: { cookie: adminCookie },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe('vacancy_source_not_found');
+  });
+});
+
 /**
  * B200 — суперадминка видит живость и доверие раздельно, и каждое число
  * называет свой знаменатель. Без этого «источник отвечает 200» и «источник
@@ -454,15 +497,11 @@ describe('DELETE /api/v1/admin/users/:userId', () => {
     const user2 = users.find((u: { email: string }) => u.email === 'maria2@example.com');
 
     const resource = resources[resources.length - 1];
-    resource.candidates.startTurn(
-      user2.candidateId,
-      '51df5f57-df61-4ac2-98af-202608270102',
-      {
-        messageId: '85512ddf-962c-4a7c-a4cc-30a35d1e5848',
-        content: 'Сообщение второго кандидата, которое должно остаться.',
-        phase: 'discovery',
-      },
-    );
+    resource.candidates.startTurn(user2.candidateId, '51df5f57-df61-4ac2-98af-202608270102', {
+      messageId: '85512ddf-962c-4a7c-a4cc-30a35d1e5848',
+      content: 'Сообщение второго кандидата, которое должно остаться.',
+      phase: 'discovery',
+    });
 
     const deleteResponse = await app.inject({
       method: 'DELETE',
@@ -512,5 +551,3 @@ describe('DELETE /api/v1/admin/users/:userId', () => {
     expect(adminInDb.c).toBe(1);
   });
 });
-
-
