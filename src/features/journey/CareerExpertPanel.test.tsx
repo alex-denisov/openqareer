@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CoachResult } from '../coach/coachApi';
-import { CareerIntelligenceSummary, ExpertWaitingRow } from './CareerExpertPanel';
+import { CareerExpertPanel, CareerIntelligenceSummary, ExpertWaitingRow } from './CareerExpertPanel';
 import { CareerActionProposalCard } from './CareerCommandActions';
 
 describe('CareerIntelligenceSummary', () => {
@@ -84,8 +84,20 @@ describe('CareerIntelligenceSummary', () => {
   });
 });
 
+describe('CareerExpertPanel copy', () => {
+  it('uses one product term: career consultant', () => {
+    const html = renderToStaticMarkup(
+      <CareerExpertPanel initialUser={null} onClose={() => undefined} />,
+    );
+
+    expect(html).toContain('Карьерный консультант');
+    expect(html).not.toContain('Карьерный советник');
+    expect(html).not.toContain('сообщение карьерному советнику');
+  });
+});
+
 /**
- * Ответ советника занимает до полутора минут. Пока он идёт, единственным
+ * Ответ консультанта занимает до полутора минут. Пока он идёт, единственным
  * признаком отправки была галочка на кнопке — она читается как «готово», а не
  * «ждём», и кандидат уходит со страницы или отправляет вопрос второй раз
  * (B162, P1-3).

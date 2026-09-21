@@ -127,7 +127,6 @@ export function VacancyBoard({
     <VacancyFilterPanel
       filters={filters}
       facets={facets}
-      sources={sources}
       countries={countries}
       onChange={applyFilters}
       onReset={() => applyFilters({})}

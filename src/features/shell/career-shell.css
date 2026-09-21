@@ -8578,7 +8578,7 @@
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
   line-height: 1.5;
-  /* Ответ советника бывает длинным; панель не должна тянуть страницу. */
+  /* Ответ консультанта бывает длинным; панель не должна тянуть страницу. */
   max-height: 11.5em;
   overflow-y: auto;
 }

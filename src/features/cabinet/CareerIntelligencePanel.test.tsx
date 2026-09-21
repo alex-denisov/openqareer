@@ -2,8 +2,33 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { buildCanonicalProfileJourney } from '../journey/careerJourneyEngine';
 import { NextAction } from './CareerIntelligencePanel';
+import { careerActionIntent } from './CareerIntelligencePanelParts';
 
 describe('CareerIntelligencePanel next action', () => {
+  it('turns action alternatives into real UI intents', () => {
+    expect(
+      careerActionIntent({
+        id: 'correct-premise',
+        label: 'Исправить исходные данные',
+        destination: 'profile',
+      }),
+    ).toBe('account');
+    expect(
+      careerActionIntent({
+        id: 'discuss-first',
+        label: 'Сначала обсудить с экспертом',
+        destination: 'coach',
+      }),
+    ).toBe('expert');
+    expect(
+      careerActionIntent({
+        id: 'review-evidence',
+        label: 'Проверить факты',
+        destination: 'evidence',
+      }),
+    ).toBe('expert');
+  });
+
   it('renders the complete reasoned-action contract for a signed-in journey', () => {
     const journey = buildCanonicalProfileJourney(
       undefined,

@@ -11,11 +11,9 @@ import { CareerTooltip } from '../shell/CareerTooltip';
  * Панель фильтров «Вакансий» по макету «Пульт» (B234).
  *
  * Порядок — как в макете: заголовок «Фильтры · сброс», поиск, сохранённые
- * выборки пилюлями, роль, страна, релокация, формат, свежесть, источник.
- * Заведение регулярной выборки (источник + запрос + «Создать») спрятано за
- * «+»: владелец (2026-09-20) не понял, зачем «создавать» и «указывать
- * источник», когда ему нужен фильтр. Поле «роль» — фильтр по названию
- * вакансии в пуле, роль кампании стоит подсказкой.
+ * выборки пилюлями, страна, релокация, формат и свежесть. Источник не является
+ * пользовательским фильтром: общий пул должен отбираться по критериям вакансии
+ * и роли, а не по площадке.
  */
 const VISIBLE_COUNTRIES = 3;
 
@@ -31,7 +29,6 @@ const FRESHNESS_CHOICES: ReadonlyArray<{ label: string; days?: number }> = [
 export function VacancyFilterPanel({
   filters,
   facets,
-  sources,
   countries,
   onChange,
   onReset,
@@ -41,7 +38,6 @@ export function VacancyFilterPanel({
 }: {
   readonly filters: VacancyFilters;
   readonly facets: VacancyFacetCounts;
-  readonly sources: ReadonlyArray<{ source: string; count: number }>;
   readonly countries: ReadonlyArray<{ country: string; count: number }>;
   readonly onChange: (filters: VacancyFilters) => void;
   readonly onReset: () => void;
@@ -60,11 +56,11 @@ export function VacancyFilterPanel({
 
       <label className="career-vacancy-search">
         <input
-          aria-label="Название или работодатель"
+          aria-label="Роль, название вакансии или работодатель"
           type="search"
           value={filters.query ?? ''}
           onChange={(event) => onChange({ ...filters, query: event.target.value })}
-          placeholder="Название, компания…"
+          placeholder="Роль, вакансия или компания…"
         />
       </label>
 
@@ -73,19 +69,6 @@ export function VacancyFilterPanel({
         defaultQuery={defaultQuery}
         onRefresh={onRefresh ?? (async () => undefined)}
       />
-
-      <fieldset>
-        <legend>Роль</legend>
-        <input
-          className="career-vacancy-role"
-          name="vacancy-role-filter"
-          type="search"
-          value={filters.role ?? ''}
-          onChange={(event) => onChange({ ...filters, role: event.target.value })}
-          placeholder={defaultQuery ?? 'Название роли'}
-          aria-label="Роль: подстрока названия вакансии"
-        />
-      </fieldset>
 
       <CountryFilter filters={filters} countries={countries} onChange={onChange} />
 
@@ -107,7 +90,6 @@ export function VacancyFilterPanel({
 
       <FreshnessFilter filters={filters} onChange={onChange} />
 
-      <SourceFilter filters={filters} sources={sources} onChange={onChange} />
     </aside>
   );
 }
@@ -284,43 +266,6 @@ function FreshnessFilter({
           </button>
         ))}
       </div>
-    </fieldset>
-  );
-}
-
-/** Источники со счётчиками: фильтр обязан говорить, сколько за ним записей. */
-function SourceFilter({
-  filters,
-  sources,
-  onChange,
-}: {
-  readonly filters: VacancyFilters;
-  readonly sources: ReadonlyArray<{ source: string; count: number }>;
-  readonly onChange: (filters: VacancyFilters) => void;
-}) {
-  return (
-    <fieldset>
-      <legend>Источник</legend>
-      <ul className="career-vacancy-sources">
-        {sources.map(({ source, count }) => (
-          <li key={source}>
-            <button
-              type="button"
-              className={filters.source === source ? 'is-active' : ''}
-              aria-pressed={filters.source === source}
-              onClick={() =>
-                onChange({
-                  ...filters,
-                  source: filters.source === source ? undefined : source,
-                })
-              }
-            >
-              <span>{source}</span>
-              <strong>{count}</strong>
-            </button>
-          </li>
-        ))}
-      </ul>
     </fieldset>
   );
 }
