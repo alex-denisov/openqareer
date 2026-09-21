@@ -1,7 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { dirname } from 'node:path';
 import { mkdirSync } from 'node:fs';
-import type { EmailStatus, RecruiterContact } from '../../shared/recruiterContact';
+import type {
+  EmailStatus,
+  RecruiterContact,
+  RecruiterContactJob,
+  RecruiterContactJobStatus,
+} from '../../shared/recruiterContact';
 import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
 
 export const RECRUITER_CONTACTS_SCHEMA = `
@@ -26,6 +32,19 @@ CREATE TABLE IF NOT EXISTS recruiter_contacts (
   updated_at TEXT NOT NULL
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_recruiter_contacts_vacancy ON recruiter_contacts(vacancy_id);
+CREATE TABLE IF NOT EXISTS recruiter_contact_jobs (
+  id TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL,
+  vacancy_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'ready', 'failed')),
+  error_code TEXT,
+  requested_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  UNIQUE(candidate_id, vacancy_id)
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_recruiter_contact_jobs_due
+  ON recruiter_contact_jobs(status, requested_at);
 `;
 
 const RECRUITER_CONTACTS_SCHEMA_WITH_FK = RECRUITER_CONTACTS_SCHEMA.replace(
@@ -54,6 +73,17 @@ interface RecruiterContactRow {
   updated_at: string;
 }
 
+interface RecruiterContactJobRow {
+  id: string;
+  candidate_id: string;
+  vacancy_id: string;
+  status: RecruiterContactJobStatus;
+  error_code: string | null;
+  requested_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
 export type RecruiterContactsRepoOptions =
   | DatabaseSync
   | { databasePath: string };
@@ -77,6 +107,19 @@ function toContact(row: RecruiterContactRow): RecruiterContact {
     confidence: Number(row.confidence),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function toJob(row: RecruiterContactJobRow): RecruiterContactJob {
+  return {
+    id: row.id,
+    candidateId: row.candidate_id,
+    vacancyId: row.vacancy_id,
+    status: row.status,
+    errorCode: row.error_code,
+    requestedAt: row.requested_at,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
   };
 }
 
@@ -215,6 +258,91 @@ export class SqliteRecruiterContactsRepository {
     `);
     const rows = stmt.all(candidateId, vacancyId) as unknown as RecruiterContactRow[];
     return rows.map(toContact);
+  }
+
+  enqueueJob(candidateId: string, vacancyId: string, requestedAt = new Date().toISOString()): RecruiterContactJob {
+    const existing = this.getJob(candidateId, vacancyId);
+    if (existing?.status === 'running') return existing;
+    const id = existing?.id ?? randomUUID();
+    this.database
+      .prepare(
+        `INSERT INTO recruiter_contact_jobs
+          (id, candidate_id, vacancy_id, status, error_code, requested_at, started_at, finished_at)
+         VALUES (?, ?, ?, 'queued', NULL, ?, NULL, NULL)
+         ON CONFLICT(candidate_id, vacancy_id) DO UPDATE SET
+           status = 'queued', error_code = NULL, requested_at = excluded.requested_at,
+           started_at = NULL, finished_at = NULL`,
+      )
+      .run(id, candidateId, vacancyId, requestedAt);
+    return this.getJob(candidateId, vacancyId)!;
+  }
+
+  getJob(candidateId: string, vacancyId: string): RecruiterContactJob | null {
+    const row = this.database
+      .prepare(
+        `SELECT id, candidate_id, vacancy_id, status, error_code,
+                requested_at, started_at, finished_at
+           FROM recruiter_contact_jobs
+          WHERE candidate_id = ? AND vacancy_id = ?`,
+      )
+      .get(candidateId, vacancyId) as RecruiterContactJobRow | undefined;
+    return row ? toJob(row) : null;
+  }
+
+  claimJobs(limit = 1, now = new Date().toISOString()): RecruiterContactJob[] {
+    const boundedLimit = Math.max(1, Math.min(4, Math.trunc(limit)));
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const staleBefore = new Date(new Date(now).getTime() - 10 * 60 * 1_000).toISOString();
+      this.database
+        .prepare(
+          `UPDATE recruiter_contact_jobs
+              SET status = 'queued', started_at = NULL
+            WHERE status = 'running' AND started_at IS NOT NULL AND started_at <= ?`,
+        )
+        .run(staleBefore);
+      const rows = this.database
+        .prepare(
+          `SELECT id, candidate_id, vacancy_id, status, error_code,
+                  requested_at, started_at, finished_at
+             FROM recruiter_contact_jobs
+            WHERE status = 'queued'
+            ORDER BY requested_at ASC
+            LIMIT ?`,
+        )
+        .all(boundedLimit) as unknown as RecruiterContactJobRow[];
+      const update = this.database.prepare(
+        `UPDATE recruiter_contact_jobs
+            SET status = 'running', started_at = ?, error_code = NULL
+          WHERE id = ? AND status = 'queued'`,
+      );
+      const claimed = rows.flatMap((row) =>
+        Number(update.run(now, row.id).changes) === 1
+          ? [toJob({ ...row, status: 'running', started_at: now, error_code: null })]
+          : [],
+      );
+      this.database.exec('COMMIT');
+      return claimed;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  finishJob(jobId: string, status: Extract<RecruiterContactJobStatus, 'ready' | 'failed'>, errorCode?: string): void {
+    this.database
+      .prepare(
+        `UPDATE recruiter_contact_jobs
+            SET status = ?, error_code = ?, finished_at = ?
+          WHERE id = ?`,
+      )
+      .run(status, errorCode ?? null, new Date().toISOString(), jobId);
+  }
+
+  deleteJobsByCandidateId(candidateId: string): number {
+    return Number(
+      this.database.prepare('DELETE FROM recruiter_contact_jobs WHERE candidate_id = ?').run(candidateId).changes,
+    );
   }
 
   deleteContactsByVacancyId(candidateId: string, vacancyId: string): void;
