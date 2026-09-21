@@ -45,13 +45,13 @@ export function sourceHealthLabel(status?: VacancySourceRegistryEntry['health'][
 
 export function sourceFailureMessage(errorCode: string) {
   if (errorCode === 'source_replaced_review_required') {
-    return 'Источник заменён на Remotive после production-сбоя. Проверьте направление и возобновите его вручную.';
+    return 'Площадка перестала отвечать, сбор переключён на Remotive. Проверьте направление и нажмите «Собрать сейчас».';
   }
   if (errorCode === 'official_access_required') {
-    return 'Нужен официальный доступ к API. Поиск сохранён, но данные не отмечены свежими.';
+    return 'Площадка закрыла API. Направление сохранено, новых вакансий с неё не будет, пока доступ не появится.';
   }
   if (errorCode === 'source_rate_limited') {
-    return 'Источник ограничил частоту запросов. Поиск сохранён и повторится после Retry-After.';
+    return 'Площадка попросила подождать (rate limit). Повторим автоматически.';
   }
   return 'Источник сейчас недоступен. Поиск сохранён и повторится по расписанию.';
 }

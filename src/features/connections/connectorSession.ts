@@ -121,9 +121,9 @@ export function sessionOpenFailureMessage(platform: ConnectionPlatform, reason?:
   const name = PLATFORM_NAMES[platform] ?? platform;
   switch (reason) {
     case 'window_blocked':
-      return `Браузер заблокировал окно входа ${name}. Разрешите всплывающие окна для этого сайта или используйте десктопное приложение OpenQareer.`;
+      return `Браузер заблокировал окно входа ${name}. Разрешите всплывающие окна для этого сайта или используйте приложение OpenQareer для компьютера.`;
     case 'desktop_bridge_unavailable':
-      return `Десктопное приложение не смогло открыть окно входа ${name}. Перезапустите приложение и повторите попытку.`;
+      return `Приложение не смогло открыть окно входа ${name}. Перезапустите его и повторите попытку.`;
     case 'unsupported_platform':
     case 'url_not_allowed':
       return `Адрес входа ${name} не прошёл проверку безопасности. Обновите приложение до свежей версии.`;

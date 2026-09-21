@@ -61,7 +61,7 @@ describe('ProfileExperience', () => {
       <ProfileExperience view={{ ...view, experience: [] }} onImprove={() => undefined} />,
     );
 
-    expect(html).toContain('Опыт работы не заполнен');
+    expect(html).toContain('Опыта пока нет. Загрузите резюме или подключите профиль на площадке');
   });
 });
 

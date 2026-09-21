@@ -242,7 +242,7 @@ test.describe('B156 truthful market intelligence boundary', () => {
     await openOpportunities(page);
 
     // B234: форма новой выборки — за «+» в блоке «Сохранённые».
-    await page.getByRole('button', { name: 'Новая регулярная выборка' }).click();
+    await page.getByRole('button', { name: 'Новый запрос к площадке' }).click();
     const create = page.locator('.career-market-create');
     await expect(create).toBeVisible();
     // B175 / INC-022: hh.ru answers 403 to the unauthenticated search, so the

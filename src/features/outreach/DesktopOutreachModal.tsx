@@ -77,7 +77,7 @@ function OutreachHeader({
             data-session={isDesktop ? 'desktop' : 'web'}
           >
             <ShieldCheck size={14} aria-hidden="true" />
-            <span>{isDesktop ? 'Локальная десктопная сессия' : 'Веб-режим'}</span>
+            <span>{isDesktop ? 'Отправка из приложения' : 'Только копирование (веб)'}</span>
           </span>
         </div>
         <p className="career-outreach-subtitle">
@@ -108,15 +108,16 @@ function OutreachQuotaBanner({ quota }: { readonly quota: OutreachDailyQuota }) 
     <div className={`career-outreach-quota-banner ${!quota.allowed ? 'is-exhausted' : ''}`}>
       <div className="career-outreach-quota-head">
         <span className="career-outreach-quota-label">
-          Отправлено сегодня: <strong>{quota.usedToday}</strong> из <strong>{quota.dailyLimit}</strong>.
+          Сегодня <strong>{quota.usedToday}</strong> из <strong>{quota.dailyLimit}</strong> инвайтов.
           {' '}
           {quota.allowed ? (
-            <span>Осталось {quota.remaining} инвайтов</span>
+            <span>Осталось {quota.remaining}</span>
           ) : (
-            <span className="career-outreach-quota-warning">Лимит исчерпан</span>
+            <span className="career-outreach-quota-warning">Лимит на сегодня</span>
           )}
         </span>
-        <span className="career-outreach-quota-safe-tag">ADR-009 Safe Limit</span>
+        {/* Иначе лимит выглядит как ограничение тарифа (B236 §5.4). */}
+        <span className="career-outreach-quota-safe-tag">Защита от блокировки площадкой</span>
       </div>
       <div
         className="career-outreach-progress-track"
@@ -129,7 +130,7 @@ function OutreachQuotaBanner({ quota }: { readonly quota: OutreachDailyQuota }) 
       </div>
       {!quota.allowed && (
         <p className="career-outreach-quota-alert" role="alert">
-          Дневной лимит 15 инвайтов исчерпан для защиты аккаунта. Сброс лимита произойдет в полночь.
+          {quota.dailyLimit} из {quota.dailyLimit} на сегодня. Больше — риск блокировки. Продолжить можно завтра.
         </p>
       )}
     </div>
@@ -256,8 +257,8 @@ function WebModeNotice({
       <div className="career-outreach-web-notice-head">
         <WarningCircle size={18} aria-hidden="true" />
         <p>
-          Прямая отправка запросов выполняется локально в десктопном приложении без передачи
-          сессии (ADR-009). Вы можете скопировать текст для ручной отправки в браузере.
+          В веб-версии отправить нельзя — скопируйте и вставьте на площадке. В приложении
+          для компьютера отправка идёт из вашей сессии; пароль и сессия к нам не попадают.
         </p>
       </div>
       <button
@@ -294,7 +295,7 @@ function DesktopSendAction({
           onChange={onToggleConfirm}
           disabled={disabled || sending}
         />
-        <span>Подтверждаю отправку запроса через мою локальную сессию LinkedIn</span>
+        <span>Отправить от моего имени из моего аккаунта на LinkedIn</span>
       </label>
       <button
         type="button"
@@ -310,7 +311,7 @@ function DesktopSendAction({
         ) : (
           <>
             <PaperPlaneTilt size={16} aria-hidden="true" />
-            <span>Отправить запрос в LinkedIn</span>
+            <span>Отправить в LinkedIn</span>
           </>
         )}
       </button>

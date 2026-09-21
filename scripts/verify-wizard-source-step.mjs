@@ -144,7 +144,7 @@ async function checkWebOffersNoPlatformLogin(page, viewport) {
   await page.getByRole('button', { name: 'Импорт профиля' }).click();
   await assertVisible(
     page,
-    page.getByText('Импорт LinkedIn и hh.ru доступен только в установленном'),
+    page.getByText('Профили на площадках подключаются в приложении для компьютера'),
     `web ${viewport.name}: desktop CTA on the profile-import source`,
   );
   for (const name of ['Подключить', 'Отключить', 'Обновить импорт']) {

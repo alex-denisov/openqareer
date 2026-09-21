@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { ArrowLeft, ArrowRight, MagnifyingGlass } from '@phosphor-icons/react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Briefcase,
+  Broadcast,
+  MagnifyingGlass,
+  ShieldCheck,
+  UsersThree,
+} from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
 import {
@@ -82,28 +90,28 @@ function AdminNav({
         className={`admin-nav-item ${activeTab === 'users' ? 'is-active' : ''}`}
         onClick={() => onSelectTab('users')}
       >
-        👥 Учётные записи
+        <UsersThree size={16} aria-hidden="true" /> Учётные записи
       </button>
       <button
         type="button"
         className={`admin-nav-item ${activeTab === 'vacancies' ? 'is-active' : ''}`}
         onClick={() => onSelectTab('vacancies')}
       >
-        💼 База вакансий
+        <Briefcase size={16} aria-hidden="true" /> База вакансий
       </button>
       <button
         type="button"
         className={`admin-nav-item ${activeTab === 'sources' ? 'is-active' : ''}`}
         onClick={() => onSelectTab('sources')}
       >
-        📡 Источники вакансий
+        <Broadcast size={16} aria-hidden="true" /> Источники вакансий
       </button>
       <button
         type="button"
         className={`admin-nav-item ${activeTab === 'audit' ? 'is-active' : ''}`}
         onClick={() => onSelectTab('audit')}
       >
-        🛡️ Журнал аудита
+        <ShieldCheck size={16} aria-hidden="true" /> Журнал аудита
       </button>
     </nav>
   );

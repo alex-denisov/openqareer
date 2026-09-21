@@ -1,13 +1,25 @@
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { useMemo, useState } from 'react';
-import { ArrowSquareOut, ListDashes, MapPin, Sparkle, Target, Users } from '@phosphor-icons/react';
+import {
+  ArrowSquareOut,
+  ChalkboardTeacher,
+  CheckCircle,
+  ListDashes,
+  MapPin,
+  PencilSimpleLine,
+  Users,
+} from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { RecruiterContact } from '../../../shared/recruiterContact';
 import { VacancyPitchModal } from './VacancyPitchModal';
 import { DesktopOutreachModal } from '../outreach/DesktopOutreachModal';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import type { CandidateMemory } from '../coach/coachApi';
-import { RecruiterContactsBlock } from './RecruiterContactsBlock';
+import {
+  RecruiterContactsResults,
+  RecruiterContactsTrigger,
+  useRecruiterContacts,
+} from './RecruiterContactsBlock';
 import { employerLabel } from '../../../shared/employerLabel';
 import {
   filterVacancies,
@@ -24,6 +36,8 @@ import { VacancyFilterPanel } from './VacancyFilterPanel';
 import type { VacancySubscription } from '../coach/coachApi';
 import { VacancyMapView } from './VacancyMapView';
 import { calculateVacancyFacets } from './vacancyFacets';
+import { VACANCY_CONDITIONS, VacancyConditionBadges } from './vacancyConditions';
+import { openTargetLabel } from './vacancyOpenTarget';
 
 /**
  * «Вакансии» — весь собранный пул с фильтрами («Пульт»).
@@ -134,9 +148,9 @@ export function VacancyBoard({
       <div className="career-vacancy-main">
         <header className="career-vacancy-head">
           <p className="career-vacancy-count">
-            <strong>{counted}</strong> в подборе{filling ? ` из ${poolTotal}, дочитываем` : ''} ·{' '}
-            <strong>{freshToday(matched, now)}</strong> собрано сегодня ·{' '}
-            <strong>{shown.length}</strong> после фильтров
+            <strong>{counted}</strong> подобрано{filling ? ` из ${poolTotal}, загружаем` : ''} ·{' '}
+            <strong>{freshToday(matched, now)}</strong> новых сегодня ·{' '}
+            показано <strong>{shown.length}</strong>
           </p>
           <div
             className="career-vacancy-view-switcher"
@@ -199,7 +213,7 @@ export function VacancyBoard({
             </ol>
             {shown.length === 0 ? (
               <p className="career-market-empty">
-                Под эти фильтры не подходит ни одна запись пула.
+                Под эти фильтры ничего не подошло. Снимите часть фильтров.
               </p>
             ) : null}
             {remaining > 0 ? (
@@ -212,16 +226,16 @@ export function VacancyBoard({
                   className="career-btn career-btn-secondary"
                   onClick={() => setVisibleCount((count) => count + VACANCY_PAGE_SIZE)}
                 >
-                  Показать ещё {Math.min(VACANCY_PAGE_SIZE, remaining)}
+                  Показать ещё {Math.min(VACANCY_PAGE_SIZE, remaining)} вакансий
                 </button>
               </div>
             ) : null}
             <footer className="career-vacancy-foot">
               <span className="career-cabinet-tag">
-                {sources.length} {sourceNoun(sources.length)} в подборе
+                {sources.length} {sourceNoun(sources.length)}
               </span>
               <span className="career-cabinet-tag">
-                последняя запись собрана {lastCollected(matched)}
+                последний сбор {lastCollected(matched)}
               </span>
             </footer>
           </div>
@@ -295,24 +309,24 @@ function VacancyBoardState({
   if (loading) {
     return (
       <p className="career-cabinet-loading" aria-busy="true">
-        Читаем собранный пул вакансий…
+        Загружаем вакансии…
       </p>
     );
   }
   if (failed) {
     return (
       <p className="career-expert-error" role="alert">
-        Пул вакансий сейчас не читается — источник не ответил. Данные профиля не затронуты,
-        повторите позже.
+        Не удалось загрузить вакансии — сервер не ответил. Профиль цел. Повторите через
+        минуту.
       </p>
     );
   }
   if (empty) {
     return (
       <p className="career-market-empty">
-        Пул пуст для вашего профиля. Подбор работает по подтверждённым навыкам и названной роли:
-        пока их нет, продукт не показывает вакансии, чтобы не выдавать случайные записи за
-        подходящие.
+        Подходящих вакансий пока нет. Подбор идёт по выбранной роли и подтверждённым навыкам:
+        пока их нет в профиле, мы не показываем случайные вакансии как подходящие. Выберите
+        роль на Главной или добавьте резюме.
       </p>
     );
   }
@@ -338,12 +352,11 @@ function VacancyChips({
   if (filters.freshness !== undefined) {
     chips.push({ key: 'freshness', label: `до ${filters.freshness} дней` });
   }
-  if (filters.relocationOnly) chips.push({ key: 'relocationOnly', label: 'Помощь с переездом' });
-  if (filters.currencyRemoteOnly)
-    chips.push({ key: 'currencyRemoteOnly', label: 'Валютная удалёнка' });
-  if (filters.russianAbroadOnly) chips.push({ key: 'russianAbroadOnly', label: 'Рос. за рубежом' });
+  for (const condition of VACANCY_CONDITIONS) {
+    if (filters[condition.filter]) chips.push({ key: condition.filter, label: condition.label });
+  }
   if (filters.city) chips.push({ key: 'city', label: `Город: ${filters.city}` });
-  if (filters.industry) chips.push({ key: 'industry', label: `Индустрия: ${filters.industry}` });
+  if (filters.industry) chips.push({ key: 'industry', label: `Отрасль: ${filters.industry}` });
   if (chips.length === 0) return null;
 
   return (
@@ -388,32 +401,6 @@ function sourceNoun(count: number): string {
   return 'источников';
 }
 
-function VacancyFeatureBadges({
-  features,
-}: {
-  features?: MatchedVacancyItem['cluster']['companyFeatures'];
-}) {
-  if (!features) return null;
-  const badges: string[] = [];
-  // Словами, без эмодзи: пиктограмма-эмодзи читается как машинный текст и
-  // не проходит контракт дизайна.
-  if (features.relocation) badges.push('помощь с переездом');
-  if (features.currencyRemote) badges.push('валютная удалёнка');
-  if (features.russianAbroad) badges.push('российская компания за рубежом');
-  if (features.atsProvider) badges.push(`ATS: ${features.atsProvider}`);
-  if (badges.length === 0) return null;
-
-  return (
-    <span className="career-vacancy-feature-badges">
-      {badges.map((b) => (
-        <span key={b} className="career-feature-badge">
-          {b}
-        </span>
-      ))}
-    </span>
-  );
-}
-
 // Строка таблицы — шесть колонок макета подряд.
 // eslint-disable-next-line max-lines-per-function
 function VacancyRow({
@@ -443,6 +430,17 @@ function VacancyRow({
     url: cluster.primaryUrl,
     source: cluster.sources[0]?.sourceId ?? '',
   };
+  const recruiter = useRecruiterContacts({
+    vacancyId: cluster.id,
+    initialContacts,
+    vacancyPayload: {
+      id: cluster.id,
+      title: cluster.canonicalTitle,
+      company: cluster.canonicalCompany ?? '',
+      url: cluster.primaryUrl,
+      description: cluster.descriptionSummary,
+    },
+  });
 
   return (
     <li className="career-vacancy-row">
@@ -456,14 +454,14 @@ function VacancyRow({
             {employerLabel(cluster.canonicalCompany)} ·{' '}
             {vacancySourceLabels(cluster.sources).join(', ')}
           </small>
-          <VacancyFeatureBadges features={cluster.companyFeatures} />
+          <VacancyConditionBadges features={cluster.companyFeatures} />
         </span>
       </div>
       <span className="career-vacancy-salary">{salaryLabel(cluster.salary)}</span>
       <span className="career-vacancy-location">
-        {cluster.canonicalLocation || (cluster.isRemote ? 'Удалённо' : 'Не указана')}
+        {cluster.canonicalLocation || (cluster.isRemote ? 'Удалённо' : 'город не указан')}
         {explanation.outsideGeography ? (
-          <small className="career-vacancy-outside">вне вашей географии</small>
+          <small className="career-vacancy-outside">не в ваших регионах</small>
         ) : null}
       </span>
       <span className="career-vacancy-age">{age.label}</span>
@@ -487,93 +485,102 @@ function VacancyRow({
             </strong>
           </>
         ) : (
-          <small>требования не разобраны</small>
+          <small title="Из текста вакансии не удалось выделить требования — сравнивать не с чем">
+            требования не выделены
+          </small>
         )}
       </span>
+      {/* Порядок — по ходу действий: подготовить → тёплый вход → контакт →
+          открыть → отметить; «Интервью» последняя (B236 §4.4). Одна залитая
+          кнопка — «Открыть на …»: отклик происходит там. Подпись короткая,
+          объяснение — в тултипе. */}
       <div className="career-vacancy-actions">
         {onPreparePitch ? (
           <button
             type="button"
-            className="career-vacancy-pitch-btn"
+            className="career-vacancy-action"
             onClick={() => onPreparePitch(cluster)}
-            title="Сопроводительное письмо и короткий питч под эту вакансию"
+            title="Сопроводительное письмо, LinkedIn-заметка и cover letter для ATS — по фактам профиля под требования вакансии. Копируете и отправляете сами."
           >
-            <Sparkle size={14} aria-hidden="true" />
-            <span>Подготовить отклик</span>
+            <PencilSimpleLine size={14} aria-hidden="true" />
+            <span>Отклик</span>
           </button>
         ) : null}
         {onOpenOutreach ? (
           <button
             type="button"
-            className="career-vacancy-outreach-btn"
+            className="career-vacancy-action"
             onClick={() => onOpenOutreach(cluster)}
-            title="Найти общих знакомых в LinkedIn и написать напрямую"
+            title="Ваши контакты на площадках, кто работает в компании или знает нанимающего. Тёплый отклик читают чаще холодного."
           >
             <Users size={14} aria-hidden="true" />
-            <span>Связи в LinkedIn</span>
+            <span>Нетворкинг</span>
           </button>
         ) : null}
-        {onPrepareInterview ? (
-          <button
-            type="button"
-            className="career-vacancy-prep-btn"
-            onClick={() => onPrepareInterview(cluster)}
-            title="Подготовка к интервью по методу STAR"
-          >
-            <Target size={14} aria-hidden="true" />
-            <span>К интервью</span>
-          </button>
-        ) : null}
+        <RecruiterContactsTrigger state={recruiter} className="career-vacancy-action" />
         <a
-          className="career-vacancy-open"
+          className="career-vacancy-action is-lead"
           href={cluster.primaryUrl}
           target="_blank"
           rel="noreferrer"
           onClick={() => applications.record(cluster.id, 'opened', snapshot)}
+          title="Страница вакансии на площадке в новой вкладке. Отметим переход в воронке."
         >
-          Открыть на {openTargetLabel(cluster.sources)} <ArrowSquareOut size={14} />
+          <ArrowSquareOut size={14} aria-hidden="true" />
+          <span>Открыть на {openTargetLabel(cluster.sources)}</span>
         </a>
         {application?.status === 'applied' ? (
-          <span className="career-vacancy-applied">
-            Отклик подтверждён {confirmedOn(application.appliedAt)}
+          <span
+            className="career-vacancy-applied"
+            title={`Отклик отмечен ${confirmedOn(application.appliedAt, 'long')}`}
+          >
+            <CheckCircle size={14} weight="fill" aria-hidden="true" />
+            <span>Отклик {confirmedOn(application.appliedAt, 'short')}</span>
           </span>
         ) : (
           <button
             type="button"
-            className="career-inline-link"
+            className="career-vacancy-action"
             onClick={() => applications.record(cluster.id, 'applied', snapshot)}
+            title="Отметьте после отклика на площадке — только так мы узнаём об отклике. Дата пойдёт в воронку и follow-up."
           >
-            Я откликнулся
+            <CheckCircle size={14} aria-hidden="true" />
+            <span>Откликнулся</span>
           </button>
         )}
+        {onPrepareInterview ? (
+          <button
+            type="button"
+            className="career-vacancy-action"
+            onClick={() => onPrepareInterview(cluster)}
+            title="Справка о компании, STAR-ответы по вашему опыту и вопросы работодателю."
+          >
+            <ChalkboardTeacher size={14} aria-hidden="true" />
+            <span>Интервью</span>
+          </button>
+        ) : null}
         {applications.unsaved.has(cluster.id) ? (
           <span className="career-vacancy-unsaved" role="status">
-            Не сохранилось — повторите
+            Отметка не сохранилась — нажмите ещё раз
           </span>
         ) : null}
       </div>
-      <RecruiterContactsBlock
-        vacancyId={cluster.id}
-        initialContacts={initialContacts}
-        vacancyPayload={{
-          id: cluster.id,
-          title: cluster.canonicalTitle,
-          company: cluster.canonicalCompany ?? '',
-          url: cluster.primaryUrl,
-          description: cluster.descriptionSummary,
-        }}
-      />
+      <RecruiterContactsResults state={recruiter} />
     </li>
   );
 }
 
 /**
- * Дата подтверждения, а не значок: «откликнулся» без даты через неделю ничего
- * не говорит кандидату, а воронка считается по датам.
+ * Дата отметки, а не значок: «откликнулся» без даты через неделю ничего не
+ * говорит кандидату, а воронка считается по датам. В строке — коротко
+ * («2 сент.»), полная дата — в тултипе.
  */
-function confirmedOn(appliedAt: string | null): string {
+function confirmedOn(appliedAt: string | null, form: 'short' | 'long'): string {
   if (!appliedAt) return 'сегодня';
-  return new Date(appliedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  return new Date(appliedAt).toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: form === 'long' ? 'long' : 'short',
+  });
 }
 
 function employerInitials(name?: string): string {
@@ -598,13 +605,4 @@ function salaryLabel(salary: MatchedVacancyItem['cluster']['salary']): string {
   const to = salary.to ? `до ${salary.to.toLocaleString('ru-RU')}` : '';
   // Неразрывный пробел: в узкой колонке «₽» отрывался на свою строку (B232).
   return `${[from, to].filter(Boolean).join(' ')}\u00a0${currency}`.trim();
-}
-
-/**
- * Куда ведёт «Открыть»: на площадку по имени, если оно короткое, иначе просто
- * «на сайте». Голое «Открыть» владелец не понял (2026-09-20).
- */
-function openTargetLabel(sources: MatchedVacancyItem['cluster']['sources']): string {
-  const name = vacancySourceLabels(sources)[0];
-  return name && name.length <= 14 ? name : 'сайте';
 }

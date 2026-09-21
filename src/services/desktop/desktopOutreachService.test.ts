@@ -115,7 +115,7 @@ describe('desktopOutreachService', () => {
 
       expect(result.success).toBe(false);
       expect(result.status).toBe('desktop_required');
-      expect(result.errorReason).toContain('десктоп');
+      expect(result.errorReason).toContain('в приложении для компьютера');
     });
 
     it('executes local action in desktop runtime without sending cookies', async () => {

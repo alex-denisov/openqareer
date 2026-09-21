@@ -48,7 +48,7 @@ describe('DesktopOutreachModal', () => {
     expect(html).toContain('aria-modal="true"');
     expect(html).toContain('FinTech Group');
     expect(html).toContain('Staff Frontend Engineer');
-    expect(html).toContain('Веб-режим');
+    expect(html).toContain('Только копирование (веб)');
   });
 
   it('renders desktop session badge when in Tauri environment', () => {
@@ -62,7 +62,7 @@ describe('DesktopOutreachModal', () => {
       />,
     );
 
-    expect(html).toContain('Локальная десктопная сессия');
+    expect(html).toContain('Отправка из приложения');
   });
 
   it('renders quota tracker banner with daily limit information', () => {
@@ -74,9 +74,9 @@ describe('DesktopOutreachModal', () => {
       />,
     );
 
-    expect(html).toContain('Отправлено сегодня:');
-    expect(html).toContain('15');
-    expect(html).toContain('Осталось 15 инвайтов');
+    expect(html).toContain('из <strong>15</strong> инвайтов');
+    expect(html).toContain('Осталось 15');
+    expect(html).toContain('Защита от блокировки площадкой');
   });
 
   it('renders decision makers list with connection degree and mutual contacts badges', () => {
@@ -111,7 +111,7 @@ describe('DesktopOutreachModal', () => {
     expect(html).toContain('/ 300');
   });
 
-  it('shows honest ADR-009 notice in web mode', () => {
+  it('tells web users to copy and paste, without internal ADR numbers (B236)', () => {
     vi.spyOn(desktopBridge, 'isTauriEnvironment').mockReturnValue(false);
 
     const html = renderToStaticMarkup(
@@ -122,7 +122,8 @@ describe('DesktopOutreachModal', () => {
       />,
     );
 
-    expect(html).toContain('ADR-009');
+    expect(html).not.toContain('ADR-009');
+    expect(html).toContain('В веб-версии отправить нельзя');
     expect(html).toContain('Скопировать текст');
   });
 

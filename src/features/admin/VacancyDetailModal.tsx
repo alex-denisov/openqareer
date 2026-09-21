@@ -1,4 +1,17 @@
 import React, { useEffect, useState } from 'react';
+import {
+  Buildings,
+  Check,
+  Copy,
+  Envelope,
+  Gift,
+  Lightning,
+  ListChecks,
+  PushPin,
+  Star,
+  Target,
+  type Icon,
+} from '@phosphor-icons/react';
 import { getAdminVacancy, type AdminVacancy } from './adminApi';
 
 function formatSalary(salary?: AdminVacancy['salary']): string {
@@ -20,7 +33,13 @@ function DiagnosticItem({ label, val, onCopy, copied }: { label: string; val: st
       <code className="admin-diag-item__code">{val}</code>
       {onCopy && (
         <button type="button" className="admin-btn admin-btn--ghost admin-btn--tiny" onClick={onCopy}>
-          {copied ? '✓ Скопировано' : '📋'}
+          {copied ? (
+            <>
+              <Check size={12} aria-hidden="true" /> Скопировано
+            </>
+          ) : (
+            <Copy size={12} aria-label="Скопировать" />
+          )}
         </button>
       )}
     </div>
@@ -88,12 +107,12 @@ function VacancyModalHeader({ vacancy, onClose }: { vacancy: AdminVacancy; onClo
 
 // ---------- Structured Section List ----------
 
-function VacancySectionList({ title, icon, items }: { title: string; icon: string; items?: string[] }) {
+function VacancySectionList({ title, icon: SectionIcon, items }: { title: string; icon: Icon; items?: string[] }) {
   if (!items || items.length === 0) return null;
   return (
     <section className="admin-vacancy-section">
       <h4 className="admin-vacancy-section__heading">
-        <span className="admin-section-icon">{icon}</span> {title}
+        <span className="admin-section-icon"><SectionIcon size={16} aria-hidden="true" /></span> {title}
       </h4>
       <ul className="admin-section-bullets">
         {items.map((item, idx) => (
@@ -109,7 +128,7 @@ function VacancySkillsSection({ skills }: { skills: string[] }) {
   return (
     <section className="admin-vacancy-section">
       <h4 className="admin-vacancy-section__heading">
-        <span className="admin-section-icon">⚡</span> Ключевые навыки и стек
+        <span className="admin-section-icon"><Lightning size={16} aria-hidden="true" /></span> Ключевые навыки и стек
       </h4>
       <div className="admin-vacancy-skills-grid">
         {skills.map((skill, idx) => (
@@ -129,14 +148,14 @@ function VacancyOverviewSection({ description, aboutCompany, contactInfo }: {
     <>
       <section className="admin-vacancy-section">
         <h4 className="admin-vacancy-section__heading">
-          <span className="admin-section-icon">📌</span> О позиции
+          <span className="admin-section-icon"><PushPin size={16} aria-hidden="true" /></span> О позиции
         </h4>
         <p className="admin-vacancy-prose">{description}</p>
       </section>
       {aboutCompany && (
         <section className="admin-vacancy-section">
           <h4 className="admin-vacancy-section__heading">
-            <span className="admin-section-icon">🏢</span> О компании
+            <span className="admin-section-icon"><Buildings size={16} aria-hidden="true" /></span> О компании
           </h4>
           <p className="admin-vacancy-prose">{aboutCompany}</p>
         </section>
@@ -144,7 +163,7 @@ function VacancyOverviewSection({ description, aboutCompany, contactInfo }: {
       {contactInfo && (
         <section className="admin-vacancy-section">
           <h4 className="admin-vacancy-section__heading">
-            <span className="admin-section-icon">📬</span> Контакты и отклик
+            <span className="admin-section-icon"><Envelope size={16} aria-hidden="true" /></span> Контакты и отклик
           </h4>
           <code className="admin-contact-code">{contactInfo}</code>
         </section>
@@ -162,11 +181,11 @@ function VacancyModalBody({ vacancy }: { vacancy: AdminVacancy }) {
         aboutCompany={vacancy.aboutCompany}
         contactInfo={vacancy.contactInfo}
       />
-      <VacancySectionList title="Обязанности и задачи" icon="🎯" items={vacancy.responsibilities} />
+      <VacancySectionList title="Обязанности и задачи" icon={Target} items={vacancy.responsibilities} />
       <VacancySkillsSection skills={vacancy.requiredSkills} />
-      <VacancySectionList title="Требования к кандидату" icon="📋" items={vacancy.qualifications} />
-      <VacancySectionList title="Будет плюсом" icon="🌟" items={vacancy.niceToHave} />
-      <VacancySectionList title="Условия и бенефиты" icon="🎁" items={vacancy.benefits} />
+      <VacancySectionList title="Требования к кандидату" icon={ListChecks} items={vacancy.qualifications} />
+      <VacancySectionList title="Будет плюсом" icon={Star} items={vacancy.niceToHave} />
+      <VacancySectionList title="Условия и бенефиты" icon={Gift} items={vacancy.benefits} />
     </div>
   );
 }

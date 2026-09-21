@@ -172,7 +172,7 @@ export function hhResumeImportFailure(reason: unknown): string {
   const raw = reason instanceof Error ? reason.message : String(reason ?? '');
   switch (raw.split(':')[0].trim()) {
     case 'hh_session_window_gone':
-      return 'Окно hh.ru закрылось, и открыть его заново не удалось. Повторите импорт или закройте это окно и подключите hh.ru ещё раз.';
+      return 'Окно площадки закрылось, и открыть его заново не удалось. Закройте это окно и нажмите «Подключить hh.ru» ещё раз.';
     case 'hh_resume_not_read':
       return 'Страница выбранного резюме не прочиталась. Выберите другое резюме, повторите попытку или загрузите PDF-резюме.';
     case 'hh_native_connection_not_persisted':

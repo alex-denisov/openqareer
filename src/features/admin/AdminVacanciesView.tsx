@@ -177,7 +177,7 @@ function VacanciesHeader({ syncing, onSyncAll, sourcesNamed }: { syncing: boolea
         </p>
       </div>
       <button type="button" className="admin-btn admin-btn--primary" onClick={onSyncAll} disabled={syncing}>
-        {syncing ? 'Синхронизация...' : '🔄 Синхронизировать все источники'}
+        {syncing ? 'Синхронизация…' : 'Синхронизировать все источники'}
       </button>
     </div>
   );

@@ -30,7 +30,7 @@ test('B213: signed-in public header stays inside the viewport', async ({ page },
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy');
 
   const headerActions = page.locator('.site-header-actions');
-  await expect(headerActions.getByRole('link', { name: 'В кабинет' })).toBeVisible();
+  await expect(headerActions.getByRole('link', { name: 'Открыть кабинет' })).toBeVisible();
 
   const layout = await page.evaluate(() => {
     const actions = document.querySelector('.site-header-actions')?.getBoundingClientRect();

@@ -1,11 +1,11 @@
 import { useCallback, useState } from 'react';
 import {
+  AddressBook,
   ArrowSquareOut,
   Chats,
   CircleNotch,
   Copy,
   EnvelopeSimple,
-  MagnifyingGlass,
   PaperPlaneTilt,
   Phone,
   User,
@@ -24,21 +24,30 @@ export interface RecruiterContactsBlockProps {
   readonly onContactsLoaded?: (contacts: RecruiterContact[]) => void;
 }
 
+/**
+ * Бейдж — про адрес, а не про человека: «Проверен» читался как «проверенный
+ * рекрутер» (B236 §5.3). Тултип говорит, стоит ли писать на гипотезу.
+ */
+const EMAIL_STATUS_COPY: Record<EmailStatus, { label: string; hint: string }> = {
+  verified: { label: 'Почта проверена', hint: 'Адрес подтверждён почтовым сервером' },
+  hypothesis: {
+    label: 'Почта — гипотеза',
+    hint: 'Собран по шаблону компании — может не существовать',
+  },
+  unverified: { label: 'Почта не проверена', hint: 'Проверить не удалось' },
+};
+
 function ContactBadge({ status }: { readonly status: EmailStatus }) {
-  const label =
-    status === 'verified'
-      ? 'Проверен'
-      : status === 'hypothesis'
-        ? 'Гипотеза'
-        : 'Не подтверждён';
+  const copy = EMAIL_STATUS_COPY[status];
 
   return (
     <span
       className="career-recruiter-badge"
       data-status={status}
       role="status"
+      title={copy.hint}
     >
-      {label}
+      {copy.label}
     </span>
   );
 }
@@ -59,7 +68,7 @@ function EmailAction({ email }: { readonly email: string }) {
       <a
         href={`mailto:${email}`}
         className="career-recruiter-link"
-        title="Написать на почту"
+        title="Написать письмо"
       >
         <EnvelopeSimple size={15} aria-hidden="true" />
         <span>{email}</span>
@@ -72,7 +81,7 @@ function EmailAction({ email }: { readonly email: string }) {
         aria-label="Скопировать адрес"
       >
         <Copy size={13} aria-hidden="true" />
-        {copied && <span className="career-recruiter-copied">Скопировано</span>}
+        {copied && <span className="career-recruiter-copied">Адрес скопирован</span>}
       </button>
     </div>
   );
@@ -149,9 +158,12 @@ function RecruiterCard({ contact }: { readonly contact: RecruiterContact }) {
 function EmptyContactsNotice({ onRetry }: { readonly onRetry: () => void }) {
   return (
     <div className="career-recruiter-empty">
-      <span>Прямые контакты в открытых источниках не найдены.</span>
+      <span>
+        Рекрутер или hiring manager в открытых источниках не нашлись. Попробуйте
+        «Нетворкинг» — знакомый в компании заменяет контакт.
+      </span>
       <button type="button" className="career-recruiter-retry-btn" onClick={onRetry}>
-        Повторить поиск
+        Искать ещё раз
       </button>
     </div>
   );
@@ -168,13 +180,13 @@ function ErrorContactsNotice({
     <div className="career-recruiter-error" role="alert">
       <span>{error}</span>
       <button type="button" className="career-recruiter-retry-btn" onClick={onRetry}>
-        Повторить
+        Попробовать ещё раз
       </button>
     </div>
   );
 }
 
-function useRecruiterContacts({
+export function useRecruiterContacts({
   vacancyId,
   vacancyPayload: _vacancyPayload,
   initialContacts,
@@ -201,7 +213,7 @@ function useRecruiterContacts({
       setHasSearched(true);
       onContactsLoaded?.(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Сбой при поиске контактов');
+      setError(err instanceof Error ? err.message : 'Поиск не удался. Попробуйте ещё раз.');
     } finally {
       setLoading(false);
     }
@@ -210,26 +222,44 @@ function useRecruiterContacts({
   return { contacts, hasSearched, loading, error, handleEnrich };
 }
 
-export function RecruiterContactsBlock({
-  vacancyId,
-  vacancyPayload,
-  initialContacts,
-  searched: initialSearched = false,
-  onContactsLoaded,
-}: RecruiterContactsBlockProps) {
-  const { contacts, hasSearched, loading, error, handleEnrich } = useRecruiterContacts({
-    vacancyId,
-    vacancyPayload,
-    initialContacts,
-    initialSearched,
-    onContactsLoaded,
-  });
+export type RecruiterContactsState = ReturnType<typeof useRecruiterContacts>;
+
+/**
+ * Кнопка «Рекрутер» стоит в одном ряду с остальными действиями строки (B236
+ * §4.4): отдельная строка «Найти прямые контакты» удваивала высоту каждой из
+ * двадцати строк. Результат поиска раскрывается под строкой.
+ */
+export function RecruiterContactsTrigger({
+  state,
+  className = 'career-recruiter-btn',
+}: {
+  readonly state: RecruiterContactsState;
+  readonly className?: string;
+}) {
+  if (state.loading || state.error || state.hasSearched || state.contacts.length > 0) {
+    return null;
+  }
+  return (
+    <button
+      type="button"
+      className={className}
+      onClick={state.handleEnrich}
+      title="Найти в открытых источниках, кто ведёт вакансию: рекрутер или hiring manager. Почта — с пометкой «проверена» или «гипотеза»."
+    >
+      <AddressBook size={14} aria-hidden="true" />
+      <span>Рекрутер</span>
+    </button>
+  );
+}
+
+export function RecruiterContactsResults({ state }: { readonly state: RecruiterContactsState }) {
+  const { contacts, hasSearched, loading, error, handleEnrich } = state;
 
   if (loading) {
     return (
       <div className="career-recruiter-loading" aria-busy="true">
         <CircleNotch size={18} className="career-spin" aria-hidden="true" />
-        <span>Ищем прямые контакты...</span>
+        <span>Ищем, кто ведёт вакансию…</span>
       </div>
     );
   }
@@ -245,11 +275,29 @@ export function RecruiterContactsBlock({
       </div>
     );
   }
+  return null;
+}
+
+/** Кнопка и результат вместе — для витрин и мест вне строки вакансии. */
+export function RecruiterContactsBlock({
+  vacancyId,
+  vacancyPayload,
+  initialContacts,
+  searched: initialSearched = false,
+  onContactsLoaded,
+}: RecruiterContactsBlockProps) {
+  const state = useRecruiterContacts({
+    vacancyId,
+    vacancyPayload,
+    initialContacts,
+    initialSearched,
+    onContactsLoaded,
+  });
 
   return (
-    <button type="button" className="career-recruiter-btn" onClick={handleEnrich}>
-      <MagnifyingGlass size={15} aria-hidden="true" />
-      <span>Найти прямые контакты</span>
-    </button>
+    <>
+      <RecruiterContactsTrigger state={state} />
+      <RecruiterContactsResults state={state} />
+    </>
   );
 }

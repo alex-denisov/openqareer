@@ -42,7 +42,11 @@ export function ProfileExperience({
   onImprove: () => void;
 }) {
   if (view.experience.length === 0) {
-    return <p className="career-profile-empty">Опыт работы не заполнен — импортируйте резюме.</p>;
+    return (
+      <p className="career-profile-empty">
+        Опыта пока нет. Загрузите резюме или подключите профиль на площадке — опыт появится здесь.
+      </p>
+    );
   }
 
   return (

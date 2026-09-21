@@ -7,6 +7,7 @@ import {
 } from '../coach/coachApi';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import { PLATFORM_LABELS, type ConnectionPlatform } from './platformLabels';
+import { pluralRu } from '../../../shared/pluralRu';
 import { HhConnectModal } from './HhConnectModal';
 import { LinkedInConnectModal } from './LinkedInConnectModal';
 import type { HhResumeItem } from './HhConnectModal';
@@ -80,7 +81,7 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
       });
       setConnections(persisted.connections);
       setNotice(
-        `Резюме hh.ru сохранено в профиль: ${persisted.connection.factCount} фактов.`,
+        `Из ${PLATFORM_LABELS.hh} сохранено ${factNoun(persisted.connection.factCount)}.`,
       );
       onDataChanged?.();
     } catch (error) {
@@ -103,7 +104,7 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
       });
       setConnections(persisted.connections);
       setNotice(
-        `Профиль LinkedIn сохранён: ${persisted.connection.factCount} фактов.`,
+        `Из ${PLATFORM_LABELS.linkedin} сохранено ${factNoun(persisted.connection.factCount)}.`,
       );
       onDataChanged?.();
     } catch (error) {
@@ -154,7 +155,9 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
         onClose={() => setImportPlatform(undefined)}
         onConnectSuccess={handleHhSessionImport}
         onAuthenticatedEmpty={() => {
-          setNotice('Вход в hh.ru выполнен, но в аккаунте пока нет резюме.');
+          setNotice(
+            'Вход на площадку выполнен, но резюме там пока нет. Создайте резюме на площадке или загрузите файл здесь.',
+          );
         }}
       />
       <LinkedInConnectModal
@@ -256,8 +259,8 @@ export function AccountConnections({
   return (
     <section className="career-account-connections" aria-labelledby="career-account-connections-title">
       <div>
-        <h2 id="career-account-connections-title">Подключённые площадки</h2>
-        <p>Доступ хранится отдельно для этого аккаунта кандидата.</p>
+        <h2 id="career-account-connections-title">Профили на площадках</h2>
+        <p>Подключения принадлежат только этому аккаунту. Пароли от площадок в OpenQareer не передаются.</p>
       </div>
       <div className="career-account-connection-list">
         {connections.map((connection) => {
@@ -298,7 +301,10 @@ export function AccountConnections({
                   </button>
                 </div>
               ) : (
-                <p>Профиль {label} подключается в десктопном приложении OpenQareer.</p>
+                <p>
+                  Профили на площадках подключаются в приложении OpenQareer для компьютера
+                  через вашу собственную сессию. На сайте можно загрузить резюме файлом.
+                </p>
               )}
             </article>
           );
@@ -312,37 +318,36 @@ export function AccountConnections({
 function connectionCopy(connection: Extract<CandidateConnection, { status: 'connected' }>): string {
   if (connection.accessMode === 'native_session_snapshot') {
     const label = PLATFORM_LABELS[connection.platform];
-    const source = connection.platform === 'hh' ? `резюме ${label}` : `профиля ${label}`;
-    return `Снимок ${source} сохранён: ${connection.factCount} фактов. Сессия ${label} не хранится.`;
+    return `Из ${label} сохранено ${factNoun(connection.factCount)}. Ваша сессия на площадке не хранится.`;
   }
   return connection.platform === 'linkedin'
-    ? 'Профиль прочитан из вашей сессии LinkedIn; карьерная история живёт в Resume Studio.'
-    : 'Резюме прочитаны из вашей сессии hh.ru; действий от вашего имени нет.';
+    ? 'Профиль прочитан из вашей сессии на площадке; опыт добавлен в раздел «Резюме».'
+    : 'Резюме прочитаны из вашей сессии на площадке; действий от вашего имени не было.';
 }
 
 function disconnectBoundaryCopy(
   connection: Extract<CandidateConnection, { status: 'connected' }>,
 ): string {
   return connection.accessMode === 'native_session_snapshot'
-    ? 'Отключится только сохранённый статус площадки. Импортированные данные останутся в профиле.'
-    : 'Локальные токены и снимок профиля будут удалены. Отзыв доступа на стороне площадки может потребовать отдельного отзыва.';
+    ? 'Отключится только связь с площадкой. Уже добавленные факты останутся в профиле.'
+    : 'Сохранённый доступ и копия профиля будут удалены. Если площадка показывает OpenQareer в своих настройках, отзовите доступ и там.';
 }
 
 function connectionManagementError(error: unknown): string {
   if (error instanceof CoachApiError && error.code === 'unauthorized') {
-    return 'Сессия закончилась. Войдите снова, чтобы проверить подключения.';
+    return 'Вы вышли из OpenQareer. Войдите снова, чтобы увидеть подключения.';
   }
   return 'Не удалось проверить подключения. Повторите после восстановления соединения.';
 }
 
 function hhSessionImportError(error: unknown): string {
   if (error instanceof CoachApiError && error.code === 'unauthorized') {
-    return 'Сессия OpenQareer закончилась. Войдите снова и повторите импорт hh.ru.';
+    return 'Вы вышли из OpenQareer. Войдите снова и повторите подключение площадки.';
   }
   if (error instanceof Error && error.message === 'hh_resume_not_read') {
-    return 'Вход в hh.ru выполнен, но выбранное резюме прочитать не удалось. Повторите проверку или загрузите PDF.';
+    return 'Вход выполнен, но выбранное резюме прочитать не удалось. Повторите подключение или загрузите резюме файлом.';
   }
-  return 'Резюме hh.ru прочитано, но сервер не подтвердил сохранение. Повторите импорт; статус подключения не изменён.';
+  return 'Резюме прочитано, но сохранить не удалось. Повторите подключение — статус площадки не изменился.';
 }
 
 function nativeSessionImportError(
@@ -350,7 +355,11 @@ function nativeSessionImportError(
   error: unknown,
 ): string {
   if (error instanceof CoachApiError && error.code === 'unauthorized') {
-    return `Сессия OpenQareer закончилась. Войдите снова и повторите импорт ${PLATFORM_LABELS[platform]}.`;
+    return 'Вы вышли из OpenQareer. Войдите снова и повторите подключение площадки.';
   }
-  return `Данные ${PLATFORM_LABELS[platform]} прочитаны, но сервер не подтвердил сохранение. Повторите импорт.`;
+  return `Данные с ${PLATFORM_LABELS[platform]} прочитаны, но сохранить не удалось. Повторите подключение.`;
+}
+
+function factNoun(count: number): string {
+  return pluralRu(count, ['факт', 'факта', 'фактов']);
 }

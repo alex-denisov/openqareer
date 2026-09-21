@@ -189,7 +189,7 @@ export async function sendDesktopConnectionRequest({
       success: false,
       status: 'desktop_required',
       errorReason:
-        'Прямая отправка доступна только в локальной сессии десктопного приложения (ADR-009).',
+        'Отправить из OpenQareer можно только в приложении для компьютера. Скопируйте текст и отправьте его на площадке сами.',
     };
   }
 
@@ -222,8 +222,8 @@ export async function sendDesktopConnectionRequest({
       status: localResult ? 'unsupported' : 'failed',
       actionId,
       errorReason: localResult
-        ? 'Десктопная сессия не вернула подтверждение отправки от провайдера.'
-        : 'Локальное действие в десктопной сессии не удалось.',
+        ? 'Площадка не подтвердила отправку. Скопируйте текст и отправьте вручную.'
+        : 'Не удалось отправить. Скопируйте текст и отправьте вручную.',
     };
   }
 

@@ -3,6 +3,7 @@ import { ArrowSquareOut, MapPin, Globe } from "@phosphor-icons/react";
 import type { MatchedVacancyItem } from "../coach/cabinetTypes";
 import { calculateVacancyFacets, type CityFacet } from "./vacancyFacets";
 import { employerLabel } from "../../../shared/employerLabel";
+import { VacancyConditionBadges } from "./vacancyConditions";
 
 interface VacancyMapViewProps {
   readonly items: readonly MatchedVacancyItem[];
@@ -288,18 +289,7 @@ function MapVacancyCard({ item }: { item: MatchedVacancyItem }) {
       </div>
 
       <div className="career-map-card-features">
-        {feat?.relocation ? (
-          <span className="career-feature-badge is-reloc">✈️ Релокация</span>
-        ) : null}
-        {feat?.currencyRemote ? (
-          <span className="career-feature-badge is-currency">💵 Валютная удалёнка</span>
-        ) : null}
-        {feat?.russianAbroad ? (
-          <span className="career-feature-badge is-ru-abroad">🌍 Рос. за рубежом</span>
-        ) : null}
-        {feat?.atsProvider ? (
-          <span className="career-feature-badge is-ats">ATS: {feat.atsProvider}</span>
-        ) : null}
+        <VacancyConditionBadges features={feat} />
       </div>
 
       <div className="career-map-card-actions">

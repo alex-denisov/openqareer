@@ -793,7 +793,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     waitUntil: 'commit',
   });
   const landingHeading = page.getByRole('heading', {
-    name: 'Карьерная операционная система кандидата',
+    name: 'Ваш поиск работы под контролем',
   });
   await landingHeading.waitFor({ state: 'visible', timeout: 2_000 });
   const shellMs = Math.round(performance.now() - startedAt);
@@ -808,7 +808,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: landing links are inert before hydration`,
   );
   assert(
-    (await page.getByRole('heading', { name: 'Карьерная операционная система кандидата' }).count()) === 1,
+    (await page.getByRole('heading', { name: 'Ваш поиск работы под контролем' }).count()) === 1,
     `${viewport.name}: landing page heading is absent from initial HTML`,
   );
 
@@ -1015,15 +1015,15 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // Ручной отклик (B165, срез 1, узлы 6 и 8): кандидат подтверждает отклик
   // сам, строка после этого говорит датой, а не значком, и на сервер уходит
   // ровно «applied» — открытие ссылки откликом не становится.
-  await page.getByRole('button', { name: 'Я откликнулся' }).first().click();
-  await page.getByText('Отклик подтверждён', { exact: false }).first().waitFor();
+  await page.getByRole('button', { name: 'Откликнулся' }).first().click();
+  await page.locator('.career-vacancy-applied').first().waitFor();
   const recorded = page.__recordedApplications;
   assert(
     recorded.length === 1 && recorded[0].status === 'applied' && Boolean(recorded[0].clusterId),
     `${viewport.name}: подтверждение отклика не ушло на сервер ${JSON.stringify(recorded)}`,
   );
   assert(
-    (await page.getByRole('button', { name: 'Я откликнулся' }).count()) === 1,
+    (await page.getByRole('button', { name: 'Откликнулся' }).count()) === 1,
     `${viewport.name}: подтверждённая строка всё ещё предлагает подтвердить отклик`,
   );
   await page.screenshot({
@@ -1034,7 +1034,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // Регулярные выборки живут в панели фильтров «Вакансий» (B181): источник,
   // здоровье источника и создание проверяются здесь же, рядом с пулом.
   // B234: форма новой выборки спрятана за «+» в блоке «Сохранённые».
-  await page.getByRole('button', { name: 'Новая регулярная выборка' }).click();
+  await page.getByRole('button', { name: 'Новый запрос к площадке' }).click();
   await page.getByRole('combobox', { name: 'Источник вакансий' }).waitFor();
   // Реестр приходит асинхронно; по умолчанию выбрана первая отвечающая
   // площадка (PRB-042), а закрытая hh.ru честно называет причину, когда её
@@ -1150,7 +1150,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
   await page.getByText('Вы вошли как', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Подключения' }).click();
-  await page.getByRole('heading', { name: 'Подключённые площадки' }).waitFor();
+  await page.getByRole('heading', { name: 'Профили на площадках' }).waitFor();
   await page.getByRole('button', { name: 'Отключить hh.ru' }).waitFor();
   assert(
     connectionCatalogRequests === 1,
@@ -1169,7 +1169,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   const logoutResponse = page.waitForResponse((res) => res.url().includes('/api/v1/auth/logout'));
   await page.getByRole('button', { name: 'Выйти' }).click();
   await logoutResponse;
-  await page.getByRole('heading', { name: 'Карьерная операционная система кандидата' }).waitFor();
+  await page.getByRole('heading', { name: 'Ваш поиск работы под контролем' }).waitFor();
   assert(
     (await page.getByRole('dialog', { name: 'Аккаунт' }).count()) === 0,
     `${viewport.name}: account panel remained open after logout`,

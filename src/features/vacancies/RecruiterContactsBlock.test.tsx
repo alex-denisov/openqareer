@@ -38,29 +38,33 @@ describe('RecruiterContactsBlock', () => {
     githubUrl: 'https://github.com/mkovalev',
   };
 
-  it('отображает кнопку «Найти прямые контакты», если контакты ещё не искались', () => {
+  it('отображает кнопку «Рекрутер» с тултипом, если контакты ещё не искались (B236 §4.4)', () => {
     const html = renderToStaticMarkup(
       <RecruiterContactsBlock vacancyId="vac-1" />,
     );
-    expect(html).toContain('Найти прямые контакты');
+    expect(html).toContain('>Рекрутер<');
+    expect(html).toContain('рекрутер или hiring manager');
+    expect(html).not.toContain('Найти прямые контакты');
   });
 
-  it('отображает карточку контакта и бейдж «Проверен»', () => {
+  it('отображает карточку контакта и бейдж «Почта проверена» — бейдж про адрес, не про человека', () => {
     const html = renderToStaticMarkup(
       <RecruiterContactsBlock vacancyId="vac-1" initialContacts={[sampleContact]} />,
     );
     expect(html).toContain('Елена Смирнова');
     expect(html).toContain('Technical Recruiter');
-    expect(html).toContain('Проверен');
+    expect(html).toContain('Почта проверена');
+    expect(html).toContain('Адрес подтверждён почтовым сервером');
   });
 
-  it('отображает бейдж «Гипотеза» для предположительного контакта', () => {
+  it('отображает бейдж «Почта — гипотеза» для предположительного контакта', () => {
     const html = renderToStaticMarkup(
       <RecruiterContactsBlock vacancyId="vac-1" initialContacts={[hypothesisContact]} />,
     );
     expect(html).toContain('Михаил Ковалев');
     expect(html).toContain('Engineering Manager');
-    expect(html).toContain('Гипотеза');
+    expect(html).toContain('Почта — гипотеза');
+    expect(html).toContain('может не существовать');
     expect(html).toContain('https://github.com/mkovalev');
   });
 
@@ -79,6 +83,8 @@ describe('RecruiterContactsBlock', () => {
     const html = renderToStaticMarkup(
       <RecruiterContactsBlock vacancyId="vac-1" initialContacts={[]} searched={true} />,
     );
-    expect(html).toContain('Прямые контакты в открытых источниках не найдены');
+    expect(html).toContain('Рекрутер или hiring manager в открытых источниках не нашлись');
+    expect(html).toContain('Искать ещё раз');
+    expect(html).not.toContain('Прямые контакты');
   });
 });

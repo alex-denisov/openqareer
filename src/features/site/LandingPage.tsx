@@ -9,6 +9,7 @@ import {
   MagnifyingGlass,
   Path,
   ShieldCheck,
+  SignIn,
   Target,
   UserCircle,
 } from '@phosphor-icons/react';
@@ -23,31 +24,45 @@ interface LandingPageProps {
   onNavigate: (path: string) => void;
 }
 
+/**
+ * Тексты лендинга — по отчёту маркетолога и карьерного консультанта (B236,
+ * `docs/v1-release/audits/2026-09-21-copy/`). Аудитория — IT-эксперты и
+ * топ-менеджеры, поэтому термины индустрии (ATS, оффер, нетворкинг) остаются;
+ * уходят внутренние слова продукта («пул», «выборка», «диагностика») и узкие
+ * фразы про одну площадку: площадок много, hh.ru и LinkedIn — только примеры.
+ */
+export const LANDING_HERO_TITLE = 'Ваш поиск работы под контролем';
+
 const FAQ_ITEMS = [
   {
-    question: 'Что я получу после карьерной диагностики?',
+    question: 'Что я увижу после загрузки резюме?',
     answer:
-      'Профиль по фактам, рабочую гипотезу целевой роли, видимые пробелы и один следующий шаг с объяснением причины.',
+      'Профиль по фактам с пометками «подтверждено» и «не проверено», названия ролей, которые подтверждаются вашим опытом, вакансии по ним из наших источников и один следующий шаг с объяснением причины.',
   },
   {
-    question: 'Как добавить профиль LinkedIn или резюме hh.ru?',
+    question: 'Как добавить профили с площадок, где я ищу работу?',
     answer:
-      'Прямой импорт LinkedIn и hh.ru работает в десктопном приложении через вашу собственную сессию. На сайте можно загрузить резюме в PDF.',
+      'На сайте — загрузите резюме файлом. В приложении для компьютера подключите профили на площадках (LinkedIn, hh.ru и другие) через вашу собственную сессию: пароли в OpenQareer не передаются. Список площадок растёт.',
+  },
+  {
+    question: 'Отправляет ли OpenQareer отклики за меня?',
+    answer:
+      'Нет. Продукт готовит текст отклика и письма, но отправляете вы сами. Отклик засчитывается в воронку только после вашего подтверждения.',
   },
   {
     question: 'Сколько это стоит?',
     answer:
-      'Базовый тариф бесплатен и не ограничен по сроку. Покупка подписки и автоматизация внешних аккаунтов в продукте пока не подключены.',
+      'Основной путь бесплатен и без срока. Платные тарифы пока нельзя купить: оплата и автоматические действия на площадках в продукте не подключены.',
   },
   {
     question: 'OpenQareer гарантирует интервью или оффер?',
     answer:
-      'Нет. Платформа помогает проверить карьерное решение и подготовить следующий шаг, но не принимает решение за работодателя.',
+      'Нет. Продукт помогает выбрать роль, увидеть вакансии и подготовить отклик, но решение принимает работодатель. Мы не показываем чисел, которых не измеряем.',
   },
   {
-    question: 'Могу ли я удалить или выгрузить свои данные?',
+    question: 'Могу ли я выгрузить или удалить свои данные?',
     answer:
-      'Да. В настройках аккаунта доступны экспорт данных и удаление аккаунта вместе с сохранёнными данными.',
+      'Да. В аккаунте есть выгрузка всех данных одним файлом и удаление аккаунта вместе со всем, что сохранено.',
   },
 ] as const;
 
@@ -61,7 +76,7 @@ const STRUCTURED_DATA = {
       url: 'https://openqareer.com',
       logo: 'https://openqareer.com/favicon.svg',
       description:
-        'Карьерная операционная система кандидата: профиль по фактам, диагностика и один следующий шаг.',
+        'Рабочее место кандидата: профиль по фактам, вакансии из десятков источников и один следующий шаг.',
     },
     {
       '@type': 'SoftwareApplication',
@@ -69,7 +84,7 @@ const STRUCTURED_DATA = {
       name: 'OpenQareer',
       url: 'https://openqareer.com',
       description:
-        'Бесплатный доступ к загрузке резюме, проверке карьерных фактов, диагностике и выбору следующего действия.',
+        'Бесплатный доступ к загрузке резюме, подтверждению фактов профиля, вакансиям из десятков источников и выбору следующего шага.',
       operatingSystem: 'Web, desktop companion',
       applicationCategory: 'BusinessApplication',
       inLanguage: 'ru-RU',
@@ -79,11 +94,11 @@ const STRUCTURED_DATA = {
         audienceType: 'Кандидаты, которые ищут работу или проверяют карьерное направление',
       },
       featureList: [
-        'Загрузка резюме в PDF',
-        'Импорт профиля LinkedIn через десктопное приложение',
-        'Импорт резюме hh.ru через десктопное приложение',
+        'Загрузка резюме файлом',
+        'Подключение профилей на площадках (LinkedIn, hh.ru и другие) в приложении для компьютера',
         'Профиль по фактам',
-        'Карьерная диагностика',
+        'Роли с опорой на опыт',
+        'Вакансии из десятков источников',
         'Один следующий шаг',
       ],
     },
@@ -107,22 +122,22 @@ const PILLARS = [
   {
     icon: ShieldCheck,
     title: 'Профиль по фактам',
-    desc: 'Опыт, результаты, навыки и образование из вашего резюме. Каждый импортированный вывод можно проверить.',
+    desc: 'Опыт, результаты, навыки и образование из ваших резюме и профилей на площадках. У каждого пункта видно, откуда он взят, его можно исправить или отклонить.',
   },
   {
     icon: Target,
-    title: 'Карьерная диагностика',
-    desc: 'Показывает, на какие роли уже есть опора в опыте и каких данных пока не хватает для решения.',
+    title: 'Роли, на которые у вас есть опора',
+    desc: 'Показывает, какие названия ролей подтверждаются вашим опытом, а какие пока только гипотеза, и чего не хватает, чтобы решить.',
   },
   {
     icon: MagnifyingGlass,
-    title: 'Проверка роли на рынке',
-    desc: 'Рабочую гипотезу можно сравнить с датированной выборкой вакансий из доступного источника.',
+    title: 'Вакансии по вашей роли из десятков источников',
+    desc: 'Для выбранной роли видно, сколько вакансий найдено, в каких источниках и на какую дату — без процентов «соответствия» без основания.',
   },
   {
     icon: FileText,
-    title: 'Один следующий шаг',
-    desc: 'Платформа предлагает одно действие, объясняет его причину и показывает, что изменится после выполнения.',
+    title: 'Один следующий шаг на сегодня',
+    desc: 'Не список из тридцати советов, а одно действие с причиной и с тем, что изменится после него.',
   },
 ];
 
@@ -130,67 +145,91 @@ const SERVICES = [
   {
     icon: Compass,
     tag: 'Старт',
-    title: 'Импорт опыта',
-    desc: 'Загрузите резюме в PDF на сайте или подключите LinkedIn либо hh.ru в десктопном приложении.',
-    points: ['Разбор структуры резюме', 'Импорт опыта и образования', 'Видимый результат загрузки'],
+    title: 'Соберите профиль из резюме и площадок',
+    desc: 'Загрузите резюме файлом или подключите профили на площадках, где вы ищете работу: LinkedIn, hh.ru и другие. Площадок будет больше.',
+    points: [
+      'Что найдено в резюме — видно по пунктам',
+      'Опыт, образование и навыки в одном профиле',
+      'Что не удалось прочитать — сказано прямо',
+    ],
   },
   {
     icon: Path,
     tag: 'Профиль',
-    title: 'Проверка карьерных фактов',
-    desc: 'Просмотрите, подтвердите или исключите выводы, собранные из резюме и диалога.',
-    points: ['Опыт и результаты', 'Навыки и образование', 'Неизвестные данные отмечены отдельно'],
+    title: 'Подтвердите или отклоните каждый факт',
+    desc: 'Всё, что собрано из резюме, площадок и разговора с консультантом, можно подтвердить, исправить или убрать.',
+    points: [
+      'Опыт с измеримыми результатами',
+      'Навыки и образование',
+      'Что не подтверждено — помечено словами',
+    ],
   },
   {
     icon: MagnifyingGlass,
-    tag: 'Диагностика',
-    title: 'Рабочая гипотеза роли',
-    desc: 'Диагностика связывает целевую роль с подтверждённым опытом и отдельно называет пробелы.',
-    points: ['Основание для роли', 'Ограничения поиска', 'Вопросы, которые меняют решение'],
+    tag: 'Роль',
+    title: 'Название роли, которое подтверждается опытом',
+    desc: 'Продукт предлагает названия ролей по вашим фактам и помечает, какие из них уже встречаются в вакансиях, а какие пока гипотеза.',
+    points: [
+      'Чем подтверждается каждая роль',
+      'Что ограничивает поиск: география, формат, уровень',
+      'Вопросы, ответ на которые изменит выбор',
+    ],
   },
   {
     icon: FileText,
     tag: 'Резюме',
-    title: 'Резюме из подтверждённых данных',
-    desc: 'Раздел резюме собирает документ из фактов профиля и показывает, что ещё нужно уточнить.',
-    points: ['Опыт и результаты из профиля', 'Видимые пробелы', 'Факты можно исправить до сохранения'],
+    title: 'Резюме, собранное только из подтверждённых фактов',
+    desc: 'Основное резюме и вариант под страну собираются из профиля; пустые места видны до сохранения.',
+    points: [
+      'Опыт и результаты — из профиля',
+      'Пробелы видны, а не спрятаны',
+      'Правки — до сохранения, не после отправки',
+    ],
   },
   {
     icon: ChartLineUp,
-    tag: 'Рынок',
-    title: 'Датированная выборка вакансий',
-    desc: 'Сохранённое направление поиска показывает источник, дату наблюдения и найденные вакансии.',
-    points: ['Один поисковый запрос', 'Состояние источника', 'Вакансии с прямыми ссылками'],
+    tag: 'Вакансии',
+    title: 'Вакансии из десятков источников с честными датами',
+    desc: 'Одна таблица: источник, сколько дней вакансия у нас, сколько требований совпало с вашим профилем, зарплата и локация, если источник их отдал.',
+    points: [
+      'Направления поиска с регулярным сбором',
+      'Состояние каждого источника: доступен, ограничен, не отвечает',
+      'Прямые ссылки на вакансию на площадке',
+    ],
   },
   {
     icon: LockKey,
     tag: 'Контроль',
-    title: 'Решение остаётся у кандидата',
-    desc: 'OpenQareer готовит следующий шаг, но не отправляет отклики и сообщения без вашего явного действия.',
-    points: ['Проверка перед внешним действием', 'Экспорт данных из аккаунта', 'Удаление аккаунта и данных'],
+    title: 'Ничего не уходит без вашего подтверждения',
+    desc: 'OpenQareer готовит отклик, письмо и подготовку к интервью, но отправляете вы. Данные можно выгрузить или удалить вместе с аккаунтом.',
+    points: [
+      'Подтверждение перед каждым внешним действием',
+      'Выгрузка всех данных одним файлом',
+      'Удаление аккаунта вместе с данными',
+    ],
   },
 ];
 
 const STEPS = [
   {
     num: '01',
-    title: 'Добавьте резюме',
-    desc: 'Загрузите PDF на сайте или импортируйте LinkedIn либо hh.ru через десктопное приложение.',
+    title: 'Добавьте резюме или подключите площадки',
+    desc: 'Загрузите резюме файлом или подключите профили на площадках, где вы ищете работу.',
   },
   {
     num: '02',
-    title: 'Проверьте профиль',
-    desc: 'OpenQareer соберёт профиль по фактам. Вы подтвердите данные и увидите, что осталось неизвестным.',
+    title: 'Подтвердите факты',
+    desc: 'OpenQareer соберёт профиль по фактам. Вы подтвердите, исправите или уберёте каждый пункт и увидите, что осталось неизвестным.',
   },
   {
     num: '03',
-    title: 'Получите диагностику',
-    desc: 'Диагностика свяжет опыт, целевую роль, рынок и ограничения без обещаний интервью или оффера.',
+    title: 'Выберите роль и условия',
+    desc: 'Продукт предложит названия ролей по вашему опыту и покажет, сколько вакансий по каждой есть в источниках. Вы выберете роль, географию и формат.',
   },
   {
     num: '04',
-    title: 'Сделайте следующий шаг',
-    desc: 'В кабинете появится один следующий шаг с причиной и ожидаемым изменением.',
+    title: 'Делайте один шаг в день',
+    desc: 'На Главной появится один следующий шаг с причиной, а в «Поиске» — очередь вакансий на сегодня.',
   },
 ];
 
@@ -207,7 +246,7 @@ function HeaderSessionActions({
     <>
       {isAdmin ? (
         <SiteLink to="/admin" className="site-btn is-admin is-small" onNavigate={onNavigate}>
-          Админка
+          Администрирование
         </SiteLink>
       ) : null}
       <div className="site-user-badge">
@@ -215,7 +254,7 @@ function HeaderSessionActions({
         <span className="user-name">{userName}</span>
       </div>
       <SiteLink to="/app" className="site-btn is-primary is-small" onNavigate={onNavigate}>
-        В кабинет
+        Открыть кабинет <ArrowRight size={16} weight="bold" aria-hidden="true" />
       </SiteLink>
     </>
   );
@@ -231,11 +270,11 @@ function LandingHeader({ session, onNavigate }: LandingPageProps) {
         <BrandMark variant="lockup" size={28} />
       </a>
       <nav className="site-nav" aria-label="Разделы сайта">
-        <a href="#features">Что внутри</a>
-        <a href="#services">Возможности</a>
-        <a href="#how-it-works">Как это работает</a>
+        <a href="#features">Что вы получите</a>
+        <a href="#services">Что уже работает</a>
+        <a href="#how-it-works">Четыре шага</a>
         <a href="#tariffs">Тарифы</a>
-        <a href="#faq">FAQ</a>
+        <a href="#faq">Вопросы</a>
       </nav>
       <div className="site-header-actions">
         {session ? (
@@ -247,10 +286,10 @@ function LandingHeader({ session, onNavigate }: LandingPageProps) {
         ) : (
           <>
             <SiteLink to="/login" className="site-btn is-ghost is-small" onNavigate={onNavigate}>
-              Войти
+              <SignIn size={16} weight="bold" aria-hidden="true" /> Войти
             </SiteLink>
             <SiteLink to="/signup" className="site-btn is-primary is-small" onNavigate={onNavigate}>
-              Начать
+              Создать аккаунт
             </SiteLink>
           </>
         )}
@@ -272,7 +311,7 @@ function HeroActionButtons({
     return (
       <>
         <SiteLink to="/app" className="site-btn is-primary is-large" onNavigate={onNavigate}>
-          Перейти в рабочий кабинет <ArrowRight size={18} weight="bold" />
+          Открыть кабинет <ArrowRight size={18} weight="bold" aria-hidden="true" />
         </SiteLink>
         {isAdmin ? (
           <SiteLink to="/admin" className="site-btn is-admin is-large" onNavigate={onNavigate}>
@@ -280,7 +319,7 @@ function HeroActionButtons({
           </SiteLink>
         ) : (
           <SiteLink to="/app" className="site-btn is-secondary is-large" onNavigate={onNavigate}>
-            Мой профиль и аналитика
+            Открыть профиль
           </SiteLink>
         )}
       </>
@@ -289,10 +328,10 @@ function HeroActionButtons({
   return (
     <>
       <SiteLink to="/signup" className="site-btn is-primary is-large" onNavigate={onNavigate}>
-        Пройти карьерную диагностику <ArrowRight size={18} weight="bold" />
+        Собрать профиль из резюме <ArrowRight size={18} weight="bold" aria-hidden="true" />
       </SiteLink>
       <SiteLink to="/login" className="site-btn is-secondary is-large" onNavigate={onNavigate}>
-        Войти в существующий аккаунт
+        <SignIn size={18} weight="bold" aria-hidden="true" /> Войти в кабинет
       </SiteLink>
     </>
   );
@@ -304,15 +343,18 @@ function LandingHero({ session, onNavigate }: LandingPageProps) {
   return (
     <section className="site-hero" aria-labelledby="hero-heading">
       <div className="site-badge">
-        <ShieldCheck size={16} weight="fill" /> Бесплатный доступ
+        <ShieldCheck size={16} weight="fill" aria-hidden="true" /> Основной путь бесплатен и без срока
       </div>
+      {/* Hero — вариант B отчёта маркетолога (решение владельца 2026-09-21):
+          контроль и безопасность для аудитории, обжёгшейся на автооткликах. */}
       <h1 id="hero-heading" className="site-hero-title">
-        Карьерная операционная система кандидата
+        {LANDING_HERO_TITLE}
       </h1>
       <p className="site-hero-lead">
-        Загрузите резюме в PDF или подключите hh.ru в десктопном приложении.
-        OpenQareer соберёт профиль по фактам, проведёт карьерную диагностику и
-        предложит один следующий шаг с объяснением причины.
+        Один профиль по фактам, одна кампания с ролью, географией и очередью
+        откликов, одна таблица вакансий из всех источников. OpenQareer готовит
+        отклик и подготовку к интервью, но ничего не отправляет без вашего
+        подтверждения.
       </p>
       <div className="site-hero-actions">
         <HeroActionButtons session={session} isAdmin={isAdmin} onNavigate={onNavigate} />
@@ -325,13 +367,13 @@ function LandingGuarantees() {
   return (
     <section className="site-guarantees" aria-label="Границы продукта">
       <div className="site-guarantee-pill">
-        <span className="dot" /> Ранняя версия: регистрация доступна без приглашения
+        <span className="dot" /> Ранняя версия: регистрация открыта всем, без приглашения
       </div>
       <div className="site-guarantee-pill">
-        <span className="dot" /> Внешние действия — только после вашего подтверждения
+        <span className="dot" /> Ни одного отклика или сообщения без вашего подтверждения
       </div>
       <div className="site-guarantee-pill">
-        <span className="dot" /> Выводы показывают факты и неизвестные данные
+        <span className="dot" /> Каждый вывод помечен: подтверждено, гипотеза или не проверено
       </div>
     </section>
   );
@@ -341,9 +383,9 @@ function LandingPillars() {
   return (
     <section id="features" className="site-section" aria-labelledby="pillars-heading">
       <header className="site-section-header">
-        <span className="site-section-eyebrow">Результат для кандидата</span>
-        <h2 id="pillars-heading" className="site-section-title">От резюме к следующему действию</h2>
-        <p className="site-section-lead">Четыре части одного проверяемого карьерного решения.</p>
+        <span className="site-section-eyebrow">Что вы получите</span>
+        <h2 id="pillars-heading" className="site-section-title">От резюме до отклика — четыре вещи, которые у вас появятся</h2>
+        <p className="site-section-lead">Каждый вывод помечен: подтверждено, гипотеза или не проверено.</p>
       </header>
       <div className="site-pillars-grid">
         {PILLARS.map((pillar) => {
@@ -366,8 +408,8 @@ function LandingServices() {
     <section id="services" className="site-section is-services" aria-labelledby="services-heading">
       <header className="site-section-header">
         <span className="site-section-eyebrow">Что уже работает</span>
-        <h2 id="services-heading" className="site-section-title">Функции текущей версии</h2>
-        <p className="site-section-lead">Только доступные сейчас действия и результаты.</p>
+        <h2 id="services-heading" className="site-section-title">Шесть вещей, которые можно сделать сегодня</h2>
+        <p className="site-section-lead">Здесь только то, что работает прямо сейчас. Что ещё не подключено — сказано прямо.</p>
       </header>
       <div className="site-services-grid">
         {SERVICES.map((srv) => {
@@ -397,9 +439,9 @@ function LandingHowItWorks() {
   return (
     <section id="how-it-works" className="site-section" aria-labelledby="how-heading">
       <header className="site-section-header">
-        <span className="site-section-eyebrow">Путь кандидата</span>
-        <h2 id="how-heading" className="site-section-title">Как работает OpenQareer</h2>
-        <p className="site-section-lead">Каждый этап даёт видимый результат и следующий переход.</p>
+        <span className="site-section-eyebrow">Четыре шага</span>
+        <h2 id="how-heading" className="site-section-title">От резюме до первого отклика</h2>
+        <p className="site-section-lead">После каждого шага видно, что появилось и что делать дальше.</p>
       </header>
       <div className="site-steps-grid">
         {STEPS.map((step) => (
@@ -426,16 +468,17 @@ function FreeTariffCard({
   return (
     <article className="site-tariff-card">
       <div className="site-tariff-header">
-        <h3>Самостоятельный</h3>
+        <h3>Самостоятельно</h3>
         <p className="site-tariff-price">0 ₽ <span>/ без срока</span></p>
-        <p className="site-tariff-desc">Основной путь кандидата открыт каждому, кто завёл аккаунт.</p>
+        <p className="site-tariff-desc">Всё, что нужно, чтобы собрать профиль, выбрать роль и работать с вакансиями своими руками.</p>
       </div>
       <ul className="site-tariff-features">
-        <li><CheckCircle size={18} weight="fill" /> Загрузка резюме в PDF</li>
-        <li><CheckCircle size={18} weight="fill" /> Импорт hh.ru в десктопном приложении</li>
-        <li><CheckCircle size={18} weight="fill" /> Профиль с проверкой фактов</li>
-        <li><CheckCircle size={18} weight="fill" /> Карьерная диагностика</li>
-        <li><CheckCircle size={18} weight="fill" /> Один объяснимый следующий шаг</li>
+        <li><CheckCircle size={18} weight="fill" aria-hidden="true" /> Загрузка резюме файлом</li>
+        <li><CheckCircle size={18} weight="fill" aria-hidden="true" /> Подключение профилей на площадках</li>
+        <li><CheckCircle size={18} weight="fill" aria-hidden="true" /> Профиль с подтверждением фактов</li>
+        <li><CheckCircle size={18} weight="fill" aria-hidden="true" /> Роли с опорой на ваш опыт</li>
+        <li><CheckCircle size={18} weight="fill" aria-hidden="true" /> Вакансии из десятков источников</li>
+        <li><CheckCircle size={18} weight="fill" aria-hidden="true" /> Один следующий шаг с причиной</li>
       </ul>
       <SiteLink to={to} className="site-btn is-secondary is-full" onNavigate={onNavigate}>
         {buttonLabel}
@@ -456,15 +499,15 @@ function FeaturedTariffCard({
   return (
     <article className="site-tariff-card is-featured">
       <div className="site-tariff-header">
-        <h3>Сопровождение</h3>
-        <p className="site-tariff-price">Не подключено <span>/ в продукте</span></p>
-        <p className="site-tariff-desc">Ручное сопровождение обсуждается отдельно после проверки основного пути.</p>
+        <h3>С сопровождением</h3>
+        <p className="site-tariff-price">Оплата не подключена</p>
+        <p className="site-tariff-desc">Разбор результатов и настройка поиска вместе со специалистом. Обсуждается отдельно, после того как вы прошли основной путь.</p>
       </div>
       <ul className="site-tariff-features">
-        <li><CheckCircle size={18} weight="fill" /> Ручной разбор результатов диагностики</li>
-        <li><CheckCircle size={18} weight="fill" /> Уточнение роли и ограничений поиска</li>
-        <li><CheckCircle size={18} weight="fill" /> Подготовка плана следующего шага</li>
-        <li><CheckCircle size={18} weight="fill" /> Без автоматических действий во внешних аккаунтах</li>
+        <li><CheckCircle size={18} weight="fill" aria-hidden="true" /> Разбор вашего профиля и ролей со специалистом</li>
+        <li><CheckCircle size={18} weight="fill" aria-hidden="true" /> Уточнение роли, географии и формата</li>
+        <li><CheckCircle size={18} weight="fill" aria-hidden="true" /> План на первые недели поиска</li>
+        <li><CheckCircle size={18} weight="fill" aria-hidden="true" /> Никаких действий в ваших аккаунтах на площадках</li>
       </ul>
       <SiteLink to={to} className="site-btn is-primary is-full" onNavigate={onNavigate}>
         {buttonLabel}
@@ -475,15 +518,15 @@ function FeaturedTariffCard({
 
 function LandingTariffs({ session, onNavigate }: LandingPageProps) {
   const targetPath = session ? '/app' : '/signup';
-  const primaryButtonLabel = session ? 'Вернуться к диагностике' : 'Сначала пройти диагностику';
-  const freeButtonLabel = session ? 'Перейти в кабинет' : 'Создать аккаунт';
+  const primaryButtonLabel = session ? 'Вернуться в кабинет' : 'Сначала собрать профиль бесплатно';
+  const freeButtonLabel = session ? 'Открыть кабинет' : 'Создать бесплатный аккаунт';
 
   return (
     <section id="tariffs" className="site-section" aria-labelledby="tariffs-heading">
       <header className="site-section-header">
-        <span className="site-section-eyebrow">Доступ и цены</span>
+        <span className="site-section-eyebrow">Сколько это стоит</span>
         <h2 id="tariffs-heading" className="site-section-title">Тарифы</h2>
-        <p className="site-section-lead">Базовый тариф бесплатен и не ограничен по сроку. Регистрация доступна без приглашения. Покупка подписки в продукте пока не подключена.</p>
+        <p className="site-section-lead">Основной путь бесплатен и без срока. Платные тарифы описаны как ориентир: оплата в продукте пока не подключена, купить их нельзя.</p>
       </header>
       <div className="site-tariffs-grid">
         <FreeTariffCard buttonLabel={freeButtonLabel} to={targetPath} onNavigate={onNavigate} />
@@ -498,7 +541,7 @@ function LandingFaq() {
     <section id="faq" className="site-section" aria-labelledby="faq-heading">
       <header className="site-section-header">
         <span className="site-section-eyebrow">Вопросы и ответы</span>
-        <h2 id="faq-heading" className="site-section-title">Часто задаваемые вопросы</h2>
+        <h2 id="faq-heading" className="site-section-title">Вопросы перед регистрацией</h2>
       </header>
       <div className="site-faq-list">
         {FAQ_ITEMS.map((item, index) => (
@@ -516,17 +559,18 @@ function LandingCta({ session, onNavigate }: LandingPageProps) {
   return (
     <section className="site-cta" aria-labelledby="cta-heading">
       <div className="site-cta-inner">
-        <h2 id="cta-heading">Начните с резюме и одного карьерного вопроса</h2>
+        <h2 id="cta-heading">Начните с резюме — остальное появится в кабинете</h2>
         <p>
-          Соберите профиль по фактам, проверьте рабочую роль и получите следующий
-          шаг, который можно выполнить и оценить.
+          Профиль по фактам, роли с опорой на опыт, вакансии из десятков
+          источников и один следующий шаг. Бесплатно и без срока.
         </p>
         <SiteLink
           to={session ? '/app' : '/signup'}
           className="site-btn is-primary is-large"
           onNavigate={onNavigate}
         >
-          {session ? 'Перейти в кабинет' : 'Создать аккаунт'} <ArrowRight size={18} weight="bold" />
+          {session ? 'Открыть кабинет' : 'Создать бесплатный аккаунт'}{' '}
+          <ArrowRight size={18} weight="bold" aria-hidden="true" />
         </SiteLink>
       </div>
     </section>
@@ -563,7 +607,7 @@ function LandingFooter({
       <div className="site-footer-inner">
         <div className="site-footer-brand">
           <BrandMark variant="lockup" size={24} />
-          <p>Профиль по фактам, диагностика и один следующий шаг.</p>
+          <p>Профиль по фактам, вакансии из десятков источников и один следующий шаг.</p>
           <span className="site-copyright">
             &copy; {new Date().getFullYear()} OpenQareer. Все права защищены.
           </span>
@@ -571,21 +615,22 @@ function LandingFooter({
         <div className="site-footer-links">
           <div className="link-group">
             <strong>Продукт</strong>
-            <a href="#features">Что внутри</a>
-            <a href="#services">Возможности</a>
+            <a href="#features">Что вы получите</a>
+            <a href="#services">Что уже работает</a>
             <a href="#tariffs">Тарифы</a>
-            <a href="#faq">FAQ</a>
+            <a href="#faq">Вопросы</a>
             {/* Публичный каталог — отдельный документ вне приложения, поэтому
-                обычная ссылка, а не переход роутером (B209). */}
-            <a href="/vacancies">Вакансии</a>
+                обычная ссылка, а не переход роутером (B209). Назван каталогом,
+                чтобы не путать с разделом кабинета «Вакансии». */}
+            <a href="/vacancies">Открытый каталог вакансий</a>
           </div>
           <LegalLinkGroup onNavigate={onNavigate} />
           <div className="link-group">
             <strong>Доступ</strong>
-            <SiteLink to="/login" className="link-btn" onNavigate={onNavigate}>Вход</SiteLink>
-            <SiteLink to="/signup" className="link-btn" onNavigate={onNavigate}>Регистрация</SiteLink>
+            <SiteLink to="/login" className="link-btn" onNavigate={onNavigate}>Войти</SiteLink>
+            <SiteLink to="/signup" className="link-btn" onNavigate={onNavigate}>Создать аккаунт</SiteLink>
             {session?.role === 'admin' ? (
-              <SiteLink to="/admin" className="link-btn" onNavigate={onNavigate}>Админка</SiteLink>
+              <SiteLink to="/admin" className="link-btn" onNavigate={onNavigate}>Администрирование</SiteLink>
             ) : null}
           </div>
         </div>

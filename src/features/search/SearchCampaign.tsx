@@ -1,4 +1,6 @@
+import { ArrowRight } from '@phosphor-icons/react';
 import { vacancyCoverage } from '../vacancies/vacancyFilters';
+import { openTargetLabel } from '../vacancies/vacancyOpenTarget';
 import { useEffect, useMemo, useState } from 'react';
 import type { CareerStrategy } from '../../../shared/careerStrategy';
 import { campaignRoleLine } from '../cabinet/careerStrategyView';
@@ -195,12 +197,14 @@ function QueuePanel({
       <header>
         <h3>Очередь на сегодня</h3>
         <span className="career-cabinet-tag">
-          {loading ? 'читаем пул…' : `${campaign.poolTotal} в подборе`}
+          {loading ? 'загружаем…' : `${campaign.poolTotal} подходящих`}
         </span>
       </header>
       {campaign.queue.length === 0 ? (
         <p className="career-home-empty">
-          {loading ? 'Читаем собранный пул вакансий…' : 'В подборе пока нет записей.'}
+          {loading
+            ? 'Загружаем вакансии…'
+            : 'Подходящих вакансий пока нет. Проверьте роль и условия или дождитесь следующего сбора.'}
         </p>
       ) : (
         <ol className="career-job-list">
@@ -210,7 +214,7 @@ function QueuePanel({
         </ol>
       )}
       <button type="button" className="career-quiet-button" onClick={onOpenVacancies}>
-        Открыть весь пул
+        Открыть все вакансии <ArrowRight size={16} aria-hidden="true" />
       </button>
     </section>
   );
@@ -260,8 +264,8 @@ function QueueRow({ entry }: { entry: MatchedVacancyItem }) {
         </div>
         <span className="career-cabinet-tag">
           {coverage
-            ? `${coverage.covered} из ${coverage.total} требований`
-            : 'требования не указаны'}
+            ? `совпало ${coverage.covered} из ${coverage.total} требований`
+            : 'требования не выделены'}
         </span>
         <a
           className="career-quiet-button"
@@ -269,7 +273,7 @@ function QueueRow({ entry }: { entry: MatchedVacancyItem }) {
           target="_blank"
           rel="noreferrer noopener"
         >
-          Открыть
+          Открыть на {openTargetLabel(entry.cluster.sources)}
         </a>
       </div>
     </li>

@@ -73,7 +73,7 @@ describe('VacancyFilterPanel (B234)', () => {
     const html = render();
     expect(html).toContain('career-vacancy-saved');
     expect(html).toContain('Product Manager');
-    expect(html).toContain('aria-label="Новая регулярная выборка"');
+    expect(html).toContain('aria-label="Новый запрос к площадке"');
   });
 
   it('offers the role field as a filter with the campaign role as its hint', () => {
@@ -94,8 +94,9 @@ describe('VacancyFilterPanel (B234)', () => {
 
   it('names relocation slices as rows with their count over the pool', () => {
     const html = render();
-    expect(html).toContain('Помощь с переездом');
-    expect(html).toContain('Валютная удалёнка');
+    expect(html).toContain('Условия');
+    expect(html).toContain('Релокация');
+    expect(html).toContain('Оплата в валюте');
     expect(html).not.toContain('Фишки работодателей');
   });
 });

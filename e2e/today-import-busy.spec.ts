@@ -62,12 +62,12 @@ test.describe('B160 «Главная» during a running import', () => {
     // профиля, посчитанная по разобранному резюме (B179).
     const assessment = page.locator('.career-home-panel').filter({ hasText: 'Оценка профиля' });
     await expect(assessment).toBeVisible();
-    await expect(assessment).toContainText('идёт импорт профиля');
+    await expect(assessment).toContainText('Профиль ещё загружается');
     await expect(assessment).not.toContainText('Профиль пуст');
 
     await releaseImport();
 
     await expect(assessment).toContainText('Профиль пуст');
-    await expect(assessment).not.toContainText('идёт импорт профиля');
+    await expect(assessment).not.toContainText('Профиль ещё загружается');
   });
 });

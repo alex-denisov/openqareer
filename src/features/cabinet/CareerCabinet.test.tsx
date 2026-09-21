@@ -253,6 +253,6 @@ describe('CareerCabinet regular selections (B181)', () => {
   });
 
   it('показывает их в разделе «Вакансии»', () => {
-    expect(renderCabinet('opportunities')).toContain('Новая регулярная выборка');
+    expect(renderCabinet('opportunities')).toContain('Новый запрос к площадке');
   });
 });

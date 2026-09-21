@@ -27,7 +27,7 @@ describe('AccountConnections', () => {
       />,
     );
 
-    expect(html).toContain('Подключённые площадки');
+    expect(html).toContain('Профили на площадках');
     expect(html).toContain('LinkedIn');
     expect(html).toContain('Подключено');
     expect(html).toContain('Отключить LinkedIn');
@@ -93,7 +93,7 @@ describe('AccountConnections', () => {
     expect(html).toContain('Подключить hh.ru');
   });
 
-  it('tells web candidates the connection lives in the desktop app', () => {
+  it('tells web candidates the connection lives in the computer app, for any platform', () => {
     const html = renderToStaticMarkup(
       <AccountConnections
         connections={[
@@ -109,7 +109,10 @@ describe('AccountConnections', () => {
       />,
     );
 
-    expect(html).toContain('Профиль LinkedIn подключается в десктопном приложении');
+    // Площадок много: копия не называет одну и не говорит «десктопное» (B236).
+    expect(html).toContain('подключаются в приложении OpenQareer для компьютера');
+    expect(html).toContain('На сайте можно загрузить резюме файлом');
+    expect(html).not.toContain('десктопн');
     expect(html).not.toContain('Подключить LinkedIn');
   });
 
@@ -134,9 +137,9 @@ describe('AccountConnections', () => {
       />,
     );
 
-    expect(html).toContain('Снимок резюме hh.ru сохранён');
-    expect(html).toContain('Сессия hh.ru не хранится');
-    expect(html).toContain('Импортированные данные останутся');
+    expect(html).toContain('Из hh.ru сохранено 7 фактов');
+    expect(html).toContain('Ваша сессия на площадке не хранится');
+    expect(html).toContain('Уже добавленные факты останутся в профиле');
     expect(html).not.toContain('токены');
   });
 

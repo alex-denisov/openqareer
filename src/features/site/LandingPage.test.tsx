@@ -7,17 +7,25 @@ describe('LandingPage', () => {
     const handleNavigate = vi.fn();
     const html = renderToStaticMarkup(<LandingPage onNavigate={handleNavigate} />);
 
-    expect(html).toContain('Карьерная операционная система кандидата');
-    expect(html).toContain('Бесплатный доступ');
-    expect(html).toContain('Загрузите резюме в PDF');
-    expect(html).toContain('подключите LinkedIn либо hh.ru в десктопном приложении');
-    expect(html).toContain('профиль по фактам');
-    expect(html).toContain('карьерную диагностику');
+    // Hero — вариант B отчёта маркетолога (B236, решение владельца 2026-09-21).
+    expect(html).toContain('Ваш поиск работы под контролем');
+    expect(html).toContain('Основной путь бесплатен и без срока');
+    expect(html).toContain('ничего не отправляет без вашего');
+    expect(html).toContain('Один профиль по фактам');
     expect(html).toContain('один следующий шаг');
-    expect(html).toContain('Часто задаваемые вопросы');
+    expect(html).toContain('Вопросы перед регистрацией');
     expect(html).toContain('Войти');
-    expect(html).toContain('Начать');
+    expect(html).toContain('Создать аккаунт');
+    expect(html).toContain('Собрать профиль из резюме');
     expect(html).toContain('application/ld+json');
+    // Площадок много: ни одна строка не подаёт hh.ru или LinkedIn как единственный путь.
+    expect(html).not.toContain('десктопн');
+    expect(html).not.toContain('в десктопном приложении');
+    expect(html).toContain('LinkedIn, hh.ru и другие');
+    // Внутренние слова продукта не показываются кандидату.
+    expect(html).not.toContain('диагностик');
+    expect(html).not.toContain('операционная система');
+    expect(html).not.toContain('выборк');
     for (const unprovenClaim of [
       'Никаких галлюцинаций',
       'полная безопасность аккаунтов',
@@ -44,8 +52,9 @@ describe('LandingPage', () => {
     expect(html).toContain('"isAccessibleForFree":true');
     expect(html).toContain('"description":"Бесплатный доступ');
     expect(html).toContain('"@type":"FAQPage"');
-    expect(html).toContain('Что я получу после карьерной диагностики?');
-    expect(html).toContain('Как добавить профиль LinkedIn или резюме hh.ru?');
+    expect(html).toContain('Что я увижу после загрузки резюме?');
+    expect(html).toContain('Как добавить профили с площадок, где я ищу работу?');
+    expect(html).toContain('Отправляет ли OpenQareer отклики за меня?');
     expect(html).not.toContain('"offers"');
   });
 
@@ -69,7 +78,7 @@ describe('LandingPage', () => {
     expect(html).not.toContain('После диагностики');
   });
 
-  it('renders "В кабинет" CTA and user badge when candidate session is present', () => {
+  it('renders "Открыть кабинет" CTA and user badge when candidate session is present', () => {
     const handleNavigate = vi.fn();
     const html = renderToStaticMarkup(
       <LandingPage
@@ -85,12 +94,12 @@ describe('LandingPage', () => {
       />,
     );
 
-    expect(html).toContain('В кабинет');
+    expect(html).toContain('Открыть кабинет');
     expect(html).toContain('Мария');
-    expect(html).not.toContain('Админка');
+    expect(html).not.toContain('Администрирование');
   });
 
-  it('renders "Админка" and admin panel buttons when admin session is present', () => {
+  it('renders "Администрирование" and admin panel buttons when admin session is present', () => {
     const handleNavigate = vi.fn();
     const html = renderToStaticMarkup(
       <LandingPage
@@ -106,9 +115,9 @@ describe('LandingPage', () => {
       />,
     );
 
-    expect(html).toContain('Админка');
+    expect(html).toContain('Администрирование');
     expect(html).toContain('Панель администратора');
-    expect(html).toContain('В кабинет');
+    expect(html).toContain('Открыть кабинет');
   });
 
   it('renders landing actions as semantic anchor links without button site-btn or link-btn elements', () => {

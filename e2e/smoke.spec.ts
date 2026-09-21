@@ -25,10 +25,8 @@ test('public landing page is ready, indexed and free of critical accessibility v
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy');
-  await expect(
-    page.getByRole('heading', { name: 'Карьерная операционная система кандидата' }),
-  ).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Пройти карьерную диагностику' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ваш поиск работы под контролем' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Собрать профиль из резюме' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Войти' }).first()).toBeVisible();
 
   const overflow = await page.evaluate(

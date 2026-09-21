@@ -4,6 +4,7 @@ import type { VacancySubscription } from '../coach/coachApi';
 import { SavedSearchesPanel } from './SavedSearchesPanel';
 import type { VacancyFacetCounts } from './vacancyFacets';
 import type { VacancyFilters } from './vacancyFilters';
+import { VACANCY_CONDITIONS } from './vacancyConditions';
 
 /**
  * Панель фильтров «Вакансий» по макету «Пульт» (B234).
@@ -52,7 +53,7 @@ export function VacancyFilterPanel({
       <header>
         <h3>Фильтры</h3>
         <button className="career-inline-link" type="button" onClick={onReset}>
-          сброс
+          Сбросить
         </button>
       </header>
 
@@ -123,7 +124,7 @@ function SavedSearchesFold({
   const [open, setOpen] = useState(false);
   return (
     <fieldset className="career-vacancy-saved">
-      <legend>Сохранённые</legend>
+      <legend>Сохранённые запросы</legend>
       <div className="career-vacancy-chips">
         {subscriptions.map((subscription) => (
           <span key={subscription.id} className="career-vacancy-saved-pill">
@@ -134,8 +135,8 @@ function SavedSearchesFold({
           type="button"
           className={open ? 'is-active' : ''}
           aria-pressed={open}
-          aria-label="Новая регулярная выборка"
-          title="Новая регулярная выборка: площадка сама присылает вакансии по запросу"
+          aria-label="Новый запрос к площадке"
+          title="Новый запрос к площадке: повторяется сам и пополняет подбор"
           onClick={() => setOpen((value) => !value)}
         >
           <Plus size={12} aria-hidden="true" />
@@ -143,7 +144,7 @@ function SavedSearchesFold({
       </div>
       {subscriptions.length === 0 && !open ? (
         <p className="career-cabinet-tag">
-          Регулярная выборка — запрос к площадке, который повторяется сам и пополняет пул.
+          Сохранённый запрос повторяется по расписанию и пополняет подбор.
         </p>
       ) : null}
       {open || subscriptions.length > 0 ? (
@@ -217,32 +218,26 @@ function RelocationFilter({
   readonly facets: VacancyFacetCounts;
   readonly onChange: (filters: VacancyFilters) => void;
 }) {
-  const rows: ReadonlyArray<{
-    key: 'relocationOnly' | 'currencyRemoteOnly' | 'russianAbroadOnly';
-    label: string;
-    count: number;
-  }> = [
-    { key: 'relocationOnly', label: 'Помощь с переездом', count: facets.relocation.count },
-    { key: 'currencyRemoteOnly', label: 'Валютная удалёнка', count: facets.currencyRemote.count },
-    {
-      key: 'russianAbroadOnly',
-      label: 'Российские компании за рубежом',
-      count: facets.russianAbroad.count,
-    },
-  ];
+  // Те же имена и иконки, что на бейджах строки: чип и бейдж зовутся одинаково (B236 §4.5).
+  const rows = VACANCY_CONDITIONS.map((condition) => ({
+    ...condition,
+    count: facets[condition.feature].count,
+  }));
   return (
     <fieldset>
-      <legend>Релокация</legend>
+      <legend>Условия</legend>
       <ul className="career-vacancy-sources">
         {rows.map((row) => (
-          <li key={row.key}>
+          <li key={row.filter}>
             <button
               type="button"
-              className={filters[row.key] ? 'is-active' : ''}
-              aria-pressed={Boolean(filters[row.key])}
-              onClick={() => onChange({ ...filters, [row.key]: !filters[row.key] })}
+              className={filters[row.filter] ? 'is-active' : ''}
+              aria-pressed={Boolean(filters[row.filter])}
+              onClick={() => onChange({ ...filters, [row.filter]: !filters[row.filter] })}
             >
-              <span>{row.label}</span>
+              <span>
+                <row.Icon size={12} aria-hidden="true" /> {row.label}
+              </span>
               <strong>{row.count}</strong>
             </button>
           </li>
@@ -266,7 +261,7 @@ function FreshnessFilter({
 }) {
   return (
     <fieldset>
-      <legend>Свежесть</legend>
+      <legend>В базе</legend>
       <div className="career-vacancy-chips">
         {FRESHNESS_CHOICES.map((choice) => (
           <button

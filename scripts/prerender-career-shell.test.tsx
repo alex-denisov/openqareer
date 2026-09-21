@@ -41,12 +41,12 @@ describe('production career shell prerender', () => {
     expect(html).toContain('class="career-bootstrap-shell" data-bootstrap-shell="true">');
     expect(html).not.toContain('data-bootstrap-shell="true" inert');
     expect(html).toContain('href="/login"');
-    expect(html).toContain('Карьерная операционная система кандидата');
-    expect(html).toContain('Бесплатный доступ');
+    expect(html).toContain('Ваш поиск работы под контролем');
+    expect(html).toContain('Основной путь бесплатен и без срока');
     expect(html).toContain('Профиль по фактам');
     expect(html).toContain('Один следующий шаг');
     expect(html).toContain('Тарифы');
-    expect(html).toContain('FAQ');
+    expect(html).toContain('Вопросы');
     expect(html).toContain('application/ld+json');
   });
 

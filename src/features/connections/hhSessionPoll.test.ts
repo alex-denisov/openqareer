@@ -683,7 +683,7 @@ describe('an hh.ru account with no resumes at all', () => {
 describe('what the candidate is told when the chosen resume does not arrive', () => {
   it('names the closed window, the unreadable page and the unsaved profile apart', () => {
     expect(hhResumeImportFailure(new Error('hh_session_window_gone'))).toContain(
-      'Окно hh.ru закрылось',
+      'Окно площадки закрылось',
     );
     expect(hhResumeImportFailure(new Error('hh_resume_not_read'))).toContain(
       'Страница выбранного резюме не прочиталась',

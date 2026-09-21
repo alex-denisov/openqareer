@@ -10,9 +10,10 @@ describe('ProfileImportModals', () => {
   it('states the manual install boundary without advertising a public download', () => {
     const html = renderToStaticMarkup(<WebDesktopCtaCallout />);
 
-    expect(html).toContain('Импорт LinkedIn и hh.ru доступен только в установленном десктопном приложении');
+    expect(html).toContain('Профили на площадках подключаются в приложении для компьютера');
+    expect(html).not.toContain('десктопн');
     expect(html).toContain('Публичной загрузки приложения пока нет');
-    expect(html).toContain('у команды OpenQareer');
+    expect(html).toContain('команде OpenQareer');
     for (const unsupportedDownloadClaim of [
       '<a',
       'href=',

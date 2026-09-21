@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
 import {
+  CreditCard,
+  ShieldCheck,
+  SignIn,
+  UserCircle,
+  type Icon,
+} from '@phosphor-icons/react';
+import {
   updateAdminUser,
   blockAdminUser,
   resetAdminUserPassword,
@@ -58,10 +65,10 @@ function ModalOverlay({ onClose, children }: { onClose: () => void; children: Re
 }
 
 function ModalTabs({ tab, onChange }: { tab: TabId; onChange: (t: TabId) => void }) {
-  const tabs: Array<{ id: TabId; label: string }> = [
-    { id: 'profile', label: '👤 Профиль и роль' },
-    { id: 'subscription', label: '💳 Подписка и тариф' },
-    { id: 'security', label: '🛡️ Безопасность и пароль' },
+  const tabs: Array<{ id: TabId; label: string; Icon: Icon }> = [
+    { id: 'profile', label: 'Профиль и роль', Icon: UserCircle },
+    { id: 'subscription', label: 'Подписка и тариф', Icon: CreditCard },
+    { id: 'security', label: 'Безопасность и пароль', Icon: ShieldCheck },
   ];
   return (
     <div className="admin-modal__tabs">
@@ -72,7 +79,7 @@ function ModalTabs({ tab, onChange }: { tab: TabId; onChange: (t: TabId) => void
           className={`admin-modal__tab ${tab === t.id ? 'admin-modal__tab--active' : ''}`}
           onClick={() => onChange(t.id)}
         >
-          {t.label}
+          <t.Icon size={14} aria-hidden="true" /> {t.label}
         </button>
       ))}
     </div>
@@ -334,7 +341,7 @@ function ModalFooter({ user, feedback, onClose }: { user: AdminUser; feedback: F
   return (
     <div className="admin-modal__footer">
       <button type="button" className="admin-btn admin-btn--impersonate" onClick={handleImpersonate} disabled={feedback.loading} title="Войти в кабинет кандидата от его имени">
-        🚀 Войти как @{user.username} (Имперсонация)
+        <SignIn size={16} aria-hidden="true" /> Войти как @{user.username} (Имперсонация)
       </button>
       <button type="button" className="admin-btn admin-btn--secondary" onClick={onClose}>
         Закрыть

@@ -19,7 +19,7 @@ describe('VacancyBoard filters', () => {
     );
     expect(html).toContain('Фильтры');
     expect(html).toContain('Сохранённые');
-    expect(html).toContain('Новая регулярная выборка');
+    expect(html).toContain('Новый запрос к площадке');
   });
 
   /**
@@ -140,14 +140,15 @@ describe('VacancyBoard · ручной отклик', () => {
     complete: true,
   };
 
-  it('предлагает подтвердить отклик, пока он не подтверждён', () => {
+  it('предлагает отметить отклик, пока он не отмечен (B236 §4.4)', () => {
     const html = renderToStaticMarkup(<VacancyBoard pool={pool} applications={[]} />);
 
-    expect(html).toContain('Я откликнулся');
-    expect(html).not.toContain('Отклик подтверждён');
+    expect(html).toContain('>Откликнулся<');
+    expect(html).not.toContain('Отклик 2 сен');
+    expect(html).not.toContain('Я откликнулся');
   });
 
-  it('подтверждённый отклик назван датой, а не значком, и кнопки больше нет', () => {
+  it('отмеченный отклик назван датой, а не значком, и кнопки больше нет', () => {
     const html = renderToStaticMarkup(
       <VacancyBoard
         pool={pool}
@@ -169,9 +170,10 @@ describe('VacancyBoard · ручной отклик', () => {
       />,
     );
 
-    expect(html).toContain('Отклик подтверждён');
-    expect(html).toContain('2 сентября');
-    expect(html).not.toContain('Я откликнулся');
+    expect(html).toContain('Отклик 2 сент.');
+    expect(html).toContain('title="Отклик отмечен 2 сентября"');
+    expect(html).not.toContain('>Откликнулся<');
+    expect(html).not.toContain('Отклик подтверждён');
   });
 
   it('отображает переключатель видов (Список и На карте) с честным знаменателем B192', () => {
@@ -203,14 +205,23 @@ describe('VacancyBoard · ручной отклик', () => {
 
     expect(html).toContain('Список (1)');
     expect(html).toContain('На карте (1 из 1)');
-    expect(html).toContain('<span>Помощь с переездом</span><strong>1</strong>');
-    expect(html).toContain('<span>Валютная удалёнка</span><strong>1</strong>');
-    expect(html).toContain('помощь с переездом');
-    expect(html).toContain('валютная удалёнка');
+    // Чип фильтра и бейдж строки зовутся одинаково (B236 §4.5).
+    expect(html).toMatch(/<span><svg[\s\S]*?<\/svg> Релокация<\/span><strong>1<\/strong>/u);
+    expect(html).toMatch(/<span><svg[\s\S]*?<\/svg> Оплата в валюте<\/span><strong>1<\/strong>/u);
+    expect(html).toContain('is-reloc"><svg');
+    expect(html).toContain('is-currency"><svg');
+    expect(html).not.toContain('Помощь с переездом');
+    expect(html).not.toContain('Валютная удалёнка');
     expect(html).not.toMatch(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
   });
 
-  it('рендерит кнопку «Подготовить отклик» в действиях строки вакансии', () => {
+  /**
+   * B236 §4.4 (карьерный консультант): кнопки строки идут по ходу действий —
+   * подготовить → тёплый вход → контакт → открыть → отметить; «Интервью»
+   * последняя. Ровно одна залитая — «Открыть на …», там происходит отклик.
+   * Подпись короткая, иконка привычная, объяснение — в тултипе.
+   */
+  it('строит кнопки строки в порядке §4.4 с одной залитой «Открыть на …»', () => {
     const html = renderToStaticMarkup(
       <VacancyBoard
         pool={{
@@ -225,11 +236,20 @@ describe('VacancyBoard · ручной отклик', () => {
       />,
     );
 
-    expect(html).toContain('career-vacancy-pitch-btn');
-    expect(html).toContain('Подготовить отклик');
+    const labels = ['>Отклик<', '>Нетворкинг<', '>Рекрутер<', 'Открыть на ', '>Откликнулся<', '>Интервью<'];
+    const positions = labels.map((label) => html.indexOf(label));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+
+    expect(html.match(/career-vacancy-action is-lead/gu)).toHaveLength(1);
+    expect(html).toContain('Открыть на Himalayas');
+    expect(html).not.toContain('Подготовить отклик');
+    expect(html).not.toContain('Связи в LinkedIn');
+    expect(html).not.toContain('К интервью');
+    expect(html).not.toContain('Найти прямые контакты');
   });
 
-  it('рендерит кнопку «К интервью» для подготовки к собеседованию', () => {
+  it('объясняет каждую кнопку строки тултипом, а не подписью', () => {
     const html = renderToStaticMarkup(
       <VacancyBoard
         pool={{
@@ -244,8 +264,12 @@ describe('VacancyBoard · ручной отклик', () => {
       />,
     );
 
-    expect(html).toContain('career-vacancy-prep-btn');
-    expect(html).toContain('К интервью');
+    expect(html).toContain('Копируете и отправляете сами');
+    expect(html).toContain('Тёплый отклик читают чаще холодного');
+    expect(html).toContain('рекрутер или hiring manager');
+    expect(html).toContain('Отметим переход в воронке');
+    expect(html).toContain('только так мы узнаём об отклике');
+    expect(html).toContain('STAR-ответы по вашему опыту');
   });
 });
 
@@ -312,6 +336,6 @@ describe('VacancyBoard · страница из 20 записей', () => {
       explanation: { ...first.explanation, outsideGeography: true },
     } as unknown as MatchedVacancyItem;
     const html = renderToStaticMarkup(<VacancyBoard pool={{ ...pool, matched: [outside] }} />);
-    expect(html).toContain('вне вашей географии');
+    expect(html).toContain('не в ваших регионах');
   });
 });
