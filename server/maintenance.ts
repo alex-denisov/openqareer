@@ -1,6 +1,7 @@
 import { readServerConfig } from './config';
 import { createJsonLineLog } from './maintenance/jsonLineLog';
 import { MaintenanceWorker } from './maintenance/maintenanceWorker';
+import { logPoolWrites } from './maintenance/poolWriteLog';
 import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
 
@@ -16,6 +17,9 @@ const composed = composeVacancyEngine({
   databasePath: config.databasePath,
   // Сведение по ключам: партия × соседи в куче, полная пересборка запрещена.
   recluster: { mode: 'keyed', batchSize: DEFAULT_KEYED_BATCH_SIZE },
+  // Итог каждой замены среза и любая транзакция дольше секунды — в журнал:
+  // контракт B230 проверяется по `journalctl`, а не по 500 на входе (PRB-043).
+  onPoolWrite: logPoolWrites(log),
 });
 const worker = new MaintenanceWorker({ engine: composed.engine, log });
 

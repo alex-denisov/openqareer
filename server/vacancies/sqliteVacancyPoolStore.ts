@@ -162,10 +162,47 @@ function indexColumns(vacancy: UnifiedVacancy, sourceId: string): SQLInputValue[
  * heap: counts, pages and point lookups are SQL, and memory follows the size
  * of a request rather than the size of the pool.
  */
+/**
+ * Порция записи пула (PRB-043 срез 2). Контракт обслуживателя B230: ни одна
+ * транзакция не держит write-lock дольше секунды, иначе HTTP-процесс ждёт
+ * его на входе кандидата. 250 строк — порядка сотни миллисекунд на VM прода.
+ */
+export const DEFAULT_POOL_WRITE_CHUNK = 250;
+
+export type PoolWriteEvent =
+  | {
+      readonly kind: 'transaction';
+      readonly operation: 'upsert' | 'remove';
+      readonly sourceId: string;
+      readonly rows: number;
+      readonly durationMs: number;
+    }
+  | {
+      readonly kind: 'slice';
+      readonly operation: 'replace' | 'merge';
+      readonly sourceId: string;
+      readonly upserted: number;
+      readonly removed: number;
+      readonly transactions: number;
+      readonly maxTransactionMs: number;
+      readonly totalMs: number;
+    };
+
+export interface SqliteVacancyPoolStoreOptions {
+  readonly databasePath: string;
+  readonly matchReader?: MatchRowReader;
+  /** Строк на одну транзакцию записи среза; по умолчанию `DEFAULT_POOL_WRITE_CHUNK`. */
+  readonly writeChunkSize?: number;
+  /** Свидетель каждой транзакции записи и итога замены среза — для журнала обслуживателя. */
+  readonly onWrite?: (event: PoolWriteEvent) => void;
+}
+
 export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private readonly database: DatabaseSync;
   private readonly databasePath: string;
   private matchReader?: MatchRowReader;
+  private readonly writeChunkSize: number;
+  private readonly onWrite?: (event: PoolWriteEvent) => void;
   /** Докуда дошёл фоновый проход по `rowid`: каждый шаг начинает с него, а не с начала таблицы. */
   private backfillCursor = 0;
   /** Докуда дошёл bounded materialized-catalog pass. */
@@ -176,8 +213,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private clusterKeysBackfillCursor = 0;
   private clusterKeysBackfillComplete = false;
 
-  constructor(options: { databasePath: string; matchReader?: MatchRowReader }) {
+  constructor(options: SqliteVacancyPoolStoreOptions) {
     this.matchReader = options.matchReader;
+    this.writeChunkSize = Math.max(1, Math.floor(options.writeChunkSize ?? DEFAULT_POOL_WRITE_CHUNK));
+    this.onWrite = options.onWrite;
     if (options.databasePath !== ':memory:') {
       mkdirSync(dirname(options.databasePath), { recursive: true });
     }
@@ -627,41 +666,111 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     );
   }
 
-  private upsertAll(sourceId: string, vacancies: readonly UnifiedVacancy[]): void {
+  /**
+   * Пишет срез порциями, каждая — своя транзакция. Одна дата `stored_at` на
+   * весь вызов: по ней замена среза потом отличает записи этого чтения от тех,
+   * что площадка больше не показывает.
+   */
+  private upsertAll(sourceId: string, vacancies: readonly UnifiedVacancy[], tally: WriteTally): string {
     const storedAt = new Date().toISOString();
     const insert = this.prepareUpsert();
     const index = this.prepareIndexUpsert();
     const projection = this.prepareProjectionUpsert();
-    for (const vacancy of vacancies) {
-      insert.run(vacancy.id, sourceId, vacancy.publishedAt, storedAt, JSON.stringify(vacancy));
-      index.run(...indexColumns(vacancy, sourceId), 0);
-      projection.run(vacancy.id, JSON.stringify(clusterProjectionOf(vacancy)));
+    for (let offset = 0; offset < vacancies.length; offset += this.writeChunkSize) {
+      const chunk = vacancies.slice(offset, offset + this.writeChunkSize);
+      this.writeTransaction('upsert', sourceId, chunk.length, tally, () => {
+        for (const vacancy of chunk) {
+          insert.run(vacancy.id, sourceId, vacancy.publishedAt, storedAt, JSON.stringify(vacancy));
+          index.run(...indexColumns(vacancy, sourceId), 0);
+          projection.run(vacancy.id, JSON.stringify(clusterProjectionOf(vacancy)));
+        }
+      });
     }
+    return storedAt;
   }
 
+  /**
+   * Снимает записи по списку id порциями — из проекции, пула и индекса. Срез
+   * снимается по собственным колонкам пула, а не по индексу: строка, ещё не
+   * дошедшая до индекса (проход после B221), иначе пережила бы замену.
+   */
+  private removeByIds(sourceId: string, ids: readonly string[], tally: WriteTally): number {
+    const removeProjection = this.database.prepare('DELETE FROM vacancy_cluster_input WHERE id = ?');
+    const removeIndex = this.database.prepare('DELETE FROM vacancy_pool_index WHERE id = ?');
+    const remove = this.database.prepare('DELETE FROM vacancy_pool WHERE id = ?');
+    let removed = 0;
+    for (let offset = 0; offset < ids.length; offset += this.writeChunkSize) {
+      const chunk = ids.slice(offset, offset + this.writeChunkSize);
+      this.writeTransaction('remove', sourceId, chunk.length, tally, () => {
+        for (const id of chunk) {
+          removeProjection.run(id);
+          removeIndex.run(id);
+          removed += Number(remove.run(id).changes);
+        }
+      });
+    }
+    return removed;
+  }
+
+  private writeTransaction(
+    operation: 'upsert' | 'remove',
+    sourceId: string,
+    rows: number,
+    tally: WriteTally,
+    operationBody: () => void,
+  ): void {
+    const startedAt = performance.now();
+    this.inTransaction(operationBody);
+    const durationMs = performance.now() - startedAt;
+    tally.transactions += 1;
+    tally.maxTransactionMs = Math.max(tally.maxTransactionMs, durationMs);
+    this.onWrite?.({ kind: 'transaction', operation, sourceId, rows, durationMs });
+  }
+
+  /**
+   * Замена среза порциями (PRB-043 срез 2). Сначала пишется новое чтение,
+   * потом порциями снимается всё живое из этого источника, чего это чтение
+   * не касалось — по `stored_at` старше начала вызова. Между порциями пул —
+   * надмножество старого и нового, прерванная замена доделывается следующей.
+   * Похороненная запись переживает замену: иначе доказательство смерти
+   * стиралось бы следующим же опросом площадки (B200 срез 2).
+   */
   replaceSourceSlice(sourceId: string, vacancies: readonly UnifiedVacancy[]): void {
-    // Похороненная запись переживает замену среза: иначе доказательство
-    // смерти стиралось бы следующим же опросом площадки (B200 срез 2).
-    // Срез снимается по собственным колонкам пула, а не по индексу: строка,
-    // ещё не дошедшая до индекса (проход после B221), иначе пережила бы замену.
-    const removeIndex = this.database.prepare(
-      `DELETE FROM vacancy_pool_index WHERE id IN
-         (SELECT id FROM vacancy_pool WHERE source_id = ? AND expired_at IS NULL)`,
+    const startedAt = performance.now();
+    const tally: WriteTally = { transactions: 0, maxTransactionMs: 0 };
+    const storedAt = this.upsertAll(sourceId, vacancies, tally);
+    // Курсор по rowid: индекс `vacancy_pool_source` хранит rowid, поэтому срез
+    // источника проходится один раз, а не с начала на каждую порцию. Нового
+    // индекса не нужно — его создание на 3,8 ГБ прода съело бы окно выката.
+    const stale = this.database.prepare(
+      `SELECT rowid AS row, id FROM vacancy_pool
+        WHERE source_id = ? AND rowid > ? AND expired_at IS NULL AND stored_at < ?
+        ORDER BY rowid LIMIT ?`,
     );
-    const remove = this.database.prepare(
-      'DELETE FROM vacancy_pool WHERE source_id = ? AND expired_at IS NULL',
-    );
-    // Проекция снимается по срезу, а не сверкой всей таблицы: `NOT IN` по
-    // 560 000 записей прода держал write-lock секундами на каждую замену (B230).
-    const removeProjection = this.database.prepare(
-      `DELETE FROM vacancy_cluster_input WHERE id IN
-         (SELECT id FROM vacancy_pool WHERE source_id = ? AND expired_at IS NULL)`,
-    );
-    this.inTransaction(() => {
-      removeProjection.run(sourceId);
-      removeIndex.run(sourceId);
-      remove.run(sourceId);
-      this.upsertAll(sourceId, vacancies);
+    let removed = 0;
+    let cursor = 0;
+    for (;;) {
+      const rows = stale.all(sourceId, cursor, storedAt, this.writeChunkSize) as Array<{
+        row: number;
+        id: string;
+      }>;
+      if (rows.length === 0) break;
+      cursor = rows[rows.length - 1].row;
+      removed += this.removeByIds(
+        sourceId,
+        rows.map((row) => row.id),
+        tally,
+      );
+    }
+    this.onWrite?.({
+      kind: 'slice',
+      operation: 'replace',
+      sourceId,
+      upserted: vacancies.length,
+      removed,
+      transactions: tally.transactions,
+      maxTransactionMs: tally.maxTransactionMs,
+      totalMs: performance.now() - startedAt,
     });
   }
 
@@ -670,15 +779,14 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     vacancies: readonly UnifiedVacancy[],
     dropObservedBefore?: string,
   ): MergeSliceResult {
+    const startedAt = performance.now();
+    const tally: WriteTally = { transactions: 0, maxTransactionMs: 0 };
     const dropBeforeMs = parseMs(dropObservedBefore);
+    this.upsertAll(sourceId, vacancies, tally);
     let dropped: VacancyLink[] = [];
-    this.inTransaction(() => {
-      this.upsertAll(sourceId, vacancies);
-      if (dropBeforeMs === undefined) return;
+    if (dropBeforeMs !== undefined) {
       // Полное перечисление, растянутое на тики, закончилось: запись, которую
       // не видел ни один тик с его начала, площадка больше не показывает (B219).
-      const gone = `SELECT i.id FROM vacancy_pool_index i WHERE i.source_id = ? AND ${ALIVE}
-             AND (i.observed_ms IS NULL OR i.observed_ms < ?)`;
       dropped = this.database
         .prepare(
           `SELECT i.id AS id, i.url AS url FROM vacancy_pool_index i
@@ -686,15 +794,21 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
                      AND (i.observed_ms IS NULL OR i.observed_ms < ?)`,
         )
         .all(sourceId, dropBeforeMs) as unknown as VacancyLink[];
-      this.database
-        .prepare(`DELETE FROM vacancy_cluster_input WHERE id IN (${gone})`)
-        .run(sourceId, dropBeforeMs);
-      this.database
-        .prepare(`DELETE FROM vacancy_pool WHERE id IN (${gone})`)
-        .run(sourceId, dropBeforeMs);
-      this.database
-        .prepare(`DELETE FROM vacancy_pool_index WHERE id IN (${gone})`)
-        .run(sourceId, dropBeforeMs);
+      this.removeByIds(
+        sourceId,
+        dropped.map((link) => link.id),
+        tally,
+      );
+    }
+    this.onWrite?.({
+      kind: 'slice',
+      operation: 'merge',
+      sourceId,
+      upserted: vacancies.length,
+      removed: dropped.length,
+      transactions: tally.transactions,
+      maxTransactionMs: tally.maxTransactionMs,
+      totalMs: performance.now() - startedAt,
     });
     return { dropped };
   }
@@ -1598,6 +1712,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       throw error;
     }
   }
+}
+
+interface WriteTally {
+  transactions: number;
+  maxTransactionMs: number;
 }
 
 function parseVacancy(payload: string): UnifiedVacancy | undefined {

@@ -12,7 +12,7 @@ import {
   type SourceFetcher,
 } from './multiSourceVacancyEngine';
 import { RobotsPolicyLoader, type RobotsFetcher } from './robotsPolicyLoader';
-import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
+import { SqliteVacancyPoolStore, type PoolWriteEvent } from './sqliteVacancyPoolStore';
 
 export interface ComposedVacancyEngine {
   readonly engine: MultiSourceVacancyEngine;
@@ -29,6 +29,8 @@ export interface ComposeVacancyEngineOptions {
   readonly fetchRobots?: RobotsFetcher;
   readonly linkProbe?: LinkProbe;
   readonly recluster?: ReclusterMode;
+  /** Свидетель транзакций записи пула — журнал обслуживателя (PRB-043 срез 2). */
+  readonly onPoolWrite?: (event: PoolWriteEvent) => void;
 }
 
 /**
@@ -38,7 +40,10 @@ export interface ComposeVacancyEngineOptions {
  * настройкам обхода — а расходятся они молча.
  */
 export function composeVacancyEngine(options: ComposeVacancyEngineOptions): ComposedVacancyEngine {
-  const pool = new SqliteVacancyPoolStore({ databasePath: options.databasePath });
+  const pool = new SqliteVacancyPoolStore({
+    databasePath: options.databasePath,
+    ...(options.onPoolWrite ? { onWrite: options.onPoolWrite } : {}),
+  });
   // Настройки веера обхода hh.ru: набор ролей выбирает владелец, отметка
   // глубокого прохода переживает выкат (B214).
   const hhCrawlSettings = createHhCrawlSettings({ databasePath: options.databasePath });
