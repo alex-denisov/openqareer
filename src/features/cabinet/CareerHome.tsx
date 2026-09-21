@@ -104,6 +104,8 @@ function HomeRail({
   importing,
   applications,
   onNavigate,
+  onOpenExpert,
+  onOpenAccount,
 }: {
   snapshot?: CandidateSnapshot;
   targetDirection: string;
@@ -112,6 +114,8 @@ function HomeRail({
   importing: boolean;
   applications?: readonly VacancyApplication[];
   onNavigate: (view: CareerCabinetView) => void;
+  onOpenExpert: () => void;
+  onOpenAccount: () => void;
 }) {
   return (
     <aside className="career-home-rail" aria-label="Оценка и следующее действие">
@@ -119,7 +123,12 @@ function HomeRail({
         applications={applications}
         onOpenVacancy={() => onNavigate('opportunities')}
       />
-      <NextAction journey={journey} onNavigate={onNavigate} />
+      <NextAction
+        journey={journey}
+        onNavigate={onNavigate}
+        onOpenExpert={onOpenExpert}
+        onOpenAccount={onOpenAccount}
+      />
       <AssessmentPanel
         snapshot={snapshot}
         targetDirection={targetDirection}
@@ -404,7 +413,7 @@ function StrategistNames({
 }
 
 /**
- * Диалог живёт в одном месте — в панели советника (B148 §9). Здесь только его
+ * Диалог живёт в одном месте — в панели консультанта (B148 §9). Здесь только его
  * последняя реплика и дверь туда, чтобы «Главная» не стала вторым чатом.
  */
 function ConsultantPanel({

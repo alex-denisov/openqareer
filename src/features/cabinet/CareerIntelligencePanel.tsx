@@ -49,7 +49,7 @@ export function CareerIntelligencePanel({
 
       <AtsReadability journey={journey} onNavigate={onNavigate} />
 
-      <NextAction journey={journey} onNavigate={onNavigate} />
+      <NextAction journey={journey} onNavigate={onNavigate} onOpenExpert={onOpenExpert} />
 
       {loading && !snapshot ? <p className="career-cabinet-loading">Обновляем рынок…</p> : null}
     </aside>

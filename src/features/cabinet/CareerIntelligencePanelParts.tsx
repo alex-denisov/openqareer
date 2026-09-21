@@ -51,7 +51,7 @@ export function sourceFailureMessage(errorCode: string, sourceId?: string) {
   }
   if (errorCode === 'official_access_required') {
     return sourceId === 'hh'
-      ? 'hh.ru закрыл поиск по запросу без официального доступа. Запрос сохранён, но сам вакансий не принесёт: вакансии hh.ru приходят в подбор из регулярного обхода площадки.'
+      ? 'Поиск hh.ru без официального доступа недоступен. Запрос сохранён, а вакансии в общем подборе могут приходить из разрешённого регулярного сбора hh.ru.'
       : 'Площадка закрыла поиск по запросу без официального доступа. Запрос сохранён, новых вакансий по нему не будет, пока доступ не появится.';
   }
   if (errorCode === 'source_rate_limited') {
@@ -162,9 +162,13 @@ export function MarketAnalytics({ subscription }: { subscription: VacancySubscri
 export function NextAction({
   journey,
   onNavigate,
+  onOpenExpert,
+  onOpenAccount,
 }: {
   journey?: CareerJourney;
   onNavigate: (view: IntelligenceDestination) => void;
+  onOpenExpert?: () => void;
+  onOpenAccount?: () => void;
 }) {
   const reasonedAction = journey?.reasonedAction;
   const destination = reasonedAction
@@ -182,7 +186,12 @@ export function NextAction({
           'Добавьте резюме или ответьте консультанту: следующий шаг появится после проверяемого факта.'}
       </p>
       {reasonedAction ? (
-        <ReasonedActionDetails action={reasonedAction} onNavigate={onNavigate} />
+        <ReasonedActionDetails
+          action={reasonedAction}
+          onNavigate={onNavigate}
+          onOpenExpert={onOpenExpert}
+          onOpenAccount={onOpenAccount}
+        />
       ) : journey?.nextAction.expectedChange ? (
         <div className="career-next-action-effect">
       <strong>Что изменится</strong>
@@ -200,10 +209,27 @@ export function NextAction({
 function ReasonedActionDetails({
   action,
   onNavigate,
+  onOpenExpert,
+  onOpenAccount,
 }: {
   action: ReasonedCareerAction;
   onNavigate: (view: IntelligenceDestination) => void;
+  onOpenExpert?: () => void;
+  onOpenAccount?: () => void;
 }) {
+  const handleAlternative = (alternative: ReasonedCareerAction['alternatives'][number]) => {
+    const intent = careerActionIntent(alternative);
+    if (intent === 'expert') {
+      onOpenExpert?.();
+      return;
+    }
+    if (intent === 'account' && onOpenAccount) {
+      onOpenAccount();
+      return;
+    }
+    onNavigate(intent === 'account' ? 'profile' : intent);
+  };
+
   return (
     <>
       <div className="career-next-action-effect">
@@ -217,7 +243,7 @@ function ReasonedActionDetails({
             <button
               type="button"
               key={alternative.id}
-              onClick={() => onNavigate(reasonedDestination(alternative.destination))}
+              onClick={() => handleAlternative(alternative)}
             >
               {alternative.label}
             </button>
@@ -227,6 +253,18 @@ function ReasonedActionDetails({
       <small className="career-next-action-boundary">{action.approvalBoundary}</small>
     </>
   );
+}
+
+/** The action destination is a UI intent, not merely a cabinet route. */
+export function careerActionIntent(
+  alternative: ReasonedCareerAction['alternatives'][number],
+): 'expert' | 'account' | IntelligenceDestination {
+  if (alternative.id === 'discuss-first' || alternative.destination === 'coach') {
+    return 'expert';
+  }
+  if (alternative.id === 'correct-premise') return 'account';
+  if (alternative.destination === 'evidence') return 'expert';
+  return reasonedDestination(alternative.destination);
 }
 
 function reasonedDestination(

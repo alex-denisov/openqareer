@@ -35,7 +35,6 @@ function render(overrides: Partial<Parameters<typeof VacancyFilterPanel>[0]> = {
     <VacancyFilterPanel
       filters={{}}
       facets={calculateVacancyFacets(items)}
-      sources={[{ source: 'Remotive', count: 12 }]}
       countries={[
         { country: 'Германия', count: 9 },
         { country: 'Россия', count: 4 },
@@ -76,11 +75,12 @@ describe('VacancyFilterPanel (B234)', () => {
     expect(html).toContain('aria-label="Новый запрос к площадке"');
   });
 
-  it('offers the role field as a filter with the campaign role as its hint', () => {
+  it('uses one combined vacancy search field instead of a second role control', () => {
     const html = render();
-    expect(html).toContain('name="vacancy-role-filter"');
-    expect(html).toContain('placeholder="Xray Technician"');
-    expect(html).not.toContain('Роль или поисковый запрос');
+    expect(html).toContain('aria-label="Роль, название вакансии или работодатель"');
+    expect(html).toContain('placeholder="Роль, вакансия или компания…"');
+    expect(html).not.toContain('name="vacancy-role-filter"');
+    expect(html).not.toContain('<legend>Источник</legend>');
   });
 
   it('lists countries with counts and folds the tail behind «+N»', () => {

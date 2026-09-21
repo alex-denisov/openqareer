@@ -45,7 +45,7 @@ export function SavedSearchesPanel(props: {
             <h3 id="career-saved-searches-title">{active.analytics.sampleSize} найдено</h3>
           </div>
           <span className={`career-search-status is-${active.status}`}>
-            {active.status === 'active' ? 'Собирается' : 'На паузе'}
+            {active.status === 'active' ? 'Обновляется по расписанию' : 'На паузе'}
           </span>
         </header>
       ) : null}

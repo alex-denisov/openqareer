@@ -208,7 +208,7 @@ export function CareerExpertPanel({
       className="career-expert-panel"
       role="dialog"
       aria-modal="true"
-      aria-label="Карьерный эксперт"
+      aria-label="Карьерный консультант"
     >
       <header>
         <div className="career-expert-identity">
@@ -216,7 +216,7 @@ export function CareerExpertPanel({
             <Sparkle size={18} weight="fill" />
           </span>
           <div>
-            <strong>Карьерный советник</strong>
+            <strong>Карьерный консультант</strong>
             <small>{user ? 'Персональный карьерный консультант' : 'Защищённый диалог'}</small>
           </div>
         </div>
@@ -225,7 +225,7 @@ export function CareerExpertPanel({
           className="career-close-button"
           type="button"
           onClick={onClose}
-          aria-label="Закрыть карьерного советника"
+          aria-label="Закрыть карьерного консультанта"
         >
           <X size={20} />
         </button>
@@ -245,7 +245,7 @@ export function CareerExpertPanel({
           <div className="career-dialogue-history" aria-label="История диалога">
             {snapshot?.messages.map((message) => (
               <article className={`career-dialogue-turn is-${message.role}`} key={message.id}>
-                <span>{message.role === 'user' ? 'Вы' : 'Карьерный советник'}</span>
+                <span>{message.role === 'user' ? 'Вы' : 'Карьерный консультант'}</span>
                 {message.content
                   .split('\n')
                   .map((paragraph, index) =>
@@ -255,7 +255,7 @@ export function CareerExpertPanel({
             ))}
             {showLiveMessage ? (
               <article className="career-dialogue-turn is-assistant" aria-live="polite">
-                <span>Карьерный советник</span>
+                <span>Карьерный консультант</span>
                 {liveResult.message
                   .split('\n')
                   .map((paragraph, index) => (paragraph ? <p key={index}>{paragraph}</p> : null))}
@@ -321,7 +321,7 @@ export function CareerExpertPanel({
 
       {user ? (
         <form className="career-expert-composer" onSubmit={handleSend}>
-          <label htmlFor="career-expert-input">Сообщение карьерному советнику</label>
+          <label htmlFor="career-expert-input">Сообщение карьерному консультанту</label>
           <div>
             <textarea
               id="career-expert-input"
@@ -362,7 +362,7 @@ export function ExpertWaitingRow({ question }: { question: string }) {
       <span>Вы</span>
       <p>{question}</p>
       <p>
-        <Spinner size={16} /> Советник читает ваши факты и рынок — ответ занимает до полутора минут.
+        <Spinner size={16} /> Консультант читает ваши факты и рынок — ответ занимает до полутора минут.
         Не закрывайте панель.
       </p>
     </article>
