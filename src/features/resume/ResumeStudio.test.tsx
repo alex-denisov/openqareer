@@ -395,7 +395,7 @@ describe('ResumeStudioSurface', () => {
 });
 
 describe('ResumeStudio export actions (B086 step 4)', () => {
-  it('renders ATS text, PDF print and JSON export buttons in the header', () => {
+  it('keeps Stanford PDF print and JSON actions with the Stanford format', () => {
     const html = render(
       <ResumeStudioSurface
         view={viewOf()}
@@ -404,10 +404,24 @@ describe('ResumeStudio export actions (B086 step 4)', () => {
       />,
     );
 
-    expect(html).toContain('TXT (ATS)');
     expect(html).toContain('Печать / PDF');
     expect(html).toContain('JSON');
     expect(html).toContain('career-resume-export-group');
+  });
+
+  it('shows the ATS download only with the format it exports', () => {
+    const html = render(
+      <ResumeStudioSurface
+        view={viewOf()}
+        draft={populatedDraft}
+        memory={populatedMemory}
+        initialFormat="ats-text"
+      />,
+    );
+
+    expect(html).toContain('TXT (ATS)');
+    expect(html).not.toContain('Печать / PDF');
+    expect(html).toContain('=== WORK EXPERIENCE ===');
   });
 });
 

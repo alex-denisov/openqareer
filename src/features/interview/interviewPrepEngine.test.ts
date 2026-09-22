@@ -57,6 +57,7 @@ describe('interviewPrepEngine', () => {
     });
 
     expect(brief.companyOverview.summary).toContain('FinCloud');
+    expect(brief.companyOverview.sourceNote).toContain('Новости компании и профиль интервьюера не подключены');
     expect(brief.companyOverview.techStack).toEqual(expect.arrayContaining(['TypeScript', 'React']));
     expect(brief.companyOverview.challenges.length).toBeGreaterThanOrEqual(2);
 

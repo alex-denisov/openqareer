@@ -118,10 +118,17 @@ function StanfordHeader({
 }) {
   return (
     <div className="career-resume-stanford-header">
-      <h1 className="career-resume-stanford-name">{fullName}</h1>
+      {fullName ? (
+        <h1 className="career-resume-stanford-name">{fullName}</h1>
+      ) : (
+        <p className="career-resume-stanford-missing">Имя не указано</p>
+      )}
       <div className="career-resume-stanford-subtitle">
-        <span>{targetRole}</span>
-        {location ? <span> | {location}</span> : null}
+        {targetRole ? <span>{targetRole}</span> : null}
+        {location ? <span>{targetRole ? ' | ' : ''}{location}</span> : null}
+        {!targetRole && !location ? (
+          <span className="career-resume-stanford-missing">Целевая роль и город не указаны</span>
+        ) : null}
       </div>
       <div className="career-resume-stanford-contacts">
         {contactParts.length > 0 ? (
@@ -148,9 +155,9 @@ function IdentitySection({ draft, document, editor }: SectionProps) {
   return (
     <section className="career-resume-identity">
       <StanfordHeader
-        fullName={draft.candidate.fullName || document.contact.fullName || 'Имя Фамилия'}
-        targetRole={draft.targetRole || document.targetRole || 'Целевая роль'}
-        location={contact?.location}
+        fullName={draft.candidate.fullName?.trim() || document.contact.fullName?.trim() || ''}
+        targetRole={draft.targetRole?.trim() || document.targetRole?.trim() || ''}
+        location={contact?.location?.trim() || document.contact.location?.trim()}
         contactParts={contactParts}
       />
 

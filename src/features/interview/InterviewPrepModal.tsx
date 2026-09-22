@@ -106,8 +106,7 @@ function InterviewHeader({
           Интервью: «{title}»{company ? `, ${company}` : ''}
         </h2>
         <p className="career-interview-subtitle">
-          Справка — из текста вакансии и открытых источников; ответы — из фактов профиля. Это
-          заготовки, не скрипт.
+          Справка — из текста вакансии; ответы — из фактов профиля. Это заготовки, не скрипт.
         </p>
       </div>
       <button
@@ -170,6 +169,7 @@ function OverviewTab({
       <section className="career-interview-section">
         <h3>Чем занимаются и на чём работают</h3>
         <p className="career-interview-summary">{overview.summary}</p>
+        <p className="career-interview-source-note">{overview.sourceNote}</p>
         <div className="career-interview-chips">
           {overview.techStack.map((tech) => (
             <span key={tech} className="career-interview-chip">
@@ -293,7 +293,11 @@ function StarQuestionCard({
             <span className="career-star-evidence-tag">
               {usedEvidenceIds.length} подтверждённых факта в основе
             </span>
-          ) : null}
+          ) : (
+            <span className="career-star-evidence-tag is-missing">
+              Нужен ваш пример: подтверждённых фактов для этого ответа нет
+            </span>
+          )}
         </div>
         <h4 className="career-star-question-title">{qText}</h4>
       </header>

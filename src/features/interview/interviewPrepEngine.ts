@@ -28,6 +28,7 @@ export interface StarQuestion {
 
 export interface CompanyOverview {
   readonly summary: string;
+  readonly sourceNote: string;
   readonly challenges: readonly string[];
   readonly techStack: readonly string[];
 }
@@ -77,6 +78,8 @@ function buildCompanyOverview(vacancy: InterviewVacancyTarget): CompanyOverview 
 
   return {
     summary,
+    sourceNote:
+      'Основано на тексте этой вакансии и переданных требованиях. Новости компании и профиль интервьюера не подключены.',
     challenges: engineering
       ? [
           'Масштабирование сервисов и оптимизация ключевых показателей производительности',

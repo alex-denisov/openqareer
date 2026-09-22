@@ -1,5 +1,5 @@
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ArrowSquareOut,
   ChalkboardTeacher,
@@ -14,6 +14,8 @@ import {
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { RecruiterContact } from '../../../shared/recruiterContact';
 import { VacancyPitchModal } from './VacancyPitchModal';
+import type { PitchTone } from './VacancyPitchModal';
+import type { VacancyPitchResult } from './vacancyPitchApi';
 import { DesktopOutreachModal } from '../outreach/DesktopOutreachModal';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import type { CandidateMemory } from '../coach/coachApi';
@@ -98,6 +100,7 @@ export function VacancyBoard({
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [filters, setFilters] = useState<VacancyFilters>({});
   const [pitchVacancy, setPitchVacancy] = useState<MatchedVacancyItem['cluster'] | null>(null);
+  const [pitchCache, setPitchCache] = useState<Readonly<Record<string, VacancyPitchResult>>>({});
   const [outreachVacancy, setOutreachVacancy] = useState<MatchedVacancyItem['cluster'] | null>(
     null,
   );
@@ -121,6 +124,31 @@ export function VacancyBoard({
   };
   const visible = useMemo(() => shown.slice(0, visibleCount), [shown, visibleCount]);
   const remaining = Math.max(0, shown.length - visible.length);
+  const pitchVacancyInput = useMemo(
+    () =>
+      pitchVacancy
+        ? {
+            id: pitchVacancy.id,
+            title: pitchVacancy.canonicalTitle,
+            company: pitchVacancy.canonicalCompany,
+            location: pitchVacancy.canonicalLocation,
+            isRemote: pitchVacancy.isRemote,
+            skills: pitchVacancy.skills,
+            descriptionSummary: pitchVacancy.descriptionSummary,
+          }
+        : null,
+    [pitchVacancy],
+  );
+  const rememberPitch = useCallback(
+    (pitch: VacancyPitchResult, tone: PitchTone) => {
+      if (!pitchVacancy) return;
+      setPitchCache((current) => ({
+        ...current,
+        [pitchCacheKey(candidateId, candidateFacts, pitchVacancy.id, tone)]: pitch,
+      }));
+    },
+    [candidateFacts, candidateId, pitchVacancy],
+  );
 
   // Панель фильтров стоит на экране всегда: регулярные выборки живут в ней, и
   // пустой пул — ровно тот случай, когда кандидату надо завести первую (B181).
@@ -260,15 +288,15 @@ export function VacancyBoard({
             setPitchVacancy(null);
             setOutreachVacancy(cur);
           }}
-          vacancy={{
-            id: pitchVacancy.id,
-            title: pitchVacancy.canonicalTitle,
-            company: pitchVacancy.canonicalCompany,
-            location: pitchVacancy.canonicalLocation,
-            isRemote: pitchVacancy.isRemote,
-            skills: pitchVacancy.skills,
-            descriptionSummary: pitchVacancy.descriptionSummary,
-          }}
+          initialPitch={
+            pitchVacancyInput
+              ? pitchCache[
+                  pitchCacheKey(candidateId, candidateFacts, pitchVacancyInput.id, 'executive')
+                ]
+              : undefined
+          }
+          onPitchReady={rememberPitch}
+          vacancy={pitchVacancyInput!}
         />
       ) : null}
       {outreachVacancy ? (
@@ -607,6 +635,23 @@ function employerInitials(name?: string): string {
       .map((word) => word[0]?.toLocaleUpperCase('ru-RU') ?? '')
       .join('') || '—'
   );
+}
+
+function pitchCacheKey(
+  candidateId: string | undefined,
+  facts: readonly CandidateMemory[] | undefined,
+  vacancyId: string,
+  tone: PitchTone,
+): string {
+  const evidenceVersion = (facts ?? [])
+    .map((fact) =>
+      [fact.id, fact.status, fact.kind, fact.sensitive ? 'sensitive' : 'public', fact.statement].join(
+        ':',
+      ),
+    )
+    .sort()
+    .join('|');
+  return `${candidateId ?? 'current-session'}:${evidenceVersion || 'no-evidence'}:${vacancyId}:${tone}`;
 }
 
 function salaryLabel(salary: MatchedVacancyItem['cluster']['salary']): string {

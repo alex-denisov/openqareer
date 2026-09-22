@@ -29,11 +29,21 @@ function buildDefaultHeadline(draft: ResumeDraft, document: ResumeDocument): str
     .map((s) => s.name.trim())
     .filter(Boolean);
   const lastEmployer = document.experience[0]?.employer?.value ?? draft.experience[0]?.employer;
+  const lastRole = document.experience[0] ?? draft.experience[0];
 
   const parts = [role];
   if (topSkills.length > 0) parts.push(topSkills.join(' | '));
-  const current = document.experience[0]?.current?.value ?? draft.experience[0]?.current;
-  if (lastEmployer && current === false) parts.push('Ex-' + lastEmployer);
+  const current = lastRole && 'current' in lastRole
+    ? (typeof lastRole.current === 'object' ? lastRole.current.value : lastRole.current)
+    : undefined;
+  const endDate = lastRole && 'endDate' in lastRole
+    ? (typeof lastRole.endDate === 'object' && lastRole.endDate !== null
+        ? lastRole.endDate.value
+        : lastRole.endDate)
+    : undefined;
+  // A draft entry defaults to current=false, which is not proof that the role
+  // ended. Only an explicit end date may turn a confirmed employer into Ex-.
+  if (lastEmployer && current === false && endDate?.trim()) parts.push('Ex-' + lastEmployer);
   const full = parts.join(' | ');
   return full.length > HEADLINE_MAX ? full.slice(0, HEADLINE_MAX) : full;
 }

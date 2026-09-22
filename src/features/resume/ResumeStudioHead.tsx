@@ -3,12 +3,13 @@ import { FORMAT_LABELS, VARIANT_LABELS, VARIANT_SHORT_LABELS } from './resumeLab
 import type { ResumeStatusSummary } from './resumeStudioModel';
 import type {
   ResumeDocument,
+  ResumeDraft,
   ResumeFormatMode,
   ResumeStudioView,
   ResumeVariantId,
 } from './resumeTypes';
 import {
-  exportResumeAsPlainText,
+  formatResumeAsAtsText,
   exportResumeAsJson,
   resumeExportFileName,
   triggerFileDownload,
@@ -27,6 +28,7 @@ interface ResumeStudioHeadProps {
   readonly dossierCount?: number;
   readonly activePane: 'dossier' | 'document' | 'unknowns';
   readonly document?: ResumeDocument;
+  readonly draft?: ResumeDraft;
   readonly onVariant: (variant: ResumeVariantId) => void;
   readonly onFormat?: (format: ResumeFormatMode) => void;
   readonly onPane: (pane: 'dossier' | 'document') => void;
@@ -73,6 +75,7 @@ export function ResumeStudioHead(props: ResumeStudioHeadProps) {
     dossierCount = unknownCount,
     activePane,
     document,
+    draft,
     onVariant,
     onFormat,
     onPane,
@@ -91,7 +94,9 @@ export function ResumeStudioHead(props: ResumeStudioHeadProps) {
       <div className="career-resume-actions">
         {onFormat ? <FormatSwitch format={format} onFormat={onFormat} /> : null}
         <VariantSwitch variant={variant} variants={variants} onVariant={onVariant} />
-        {document ? <ResumeExportActions document={document} /> : null}
+        {document && draft ? (
+          <ResumeExportActions document={document} draft={draft} format={format} />
+        ) : null}
         {onSave ? (
           <button
             className="career-primary-button"
@@ -235,9 +240,18 @@ function formatMoment(value: string): string {
   }).format(parsed);
 }
 
-function ResumeExportActions({ document }: { readonly document: ResumeDocument }) {
+// eslint-disable-next-line max-lines-per-function
+function ResumeExportActions({
+  document,
+  draft,
+  format,
+}: {
+  readonly document: ResumeDocument;
+  readonly draft: ResumeDraft;
+  readonly format: ResumeFormatMode;
+}) {
   const handleExportText = () => {
-    const text = exportResumeAsPlainText(document);
+    const text = formatResumeAsAtsText(document, draft);
     const fileName = resumeExportFileName(document, 'txt');
     triggerFileDownload(fileName, text, 'text/plain;charset=utf-8');
   };
@@ -250,24 +264,28 @@ function ResumeExportActions({ document }: { readonly document: ResumeDocument }
 
   return (
     <div className="career-resume-export-group" role="group" aria-label="Экспорт резюме">
-      <button
-        type="button"
-        className="career-resume-export-button"
-        onClick={handleExportText}
-        title="Скачать резюме в текстовом формате для ATS"
-      >
-        <FileText size={15} />
-        TXT (ATS)
-      </button>
-      <button
-        type="button"
-        className="career-resume-export-button"
-        onClick={triggerResumePrint}
-        title="Распечатать или сохранить в PDF"
-      >
-        <Printer size={15} />
-        Печать / PDF
-      </button>
+      {format === 'stanford-pdf' ? (
+        <button
+          type="button"
+          className="career-resume-export-button"
+          onClick={triggerResumePrint}
+          title="Распечатать или сохранить Stanford Resume в PDF"
+        >
+          <Printer size={15} />
+          Печать / PDF
+        </button>
+      ) : null}
+      {format === 'ats-text' ? (
+        <button
+          type="button"
+          className="career-resume-export-button"
+          onClick={handleExportText}
+          title="Скачать ровно тот ATS-текст, который показан ниже"
+        >
+          <FileText size={15} />
+          TXT (ATS)
+        </button>
+      ) : null}
       <button
         type="button"
         className="career-resume-export-button"
@@ -280,4 +298,3 @@ function ResumeExportActions({ document }: { readonly document: ResumeDocument }
     </div>
   );
 }
-
