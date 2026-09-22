@@ -52,7 +52,9 @@ function useVacancySourcesPage() {
   const load = useCallback(async (signal?: AbortSignal) => {
     setState(sourcesLoading());
     try {
-      const data = await listAdminVacancySources(signal);
+      const data = await listAdminVacancySources(signal, (sources) => {
+        if (!signal?.aborted) setState(sourcesLoaded(sources));
+      });
       if (!signal?.aborted) setState(sourcesLoaded(data));
     } catch (reason: unknown) {
       if (signal?.aborted) return;

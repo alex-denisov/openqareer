@@ -360,13 +360,18 @@ interface AdminVacancySourcePage {
   nextOffset: number | null;
 }
 
+type AdminVacancySourcesProgress = (sources: readonly AdminVacancySource[]) => void;
+
 /**
  * Реестр со здоровьем площадок весит около 30 КБ, а прод рвёт тело ответа на
  * 20 220 байтах (INC-032). Экран собирает список страницами, пока маршрут не
  * скажет, что выборка кончилась: остановиться на первой странице значило бы
  * молча потерять две трети площадок.
  */
-export async function listAdminVacancySources(signal?: AbortSignal): Promise<AdminVacancySource[]> {
+export async function listAdminVacancySources(
+  signal?: AbortSignal,
+  onPage?: AdminVacancySourcesProgress,
+): Promise<AdminVacancySource[]> {
   const collected: AdminVacancySource[] = [];
   let offset: number | null = 0;
 
@@ -376,6 +381,10 @@ export async function listAdminVacancySources(signal?: AbortSignal): Promise<Adm
     });
     const page: AdminVacancySourcePage = await readData<AdminVacancySourcePage>(response);
     collected.push(...page.items);
+    // The registry is deliberately byte-paginated. Publish each successful
+    // page immediately so the admin sees the first sources while the rest of
+    // the large registry continues loading (B235).
+    onPage?.([...collected]);
     // Страница, не сдвинувшая смещение, вернула бы нас сюда навсегда.
     offset = page.nextOffset !== null && page.nextOffset > offset ? page.nextOffset : null;
   }
@@ -394,9 +403,12 @@ export async function syncAllAdminVacancySources(): Promise<{
 }
 
 export async function syncAdminVacancySource(sourceId: string): Promise<{ queued: boolean }> {
-  const response = await apiFetch(`/api/v1/admin/vacancy-sources/${encodeURIComponent(sourceId)}/sync`, {
-    method: 'POST',
-  });
+  const response = await apiFetch(
+    `/api/v1/admin/vacancy-sources/${encodeURIComponent(sourceId)}/sync`,
+    {
+      method: 'POST',
+    },
+  );
   return readData<{ queued: boolean }>(response);
 }
 
