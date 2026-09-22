@@ -342,16 +342,28 @@ async function handleListSources(deps: RouteDeps, request: FastifyRequest, reply
   // оставалось вопросом без ответа. Сводка короткая намеренно: тот же
   // маршрут уже рвался на 20 220 байтах (INC-032).
   const scheduler = deps.multiSourceEngine.getScheduler();
-  const sources = deps.multiSourceEngine.getSources().map((source) => {
-    const measured = health.get(source.id);
-    const schedule = toAdminSourceSchedule(
-      scheduler.getScheduleInfo(source.id, Date.now(), source.refreshIntervalMinutes),
+  const sources = deps.multiSourceEngine
+    .getSources()
+    .map((source) => {
+      const measured = health.get(source.id);
+      const schedule = toAdminSourceSchedule(
+        scheduler.getScheduleInfo(source.id, Date.now(), source.refreshIntervalMinutes),
+      );
+      const manualSync = deps.multiSourceEngine.getManualSourceSyncState(source.id);
+      return measured
+        ? {
+            ...source,
+            schedule,
+            manualSync,
+            health: { liveness: measured.liveness, trust: measured.trust },
+          }
+        : { ...source, schedule, manualSync };
+    })
+    .sort(
+      (left, right) =>
+        left.name.localeCompare(right.name, 'ru-RU', { sensitivity: 'base' }) ||
+        left.id.localeCompare(right.id),
     );
-    const manualSync = deps.multiSourceEngine.getManualSourceSyncState(source.id);
-    return measured
-      ? { ...source, schedule, manualSync, health: { liveness: measured.liveness, trust: measured.trust } }
-      : { ...source, schedule, manualSync };
-  });
   // Весь реестр со здоровьем — 29 788 байт, а прод рвёт тело на 20 220
   // (INC-032). Экран забирает список страницами внутри доказанного бюджета.
   const offset = Number((request.query as { offset?: string } | undefined)?.offset ?? 0);

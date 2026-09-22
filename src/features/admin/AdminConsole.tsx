@@ -147,16 +147,24 @@ function useHhCrawlFilter(): HhCrawlFilter | null {
   return filter;
 }
 
+function shouldShowHhCrawlFilter(state: VacancySourcesState): boolean {
+  return (
+    state.status === 'ready' &&
+    state.sources.some((source) => source.id === 'hh' || source.type === 'hh')
+  );
+}
+
 function AdminVacancySourcesTab() {
   const { state, refresh, sync } = useVacancySourcesPage();
   // Фильтр обхода hh.ru стоит рядом с источниками: он и есть настройка одного
   // из них, и искать его в отдельной вкладке владельцу незачем (B214).
   const crawlFilter = useHhCrawlFilter();
+  const showHhFilter = shouldShowHhCrawlFilter(state);
 
   return (
     <>
       <AdminVacancySourcesView state={state} onRefresh={refresh} onSync={sync} />
-      <HhCrawlFilterView filter={crawlFilter} />
+      {showHhFilter ? <HhCrawlFilterView filter={crawlFilter} /> : null}
     </>
   );
 }
@@ -170,9 +178,16 @@ function getInitialAdminTab(): 'users' | 'vacancies' | 'sources' | 'audit' | 'li
   return 'users';
 }
 
-export function AdminConsole({ session, sessionPending = false, onUnauthorized }: AdminConsoleProps) {
+// eslint-disable-next-line max-lines-per-function -- the console owns tab routing and role boundary in one shell
+export function AdminConsole({
+  session,
+  sessionPending = false,
+  onUnauthorized,
+}: AdminConsoleProps) {
   const isAdmin = session ? roleCan(session.role, 'admin.console') : false;
-  const [activeTab, setActiveTab] = useState<'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin'>(getInitialAdminTab);
+  const [activeTab, setActiveTab] = useState<
+    'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin'
+  >(getInitialAdminTab);
 
   useEffect(() => {
     document.title = 'Администрирование · openqareer';
@@ -279,7 +294,8 @@ function AdminDirectory() {
         />
       )}
       <p className="admin-scope-note">
-        Раздел оператора: управление ролями, тарифами, блокировками, сброс паролей и бесшовная имперсонация сессий.
+        Раздел оператора: управление ролями, тарифами, блокировками, сброс паролей и бесшовная
+        имперсонация сессий.
       </p>
     </>
   );
@@ -436,7 +452,12 @@ function AdminDirectoryPage({
           onImpersonate={handleImpersonate}
         />
       </div>
-      <AdminPagination total={page.total} offset={offset} shown={page.users.length} onOffset={onOffset} />
+      <AdminPagination
+        total={page.total}
+        offset={offset}
+        shown={page.users.length}
+        onOffset={onOffset}
+      />
     </>
   );
 }
@@ -507,11 +528,7 @@ function AdminTableRow({
         <span className={`admin-badge admin-badge--${user.subscriptionTier || 'free'}`}>
           {(user.subscriptionTier || 'free').toUpperCase()}
         </span>
-        {user.blockedAt && (
-          <span className="admin-badge admin-badge--blocked">
-            Блок
-          </span>
-        )}
+        {user.blockedAt && <span className="admin-badge admin-badge--blocked">Блок</span>}
       </td>
       <td className="admin-mono" data-label="Создан:">
         {formatMoment(user.createdAt)}
@@ -601,7 +618,8 @@ function useDirectoryPage(query: string, offset: number) {
         if (!signal?.aborted) {
           setState({
             status: 'failed',
-            message: reason instanceof Error ? reason.message : 'Не удалось загрузить пользователей.',
+            message:
+              reason instanceof Error ? reason.message : 'Не удалось загрузить пользователей.',
           });
         }
       }

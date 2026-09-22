@@ -400,6 +400,11 @@ describe('GET /api/v1/admin/vacancy-sources', () => {
     const sources = page.items;
     expect(Array.isArray(sources)).toBe(true);
     expect(sources.length).toBeGreaterThan(0);
+    expect(sources.map((source: { name: string }) => source.name)).toEqual(
+      [...sources.map((source: { name: string }) => source.name)].sort((left, right) =>
+        left.localeCompare(right, 'ru-RU', { sensitivity: 'base' }),
+      ),
+    );
     // Весь реестр со здоровьем в один ответ не помещается — прод рвёт тело на
     // 20 220 байтах (INC-032), поэтому список отдаётся страницами.
     expect(page.total).toBeGreaterThan(sources.length);
