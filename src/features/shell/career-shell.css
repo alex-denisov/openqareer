@@ -6512,6 +6512,13 @@
   color: var(--career-text);
 }
 
+.career-resume-stanford-missing {
+  margin: 0;
+  color: var(--career-warning);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
 .career-resume-stanford-subtitle {
   font-size: var(--career-text-sm);
   color: var(--career-text-soft);
@@ -10224,6 +10231,10 @@
   .career-resume-document article {
     break-inside: avoid;
   }
+
+  .career-resume-stanford-missing {
+    display: none !important;
+  }
 }
 
 /* ---- B222: Генератор контекстного сопроводительного письма и питча ---- */
@@ -12170,6 +12181,13 @@
   line-height: 1.45;
 }
 
+.career-interview-source-note {
+  margin: -2px 0 12px;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  line-height: 1.4;
+}
+
 .career-interview-chips {
   display: flex;
   flex-wrap: wrap;
@@ -12245,6 +12263,12 @@
   padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid var(--career-success);
+}
+
+.career-star-evidence-tag.is-missing {
+  color: var(--career-warning);
+  background: var(--career-warning-soft);
+  border-color: var(--career-warning);
 }
 
 .career-star-question-title {

@@ -85,6 +85,7 @@ describe('InterviewPrepModal', () => {
     expect(html).toContain('TypeScript');
     expect(html).toContain('На что сделать упор');
     expect(html).toContain('О чём спросят вероятнее всего');
+    expect(html).toContain('Новости компании и профиль интервьюера не подключены');
   });
 
   it('рендерит вопросы и ответы по формуле STAR во вкладке star', () => {
@@ -104,6 +105,20 @@ describe('InterviewPrepModal', () => {
     expect(html).toContain('Результат:');
     expect(html).toContain('Скопировать');
     expect(html).toContain('45%');
+  });
+
+  it('помечает STAR-вопросы без фактов как требующие собственного примера', () => {
+    const html = renderToStaticMarkup(
+      <InterviewPrepModal
+        isOpen={true}
+        onClose={vi.fn()}
+        vacancy={sampleVacancy}
+        facts={[]}
+        initialTab="star"
+      />,
+    );
+
+    expect(html).toContain('Нужен ваш пример: подтверждённых фактов для этого ответа нет');
   });
 
   it('рендерит 5 встречных вопросов работодателю во вкладке questions', () => {

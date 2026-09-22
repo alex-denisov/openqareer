@@ -208,7 +208,7 @@ function DossierFactsSection({
   return (
     <section className="career-resume-rail-block career-resume-facts-block">
       <div className="career-resume-facts-header">
-        <h3>Подтверждённые факты ({memory.length})</h3>
+        <h3>Подтверждённые факты ({eligibleFacts.length})</h3>
       </div>
       <div className="career-resume-search-wrapper">
         <MagnifyingGlass size={14} className="career-resume-search-icon" aria-hidden />

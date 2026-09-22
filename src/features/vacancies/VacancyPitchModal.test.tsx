@@ -62,6 +62,9 @@ describe('VacancyPitchModal', () => {
     expect(html).toContain('Executive');
     expect(html).toContain('Прямой');
     expect(html).toContain('Технический');
+    expect(html).toContain('data-pitch-group="tone"');
+    expect(html).toContain('data-pitch-group="format"');
+    expect(html).toContain('tabindex="-1"');
 
     // Email pitch content
     expect(html).toContain('Архитектура и надежность');

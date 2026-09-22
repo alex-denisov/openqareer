@@ -133,4 +133,48 @@ describe('ResumeLinkedInPackView', () => {
     expect(html).toMatch(/Agile Methodology/u);
     expect(html).toMatch(/Копировать навыки/u);
   });
+
+  it('does not mark a current employer as former in the headline', () => {
+    const currentDraft: ResumeDraft = {
+      ...mockDraft,
+      experience: [{ ...mockDraft.experience[0]!, endDate: undefined, current: true }],
+    };
+    const currentDocument: ResumeDocument = {
+      ...mockDocument,
+      experience: [
+        {
+          ...mockDocument.experience[0]!,
+          endDate: null,
+          current: assertion(true),
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <ResumeLinkedInPackView document={currentDocument} draft={currentDraft} />,
+    );
+
+    expect(html).not.toContain('Ex-Kaspersky');
+  });
+
+  it('does not infer a former employer when chronology is incomplete', () => {
+    const incompleteDraft: ResumeDraft = {
+      ...mockDraft,
+      experience: [{ ...mockDraft.experience[0]!, endDate: undefined, current: false }],
+    };
+    const incompleteDocument: ResumeDocument = {
+      ...mockDocument,
+      experience: [
+        {
+          ...mockDocument.experience[0]!,
+          endDate: null,
+          current: assertion(false),
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <ResumeLinkedInPackView document={incompleteDocument} draft={incompleteDraft} />,
+    );
+
+    expect(html).not.toContain('Ex-Kaspersky');
+  });
 });

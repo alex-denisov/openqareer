@@ -28,6 +28,8 @@ export interface VacancyPitchModalProps {
     readonly descriptionSummary?: string;
   };
   readonly initialPitch?: VacancyPitchResult;
+  /** Keeps a generated draft warm while the current candidate stays on this screen. */
+  readonly onPitchReady?: (pitch: VacancyPitchResult, tone: PitchTone) => void;
   readonly initialTab?: PitchFormatTab;
   readonly onOpenOutreach?: () => void;
   readonly onFetchPitch?: (
@@ -99,7 +101,8 @@ function movePitchBoundary<T extends string>(
 }
 
 function focusPitchSelection(event: React.KeyboardEvent<HTMLButtonElement>, id: string): void {
-  const button = event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
+  const group = event.currentTarget.closest<HTMLElement>('[data-pitch-group]');
+  const button = group?.querySelector<HTMLButtonElement>(
     `[data-pitch-value="${id}"]`,
   );
   button?.focus();
@@ -151,7 +154,12 @@ function PitchControls({
 }) {
   return (
     <section className="career-pitch-controls">
-      <div className="career-pitch-tone-selector" role="radiogroup" aria-label="Тональность отклика">
+      <div
+        className="career-pitch-tone-selector"
+        role="radiogroup"
+        aria-label="Тональность отклика"
+        data-pitch-group="tone"
+      >
         {TONES.map((t) => (
           <CareerTooltip key={t.id} content={t.desc}>
             <button
@@ -186,7 +194,12 @@ function PitchControls({
           </CareerTooltip>
         ))}
       </div>
-      <div className="career-pitch-format-tabs" role="tablist" aria-label="Формат сопроводительных материалов">
+      <div
+        className="career-pitch-format-tabs"
+        role="tablist"
+        aria-label="Формат сопроводительных материалов"
+        data-pitch-group="format"
+      >
         {FORMAT_TABS.map((t) => {
           const Icon = t.icon;
           return (
@@ -451,6 +464,7 @@ function usePitchFetcher(
   tone: PitchTone,
   initialPitch?: VacancyPitchResult,
   onFetchPitch?: VacancyPitchModalProps['onFetchPitch'],
+  onPitchReady?: VacancyPitchModalProps['onPitchReady'],
 ) {
   const [pitch, setPitch] = useState<VacancyPitchResult | null>(initialPitch ?? null);
   const [loading, setLoading] = useState(false);
@@ -469,6 +483,7 @@ function usePitchFetcher(
       .then((data) => {
         if (isMounted) {
           setPitch(data);
+          onPitchReady?.(data, tone);
           setLoading(false);
         }
       })
@@ -481,7 +496,7 @@ function usePitchFetcher(
     return () => {
       isMounted = false;
     };
-  }, [isOpen, vacancy, tone, initialPitch, onFetchPitch]);
+  }, [isOpen, vacancy, tone, initialPitch, onFetchPitch, onPitchReady]);
 
   return { pitch, loading, error };
 }
@@ -612,10 +627,25 @@ function usePitchModalController(
   props: VacancyPitchModalProps,
   cardRef: React.RefObject<HTMLDivElement | null>,
 ) {
-  const { isOpen, onClose, vacancy, initialPitch, initialTab = 'email', onFetchPitch } = props;
+  const {
+    isOpen,
+    onClose,
+    vacancy,
+    initialPitch,
+    initialTab = 'email',
+    onFetchPitch,
+    onPitchReady,
+  } = props;
   const [tab, setTab] = useState<PitchFormatTab>(initialTab);
   const [tone, setTone] = useState<PitchTone>('executive');
-  const { pitch, loading, error } = usePitchFetcher(isOpen, vacancy, tone, initialPitch, onFetchPitch);
+  const { pitch, loading, error } = usePitchFetcher(
+    isOpen,
+    vacancy,
+    tone,
+    initialPitch,
+    onFetchPitch,
+    onPitchReady,
+  );
   const { copiedKey, handleCopy, handleDownloadTxt } = usePitchModalActions(pitch, vacancy.title);
 
   useModalAccessibility(isOpen, onClose, cardRef);
