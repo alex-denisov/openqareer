@@ -110,6 +110,10 @@ fn session_window_chrome(managed: bool) -> (bool, bool, bool) {
     }
 }
 
+fn should_parent_session_window(session_key: Option<&str>) -> bool {
+    session_key.is_none()
+}
+
 fn managed_session_uuid(session_key: &str) -> Result<Uuid, String> {
     let raw = session_key
         .strip_prefix("profile_")
@@ -405,16 +409,21 @@ pub async fn open_session_window(
         }
     }
 
-    builder = match builder.parent(&main_window) {
-        Ok(parented) => parented,
-        Err(error) => {
-            return SessionWindowReport {
-                opened: false,
-                label: label.to_string(),
-                reason: Some(format!("window_parent_failed: {error}")),
+    // Candidate sessions are borderless overlays hosted by the wizard. A pool
+    // session is a real standalone operator window; parenting a decorated
+    // WebView on macOS can prevent it from being shown at all.
+    if should_parent_session_window(request.session_key.as_deref()) {
+        builder = match builder.parent(&main_window) {
+            Ok(parented) => parented,
+            Err(error) => {
+                return SessionWindowReport {
+                    opened: false,
+                    label: label.to_string(),
+                    reason: Some(format!("window_parent_failed: {error}")),
+                }
             }
-        }
-    };
+        };
+    }
 
     if let Some(proxy) = proxy_url {
         builder = builder.proxy_url(proxy);
@@ -851,6 +860,14 @@ mod tests {
     fn gives_managed_windows_native_controls_without_changing_candidate_chrome() {
         assert_eq!(session_window_chrome(true), (true, true, false));
         assert_eq!(session_window_chrome(false), (false, false, true));
+    }
+
+    #[test]
+    fn keeps_managed_pool_windows_top_level_but_parents_candidate_overlays() {
+        assert!(should_parent_session_window(None));
+        assert!(!should_parent_session_window(Some(
+            "profile_123e4567-e89b-12d3-a456-426614174000"
+        )));
     }
 
     #[test]

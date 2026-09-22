@@ -20,6 +20,7 @@ import {
   openManagedLinkedinSession,
   readSessionPage,
   resizeConnectorSession,
+  type SessionInspectionResult,
   type ManagedSessionKey,
 } from '../connections/connectorSession';
 import {
@@ -56,6 +57,34 @@ const ADMIN_WAITING_COPY: Record<LinkedInWaitingStage, string> = {
   captcha: 'Пройдите CAPTCHA в открытом окне LinkedIn.',
   unrecognised: 'Вход ещё не подтверждён. Откройте свой профиль в окне LinkedIn.',
 };
+
+export function isAdminProfileCaptureFailure(reason: unknown): boolean {
+  const code = reason instanceof Error ? reason.message : String(reason ?? '');
+  return (
+    code === 'linkedin_authenticated_capture_failed' ||
+    code === 'linkedin_authenticated_profile_unclassified'
+  );
+}
+
+export function isSafeAdminLinkedinSessionPage(page: SessionInspectionResult): boolean {
+  try {
+    const url = new URL(page.url);
+    const host = url.hostname.toLowerCase();
+    return (
+      page.ready &&
+      url.protocol === 'https:' &&
+      (host === 'linkedin.com' ||
+        host.endsWith('.linkedin.com') ||
+        host === 'linkedin.cn' ||
+        host.endsWith('.linkedin.cn')) &&
+      !page.login &&
+      !page.otp &&
+      !page.captcha
+    );
+  } catch {
+    return false;
+  }
+}
 
 const STATE_COPY: Record<LinkedinSessionState, { label: string; detail: string }> = {
   unconfigured: {
@@ -184,35 +213,35 @@ function useAdminLinkedinLoginPolling(
     if (!activeLogin) return;
     let cancelled = false;
     let finished = false;
+    let authenticated = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const finish = async (accountMarker?: string | null) => {
+      const account = await completeAdminLinkedinLogin(activeLogin.accountId, activeLogin.handle, {
+        state: 'ready',
+        ...(accountMarker ? { accountMarker } : {}),
+      });
+      await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
+      if (cancelled) return;
+      finished = true;
+      setActiveLogin(undefined);
+      setError(undefined);
+      setNotice(`Вход подтверждён. Идентификатор ${account.emailLogin} привязан к приложению.`);
+      refresh();
+    };
 
     const flow = createLinkedInSessionImportFlow({
       inspectCurrentPage: () => inspectSessionPage('linkedin', activeLogin.sessionKey),
       readSessionPage: (url) => readSessionPage('linkedin', url, activeLogin.sessionKey),
       onAuthenticated: () => {
+        authenticated = true;
         if (!cancelled) setNotice('Вход распознан. Читаем профиль LinkedIn для подтверждения…');
       },
       // Keep the managed window open until the admin lease is completed. The
       // candidate flow closes it after capture; admin owns a persistent pool
       // profile and must complete the server transition first.
       onProviderDataCaptured: () => undefined,
-      onReady: async (result) => {
-        const account = await completeAdminLinkedinLogin(
-          activeLogin.accountId,
-          activeLogin.handle,
-          {
-            state: 'ready',
-            ...(result.accountMarker ? { accountMarker: result.accountMarker } : {}),
-          },
-        );
-        await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
-        if (cancelled) return;
-        finished = true;
-        setActiveLogin(undefined);
-        setError(undefined);
-        setNotice(`Вход подтверждён. Идентификатор ${account.emailLogin} привязан к приложению.`);
-        refresh();
-      },
+      onReady: (result) => finish(result.accountMarker),
     });
 
     const poll = async () => {
@@ -226,6 +255,17 @@ function useAdminLinkedinLoginPolling(
         }
       } catch (reason: unknown) {
         if (cancelled) return;
+        if (authenticated && isAdminProfileCaptureFailure(reason)) {
+          try {
+            const confirmation = await inspectSessionPage('linkedin', activeLogin.sessionKey);
+            if (isSafeAdminLinkedinSessionPage(confirmation)) {
+              await finish(confirmation.accountMarker);
+              return;
+            }
+          } catch {
+            // Fall through to the truthful capture error below.
+          }
+        }
         finished = true;
         await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
         setActiveLogin(undefined);
