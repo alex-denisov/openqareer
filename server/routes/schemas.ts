@@ -179,7 +179,10 @@ export const adminUserPasswordResetSchema = z.object({
 });
 
 const linkedinAccountIdSchema = z.string().uuid();
-const linkedinEmailLoginSchema = z.string().trim().email().max(254);
+// The admin sees and owns the provider login identifier. It is commonly an
+// email, but some governed provider accounts use a label or username instead.
+// Keep the field bounded without forcing an email-shaped value in the UI.
+const linkedinEmailLoginSchema = z.string().trim().min(1).max(254);
 const linkedinAdminLabelSchema = z.string().trim().min(1).max(120);
 
 export const adminLinkedinPoolQuerySchema = z.object({
@@ -225,6 +228,8 @@ export const adminLinkedinPoolDeleteSchema = z.object({
 
 export const adminLinkedinPoolCompleteSchema = z.object({
   handle: z.string().regex(/^lhs_[A-Za-z0-9_-]{40,}$/),
+  state: z.enum(['ready', 'login_required', 'challenge_required', 'expired', 'banned']),
+  accountMarker: z.string().trim().max(240).optional(),
 });
 
 export const adminVacancyQuerySchema = z.object({

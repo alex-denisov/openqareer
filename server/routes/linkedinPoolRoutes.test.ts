@@ -11,7 +11,11 @@ import type { CoachProvider } from '../providers/coachProvider';
 
 const ADMIN = { username: 'admin.test', password: 'admin-password-for-tests' };
 const CANDIDATE = { username: 'candidate.test', password: 'candidate-password-for-tests' };
-const provider: CoachProvider = { async createTurn() { throw new Error('not used'); } };
+const provider: CoachProvider = {
+  async createTurn() {
+    throw new Error('not used');
+  },
+};
 const resources: Array<{
   app: Awaited<ReturnType<typeof buildApp>>;
   auth: AuthService;
@@ -34,10 +38,13 @@ async function createApp() {
   const databasePath = join(directory, 'app.db');
   const candidates = new SqliteCandidateStore({ databasePath, encryptionKey: Buffer.alloc(32, 8) });
   const auth = new AuthService({ databasePath });
-  await auth.seedAccounts([
-    { ...ADMIN, role: 'admin' },
-    { ...CANDIDATE, role: 'candidate' },
-  ], candidates);
+  await auth.seedAccounts(
+    [
+      { ...ADMIN, role: 'admin' },
+      { ...CANDIDATE, role: 'candidate' },
+    ],
+    candidates,
+  );
   const repository = new SqliteLinkedinPoolRepository({
     databasePath,
     encryptionKey: Buffer.alloc(32, 8),
@@ -138,6 +145,19 @@ describe('admin LinkedIn pool boundary', () => {
     expect(login.json().data.account.state).toBe('user_action_required');
     expect(login.json().data.lease.webRemote).toBe(false);
 
+    const complete = await app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/linkedin/accounts/${accountId}/session/complete`,
+      headers: { cookie: adminCookie, origin: 'http://localhost:3000' },
+      payload: {
+        handle: login.json().data.lease.handle,
+        state: 'ready',
+        accountMarker: 'marker-1',
+      },
+    });
+    expect(complete.statusCode).toBe(200);
+    expect(complete.json().data.state).toBe('ready');
+
     const probe = await app.inject({
       method: 'POST',
       url: `/api/v1/admin/linkedin/accounts/${accountId}/probe`,
@@ -146,6 +166,24 @@ describe('admin LinkedIn pool boundary', () => {
     expect(probe.statusCode).toBe(200);
     expect(probe.json().data.state).toBe('login_required');
     expect(probe.json().data.lastFailureCode).toBe('provider_probe_unavailable');
+  });
+
+  it('accepts an admin-chosen provider identifier that is not an email', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/linkedin/accounts',
+      headers: {
+        cookie: adminCookie,
+        origin: 'http://localhost:3000',
+        'idempotency-key': '66666666-6666-4666-8666-666666666666',
+      },
+      payload: { adminLabel: 'LinkedIn-1', emailLogin: 'LinkedIn-1' },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().data.emailLogin).toBe('LinkedIn-1');
   });
 
   it('requires the browser origin for admin mutations', async () => {

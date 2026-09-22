@@ -11,7 +11,15 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react';
 import { apiErrorMessage } from '../coach/apiClient';
+import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import {
+  closeConnectorSession,
+  inspectSessionPage,
+  openManagedLinkedinSession,
+  type ManagedSessionKey,
+} from '../connections/connectorSession';
+import {
+  completeAdminLinkedinLogin,
   createAdminLinkedinAccount,
   deleteAdminLinkedinAccount,
   listAdminLinkedinAccounts,
@@ -28,22 +36,35 @@ type PoolViewState =
   | { status: 'failed'; message: string };
 
 const STATE_COPY: Record<LinkedinSessionState, { label: string; detail: string }> = {
-  unconfigured: { label: 'Не настроено', detail: 'Добавьте аккаунт и откройте ручное окно LinkedIn.' },
+  unconfigured: {
+    label: 'Не настроено',
+    detail: 'Добавьте аккаунт и откройте ручное окно LinkedIn.',
+  },
   login_required: { label: 'Нужно войти', detail: 'Откройте desktop-окно и войдите вручную.' },
-  user_action_required: { label: 'Нужна проверка', detail: 'Продолжите вход, 2FA или CAPTCHA в desktop-окне.' },
-  checking: { label: 'Проверяем сессию', detail: 'Сервер ждёт подтверждённый provider probe.' },
-  ready: { label: 'Сессия подтверждена', detail: 'Есть свежая проверка provider/session marker.' },
+  user_action_required: {
+    label: 'Нужна проверка',
+    detail: 'Продолжите вход, 2FA или CAPTCHA в desktop-окне.',
+  },
+  checking: { label: 'Проверяем сессию', detail: 'Проверяем подтверждение входа.' },
+  ready: { label: 'Сессия подтверждена', detail: 'Вход подтверждён, сессия готова.' },
   expired: { label: 'Сессия истекла', detail: 'Повторите ручной вход в desktop-окне.' },
-  challenge_required: { label: 'Нужна проверка LinkedIn', detail: 'Завершите проверку LinkedIn вручную.' },
-  cooling_down: { label: 'Пауза', detail: 'Аккаунт временно не используется до следующей проверки.' },
-  revoked: { label: 'Отозвано', detail: 'Lease остановлен. Подключите аккаунт заново.' },
+  challenge_required: {
+    label: 'Нужна проверка LinkedIn',
+    detail: 'Завершите проверку LinkedIn вручную.',
+  },
+  cooling_down: {
+    label: 'Пауза',
+    detail: 'Аккаунт временно не используется до следующей проверки.',
+  },
+  revoked: { label: 'Отозвано', detail: 'Сессия остановлена. Подключите аккаунт заново.' },
   banned: { label: 'Ограничен провайдером', detail: 'Автоматического обхода или ротации нет.' },
   disabled: { label: 'Отключено', detail: 'Аккаунт отключён администратором.' },
 };
 
 function statusClass(state: LinkedinSessionState): string {
   if (state === 'ready') return 'is-success';
-  if (['challenge_required', 'expired', 'user_action_required'].includes(state)) return 'is-warning';
+  if (['challenge_required', 'expired', 'user_action_required'].includes(state))
+    return 'is-warning';
   if (['banned', 'disabled', 'revoked'].includes(state)) return 'is-danger';
   return 'is-muted';
 }
@@ -64,15 +85,40 @@ function formatMoment(value: string | null): string {
 function failureCopy(code: LinkedinPoolAccount['lastFailureCode']): string | null {
   switch (code) {
     case 'session_runtime_unavailable':
-      return 'Окно ручного входа доступно только в desktop runtime.';
+      return 'Окно ручного входа доступно только в приложении OpenQareer Desktop.';
     case 'provider_probe_unavailable':
-      return 'Проверка provider/session marker ещё не подключена к этому runtime.';
+      return 'Автоматическая проверка сессии пока недоступна. Откройте вход в отдельном окне ещё раз.';
     case 'provider_permission_required':
-      return 'LinkedIn source остаётся выключенным без официального разрешения провайдера.';
+      return 'Источник LinkedIn отключён: для него нет разрешения провайдера.';
     case 'provider_probe_failed':
-      return 'Проверка не подтвердила выбранный аккаунт.';
+      return 'LinkedIn не подтвердил эту сессию. Повторите вход в отдельном окне.';
     default:
       return null;
+  }
+}
+
+function capabilityCopy(value: LinkedinPoolAccount['capabilityVerdict']): string {
+  switch (value) {
+    case 'official_api':
+      return 'Официальный API';
+    case 'provider_permitted':
+      return 'Разрешено провайдером';
+    default:
+      return 'Ожидает подтверждения';
+  }
+}
+
+function managedOpenFailureCopy(reason?: string): string {
+  switch (reason) {
+    case 'desktop_runtime_required':
+      return 'Откройте админку в приложении OpenQareer Desktop: только оно может создать отдельный профиль LinkedIn для этого аккаунта.';
+    case 'window_not_registered':
+      return 'Приложение не зарегистрировало окно LinkedIn. Перезапустите OpenQareer Desktop и повторите вход.';
+    case 'managed_session_data_dir_unavailable':
+    case 'managed_session_data_dir_create_failed':
+      return 'Не удалось создать изолированный профиль LinkedIn на этом устройстве.';
+    default:
+      return 'Не удалось открыть отдельное окно LinkedIn. Перезапустите OpenQareer Desktop и повторите вход.';
   }
 }
 
@@ -82,9 +128,14 @@ function useLinkedinPool() {
     setState({ status: 'loading' });
     try {
       const page = await listAdminLinkedinAccounts({ signal });
-      if (!signal?.aborted) setState({ status: 'ready', accounts: page.accounts, total: page.total });
+      if (!signal?.aborted)
+        setState({ status: 'ready', accounts: page.accounts, total: page.total });
     } catch (reason: unknown) {
-      if (!signal?.aborted) setState({ status: 'failed', message: apiErrorMessage(reason, 'Не удалось загрузить аккаунты LinkedIn.') });
+      if (!signal?.aborted)
+        setState({
+          status: 'failed',
+          message: apiErrorMessage(reason, 'Не удалось загрузить аккаунты LinkedIn.'),
+        });
     }
   }, []);
 
@@ -94,20 +145,24 @@ function useLinkedinPool() {
     return () => controller.abort();
   }, [load]);
 
-  return { state, refresh: () => void load() };
+  const refresh = useCallback(() => void load(), [load]);
+  return { state, refresh };
 }
 
 // eslint-disable-next-line max-lines-per-function
 export function AdminLinkedinPoolView() {
   const { state, refresh } = useLinkedinPool();
-  const [adminLabel, setAdminLabel] = useState('');
-  const [emailLogin, setEmailLogin] = useState('');
-  const [providerAccountMarker, setProviderAccountMarker] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [formBusy, setFormBusy] = useState(false);
   const [busyAccountId, setBusyAccountId] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
   const [confirmDelete, setConfirmDelete] = useState<LinkedinPoolAccount>();
+  const [activeLogin, setActiveLogin] = useState<{
+    accountId: string;
+    sessionKey: ManagedSessionKey;
+    handle: string;
+  }>();
 
   useEffect(() => {
     if (!confirmDelete) return;
@@ -118,6 +173,84 @@ export function AdminLinkedinPoolView() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [confirmDelete]);
 
+  // eslint-disable-next-line max-lines-per-function -- the native poll and its terminal API transition share one lifecycle
+  useEffect(() => {
+    if (!activeLogin) return;
+    let disposed = false;
+    let pollInFlight = false;
+
+    // eslint-disable-next-line max-lines-per-function -- keep the native state machine readable as one guarded poll
+    const poll = async () => {
+      if (disposed || pollInFlight) return;
+      pollInFlight = true;
+      try {
+        const report = await inspectSessionPage('linkedin', activeLogin.sessionKey);
+        if (disposed) return;
+        if (report.captcha) {
+          setNotice(
+            'LinkedIn просит пройти CAPTCHA в отдельном окне. Приложение ждёт завершения проверки.',
+          );
+          return;
+        }
+        if (report.otp) {
+          setNotice('Введите код 2FA в отдельном окне LinkedIn. Код не передаётся в OpenQareer.');
+          return;
+        }
+        if (report.login) {
+          setNotice('Введите логин и пароль в отдельном окне LinkedIn. OpenQareer их не получает.');
+          return;
+        }
+        if (!report.signedInApplicant) {
+          setNotice(
+            'Окно LinkedIn открыто. Завершите вход. Приложение подтвердит его автоматически.',
+          );
+          return;
+        }
+
+        try {
+          await completeAdminLinkedinLogin(activeLogin.accountId, activeLogin.handle, {
+            state: 'ready',
+            ...(report.accountMarker ? { accountMarker: report.accountMarker } : {}),
+          });
+          if (!disposed) {
+            setActiveLogin(undefined);
+            setError(undefined);
+            setNotice('Вход подтверждён. Изолированная сессия LinkedIn готова к работе.');
+            refresh();
+          }
+        } catch (reason: unknown) {
+          if (!disposed) {
+            setActiveLogin(undefined);
+            setError(
+              apiErrorMessage(reason, 'Вход открылся, но подтвердить сессию LinkedIn не удалось.'),
+            );
+            refresh();
+          }
+        }
+      } catch (reason: unknown) {
+        if (!disposed) {
+          setActiveLogin(undefined);
+          setError(
+            apiErrorMessage(
+              reason,
+              'Окно LinkedIn закрылось или стало недоступно. Откройте вход ещё раз.',
+            ),
+          );
+          refresh();
+        }
+      } finally {
+        pollInFlight = false;
+      }
+    };
+
+    void poll();
+    const timer = window.setInterval(() => void poll(), 1_000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [activeLogin, refresh]);
+
   async function addAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormBusy(true);
@@ -125,14 +258,13 @@ export function AdminLinkedinPoolView() {
     setNotice(undefined);
     try {
       await createAdminLinkedinAccount({
-        adminLabel: adminLabel.trim(),
-        emailLogin: emailLogin.trim(),
-        ...(providerAccountMarker.trim() ? { providerAccountMarker: providerAccountMarker.trim() } : {}),
+        adminLabel: identifier.trim(),
+        emailLogin: identifier.trim(),
       });
-      setAdminLabel('');
-      setEmailLogin('');
-      setProviderAccountMarker('');
-      setNotice('Аккаунт добавлен в управляемый реестр. Сессия ещё не подтверждена.');
+      setIdentifier('');
+      setNotice(
+        'Идентификатор добавлен. Нажмите «Войти в LinkedIn», чтобы открыть отдельное окно входа.',
+      );
       refresh();
     } catch (reason: unknown) {
       setError(apiErrorMessage(reason, 'Не удалось добавить аккаунт LinkedIn.'));
@@ -142,13 +274,29 @@ export function AdminLinkedinPoolView() {
   }
 
   async function openLogin(account: LinkedinPoolAccount) {
+    if (!isTauriEnvironment()) {
+      setError(managedOpenFailureCopy('desktop_runtime_required'));
+      return;
+    }
     setBusyAccountId(account.id);
     setError(undefined);
     setNotice(undefined);
     try {
-      await requestAdminLinkedinLogin(account.id);
-      setNotice('Desktop-only lease создан. Веб показывает статусы и управление, но не открывает общий кандидатский window для pool account.');
-      setError('session_runtime_unavailable: нужен отдельный изолированный desktop runtime для этого аккаунта. Сессия не считается подключённой.');
+      const started = await requestAdminLinkedinLogin(account.id);
+      const opened = await openManagedLinkedinSession(started.account.profileIsolationId);
+      if (!opened.opened) {
+        setError(managedOpenFailureCopy(opened.reason));
+        refresh();
+        return;
+      }
+      setActiveLogin({
+        accountId: account.id,
+        sessionKey: started.account.profileIsolationId,
+        handle: started.lease.handle,
+      });
+      setNotice(
+        'Отдельное окно LinkedIn открыто. Завершите вход. Статус обновится автоматически.',
+      );
       refresh();
     } catch (reason: unknown) {
       setError(apiErrorMessage(reason, 'Не удалось запросить ручной вход.'));
@@ -181,10 +329,28 @@ export function AdminLinkedinPoolView() {
     await runAccountAction(
       confirmDelete,
       async () => {
+        if (activeLogin?.accountId === confirmDelete.id) {
+          await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
+          setActiveLogin(undefined);
+        }
         await deleteAdminLinkedinAccount(confirmDelete.id, confirmDelete.revision);
         setConfirmDelete(undefined);
       },
       'Аккаунт удалён, runtime-копия отозвана.',
+    );
+  }
+
+  async function revokeAccount(account: LinkedinPoolAccount) {
+    await runAccountAction(
+      account,
+      async () => {
+        if (activeLogin?.accountId === account.id) {
+          await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
+          setActiveLogin(undefined);
+        }
+        await revokeAdminLinkedinAccount(account.id);
+      },
+      'Сессия отозвана.',
     );
   }
 
@@ -195,9 +361,13 @@ export function AdminLinkedinPoolView() {
           <p className="admin-eyebrow">Управляемые сессии</p>
           <h1 id="admin-linkedin-pool-title">Аккаунты LinkedIn</h1>
           <p className="admin-note">
-            Полный email login виден здесь только администратору. Пароли, cookie, 2FA-коды и storage state не попадают в API, браузер или журнал.
+            Полный идентификатор сессии виден здесь только администратору. Пароли, cookie, 2FA-коды
+            и storage state не попадают в API, браузер или журнал.
           </p>
-          <p className="admin-note">Интерактивный вход открывается в desktop-приложении; веб оставляет только статусы и guarded operations.</p>
+          <p className="admin-note">
+            Кнопка входа открывает отдельный профиль LinkedIn в OpenQareer Desktop. Введите данные
+            только в окне LinkedIn.
+          </p>
         </div>
         <button className="admin-btn is-secondary" type="button" onClick={refresh}>
           <ArrowClockwise size={18} aria-hidden="true" /> Обновить
@@ -209,72 +379,185 @@ export function AdminLinkedinPoolView() {
           <LinkedinLogo size={24} aria-hidden="true" />
           <div>
             <h2>Добавить аккаунт пула</h2>
-            <p>Идентификатор сохраняется зашифрованным и не маскируется в этом admin-only разделе.</p>
+            <p>
+              Укажите понятный вам идентификатор: email, имя аккаунта или свою метку. Он сохраняется
+              зашифрованным и виден без маскировки только администратору.
+            </p>
           </div>
         </div>
         <div className="admin-linkedin-add__fields">
           <label>
-            <span>Метка администратора</span>
-            <input value={adminLabel} onChange={(event) => setAdminLabel(event.target.value)} required maxLength={120} />
-          </label>
-          <label>
-            <span>Полный email login</span>
-            <input type="email" value={emailLogin} onChange={(event) => setEmailLogin(event.target.value)} required maxLength={254} autoComplete="off" />
-          </label>
-          <label>
-            <span>Provider account marker, если известен</span>
-            <input value={providerAccountMarker} onChange={(event) => setProviderAccountMarker(event.target.value)} maxLength={240} autoComplete="off" />
+            <span>Идентификатор сессии</span>
+            <input
+              value={identifier}
+              onChange={(event) => setIdentifier(event.target.value)}
+              placeholder="LinkedIn-1 или name@example.com"
+              required
+              maxLength={254}
+              autoComplete="off"
+            />
           </label>
         </div>
-        <button className="admin-btn admin-btn--primary" type="submit" disabled={formBusy} aria-busy={formBusy}>
+        <button
+          className="admin-btn admin-btn--primary"
+          type="submit"
+          disabled={formBusy}
+          aria-busy={formBusy}
+        >
           <Plus size={18} aria-hidden="true" /> {formBusy ? 'Добавляем…' : 'Добавить аккаунт'}
         </button>
       </form>
 
-      {notice ? <p className="admin-success" role="status">{notice}</p> : null}
-      {error ? <p className="admin-error" role="alert">{error}</p> : null}
-      {state.status === 'loading' ? <p className="admin-note" aria-busy="true">Загружаем реестр LinkedIn…</p> : null}
-      {state.status === 'failed' ? <div className="admin-error" role="alert"><p>{state.message}</p><button className="admin-btn is-secondary" type="button" onClick={refresh}>Повторить</button></div> : null}
-      {state.status === 'ready' && state.accounts.length === 0 ? <p className="admin-empty-state">Аккаунтов пула пока нет. Добавьте первый login выше.</p> : null}
+      {notice ? (
+        <p className="admin-success" role="status">
+          {notice}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="admin-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {state.status === 'loading' ? (
+        <p className="admin-note" aria-busy="true">
+          Загружаем реестр LinkedIn…
+        </p>
+      ) : null}
+      {state.status === 'failed' ? (
+        <div className="admin-error" role="alert">
+          <p>{state.message}</p>
+          <button className="admin-btn is-secondary" type="button" onClick={refresh}>
+            Повторить
+          </button>
+        </div>
+      ) : null}
+      {state.status === 'ready' && state.accounts.length === 0 ? (
+        <p className="admin-empty-state">
+          Аккаунтов пула пока нет. Добавьте первый идентификатор выше.
+        </p>
+      ) : null}
       {state.status === 'ready' ? (
         <div className="admin-linkedin-grid" aria-live="polite">
+          {/* eslint-disable-next-line max-lines-per-function -- the card keeps status, actions and destructive confirmation together */}
           {state.accounts.map((account) => {
             const copy = STATE_COPY[account.state];
             const busy = busyAccountId === account.id;
-            const canLogin = ['unconfigured', 'login_required', 'expired', 'challenge_required', 'revoked'].includes(account.state);
+            const canLogin = [
+              'unconfigured',
+              'login_required',
+              'user_action_required',
+              'expired',
+              'challenge_required',
+              'revoked',
+            ].includes(account.state);
             return (
               <article className="admin-linkedin-card" key={account.id} aria-busy={busy}>
                 <header className="admin-linkedin-card__header">
                   <div>
-                    <p className="admin-eyebrow">{account.adminLabel}</p>
-                    <h2>{account.adminLabel}</h2>
+                    <p className="admin-eyebrow">Идентификатор сессии</p>
+                    <h2>{account.emailLogin}</h2>
                   </div>
                   <span className={`admin-badge ${statusClass(account.state)}`}>{copy.label}</span>
                 </header>
-                <p className="admin-linkedin-card__login">
-                  <span>Полный email login</span>
-                  <code>{account.emailLogin}</code>
-                </p>
                 <p className="admin-linkedin-card__detail">{copy.detail}</p>
-                {failureCopy(account.lastFailureCode) ? <p className="admin-linkedin-card__failure"><WarningCircle size={16} aria-hidden="true" />{failureCopy(account.lastFailureCode)}</p> : null}
+                {activeLogin?.accountId === account.id ? (
+                  <p className="admin-linkedin-card__active" role="status">
+                    Окно LinkedIn открыто. Ожидаем подтверждение входа…
+                  </p>
+                ) : null}
+                {failureCopy(account.lastFailureCode) ? (
+                  <p className="admin-linkedin-card__failure">
+                    <WarningCircle size={16} aria-hidden="true" />
+                    {failureCopy(account.lastFailureCode)}
+                  </p>
+                ) : null}
                 <dl className="admin-linkedin-card__meta">
-                  <div><dt>Последняя проверка</dt><dd>{formatMoment(account.lastVerifiedAt)}</dd></div>
-                  <div><dt>Heartbeat</dt><dd>{formatMoment(account.lastHeartbeatAt)}</dd></div>
-                  <div><dt>Provider capability</dt><dd>{account.capabilityVerdict}</dd></div>
+                  <div>
+                    <dt>Последняя проверка</dt>
+                    <dd>{formatMoment(account.lastVerifiedAt)}</dd>
+                  </div>
+                  <div>
+                    <dt>Heartbeat</dt>
+                    <dd>{formatMoment(account.lastHeartbeatAt)}</dd>
+                  </div>
+                  <div>
+                    <dt>Доступ источника</dt>
+                    <dd>{capabilityCopy(account.capabilityVerdict)}</dd>
+                  </div>
                 </dl>
                 <div className="admin-linkedin-card__actions">
-                  {canLogin ? <button className="admin-btn admin-btn--primary" type="button" disabled={busy} onClick={() => void openLogin(account)}><Desktop size={18} aria-hidden="true" /> Запросить desktop-вход</button> : null}
-                  {['ready', 'checking', 'user_action_required'].includes(account.state) ? <button className="admin-btn is-secondary" type="button" disabled={busy} onClick={() => void runAccountAction(account, () => probeAdminLinkedinAccount(account.id), 'Проверка запрошена; зелёный статус появится только после provider probe.')}><CheckCircle size={18} aria-hidden="true" /> Проверить сессию</button> : null}
-                  {account.state !== 'revoked' && account.state !== 'disabled' ? <button className="admin-btn is-secondary" type="button" disabled={busy} onClick={() => void runAccountAction(account, () => revokeAdminLinkedinAccount(account.id), 'Сессия отозвана.')}><LinkBreak size={18} aria-hidden="true" /> Отозвать</button> : null}
-                  <button className="admin-btn admin-btn--danger-outline" type="button" disabled={busy} onClick={() => setConfirmDelete(account)}><Trash size={18} aria-hidden="true" /> Удалить</button>
+                  {canLogin ? (
+                    <button
+                      className="admin-btn admin-btn--primary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void openLogin(account)}
+                    >
+                      <Desktop size={18} aria-hidden="true" /> Войти в LinkedIn
+                    </button>
+                  ) : null}
+                  {['ready', 'checking'].includes(account.state) ? (
+                    <button
+                      className="admin-btn is-secondary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void runAccountAction(
+                          account,
+                          () => probeAdminLinkedinAccount(account.id),
+                          'Проверка статуса отправлена.',
+                        )
+                      }
+                    >
+                      <CheckCircle size={18} aria-hidden="true" /> Проверить сессию
+                    </button>
+                  ) : null}
+                  {account.state !== 'revoked' && account.state !== 'disabled' ? (
+                    <button
+                      className="admin-btn is-secondary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void revokeAccount(account)}
+                    >
+                      <LinkBreak size={18} aria-hidden="true" /> Отозвать
+                    </button>
+                  ) : null}
+                  <button
+                    className="admin-btn admin-btn--danger-outline"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setConfirmDelete(account)}
+                  >
+                    <Trash size={18} aria-hidden="true" /> Удалить
+                  </button>
                 </div>
                 {confirmDelete?.id === account.id ? (
-                  <div className="admin-linkedin-confirm" role="alertdialog" aria-modal="true" aria-labelledby={`delete-title-${account.id}`}>
+                  <div
+                    className="admin-linkedin-confirm"
+                    role="alertdialog"
+                    aria-modal="true"
+                    aria-labelledby={`delete-title-${account.id}`}
+                  >
                     <h3 id={`delete-title-${account.id}`}>Удалить аккаунт LinkedIn?</h3>
-                    <p>Будет отозван lease и удалена runtime-копия профиля. Email login перестанет быть доступен в реестре.</p>
+                    <p>
+                      Будет отозвана сессия и удалена runtime-копия профиля. Идентификатор
+                      перестанет быть доступен в реестре.
+                    </p>
                     <div>
-                      <button className="admin-btn is-secondary" type="button" onClick={() => setConfirmDelete(undefined)}>Отмена</button>
-                      <button className="admin-btn admin-btn--danger" type="button" onClick={() => void deleteAccount()}>Удалить аккаунт</button>
+                      <button
+                        className="admin-btn is-secondary"
+                        type="button"
+                        onClick={() => setConfirmDelete(undefined)}
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        className="admin-btn admin-btn--danger"
+                        type="button"
+                        onClick={() => void deleteAccount()}
+                      >
+                        Удалить аккаунт
+                      </button>
                     </div>
                   </div>
                 ) : null}
@@ -283,7 +566,11 @@ export function AdminLinkedinPoolView() {
           })}
         </div>
       ) : null}
-      <p className="admin-scope-note"><ShieldWarning size={18} aria-hidden="true" /> Обычные пользователи не получают этот раздел, его API или идентификаторы аккаунтов. LinkedIn source остаётся disabled без provider-permitted/official capability.</p>
+      <p className="admin-scope-note">
+        <ShieldWarning size={18} aria-hidden="true" /> Обычные пользователи не получают этот раздел,
+        его API или идентификаторы аккаунтов. Источник LinkedIn остаётся отключённым, пока не
+        подтверждена разрешённая интеграция провайдера.
+      </p>
     </section>
   );
 }

@@ -207,7 +207,7 @@ test.describe('B089 administrator console', () => {
     await expect(page.getByRole('status')).toContainText('В очереди');
   });
 
-  test('the LinkedIn pool shows the complete login only inside the admin console', async ({
+  test('the LinkedIn pool shows the complete identifier and names the desktop login boundary', async ({
     page,
   }) => {
     await stubSession(page, ADMINISTRATOR);
@@ -267,9 +267,9 @@ test.describe('B089 administrator console', () => {
 
     await expect(page.getByText('pool-admin@example.test')).toBeVisible();
     await expect(
-      page.getByRole('article').getByText('Полный email login', { exact: true }),
+      page.getByRole('article').getByText('Идентификатор сессии', { exact: true }),
     ).toBeVisible();
-    await page.getByRole('button', { name: 'Запросить desktop-вход' }).click();
-    await expect(page.getByRole('alert')).toContainText('session_runtime_unavailable');
+    await page.getByRole('button', { name: 'Войти в LinkedIn' }).click();
+    await expect(page.getByRole('alert')).toContainText('приложении OpenQareer Desktop');
   });
 });

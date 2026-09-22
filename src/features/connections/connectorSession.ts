@@ -50,10 +50,14 @@ interface DesktopSessionInspectionReport {
   readonly ready: boolean;
   readonly url: string;
   readonly signedInApplicant: boolean;
+  readonly accountMarker?: string | null;
   readonly login: boolean;
   readonly otp: boolean;
   readonly captcha: boolean;
 }
+
+/** Stable profile key for an admin-managed provider session. */
+export type ManagedSessionKey = string;
 
 /**
  * Opens the platform's own sign-in window. The candidate authenticates on the
@@ -74,18 +78,7 @@ export async function openConnectorSession(
   }
 
   if (isTauriEnvironment()) {
-    try {
-      const report = await invokeDesktopCommand<DesktopSessionWindowReport>(
-        'open_connector_session',
-        { request: { platform, url, layout } },
-      );
-      if (!report) return { opened: false, reason: 'desktop_bridge_unavailable' };
-      return report.opened
-        ? { opened: true }
-        : { opened: false, reason: report.reason ?? 'window_build_failed' };
-    } catch {
-      return { opened: false, reason: 'desktop_bridge_unavailable' };
-    }
+    return openConnectorSessionInDesktop(platform, url, layout);
   }
 
   const popup = window.open(
@@ -96,24 +89,72 @@ export async function openConnectorSession(
   return popup ? { opened: true } : { opened: false, reason: 'window_blocked' };
 }
 
-export async function closeConnectorSession(platform: ConnectionPlatform): Promise<void> {
+async function openConnectorSessionInDesktop(
+  platform: ConnectionPlatform,
+  url: string,
+  layout?: SessionLayout,
+  sessionKey?: ManagedSessionKey,
+): Promise<SessionOpenResult> {
+  try {
+    const report = await invokeDesktopCommand<DesktopSessionWindowReport>(
+      'open_connector_session',
+      { request: { platform, url, layout, ...(sessionKey ? { sessionKey } : {}) } },
+    );
+    if (!report) return { opened: false, reason: 'desktop_bridge_unavailable' };
+    return report.opened
+      ? { opened: true }
+      : { opened: false, reason: report.reason ?? 'window_build_failed' };
+  } catch {
+    return { opened: false, reason: 'desktop_bridge_unavailable' };
+  }
+}
+
+/** Opens a LinkedIn pool account in its own persistent native webview store. */
+export async function openManagedLinkedinSession(
+  sessionKey: ManagedSessionKey,
+  layout?: SessionLayout,
+): Promise<SessionOpenResult> {
+  if (typeof window === 'undefined') {
+    return { opened: false, reason: 'no_window_environment' };
+  }
+  if (!isTauriEnvironment()) {
+    return { opened: false, reason: 'desktop_runtime_required' };
+  }
+  return openConnectorSessionInDesktop(
+    'linkedin',
+    'https://www.linkedin.com/login?locale=en_US',
+    layout,
+    sessionKey,
+  );
+}
+
+export async function closeConnectorSession(
+  platform: ConnectionPlatform,
+  sessionKey?: ManagedSessionKey,
+): Promise<void> {
   if (!isTauriEnvironment()) return;
-  await invokeDesktopCommand<boolean>('close_connector_session', { platform });
+  await invokeDesktopCommand<boolean>('close_connector_session', {
+    platform,
+    ...(sessionKey ? { sessionKey } : {}),
+  });
 }
 
 export async function resetConnectorSession(platform: ConnectionPlatform): Promise<boolean> {
   if (!isTauriEnvironment()) return false;
-  return (
-    (await invokeDesktopCommand<boolean>('reset_connector_session', { platform })) === true
-  );
+  return (await invokeDesktopCommand<boolean>('reset_connector_session', { platform })) === true;
 }
 
 export async function resizeConnectorSession(
   platform: ConnectionPlatform,
   layout: SessionLayout,
+  sessionKey?: ManagedSessionKey,
 ): Promise<void> {
   if (!isTauriEnvironment()) return;
-  await invokeDesktopCommand<boolean>('resize_connector_session', { platform, layout });
+  await invokeDesktopCommand<boolean>('resize_connector_session', {
+    platform,
+    layout,
+    ...(sessionKey ? { sessionKey } : {}),
+  });
 }
 
 /** Explains, honestly, why no sign-in window is on screen. */
@@ -260,6 +301,7 @@ export interface SessionInspectionResult {
   readonly ready: boolean;
   readonly url: string;
   readonly signedInApplicant: boolean;
+  readonly accountMarker?: string | null;
   readonly login: boolean;
   readonly otp: boolean;
   readonly captcha: boolean;
@@ -271,6 +313,7 @@ export interface SessionInspectionResult {
  */
 export async function inspectSessionPage(
   platform: ConnectionPlatform,
+  sessionKey?: ManagedSessionKey,
 ): Promise<SessionInspectionResult> {
   if (!isTauriEnvironment()) {
     return {
@@ -284,16 +327,18 @@ export async function inspectSessionPage(
   }
   const report = await invokeDesktopCommand<DesktopSessionInspectionReport>(
     'inspect_connector_session_page',
-    { platform },
+    { platform, ...(sessionKey ? { sessionKey } : {}) },
   );
-  return report ?? {
-    ready: false,
-    url: '',
-    signedInApplicant: false,
-    login: false,
-    otp: false,
-    captcha: false,
-  };
+  return (
+    report ?? {
+      ready: false,
+      url: '',
+      signedInApplicant: false,
+      login: false,
+      otp: false,
+      captcha: false,
+    }
+  );
 }
 
 /**
@@ -304,11 +349,12 @@ export async function inspectSessionPage(
 export async function readSessionPage(
   platform: ConnectionPlatform,
   url: string,
+  sessionKey?: ManagedSessionKey,
 ): Promise<SessionPageResult> {
   if (isTauriEnvironment()) {
     const report = await invokeDesktopCommand<DesktopSessionPageReport>(
       'read_connector_session_page',
-      { request: { platform, url } },
+      { request: { platform, url, ...(sessionKey ? { sessionKey } : {}) } },
     );
     if (report) {
       return { ok: report.ok, body: report.body, url: report.url };

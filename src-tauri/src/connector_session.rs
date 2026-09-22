@@ -7,12 +7,15 @@
 //! silently refuse the request and no window ever appears (B149).
 
 use serde::{Deserialize, Serialize};
+use std::fs::create_dir_all;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{
     AppHandle, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl,
     WebviewWindowBuilder,
 };
+use uuid::Uuid;
 
 const PAGE_READY_TIMEOUT: Duration = Duration::from_secs(25);
 const PAGE_POLL_INTERVAL: Duration = Duration::from_millis(350);
@@ -47,6 +50,7 @@ pub struct SessionWindowRequest {
     pub platform: String,
     pub url: String,
     pub layout: Option<SessionLayout>,
+    pub session_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +81,7 @@ pub struct SessionInspectionReport {
     pub ready: bool,
     pub url: String,
     pub signed_in_applicant: bool,
+    pub account_marker: Option<String>,
     pub login: bool,
     pub otp: bool,
     pub captcha: bool,
@@ -90,6 +95,37 @@ pub fn session_window_label(platform: &str) -> Option<&'static str> {
         "hh" => Some("connector-hh"),
         _ => None,
     }
+}
+
+const MANAGED_LINKEDIN_LABEL_PREFIX: &str = "connector-linkedin-pool-";
+
+fn managed_session_uuid(session_key: &str) -> Result<Uuid, String> {
+    let raw = session_key
+        .strip_prefix("profile_")
+        .ok_or_else(|| "managed_session_key_invalid".to_string())?;
+    Uuid::parse_str(raw).map_err(|_| "managed_session_key_invalid".to_string())
+}
+
+fn session_window_label_for(
+    platform: &str,
+    session_key: Option<&str>,
+) -> Result<(String, Option<[u8; 16]>), String> {
+    if let Some(key) = session_key {
+        if platform != "linkedin" {
+            return Err("managed_session_platform_unsupported".to_string());
+        }
+        let uuid = managed_session_uuid(key)?;
+        return Ok((
+            format!("{MANAGED_LINKEDIN_LABEL_PREFIX}{}", uuid.simple()),
+            Some(*uuid.as_bytes()),
+        ));
+    }
+    Ok((
+        session_window_label(platform)
+            .ok_or_else(|| "unsupported_platform".to_string())?
+            .to_string(),
+        None,
+    ))
 }
 
 fn host_belongs_to(host: &str, domain: &str) -> bool {
@@ -201,13 +237,27 @@ pub fn should_route_through_tunnel(url: &str, tunnel_running: bool) -> bool {
         )
 }
 
-fn validate(request: &SessionWindowRequest) -> Result<(&'static str, Url), String> {
-    let label = session_window_label(&request.platform).ok_or("unsupported_platform")?;
+fn validate(request: &SessionWindowRequest) -> Result<(String, Url, Option<[u8; 16]>), String> {
+    let (label, data_store_identifier) =
+        session_window_label_for(&request.platform, request.session_key.as_deref())?;
     if !is_allowed_session_url(&request.platform, &request.url) {
         return Err("url_not_allowed".to_string());
     }
     let url = Url::parse(&request.url).map_err(|_| "url_not_allowed".to_string())?;
-    Ok((label, url))
+    Ok((label, url, data_store_identifier))
+}
+
+fn managed_data_directory(app: &AppHandle, session_key: &str) -> Result<PathBuf, String> {
+    let uuid = managed_session_uuid(session_key)?;
+    let root = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("managed_session_data_dir_unavailable: {error}"))?
+        .join("linkedin-pool");
+    let directory = root.join(format!("profile_{}", uuid.simple()));
+    create_dir_all(&directory)
+        .map_err(|error| format!("managed_session_data_dir_create_failed: {error}"))?;
+    Ok(directory)
 }
 
 /// How long a freshly built window may take to appear in the manager before the
@@ -237,7 +287,7 @@ pub async fn open_session_window(
     request: &SessionWindowRequest,
     proxy_url: Option<Url>,
 ) -> SessionWindowReport {
-    let (label, url) = match validate(request) {
+    let (label, url, data_store_identifier) = match validate(request) {
         Ok(value) => value,
         Err(reason) => {
             return SessionWindowReport {
@@ -266,12 +316,17 @@ pub async fn open_session_window(
         };
     }
 
-    if let Some(existing) = app.get_webview(label) {
+    if let Some(existing) = app.get_webview(&label) {
         if !existing.url().is_ok_and(|current| current == url) {
             let _ = existing.navigate(url);
         }
-        resize_session_window(app, &request.platform, layout.clone());
-        if let Some(window) = app.get_webview_window(label) {
+        resize_session_window_for(
+            app,
+            &request.platform,
+            request.session_key.as_deref(),
+            layout.clone(),
+        );
+        if let Some(window) = app.get_webview_window(&label) {
             let _ = window.show();
             let _ = window.set_focus();
         } else {
@@ -294,7 +349,7 @@ pub async fn open_session_window(
     };
     let screen_layout = screen_layout(&layout, &main_window);
     let platform = request.platform.clone();
-    let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
+    let mut builder = WebviewWindowBuilder::new(app, label.clone(), WebviewUrl::External(url))
         .title(format!("OpenQareer · {}", platform_name(&request.platform)))
         .position(screen_layout.x, screen_layout.y)
         .inner_size(screen_layout.width, screen_layout.height)
@@ -304,9 +359,25 @@ pub async fn open_session_window(
         .on_navigation(move |next_url| allow_session_navigation(&platform, next_url));
 
     if request.platform == "linkedin" {
-        builder = builder.initialization_script_for_all_frames(
-            LINKEDIN_LOCALE_INITIALIZATION_SCRIPT,
-        );
+        builder =
+            builder.initialization_script_for_all_frames(LINKEDIN_LOCALE_INITIALIZATION_SCRIPT);
+    }
+
+    if let Some(session_key) = request.session_key.as_deref() {
+        let data_directory = match managed_data_directory(app, session_key) {
+            Ok(directory) => directory,
+            Err(reason) => {
+                return SessionWindowReport {
+                    opened: false,
+                    label,
+                    reason: Some(reason),
+                }
+            }
+        };
+        builder = builder.data_directory(data_directory);
+        if let Some(identifier) = data_store_identifier {
+            builder = builder.data_store_identifier(identifier);
+        }
     }
 
     builder = match builder.parent(&main_window) {
@@ -328,7 +399,7 @@ pub async fn open_session_window(
         Ok(_) => {
             // Reporting "opened" before the window is inspectable is what threw
             // the whole step back to idle on the very first poll (B157).
-            if await_registered_window(app, label).await {
+            if await_registered_window(app, &label).await {
                 SessionWindowReport {
                     opened: true,
                     label: label.to_string(),
@@ -359,6 +430,17 @@ pub fn is_session_window_open(app: &AppHandle, platform: &str) -> bool {
         .is_some()
 }
 
+pub fn is_managed_session_window_open(
+    app: &AppHandle,
+    platform: &str,
+    session_key: Option<&str>,
+) -> bool {
+    let Ok((label, _)) = session_window_label_for(platform, session_key) else {
+        return false;
+    };
+    app.get_webview(&label).is_some()
+}
+
 /// The application's own webview. Everything else with a label is a session
 /// window this module opened.
 pub const MAIN_WINDOW_LABEL: &str = "main";
@@ -386,16 +468,40 @@ pub fn close_orphaned_session_windows(app: &AppHandle, webview_label: &str) {
     for platform in sessions_orphaned_by_page_load(webview_label) {
         close_session_window(app, platform);
     }
+    if webview_label == MAIN_WINDOW_LABEL {
+        let managed_labels: Vec<String> = app
+            .webview_windows()
+            .keys()
+            .filter(|label| label.starts_with(MANAGED_LINKEDIN_LABEL_PREFIX))
+            .cloned()
+            .collect();
+        for label in managed_labels {
+            close_session_window_by_label(app, &label);
+        }
+    }
 }
 
 pub fn close_session_window(app: &AppHandle, platform: &str) -> bool {
-    session_window_label(platform).is_some_and(|label| {
-        app.get_webview_window(label)
-            .is_some_and(|window| window.close().is_ok())
-            || app
-                .get_webview(label)
-                .is_some_and(|webview| webview.close().is_ok())
-    })
+    session_window_label(platform).is_some_and(|label| close_session_window_by_label(app, label))
+}
+
+pub fn close_managed_session_window(
+    app: &AppHandle,
+    platform: &str,
+    session_key: Option<&str>,
+) -> bool {
+    let Ok((label, _)) = session_window_label_for(platform, session_key) else {
+        return false;
+    };
+    close_session_window_by_label(app, &label)
+}
+
+fn close_session_window_by_label(app: &AppHandle, label: &str) -> bool {
+    app.get_webview_window(label)
+        .is_some_and(|window| window.close().is_ok())
+        || app
+            .get_webview(label)
+            .is_some_and(|webview| webview.close().is_ok())
 }
 
 /// The page a reset-only window loads. Nothing is ever read from it: it exists
@@ -448,36 +554,47 @@ async fn open_hidden_session_window(app: &AppHandle, platform: &str, label: &str
         .skip_taskbar(true)
         .on_navigation(move |next| allow_session_navigation(&allowed, next));
     if platform == "linkedin" {
-        builder = builder.initialization_script_for_all_frames(
-            LINKEDIN_LOCALE_INITIALIZATION_SCRIPT,
-        );
+        builder =
+            builder.initialization_script_for_all_frames(LINKEDIN_LOCALE_INITIALIZATION_SCRIPT);
     }
     let built = builder.build();
     built.is_ok() && await_registered_window(app, label).await
 }
 
 pub fn resize_session_window(app: &AppHandle, platform: &str, layout: SessionLayout) -> bool {
+    resize_session_window_for(app, platform, None, layout)
+}
+
+pub fn resize_session_window_for(
+    app: &AppHandle,
+    platform: &str,
+    session_key: Option<&str>,
+    layout: SessionLayout,
+) -> bool {
     if layout.width < 320.0 || layout.height < 320.0 || layout.x < 0.0 || layout.y < 0.0 {
         return false;
     }
-    session_window_label(platform).is_some_and(|label| {
-        if let Some(window) = app.get_webview_window(label) {
-            let Some(main) = app.get_webview_window("main") else {
-                return false;
-            };
-            let screen = screen_layout(&layout, &main);
-            return window
-                .set_position(LogicalPosition::new(screen.x, screen.y))
-                .and_then(|_| window.set_size(LogicalSize::new(screen.width, screen.height)))
-                .is_ok();
-        }
-        app.get_webview(label).is_some_and(|webview| {
-            webview
-                .set_position(LogicalPosition::new(layout.x, layout.y))
-                .and_then(|_| webview.set_size(LogicalSize::new(layout.width, layout.height)))
-                .is_ok()
+    session_window_label_for(platform, session_key)
+        .ok()
+        .map(|(label, _)| label)
+        .is_some_and(|label| {
+            if let Some(window) = app.get_webview_window(&label) {
+                let Some(main) = app.get_webview_window("main") else {
+                    return false;
+                };
+                let screen = screen_layout(&layout, &main);
+                return window
+                    .set_position(LogicalPosition::new(screen.x, screen.y))
+                    .and_then(|_| window.set_size(LogicalSize::new(screen.width, screen.height)))
+                    .is_ok();
+            }
+            app.get_webview(&label).is_some_and(|webview| {
+                webview
+                    .set_position(LogicalPosition::new(layout.x, layout.y))
+                    .and_then(|_| webview.set_size(LogicalSize::new(layout.width, layout.height)))
+                    .is_ok()
+            })
         })
-    })
 }
 
 fn platform_name(platform: &str) -> &'static str {
@@ -561,9 +678,17 @@ pub async fn inspect_session_page(
     app: &AppHandle,
     platform: &str,
 ) -> Result<SessionInspectionReport, String> {
-    let label = session_window_label(platform).ok_or("unsupported_platform")?;
+    inspect_session_page_for(app, platform, None).await
+}
+
+pub async fn inspect_session_page_for(
+    app: &AppHandle,
+    platform: &str,
+    session_key: Option<&str>,
+) -> Result<SessionInspectionReport, String> {
+    let (label, _) = session_window_label_for(platform, session_key)?;
     let window = app
-        .get_webview(label)
+        .get_webview(&label)
         .ok_or_else(|| "session_window_missing".to_string())?;
     let script = inspection_script(platform)?;
     let raw = eval_json(&window, &script).await?;
@@ -577,9 +702,9 @@ pub async fn read_session_page(
     app: &AppHandle,
     request: &SessionWindowRequest,
 ) -> Result<SessionPageReport, String> {
-    let (label, url) = validate(request)?;
+    let (label, url, _) = validate(request)?;
     let window = app
-        .get_webview(label)
+        .get_webview(&label)
         .ok_or_else(|| "session_window_missing".to_string())?;
 
     let already_there = window.url().is_ok_and(|current| current == url);
@@ -669,6 +794,32 @@ mod tests {
         assert_eq!(session_window_label("hh"), Some("connector-hh"));
         assert_eq!(session_window_label("facebook"), None);
         assert_eq!(session_window_label(""), None);
+    }
+
+    #[test]
+    fn gives_each_managed_linkedin_profile_its_own_window_label_and_store() {
+        let (label, store) = session_window_label_for(
+            "linkedin",
+            Some("profile_123e4567-e89b-12d3-a456-426614174000"),
+        )
+        .expect("managed profile");
+        assert!(label.starts_with(MANAGED_LINKEDIN_LABEL_PREFIX));
+        assert_eq!(
+            store,
+            Some(
+                Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000")
+                    .unwrap()
+                    .into_bytes()
+            )
+        );
+        assert_eq!(
+            session_window_label_for("hh", Some("profile_123e4567-e89b-12d3-a456-426614174000")),
+            Err("managed_session_platform_unsupported".to_string())
+        );
+        assert_eq!(
+            session_window_label_for("linkedin", Some("profile-not-a-uuid")),
+            Err("managed_session_key_invalid".to_string())
+        );
     }
 
     #[test]
@@ -797,7 +948,10 @@ mod tests {
         ] {
             assert!(should_route_through_tunnel(url, true));
         }
-        assert!(!should_route_through_tunnel("https://www.google.com/recaptcha", false));
+        assert!(!should_route_through_tunnel(
+            "https://www.google.com/recaptcha",
+            false
+        ));
     }
 
     #[test]

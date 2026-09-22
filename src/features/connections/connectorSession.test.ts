@@ -6,6 +6,7 @@ import {
   looksLikeLinkedInLoginPage,
   inspectSessionPage,
   openConnectorSession,
+  openManagedLinkedinSession,
   platformRouteNotice,
   readSessionPage,
   resetConnectorSession,
@@ -41,10 +42,7 @@ describe('openConnectorSession', () => {
   it('reports failure when the browser refuses to open the session window', async () => {
     useWindow({ open: () => null });
 
-    const result = await openConnectorSession(
-      'hh',
-      'https://hh.ru/account/login',
-    );
+    const result = await openConnectorSession('hh', 'https://hh.ru/account/login');
 
     expect(result.opened).toBe(false);
     expect(result.reason).toBe('window_blocked');
@@ -53,10 +51,7 @@ describe('openConnectorSession', () => {
   it('reports success when the browser opens the session window', async () => {
     useWindow({ open: () => ({ closed: false }) });
 
-    const result = await openConnectorSession(
-      'linkedin',
-      'https://www.linkedin.com/login',
-    );
+    const result = await openConnectorSession('linkedin', 'https://www.linkedin.com/login');
 
     expect(result.opened).toBe(true);
   });
@@ -73,10 +68,7 @@ describe('openConnectorSession', () => {
       open: () => ({ closed: false }),
     });
 
-    const result = await openConnectorSession(
-      'linkedin',
-      'https://www.linkedin.com/login',
-    );
+    const result = await openConnectorSession('linkedin', 'https://www.linkedin.com/login');
 
     expect(result.opened).toBe(false);
     expect(result.reason).toBe('window_build_failed');
@@ -169,6 +161,27 @@ describe('session window commands in the desktop shell', () => {
       'close_connector_session',
       'reset_connector_session',
       'resize_connector_session',
+    ]);
+  });
+
+  it('opens a managed LinkedIn account with its own session key', async () => {
+    const calls = useDesktop(() => ({ opened: true, label: 'connector-linkedin-pool-test' }));
+
+    await expect(
+      openManagedLinkedinSession('profile_123e4567-e89b-12d3-a456-426614174000'),
+    ).resolves.toEqual({ opened: true });
+    expect(calls).toEqual([
+      {
+        cmd: 'open_connector_session',
+        args: {
+          request: {
+            platform: 'linkedin',
+            url: 'https://www.linkedin.com/login?locale=en_US',
+            layout: undefined,
+            sessionKey: 'profile_123e4567-e89b-12d3-a456-426614174000',
+          },
+        },
+      },
     ]);
   });
 
@@ -307,18 +320,13 @@ describe('readSessionPage', () => {
       },
     });
 
-    await expect(
-      readSessionPage('hh', 'https://hh.ru/applicant/resumes'),
-    ).rejects.toBeDefined();
+    await expect(readSessionPage('hh', 'https://hh.ru/applicant/resumes')).rejects.toBeDefined();
   });
 
   it('reads nothing on the web, where no platform session is available', async () => {
     useWindow({});
 
-    const page = await readSessionPage(
-      'linkedin',
-      'https://www.linkedin.com/in/me/',
-    );
+    const page = await readSessionPage('linkedin', 'https://www.linkedin.com/in/me/');
 
     expect(page.ok).toBe(false);
     expect(page.body).toBeUndefined();
@@ -351,6 +359,33 @@ describe('inspectSessionPage', () => {
     });
     await expect(inspectSessionPage('hh')).resolves.not.toHaveProperty('body');
   });
+
+  it('passes the managed profile key and returns the detected provider marker', async () => {
+    useWindow({
+      __TAURI_INTERNALS__: {
+        invoke: async (cmd: string, args: unknown) => {
+          expect(cmd).toBe('inspect_connector_session_page');
+          expect(args).toEqual({
+            platform: 'linkedin',
+            sessionKey: 'profile_123e4567-e89b-12d3-a456-426614174000',
+          });
+          return {
+            ready: true,
+            url: 'https://www.linkedin.com/feed/',
+            signedInApplicant: true,
+            accountMarker: 'profile-slug',
+            login: false,
+            otp: false,
+            captcha: false,
+          };
+        },
+      },
+    });
+
+    await expect(
+      inspectSessionPage('linkedin', 'profile_123e4567-e89b-12d3-a456-426614174000'),
+    ).resolves.toMatchObject({ signedInApplicant: true, accountMarker: 'profile-slug' });
+  });
 });
 
 describe('resetConnectorSession', () => {
@@ -371,21 +406,15 @@ describe('resetConnectorSession', () => {
 
 describe('page recognisers', () => {
   it('recognises a LinkedIn page that still asks for credentials', () => {
-    expect(looksLikeLinkedInLoginPage('<input name="session_password">')).toBe(
-      true,
-    );
+    expect(looksLikeLinkedInLoginPage('<input name="session_password">')).toBe(true);
     expect(looksLikeLinkedInLoginPage('<div id="join-form">')).toBe(true);
-    expect(looksLikeLinkedInLoginPage('https://linkedin.com/checkpoint/x')).toBe(
-      true,
-    );
+    expect(looksLikeLinkedInLoginPage('https://linkedin.com/checkpoint/x')).toBe(true);
     expect(looksLikeLinkedInLoginPage('<h1>Marina Orlova</h1>')).toBe(false);
   });
 
   it('recognises an hh.ru login page and its VPN block', () => {
     expect(looksLikeHhLoginPage('<a href="/account/login">')).toBe(true);
-    expect(looksLikeHhLoginPage('<div data-qa="account-login-page">')).toBe(
-      true,
-    );
+    expect(looksLikeHhLoginPage('<div data-qa="account-login-page">')).toBe(true);
     expect(looksLikeHhLoginPage('<h1>Мои резюме</h1>')).toBe(false);
     expect(looksLikeHhVpnBlock('VPN мешает работе сайта')).toBe(true);
     expect(looksLikeHhVpnBlock('<div class="vpn-cheeck">')).toBe(true);
@@ -395,18 +424,14 @@ describe('page recognisers', () => {
 
 describe('sessionOpenFailureMessage security reasons', () => {
   it('asks for an update when the shell refused the address', () => {
-    expect(sessionOpenFailureMessage('linkedin', 'url_not_allowed')).toMatch(
-      /безопасност/i,
-    );
-    expect(sessionOpenFailureMessage('hh', 'unsupported_platform')).toMatch(
-      /безопасност/i,
-    );
+    expect(sessionOpenFailureMessage('linkedin', 'url_not_allowed')).toMatch(/безопасност/i);
+    expect(sessionOpenFailureMessage('hh', 'unsupported_platform')).toMatch(/безопасност/i);
   });
 
   it('explains a headless environment', () => {
-    expect(
-      sessionOpenFailureMessage('hh', 'no_window_environment'),
-    ).toMatch(/приложении|браузере/i);
+    expect(sessionOpenFailureMessage('hh', 'no_window_environment')).toMatch(
+      /приложении|браузере/i,
+    );
   });
 });
 
@@ -439,9 +464,7 @@ describe('failure mapping edge cases', () => {
 
   it('falls back to a usable message for an unmapped or missing reason', () => {
     expect(sessionCheckFailure('hh', undefined).step).toBe('session_open');
-    expect(sessionCheckFailure('hh', new Error('eval_failed: boom')).step).toBe(
-      'session_open',
-    );
+    expect(sessionCheckFailure('hh', new Error('eval_failed: boom')).step).toBe('session_open');
     expect(sessionCheckFailure('linkedin', {}).message).toMatch(/не удалось/i);
   });
 });
@@ -451,17 +474,13 @@ describe('sessionOpenFailureMessage', () => {
     expect(sessionOpenFailureMessage('hh', 'window_not_registered')).toContain(
       'приложение не получило к нему доступ',
     );
-    expect(sessionOpenFailureMessage('hh', 'window_blocked')).toContain(
-      'Браузер заблокировал',
-    );
+    expect(sessionOpenFailureMessage('hh', 'window_blocked')).toContain('Браузер заблокировал');
     expect(sessionOpenFailureMessage('linkedin', 'unsupported_platform')).toContain(
       'проверку безопасности',
     );
     expect(sessionOpenFailureMessage('linkedin', 'no_window_environment')).toContain(
       'только в приложении или браузере',
     );
-    expect(sessionOpenFailureMessage('hh', 'something_new')).toContain(
-      'Повторите попытку',
-    );
+    expect(sessionOpenFailureMessage('hh', 'something_new')).toContain('Повторите попытку');
   });
 });
