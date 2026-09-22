@@ -48,6 +48,21 @@ describe('AdminVacancySourcesView', () => {
     expect(html).toContain('Синхронизировать');
   });
 
+  it('sorts source cards alphabetically instead of trusting API order', () => {
+    const html = renderToStaticMarkup(
+      <AdminVacancySourcesView
+        state={sourcesLoaded([
+          { ...sampleSources[0], name: 'Zeta Jobs' },
+          { ...sampleSources[1], name: 'Alpha Jobs' },
+        ])}
+        onRefresh={vi.fn()}
+        onSync={vi.fn()}
+      />,
+    );
+
+    expect(html.indexOf('Alpha Jobs')).toBeLessThan(html.indexOf('Zeta Jobs'));
+  });
+
   /**
    * B200 — живость и доверие показываются раздельно, и каждое число называет
    * свой знаменатель. Иначе «площадка отвечает» и «площадка жива» выглядели на
@@ -249,9 +264,7 @@ describe('AdminVacancySourcesView', () => {
   it('называет ручной опрос очередью, пока обслуживатель его не выполнил', () => {
     const html = renderToStaticMarkup(
       <AdminVacancySourcesView
-        state={sourcesLoaded([
-          { ...sampleSources[0], manualSync: { status: 'queued' } },
-        ])}
+        state={sourcesLoaded([{ ...sampleSources[0], manualSync: { status: 'queued' } }])}
         onRefresh={vi.fn()}
         onSync={vi.fn()}
       />,

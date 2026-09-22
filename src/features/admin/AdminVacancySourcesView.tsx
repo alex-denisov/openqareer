@@ -70,9 +70,8 @@ function SourceLinkCheckFact({ liveness }: { liveness: AdminSourceHealth['livene
   }
   return (
     <li>
-      Ссылок открылось: {linkCheck.open} из {linkCheck.checked} (выборка из{' '}
-      {linkCheck.sampledFrom}), проверено{' '}
-      {new Date(linkCheck.checkedAt).toLocaleDateString('ru-RU')}
+      Ссылок открылось: {linkCheck.open} из {linkCheck.checked} (выборка из {linkCheck.sampledFrom}
+      ), проверено {new Date(linkCheck.checkedAt).toLocaleDateString('ru-RU')}
       {linkCheck.unknown > 0 ? `; без ответа ${linkCheck.unknown}` : ''}
     </li>
   );
@@ -88,10 +87,7 @@ function SourceHealthFacts({ health }: { health: AdminSourceHealth }) {
       серию пустых уловов. Подпись обязана это называть.
     */
     <ul className="admin-source-health-facts">
-      <li>
-        В последнем непустом улове свежее 30 дней:{' '}
-        {countedShare(liveness.fresherThan30Days)}
-      </li>
+      <li>В последнем непустом улове свежее 30 дней: {countedShare(liveness.fresherThan30Days)}</li>
       <li>В нём же свежее 180 дней: {countedShare(liveness.fresherThan180Days)}</li>
       <li>Карточек с работодателем: {countedShare(trust.completeness.withEmployer)}</li>
       <li>За 30 дней успешных опросов: {countedShare(trust.consistency.successful)}</li>
@@ -130,11 +126,7 @@ function SourceSchedule({ schedule }: { schedule?: AdminSourceSchedule }) {
   );
 }
 
-function ManualSyncStatus({
-  status,
-}: {
-  status?: AdminVacancySource['manualSync'];
-}) {
+function ManualSyncStatus({ status }: { status?: AdminVacancySource['manualSync'] }) {
   if (!status || status.status === 'ready') return null;
   const running = status.status === 'running';
   return (
@@ -232,9 +224,15 @@ function SourcesBody({
     return <p className="admin-note is-empty-note">Ни одной площадки не зарегистрировано.</p>;
   }
 
+  const sources = [...state.sources].sort(
+    (left, right) =>
+      left.name.localeCompare(right.name, 'ru-RU', { sensitivity: 'base' }) ||
+      left.id.localeCompare(right.id),
+  );
+
   return (
     <div className="admin-sources-grid">
-      {state.sources.map((source) => (
+      {sources.map((source) => (
         <SourceCard key={source.id} source={source} onSync={onSync} onOpenTest={onOpenTest} />
       ))}
     </div>
@@ -277,20 +275,11 @@ function SourceCardActions({
 }) {
   return (
     <div className="admin-source-actions">
-      <button
-        className="admin-btn is-secondary"
-        type="button"
-        disabled={syncing}
-        onClick={onSync}
-      >
+      <button className="admin-btn is-secondary" type="button" disabled={syncing} onClick={onSync}>
         <ArrowsClockwise size={14} className={syncing ? 'is-spinning' : ''} />
         {syncing ? 'Синхронизация…' : 'Синхронизировать'}
       </button>
-      <button
-        className="admin-btn is-secondary"
-        type="button"
-        onClick={onOpenTest}
-      >
+      <button className="admin-btn is-secondary" type="button" onClick={onOpenTest}>
         <MagnifyingGlass size={14} />
         Проверить выдачу
       </button>
@@ -370,7 +359,9 @@ function VacancyTestItemCard({ v }: { v: VacancySourceTestItem }) {
       {v.requiredSkills && v.requiredSkills.length > 0 ? (
         <div className="admin-test-skills-list">
           {v.requiredSkills.map((s) => (
-            <span key={s} className="admin-badge is-muted">{s}</span>
+            <span key={s} className="admin-badge is-muted">
+              {s}
+            </span>
           ))}
         </div>
       ) : null}
@@ -390,8 +381,12 @@ function VacancyTestResultsView({ result }: { result: VacancySourceTestResult })
         <span className={`admin-badge ${result.success ? 'is-success' : 'is-error'}`}>
           {result.success ? '200 OK' : 'Ошибка'}
         </span>
-        <span>Время ответа: <strong>{result.latencyMs} мс</strong></span>
-        <span>Найдено вакансий: <strong>{result.count}</strong></span>
+        <span>
+          Время ответа: <strong>{result.latencyMs} мс</strong>
+        </span>
+        <span>
+          Найдено вакансий: <strong>{result.count}</strong>
+        </span>
       </div>
 
       {result.vacancies.length > 0 ? (
@@ -490,8 +485,17 @@ function VacancySourceTestModal({
   return (
     <div className="admin-test-modal-backdrop" role="dialog" aria-modal="true">
       <div className="admin-test-modal">
-        <VacancySourceTestHeader name={source.name} targetUrl={source.targetUrl} onClose={onClose} />
-        <VacancySourceTestSearchForm query={query} busy={busy} onQueryChange={setQuery} onSubmit={runTest} />
+        <VacancySourceTestHeader
+          name={source.name}
+          targetUrl={source.targetUrl}
+          onClose={onClose}
+        />
+        <VacancySourceTestSearchForm
+          query={query}
+          busy={busy}
+          onQueryChange={setQuery}
+          onSubmit={runTest}
+        />
         {error ? (
           <div className="admin-badge is-error admin-test-error" role="alert">
             {error}
@@ -516,7 +520,8 @@ export function AdminVacancySourcesView({
         <div>
           <h2>Мультиисточниковый сбор вакансий</h2>
           <p className="admin-note">
-            Управление парсерами, каналами Telegram, RSS-фидами, дедупликацией и интерактивное тестирование выдачи.
+            Управление парсерами, каналами Telegram, RSS-фидами, дедупликацией и интерактивное
+            тестирование выдачи.
           </p>
         </div>
         <button
@@ -525,10 +530,7 @@ export function AdminVacancySourcesView({
           disabled={state.status === 'loading'}
           onClick={onRefresh}
         >
-          <ArrowsClockwise
-            size={16}
-            className={state.status === 'loading' ? 'is-spinning' : ''}
-          />
+          <ArrowsClockwise size={16} className={state.status === 'loading' ? 'is-spinning' : ''} />
           Обновить статус
         </button>
       </div>
@@ -541,10 +543,7 @@ export function AdminVacancySourcesView({
       />
 
       {testingSource ? (
-        <VacancySourceTestModal
-          source={testingSource}
-          onClose={() => setTestingSource(null)}
-        />
+        <VacancySourceTestModal source={testingSource} onClose={() => setTestingSource(null)} />
       ) : null}
     </div>
   );
