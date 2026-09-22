@@ -18,6 +18,24 @@ describe('LinkedinScraper with Obscura pool rotation', () => {
     </li>
   `;
 
+  it('does not invoke a browser without provider capability', async () => {
+    const pool = new LinkedinAccountPool({ accountIds: ['acc-1'], storageRoot: '/tmp/test-crawlers' });
+    let calls = 0;
+    const scraper = new LinkedinScraper({
+      pool,
+      navigator: async () => {
+        calls += 1;
+        return { status: 200, url: '', content: sampleJobsHtml };
+      },
+      minDelayMs: 0,
+      maxDelayMs: 0,
+    });
+
+    const result = await scraper.scrapeJobs({ keywords: 'Architect' });
+    expect(result.status).toBe('provider_permission_required');
+    expect(calls).toBe(0);
+  });
+
   it('scrapes vacancies using active account from pool and records success', async () => {
     const pool = new LinkedinAccountPool({
       accountIds: ['acc-1', 'acc-2'],
@@ -35,6 +53,7 @@ describe('LinkedinScraper with Obscura pool rotation', () => {
       navigator: mockNavigator,
       minDelayMs: 0,
       maxDelayMs: 0,
+      providerCapability: 'provider_permitted',
     });
 
     const result = await scraper.scrapeJobs({ keywords: 'Architect', location: 'Remote' });
@@ -79,6 +98,7 @@ describe('LinkedinScraper with Obscura pool rotation', () => {
       navigator: mockNavigator,
       minDelayMs: 0,
       maxDelayMs: 0,
+      providerCapability: 'provider_permitted',
     });
 
     const result = await scraper.scrapeJobs({ keywords: 'DevOps', location: 'Remote' });
@@ -105,6 +125,7 @@ describe('LinkedinScraper with Obscura pool rotation', () => {
       navigator: async () => ({ status: 200, url: '', content: '' }),
       minDelayMs: 0,
       maxDelayMs: 0,
+      providerCapability: 'provider_permitted',
     });
 
     const result = await scraper.scrapeJobs({ keywords: 'Rust', location: 'Remote' });
@@ -127,6 +148,7 @@ describe('LinkedinScraper with Obscura pool rotation', () => {
       }),
       minDelayMs: 0,
       maxDelayMs: 0,
+      providerCapability: 'provider_permitted',
     });
 
     const result = await scraper.scrapeJobs({ keywords: 'Rust', location: 'Remote' });
@@ -174,6 +196,7 @@ describe('LinkedinScraper with Obscura pool rotation', () => {
       navigator: mockNavigator,
       minDelayMs: 0,
       maxDelayMs: 0,
+      providerCapability: 'provider_permitted',
     });
 
     const result = await scraper.scrapePosts({ keywords: '#hiring react' });

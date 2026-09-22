@@ -108,6 +108,7 @@ describe('Linkedin Ingest Runner (B208)', () => {
     const reading = await fetchLinkedinCrawler({
       pool,
       scraper,
+      providerCapability: 'provider_permitted',
       keywords: ['Software Engineer'],
       postKeywords: ['#hiring'],
     });
@@ -175,6 +176,7 @@ describe('Linkedin Ingest Runner (B208)', () => {
         linkedinCrawlerDeps: {
           pool,
           scraper,
+          providerCapability: 'provider_permitted',
           keywords: ['Software Engineer'],
         },
       },

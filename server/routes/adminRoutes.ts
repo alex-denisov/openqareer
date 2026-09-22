@@ -1,5 +1,4 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { AuthPrincipal } from '../auth/authService';
 import type { RouteDeps } from './deps';
 import {
   authenticateSession,
@@ -8,6 +7,7 @@ import {
   setSessionCookie,
   withDeps,
 } from './helpers';
+import { requireAdmin } from './adminAuth';
 import { toAdminSourceSchedule } from '../vacancies/adminSourceSchedule';
 import { buildAdminSourcePage } from '../vacancies/adminSourcePage';
 import { buildAdminVacancyPage } from '../vacancies/adminVacancyPage';
@@ -15,6 +15,7 @@ import { queueFallbackDescriptors } from '../providers/providerQueue';
 import { describeRoleNamerQueue } from '../providers/roleNamer';
 import { CAREER_SUPER_PROMPT_REVISION } from '../prompts/careerSuperPrompt';
 import { registerHhCrawlFilterRoutes } from './hhCrawlFilterRoutes';
+import { registerLinkedinPoolRoutes } from './linkedinPoolRoutes';
 import {
   adminVacancyQuerySchema,
   adminVacancySourceTestSchema,
@@ -24,30 +25,6 @@ import {
   adminUserPasswordResetSchema,
   adminUserQuerySchema,
 } from './schemas';
-
-function requireAdmin(
-  deps: Pick<RouteDeps, 'authService' | 'config'>,
-  request: Parameters<typeof authenticateSession>[0],
-  reply: Parameters<typeof sendError>[0],
-): AuthPrincipal | null {
-  const principal = authenticateSession(request, deps.authService, deps.config);
-  if (!principal) {
-    void sendError(reply, request, 401, 'unauthorized', 'Нужен вход в аккаунт.', false);
-    return null;
-  }
-  if (principal.role !== 'admin') {
-    void sendError(
-      reply,
-      request,
-      403,
-      'forbidden',
-      'Раздел доступен только администратору.',
-      false,
-    );
-    return null;
-  }
-  return principal;
-}
 
 async function handleListUsers(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireAdmin(deps, request, reply);
@@ -424,6 +401,7 @@ function registerRuntimeMemory(app: FastifyInstance, deps: RouteDeps): void {
 export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   registerCrawlFilter(app, deps);
   registerRuntimeMemory(app, deps);
+  registerLinkedinPoolRoutes(app, deps);
   app.get('/api/v1/admin/users', withDeps(deps, handleListUsers));
   app.get('/api/v1/admin/users/:userId', withDeps(deps, handleGetUser));
   app.patch('/api/v1/admin/users/:userId', withDeps(deps, handlePatchUser));

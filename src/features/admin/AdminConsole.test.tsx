@@ -36,6 +36,15 @@ describe('AdminConsole', () => {
     expect(html).not.toContain('admin-table');
   });
 
+  it('renders no administrator surface when the app provides the role redirect', () => {
+    const html = renderToStaticMarkup(
+      <AdminConsole session={candidate} onUnauthorized={() => undefined} />,
+    );
+
+    expect(html).toBe('');
+    expect(html).not.toContain('Аккаунты LinkedIn');
+  });
+
   it('waits silently while the session is still being checked', () => {
     const html = renderToStaticMarkup(<AdminConsole sessionPending />);
 
@@ -48,6 +57,7 @@ describe('AdminConsole', () => {
 
     expect(html).toContain('Учётные записи');
     expect(html).toContain('Поиск по логину, email или имени');
+    expect(html).toContain('Аккаунты LinkedIn');
     // The scope note describes the operator section's capabilities.
     expect(html).toContain('управление ролями, тарифами, блокировками');
   });

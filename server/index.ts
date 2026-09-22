@@ -28,6 +28,7 @@ import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContact
 import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
 import { buildRecruiterVacancyInput } from './outreach/recruiterIntelligenceInput';
 import { runRecruiterIntelligenceJobs } from './outreach/recruiterIntelligenceWorker';
+import { SqliteLinkedinPoolRepository } from './linkedinPool/sqliteLinkedinPoolRepository';
 
 const config = readServerConfig(process.env);
 const candidateStore = new SqliteCandidateStore({
@@ -129,6 +130,11 @@ const recruiterContactsRepo = new SqliteRecruiterContactsRepository({
 const candidateReputationRepo = new SqliteCandidateReputationRepository({
   databasePath: config.databasePath,
 });
+const linkedinPool = new SqliteLinkedinPoolRepository({
+  databasePath: config.databasePath,
+  encryptionKey: config.dataEncryptionKey,
+  runtimeRoot: config.linkedinRuntimeRoot,
+});
 const app = await buildApp({
   config,
   coachProvider,
@@ -139,6 +145,7 @@ const app = await buildApp({
   hhCrawlSettings,
   recruiterContactsRepo,
   candidateReputationRepo,
+  linkedinPool,
   runtimeMemory: () => {
     const heap = readProcessHeap();
     return {
@@ -260,6 +267,7 @@ async function shutdown(signal: string): Promise<void> {
   vacancyEngine.close();
   recruiterContactsRepo.close();
   candidateReputationRepo.close();
+  linkedinPool.close();
   process.exit(0);
 }
 

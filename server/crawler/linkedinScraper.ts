@@ -3,6 +3,7 @@ import type { LinkedinAccountPool } from './linkedinAccountPool';
 import { parseLinkedinJobCards } from './linkedinParser';
 import { parseLinkedinPostCards } from './linkedinPostParser';
 import { ObscuraRunner } from './obscuraRunner';
+import type { LinkedinProviderCapabilityVerdict } from './linkedinProviderCapability';
 
 export interface PageNavigationResult {
   readonly status: number;
@@ -29,7 +30,12 @@ export interface ScrapePostsQuery {
 }
 
 export interface ScrapeResult {
-  readonly status: 'success' | 'no_accounts_available' | 'exhausted_retries' | 'session_required';
+  readonly status:
+    | 'success'
+    | 'no_accounts_available'
+    | 'exhausted_retries'
+    | 'session_required'
+    | 'provider_permission_required';
   readonly accountId?: string;
   readonly vacancies: readonly UnifiedVacancy[];
   readonly waitMs?: number;
@@ -41,6 +47,7 @@ export interface LinkedinScraperOptions {
   readonly minDelayMs?: number;
   readonly maxDelayMs?: number;
   readonly proxyUrl?: string;
+  readonly providerCapability?: LinkedinProviderCapabilityVerdict;
 }
 
 export function resolveLinkedinProxyUrl(explicitProxy?: string): string | undefined {
@@ -59,11 +66,13 @@ export class LinkedinScraper {
   private readonly navigator: PageNavigator;
   private readonly minDelayMs: number;
   private readonly maxDelayMs: number;
+  private readonly providerCapability: LinkedinProviderCapabilityVerdict;
 
   constructor(options: LinkedinScraperOptions) {
     this.pool = options.pool;
     this.minDelayMs = options.minDelayMs ?? 8000;
     this.maxDelayMs = options.maxDelayMs ?? 25000;
+    this.providerCapability = options.providerCapability ?? 'not_configured';
 
     this.navigator =
       options.navigator ??
@@ -116,6 +125,9 @@ export class LinkedinScraper {
     targetUrl: string,
     parser: (content: string, context: { observedAt: string }) => readonly UnifiedVacancy[],
   ): Promise<ScrapeResult> {
+    if (this.providerCapability === 'not_configured') {
+      return { status: 'provider_permission_required', vacancies: [] };
+    }
     const totalAccounts = this.pool.getPoolSummary().total;
     const maxAttempts = Math.max(1, totalAccounts);
     let sessionRequired = false;

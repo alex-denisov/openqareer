@@ -2,10 +2,9 @@ import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import { ATS_BOARD_MEASUREMENTS, ATS_BOARD_SOURCES } from './atsBoardSources';
 import { WORKDAY_BOARD_MEASUREMENTS, WORKDAY_BOARD_SOURCES } from './workdayBoardSources';
 import { MEASUREMENTS } from './vacancySourceMeasurementData';
-import { configuredLinkedinAccountIds } from '../crawler/linkedinAccountConfig';
+import { linkedinProviderCapability } from '../crawler/linkedinProviderCapability';
 
-const linkedInCrawlerAccountIds = configuredLinkedinAccountIds();
-const linkedInCrawlerEnabled = linkedInCrawlerAccountIds.length > 0;
+const linkedInCapability = linkedinProviderCapability();
 
 /**
  * The three access classes the owner named for B164: what may be read from the
@@ -560,19 +559,11 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     type: 'json_api',
     accessClass: 'open_web',
     market: 'US, EU, MENA, APAC, LATAM, СНГ, Россия, удалёнка (гостевой список LinkedIn)',
-    addressStatus: 'live',
-    enabled: true,
+    addressStatus: 'official_access_required',
+    enabled: false,
+    disabledReason:
+      'provider_permission_required: гостевой HTML/API-канал не является разрешённым provider capability; владелец пула не заменяет разрешение площадки.',
     targetUrl: 'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search',
-    // robots.txt LinkedIn запрещает /jobs-guest/ словами; включено по прямому,
-    // трижды повторённому решению владельца (B218). Гостевой список открыт без
-    // учётной записи; капчу не решаем, аккаунт не вводим.
-    robotsOverride: {
-      grantedBy: 'owner',
-      grantedOn: '2026-09-14',
-      basis:
-        'Прямое решение владельца (B218, повторено трижды): гостевой список /jobs-guest/ открыт без учётной записи; вакансии LinkedIn критичны для продукта. Темп вежливый, на 429 источник останавливается.',
-    },
-    // Полтора часа: веер по 4 комбинации за опрос (B218).
     refreshIntervalMinutes: 90,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
@@ -583,11 +574,9 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     type: 'linkedin_crawler',
     accessClass: 'browser_session',
     market: 'US, EU, MENA, APAC, LATAM, СНГ, Россия, удалёнка (серверный сбор Obscura)',
-    addressStatus: 'live',
-    enabled: linkedInCrawlerEnabled,
-    ...(linkedInCrawlerEnabled
-      ? {}
-      : { disabledReason: 'account_pool_unconfigured: LINKEDIN_ACCOUNT_IDS не задан' }),
+    addressStatus: 'official_access_required',
+    enabled: false,
+    disabledReason: `${linkedInCapability.reason}: legacy Obscura crawler is not a provider-permitted capability`,
     targetUrl: 'https://www.linkedin.com/jobs/search',
     refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,

@@ -58,4 +58,6 @@ export interface RouteDeps {
   recruiterContactsRepo?: import('../data/sqliteRecruiterContactsRepository').SqliteRecruiterContactsRepository;
   /** Репозиторий аудита репутации и цифрового следа кандидата (B224). */
   candidateReputationRepo?: import('../data/sqliteCandidateReputationRepository').SqliteCandidateReputationRepository;
+  /** Реестр управляемых LinkedIn-сессий; доступен только роли admin (B239). */
+  linkedinPool?: import('../linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
 }

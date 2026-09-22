@@ -91,7 +91,9 @@ test.describe('B089 administrator console', () => {
     await expect(dialog.getByRole('heading', { name: /maria/ })).toBeVisible();
   });
 
-  test('a signed-in candidate is refused without being told to sign in again', async ({ page }) => {
+  test('a signed-in candidate is redirected out of admin without loading admin data', async ({
+    page,
+  }) => {
     await stubSession(page, CANDIDATE);
     let directoryCalls = 0;
     await page.route('**/api/v1/admin/users*', async (route) => {
@@ -102,23 +104,23 @@ test.describe('B089 administrator console', () => {
     await page.goto('/admin', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
-    await expect(page.getByText('Этот аккаунт не администратор')).toBeVisible();
-    await expect(page.locator('.admin-table')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.locator('.admin-console')).toHaveCount(0);
+    await expect(page.getByText('Аккаунты LinkedIn')).toHaveCount(0);
     // A refused surface must not even ask for the data it cannot have.
     expect(directoryCalls).toBe(0);
   });
 
-  test('an anonymous visitor is sent to the door that actually opens', async ({ page }) => {
+  test('an anonymous visitor is sent to the login door without rendering admin', async ({
+    page,
+  }) => {
     await stubSession(page, null);
 
     await page.goto('/admin', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
-    await expect(page.getByText('Нужен вход под учётной записью администратора')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Вернуться в кабинет' })).toHaveAttribute(
-      'href',
-      '/',
-    );
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.locator('.admin-console')).toHaveCount(0);
   });
 
   test('a failed directory explains itself and offers a retry', async ({ page }) => {
@@ -203,5 +205,71 @@ test.describe('B089 administrator console', () => {
     await expect(page.getByRole('status')).toContainText('Обслуживатель заберёт запрос');
     await page.getByRole('button', { name: 'Синхронизировать' }).click();
     await expect(page.getByRole('status')).toContainText('В очереди');
+  });
+
+  test('the LinkedIn pool shows the complete login only inside the admin console', async ({
+    page,
+  }) => {
+    await stubSession(page, ADMINISTRATOR);
+    await page.route('**/api/v1/admin/users*', async (route) => {
+      await route.fulfill({ json: { data: DIRECTORY } });
+    });
+    await page.route('**/api/v1/admin/linkedin/accounts?*', async (route) => {
+      await route.fulfill({
+        json: {
+          data: {
+            total: 1,
+            offset: 0,
+            nextOffset: null,
+            accounts: [
+              {
+                id: '2e6f2b8a-1e84-4f07-9c6d-f8b5a4e2e4a1',
+                adminLabel: 'Основной пул',
+                emailLogin: 'pool-admin@example.test',
+                providerAccountMarker: 'marker-1',
+                profileIsolationId: 'profile-1',
+                state: 'login_required',
+                lastVerifiedAt: null,
+                lastHeartbeatAt: null,
+                lastFailureCode: 'login_required',
+                leaseUntil: null,
+                capabilityVerdict: 'not_configured',
+                revision: 0,
+                createdAt: '2026-09-22T00:00:00.000Z',
+                updatedAt: '2026-09-22T00:00:00.000Z',
+              },
+            ],
+          },
+        },
+      });
+    });
+    await page.route('**/api/v1/admin/linkedin/accounts/*/session', async (route) => {
+      await route.fulfill({
+        status: 202,
+        json: {
+          data: {
+            account: { state: 'user_action_required' },
+            lease: {
+              accountId: '2e6f2b8a-1e84-4f07-9c6d-f8b5a4e2e4a1',
+              handle: 'lhs_synthetic_handle_for_e2e_123456789012345678901234567890',
+              expiresAt: '2026-09-22T00:15:00.000Z',
+              transport: 'desktop',
+              webRemote: false,
+            },
+          },
+        },
+      });
+    });
+
+    await page.goto('/admin', { waitUntil: 'domcontentloaded' });
+    await waitForLiveApp(page);
+    await page.getByRole('button', { name: 'Аккаунты LinkedIn' }).click();
+
+    await expect(page.getByText('pool-admin@example.test')).toBeVisible();
+    await expect(
+      page.getByRole('article').getByText('Полный email login', { exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Запросить desktop-вход' }).click();
+    await expect(page.getByRole('alert')).toContainText('session_runtime_unavailable');
   });
 });

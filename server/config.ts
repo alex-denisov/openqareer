@@ -37,6 +37,7 @@ const configSchema = z.object({
     return decoded;
   }),
   OPENQAREER_DATABASE_PATH: z.string().min(1).default('data/openqareer.db'),
+  OPENQAREER_LINKEDIN_RUNTIME_ROOT: blankAsUnset(z.string().min(1).max(1_024)),
   OPENQAREER_AI_MODEL: z.enum(supportedModels).default('gpt-5.6-sol'),
   OPENQAREER_PERSONAL_AI_PROVIDER: z.enum(PROVIDER_IDS).default('openai'),
   OPENQAREER_PERSONAL_AI_MODEL: z.string().min(1).optional(),
@@ -111,6 +112,8 @@ export interface ServerConfig {
   previewToken: string;
   dataEncryptionKey: Buffer;
   databasePath: string;
+  /** Encrypted browser runtime root; must be outside the repository in production. */
+  linkedinRuntimeRoot?: string;
   model: string;
   personalProvider?: ProviderId;
   syntheticProvider?: ProviderId;
@@ -246,6 +249,7 @@ export function readServerConfig(
     previewToken: parsed.OPENQAREER_PREVIEW_API_TOKEN,
     dataEncryptionKey: parsed.OPENQAREER_DATA_ENCRYPTION_KEY,
     databasePath: parsed.OPENQAREER_DATABASE_PATH,
+    linkedinRuntimeRoot: parsed.OPENQAREER_LINKEDIN_RUNTIME_ROOT,
     model: personalRoute.model,
     personalProvider: personalRoute.provider,
     syntheticProvider: syntheticRoute.provider,
