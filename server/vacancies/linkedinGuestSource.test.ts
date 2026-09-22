@@ -19,6 +19,21 @@ const CARD = (id: string, title: string) => `<li>
   </div></li>`;
 
 describe('LinkedIn guest source (B218)', () => {
+  it('fails closed without an explicit provider capability', async () => {
+    let calls = 0;
+    const reading = await fetchLinkedinGuest({
+      fetchPage: async () => {
+        calls += 1;
+        return { status: 200, body: '<ul></ul>' };
+      },
+      sleep: async () => {},
+      observedAt: 'now',
+    });
+
+    expect(reading).toEqual({ vacancies: [], partial: true });
+    expect(calls).toBe(0);
+  });
+
   it('строит адрес с offset и комбинацией веера', () => {
     const url = new URL(
       linkedinGuestUrl(20, {
@@ -68,6 +83,7 @@ describe('LinkedIn guest source (B218)', () => {
         },
         sleep: async () => {},
         observedAt: '2026-09-14T09:00:00.000Z',
+        providerCapability: 'provider_permitted',
       },
       0,
     );
@@ -91,6 +107,7 @@ describe('LinkedIn guest source (B218)', () => {
         },
         sleep: async () => {},
         observedAt: '2026-09-14T09:00:00.000Z',
+        providerCapability: 'provider_permitted',
       },
       0,
     );
@@ -106,6 +123,7 @@ describe('LinkedIn guest source (B218)', () => {
           fetchPage: async () => ({ status: 429, body: '' }),
           sleep: async () => {},
           observedAt: 'now',
+          providerCapability: 'provider_permitted',
         },
         0,
       ),

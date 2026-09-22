@@ -56,18 +56,22 @@
 }
 
 .admin-note,
-.admin-count,
-.admin-scope-note {
+.admin-count {
   color: var(--text-muted);
   line-height: 1.6;
 }
 
 .admin-scope-note {
+  color: var(--text-muted);
+  line-height: 1.6;
   margin-top: 40px;
   padding-top: 20px;
   border-top: 1px solid var(--line);
   font-size: 0.85rem;
   max-width: 60rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 .admin-mono {
@@ -316,6 +320,221 @@
   background: var(--surface-raised);
   border-color: var(--line-strong);
   font-weight: 600;
+}
+
+.admin-linkedin-pool {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.admin-linkedin-add {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-medium);
+  background: var(--surface-raised);
+}
+
+.admin-linkedin-add__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  color: var(--primary-accent);
+}
+
+.admin-linkedin-add__heading h2,
+.admin-linkedin-add__heading p {
+  margin: 0;
+}
+
+.admin-linkedin-add__heading p {
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.admin-linkedin-add__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 0.875rem;
+}
+
+.admin-linkedin-add__fields label {
+  display: grid;
+  gap: 0.375rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.admin-linkedin-add__fields input {
+  min-block-size: 2.75rem;
+  min-inline-size: 0;
+  padding-inline: 0.75rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+  color: var(--text-main);
+}
+
+.admin-linkedin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+}
+
+.admin-linkedin-card {
+  display: flex;
+  min-inline-size: 0;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 1.125rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-medium);
+  background: var(--surface);
+}
+
+.admin-linkedin-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.admin-linkedin-card__header h2,
+.admin-linkedin-card__header p {
+  margin: 0;
+}
+
+.admin-linkedin-card__header h2 {
+  overflow-wrap: anywhere;
+}
+
+.admin-linkedin-card__login,
+.admin-linkedin-card__detail,
+.admin-linkedin-card__failure {
+  margin: 0;
+}
+
+.admin-linkedin-card__login {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.admin-linkedin-card__login code {
+  overflow-wrap: anywhere;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+.admin-linkedin-card__detail {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.admin-linkedin-card__failure {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  color: var(--warning-amber);
+  line-height: 1.45;
+}
+
+.admin-linkedin-card__meta {
+  display: grid;
+  gap: 0.625rem;
+  margin: 0;
+}
+
+.admin-linkedin-card__meta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.5rem;
+}
+
+.admin-linkedin-card__meta dt {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.admin-linkedin-card__meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  text-align: end;
+}
+
+.admin-linkedin-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.admin-linkedin-card__actions .admin-btn {
+  flex: 1 1 10rem;
+}
+
+.admin-linkedin-confirm {
+  display: grid;
+  gap: 0.625rem;
+  padding: 0.875rem;
+  border: 1px solid var(--danger-red);
+  border-radius: var(--radius-small);
+  background: var(--surface-raised);
+}
+
+.admin-linkedin-confirm h3,
+.admin-linkedin-confirm p {
+  margin: 0;
+}
+
+.admin-linkedin-confirm p {
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.admin-linkedin-confirm > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.admin-success {
+  margin: 0;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--primary-success);
+  border-radius: var(--radius-small);
+  color: var(--primary-success);
+}
+
+.admin-empty-state {
+  margin: 0;
+  padding: 2rem 1rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-medium);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.admin-btn:focus-visible,
+.admin-linkedin-add input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-btn {
+    transition: none;
+  }
 }
 
 /* Vacancy Sources View */

@@ -178,6 +178,55 @@ export const adminUserPasswordResetSchema = z.object({
   newPassword: z.string().min(8).max(256),
 });
 
+const linkedinAccountIdSchema = z.string().uuid();
+const linkedinEmailLoginSchema = z.string().trim().email().max(254);
+const linkedinAdminLabelSchema = z.string().trim().min(1).max(120);
+
+export const adminLinkedinPoolQuerySchema = z.object({
+  state: z
+    .enum([
+      'unconfigured',
+      'login_required',
+      'user_action_required',
+      'checking',
+      'ready',
+      'expired',
+      'challenge_required',
+      'cooling_down',
+      'revoked',
+      'banned',
+      'disabled',
+    ])
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
+});
+
+export const adminLinkedinPoolCreateSchema = z.object({
+  adminLabel: linkedinAdminLabelSchema,
+  emailLogin: linkedinEmailLoginSchema,
+  providerAccountMarker: z.string().trim().min(1).max(240).optional(),
+});
+
+export const adminLinkedinPoolPatchSchema = z.object({
+  revision: z.number().int().min(0),
+  adminLabel: linkedinAdminLabelSchema.optional(),
+  emailLogin: linkedinEmailLoginSchema.optional(),
+  providerAccountMarker: z.string().trim().max(240).nullable().optional(),
+});
+
+export const adminLinkedinPoolParamsSchema = z.object({
+  accountId: linkedinAccountIdSchema,
+});
+
+export const adminLinkedinPoolDeleteSchema = z.object({
+  revision: z.number().int().min(0),
+});
+
+export const adminLinkedinPoolCompleteSchema = z.object({
+  handle: z.string().regex(/^lhs_[A-Za-z0-9_-]{40,}$/),
+});
+
 export const adminVacancyQuerySchema = z.object({
   sourceId: z.string().optional(),
   type: z.string().optional(),

@@ -3,6 +3,7 @@ import type { SourceReading } from '../vacancies/multiSourceVacancyEngine';
 import { LinkedinAccountPool } from './linkedinAccountPool';
 import { configuredLinkedinAccountIds } from './linkedinAccountConfig';
 import { LinkedinScraper, resolveLinkedinProxyUrl } from './linkedinScraper';
+import { linkedinProviderCapability, type LinkedinProviderCapabilityVerdict } from './linkedinProviderCapability';
 
 export const LINKEDIN_CRAWLER_SOURCE_ID = 'src-linkedin-crawler';
 export const DEFAULT_LINKEDIN_KEYWORDS = ['Software Engineer'] as const;
@@ -14,6 +15,8 @@ export interface LinkedinCrawlerDeps {
   readonly keywords?: readonly string[];
   readonly postKeywords?: readonly string[];
   readonly query?: string;
+  /** Explicit provider verdict required; account ids alone never unlock crawling. */
+  readonly providerCapability?: LinkedinProviderCapabilityVerdict;
 }
 
 function createDefaultAccountPool(): LinkedinAccountPool {
@@ -36,6 +39,7 @@ function resolveScraperAndPool(deps?: LinkedinCrawlerDeps): {
     new LinkedinScraper({
       pool,
       proxyUrl: resolveLinkedinProxyUrl(),
+      providerCapability: deps?.providerCapability,
     });
   return { scraper, pool };
 }
@@ -95,6 +99,10 @@ export function formatCrawlerVacancy(
 export async function fetchLinkedinCrawler(
   deps?: LinkedinCrawlerDeps,
 ): Promise<SourceReading> {
+  const capability = deps?.providerCapability ?? linkedinProviderCapability().verdict;
+  if (capability === 'not_configured') {
+    return { vacancies: [], partial: true };
+  }
   const { scraper, pool } = resolveScraperAndPool(deps);
 
   if (!isPoolAvailable(pool)) {

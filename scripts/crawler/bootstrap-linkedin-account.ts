@@ -5,6 +5,7 @@ import path from 'node:path';
 import { parseEnvironmentFile } from '../../server/connectors/hh/hhTestAccountEnvironment';
 import { resolveLocalEnvironmentFilePath } from '../../server/localEnvironmentFile';
 import { linkedinCredentialBlock } from '../../server/crawler/linkedinAccountConfig';
+import { linkedinProviderCapability } from '../../server/crawler/linkedinProviderCapability';
 import { ObscuraRunner } from '../../server/crawler/obscuraRunner';
 import { resolveLinkedinProxyUrl } from '../../server/crawler/linkedinScraper';
 
@@ -121,6 +122,9 @@ function looksSignedIn(html: string): boolean {
 // eslint-disable-next-line max-lines-per-function
 async function main(): Promise<void> {
   loadLocalEnv();
+  if (linkedinProviderCapability().verdict === 'not_configured') {
+    throw new Error('provider_permission_required: LinkedIn bootstrap is disabled until an official/provider-permitted capability is recorded');
+  }
   const accountId = accountArg();
   const credentials = linkedinCredentialBlock(accountId);
   if (!credentials.login || !credentials.password) {

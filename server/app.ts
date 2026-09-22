@@ -59,6 +59,7 @@ interface BuildAppOptions {
   roleNamer?: RoleNamer;
   recruiterContactsRepo?: SqliteRecruiterContactsRepository;
   candidateReputationRepo?: SqliteCandidateReputationRepository;
+  linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
 
 
   /**
@@ -234,6 +235,7 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Rou
     roleNamer,
     recruiterContactsRepo,
     candidateReputationRepo,
+    linkedinPool,
     searchVacancies = searchHhVacancies,
     hhCrawlSettings,
     runtimeMemory,
@@ -254,6 +256,7 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Rou
     candidateReputationRepo:
       candidateReputationRepo ??
       new SqliteCandidateReputationRepository({ databasePath: config.databasePath }),
+    ...(linkedinPool ? { linkedinPool } : {}),
     roleNamingFailures: new RoleNamingFailureLog(),
 
     searchVacancies,

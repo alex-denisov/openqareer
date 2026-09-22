@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Briefcase,
   Broadcast,
+  LinkedinLogo,
   MagnifyingGlass,
   ShieldCheck,
   UsersThree,
@@ -31,10 +32,13 @@ import {
 import { AdminVacanciesView } from './AdminVacanciesView';
 import { AdminAuditView } from './AdminAuditView';
 import { AdminUserProfileModal } from './AdminUserProfileModal';
+import { AdminLinkedinPoolView } from './AdminLinkedinPoolView';
+import { roleCan } from '../../../shared/roleMatrix';
 
 interface AdminConsoleProps {
   session?: AuthUser | null;
   sessionPending?: boolean;
+  onUnauthorized?: () => void;
 }
 
 type DirectoryState =
@@ -80,8 +84,8 @@ function AdminNav({
   activeTab,
   onSelectTab,
 }: {
-  activeTab: 'users' | 'vacancies' | 'sources' | 'audit';
-  onSelectTab: (tab: 'users' | 'vacancies' | 'sources' | 'audit') => void;
+  activeTab: 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin';
+  onSelectTab: (tab: 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin') => void;
 }) {
   return (
     <nav className="admin-nav" aria-label="Разделы администратора">
@@ -112,6 +116,13 @@ function AdminNav({
         onClick={() => onSelectTab('audit')}
       >
         <ShieldCheck size={16} aria-hidden="true" /> Журнал аудита
+      </button>
+      <button
+        type="button"
+        className={`admin-nav-item ${activeTab === 'linkedin' ? 'is-active' : ''}`}
+        onClick={() => onSelectTab('linkedin')}
+      >
+        <LinkedinLogo size={16} aria-hidden="true" /> Аккаунты LinkedIn
       </button>
     </nav>
   );
@@ -150,24 +161,28 @@ function AdminVacancySourcesTab() {
   );
 }
 
-function getInitialAdminTab(): 'users' | 'vacancies' | 'sources' | 'audit' {
+function getInitialAdminTab(): 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin' {
   if (typeof window === 'undefined') return 'users';
   const params = new URLSearchParams(window.location.search);
   const tab = params.get('tab');
-  if (tab === 'vacancies' || tab === 'sources' || tab === 'audit') return tab;
+  if (tab === 'vacancies' || tab === 'sources' || tab === 'audit' || tab === 'linkedin') return tab;
   if (params.get('vacancyId')) return 'vacancies';
   return 'users';
 }
 
-export function AdminConsole({ session, sessionPending = false }: AdminConsoleProps) {
-  const isAdmin = session?.role === 'admin';
-  const [activeTab, setActiveTab] = useState<'users' | 'vacancies' | 'sources' | 'audit'>(getInitialAdminTab);
+export function AdminConsole({ session, sessionPending = false, onUnauthorized }: AdminConsoleProps) {
+  const isAdmin = session ? roleCan(session.role, 'admin.console') : false;
+  const [activeTab, setActiveTab] = useState<'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin'>(getInitialAdminTab);
 
   useEffect(() => {
     document.title = 'Администрирование · openqareer';
   }, []);
 
-  const handleSelectTab = (tab: 'users' | 'vacancies' | 'sources' | 'audit') => {
+  useEffect(() => {
+    if (!sessionPending && !isAdmin) onUnauthorized?.();
+  }, [isAdmin, onUnauthorized, sessionPending]);
+
+  const handleSelectTab = (tab: 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin') => {
     setActiveTab(tab);
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -194,7 +209,10 @@ export function AdminConsole({ session, sessionPending = false }: AdminConsolePr
     );
   }
 
-  if (!isAdmin) return <AdminRefusal signedIn={Boolean(session)} />;
+  if (!isAdmin) {
+    if (onUnauthorized) return null;
+    return <AdminRefusal signedIn={Boolean(session)} />;
+  }
 
   return (
     <AdminFrame>
@@ -203,6 +221,7 @@ export function AdminConsole({ session, sessionPending = false }: AdminConsolePr
       {activeTab === 'vacancies' && <AdminVacanciesView />}
       {activeTab === 'sources' && <AdminVacancySourcesTab />}
       {activeTab === 'audit' && <AdminAuditView />}
+      {activeTab === 'linkedin' && <AdminLinkedinPoolView />}
     </AdminFrame>
   );
 }

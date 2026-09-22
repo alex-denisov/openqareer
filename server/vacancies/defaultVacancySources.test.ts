@@ -83,7 +83,8 @@ describe('registry of vacancy sources', () => {
     expect(remotive?.robotsOverride?.grantedBy).toBe('owner');
     expect(remotive?.refreshIntervalMinutes).toBeGreaterThanOrEqual(360);
     // Разрешение поверх robots — только явное: owner-grants для API Remotive,
-    // Indeed, гостевого LinkedIn и измеренных досок SmartRecruiters.
+    // Indeed и измеренных досок SmartRecruiters. LinkedIn fail-closed до
+    // provider-permitted/official capability.
     const overridden = DEFAULT_VACANCY_SOURCES.filter((s) => s.robotsOverride)
       .map((s) => s.id)
       .sort();
@@ -92,7 +93,6 @@ describe('registry of vacancy sources', () => {
       'ats-smartrecruiters-visa',
       'remotive',
       'src-indeed',
-      'src-linkedin-guest',
     ]);
   });
 });
@@ -176,8 +176,8 @@ describe('registry of vacancy sources: routes and address status (B199)', () => 
     const ids = DEFAULT_VACANCY_SOURCES.map((source) => source.id);
 
     // Владелец 2026-09-05: «Не отсекай площадки типа linkedin, glassdoor и
-    // другие у которых антиботы». Indeed и LinkedIn подключены по механике
-    // JobSpy (B218), Glassdoor остаётся названным и выключенным.
+    // другие у которых антиботы». LinkedIn остаётся в реестре, но fail-closed
+    // до provider-permitted/official capability; Glassdoor также выключен.
     expect(ids).toContain('src-linkedin-guest');
     expect(ids).toContain('src-glassdoor');
     expect(ids).toContain('src-indeed');
@@ -398,11 +398,9 @@ describe('LinkedIn Obscura crawler in default registry (B208)', () => {
     expect(source?.name).toBe('LinkedIn (Obscura Crawler)');
     expect(source?.type).toBe('linkedin_crawler');
     expect(source?.accessClass).toBe('browser_session');
-    expect(source?.addressStatus).toBe('live');
-    expect(source?.enabled).toBe(Boolean(process.env.LINKEDIN_ACCOUNT_IDS));
-    if (!process.env.LINKEDIN_ACCOUNT_IDS) {
-      expect(source?.disabledReason).toContain('account_pool_unconfigured');
-    }
+    expect(source?.addressStatus).toBe('official_access_required');
+    expect(source?.enabled).toBe(false);
+    expect(source?.disabledReason).toContain('provider_permission_required');
     expect(source?.targetUrl).toBe('https://www.linkedin.com/jobs/search');
 
     const readings = vacancySourceMeasurements('src-linkedin-crawler');

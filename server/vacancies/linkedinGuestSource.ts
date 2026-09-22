@@ -3,6 +3,7 @@ import type { SourceReading } from './multiSourceVacancyEngine';
 import { buildJsonVacancy, fromIso, isUsableVacancy } from './jsonVacancyRecord';
 import { LINKEDIN_GUEST_URL } from './jobspyEndpoints';
 import { FAN_SIZE, type FanCombo, fanComboAt, fanStartIndex } from './jobspyFan';
+import { linkedinProviderCapability, type LinkedinProviderCapabilityVerdict } from '../crawler/linkedinProviderCapability';
 
 /**
  * LinkedIn — гостевой список вакансий (B218). Механика JobSpy: адрес
@@ -119,12 +120,18 @@ export interface LinkedinFetchDeps {
   ) => Promise<{ status: number; body: string }>;
   readonly sleep: (ms: number) => Promise<void>;
   readonly observedAt: string;
+  /** Test/provider adapter must opt in explicitly; the default is fail-closed. */
+  readonly providerCapability?: LinkedinProviderCapabilityVerdict;
 }
 
 export async function fetchLinkedinGuest(
   deps: LinkedinFetchDeps,
   nowMs: number = Date.now(),
 ): Promise<SourceReading> {
+  const capability = deps.providerCapability ?? linkedinProviderCapability().verdict;
+  if (capability === 'not_configured') {
+    return { vacancies: [], partial: true };
+  }
   const startIndex = fanStartIndex(nowMs, LINKEDIN_INTERVAL_MINUTES, LINKEDIN_COMBOS_PER_SYNC);
   const vacancies: UnifiedVacancy[] = [];
   // Веер шире одного опроса, поэтому чтение частичное: движок дополняет срез,

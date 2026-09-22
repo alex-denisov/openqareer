@@ -347,7 +347,11 @@ export default function App() {
   if (isAdminPath(currentPath)) {
     return (
       <AppErrorBoundary>
-        <AdminConsole session={state.session} sessionPending={state.session === undefined} />
+        <AdminConsole
+          session={state.session}
+          sessionPending={state.session === undefined}
+          onUnauthorized={() => navigate(state.session ? '/app' : '/login')}
+        />
       </AppErrorBoundary>
     );
   }
