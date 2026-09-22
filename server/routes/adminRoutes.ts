@@ -333,41 +333,45 @@ async function handleListSources(deps: RouteDeps, request: FastifyRequest, reply
   const principal = requireAdmin(deps, request, reply);
   if (!principal) return;
   deps.multiSourceEngine.refreshPersistedSourceState();
-  // Живость и доверие едут вместе с самой площадкой: администратор читает
-  // «жива ли она» и «можно ли ей верить» как две разные вещи (B200).
-  const health = new Map(
-    deps.multiSourceEngine.getSourceHealthReport().map((item) => [item.sourceId, item]),
-  );
   // Расписание B204 админ не видел вовсе, и «почему площадку не опрашивают»
   // оставалось вопросом без ответа. Сводка короткая намеренно: тот же
   // маршрут уже рвался на 20 220 байтах (INC-032).
-  const scheduler = deps.multiSourceEngine.getScheduler();
+  // Весь реестр со здоровьем — 29 788 байт, а прод рвёт тело на 20 220
+  // (INC-032). Экран забирает список страницами внутри доказанного бюджета.
+  const offset = Number((request.query as { offset?: string } | undefined)?.offset ?? 0);
   const sources = deps.multiSourceEngine
     .getSources()
-    .map((source) => {
-      const measured = health.get(source.id);
-      const schedule = toAdminSourceSchedule(
-        scheduler.getScheduleInfo(source.id, Date.now(), source.refreshIntervalMinutes),
-      );
-      const manualSync = deps.multiSourceEngine.getManualSourceSyncState(source.id);
-      return measured
-        ? {
-            ...source,
-            schedule,
-            manualSync,
-            health: { liveness: measured.liveness, trust: measured.trust },
-          }
-        : { ...source, schedule, manualSync };
-    })
     .sort(
       (left, right) =>
         left.name.localeCompare(right.name, 'ru-RU', { sensitivity: 'base' }) ||
         left.id.localeCompare(right.id),
     );
-  // Весь реестр со здоровьем — 29 788 байт, а прод рвёт тело на 20 220
-  // (INC-032). Экран забирает список страницами внутри доказанного бюджета.
-  const offset = Number((request.query as { offset?: string } | undefined)?.offset ?? 0);
-  const page = buildAdminSourcePage(sources, Number.isFinite(offset) ? offset : 0);
+  const nowMs = Date.now();
+  // Do not calculate health for all 396 registered sources on every page. The
+  // old route repeated the full O(N) report for each byte-bounded page, so the
+  // admin screen spent minutes in loading before it could show the first useful
+  // card. The page builder measures the transformed payload and therefore only
+  // transforms the sources that fit in this response (plus at most one probe).
+  const page = buildAdminSourcePage(
+    sources,
+    Number.isFinite(offset) ? offset : 0,
+    undefined,
+    (source) => {
+      const measured = deps.multiSourceEngine.getSourceHealth(source.id, nowMs);
+      const schedule = measured?.schedule
+        ? toAdminSourceSchedule(measured.schedule, nowMs)
+        : undefined;
+      const manualSync = deps.multiSourceEngine.getManualSourceSyncState(source.id);
+      return measured
+        ? {
+            ...source,
+            ...(schedule ? { schedule } : {}),
+            manualSync,
+            health: { liveness: measured.liveness, trust: measured.trust },
+          }
+        : { ...source, ...(schedule ? { schedule } : {}), manualSync };
+    },
+  );
   return {
     data: {
       items: page.items,

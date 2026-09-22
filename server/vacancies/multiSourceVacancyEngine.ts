@@ -601,13 +601,25 @@ export class MultiSourceVacancyEngine {
   }
 
   /** Здоровье каждой площадки: живость и доверие считаются раздельно (B200). */
-  public getSourceHealthReport(nowMs: number = Date.now()): SourceHealthReportItem[] {
-    return Array.from(this.sources.values()).map((source) => ({
+  public getSourceHealth(
+    sourceId: string,
+    nowMs: number = Date.now(),
+  ): SourceHealthReportItem | undefined {
+    const source = this.sources.get(sourceId);
+    if (!source) return undefined;
+    return {
       sourceId: source.id,
       sourceName: source.name,
       ...this.healthOf(source.id, nowMs),
       schedule: this.scheduler.getScheduleInfo(source.id, nowMs, source.refreshIntervalMinutes),
-    }));
+    };
+  }
+
+  public getSourceHealthReport(nowMs: number = Date.now()): SourceHealthReportItem[] {
+    return Array.from(this.sources.keys()).flatMap((sourceId) => {
+      const measured = this.getSourceHealth(sourceId, nowMs);
+      return measured ? [measured] : [];
+    });
   }
 
   private healthOf(sourceId: string, nowMs: number): SourceHealth {
