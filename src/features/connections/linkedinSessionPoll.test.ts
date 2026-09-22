@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  createLinkedInSessionImportFlow,
-  linkedinWaitingNotice,
-} from './linkedinSessionPoll';
+import { createLinkedInSessionImportFlow, linkedinWaitingNotice } from './linkedinSessionPoll';
 
 describe('LinkedIn session import flow', () => {
   it('waits through login and MFA without navigating the provider webview', async () => {
@@ -77,6 +74,7 @@ describe('LinkedIn session import flow', () => {
         ready: true,
         url: 'https://www.linkedin.com/feed/',
         signedInApplicant: true,
+        accountMarker: 'alexey-test',
         login: false,
         otp: false,
         captcha: false,
@@ -99,6 +97,7 @@ describe('LinkedIn session import flow', () => {
     expect(events).toEqual(['closed', 'read-profile', 'captured', 'import']);
     expect(onReady.mock.calls[0]?.[0]).toMatchObject({
       rawUrl: 'https://www.linkedin.com/in/alexey-test/',
+      accountMarker: 'alexey-test',
       parsed: { fullName: 'Alexey Test' },
     });
 
@@ -187,8 +186,8 @@ describe('LinkedIn capture after the sign-in is already recognised', () => {
     { name: 'a look-alike host', url: 'https://linkedin.com.evil.example/in/me/' },
     { name: 'plain http', url: 'http://www.linkedin.com/in/me/' },
     { name: 'a value that is not a URL at all', url: 'not-a-url' },
-    { name: 'somebody else\'s page', url: 'https://www.linkedin.com/company/openqareer/' },
-  ])('never accepts $name as the candidate\'s own profile', async ({ url }) => {
+    { name: "somebody else's page", url: 'https://www.linkedin.com/company/openqareer/' },
+  ])("never accepts $name as the candidate's own profile", async ({ url }) => {
     const readSessionPage = vi.fn(async () => ({ ok: true, url, body: '<h1>X</h1>' }));
 
     await expect(

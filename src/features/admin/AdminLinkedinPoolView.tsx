@@ -18,9 +18,14 @@ import {
   inspectSessionPage,
   managedLinkedinSessionLayout,
   openManagedLinkedinSession,
+  readSessionPage,
   resizeConnectorSession,
   type ManagedSessionKey,
 } from '../connections/connectorSession';
+import {
+  createLinkedInSessionImportFlow,
+  type LinkedInWaitingStage,
+} from '../connections/linkedinSessionPoll';
 import {
   completeAdminLinkedinLogin,
   createAdminLinkedinAccount,
@@ -37,6 +42,20 @@ type PoolViewState =
   | { status: 'loading' }
   | { status: 'ready'; accounts: LinkedinPoolAccount[]; total: number }
   | { status: 'failed'; message: string };
+
+type ActiveLinkedinLogin = {
+  accountId: string;
+  sessionKey: ManagedSessionKey;
+  handle: string;
+};
+
+const ADMIN_WAITING_COPY: Record<LinkedInWaitingStage, string> = {
+  loading: 'Загружаем страницу LinkedIn…',
+  login: 'Введите логин и пароль в открытом окне LinkedIn.',
+  otp: 'Введите код 2FA в открытом окне LinkedIn.',
+  captcha: 'Пройдите CAPTCHA в открытом окне LinkedIn.',
+  unrecognised: 'Вход ещё не подтверждён. Откройте свой профиль в окне LinkedIn.',
+};
 
 const STATE_COPY: Record<LinkedinSessionState, { label: string; detail: string }> = {
   unconfigured: {
@@ -152,6 +171,82 @@ function useLinkedinPool() {
   return { state, refresh };
 }
 
+// eslint-disable-next-line max-lines-per-function -- this hook owns one candidate-equivalent auth lifecycle
+function useAdminLinkedinLoginPolling(
+  activeLogin: ActiveLinkedinLogin | undefined,
+  refresh: () => void,
+  setActiveLogin: (value: ActiveLinkedinLogin | undefined) => void,
+  setNotice: (value: string | undefined) => void,
+  setError: (value: string | undefined) => void,
+): void {
+  // eslint-disable-next-line max-lines-per-function -- this effect owns one candidate-equivalent auth lifecycle
+  useEffect(() => {
+    if (!activeLogin) return;
+    let cancelled = false;
+    let finished = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const flow = createLinkedInSessionImportFlow({
+      inspectCurrentPage: () => inspectSessionPage('linkedin', activeLogin.sessionKey),
+      readSessionPage: (url) => readSessionPage('linkedin', url, activeLogin.sessionKey),
+      onAuthenticated: () => {
+        if (!cancelled) setNotice('Вход распознан. Читаем профиль LinkedIn для подтверждения…');
+      },
+      // Keep the managed window open until the admin lease is completed. The
+      // candidate flow closes it after capture; admin owns a persistent pool
+      // profile and must complete the server transition first.
+      onProviderDataCaptured: () => undefined,
+      onReady: async (result) => {
+        const account = await completeAdminLinkedinLogin(
+          activeLogin.accountId,
+          activeLogin.handle,
+          {
+            state: 'ready',
+            ...(result.accountMarker ? { accountMarker: result.accountMarker } : {}),
+          },
+        );
+        await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
+        if (cancelled) return;
+        finished = true;
+        setActiveLogin(undefined);
+        setError(undefined);
+        setNotice(`Вход подтверждён. Идентификатор ${account.emailLogin} привязан к приложению.`);
+        refresh();
+      },
+    });
+
+    const poll = async () => {
+      if (cancelled || finished) return;
+      try {
+        const result = await flow.run();
+        if (cancelled || finished) return;
+        if (result.status === 'waiting_for_sign_in') {
+          setNotice(ADMIN_WAITING_COPY[result.stage]);
+          timer = setTimeout(() => void poll(), 1_000);
+        }
+      } catch (reason: unknown) {
+        if (cancelled) return;
+        finished = true;
+        await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
+        setActiveLogin(undefined);
+        setError(
+          apiErrorMessage(
+            reason,
+            'LinkedIn вошёл, но профиль не удалось прочитать. Откройте вход ещё раз.',
+          ),
+        );
+        refresh();
+      }
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [activeLogin, refresh, setActiveLogin, setError, setNotice]);
+}
+
 // eslint-disable-next-line max-lines-per-function
 export function AdminLinkedinPoolView() {
   const { state, refresh } = useLinkedinPool();
@@ -161,11 +256,7 @@ export function AdminLinkedinPoolView() {
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
   const [confirmDelete, setConfirmDelete] = useState<LinkedinPoolAccount>();
-  const [activeLogin, setActiveLogin] = useState<{
-    accountId: string;
-    sessionKey: ManagedSessionKey;
-    handle: string;
-  }>();
+  const [activeLogin, setActiveLogin] = useState<ActiveLinkedinLogin>();
 
   useEffect(() => {
     if (!confirmDelete) return;
@@ -190,83 +281,7 @@ export function AdminLinkedinPoolView() {
     return () => window.removeEventListener('resize', resize);
   }, [activeLogin]);
 
-  // eslint-disable-next-line max-lines-per-function -- the native poll and its terminal API transition share one lifecycle
-  useEffect(() => {
-    if (!activeLogin) return;
-    let disposed = false;
-    let pollInFlight = false;
-
-    // eslint-disable-next-line max-lines-per-function -- keep the native state machine readable as one guarded poll
-    const poll = async () => {
-      if (disposed || pollInFlight) return;
-      pollInFlight = true;
-      try {
-        const report = await inspectSessionPage('linkedin', activeLogin.sessionKey);
-        if (disposed) return;
-        if (report.captcha) {
-          setNotice(
-            'LinkedIn просит пройти CAPTCHA в отдельном окне. Приложение ждёт завершения проверки.',
-          );
-          return;
-        }
-        if (report.otp) {
-          setNotice('Введите код 2FA в отдельном окне LinkedIn. Код не передаётся в OpenQareer.');
-          return;
-        }
-        if (report.login) {
-          setNotice('Введите логин и пароль в отдельном окне LinkedIn. OpenQareer их не получает.');
-          return;
-        }
-        if (!report.signedInApplicant) {
-          setNotice(
-            'Окно LinkedIn открыто. Завершите вход. Приложение подтвердит его автоматически.',
-          );
-          return;
-        }
-
-        try {
-          await completeAdminLinkedinLogin(activeLogin.accountId, activeLogin.handle, {
-            state: 'ready',
-            ...(report.accountMarker ? { accountMarker: report.accountMarker } : {}),
-          });
-          if (!disposed) {
-            setActiveLogin(undefined);
-            setError(undefined);
-            setNotice('Вход подтверждён. Изолированная сессия LinkedIn готова к работе.');
-            refresh();
-          }
-        } catch (reason: unknown) {
-          if (!disposed) {
-            setActiveLogin(undefined);
-            setError(
-              apiErrorMessage(reason, 'Вход открылся, но подтвердить сессию LinkedIn не удалось.'),
-            );
-            refresh();
-          }
-        }
-      } catch (reason: unknown) {
-        if (!disposed) {
-          setActiveLogin(undefined);
-          setError(
-            apiErrorMessage(
-              reason,
-              'Окно LinkedIn закрылось или стало недоступно. Откройте вход ещё раз.',
-            ),
-          );
-          refresh();
-        }
-      } finally {
-        pollInFlight = false;
-      }
-    };
-
-    void poll();
-    const timer = window.setInterval(() => void poll(), 1_000);
-    return () => {
-      disposed = true;
-      window.clearInterval(timer);
-    };
-  }, [activeLogin, refresh]);
+  useAdminLinkedinLoginPolling(activeLogin, refresh, setActiveLogin, setNotice, setError);
 
   async function addAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
