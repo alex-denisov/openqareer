@@ -21,23 +21,25 @@ export interface AdminSourcePage<T> {
   readonly nextOffset: number | null;
 }
 
-export function buildAdminSourcePage<T>(
+export function buildAdminSourcePage<T, R = T>(
   all: readonly T[],
   offset: number,
   budgetBytes: number = ADMIN_VACANCY_PAGE_BYTE_BUDGET,
-): AdminSourcePage<T> {
+  transform?: (item: T) => R,
+): AdminSourcePage<R> {
   const start = Math.max(0, Math.trunc(offset));
-  const items: T[] = [];
+  const items: R[] = [];
   // Открывающая и закрывающая скобки массива входят в тот же бюджет.
   let size = 2;
 
   for (let index = start; index < all.length; index += 1) {
-    const cost = Buffer.byteLength(JSON.stringify(all[index]), 'utf8') + (items.length > 0 ? 1 : 0);
+    const item = transform ? transform(all[index]) : (all[index] as unknown as R);
+    const cost = Buffer.byteLength(JSON.stringify(item), 'utf8') + (items.length > 0 ? 1 : 0);
     // Запись, которая одна не влезает в бюджет, всё равно уходит первой: иначе
     // страница вернулась бы пустой, выборка выглядела бы кончившейся, и
     // площадка исчезла бы с экрана совсем.
     if (items.length > 0 && size + cost > budgetBytes) break;
-    items.push(all[index]);
+    items.push(item);
     size += cost;
   }
 

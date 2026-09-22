@@ -63,6 +63,18 @@ describe('buildAdminSourcePage', () => {
     expect(page.total).toBe(all.length);
     expect(page.offset).toBe(0);
   });
+
+  it('трансформирует только текущую byte-bounded страницу', () => {
+    const all = Array.from({ length: 4 }, (_, index) => ({ id: `source-${index}` }));
+    const transformed: string[] = [];
+    const page = buildAdminSourcePage(all, 0, 180, (source) => {
+      transformed.push(source.id);
+      return { ...source, health: 'x'.repeat(80) };
+    });
+
+    expect(page.items).toEqual([{ id: 'source-0', health: 'x'.repeat(80) }]);
+    expect(transformed.length).toBeLessThan(all.length);
+  });
 });
 
 describe('реестр площадок', () => {
