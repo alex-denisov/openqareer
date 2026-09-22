@@ -40,6 +40,7 @@ export type LinkedInSessionPollResult =
       readonly status: 'ready';
       readonly parsed: ParsedResume;
       readonly rawUrl: string;
+      readonly accountMarker?: string | null;
     };
 
 interface LinkedInSessionImportFlowDependencies {
@@ -88,9 +89,7 @@ async function runOnce(
   const page = await captureSignedInPage({
     read: () => dependencies.readSessionPage(LINKEDIN_PROFILE_URL),
     interpret: (candidate) =>
-      isOwnProfileUrl(candidate.url)
-        ? { body: candidate.body, url: candidate.url }
-        : undefined,
+      isOwnProfileUrl(candidate.url) ? { body: candidate.body, url: candidate.url } : undefined,
     failureCode: 'linkedin_authenticated_capture_failed',
     waitBeforeRetry: dependencies.waitBeforeRetry,
   });
@@ -104,7 +103,12 @@ async function runOnce(
   if (!parsed.fullName && parsed.experience.length === 0) {
     throw new Error('linkedin_authenticated_profile_unclassified');
   }
-  const result = { status: 'ready' as const, parsed, rawUrl: page.url };
+  const result = {
+    status: 'ready' as const,
+    parsed,
+    rawUrl: page.url,
+    ...(current.accountMarker ? { accountMarker: current.accountMarker } : {}),
+  };
   await dependencies.onProviderDataCaptured();
   await dependencies.onReady(result);
   return result;
@@ -145,10 +149,12 @@ function isAllowedLinkedInUrl(rawUrl: string): boolean {
 
 function extractHeading(html: string): string | undefined {
   const match = /<h1[^>]*>([\s\S]*?)<\/h1>/iu.exec(html);
-  return match?.[1]
-    ?.replace(/<[^>]+>/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim() || undefined;
+  return (
+    match?.[1]
+      ?.replace(/<[^>]+>/gu, ' ')
+      .replace(/\s+/gu, ' ')
+      .trim() || undefined
+  );
 }
 
 function htmlToProfileText(html: string): string {
