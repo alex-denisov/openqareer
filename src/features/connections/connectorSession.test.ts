@@ -5,6 +5,7 @@ import {
   looksLikeHhVpnBlock,
   looksLikeLinkedInLoginPage,
   inspectSessionPage,
+  managedLinkedinSessionLayout,
   openConnectorSession,
   openManagedLinkedinSession,
   platformRouteNotice,
@@ -168,7 +169,10 @@ describe('session window commands in the desktop shell', () => {
     const calls = useDesktop(() => ({ opened: true, label: 'connector-linkedin-pool-test' }));
 
     await expect(
-      openManagedLinkedinSession('profile_123e4567-e89b-12d3-a456-426614174000'),
+      openManagedLinkedinSession(
+        'profile_123e4567-e89b-12d3-a456-426614174000',
+        managedLinkedinSessionLayout(1440, 900),
+      ),
     ).resolves.toEqual({ opened: true });
     expect(calls).toEqual([
       {
@@ -177,12 +181,26 @@ describe('session window commands in the desktop shell', () => {
           request: {
             platform: 'linkedin',
             url: 'https://www.linkedin.com/login?locale=en_US',
-            layout: undefined,
+            layout: { x: 142, y: 130, width: 1156, height: 640 },
             sessionKey: 'profile_123e4567-e89b-12d3-a456-426614174000',
           },
         },
       },
     ]);
+  });
+
+  it('uses the wizard-sized managed layout and keeps it inside the app viewport', () => {
+    expect(managedLinkedinSessionLayout(1440, 900)).toEqual({
+      x: 142,
+      y: 130,
+      width: 1156,
+      height: 640,
+    });
+    const compact = managedLinkedinSessionLayout(960, 700);
+    expect(compact.width).toBe(896);
+    expect(compact.height).toBe(560);
+    expect(compact.x).toBeGreaterThanOrEqual(0);
+    expect(compact.y).toBeGreaterThanOrEqual(0);
   });
 
   it('treats anything but a confirmed true as a command that did not happen', async () => {

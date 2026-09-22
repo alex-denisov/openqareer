@@ -9,13 +9,16 @@ import {
   ShieldWarning,
   Trash,
   WarningCircle,
+  X,
 } from '@phosphor-icons/react';
 import { apiErrorMessage } from '../coach/apiClient';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import {
   closeConnectorSession,
   inspectSessionPage,
+  managedLinkedinSessionLayout,
   openManagedLinkedinSession,
+  resizeConnectorSession,
   type ManagedSessionKey,
 } from '../connections/connectorSession';
 import {
@@ -173,6 +176,20 @@ export function AdminLinkedinPoolView() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [confirmDelete]);
 
+  useEffect(() => {
+    if (!activeLogin) return;
+    const resize = () => {
+      void resizeConnectorSession(
+        'linkedin',
+        managedLinkedinSessionLayout(window.innerWidth, window.innerHeight),
+        activeLogin.sessionKey,
+      );
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, [activeLogin]);
+
   // eslint-disable-next-line max-lines-per-function -- the native poll and its terminal API transition share one lifecycle
   useEffect(() => {
     if (!activeLogin) return;
@@ -283,7 +300,10 @@ export function AdminLinkedinPoolView() {
     setNotice(undefined);
     try {
       const started = await requestAdminLinkedinLogin(account.id);
-      const opened = await openManagedLinkedinSession(started.account.profileIsolationId);
+      const opened = await openManagedLinkedinSession(
+        started.account.profileIsolationId,
+        managedLinkedinSessionLayout(window.innerWidth, window.innerHeight),
+      );
       if (!opened.opened) {
         setError(managedOpenFailureCopy(opened.reason));
         refresh();
@@ -294,9 +314,7 @@ export function AdminLinkedinPoolView() {
         sessionKey: started.account.profileIsolationId,
         handle: started.lease.handle,
       });
-      setNotice(
-        'Отдельное окно LinkedIn открыто. Завершите вход. Статус обновится автоматически.',
-      );
+      setNotice('Отдельное окно LinkedIn открыто. Завершите вход. Статус обновится автоматически.');
       refresh();
     } catch (reason: unknown) {
       setError(apiErrorMessage(reason, 'Не удалось запросить ручной вход.'));
@@ -352,6 +370,17 @@ export function AdminLinkedinPoolView() {
       },
       'Сессия отозвана.',
     );
+  }
+
+  async function closeLoginWindow(account: LinkedinPoolAccount) {
+    if (activeLogin?.accountId !== account.id) return;
+    setBusyAccountId(account.id);
+    await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
+    setActiveLogin(undefined);
+    setBusyAccountId(undefined);
+    setError(undefined);
+    setNotice('Окно LinkedIn закрыто. Нажмите «Войти в LinkedIn», чтобы продолжить.');
+    refresh();
   }
 
   return (
@@ -486,6 +515,16 @@ export function AdminLinkedinPoolView() {
                   </div>
                 </dl>
                 <div className="admin-linkedin-card__actions">
+                  {activeLogin?.accountId === account.id ? (
+                    <button
+                      className="admin-btn is-secondary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void closeLoginWindow(account)}
+                    >
+                      <X size={18} aria-hidden="true" /> Закрыть окно
+                    </button>
+                  ) : null}
                   {canLogin ? (
                     <button
                       className="admin-btn admin-btn--primary"
