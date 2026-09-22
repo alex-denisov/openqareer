@@ -169,8 +169,11 @@ function FunnelPanel({ campaign }: { campaign: SearchCampaignView }) {
               {step.value === undefined ? <EyeSlash size={16} aria-hidden="true" /> : step.value}
             </span>
             <span className="career-funnel-label">
-              {step.value === undefined ? `${step.label} — не отслеживаем` : step.label}
+              {step.label}
             </span>
+            {step.value === undefined ? (
+              <small className="career-funnel-untracked-label">не отслеживаем</small>
+            ) : null}
           </li>
         ))}
       </ol>
