@@ -66,12 +66,14 @@ describe('SqliteLinkedinPoolRepository', () => {
     });
     expect(replay.created).toBe(false);
     expect(replay.account.id).toBe(first.id);
-    expect(() => repository.create({
-      adminLabel: 'Другой',
-      emailLogin: 'pool-admin@example.test',
-      idempotencyKey: '22222222-2222-4222-8222-222222222222',
-      ...actor,
-    })).toThrow('linkedin_email_login_exists');
+    expect(() =>
+      repository.create({
+        adminLabel: 'Другой',
+        emailLogin: 'pool-admin@example.test',
+        idempotencyKey: '22222222-2222-4222-8222-222222222222',
+        ...actor,
+      }),
+    ).toThrow('linkedin_email_login_exists');
 
     resources.pop();
     repository.close();
@@ -120,15 +122,37 @@ describe('SqliteLinkedinPoolRepository', () => {
     expect(result.lastFailureCode).toBe('session_runtime_unavailable');
   });
 
+  it('accepts the native provider inspection for an arbitrary admin identifier', async () => {
+    const { repository } = createRepository();
+    const account = repository.create({
+      adminLabel: 'LinkedIn-1',
+      emailLogin: 'LinkedIn-1',
+      idempotencyKey: '55555555-5555-4555-8555-555555555555',
+      ...actor,
+    }).account;
+    const started = await repository.beginLogin(account.id, actor);
+
+    const ready = await repository.completeLogin(account.id, started.lease.handle, {
+      state: 'ready',
+      accountMarker: 'linkedin-profile-marker',
+    });
+
+    expect(ready.emailLogin).toBe('LinkedIn-1');
+    expect(ready.state).toBe('ready');
+    expect(ready.providerAccountMarker).toBe('linkedin-profile-marker');
+  });
+
   it('uses optimistic revision and deletes the exact profile runtime on delete', () => {
     const { repository, directory } = createRepository();
     const account = createAccount(repository);
-    expect(() => repository.update({
-      accountId: account.id,
-      revision: 9,
-      adminLabel: 'stale',
-      ...actor,
-    })).toThrow(LinkedinPoolConflictError);
+    expect(() =>
+      repository.update({
+        accountId: account.id,
+        revision: 9,
+        adminLabel: 'stale',
+        ...actor,
+      }),
+    ).toThrow(LinkedinPoolConflictError);
 
     repository.delete(account.id, account.revision, actor);
     expect(repository.list({ limit: 25, offset: 0 }).total).toBe(0);

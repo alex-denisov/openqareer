@@ -156,8 +156,11 @@ CREATE INDEX IF NOT EXISTS linkedin_pool_audit_created
   ON linkedin_pool_audit(created_at DESC, id DESC);
 `;
 
-function normalizeEmail(value: string): string {
-  return value.trim().toLowerCase();
+function normalizeLoginIdentifier(value: string): string {
+  const trimmed = value.trim();
+  // Email logins are case-insensitive. Preserve non-email identifiers exactly
+  // as entered so the admin can recognize a provider-specific account label.
+  return trimmed.includes('@') ? trimmed.toLowerCase() : trimmed;
 }
 
 function digest(value: string): string {
@@ -219,7 +222,9 @@ export class SqliteLinkedinPoolRepository {
 
   list(input: LinkedinPoolListInput): LinkedinPoolPage {
     const where = input.state ? 'WHERE state = ?' : '';
-    const params = input.state ? [input.state, input.limit, input.offset] : [input.limit, input.offset];
+    const params = input.state
+      ? [input.state, input.limit, input.offset]
+      : [input.limit, input.offset];
     const totalRow = this.database
       .prepare(`SELECT COUNT(*) AS total FROM linkedin_pool_accounts ${where}`)
       .get(...(input.state ? [input.state] : [])) as { total: number };
@@ -230,9 +235,10 @@ export class SqliteLinkedinPoolRepository {
       )
       .all(...params) as unknown as AccountRow[];
     const accounts = rows.map((row) => this.toAccount(row));
-    const nextOffset = input.offset + accounts.length < Number(totalRow.total)
-      ? input.offset + accounts.length
-      : null;
+    const nextOffset =
+      input.offset + accounts.length < Number(totalRow.total)
+        ? input.offset + accounts.length
+        : null;
     return {
       total: Number(totalRow.total),
       accounts,
@@ -245,7 +251,7 @@ export class SqliteLinkedinPoolRepository {
   // and the audit write in one reviewable transaction boundary.
   // eslint-disable-next-line max-lines-per-function
   create(input: LinkedinPoolCreateInput): { account: LinkedinPoolAccount; created: boolean } {
-    const emailLogin = normalizeEmail(input.emailLogin);
+    const emailLogin = normalizeLoginIdentifier(input.emailLogin);
     const requestDigest = digest(
       JSON.stringify({
         adminLabel: input.adminLabel,
@@ -254,7 +260,9 @@ export class SqliteLinkedinPoolRepository {
       }),
     );
     const previous = this.database
-      .prepare('SELECT request_digest, account_id FROM linkedin_pool_idempotency WHERE idempotency_key = ?')
+      .prepare(
+        'SELECT request_digest, account_id FROM linkedin_pool_idempotency WHERE idempotency_key = ?',
+      )
       .get(input.idempotencyKey) as { request_digest: string; account_id: string } | undefined;
     if (previous) {
       if (previous.request_digest !== requestDigest) {
@@ -334,17 +342,17 @@ export class SqliteLinkedinPoolRepository {
   update(input: LinkedinPoolUpdateInput): LinkedinPoolAccount {
     const current = this.requireAccountRow(input.accountId);
     this.assertRevision(current, input.revision);
-    const nextEmail = input.emailLogin === undefined
-      ? this.openEmail(current)
-      : normalizeEmail(input.emailLogin);
-    const nextMarker = input.providerAccountMarker === undefined
-      ? this.openMarker(current)
-      : input.providerAccountMarker?.trim() || null;
+    const nextEmail =
+      input.emailLogin === undefined
+        ? this.openEmail(current)
+        : normalizeLoginIdentifier(input.emailLogin);
+    const nextMarker =
+      input.providerAccountMarker === undefined
+        ? this.openMarker(current)
+        : input.providerAccountMarker?.trim() || null;
     if (nextEmail !== this.openEmail(current)) {
       const duplicate = this.database
-        .prepare(
-          'SELECT 1 FROM linkedin_pool_accounts WHERE email_login_digest = ? AND id <> ?',
-        )
+        .prepare('SELECT 1 FROM linkedin_pool_accounts WHERE email_login_digest = ? AND id <> ?')
         .get(digest(nextEmail), input.accountId);
       if (duplicate) throw new LinkedinPoolConflictError('linkedin_email_login_exists');
     }
@@ -374,7 +382,10 @@ export class SqliteLinkedinPoolRepository {
     return this.requireAccount(input.accountId);
   }
 
-  async beginLogin(accountId: string, actor: LinkedinPoolActor): Promise<{
+  async beginLogin(
+    accountId: string,
+    actor: LinkedinPoolActor,
+  ): Promise<{
     account: LinkedinPoolAccount;
     lease: LinkedinLease;
   }> {
@@ -392,9 +403,7 @@ export class SqliteLinkedinPoolRepository {
     const rawHandle = `lhs_${randomBytes(32).toString('base64url')}`;
     const nowIso = now.toISOString();
     this.transaction(() => {
-      this.database
-        .prepare('DELETE FROM linkedin_pool_leases WHERE account_id = ?')
-        .run(accountId);
+      this.database.prepare('DELETE FROM linkedin_pool_leases WHERE account_id = ?').run(accountId);
       this.database
         .prepare(
           `INSERT INTO linkedin_pool_leases
@@ -423,7 +432,11 @@ export class SqliteLinkedinPoolRepository {
     };
   }
 
-  async completeLogin(accountId: string, handle: string): Promise<LinkedinPoolAccount> {
+  async completeLogin(
+    accountId: string,
+    handle: string,
+    providerProbe?: LinkedinProviderProbe,
+  ): Promise<LinkedinPoolAccount> {
     const lease = this.database
       .prepare(
         `SELECT account_id, token_hash, expires_at FROM linkedin_pool_leases
@@ -446,6 +459,9 @@ export class SqliteLinkedinPoolRepository {
     this.database
       .prepare('UPDATE linkedin_pool_leases SET consumed_at = ? WHERE token_hash = ?')
       .run(now, lease.token_hash);
+    if (providerProbe) {
+      return this.applyProbe(accountId, providerProbe);
+    }
     if (!this.probe) {
       return this.finishWithoutRuntime(accountId, 'session_runtime_unavailable');
     }
@@ -453,7 +469,13 @@ export class SqliteLinkedinPoolRepository {
     try {
       probe = await this.probe({
         account,
-        lease: { accountId, handle, expiresAt: lease.expires_at, transport: 'desktop', webRemote: false },
+        lease: {
+          accountId,
+          handle,
+          expiresAt: lease.expires_at,
+          transport: 'desktop',
+          webRemote: false,
+        },
       });
     } catch {
       return this.finishWithoutRuntime(accountId, 'provider_probe_failed');
@@ -519,7 +541,8 @@ export class SqliteLinkedinPoolRepository {
     }
     assertTransition(current.state, probe.state);
     const now = this.now().toISOString();
-    const lastVerifiedAt = probe.state === 'ready' ? probe.verifiedAt ?? now : current.last_verified_at;
+    const lastVerifiedAt =
+      probe.state === 'ready' ? (probe.verifiedAt ?? now) : current.last_verified_at;
     const failureCode = probe.failureCode ?? failureCodeForState(probe.state);
     const markerCipher = probe.accountMarker
       ? this.sealedText.seal(
@@ -533,15 +556,7 @@ export class SqliteLinkedinPoolRepository {
           last_verified_at = ?, last_heartbeat_at = ?, last_failure_code = ?,
           lease_until = NULL, revision = revision + 1, updated_at = ? WHERE id = ?`,
       )
-      .run(
-        probe.state,
-        markerCipher,
-        lastVerifiedAt,
-        now,
-        failureCode,
-        now,
-        accountId,
-      );
+      .run(probe.state, markerCipher, lastVerifiedAt, now, failureCode, now, accountId);
     return this.requireAccount(accountId);
   }
 

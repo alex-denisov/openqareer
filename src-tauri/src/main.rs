@@ -9,9 +9,10 @@ mod tunnel_manager;
 
 use automation_worker::{execute_candidate_action_safely, LocalActionRequest, LocalActionResult};
 use connector_session::{
-    close_orphaned_session_windows, close_session_window, inspect_session_page,
-    is_session_window_open, open_session_window,
-    read_session_page, reset_session_window, resize_session_window, should_route_through_tunnel,
+    close_managed_session_window, close_orphaned_session_windows, close_session_window,
+    inspect_session_page, inspect_session_page_for, is_managed_session_window_open,
+    is_session_window_open, open_session_window, read_session_page, reset_session_window,
+    resize_session_window, resize_session_window_for, should_route_through_tunnel,
     SessionInspectionReport, SessionLayout, SessionPageReport, SessionWindowReport,
     SessionWindowRequest,
 };
@@ -184,13 +185,25 @@ async fn open_connector_session(
 
 /// Whether the platform's window is still on screen.
 #[tauri::command]
-fn is_connector_session_open(app: AppHandle, platform: String) -> bool {
-    is_session_window_open(&app, &platform)
+fn is_connector_session_open(
+    app: AppHandle,
+    platform: String,
+    session_key: Option<String>,
+) -> bool {
+    if session_key.is_some() {
+        is_managed_session_window_open(&app, &platform, session_key.as_deref())
+    } else {
+        is_session_window_open(&app, &platform)
+    }
 }
 
 #[tauri::command]
-fn close_connector_session(app: AppHandle, platform: String) -> bool {
-    close_session_window(&app, &platform)
+fn close_connector_session(app: AppHandle, platform: String, session_key: Option<String>) -> bool {
+    if session_key.is_some() {
+        close_managed_session_window(&app, &platform, session_key.as_deref())
+    } else {
+        close_session_window(&app, &platform)
+    }
 }
 
 #[tauri::command]
@@ -199,8 +212,17 @@ async fn reset_connector_session(app: AppHandle, platform: String) -> bool {
 }
 
 #[tauri::command]
-fn resize_connector_session(app: AppHandle, platform: String, layout: SessionLayout) -> bool {
-    resize_session_window(&app, &platform, layout)
+fn resize_connector_session(
+    app: AppHandle,
+    platform: String,
+    layout: SessionLayout,
+    session_key: Option<String>,
+) -> bool {
+    if session_key.is_some() {
+        resize_session_window_for(&app, &platform, session_key.as_deref(), layout)
+    } else {
+        resize_session_window(&app, &platform, layout)
+    }
 }
 
 /// Reads a page inside the candidate's own signed-in session window.
@@ -217,8 +239,13 @@ async fn read_connector_session_page(
 async fn inspect_connector_session_page(
     app: AppHandle,
     platform: String,
+    session_key: Option<String>,
 ) -> Result<SessionInspectionReport, String> {
-    inspect_session_page(&app, &platform).await
+    if session_key.is_some() {
+        inspect_session_page_for(&app, &platform, session_key.as_deref()).await
+    } else {
+        inspect_session_page(&app, &platform).await
+    }
 }
 
 #[tauri::command]

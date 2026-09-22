@@ -42,11 +42,23 @@
     var linkedinMarker = q(
       'a[href*="/logout"],a[href*="/m/logout"],[data-view-name="navigation-profile"],[data-test-id="nav-profile"],[data-test-global-nav-me],a[href*="/in/"][aria-label],.global-nav__me-photo,button[aria-label="Me"],button[aria-label="Вы"],button[aria-label*="Me" i],button[aria-label*="Профиль" i]',
     );
+    var linkedinAccountMarker = null;
+    if (platform === 'linkedin') {
+      var profileLink = document.querySelector('a[href*="/in/"]');
+      if (profileLink) {
+        try {
+          var profileUrl = new URL(profileLink.href, location.origin);
+          var profileMatch = /^\/in\/([^/?#]+)/u.exec(profileUrl.pathname);
+          linkedinAccountMarker = profileMatch ? profileMatch[1] : null;
+        } catch (_profileError) {}
+      }
+    }
     var marker = platform === 'linkedin' ? linkedinMarker : hhMarker;
     return {
       ready: document.readyState === 'complete',
       url: location.href,
       signedInApplicant: Boolean(marker) && !login && !otp && !captcha,
+      accountMarker: linkedinAccountMarker,
       login: Boolean(login),
       otp: Boolean(otp),
       captcha: Boolean(captcha),
@@ -56,6 +68,7 @@
       ready: false,
       url: '',
       signedInApplicant: false,
+      accountMarker: null,
       login: false,
       otp: false,
       captcha: false,

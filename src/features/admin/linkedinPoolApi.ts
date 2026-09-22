@@ -107,11 +107,14 @@ export async function updateAdminLinkedinAccount(
     providerAccountMarker?: string | null;
   },
 ): Promise<LinkedinPoolAccount> {
-  const response = await apiFetch(`/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
+  const response = await apiFetch(
+    `/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
   return readData<LinkedinPoolAccount>(response);
 }
 
@@ -119,43 +122,65 @@ export async function requestAdminLinkedinLogin(accountId: string): Promise<{
   account: LinkedinPoolAccount;
   lease: LinkedinLoginLease;
 }> {
-  const response = await apiFetch(`/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}/session`, {
-    method: 'POST',
-  });
+  const response = await apiFetch(
+    `/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}/session`,
+    {
+      method: 'POST',
+    },
+  );
   return readData<{ account: LinkedinPoolAccount; lease: LinkedinLoginLease }>(response);
 }
 
 export async function completeAdminLinkedinLogin(
   accountId: string,
   handle: string,
+  probe: {
+    state: 'ready' | 'login_required' | 'challenge_required' | 'expired' | 'banned';
+    accountMarker?: string;
+  },
 ): Promise<LinkedinPoolAccount> {
-  const response = await apiFetch(`/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}/session/complete`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ handle }),
-  });
+  const response = await apiFetch(
+    `/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}/session/complete`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ handle, ...probe }),
+    },
+  );
   return readData<LinkedinPoolAccount>(response);
 }
 
 export async function probeAdminLinkedinAccount(accountId: string): Promise<LinkedinPoolAccount> {
-  const response = await apiFetch(`/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}/probe`, {
-    method: 'POST',
-  });
+  const response = await apiFetch(
+    `/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}/probe`,
+    {
+      method: 'POST',
+    },
+  );
   return readData<LinkedinPoolAccount>(response);
 }
 
 export async function revokeAdminLinkedinAccount(accountId: string): Promise<LinkedinPoolAccount> {
-  const response = await apiFetch(`/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}/revoke`, {
-    method: 'POST',
-  });
+  const response = await apiFetch(
+    `/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}/revoke`,
+    {
+      method: 'POST',
+    },
+  );
   return readData<LinkedinPoolAccount>(response);
 }
 
-export async function deleteAdminLinkedinAccount(accountId: string, revision: number): Promise<void> {
-  const response = await apiFetch(`/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ revision }),
-  });
+export async function deleteAdminLinkedinAccount(
+  accountId: string,
+  revision: number,
+): Promise<void> {
+  const response = await apiFetch(
+    `/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}`,
+    {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ revision }),
+    },
+  );
   if (!response.ok) await throwApiError(response);
 }
