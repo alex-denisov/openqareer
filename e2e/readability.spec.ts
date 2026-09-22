@@ -358,9 +358,9 @@ test.describe('B232 readability gate', () => {
     await page.screenshot({ path: info.outputPath('b236-tooltip-focused.png') });
 
     await pitchAction.click();
-    const dialog = page.getByRole('dialog', { name: /Подготовка отклика/u });
+    const dialog = page.getByRole('dialog', { name: /Отклик:/u });
     await expect(dialog).toBeVisible();
-    await dialog.getByRole('tab', { name: 'LinkedIn Note' }).click();
+    await dialog.getByRole('tab', { name: 'LinkedIn-заметка (300 знаков)' }).click();
     await expect(dialog.getByRole('button', { name: 'Кому отправить' })).toBeVisible();
     await page.screenshot({ path: info.outputPath('b236-pitch-modal.png') });
 

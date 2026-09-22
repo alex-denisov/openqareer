@@ -139,15 +139,16 @@ if [[ "$healthy" != "1" ]]; then
   fail "release health check failed; previous release restored"
 fi
 
-rm -f -- "$archive"
-
 # Обслуживатель пула (B230) перезапускается после того, как HTTP подтвердил
-# релиз: он не участвует в /health и не может откатить выкат, но обязан
-# работать из того же `current`, что и сервер.
-if ! sudo -n /usr/bin/systemctl restart "$MAINTENANCE_SERVICE"; then
-  printf 'openqareer-activate: warning: %s restart failed; check journalctl -u %s\n' \
-    "$MAINTENANCE_SERVICE" "$MAINTENANCE_SERVICE" >&2
+# релиз. Он не участвует в /health, поэтому один только health-check не может
+# подтвердить production readiness. Нельзя оставить новый HTTP-релиз с
+# остановленным или неактивным worker-ом: это будет частично выкачанный батч.
+if ! sudo -n /usr/bin/systemctl restart "$MAINTENANCE_SERVICE" ||
+  ! systemctl is-active --quiet "$MAINTENANCE_SERVICE"; then
+  fail "maintenance service is not active after release restart; check journalctl -u $MAINTENANCE_SERVICE"
 fi
+
+rm -f -- "$archive"
 
 current_target="$(readlink current)"
 previous_target="$(readlink previous 2>/dev/null || true)"

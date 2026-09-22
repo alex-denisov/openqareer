@@ -302,15 +302,14 @@ function ScoreRing({ score }: { score: ProfileScore }) {
         {/* Число и подпись — в HTML, не в SVG: текст в viewBox масштабируется
             вместе с кольцом и на 96 px выходил 6 px высотой (B232). */}
         <strong className="career-score-number" aria-hidden="true">
-          {score.value}
+          {score.value}%
         </strong>
         <span className="career-score-caption" aria-hidden="true">
-          из 100
+          проверок
         </span>
       </div>
       <p>
-        Пройдено {score.checks} проверок из {score.total}. Каждая проверка ниже называет, из чего
-        сложено число.
+        {score.checks} из {score.total} формальных проверок. Это заполненность, не сила резюме.
       </p>
     </div>
   );

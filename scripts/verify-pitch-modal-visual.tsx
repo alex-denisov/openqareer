@@ -201,19 +201,19 @@ function createTestCases(appCss: string, shellCss: string): TestCase[] {
       name: 'desktop-1440-pitch-modal-email',
       viewport: { width: 1440, height: 900 },
       html: buildHtml(board, appCss, shellCss, { showModal: true, modalHtml: email }),
-      description: 'Десктоп (1440×900): модальное окно, вкладка Email-сопроводительное',
+      description: 'Десктоп (1440×900): модальное окно, вкладка «Письмо»',
     },
     {
       name: 'desktop-1440-pitch-modal-linkedin',
       viewport: { width: 1440, height: 900 },
       html: buildHtml(board, appCss, shellCss, { showModal: true, modalHtml: linkedIn }),
-      description: 'Десктоп (1440×900): вкладка LinkedIn Note со счетчиком символов (/ 300)',
+      description: 'Десктоп (1440×900): вкладка LinkedIn-заметка со счетчиком символов (из 300)',
     },
     {
       name: 'desktop-1440-pitch-modal-ats',
       viewport: { width: 1440, height: 900 },
       html: buildHtml(board, appCss, shellCss, { showModal: true, modalHtml: ats }),
-      description: 'Десктоп (1440×900): вкладка ATS Cover Letter с кнопками копирования и скачивания',
+      description: 'Десктоп (1440×900): вкладка Cover letter для ATS с кнопками копирования и скачивания',
     },
     {
       name: 'mobile-390-pitch-modal-email',
@@ -225,7 +225,7 @@ function createTestCases(appCss: string, shellCss: string): TestCase[] {
       name: 'mobile-390-pitch-modal-linkedin',
       viewport: { width: 390, height: 844 },
       html: buildHtml(board, appCss, shellCss, { showModal: true, modalHtml: linkedIn }),
-      description: 'Мобайл (390×844): вкладка LinkedIn Note с адаптивным счетчиком',
+      description: 'Мобайл (390×844): вкладка LinkedIn-заметка с адаптивным счетчиком',
     },
     {
       name: 'mobile-320-pitch-modal-narrow',

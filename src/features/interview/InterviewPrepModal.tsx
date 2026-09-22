@@ -65,10 +65,6 @@ export function InterviewPrepModal(props: InterviewPrepModalProps) {
         ref={cardRef}
       >
         <InterviewHeader title={vacancy.title} company={vacancy.company} onClose={onClose} />
-        <p className="career-cabinet-tag career-interview-source-note">
-          Справка собрана по тексту вакансии и открытым источникам. Ответы взяты из фактов профиля.
-          Это заготовки, не скрипт.
-        </p>
         <InterviewTabNav tab={tab} onTabChange={setTab} />
         <main className="career-interview-body">
           <InterviewTabContent tab={tab} brief={brief} />
@@ -107,9 +103,12 @@ function InterviewHeader({
     <header className="career-interview-header">
       <div className="career-interview-title-block">
         <h2 id="career-interview-title" className="career-interview-title">
-          Интервью: «{title}»
+          Интервью: «{title}»{company ? `, ${company}` : ''}
         </h2>
-        {company ? <p className="career-interview-subtitle">{company}</p> : null}
+        <p className="career-interview-subtitle">
+          Справка — из текста вакансии и открытых источников; ответы — из фактов профиля. Это
+          заготовки, не скрипт.
+        </p>
       </div>
       <button
         type="button"

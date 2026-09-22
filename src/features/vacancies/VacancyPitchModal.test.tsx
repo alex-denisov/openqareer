@@ -54,14 +54,14 @@ describe('VacancyPitchModal', () => {
     expect(html).toContain('FinTech Group');
 
     // Format tabs
-    expect(html).toContain('Email-сопроводительное');
-    expect(html).toContain('LinkedIn Note');
-    expect(html).toContain('ATS Cover Letter');
+    expect(html).toContain('Письмо');
+    expect(html).toContain('LinkedIn-заметка (300 знаков)');
+    expect(html).toContain('Cover letter для ATS');
 
     // Tone switchers
     expect(html).toContain('Executive');
-    expect(html).toContain('Confident');
-    expect(html).toContain('Technical');
+    expect(html).toContain('Прямой');
+    expect(html).toContain('Технический');
 
     // Email pitch content
     expect(html).toContain('Архитектура и надежность');
@@ -83,7 +83,7 @@ describe('VacancyPitchModal', () => {
     );
 
     expect(html).toContain('Копировать сообщение');
-    expect(html).toContain('/ 300');
+    expect(html).toContain('из 300');
     expect(html).toContain('Рад знакомству!');
   });
 

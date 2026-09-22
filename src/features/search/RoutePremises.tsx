@@ -26,20 +26,20 @@ export function CareerRoutePremises({
     <section className="career-route-premises" aria-labelledby="career-route-premises-title">
       <header>
         <div>
-          <span className="career-cabinet-kicker">Изменяемые предпосылки</span>
-          <h3 id="career-route-premises-title">Роль и условия маршрута</h3>
+          <span className="career-cabinet-kicker">Условия поиска</span>
+          <h3 id="career-route-premises-title">Роль, регион, формат</h3>
         </div>
         <button type="button" onClick={onEdit} disabled={editDisabled}>
-          {editDisabled ? 'Читаем текущие ответы…' : 'Изменить роль и условия'}
+          {editDisabled ? 'Читаем текущие ответы…' : 'Изменить условия'}
         </button>
       </header>
       <dl>
         <div>
-          <dt>Роль и уровень</dt>
+          <dt>Роль и грейд</dt>
           <dd>{targetRole?.trim() || 'Уточняются'}</dd>
         </div>
         <div>
-          <dt>География</dt>
+          <dt>Где</dt>
           <dd>
             {candidateRegionLabels(regions).join(', ') || 'Регионы не выбраны'}
           </dd>
@@ -50,8 +50,7 @@ export function CareerRoutePremises({
         </div>
       </dl>
       <p>
-        После сохранения гипотезы и поисковый запрос пересчитываются; прошлые
-        варианты остаются обратимыми.
+        После сохранения подбор пересоберётся. Прежние условия останутся в истории.
       </p>
     </section>
   );

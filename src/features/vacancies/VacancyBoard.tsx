@@ -8,6 +8,7 @@ import {
   ListDashes,
   MapPin,
   PencilSimpleLine,
+  X,
   Users,
 } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -376,7 +377,7 @@ function VacancyChips({
             onClick={() => onChange({ ...filters, [chip.key]: undefined })}
             aria-label={`Снять фильтр: ${chip.label}`}
           >
-            {chip.label} ✕
+            {chip.label} <X size={13} aria-hidden="true" />
           </button>
         </li>
       ))}

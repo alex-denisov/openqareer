@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * B160 remainder — «Изменить роль и условия» used to open the «Аккаунт» panel,
+ * B160 remainder — «Изменить условия» used to open the «Аккаунт» panel,
  * which holds no role, no regions and no work mode. There was no way in the
  * product to change the premises of the candidate's own route. This spec
  * asserts the editor exists, shows the current answers and writes them to the
@@ -144,7 +144,7 @@ test.describe('B160 route premises are editable in the cabinet', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openCareer(page);
 
-    await page.getByRole('button', { name: 'Изменить роль и условия' }).click();
+    await page.getByRole('button', { name: 'Изменить условия' }).click();
 
     const editor = page.locator('.career-route-premises-editor');
     await expect(editor).toBeVisible();
@@ -177,7 +177,7 @@ test.describe('B160 route premises are editable in the cabinet', () => {
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openCareer(page);
-    await page.getByRole('button', { name: 'Изменить роль и условия' }).click();
+    await page.getByRole('button', { name: 'Изменить условия' }).click();
     await expect(page.locator('.career-route-premises-editor')).toBeVisible();
 
     const overflow = await page.evaluate(
