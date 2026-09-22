@@ -10,6 +10,7 @@ import {
 
 interface TooltipTriggerProps {
   'aria-describedby'?: string;
+  tabIndex?: number;
   onBlur?: FocusEventHandler<HTMLElement>;
   onFocus?: FocusEventHandler<HTMLElement>;
   onMouseEnter?: MouseEventHandler<HTMLElement>;
@@ -31,10 +32,20 @@ export function CareerTooltip({ content, children }: CareerTooltipProps) {
   const [open, setOpen] = useState(false);
   const existingDescription = children.props['aria-describedby'];
   const describedBy = [existingDescription, tooltipId].filter(Boolean).join(' ');
+  const childTag = typeof children.type === 'string' ? children.type : undefined;
+  const isKeyboardTarget =
+    children.props.tabIndex !== undefined ||
+    childTag === 'a' ||
+    childTag === 'button' ||
+    childTag === 'input' ||
+    childTag === 'select' ||
+    childTag === 'textarea' ||
+    childTag === 'summary';
 
   const trigger = isValidElement(children)
     ? cloneElement(children, {
         'aria-describedby': describedBy,
+        ...(!isKeyboardTarget ? { tabIndex: 0 } : {}),
         onFocus: (event) => {
           children.props.onFocus?.(event);
           setOpen(true);

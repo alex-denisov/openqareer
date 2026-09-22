@@ -85,7 +85,9 @@ if [[ "$healthy" != "1" ]]; then
   fail "rollback health failed; original current release restored"
 fi
 
-sudo -n /usr/bin/systemctl restart "$MAINTENANCE_SERVICE" ||
-  printf 'openqareer-rollback: warning: %s restart failed\n' "$MAINTENANCE_SERVICE" >&2
+if ! sudo -n /usr/bin/systemctl restart "$MAINTENANCE_SERVICE" ||
+  ! systemctl is-active --quiet "$MAINTENANCE_SERVICE"; then
+  fail "maintenance service is not active after rollback restart; check journalctl -u $MAINTENANCE_SERVICE"
+fi
 
 printf 'rollback=%s previous=%s health=ok\n' "$previous_target" "$current_target"

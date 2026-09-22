@@ -48,9 +48,9 @@ function render(options: {
 }
 
 describe('StrategyReviewPanel', () => {
-  it('называет порядок изменений и правило одной переменной', () => {
+  it('не показывает методологию до первого сработавшего сигнала', () => {
     const markup = render({});
-    expect(markup).toContain('канал отклика → материалы и скрининговые ответы');
+    expect(markup).not.toContain('канал отклика → материалы и скрининговые ответы');
     expect(markup).toContain('по одному изменению за раз');
     // Наращивать объём откликов запрещено как ответ на любой сигнал.
     expect(markup).not.toContain('больше откликов');
@@ -76,11 +76,18 @@ describe('StrategyReviewPanel', () => {
     expect(markup).toContain('Менять: канал отклика');
   });
 
-  it('барьер смены роли показывает числами со знаменателями', () => {
-    const markup = render({});
+  it('показывает цену смены роли только после первого подтверждённого отклика', () => {
+    const markup = render({
+      commands: [
+        {
+          status: 'completed_with_receipt',
+          execution: { updatedAt: NOW },
+        } as unknown as CareerCommand,
+      ],
+    });
     expect(markup).toContain('3 из 14');
-    expect(markup).toContain('0 из 20');
-    expect(markup).toContain('барьер не взят');
+    expect(markup).toContain('1 из 20');
+    expect(markup).toContain('Менять роль рано');
     expect(markup).toContain('обнулит накопленную воронку');
   });
 

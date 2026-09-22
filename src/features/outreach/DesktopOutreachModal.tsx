@@ -70,7 +70,7 @@ function OutreachHeader({
       <div className="career-outreach-title-block">
         <div className="career-outreach-title-row">
           <h2 id="career-outreach-modal-title" className="career-outreach-title">
-            Нетворкинг и прямой аутрич
+            Нетворкинг{company ? `: ${company}` : ''}
           </h2>
           <span
             className={`career-outreach-session-badge ${isDesktop ? 'is-desktop' : 'is-web'}`}
@@ -81,9 +81,8 @@ function OutreachHeader({
           </span>
         </div>
         <p className="career-outreach-subtitle">
-          {company ? <strong>{company}</strong> : null}
-          {company ? ' · ' : null}
-          <span>{vacancyTitle}</span>
+          {vacancyTitle}. Ваши контакты на площадках, кто работает здесь или знает нанимающего.
+          Отправляете вы — из своей сессии в приложении или вручную.
         </p>
       </div>
       <button
@@ -343,7 +342,7 @@ function OutreachNoteInputs({
           Заметка к запросу в контакты
         </label>
         <span className={`career-outreach-char-count ${isOverflow ? 'is-overflow' : ''}`}>
-          {note.length} / 300
+            {note.length} из 300
         </span>
       </div>
       {selectedProfile ? (
@@ -465,8 +464,8 @@ function useOutreachModalState(
   const [profiles, setProfiles] = useState<DecisionMakerProfile[]>(defaultList);
   const [selectedId, setSelectedId] = useState<string>(defaultList[0]?.id ?? '');
   const [note, setNote] = useState<string>(
-    initialNote ||
-      `Здравствуйте! Заинтересовала позиция ${vacancy.title} в компании ${vacancy.company ?? ''}. Буду рад знакомству и диалогу.`,
+      initialNote ||
+      `Здравствуйте! Вижу, вы работаете в ${vacancy.company ?? 'компании'}. Пишу по роли ${vacancy.title}; буду рад(а) задать пару вопросов о команде.`,
   );
   const [quota, setQuota] = useState<OutreachDailyQuota>(getOutreachQuota(undefined, candidateId));
   const [sending, setSending] = useState(false);
@@ -534,7 +533,7 @@ function useOutreachSendHandler({
         candidateId,
       });
       if (!result.success) {
-        setSendError(result.errorReason || 'Сбой при отправке запроса.');
+        setSendError(result.errorReason || 'Не удалось отправить. Скопируйте и отправьте вручную.');
         setSending(false);
         return;
       }
@@ -549,7 +548,9 @@ function useOutreachSendHandler({
       setQuota(getOutreachQuota(undefined, candidateId));
       onSent?.(record);
     } catch (err) {
-      setSendError(err instanceof Error ? err.message : 'Неизвестная ошибка.');
+      setSendError(
+        err instanceof Error ? err.message : 'Не удалось отправить. Скопируйте и отправьте вручную.',
+      );
     } finally {
       setSending(false);
     }

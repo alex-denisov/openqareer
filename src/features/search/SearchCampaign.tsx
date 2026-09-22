@@ -1,4 +1,4 @@
-import { ArrowRight } from '@phosphor-icons/react';
+import { ArrowRight, EyeSlash } from '@phosphor-icons/react';
 import { vacancyCoverage } from '../vacancies/vacancyFilters';
 import { openTargetLabel } from '../vacancies/vacancyOpenTarget';
 import { useEffect, useMemo, useState } from 'react';
@@ -75,7 +75,13 @@ export function SearchCampaign({
     <section className="career-campaign" aria-labelledby="career-campaign-title">
       <header className="career-campaign-head">
         <div>
-          <h2 id="career-campaign-title">Кампания поиска</h2>
+          <h2 id="career-campaign-title">
+            {strategy
+              ? `Кампания: «${strategy.current.role.title}»`
+              : targetDirection.trim()
+                ? `Кампания: «${targetDirection.trim()}»`
+                : 'Кампания: роль не выбрана'}
+          </h2>
           <p>{campaignRoleLine(strategy, targetDirection)}</p>
         </div>
         <button
@@ -84,7 +90,7 @@ export function SearchCampaign({
           disabled={premisesLoading}
           onClick={() => setEditing((open) => !open)}
         >
-          {premisesLoading ? 'Читаем текущие ответы…' : 'Настроить кампанию'}
+          {premisesLoading ? 'Читаем текущие ответы…' : 'Роль, регион, формат'}
         </button>
       </header>
 
@@ -117,8 +123,7 @@ export function SearchCampaign({
 
       {failed ? (
         <p className="career-cabinet-error" role="alert">
-          Пул не прочитан, поэтому числа кампании не показаны: пустая кампания и недоступный
-          источник — разные вещи.
+          Не удалось загрузить вакансии, счётчики скрыты — это сбой загрузки, а не пустая кампания.
         </p>
       ) : null}
 
@@ -153,23 +158,28 @@ export function SearchCampaign({
 function FunnelPanel({ campaign }: { campaign: SearchCampaignView }) {
   return (
     <section className="career-home-panel">
-      <header>
-        <h3>Воронка кампании</h3>
-        <span className="career-cabinet-tag">сверено с нашими источниками</span>
+        <header>
+        <h3>Воронка</h3>
+        <span className="career-cabinet-tag">первые три ступени — по вашим действиям здесь</span>
       </header>
       <ol className="career-funnel">
         {campaign.funnel.map((step) => (
           <li key={step.label} className={step.value === undefined ? 'is-untracked' : ''}>
             <span className="career-funnel-value">
-              {step.value === undefined ? '—' : step.value}
+              {step.value === undefined ? <EyeSlash size={16} aria-hidden="true" /> : step.value}
             </span>
-            <span className="career-funnel-label">{step.label}</span>
+            <span className="career-funnel-label">
+              {step.label}
+            </span>
+            {step.value === undefined ? (
+              <small className="career-funnel-untracked-label">не отслеживаем</small>
+            ) : null}
           </li>
         ))}
       </ol>
       <p className="career-cabinet-tag">
-        «Открыто» — переход на площадку, «отклик» — ваша отметка. Просмотры, ответы и интервью не
-        отслеживаем: площадки не сообщают эти данные.
+        Дальше отклик живёт на площадке и в почте работодателя — они нам этого не сообщают,
+        поэтому просмотры, ответы и интервью не считаем и нулём не показываем.
       </p>
     </section>
   );

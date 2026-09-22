@@ -102,14 +102,14 @@ describe('CareerCabinet route premises', () => {
       />,
     );
 
-    expect(html).toContain('Роль и уровень');
+    expect(html).toContain('Роль и грейд');
     expect(html).toContain('Руководитель продукта');
-    expect(html).toContain('География');
+    expect(html).toContain('Где');
     expect(html).toContain('Россия');
     expect(html).toContain('EU');
     expect(html).toContain('Формат работы');
     expect(html).toContain('Удалённо');
-    expect(html).toContain('Изменить роль и условия');
+    expect(html).toContain('Изменить условия');
   });
 });
 
@@ -153,7 +153,7 @@ describe('CareerCabinet composition', () => {
   it('projects the regions the candidate chose instead of an empty geography (B158, B160)', () => {
     const html = renderCabinet('career');
 
-    expect(html).toContain('География');
+    expect(html).toContain('Где');
     expect(html).toContain('Россия');
     expect(html).not.toContain('Не указана');
   });
@@ -191,7 +191,7 @@ describe('CareerCabinet composition', () => {
   it('does not repeat the ATS readability and next action block on «Поиск» (B233)', () => {
     const html = renderCabinet('career');
 
-    expect(html).toContain('Кампания поиска');
+    expect(html).toContain('Кампания:');
     expect(html).not.toContain('ATS-читаемость');
     expect(html).not.toContain('Один шаг на сегодня');
   });
@@ -218,10 +218,10 @@ describe('CareerCabinet composition', () => {
   it('gives «Поиск» the campaign screen', () => {
     const html = renderCabinet('career');
 
-    expect(html).toContain('Кампания поиска');
-    expect(html).toContain('Воронка кампании');
+    expect(html).toContain('Кампания:');
+    expect(html).toContain('Воронка');
     expect(html).toContain('Очередь на сегодня');
-    expect(html).toContain('Роль и условия маршрута');
+    expect(html).toContain('Роль, регион, формат');
     // Регулярные выборки ушли отсюда в панель фильтров «Вакансий» — туда, где
     // кандидат смотрит сам пул (решение владельца 2026-09-02, B181).
     expect(html).not.toContain('Регулярный поиск');

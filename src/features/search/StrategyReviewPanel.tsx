@@ -50,6 +50,8 @@ export function StrategyReviewPanel({
     delivered: commands.filter((command) => command.status === 'completed_with_receipt').length,
     now,
   });
+  const measuredSignals = review.signals.filter((signal) => signal.state !== 'untracked');
+  const hasFiredSignal = measuredSignals.some((signal) => signal.state === 'fired');
 
   return (
     <section className="career-strategy-review" aria-labelledby="career-strategy-review-title">
@@ -57,10 +59,10 @@ export function StrategyReviewPanel({
         <h3 id="career-strategy-review-title">Что менять, если не работает</h3>
         <span className="career-cabinet-tag">по одному изменению за раз</span>
       </header>
-      <ChangeOrderLine />
-      <SignalList signals={review.signals.filter((signal) => signal.state !== 'untracked')} />
+      {hasFiredSignal ? <ChangeOrderLine /> : null}
+      <SignalList signals={measuredSignals} />
       <UntrackedBlock />
-      {strategy ? <BarrierLine barrier={barrier} /> : null}
+      {strategy && barrier.delivered.value > 0 ? <BarrierLine barrier={barrier} /> : null}
     </section>
   );
 }
@@ -145,9 +147,9 @@ function observation(
 function BarrierLine({ barrier }: { readonly barrier: RoleChangeBarrier }) {
   return (
     <p className="career-home-empty">
-      Смена роли: {barrier.days.value} из {barrier.days.total} {barrier.days.basis},{' '}
-      {barrier.delivered.value} из {barrier.delivered.total} {barrier.delivered.basis} —{' '}
-      {barrier.met ? 'барьер взят' : 'барьер не взят'}. {barrier.loses}
+      {barrier.met ? 'Порог для смены роли пройден' : 'Менять роль рано'}: {barrier.days.value} из{' '}
+      {barrier.days.total} {barrier.days.basis}, {barrier.delivered.value} из{' '}
+      {barrier.delivered.total} {barrier.delivered.basis}. {barrier.loses}
     </p>
   );
 }

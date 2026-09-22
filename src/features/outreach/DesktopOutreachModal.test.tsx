@@ -108,7 +108,7 @@ describe('DesktopOutreachModal', () => {
 
     expect(html).toContain('Заметка к запросу в контакты');
     expect(html).toContain('Здравствуйте, Анна!');
-    expect(html).toContain('/ 300');
+    expect(html).toContain('из 300');
   });
 
   it('tells web users to copy and paste, without internal ADR numbers (B236)', () => {

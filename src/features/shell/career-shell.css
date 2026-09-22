@@ -9708,6 +9708,17 @@
   font-size: var(--career-text-sm);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.career-funnel-untracked-label {
+  max-inline-size: 100%;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .career-strategy-untracked {

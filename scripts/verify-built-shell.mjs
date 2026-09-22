@@ -937,10 +937,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByRole('heading', { name: 'Поиск', exact: true }).waitFor();
   // «Поиск» — кампания из макета: плитки, воронка, очередь и автоматизация по
   // тарифу (B179).
-  await page.getByRole('heading', { name: 'Кампания поиска' }).waitFor();
-  await page.getByRole('heading', { name: 'Воронка кампании' }).waitFor();
+  await page.getByRole('heading', { name: /Кампания:/u }).waitFor();
+  await page.getByRole('heading', { name: 'Воронка' }).waitFor();
   await page.getByRole('heading', { name: 'Очередь на сегодня' }).waitFor();
-  await page.getByRole('heading', { name: 'Роль и условия маршрута' }).waitFor();
+  await page.getByRole('heading', { name: 'Роль, регион, формат' }).waitFor();
   // INC-019: these used to be literal `true`s reported as verification. They
   // now record what the walk actually observed, and a false value fails the
   // gate instead of being printed next to `"status":"pass"`.

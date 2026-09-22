@@ -37,9 +37,17 @@ export interface VacancyPitchModalProps {
 }
 
 const TONES: ReadonlyArray<{ id: PitchTone; label: string; desc: string }> = [
-  { id: 'executive', label: 'Executive', desc: 'Фокус на бизнес-результатах и масштабе' },
-  { id: 'confident', label: 'Confident', desc: 'Прямой отклик и готовность решать задачи' },
-  { id: 'technical', label: 'Technical', desc: 'Глубина стека, архитектура и надежность' },
+  {
+    id: 'executive',
+    label: 'Executive',
+    desc: 'Для C-Level и senior-ролей: бизнес-результат, масштаб, P&L',
+  },
+  { id: 'confident', label: 'Прямой', desc: 'Для большинства ролей: что умею и что сделаю' },
+  {
+    id: 'technical',
+    label: 'Технический',
+    desc: 'Для инженерных ролей: стек, архитектура и надёжность',
+  },
 ];
 
 const FORMAT_TABS: ReadonlyArray<{
@@ -47,9 +55,9 @@ const FORMAT_TABS: ReadonlyArray<{
   label: string;
   icon: typeof Envelope;
 }> = [
-  { id: 'email', label: 'Email-сопроводительное', icon: Envelope },
-  { id: 'linkedin', label: 'LinkedIn Note', icon: LinkedinLogo },
-  { id: 'ats', label: 'ATS Cover Letter', icon: FileText },
+  { id: 'email', label: 'Письмо', icon: Envelope },
+  { id: 'linkedin', label: 'LinkedIn-заметка (300 знаков)', icon: LinkedinLogo },
+  { id: 'ats', label: 'Cover letter для ATS', icon: FileText },
 ];
 
 function pluralizeFacts(count: number): string {
@@ -110,9 +118,12 @@ function PitchHeader({
     <header className="career-pitch-header">
       <div className="career-pitch-title-block">
         <h2 id="career-pitch-title" className="career-pitch-title">
-          Подготовка отклика: {title}
+          Отклик: «{title}»{company ? `, ${company}` : ''}
         </h2>
-        {company ? <p className="career-pitch-subtitle">{company}</p> : null}
+        <p className="career-pitch-subtitle">
+          Три текста по фактам профиля под требования вакансии. Проверьте, поправьте, скопируйте —
+          отправка с площадки или из почты.
+        </p>
       </div>
       <button
         type="button"
@@ -222,9 +233,9 @@ function PitchControls({
 function PitchMetaBar({ evidenceCount }: { evidenceCount: number }) {
   return (
     <div className="career-pitch-meta-bar">
-      <span className="career-pitch-evidence-tag">{pluralizeFacts(evidenceCount)}</span>
+      <span className="career-pitch-evidence-tag">Использовано {pluralizeFacts(evidenceCount)} из профиля.</span>
       <span className="career-pitch-safe-tag">
-        Сформировано строго из подтверждённых данных профиля
+        Ничего не придумано: чего нет в профиле — нет и в тексте.
       </span>
     </div>
   );
@@ -242,7 +253,7 @@ function EmailSubjectField({
   return (
     <div className="career-pitch-field-group">
       <label htmlFor="pitch-email-subject" className="career-pitch-field-label">
-        Тема письма:
+        Тема письма
       </label>
       <div className="career-pitch-copyable-field">
         <input id="pitch-email-subject" type="text" readOnly value={subject} className="career-pitch-input" />
@@ -250,10 +261,10 @@ function EmailSubjectField({
           type="button"
           className="career-btn career-btn-secondary career-btn-sm"
           onClick={() => onCopy(subject, 'email-subject')}
-          aria-label="Копировать тему письма"
+          aria-label="Скопировать тему письма"
         >
           {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-          <span>{copied ? 'Скопировано' : 'Тема'}</span>
+          <span>{copied ? 'Скопировано' : 'Скопировать тему'}</span>
         </button>
       </div>
     </div>
@@ -354,7 +365,7 @@ function LinkedInNoteTab({
             Заметка к запросу в контакты
           </label>
           <span className={`career-pitch-char-counter ${note.length > 300 ? 'is-overflow' : ''}`}>
-            {note.length} / 300
+            {note.length} из 300
           </span>
         </div>
         <textarea

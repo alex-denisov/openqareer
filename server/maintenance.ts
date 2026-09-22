@@ -36,6 +36,15 @@ async function shutdown(signal: string): Promise<void> {
   // underneath the still-running promise.
   await restoreInFlight?.catch(() => undefined);
   const { waveFinished } = await worker.stop();
+  if (!waveFinished) {
+    // Не закрываем SQLite, пока незавершённая волна ещё может вернуться из
+    // fetcher и записать результат. Процесс должен завершиться целиком, иначе
+    // следующий systemd restart получает закрытое соединение вместо честного
+    // fail-and-restart.
+    log.error({ signal }, 'maintenance-shutdown-forced');
+    process.exit(1);
+    return;
+  }
   composed.close();
   log.info({ signal, waveFinished }, 'maintenance-shutdown-finished');
   process.exit(0);
