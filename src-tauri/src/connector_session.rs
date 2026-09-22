@@ -99,6 +99,17 @@ pub fn session_window_label(platform: &str) -> Option<&'static str> {
 
 const MANAGED_LINKEDIN_LABEL_PREFIX: &str = "connector-linkedin-pool-";
 
+fn session_window_chrome(managed: bool) -> (bool, bool, bool) {
+    if managed {
+        // Pool accounts need native close/resize controls because there is no
+        // candidate wizard shell behind their standalone window.
+        (true, true, false)
+    } else {
+        // Candidate sessions are visually hosted by the wizard modal.
+        (false, false, true)
+    }
+}
+
 fn managed_session_uuid(session_key: &str) -> Result<Uuid, String> {
     let raw = session_key
         .strip_prefix("profile_")
@@ -302,11 +313,22 @@ pub async fn open_session_window(
 
     // A window that drifted elsewhere during a previous attempt must come back
     // to the page the candidate just asked for, not merely to the front.
-    let layout = request.layout.clone().unwrap_or(SessionLayout {
-        x: 180.0,
-        y: 140.0,
-        width: 920.0,
-        height: 620.0,
+    let layout = request.layout.clone().unwrap_or_else(|| {
+        if request.session_key.is_some() {
+            SessionLayout {
+                x: 32.0,
+                y: 70.0,
+                width: 1156.0,
+                height: 640.0,
+            }
+        } else {
+            SessionLayout {
+                x: 180.0,
+                y: 140.0,
+                width: 920.0,
+                height: 620.0,
+            }
+        }
     });
     if layout.width < 320.0 || layout.height < 320.0 || layout.x < 0.0 || layout.y < 0.0 {
         return SessionWindowReport {
@@ -353,10 +375,13 @@ pub async fn open_session_window(
         .title(format!("OpenQareer · {}", platform_name(&request.platform)))
         .position(screen_layout.x, screen_layout.y)
         .inner_size(screen_layout.width, screen_layout.height)
-        .decorations(false)
-        .resizable(false)
-        .skip_taskbar(true)
         .on_navigation(move |next_url| allow_session_navigation(&platform, next_url));
+    let (decorations, resizable, skip_taskbar) =
+        session_window_chrome(request.session_key.is_some());
+    builder = builder
+        .decorations(decorations)
+        .resizable(resizable)
+        .skip_taskbar(skip_taskbar);
 
     if request.platform == "linkedin" {
         builder =
@@ -820,6 +845,12 @@ mod tests {
             session_window_label_for("linkedin", Some("profile-not-a-uuid")),
             Err("managed_session_key_invalid".to_string())
         );
+    }
+
+    #[test]
+    fn gives_managed_windows_native_controls_without_changing_candidate_chrome() {
+        assert_eq!(session_window_chrome(true), (true, true, false));
+        assert_eq!(session_window_chrome(false), (false, false, true));
     }
 
     #[test]

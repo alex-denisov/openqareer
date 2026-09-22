@@ -53,7 +53,15 @@
         } catch (_profileError) {}
       }
     }
-    var marker = platform === 'linkedin' ? linkedinMarker : hhMarker;
+    var linkedinAuthenticatedRoute =
+      /^\/(?:feed|mynetwork|jobs|messaging|notifications|search)(?:\/|$)/i.test(path) ||
+      q(
+        '[data-view-name="feed-nav"],[data-view-name="profile-top-card"],[data-view-name="profile-edit-button"],button[aria-label*="Edit profile" i],button[aria-label*="Редактировать профиль" i],a[href*="/edit/"]',
+      ) ||
+      (/^\/in\/[^/]+(?:\/|$)/i.test(path) &&
+        /(edit profile|analytics|редактировать профиль|аналитика)/i.test(text));
+    var marker =
+      platform === 'linkedin' ? linkedinMarker || linkedinAuthenticatedRoute : hhMarker;
     return {
       ready: document.readyState === 'complete',
       url: location.href,

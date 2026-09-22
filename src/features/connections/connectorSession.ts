@@ -34,6 +34,25 @@ export interface SessionLayout {
   readonly height: number;
 }
 
+/**
+ * The admin flow has no candidate wizard host to measure. Keep its managed
+ * window at the same useful desktop scale as the wizard and center it inside
+ * the main app viewport.
+ */
+export function managedLinkedinSessionLayout(
+  viewportWidth: number,
+  viewportHeight: number,
+): SessionLayout {
+  const width = Math.min(1156, Math.max(320, viewportWidth - 64));
+  const height = Math.min(640, Math.max(320, viewportHeight - 140));
+  return {
+    x: Math.max(32, Math.round((viewportWidth - width) / 2)),
+    y: Math.max(70, Math.round((viewportHeight - height) / 2)),
+    width,
+    height,
+  };
+}
+
 interface DesktopSessionWindowReport {
   readonly opened: boolean;
   readonly label: string;
