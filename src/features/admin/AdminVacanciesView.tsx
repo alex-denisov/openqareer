@@ -169,11 +169,12 @@ function VacanciesHeader({ syncing, onSyncAll, sourcesNamed }: { syncing: boolea
   return (
     <div className="admin-vacancies-header">
       <div>
-        <h2 className="admin-section-title">База вакансий всех источников</h2>
+        <p className="admin-eyebrow">Администрирование / каталог</p>
+        <h1 className="admin-section-title">База вакансий</h1>
         <p className="admin-section-subtitle">
           {sourcesNamed === null
-            ? 'Агрегация, валидация и мониторинг качества вакансий (API, биржи, Telegram)'
-            : `Агрегация, валидация и мониторинг качества вакансий из ${sourcesNamed} каналов (API, биржи, Telegram)`}
+            ? 'Поиск и проверка записей из подключённых источников.'
+            : `Поиск и проверка записей из ${sourcesNamed} источников.`}
         </p>
       </div>
       <button type="button" className="admin-btn admin-btn--primary" onClick={onSyncAll} disabled={syncing}>

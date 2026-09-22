@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
 
 /**
  * B089 — the administrator surface. The owner asked for an admin account for
@@ -271,5 +272,114 @@ test.describe('B089 administrator console', () => {
     ).toBeVisible();
     await page.getByRole('button', { name: 'Войти в LinkedIn' }).click();
     await expect(page.getByRole('alert')).toContainText('приложении OpenQareer Desktop');
+  });
+
+  test('all five operator screens keep their hierarchy and fit the viewport', async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(60_000);
+    await stubSession(page, ADMINISTRATOR);
+    await page.route('**/api/v1/admin/users*', (route) =>
+      route.fulfill({ json: { data: DIRECTORY } }),
+    );
+    await page.route('**/api/v1/admin/vacancies?*', (route) =>
+      route.fulfill({
+        json: {
+          data: { total: 0, items: [], statsBySource: [], offset: 0, nextOffset: null },
+        },
+      }),
+    );
+    await page.route('**/api/v1/admin/vacancy-sources?offset=*', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            items: [
+              {
+                id: 'source-test',
+                name: 'Тестовая площадка',
+                type: 'rss',
+                enabled: true,
+                targetUrl: 'https://example.com/jobs',
+                refreshIntervalMinutes: 60,
+                itemsFoundTotal: 12,
+                itemsActiveTotal: 8,
+                lastStatus: 'healthy',
+              },
+            ],
+            total: 1,
+            offset: 0,
+            nextOffset: null,
+          },
+        },
+      }),
+    );
+    await page.route('**/api/v1/admin/hh-crawl-filter', (route) =>
+      route.fulfill({ json: { data: null } }),
+    );
+    await page.route('**/api/v1/admin/audit?*', (route) =>
+      route.fulfill({
+        json: {
+          data: { total: 0, records: [], offset: 0, nextOffset: null },
+        },
+      }),
+    );
+    await page.route('**/api/v1/admin/linkedin/accounts?*', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            total: 1,
+            accounts: [
+              {
+                id: '2e6f2b8a-1e84-4f07-9c6d-f8b5a4e2e4a1',
+                adminLabel: 'Основной пул',
+                emailLogin: 'pool-admin@example.test',
+                providerAccountMarker: null,
+                profileIsolationId: 'profile-1',
+                state: 'login_required',
+                lastVerifiedAt: null,
+                lastHeartbeatAt: null,
+                lastFailureCode: 'login_required',
+                leaseUntil: null,
+                capabilityVerdict: 'not_configured',
+                revision: 0,
+                createdAt: '2026-09-22T00:00:00.000Z',
+                updatedAt: '2026-09-22T00:00:00.000Z',
+              },
+            ],
+            offset: 0,
+            nextOffset: null,
+          },
+        },
+      }),
+    );
+
+    await page.goto('/admin', { waitUntil: 'domcontentloaded' });
+    await waitForLiveApp(page);
+    const screens = [
+      ['users', 'Учётные записи'],
+      ['vacancies', 'База вакансий'],
+      ['sources', 'Источники вакансий'],
+      ['audit', 'Журнал аудита', 'Журнал действий'],
+      ['linkedin', 'Аккаунты LinkedIn'],
+    ] as const;
+    const directory = 'output/playwright/admin-redesign';
+    mkdirSync(directory, { recursive: true });
+    for (const [tab, navName, pageTitle] of screens) {
+      await page
+        .getByRole('navigation', { name: 'Разделы администратора' })
+        .getByRole('button', { name: navName })
+        .click();
+      await expect(
+        page.getByRole('heading', { name: pageTitle ?? navName, level: 1 }),
+      ).toBeVisible();
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          ),
+        )
+        .toBeLessThanOrEqual(0);
+      await page.screenshot({ path: `${directory}/${testInfo.project.name}-${tab}.png` });
+    }
   });
 });

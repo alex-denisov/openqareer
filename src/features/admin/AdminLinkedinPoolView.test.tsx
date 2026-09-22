@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   AdminLinkedinPoolView,
-  isAdminProfileCaptureFailure,
   isSafeAdminLinkedinSessionPage,
 } from './AdminLinkedinPoolView';
 
@@ -19,20 +18,27 @@ describe('AdminLinkedinPoolView', () => {
     expect(html).not.toContain('mask');
   });
 
-  it('accepts an authenticated LinkedIn page when profile capture itself is unavailable', () => {
-    expect(isAdminProfileCaptureFailure(new Error('linkedin_authenticated_capture_failed'))).toBe(
-      true,
-    );
+  it('requires a classified signed-in LinkedIn page before confirming a pool session', () => {
     expect(
       isSafeAdminLinkedinSessionPage({
         ready: true,
-        url: 'https://www.linkedin.com/in/me/',
-        signedInApplicant: false,
+        url: 'https://www.linkedin.com/feed/',
+        signedInApplicant: true,
         login: false,
         otp: false,
         captcha: false,
       }),
     ).toBe(true);
+    expect(
+      isSafeAdminLinkedinSessionPage({
+        ready: true,
+        url: 'https://www.linkedin.com/feed/',
+        signedInApplicant: false,
+        login: false,
+        otp: false,
+        captcha: false,
+      }),
+    ).toBe(false);
     expect(
       isSafeAdminLinkedinSessionPage({
         ready: true,

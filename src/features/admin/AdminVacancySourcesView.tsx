@@ -518,10 +518,10 @@ export function AdminVacancySourcesView({
     <div className="admin-vacancy-sources-view">
       <div className="admin-section-header">
         <div>
-          <h2>Мультиисточниковый сбор вакансий</h2>
+          <p className="admin-eyebrow">Администрирование / сбор</p>
+          <h1>Источники вакансий</h1>
           <p className="admin-note">
-            Управление парсерами, каналами Telegram, RSS-фидами, дедупликацией и интерактивное
-            тестирование выдачи.
+            Состояние площадок, расписание опроса и проверка выдачи.
           </p>
         </div>
         <button

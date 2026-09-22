@@ -140,6 +140,15 @@ describe('SqliteLinkedinPoolRepository', () => {
     expect(ready.emailLogin).toBe('LinkedIn-1');
     expect(ready.state).toBe('ready');
     expect(ready.providerAccountMarker).toBe('linkedin-profile-marker');
+
+    const recheck = await repository.beginLogin(account.id, actor);
+    expect(recheck.account.state).toBe('user_action_required');
+    const checked = await repository.completeLogin(account.id, recheck.lease.handle, {
+      state: 'ready',
+      accountMarker: 'linkedin-profile-marker',
+    });
+    expect(checked.state).toBe('ready');
+    expect(checked.lastVerifiedAt).toBeTruthy();
   });
 
   it('uses optimistic revision and deletes the exact profile runtime on delete', () => {

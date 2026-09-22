@@ -91,6 +91,7 @@ function AdminNav({
 }) {
   return (
     <nav className="admin-nav" aria-label="Разделы администратора">
+      <p className="admin-nav-label">Разделы</p>
       <button
         type="button"
         className={`admin-nav-item ${activeTab === 'users' ? 'is-active' : ''}`}
@@ -233,12 +234,16 @@ export function AdminConsole({
 
   return (
     <AdminFrame>
-      <AdminNav activeTab={activeTab} onSelectTab={handleSelectTab} />
-      {activeTab === 'users' && <AdminDirectory />}
-      {activeTab === 'vacancies' && <AdminVacanciesView />}
-      {activeTab === 'sources' && <AdminVacancySourcesTab />}
-      {activeTab === 'audit' && <AdminAuditView />}
-      {activeTab === 'linkedin' && <AdminLinkedinPoolView />}
+      <div className="admin-layout">
+        <AdminNav activeTab={activeTab} onSelectTab={handleSelectTab} />
+        <div className="admin-workspace">
+          {activeTab === 'users' && <AdminDirectory />}
+          {activeTab === 'vacancies' && <AdminVacanciesView />}
+          {activeTab === 'sources' && <AdminVacancySourcesTab />}
+          {activeTab === 'audit' && <AdminAuditView />}
+          {activeTab === 'linkedin' && <AdminLinkedinPoolView />}
+        </div>
+      </div>
     </AdminFrame>
   );
 }
@@ -296,8 +301,8 @@ function AdminDirectory() {
         />
       )}
       <p className="admin-scope-note">
-        Раздел оператора: управление ролями, тарифами, блокировками, сброс паролей и бесшовная
-        имперсонация сессий.
+        Раздел оператора: управление ролями, тарифами, блокировками, сбросом паролей и входом в
+        кабинет пользователя.
       </p>
     </>
   );
@@ -309,14 +314,7 @@ function AdminDirectoryHeader() {
       <div>
         <p className="admin-eyebrow">Администрирование</p>
         <h1>Учётные записи</h1>
-      </div>
-      <div className="admin-head-actions">
-        <a className="admin-quiet-link" href="/app">
-          В кабинет
-        </a>
-        <a className="admin-quiet-link" href="/">
-          На главную
-        </a>
+        <p className="admin-note">Поиск, доступ и состояние пользователей.</p>
       </div>
     </header>
   );
@@ -593,6 +591,7 @@ function AdminFrame({ children }: { children: ReactNode }) {
         <a className="admin-brand" href="/" aria-label="openqareer">
           <BrandMark variant="lockup" size={26} />
         </a>
+        <span className="admin-frame-title">Панель управления</span>
         <div className="admin-frame-actions">
           <a href="/app" className="admin-btn is-secondary">
             В кабинет

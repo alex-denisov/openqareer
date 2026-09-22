@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ArrowClockwise,
-  CheckCircle,
   Desktop,
   LinkBreak,
   LinkedinLogo,
@@ -18,21 +17,16 @@ import {
   inspectSessionPage,
   managedLinkedinSessionLayout,
   openManagedLinkedinSession,
-  readSessionPage,
   resizeConnectorSession,
   type SessionInspectionResult,
   type ManagedSessionKey,
 } from '../connections/connectorSession';
-import {
-  createLinkedInSessionImportFlow,
-  type LinkedInWaitingStage,
-} from '../connections/linkedinSessionPoll';
+import { sessionWaitingStage, type SessionWaitingStage } from '../connections/sessionWaitingStage';
 import {
   completeAdminLinkedinLogin,
   createAdminLinkedinAccount,
   deleteAdminLinkedinAccount,
   listAdminLinkedinAccounts,
-  probeAdminLinkedinAccount,
   requestAdminLinkedinLogin,
   revokeAdminLinkedinAccount,
   type LinkedinPoolAccount,
@@ -50,7 +44,7 @@ type ActiveLinkedinLogin = {
   handle: string;
 };
 
-const ADMIN_WAITING_COPY: Record<LinkedInWaitingStage, string> = {
+const ADMIN_WAITING_COPY: Record<SessionWaitingStage, string> = {
   loading: 'Загружаем страницу LinkedIn…',
   login: 'Введите логин и пароль в открытом окне LinkedIn.',
   otp: 'Введите код 2FA в открытом окне LinkedIn.',
@@ -58,20 +52,13 @@ const ADMIN_WAITING_COPY: Record<LinkedInWaitingStage, string> = {
   unrecognised: 'Вход ещё не подтверждён. Откройте свой профиль в окне LinkedIn.',
 };
 
-export function isAdminProfileCaptureFailure(reason: unknown): boolean {
-  const code = reason instanceof Error ? reason.message : String(reason ?? '');
-  return (
-    code === 'linkedin_authenticated_capture_failed' ||
-    code === 'linkedin_authenticated_profile_unclassified'
-  );
-}
-
 export function isSafeAdminLinkedinSessionPage(page: SessionInspectionResult): boolean {
   try {
     const url = new URL(page.url);
     const host = url.hostname.toLowerCase();
     return (
       page.ready &&
+      page.signedInApplicant &&
       url.protocol === 'https:' &&
       (host === 'linkedin.com' ||
         host.endsWith('.linkedin.com') ||
@@ -97,7 +84,7 @@ const STATE_COPY: Record<LinkedinSessionState, { label: string; detail: string }
     detail: 'Продолжите вход, 2FA или CAPTCHA в desktop-окне.',
   },
   checking: { label: 'Проверяем сессию', detail: 'Проверяем подтверждение входа.' },
-  ready: { label: 'Сессия подтверждена', detail: 'Вход подтверждён, сессия готова.' },
+  ready: { label: 'Вход подтверждён', detail: 'Последняя проверка подтвердила вход. Текущий статус можно проверить в приложении.' },
   expired: { label: 'Сессия истекла', detail: 'Повторите ручной вход в desktop-окне.' },
   challenge_required: {
     label: 'Нужна проверка LinkedIn',
@@ -213,7 +200,7 @@ function useAdminLinkedinLoginPolling(
     if (!activeLogin) return;
     let cancelled = false;
     let finished = false;
-    let authenticated = false;
+    let inspectionFailures = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const finish = async (accountMarker?: string | null) => {
@@ -226,57 +213,49 @@ function useAdminLinkedinLoginPolling(
       finished = true;
       setActiveLogin(undefined);
       setError(undefined);
-      setNotice(`Вход подтверждён. Идентификатор ${account.emailLogin} привязан к приложению.`);
+      setNotice(`Сессия ${account.emailLogin} подтверждена в отдельном профиле приложения.`);
       refresh();
     };
 
-    const flow = createLinkedInSessionImportFlow({
-      inspectCurrentPage: () => inspectSessionPage('linkedin', activeLogin.sessionKey),
-      readSessionPage: (url) => readSessionPage('linkedin', url, activeLogin.sessionKey),
-      onAuthenticated: () => {
-        authenticated = true;
-        if (!cancelled) setNotice('Вход распознан. Читаем профиль LinkedIn для подтверждения…');
-      },
-      // Keep the managed window open until the admin lease is completed. The
-      // candidate flow closes it after capture; admin owns a persistent pool
-      // profile and must complete the server transition first.
-      onProviderDataCaptured: () => undefined,
-      onReady: (result) => finish(result.accountMarker),
-    });
-
     const poll = async () => {
       if (cancelled || finished) return;
+      let page: SessionInspectionResult;
       try {
-        const result = await flow.run();
-        if (cancelled || finished) return;
-        if (result.status === 'waiting_for_sign_in') {
-          setNotice(ADMIN_WAITING_COPY[result.stage]);
-          timer = setTimeout(() => void poll(), 1_000);
-        }
+        page = await inspectSessionPage('linkedin', activeLogin.sessionKey);
       } catch (reason: unknown) {
         if (cancelled) return;
-        if (authenticated && isAdminProfileCaptureFailure(reason)) {
-          try {
-            const confirmation = await inspectSessionPage('linkedin', activeLogin.sessionKey);
-            if (isSafeAdminLinkedinSessionPage(confirmation)) {
-              await finish(confirmation.accountMarker);
-              return;
-            }
-          } catch {
-            // Fall through to the truthful capture error below.
-          }
+        inspectionFailures += 1;
+        if (inspectionFailures < 12) {
+          setNotice('Окно LinkedIn загружается. Повторяем проверку сессии…');
+          timer = setTimeout(() => void poll(), 1_000);
+          return;
         }
         finished = true;
-        await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
         setActiveLogin(undefined);
         setError(
           apiErrorMessage(
             reason,
-            'LinkedIn вошёл, но профиль не удалось прочитать. Откройте вход ещё раз.',
+            'Не удалось проверить окно LinkedIn. Оно осталось открытым; повторите проверку в админке.',
           ),
         );
         refresh();
+        return;
       }
+      if (cancelled || finished) return;
+      inspectionFailures = 0;
+      if (isSafeAdminLinkedinSessionPage(page)) {
+        try {
+          await finish(page.accountMarker);
+        } catch (reason: unknown) {
+          finished = true;
+          setActiveLogin(undefined);
+          setError(apiErrorMessage(reason, 'Сервер не подтвердил сессию. Повторите проверку.'));
+          refresh();
+        }
+        return;
+      }
+      setNotice(ADMIN_WAITING_COPY[sessionWaitingStage(page)]);
+      timer = setTimeout(() => void poll(), 1_000);
     };
 
     void poll();
@@ -346,6 +325,7 @@ export function AdminLinkedinPoolView() {
   }
 
   async function openLogin(account: LinkedinPoolAccount) {
+    if (activeLogin) return;
     if (!isTauriEnvironment()) {
       setError(managedOpenFailureCopy('desktop_runtime_required'));
       return;
@@ -360,6 +340,7 @@ export function AdminLinkedinPoolView() {
         managedLinkedinSessionLayout(window.innerWidth, window.innerHeight),
       );
       if (!opened.opened) {
+        await completeAdminLinkedinLogin(account.id, started.lease.handle, { state: 'login_required' }).catch(() => undefined);
         setError(managedOpenFailureCopy(opened.reason));
         refresh();
         return;
@@ -369,7 +350,7 @@ export function AdminLinkedinPoolView() {
         sessionKey: started.account.profileIsolationId,
         handle: started.lease.handle,
       });
-      setNotice('Отдельное окно LinkedIn открыто. Завершите вход. Статус обновится автоматически.');
+      setNotice('Проверяем отдельный профиль LinkedIn. Если вход требуется, завершите его в открытом окне.');
       refresh();
     } catch (reason: unknown) {
       setError(apiErrorMessage(reason, 'Не удалось запросить ручной вход.'));
@@ -431,6 +412,7 @@ export function AdminLinkedinPoolView() {
     if (activeLogin?.accountId !== account.id) return;
     setBusyAccountId(account.id);
     await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
+    await completeAdminLinkedinLogin(account.id, activeLogin.handle, { state: 'login_required' }).catch(() => undefined);
     setActiveLogin(undefined);
     setBusyAccountId(undefined);
     setError(undefined);
@@ -440,33 +422,31 @@ export function AdminLinkedinPoolView() {
 
   return (
     <section className="admin-linkedin-pool" aria-labelledby="admin-linkedin-pool-title">
-      <header className="admin-section-header">
+      <header className="admin-section-header admin-linkedin-header">
         <div>
-          <p className="admin-eyebrow">Управляемые сессии</p>
+          <p className="admin-eyebrow">Администрирование / сессии</p>
           <h1 id="admin-linkedin-pool-title">Аккаунты LinkedIn</h1>
-          <p className="admin-note">
-            Полный идентификатор сессии виден здесь только администратору. Пароли, cookie, 2FA-коды
-            и storage state не попадают в API, браузер или журнал.
-          </p>
-          <p className="admin-note">
-            Кнопка входа открывает отдельный профиль LinkedIn в OpenQareer Desktop. Введите данные
-            только в окне LinkedIn.
-          </p>
+          <p className="admin-note">Подключение и проверка каждого аккаунта в отдельном окне OpenQareer Desktop.</p>
         </div>
         <button className="admin-btn is-secondary" type="button" onClick={refresh}>
           <ArrowClockwise size={18} aria-hidden="true" /> Обновить
         </button>
       </header>
 
+      {state.status === 'ready' ? (
+        <div className="admin-linkedin-summary" aria-label="Состояние пула">
+          <div><strong>{state.total}</strong><span>аккаунтов в реестре</span></div>
+          <div><strong>{state.accounts.filter((account) => account.state === 'ready').length}</strong><span>с подтверждённым входом на странице</span></div>
+          <p>Статус отражает последнюю проверку. Источник вакансий LinkedIn пока не включён.</p>
+        </div>
+      ) : null}
+
       <form className="admin-linkedin-add" onSubmit={(event) => void addAccount(event)}>
         <div className="admin-linkedin-add__heading">
           <LinkedinLogo size={24} aria-hidden="true" />
           <div>
-            <h2>Добавить аккаунт пула</h2>
-            <p>
-              Укажите понятный вам идентификатор: email, имя аккаунта или свою метку. Он сохраняется
-              зашифрованным и виден без маскировки только администратору.
-            </p>
+            <h2>Новый аккаунт</h2>
+            <p>Добавьте идентификатор, затем откройте вход в приложении.</p>
           </div>
         </div>
         <div className="admin-linkedin-add__fields">
@@ -475,7 +455,7 @@ export function AdminLinkedinPoolView() {
             <input
               value={identifier}
               onChange={(event) => setIdentifier(event.target.value)}
-              placeholder="LinkedIn-1 или name@example.com"
+              placeholder="name@example.com"
               required
               maxLength={254}
               autoComplete="off"
@@ -530,6 +510,8 @@ export function AdminLinkedinPoolView() {
               'unconfigured',
               'login_required',
               'user_action_required',
+              'ready',
+              'checking',
               'expired',
               'challenge_required',
               'revoked',
@@ -580,30 +562,17 @@ export function AdminLinkedinPoolView() {
                       <X size={18} aria-hidden="true" /> Закрыть окно
                     </button>
                   ) : null}
-                  {canLogin ? (
+                  {canLogin && activeLogin?.accountId !== account.id ? (
                     <button
                       className="admin-btn admin-btn--primary"
                       type="button"
-                      disabled={busy}
+                      disabled={busy || Boolean(activeLogin)}
                       onClick={() => void openLogin(account)}
                     >
-                      <Desktop size={18} aria-hidden="true" /> Войти в LinkedIn
-                    </button>
-                  ) : null}
-                  {['ready', 'checking'].includes(account.state) ? (
-                    <button
-                      className="admin-btn is-secondary"
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        void runAccountAction(
-                          account,
-                          () => probeAdminLinkedinAccount(account.id),
-                          'Проверка статуса отправлена.',
-                        )
-                      }
-                    >
-                      <CheckCircle size={18} aria-hidden="true" /> Проверить сессию
+                      <Desktop size={18} aria-hidden="true" />{' '}
+                      {account.state === 'ready' || account.state === 'checking'
+                        ? 'Проверить в приложении'
+                        : 'Войти в LinkedIn'}
                     </button>
                   ) : null}
                   {account.state !== 'revoked' && account.state !== 'disabled' ? (
@@ -661,9 +630,9 @@ export function AdminLinkedinPoolView() {
         </div>
       ) : null}
       <p className="admin-scope-note">
-        <ShieldWarning size={18} aria-hidden="true" /> Обычные пользователи не получают этот раздел,
-        его API или идентификаторы аккаунтов. Источник LinkedIn остаётся отключённым, пока не
-        подтверждена разрешённая интеграция провайдера.
+        <ShieldWarning size={18} aria-hidden="true" /> Полный идентификатор виден только администратору.
+        Пароли, cookie и коды подтверждения остаются в окне LinkedIn. Источник вакансий включается
+        только после подтверждения разрешённой интеграции провайдера.
       </p>
     </section>
   );

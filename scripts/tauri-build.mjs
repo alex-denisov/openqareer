@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync, spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { desktopBuildSha } from './desktopBuildSha.mjs';
 
 /**
@@ -30,8 +32,28 @@ if (reason === 'head') {
   );
 }
 
+const startedAt = Date.now();
 const result = spawnSync('npx', ['tauri', 'build', ...process.argv.slice(2)], {
   stdio: 'inherit',
   env: { ...process.env, OPENQAREER_COMMIT_SHA: sha },
 });
-process.exit(result.status ?? 1);
+if (result.status !== 0) process.exit(result.status ?? 1);
+
+if (process.platform === 'darwin') {
+  const bundleRoot = join(process.cwd(), 'src-tauri', 'target', 'release', 'bundle');
+  const macosRoot = join(bundleRoot, 'macos');
+  const app = join(macosRoot, 'OpenQareer.app');
+  const dmgRoot = join(bundleRoot, 'dmg');
+  const diskImages = existsSync(dmgRoot)
+    ? readdirSync(dmgRoot).filter((name) => name.endsWith('.dmg'))
+    : [];
+  const newestDmg = diskImages
+    .map((name) => ({ name, modified: statSync(join(dmgRoot, name)).mtimeMs }))
+    .sort((left, right) => right.modified - left.modified)[0];
+  if (!existsSync(app) || !newestDmg || newestDmg.modified < startedAt - 2_000) {
+    throw new Error('Fresh OpenQareer.app and .dmg must both exist after the macOS build');
+  }
+  const destination = join(macosRoot, newestDmg.name);
+  copyFileSync(join(dmgRoot, newestDmg.name), destination);
+  console.log(`kept release artifacts: ${app} and ${destination}`);
+}

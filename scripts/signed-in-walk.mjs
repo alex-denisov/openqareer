@@ -50,6 +50,7 @@ const base = argument('base', 'https://openqareer.com').replace(/\/$/, '');
 const role = argument('role', 'candidate');
 const path = argument('path', '/');
 const shot = argument('shot', null);
+const adminShots = argument('admin-shots', null);
 const script = argument('eval', null);
 const width = Number(argument('width', '1440'));
 const height = Number(argument('height', '900'));
@@ -133,6 +134,20 @@ if (shot) {
   mkdirSync(dirname(shot), { recursive: true });
   await page.screenshot({ path: shot, fullPage: false });
   process.stdout.write(`снимок: ${shot}\n`);
+}
+
+if (adminShots && role === 'admin' && signedIn) {
+  mkdirSync(adminShots, { recursive: true });
+  for (const tab of ['users', 'vacancies', 'sources', 'audit', 'linkedin']) {
+    await page.locator(`.admin-nav-item`).filter({ hasText: {
+      users: 'Учётные записи', vacancies: 'База вакансий', sources: 'Источники вакансий',
+      audit: 'Журнал аудита', linkedin: 'Аккаунты LinkedIn',
+    }[tab] }).click();
+    await page.waitForTimeout(1200);
+    const filename = join(adminShots, `${tab}.png`);
+    await page.screenshot({ path: filename, fullPage: false });
+    process.stdout.write(`снимок ${tab}: ${filename}\n`);
+  }
 }
 
 process.stdout.write(

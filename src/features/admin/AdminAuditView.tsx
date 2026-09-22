@@ -92,10 +92,11 @@ export function AdminAuditView() {
   return (
     <div className="admin-audit-view">
       <div className="admin-section-header">
-        <h2 className="admin-section-title">Журнал действий администраторов</h2>
-        <p className="admin-section-subtitle">
-          Неизменяемый журнал безопасности: фиксация всех изменений ролей, тарифов, блокировок и сессий имперсонации
-        </p>
+        <div>
+          <p className="admin-eyebrow">Администрирование / безопасность</p>
+          <h1 className="admin-section-title">Журнал действий</h1>
+          <p className="admin-section-subtitle">Изменения ролей, тарифов, блокировок и входы в кабинеты пользователей.</p>
+        </div>
       </div>
 
       {error && <div className="admin-alert admin-alert--error">{error}</div>}

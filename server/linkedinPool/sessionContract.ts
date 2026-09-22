@@ -87,6 +87,7 @@ const ALLOWED_TRANSITIONS: Record<LinkedinSessionState, readonly LinkedinSession
   user_action_required: ['checking', 'login_required', 'revoked', 'disabled'],
   checking: [
     'ready',
+    'user_action_required',
     'expired',
     'challenge_required',
     'login_required',
@@ -94,7 +95,7 @@ const ALLOWED_TRANSITIONS: Record<LinkedinSessionState, readonly LinkedinSession
     'revoked',
     'disabled',
   ],
-  ready: ['checking', 'expired', 'challenge_required', 'cooling_down', 'revoked', 'disabled'],
+  ready: ['checking', 'user_action_required', 'expired', 'challenge_required', 'cooling_down', 'revoked', 'disabled'],
   expired: ['user_action_required', 'login_required', 'revoked', 'disabled'],
   challenge_required: ['user_action_required', 'login_required', 'revoked', 'disabled'],
   cooling_down: ['checking', 'ready', 'login_required', 'revoked', 'disabled'],
