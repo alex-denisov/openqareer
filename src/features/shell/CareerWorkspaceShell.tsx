@@ -79,14 +79,11 @@ type RailNavItem =
  * B248 (owner decision 2026-09-23 16:39) — five rail items, exactly the
  * mockup's IA: Сегодня · Профиль · Вакансии · Отклики · Консультант.
  *
- * Two of the five have no dedicated screen yet and open the nearest existing
- * one instead of a placeholder route, so no destination is invented and no
- * screen is lost:
- * - «Отклики» opens «Вакансии» — manual applications already live there
- *   (`useVacancyApplications`, B165); the dedicated kanban is B251/B245 batch 5.
- * - «Консультант» opens the existing «Эксперт» drawer, unchanged.
- * Neither counts as the active section, since they are bridges, not their own
- * screen — highlighting «Вакансии» for both would be misleading.
+ * «Отклики» now opens its own kanban (`ResponsesBoard`, B251 S3) instead of
+ * bridging to «Вакансии» — the dedicated screen this comment used to say was
+ * still pending.
+ * «Консультант» opens the existing «Эксперт» drawer, unchanged, and is not
+ * its own section — highlighting «Вакансии» for it would be misleading.
  *
  * «Поиск» (role/market, formerly a rail item) has no slot in the five-item
  * mockup; it stays reachable from the «Роль» step of the path indicator and
@@ -108,8 +105,8 @@ const primaryNavigation: readonly RailNavItem[] = [
     label: 'Отклики',
     icon: ResponsesIcon,
     kind: 'navigate',
-    target: 'opportunities',
-    tracksActive: false,
+    target: 'responses',
+    tracksActive: true,
   },
   { key: 'consultant', label: 'Консультант', icon: ConsultantIcon, kind: 'expert' },
 ];
@@ -124,6 +121,7 @@ const pageNames: Record<ShellView, string> = {
   resume: 'Резюме',
   career: 'Поиск',
   opportunities: 'Вакансии',
+  responses: 'Отклики',
   tariffs: 'Тарифы',
 };
 
@@ -552,6 +550,18 @@ export function CareerWorkspaceShell({
               onOpenExpert={openExpert}
               onUpdateWorkspace={onUpdateWorkspace}
             />
+          ) : null}
+          {/* Трекер откликов читает `/api/v1/candidate/applications` — сессия
+              обязательна; до входа в аккаунт кабинет ниже возьмёт этот раздел
+              на себя (B251 S3). */}
+          {!cabinetSession && visibleWorkspace && journey && activeView === 'responses' ? (
+            <div className="career-responses-signin-hint">
+              <h3>Отклики появятся после входа в аккаунт</h3>
+              <p>Пайплайн откликов хранится на сервере вместе с профилем. Войдите, чтобы открыть его.</p>
+              <button type="button" onClick={onOpenLogin}>
+                Войти
+              </button>
+            </div>
           ) : null}
           {activeView === 'tariffs' ? <CareerTariffsView onOpenCoach={openExpert} /> : null}
         </AppErrorBoundary>

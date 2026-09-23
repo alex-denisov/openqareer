@@ -7,4 +7,5 @@ export type CareerCabinetView =
   | 'profile'
   | 'resume'
   | 'career'
-  | 'opportunities';
+  | 'opportunities'
+  | 'responses';
