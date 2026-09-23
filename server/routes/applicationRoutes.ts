@@ -3,6 +3,11 @@ import { z } from 'zod';
 import { APPLICATION_STAGES } from '../../shared/applicationStage';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, withDeps } from './helpers';
+import { timezoneOffsetSchema } from './timezoneQuery';
+import { registerApplicationMaterialsRoutes } from './applicationMaterialsRoutes';
+import { registerApplicationInterviewRoutes } from './applicationInterviewRoutes';
+import { registerApplicationOfferRoutes } from './applicationOfferRoutes';
+import { registerVacancySkipRoutes } from './vacancySkipRoutes';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -21,16 +26,53 @@ const vacancySnapshotSchema = z.object({
 });
 
 /**
- * `POST /applications` (B251, S1, architecture.md §4). `clusterId` покрывает
- * карточку из подбора; ручная карточка «через рекрутера» посылает
- * `manualVacancy` без `clusterId` — S1 хранит её, интерфейса для неё ещё нет.
+ * A card with no vacancy in the pool ("через рекрутера, компания скрыта",
+ * owner decision 2026-09-23 22:26): no `url` required, `company` may be
+ * empty and explicitly marked hidden rather than missing.
  */
-const createApplicationSchema = z.object({
-  clusterId: z.string().trim().min(1).max(200).optional(),
-  manualVacancy: vacancySnapshotSchema.optional(),
-  stage: stageSchema,
-  occurredAt: z.string().trim().min(1).optional(),
+const manualVacancySchema = z.object({
+  title: z.string().trim().min(1).max(300),
+  company: z.string().trim().max(300).default(''),
+  companyHidden: z.boolean().default(false),
+  source: z.enum(['recruiter', 'other']),
+  url: z
+    .string()
+    .trim()
+    .url()
+    .max(2000)
+    .refine((value) => /^https?:\/\//iu.test(value), 'url_scheme_not_allowed')
+    .optional(),
 });
+
+/**
+ * `POST /applications` (B251, S1–S2, architecture.md §4). `clusterId` покрывает
+ * карточку из подбора; ручная карточка «через рекрутера» посылает
+ * `manualVacancy` без `clusterId`.
+ */
+const createApplicationSchema = z
+  .object({
+    clusterId: z.string().trim().min(1).max(200).optional(),
+    // Either the pool's own snapshot (url required, attached alongside
+    // `clusterId`) or a card with no vacancy in the pool at all.
+    manualVacancy: z.union([vacancySnapshotSchema, manualVacancySchema]).optional(),
+    stage: stageSchema,
+    occurredAt: z.string().trim().min(1).optional(),
+  })
+  .refine((body) => Boolean(body.clusterId) || Boolean(body.manualVacancy), {
+    message: 'clusterId_or_manualVacancy_required',
+  });
+
+function normalizeVacancySnapshot(
+  input: z.infer<typeof vacancySnapshotSchema> | z.infer<typeof manualVacancySchema>,
+): import('../../shared/vacancyApplication').VacancyApplicationSnapshot {
+  return {
+    title: input.title,
+    company: input.company,
+    url: input.url ?? '',
+    source: input.source,
+    ...('companyHidden' in input ? { companyHidden: input.companyHidden } : {}),
+  };
+}
 
 const patchApplicationSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
@@ -41,17 +83,18 @@ const patchApplicationSchema = z.object({
   followUpDueAt: z.string().trim().min(1).nullable().optional(),
 });
 
+const listApplicationsQuerySchema = z.object({ tz: timezoneOffsetSchema });
+
 const handleListApplications: Handler = async (deps, request, reply) => {
-  const candidate = authenticateCandidate(
-    request,
-    reply,
-    deps.candidateStore,
-    deps.authService,
-    deps.config,
-  );
+  const { authService, candidateStore, config, multiSourceEngine } = deps;
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
+  const { tz } = listApplicationsQuerySchema.parse(request.query ?? {});
   return {
-    data: deps.candidateStore.listApplications(candidate.id),
+    data: candidateStore.listApplications(candidate.id, {
+      timezoneOffsetMinutes: tz,
+      isVacancyGone: (clusterId) => multiSourceEngine.isKnownVacancyGone(clusterId),
+    }),
     meta: { requestId: request.id },
   };
 };
@@ -64,7 +107,7 @@ const handleCreateApplication: Handler = async (deps, request, reply) => {
   const body = createApplicationSchema.parse(request.body);
   const created = candidateStore.createApplication(candidate.id, {
     clusterId: body.clusterId ?? null,
-    vacancy: body.manualVacancy,
+    manualVacancy: body.manualVacancy ? normalizeVacancySnapshot(body.manualVacancy) : undefined,
     stage: body.stage,
     occurredAt: body.occurredAt,
   });
@@ -82,7 +125,31 @@ const handlePatchApplication: Handler = async (deps, request, reply) => {
   return { data: patched, meta: { requestId: request.id } };
 };
 
-/** Трекер откликов (B251, S1, architecture.md §4). Интерфейса нет: только API. */
+const recordEventSchema = z.object({
+  kind: z.enum(['follow_up_sent', 'thank_you_sent', 'promise']),
+  occurredAt: z.string().trim().min(1),
+  note: z.string().max(4_000).nullable().optional(),
+});
+
+const handleRecordApplicationEvent: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const applicationId = (request.params as { id: string }).id;
+  const body = recordEventSchema.parse(request.body);
+  const updated = candidateStore.recordApplicationEvent(candidate.id, applicationId, body);
+  return { data: updated, meta: { requestId: request.id } };
+};
+
+const handleApplicationFunnel: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  return { data: candidateStore.applicationFunnel(candidate.id), meta: { requestId: request.id } };
+};
+
+/** Трекер откликов (B251, S1–S2, architecture.md §4). */
 export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/candidate/applications', withDeps(deps, handleListApplications));
   app.post(
@@ -95,4 +162,14 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
     { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
     withDeps(deps, handlePatchApplication),
   );
+  app.get('/api/v1/candidate/applications/funnel', withDeps(deps, handleApplicationFunnel));
+  app.post(
+    '/api/v1/candidate/applications/:id/events',
+    { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
+    withDeps(deps, handleRecordApplicationEvent),
+  );
+  registerApplicationMaterialsRoutes(app, deps);
+  registerApplicationInterviewRoutes(app, deps);
+  registerApplicationOfferRoutes(app, deps);
+  registerVacancySkipRoutes(app, deps);
 }

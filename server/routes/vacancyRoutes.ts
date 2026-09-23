@@ -28,6 +28,7 @@ import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import { MatchedPoolSnapshots } from '../vacancies/matchedPoolSnapshot';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { buildRoleProposals, confirmChosenTitle } from '../vacancies/roleHypotheses';
+import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
 import { campaignMeta, readCampaign } from './campaignContext';
 import { registerCampaignRoutes } from './campaignRoutes';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
@@ -616,12 +617,16 @@ const handleMatchedVacancies: Handler = async (
   // SQL добирает кандидатов до лимита любыми свежими записями; при названной
   // роли в подбор идут только совпавшие с ней, и счётчик считает их же.
   // Записи вне рынков кампании помечены и стоят после остальных (PRB-040).
-  const matched = markGeography(
+  const roleFiltered = markGeography(
     targetRoles.length > 0
       ? snapshot.filter((item) => item.explanation.roleMatch !== 'none')
       : snapshot,
     campaign.regions.value as CandidateRegion[],
   );
+  // Applied strictly after the cache read (architecture.md §4, §7): folding
+  // "saved"/"skip" decisions into the cache key would force a full pool
+  // recompute on every click, and that recompute costs minutes (B230/B247).
+  const matched = applyVacancyDecisions(roleFiltered, candidateStore.listVacancyDecisions(candidate.id));
 
   // Весь подбор одним телом не доходит: маршрут рвёт ответ примерно на 20 460
   // байт (INC-029). Экран забирает пул страницами внутри доказанного бюджета.
@@ -799,6 +804,12 @@ const handleDeleteSubscription: Handler = async (deps, request, reply) => {
 const vacancyPitchInputSchema = z
   .object({
     tone: z.enum(['executive', 'confident', 'technical']).optional(),
+    /**
+     * B251, S2, architecture.md §4: when set, the generated cover letter is
+     * saved to `candidate_documents` (`cover_letter`, `generated`) and linked
+     * to this card. Without it the route behaves exactly as before.
+     */
+    applicationId: z.string().trim().min(1).max(200).optional(),
     vacancy: z
       .object({
         title: z.string().trim().min(1).optional(),
@@ -859,11 +870,37 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
     tone: body?.tone ?? 'executive',
   });
 
+  if (body?.applicationId) {
+    linkGeneratedCoverLetter(candidateStore, candidate.id, body.applicationId, pitch.atsCoverLetter);
+  }
+
   return {
     data: pitch,
     meta: { requestId: request.id },
   };
 };
+
+/**
+ * Saves the generated letter to `candidate_documents` and links it to the
+ * card (architecture.md §4). Throws `ApplicationNotFoundError` if the card
+ * is not the candidate's own — the generic error mapper turns that into 404.
+ */
+function linkGeneratedCoverLetter(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+  applicationId: string,
+  coverLetterText: string,
+): void {
+  const { document } = candidateStore.saveDocument(candidateId, {
+    kind: 'cover_letter',
+    source: 'generated',
+    fileName: 'cover-letter.txt',
+    mimeType: 'text/plain',
+    contentBase64: Buffer.from(coverLetterText, 'utf8').toString('base64'),
+    parseStatus: 'not_applicable',
+  });
+  candidateStore.linkApplicationMaterial(candidateId, applicationId, 'cover_letter', document.id);
+}
 
 /** Ручной отклик (B165, срез 1) — свои два маршрута, чтение и запись. */
 function registerVacancyApplicationRoutes(app: FastifyInstance, deps: RouteDeps): void {

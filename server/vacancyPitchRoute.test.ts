@@ -252,6 +252,50 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
 
     expect(json.data.linkedInNote.length).toBeLessThanOrEqual(300);
   });
+
+  // B251, S2, architecture.md §4: an optional `applicationId` saves the
+  // letter to `candidate_documents` and links it to the card in one call.
+  it('saves and links the letter when applicationId is provided', async () => {
+    const { app, candidates } = await createApp([sampleCluster]);
+    const { cookie, candidateId } = await login(app);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/applications',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: { clusterId: 'cluster-99', stage: 'saved' },
+    });
+    const applicationId = created.json().data.id;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: { applicationId },
+    });
+    expect(response.statusCode).toBe(200);
+
+    const documents = candidates.getSnapshot(candidateId)?.documents ?? [];
+    const letter = documents.find((doc) => doc.kind === 'cover_letter' && doc.source === 'generated');
+    expect(letter).toBeDefined();
+
+    const application = candidates
+      .listApplications(candidateId)
+      .find((a) => a.id === applicationId);
+    expect(application?.materials).toMatchObject({ coverLetter: true });
+  });
+
+  it('returns 404 when applicationId belongs to a different candidate', async () => {
+    const { app } = await createApp([sampleCluster]);
+    const { cookie } = await login(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: { applicationId: 'not-a-real-application' },
+    });
+    expect(response.statusCode).toBe(404);
+  });
 });
 
 describe('POST /api/v1/vacancies/:id/enrich-contacts', () => {
