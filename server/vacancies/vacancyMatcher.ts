@@ -1,6 +1,7 @@
 import type { VacancyCluster, VacancyMatchExplanation } from '../domain/unifiedVacancy';
 import type { VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
 import { normalizeTextForComparison } from './vacancyFingerprint';
+import { evaluateLevelMatch, type SeniorityLevel } from './levelMatcher';
 
 /**
  * Объяснение соответствия состоит только из измеримого. Сводный балл убран
@@ -15,6 +16,8 @@ export interface CandidateMatchProfile {
   confirmedFacts: string[];
   preferredRemote?: boolean;
   preferredLocations?: string[];
+  /** Целевой уровень роли кандидата — вход fit-dot «уровень» (B248). */
+  targetLevel?: SeniorityLevel;
 }
 
 function evaluateSkills(candidateSkills: string[], vacancySkills: string[]) {
@@ -80,6 +83,7 @@ export function matchCandidateWithVacancy(
   const vacancySkills = vacancy.skills ?? [];
   const skillEval = evaluateSkills(candidate.confirmedSkills, vacancySkills);
   const roleEval = evaluateRole(candidate.targetRoles, vacancy.canonicalTitle);
+  const levelMatch = evaluateLevelMatch(candidate.targetLevel, vacancy.canonicalTitle);
 
   const locationPoints: string[] = [];
   if (candidate.preferredRemote && vacancy.isRemote) {
@@ -94,6 +98,7 @@ export function matchCandidateWithVacancy(
   return {
     clusterId: vacancy.id,
     roleMatch: roleEval.roleMatch,
+    ...(levelMatch ? { levelMatch } : {}),
     ...(requirements ? { requirements } : {}),
     matchingPoints: [...roleEval.matchingPoints, ...skillEval.matchingPoints, ...locationPoints],
     missingPoints: skillEval.missingPoints,

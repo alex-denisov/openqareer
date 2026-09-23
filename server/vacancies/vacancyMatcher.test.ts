@@ -98,4 +98,27 @@ describe('Explainable Vacancy Matcher', () => {
       expect(lintTextQuality(explanation.summary)).toEqual([]);
     });
   });
+
+  describe('level-match — третий fit-dot рядом с ролью и гео', () => {
+    it('называет уровень целевым, когда заголовок вакансии совпадает с уровнем кандидата', () => {
+      const explanation = matchCandidateWithVacancy(
+        { ...strongCandidate, targetLevel: 'lead' },
+        sampleCluster,
+      );
+      expect(explanation.levelMatch).toBe('target');
+    });
+
+    it('не называет уровень, когда кандидат его не указал', () => {
+      const explanation = matchCandidateWithVacancy(strongCandidate, sampleCluster);
+      expect(explanation.levelMatch).toBeUndefined();
+    });
+
+    it('не называет уровень, когда заголовок вакансии не даёт сигнала об уровне', () => {
+      const explanation = matchCandidateWithVacancy(
+        { ...strongCandidate, targetLevel: 'head' },
+        { ...sampleCluster, canonicalTitle: 'Frontend Engineer' },
+      );
+      expect(explanation.levelMatch).toBeUndefined();
+    });
+  });
 });
