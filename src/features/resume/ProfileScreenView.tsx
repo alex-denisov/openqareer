@@ -1,27 +1,18 @@
 import { useCallback, useState } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
-import {
-  updateAccountProfile,
-  type CandidateMemory,
-  type ImportedSourceSummary,
-} from '../coach/coachApi';
+import { updateAccountProfile, type CandidateMemory, type ImportedSourceSummary } from '../coach/coachApi';
+import { ProfileAboutSection } from './ProfileAboutSection';
+import { ProfileAchievementsSection } from './ProfileAchievementsSection';
+import { ProfileCoursesSection } from './ProfileCoursesSection';
 import { ProfileDocumentMenu } from './ProfileDocumentMenu';
-import {
-  ProfileAboutSection,
-  ProfileEducationSection,
-  ProfileExperienceSection,
-  ProfileSkillsSection,
-} from './ProfileMainSections';
-import {
-  ProfileAchievementsSection,
-  ProfileCertificatesSection,
-  ProfileCoursesSection,
-  ProfileLanguagesSection,
-  ProfileProjectsSection,
-  ProfileRecommendationsSection,
-} from './ProfileMoreSections';
-import { ProfileOpenToWork } from './ProfileOpenToWork';
+import { ProfileEducationSection } from './ProfileEducationSection';
+import { ProfileExperienceSection } from './ProfileExperienceSection';
+import { ProfileLanguagesSection } from './ProfileLanguagesSection';
+import { ProfileOpenToWork, type OpenToWorkConfirmation } from './ProfileOpenToWork';
+import { ProfileRecommendationsSection } from './ProfileRecommendationsSection';
 import { ProfileSideRail } from './ProfileSideRail';
+import { ProfileSkillsSection } from './ProfileSkillsSection';
+import { ProfileCertificatesSection, ProfileProjectsSection } from './ProfileTileSections';
 import { ProfileTopcard } from './ProfileTopcard';
 import { importedSourceOf, type ImportedSource } from './resumeSourceCoverage';
 import { useResumeStudio } from './useResumeStudio';
@@ -65,13 +56,7 @@ function ProfileLoadingState() {
   );
 }
 
-function ProfileErrorState({
-  message,
-  onRetry,
-}: {
-  readonly message?: string;
-  readonly onRetry: () => void;
-}) {
+function ProfileErrorState({ message, onRetry }: { readonly message?: string; readonly onRetry: () => void }) {
   return (
     <div className="career-profile-screen-state" role="alert">
       <WarningCircle size={24} />
@@ -101,6 +86,31 @@ function isDraftEmpty(draft: ResumeDraft): boolean {
   );
 }
 
+type ProfileTab = 'profile' | 'documents';
+
+function ProfileTabs({ tab, onTab }: { readonly tab: ProfileTab; readonly onTab: (tab: ProfileTab) => void }) {
+  return (
+    <div className="career-profile-screen-tabs" role="group" aria-label="Что показать">
+      <button
+        type="button"
+        className={tab === 'profile' ? 'is-active' : ''}
+        aria-pressed={tab === 'profile'}
+        onClick={() => onTab('profile')}
+      >
+        Профиль
+      </button>
+      <button
+        type="button"
+        className={tab === 'documents' ? 'is-active' : ''}
+        aria-pressed={tab === 'documents'}
+        onClick={() => onTab('documents')}
+      >
+        Документ и форматы
+      </button>
+    </div>
+  );
+}
+
 export interface ProfileScreenSurfaceProps {
   readonly candidateId: string;
   readonly view?: ResumeStudioView;
@@ -113,15 +123,17 @@ export interface ProfileScreenSurfaceProps {
   readonly saveError?: string;
   readonly onRetry: () => void;
   readonly onDraftChange: (draft: ResumeDraft) => void;
-  readonly onSave: () => void;
+  readonly onSectionSave: (next: ResumeDraft) => void;
   readonly onRefresh?: () => void;
-  readonly onConfirmOpenToWork: (workMode: 'office' | 'hybrid' | 'remote' | 'flexible') => void;
+  readonly onConfirmOpenToWork: (confirmation: OpenToWorkConfirmation) => void;
   readonly confirmingOpenToWork?: boolean;
 }
 
 /**
  * Presentational surface: every state (loading, error, empty, populated) can
  * be asserted without a network, the same split `ResumeStudioSurface` uses.
+ * There is no permanent "Сохранить" button (B265 owner remark #5) — every
+ * section saves itself when its own edit mode is closed.
  */
 // eslint-disable-next-line max-lines-per-function
 export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
@@ -136,11 +148,12 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
     saveError,
     onRetry,
     onDraftChange,
-    onSave,
+    onSectionSave,
     onRefresh,
     onConfirmOpenToWork,
     confirmingOpenToWork,
   } = props;
+  const [tab, setTab] = useState<ProfileTab>('profile');
 
   if (loading) {
     return (
@@ -166,50 +179,58 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
 
   return (
     <div className="career-profile-screen-view">
-      <ProfileTopcard
-        draft={draft}
-        importedSource={importedSource}
-        updatedAt={props.view?.savedAt?.updatedAt}
-        onDraftChange={onDraftChange}
-      />
+      <div className="career-profile-screen-header-row">
+        <ProfileTopcard
+          draft={draft}
+          importedSource={importedSource}
+          updatedAt={props.view?.savedAt?.updatedAt}
+          onDraftChange={onDraftChange}
+        />
+        <ProfileTabs tab={tab} onTab={setTab} />
+      </div>
+      {saveError ? (
+        <p className="career-resume-error" role="alert">
+          {saveError}
+        </p>
+      ) : null}
       <ProfileOpenToWork
         candidateId={candidateId}
         draft={draft}
         onConfirm={onConfirmOpenToWork}
         confirming={confirmingOpenToWork}
       />
-      <div className="career-profile-screen-header-actions">
+      {tab === 'documents' ? (
         <ProfileDocumentMenu draft={draft} memory={memory} />
-        {saveError ? (
-          <span className="career-resume-error" role="alert">
-            {saveError}
-          </span>
-        ) : null}
-        <button type="button" className="career-primary-button" disabled={saving} onClick={onSave}>
-          {saving ? 'Сохраняем…' : 'Сохранить'}
-        </button>
-      </div>
-      <ProfileAnchorNav />
-      <div className="career-profile-screen-layout">
-        <div className="career-profile-screen-main-col">
-          <ProfileAboutSection draft={draft} />
-          <ProfileExperienceSection draft={draft} />
-          <ProfileEducationSection draft={draft} />
-          <ProfileSkillsSection draft={draft} />
-          <ProfileCertificatesSection draft={draft} />
-          <ProfileProjectsSection draft={draft} />
-          <ProfileCoursesSection draft={draft} importedLabel={importedSource?.label} />
-          <ProfileLanguagesSection draft={draft} />
-          <ProfileRecommendationsSection draft={draft} />
-          <ProfileAchievementsSection draft={draft} />
-        </div>
-        <ProfileSideRail
-          draft={draft}
-          importedSource={importedSource}
-          onRefresh={() => onRefresh?.()}
-          refreshing={false}
-        />
-      </div>
+      ) : (
+        <>
+          <ProfileAnchorNav />
+          <div className="career-profile-screen-layout">
+            <div className="career-profile-screen-main-col">
+              <ProfileAboutSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileExperienceSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileEducationSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileSkillsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileCertificatesSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileProjectsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileCoursesSection
+                draft={draft}
+                saving={saving}
+                onSectionSave={onSectionSave}
+                importedLabel={importedSource?.label}
+              />
+              <ProfileLanguagesSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileRecommendationsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileAchievementsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+            </div>
+            <ProfileSideRail
+              draft={draft}
+              importedSource={importedSource}
+              onRefresh={() => onRefresh?.()}
+              refreshing={false}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -236,17 +257,26 @@ export function ProfileScreenView({
   const state = useResumeStudio(onRefreshFacts);
   const [confirmingOtw, setConfirmingOtw] = useState(false);
 
-  const confirmOpenToWork = useCallback(
-    async (workMode: 'office' | 'hybrid' | 'remote' | 'flexible') => {
-      setConfirmingOtw(true);
-      try {
-        await updateAccountProfile({ workMode });
-      } finally {
-        setConfirmingOtw(false);
-      }
+  // `state.setDraft` and `state.save` both key off React state, so a section's
+  // edit form has to hand the freshly computed draft to both — updating
+  // state and then calling `state.save()` with no argument would race the
+  // update and persist the value from before this edit (see useResumeStudio).
+  const onSectionSave = useCallback(
+    (next: ResumeDraft) => {
+      state.setDraft(next);
+      state.save(next);
     },
-    [],
+    [state],
   );
+
+  const confirmOpenToWork = useCallback(async (confirmation: OpenToWorkConfirmation) => {
+    setConfirmingOtw(true);
+    try {
+      await updateAccountProfile({ workMode: confirmation.workMode, regions: confirmation.regions });
+    } finally {
+      setConfirmingOtw(false);
+    }
+  }, []);
 
   return (
     <ProfileScreenSurface
@@ -261,9 +291,9 @@ export function ProfileScreenView({
       saveError={state.saveError}
       onRetry={state.reload}
       onDraftChange={state.setDraft}
-      onSave={state.save}
+      onSectionSave={onSectionSave}
       onRefresh={onRefreshFacts}
-      onConfirmOpenToWork={(mode) => void confirmOpenToWork(mode)}
+      onConfirmOpenToWork={(confirmation) => void confirmOpenToWork(confirmation)}
       confirmingOpenToWork={confirmingOtw}
     />
   );

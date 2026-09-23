@@ -175,11 +175,7 @@ function TopcardEdit({
   const [open, setOpen] = useState(false);
   if (!open) {
     return (
-      <button
-        type="button"
-        className="career-profile-screen-edit-trigger"
-        onClick={() => setOpen(true)}
-      >
+      <button type="button" className="career-quiet-button" onClick={() => setOpen(true)}>
         <PencilSimple size={15} />
         Изменить
       </button>

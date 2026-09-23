@@ -12649,7 +12649,6 @@
   color: var(--career-accent-ink);
   display: grid;
   place-items: center;
-  font-family: var(--font-mono, monospace);
   font-weight: 700;
   font-size: var(--career-text-xl);
   border: 1px solid var(--career-line-strong);
@@ -12762,7 +12761,8 @@
   color: var(--career-text-dim);
 }
 
-.career-profile-screen-field input {
+.career-profile-screen-field input,
+.career-profile-screen-field select {
   min-height: var(--career-target-min);
   padding: 0 var(--career-space-3);
   border-radius: var(--career-radius-sm);
@@ -13004,6 +13004,9 @@
   display: grid;
   place-items: center;
   color: var(--career-text-soft);
+  font-size: var(--career-text-aux);
+  font-weight: 700;
+  object-fit: cover;
   flex: none;
 }
 
@@ -13105,7 +13108,7 @@
 
 .career-profile-screen-lang-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: var(--career-space-3);
   align-items: center;
 }
@@ -13171,6 +13174,8 @@
 .career-profile-screen-achv-item b {
   font-size: var(--career-text-sm);
   display: block;
+  flex: 1;
+  min-width: 0;
 }
 
 .career-profile-screen-achv-item span {
@@ -13230,4 +13235,139 @@
   font-size: var(--career-text-sm);
   color: var(--career-text-soft);
   padding: 6px 0;
+}
+
+/* ===================== B265 review round 2 ===================== */
+.career-profile-screen-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--career-space-4);
+  flex-wrap: wrap;
+}
+
+.career-profile-screen-header-row .career-profile-screen-topcard {
+  flex: 1 1 480px;
+}
+
+/* "Профиль / Документ и форматы" — top-right tabs, replacing the permanent
+   header Save button (B265 owner remark #5). */
+.career-profile-screen-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--career-radius-md);
+  border: 1px solid var(--career-line-strong);
+  background: var(--career-surface);
+  flex: none;
+}
+
+.career-profile-screen-tabs button {
+  min-height: var(--career-target-min);
+  padding: 0 var(--career-space-4);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-sm);
+  border: none;
+  background: transparent;
+}
+
+.career-profile-screen-tabs button.is-active {
+  color: var(--career-text);
+  background: var(--career-surface-raised);
+}
+
+.career-profile-screen-section-head-actions {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* A working pencil on every section (B265 owner remark #7) — never a
+   disabled placeholder. */
+.career-profile-screen-icon-button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--career-radius-sm);
+  border: 1px solid var(--career-line-strong);
+  color: var(--career-text-soft);
+  background: var(--career-surface);
+  flex: none;
+}
+
+.career-profile-screen-icon-button:hover {
+  color: var(--career-text);
+  background: var(--career-surface-raised);
+}
+
+.career-profile-screen-icon-button.is-danger:hover {
+  color: var(--career-danger);
+  border-color: color-mix(in oklch, var(--career-danger) 45%, var(--career-line));
+}
+
+.career-profile-screen-position-title-row .career-profile-screen-icon-button,
+.career-profile-screen-rec-author .career-profile-screen-icon-button,
+.career-profile-screen-achv-item .career-profile-screen-icon-button,
+.career-profile-screen-lang-row .career-profile-screen-icon-button {
+  margin-left: 4px;
+}
+
+.career-profile-screen-textarea {
+  min-height: 120px;
+  padding: var(--career-space-3);
+  border-radius: var(--career-radius-sm);
+  border: 1px solid var(--career-line-strong);
+  background: var(--career-bg-elevated);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  resize: vertical;
+}
+
+.career-profile-screen-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.career-profile-screen-tile-head b {
+  flex: 1;
+  min-width: 0;
+}
+
+.career-profile-screen-tag.is-removable {
+  gap: 6px;
+}
+
+.career-profile-screen-tag.is-removable button {
+  border: none;
+  background: transparent;
+  color: inherit;
+  line-height: 1;
+  padding: 0;
+}
+
+.career-profile-screen-rec-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.career-profile-screen-rec-author > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.career-profile-screen-achv-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 760px) {
+  .career-profile-screen-header-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

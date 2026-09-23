@@ -8,7 +8,7 @@ const baseProps: ProfileScreenSurfaceProps = {
   memory: [],
   onRetry: () => undefined,
   onDraftChange: () => undefined,
-  onSave: () => undefined,
+  onSectionSave: () => undefined,
   onConfirmOpenToWork: () => undefined,
 };
 
@@ -105,5 +105,40 @@ describe('ProfileScreenSurface — states', () => {
       />,
     );
     expect(html).toContain('Абзац номер 6');
+  });
+
+  // Owner remark #6: a heading paragraph followed by "- bullet" lines must
+  // render as a paragraph plus a real <ul>, not one run-on sentence.
+  it('renders "about" bullet lines as a bulleted list, not glued onto the previous sentence', () => {
+    const about = 'Что делаю лучше всего:\n- Строю инженерную стратегию\n- Масштабирую команды';
+    const html = renderToStaticMarkup(
+      <ProfileScreenSurface
+        {...baseProps}
+        draft={{ ...populatedDraft, candidate: { ...populatedDraft.candidate, about } }}
+      />,
+    );
+    expect(html).not.toContain('Что делаю лучше всего: - Строю');
+    expect(html).toMatch(/<ul>.*Строю инженерную стратегию.*<\/ul>/);
+    expect(html).toContain('<li>Строю инженерную стратегию</li>');
+    expect(html).toContain('<li>Масштабирую команды</li>');
+  });
+
+  it('gives every section a working pencil (owner remark #7)', () => {
+    const html = renderToStaticMarkup(
+      <ProfileScreenSurface {...baseProps} draft={populatedDraft} />,
+    );
+    expect(html).toContain('Изменить «Обо мне»');
+    expect(html).toContain('Изменить должность');
+    expect(html).toContain('Изменить образование');
+    expect(html).toContain('Изменить навыки');
+  });
+
+  it('shows the "Профиль" and "Документ и форматы" tabs instead of a permanent Save button', () => {
+    const html = renderToStaticMarkup(
+      <ProfileScreenSurface {...baseProps} draft={populatedDraft} />,
+    );
+    expect(html).toContain('career-profile-screen-tabs');
+    expect(html).toContain('Документ и форматы');
+    expect(html).not.toContain('>Сохранить<');
   });
 });

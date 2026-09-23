@@ -3,11 +3,20 @@ import { Sparkle } from '@phosphor-icons/react';
 import { openToWorkDismissalKey } from './profileEditing';
 import type { ResumeDraft } from './resumeTypes';
 
+type WorkMode = 'office' | 'hybrid' | 'remote' | 'flexible';
+
 const WORKPLACE_LABELS: Record<string, string> = {
   on_site: 'On-site',
   hybrid: 'Hybrid',
   remote: 'Remote',
 };
+
+const WORK_MODE_OPTIONS: readonly { value: WorkMode; label: string }[] = [
+  { value: 'office', label: 'Только офис' },
+  { value: 'hybrid', label: 'Только гибрид' },
+  { value: 'remote', label: 'Только удалённо' },
+  { value: 'flexible', label: 'On-site · Hybrid · Remote' },
+];
 
 function readDismissed(key: string | undefined): boolean {
   if (!key || typeof window === 'undefined') return false;
@@ -18,12 +27,115 @@ function readDismissed(key: string | undefined): boolean {
   }
 }
 
+function primaryWorkMode(workplaceTypes: readonly string[]): WorkMode {
+  if (workplaceTypes.includes('remote')) return 'remote';
+  if (workplaceTypes.includes('hybrid')) return 'hybrid';
+  if (workplaceTypes.includes('on_site')) return 'office';
+  return 'flexible';
+}
+
+export interface OpenToWorkConfirmation {
+  readonly workMode: WorkMode;
+  readonly regions: readonly string[];
+}
+
+function OpenToWorkFields({
+  mode,
+  regionsText,
+  onMode,
+  onRegionsText,
+}: {
+  readonly mode: WorkMode;
+  readonly regionsText: string;
+  readonly onMode: (mode: WorkMode) => void;
+  readonly onRegionsText: (value: string) => void;
+}) {
+  return (
+    <div className="career-profile-screen-field-grid">
+      <label className="career-profile-screen-field">
+        <span>Формат работы</span>
+        <select value={mode} onChange={(event) => onMode(event.target.value as WorkMode)}>
+          {WORK_MODE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="career-profile-screen-field">
+        <span>Регионы</span>
+        <input value={regionsText} onChange={(event) => onRegionsText(event.target.value)} />
+      </label>
+    </div>
+  );
+}
+
+/**
+ * "Изменить перед подтверждением": the candidate can correct the work mode
+ * and the region list LinkedIn proposed before anything is applied — the
+ * mockup's middle action, distinct from a blind "Подтвердить" (B265 review).
+ */
+function OpenToWorkEditForm({
+  workMode,
+  regions,
+  confirming,
+  onCancel,
+  onSave,
+}: {
+  readonly workMode: WorkMode;
+  readonly regions: readonly string[];
+  readonly confirming?: boolean;
+  readonly onCancel: () => void;
+  readonly onSave: (confirmation: OpenToWorkConfirmation) => void;
+}) {
+  const [mode, setMode] = useState<WorkMode>(workMode);
+  const [regionsText, setRegionsText] = useState(regions.join(', '));
+  return (
+    <div className="career-profile-screen-edit-body">
+      <OpenToWorkFields
+        mode={mode}
+        regionsText={regionsText}
+        onMode={setMode}
+        onRegionsText={setRegionsText}
+      />
+      <div className="career-profile-screen-edit-actions">
+        <button type="button" className="career-quiet-button" onClick={onCancel}>
+          Отклонить предложение
+        </button>
+        <button
+          type="button"
+          className="career-primary-button"
+          disabled={confirming}
+          onClick={() =>
+            onSave({
+              workMode: mode,
+              regions: regionsText
+                .split(',')
+                .map((region) => region.trim())
+                .filter(Boolean),
+            })
+          }
+        >
+          {confirming ? 'Применяем…' : 'Сохранить и применить'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface ProfileOpenToWorkProps {
+  readonly candidateId: string;
+  readonly draft: ResumeDraft;
+  readonly onConfirm: (confirmation: OpenToWorkConfirmation) => void;
+  readonly confirming?: boolean;
+}
+
 /**
  * A proposal read from a native source, never written to work preferences
  * until the candidate confirms it (B265 §3c, server/domain/resumeDraft.ts
- * `ResumeSourceSuggestionsInput`). Declining it is remembered until the next
- * import produces a different proposal, not forever and not silently reset
- * on every page load.
+ * `ResumeSourceSuggestionsInput`). Three actions, matching the mockup:
+ * confirm as-is, change first, or decline — declining is remembered until
+ * the next import produces a different proposal, not forever.
  */
 // eslint-disable-next-line max-lines-per-function
 export function ProfileOpenToWork({
@@ -31,23 +143,15 @@ export function ProfileOpenToWork({
   draft,
   onConfirm,
   confirming,
-}: {
-  readonly candidateId: string;
-  readonly draft: ResumeDraft;
-  readonly onConfirm: (workMode: 'office' | 'hybrid' | 'remote' | 'flexible') => void;
-  readonly confirming?: boolean;
-}) {
+}: ProfileOpenToWorkProps) {
   const openToWork = draft.sourceSuggestions?.openToWork;
   const dismissKey = openToWorkDismissalKey(candidateId, draft.sourceSuggestions);
   const [dismissed, setDismissed] = useState(() => readDismissed(dismissKey));
+  const [editing, setEditing] = useState(false);
   if (!openToWork || dismissed) return null;
 
   const workModes = openToWork.workplaceTypes.map((mode) => WORKPLACE_LABELS[mode] ?? mode);
-  const primaryMode = openToWork.workplaceTypes.includes('remote')
-    ? 'remote'
-    : openToWork.workplaceTypes.includes('hybrid')
-      ? 'hybrid'
-      : 'office';
+  const primaryMode = primaryWorkMode(openToWork.workplaceTypes);
 
   function dismiss() {
     setDismissed(true);
@@ -84,19 +188,35 @@ export function ProfileOpenToWork({
           </span>
         ) : null}
       </div>
-      <div className="career-profile-screen-otw-actions">
-        <button
-          type="button"
-          className="career-primary-button"
-          disabled={confirming}
-          onClick={() => onConfirm(primaryMode)}
-        >
-          {confirming ? 'Применяем…' : 'Подтвердить и применить к целям поиска'}
-        </button>
-        <button type="button" className="career-quiet-button" onClick={dismiss}>
-          Отклонить
-        </button>
-      </div>
+      {editing ? (
+        <OpenToWorkEditForm
+          workMode={primaryMode}
+          regions={openToWork.locations}
+          confirming={confirming}
+          onCancel={() => setEditing(false)}
+          onSave={(confirmation) => {
+            onConfirm(confirmation);
+            setEditing(false);
+          }}
+        />
+      ) : (
+        <div className="career-profile-screen-otw-actions">
+          <button
+            type="button"
+            className="career-primary-button"
+            disabled={confirming}
+            onClick={() => onConfirm({ workMode: primaryMode, regions: openToWork.locations })}
+          >
+            {confirming ? 'Применяем…' : 'Подтвердить и применить к целям поиска'}
+          </button>
+          <button type="button" className="career-quiet-button" onClick={() => setEditing(true)}>
+            Изменить перед подтверждением
+          </button>
+          <button type="button" className="career-quiet-button" onClick={dismiss}>
+            Отклонить
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -27,10 +27,12 @@ export type {
   ResumeAchievementInput,
   ResumeAchievementKind,
   ResumeCertificationInput,
+  ResumeCourseInput,
   ResumeEducationInput,
   ResumeExperienceInput,
   ResumeLanguageInput,
   ResumeProjectInput,
+  ResumeRecommendationInput,
   ResumeSkillInput,
 } from '../../../server/domain/resumeDraft';
 
