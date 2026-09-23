@@ -405,6 +405,34 @@ export class SqliteApplicationRepository {
     return totals;
   }
 
+  /**
+   * `POST /vacancy-skips` (architecture.md §4): archives the `saved` card for
+   * this `clusterId`, if any, with `closed_reason = reasonId`. A card past
+   * `saved` is left alone — a skip never downgrades progress.
+   */
+  archiveSavedByCluster(
+    candidateId: string,
+    clusterId: string,
+    reasonId: string,
+    now = new Date().toISOString(),
+  ): void {
+    const existing = this.findByCluster(candidateId, clusterId);
+    if (!existing || existing.stage !== 'saved') return;
+    this.database
+      .prepare(
+        `UPDATE applications SET stage = 'archived', closed_reason = ?,
+           stage_changed_at = ?, version = version + 1, updated_at = ?
+         WHERE candidate_id = ? AND id = ?`,
+      )
+      .run(reasonId, now, now, candidateId, existing.id);
+    this.insertEvent(
+      candidateId,
+      existing.id,
+      { kind: 'stage', fromStage: 'saved', toStage: 'archived', occurredAt: now, provenance: 'candidate' },
+      now,
+    );
+  }
+
   listEvents(candidateId: string, applicationId: string): StoredApplicationEvent[] {
     const rows = this.database
       .prepare(
