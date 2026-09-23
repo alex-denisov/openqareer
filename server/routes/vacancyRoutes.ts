@@ -29,6 +29,8 @@ import { MatchedPoolSnapshots } from '../vacancies/matchedPoolSnapshot';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { buildRoleProposals, confirmChosenTitle } from '../vacancies/roleHypotheses';
 import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
+import { deriveCandidateTargetLevel } from '../vacancies/candidateLevel';
+import { countMatchedVacanciesByRole } from '../vacancies/vacancyRoleCounts';
 import { campaignMeta, readCampaign } from './campaignContext';
 import type { CampaignResolution } from '../vacancies/campaign';
 import { registerCampaignRoutes } from './campaignRoutes';
@@ -102,6 +104,20 @@ function readMatchProfile(
     .map((m) => m.statement);
 
   return { confirmedSkills };
+}
+
+/**
+ * Целевой уровень кандидата (B248, срез «подключение уровня»): роль кампании
+ * важнее прошлой должности — кандидат вправе целиться выше своего опыта, и
+ * fit-dot «уровень» обязан мерить его заявленную цель, а не только прошлое.
+ */
+function readTargetLevel(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+  targetRoles: readonly string[],
+) {
+  const experience = candidateStore.getSnapshot(candidateId)?.resume?.draft.experience ?? [];
+  return deriveCandidateTargetLevel({ targetRoles, experience });
 }
 
 /**
@@ -211,11 +227,13 @@ async function readRoleContext(
   // ничего не назвал» там, где на самом деле некого спрашивать (B161).
   if (confirmedSkills.length === 0 && targetRoles.length === 0) return null;
 
+  const targetLevel = readTargetLevel(candidateStore, candidateId, targetRoles);
   const matched = await readMatchedSnapshot(
     multiSourceEngine,
     candidateId,
     confirmedSkills,
     targetRoles,
+    targetLevel,
   );
 
   // Имя роли даёт модель, читающая факты кандидата; пул приписывает к нему
@@ -556,20 +574,27 @@ function readMatchedSnapshot(
   candidateId: string,
   confirmedSkills: string[],
   targetRoles: string[],
+  targetLevel: ReturnType<typeof deriveCandidateTargetLevel>,
 ): Promise<MatchedVacancyItem[]> {
   let snapshots = matchedPoolSnapshots.get(engine);
   if (!snapshots) {
     snapshots = new MatchedPoolSnapshots();
     matchedPoolSnapshots.set(engine, snapshots);
   }
-  return snapshots.readAsync(candidateId, matchProfileKey(confirmedSkills, targetRoles), () =>
-    engine.getMatchedVacanciesAsync({
-      candidateId,
-      targetRoles,
-      confirmedSkills,
-      confirmedFacts: confirmedSkills,
-      preferredRemote: true,
-    }),
+  return snapshots.readAsync(
+    candidateId,
+    // Уровень входит в отпечаток снимка: смена целевой роли меняет и уровень,
+    // и старый снимок с прежним fit-dot «уровень» не должен пережить это.
+    `${matchProfileKey(confirmedSkills, targetRoles)}:${targetLevel ?? ''}`,
+    () =>
+      engine.getMatchedVacanciesAsync({
+        candidateId,
+        targetRoles,
+        confirmedSkills,
+        confirmedFacts: confirmedSkills,
+        preferredRemote: true,
+        ...(targetLevel ? { targetLevel } : {}),
+      }),
   );
 }
 
@@ -634,13 +659,20 @@ const handleMatchedVacancies: Handler = async (
 
   // Подбор считается один раз на чтение: страницы одного чтения обязаны
   // приходить из одного списка, иначе смещение указывает не на ту запись.
+  const targetLevel = readTargetLevel(candidateStore, candidate.id, targetRoles);
   const snapshot = await readMatchedSnapshot(
     multiSourceEngine,
     candidate.id,
     confirmedSkills,
     targetRoles,
+    targetLevel,
   );
   const matched = finishMatchedVacancies(snapshot, targetRoles, campaign, candidateStore, candidate.id);
+  // Гипотеза роли (B247, срез 2): порог считается по тому же снимку, что и
+  // сам подбор — до фильтра по роли/гео, иначе роль без вакансий в её же
+  // рынке выглядела бы гипотезой из-за чужого фильтра, а не своего счёта.
+  const vacancyCountsByRole = countMatchedVacanciesByRole(snapshot, targetRoles);
+  const campaignWithHypotheses = readCampaign(candidateStore, candidate.id, vacancyCountsByRole);
 
   // Весь подбор одним телом не доходит: маршрут рвёт ответ примерно на 20 460
   // байт (INC-029). Экран забирает пул страницами внутри доказанного бюджета.
@@ -657,8 +689,9 @@ const handleMatchedVacancies: Handler = async (
       // шестьюдесятью кругами подряд (PRB-023, B211).
       ...(page.pageOffsets ? { pageOffsets: page.pageOffsets } : {}),
       // Баннер расхождения профиль/кампания читает конкретные значения обеих
-      // сторон отсюда, а не пересчитывает их сам (B247, срез 1).
-      campaign: campaignMeta(campaign),
+      // сторон отсюда, а не пересчитывает их сам (B247, срез 1). Гипотезы роли
+      // едут в том же теле — экран «Вакансии» не пересчитывает порог сам.
+      campaign: campaignMeta(campaignWithHypotheses),
     },
   };
 };
