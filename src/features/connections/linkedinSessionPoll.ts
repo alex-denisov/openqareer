@@ -1,4 +1,5 @@
 import { parseResumeContent, type ParsedResume } from '../workspace/resumeParser';
+import { extractLinkedInProfile } from './linkedinProfileExtract';
 import type { SessionInspectionResult, SessionPageResult } from './connectorSession';
 import { captureSignedInPage } from './sessionCapture';
 import {
@@ -93,12 +94,13 @@ async function runOnce(
     failureCode: 'linkedin_authenticated_capture_failed',
     waitBeforeRetry: dependencies.waitBeforeRetry,
   });
-  const profileText = htmlToProfileText(page.body);
-  const parsedBase = parseResumeContent(profileText);
+  const profile = extractLinkedInProfile(page.body);
+  if (profile.text.length > 500_000) throw new Error('linkedin_profile_payload_too_large');
+  const parsedBase = parseResumeContent(profile.text);
   const parsed = {
     ...parsedBase,
-    fullName: extractHeading(page.body) ?? parsedBase.fullName,
-    rawText: profileText,
+    fullName: profile.fullName ?? parsedBase.fullName,
+    rawText: profile.text,
   };
   if (!parsed.fullName && parsed.experience.length === 0) {
     throw new Error('linkedin_authenticated_profile_unclassified');
@@ -145,32 +147,4 @@ function isAllowedLinkedInUrl(rawUrl: string): boolean {
   } catch {
     return false;
   }
-}
-
-function extractHeading(html: string): string | undefined {
-  const match = /<h1[^>]*>([\s\S]*?)<\/h1>/iu.exec(html);
-  return (
-    match?.[1]
-      ?.replace(/<[^>]+>/gu, ' ')
-      .replace(/\s+/gu, ' ')
-      .trim() || undefined
-  );
-}
-
-function htmlToProfileText(html: string): string {
-  const main = /<main\b[^>]*>([\s\S]*?)<\/main>/iu.exec(html)?.[1] ?? html;
-  const text = main
-    .replace(/<script\b[\s\S]*?<\/script>/giu, ' ')
-    .replace(/<style\b[\s\S]*?<\/style>/giu, ' ')
-    .replace(/<(?:br|\/p|\/div|\/li|\/section|\/h\d)>/giu, '\n')
-    .replace(/<[^>]+>/gu, ' ')
-    .replace(/&nbsp;|&#160;/giu, ' ')
-    .replace(/&amp;/giu, '&')
-    .replace(/&lt;/giu, '<')
-    .replace(/&gt;/giu, '>')
-    .replace(/[ \t]+/gu, ' ')
-    .replace(/\n{3,}/gu, '\n\n')
-    .trim();
-  if (text.length > 500_000) throw new Error('linkedin_profile_payload_too_large');
-  return text;
 }

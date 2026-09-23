@@ -818,6 +818,52 @@ pub async fn inspect_session_page_for(
 
 /// Reads a page **inside the session the candidate signed in to**. A separate
 /// HTTP client cannot do this: it does not share the webview's cookie jar.
+/// LinkedIn renders About, Experience and the rest only when they scroll into
+/// view; a snapshot of the untouched page held the top card and the footer
+/// alone (B264). Scrolls the window and LinkedIn's own scroll container until
+/// the page stops growing, within a fixed step budget, then returns to the top.
+const LAZY_SCROLL_MAX_STEPS: usize = 16;
+const LAZY_SCROLL_STEP_DELAY: Duration = Duration::from_millis(600);
+const LAZY_SCROLL_SCRIPT: &str = "(function(){try{\
+var step=Math.max(600,window.innerHeight);\
+var box=document.querySelector('main');\
+window.scrollBy(0,step);if(box){box.scrollTop+=step;}\
+var root=document.scrollingElement||document.documentElement;\
+var height=Math.max(root.scrollHeight,box?box.scrollHeight:0);\
+var bottom=Math.max(window.scrollY+window.innerHeight,box?box.scrollTop+box.clientHeight:0);\
+return {height:height,atEnd:bottom>=height-4};\
+}catch(e){return {height:0,atEnd:true};}})()";
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LazyScrollState {
+    height: f64,
+    at_end: bool,
+}
+
+async fn load_lazy_sections(window: &Webview) {
+    let mut last_height = -1.0;
+    for _ in 0..LAZY_SCROLL_MAX_STEPS {
+        let Ok(raw) = eval_json(window, LAZY_SCROLL_SCRIPT).await else {
+            break;
+        };
+        tokio::time::sleep(LAZY_SCROLL_STEP_DELAY).await;
+        let Ok(state) = serde_json::from_str::<LazyScrollState>(&raw) else {
+            break;
+        };
+        if state.at_end && (state.height - last_height).abs() < 1.0 {
+            break;
+        }
+        last_height = state.height;
+    }
+    let _ = eval_json(
+        window,
+        "(function(){window.scrollTo(0,0);var box=document.querySelector('main');if(box){box.scrollTop=0;}return true;})()",
+    )
+    .await;
+    tokio::time::sleep(PAGE_SETTLE_DELAY).await;
+}
+
 pub async fn read_session_page(
     app: &AppHandle,
     request: &SessionWindowRequest,
@@ -846,6 +892,10 @@ pub async fn read_session_page(
             return Err("page_load_timeout".to_string());
         }
         tokio::time::sleep(PAGE_POLL_INTERVAL).await;
+    }
+
+    if request.platform == "linkedin" {
+        load_lazy_sections(&window).await;
     }
 
     let body_json = eval_json(
