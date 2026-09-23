@@ -4,6 +4,11 @@ import type { StoredWorkPreferenceRun } from './sqliteWorkPreferenceRepository';
 import type { VacancyApplicationInput } from './sqliteVacancyApplicationRepository';
 import type { VacancyApplication } from '../../shared/vacancyApplication';
 import type {
+  CreateApplicationInput,
+  PatchApplicationInput,
+  StoredApplication,
+} from './sqliteApplicationRepository';
+import type {
   CoachMessage,
   CoachPhase,
   CoachTurnInput,
@@ -417,6 +422,20 @@ export interface CandidateStore {
     candidateId: string,
     input: VacancyApplicationInput,
   ): VacancyApplication;
+
+  /** Трекер откликов (B251, срез 1). Ленивый перенос старых `applied` на первом чтении. */
+  listApplications(candidateId: string): StoredApplication[];
+
+  createApplication(
+    candidateId: string,
+    input: CreateApplicationInput,
+  ): StoredApplication;
+
+  patchApplication(
+    candidateId: string,
+    applicationId: string,
+    input: PatchApplicationInput,
+  ): StoredApplication;
 
   getWorkPreferenceRun(candidateId: string): StoredWorkPreferenceRun | null;
 
