@@ -9,6 +9,8 @@ import { VacancyBoard } from '../vacancies/VacancyBoard';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
 import { useVacancyApplications } from '../vacancies/useVacancyApplications';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
+import { CareerPathIndicator } from '../shell/CareerPathIndicator';
+import { buildPathIndicator } from '../shell/pathIndicator';
 import { useCareerCabinetData } from './useCareerCabinetData';
 import {
   applyRoutePremises,
@@ -21,7 +23,7 @@ import { useRoleHypotheses } from '../career-map/useRoleHypotheses';
 import { useCareerStrategy, type CareerStrategyRead } from './useCareerStrategy';
 import { useWorkPreferences, type WorkPreferencesState } from './useWorkPreferences';
 import type { ProposedRole } from '../../../shared/roleProposals';
-import type { VacancyApplication } from '../../../shared/vacancyApplication';
+import { countConfirmedApplications, type VacancyApplication } from '../../../shared/vacancyApplication';
 import type { CareerCabinetView } from './cabinetViews';
 
 export type { CareerCabinetView } from './cabinetViews';
@@ -127,6 +129,22 @@ export function CareerCabinet({
           error={data.error}
           onRetry={() => void data.refresh()}
         />
+        {/* B248 §2 — the same path indicator the anonymous wizard shows
+            (`CareerWorkspaceShell`), wired to the cabinet's own journey, pool
+            and confirmed applications instead of a second read of any of
+            them (INC-024, B104). */}
+        {journey && !(data.loading && !data.snapshot) ? (
+          <CareerPathIndicator
+            steps={buildPathIndicator({
+              track: journey.track,
+              matchedPoolCount: pool.matched.length,
+              confirmedApplications: countConfirmedApplications(
+                vacancyApplications.applications,
+              ),
+            })}
+            onNavigate={onNavigate}
+          />
+        ) : null}
         {/* До первого ответа сервера экран не рисует ни имени из сессии, ни
             пустых вкладок: профиль появляется целиком и один раз, а не
             «пустой, потом с данными импорта» (владелец, 2026-09-20). */}
@@ -210,9 +228,7 @@ function CabinetSection({
   onOpenExpert: () => void;
   onOpenTariffs?: () => void;
 }) {
-  // «Главная» держит кандидата и его факты: отдельный раздел «Профиль» показывал
-  // бы то же самое второй раз, поэтому его прежний адрес ведёт сюда же.
-  if (view === 'today' || view === 'profile') {
+  if (view === 'today') {
     return (
       <CareerHome
         session={session}
@@ -237,7 +253,11 @@ function CabinetSection({
       />
     );
   }
-  if (view === 'resume') {
+  // B248 (owner review 2026-09-23) — the rail's «Профиль» opens the resume
+  // surface, not a second copy of «Сегодня». B265 replaces this with its own
+  // profile screen; until then this is the nearest existing screen, not a
+  // placeholder.
+  if (view === 'resume' || view === 'profile') {
     return (
       <ResumeStudio
         memory={data.snapshot?.memory ?? []}
@@ -327,8 +347,11 @@ function CabinetHeader({
 }
 
 const VIEW_TITLE: Record<CareerCabinetView, string> = {
-  today: 'Главная',
-  profile: 'Главная',
+  today: 'Сегодня',
+  // «Профиль» renders the same surface as «Сегодня» today (B248 rail item
+  // opens it) — its own heading, since the candidate clicked a named button
+  // and a page titled «Сегодня» in reply would read as a broken link.
+  profile: 'Профиль',
   resume: 'Резюме',
   career: 'Поиск',
   opportunities: 'Вакансии',
@@ -338,7 +361,8 @@ const VIEW_TITLE: Record<CareerCabinetView, string> = {
 // (B236, отчёты маркетолога и консультанта): без «пула», «выборок», «маршрута».
 const VIEW_DESCRIPTION: Record<CareerCabinetView, string> = {
   today: 'Ваш профиль по фактам, роли с опорой на опыт и один шаг на сегодня.',
-  profile: 'Ваш профиль по фактам, роли с опорой на опыт и один шаг на сегодня.',
+  profile:
+    'Основное резюме и три формата позиционирования — только из подтверждённых фактов; пробелы видны.',
   resume:
     'Основное резюме и три формата позиционирования — только из подтверждённых фактов; пробелы видны.',
   career: 'Кампания: по какой роли ищем, что откликнуть сегодня, как идёт воронка.',

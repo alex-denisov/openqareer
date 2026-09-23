@@ -202,14 +202,18 @@ describe('CareerCabinet composition', () => {
     }
   });
 
-  // Прежний адрес «Профиля» ведёт на «Главную»: показывать те же факты дважды
-  // значило бы держать два экрана об одном и том же.
-  it('sends the old «Профиль» address to «Главная»', () => {
-    const html = renderCabinet('profile');
+  // B248 (owner review 2026-09-23): «Профиль» must not repeat «Сегодня»
+  // under a different heading — it opens the resume surface, the nearest
+  // existing screen, until B265 replaces it with its own profile screen.
+  it('gives «Профиль» the resume surface, not a second «Сегодня»', () => {
+    const profile = renderCabinet('profile');
+    const resume = renderCabinet('resume');
 
-    expect(html).toContain('Разделы профиля');
-    expect(html).toContain('Готовность профиля');
-    expect(html).not.toContain('Рынок и следующие шаги');
+    expect(profile).not.toContain('Разделы профиля');
+    expect(profile).not.toContain('Один шаг на сегодня');
+    // Same surface as «Резюме» — a candidate-scoped read, present on both.
+    expect(profile).toContain('career-resume-studio');
+    expect(resume).toContain('career-resume-studio');
   });
 
   // «Пульт» развёл рынок на два раздела: кампания живёт в «Поиске», пул — в

@@ -11,12 +11,11 @@ export async function runCjm2(outDir) {
 
   await run.step('search-open', {
     wait: 3000,
-    note: 'Раздел «Поиск» — кампания и предложенные роли',
+    note: 'Шаг «Роль» индикатора пути — кампания и предложенные роли',
     act: async (page) => {
-      const btn = page
-        .locator('nav')
-        .getByRole('button', { name: /^Поиск/ })
-        .first();
+      // «Поиск» has no rail item in the B248 IA; it opens from the path
+      // indicator's «Роль» step, which every campaign screen carries.
+      const btn = page.getByRole('button', { name: /^Роль\./ }).first();
       await btn.click();
     },
   });

@@ -210,9 +210,29 @@ describe('B232 typography scale', () => {
   });
 
   it('sets every font-size in the shell from a text token', () => {
+    // `--career-text-aux` (B248) is allowed strictly for auxiliary micro-labels
+    // (mobile nav captions, the path indicator's reason lines) — never body
+    // content. It is not a seventh step of the scale; see the token comment.
     const literals = [...shellCss.matchAll(/font-size:\s*([^;]+);/g)]
       .map((match) => match[1].trim())
-      .filter((value) => !/^var\(--career-text-(xs|sm|md|lg|xl|display)\)( !important)?$/.test(value));
+      .filter(
+        (value) => !/^var\(--career-text-(xs|sm|md|lg|xl|display|aux)\)( !important)?$/.test(value),
+      );
     expect(literals).toEqual([]);
+  });
+});
+
+/**
+ * B248, owner review 2026-09-23 (390px) — the rail's left-edge active tick
+ * (`.career-nav-button.is-active::before`) floated between two icons in the
+ * five-item bottom nav, read as a stray blue bar with nothing to mark.
+ */
+describe('mobile bottom nav has no stray active tick', () => {
+  const shellCss = fs.readFileSync(path.join(SRC_DIR, 'features/shell/career-shell.css'), 'utf8');
+
+  it('cancels the rail active-tick pseudo-element inside .career-mobile-nav', () => {
+    expect(shellCss).toMatch(
+      /\.career-mobile-nav \.career-nav-button\.is-active::before\s*\{\s*content:\s*none;/u,
+    );
   });
 });
