@@ -130,6 +130,15 @@ export interface VacancyMatchExplanation {
    * остальных и подписана, но не скрыта: источник мог назвать страну неточно.
    */
   outsideGeography?: boolean;
+  /**
+   * Решение кандидата «Сохранить» / «Пропустить с причиной» (B248), уже
+   * применённое к этой странице подбора: `applyVacancyDecisions` расставляет
+   * его снаружи, сам матчер о решениях не знает.
+   */
+  candidateDecision?: {
+    readonly status: 'saved' | 'skipped';
+    readonly skipReasonId?: import('../../shared/vacancySkipReasons').VacancySkipReasonId;
+  };
   summary: string;
   calculatedAt: string;
 }
