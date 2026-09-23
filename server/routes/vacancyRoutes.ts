@@ -30,6 +30,7 @@ import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { buildRoleProposals, confirmChosenTitle } from '../vacancies/roleHypotheses';
 import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
 import { campaignMeta, readCampaign } from './campaignContext';
+import type { CampaignResolution } from '../vacancies/campaign';
 import { registerCampaignRoutes } from './campaignRoutes';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
 import { generateVacancyPitch } from '../domain/vacancyPitchService';
@@ -572,6 +573,31 @@ function readMatchedSnapshot(
   );
 }
 
+/**
+ * Everything that happens to the matched pool after its cache read: role and
+ * geography filtering, then decisions (`saved`/`skip`) applied strictly
+ * after the cache (architecture.md §4, §7) so a click never forces a full
+ * pool recompute (B230/B247).
+ */
+function finishMatchedVacancies(
+  snapshot: readonly MatchedVacancyItem[],
+  targetRoles: readonly string[],
+  campaign: CampaignResolution,
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+): MatchedVacancyItem[] {
+  // SQL добирает кандидатов до лимита любыми свежими записями; при названной
+  // роли в подбор идут только совпавшие с ней, и счётчик считает их же.
+  // Записи вне рынков кампании помечены и стоят после остальных (PRB-040).
+  const roleFiltered = markGeography(
+    targetRoles.length > 0
+      ? snapshot.filter((item) => item.explanation.roleMatch !== 'none')
+      : snapshot,
+    campaign.regions.value as CandidateRegion[],
+  );
+  return applyVacancyDecisions(roleFiltered, candidateStore.listVacancyDecisions(candidateId));
+}
+
 const handleMatchedVacancies: Handler = async (
   { authService, candidateStore, config, multiSourceEngine },
   request,
@@ -614,19 +640,7 @@ const handleMatchedVacancies: Handler = async (
     confirmedSkills,
     targetRoles,
   );
-  // SQL добирает кандидатов до лимита любыми свежими записями; при названной
-  // роли в подбор идут только совпавшие с ней, и счётчик считает их же.
-  // Записи вне рынков кампании помечены и стоят после остальных (PRB-040).
-  const roleFiltered = markGeography(
-    targetRoles.length > 0
-      ? snapshot.filter((item) => item.explanation.roleMatch !== 'none')
-      : snapshot,
-    campaign.regions.value as CandidateRegion[],
-  );
-  // Applied strictly after the cache read (architecture.md §4, §7): folding
-  // "saved"/"skip" decisions into the cache key would force a full pool
-  // recompute on every click, and that recompute costs minutes (B230/B247).
-  const matched = applyVacancyDecisions(roleFiltered, candidateStore.listVacancyDecisions(candidate.id));
+  const matched = finishMatchedVacancies(snapshot, targetRoles, campaign, candidateStore, candidate.id);
 
   // Весь подбор одним телом не доходит: маршрут рвёт ответ примерно на 20 460
   // байт (INC-029). Экран забирает пул страницами внутри доказанного бюджета.

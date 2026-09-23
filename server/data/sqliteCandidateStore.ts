@@ -51,21 +51,12 @@ import {
   SqliteWorkPreferenceRepository,
   type StoredWorkPreferenceRun,
 } from './sqliteWorkPreferenceRepository';
+import { SqliteVacancyApplicationRepository } from './sqliteVacancyApplicationRepository';
+import { ApplicationTrackerController } from './store/applicationTrackerController';
 import {
-  SqliteVacancyApplicationRepository,
-  type VacancyApplicationInput,
-} from './sqliteVacancyApplicationRepository';
-import type { VacancyApplication, VacancyApplicationSnapshot } from '../../shared/vacancyApplication';
-import type { CreateApplicationInput, PatchApplicationInput } from './sqliteApplicationRepository';
-import type { SkipReasonId } from '../../shared/skipReasons';
-import type { ApplicationMaterialRole } from './sqliteApplicationMaterialsRepository';
-import type { CreateInterviewInput, PatchInterviewInput } from './sqliteApplicationInterviewRepository';
-import type { ApplicationOfferTerms } from './sqliteApplicationOfferRepository';
-import type { VacancySkipOrigin } from './sqliteVacancySkipRepository';
-import {
-  ApplicationTrackerController,
-  type ReadApplicationOptions,
-} from './store/applicationTrackerController';
+  createApplicationTrackerMethods,
+  type ApplicationTrackerMethods,
+} from './sqliteCandidateStoreApplicationMethods';
 import type { CareerStrategy } from '../../shared/careerStrategy';
 import type {
   StoredVacancy,
@@ -146,6 +137,7 @@ export class SqliteCandidateStore implements CandidateStore {
       candidateMediaRepository: this.candidateMediaRepository,
       applicationTracker: this.applicationTracker,
     } = createRepositories(this.database, this.sealedText));
+    this.wireApplicationTrackerMethods();
     this.conversations = new ConversationController({
       database: this.database,
       sealedText: this.sealedText,
@@ -165,6 +157,14 @@ export class SqliteCandidateStore implements CandidateStore {
     applyMigrations(this.database, (operation) => this.transaction(operation));
     this.careerCommandRepository.recoverInterruptedProcessing(
       new Date().toISOString(),
+    );
+  }
+
+  /** See `sqliteCandidateStoreApplicationMethods.ts` for what this wires in. */
+  private wireApplicationTrackerMethods(): void {
+    Object.assign(
+      this,
+      createApplicationTrackerMethods(this.applicationTracker, (id) => this.requireCandidate(id)),
     );
   }
 
@@ -469,109 +469,24 @@ export class SqliteCandidateStore implements CandidateStore {
     return this.workPreferenceRepository.get(candidateId);
   }
 
-  listVacancyApplications(candidateId: string): VacancyApplication[] {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.listLegacy(candidateId);
-  }
-
-  recordVacancyApplication(
-    candidateId: string,
-    input: VacancyApplicationInput,
-  ): VacancyApplication {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.recordLegacy(candidateId, input);
-  }
-
-  /** Трекер откликов (B251, S1–S2). Ленивый перенос старых `applied` на первом чтении. */
-  listApplications(candidateId: string, options?: ReadApplicationOptions) {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.list(candidateId, options);
-  }
-
-  createApplication(
-    candidateId: string,
-    input: CreateApplicationInput & { manualVacancy?: VacancyApplicationSnapshot },
-  ) {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.create(candidateId, input);
-  }
-
-  patchApplication(candidateId: string, applicationId: string, input: PatchApplicationInput) {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.patch(candidateId, applicationId, input);
-  }
-
-  recordApplicationEvent(
-    candidateId: string,
-    applicationId: string,
-    input: { kind: 'follow_up_sent' | 'thank_you_sent' | 'promise'; occurredAt: string; note?: string | null },
-  ) {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.recordEvent(candidateId, applicationId, input);
-  }
-
-  applicationFunnel(candidateId: string) {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.funnel(candidateId);
-  }
-
-  linkApplicationMaterial(
-    candidateId: string,
-    applicationId: string,
-    role: ApplicationMaterialRole,
-    documentId: string,
-  ) {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.linkMaterial(candidateId, applicationId, role, documentId);
-  }
-
-  createApplicationInterview(candidateId: string, applicationId: string, input: CreateInterviewInput) {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.createInterview(candidateId, applicationId, input);
-  }
-
-  patchApplicationInterview(
-    candidateId: string,
-    applicationId: string,
-    interviewId: string,
-    input: PatchInterviewInput,
-  ) {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.patchInterview(candidateId, applicationId, interviewId, input);
-  }
-
-  putApplicationOffer(
-    candidateId: string,
-    applicationId: string,
-    terms: ApplicationOfferTerms,
-    respondBy: string | null,
-  ) {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.putOffer(candidateId, applicationId, terms, respondBy);
-  }
-
-  listVacancySkips(candidateId: string) {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.listSkips(candidateId);
-  }
-
-  createVacancySkip(
-    candidateId: string,
-    input: { clusterId: string; reasonId: SkipReasonId; origin: VacancySkipOrigin },
-  ) {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.createSkip(candidateId, input);
-  }
-
-  deleteVacancySkip(candidateId: string, clusterId: string): boolean {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.deleteSkip(candidateId, clusterId);
-  }
-
-  listVacancyDecisions(candidateId: string) {
-    this.requireCandidate(candidateId);
-    return this.applicationTracker.listVacancyDecisions(candidateId);
-  }
+  // Every application-tracker method (B251, S1–S2) is wired in by the
+  // constructor from `sqliteCandidateStoreApplicationMethods.ts`, which keeps
+  // this file under the 800-line gate. See that file for the implementations.
+  declare listVacancyApplications: ApplicationTrackerMethods['listVacancyApplications'];
+  declare recordVacancyApplication: ApplicationTrackerMethods['recordVacancyApplication'];
+  declare listApplications: ApplicationTrackerMethods['listApplications'];
+  declare createApplication: ApplicationTrackerMethods['createApplication'];
+  declare patchApplication: ApplicationTrackerMethods['patchApplication'];
+  declare recordApplicationEvent: ApplicationTrackerMethods['recordApplicationEvent'];
+  declare applicationFunnel: ApplicationTrackerMethods['applicationFunnel'];
+  declare linkApplicationMaterial: ApplicationTrackerMethods['linkApplicationMaterial'];
+  declare createApplicationInterview: ApplicationTrackerMethods['createApplicationInterview'];
+  declare patchApplicationInterview: ApplicationTrackerMethods['patchApplicationInterview'];
+  declare putApplicationOffer: ApplicationTrackerMethods['putApplicationOffer'];
+  declare listVacancySkips: ApplicationTrackerMethods['listVacancySkips'];
+  declare createVacancySkip: ApplicationTrackerMethods['createVacancySkip'];
+  declare deleteVacancySkip: ApplicationTrackerMethods['deleteVacancySkip'];
+  declare listVacancyDecisions: ApplicationTrackerMethods['listVacancyDecisions'];
 
   saveWorkPreferenceRun(
     candidateId: string,
