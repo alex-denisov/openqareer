@@ -35,8 +35,8 @@ interface CardConfig {
  * `SourceChoice.profile-import` underneath (one connected platform at a
  * time — `intakeSourceLock`), the two cards only tell them apart on screen.
  */
-export function OnboardingSourceCards(props: OnboardingSourceCardsProps) {
-  const cards: CardConfig[] = [
+function buildCards(props: OnboardingSourceCardsProps): CardConfig[] {
+  return [
     {
       id: 'pdf',
       icon: UploadSimple,
@@ -70,7 +70,10 @@ export function OnboardingSourceCards(props: OnboardingSourceCardsProps) {
       onClick: props.onChooseTalk,
     },
   ];
+}
 
+export function OnboardingSourceCards(props: OnboardingSourceCardsProps) {
+  const cards = buildCards(props);
   return (
     <div className="career-onboarding-source-grid" role="group" aria-label="Источник опыта">
       {cards.map((card) => (

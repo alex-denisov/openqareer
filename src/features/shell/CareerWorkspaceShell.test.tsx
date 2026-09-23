@@ -118,7 +118,7 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    expect(html).toContain('С чем разобраться?');
+    expect(html).toContain('С чем разбираемся?');
     expect(html).not.toContain('Начать диагностику');
     expect(html).not.toContain('Карьерный кабинет');
   });
@@ -187,7 +187,7 @@ describe('CareerWorkspaceShell', () => {
     // The diagnostic opens on its first question: the welcome screen that used
     // to stand in front of it, and its «Не заполнен» status board, are gone
     // (B169 §4). Nothing else about the first-time shell changed.
-    expect(html).toContain('С чем разобраться?');
+    expect(html).toContain('С чем разбираемся?');
     expect(html).not.toContain('Начать диагностику');
     expect(html).not.toContain('Профиль</span><strong>Не заполнен</strong>');
     expect(html).not.toContain('Посмотреть демо');

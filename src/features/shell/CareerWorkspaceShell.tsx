@@ -12,7 +12,7 @@ import {
 import type { AuthUser } from '../coach/coachApi';
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
 import { CareerExpertPanel } from '../journey/CareerExpertPanel';
-import { CareerIntake } from '../journey/CareerIntake';
+import { OnboardingWizard } from '../journey/OnboardingWizard';
 import {
   CareerMapView,
   OpportunitiesView,
@@ -482,11 +482,10 @@ export function CareerWorkspaceShell({
           ) : null}
 
           {intakeVisible ? (
-            <CareerIntake
+            <OnboardingWizard
               key={`intake-${intakeSeed}`}
               onComplete={completeIntake}
               hasAccount={Boolean(session)}
-              onOpenAccount={() => setAccountOpen(true)}
               onStartedChange={setIntakeStarted}
             />
           ) : null}
