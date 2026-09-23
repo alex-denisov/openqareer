@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  bindConnectorAccount,
   closeConnectorSession,
+  connectorAccountKey,
   looksLikeHhLoginPage,
   looksLikeHhVpnBlock,
   looksLikeLinkedInLoginPage,
@@ -163,6 +165,25 @@ describe('session window commands in the desktop shell', () => {
       'reset_connector_session',
       'resize_connector_session',
     ]);
+  });
+
+  it('binds sign-in windows to a hashed account key and unbinds on sign-out (INC-039)', async () => {
+    const calls = useDesktop(() => true);
+
+    await expect(bindConnectorAccount('Adenisov.Test')).resolves.toBe(true);
+    await bindConnectorAccount(null);
+
+    const key = await connectorAccountKey('adenisov.test');
+    expect(key).toMatch(/^[0-9a-f]{64}$/);
+    expect(key).not.toBe(await connectorAccountKey('test1'));
+    expect(calls).toEqual([
+      { cmd: 'bind_connector_account', args: { accountKey: key } },
+      { cmd: 'bind_connector_account', args: { accountKey: null } },
+    ]);
+  });
+
+  it('explains a window opened before the account was bound', () => {
+    expect(sessionOpenFailureMessage('linkedin', 'account_not_bound')).toContain('кабинету');
   });
 
   it('opens a managed LinkedIn account with its own session key', async () => {

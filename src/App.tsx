@@ -25,6 +25,7 @@ import {
   resolvedDesktopSessionPath,
 } from './features/site/desktopSessionRouting';
 import { isTauriEnvironment } from './services/desktop/desktopBridge';
+import { bindConnectorAccount } from './features/connections/connectorSession';
 import {
   clearWorkspace,
   loadWorkspace,
@@ -34,10 +35,7 @@ import {
   type CandidateWorkspace,
   type WorkspaceInput,
 } from './features/workspace/workspaceStorage';
-import {
-  importCandidateResume,
-  type ResumeImportSource,
-} from './features/resume/resumeApi';
+import { importCandidateResume, type ResumeImportSource } from './features/resume/resumeApi';
 
 function importSourceOf(source: WorkspaceInput['resumeSource']): ResumeImportSource {
   if (source === 'linkedin-pdf') return 'linkedin';
@@ -84,7 +82,8 @@ export default function App() {
   const resolveSession = useCallback(async () => {
     const revision = ++sessionRevision.current;
     const token = getStoredSessionToken();
-    const isCurrent = () => revision === sessionRevision.current && token === getStoredSessionToken();
+    const isCurrent = () =>
+      revision === sessionRevision.current && token === getStoredSessionToken();
     setSessionError(undefined);
     // The desktop companion has no useful anonymous workspace: its only
     // session credential is the bearer token stored by auth responses. Do not
@@ -99,10 +98,7 @@ export default function App() {
     try {
       const session = await getSession();
       if (!isCurrent()) return;
-      const result = loadWorkspace(
-        window.localStorage,
-        session?.candidateId ?? null,
-      );
+      const result = loadWorkspace(window.localStorage, session?.candidateId ?? null);
       // Browser storage is a cache. Sign-out clears it and a different browser
       // never had it, so a signed-in candidate whose cache is empty is read
       // back from the server instead of being treated as brand new with every
@@ -141,10 +137,21 @@ export default function App() {
     }
   }, [currentPath, isDesktop, navigate]);
 
+  // Окна входа LinkedIn и hh.ru живут в хранилище своего аккаунта: общее
+  // хранилище показывало второму аккаунту сессию первого (INC-039).
+  const connectorAccount =
+    state.session === undefined ? undefined : (state.session?.username ?? null);
+  useEffect(() => {
+    if (!isDesktop || connectorAccount === undefined) return;
+    void bindConnectorAccount(connectorAccount).catch(() => false);
+  }, [isDesktop, connectorAccount]);
+
   useEffect(() => {
     document.getElementById('root')?.removeAttribute('aria-busy');
     void resolveSession();
-    return () => { sessionRevision.current += 1; };
+    return () => {
+      sessionRevision.current += 1;
+    };
   }, [resolveSession]);
 
   // Первый `401` с кандидатского маршрута при показанном профиле: сессия истекла
@@ -186,10 +193,7 @@ export default function App() {
       ) {
         return;
       }
-      const result = loadWorkspace(
-        window.localStorage,
-        state.session?.candidateId ?? null,
-      );
+      const result = loadWorkspace(window.localStorage, state.session?.candidateId ?? null);
       setState((current) => ({
         ...current,
         workspace: result.status === 'ready' ? result.workspace : undefined,
@@ -203,11 +207,7 @@ export default function App() {
   function persist(workspace: CandidateWorkspace) {
     try {
       if (state.session?.candidateId) {
-        saveWorkspace(
-          window.localStorage,
-          workspace,
-          state.session.candidateId,
-        );
+        saveWorkspace(window.localStorage, workspace, state.session.candidateId);
         // Write through, so the answers survive this browser.
         void putCandidateWorkspace(workspaceInputOf(workspace)).catch(() => {
           setStorageError(
@@ -275,9 +275,7 @@ export default function App() {
         invalidStorage: false,
       }));
     } catch {
-      setStorageError(
-        'Браузер не разрешил удалить запись. Очистите данные сайта в настройках.',
-      );
+      setStorageError('Браузер не разрешил удалить запись. Очистите данные сайта в настройках.');
     }
   }
 
@@ -313,11 +311,7 @@ export default function App() {
     }
     if (currentPath === '/signup') {
       return (
-        <SignupPage
-          onNavigate={navigate}
-          onSessionChange={handleSessionChange}
-          nextPath="/app"
-        />
+        <SignupPage onNavigate={navigate} onSessionChange={handleSessionChange} nextPath="/app" />
       );
     }
     if (currentPath === '/reset-password') {
@@ -359,29 +353,19 @@ export default function App() {
   if (isAuthPath(currentPath)) {
     if (isDesktop) {
       if (isResolvingSession) {
-        return (
-          <AppErrorBoundary>
-            {renderWorkspace(true)}
-          </AppErrorBoundary>
-        );
+        return <AppErrorBoundary>{renderWorkspace(true)}</AppErrorBoundary>;
       }
       return (
         <AppErrorBoundary>
           <div className="desktop-app-container">
             {renderWorkspace(true)}
-            <div className="desktop-auth-overlay">
-              {renderAuthContent()}
-            </div>
+            <div className="desktop-auth-overlay">{renderAuthContent()}</div>
           </div>
         </AppErrorBoundary>
       );
     }
 
-    return (
-      <AppErrorBoundary>
-        {renderAuthContent()}
-      </AppErrorBoundary>
-    );
+    return <AppErrorBoundary>{renderAuthContent()}</AppErrorBoundary>;
   }
 
   const legalSlug = legalSlugFromPath(currentPath);

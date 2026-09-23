@@ -158,6 +158,24 @@ export async function closeConnectorSession(
   });
 }
 
+/** Hex SHA-256 of the account, so the desktop store key carries no username. */
+export async function connectorAccountKey(username: string): Promise<string> {
+  const bytes = new TextEncoder().encode(`openqareer-connector:${username.toLowerCase()}`);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Gives every OpenQareer account its own LinkedIn and hh.ru sign-in store; the
+ * shared WebView store showed one account's LinkedIn session to another
+ * (INC-039). `null` on sign-out closes the previous account's windows.
+ */
+export async function bindConnectorAccount(username: string | null): Promise<boolean> {
+  if (!isTauriEnvironment()) return false;
+  const accountKey = username ? await connectorAccountKey(username) : null;
+  return (await invokeDesktopCommand<boolean>('bind_connector_account', { accountKey })) === true;
+}
+
 export async function resetConnectorSession(platform: ConnectionPlatform): Promise<boolean> {
   if (!isTauriEnvironment()) return false;
   return (await invokeDesktopCommand<boolean>('reset_connector_session', { platform })) === true;
@@ -189,6 +207,8 @@ export function sessionOpenFailureMessage(platform: ConnectionPlatform, reason?:
       return `Адрес входа ${name} не прошёл проверку безопасности. Обновите приложение до свежей версии.`;
     case 'no_window_environment':
       return `Окно входа ${name} можно открыть только в приложении или браузере.`;
+    case 'account_not_bound':
+      return `Окно входа ${name} ещё не привязано к вашему кабинету. Подождите пару секунд и повторите попытку.`;
     case 'window_not_registered':
       return `Окно входа ${name} создалось, но приложение не получило к нему доступ. Перезапустите OpenQareer и повторите попытку или загрузите PDF-резюме.`;
     default:

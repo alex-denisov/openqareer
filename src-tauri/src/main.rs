@@ -9,12 +9,12 @@ mod tunnel_manager;
 
 use automation_worker::{execute_candidate_action_safely, LocalActionRequest, LocalActionResult};
 use connector_session::{
-    close_managed_session_window, close_orphaned_session_windows, close_session_window,
-    inspect_session_page, inspect_session_page_for, is_managed_session_window_open,
-    is_session_window_open, open_session_window, read_session_page, reset_session_window,
-    resize_session_window, resize_session_window_for, should_route_through_tunnel,
-    SessionInspectionReport, SessionLayout, SessionPageReport, SessionWindowReport,
-    SessionWindowRequest,
+    bind_candidate_account, close_managed_session_window, close_orphaned_session_windows,
+    close_session_window, inspect_session_page, inspect_session_page_for,
+    is_managed_session_window_open, is_session_window_open, open_session_window, read_session_page,
+    reset_session_window, resize_session_window, resize_session_window_for,
+    should_route_through_tunnel, CandidateSessionAccount, SessionInspectionReport, SessionLayout,
+    SessionPageReport, SessionWindowReport, SessionWindowRequest,
 };
 use network_probe::{evaluate_network_environment, NetworkEnvironmentStatus};
 use serde::{Deserialize, Serialize};
@@ -206,6 +206,13 @@ fn close_connector_session(app: AppHandle, platform: String, session_key: Option
     }
 }
 
+/// Binds the candidate's sign-in windows to the signed-in OpenQareer account
+/// (a SHA-256 hex digest), or unbinds them on sign-out (INC-039).
+#[tauri::command]
+fn bind_connector_account(app: AppHandle, account_key: Option<String>) -> Result<bool, String> {
+    bind_candidate_account(&app, account_key)
+}
+
 #[tauri::command]
 async fn reset_connector_session(app: AppHandle, platform: String) -> bool {
     reset_session_window(&app, &platform).await
@@ -315,6 +322,7 @@ fn main() {
             close_orphaned_session_windows(&webview.app_handle().clone(), webview.label());
         })
         .manage(app_state)
+        .manage(CandidateSessionAccount::default())
         .invoke_handler(tauri::generate_handler![
             probe_network_status,
             get_tunnel_status,
@@ -322,6 +330,7 @@ fn main() {
             stop_tunnel,
             execute_local_action,
             desktop_native_fetch,
+            bind_connector_account,
             open_connector_session,
             is_connector_session_open,
             close_connector_session,

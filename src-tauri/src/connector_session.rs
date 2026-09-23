@@ -275,6 +275,73 @@ fn managed_data_directory(app: &AppHandle, session_key: &str) -> Result<PathBuf,
     Ok(directory)
 }
 
+/// The OpenQareer account the candidate sign-in windows belong to. Every
+/// account gets its own WebView store: the default store is shared by the whole
+/// app, so a second account on the same Mac saw the first one's LinkedIn
+/// session (INC-039).
+#[derive(Default)]
+pub struct CandidateSessionAccount(Mutex<Option<String>>);
+
+const CANDIDATE_ACCOUNT_KEY_LENGTH: usize = 64;
+
+fn is_valid_account_key(key: &str) -> bool {
+    key.len() == CANDIDATE_ACCOUNT_KEY_LENGTH
+        && key
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+fn account_store_identifier(key: &str) -> Result<[u8; 16], String> {
+    let mut identifier = [0u8; 16];
+    for (index, slot) in identifier.iter_mut().enumerate() {
+        *slot = u8::from_str_radix(&key[index * 2..index * 2 + 2], 16)
+            .map_err(|_| "account_key_invalid".to_string())?;
+    }
+    Ok(identifier)
+}
+
+/// Binds candidate sessions to an account. A change of account closes the
+/// previous account's windows so none of them outlives the sign-out.
+pub fn bind_candidate_account(app: &AppHandle, key: Option<String>) -> Result<bool, String> {
+    if key
+        .as_deref()
+        .is_some_and(|value| !is_valid_account_key(value))
+    {
+        return Err("account_key_invalid".to_string());
+    }
+    let state = app.state::<CandidateSessionAccount>();
+    let mut current = state
+        .0
+        .lock()
+        .map_err(|_| "account_state_unavailable".to_string())?;
+    if *current != key {
+        close_session_window(app, "linkedin");
+        close_session_window(app, "hh");
+        *current = key;
+    }
+    Ok(current.is_some())
+}
+
+fn candidate_store(app: &AppHandle) -> Result<(PathBuf, [u8; 16]), String> {
+    let key = app
+        .state::<CandidateSessionAccount>()
+        .0
+        .lock()
+        .map_err(|_| "account_state_unavailable".to_string())?
+        .clone()
+        .ok_or_else(|| "account_not_bound".to_string())?;
+    let identifier = account_store_identifier(&key)?;
+    let directory = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("candidate_session_data_dir_unavailable: {error}"))?
+        .join("candidate-sessions")
+        .join(&key[..32]);
+    create_dir_all(&directory)
+        .map_err(|error| format!("candidate_session_data_dir_create_failed: {error}"))?;
+    Ok((directory, identifier))
+}
+
 /// How long a freshly built window may take to appear in the manager before the
 /// report stops calling it opened. The window is created on the main thread
 /// while this command runs on a worker, so "build returned Ok" is not yet
@@ -407,6 +474,20 @@ pub async fn open_session_window(
         if let Some(identifier) = data_store_identifier {
             builder = builder.data_store_identifier(identifier);
         }
+    } else {
+        let (data_directory, identifier) = match candidate_store(app) {
+            Ok(store) => store,
+            Err(reason) => {
+                return SessionWindowReport {
+                    opened: false,
+                    label,
+                    reason: Some(reason),
+                }
+            }
+        };
+        builder = builder
+            .data_directory(data_directory)
+            .data_store_identifier(identifier);
     }
 
     // Candidate sessions are borderless overlays hosted by the wizard. A pool
@@ -580,9 +661,14 @@ async fn open_hidden_session_window(app: &AppHandle, platform: &str, label: &str
     let Some(url) = platform_root_url(platform).and_then(|raw| Url::parse(raw).ok()) else {
         return false;
     };
+    let Ok((data_directory, identifier)) = candidate_store(app) else {
+        return false;
+    };
     let allowed = platform.to_string();
     let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
         .title(format!("OpenQareer · {}", platform_name(platform)))
+        .data_directory(data_directory)
+        .data_store_identifier(identifier)
         .inner_size(480.0, 360.0)
         .visible(false)
         .skip_taskbar(true)
@@ -798,6 +884,26 @@ return body.length>2000000?'__OPENQAREER_PAGE_TOO_LARGE__':body;\
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_account_key_maps_to_its_own_store_identifier() {
+        let first = "a".repeat(64);
+        let second = format!("b{}", "a".repeat(63));
+        assert!(is_valid_account_key(&first));
+        assert_ne!(
+            account_store_identifier(&first).unwrap(),
+            account_store_identifier(&second).unwrap()
+        );
+        assert_eq!(account_store_identifier(&first).unwrap(), [0xaa; 16]);
+    }
+
+    #[test]
+    fn an_account_key_must_be_a_lowercase_sha256_digest() {
+        assert!(!is_valid_account_key("adenisov.test"));
+        assert!(!is_valid_account_key(&"A".repeat(64)));
+        assert!(!is_valid_account_key(&"a".repeat(63)));
+        assert!(!is_valid_account_key(&format!("../{}", "a".repeat(61))));
+    }
 
     #[test]
     fn the_reset_only_window_stays_inside_the_platforms_own_origins() {
