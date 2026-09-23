@@ -7069,8 +7069,8 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
-  margin-top: 14px;
-  margin-bottom: 16px;
+  margin-top: 8px;
+  margin-bottom: 8px;
 }
 
 @media (max-width: 640px) {
@@ -12629,14 +12629,14 @@
 .career-onboarding-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--career-space-4);
+  justify-content: flex-end;
+  margin-bottom: var(--career-space-3);
 }
 
 .career-onboarding-dots {
   display: flex;
   gap: 8px;
-  margin: 0 0 var(--career-space-5);
+  margin: 0 0 var(--career-space-3);
   padding: 0;
   list-style: none;
 }
@@ -12659,8 +12659,8 @@
 .career-onboarding-source-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
-  gap: var(--career-space-4);
-  margin: var(--career-space-5) 0;
+  gap: var(--career-space-3);
+  margin: var(--career-space-4) 0;
 }
 
 .career-onboarding-source-card {
@@ -12668,7 +12668,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--career-space-2);
-  padding: var(--career-space-5);
+  padding: var(--career-space-4);
   border-radius: var(--career-radius-md);
   border: 1px solid var(--career-line);
   background: var(--career-surface);
@@ -12874,6 +12874,7 @@
 
 .career-onboarding-format-row {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--career-space-2);
   margin-top: var(--career-space-4);
 }

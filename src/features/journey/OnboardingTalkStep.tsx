@@ -24,7 +24,7 @@ export function OnboardingTalkStep(props: OnboardingTalkStepProps) {
           value={props.tasks}
           onChange={(event) => props.onChange({ tasks: event.target.value })}
           placeholder="Например: вёл переговоры с 12 поставщиками, отвечал за бюджет отдела…"
-          rows={3}
+          rows={2}
         />
       </label>
       <label className="career-onboarding-qa-item">
@@ -33,7 +33,7 @@ export function OnboardingTalkStep(props: OnboardingTalkStepProps) {
           value={props.change}
           onChange={(event) => props.onChange({ change: event.target.value })}
           placeholder="Например: меньше операционки, больше стратегии"
-          rows={3}
+          rows={2}
         />
       </label>
       <label className="career-onboarding-qa-item">
@@ -41,7 +41,7 @@ export function OnboardingTalkStep(props: OnboardingTalkStepProps) {
         <textarea
           value={props.successMeasure}
           onChange={(event) => props.onChange({ successMeasure: event.target.value })}
-          rows={3}
+          rows={2}
         />
       </label>
     </div>

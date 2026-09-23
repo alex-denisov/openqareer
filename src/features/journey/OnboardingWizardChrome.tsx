@@ -17,8 +17,10 @@ export function OnboardingWizardChrome(props: OnboardingWizardChromeProps) {
   const dots = Array.from({ length: props.step.total }, (_, index) => index + 1);
   return (
     <header className="career-onboarding-header">
+      {/* The shell's own rail already carries the wordmark (`BrandMark`); a
+          second one here only spent vertical space onboarding.html does not
+          have to share with the rest of the app's chrome. */}
       <div className="career-onboarding-top">
-        <span className="career-eyebrow">openqareer</span>
         <button type="button" className="career-quiet-button" onClick={props.onSkip}>
           Отложить настройку
         </button>

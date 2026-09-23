@@ -127,7 +127,7 @@ export function IntakeSourceStep(props: IntakeSourceStepProps) {
             value={props.resumeText}
             onChange={(event) => props.onResumeText(event.target.value)}
             placeholder="Например: чем вы управляли, что изменили, с кем работали и за какой результат отвечали."
-            rows={8}
+            rows={4}
           />
         </label>
       ) : null}

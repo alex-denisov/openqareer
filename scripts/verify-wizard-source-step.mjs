@@ -182,6 +182,10 @@ const EXPECTED_REGIONS = ['Россия', 'СНГ', 'US', 'EU', 'MENA', 'APAC', 
 async function checkRegionsOnStepFive(page, viewport) {
   await page.getByRole('button', { name: 'Сменить источник' }).click();
   await page.getByRole('button', { name: 'Расскажу сам' }).click();
+  await page.getByRole('button', { name: /Продолжить/u }).click();
+  await page
+    .getByRole('heading', { name: 'Три вопроса о последней роли' })
+    .waitFor({ timeout: 10000 });
   const [q1, q2, q3] = await page.getByRole('textbox').all();
   await q1.fill(
     'Руководил продуктовой командой из восьми человек и отвечал за выручку направления.',
@@ -273,7 +277,7 @@ async function webWalk(browser, baseUrl, viewport) {
   await reachSourceStep(page, baseUrl);
   await checkWebOffersNoPlatformLogin(page, viewport);
   await checkSourceLockSitsUnderItsSource(page, viewport);
-  await checkRegionsOnStepThree(page, viewport);
+  await checkRegionsOnStepFive(page, viewport);
   await context.close();
 }
 

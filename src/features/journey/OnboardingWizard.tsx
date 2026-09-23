@@ -113,7 +113,7 @@ export function OnboardingWizard({
   }, [error]);
 
   useEffect(() => {
-    if (!hasAccount || ingested) return;
+    if (!hasAccount || sourceChoice !== 'profile-import' || ingested) return;
     let active = true;
     void getConnections()
       .then((connections) => {
@@ -125,7 +125,7 @@ export function OnboardingWizard({
     return () => {
       active = false;
     };
-  }, [hasAccount, ingested]);
+  }, [hasAccount, sourceChoice, ingested]);
 
   const sourceLock = intakeSourceLock({
     ingestedSource: ingested?.source,
