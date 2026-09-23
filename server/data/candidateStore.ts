@@ -204,6 +204,13 @@ export interface MemoryChange {
 export interface ResumeEvidenceImport {
   /** Shown in the conversation so the candidate sees where the facts came from. */
   readonly sourceLabel: string;
+  /**
+   * A stable identifier of the source document (candidate-scoped hash of its
+   * raw text). Reimporting the same digest reuses the same conversation
+   * message instead of appending a duplicate "Импорт: ..." line (B247 S6).
+   * Omitted callers keep the old always-insert behaviour.
+   */
+  readonly sourceDigest?: string;
   readonly entries: ReadonlyArray<{
     readonly memoryId: string;
     readonly domain: StoredMemory['domain'];

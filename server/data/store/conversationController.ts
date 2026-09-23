@@ -235,9 +235,30 @@ export class ConversationController {
     input: ResumeEvidenceImport,
   ): ImportedResumeEvidence {
     const conversationId = this.conversationId(candidateId);
-    const messageId = randomUUID();
+    // A digest ties the announcement message to its document: reimporting the
+    // exact same document reuses the same message id, so the history gets one
+    // update instead of a fresh "Импорт: ..." line every retry (B247 S6). No
+    // digest (older callers) keeps the previous always-insert behaviour.
+    const messageId = input.sourceDigest
+      ? `resume-import:${input.sourceDigest}`
+      : randomUUID();
     const now = new Date().toISOString();
     const memoryIds: string[] = [];
+    if (input.sourceDigest) {
+      // Reusing the message id means the prior reading's untouched facts are
+      // sourced from the very id this call is about to reuse — clear them
+      // before inserting the fresh ones, or the dossier doubles under new
+      // ids (the same failure mode B162 fixed for the file-replace path). Only
+      // facts still awaiting review go: re-reading the very same document must
+      // not undo a confirmation or correction the candidate already made.
+      this.database
+        .prepare(
+          `DELETE FROM memory
+           WHERE candidate_id = ? AND status = 'proposed'
+             AND source_message_ids = ?`,
+        )
+        .run(candidateId, JSON.stringify([messageId]));
+    }
     this.insertMessage(
       candidateId,
       conversationId,
@@ -498,11 +519,16 @@ export class ConversationController {
     content: string,
     createdAt: string,
   ): void {
+    // Every caller except the resume-import digest path mints a fresh random
+    // id, so ON CONFLICT never fires for them. The digest path (B247 S6)
+    // deliberately reuses an id to update the existing announcement message
+    // in place — its position in the history (created_at) is left untouched.
     this.database
       .prepare(
         `INSERT INTO messages
           (id, candidate_id, conversation_id, role, body_cipher, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (candidate_id, id) DO UPDATE SET body_cipher = excluded.body_cipher`,
       )
       .run(
         messageId,

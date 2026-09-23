@@ -439,6 +439,7 @@ function resumeImportCommit(
   return {
     evidence: {
       sourceLabel: resumeImportLabel(body.source, body.fileName),
+      sourceDigest: resumeDocumentDigest(candidateId, body.source, body.text),
       entries: plan.evidence.map((item) => ({
         memoryId: item.memoryId,
         domain: item.domain,
@@ -453,6 +454,25 @@ function resumeImportCommit(
         }
       : undefined,
   };
+}
+
+/**
+ * Identifies the imported document for the candidate, so a re-upload of the
+ * same file updates its "Импорт: ..." history line instead of adding another
+ * one (B247 S6).
+ */
+function resumeDocumentDigest(
+  candidateId: string,
+  source: z.infer<typeof resumeImportSchema>['source'],
+  text: string,
+): string {
+  return createHash('sha256')
+    .update(candidateId)
+    .update('\0')
+    .update(source)
+    .update('\0')
+    .update(text)
+    .digest('hex');
 }
 
 function nativeImportDigest(
