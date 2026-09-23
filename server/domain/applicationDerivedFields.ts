@@ -17,6 +17,8 @@ export interface ApplicationInterviewSummary {
   readonly prepStatus: StoredApplicationInterview['prepStatus'];
 }
 
+export interface ApplicationView extends StoredApplication, ApplicationDerivedFields {}
+
 export interface ApplicationDerivedFields {
   readonly followUp: FollowUpStatus | null;
   readonly whoseTurn: ApplicationTurn;

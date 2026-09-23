@@ -433,6 +433,23 @@ export class SqliteApplicationRepository {
     );
   }
 
+  /** `PUT /applications/:id/materials/:role`: records the link as a `material` event. */
+  recordMaterialEvent(
+    candidateId: string,
+    applicationId: string,
+    role: 'cover_letter' | 'resume',
+    documentId: string,
+    now = new Date().toISOString(),
+  ): void {
+    this.insertEvent(
+      candidateId,
+      applicationId,
+      { kind: 'material', fromStage: null, toStage: null, occurredAt: now, provenance: 'candidate' },
+      now,
+      this.sealedText.seal(JSON.stringify({ role, documentId }), eventAssociatedData(candidateId, applicationId)),
+    );
+  }
+
   listEvents(candidateId: string, applicationId: string): StoredApplicationEvent[] {
     const rows = this.database
       .prepare(
