@@ -36,11 +36,12 @@ export async function runCjm6(outDir) {
 
   await run.step('search-funnel', {
     wait: 4000,
-    note: 'Воронка/этапы в разделе «Поиск» — есть ли учёт статусов и follow-up',
+    note: 'Воронка/этапы через шаг «Роль» индикатора пути — есть ли учёт статусов и follow-up',
     act: async (page) => {
+      // «Поиск» has no rail item in the B248 IA; it opens from the path
+      // indicator's «Роль» step, which every campaign screen carries.
       await page
-        .locator('nav')
-        .getByRole('button', { name: /^Поиск/ })
+        .getByRole('button', { name: /^Роль\./ })
         .first()
         .click();
     },

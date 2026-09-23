@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
+  CaretRight,
   DownloadSimple,
   Key,
   ShieldCheck,
@@ -46,6 +47,12 @@ interface CareerAccountPanelProps {
   onClose: () => void;
   onIdentityChange: (session: AuthUser | null) => void;
   onDataChanged?: () => void;
+  /** B248 (owner decision 2026-09-23) — tariffs opened from this panel, not
+   * a separate rail item. Opens the existing full-screen «Тарифы» screen. */
+  onOpenTariffs?: () => void;
+  tariffsPlanName?: string;
+  tariffsAvailable?: boolean;
+  tariffsLockedReason?: string;
 }
 
 type AuthMode = 'choose' | 'login' | 'register' | 'forgot' | 'reset';
@@ -73,12 +80,19 @@ export function CareerAccountPanel({
   onClose,
   onIdentityChange,
   onDataChanged,
+  onOpenTariffs,
+  tariffsPlanName,
+  tariffsAvailable = false,
+  tariffsLockedReason,
 }: CareerAccountPanelProps) {
   const resetToken = resetTokenFromLocation();
   const [user, setUser] = useState<AuthUser | null | undefined>(initialUser);
   const [account, setAccount] = useState<AccountSnapshot>();
   const [mode, setMode] = useState<AuthMode>(() => (resetToken ? 'reset' : 'choose'));
-  const [section, setSection] = useState<AccountSection>('connections');
+  // B248: the panel now also opens for «Тарифы» alone (owner decision
+  // 2026-09-23). «Подключения» reads a network catalog on mount, so it must
+  // stay an explicit choice, not the tab every opening reason mounts first.
+  const [section, setSection] = useState<AccountSection>('security');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -374,6 +388,26 @@ export function CareerAccountPanel({
       </header>
 
       <div className="career-account-body">
+        {onOpenTariffs ? (
+          <button
+            type="button"
+            className="career-account-tariffs-button"
+            disabled={!tariffsAvailable}
+            onClick={onOpenTariffs}
+            aria-label={
+              !tariffsAvailable && tariffsLockedReason
+                ? `Тарифы. ${tariffsLockedReason}`
+                : `Тарифы, текущий план «${tariffsPlanName}»`
+            }
+            title={!tariffsAvailable ? (tariffsLockedReason ?? 'Тарифы') : 'Тарифы'}
+          >
+            <span>
+              <b>Тарифы</b>
+              <span>план «{tariffsPlanName}»</span>
+            </span>
+            <CaretRight size={16} aria-hidden="true" />
+          </button>
+        ) : null}
         {user === undefined ? <p>Проверяем сессию…</p> : null}
         {user ? (
           <AuthenticatedAccount

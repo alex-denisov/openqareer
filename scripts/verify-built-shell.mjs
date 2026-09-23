@@ -850,7 +850,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   const shell = page.getByTestId('career-shell');
   await shell.waitFor({ state: 'visible', timeout: 10_000 });
 
-  for (const label of ['Главная', 'Поиск', 'Вакансии']) {
+  for (const label of ['Сегодня', 'Профиль', 'Вакансии', 'Отклики', 'Консультант']) {
     assert(
       (await page.locator(`button[aria-label="${label}"]`).count()) >= 2,
       `${viewport.name}: invariant navigation is missing ${label}`,
@@ -869,7 +869,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // candidate himself — the dossier with the recommendation and the assessment
   // beside it — while the strategist dialogue stays in the «Эксперт» drawer and
   // the campaign stays in «Поиске» and the collected pool in «Вакансиях».
-  await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
   await page.locator('.career-profile-surface').first().waitFor();
   // «Главная» показывает сам профиль: место работы из разобранного резюме с
   // периодом и счётом измеримых пунктов, а не очередь подтверждения (B179).
@@ -933,7 +933,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await expert.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
   await expert.waitFor({ state: 'hidden' });
 
-  await page.locator('button[aria-label="Поиск"]:visible').click();
+  // «Поиск» has no rail item in the B248 IA; it opens from the path
+  // indicator's «Роль» step, which every campaign screen carries.
+  await page.getByRole('button', { name: /^Роль\./ }).first().click();
   await page.getByRole('heading', { name: 'Поиск', exact: true }).waitFor();
   // «Поиск» — кампания из макета: плитки, воронка, очередь и автоматизация по
   // тарифу (B179).
@@ -1083,19 +1085,21 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // Доказательство создания: панель перешла к самой выборке с её запросом.
   await page.locator('.career-market-query-row strong').getByText('product manager').waitFor();
 
-  await page.locator('button[aria-label="Поиск"]:visible').click();
+  // «Поиск» has no rail item in the B248 IA; it opens from the path
+  // indicator's «Роль» step, which every campaign screen carries.
+  await page.getByRole('button', { name: /^Роль\./ }).first().click();
   await page.getByRole('heading', { name: 'Поиск', exact: true }).waitFor();
   await page.screenshot({
     path: `output/playwright/b178-search-${viewport.name}.png`,
     fullPage: true,
   });
-  await page.locator('button[aria-label="Главная"]:visible').click();
-  await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
+  await page.locator('button[aria-label="Сегодня"]:visible').click();
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
   const profileFactReview =
     (await page.locator('.career-profile-surface').count()) === 1;
   assert(
     profileFactReview,
-    `${viewport.name}: candidate profile surface missing on «Главной»`,
+    `${viewport.name}: candidate profile surface missing on «Сегодня»`,
   );
   // Раздела «Резюме» в рельсе больше нет — макет его не держит. Сборка
   // резюме открывается из «Документы» на «Главной» (B179).
@@ -1121,8 +1125,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
   );
   await mkdir('output/playwright', { recursive: true });
   await page.screenshot({ path: `output/playwright/resume-source-${viewport.name}.png` });
-  await page.locator('button[aria-label="Главная"]:visible').click();
-  await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
+  await page.locator('button[aria-label="Сегодня"]:visible').click();
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
   // «Главная» вернулась к самому кандидату: карточка места работы из резюме и
   // кольцо оценки, посчитанное по этому же профилю (B179).
   const reasonedAction =
@@ -1130,20 +1134,23 @@ async function verifyViewport(browser, baseUrl, viewport) {
     (await page.locator('.career-score-number').count()) === 1;
   assert(
     reasonedAction,
-    `${viewport.name}: «Главная» does not show the parsed profile`,
+    `${viewport.name}: «Сегодня» does not show the parsed profile`,
   );
 
-  const tariffsButton = page
-    .locator(
-      // «Пульт»: тариф в рельсе — карточка плана, а не пункт меню.
-      '.career-mobile-tariffs:visible, .career-rail-bottom .career-plan-card:visible',
-    )
-    .first();
-  await tariffsButton.click();
+  // B248 (owner decision 2026-09-23): the rail no longer carries its own
+  // plan card. Narrow screens keep the topbar's «Тарифы» link (point 4 of
+  // the owner's review); everywhere else it opens from the account panel.
+  const mobileTariffs = page.locator('.career-mobile-tariffs:visible').first();
+  if (await mobileTariffs.count()) {
+    await mobileTariffs.click();
+  } else {
+    await page.locator('button[aria-label="Открыть аккаунт"]:visible').first().click();
+    await page.locator('.career-account-tariffs-button').click();
+  }
   await page.getByRole('heading', { name: 'Сколько делать за вас' }).waitFor();
   assert(
-    (await page.locator('button[aria-label="Главная"]:visible').count()) === 1,
-    `${viewport.name}: «Главная» disappeared after navigation`,
+    (await page.locator('button[aria-label="Сегодня"]:visible').count()) === 1,
+    `${viewport.name}: «Сегодня» disappeared after navigation`,
   );
 
   assert(
@@ -1228,7 +1235,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     'Проверяю, что смена источника удаляет факты и ссылки от ранее выбранного профиля.',
   );
   await page.getByRole('button', { name: 'Собрать карьерную картину' }).click();
-  await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
   const sourceCleanWorkspace = JSON.parse(
     await page.evaluate(() => localStorage.getItem('candidate-workspace')),
   );
@@ -1386,7 +1393,7 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
   await page.getByLabel('Логин').fill('returning.candidate');
   await page.getByLabel('Пароль').fill('returning-candidate-password');
   await page.getByRole('button', { name: 'Войти' }).click();
-  await page.getByRole('heading', { name: 'Главная', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
   const matchingOwnerRestored =
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) !== null;
   assert(

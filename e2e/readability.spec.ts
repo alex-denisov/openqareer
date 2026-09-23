@@ -19,7 +19,7 @@ import {
  * `tauri.conf.json` (1280), большого экрана (1440) и телефона (390).
  */
 
-const SECTIONS = ['Главная', 'Поиск', 'Вакансии'] as const;
+const SECTIONS = ['Сегодня', 'Роль', 'Вакансии'] as const;
 const DESKTOP_WIDTHS = [1176, 1280, 1440] as const;
 const MAX_DISTINCT_SIZES = 6;
 const MIN_FONT_PX = 13;
@@ -81,8 +81,15 @@ function measure(minFontPx: number): ReadabilityFacts {
   const viewportWidth = document.documentElement.clientWidth;
   const overflowX =
     Math.max(document.documentElement.scrollWidth, main.scrollWidth) - viewportWidth;
+  // B248 — `.career-path` is a deliberate horizontal scroller on narrow
+  // screens (the path indicator's five steps never shrink or wrap, per the
+  // owner's 2026-09-23 review). Its own box never exceeds the viewport
+  // (`overflowX` above already proves that); only its children legitimately
+  // extend past it, which is what a horizontal scroller is. Nothing else in
+  // the shell is exempt.
   const wide = [...main.querySelectorAll<HTMLElement>('*')]
     .filter((element) => element.getBoundingClientRect().right > viewportWidth + 2)
+    .filter((element) => !element.closest('.career-path'))
     .slice(0, 5)
     .map(
       (element) =>
@@ -146,6 +153,33 @@ async function mockSignedInCabinet(page: Page): Promise<string[]> {
       return route.fulfill({ json: { data: roleHypotheses } });
     }
     if (path.endsWith('/candidate/resume')) {
+      // B248, owner review 2026-09-23 — this shape used to disagree with
+      // `ResumeStudioProjection`/`ResumeEvidenceFreshness`
+      // (`server/domain/resumeStudioTypes.ts`): `evidenceFreshness.stale`
+      // is an array the surface calls `.length` on, not a boolean, and it
+      // crashed into the error boundary the moment «Профиль» started
+      // opening this screen instead of a copy of «Сегодня». The client
+      // rebuilds its own projection from the draft and never reads this
+      // one, but the shape still has to be honest.
+      const emptyDocument = {
+        kind: 'master',
+        targetRole: null,
+        contact: { fullName: null, email: null, phone: null, location: null, links: [] },
+        experience: [],
+        education: [],
+        languages: [],
+        unknowns: [],
+        conventions: {
+          country: null,
+          packVersion: null,
+          reverseChronological: true,
+          maxPages: null,
+          recommendedBulletsPerRole: null,
+          photo: 'omitted',
+          discriminatoryPii: 'omitted',
+        },
+        length: { lines: 0, pages: 1, linesPerPage: 45 },
+      };
       return route.fulfill({
         json: {
           data: {
@@ -154,8 +188,13 @@ async function mockSignedInCabinet(page: Page): Promise<string[]> {
               createdAt: candidateSnapshot.resume.createdAt,
               updatedAt: candidateSnapshot.resume.updatedAt,
             },
-            projection: { variants: [] },
-            evidenceFreshness: { stale: false, staleMemoryIds: [] },
+            projection: {
+              master: emptyDocument,
+              germanyVariant: { ...emptyDocument, kind: 'country-role' },
+              evidenceSnapshot: [],
+              excludedEvidenceIds: [],
+            },
+            evidenceFreshness: { valid: true, stale: [] },
           },
         },
       });
@@ -189,13 +228,23 @@ async function mockSignedInCabinet(page: Page): Promise<string[]> {
 }
 
 async function openSection(page: Page, label: (typeof SECTIONS)[number]): Promise<void> {
-  const rail = page.locator('aside#career-rail nav');
-  const mobile = page.locator('nav.career-mobile-nav');
-  const nav = (await rail.isVisible()) ? rail : mobile;
-  await nav.getByRole('button', { name: label, exact: true }).click();
+  if (label === 'Роль') {
+    // «Поиск» has no rail item in the B248 IA (Сегодня · Профиль · Вакансии ·
+    // Отклики · Консультант); it opens from the path indicator's «Роль»
+    // step instead (career-consultant-notes.md §2).
+    await page
+      .getByRole('button', { name: /^Роль\./ })
+      .first()
+      .click();
+  } else {
+    const rail = page.locator('aside#career-rail nav');
+    const mobile = page.locator('nav.career-mobile-nav');
+    const nav = (await rail.isVisible()) ? rail : mobile;
+    await nav.getByRole('button', { name: label, exact: true }).click();
+  }
   const landmark = {
-    Главная: page.locator('.career-profile-tabs'),
-    Поиск: page.locator('.career-campaign-tile').first(),
+    Сегодня: page.locator('.career-profile-tabs'),
+    Роль: page.locator('.career-campaign-tile').first(),
     Вакансии: page.locator('.career-vacancy-row').first(),
   }[label];
   await expect(landmark).toBeVisible();
@@ -255,6 +304,72 @@ test.describe('B232 readability gate', () => {
     expect(unmatched).toEqual([]);
   });
 
+  /**
+   * B248, owner review 2026-09-23 — the phone build once wrapped the path
+   * indicator's five steps onto two rows, and «Профиль»'s label ran into
+   * «Роль»'s dot. The mockup keeps one row and scrolls horizontally instead;
+   * this asserts that directly rather than trusting a screenshot.
+   */
+  test('the path indicator on the phone stays one row without wrapping or overlapping labels', async ({
+    page,
+  }, info) => {
+    test.skip(info.project.name !== 'mobile-390', 'phone only');
+    const unmatched = await mockSignedInCabinet(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await openSection(page, 'Сегодня');
+
+    const steps = page.locator('.career-path-step');
+    await expect(steps).toHaveCount(5);
+
+    const facts = await page.evaluate(() => {
+      const nodes = [...document.querySelectorAll<HTMLElement>('.career-path-step')];
+      const tops = nodes.map((node) => Math.round(node.getBoundingClientRect().top));
+      const dots = nodes.map((node) =>
+        node.querySelector('.career-path-dot')?.getBoundingClientRect(),
+      );
+      const labels = nodes.map((node) =>
+        node.querySelector('.career-path-label')?.getBoundingClientRect(),
+      );
+      const overlaps: string[] = [];
+      for (let i = 0; i < labels.length; i += 1) {
+        const label = labels[i];
+        if (!label) continue;
+        for (let j = 0; j < dots.length; j += 1) {
+          if (j === i) continue;
+          const dot = dots[j];
+          if (!dot) continue;
+          const ix = Math.min(label.right, dot.right) - Math.max(label.left, dot.left);
+          const iy = Math.min(label.bottom, dot.bottom) - Math.max(label.top, dot.top);
+          if (ix > 2 && iy > 2) overlaps.push(`step ${i} label × step ${j} dot`);
+        }
+      }
+      return { singleRow: new Set(tops).size === 1, tops, overlaps };
+    });
+
+    expect(facts.singleRow, JSON.stringify(facts)).toBe(true);
+    expect(facts.overlaps, JSON.stringify(facts)).toEqual([]);
+    expect(unmatched).toEqual([]);
+  });
+
+  /**
+   * B248, owner review 2026-09-23 (390px) — the rail's left-edge active tick
+   * floated between «Сегодня» and «Профиль» in the bottom nav, with nothing
+   * for it to mark there. Colour alone still names the active item.
+   */
+  test('the bottom nav carries no stray active-tick bar between icons', async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile-390', 'phone only');
+    await mockSignedInCabinet(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+
+    const beforeContent = await page
+      .locator('nav.career-mobile-nav .career-nav-button.is-active')
+      .first()
+      .evaluate((el) => getComputedStyle(el, '::before').content);
+    expect(beforeContent).toBe('none');
+  });
+
   test('the vacancy list shows twenty rows and grows on request', async ({ page }, info) => {
     test.skip(info.project.name !== 'desktop-1440', 'one browser is enough');
     await mockSignedInCabinet(page);
@@ -289,7 +404,7 @@ test.describe('B232 readability gate', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
     await page.setViewportSize({ width: 1280, height: 860 });
-    await openSection(page, 'Главная');
+    await openSection(page, 'Сегодня');
 
     const composition = await page.evaluate(() => {
       const accent = getComputedStyle(document.documentElement).getPropertyValue('--career-accent');
@@ -326,7 +441,7 @@ test.describe('B232 readability gate', () => {
     await folds.first().scrollIntoViewIfNeeded();
     await folds.first().click();
     await expect(page.locator('.career-home-fold[open] .career-ats-card')).toBeVisible();
-    await page.screenshot({ path: info.outputPath('Главная-folds-1280.png') });
+    await page.screenshot({ path: info.outputPath('Сегодня-folds-1280.png') });
   });
 
   test('vacancy actions expose focus tooltips and the pitch modal keeps keyboard focus', async ({
@@ -374,12 +489,31 @@ test.describe('B232 readability gate', () => {
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-    await openSection(page, 'Поиск');
+    await openSection(page, 'Роль');
 
     await expect(page.locator('.career-automation-list')).toHaveCount(0);
     await page.getByRole('button', { name: 'Посмотреть тарифы', exact: true }).click();
     await expect(
       page.getByRole('heading', { name: 'Сколько делать за вас', exact: true }),
     ).toBeVisible();
+  });
+
+  /**
+   * B248, owner review 2026-09-23 — a screenshot taken from an ad hoc script
+   * that never stubbed `/api/v1/candidate/resume` showed «Профиль» stuck on
+   * an error. This proves the real screen, mocked the same way every other
+   * cabinet route is here, actually renders the candidate's resume on both
+   * required widths — not an error state.
+   */
+  test('«Профиль» shows the candidate resume, not an error state', async ({ page }) => {
+    await mockSignedInCabinet(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await page.locator('button[aria-label="Профиль"]:visible').first().click();
+
+    await expect(page.getByRole('heading', { name: 'Профиль', exact: true })).toBeVisible();
+    await expect(page.getByText('Не удалось загрузить резюме')).toHaveCount(0);
+    await expect(page.getByText('FinCloud').first()).toBeVisible();
+    await expect(page.getByText('Head of Product').first()).toBeVisible();
   });
 });

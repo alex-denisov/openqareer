@@ -108,7 +108,7 @@ test.describe('B140 workspace shell and intake defects', () => {
     await waitForLiveApp(page);
 
     await expect(page.locator('.career-topbar .career-page-name')).toHaveCount(0);
-    await expect(page).toHaveTitle(/Главная/);
+    await expect(page).toHaveTitle(/Сегодня/);
   });
 
   test('step three gives every legend the same breathing room as a label', async ({ page }) => {

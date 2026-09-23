@@ -122,3 +122,59 @@ export function TariffsIcon({ size = 22, active = false }: SectionIconProps) {
     </svg>
   );
 }
+
+/**
+ * «Сегодня» (B248) — a day square with a done mark: today, decided. Verbatim
+ * from `docs/v1-release/tasks/work/B248/assets/icons.js` (`today`).
+ */
+export function TodayIcon({ size = 22 }: SectionIconProps) {
+  return (
+    <svg {...frame(size)}>
+      <rect x="3.4" y="5.2" width="17.2" height="15.4" rx="2.6" />
+      <path d="M3.4 9.6h17.2" strokeLinecap="round" />
+      <path d="M7.6 3.4v3.6M16.4 3.4v3.6" strokeLinecap="round" />
+      <path d="M8 14.6l2.3 2.3 5.1-5.1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/**
+ * «Отклики» (B248) — a small pipeline of three stages. Verbatim from
+ * `docs/v1-release/tasks/work/B248/assets/icons.js` (`responses`).
+ */
+export function ResponsesIcon({ size = 22 }: SectionIconProps) {
+  return (
+    <svg {...frame(size)}>
+      <rect x="2.6" y="4.4" width="5.4" height="15.2" rx="1.8" />
+      <rect x="9.3" y="4.4" width="5.4" height="15.2" rx="1.8" />
+      <rect x="16" y="4.4" width="5.4" height="15.2" rx="1.8" />
+      <path d="M4.4 8h2M11.1 8h2M17.8 8h2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/**
+ * «Консультант» (B248) — a speech bubble with a person inside. Verbatim from
+ * `docs/v1-release/tasks/work/B248/assets/icons.js` (`consultant`).
+ */
+export function ConsultantIcon({ size = 22 }: SectionIconProps) {
+  return (
+    <svg {...frame(size)}>
+      <path
+        d="M4 5.6h16a1.6 1.6 0 0 1 1.6 1.6v8.4a1.6 1.6 0 0 1-1.6 1.6H10.4L6 21.2V17.2H4A1.6 1.6 0 0 1 2.4 15.6V7.2A1.6 1.6 0 0 1 4 5.6Z"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="10.6" r="1.7" />
+      <path d="M8.7 14.4c.8-1.5 2-2.2 3.3-2.2s2.5.7 3.3 2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Path-indicator dot mark — verbatim `check` glyph from B248's icon sprite. */
+export function PathCheckIcon({ size = 13 }: SectionIconProps) {
+  return (
+    <svg {...frame(size)}>
+      <path d="M4.5 12.5l5 5 10-11" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}

@@ -129,7 +129,13 @@ async function seedWorkspace(page: Page): Promise<void> {
 
 async function openCareer(page: Page): Promise<void> {
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  await page.locator('button[aria-label="Поиск"]:visible').first().click();
+  // «Поиск» has no rail item in the B248 IA (Сегодня · Профиль · Вакансии ·
+  // Отклики · Консультант); it opens from the path indicator's «Роль» step,
+  // which every campaign screen carries (career-consultant-notes.md §2).
+  await page
+    .getByRole('button', { name: /^Роль\./ })
+    .first()
+    .click();
   // «Поиск» стал кампанией из макета; предпосылки маршрута живут в ней (B179).
   await expect(page.locator('.career-campaign')).toBeVisible();
 }

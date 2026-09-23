@@ -96,12 +96,12 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    for (const label of ['Поиск', 'Вакансии']) {
+    for (const label of ['Профиль', 'Вакансии']) {
       expect(html).toContain(
         `aria-label="${label}. Завершите карьерную диагностику, чтобы открыть раздел"`,
       );
     }
-    expect(html).toContain('aria-label="Главная"');
+    expect(html).toContain('aria-label="Сегодня"');
   });
 
   it('opens the diagnostic wizard for a newly signed-in candidate without a workspace', () => {
@@ -193,9 +193,11 @@ describe('CareerWorkspaceShell', () => {
     expect(html).not.toContain('Посмотреть демо');
     expect(html).not.toContain('Выйти из демо');
     expect(html).not.toContain('Демо · синтетические данные');
-    expect(html).toContain('Главная');
-    expect(html).toContain('Поиск');
+    expect(html).toContain('Сегодня');
+    expect(html).toContain('Профиль');
     expect(html).toContain('Вакансии');
+    expect(html).toContain('Отклики');
+    expect(html).toContain('Консультант');
     expect(html).toContain('aria-label="Открыть аккаунт"');
     expect(html).not.toContain('career-intent-list" role="list');
     expect(html).not.toContain('data-testid="workspace-setup"');
@@ -502,13 +504,14 @@ describe('CareerWorkspaceShell brand chrome', () => {
       />
     );
 
-    it('closes «Тарифы» while the diagnostic is unfinished', () => {
+    // B248 (owner decision 2026-09-23): «Тарифы» is no longer its own rail
+    // item — it opens from the account panel, and the closed reason travels
+    // there as a prop. See `CareerAccountPanel.test.tsx` for the button
+    // itself; here the rail's account trigger still names the current plan.
+    it('names the current plan on the account trigger while the diagnostic is unfinished', () => {
       const html = renderToStaticMarkup(firstTime);
-      const tariffs = /<button[^>]*aria-label="Тарифы\.[^"]*"[^>]*>/u.exec(html)?.[0];
 
-      expect(tariffs, 'the rail renders a Тарифы button').toBeDefined();
-      expect(tariffs).toContain('disabled');
-      expect(tariffs).toContain('Завершите карьерную диагностику');
+      expect(html).toContain(`title="Аккаунт и тарифы. План «${CURRENT_PLAN.name}»"`);
     });
 
     it('drops the contextless global expert door', () => {
@@ -625,18 +628,21 @@ describe('рельс «Пульт»', () => {
       (match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'),
     );
 
-    // Три раздела макета, каждый нарисован дважды: рельс и нижняя панель на
-    // узком экране. Важно, что рисунков ровно три разных (B179).
-    expect(paths.length).toBe(6);
-    expect(new Set(paths).size).toBe(3);
+    // Пять разделов макета «Сегодня · Профиль · Вакансии · Отклики ·
+    // Консультант» (B248), каждый нарисован дважды: рельс и нижняя панель на
+    // узком экране. Важно, что рисунков ровно пять разных (B179, B248).
+    expect(paths.length).toBe(10);
+    expect(new Set(paths).size).toBe(5);
   });
 
   it('называет план, который действительно работает, а не выдуманный', () => {
     const html = railHtml();
 
-    expect(html).toContain(`план «${CURRENT_PLAN.name}»`);
-    // Тариф — карточка, а не пункт меню рядом с разделами.
-    expect(html).toContain('career-plan-card');
+    expect(html).toContain(`План «${CURRENT_PLAN.name}»`);
+    // B248: тариф больше не карточка рядом с разделами — один аватар внизу
+    // рельса, тариф открывается из панели аккаунта (CareerAccountPanel.test.tsx).
+    expect(html).not.toContain('career-plan-card');
+    expect(html).toContain('career-account-button');
   });
 
   it('не тратит пункт меню на ручку раскрытия', () => {

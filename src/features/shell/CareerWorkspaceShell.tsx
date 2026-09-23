@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useState, type ReactElement } from 're
 import { CaretLeft, CaretRight, ShieldCheck } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import {
-  SearchIcon,
   VacanciesIcon,
   ProfileIcon,
-  TariffsIcon,
+  TodayIcon,
+  ResponsesIcon,
+  ConsultantIcon,
   type SectionIconProps,
 } from './sectionIcons';
 import type { AuthUser } from '../coach/coachApi';
@@ -26,6 +27,8 @@ import { initialsFor } from './accountIdentity';
 import { createIntakeCompletion } from './intakeCompletion';
 import { CareerAccountPanel } from './CareerAccountPanel';
 import { AppErrorBoundary } from './AppErrorBoundary';
+import { CareerPathIndicator } from './CareerPathIndicator';
+import { buildPathIndicator } from './pathIndicator';
 import {
   keepsIntakeAcrossIdentityChange,
   shouldShowIntake,
@@ -55,28 +58,69 @@ interface CareerWorkspaceShellProps {
 
 type SectionIcon = (props: SectionIconProps) => ReactElement;
 
-const primaryNavigation: Array<{
-  id: Exclude<ShellView, 'tariffs'>;
-  label: string;
-  icon: SectionIcon;
-}> = [
-  { id: 'today', label: 'Главная', icon: ProfileIcon },
-  { id: 'career', label: 'Поиск', icon: SearchIcon },
+/**
+ * One rail item either opens a section (`kind: 'navigate'`) or opens the
+ * «Консультант» drawer over whatever the candidate is looking at
+ * (`kind: 'expert'`) — the drawer is not a section of its own.
+ */
+type RailNavItem =
+  | {
+      key: string;
+      label: string;
+      icon: SectionIcon;
+      kind: 'navigate';
+      target: Exclude<ShellView, 'tariffs'>;
+      /** Marks this item active even when it shares a screen with another. */
+      tracksActive: boolean;
+    }
+  | { key: string; label: string; icon: SectionIcon; kind: 'expert' };
+
+/**
+ * B248 (owner decision 2026-09-23 16:39) — five rail items, exactly the
+ * mockup's IA: Сегодня · Профиль · Вакансии · Отклики · Консультант.
+ *
+ * Two of the five have no dedicated screen yet and open the nearest existing
+ * one instead of a placeholder route, so no destination is invented and no
+ * screen is lost:
+ * - «Отклики» opens «Вакансии» — manual applications already live there
+ *   (`useVacancyApplications`, B165); the dedicated kanban is B251/B245 batch 5.
+ * - «Консультант» opens the existing «Эксперт» drawer, unchanged.
+ * Neither counts as the active section, since they are bridges, not their own
+ * screen — highlighting «Вакансии» for both would be misleading.
+ *
+ * «Поиск» (role/market, formerly a rail item) has no slot in the five-item
+ * mockup; it stays reachable from the «Роль» step of the path indicator and
+ * keeps its own `ShellSection` for that click-through (B248 §4 mapping).
+ */
+const primaryNavigation: readonly RailNavItem[] = [
+  { key: 'today', label: 'Сегодня', icon: TodayIcon, kind: 'navigate', target: 'today', tracksActive: true },
+  { key: 'profile', label: 'Профиль', icon: ProfileIcon, kind: 'navigate', target: 'profile', tracksActive: true },
   {
-    id: 'opportunities',
+    key: 'opportunities',
     label: 'Вакансии',
     icon: VacanciesIcon,
+    kind: 'navigate',
+    target: 'opportunities',
+    tracksActive: true,
   },
+  {
+    key: 'responses',
+    label: 'Отклики',
+    icon: ResponsesIcon,
+    kind: 'navigate',
+    target: 'opportunities',
+    tracksActive: false,
+  },
+  { key: 'consultant', label: 'Консультант', icon: ConsultantIcon, kind: 'expert' },
 ];
 
 /**
- * В рельсе три раздела — ровно те, что в макете «Пульт»: «Главная», «Поиск»,
- * «Вакансии». Раздела «Резюме» в макете нет; мастер-резюме остаётся доступен
- * из «Портфолио» на «Главной», где ему и место (B179).
+ * «Резюме» has no rail item in the B248 mockup either; the master resume
+ * stays reachable from «Портфолио» on «Сегодня» (B179).
  */
 const pageNames: Record<ShellView, string> = {
-  today: 'Главная',
-  profile: 'Главная',
+  today: 'Сегодня',
+  profile: 'Профиль',
   resume: 'Резюме',
   career: 'Поиск',
   opportunities: 'Вакансии',
@@ -198,6 +242,27 @@ export function CareerWorkspaceShell({
     return sectionLockReason(view, navigationState);
   }
 
+  function railButtonProps(item: RailNavItem) {
+    if (item.kind === 'expert') {
+      return {
+        label: item.label,
+        icon: item.icon,
+        active: false,
+        disabled: !isNavigable('opportunities'),
+        lockedReason: lockedReason('opportunities'),
+        onClick: openExpert,
+      };
+    }
+    return {
+      label: item.label,
+      icon: item.icon,
+      active: item.tracksActive && activeView === item.target,
+      disabled: !isNavigable(item.target),
+      lockedReason: lockedReason(item.target),
+      onClick: () => navigate(item.target),
+    };
+  }
+
   function toggleRail() {
     setRailExpanded((current) => {
       const next = !current;
@@ -301,65 +366,31 @@ export function CareerWorkspaceShell({
         </button>
         <nav>
           {primaryNavigation.map((item) => (
-            <NavigationButton
-              key={item.id}
-              item={item}
-              active={activeView === item.id}
-              disabled={!isNavigable(item.id)}
-              lockedReason={lockedReason(item.id)}
-              onClick={() => navigate(item.id)}
-            />
+            <NavigationButton key={item.key} {...railButtonProps(item)} />
           ))}
         </nav>
         <div className="career-rail-bottom">
-          {/* «Пульт»: тариф — не пункт меню, а карточка текущего плана. Строка
-              меню читалась как ещё один раздел кабинета и стояла в одном ряду
-              с «Карьерой». */}
-          <button
-            className={`career-plan-card ${activeView === 'tariffs' ? 'is-active' : ''}`}
-            type="button"
-            disabled={!isNavigable('tariffs')}
-            onClick={() => navigate('tariffs')}
-            aria-current={activeView === 'tariffs' ? 'page' : undefined}
-            aria-label={
-              !isNavigable('tariffs') && lockedReason('tariffs')
-                ? `Тарифы. ${lockedReason('tariffs')}`
-                : `Тарифы, текущий план «${planName}»`
-            }
-            title={
-              !isNavigable('tariffs')
-                ? (lockedReason('tariffs') ?? 'Тарифы')
-                : 'Тарифы'
-            }
-          >
-            <span className="career-plan-facet">
-              <TariffsIcon size={18} active={activeView === 'tariffs'} />
-            </span>
-            <span className="career-plan-text">
-              <b>Тарифы</b>
-              <span>план «{planName}»</span>
-            </span>
-          </button>
           {session?.role === 'admin' ? (
             <a className="career-rail-admin" href="/admin">
               <ShieldCheck size={22} />
               <span>Админка</span>
             </a>
           ) : null}
-          {/* Отделён линией: это не раздел, а вы. */}
+          {/* B248 (owner decision 2026-09-23) — a single avatar, not a rail
+              item beside it: тариф и аккаунт живут в одной панели, which
+              opens on click. The plan name still reaches assistive tech via
+              the accessible name, since nothing here is rendered until the
+              panel opens. */}
           <button
             className="career-account-button"
             type="button"
             disabled={sessionPending}
             onClick={() => setAccountOpen(true)}
             aria-label="Открыть аккаунт"
+            title={`Аккаунт и тарифы. План «${planName}»`}
           >
             <span className="career-rail-avatar" aria-hidden="true">
               {accountInitials}
-            </span>
-            <span className="career-account-identity">
-              <b>{session?.displayName ?? session?.username ?? 'Аккаунт'}</b>
-              <span>{session?.email ?? session?.username ?? 'Войти'}</span>
             </span>
           </button>
         </div>
@@ -473,6 +504,19 @@ export function CareerWorkspaceShell({
               onOpenExpert={openExpert}
             />
           ) : null}
+          {!cabinetSession && visibleWorkspace && journey && activeView !== 'tariffs' ? (
+            <CareerPathIndicator
+              steps={buildPathIndicator({
+                track: journey.track,
+                // The wizard-only workspace has no server pool or recorded
+                // applications of its own; the cabinet session below is where
+                // both live once a candidate signs in (B165, B104).
+                matchedPoolCount: 0,
+                confirmedApplications: 0,
+              })}
+              onNavigate={navigate}
+            />
+          ) : null}
           {!cabinetSession && visibleWorkspace && journey && activeView === 'today' ? (
             <TodayJourneyView
               workspace={visibleWorkspace}
@@ -519,15 +563,7 @@ export function CareerWorkspaceShell({
         aria-hidden={expertOpen || accountOpen ? true : undefined}
       >
         {primaryNavigation.map((item) => (
-          <NavigationButton
-            key={item.id}
-            item={item}
-            active={activeView === item.id}
-            disabled={!isNavigable(item.id)}
-            lockedReason={lockedReason(item.id)}
-            mobile
-            onClick={() => navigate(item.id)}
-          />
+          <NavigationButton key={item.key} {...railButtonProps(item)} />
         ))}
       </nav>
 
@@ -565,6 +601,13 @@ export function CareerWorkspaceShell({
             onClose={closeAccount}
             onIdentityChange={resetForAccount}
             onDataChanged={() => setCabinetRevision((revision) => revision + 1)}
+            tariffsPlanName={planName}
+            tariffsAvailable={isNavigable('tariffs')}
+            tariffsLockedReason={lockedReason('tariffs')}
+            onOpenTariffs={() => {
+              closeAccount();
+              navigate('tariffs');
+            }}
           />
         </>
       ) : null}
@@ -573,24 +616,20 @@ export function CareerWorkspaceShell({
 }
 
 function NavigationButton({
-  item,
+  label,
+  icon: ItemIcon,
   active,
   disabled = false,
   lockedReason,
   onClick,
 }: {
-  item: {
-    id: ShellView;
-    label: string;
-    icon: SectionIcon;
-  };
+  label: string;
+  icon: SectionIcon;
   active: boolean;
   disabled?: boolean;
   lockedReason?: string;
-  mobile?: boolean;
   onClick: () => void;
 }) {
-  const ItemIcon = item.icon;
   return (
     <button
       className={`career-nav-button ${active ? 'is-active' : ''}`}
@@ -598,13 +637,11 @@ function NavigationButton({
       disabled={disabled}
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      aria-label={
-        disabled && lockedReason ? `${item.label}. ${lockedReason}` : item.label
-      }
-      title={disabled ? (lockedReason ?? item.label) : item.label}
+      aria-label={disabled && lockedReason ? `${label}. ${lockedReason}` : label}
+      title={disabled ? (lockedReason ?? label) : label}
     >
       <ItemIcon size={22} active={active} />
-      <span>{item.label}</span>
+      <span>{label}</span>
     </button>
   );
 }
