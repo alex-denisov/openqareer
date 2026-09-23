@@ -7,6 +7,7 @@ import {
   MIGRATION_15,
   MIGRATION_21,
   MIGRATION_26,
+  MIGRATION_32,
 } from './sqliteSchema';
 import { applyMigrations } from './store/applyMigrations';
 
@@ -294,5 +295,44 @@ describe('dead work-preferences assessment removal (B187)', () => {
       database.prepare('SELECT COUNT(*) AS total FROM assessments').get(),
     ).toEqual({ total: 1 });
     database.close();
+  });
+});
+
+describe('candidate media table migration (B265 slice 2)', () => {
+  it('creates candidate_media idempotently and only adds the expected columns', () => {
+    const database = new DatabaseSync(':memory:', {
+      enableForeignKeyConstraints: true,
+    });
+    database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;');
+
+    expect(() => {
+      database.exec(MIGRATION_32);
+      database.exec(MIGRATION_32);
+    }).not.toThrow();
+
+    const columns = (
+      database.prepare('PRAGMA table_info(candidate_media)').all() as Array<{
+        name: string;
+      }>
+    ).map((column) => column.name);
+    expect(columns.sort()).toEqual(
+      [
+        'candidate_id',
+        'media_id',
+        'kind',
+        'mime',
+        'bytes_cipher',
+        'byte_length',
+        'created_at',
+      ].sort(),
+    );
+    database.close();
+  });
+
+  it('is not an ALTER TABLE: applying it never touches an existing table\'s rows', () => {
+    // Owner rule (B230): the prod DB's 20s health window does not survive an
+    // ALTER TABLE. MIGRATION_32 must be a bare CREATE TABLE IF NOT EXISTS.
+    expect(MIGRATION_32).not.toMatch(/ALTER TABLE/iu);
+    expect(MIGRATION_32).toMatch(/CREATE TABLE IF NOT EXISTS candidate_media/u);
   });
 });

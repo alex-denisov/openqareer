@@ -787,3 +787,4 @@ describe('INC-037 · импорт не ждёт модель дольше сво
     expect(elapsed).toBeLessThan(5_000);
   });
 });
+

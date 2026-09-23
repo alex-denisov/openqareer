@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { getEmailError, getNameError, getPasswordError } from '../../shared/accountValidation';
 import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
+import { linkedinProfileV2Schema } from '../../shared/linkedinProfileV2';
 import { parseProfileUrl } from '../connectors/profileUrlImport';
 import { hhApplicationExecutionTargetSchema } from '../orchestration/careerCommandPlanner';
 
@@ -410,3 +411,50 @@ export const resumeImportSchema = z
       });
     }
   });
+
+/**
+ * `POST /candidate/resume/import/structured` (B265 §2, slice 3). Unlike
+ * `resumeImportSchema`, there is no free-text `text` field at all — the DOM
+ * was already parsed on the candidate's device, and the server never runs a
+ * model or a text reader over this payload (architecture §2, §7: p95 <1s
+ * without media, no LLM call on this route ever).
+ */
+export const structuredResumeImportSchema = z
+  .object({
+    schemaVersion: z.literal(2),
+    source: z.literal('linkedin'),
+    extractorVersion: z.string().trim().min(1).max(60),
+    sourceReceipt: z
+      .object({
+        platform: z.literal('linkedin'),
+        accessMode: z.literal('native_session_snapshot'),
+        sourceUrl: z
+          .string()
+          .url()
+          .max(2_048)
+          .refine((value) => {
+            const url = new URL(value);
+            return (
+              url.protocol === 'https:' &&
+              (url.hostname === 'linkedin.com' ||
+                url.hostname.endsWith('.linkedin.com') ||
+                url.hostname === 'linkedin.cn' ||
+                url.hostname.endsWith('.linkedin.cn')) &&
+              /^\/in\/[^/]{2,200}\/?$/u.test(url.pathname)
+            );
+          }, 'sourceReceipt.sourceUrl must be an https linkedin.com/in/... profile URL'),
+        capturedAt: z.string().datetime({ offset: true }),
+      })
+      .strict()
+      .superRefine((value, context) => {
+        if (Date.parse(value.capturedAt) > Date.now() + 5 * 60 * 1_000) {
+          context.addIssue({
+            code: 'custom',
+            path: ['capturedAt'],
+            message: 'capturedAt cannot be in the future',
+          });
+        }
+      }),
+    profile: linkedinProfileV2Schema,
+  })
+  .strict();

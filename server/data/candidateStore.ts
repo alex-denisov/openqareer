@@ -22,6 +22,8 @@ import type {
 } from '../domain/assessment';
 import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
 import type { ResumeDraft } from '../domain/resumeDraft';
+import type { DownloadedMedia } from '../domain/candidateMedia';
+import type { StoredCandidateMedia } from './sqliteCandidateMediaRepository';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import type {
@@ -259,6 +261,12 @@ export interface ResumeImportCommit {
   readonly evidence: ResumeEvidenceImport;
   readonly draft: ResumeDraft;
   readonly sourceReceipt?: NativeSourceReceiptInput;
+  /**
+   * Photo/logo bytes already downloaded by the caller (B265 §4) — the fetch
+   * itself never runs inside this transaction, only the sealed write of what
+   * came back.
+   */
+  readonly media?: readonly DownloadedMedia[];
 }
 
 export interface CommittedResumeImport {
@@ -433,6 +441,8 @@ export interface CandidateStore {
     draft: ResumeDraft,
     evidenceSnapshot: readonly ResumeEvidenceSnapshot[],
   ): StoredResumeDraft;
+  /** Serves a cached photo/logo only to the candidate it belongs to (B265 §4). */
+  getCandidateMedia(candidateId: string, mediaId: string): StoredCandidateMedia | null;
   saveCareerCommand(command: CareerCommandRecord): CareerCommandRecord;
   getCareerCommand(
     candidateId: string,

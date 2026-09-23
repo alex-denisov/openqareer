@@ -1010,3 +1010,23 @@ INSERT OR IGNORE INTO cluster_keys_backfill_state (id) VALUES (1);
 export const VACANCY_CLUSTER_REPRESENTATIVE_COLUMN = `
 ALTER TABLE vacancy_clusters ADD COLUMN representative TEXT;
 `;
+
+/**
+ * Кешированные байты фото/логотипа из LinkedIn (B265 §4, §5). Только
+ * `CREATE TABLE IF NOT EXISTS` — окно здоровья выката 20 с не переживает
+ * `ALTER TABLE` на проде (B230), а создание пустой таблицы не читает
+ * существующие страницы. `media_id` считается без query-строки ссылки, поэтому
+ * один и тот же логотип трёх должностей хранится одной строкой.
+ */
+export const MIGRATION_32 = `
+CREATE TABLE IF NOT EXISTS candidate_media (
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  media_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('photo', 'employer_logo')),
+  mime TEXT NOT NULL,
+  bytes_cipher TEXT NOT NULL,
+  byte_length INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (candidate_id, media_id)
+) STRICT;
+`;

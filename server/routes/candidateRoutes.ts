@@ -27,6 +27,7 @@ import {
 } from '../domain/resumeImport';
 import { preferStructuredResume } from '../domain/resumeStructuring';
 import { structureWithinBudget } from '../providers/resumeStructurer';
+import { handleImportStructuredResume } from './structuredResumeImportRoute';
 import { parseResumeContent } from '../../src/features/workspace/resumeParser';
 import { normalizeResumeSourceText } from '../../src/features/workspace/resumeSourceText';
 import type { CandidateStore } from '../data/candidateStore';
@@ -60,7 +61,7 @@ import {
   resumeImportSchema,
 } from './schemas';
 
-type Handler = (
+export type Handler = (
   deps: RouteDeps,
   request: FastifyRequest,
   reply: FastifyReply,
@@ -78,7 +79,7 @@ interface ResumeStudioView {
  * it with the evidence the candidate approved when the draft was saved, so a
  * revoked fact surfaces instead of surviving inside a generated document.
  */
-function resumeStudioView(candidateStore: CandidateStore, candidateId: string): ResumeStudioView {
+export function resumeStudioView(candidateStore: CandidateStore, candidateId: string): ResumeStudioView {
   const snapshot = candidateStore.getSnapshot(candidateId);
   const stored = snapshot.resume;
   const projection = buildResumeStudioProjection({
@@ -535,6 +536,34 @@ const handlePutResume: Handler = async (deps, request, reply) => {
   return { data: resumeStudioView(candidateStore, candidate.id), meta: { requestId: request.id } };
 };
 
+/**
+ * `GET /candidate/media/:mediaId` (B265 §4). Serves a cached LinkedIn photo/
+ * logo only to the session that owns it — a wrong or unknown id is a plain
+ * 404, so a probe never learns whether some other candidate's mediaId exists.
+ */
+const handleGetCandidateMedia: Handler = async (
+  { authService, candidateStore, config },
+  request,
+  reply,
+) => {
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const mediaId = z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .parse((request.params as { mediaId: string }).mediaId);
+  const media = candidateStore.getCandidateMedia(candidate.id, mediaId);
+  if (!media) {
+    return sendError(reply, request, 404, 'media_not_found', 'Файл не найден.', false);
+  }
+  reply.header('Cache-Control', 'private, max-age=86400');
+  reply.header('ETag', mediaId);
+  reply.header('X-Content-Type-Options', 'nosniff');
+  return reply.type(media.mime).send(media.bytes);
+};
+
 const handleSaveGermanyMarket: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
@@ -791,6 +820,14 @@ async function registerResumeEndpoints(app: FastifyInstance, deps: RouteDeps): P
     },
     withDeps(deps, handleImportResume),
   );
+  app.post(
+    '/api/v1/candidate/resume/import/structured',
+    {
+      bodyLimit: 512 * 1_024,
+      config: { rateLimit: { max: 20, timeWindow: '15 minutes' } },
+    },
+    withDeps(deps, handleImportStructuredResume),
+  );
   app.get('/api/v1/candidate/resume', withDeps(deps, handleGetResume));
   app.put(
     '/api/v1/candidate/resume',
@@ -834,6 +871,7 @@ async function registerDocumentEndpoints(app: FastifyInstance, deps: RouteDeps):
     withDeps(deps, handleSetRetention),
   );
   app.delete('/api/v1/candidate/documents/:documentId', withDeps(deps, handleDeleteDocument));
+  app.get('/api/v1/candidate/media/:mediaId', withDeps(deps, handleGetCandidateMedia));
 }
 
 export async function registerCandidateRoutes(

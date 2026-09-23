@@ -169,7 +169,11 @@ async function createFastifyBase(
   });
 
   app.addHook('onSend', async (request, reply) => {
-    if (request.url.startsWith('/api/')) {
+    // Cached media (B265 §4) is the one deliberate exception: a candidate's
+    // own photo/logo is content-addressed by `mediaId` and safe to keep in
+    // the browser cache for a day, unlike every other candidate-scoped API
+    // response here.
+    if (request.url.startsWith('/api/') && !request.url.startsWith('/api/v1/candidate/media/')) {
       reply.header('Cache-Control', 'no-store');
     }
   });

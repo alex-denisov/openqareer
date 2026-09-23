@@ -40,6 +40,7 @@ import { SealedText } from './sealedText';
 import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
 import { SqliteMarketRepository } from './sqliteMarketRepository';
 import { SqliteResumeRepository } from './sqliteResumeRepository';
+import { SqliteCandidateMediaRepository, type StoredCandidateMedia } from './sqliteCandidateMediaRepository';
 import { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
@@ -105,6 +106,7 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly careerStrategyRepository: SqliteCareerStrategyRepository;
   private readonly workPreferenceRepository: SqliteWorkPreferenceRepository;
   private readonly vacancyApplicationRepository: SqliteVacancyApplicationRepository;
+  private readonly candidateMediaRepository: SqliteCandidateMediaRepository;
   private readonly conversations: ConversationController;
   private readonly sourceConnections: SourceConnectionController;
 
@@ -132,6 +134,7 @@ export class SqliteCandidateStore implements CandidateStore {
       careerStrategyRepository: this.careerStrategyRepository,
       workPreferenceRepository: this.workPreferenceRepository,
       vacancyApplicationRepository: this.vacancyApplicationRepository,
+      candidateMediaRepository: this.candidateMediaRepository,
     } = createRepositories(this.database, this.sealedText));
     this.conversations = new ConversationController({
       database: this.database,
@@ -441,7 +444,16 @@ export class SqliteCandidateStore implements CandidateStore {
     evidenceSnapshot: readonly ResumeEvidenceSnapshot[],
   ): StoredResumeDraft {
     this.requireCandidate(candidateId);
-    return this.resumeRepository.save(candidateId, draft, evidenceSnapshot);
+    return this.transaction(() => {
+      const saved = this.resumeRepository.save(candidateId, draft, evidenceSnapshot);
+      this.candidateMediaRepository.pruneUnreferenced(candidateId, referencedMediaIds(draft));
+      return saved;
+    });
+  }
+
+  getCandidateMedia(candidateId: string, mediaId: string): StoredCandidateMedia | null {
+    this.requireCandidate(candidateId);
+    return this.candidateMediaRepository.get(candidateId, mediaId);
   }
 
   /** Ответы на задания «Какие роли мне подходят» (B180, срез 3). */
@@ -570,11 +582,15 @@ export class SqliteCandidateStore implements CandidateStore {
       ...input.draft,
       evidence: this.conversations.snapshotParts(candidateId).memory,
     });
+    if (input.media?.length) {
+      this.candidateMediaRepository.saveMany(candidateId, input.media);
+    }
     const resume = this.resumeRepository.save(
       candidateId,
       input.draft,
       projection.evidenceSnapshot,
     );
+    this.candidateMediaRepository.pruneUnreferenced(candidateId, referencedMediaIds(input.draft));
     const sourceConnection = input.sourceReceipt
       ? this.sourceConnections.upsert(candidateId, input.sourceReceipt, evidence)
       : undefined;
@@ -812,6 +828,14 @@ function normalizeRetentionUntil(
   return new Date(retentionTime).toISOString();
 }
 
+/** Every `candidate_media` row a draft still points at — the rest gets pruned. */
+function referencedMediaIds(draft: ResumeDraft): string[] {
+  return [
+    draft.candidate.photoMediaId,
+    ...draft.experience.map((role) => role.employerLogoMediaId),
+  ].filter((value): value is string => Boolean(value));
+}
+
 interface StoreRepositories {
   assessmentsRepository: SqliteAssessmentRepository;
   marketRepository: SqliteMarketRepository;
@@ -823,6 +847,7 @@ interface StoreRepositories {
   careerStrategyRepository: SqliteCareerStrategyRepository;
   workPreferenceRepository: SqliteWorkPreferenceRepository;
   vacancyApplicationRepository: SqliteVacancyApplicationRepository;
+  candidateMediaRepository: SqliteCandidateMediaRepository;
 }
 
 function createRepositories(
@@ -843,5 +868,6 @@ function createRepositories(
     careerStrategyRepository: new SqliteCareerStrategyRepository(database, sealedText),
     workPreferenceRepository: new SqliteWorkPreferenceRepository(database, sealedText),
     vacancyApplicationRepository: new SqliteVacancyApplicationRepository(database, sealedText),
+    candidateMediaRepository: new SqliteCandidateMediaRepository(database, sealedText),
   };
 }

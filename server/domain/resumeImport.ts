@@ -46,7 +46,21 @@ export interface ResumeImportPlan {
 export interface ResumeImportOptions {
   /** Namespaces every generated id so two imports never collide. */
   readonly idPrefix: string;
+  /**
+   * Marks the produced draft as v2 (B265). Absent for every existing hh/PDF/
+   * text import, so those routes keep writing v1 drafts unchanged — only the
+   * structured LinkedIn route passes `2` here.
+   */
+  readonly schemaVersion?: 2;
 }
+
+const MAX_CERTIFICATIONS = 50;
+const MAX_PROJECTS = 50;
+const MAX_ACHIEVEMENTS = 100;
+const MAX_OPEN_TO_WORK_ROLES = 20;
+const MAX_OPEN_TO_WORK_LOCATIONS = 20;
+const MAX_OPEN_TO_WORK_WORKPLACE_TYPES = 3;
+const MAX_SKILLS_PER_ROLE = 50;
 
 /**
  * Whether the document said anything a career profile is built from. Stray
@@ -75,10 +89,14 @@ export function planResumeImport(
   const languages = planLanguages(parsed, prefix, evidence);
   const skills = planSkills(parsed, prefix, evidence);
   addProfileEvidence(parsed, prefix, evidence);
+  const certifications = planCertifications(parsed, prefix, evidence);
+  const projects = planProjects(parsed, prefix, evidence);
+  const achievements = planAchievements(parsed, prefix, evidence);
 
   return {
     evidence,
     draft: {
+      schemaVersion: options.schemaVersion,
       candidate: planCandidate(parsed),
       targetRole: label(parsed.targetRole),
       experience,
@@ -89,6 +107,10 @@ export function planResumeImport(
       recommendations: planRecommendations(parsed, prefix),
       languages,
       additional: planAdditional(parsed),
+      ...(certifications.length ? { certifications } : {}),
+      ...(projects.length ? { projects } : {}),
+      ...(achievements.length ? { achievements } : {}),
+      ...(planOpenToWork(parsed) ? { sourceSuggestions: { openToWork: planOpenToWork(parsed) } } : {}),
     },
   };
 }
@@ -96,6 +118,7 @@ export function planResumeImport(
 function planCandidate(parsed: ParsedResume): ResumeDraft['candidate'] {
   return {
     fullName: label(parsed.fullName),
+    headline: label(parsed.headline),
     about: longText(parsed.about),
     contact: {
       email: email(parsed.contact.email),
@@ -106,7 +129,122 @@ function planCandidate(parsed: ParsedResume): ResumeDraft['candidate'] {
         .map((link) => clamp(link, MAX_LINK))
         .filter((link): link is string => Boolean(link))
         .slice(0, MAX_LINKS),
+      linkedinUrl: clamp(parsed.contact.linkedinUrl, 2_000),
     },
+  };
+}
+
+function planCertifications(
+  parsed: ParsedResume,
+  prefix: string,
+  evidence: ResumeImportEvidence[],
+): NonNullable<ResumeDraft['certifications']> {
+  return (parsed.certifications ?? [])
+    .filter((entry) => hasWords(entry.name))
+    .slice(0, MAX_CERTIFICATIONS)
+    .map((entry, index) => {
+      const memoryId = `${prefix}-cert-${index + 1}`;
+      evidence.push({
+        memoryId,
+        domain: 'other',
+        statement: statement([entry.name, entry.issuer].filter(Boolean).join(' — ')),
+      });
+      return {
+        id: memoryId,
+        evidenceMemoryId: memoryId,
+        name: clamp(entry.name, MAX_LABEL) ?? '',
+        issuer: label(entry.issuer),
+        issuedAt: clamp(entry.issuedAt, MAX_DATE),
+        expiresAt: clamp(entry.expiresAt, MAX_DATE),
+        credentialId: label(entry.credentialId),
+        url: clamp(entry.url, 2_000),
+      };
+    });
+}
+
+function planProjects(
+  parsed: ParsedResume,
+  prefix: string,
+  evidence: ResumeImportEvidence[],
+): NonNullable<ResumeDraft['projects']> {
+  return (parsed.projects ?? [])
+    .filter((entry) => hasWords(entry.name))
+    .slice(0, MAX_PROJECTS)
+    .map((entry, index) => {
+      const memoryId = `${prefix}-proj-${index + 1}`;
+      evidence.push({
+        memoryId,
+        domain: 'other',
+        statement: statement([entry.name, entry.description].filter(Boolean).join(' — ')),
+      });
+      return {
+        id: memoryId,
+        evidenceMemoryId: memoryId,
+        name: clamp(entry.name, MAX_LABEL) ?? '',
+        startDate: clamp(entry.startDate, MAX_DATE),
+        endDate: clamp(entry.endDate, MAX_DATE),
+        current: entry.current,
+        description: descriptionText(entry.description),
+        employer: label(entry.employer),
+        url: clamp(entry.url, 2_000),
+        skills: entry.skills?.map((skill) => clamp(skill, MAX_LABEL) ?? '').filter(Boolean),
+      };
+    });
+}
+
+function planAchievements(
+  parsed: ParsedResume,
+  prefix: string,
+  evidence: ResumeImportEvidence[],
+): NonNullable<ResumeDraft['achievements']> {
+  return (parsed.achievements ?? [])
+    .filter((entry) => hasWords(entry.title))
+    .slice(0, MAX_ACHIEVEMENTS)
+    .map((entry, index) => {
+      const memoryId = `${prefix}-ach2-${index + 1}`;
+      evidence.push({
+        memoryId,
+        domain: 'other',
+        statement: statement([entry.title, entry.issuer].filter(Boolean).join(' — ')),
+      });
+      return {
+        id: memoryId,
+        evidenceMemoryId: memoryId,
+        kind: entry.kind,
+        title: clamp(entry.title, MAX_LABEL) ?? '',
+        issuer: label(entry.issuer),
+        role: label(entry.role),
+        date: clamp(entry.date, MAX_DATE),
+        endDate: clamp(entry.endDate, MAX_DATE),
+        description: descriptionText(entry.description),
+        url: clamp(entry.url, 2_000),
+      };
+    });
+}
+
+/**
+ * Owner decision (tickets/B265 §3c): a native source's open-to-work signal is
+ * only ever a proposal candidate reviews on screen — it never writes the
+ * candidate's actual work preferences and never becomes a dossier fact.
+ */
+function planOpenToWork(
+  parsed: ParsedResume,
+): NonNullable<ResumeDraft['sourceSuggestions']>['openToWork'] {
+  const openToWork = parsed.openToWork;
+  if (!openToWork) return undefined;
+  if (
+    openToWork.roles.length === 0 &&
+    openToWork.locations.length === 0 &&
+    openToWork.workplaceTypes.length === 0
+  ) {
+    return undefined;
+  }
+  return {
+    roles: openToWork.roles.map((role) => clamp(role, MAX_LABEL) ?? '').slice(0, MAX_OPEN_TO_WORK_ROLES),
+    locations: openToWork.locations
+      .map((location) => clamp(location, MAX_LABEL) ?? '')
+      .slice(0, MAX_OPEN_TO_WORK_LOCATIONS),
+    workplaceTypes: openToWork.workplaceTypes.slice(0, MAX_OPEN_TO_WORK_WORKPLACE_TYPES),
   };
 }
 
@@ -146,8 +284,10 @@ function planRecommendations(
       recommender: label(item.recommender),
       organization: label(item.organization),
       position: label(item.position),
-      text: longText(item.text),
+      text: item.text ? clamp(item.text, 5_000) : undefined,
       contact: label(item.contact),
+      relationship: label(item.relationship),
+      date: clamp(item.date, MAX_DATE),
     }));
 }
 
@@ -159,6 +299,28 @@ function planAdditional(parsed: ParsedResume): ResumeDraft['additional'] {
     relocation: label(parsed.additional.relocation),
     driversLicense: label(parsed.additional.driversLicense),
   };
+}
+
+function planRoleBullets(
+  role: ParsedResume['experience'][number],
+  prefix: string,
+  index: number,
+  evidence: ResumeImportEvidence[],
+): string[] {
+  const bulletMemoryIds: string[] = [];
+  role.responsibilities.forEach((item, position) => {
+    if (bulletMemoryIds.length >= MAX_BULLETS_PER_ROLE) return;
+    const memoryId = `${prefix}-resp-${index + 1}-${position + 1}`;
+    evidence.push({ memoryId, domain: 'responsibility', statement: statement(item) });
+    bulletMemoryIds.push(memoryId);
+  });
+  role.achievements.forEach((item, position) => {
+    if (bulletMemoryIds.length >= MAX_BULLETS_PER_ROLE) return;
+    const memoryId = `${prefix}-ach-${index + 1}-${position + 1}`;
+    evidence.push({ memoryId, domain: 'outcome', statement: statement(item) });
+    bulletMemoryIds.push(memoryId);
+  });
+  return bulletMemoryIds;
 }
 
 function planExperience(
@@ -176,23 +338,7 @@ function planExperience(
         domain: 'role-evidence',
         statement: statement(rolePeriodStatement(role)),
       });
-      const bulletMemoryIds: string[] = [];
-      role.responsibilities.forEach((item, position) => {
-        if (bulletMemoryIds.length >= MAX_BULLETS_PER_ROLE) return;
-        const memoryId = `${prefix}-resp-${index + 1}-${position + 1}`;
-        evidence.push({
-          memoryId,
-          domain: 'responsibility',
-          statement: statement(item),
-        });
-        bulletMemoryIds.push(memoryId);
-      });
-      role.achievements.forEach((item, position) => {
-        if (bulletMemoryIds.length >= MAX_BULLETS_PER_ROLE) return;
-        const memoryId = `${prefix}-ach-${index + 1}-${position + 1}`;
-        evidence.push({ memoryId, domain: 'outcome', statement: statement(item) });
-        bulletMemoryIds.push(memoryId);
-      });
+      const bulletMemoryIds = planRoleBullets(role, prefix, index, evidence);
       return {
         id: `${prefix}-exp-${index + 1}`,
         chronologyMemoryId,
@@ -203,6 +349,13 @@ function planExperience(
         endDate: role.current ? undefined : clamp(role.endDate, MAX_DATE),
         current: role.current,
         bulletMemoryIds,
+        employmentType: label(role.employmentType),
+        workplaceType: role.workplaceType,
+        skills: role.skills
+          ?.map((skill) => clamp(skill, MAX_LABEL) ?? '')
+          .filter(Boolean)
+          .slice(0, MAX_SKILLS_PER_ROLE),
+        employerGroupKey: label(role.employerGroupKey),
       };
     });
 }
@@ -233,6 +386,7 @@ function planEducation(
         qualification: label(entry.qualification),
         startDate: clamp(entry.startDate, MAX_DATE),
         endDate: clamp(entry.endDate, MAX_DATE),
+        description: descriptionText(entry.description),
       };
     });
 }
@@ -380,6 +534,11 @@ function label(value: string | undefined): string | undefined {
 
 function longText(value: string | undefined): string | undefined {
   return clamp(value, MAX_LONG_TEXT);
+}
+
+/** Descriptions (education, project, achievement) cap at 5 000, per architecture §2. */
+function descriptionText(value: string | undefined): string | undefined {
+  return clamp(value, 5_000);
 }
 
 /**
