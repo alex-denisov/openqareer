@@ -39,43 +39,20 @@ describe('applyVacancyDecisions (B248)', () => {
   it('marks a saved vacancy with its decision, keeping it in place', () => {
     const result = applyVacancyDecisions(
       [item('a'), item('b')],
-      [{ clusterId: 'a', status: 'saved', skipReasonId: null, decidedAt: '2026-09-20T00:00:00.000Z' }],
+      [{ clusterId: 'a', status: 'saved' }],
     );
     expect(result.map((entry) => entry.cluster.id)).toEqual(['a', 'b']);
     expect(result[0].explanation.candidateDecision).toEqual({ status: 'saved' });
   });
 
-  it('excludes a vacancy skipped for a hard-mismatch reason entirely', () => {
-    const result = applyVacancyDecisions(
-      [item('a'), item('b')],
-      [
-        {
-          clusterId: 'a',
-          status: 'skipped',
-          skipReasonId: 'role-family',
-          decidedAt: '2026-09-20T00:00:00.000Z',
-        },
-      ],
-    );
-    expect(result.map((entry) => entry.cluster.id)).toEqual(['b']);
-  });
-
-  it('keeps a vacancy skipped for a soft reason, but pushes it to the end and flags it', () => {
-    const result = applyVacancyDecisions(
-      [item('a'), item('b')],
-      [
-        {
-          clusterId: 'a',
-          status: 'skipped',
-          skipReasonId: 'comp-below',
-          decidedAt: '2026-09-20T00:00:00.000Z',
-        },
-      ],
-    );
-    expect(result.map((entry) => entry.cluster.id)).toEqual(['b', 'a']);
-    expect(result[1].explanation.candidateDecision).toEqual({
-      status: 'skipped',
-      skipReasonId: 'comp-below',
-    });
-  });
+  it.each(['role-family', 'comp-below', 'stale'] as const)(
+    'hides a vacancy skipped for any reason (%s)',
+    (skipReasonId) => {
+      const result = applyVacancyDecisions(
+        [item('a'), item('b')],
+        [{ clusterId: 'a', status: 'skipped', skipReasonId }],
+      );
+      expect(result.map((entry) => entry.cluster.id)).toEqual(['b']);
+    },
+  );
 });

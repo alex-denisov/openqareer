@@ -144,7 +144,7 @@ export interface VacancyMatchExplanation {
    */
   candidateDecision?: {
     readonly status: 'saved' | 'skipped';
-    readonly skipReasonId?: import('../../shared/vacancySkipReasons').VacancySkipReasonId;
+    readonly skipReasonId?: import('../../shared/skipReasons').SkipReasonId;
   };
   summary: string;
   calculatedAt: string;
