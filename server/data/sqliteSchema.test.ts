@@ -8,6 +8,7 @@ import {
   MIGRATION_21,
   MIGRATION_26,
   MIGRATION_32,
+  MIGRATION_33,
 } from './sqliteSchema';
 import { applyMigrations } from './store/applyMigrations';
 
@@ -334,5 +335,109 @@ describe('candidate media table migration (B265 slice 2)', () => {
     // ALTER TABLE. MIGRATION_32 must be a bare CREATE TABLE IF NOT EXISTS.
     expect(MIGRATION_32).not.toMatch(/ALTER TABLE/iu);
     expect(MIGRATION_32).toMatch(/CREATE TABLE IF NOT EXISTS candidate_media/u);
+  });
+});
+
+describe('application tracker schema migration (B251 slice 1)', () => {
+  const TABLES = [
+    'applications',
+    'application_events',
+    'application_materials',
+    'application_interviews',
+    'application_offers',
+    'vacancy_skips',
+    'candidate_visits',
+    'candidate_outreach',
+  ];
+
+  function freshDatabase(): DatabaseSync {
+    const database = new DatabaseSync(':memory:', {
+      enableForeignKeyConstraints: true,
+    });
+    database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;');
+    return database;
+  }
+
+  it('creates all eight tables idempotently', () => {
+    const database = freshDatabase();
+
+    expect(() => {
+      database.exec(MIGRATION_33);
+      database.exec(MIGRATION_33);
+    }).not.toThrow();
+
+    for (const table of TABLES) {
+      expect(
+        database
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+          .get(table),
+      ).toEqual({ name: table });
+    }
+    database.close();
+  });
+
+  it('is only CREATE TABLE/INDEX IF NOT EXISTS and never touches vacancy_applications', () => {
+    // Owner rule (B230): the prod DB's 20s health window does not survive an
+    // ALTER TABLE, and the old facade table stays untouched (architecture.md §5).
+    expect(MIGRATION_33).not.toMatch(/ALTER TABLE/iu);
+    expect(MIGRATION_33).not.toMatch(/vacancy_applications/iu);
+    const statements = MIGRATION_33.split(';').map((s) => s.trim()).filter(Boolean);
+    for (const statement of statements) {
+      expect(statement).toMatch(/^CREATE (TABLE|(UNIQUE )?INDEX) IF NOT EXISTS/iu);
+    }
+  });
+
+  it('rejects an application stage outside the seven known stages', () => {
+    const database = freshDatabase();
+    database.exec(MIGRATION_33);
+    database
+      .prepare("INSERT INTO candidates (id) VALUES ('candidate-1')")
+      .run();
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO applications
+            (id, candidate_id, stage, stage_changed_at, created_at, updated_at)
+           VALUES ('app-1', 'candidate-1', 'bogus', 'now', 'now', 'now')`,
+        )
+        .run(),
+    ).toThrow();
+    database.close();
+  });
+
+  it('enforces one row per candidate + cluster only when cluster_id is set', () => {
+    const database = freshDatabase();
+    database.exec(MIGRATION_33);
+    database.prepare("INSERT INTO candidates (id) VALUES ('candidate-1')").run();
+    const insertApplication = (id: string, clusterId: string | null) =>
+      database
+        .prepare(
+          `INSERT INTO applications
+            (id, candidate_id, cluster_id, stage, stage_changed_at, created_at, updated_at)
+           VALUES (?, 'candidate-1', ?, 'saved', 'now', 'now', 'now')`,
+        )
+        .run(id, clusterId);
+
+    insertApplication('app-1', 'cluster-1');
+    expect(() => insertApplication('app-2', 'cluster-1')).toThrow();
+    // Manual cards without a pool cluster never collide.
+    expect(() => insertApplication('app-3', null)).not.toThrow();
+    expect(() => insertApplication('app-4', null)).not.toThrow();
+    database.close();
+  });
+
+  it('rejects a vacancy skip reason outside the eight B248 terms', () => {
+    const database = freshDatabase();
+    database.exec(MIGRATION_33);
+    database.prepare("INSERT INTO candidates (id) VALUES ('candidate-1')").run();
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO vacancy_skips (candidate_id, cluster_id, reason_id, origin, created_at)
+           VALUES ('candidate-1', 'cluster-1', 'not-a-reason', 'vacancy_card', 'now')`,
+        )
+        .run(),
+    ).toThrow();
+    database.close();
   });
 });
