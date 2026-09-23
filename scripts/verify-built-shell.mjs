@@ -282,6 +282,22 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
+  // B249: рассказ «своими словами» шлёт текст на тот же импорт, что PDF и
+  // коннекторы; без ответа тут шаг «Расскажу сам» падал бы 502-м на «Продолжить».
+  await page.route('**/api/v1/candidate/resume/import', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          parsed: { rawText: route.request().postDataJSON()?.text ?? '', sections: [] },
+          resume: { draft: null, savedAt: null },
+          structuredBy: 'rules',
+          factCount: 2,
+        },
+      }),
+    });
+  });
   // Гипотезы роли считает сервер (B180, срез 1б): «Главная» спрашивает их
   // отдельным маршрутом, и без ответа прогон записал бы 502, который увидел бы
   // и кандидат. Отвечаем одной настоящей гипотезой — панель должна печатать
