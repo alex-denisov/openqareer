@@ -1030,13 +1030,3 @@ CREATE TABLE IF NOT EXISTS candidate_media (
   PRIMARY KEY (candidate_id, media_id)
 ) STRICT;
 `;
-
-/**
- * B265 — the "Open to work" proposal on the Profile screen offers regions
- * alongside the work mode; account profile only stored the mode. A JSON
- * array (mirroring `candidate_workspace.regions`) keeps this column optional
- * to add and trivial to read back as a string list.
- */
-export const MIGRATION_33 = `
-ALTER TABLE users ADD COLUMN regions_json TEXT;
-`;

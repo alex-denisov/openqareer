@@ -215,63 +215,6 @@ describe('cookie auth routes', () => {
     });
   });
 
-  // B265 — the Profile screen's "Open to work" proposal offers regions
-  // alongside the work mode; the account profile PATCH has to accept and
-  // persist both together, not just the mode.
-  it('accepts and persists job-search regions alongside the work mode', async () => {
-    const app = await createApp();
-    const candidate = await login(app, 'candidate.test', 'candidate-password-for-tests');
-
-    const updated = await app.inject({
-      method: 'PATCH',
-      url: '/api/v1/account/profile',
-      headers: {
-        cookie: candidate.cookie,
-        origin: 'http://localhost:3000',
-      },
-      payload: {
-        workMode: 'remote',
-        regions: ['Берлин', 'Remote (EU)'],
-      },
-    });
-
-    expect(updated.statusCode).toBe(200);
-    expect(updated.json().data).toMatchObject({
-      profile: {
-        workMode: 'remote',
-        regions: ['Берлин', 'Remote (EU)'],
-      },
-    });
-
-    const account = await app.inject({
-      method: 'GET',
-      url: '/api/v1/account',
-      headers: { cookie: candidate.cookie },
-    });
-    expect(account.json().data).toMatchObject({
-      profile: { regions: ['Берлин', 'Remote (EU)'] },
-    });
-  });
-
-  it('rejects a region list past the field limits instead of silently truncating it', async () => {
-    const app = await createApp();
-    const candidate = await login(app, 'candidate.test', 'candidate-password-for-tests');
-
-    const rejected = await app.inject({
-      method: 'PATCH',
-      url: '/api/v1/account/profile',
-      headers: {
-        cookie: candidate.cookie,
-        origin: 'http://localhost:3000',
-      },
-      payload: {
-        regions: Array.from({ length: 21 }, (_, index) => `Регион ${index}`),
-      },
-    });
-
-    expect(rejected.statusCode).toBe(422);
-  });
-
   it('changes the password and rotates every existing session', async () => {
     const app = await createApp();
     const first = await login(app, 'candidate.test', 'candidate-password-for-tests');
