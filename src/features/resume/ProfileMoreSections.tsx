@@ -15,11 +15,11 @@ function SectionHead({
   readonly emptyTag?: boolean;
 }) {
   return (
-    <div className="career-profile-section-head">
+    <div className="career-profile-screen-section-head">
       <h2 id={id}>{title}</h2>
-      {count ? <span className="career-profile-section-count">{count}</span> : null}
-      {imported ? <span className="career-cabinet-tag is-accent">Импортировано</span> : null}
-      {emptyTag ? <span className="career-cabinet-tag">Пусто</span> : null}
+      {count ? <span className="career-profile-screen-section-count">{count}</span> : null}
+      {imported ? <span className="career-profile-screen-tag is-accent">Импортировано</span> : null}
+      {emptyTag ? <span className="career-profile-screen-tag">Пусто</span> : null}
     </div>
   );
 }
@@ -28,19 +28,28 @@ export function ProfileCertificatesSection({ draft }: { readonly draft: ResumeDr
   const certifications = draft.certifications ?? [];
   if (!certifications.length) return null;
   return (
-    <section className="career-profile-panel career-profile-section" id="sec-certificates" aria-labelledby="sec-certificates-title">
-      <SectionHead id="sec-certificates-title" title="Сертификаты" count={String(certifications.length)} imported />
-      <div className="career-profile-tile-grid">
+    <section
+      className="career-profile-screen-panel career-profile-screen-section"
+      id="sec-certificates"
+      aria-labelledby="sec-certificates-title"
+    >
+      <SectionHead
+        id="sec-certificates-title"
+        title="Сертификаты"
+        count={String(certifications.length)}
+        imported
+      />
+      <div className="career-profile-screen-tile-grid">
         {certifications.map((cert) => (
-          <div key={cert.id} className="career-profile-tile">
+          <div key={cert.id} className="career-profile-screen-tile">
             <b>{cert.name}</b>
-            <span className="career-profile-tile-meta">
+            <span className="career-profile-screen-tile-meta">
               {[cert.issuer, cert.issuedAt ? `выдан ${cert.issuedAt}` : undefined]
                 .filter(Boolean)
                 .join(' · ')}
             </span>
             {cert.url ? (
-              <a className="career-profile-tile-link" href={cert.url}>
+              <a className="career-profile-screen-tile-link" href={cert.url}>
                 Подтверждение
               </a>
             ) : null}
@@ -55,13 +64,22 @@ export function ProfileProjectsSection({ draft }: { readonly draft: ResumeDraft 
   const projects = draft.projects ?? [];
   if (!projects.length) return null;
   return (
-    <section className="career-profile-panel career-profile-section" id="sec-projects" aria-labelledby="sec-projects-title">
-      <SectionHead id="sec-projects-title" title="Проекты" count={String(projects.length)} imported />
-      <div className="career-profile-tile-grid">
+    <section
+      className="career-profile-screen-panel career-profile-screen-section"
+      id="sec-projects"
+      aria-labelledby="sec-projects-title"
+    >
+      <SectionHead
+        id="sec-projects-title"
+        title="Проекты"
+        count={String(projects.length)}
+        imported
+      />
+      <div className="career-profile-screen-tile-grid">
         {projects.map((project) => (
-          <div key={project.id} className="career-profile-tile">
+          <div key={project.id} className="career-profile-screen-tile">
             <b>{project.name}</b>
-            <span className="career-profile-tile-meta">
+            <span className="career-profile-screen-tile-meta">
               {[project.employer, [project.startDate, project.endDate].filter(Boolean).join(' — ')]
                 .filter(Boolean)
                 .join(' · ')}
@@ -69,6 +87,30 @@ export function ProfileProjectsSection({ draft }: { readonly draft: ResumeDraft 
             {project.description ? <p>{project.description}</p> : null}
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function EmptyCoursesState({ importedLabel }: { readonly importedLabel?: string }) {
+  return (
+    <section
+      className="career-profile-screen-panel career-profile-screen-section"
+      id="sec-courses"
+      aria-labelledby="sec-courses-title"
+    >
+      <SectionHead id="sec-courses-title" title="Курсы" emptyTag />
+      <div className="career-profile-screen-state-block">
+        <BookOpen size={22} />
+        <h3>
+          {importedLabel
+            ? `${importedLabel} не передал курсы для этого профиля`
+            : 'Курсы не заполнены'}
+        </h3>
+        <p>
+          Раздел действительно пуст в источнике — это не ошибка импорта. Добавьте курсы вручную,
+          если они у вас есть.
+        </p>
       </div>
     </section>
   );
@@ -88,28 +130,24 @@ export function ProfileCoursesSection({
 }) {
   const courses = draft.courses ?? [];
   if (!courses.length) {
-    return (
-      <section className="career-profile-panel career-profile-section" id="sec-courses" aria-labelledby="sec-courses-title">
-        <SectionHead id="sec-courses-title" title="Курсы" emptyTag />
-        <div className="career-profile-state-block">
-          <BookOpen size={22} />
-          <h3>
-            {importedLabel ? `${importedLabel} не передал курсы для этого профиля` : 'Курсы не заполнены'}
-          </h3>
-          <p>Раздел действительно пуст в источнике — это не ошибка импорта. Добавьте курсы вручную, если они у вас есть.</p>
-        </div>
-      </section>
-    );
+    return <EmptyCoursesState importedLabel={importedLabel} />;
   }
   return (
-    <section className="career-profile-panel career-profile-section" id="sec-courses" aria-labelledby="sec-courses-title">
+    <section
+      className="career-profile-screen-panel career-profile-screen-section"
+      id="sec-courses"
+      aria-labelledby="sec-courses-title"
+    >
       <SectionHead id="sec-courses-title" title="Курсы" count={String(courses.length)} imported />
-      <div className="career-profile-tile-grid">
+      <div className="career-profile-screen-tile-grid">
         {courses.map((course) => (
-          <div key={course.id} className="career-profile-tile">
+          <div key={course.id} className="career-profile-screen-tile">
             <b>{course.name}</b>
-            <span className="career-profile-tile-meta">
-              {[course.institution ?? course.provider, course.year ? String(course.year) : undefined]
+            <span className="career-profile-screen-tile-meta">
+              {[
+                course.institution ?? course.provider,
+                course.year ? String(course.year) : undefined,
+              ]
                 .filter(Boolean)
                 .join(' · ')}
             </span>
@@ -123,12 +161,21 @@ export function ProfileCoursesSection({
 export function ProfileLanguagesSection({ draft }: { readonly draft: ResumeDraft }) {
   if (!draft.languages.length) return null;
   return (
-    <section className="career-profile-panel career-profile-section" id="sec-languages" aria-labelledby="sec-languages-title">
-      <SectionHead id="sec-languages-title" title="Языки" count={String(draft.languages.length)} imported />
+    <section
+      className="career-profile-screen-panel career-profile-screen-section"
+      id="sec-languages"
+      aria-labelledby="sec-languages-title"
+    >
+      <SectionHead
+        id="sec-languages-title"
+        title="Языки"
+        count={String(draft.languages.length)}
+        imported
+      />
       {draft.languages.map((lang) => (
-        <div key={lang.id} className="career-profile-lang-row">
-          <div className="career-profile-lang-name">{lang.name || 'Язык не указан'}</div>
-          {lang.cefr ? <span className="career-profile-cefr">{lang.cefr}</span> : null}
+        <div key={lang.id} className="career-profile-screen-lang-row">
+          <div className="career-profile-screen-lang-name">{lang.name || 'Язык не указан'}</div>
+          {lang.cefr ? <span className="career-profile-screen-cefr">{lang.cefr}</span> : null}
         </div>
       ))}
     </section>
@@ -139,22 +186,35 @@ export function ProfileRecommendationsSection({ draft }: { readonly draft: Resum
   const recommendations = draft.recommendations ?? [];
   if (!recommendations.length) {
     return (
-      <section className="career-profile-panel career-profile-section" id="sec-recommendations" aria-labelledby="sec-recommendations-title">
+      <section
+        className="career-profile-screen-panel career-profile-screen-section"
+        id="sec-recommendations"
+        aria-labelledby="sec-recommendations-title"
+      >
         <SectionHead id="sec-recommendations-title" title="Рекомендации" />
-        <p className="career-profile-empty-note">Рекомендаций пока нет.</p>
+        <p className="career-profile-screen-empty-note">Рекомендаций пока нет.</p>
       </section>
     );
   }
   return (
-    <section className="career-profile-panel career-profile-section" id="sec-recommendations" aria-labelledby="sec-recommendations-title">
-      <SectionHead id="sec-recommendations-title" title="Рекомендации" count={String(recommendations.length)} imported />
+    <section
+      className="career-profile-screen-panel career-profile-screen-section"
+      id="sec-recommendations"
+      aria-labelledby="sec-recommendations-title"
+    >
+      <SectionHead
+        id="sec-recommendations-title"
+        title="Рекомендации"
+        count={String(recommendations.length)}
+        imported
+      />
       {recommendations.map((rec) => (
-        <div key={rec.id} className="career-profile-rec">
-          <p className="career-profile-rec-quote">
+        <div key={rec.id} className="career-profile-screen-rec">
+          <p className="career-profile-screen-rec-quote">
             <Quotes size={14} />
             {rec.text}
           </p>
-          <div className="career-profile-rec-author">
+          <div className="career-profile-screen-rec-author">
             <b>{rec.recommender || rec.author}</b>
             <span>{[rec.position ?? rec.role, rec.organization].filter(Boolean).join(', ')}</span>
           </div>
@@ -181,13 +241,17 @@ export function ProfileAchievementsSection({ draft }: { readonly draft: ResumeDr
     groups.set(achievement.kind, [...bucket, achievement]);
   });
   return (
-    <section className="career-profile-panel career-profile-section" id="sec-achievements" aria-labelledby="sec-achievements-title">
+    <section
+      className="career-profile-screen-panel career-profile-screen-section"
+      id="sec-achievements"
+      aria-labelledby="sec-achievements-title"
+    >
       <SectionHead id="sec-achievements-title" title="Достижения" imported />
       {[...groups.entries()].map(([kind, items]) => (
-        <div key={kind} className="career-profile-achv-group">
+        <div key={kind} className="career-profile-screen-achv-group">
           <h3>{ACHIEVEMENT_GROUP_LABEL[kind]}</h3>
           {items.map((item) => (
-            <div key={item.id} className="career-profile-achv-item">
+            <div key={item.id} className="career-profile-screen-achv-item">
               <b>{item.title}</b>
               <span>{[item.issuer, item.date].filter(Boolean).join(' · ')}</span>
             </div>

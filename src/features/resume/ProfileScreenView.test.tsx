@@ -46,7 +46,7 @@ describe('ProfileScreenSurface — states', () => {
   it('shows a loading state and no sections while the draft has not arrived', () => {
     const html = renderToStaticMarkup(<ProfileScreenSurface {...baseProps} loading />);
     expect(html).toContain('Загружаем профиль');
-    expect(html).not.toContain('career-profile-topcard');
+    expect(html).not.toContain('career-profile-screen-topcard');
   });
 
   it('shows a retry action on error, never a blank screen', () => {
@@ -69,7 +69,9 @@ describe('ProfileScreenSurface — states', () => {
   });
 
   it('renders every section anchor and the source-coverage side rail once the draft is populated', () => {
-    const html = renderToStaticMarkup(<ProfileScreenSurface {...baseProps} draft={populatedDraft} />);
+    const html = renderToStaticMarkup(
+      <ProfileScreenSurface {...baseProps} draft={populatedDraft} />,
+    );
     expect(html).toContain('Марина Соколова');
     expect(html).toContain('VP of Engineering');
     expect(html).toContain('FinNova Bank');
@@ -77,15 +79,19 @@ describe('ProfileScreenSurface — states', () => {
     expect(html).toContain('Kubernetes');
     expect(html).toContain('sec-courses');
     expect(html).toContain('Раздел действительно пуст в источнике');
-    expect(html).toContain('career-profile-coverage');
+    expect(html).toContain('career-profile-screen-coverage');
   });
 
   it('surfaces a save error next to the save action without hiding the document', () => {
     const html = renderToStaticMarkup(
-      <ProfileScreenSurface {...baseProps} draft={populatedDraft} saveError="Не удалось сохранить" />,
+      <ProfileScreenSurface
+        {...baseProps}
+        draft={populatedDraft}
+        saveError="Не удалось сохранить"
+      />,
     );
     expect(html).toContain('Не удалось сохранить');
-    expect(html).toContain('career-profile-topcard');
+    expect(html).toContain('career-profile-screen-topcard');
   });
 
   it('renders long "about" text across paragraphs without truncating it', () => {

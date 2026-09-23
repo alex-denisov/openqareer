@@ -45,8 +45,8 @@ export function ProfileDocumentMenu({
   }
 
   return (
-    <div className="career-profile-document-menu">
-      <div className="career-profile-document-menu-head">
+    <div className="career-profile-screen-document-menu">
+      <div className="career-profile-screen-document-menu-head">
         <div className="career-resume-formats" role="group" aria-label="Формат позиционирования">
           {FORMATS.map((mode) => (
             <button
@@ -62,7 +62,11 @@ export function ProfileDocumentMenu({
         </div>
         <div className="career-resume-export-group" role="group" aria-label="Экспорт резюме">
           {format === 'stanford-pdf' ? (
-            <button type="button" className="career-resume-export-button" onClick={triggerResumePrint}>
+            <button
+              type="button"
+              className="career-resume-export-button"
+              onClick={triggerResumePrint}
+            >
               <Printer size={15} />
               Печать / PDF
             </button>
@@ -73,7 +77,11 @@ export function ProfileDocumentMenu({
               className="career-resume-export-button"
               onClick={() => {
                 const text = formatResumeAsAtsText(document, draft);
-                triggerFileDownload(resumeExportFileName(document, 'txt'), text, 'text/plain;charset=utf-8');
+                triggerFileDownload(
+                  resumeExportFileName(document, 'txt'),
+                  text,
+                  'text/plain;charset=utf-8',
+                );
               }}
             >
               <FileText size={15} />
@@ -85,7 +93,11 @@ export function ProfileDocumentMenu({
             className="career-resume-export-button"
             onClick={() => {
               const json = exportResumeAsJson(document);
-              triggerFileDownload(resumeExportFileName(document, 'json'), json, 'application/json;charset=utf-8');
+              triggerFileDownload(
+                resumeExportFileName(document, 'json'),
+                json,
+                'application/json;charset=utf-8',
+              );
             }}
           >
             <FileCode size={15} />
@@ -96,10 +108,14 @@ export function ProfileDocumentMenu({
           Закрыть
         </button>
       </div>
-      <div className="career-profile-document-preview">
-        {format === 'stanford-pdf' ? <ResumeDocumentView draft={draft} document={document} evidence={[]} /> : null}
+      <div className="career-profile-screen-document-preview">
+        {format === 'stanford-pdf' ? (
+          <ResumeDocumentView draft={draft} document={document} evidence={[]} />
+        ) : null}
         {format === 'ats-text' ? <ResumeAtsView document={document} draft={draft} /> : null}
-        {format === 'linkedin-pack' ? <ResumeLinkedInPackView document={document} draft={draft} /> : null}
+        {format === 'linkedin-pack' ? (
+          <ResumeLinkedInPackView document={document} draft={draft} />
+        ) : null}
       </div>
     </div>
   );

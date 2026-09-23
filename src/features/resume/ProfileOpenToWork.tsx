@@ -61,28 +61,30 @@ export function ProfileOpenToWork({
   }
 
   return (
-    <div className="career-profile-otw" role="region" aria-label="Open to work">
-      <div className="career-profile-otw-head">
+    <div className="career-profile-screen-otw" role="region" aria-label="Open to work">
+      <div className="career-profile-screen-otw-head">
         <Sparkle size={16} weight="fill" />
         <h2>LinkedIn: «Open to work» — только для рекрутеров</h2>
-        <span className="career-cabinet-tag is-warning">Предложено · требует решения</span>
+        <span className="career-profile-screen-tag is-warning">Предложено · требует решения</span>
       </div>
-      <p className="career-profile-otw-body">
-        В LinkedIn открыта видимость поиска работы. OpenQareer ничего не меняет
-        в целях поиска, пока вы не подтвердите.
+      <p className="career-profile-screen-otw-body">
+        В LinkedIn открыта видимость поиска работы. OpenQareer ничего не меняет в целях поиска, пока
+        вы не подтвердите.
       </p>
-      <div className="career-profile-otw-facts">
+      <div className="career-profile-screen-otw-facts">
         {workModes.length ? (
-          <span className="career-cabinet-tag">Формат: {workModes.join(' · ')}</span>
+          <span className="career-profile-screen-tag">Формат: {workModes.join(' · ')}</span>
         ) : null}
         {openToWork.roles.length ? (
-          <span className="career-cabinet-tag">Роли: {openToWork.roles.join(', ')}</span>
+          <span className="career-profile-screen-tag">Роли: {openToWork.roles.join(', ')}</span>
         ) : null}
         {openToWork.locations.length ? (
-          <span className="career-cabinet-tag">Регионы: {openToWork.locations.join(', ')}</span>
+          <span className="career-profile-screen-tag">
+            Регионы: {openToWork.locations.join(', ')}
+          </span>
         ) : null}
       </div>
-      <div className="career-profile-otw-actions">
+      <div className="career-profile-screen-otw-actions">
         <button
           type="button"
           className="career-primary-button"

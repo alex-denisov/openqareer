@@ -14,10 +14,10 @@ function SectionHead({
   readonly imported?: boolean;
 }) {
   return (
-    <div className="career-profile-section-head">
+    <div className="career-profile-screen-section-head">
       <h2 id={id}>{title}</h2>
-      {count ? <span className="career-profile-section-count">{count}</span> : null}
-      {imported ? <span className="career-cabinet-tag is-accent">Импортировано</span> : null}
+      {count ? <span className="career-profile-screen-section-count">{count}</span> : null}
+      {imported ? <span className="career-profile-screen-tag is-accent">Импортировано</span> : null}
     </div>
   );
 }
@@ -27,7 +27,11 @@ export function ProfileAboutSection({ draft }: { readonly draft: ResumeDraft }) 
   if (!about) return null;
   const paragraphs = about.split(/\n{2,}/u).filter(Boolean);
   return (
-    <section className="career-profile-panel career-profile-section" id="sec-about" aria-labelledby="sec-about-title">
+    <section
+      className="career-profile-screen-panel career-profile-screen-section"
+      id="sec-about"
+      aria-labelledby="sec-about-title"
+    >
       <SectionHead id="sec-about-title" title="Обо мне" imported />
       {paragraphs.map((paragraph, index) => (
         <p key={index}>{paragraph}</p>
@@ -38,27 +42,31 @@ export function ProfileAboutSection({ draft }: { readonly draft: ResumeDraft }) 
 
 function periodLabel(entry: ResumeExperienceInput): string {
   if (!entry.startDate) return '';
-  const end = entry.current ? 'по настоящее время' : entry.endDate ?? '';
+  const end = entry.current ? 'по настоящее время' : (entry.endDate ?? '');
   return end ? `${entry.startDate} — ${end}` : entry.startDate;
 }
 
 function PositionRow({ entry }: { readonly entry: ResumeExperienceInput }) {
   return (
-    <div className="career-profile-position">
-      <div className="career-profile-position-title-row">
+    <div className="career-profile-screen-position">
+      <div className="career-profile-screen-position-title-row">
         <b>{entry.title || 'Должность не указана'}</b>
       </div>
-      <div className="career-profile-position-tags">
-        {entry.employmentType ? <span className="career-cabinet-tag">{entry.employmentType}</span> : null}
+      <div className="career-profile-screen-position-tags">
+        {entry.employmentType ? (
+          <span className="career-profile-screen-tag">{entry.employmentType}</span>
+        ) : null}
         {entry.workplaceType ? (
-          <span className="career-cabinet-tag">{WORKPLACE_LABEL[entry.workplaceType]}</span>
+          <span className="career-profile-screen-tag">{WORKPLACE_LABEL[entry.workplaceType]}</span>
         ) : null}
       </div>
-      {periodLabel(entry) ? <div className="career-profile-position-dates">{periodLabel(entry)}</div> : null}
+      {periodLabel(entry) ? (
+        <div className="career-profile-screen-position-dates">{periodLabel(entry)}</div>
+      ) : null}
       {entry.skills?.length ? (
-        <div className="career-profile-skill-row">
+        <div className="career-profile-screen-skill-row">
           {entry.skills.map((skill) => (
-            <span key={skill} className="career-cabinet-tag">
+            <span key={skill} className="career-profile-screen-tag">
               {skill}
             </span>
           ))}
@@ -77,15 +85,23 @@ const WORKPLACE_LABEL: Record<string, string> = {
 export function ProfileExperienceSection({ draft }: { readonly draft: ResumeDraft }) {
   if (!draft.experience.length) {
     return (
-      <section className="career-profile-panel career-profile-section" id="sec-experience" aria-labelledby="sec-experience-title">
+      <section
+        className="career-profile-screen-panel career-profile-screen-section"
+        id="sec-experience"
+        aria-labelledby="sec-experience-title"
+      >
         <SectionHead id="sec-experience-title" title="Опыт" />
-        <p className="career-profile-empty-note">Опыт работы ещё не добавлен.</p>
+        <p className="career-profile-screen-empty-note">Опыт работы ещё не добавлен.</p>
       </section>
     );
   }
   const groups = groupExperienceByEmployer(draft.experience);
   return (
-    <section className="career-profile-panel career-profile-section" id="sec-experience" aria-labelledby="sec-experience-title">
+    <section
+      className="career-profile-screen-panel career-profile-screen-section"
+      id="sec-experience"
+      aria-labelledby="sec-experience-title"
+    >
       <SectionHead
         id="sec-experience-title"
         title="Опыт"
@@ -93,14 +109,16 @@ export function ProfileExperienceSection({ draft }: { readonly draft: ResumeDraf
         imported
       />
       {groups.map((group) => (
-        <div key={group.key} className="career-profile-company-group">
-          <div className="career-profile-company-head">
-            <span className="career-profile-company-logo" aria-hidden="true">
+        <div key={group.key} className="career-profile-screen-company-group">
+          <div className="career-profile-screen-company-head">
+            <span className="career-profile-screen-company-logo" aria-hidden="true">
               <Buildings size={20} />
             </span>
             <div>
               <b>{group.employer || 'Работодатель не указан'}</b>
-              {group.location ? <div className="career-profile-company-span">{group.location}</div> : null}
+              {group.location ? (
+                <div className="career-profile-screen-company-span">{group.location}</div>
+              ) : null}
             </div>
           </div>
           {group.positions.map((entry) => (
@@ -115,19 +133,32 @@ export function ProfileExperienceSection({ draft }: { readonly draft: ResumeDraf
 export function ProfileEducationSection({ draft }: { readonly draft: ResumeDraft }) {
   if (!draft.education.length) {
     return (
-      <section className="career-profile-panel career-profile-section" id="sec-education" aria-labelledby="sec-education-title">
+      <section
+        className="career-profile-screen-panel career-profile-screen-section"
+        id="sec-education"
+        aria-labelledby="sec-education-title"
+      >
         <SectionHead id="sec-education-title" title="Образование" />
-        <p className="career-profile-empty-note">Образование ещё не добавлено.</p>
+        <p className="career-profile-screen-empty-note">Образование ещё не добавлено.</p>
       </section>
     );
   }
   return (
-    <section className="career-profile-panel career-profile-section" id="sec-education" aria-labelledby="sec-education-title">
-      <SectionHead id="sec-education-title" title="Образование" count={String(draft.education.length)} imported />
+    <section
+      className="career-profile-screen-panel career-profile-screen-section"
+      id="sec-education"
+      aria-labelledby="sec-education-title"
+    >
+      <SectionHead
+        id="sec-education-title"
+        title="Образование"
+        count={String(draft.education.length)}
+        imported
+      />
       {draft.education.map((edu) => (
-        <div key={edu.id} className="career-profile-edu-item">
+        <div key={edu.id} className="career-profile-screen-edu-item">
           <b>{edu.institution || 'Учебное заведение не указано'}</b>
-          <div className="career-profile-edu-meta">
+          <div className="career-profile-screen-edu-meta">
             {[edu.qualification, [edu.startDate, edu.endDate].filter(Boolean).join(' — ')]
               .filter(Boolean)
               .join(' · ')}
@@ -143,23 +174,31 @@ export function ProfileSkillsSection({ draft }: { readonly draft: ResumeDraft })
   const skills = draft.skills ?? [];
   if (!skills.length) {
     return (
-      <section className="career-profile-panel career-profile-section" id="sec-skills" aria-labelledby="sec-skills-title">
+      <section
+        className="career-profile-screen-panel career-profile-screen-section"
+        id="sec-skills"
+        aria-labelledby="sec-skills-title"
+      >
         <SectionHead id="sec-skills-title" title="Навыки" />
-        <p className="career-profile-empty-note">Навыки ещё не добавлены.</p>
+        <p className="career-profile-screen-empty-note">Навыки ещё не добавлены.</p>
       </section>
     );
   }
   const groups = categorizeSkills(skills);
   return (
-    <section className="career-profile-panel career-profile-section" id="sec-skills" aria-labelledby="sec-skills-title">
+    <section
+      className="career-profile-screen-panel career-profile-screen-section"
+      id="sec-skills"
+      aria-labelledby="sec-skills-title"
+    >
       <SectionHead id="sec-skills-title" title="Навыки" count={String(skills.length)} imported />
-      <div className="career-profile-skill-groups">
+      <div className="career-profile-screen-skill-groups">
         {groups.map((group) => (
           <div key={group.label}>
-            <span className="career-profile-group-label">{group.label}</span>
-            <div className="career-profile-group-chips">
+            <span className="career-profile-screen-group-label">{group.label}</span>
+            <div className="career-profile-screen-group-chips">
               {group.skills.map((skill) => (
-                <span key={skill.id} className="career-cabinet-tag">
+                <span key={skill.id} className="career-profile-screen-tag">
                   {skill.name}
                 </span>
               ))}

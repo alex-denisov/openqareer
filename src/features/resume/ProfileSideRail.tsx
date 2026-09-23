@@ -1,4 +1,11 @@
-import { ArrowClockwise, CheckCircle, EnvelopeSimple, Globe, PaperPlaneTilt, Phone } from '@phosphor-icons/react';
+import {
+  ArrowClockwise,
+  CheckCircle,
+  EnvelopeSimple,
+  Globe,
+  PaperPlaneTilt,
+  Phone,
+} from '@phosphor-icons/react';
 import { resumeSourceCoverage, type ImportedSource } from './resumeSourceCoverage';
 import type { ResumeDraft } from './resumeTypes';
 
@@ -16,17 +23,17 @@ function SourceCoveragePanel({
   const coverage = resumeSourceCoverage(draft);
   const total = coverage.filled.length + coverage.empty.length;
   return (
-    <div className="career-profile-panel career-profile-rail-card">
+    <div className="career-profile-screen-panel career-profile-screen-rail-card">
       <h2>
         <CheckCircle size={15} />
         Источник профиля
       </h2>
-      <p className="career-profile-rail-hint">
+      <p className="career-profile-screen-rail-hint">
         {importedSource
           ? `Импортировано из ${importedSource.label} · заполнено разделов: ${coverage.filled.length} из ${total}.`
           : `Заполнено разделов: ${coverage.filled.length} из ${total}.`}
       </p>
-      <ul className="career-profile-coverage">
+      <ul className="career-profile-screen-coverage">
         {coverage.filled.map((section) => (
           <li key={section.id}>
             <span>{section.label}</span>
@@ -40,7 +47,12 @@ function SourceCoveragePanel({
           </li>
         ))}
       </ul>
-      <button type="button" className="career-quiet-button" disabled={refreshing} onClick={onRefresh}>
+      <button
+        type="button"
+        className="career-quiet-button"
+        disabled={refreshing}
+        onClick={onRefresh}
+      >
         <ArrowClockwise size={14} />
         {refreshing ? 'Обновляем…' : 'Обновить импорт'}
       </button>
@@ -57,12 +69,12 @@ function ContactsPanel({ draft }: { readonly draft: ResumeDraft }) {
   if (contact?.links?.[0]) items.push({ icon: Globe, text: contact.links[0] });
   if (!items.length) return null;
   return (
-    <div className="career-profile-panel career-profile-rail-card">
+    <div className="career-profile-screen-panel career-profile-screen-rail-card">
       <h2>
         <EnvelopeSimple size={15} />
         Контакты
       </h2>
-      <ul className="career-profile-rail-contacts">
+      <ul className="career-profile-screen-rail-contacts">
         {items.map((item) => (
           <li key={item.text}>
             <item.icon size={15} />
@@ -86,7 +98,7 @@ export function ProfileSideRail({
   readonly refreshing?: boolean;
 }) {
   return (
-    <aside className="career-profile-side-col" aria-label="Источник и контакты">
+    <aside className="career-profile-screen-side-col" aria-label="Источник и контакты">
       <SourceCoveragePanel
         draft={draft}
         importedSource={importedSource}

@@ -211,7 +211,7 @@ describe('CareerCabinet composition', () => {
     const resume = renderCabinet('resume');
 
     expect(profile).not.toContain('Один шаг на сегодня');
-    expect(profile).toContain('career-profile-view');
+    expect(profile).toContain('career-profile-screen-view');
     expect(resume).toContain('career-resume-studio');
   });
 

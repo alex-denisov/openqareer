@@ -1,6 +1,10 @@
 import { useCallback, useState } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
-import { updateAccountProfile, type CandidateMemory, type ImportedSourceSummary } from '../coach/coachApi';
+import {
+  updateAccountProfile,
+  type CandidateMemory,
+  type ImportedSourceSummary,
+} from '../coach/coachApi';
 import { ProfileDocumentMenu } from './ProfileDocumentMenu';
 import {
   ProfileAboutSection,
@@ -38,7 +42,7 @@ const ANCHORS: readonly { id: string; label: string }[] = [
 
 function ProfileAnchorNav() {
   return (
-    <nav className="career-profile-anchor-nav" aria-label="Разделы профиля">
+    <nav className="career-profile-screen-anchor-nav" aria-label="Разделы профиля">
       {ANCHORS.map((anchor) => (
         <a key={anchor.id} href={`#${anchor.id}`}>
           {anchor.label}
@@ -50,7 +54,7 @@ function ProfileAnchorNav() {
 
 function ProfileLoadingState() {
   return (
-    <div className="career-profile-state" role="status" aria-live="polite">
+    <div className="career-profile-screen-state" role="status" aria-live="polite">
       <span className="career-cabinet-skeleton" aria-hidden="true">
         <span className="career-skeleton-line is-wide" />
         <span className="career-skeleton-line" />
@@ -61,9 +65,15 @@ function ProfileLoadingState() {
   );
 }
 
-function ProfileErrorState({ message, onRetry }: { readonly message?: string; readonly onRetry: () => void }) {
+function ProfileErrorState({
+  message,
+  onRetry,
+}: {
+  readonly message?: string;
+  readonly onRetry: () => void;
+}) {
   return (
-    <div className="career-profile-state" role="alert">
+    <div className="career-profile-screen-state" role="alert">
       <WarningCircle size={24} />
       <p>{message ?? 'Не удалось загрузить профиль. Проверьте соединение и повторите запрос.'}</p>
       <button type="button" className="career-quiet-button" onClick={onRetry}>
@@ -76,7 +86,7 @@ function ProfileErrorState({ message, onRetry }: { readonly message?: string; re
 
 function ProfileEmptyState() {
   return (
-    <div className="career-profile-state">
+    <div className="career-profile-screen-state">
       <p>Профиль пока пуст. Импортируйте резюме из LinkedIn или заполните разделы вручную.</p>
     </div>
   );
@@ -134,28 +144,28 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
 
   if (loading) {
     return (
-      <div className="career-profile-view">
+      <div className="career-profile-screen-view">
         <ProfileLoadingState />
       </div>
     );
   }
   if (error || !draft) {
     return (
-      <div className="career-profile-view">
+      <div className="career-profile-screen-view">
         <ProfileErrorState message={error} onRetry={onRetry} />
       </div>
     );
   }
   if (isDraftEmpty(draft)) {
     return (
-      <div className="career-profile-view">
+      <div className="career-profile-screen-view">
         <ProfileEmptyState />
       </div>
     );
   }
 
   return (
-    <div className="career-profile-view">
+    <div className="career-profile-screen-view">
       <ProfileTopcard
         draft={draft}
         importedSource={importedSource}
@@ -168,7 +178,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
         onConfirm={onConfirmOpenToWork}
         confirming={confirmingOpenToWork}
       />
-      <div className="career-profile-header-actions">
+      <div className="career-profile-screen-header-actions">
         <ProfileDocumentMenu draft={draft} memory={memory} />
         {saveError ? (
           <span className="career-resume-error" role="alert">
@@ -180,8 +190,8 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
         </button>
       </div>
       <ProfileAnchorNav />
-      <div className="career-profile-layout">
-        <div className="career-profile-main-col">
+      <div className="career-profile-screen-layout">
+        <div className="career-profile-screen-main-col">
           <ProfileAboutSection draft={draft} />
           <ProfileExperienceSection draft={draft} />
           <ProfileEducationSection draft={draft} />

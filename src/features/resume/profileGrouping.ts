@@ -83,7 +83,17 @@ const SKILL_CATEGORIES: readonly { label: string; match: readonly string[] }[] =
   },
   {
     label: 'Языки и фреймворки',
-    match: ['go', 'typescript', 'python', 'postgresql', 'grpc', 'react', 'java', 'javascript', 'sql'],
+    match: [
+      'go',
+      'typescript',
+      'python',
+      'postgresql',
+      'grpc',
+      'react',
+      'java',
+      'javascript',
+      'sql',
+    ],
   },
   {
     label: 'Продукт и комплаенс',
