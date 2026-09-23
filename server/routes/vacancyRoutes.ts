@@ -186,6 +186,14 @@ interface RoleContext {
   readonly constraints: StrategyConstraints;
 }
 
+// Ответы на задания меняют порядок ролей одного яруса и никогда — состав
+// (B180, срез 3). Прогон по прежней версии ключа в счёт не идёт: смена
+// формулировок меняет смысл сохранённых ответов.
+function currentWorkPreferences(candidateStore: RouteDeps['candidateStore'], candidateId: string) {
+  const run = candidateStore.getWorkPreferenceRun(candidateId);
+  return run && run.keyVersion === WORK_PREFERENCE_KEY_VERSION ? run.result : undefined;
+}
+
 async function readRoleContext(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -230,12 +238,7 @@ async function readRoleContext(
     candidateOrganisations(candidateStore, candidateId),
   );
 
-  // Ответы на задания меняют порядок ролей одного яруса и никогда — состав
-  // (B180, срез 3). Прогон по прежней версии ключа в счёт не идёт: смена
-  // формулировок меняет смысл сохранённых ответов.
-  const run = candidateStore.getWorkPreferenceRun(candidateId);
-  const preferences =
-    run && run.keyVersion === WORK_PREFERENCE_KEY_VERSION ? run.result : undefined;
+  const preferences = currentWorkPreferences(candidateStore, candidateId);
 
   return {
     proposals: buildRoleProposals({
