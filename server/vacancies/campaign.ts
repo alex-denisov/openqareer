@@ -46,10 +46,45 @@ export interface CampaignDivergence {
   readonly regions: CampaignDivergenceSide<readonly string[]> | null;
 }
 
+/**
+ * Порог значимости роли (B247, срез 2). Роль кампании с числом вакансий ниже
+ * порога — гипотеза, а не результат подбора: баннер «Вакансии» и тег фильтра
+ * «Вакансии»/шаг 4 онбординга читают именно этот флаг, не считают заново.
+ */
+export const ROLE_HYPOTHESIS_THRESHOLD = 8;
+
+export interface RoleHypothesisFlag {
+  readonly role: string;
+  readonly vacancyCount: number;
+  readonly isHypothesis: boolean;
+}
+
+/**
+ * Помечает каждую роль кампании гипотезой, если по ней найдено меньше
+ * `threshold` вакансий. Роль без записи в счётчике считается нулём — молчание
+ * счётчика не значит «результат подтверждён», а значит «пока ничего не
+ * найдено», и это тоже гипотеза (PRB-016).
+ */
+export function annotateRoleHypotheses(
+  roles: readonly string[],
+  vacancyCountsByRole: Readonly<Record<string, number>>,
+  threshold: number = ROLE_HYPOTHESIS_THRESHOLD,
+): RoleHypothesisFlag[] {
+  return roles.map((role) => {
+    const vacancyCount = vacancyCountsByRole[role] ?? 0;
+    return { role, vacancyCount, isHypothesis: vacancyCount < threshold };
+  });
+}
+
 export interface CampaignResolution {
   readonly roles: CampaignField<readonly string[]>;
   readonly regions: CampaignField<readonly string[]>;
   readonly divergence: CampaignDivergence;
+  /**
+   * `undefined`, пока вызывающая сторона не прочитала пул и не посчитала
+   * вакансии по ролям: без счёта нечего размечать (см. `annotateRoleHypotheses`).
+   */
+  readonly roleHypotheses?: readonly RoleHypothesisFlag[];
 }
 
 export interface ResolveCampaignInput {
@@ -57,6 +92,8 @@ export interface ResolveCampaignInput {
   readonly resumeTargetRole?: string | null;
   readonly profileRegions: readonly string[];
   readonly explicit: StoredCampaignSelection | null;
+  /** Число подобранных вакансий на роль кампании — вход порога значимости. */
+  readonly vacancyCountsByRole?: Readonly<Record<string, number>>;
 }
 
 const ACCEPTED_STATUSES = new Set(['confirmed', 'corrected']);
@@ -130,5 +167,8 @@ export function resolveCampaign(input: ResolveCampaignInput): CampaignResolution
       roles: divergenceOf(roles, derivedRoles),
       regions: divergenceOf(regions, derivedRegions),
     },
+    ...(input.vacancyCountsByRole
+      ? { roleHypotheses: annotateRoleHypotheses(roles.value, input.vacancyCountsByRole) }
+      : {}),
   };
 }

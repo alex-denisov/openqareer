@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { resolveCampaign, type CampaignMemoryFact } from './campaign';
+import {
+  annotateRoleHypotheses,
+  resolveCampaign,
+  ROLE_HYPOTHESIS_THRESHOLD,
+  type CampaignMemoryFact,
+} from './campaign';
 
 function fact(partial: Partial<CampaignMemoryFact> & { statement: string }): CampaignMemoryFact {
   return {
@@ -97,5 +102,66 @@ describe('resolveCampaign (B247, срез 1)', () => {
 
     expect(resolution.divergence.roles).toBeNull();
     expect(resolution.divergence.regions).toBeNull();
+  });
+
+  it('без счёта вакансий по ролям не размечает гипотезы вовсе', () => {
+    const resolution = resolveCampaign({
+      memory: [fact({ statement: 'VP Tech', domain: 'role-evidence', status: 'confirmed' })],
+      resumeTargetRole: null,
+      profileRegions: [],
+      explicit: null,
+    });
+
+    expect(resolution.roleHypotheses).toBeUndefined();
+  });
+
+  it('роль с числом вакансий ниже порога помечается гипотезой', () => {
+    const resolution = resolveCampaign({
+      memory: [
+        fact({ statement: 'VP Tech', domain: 'role-evidence', status: 'confirmed' }),
+        fact({ statement: 'CPO', kind: 'hypothesis', status: 'confirmed' }),
+      ],
+      resumeTargetRole: null,
+      profileRegions: [],
+      explicit: null,
+      vacancyCountsByRole: { 'VP Tech': 12, CPO: 3 },
+    });
+
+    expect(resolution.roleHypotheses).toEqual([
+      { role: 'VP Tech', vacancyCount: 12, isHypothesis: false },
+      { role: 'CPO', vacancyCount: 3, isHypothesis: true },
+    ]);
+  });
+
+  it('роль без записи в счётчике считается нулём вакансий и тоже гипотезой', () => {
+    const resolution = resolveCampaign({
+      memory: [fact({ statement: 'VP Tech', domain: 'role-evidence', status: 'confirmed' })],
+      resumeTargetRole: null,
+      profileRegions: [],
+      explicit: null,
+      vacancyCountsByRole: {},
+    });
+
+    expect(resolution.roleHypotheses).toEqual([
+      { role: 'VP Tech', vacancyCount: 0, isHypothesis: true },
+    ]);
+  });
+});
+
+describe('annotateRoleHypotheses (B247, срез 2)', () => {
+  it('использует порог значимости по умолчанию — 8 вакансий', () => {
+    expect(ROLE_HYPOTHESIS_THRESHOLD).toBe(8);
+    expect(annotateRoleHypotheses(['Role A'], { 'Role A': 7 })).toEqual([
+      { role: 'Role A', vacancyCount: 7, isHypothesis: true },
+    ]);
+    expect(annotateRoleHypotheses(['Role A'], { 'Role A': 8 })).toEqual([
+      { role: 'Role A', vacancyCount: 8, isHypothesis: false },
+    ]);
+  });
+
+  it('принимает собственный порог', () => {
+    expect(annotateRoleHypotheses(['Role A'], { 'Role A': 5 }, 3)).toEqual([
+      { role: 'Role A', vacancyCount: 5, isHypothesis: false },
+    ]);
   });
 });
