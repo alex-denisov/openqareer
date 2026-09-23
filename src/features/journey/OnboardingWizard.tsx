@@ -74,7 +74,9 @@ export function OnboardingWizard({
   const timer = useRef(startOnboardingTimer());
   const [now, setNow] = useState(() => Date.now());
   const [step, setStep] = useState<OnboardingStepId>('source');
-  const [sourceChoice, setSourceChoice] = useState<SourceChoice>('pdf');
+  const [sourceChoice, setSourceChoice] = useState<SourceChoice>(() =>
+    isDesktop ? 'profile-import' : 'pdf',
+  );
   const [typedResume, setTypedResume] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [hhUrl, setHhUrl] = useState('');
@@ -111,7 +113,7 @@ export function OnboardingWizard({
   }, [error]);
 
   useEffect(() => {
-    if (!hasAccount || sourceChoice !== 'profile-import' || ingested) return;
+    if (!hasAccount || ingested) return;
     let active = true;
     void getConnections()
       .then((connections) => {
@@ -123,7 +125,7 @@ export function OnboardingWizard({
     return () => {
       active = false;
     };
-  }, [hasAccount, sourceChoice, ingested]);
+  }, [hasAccount, ingested]);
 
   const sourceLock = intakeSourceLock({
     ingestedSource: ingested?.source,
