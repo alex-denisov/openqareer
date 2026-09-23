@@ -4,6 +4,11 @@
  *
  * B251 срез 1 — модель трекера откликов (system-architect, вариант B).
  *
+ * `application_events.provenance = 'system'` (S2) marks the automatic archive
+ * event fired when a tracked vacancy disappears from the pool (architecture.md
+ * §4, owner decision 2026-09-23 22:26): the candidate did not close the card,
+ * the system did.
+ *
  * Только `CREATE TABLE/INDEX IF NOT EXISTS` на пустых таблицах: прод-БД
  * 3.8 GB, окно здоровья выката 20 с не переживает `ALTER TABLE` (B230).
  * `vacancy_applications` (MIGRATION_28) не трогаем — она остаётся фасадом
@@ -35,9 +40,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS applications_candidate_cluster
 CREATE INDEX IF NOT EXISTS applications_candidate_stage
   ON applications(candidate_id, stage);
 
--- 'system' provenance (B251, S2) marks the automatic archive event fired when
--- a tracked vacancy disappears from the pool (architecture.md §4, owner
--- decision 2026-09-23 22:26): the candidate did not close the card, the system did.
 CREATE TABLE IF NOT EXISTS application_events (
   id TEXT PRIMARY KEY,
   application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,

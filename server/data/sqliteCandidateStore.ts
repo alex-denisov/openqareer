@@ -55,13 +55,17 @@ import {
   SqliteVacancyApplicationRepository,
   type VacancyApplicationInput,
 } from './sqliteVacancyApplicationRepository';
-import type { VacancyApplication } from '../../shared/vacancyApplication';
-import type {
-  CreateApplicationInput,
-  PatchApplicationInput,
-  StoredApplication,
-} from './sqliteApplicationRepository';
-import { ApplicationTrackerController } from './store/applicationTrackerController';
+import type { VacancyApplication, VacancyApplicationSnapshot } from '../../shared/vacancyApplication';
+import type { CreateApplicationInput, PatchApplicationInput } from './sqliteApplicationRepository';
+import type { SkipReasonId } from '../../shared/skipReasons';
+import type { ApplicationMaterialRole } from './sqliteApplicationMaterialsRepository';
+import type { CreateInterviewInput, PatchInterviewInput } from './sqliteApplicationInterviewRepository';
+import type { ApplicationOfferTerms } from './sqliteApplicationOfferRepository';
+import type { VacancySkipOrigin } from './sqliteVacancySkipRepository';
+import {
+  ApplicationTrackerController,
+  type ReadApplicationOptions,
+} from './store/applicationTrackerController';
 import type { CareerStrategy } from '../../shared/careerStrategy';
 import type {
   StoredVacancy,
@@ -478,20 +482,95 @@ export class SqliteCandidateStore implements CandidateStore {
     return this.applicationTracker.recordLegacy(candidateId, input);
   }
 
-  /** Трекер откликов (B251, срез 1). Ленивый перенос старых `applied` на первом чтении. */
-  listApplications(candidateId: string): StoredApplication[] {
+  /** Трекер откликов (B251, S1–S2). Ленивый перенос старых `applied` на первом чтении. */
+  listApplications(candidateId: string, options?: ReadApplicationOptions) {
     this.requireCandidate(candidateId);
-    return this.applicationTracker.list(candidateId);
+    return this.applicationTracker.list(candidateId, options);
   }
 
-  createApplication(candidateId: string, input: CreateApplicationInput): StoredApplication {
+  createApplication(
+    candidateId: string,
+    input: CreateApplicationInput & { manualVacancy?: VacancyApplicationSnapshot },
+  ) {
     this.requireCandidate(candidateId);
     return this.applicationTracker.create(candidateId, input);
   }
 
-  patchApplication(candidateId: string, applicationId: string, input: PatchApplicationInput): StoredApplication {
+  patchApplication(candidateId: string, applicationId: string, input: PatchApplicationInput) {
     this.requireCandidate(candidateId);
     return this.applicationTracker.patch(candidateId, applicationId, input);
+  }
+
+  recordApplicationEvent(
+    candidateId: string,
+    applicationId: string,
+    input: { kind: 'follow_up_sent' | 'thank_you_sent' | 'promise'; occurredAt: string; note?: string | null },
+  ) {
+    this.requireCandidate(candidateId);
+    return this.applicationTracker.recordEvent(candidateId, applicationId, input);
+  }
+
+  applicationFunnel(candidateId: string) {
+    this.requireCandidate(candidateId);
+    return this.applicationTracker.funnel(candidateId);
+  }
+
+  linkApplicationMaterial(
+    candidateId: string,
+    applicationId: string,
+    role: ApplicationMaterialRole,
+    documentId: string,
+  ) {
+    this.requireCandidate(candidateId);
+    return this.applicationTracker.linkMaterial(candidateId, applicationId, role, documentId);
+  }
+
+  createApplicationInterview(candidateId: string, applicationId: string, input: CreateInterviewInput) {
+    this.requireCandidate(candidateId);
+    return this.applicationTracker.createInterview(candidateId, applicationId, input);
+  }
+
+  patchApplicationInterview(
+    candidateId: string,
+    applicationId: string,
+    interviewId: string,
+    input: PatchInterviewInput,
+  ) {
+    this.requireCandidate(candidateId);
+    return this.applicationTracker.patchInterview(candidateId, applicationId, interviewId, input);
+  }
+
+  putApplicationOffer(
+    candidateId: string,
+    applicationId: string,
+    terms: ApplicationOfferTerms,
+    respondBy: string | null,
+  ) {
+    this.requireCandidate(candidateId);
+    return this.applicationTracker.putOffer(candidateId, applicationId, terms, respondBy);
+  }
+
+  listVacancySkips(candidateId: string) {
+    this.requireCandidate(candidateId);
+    return this.applicationTracker.listSkips(candidateId);
+  }
+
+  createVacancySkip(
+    candidateId: string,
+    input: { clusterId: string; reasonId: SkipReasonId; origin: VacancySkipOrigin },
+  ) {
+    this.requireCandidate(candidateId);
+    return this.applicationTracker.createSkip(candidateId, input);
+  }
+
+  deleteVacancySkip(candidateId: string, clusterId: string): boolean {
+    this.requireCandidate(candidateId);
+    return this.applicationTracker.deleteSkip(candidateId, clusterId);
+  }
+
+  listVacancyDecisions(candidateId: string) {
+    this.requireCandidate(candidateId);
+    return this.applicationTracker.listVacancyDecisions(candidateId);
   }
 
   saveWorkPreferenceRun(

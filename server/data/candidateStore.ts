@@ -3,11 +3,20 @@ import type { CareerStrategy } from '../../shared/careerStrategy';
 import type { StoredWorkPreferenceRun } from './sqliteWorkPreferenceRepository';
 import type { VacancyApplicationInput } from './sqliteVacancyApplicationRepository';
 import type { VacancyApplication } from '../../shared/vacancyApplication';
+import type { CreateApplicationInput, PatchApplicationInput } from './sqliteApplicationRepository';
+import type { ApplicationStage } from '../../shared/applicationStage';
+import type { SkipReasonId } from '../../shared/skipReasons';
+import type { VacancyDecision } from '../vacancies/applyVacancyDecisions';
+import type { ApplicationView } from '../domain/applicationDerivedFields';
+import type { ReadApplicationOptions } from './store/applicationTrackerController';
+import type { ApplicationMaterialRole, StoredApplicationMaterial } from './sqliteApplicationMaterialsRepository';
 import type {
-  CreateApplicationInput,
-  PatchApplicationInput,
-  StoredApplication,
-} from './sqliteApplicationRepository';
+  CreateInterviewInput,
+  PatchInterviewInput,
+  StoredApplicationInterview,
+} from './sqliteApplicationInterviewRepository';
+import type { ApplicationOfferTerms, StoredApplicationOffer } from './sqliteApplicationOfferRepository';
+import type { StoredVacancySkip, VacancySkipOrigin } from './sqliteVacancySkipRepository';
 import type {
   CoachMessage,
   CoachPhase,
@@ -423,19 +432,69 @@ export interface CandidateStore {
     input: VacancyApplicationInput,
   ): VacancyApplication;
 
-  /** Трекер откликов (B251, срез 1). Ленивый перенос старых `applied` на первом чтении. */
-  listApplications(candidateId: string): StoredApplication[];
+  /** Трекер откликов (B251, S1–S2). Ленивый перенос старых `applied` на первом чтении. */
+  listApplications(candidateId: string, options?: ReadApplicationOptions): ApplicationView[];
 
   createApplication(
     candidateId: string,
-    input: CreateApplicationInput,
-  ): StoredApplication;
+    input: CreateApplicationInput & { manualVacancy?: import('../../shared/vacancyApplication').VacancyApplicationSnapshot },
+  ): ApplicationView;
 
   patchApplication(
     candidateId: string,
     applicationId: string,
     input: PatchApplicationInput,
-  ): StoredApplication;
+  ): ApplicationView;
+
+  /** `POST /applications/:id/events` (B251, S2). */
+  recordApplicationEvent(
+    candidateId: string,
+    applicationId: string,
+    input: { kind: 'follow_up_sent' | 'thank_you_sent' | 'promise'; occurredAt: string; note?: string | null },
+  ): ApplicationView;
+
+  /** `GET /applications/funnel` (B251, S2). */
+  applicationFunnel(candidateId: string): Record<ApplicationStage, number> & { opened: number };
+
+  /** `PUT /applications/:id/materials/:role` (B251, S2). */
+  linkApplicationMaterial(
+    candidateId: string,
+    applicationId: string,
+    role: ApplicationMaterialRole,
+    documentId: string,
+  ): StoredApplicationMaterial;
+
+  createApplicationInterview(
+    candidateId: string,
+    applicationId: string,
+    input: CreateInterviewInput,
+  ): StoredApplicationInterview;
+
+  patchApplicationInterview(
+    candidateId: string,
+    applicationId: string,
+    interviewId: string,
+    input: PatchInterviewInput,
+  ): StoredApplicationInterview;
+
+  putApplicationOffer(
+    candidateId: string,
+    applicationId: string,
+    terms: ApplicationOfferTerms,
+    respondBy: string | null,
+  ): StoredApplicationOffer;
+
+  listVacancySkips(candidateId: string): StoredVacancySkip[];
+
+  createVacancySkip(
+    candidateId: string,
+    input: { clusterId: string; reasonId: SkipReasonId; origin: VacancySkipOrigin },
+  ): StoredVacancySkip;
+
+  deleteVacancySkip(candidateId: string, clusterId: string): boolean;
+
+  /** Applied to the matched pool after its cache read; never part of the cache key (architecture.md §4, §7). */
+  listVacancyDecisions(candidateId: string): VacancyDecision[];
 
   getWorkPreferenceRun(candidateId: string): StoredWorkPreferenceRun | null;
 
