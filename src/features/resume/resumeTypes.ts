@@ -24,9 +24,14 @@ export type {
 export type { ResumeUnknownCode } from '../../../server/domain/resumeStudioTypes';
 
 export type {
+  ResumeAchievementInput,
+  ResumeAchievementKind,
+  ResumeCertificationInput,
   ResumeEducationInput,
   ResumeExperienceInput,
   ResumeLanguageInput,
+  ResumeProjectInput,
+  ResumeSkillInput,
 } from '../../../server/domain/resumeDraft';
 
 import type { ResumeDraft } from '../../../server/domain/resumeDraft';

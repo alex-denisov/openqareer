@@ -202,17 +202,16 @@ describe('CareerCabinet composition', () => {
     }
   });
 
-  // B248 (owner review 2026-09-23): «Профиль» must not repeat «Сегодня»
-  // under a different heading — it opens the resume surface, the nearest
-  // existing screen, until B265 replaces it with its own profile screen.
-  it('gives «Профиль» the resume surface, not a second «Сегодня»', () => {
+  // B265: «Профиль» is its own screen (topcard, Open to work, every imported
+  // section), not a second «Сегодня» and not the Resume Studio surface
+  // anymore. «Резюме» is no longer a reachable rail item but still opens
+  // Resume Studio for anyone with a stored link to it.
+  it('gives «Профиль» its own screen, not a second «Сегодня» or Resume Studio', () => {
     const profile = renderCabinet('profile');
     const resume = renderCabinet('resume');
 
-    expect(profile).not.toContain('Разделы профиля');
     expect(profile).not.toContain('Один шаг на сегодня');
-    // Same surface as «Резюме» — a candidate-scoped read, present on both.
-    expect(profile).toContain('career-resume-studio');
+    expect(profile).toContain('career-profile-view');
     expect(resume).toContain('career-resume-studio');
   });
 

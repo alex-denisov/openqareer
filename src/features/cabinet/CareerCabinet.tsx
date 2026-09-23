@@ -5,6 +5,7 @@ import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { CareerHome } from './CareerHome';
 import { SearchCampaign } from '../search/SearchCampaign';
 import { ResumeStudio } from '../resume/ResumeStudio';
+import { ProfileScreenView } from '../resume/ProfileScreenView';
 import { VacancyBoard } from '../vacancies/VacancyBoard';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
 import { useVacancyApplications } from '../vacancies/useVacancyApplications';
@@ -253,11 +254,21 @@ function CabinetSection({
       />
     );
   }
-  // B248 (owner review 2026-09-23) — the rail's «Профиль» opens the resume
-  // surface, not a second copy of «Сегодня». B265 replaces this with its own
-  // profile screen; until then this is the nearest existing screen, not a
-  // placeholder.
-  if (view === 'resume' || view === 'profile') {
+  // B265 — the rail's «Профиль» is its own screen (topcard, Open to work,
+  // every imported section, edit-in-place), not Resume Studio. «Резюме»
+  // (`view === 'resume'`) is no longer a reachable rail item but keeps
+  // pointing at Resume Studio for anyone with a stored link to it.
+  if (view === 'profile') {
+    return (
+      <ProfileScreenView
+        candidateId={session.candidateId}
+        memory={data.snapshot?.memory ?? []}
+        importedSources={data.snapshot?.importedSources}
+        onRefreshFacts={() => void data.refresh()}
+      />
+    );
+  }
+  if (view === 'resume') {
     return (
       <ResumeStudio
         memory={data.snapshot?.memory ?? []}
