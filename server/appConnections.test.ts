@@ -81,6 +81,37 @@ describe('candidate platform connections', () => {
     ]);
   });
 
+  // B247 S7: a document import without a live session must not read as bare
+  // "disconnected" — the dossier already carries the imported profile.
+  it('различает импортированный без подключения профиль LinkedIn', async () => {
+    const { app, candidateStore, candidateId, authorization } = await createConnectionsApp();
+    candidateStore.importResumeEvidence(candidateId, {
+      sourceLabel: 'Импорт: профиль LinkedIn «cv.pdf»',
+      entries: [
+        {
+          memoryId: 'imported-linkedin-fact',
+          domain: 'outcome',
+          statement: 'Возглавил продуктовую команду.',
+        },
+      ],
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/connections',
+      headers: { authorization },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const linkedin = response
+      .json()
+      .data.find((connection: { platform: string }) => connection.platform === 'linkedin');
+    expect(linkedin).toMatchObject({
+      status: 'imported',
+      importedAt: expect.any(String),
+    });
+  });
+
   it('returns tunnel bootstrap only to an authenticated candidate', async () => {
     const configured = await createConnectionsApp({
       desktopTunnel: {
@@ -170,9 +201,13 @@ describe('candidate platform connections', () => {
       url: '/api/v1/candidate/connections',
       headers: { authorization },
     });
+    // The disconnect removes the live session, but the imported facts stay in
+    // the dossier — the platform now reads as "imported", not a bare
+    // "disconnected" that would contradict what the candidate still sees
+    // (B247 S7).
     expect(
       connections.json().data.find((c: { platform: string }) => c.platform === 'hh').status,
-    ).toBe('disconnected');
+    ).toBe('imported');
   });
 
   it('serves matched vacancies for candidate and manages vacancy sources for admin', async () => {

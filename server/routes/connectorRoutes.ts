@@ -8,7 +8,10 @@ import {
   withDeps,
 } from './helpers';
 import { profileImportSchema } from './schemas';
-import { listCandidateConnectionViews } from '../connectors/nativeSourceConnection';
+import {
+  deriveImportedFactSources,
+  listCandidateConnectionViews,
+} from '../connectors/nativeSourceConnection';
 
 async function handleProfileImport(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
@@ -36,9 +39,11 @@ async function handleListConnections(deps: RouteDeps, request: FastifyRequest, r
     deps.config,
   );
   if (!candidate) return;
+  const snapshot = deps.candidateStore.getSnapshot(candidate.id);
   return {
     data: listCandidateConnectionViews(
       deps.candidateStore.listNativeSourceConnections(candidate.id),
+      deriveImportedFactSources(snapshot.messages, snapshot.memory),
     ),
     meta: { requestId: request.id },
   };

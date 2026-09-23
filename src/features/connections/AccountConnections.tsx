@@ -270,7 +270,7 @@ export function AccountConnections({
               <div className="career-connection-headline">
                 <strong>{label}</strong>
                 <span className={connection.status === 'connected' ? 'is-connected' : undefined}>
-                  {connection.status === 'connected' ? 'Подключено' : 'Не подключено'}
+                  {connectionStatusLabel(connection.status)}
                 </span>
               </div>
               {connection.status === 'connected' ? (
@@ -288,6 +288,8 @@ export function AccountConnections({
                   </button>
                   <small>{disconnectBoundaryCopy(connection)}</small>
                 </>
+              ) : connection.status === 'imported' ? (
+                <p>{importedWithoutConnectionCopy(connection.importedAt)}</p>
               ) : isDesktop ? (
                 <div className="career-connection-panel">
                   <button
@@ -313,6 +315,33 @@ export function AccountConnections({
       {notice ? <p className="career-inline-note" role="status">{notice}</p> : null}
     </section>
   );
+}
+
+function connectionStatusLabel(status: CandidateConnection['status']): string {
+  if (status === 'connected') return 'Подключено';
+  if (status === 'imported') return 'Профиль импортирован';
+  return 'Не подключено';
+}
+
+/**
+ * A document import without a live session (file upload, or a desktop import
+ * whose connection was later removed) is not "Не подключено" — the dossier
+ * still carries what the candidate handed over. The state names both facts:
+ * when it was imported, and that a live connection would keep it current
+ * (B247 S7).
+ */
+function importedWithoutConnectionCopy(importedAt: string): string {
+  return `Профиль импортирован ${importDate(importedAt)} · обновить в приложении`;
+}
+
+function importDate(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return 'ранее';
+  return parsed.toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
 function connectionCopy(connection: Extract<CandidateConnection, { status: 'connected' }>): string {

@@ -306,11 +306,15 @@ describe('POST /api/v1/candidate/resume/import', () => {
       url: '/api/v1/candidate/connections',
       headers: { authorization },
     });
+    // The DELETE action itself reports 'disconnected' (the live receipt is
+    // gone). The connections list, read right after, must not repeat that as
+    // the platform's status: the retained facts came from an import, and B247
+    // S7 reads that as "imported", never a bare disconnected with no data.
     expect(
       connections
         .json()
         .data.find((connection: { platform: string }) => connection.platform === 'hh'),
-    ).toMatchObject({ platform: 'hh', status: 'disconnected' });
+    ).toMatchObject({ platform: 'hh', status: 'imported' });
   });
 
   it('exports safe native receipt metadata without its private storage payload', async () => {

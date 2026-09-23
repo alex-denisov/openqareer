@@ -143,6 +143,30 @@ describe('AccountConnections', () => {
     expect(html).not.toContain('токены');
   });
 
+  // B247 S7: a document import without a live session must read as its own
+  // state, not the bare "Не подключено" a candidate with zero data sees.
+  it('marks a document import without a live session as imported, not disconnected', () => {
+    const html = renderToStaticMarkup(
+      <AccountConnections
+        connections={[
+          {
+            platform: 'linkedin',
+            available: true,
+            status: 'imported',
+            capabilities: ['resume_read'],
+            importsCareerHistory: true,
+            importedAt: '2026-09-10T09:00:00.000Z',
+          },
+        ]}
+        onDisconnect={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Профиль импортирован');
+    expect(html).toContain('обновить в приложении');
+    expect(html).not.toContain('Не подключено');
+  });
+
   it('offers LinkedIn through the restored desktop session flow', () => {
     const html = renderToStaticMarkup(
       <AccountConnections

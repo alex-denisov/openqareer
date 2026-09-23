@@ -75,6 +75,7 @@ export type CandidateConnection = {
   importsCareerHistory: boolean;
 } & (
   | { status: 'disconnected' }
+  | { status: 'imported'; importedAt: string }
   | {
       status: 'connected';
       accessMode: 'native_session_snapshot';
