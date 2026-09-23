@@ -81,5 +81,7 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
     };
   }, [provided]);
 
-  return provided ?? { matched, total, poolTotal, loading, failed, complete, campaign };
+  return (
+    provided ?? { matched, total, poolTotal, loading, failed, complete, campaign, candidateLevel }
+  );
 }
