@@ -33,6 +33,7 @@ import { registerCampaignRoutes } from './campaignRoutes';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
 import { generateVacancyPitch } from '../domain/vacancyPitchService';
 import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';
+import { registerApplicationRoutes } from './applicationRoutes';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
@@ -916,6 +917,7 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
     withDeps(deps, handleSubmitWorkPreferences),
   );
   registerVacancyApplicationRoutes(app, deps);
+  registerApplicationRoutes(app, deps);
   registerCampaignRoutes(app, deps);
   app.get('/api/v1/candidate/strategy', withDeps(deps, handleReadStrategy));
   app.post(

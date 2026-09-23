@@ -6,6 +6,7 @@ import { ZodError } from 'zod';
 import { legalSlugFromPath } from '../../shared/legalRegistry';
 import { CoachProviderError } from '../providers/coachProvider';
 import { CandidateNotFoundError, CandidateStoreConflictError } from '../data/sqliteCandidateStore';
+import { ApplicationNotFoundError, ApplicationVersionConflictError } from '../data/store/errors';
 import {
   CareerCommandApprovalError,
   CareerCommandConflictError,
@@ -129,6 +130,19 @@ const mappedErrors: MappedError[] = [
     status: 404,
     code: 'candidate_not_found',
     message: 'Профиль кандидата не найден.',
+  },
+  {
+    // B251, S1: карточка открыта на двух устройствах, `expectedVersion` устарел.
+    match: (e) => e instanceof ApplicationVersionConflictError,
+    status: 409,
+    code: 'application_version_conflict',
+    message: 'Карточка отклика изменилась. Обновите данные и повторите действие.',
+  },
+  {
+    match: (e) => e instanceof ApplicationNotFoundError,
+    status: 404,
+    code: 'application_not_found',
+    message: 'Отклик не найден.',
   },
 ];
 

@@ -56,12 +56,12 @@ import {
   type VacancyApplicationInput,
 } from './sqliteVacancyApplicationRepository';
 import type { VacancyApplication } from '../../shared/vacancyApplication';
-import {
-  SqliteApplicationRepository,
-  type CreateApplicationInput,
-  type PatchApplicationInput,
-  type StoredApplication,
+import type {
+  CreateApplicationInput,
+  PatchApplicationInput,
+  StoredApplication,
 } from './sqliteApplicationRepository';
+import { ApplicationTrackerController } from './store/applicationTrackerController';
 import type { CareerStrategy } from '../../shared/careerStrategy';
 import type {
   StoredVacancy,
@@ -111,11 +111,10 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly vacancyRepository: SqliteVacancyRepository;
   private readonly careerStrategyRepository: SqliteCareerStrategyRepository;
   private readonly workPreferenceRepository: SqliteWorkPreferenceRepository;
-  private readonly vacancyApplicationRepository: SqliteVacancyApplicationRepository;
-  private readonly applicationRepository: SqliteApplicationRepository;
   private readonly candidateMediaRepository: SqliteCandidateMediaRepository;
   private readonly conversations: ConversationController;
   private readonly sourceConnections: SourceConnectionController;
+  private readonly applicationTracker: ApplicationTrackerController;
 
   constructor(options: SqliteStoreOptions) {
     if (options.databasePath !== ':memory:') {
@@ -140,9 +139,8 @@ export class SqliteCandidateStore implements CandidateStore {
       vacancyRepository: this.vacancyRepository,
       careerStrategyRepository: this.careerStrategyRepository,
       workPreferenceRepository: this.workPreferenceRepository,
-      vacancyApplicationRepository: this.vacancyApplicationRepository,
-      applicationRepository: this.applicationRepository,
       candidateMediaRepository: this.candidateMediaRepository,
+      applicationTracker: this.applicationTracker,
     } = createRepositories(this.database, this.sealedText));
     this.conversations = new ConversationController({
       database: this.database,
@@ -358,10 +356,7 @@ export class SqliteCandidateStore implements CandidateStore {
     return this.vacancyRepository.get(candidateId, subscriptionId);
   }
 
-  recordVacancyRefresh(
-    subscriptionId: string,
-    sample: VacancySample,
-  ): VacancyRefreshResult {
+  recordVacancyRefresh(subscriptionId: string, sample: VacancySample): VacancyRefreshResult {
     return this.vacancyRepository.recordRefresh(subscriptionId, sample);
   }
 
@@ -472,7 +467,7 @@ export class SqliteCandidateStore implements CandidateStore {
 
   listVacancyApplications(candidateId: string): VacancyApplication[] {
     this.requireCandidate(candidateId);
-    return this.vacancyApplicationRepository.list(candidateId);
+    return this.applicationTracker.listLegacy(candidateId);
   }
 
   recordVacancyApplication(
@@ -480,50 +475,23 @@ export class SqliteCandidateStore implements CandidateStore {
     input: VacancyApplicationInput,
   ): VacancyApplication {
     this.requireCandidate(candidateId);
-    const stored = this.vacancyApplicationRepository.record(candidateId, input);
-    // Dual-write (B251, S1, architecture.md §4): the old client only knows
-    // `opened`/`applied`. A confirmed `applied` also advances the tracker,
-    // but never downgrades a card the tracker already moved past.
-    if (input.status === 'applied') {
-      this.applicationRepository.recordLegacyApplied(candidateId, input.clusterId, input.vacancy);
-    }
-    return stored;
+    return this.applicationTracker.recordLegacy(candidateId, input);
   }
 
-  /**
-   * Ленивый перенос старых `applied` (B251, S1, architecture.md §5), на
-   * первом `GET /applications`. `opened` не переносится — «открыл» не
-   * «Хочу». Идемпотентен: повторный вызов ничего не дублирует.
-   */
+  /** Трекер откликов (B251, срез 1). Ленивый перенос старых `applied` на первом чтении. */
   listApplications(candidateId: string): StoredApplication[] {
     this.requireCandidate(candidateId);
-    const legacyApplied = this.vacancyApplicationRepository
-      .list(candidateId)
-      .filter((application) => application.status === 'applied')
-      .map((application) => ({
-        clusterId: application.clusterId,
-        vacancy: application.vacancy,
-        appliedAt: application.appliedAt,
-      }));
-    this.applicationRepository.migrateLegacyApplied(candidateId, legacyApplied);
-    return this.applicationRepository.list(candidateId);
+    return this.applicationTracker.list(candidateId);
   }
 
-  createApplication(
-    candidateId: string,
-    input: CreateApplicationInput,
-  ): StoredApplication {
+  createApplication(candidateId: string, input: CreateApplicationInput): StoredApplication {
     this.requireCandidate(candidateId);
-    return this.applicationRepository.create(candidateId, input);
+    return this.applicationTracker.create(candidateId, input);
   }
 
-  patchApplication(
-    candidateId: string,
-    applicationId: string,
-    input: PatchApplicationInput,
-  ): StoredApplication {
+  patchApplication(candidateId: string, applicationId: string, input: PatchApplicationInput): StoredApplication {
     this.requireCandidate(candidateId);
-    return this.applicationRepository.patch(candidateId, applicationId, input);
+    return this.applicationTracker.patch(candidateId, applicationId, input);
   }
 
   saveWorkPreferenceRun(
@@ -739,10 +707,7 @@ export class SqliteCandidateStore implements CandidateStore {
     return this.careerCommandRepository.save(command);
   }
 
-  getCareerCommand(
-    candidateId: string,
-    commandId: string,
-  ): CareerCommandRecord | null {
+  getCareerCommand(candidateId: string, commandId: string): CareerCommandRecord | null {
     return this.careerCommandRepository.get(candidateId, commandId);
   }
 
@@ -766,12 +731,7 @@ export class SqliteCandidateStore implements CandidateStore {
     execution: ConnectorActionRecord,
     claimedAt: string,
   ): CareerCommandRecord {
-    return this.careerCommandRepository.claim(
-      candidateId,
-      commandId,
-      execution,
-      claimedAt,
-    );
+    return this.careerCommandRepository.claim(candidateId, commandId, execution, claimedAt);
   }
 
   finishCareerCommand(
@@ -779,11 +739,7 @@ export class SqliteCandidateStore implements CandidateStore {
     commandId: string,
     command: CareerCommandRecord,
   ): CareerCommandRecord {
-    return this.careerCommandRepository.finish(
-      candidateId,
-      commandId,
-      command,
-    );
+    return this.careerCommandRepository.finish(candidateId, commandId, command);
   }
 
   close(): void {
@@ -897,30 +853,26 @@ interface StoreRepositories {
   vacancyRepository: SqliteVacancyRepository;
   careerStrategyRepository: SqliteCareerStrategyRepository;
   workPreferenceRepository: SqliteWorkPreferenceRepository;
-  vacancyApplicationRepository: SqliteVacancyApplicationRepository;
-  applicationRepository: SqliteApplicationRepository;
   candidateMediaRepository: SqliteCandidateMediaRepository;
+  applicationTracker: ApplicationTrackerController;
 }
 
 function createRepositories(
   database: DatabaseSync,
   sealedText: SealedText,
 ): StoreRepositories {
+  const legacyApplications = new SqliteVacancyApplicationRepository(database, sealedText);
   return {
+    applicationTracker: new ApplicationTrackerController(database, sealedText, legacyApplications),
     assessmentsRepository: new SqliteAssessmentRepository(database, sealedText),
     marketRepository: new SqliteMarketRepository(database, sealedText),
     resumeRepository: new SqliteResumeRepository(database, sealedText),
     workspaceRepository: new SqliteWorkspaceRepository(database, sealedText),
-    careerCommandRepository: new SqliteCareerCommandRepository(
-      database,
-      sealedText,
-    ),
+    careerCommandRepository: new SqliteCareerCommandRepository(database, sealedText),
     documentRepository: new SqliteDocumentRepository(database, sealedText),
     vacancyRepository: new SqliteVacancyRepository(database, sealedText),
     careerStrategyRepository: new SqliteCareerStrategyRepository(database, sealedText),
     workPreferenceRepository: new SqliteWorkPreferenceRepository(database, sealedText),
-    vacancyApplicationRepository: new SqliteVacancyApplicationRepository(database, sealedText),
-    applicationRepository: new SqliteApplicationRepository(database, sealedText),
     candidateMediaRepository: new SqliteCandidateMediaRepository(database, sealedText),
   };
 }
