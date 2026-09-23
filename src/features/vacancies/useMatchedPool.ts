@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getMatchedVacancyPage } from '../coach/coachApi';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
+import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import { collectMatchedPool, withDeadline } from './vacancyRead';
 
 export interface MatchedPool {
@@ -11,6 +12,10 @@ export interface MatchedPool {
   readonly failed: boolean;
   /** Прочитан ли пул целиком: выборка по половине пула — не выборка по пулу. */
   readonly complete: boolean;
+  /** Кампания и гипотезы роли — только с первой страницы (B248). */
+  readonly campaign?: CampaignMetaView;
+  /** Целевой уровень кандидата, выведенный сервером — только с первой страницы. */
+  readonly candidateLevel?: string | null;
 }
 
 /**
@@ -28,12 +33,22 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [complete, setComplete] = useState(false);
+  const [campaign, setCampaign] = useState<CampaignMetaView | undefined>(undefined);
+  const [candidateLevel, setCandidateLevel] = useState<string | null | undefined>(undefined);
 
   useEffect(() => {
     if (provided) return;
     let active = true;
     void collectMatchedPool<MatchedVacancyItem>(
-      (offset) => withDeadline((signal) => getMatchedVacancyPage(offset, signal)),
+      (offset) =>
+        withDeadline((signal) => getMatchedVacancyPage(offset, signal)).then((page) => {
+          // Кампания едет только с первой страницей (B211, тот же приём).
+          if (offset === 0 && active) {
+            if (page.campaign) setCampaign(page.campaign);
+            if (page.candidateLevel !== undefined) setCandidateLevel(page.candidateLevel);
+          }
+          return page;
+        }),
       undefined,
       // Пул приходит полусотней страниц. Экран показывает каждую сразу: ждать
       // последнюю — это десяток секунд «Читаем пул…» вместо вакансий.
@@ -66,5 +81,5 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
     };
   }, [provided]);
 
-  return provided ?? { matched, total, poolTotal, loading, failed, complete };
+  return provided ?? { matched, total, poolTotal, loading, failed, complete, campaign };
 }
