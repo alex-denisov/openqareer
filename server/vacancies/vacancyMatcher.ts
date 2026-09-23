@@ -18,24 +18,47 @@ export interface CandidateMatchProfile {
   preferredLocations?: string[];
   /** Целевой уровень роли кандидата — вход fit-dot «уровень» (B248). */
   targetLevel?: SeniorityLevel;
+  /**
+   * Подтверждённые навыки с id факта профиля, откуда они взяты (B248,
+   * «совпадает по фактам профиля»). Необязателен: без него совпадение
+   * остаётся строкой, как раньше.
+   */
+  confirmedSkillFacts?: readonly { readonly id: string; readonly label: string }[];
 }
 
-function evaluateSkills(candidateSkills: string[], vacancySkills: string[]) {
+interface MatchingFactPoint {
+  readonly text: string;
+  readonly factId?: string;
+}
+
+function evaluateSkills(
+  candidateSkills: string[],
+  vacancySkills: string[],
+  confirmedSkillFacts: readonly { readonly id: string; readonly label: string }[] = [],
+) {
   const matchingPoints: string[] = [];
+  const matchingFacts: MatchingFactPoint[] = [];
   const missingPoints: string[] = [];
   const candidateSkillsNorm = new Set(candidateSkills.map(normalizeTextForComparison));
+  const factIdByLabel = new Map(
+    confirmedSkillFacts.map((fact) => [normalizeTextForComparison(fact.label), fact.id]),
+  );
 
   let matchedCount = 0;
   for (const skill of vacancySkills) {
-    if (candidateSkillsNorm.has(normalizeTextForComparison(skill))) {
+    const skillNorm = normalizeTextForComparison(skill);
+    if (candidateSkillsNorm.has(skillNorm)) {
       matchedCount += 1;
-      matchingPoints.push(`Подтверждённый навык: ${skill}`);
+      const text = `Подтверждённый навык: ${skill}`;
+      matchingPoints.push(text);
+      const factId = factIdByLabel.get(skillNorm);
+      matchingFacts.push(factId ? { text, factId } : { text });
     } else {
       missingPoints.push(skill);
     }
   }
 
-  return { matchedCount, matchingPoints, missingPoints };
+  return { matchedCount, matchingPoints, matchingFacts, missingPoints };
 }
 
 function evaluateRole(targetRoles: string[], vacancyTitle: string) {
@@ -81,7 +104,11 @@ export function matchCandidateWithVacancy(
   vacancy: VacancyCluster,
 ): VacancyMatchExplanation {
   const vacancySkills = vacancy.skills ?? [];
-  const skillEval = evaluateSkills(candidate.confirmedSkills, vacancySkills);
+  const skillEval = evaluateSkills(
+    candidate.confirmedSkills,
+    vacancySkills,
+    candidate.confirmedSkillFacts,
+  );
   const roleEval = evaluateRole(candidate.targetRoles, vacancy.canonicalTitle);
   const levelMatch = evaluateLevelMatch(candidate.targetLevel, vacancy.canonicalTitle);
 
@@ -101,6 +128,11 @@ export function matchCandidateWithVacancy(
     ...(levelMatch ? { levelMatch } : {}),
     ...(requirements ? { requirements } : {}),
     matchingPoints: [...roleEval.matchingPoints, ...skillEval.matchingPoints, ...locationPoints],
+    matchingFacts: [
+      ...roleEval.matchingPoints.map((text) => ({ text })),
+      ...skillEval.matchingFacts,
+      ...locationPoints.map((text) => ({ text })),
+    ],
     missingPoints: skillEval.missingPoints,
     summary: summarize(roleEval.roleMatch, requirements),
     calculatedAt: new Date().toISOString(),

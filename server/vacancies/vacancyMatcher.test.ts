@@ -99,6 +99,37 @@ describe('Explainable Vacancy Matcher', () => {
     });
   });
 
+  describe('«совпадает по фактам профиля» — привязка к id, а не только к строке', () => {
+    it('приписывает id факта совпавшему навыку, когда факт известен', () => {
+      const explanation = matchCandidateWithVacancy(
+        {
+          ...strongCandidate,
+          confirmedSkillFacts: [{ id: 'fact-42', label: 'React' }],
+        },
+        sampleCluster,
+      );
+      const reactFact = explanation.matchingFacts?.find((entry) =>
+        entry.text.includes('React'),
+      );
+      expect(reactFact?.factId).toBe('fact-42');
+    });
+
+    it('не выдумывает id, когда факт для совпавшего навыка не передан', () => {
+      const explanation = matchCandidateWithVacancy(strongCandidate, sampleCluster);
+      const reactFact = explanation.matchingFacts?.find((entry) =>
+        entry.text.includes('React'),
+      );
+      expect(reactFact?.factId).toBeUndefined();
+    });
+
+    it('содержит ту же строку и тот же порядок, что matchingPoints', () => {
+      const explanation = matchCandidateWithVacancy(strongCandidate, sampleCluster);
+      expect(explanation.matchingFacts?.map((entry) => entry.text)).toEqual(
+        explanation.matchingPoints,
+      );
+    });
+  });
+
   describe('level-match — третий fit-dot рядом с ролью и гео', () => {
     it('называет уровень целевым, когда заголовок вакансии совпадает с уровнем кандидата', () => {
       const explanation = matchCandidateWithVacancy(

@@ -130,6 +130,9 @@ function trim(item: MatchedVacancyItem): MatchedVacancyItem {
       missingPoints: item.explanation.missingPoints.slice(0, VISIBLE_POINTS),
       matchingCount: item.explanation.matchingPoints.length,
       missingCount: item.explanation.missingPoints.length,
+      ...(item.explanation.matchingFacts
+        ? { matchingFacts: item.explanation.matchingFacts.slice(0, VISIBLE_POINTS) }
+        : {}),
     },
   };
 }
