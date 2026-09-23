@@ -828,6 +828,16 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
 
   const title = body?.vacancy?.title ?? cluster?.canonicalTitle ?? poolVacancy?.title;
   if (!title) {
+    if (multiSourceEngine.isKnownVacancyGone(vacancyId)) {
+      return sendError(
+        reply,
+        request,
+        410,
+        'vacancy_gone',
+        'Вакансия снята или обновилась — обновите список.',
+        false,
+      );
+    }
     return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
   }
 

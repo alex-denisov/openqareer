@@ -86,6 +86,21 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     return this.getVacancy(id) !== undefined;
   }
 
+  /** Снятая запись не пропадает — нужна только для ключа `member` (B247 S5). */
+  getVacancyIncludingExpired(id: string): UnifiedVacancy | undefined {
+    return this.rows.get(id)?.vacancy;
+  }
+
+  /** Сохранённый кластер по ключу `member` (B247 S5). */
+  clusterIdForMemberKey(key: string): string | undefined {
+    for (const cluster of this.clusters.values()) {
+      for (const source of cluster.sources) {
+        if (source.externalId === key || source.sourceUrl === key) return cluster.id;
+      }
+    }
+    return undefined;
+  }
+
   countVacancies(window: FreshnessWindow): number {
     return this.loadVacancies(window).length;
   }

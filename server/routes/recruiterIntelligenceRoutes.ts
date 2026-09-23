@@ -31,7 +31,7 @@ async function handleEnrichContacts(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<unknown> {
-  const { authService, candidateStore, config, recruiterContactsRepo } = deps;
+  const { authService, candidateStore, config, multiSourceEngine, recruiterContactsRepo } = deps;
   if (!hasSafeMutationOrigin(request, config)) {
     return csrfError(request, reply);
   }
@@ -47,6 +47,16 @@ async function handleEnrichContacts(
   }
   const vacancyInput = buildRecruiterVacancyInput(vacancyId, deps);
   if (!vacancyInput.title) {
+    if (multiSourceEngine?.isKnownVacancyGone?.(vacancyId)) {
+      return sendError(
+        reply,
+        request,
+        410,
+        'vacancy_gone',
+        'Вакансия снята или обновилась — обновите список.',
+        false,
+      );
+    }
     return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена в серверном пуле.', false);
   }
 

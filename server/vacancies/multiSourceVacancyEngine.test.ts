@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
+import { clusterVacancies } from './vacancyDeduplicator';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 
@@ -450,5 +451,129 @@ describe('MultiSourceVacancyEngine', () => {
     expect(engine.getActiveClusters()[0]?.vacanciesCount).toBe(1);
     await engine.syncSource('stable-source');
     expect(engine.getActiveClusters()).toEqual([]);
+  });
+});
+
+// B247 S5: строка подбора получает id кластера, собранного заново из
+// подмножества кандидатов; в пуле такая же вакансия может быть не первым
+// членом сохранённого кластера, и старый `getActiveCluster` отвечал 404.
+describe('MultiSourceVacancyEngine.getActiveCluster — id from a request-time cluster', () => {
+  function twoMemberEngine(options: { thenEmpty?: boolean } = {}) {
+    let round = 0;
+    const members = [
+      {
+        id: 'founder-1',
+        fingerprint: 'fp-shared',
+        title: 'Platform Engineer',
+        company: 'Acme',
+        isRemote: true,
+        description: 'Shared fingerprint member one.',
+        requiredSkills: [],
+        url: 'https://example.com/founder-1',
+        provenance: {
+          sourceType: 'hh' as const,
+          sourceId: 'src-b247',
+          sourceUrl: 'https://example.com/founder-1',
+          externalId: 'founder-1',
+          observedAt: new Date().toISOString(),
+        },
+        publishedAt: new Date().toISOString(),
+        status: 'active' as const,
+      },
+      {
+        id: 'second-2',
+        fingerprint: 'fp-shared',
+        title: 'Platform Engineer',
+        company: 'Acme',
+        isRemote: true,
+        description: 'Shared fingerprint member two.',
+        requiredSkills: [],
+        url: 'https://example.com/second-2',
+        provenance: {
+          sourceType: 'hh' as const,
+          sourceId: 'src-b247',
+          sourceUrl: 'https://example.com/second-2',
+          externalId: 'second-2',
+          observedAt: new Date().toISOString(),
+        },
+        publishedAt: new Date().toISOString(),
+        status: 'active' as const,
+      },
+    ];
+    const engine = new MultiSourceVacancyEngine({
+      pool: new MemoryVacancyPoolStore(),
+      recluster: { mode: 'sync' },
+      sources: [
+        {
+          id: 'src-b247',
+          name: 'B247 source',
+          type: 'hh',
+          enabled: true,
+          targetUrl: 'https://example.com',
+          refreshIntervalMinutes: 60,
+          itemsFoundTotal: 0,
+          itemsActiveTotal: 0,
+        },
+      ],
+      fetcher: async () => {
+        round += 1;
+        return options.thenEmpty && round > 1 ? [] : members;
+      },
+    });
+    return engine;
+  }
+
+  it('resolves a saved cluster when the requested id names a non-first member (404 repro)', async () => {
+    const engine = twoMemberEngine();
+    await engine.syncSource('src-b247');
+    const saved = engine.getActiveClusters()[0];
+    expect(saved.vacanciesCount).toBe(2);
+    expect(saved.id).toBe('cluster-founder-1');
+
+    // Match-time re-clustering of a narrowed candidate set founds the same
+    // pair on `second-2` instead of `founder-1` (fresh cluster, not saved).
+    const secondMember = engine.getVacancy('second-2');
+    expect(secondMember).toBeDefined();
+    const requestTimeCluster = clusterVacancies([secondMember!])[0];
+    expect(requestTimeCluster.id).toBe('cluster-second-2');
+    expect(requestTimeCluster.id).not.toBe(saved.id);
+
+    const resolved = engine.getActiveCluster(requestTimeCluster.id);
+    expect(resolved?.id).toBe(saved.id);
+    expect(resolved?.vacanciesCount).toBe(2);
+  });
+
+  it('does not hydrate every persisted cluster to resolve by member (PRB-041 guard)', async () => {
+    const engine = twoMemberEngine();
+    await engine.syncSource('src-b247');
+    const pool = (engine as unknown as { pool: MemoryVacancyPoolStore }).pool;
+    const originalLoadClusters = pool.loadClusters.bind(pool);
+    pool.loadClusters = () => {
+      throw new Error('full cluster hydration on a single-vacancy lookup');
+    };
+    try {
+      expect(() => engine.getActiveCluster('cluster-second-2')).not.toThrow();
+      expect(engine.getActiveCluster('cluster-second-2')?.id).toBe('cluster-founder-1');
+    } finally {
+      pool.loadClusters = originalLoadClusters;
+    }
+  });
+
+  it('reports a withdrawn vacancy as gone (410), not merely not found (404)', async () => {
+    const engine = twoMemberEngine({ thenEmpty: true });
+    await engine.syncSource('src-b247');
+    expect(engine.getActiveCluster('cluster-second-2')).toBeDefined();
+
+    // Снятие обнаруживается пробой ссылок: `markExpired` хоронит запись с
+    // датой смерти, но она остаётся в базе (B200 срез 2) — только на этом и
+    // строится честный 410 вместо молчаливого 404.
+    const pool = (engine as unknown as { pool: MemoryVacancyPoolStore }).pool;
+    pool.markExpired(['founder-1', 'second-2'], new Date().toISOString());
+    // A resync without the withdrawn members drops the persisted cluster.
+    await engine.syncSource('src-b247');
+
+    expect(engine.getActiveCluster('cluster-second-2')).toBeUndefined();
+    expect(engine.isKnownVacancyGone('cluster-second-2')).toBe(true);
+    expect(engine.isKnownVacancyGone('cluster-does-not-exist-at-all')).toBe(false);
   });
 });

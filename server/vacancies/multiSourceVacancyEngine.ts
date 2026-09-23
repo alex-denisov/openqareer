@@ -13,6 +13,7 @@ import {
   clusterVacancies,
   clusterVacanciesAsync,
   IncrementalClusterBuilder,
+  memberKeysOf,
 } from './vacancyDeduplicator';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import { mapWithConcurrency } from './boundedConcurrency';
@@ -730,9 +731,67 @@ export class MultiSourceVacancyEngine {
    * отвечать после одного нажатия (PRB-041).
    */
   public getActiveCluster(clusterId: string): VacancyCluster | undefined {
-    const inHeap = this.clusters.find((cluster) => cluster.id === clusterId);
-    const cluster = inHeap ?? this.getPublicCatalogCluster(clusterId);
+    const cluster = this.resolveClusterForId(clusterId);
     return cluster?.status === 'active' ? cluster : undefined;
+  }
+
+  /**
+   * True когда `clusterId` был известной вакансией — нашлась запись
+   * (возможно, снятая) или прямое совпадение кластера, — но живого активного
+   * кластера для неё сейчас нет: снята или заменилась при пересборке. Клик
+   * должен получить 410 с понятной причиной, а не молчаливый 404 (B247 S5).
+   */
+  public isKnownVacancyGone(clusterId: string): boolean {
+    if (this.getActiveCluster(clusterId)) return false;
+    const inHeap = this.clusters.find((cluster) => cluster.id === clusterId);
+    const direct = inHeap ?? this.getPublicCatalogCluster(clusterId);
+    if (direct) return true;
+    return this.memberRecordExists(clusterId);
+  }
+
+  private memberRecordExists(clusterId: string): boolean {
+    const prefix = 'cluster-';
+    if (!clusterId.startsWith(prefix)) return false;
+    const memberId = clusterId.slice(prefix.length);
+    if (!memberId) return false;
+    const member = this.pool.getVacancyIncludingExpired
+      ? this.pool.getVacancyIncludingExpired(memberId)
+      : this.pool.getVacancy(memberId);
+    return member !== undefined;
+  }
+
+  /**
+   * Строка подбора получает id `cluster-<первая запись>` кластера, собранного
+   * **на запросе** (`vacancyDeduplicator.ts` вокруг строки 204), а сохранённый
+   * кластер может быть склеен вокруг другого основателя — прямое совпадение id
+   * находит только первого члена (B247 S5). Промах по id → id записи из
+   * `cluster-<id>` → её `externalId`/`sourceUrl` → ключ `member` в
+   * `vacancy_cluster_keys` (точечный индексный запрос, не полный пул).
+   */
+  private resolveClusterForId(clusterId: string): VacancyCluster | undefined {
+    const inHeap = this.clusters.find((cluster) => cluster.id === clusterId);
+    const direct = inHeap ?? this.getPublicCatalogCluster(clusterId);
+    if (direct) return direct;
+    return this.resolveClusterByMember(clusterId);
+  }
+
+  private resolveClusterByMember(clusterId: string): VacancyCluster | undefined {
+    const prefix = 'cluster-';
+    if (!clusterId.startsWith(prefix)) return undefined;
+    const memberId = clusterId.slice(prefix.length);
+    if (!memberId) return undefined;
+    const member = this.pool.getVacancyIncludingExpired
+      ? this.pool.getVacancyIncludingExpired(memberId)
+      : this.pool.getVacancy(memberId);
+    if (!member) return undefined;
+    if (typeof this.pool.clusterIdForMemberKey !== 'function') return undefined;
+    for (const key of memberKeysOf(member)) {
+      const savedClusterId = this.pool.clusterIdForMemberKey(key);
+      if (!savedClusterId) continue;
+      const saved = this.getPublicCatalogCluster(savedClusterId);
+      if (saved) return saved;
+    }
+    return undefined;
   }
 
   /** One event-loop-sized materialization tick for B229. */

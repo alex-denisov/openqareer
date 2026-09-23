@@ -162,6 +162,14 @@ export interface VacancyPoolStore {
   }>;
   getCatalogEntry?(key: string): CatalogEntryRow | undefined;
   getCluster?(clusterId: string): VacancyCluster | undefined;
+  /**
+   * Запись независимо от того, снята ли она (B247 S5): нужна только чтобы
+   * достать `externalId`/`sourceUrl` для поиска кластера по ключу `member`,
+   * без данных наружу.
+   */
+  getVacancyIncludingExpired?(id: string): UnifiedVacancy | undefined;
+  /** Точечный поиск сохранённого кластера по ключу `member` (B247 S5). */
+  clusterIdForMemberKey?(key: string): string | undefined;
   catalogProjectionReady?(): boolean;
   /** One bounded maintenance tick; returns rows inspected. */
   backfillCatalogEntriesStep?(chunk?: number): number;

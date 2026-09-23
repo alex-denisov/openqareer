@@ -403,6 +403,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return this.readVacancies(`${PAYLOAD_OF} WHERE i.id = ? AND ${ALIVE}`, [id])[0];
   }
 
+  /** Снятая запись не пропадает — нужна только для ключа `member` (B247 S5). */
+  getVacancyIncludingExpired(id: string): UnifiedVacancy | undefined {
+    return this.readVacancies(`${PAYLOAD_OF} WHERE i.id = ?`, [id])[0];
+  }
+
   hasVacancy(id: string): boolean {
     return (
       this.database
@@ -1909,6 +1914,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       )
       .get(key) as CatalogEntrySqlRow | undefined;
     return row ? this.catalogEntryFromRow(row) : undefined;
+  }
+
+  /**
+   * Сохранённый кластер по ключу `member` (B247 S5) — тот же индексный запрос,
+   * что и в `candidateClusterIds`, но на один ключ и без подъёма партии.
+   */
+  clusterIdForMemberKey(key: string): string | undefined {
+    const row = this.database
+      .prepare('SELECT cluster_id FROM vacancy_cluster_keys WHERE kind = ? AND key = ? LIMIT 1')
+      .get('member', key) as { cluster_id: string } | undefined;
+    return row?.cluster_id;
   }
 
   getCluster(clusterId: string): VacancyCluster | undefined {
