@@ -24,5 +24,11 @@ export async function runCjm7(outDir) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const outDir = process.argv[2] ?? './e2e/cjm/.state/tmp-cjm7';
   const r = await runCjm7(outDir);
-  console.log(JSON.stringify({ cjm: r.cjm, steps: r.steps.map((s) => s.name), consoleErrors: r.consoleErrors }, null, 2));
+  console.log(
+    JSON.stringify(
+      { cjm: r.cjm, steps: r.steps.map((s) => s.name), consoleErrors: r.consoleErrors },
+      null,
+      2,
+    ),
+  );
 }

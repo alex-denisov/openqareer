@@ -244,21 +244,7 @@ export class ConversationController {
       : randomUUID();
     const now = new Date().toISOString();
     const memoryIds: string[] = [];
-    if (input.sourceDigest) {
-      // Reusing the message id means the prior reading's untouched facts are
-      // sourced from the very id this call is about to reuse — clear them
-      // before inserting the fresh ones, or the dossier doubles under new
-      // ids (the same failure mode B162 fixed for the file-replace path). Only
-      // facts still awaiting review go: re-reading the very same document must
-      // not undo a confirmation or correction the candidate already made.
-      this.database
-        .prepare(
-          `DELETE FROM memory
-           WHERE candidate_id = ? AND status = 'proposed'
-             AND source_message_ids = ?`,
-        )
-        .run(candidateId, JSON.stringify([messageId]));
-    }
+    if (input.sourceDigest) this.clearUnreviewedFactsOf(candidateId, messageId);
     this.insertMessage(
       candidateId,
       conversationId,
@@ -298,6 +284,24 @@ export class ConversationController {
     }
     this.touchConversation(conversationId, now);
     return { messageId, memoryIds };
+  }
+
+  /**
+   * Reusing the message id means the prior reading's untouched facts are
+   * sourced from the very id a same-document reimport is about to reuse —
+   * clear them before inserting the fresh ones, or the dossier doubles under
+   * new ids (the failure mode B162 fixed for the file-replace path). Only
+   * facts still awaiting review go: re-reading the very same document must
+   * not undo a confirmation or correction the candidate already made.
+   */
+  private clearUnreviewedFactsOf(candidateId: string, messageId: string): void {
+    this.database
+      .prepare(
+        `DELETE FROM memory
+         WHERE candidate_id = ? AND status = 'proposed'
+           AND source_message_ids = ?`,
+      )
+      .run(candidateId, JSON.stringify([messageId]));
   }
 
   /**

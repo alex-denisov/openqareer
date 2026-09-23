@@ -17,7 +17,11 @@ export async function runCjm3(outDir) {
     wait: 8000,
     note: 'Раздел «Вакансии» — список подборки',
     act: async (page) => {
-      await page.locator('nav').getByRole('button', { name: /^Вакансии/ }).first().click();
+      await page
+        .locator('nav')
+        .getByRole('button', { name: /^Вакансии/ })
+        .first()
+        .click();
     },
   });
 
@@ -52,7 +56,11 @@ export async function runCjm3(outDir) {
       note: `Кнопка «${action}» на строке вакансии — доступна ли и просит ли причину`,
       act: async (page, vp) => {
         if (vp !== '1440') return;
-        const btn = page.locator('.career-vacancy-row').first().getByRole('button', { name: new RegExp(`^${action}`) }).first();
+        const btn = page
+          .locator('.career-vacancy-row')
+          .first()
+          .getByRole('button', { name: new RegExp(`^${action}`) })
+          .first();
         if (await btn.isVisible().catch(() => false)) await btn.click();
         else throw new Error(`кнопка «${action}» не найдена в строке`);
       },
@@ -60,11 +68,27 @@ export async function runCjm3(outDir) {
   }
 
   const result = await run.close();
-  return { cjm: 'CJM3', title: 'Ежедневная подборка и решение', top20Count: rows.length, ...result };
+  return {
+    cjm: 'CJM3',
+    title: 'Ежедневная подборка и решение',
+    top20Count: rows.length,
+    ...result,
+  };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const outDir = process.argv[2] ?? './e2e/cjm/.state/tmp-cjm3';
   const r = await runCjm3(outDir);
-  console.log(JSON.stringify({ cjm: r.cjm, steps: r.steps.map((s) => s.name), top20Count: r.top20Count, consoleErrors: r.consoleErrors }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        cjm: r.cjm,
+        steps: r.steps.map((s) => s.name),
+        top20Count: r.top20Count,
+        consoleErrors: r.consoleErrors,
+      },
+      null,
+      2,
+    ),
+  );
 }

@@ -30,7 +30,11 @@ const runners = [
   ['cjm7', runCjm7],
 ];
 
-const summary = { runAt: new Date().toISOString(), base: process.env.OPENQAREER_CJM_BASE ?? 'https://openqareer.com', cjms: [] };
+const summary = {
+  runAt: new Date().toISOString(),
+  base: process.env.OPENQAREER_CJM_BASE ?? 'https://openqareer.com',
+  cjms: [],
+};
 
 for (const [dir, runner] of runners) {
   const outDir = join(outRoot, dir);

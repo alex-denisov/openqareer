@@ -49,7 +49,11 @@ export async function ensureSession(role, { force = false } = {}) {
 
   const url = page.url();
   if (url.includes('/login')) {
-    const message = await page.locator('[role="alert"]').first().textContent().catch(() => null);
+    const message = await page
+      .locator('[role="alert"]')
+      .first()
+      .textContent()
+      .catch(() => null);
     await browser.close();
     throw new Error(`вход под ролью «${role}» не удался: ${message ?? '(без сообщения формы)'}`);
   }

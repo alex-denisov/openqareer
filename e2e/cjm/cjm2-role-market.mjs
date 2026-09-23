@@ -13,7 +13,10 @@ export async function runCjm2(outDir) {
     wait: 3000,
     note: 'Раздел «Поиск» — кампания и предложенные роли',
     act: async (page) => {
-      const btn = page.locator('nav').getByRole('button', { name: /^Поиск/ }).first();
+      const btn = page
+        .locator('nav')
+        .getByRole('button', { name: /^Поиск/ })
+        .first();
       await btn.click();
     },
   });
@@ -30,5 +33,11 @@ export async function runCjm2(outDir) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const outDir = process.argv[2] ?? './e2e/cjm/.state/tmp-cjm2';
   const r = await runCjm2(outDir);
-  console.log(JSON.stringify({ cjm: r.cjm, steps: r.steps.map((s) => s.name), consoleErrors: r.consoleErrors }, null, 2));
+  console.log(
+    JSON.stringify(
+      { cjm: r.cjm, steps: r.steps.map((s) => s.name), consoleErrors: r.consoleErrors },
+      null,
+      2,
+    ),
+  );
 }

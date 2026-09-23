@@ -67,13 +67,22 @@ export async function openCjmRun(cjmId, statePath, outDir) {
         try {
           await act(page, vp.name);
         } catch (e) {
-          record.errors[vp.name] = [...(record.errors[vp.name] ?? []), `act: ${e.message.split('\n')[0]}`];
+          record.errors[vp.name] = [
+            ...(record.errors[vp.name] ?? []),
+            `act: ${e.message.split('\n')[0]}`,
+          ];
         }
       }
       await page.waitForTimeout(wait);
-      const file = join(outDir, `${String(steps.length + 1).padStart(2, '0')}-${name}-${vp.name}.png`);
+      const file = join(
+        outDir,
+        `${String(steps.length + 1).padStart(2, '0')}-${name}-${vp.name}.png`,
+      );
       await page.screenshot({ path: file, fullPage }).catch((e) => {
-        record.errors[vp.name] = [...(record.errors[vp.name] ?? []), `screenshot: ${e.message.split('\n')[0]}`];
+        record.errors[vp.name] = [
+          ...(record.errors[vp.name] ?? []),
+          `screenshot: ${e.message.split('\n')[0]}`,
+        ];
       });
       record.shots[vp.name] = file;
       record.text[vp.name] = await page
