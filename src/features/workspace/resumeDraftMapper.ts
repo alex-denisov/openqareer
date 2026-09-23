@@ -5,9 +5,11 @@ import type { ParsedResume, ProfileFactDraft } from './resumeParser';
 // eslint-disable-next-line max-lines-per-function
 export function parsedResumeToDraft(parsed: ParsedResume): ResumeDraft {
   return {
+    schemaVersion: 2,
     candidate: {
       fullName: parsed.fullName,
       photoUrl: parsed.photoUrl,
+      headline: parsed.headline,
       about: parsed.about,
       contact: {
         email: parsed.contact.email,
@@ -15,6 +17,7 @@ export function parsedResumeToDraft(parsed: ParsedResume): ResumeDraft {
         telegram: parsed.contact.telegram,
         location: parsed.contact.location,
         links: parsed.contact.links,
+        linkedinUrl: parsed.contact.linkedinUrl,
       },
     },
     targetRole: parsed.targetRole,
@@ -73,6 +76,46 @@ export function parsedResumeToDraft(parsed: ParsedResume): ResumeDraft {
       cefr: lang.cefr,
     })),
     additional: parsed.additional,
+    certifications: parsed.certifications?.map((cert, index) => ({
+      id: `cert-${index + 1}`,
+      name: cert.name,
+      issuer: cert.issuer,
+      issuedAt: cert.issuedAt,
+      expiresAt: cert.expiresAt,
+      credentialId: cert.credentialId,
+      url: cert.url,
+    })),
+    projects: parsed.projects?.map((project, index) => ({
+      id: `project-${index + 1}`,
+      name: project.name,
+      startDate: project.startDate,
+      endDate: project.endDate,
+      current: project.current,
+      description: project.description,
+      employer: project.employer,
+      url: project.url,
+      skills: project.skills,
+    })),
+    achievements: parsed.achievements?.map((achievement, index) => ({
+      id: `achievement-${index + 1}`,
+      kind: achievement.kind,
+      title: achievement.title,
+      issuer: achievement.issuer,
+      role: achievement.role,
+      date: achievement.date,
+      endDate: achievement.endDate,
+      description: achievement.description,
+      url: achievement.url,
+    })),
+    sourceSuggestions: parsed.openToWork
+      ? {
+          openToWork: {
+            roles: parsed.openToWork.roles,
+            locations: parsed.openToWork.locations,
+            workplaceTypes: parsed.openToWork.workplaceTypes,
+          },
+        }
+      : undefined,
   };
 }
 

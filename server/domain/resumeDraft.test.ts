@@ -219,4 +219,25 @@ describe('resumeDraftSchema — v2 extension for reading (B265 slice 1)', () => 
     });
     expect(projection.master.about).toBe(about);
   });
+
+  it('rejects a non-https certification URL (M4 hardening)', () => {
+    const withPlainHttp = {
+      ...v2Draft(),
+      certifications: [{ ...v2Draft().certifications[0], url: 'http://credly.com/badges/abc123' }],
+    };
+    expect(() => resumeDraftSchema.parse(withPlainHttp)).toThrow();
+  });
+
+  it('rejects a javascript: URL disguised as a project link', () => {
+    const withJsScheme = {
+      ...v2Draft(),
+      projects: [{ ...v2Draft().projects[0], url: 'javascript:alert(1)' }],
+    };
+    expect(() => resumeDraftSchema.parse(withJsScheme)).toThrow();
+  });
+
+  it('accepts an https URL', () => {
+    const draft = resumeDraftSchema.parse(v2Draft());
+    expect(draft.certifications?.[0]?.url).toBe('https://www.credly.com/badges/abc123');
+  });
 });
