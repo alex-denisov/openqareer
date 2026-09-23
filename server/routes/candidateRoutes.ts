@@ -513,6 +513,20 @@ const handlePutResume: Handler = async (deps, request, reply) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const draft = resumeDraftSchema.parse(request.body);
+  // A stored v2 draft carries fields a pre-B265 client has never heard of.
+  // Saving that client's payload as-is would silently drop them, so an old
+  // build is refused outright instead of quietly losing data (architecture §1).
+  const storedDraft = candidateStore.getSnapshot(candidate.id).resume?.draft;
+  if (storedDraft?.schemaVersion === 2 && draft.schemaVersion !== 2) {
+    return sendError(
+      reply,
+      request,
+      409,
+      'resume_client_outdated',
+      'Обновите приложение, чтобы сохранить резюме.',
+      false,
+    );
+  }
   const projection = buildResumeStudioProjection({
     ...draft,
     evidence: candidateStore.getSnapshot(candidate.id).memory,

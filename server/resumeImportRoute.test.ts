@@ -625,6 +625,126 @@ describe('POST /api/v1/candidate/resume/import', () => {
   });
 });
 
+/** A resume draft body carrying every new v2 field (architecture §1). */
+function v2ResumeDraftBody() {
+  return {
+    schemaVersion: 2,
+    candidate: {
+      fullName: 'Marina Orlova',
+      headline: 'VP of Technology',
+      contact: { links: [] },
+    },
+    experience: [],
+    education: [],
+    languages: [],
+    projects: [
+      {
+        id: 'proj-1',
+        name: 'Platform migration',
+        description: 'Migrated core services to Kubernetes.',
+      },
+    ],
+  };
+}
+
+function putHeaders(authorization: string) {
+  return { authorization, origin: 'http://localhost:3000' };
+}
+
+describe('PUT /api/v1/candidate/resume — v2 draft outdated-client guard (B265 slice 1)', () => {
+  it('returns 409 resume_client_outdated when a v2 draft is saved without schemaVersion:2', async () => {
+    const { app, authorization } = await createApp();
+
+    const seeded = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/resume',
+      headers: putHeaders(authorization),
+      payload: v2ResumeDraftBody(),
+    });
+    expect(seeded.statusCode).toBe(200);
+
+    const staleClientBody: Record<string, unknown> = { ...v2ResumeDraftBody() };
+    delete staleClientBody.schemaVersion;
+    delete staleClientBody.projects;
+
+    const rejected = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/resume',
+      headers: putHeaders(authorization),
+      payload: staleClientBody,
+    });
+    expect(rejected.statusCode).toBe(409);
+    expect(rejected.json().error.code).toBe('resume_client_outdated');
+
+    const stillIntact = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/resume',
+      headers: putHeaders(authorization),
+    });
+    expect(stillIntact.json().data.draft.schemaVersion).toBe(2);
+    expect(stillIntact.json().data.draft.projects?.[0]?.name).toBe('Platform migration');
+  });
+
+  it('succeeds and keeps new fields when the client sends schemaVersion:2', async () => {
+    const { app, authorization } = await createApp();
+
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/resume',
+      headers: putHeaders(authorization),
+      payload: v2ResumeDraftBody(),
+    });
+
+    const updated = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/resume',
+      headers: putHeaders(authorization),
+      payload: {
+        ...v2ResumeDraftBody(),
+        candidate: { ...v2ResumeDraftBody().candidate, headline: 'CTO' },
+      },
+    });
+    expect(updated.statusCode).toBe(200);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/resume',
+      headers: putHeaders(authorization),
+    });
+    expect(response.json().data.draft.candidate.headline).toBe('CTO');
+    expect(response.json().data.draft.schemaVersion).toBe(2);
+  });
+
+  it('still serves a v1 draft (GET) after v2 code ships, with new fields undefined', async () => {
+    const { app, authorization } = await createApp();
+
+    const v1Body = {
+      candidate: { fullName: 'Old Client Candidate', contact: { links: [] } },
+      experience: [],
+      education: [],
+      languages: [],
+    };
+
+    const saved = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/resume',
+      headers: putHeaders(authorization),
+      payload: v1Body,
+    });
+    expect(saved.statusCode).toBe(200);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/resume',
+      headers: putHeaders(authorization),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.draft.candidate.fullName).toBe('Old Client Candidate');
+    expect(response.json().data.draft.schemaVersion).toBeUndefined();
+    expect(response.json().data.draft.projects).toBeUndefined();
+  });
+});
+
 /**
  * INC-037 — у импорта не было потолка времени. На проде 2026-09-07 разбор шёл
  * 389 секунд и всё равно откатился на правила: кандидат ждал шесть с половиной
