@@ -24,6 +24,12 @@ export interface VacancyApplicationSnapshot {
   readonly company: string;
   readonly url: string;
   readonly source: string;
+  /**
+   * B251, S2 — a manual card ("через рекрутера, компания скрыта") that
+   * names no `company`: `true` says the field is deliberately empty, not
+   * missing data.
+   */
+  readonly companyHidden?: boolean;
 }
 
 export interface VacancyApplication {

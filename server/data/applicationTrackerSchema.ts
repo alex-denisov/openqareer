@@ -35,6 +35,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS applications_candidate_cluster
 CREATE INDEX IF NOT EXISTS applications_candidate_stage
   ON applications(candidate_id, stage);
 
+-- 'system' provenance (B251, S2) marks the automatic archive event fired when
+-- a tracked vacancy disappears from the pool (architecture.md §4, owner
+-- decision 2026-09-23 22:26): the candidate did not close the card, the system did.
 CREATE TABLE IF NOT EXISTS application_events (
   id TEXT PRIMARY KEY,
   application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
@@ -46,7 +49,7 @@ CREATE TABLE IF NOT EXISTS application_events (
   to_stage TEXT,
   occurred_at TEXT NOT NULL,
   recorded_at TEXT NOT NULL,
-  provenance TEXT NOT NULL CHECK (provenance IN ('candidate', 'migrated', 'legacy_client')),
+  provenance TEXT NOT NULL CHECK (provenance IN ('candidate', 'migrated', 'legacy_client', 'system')),
   payload_cipher TEXT
 ) STRICT;
 CREATE INDEX IF NOT EXISTS application_events_by_application

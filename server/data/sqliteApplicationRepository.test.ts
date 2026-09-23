@@ -136,4 +136,73 @@ describe('SqliteApplicationRepository', () => {
       expect(repo.list('candidate-1')).toHaveLength(1);
     });
   });
+
+  describe('recordEvent', () => {
+    it('appends a follow-up event without changing the stage', () => {
+      const { repo } = createRepo();
+      const created = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'applied', vacancy });
+      const after = repo.recordEvent('candidate-1', created.id, {
+        kind: 'follow_up_sent',
+        occurredAt: '2030-01-01T00:00:00.000Z',
+      });
+      expect(after.stage).toBe('applied');
+      const events = repo.listEvents('candidate-1', created.id);
+      expect(events.at(-1)).toMatchObject({ kind: 'follow_up_sent', provenance: 'candidate' });
+    });
+
+    it('throws not-found for an unknown application', () => {
+      const { repo } = createRepo();
+      expect(() =>
+        repo.recordEvent('candidate-1', 'missing', {
+          kind: 'thank_you_sent',
+          occurredAt: '2026-09-10T00:00:00.000Z',
+        }),
+      ).toThrow(ApplicationNotFoundError);
+    });
+  });
+
+  describe('archiveClosedVacancy', () => {
+    it('archives a card with a system event and vacancy_closed reason', () => {
+      const { repo } = createRepo();
+      const created = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'applied', vacancy });
+      const archived = repo.archiveClosedVacancy('candidate-1', created);
+      expect(archived.stage).toBe('archived');
+      expect(archived.closedReason).toBe('vacancy_closed');
+      const events = repo.listEvents('candidate-1', created.id);
+      expect(events.at(-1)).toMatchObject({ toStage: 'archived', provenance: 'system' });
+    });
+
+    it('is idempotent: does not touch an already-archived or rejected card', () => {
+      const { repo } = createRepo();
+      const created = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'rejected', vacancy });
+      const untouched = repo.archiveClosedVacancy('candidate-1', created);
+      expect(untouched).toEqual(created);
+      expect(repo.listEvents('candidate-1', created.id)).toHaveLength(1);
+    });
+  });
+
+  describe('funnel', () => {
+    it('counts distinct applications that ever reached each stage', () => {
+      const { repo } = createRepo();
+      const a = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'saved', vacancy });
+      repo.patch('candidate-1', a.id, { expectedVersion: a.version, stage: 'applied' });
+      repo.create('candidate-1', { clusterId: 'cluster-2', stage: 'saved', vacancy });
+      const funnel = repo.funnel('candidate-1');
+      expect(funnel.saved).toBe(2);
+      expect(funnel.applied).toBe(1);
+      expect(funnel.interview).toBe(0);
+    });
+  });
+
+  describe('create with a manual card', () => {
+    it('stores a companyHidden manual vacancy with no clusterId', () => {
+      const { repo } = createRepo();
+      const created = repo.create('candidate-1', {
+        stage: 'saved',
+        vacancy: { title: 'Через рекрутера', company: '', url: '', source: 'recruiter', companyHidden: true },
+      });
+      expect(created.clusterId).toBeNull();
+      expect(created.vacancy).toMatchObject({ companyHidden: true, source: 'recruiter' });
+    });
+  });
 });

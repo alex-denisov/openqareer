@@ -12,7 +12,7 @@ import {
 import type { VacancyApplicationSnapshot } from '../../shared/vacancyApplication';
 
 export type ApplicationProcessProfile = 'standard' | 'executive';
-export type ApplicationEventProvenance = 'candidate' | 'migrated' | 'legacy_client';
+export type ApplicationEventProvenance = 'candidate' | 'migrated' | 'legacy_client' | 'system';
 export type ApplicationEventKind =
   | 'stage'
   | 'note'
@@ -52,6 +52,8 @@ export interface CreateApplicationInput {
   readonly vacancy?: VacancyApplicationSnapshot;
   readonly stage: ApplicationStage;
   readonly occurredAt?: string;
+  /** Defaults to `standard` (server/vacancies/processProfileDefault.ts decides). */
+  readonly processProfile?: ApplicationProcessProfile;
 }
 
 export interface PatchApplicationInput {
@@ -153,13 +155,14 @@ export class SqliteApplicationRepository {
         `INSERT INTO applications
           (id, candidate_id, cluster_id, stage, process_profile, vacancy_cipher,
            follow_up_due_at, stage_changed_at, version, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'standard', ?, NULL, ?, 1, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 1, ?, ?)`,
       )
       .run(
         id,
         candidateId,
         input.clusterId ?? null,
         input.stage,
+        input.processProfile ?? 'standard',
         input.vacancy
           ? this.sealedText.seal(JSON.stringify(input.vacancy), vacancyAssociatedData(candidateId, id))
           : null,
@@ -327,6 +330,81 @@ export class SqliteApplicationRepository {
     }
   }
 
+  /**
+   * `POST /applications/:id/events` (architecture.md §4): follow-up sent,
+   * thank-you sent, or a promise the company made. Does not touch `stage`.
+   */
+  recordEvent(
+    candidateId: string,
+    applicationId: string,
+    input: { kind: 'follow_up_sent' | 'thank_you_sent' | 'promise'; occurredAt: string; note?: string | null },
+    now = new Date().toISOString(),
+  ): StoredApplication {
+    const current = this.get(candidateId, applicationId);
+    if (!current) throw new ApplicationNotFoundError();
+    this.insertEvent(
+      candidateId,
+      applicationId,
+      { kind: input.kind, fromStage: null, toStage: null, occurredAt: input.occurredAt, provenance: 'candidate' },
+      now,
+      input.note ? this.sealedText.seal(input.note, eventAssociatedData(candidateId, applicationId)) : null,
+    );
+    return current;
+  }
+
+  /**
+   * A tracked vacancy disappeared from the pool (architecture.md §4, owner
+   * decision 2026-09-23 22:26): move the card to `archived` with
+   * `closed_reason = 'vacancy_closed'` and a `system`-provenance event.
+   * Idempotent — a closed/rejected card is left alone, so a second read of
+   * `GET /applications` never double-archives or double-writes the event.
+   */
+  archiveClosedVacancy(
+    candidateId: string,
+    application: StoredApplication,
+    now = new Date().toISOString(),
+  ): StoredApplication {
+    if (application.stage === 'archived' || application.stage === 'rejected') return application;
+    this.database
+      .prepare(
+        `UPDATE applications SET stage = 'archived', closed_reason = 'vacancy_closed',
+           stage_changed_at = ?, version = version + 1, updated_at = ?
+         WHERE candidate_id = ? AND id = ?`,
+      )
+      .run(now, now, candidateId, application.id);
+    this.insertEvent(
+      candidateId,
+      application.id,
+      { kind: 'stage', fromStage: application.stage, toStage: 'archived', occurredAt: now, provenance: 'system' },
+      now,
+    );
+    return this.get(candidateId, application.id) as StoredApplication;
+  }
+
+  /**
+   * Number of applications that ever reached each stage (architecture.md §3):
+   * counted from `application_events.to_stage`, not the current `stage`, so a
+   * card that passed through `interview` on its way to `rejected` still
+   * counts there.
+   */
+  funnel(candidateId: string): Record<ApplicationStage, number> {
+    const rows = this.database
+      .prepare(
+        `SELECT to_stage AS stage, COUNT(DISTINCT application_id) AS total
+           FROM application_events
+          WHERE candidate_id = ? AND to_stage IS NOT NULL
+          GROUP BY to_stage`,
+      )
+      .all(candidateId) as unknown as Array<{ stage: ApplicationStage; total: number }>;
+    const totals = Object.fromEntries(
+      (['saved', 'applied', 'responded', 'interview', 'offer', 'rejected', 'archived'] as const).map(
+        (stage) => [stage, 0],
+      ),
+    ) as Record<ApplicationStage, number>;
+    for (const row of rows) totals[row.stage] = row.total;
+    return totals;
+  }
+
   listEvents(candidateId: string, applicationId: string): StoredApplicationEvent[] {
     const rows = this.database
       .prepare(
@@ -366,12 +444,13 @@ export class SqliteApplicationRepository {
       provenance: ApplicationEventProvenance;
     },
     recordedAt: string,
+    payloadCipher: string | null = null,
   ): void {
     this.database
       .prepare(
         `INSERT INTO application_events
-          (id, application_id, candidate_id, kind, from_stage, to_stage, occurred_at, recorded_at, provenance)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, application_id, candidate_id, kind, from_stage, to_stage, occurred_at, recorded_at, provenance, payload_cipher)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         randomUUID(),
@@ -383,6 +462,7 @@ export class SqliteApplicationRepository {
         event.occurredAt,
         recordedAt,
         event.provenance,
+        payloadCipher,
       );
   }
 
@@ -417,4 +497,8 @@ function vacancyAssociatedData(candidateId: string, applicationId: string): stri
 
 function notesAssociatedData(candidateId: string, applicationId: string): string {
   return `candidate:${candidateId}:application:${applicationId}:notes`;
+}
+
+function eventAssociatedData(candidateId: string, applicationId: string): string {
+  return `candidate:${candidateId}:application:${applicationId}:event`;
 }
