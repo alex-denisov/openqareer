@@ -75,6 +75,7 @@ export function OnboardingWizard({
   const [now, setNow] = useState(() => Date.now());
   const [step, setStep] = useState<OnboardingStepId>('source');
   const [sourceChoice, setSourceChoice] = useState<SourceChoice>('pdf');
+  const [typedResume, setTypedResume] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [hhUrl, setHhUrl] = useState('');
   const [isLinkedinModalOpen, setLinkedinModalOpen] = useState(false);
@@ -130,7 +131,7 @@ export function OnboardingWizard({
     connectedPlatform:
       connectedSource?.platform ??
       (isHhConnected && !isHhEmptyAccount ? 'hh' : isLinkedinConnected ? 'linkedin' : undefined),
-    typedLength: 0,
+    typedLength: typedResume.trim().length,
   });
 
   function chooseSource(next: SourceChoice) {
@@ -138,6 +139,7 @@ export function OnboardingWizard({
     if (sourceLock.lockedTo && sourceLock.lockedTo !== next) return;
     setSourceChoice(next);
     setError(undefined);
+    if (next !== 'text') setTypedResume('');
     ingestion.clear();
   }
 
@@ -208,6 +210,13 @@ export function OnboardingWizard({
         setError('Загрузите PDF или выберите другой источник.');
         return;
       }
+      if (sourceChoice === 'text') {
+        if (typedResume.trim().length < 80) {
+          setError('Добавьте хотя бы 80 знаков, чтобы собрать профиль из текста.');
+          return;
+        }
+        await ingestion.acceptParsed(parseResumeContent(typedResume), 'text');
+      }
       setStep(nextStepId(branch, step) ?? step);
       return;
     }
@@ -263,24 +272,49 @@ export function OnboardingWizard({
         <>
           <OnboardingSourceCards
             active={
-              sourceChoice === 'pdf' ? 'pdf' : sourceChoice === 'none' ? 'none' : 'profile-import'
+              sourceChoice === 'pdf' || sourceChoice === 'text'
+                ? 'pdf'
+                : sourceChoice === 'none'
+                  ? 'none'
+                  : 'profile-import'
             }
             linkedinSelected={
               isLinkedinConnected || connectedSource?.platform === 'linkedin' || isLinkedinModalOpen
             }
             hhSelected={isHhConnected || connectedSource?.platform === 'hh' || isHhModalOpen}
+            lockedTo={
+              sourceLock.lockedTo === 'text'
+                ? 'pdf'
+                : sourceLock.lockedTo === 'profile-import' || sourceLock.lockedTo === 'pdf'
+                  ? sourceLock.lockedTo
+                  : undefined
+            }
+            lockReason={sourceLock.reason}
             onChoosePdf={() => chooseSource('pdf')}
-            onChooseLinkedin={() => {
-              chooseSource('profile-import');
-              setLinkedinModalOpen(true);
-            }}
-            onChooseHh={() => {
-              chooseSource('profile-import');
-              setHhModalOpen(true);
-            }}
+            onChooseLinkedin={() => chooseSource('profile-import')}
+            onChooseHh={() => chooseSource('profile-import')}
             onChooseTalk={() => chooseSource('none')}
           />
-          {sourceChoice === 'pdf' || sourceChoice === 'profile-import' ? (
+          {sourceChoice === 'pdf' ? (
+            <button
+              type="button"
+              className="career-text-button"
+              onClick={() => chooseSource('text')}
+            >
+              Нет PDF под рукой — вставить текст резюме
+            </button>
+          ) : null}
+          {sourceChoice === 'text' ? (
+            <button
+              type="button"
+              className="career-quiet-button"
+              onClick={() => chooseSource('pdf')}
+            >
+              <ArrowLeft size={16} />
+              Вернуться к PDF
+            </button>
+          ) : null}
+          {sourceChoice === 'pdf' || sourceChoice === 'profile-import' || sourceChoice === 'text' ? (
             <IntakeSourceStep
               hideChoiceRow
               isDesktop={isDesktop}
@@ -289,14 +323,15 @@ export function OnboardingWizard({
               lock={sourceLock}
               onReleaseSource={() => {
                 setSourceChoice('pdf');
+                setTypedResume('');
                 ingestion.clear();
               }}
               onDisconnectPlatform={(platform) => void disconnectPlatform(platform)}
               ingested={ingested}
               busy={ingestion.busy}
               notice={ingestion.notice}
-              resumeText=""
-              onResumeText={() => undefined}
+              resumeText={typedResume}
+              onResumeText={setTypedResume}
               onPickPdf={(event: ChangeEvent<HTMLInputElement>) => {
                 const file = event.target.files?.[0];
                 if (file) void ingestion.readPdf(file);

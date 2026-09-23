@@ -35,7 +35,11 @@ interface OnboardingGeoStepProps {
 export function OnboardingGeoStep(props: OnboardingGeoStepProps) {
   return (
     <div className="career-onboarding-geo">
-      <div className="career-onboarding-geo-grid">
+      <div
+        className="career-onboarding-geo-grid"
+        role="group"
+        aria-label="Где рассматриваете работу"
+      >
         {CANDIDATE_REGION_CATALOGUE.map((region) => {
           const selected = props.regions.includes(region.id);
           const fromImport = props.prefilledRegion === region.id;

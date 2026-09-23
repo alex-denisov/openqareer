@@ -123,13 +123,10 @@ async function assertVisible(page, locator, what) {
   }
 }
 
-/** Opens the wizard and stops on its second step. */
+/** Opens the wizard, which opens on the source step since B249. */
 async function reachSourceStep(page, baseUrl) {
   await page.goto(`${baseUrl}app`, { waitUntil: 'load' });
-  await page.getByRole('heading', { name: 'С чем разобраться?' }).waitFor({ timeout: 20000 });
-  await page.getByRole('button', { name: /Хочу найти работу/u }).click();
-  await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page.getByRole('heading', { name: 'Что уже есть?' }).waitFor({ timeout: 10000 });
+  await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor({ timeout: 20000 });
 }
 
 async function isBelow(page, selector, anchorSelector) {
@@ -141,7 +138,7 @@ async function isBelow(page, selector, anchorSelector) {
 
 /** 5) Automation runs from the candidate's own machine, so the web offers no login. */
 async function checkWebOffersNoPlatformLogin(page, viewport) {
-  await page.getByRole('button', { name: 'Импорт профиля' }).click();
+  await page.getByRole('button', { name: 'Профиль LinkedIn' }).click();
   await assertVisible(
     page,
     page.getByText('Профили на площадках подключаются в приложении для компьютера'),
@@ -157,7 +154,8 @@ async function checkWebOffersNoPlatformLogin(page, viewport) {
 
 /** The release notice renders under the source it describes, not against the buttons. */
 async function checkSourceLockSitsUnderItsSource(page, viewport) {
-  await page.getByRole('button', { name: 'Текстом' }).click();
+  await page.getByRole('button', { name: 'PDF резюме' }).click();
+  await page.getByRole('button', { name: 'Нет PDF под рукой — вставить текст резюме' }).click();
   await page
     .getByRole('textbox')
     .fill(
@@ -168,22 +166,37 @@ async function checkSourceLockSitsUnderItsSource(page, viewport) {
     page.getByRole('button', { name: 'Сменить источник' }),
     `web ${viewport.name}: release control under the locked source`,
   );
-  if (!(await isBelow(page, '.career-source-lock', '.career-source-choice'))) {
-    problems.push(`web ${viewport.name}: release notice still sits against the source buttons`);
+  if (!(await isBelow(page, '.career-source-lock', '.career-onboarding-source-grid'))) {
+    problems.push(`web ${viewport.name}: release notice still sits against the source cards`);
   }
   await page.screenshot({ path: `${OUT}/web-${viewport.name}-step2-lock.png` });
 }
 
 const EXPECTED_REGIONS = ['Россия', 'СНГ', 'US', 'EU', 'MENA', 'APAC', 'LATAM'];
 
-/** 2) Step three offers exactly the seven regions the owner named. */
-async function checkRegionsOnStepThree(page, viewport) {
+/**
+ * 2) Step five ("География и формат") offers exactly the seven regions the
+ * owner named — reached via the "расскажу сам" branch, which skips the
+ * document steps entirely (onboarding.html step 2b/talk).
+ */
+async function checkRegionsOnStepFive(page, viewport) {
   await page.getByRole('button', { name: 'Сменить источник' }).click();
-  await page.getByRole('button', { name: 'Без документов' }).click();
+  await page.getByRole('button', { name: 'Расскажу сам' }).click();
+  const [q1, q2, q3] = await page.getByRole('textbox').all();
+  await q1.fill(
+    'Руководил продуктовой командой из восьми человек и отвечал за выручку направления.',
+  );
+  await q2.fill('Меньше операционки, больше стратегии.');
+  await q3.fill('Команда выросла вдвое.');
   await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page.getByRole('heading', { name: 'Что должно измениться?' }).waitFor({ timeout: 10000 });
+  await page.getByRole('heading', { name: 'Проверьте профиль' }).waitFor({ timeout: 10000 });
+  await page.getByRole('button', { name: /Продолжить/u }).click();
+  await page.getByRole('heading', { name: 'На какие роли вас купят' }).waitFor({ timeout: 10000 });
+  await page.getByRole('button', { name: /Продолжить/u }).click();
+  await page.getByRole('heading', { name: 'География и формат' }).waitFor({ timeout: 10000 });
+
   const regions = await page
-    .locator('fieldset', { has: page.getByText('Где рассматриваете работу?') })
+    .getByRole('group', { name: 'Где рассматриваете работу' })
     .getByRole('button')
     .allInnerTexts();
   if (JSON.stringify(regions.map((item) => item.trim())) !== JSON.stringify(EXPECTED_REGIONS)) {
@@ -196,9 +209,9 @@ async function checkRegionsOnStepThree(page, viewport) {
   }
   const wide = await overflow(page);
   if (wide.horizontal > 1) {
-    problems.push(`${viewport.name}: step 3 overflows by ${wide.horizontal}px`);
+    problems.push(`${viewport.name}: step 5 overflows by ${wide.horizontal}px`);
   }
-  await page.screenshot({ path: `${OUT}/web-${viewport.name}-step3.png` });
+  await page.screenshot({ path: `${OUT}/web-${viewport.name}-step5.png` });
 }
 
 /** 3) A connected platform shows its sign-out where «Подключить» used to be. */

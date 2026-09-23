@@ -38,6 +38,27 @@ describe('OnboardingSourceCards', () => {
     expect(html).toMatch(/is-selected[^>]*>[\s\S]*?PDF резюме/);
   });
 
+  it('shuts the other cards once a source is captured, naming why', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingSourceCards
+        active="pdf"
+        linkedinSelected={false}
+        hhSelected={false}
+        lockedTo="pdf"
+        lockReason="PDF уже прочитан."
+        onChoosePdf={noop}
+        onChooseLinkedin={noop}
+        onChooseHh={noop}
+        onChooseTalk={noop}
+      />,
+    );
+    const linkedinButtonMatch = html.match(
+      /<button[^>]*>[\s\S]*?Профиль LinkedIn[\s\S]*?<\/button>/,
+    );
+    expect(linkedinButtonMatch?.[0]).toContain('aria-disabled="true"');
+    expect(linkedinButtonMatch?.[0]).toContain('title="PDF уже прочитан."');
+  });
+
   it('reflects a connected LinkedIn profile even while the source is generically "profile-import"', () => {
     const html = renderToStaticMarkup(
       <OnboardingSourceCards
