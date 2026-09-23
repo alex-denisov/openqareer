@@ -46,6 +46,10 @@ bin/
 .idea/
 *.swp
 
+# CJM acceptance harness (B246): cached login storageState — a live prod
+# cookie for a real (test) account, never committed.
+e2e/cjm/.state/
+
 # Local-only private research and candidate material
 private-research/
 **/private-research/
