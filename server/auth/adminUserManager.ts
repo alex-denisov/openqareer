@@ -6,6 +6,7 @@ import type {
   AdminAuditPage,
   AdminUserPage,
   AdminUserQuery,
+  AdminAuditQuery,
   AdminUserRecord,
   AdminUserUpdateInput,
   AuthPrincipal,
@@ -47,14 +48,6 @@ interface AuditRow {
   detail: string | null;
   created_at: string;
 }
-
-const DIRECTORY_FILTER_COUNT = `WHERE users.username LIKE ?1 ESCAPE '\\'
-     OR IFNULL(users.email, '') LIKE ?1 ESCAPE '\\'
-     OR IFNULL(users.display_name, '') LIKE ?1 ESCAPE '\\'`;
-
-const DIRECTORY_FILTER_SELECT = `WHERE users.username LIKE ?4 ESCAPE '\\'
-     OR IFNULL(users.email, '') LIKE ?4 ESCAPE '\\'
-     OR IFNULL(users.display_name, '') LIKE ?4 ESCAPE '\\'`;
 
 function likePattern(needle: string): string {
   return `%${needle.replace(/[\\%_]/gu, (character) => `\\${character}`)}%`;
@@ -111,17 +104,38 @@ export function recordAdminAudit(
     );
 }
 
+// eslint-disable-next-line max-lines-per-function -- filter, count and ordered page share one SQL contract
 export function listUsers(database: DatabaseSync, input: AdminUserQuery): AdminUserPage {
   const needle = input.query?.trim();
-  const filterCountClause = needle ? DIRECTORY_FILTER_COUNT : '';
-  const filterSelectClause = needle ? DIRECTORY_FILTER_SELECT : '';
   const now = new Date().toISOString();
-
-  const countSql = `SELECT COUNT(*) AS total FROM users ${filterCountClause};`;
-  const countStmt = database.prepare(countSql);
-  const countRow = (
-    needle ? countStmt.get(likePattern(needle)) : countStmt.get()
-  ) as { total: number };
+  const where: string[] = [];
+  const params: Array<string | number> = [];
+  if (needle) {
+    const searchColumns = {
+      all: ['users.username', "IFNULL(users.email, '')", "IFNULL(users.display_name, '')"],
+      username: ['users.username'],
+      email: ["IFNULL(users.email, '')"],
+      displayName: ["IFNULL(users.display_name, '')"],
+    }[input.searchField ?? 'all'];
+    where.push(`(${searchColumns.map((column) => `${column} LIKE ? ESCAPE '\\'`).join(' OR ')})`);
+    const pattern = likePattern(needle);
+    params.push(...searchColumns.map(() => pattern));
+  }
+  if (input.role) { where.push('users.role = ?'); params.push(input.role); }
+  if (input.tier) { where.push("COALESCE(users.subscription_tier, 'free') = ?"); params.push(input.tier); }
+  if (input.blocked !== undefined) where.push(input.blocked ? 'users.blocked_at IS NOT NULL' : 'users.blocked_at IS NULL');
+  const condition = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const countRow = database.prepare(`SELECT COUNT(*) AS total FROM users ${condition}`)
+    .get(...params) as { total: number };
+  const orderColumns = {
+    name: 'COALESCE(users.display_name, users.username) COLLATE NOCASE',
+    role: 'users.role',
+    tier: "COALESCE(users.subscription_tier, 'free')",
+    created: 'users.created_at',
+    sessions: 'active_sessions',
+  } as const;
+  const order = orderColumns[input.sortBy ?? 'created'];
+  const direction = input.sortDirection === 'asc' ? 'ASC' : 'DESC';
 
   const selectSql = `
     SELECT
@@ -147,17 +161,13 @@ export function listUsers(database: DatabaseSync, input: AdminUserQuery): AdminU
     LEFT JOIN sessions
       ON sessions.user_id = users.id
      AND sessions.expires_at > ?1
-    ${filterSelectClause}
+    ${condition}
     GROUP BY users.id
-    ORDER BY users.created_at DESC
-    LIMIT ?2 OFFSET ?3;
+    ORDER BY ${order} ${direction}, users.id ASC
+    LIMIT ? OFFSET ?;
   `;
-
-  const rows = (
-    needle
-      ? database.prepare(selectSql).all(now, input.limit, input.offset, likePattern(needle))
-      : database.prepare(selectSql).all(now, input.limit, input.offset)
-  ) as unknown as AdminUserRow[];
+  const rows = database.prepare(selectSql)
+    .all(now, ...params, input.limit, input.offset) as unknown as AdminUserRow[];
 
   return {
     total: countRow.total,
@@ -390,17 +400,27 @@ export function deleteUserByAdmin(
   }
 }
 
-export function listAudit(database: DatabaseSync, query?: { limit: number; offset: number }): AdminAuditPage {
+export function listAudit(database: DatabaseSync, query?: AdminAuditQuery): AdminAuditPage {
   const limit = Math.min(query?.limit ?? 50, 100);
   const offset = query?.offset ?? 0;
-
-  const countRow = database
-    .prepare('SELECT COUNT(*) AS total FROM admin_audit')
-    .get() as { total: number };
-
-  const rows = database
-    .prepare('SELECT * FROM admin_audit ORDER BY created_at DESC LIMIT ? OFFSET ?')
-    .all(limit, offset) as unknown as AuditRow[];
+  const where: string[] = [];
+  const params: string[] = [];
+  if (query?.query) {
+    const pattern = likePattern(query.query);
+    where.push(`(actor_username LIKE ? ESCAPE '\\' OR IFNULL(subject_username, '') LIKE ? ESCAPE '\\'
+      OR IFNULL(detail, '') LIKE ? ESCAPE '\\' OR action LIKE ? ESCAPE '\\')`);
+    params.push(pattern, pattern, pattern, pattern);
+  }
+  if (query?.action === 'block_user') {
+    where.push('action IN (?, ?)');
+    params.push('block_user', 'unblock_user');
+  } else if (query?.action) { where.push('action = ?'); params.push(query.action); }
+  const condition = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const direction = query?.sortDirection === 'asc' ? 'ASC' : 'DESC';
+  const countRow = database.prepare(`SELECT COUNT(*) AS total FROM admin_audit ${condition}`)
+    .get(...params) as { total: number };
+  const rows = database.prepare(`SELECT * FROM admin_audit ${condition} ORDER BY created_at ${direction}, id ASC LIMIT ? OFFSET ?`)
+    .all(...params, limit, offset) as unknown as AuditRow[];
 
   return {
     total: countRow.total,

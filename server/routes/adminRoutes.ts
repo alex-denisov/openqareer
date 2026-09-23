@@ -18,6 +18,7 @@ import { registerHhCrawlFilterRoutes } from './hhCrawlFilterRoutes';
 import { registerLinkedinPoolRoutes } from './linkedinPoolRoutes';
 import {
   adminVacancyQuerySchema,
+  adminAuditQuerySchema,
   adminVacancySourceTestSchema,
   adminVacancySourceToggleSchema,
   adminUserBlockSchema,
@@ -32,7 +33,7 @@ async function handleListUsers(deps: RouteDeps, request: FastifyRequest, reply: 
   const query = adminUserQuerySchema.parse(request.query);
   return {
     data: deps.authService.listUsers
-      ? deps.authService.listUsers({ query: query.query, limit: query.limit, offset: query.offset })
+      ? deps.authService.listUsers(query)
       : { total: 0, users: [] },
     meta: { requestId: request.id },
   };
@@ -52,11 +53,9 @@ async function handleGetUser(deps: RouteDeps, request: FastifyRequest, reply: Fa
 async function handleListAudit(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireAdmin(deps, request, reply);
   if (!principal) return;
-  const query = request.query as { limit?: string; offset?: string };
-  const limit = Math.min(Number(query.limit) || 50, 100);
-  const offset = Math.max(Number(query.offset) || 0, 0);
+  const query = adminAuditQuerySchema.parse(request.query ?? {});
   const result = deps.authService.listAudit
-    ? deps.authService.listAudit({ limit, offset })
+    ? deps.authService.listAudit(query)
     : { total: 0, records: [] };
   return { data: result, meta: { requestId: request.id } };
 }

@@ -6,6 +6,9 @@ import {
   Warning,
   X,
   XCircle,
+  CaretDown,
+  Database,
+  ClockCounterClockwise,
 } from '@phosphor-icons/react';
 import {
   testAdminVacancySource,
@@ -195,17 +198,26 @@ interface AdminVacancySourcesViewProps {
  * Три ответа экрана — три разных вида (B207). Отказ маршрута выглядел ровно
  * как честный пустой список, и администратор не мог их различить.
  */
+// eslint-disable-next-line max-lines-per-function -- search, status and ordering stay with this complete registry
 function SourcesBody({
   state,
   onRefresh,
   onSync,
   onOpenTest,
+  expandedSourceId,
+  onExpandedChange,
 }: {
   state: VacancySourcesState;
   onRefresh: () => void;
   onSync: (sourceId: string) => Promise<void>;
   onOpenTest: (source: AdminVacancySource) => void;
+  expandedSourceId: string | null;
+  onExpandedChange: (id: string | null) => void;
 }) {
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<'all' | 'healthy' | 'attention' | 'unmeasured'>('all');
+  const [sortBy, setSortBy] = useState<'name' | 'active' | 'recent'>('name');
+  const [descending, setDescending] = useState(false);
   if (state.status === 'failed') {
     return (
       <div className="admin-error" role="alert">
@@ -221,21 +233,57 @@ function SourcesBody({
   if (state.status === 'loading') return null;
 
   if (state.sources.length === 0) {
-    return <p className="admin-note is-empty-note">Ни одной площадки не зарегистрировано.</p>;
+    return <p className="admin-note is-empty-note" data-complete={state.complete}>{state.complete ? 'Ни одной площадки не зарегистрировано.' : 'Загружаем источники…'}</p>;
   }
 
-  const sources = [...state.sources].sort(
-    (left, right) =>
-      left.name.localeCompare(right.name, 'ru-RU', { sensitivity: 'base' }) ||
-      left.id.localeCompare(right.id),
-  );
+  const needle = query.trim().toLocaleLowerCase('ru-RU');
+  const sources = state.sources
+    .filter((source) => !needle || [source.name, source.id, source.type, source.targetUrl]
+      .some((value) => value.toLocaleLowerCase('ru-RU').includes(needle)))
+    .filter((source) => status === 'all' ||
+      (status === 'healthy' && source.lastStatus === 'healthy') ||
+      (status === 'attention' && (source.lastStatus === 'degraded' || source.lastStatus === 'error')) ||
+      (status === 'unmeasured' && !source.lastStatus))
+    .sort((left, right) => {
+      const order = sortBy === 'active'
+        ? left.itemsActiveTotal - right.itemsActiveTotal
+        : sortBy === 'recent'
+          ? (left.lastSyncAt ?? '').localeCompare(right.lastSyncAt ?? '')
+          : left.name.localeCompare(right.name, 'ru-RU', { sensitivity: 'base' });
+      return (descending ? -order : order) || left.id.localeCompare(right.id);
+    });
 
   return (
-    <div className="admin-sources-grid">
-      {sources.map((source) => (
-        <SourceCard key={source.id} source={source} onSync={onSync} onOpenTest={onOpenTest} />
-      ))}
-    </div>
+    <>
+      <div className="admin-register-toolbar">
+        <label className="admin-register-search">Найти источник
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Название, тип, адрес или ID" />
+        </label>
+        <div className="admin-register-chips" aria-label="Состояние источников">
+          {([['all', 'Все'], ['healthy', 'Опрос OK'], ['attention', 'Внимание'], ['unmeasured', 'Не проверено']] as const).map(([value, label]) => (
+            <button key={value} type="button" aria-pressed={status === value} onClick={() => setStatus(value)}>{label}</button>
+          ))}
+        </div>
+        <div className="admin-register-chips" aria-label="Порядок источников">
+          {([['name', 'Название'], ['active', 'Активные'], ['recent', 'Последний опрос']] as const).map(([value, label]) => (
+            <button key={value} type="button" aria-pressed={sortBy === value} onClick={() => { setSortBy(value); setDescending(value !== 'name'); }}>{label}</button>
+          ))}
+          <button type="button" onClick={() => setDescending((value) => !value)} aria-label="Изменить направление сортировки">{descending ? '↓' : '↑'}</button>
+        </div>
+      </div>
+      <p className="admin-register-count" data-complete={state.complete} aria-live="polite">
+        {state.complete
+          ? `Показано ${sources.length} из ${state.sources.length} источников`
+          : `Источников загружено: ${state.sources.length}; список пополняется…`}
+      </p>
+      {sources.length ? (
+        <div className="admin-source-list">
+          {sources.map((source) => (
+            <SourceCard key={source.id} source={source} onSync={onSync} onOpenTest={onOpenTest} expanded={expandedSourceId === source.id} onToggle={() => onExpandedChange(expandedSourceId === source.id ? null : source.id)} />
+          ))}
+        </div>
+      ) : <p className="admin-empty-state">Источники по выбранным условиям не найдены.</p>}
+    </>
   );
 }
 
@@ -243,7 +291,7 @@ function SourceStatusBadge({ status }: { status?: AdminVacancySource['lastStatus
   if (status === 'healthy') {
     return (
       <span className="admin-badge is-success">
-        <CheckCircle size={14} /> Активен
+        <CheckCircle size={14} /> Опрос OK
       </span>
     );
   }
@@ -287,14 +335,18 @@ function SourceCardActions({
   );
 }
 
-function SourceCard({
+export function SourceCard({
   source,
   onSync,
   onOpenTest,
+  expanded,
+  onToggle,
 }: {
   source: AdminVacancySource;
   onSync: (sourceId: string) => Promise<void>;
   onOpenTest: (source: AdminVacancySource) => void;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
   const [syncing, setSyncing] = useState(false);
 
@@ -309,33 +361,24 @@ function SourceCard({
 
   return (
     <article className="admin-source-card">
-      <div className="admin-source-header">
-        <div>
-          <h3>{source.name}</h3>
-          <span className="admin-source-type">Тип: {source.type}</span>
-        </div>
+      <button className="admin-source-row" type="button" aria-expanded={expanded} onClick={onToggle}>
+        <span className="admin-source-row__name"><strong>{source.name}</strong><small>{source.type.toUpperCase()}</small></span>
         <SourceStatusBadge status={source.lastStatus} />
-      </div>
-
-      <p className="admin-source-url">{source.targetUrl}</p>
-
-      <SourceSchedule schedule={source.schedule} />
-      <ManualSyncStatus status={source.manualSync} />
-      <SourceHealthPanel health={source.health} />
-
-      <div className="admin-source-stats">
-        <span>{source.itemsActiveTotal} активных</span>
-        <span>•</span>
-        <span>{source.itemsFoundTotal} всего найдено</span>
-        <span>•</span>
-        <span>Интервал: {source.refreshIntervalMinutes} мин</span>
-      </div>
-
-      <SourceCardActions
-        syncing={syncing}
-        onSync={handleSync}
-        onOpenTest={() => onOpenTest(source)}
-      />
+        <span className="admin-source-row__metric"><strong><CheckCircle size={14} aria-hidden="true" /> {source.itemsActiveTotal}</strong><small>активных</small></span>
+        <span className="admin-source-row__metric"><strong><Database size={14} aria-hidden="true" /> {source.itemsFoundTotal}</strong><small>найдено</small></span>
+        <span className="admin-source-row__metric"><strong><ClockCounterClockwise size={14} aria-hidden="true" /> {source.lastSyncAt ? new Date(source.lastSyncAt).toLocaleDateString('ru-RU') : '—'}</strong><small>последний опрос</small></span>
+        <CaretDown className={expanded ? 'is-expanded' : ''} size={18} aria-hidden="true" />
+      </button>
+      {expanded ? (
+        <div className="admin-source-row__detail">
+          <p className="admin-source-url">{source.targetUrl}</p>
+          <SourceSchedule schedule={source.schedule} />
+          <ManualSyncStatus status={source.manualSync} />
+          <SourceHealthPanel health={source.health} />
+          <p className="admin-source-stats">Интервал опроса: {source.refreshIntervalMinutes} мин</p>
+          <SourceCardActions syncing={syncing} onSync={handleSync} onOpenTest={() => onOpenTest(source)} />
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -513,6 +556,7 @@ export function AdminVacancySourcesView({
   onSync,
 }: AdminVacancySourcesViewProps) {
   const [testingSource, setTestingSource] = useState<AdminVacancySource | null>(null);
+  const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
 
   return (
     <div className="admin-vacancy-sources-view">
@@ -540,6 +584,8 @@ export function AdminVacancySourcesView({
         onRefresh={onRefresh}
         onSync={onSync}
         onOpenTest={(src) => setTestingSource(src)}
+        expandedSourceId={expandedSourceId}
+        onExpandedChange={setExpandedSourceId}
       />
 
       {testingSource ? (

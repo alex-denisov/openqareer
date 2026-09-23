@@ -85,7 +85,7 @@ test.describe('B089 administrator console', () => {
 
     await page
       .getByRole('row', { name: /Мария Иванова/ })
-      .getByRole('button', { name: 'Управление' })
+      .getByRole('button', { name: 'Управление аккаунтом maria' })
       .click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
@@ -147,7 +147,9 @@ test.describe('B089 administrator console', () => {
     await expect(page.getByText('Показано 2 из 2')).toBeVisible();
   });
 
-  test('the console fits both required viewports without sideways scrolling', async ({ page }) => {
+  test('the console fits both required viewports without sideways scrolling', async ({
+    page,
+  }, testInfo) => {
     await stubSession(page, ADMINISTRATOR);
     await page.route('**/api/v1/admin/users*', async (route) => {
       await route.fulfill({ json: { data: DIRECTORY } });
@@ -161,6 +163,19 @@ test.describe('B089 administrator console', () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow).toBeLessThanOrEqual(0);
+    const tableOverflow = await page
+      .locator('.admin-table-scroll')
+      .evaluate((element) => element.scrollWidth - element.clientWidth);
+    expect(tableOverflow).toBeLessThanOrEqual(0);
+    if (testInfo.project.name === 'desktop-1440') {
+      for (const width of [900, 1280]) {
+        await page.setViewportSize({ width, height: 860 });
+        const inner = await page
+          .locator('.admin-table-scroll')
+          .evaluate((element) => element.scrollWidth - element.clientWidth);
+        expect(inner, `user table overflow at ${width}px`).toBeLessThanOrEqual(0);
+      }
+    }
   });
 
   test('the source screen names a queued manual sync instead of claiming it is complete', async ({
@@ -202,6 +217,7 @@ test.describe('B089 administrator console', () => {
     await waitForLiveApp(page);
     await page.getByRole('button', { name: 'Источники вакансий' }).click();
 
+    await page.getByRole('button', { name: /Тестовая площадка/ }).click();
     await expect(page.getByRole('status')).toContainText('В очереди');
     await expect(page.getByRole('status')).toContainText('Обслуживатель заберёт запрос');
     await page.getByRole('button', { name: 'Синхронизировать' }).click();
@@ -267,11 +283,62 @@ test.describe('B089 administrator console', () => {
     await page.getByRole('button', { name: 'Аккаунты LinkedIn' }).click();
 
     await expect(page.getByText('pool-admin@example.test')).toBeVisible();
-    await expect(
-      page.getByRole('article').getByText('Идентификатор сессии', { exact: true }),
-    ).toBeVisible();
+    await page.getByRole('button', { name: /pool-admin@example.test/ }).click();
     await page.getByRole('button', { name: 'Войти в LinkedIn' }).click();
     await expect(page.getByRole('alert')).toContainText('приложении OpenQareer Desktop');
+  });
+
+  test('a new LinkedIn account appears in the list even when an old filter was active', async ({
+    page,
+  }) => {
+    await stubSession(page, ADMINISTRATOR);
+    await page.route('**/api/v1/admin/users*', (route) =>
+      route.fulfill({ json: { data: DIRECTORY } }),
+    );
+    const accounts: Array<Record<string, unknown>> = [];
+    await page.route('**/api/v1/admin/linkedin/accounts?*', (route) =>
+      route.fulfill({
+        json: {
+          data: { total: accounts.length, accounts, offset: 0, nextOffset: null },
+        },
+      }),
+    );
+    await page.route('**/api/v1/admin/linkedin/accounts', async (route) => {
+      const body = route.request().postDataJSON() as { emailLogin: string };
+      const created = {
+        id: '2e6f2b8a-1e84-4f07-9c6d-f8b5a4e2e4a1',
+        adminLabel: body.emailLogin,
+        emailLogin: body.emailLogin,
+        providerAccountMarker: null,
+        profileIsolationId: 'profile-1',
+        state: 'login_required',
+        lastVerifiedAt: null,
+        lastHeartbeatAt: null,
+        lastFailureCode: 'login_required',
+        leaseUntil: null,
+        capabilityVerdict: 'not_configured',
+        revision: 0,
+        createdAt: '2026-09-22T00:00:00.000Z',
+        updatedAt: '2026-09-22T00:00:00.000Z',
+      };
+      accounts.push(created);
+      await route.fulfill({ status: 201, json: { data: created } });
+    });
+    await page.goto('/admin', { waitUntil: 'domcontentloaded' });
+    await waitForLiveApp(page);
+    await page.getByRole('button', { name: 'Аккаунты LinkedIn' }).click();
+    await page.getByRole('searchbox', { name: 'Поиск аккаунта' }).fill('старый');
+    await page.locator('.admin-linkedin-create summary').click();
+    await page
+      .getByRole('textbox', { name: 'Идентификатор сессии' })
+      .fill('new-account@example.test');
+    await page
+      .locator('.admin-linkedin-add')
+      .getByRole('button', { name: 'Добавить аккаунт' })
+      .click();
+    await expect(page.getByRole('searchbox', { name: 'Поиск аккаунта' })).toHaveValue('');
+    await expect(page.getByRole('button', { name: /new-account@example.test/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Войти в LinkedIn' })).toBeVisible();
   });
 
   test('all five operator screens keep their hierarchy and fit the viewport', async ({
@@ -285,7 +352,53 @@ test.describe('B089 administrator console', () => {
     await page.route('**/api/v1/admin/vacancies?*', (route) =>
       route.fulfill({
         json: {
-          data: { total: 0, items: [], statsBySource: [], offset: 0, nextOffset: null },
+          data: {
+            total: 2,
+            items: [
+              {
+                id: 'vacancy-1',
+                fingerprint: 'f1',
+                title: 'Руководитель продукта',
+                company: 'Тестовая компания',
+                location: 'Москва',
+                isRemote: true,
+                salary: { from: 250000, to: 350000, currency: 'RUB' },
+                descriptionSnippet: 'Развитие продукта',
+                requiredSkills: ['Стратегия'],
+                skillCount: 1,
+                url: 'https://example.com/jobs/1',
+                provenance: {
+                  sourceType: 'rss',
+                  sourceId: 'source-test',
+                  observedAt: '2026-09-22T10:00:00.000Z',
+                },
+                publishedAt: '2026-09-22T09:00:00.000Z',
+                status: 'active',
+              },
+              {
+                id: 'vacancy-2',
+                fingerprint: 'f2',
+                title: 'Директор по операциям',
+                company: 'Другая компания',
+                location: 'Санкт-Петербург',
+                isRemote: false,
+                descriptionSnippet: 'Операционное управление',
+                requiredSkills: [],
+                skillCount: 0,
+                url: 'https://example.com/jobs/2',
+                provenance: {
+                  sourceType: 'rss',
+                  sourceId: 'source-test',
+                  observedAt: '2026-09-21T10:00:00.000Z',
+                },
+                publishedAt: '2026-09-21T09:00:00.000Z',
+                status: 'active',
+              },
+            ],
+            statsBySource: [{ sourceId: 'source-test', sourceName: 'Тестовая площадка', count: 2 }],
+            offset: 0,
+            nextOffset: null,
+          },
         },
       }),
     );
@@ -319,7 +432,33 @@ test.describe('B089 administrator console', () => {
     await page.route('**/api/v1/admin/audit?*', (route) =>
       route.fulfill({
         json: {
-          data: { total: 0, records: [], offset: 0, nextOffset: null },
+          data: {
+            total: 2,
+            records: [
+              {
+                id: 'event-1',
+                actorUserId: 'admin-1',
+                actorUsername: 'admin.test',
+                action: 'change_user_role',
+                subjectUserId: 'candidate-1',
+                subjectUsername: 'candidate.test',
+                detail: 'Роль: candidate → admin',
+                createdAt: '2026-09-22T10:00:00.000Z',
+              },
+              {
+                id: 'event-2',
+                actorUserId: 'admin-1',
+                actorUsername: 'admin.test',
+                action: 'block_user',
+                subjectUserId: 'candidate-2',
+                subjectUsername: 'other.test',
+                detail: 'Блокировка после обращения',
+                createdAt: '2026-09-21T10:00:00.000Z',
+              },
+            ],
+            offset: 0,
+            nextOffset: null,
+          },
         },
       }),
     );
@@ -380,6 +519,66 @@ test.describe('B089 administrator console', () => {
         )
         .toBeLessThanOrEqual(0);
       await page.screenshot({ path: `${directory}/${testInfo.project.name}-${tab}.png` });
+      if (tab === 'users') {
+        const sorted = page.waitForRequest(
+          (request) =>
+            request.url().includes('/api/v1/admin/users?') && request.url().includes('sortBy=name'),
+        );
+        if (testInfo.project.name === 'mobile-390') {
+          await page
+            .locator('.admin-directory-sort-mobile')
+            .getByRole('button', { name: 'Имя', exact: true })
+            .click();
+        } else {
+          await page.getByRole('columnheader', { name: 'Аккаунт' }).getByRole('button').click();
+        }
+        await sorted;
+        const filtered = page.waitForRequest(
+          (request) =>
+            request.url().includes('/api/v1/admin/users?') && request.url().includes('role=admin'),
+        );
+        await page.getByLabel('Роль').selectOption('admin');
+        await filtered;
+      }
+      if (tab === 'vacancies') {
+        await page.getByRole('button', { name: 'Компания', exact: true }).click();
+        await expect(page.locator('.admin-vacancy-row').first()).toContainText('Другая компания');
+        await page.locator('.admin-source-picker summary').click();
+        await page.getByRole('searchbox', { name: 'Найти источник' }).fill('Тестовая');
+        await expect(
+          page
+            .locator('.admin-source-picker__options')
+            .getByRole('button', { name: /Тестовая площадка/ }),
+        ).toBeVisible();
+        await page.getByRole('searchbox', { name: 'Найти источник' }).press('Escape');
+        await expect(page.locator('.admin-source-picker')).not.toHaveAttribute('open', '');
+      }
+      if (tab === 'sources') {
+        await page.getByRole('button', { name: /Тестовая площадка/ }).click();
+        await expect(page.getByText('https://example.com/jobs')).toBeVisible();
+        await page.screenshot({ path: `${directory}/${testInfo.project.name}-sources-open.png` });
+        await page.getByRole('searchbox', { name: 'Найти источник' }).fill('несуществующий');
+        await expect(page.getByText('Источники по выбранным условиям не найдены.')).toBeVisible();
+      }
+      if (tab === 'audit') {
+        await page.locator('.admin-audit-row summary').first().click();
+        await expect(page.getByText('Роль: candidate → admin')).toBeVisible();
+        await page.screenshot({ path: `${directory}/${testInfo.project.name}-audit-open.png` });
+        const filtered = page.waitForRequest(
+          (request) =>
+            request.url().includes('/api/v1/admin/audit?') &&
+            request.url().includes('action=change_user_role'),
+        );
+        await page.getByRole('button', { name: 'Роли', exact: true }).click();
+        await filtered;
+      }
+      if (tab === 'linkedin') {
+        await page.getByRole('button', { name: /pool-admin@example.test/ }).click();
+        await expect(page.getByRole('button', { name: 'Войти в LinkedIn' })).toBeVisible();
+        await page.screenshot({ path: `${directory}/${testInfo.project.name}-linkedin-open.png` });
+        await page.getByRole('searchbox', { name: 'Поиск аккаунта' }).fill('несуществующий');
+        await expect(page.getByText('Аккаунты по выбранным условиям не найдены.')).toBeVisible();
+      }
     }
   });
 });

@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowClockwise,
+  CaretDown,
   Desktop,
   LinkBreak,
   LinkedinLogo,
   Plus,
-  ShieldWarning,
   Trash,
   WarningCircle,
   X,
@@ -162,14 +162,24 @@ function managedOpenFailureCopy(reason?: string): string {
 
 function useLinkedinPool() {
   const [state, setState] = useState<PoolViewState>({ status: 'loading' });
+  const requestNumber = useRef(0);
   const load = useCallback(async (signal?: AbortSignal) => {
+    const currentRequest = ++requestNumber.current;
     setState({ status: 'loading' });
     try {
-      const page = await listAdminLinkedinAccounts({ signal });
-      if (!signal?.aborted)
-        setState({ status: 'ready', accounts: page.accounts, total: page.total });
+      const accounts: LinkedinPoolAccount[] = [];
+      let offset: number | null = 0;
+      let total = 0;
+      while (offset !== null && accounts.length < 1000) {
+        const page = await listAdminLinkedinAccounts({ signal, limit: 100, offset });
+        accounts.push(...page.accounts);
+        total = page.total;
+        offset = page.nextOffset;
+      }
+      if (!signal?.aborted && currentRequest === requestNumber.current)
+        setState({ status: 'ready', accounts, total });
     } catch (reason: unknown) {
-      if (!signal?.aborted)
+      if (!signal?.aborted && currentRequest === requestNumber.current)
         setState({
           status: 'failed',
           message: apiErrorMessage(reason, 'Не удалось загрузить аккаунты LinkedIn.'),
@@ -276,6 +286,12 @@ export function AdminLinkedinPoolView() {
   const [error, setError] = useState<string>();
   const [confirmDelete, setConfirmDelete] = useState<LinkedinPoolAccount>();
   const [activeLogin, setActiveLogin] = useState<ActiveLinkedinLogin>();
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'ready' | 'action' | 'stopped'>('all');
+  const [sortBy, setSortBy] = useState<'name' | 'state' | 'verified'>('name');
+  const [descending, setDescending] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const createDetailsRef = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
     if (!confirmDelete) return;
@@ -308,11 +324,17 @@ export function AdminLinkedinPoolView() {
     setError(undefined);
     setNotice(undefined);
     try {
-      await createAdminLinkedinAccount({
+      const created = await createAdminLinkedinAccount({
         adminLabel: identifier.trim(),
         emailLogin: identifier.trim(),
       });
       setIdentifier('');
+      setQuery('');
+      setStatusFilter('all');
+      setSortBy('name');
+      setDescending(false);
+      setExpandedId(created.id);
+      if (createDetailsRef.current) createDetailsRef.current.open = false;
       setNotice(
         'Идентификатор добавлен. Нажмите «Войти в LinkedIn», чтобы открыть отдельное окно входа.',
       );
@@ -420,6 +442,22 @@ export function AdminLinkedinPoolView() {
     refresh();
   }
 
+  const visibleAccounts = state.status === 'ready'
+    ? state.accounts
+      .filter((account) => !query.trim() || [account.emailLogin, account.adminLabel]
+        .some((value) => value.toLocaleLowerCase('ru-RU').includes(query.trim().toLocaleLowerCase('ru-RU'))))
+      .filter((account) => statusFilter === 'all' ||
+        (statusFilter === 'ready' && account.state === 'ready') ||
+        (statusFilter === 'action' && ['login_required', 'user_action_required', 'challenge_required', 'expired', 'unconfigured', 'checking'].includes(account.state)) ||
+        (statusFilter === 'stopped' && ['revoked', 'disabled', 'banned', 'cooling_down'].includes(account.state)))
+      .sort((left, right) => {
+        const a = sortBy === 'name' ? left.emailLogin : sortBy === 'state' ? STATE_COPY[left.state].label : left.lastVerifiedAt ?? '';
+        const b = sortBy === 'name' ? right.emailLogin : sortBy === 'state' ? STATE_COPY[right.state].label : right.lastVerifiedAt ?? '';
+        const order = a.localeCompare(b, 'ru-RU');
+        return (descending ? -order : order) || left.id.localeCompare(right.id);
+      })
+    : [];
+
   return (
     <section className="admin-linkedin-pool" aria-labelledby="admin-linkedin-pool-title">
       <header className="admin-section-header admin-linkedin-header">
@@ -433,14 +471,8 @@ export function AdminLinkedinPoolView() {
         </button>
       </header>
 
-      {state.status === 'ready' ? (
-        <div className="admin-linkedin-summary" aria-label="Состояние пула">
-          <div><strong>{state.total}</strong><span>аккаунтов в реестре</span></div>
-          <div><strong>{state.accounts.filter((account) => account.state === 'ready').length}</strong><span>с подтверждённым входом на странице</span></div>
-          <p>Статус отражает последнюю проверку. Источник вакансий LinkedIn пока не включён.</p>
-        </div>
-      ) : null}
-
+      <details className="admin-linkedin-create" ref={createDetailsRef}>
+        <summary><Plus size={18} aria-hidden="true" /> Добавить аккаунт</summary>
       <form className="admin-linkedin-add" onSubmit={(event) => void addAccount(event)}>
         <div className="admin-linkedin-add__heading">
           <LinkedinLogo size={24} aria-hidden="true" />
@@ -471,6 +503,24 @@ export function AdminLinkedinPoolView() {
           <Plus size={18} aria-hidden="true" /> {formBusy ? 'Добавляем…' : 'Добавить аккаунт'}
         </button>
       </form>
+      </details>
+
+      <div className="admin-register-toolbar">
+        <label className="admin-register-search">Поиск аккаунта
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Идентификатор или метка" />
+        </label>
+        <div className="admin-register-chips" aria-label="Состояние аккаунтов LinkedIn">
+          {([['all', 'Все'], ['ready', 'Вход есть'], ['action', 'Нужен вход'], ['stopped', 'Остановлены']] as const).map(([value, label]) => (
+            <button key={value} type="button" aria-pressed={statusFilter === value} onClick={() => setStatusFilter(value)}>{label}</button>
+          ))}
+        </div>
+        <div className="admin-register-chips" aria-label="Порядок аккаунтов LinkedIn">
+          {([['name', 'Имя'], ['state', 'Статус'], ['verified', 'Проверка']] as const).map(([value, label]) => (
+            <button key={value} type="button" aria-pressed={sortBy === value} onClick={() => { setSortBy(value); setDescending(value === 'verified'); }}>{label}</button>
+          ))}
+          <button type="button" onClick={() => setDescending((value) => !value)} aria-label="Изменить направление сортировки">{descending ? '↓' : '↑'}</button>
+        </div>
+      </div>
 
       {notice ? (
         <p className="admin-success" role="status">
@@ -497,13 +547,19 @@ export function AdminLinkedinPoolView() {
       ) : null}
       {state.status === 'ready' && state.accounts.length === 0 ? (
         <p className="admin-empty-state">
-          Аккаунтов пула пока нет. Добавьте первый идентификатор выше.
+          Аккаунтов пула пока нет. Откройте «Добавить аккаунт».
         </p>
+      ) : null}
+      {state.status === 'ready' && state.accounts.length > 0 ? (
+        <p className="admin-register-count">Показано {visibleAccounts.length} из {state.total} аккаунтов{state.total > state.accounts.length ? ' (первые 1000 загружены)' : ''}</p>
+      ) : null}
+      {state.status === 'ready' && state.accounts.length > 0 && visibleAccounts.length === 0 ? (
+        <p className="admin-empty-state">Аккаунты по выбранным условиям не найдены.</p>
       ) : null}
       {state.status === 'ready' ? (
         <div className="admin-linkedin-grid" aria-live="polite">
           {/* eslint-disable-next-line max-lines-per-function -- the card keeps status, actions and destructive confirmation together */}
-          {state.accounts.map((account) => {
+          {visibleAccounts.map((account) => {
             const copy = STATE_COPY[account.state];
             const busy = busyAccountId === account.id;
             const canLogin = [
@@ -518,13 +574,13 @@ export function AdminLinkedinPoolView() {
             ].includes(account.state);
             return (
               <article className="admin-linkedin-card" key={account.id} aria-busy={busy}>
-                <header className="admin-linkedin-card__header">
-                  <div>
-                    <p className="admin-eyebrow">Идентификатор сессии</p>
-                    <h2>{account.emailLogin}</h2>
-                  </div>
+                <button className="admin-linkedin-row__toggle" type="button" aria-expanded={expandedId === account.id} onClick={() => setExpandedId((value) => value === account.id ? null : account.id)}>
+                  <strong>{account.emailLogin}</strong>
                   <span className={`admin-badge ${statusClass(account.state)}`}>{copy.label}</span>
-                </header>
+                  <span className="admin-linkedin-row__date">{formatMoment(account.lastVerifiedAt)}</span>
+                  <CaretDown className={expandedId === account.id ? 'is-expanded' : ''} size={18} aria-hidden="true" />
+                </button>
+                {expandedId === account.id ? <div className="admin-linkedin-row__detail">
                 <p className="admin-linkedin-card__detail">{copy.detail}</p>
                 {activeLogin?.accountId === account.id ? (
                   <p className="admin-linkedin-card__active" role="status">
@@ -624,16 +680,12 @@ export function AdminLinkedinPoolView() {
                     </div>
                   </div>
                 ) : null}
+                </div> : null}
               </article>
             );
           })}
         </div>
       ) : null}
-      <p className="admin-scope-note">
-        <ShieldWarning size={18} aria-hidden="true" /> Полный идентификатор виден только администратору.
-        Пароли, cookie и коды подтверждения остаются в окне LinkedIn. Источник вакансий включается
-        только после подтверждения разрешённой интеграции провайдера.
-      </p>
     </section>
   );
 }

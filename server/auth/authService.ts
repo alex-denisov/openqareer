@@ -33,6 +33,7 @@ import type {
   AdminUserRecord,
   AdminUserPage,
   AdminUserQuery,
+  AdminAuditQuery,
   AdminAuditPage,
   AdminUserUpdateInput,
   SessionAuth,
@@ -79,6 +80,7 @@ export type {
   AdminUserRecord,
   AdminUserPage,
   AdminUserQuery,
+  AdminAuditQuery,
   AdminAuditPage,
   AdminUserUpdateInput,
   SessionAuth,
@@ -441,7 +443,7 @@ export class AuthService implements SessionAuth {
     stampContractEnd(this.database, targetUserId, new Date().toISOString());
   }
 
-  listAudit(query?: { limit: number; offset: number }): AdminAuditPage {
+  listAudit(query?: AdminAuditQuery): AdminAuditPage {
     return adminListAudit(this.database, query);
   }
 

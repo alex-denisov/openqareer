@@ -233,6 +233,12 @@ export const ADMIN_PAGE_SIZE = 25;
 
 export async function listAdminUsers(input: {
   query?: string;
+  searchField?: 'all' | 'username' | 'email' | 'displayName';
+  role?: 'candidate' | 'admin';
+  tier?: SubscriptionTier;
+  blocked?: boolean;
+  sortBy?: 'name' | 'role' | 'tier' | 'created' | 'sessions';
+  sortDirection?: 'asc' | 'desc';
   offset?: number;
   signal?: AbortSignal;
 }): Promise<AdminUserPage> {
@@ -242,6 +248,12 @@ export async function listAdminUsers(input: {
   });
   const query = input.query?.trim();
   if (query) params.set('query', query);
+  if (input.searchField) params.set('searchField', input.searchField);
+  if (input.role) params.set('role', input.role);
+  if (input.tier) params.set('tier', input.tier);
+  if (input.blocked !== undefined) params.set('blocked', String(input.blocked));
+  if (input.sortBy) params.set('sortBy', input.sortBy);
+  if (input.sortDirection) params.set('sortDirection', input.sortDirection);
   const response = await apiFetch(`/api/v1/admin/users?${params.toString()}`, {
     ...(input.signal ? { signal: input.signal } : {}),
   });
@@ -304,6 +316,9 @@ export async function deleteAdminUser(userId: string): Promise<void> {
 }
 
 export async function listAdminAudit(input?: {
+  query?: string;
+  action?: string;
+  sortDirection?: 'asc' | 'desc';
   limit?: number;
   offset?: number;
   signal?: AbortSignal;
@@ -312,6 +327,9 @@ export async function listAdminAudit(input?: {
     limit: String(input?.limit ?? 50),
     offset: String(input?.offset ?? 0),
   });
+  if (input?.query?.trim()) params.set('query', input.query.trim());
+  if (input?.action) params.set('action', input.action);
+  if (input?.sortDirection) params.set('sortDirection', input.sortDirection);
   const response = await apiFetch(`/api/v1/admin/audit?${params.toString()}`, {
     ...(input?.signal ? { signal: input.signal } : {}),
   });

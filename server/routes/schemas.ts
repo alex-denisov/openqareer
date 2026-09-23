@@ -153,7 +153,21 @@ export const documentRetentionSchema = z.object({
 
 export const adminUserQuerySchema = z.object({
   query: z.string().trim().max(80).optional(),
+  searchField: z.enum(['all', 'username', 'email', 'displayName']).default('all'),
+  role: z.enum(['candidate', 'admin']).optional(),
+  tier: z.enum(['free', 'pro', 'executive', 'enterprise']).optional(),
+  blocked: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  sortBy: z.enum(['name', 'role', 'tier', 'created', 'sessions']).default('created'),
+  sortDirection: z.enum(['asc', 'desc']).default('desc'),
   limit: z.coerce.number().int().min(1).max(100).default(25),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
+});
+
+export const adminAuditQuerySchema = z.object({
+  query: z.string().trim().max(80).optional(),
+  action: z.string().trim().max(80).optional(),
+  sortDirection: z.enum(['asc', 'desc']).default('desc'),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).max(100_000).default(0),
 });
 

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { ArrowSquareOut, CaretDown, MagnifyingGlass } from '@phosphor-icons/react';
 import { employerLabel } from '../../../shared/employerLabel';
 import {
   listAdminVacancies,
@@ -10,6 +11,26 @@ import { VacancyDetailModal } from './VacancyDetailModal';
 import { sourceCountLabel } from './sourceCountLabel';
 
 type RemoteFilter = 'all' | 'remote' | 'office';
+type VacancySortKey = 'title' | 'company' | 'source' | 'location' | 'salary' | 'published';
+
+function sortVacancies(items: readonly AdminVacancySummary[], key: VacancySortKey, descending: boolean): AdminVacancySummary[] {
+  const value = (item: AdminVacancySummary): string | number => {
+    switch (key) {
+      case 'title': return item.title;
+      case 'company': return employerLabel(item.company);
+      case 'source': return item.provenance.sourceId;
+      case 'location': return item.location ?? '';
+      case 'salary': return item.salary?.from ?? item.salary?.to ?? 0;
+      case 'published': return item.publishedAt;
+    }
+  };
+  return [...items].sort((left, right) => {
+    const a = value(left);
+    const b = value(right);
+    const order = typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b), 'ru-RU');
+    return (descending ? -order : order) || left.id.localeCompare(right.id);
+  });
+}
 
 function formatSalary(salary?: AdminVacancySummary['salary']): string {
   if (!salary) return 'Зарплата не указана';
@@ -60,16 +81,43 @@ function SourceSelect({
   value: string; onChange: (v: string) => void;
   sources?: Array<{ sourceId: string; sourceName: string; count: number }>;
 }) {
-  // «18+» стояло литералом с тех пор, когда источников было восемнадцать; их
-  // стало 195. Пока список не пришёл, число не называется вовсе.
+  const [needle, setNeedle] = useState('');
+  const pickerRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) pickerRef.current.open = false;
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && pickerRef.current?.open) {
+        pickerRef.current.open = false;
+        pickerRef.current.querySelector('summary')?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
   const named = sourceCountLabel(sources);
+  const current = sources?.find((source) => source.sourceId === value);
+  const options = sources?.filter((source) => source.sourceName.toLocaleLowerCase('ru-RU').includes(needle.toLocaleLowerCase('ru-RU')) || source.sourceId.toLocaleLowerCase('ru-RU').includes(needle.toLocaleLowerCase('ru-RU'))) ?? [];
   return (
-    <select className="admin-select" value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="all">{named === null ? 'Все источники' : `Все источники (${named})`}</option>
-      {sources?.map((s) => (
-        <option key={s.sourceId} value={s.sourceId}>{s.sourceName} ({s.count})</option>
-      ))}
-    </select>
+    <details className="admin-source-picker" ref={pickerRef}>
+      <summary>{current ? current.sourceName : named === null ? 'Все источники' : `Все источники (${named})`} <CaretDown size={16} aria-hidden="true" /></summary>
+      <div className="admin-source-picker__menu">
+        <label>Найти источник<input type="search" value={needle} onChange={(event) => setNeedle(event.target.value)} placeholder="Название или ID" /></label>
+        <div className="admin-source-picker__options">
+          <button type="button" aria-pressed={value === 'all'} onClick={(event) => { onChange('all'); event.currentTarget.closest('details')?.removeAttribute('open'); }}>Все источники</button>
+          {options.map((source) => (
+            <button key={source.sourceId} type="button" aria-pressed={value === source.sourceId} onClick={(event) => { onChange(source.sourceId); event.currentTarget.closest('details')?.removeAttribute('open'); }}>
+              <span>{source.sourceName}</span><small>{source.count}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -85,81 +133,36 @@ function VacancyFilters({
   return (
     <div className="admin-vacancies-controls">
       <div className="admin-search-wrapper">
-        <input type="text" className="admin-input" placeholder="Поиск по должности, компании, навыкам, ID..." value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} />
+        <MagnifyingGlass size={18} aria-hidden="true" />
+        <input type="search" className="admin-input" aria-label="Поиск вакансий" placeholder="Должность, компания, навык или ID" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} />
       </div>
       <div className="admin-filter-group">
         <SourceSelect value={selectedSource} onChange={onSourceChange} sources={sources} />
-        <select className="admin-select" value={selectedRemote} onChange={(e) => onRemoteChange(e.target.value as RemoteFilter)}>
-          <option value="all">Формат: Все</option>
-          <option value="remote">Только Remote</option>
-          <option value="office">Офис / Гибрид</option>
-        </select>
+        <div className="admin-register-chips" aria-label="Формат работы">
+          {([['all', 'Все'], ['remote', 'Удалённо'], ['office', 'Офис / гибрид']] as const).map(([value, label]) => (
+            <button key={value} type="button" aria-pressed={selectedRemote === value} onClick={() => onRemoteChange(value)}>{label}</button>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-// ---------- Vacancy Card ----------
-
-function VacancyCardMeta({ vacancy }: { vacancy: AdminVacancySummary }) {
-  return (
-    <div className="admin-vacancy-card__meta">
-      <span className="admin-vacancy-company">{employerLabel(vacancy.company)}</span>
-      <span className="admin-dot-sep">•</span>
-      <span className="admin-vacancy-location">{vacancy.location}</span>
-      {vacancy.isRemote && <span className="admin-badge admin-badge--pro">Remote</span>}
-      {vacancy.experienceLevel && <span className="admin-badge admin-badge--info">{vacancy.experienceLevel}</span>}
-    </div>
-  );
-}
+// ---------- Compact vacancy register ----------
 
 function VacancyCard({ vacancy, onSelect }: { vacancy: AdminVacancySummary; onSelect: (v: AdminVacancySummary) => void }) {
   return (
-    <article className="admin-vacancy-card">
-      <div className="admin-vacancy-card__header">
-        <div className="admin-vacancy-card__title-row">
-          <h3 className="admin-vacancy-card__title">{vacancy.title}</h3>
-          <div className="admin-vacancy-badges">
-            <span className="admin-vacancy-id-chip">ID: {vacancy.id}</span>
-            <span className="admin-source-badge admin-source-badge--active">{vacancy.provenance.sourceId}</span>
-          </div>
-        </div>
-        <VacancyCardMeta vacancy={vacancy} />
+    <article className="admin-vacancy-row">
+      <div className="admin-vacancy-row__main">
+        <button type="button" onClick={() => onSelect(vacancy)}>{vacancy.title}</button>
+        <small>{employerLabel(vacancy.company)} · {vacancy.id}</small>
       </div>
-      <div className="admin-vacancy-salary">{formatSalary(vacancy.salary)}</div>
-      <p className="admin-vacancy-desc">{vacancy.descriptionSnippet}</p>
-      {vacancy.requiredSkills && vacancy.requiredSkills.length > 0 && (
-        <div className="admin-vacancy-skills">
-          {vacancy.requiredSkills.map((s, idx) => (
-            <span key={idx} className="admin-skill-chip">{s}</span>
-          ))}
-          {vacancy.skillCount > vacancy.requiredSkills.length && (
-            <span className="admin-skill-chip">
-              +{vacancy.skillCount - vacancy.requiredSkills.length}
-            </span>
-          )}
-        </div>
-      )}
-      <VacancyCardFooter vacancy={vacancy} onSelect={onSelect} />
+      <span className="admin-vacancy-row__source" title={vacancy.provenance.sourceId}>{vacancy.provenance.sourceId}</span>
+      <span className="admin-vacancy-row__place">{vacancy.location || 'Место не указано'}<small>{vacancy.isRemote ? 'Удалённо' : 'Офис / гибрид'}{vacancy.experienceLevel ? ` · ${vacancy.experienceLevel}` : ''}</small></span>
+      <span className="admin-vacancy-row__salary">{formatSalary(vacancy.salary)}</span>
+      <time className="admin-vacancy-row__date" dateTime={vacancy.publishedAt}>{new Date(vacancy.publishedAt).toLocaleDateString('ru-RU')}</time>
+      <a className="admin-icon-btn" href={vacancy.url} target="_blank" rel="noopener noreferrer" aria-label={`Открыть источник вакансии ${vacancy.title}`} title="Открыть источник"><ArrowSquareOut size={18} aria-hidden="true" /></a>
     </article>
-  );
-}
-
-function VacancyCardFooter({ vacancy, onSelect }: { vacancy: AdminVacancySummary; onSelect: (v: AdminVacancySummary) => void }) {
-  return (
-    <div className="admin-vacancy-card__footer">
-      <span className="admin-vacancy-date">
-        Опубликовано: {new Date(vacancy.publishedAt).toLocaleDateString('ru-RU')}
-      </span>
-      <div className="admin-vacancy-card__actions">
-        <button type="button" className="admin-btn admin-btn--secondary" onClick={() => onSelect(vacancy)}>
-          Подробнее & Структура
-        </button>
-        <a href={vacancy.url} target="_blank" rel="noopener noreferrer" className="admin-btn admin-btn--outline">
-          Источник ↗
-        </a>
-      </div>
-    </div>
   );
 }
 
@@ -199,12 +202,14 @@ function VacanciesList({ items, onSelect }: { items: AdminVacancySummary[]; onSe
 
 // ---------- Data Loading Hook ----------
 
-function useVacancyLoader(selectedSource: string, searchQuery: string, selectedRemote: RemoteFilter) {
+function useVacancyLoader(selectedSource: string, searchQuery: string, selectedRemote: RemoteFilter, offset: number) {
   const [data, setData] = useState<AdminVacancyPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestNumber = useRef(0);
 
   const fetchVacancies = useCallback(async () => {
+    const currentRequest = ++requestNumber.current;
     setLoading(true);
     setError(null);
     try {
@@ -212,15 +217,19 @@ function useVacancyLoader(selectedSource: string, searchQuery: string, selectedR
         sourceId: selectedSource !== 'all' ? selectedSource : undefined,
         query: searchQuery || undefined,
         isRemote: selectedRemote === 'remote' ? true : selectedRemote === 'office' ? false : undefined,
-        limit: 50,
+        limit: 20,
+        offset,
       });
-      setData(res);
+      if (currentRequest === requestNumber.current) setData(res);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить вакансии');
+      if (currentRequest === requestNumber.current) {
+        setData(null);
+        setError(err instanceof Error ? err.message : 'Не удалось загрузить вакансии');
+      }
     } finally {
-      setLoading(false);
+      if (currentRequest === requestNumber.current) setLoading(false);
     }
-  }, [selectedSource, searchQuery, selectedRemote]);
+  }, [selectedSource, searchQuery, selectedRemote, offset]);
 
   useEffect(() => { fetchVacancies(); }, [fetchVacancies]);
 
@@ -261,13 +270,22 @@ function useVacancyUrlSync(
 
 // ---------- Root Export ----------
 
+// eslint-disable-next-line max-lines-per-function -- one paged vacancy register with coordinated filters and detail dialog
 export function AdminVacanciesView() {
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedSource, setSelectedSource] = useState('all');
   const [selectedRemote, setSelectedRemote] = useState<RemoteFilter>('all');
+  const [offset, setOffset] = useState(0);
+  const [sortBy, setSortBy] = useState<VacancySortKey>('published');
+  const [descending, setDescending] = useState(true);
   const [selectedVacancy, setSelectedVacancy] = useState<AdminVacancySummary | null>(null);
-  const { data, loading, error, setError, fetchVacancies } = useVacancyLoader(selectedSource, searchQuery, selectedRemote);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+  const { data, loading, error, setError, fetchVacancies } = useVacancyLoader(selectedSource, debouncedQuery, selectedRemote, offset);
   const handleSelectVacancy = useVacancyUrlSync(data, selectedVacancy, setSelectedVacancy);
 
   const handleSyncAll = async () => {
@@ -288,15 +306,28 @@ export function AdminVacanciesView() {
       {data && <VacancyStatsGrid data={data} />}
       <VacancyFilters
         searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        onSearchChange={(value) => { setSearchQuery(value); setOffset(0); }}
         selectedSource={selectedSource}
-        onSourceChange={setSelectedSource}
+        onSourceChange={(value) => { setSelectedSource(value); setOffset(0); }}
         selectedRemote={selectedRemote}
-        onRemoteChange={setSelectedRemote}
+        onRemoteChange={(value) => { setSelectedRemote(value); setOffset(0); }}
         sources={data?.statsBySource}
       />
+      <div className="admin-vacancy-sort" aria-label="Сортировка показанных вакансий">
+        <span>На этой странице:</span>
+        {([['title', 'Должность'], ['company', 'Компания'], ['source', 'Источник'], ['location', 'Место'], ['salary', 'Зарплата'], ['published', 'Дата']] as const).map(([value, label]) => (
+          <button key={value} type="button" aria-pressed={sortBy === value} onClick={() => { setDescending(value === sortBy ? !descending : value === 'published'); setSortBy(value); }}>{label}{sortBy === value ? (descending ? ' ↓' : ' ↑') : ''}</button>
+        ))}
+      </div>
       {error && <div className="admin-alert admin-alert--error">{error}</div>}
-      {loading ? <div className="admin-loading-state">Загрузка вакансий...</div> : data ? <VacanciesList items={data.items} onSelect={handleSelectVacancy} /> : null}
+      {loading ? <div className="admin-loading-state">Загрузка вакансий...</div> : data ? <VacanciesList items={sortVacancies(data.items, sortBy, descending)} onSelect={handleSelectVacancy} /> : null}
+      {data && !loading ? (
+        <nav className="admin-register-pager" aria-label="Страницы вакансий">
+          <button type="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}>Назад</button>
+          <span>Показано {data.items.length ? offset + 1 : 0}–{offset + data.items.length} из {data.total}</span>
+          <button type="button" disabled={data.nextOffset === null} onClick={() => setOffset(data.nextOffset ?? offset)}>Далее</button>
+        </nav>
+      ) : null}
       {selectedVacancy && (
         <VacancyDetailModal vacancyId={selectedVacancy.id} onClose={() => handleSelectVacancy(null)} />
       )}

@@ -143,7 +143,20 @@ if (adminShots && role === 'admin' && signedIn) {
       users: 'Учётные записи', vacancies: 'База вакансий', sources: 'Источники вакансий',
       audit: 'Журнал аудита', linkedin: 'Аккаунты LinkedIn',
     }[tab] }).click();
-    await page.waitForTimeout(1200);
+    const ready = await page.waitForFunction((activeTab) => {
+      if (activeTab === 'sources') {
+        return Boolean(document.querySelector('.admin-register-count[data-complete="true"], .admin-note.is-empty-note[data-complete="true"], .admin-error'));
+      }
+      const readySelector = {
+        users: '.admin-user-table tbody tr, .admin-empty-state',
+        vacancies: '.admin-vacancy-row, .admin-empty-state, .admin-alert--error',
+        sources: '.admin-source-card, .admin-empty-state, .admin-error',
+        audit: '.admin-audit-row, .admin-empty-state, .admin-alert--error',
+        linkedin: '.admin-linkedin-card, .admin-empty-state, .admin-error',
+      }[activeTab];
+      return Boolean(readySelector && document.querySelector(readySelector));
+    }, tab, { timeout: 30000 }).then(() => true).catch(() => false);
+    if (!ready) process.stdout.write(`экран ${tab}: загрузка не завершилась за 30 с\n`);
     const filename = join(adminShots, `${tab}.png`);
     await page.screenshot({ path: filename, fullPage: false });
     process.stdout.write(`снимок ${tab}: ${filename}\n`);

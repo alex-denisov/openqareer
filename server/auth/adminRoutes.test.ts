@@ -233,6 +233,15 @@ describe('GET /api/v1/admin/users', () => {
     });
     expect(byUsername.json().data.total).toBe(1);
     expect(byUsername.json().data.users[0].role).toBe('admin');
+
+    const nameOnly = await app.inject({
+      method: 'GET', url: '/api/v1/admin/users?query=Мария&searchField=displayName', headers: { cookie },
+    });
+    expect(nameOnly.json().data.total).toBe(1);
+    const emailOnly = await app.inject({
+      method: 'GET', url: '/api/v1/admin/users?query=Мария&searchField=email', headers: { cookie },
+    });
+    expect(emailOnly.json().data.total).toBe(0);
   });
 
   it('pages without losing the total', async () => {
@@ -249,6 +258,29 @@ describe('GET /api/v1/admin/users', () => {
 
     expect(page.json().data.total).toBe(4);
     expect(page.json().data.users).toHaveLength(2);
+  });
+
+  it('filters before pagination and sorts the full matching directory', async () => {
+    const app = await createApp();
+    await register(app, 'Yana', 'yana@example.com');
+    await register(app, 'Anna', 'anna@example.com');
+    const cookie = await signIn(app, ADMIN);
+
+    const filtered = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/users?role=candidate&tier=free&blocked=false&sortBy=name&sortDirection=asc&limit=1',
+      headers: { cookie },
+    });
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json().data.total).toBe(3);
+    expect(filtered.json().data.users[0].displayName).toBe('Anna');
+
+    const next = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/users?role=candidate&tier=free&blocked=false&sortBy=name&sortDirection=asc&limit=1&offset=1',
+      headers: { cookie },
+    });
+    expect(next.json().data.users[0].username).toBe(CANDIDATE.username);
   });
 
   it('refuses a page size it cannot serve instead of silently truncating', async () => {
@@ -287,6 +319,15 @@ describe('PATCH /api/v1/admin/users/:userId', () => {
 
     expect(updateResponse.statusCode).toBe(200);
     expect(updateResponse.json().data.role).toBe('admin');
+
+    const audit = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/audit?action=change_user_role&query=newbie&sortDirection=asc&limit=1',
+      headers: { cookie: adminCookie },
+    });
+    expect(audit.statusCode).toBe(200);
+    expect(audit.json().data.total).toBe(1);
+    expect(audit.json().data.records[0].subjectUsername).toBe(candidateUser.username);
   });
 
   it('forbids candidate accounts from changing roles', async () => {
@@ -309,6 +350,28 @@ describe('PATCH /api/v1/admin/users/:userId', () => {
     });
 
     expect(updateResponse.statusCode).toBe(403);
+  });
+});
+
+describe('GET /api/v1/admin/audit', () => {
+  it('groups block and unblock events under the blocking filter', async () => {
+    const app = await createApp();
+    const cookie = await signIn(app, ADMIN);
+    const directory = await app.inject({ method: 'GET', url: '/api/v1/admin/users?query=candidate.test', headers: { cookie } });
+    const userId = directory.json().data.users[0].id;
+    for (const blocked of [true, false]) {
+      const changed = await app.inject({
+        method: 'POST', url: `/api/v1/admin/users/${userId}/block`,
+        headers: { cookie }, payload: { blocked },
+      });
+      expect(changed.statusCode).toBe(200);
+    }
+    const audit = await app.inject({
+      method: 'GET', url: '/api/v1/admin/audit?action=block_user&query=candidate.test', headers: { cookie },
+    });
+    expect(audit.statusCode).toBe(200);
+    expect(audit.json().data.total).toBe(2);
+    expect(audit.json().data.records.map((record: { action: string }) => record.action).sort()).toEqual(['block_user', 'unblock_user']);
   });
 });
 

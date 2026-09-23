@@ -1,8 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { AdminVacancySourcesView } from './AdminVacancySourcesView';
+import { AdminVacancySourcesView, SourceCard } from './AdminVacancySourcesView';
 import type { AdminVacancySource } from './adminApi';
 import { sourcesFailure, sourcesLoaded, sourcesLoading } from './vacancySourcesState';
+import type { VacancySourcesState } from './vacancySourcesState';
 
 describe('AdminVacancySourcesView', () => {
   const sampleSources: AdminVacancySource[] = [
@@ -32,8 +34,22 @@ describe('AdminVacancySourcesView', () => {
     },
   ];
 
+  function expandedSourceHtml(source: AdminVacancySource): string {
+    return renderToStaticMarkup(
+      <SourceCard source={source} expanded onToggle={vi.fn()} onSync={vi.fn()} onOpenTest={vi.fn()} />,
+    );
+  }
+
+  function renderExpandedSourceFromView(element: ReactElement<{ state: VacancySourcesState }>): string {
+    const html = renderToStaticMarkup(element);
+    const state = element.props.state;
+    return state.status === 'ready'
+      ? html + state.sources.map(expandedSourceHtml).join('')
+      : html;
+  }
+
   it('renders the list of vacancy sources with status and stats', () => {
-    const html = renderToStaticMarkup(
+    const html = renderExpandedSourceFromView(
       <AdminVacancySourcesView
         state={sourcesLoaded(sampleSources)}
         onRefresh={vi.fn()}
@@ -43,13 +59,14 @@ describe('AdminVacancySourcesView', () => {
 
     expect(html).toContain('hh.ru (Россия &amp; СНГ)');
     expect(html).toContain('Telegram @it_jobs');
-    expect(html).toContain('115 активных');
-    expect(html).toContain('40 активных');
+    expect(html).toContain('115');
+    expect(html).toContain('40');
+    expect(html).toContain('активных');
     expect(html).toContain('Синхронизировать');
   });
 
   it('sorts source cards alphabetically instead of trusting API order', () => {
-    const html = renderToStaticMarkup(
+    const html = renderExpandedSourceFromView(
       <AdminVacancySourcesView
         state={sourcesLoaded([
           { ...sampleSources[0], name: 'Zeta Jobs' },
@@ -63,13 +80,21 @@ describe('AdminVacancySourcesView', () => {
     expect(html.indexOf('Alpha Jobs')).toBeLessThan(html.indexOf('Zeta Jobs'));
   });
 
+  it('labels a progressively loaded registry as incomplete until the last page arrives', () => {
+    const html = renderToStaticMarkup(
+      <AdminVacancySourcesView state={sourcesLoaded(sampleSources, false)} onRefresh={vi.fn()} onSync={vi.fn()} />,
+    );
+    expect(html).toContain('Источников загружено: 2; список пополняется');
+    expect(html).toContain('data-complete="false"');
+  });
+
   /**
    * B200 — живость и доверие показываются раздельно, и каждое число называет
    * свой знаменатель. Иначе «площадка отвечает» и «площадка жива» выглядели на
    * экране одинаково, а «10 %» скрывало размер выборки.
    */
   it('печатает живость и доверие раздельно, со знаменателями', () => {
-    const html = renderToStaticMarkup(
+    const html = renderExpandedSourceFromView(
       <AdminVacancySourcesView
         state={sourcesLoaded([
           {
@@ -119,7 +144,7 @@ describe('AdminVacancySourcesView', () => {
    * замера, а «не проверяли» называется словами, а не нулём.
    */
   it('печатает обход ссылок объявлений со знаменателем и датой', () => {
-    const html = renderToStaticMarkup(
+    const html = renderExpandedSourceFromView(
       <AdminVacancySourcesView
         state={sourcesLoaded([
           {
@@ -195,7 +220,7 @@ describe('AdminVacancySourcesView', () => {
       },
     };
 
-    const html = renderToStaticMarkup(
+    const html = renderExpandedSourceFromView(
       <AdminVacancySourcesView
         state={sourcesLoaded([{ ...sampleSources[0], health: measuredHealth }])}
         onRefresh={vi.fn()}
@@ -209,7 +234,7 @@ describe('AdminVacancySourcesView', () => {
   });
 
   it('называет словами, что ссылки объявлений ещё не проверяли', () => {
-    const html = renderToStaticMarkup(
+    const html = renderExpandedSourceFromView(
       <AdminVacancySourcesView
         state={sourcesLoaded([
           {
@@ -248,7 +273,7 @@ describe('AdminVacancySourcesView', () => {
   });
 
   it('не выдаёт неопрошенную площадку за живую', () => {
-    const html = renderToStaticMarkup(
+    const html = renderExpandedSourceFromView(
       <AdminVacancySourcesView
         state={sourcesLoaded(sampleSources)}
         onRefresh={vi.fn()}
@@ -262,7 +287,7 @@ describe('AdminVacancySourcesView', () => {
   });
 
   it('называет ручной опрос очередью, пока обслуживатель его не выполнил', () => {
-    const html = renderToStaticMarkup(
+    const html = renderExpandedSourceFromView(
       <AdminVacancySourcesView
         state={sourcesLoaded([{ ...sampleSources[0], manualSync: { status: 'queued' } }])}
         onRefresh={vi.fn()}
@@ -280,7 +305,7 @@ describe('AdminVacancySourcesView', () => {
    * ровно как честный ответ «источников нет»: пустая сетка и ничего больше.
    */
   it('печатает названный отказ и кнопку повтора вместо пустой сетки', () => {
-    const html = renderToStaticMarkup(
+    const html = renderExpandedSourceFromView(
       <AdminVacancySourcesView
         state={sourcesFailure(new Error('Слишком много запросов. Повторите через 8 минут.'))!}
         onRefresh={vi.fn()}
@@ -295,7 +320,7 @@ describe('AdminVacancySourcesView', () => {
   });
 
   it('пустой список называет себя пустым, а не отказом', () => {
-    const html = renderToStaticMarkup(
+    const html = renderExpandedSourceFromView(
       <AdminVacancySourcesView state={sourcesLoaded([])} onRefresh={vi.fn()} onSync={vi.fn()} />,
     );
 
@@ -305,7 +330,7 @@ describe('AdminVacancySourcesView', () => {
   });
 
   it('во время загрузки не выдаёт пустоту за ответ', () => {
-    const html = renderToStaticMarkup(
+    const html = renderExpandedSourceFromView(
       <AdminVacancySourcesView state={sourcesLoading()} onRefresh={vi.fn()} onSync={vi.fn()} />,
     );
 

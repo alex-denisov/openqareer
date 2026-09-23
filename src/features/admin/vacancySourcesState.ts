@@ -13,7 +13,7 @@ import type { AdminVacancySource } from './adminApi';
  */
 export type VacancySourcesState =
   | { readonly status: 'loading' }
-  | { readonly status: 'ready'; readonly sources: readonly AdminVacancySource[] }
+  | { readonly status: 'ready'; readonly sources: readonly AdminVacancySource[]; readonly complete: boolean }
   | { readonly status: 'failed'; readonly message: string };
 
 /** Что говорит экран, когда причина отказа нечитаема. */
@@ -25,8 +25,9 @@ export function sourcesLoading(): VacancySourcesState {
 
 export function sourcesLoaded(
   sources: readonly AdminVacancySource[],
+  complete = true,
 ): VacancySourcesState {
-  return { status: 'ready', sources };
+  return { status: 'ready', sources, complete };
 }
 
 /**

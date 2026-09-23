@@ -6,6 +6,8 @@ import {
   Broadcast,
   LinkedinLogo,
   MagnifyingGlass,
+  GearSix,
+  SignIn,
   ShieldCheck,
   UsersThree,
 } from '@phosphor-icons/react';
@@ -53,7 +55,7 @@ function useVacancySourcesPage() {
     setState(sourcesLoading());
     try {
       const data = await listAdminVacancySources(signal, (sources) => {
-        if (!signal?.aborted) setState(sourcesLoaded(sources));
+        if (!signal?.aborted) setState(sourcesLoaded(sources, false));
       });
       if (!signal?.aborted) setState(sourcesLoaded(data));
     } catch (reason: unknown) {
@@ -264,12 +266,26 @@ function AdminRefusal({ signedIn }: { signedIn: boolean }) {
   );
 }
 
+// eslint-disable-next-line max-lines-per-function -- directory filters, sorting and modal state form one screen
 function AdminDirectory() {
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
+  const [searchField, setSearchField] = useState<'all' | 'username' | 'email' | 'displayName'>('all');
   const [offset, setOffset] = useState(0);
+  const [role, setRole] = useState<'all' | 'candidate' | 'admin'>('all');
+  const [tier, setTier] = useState<'all' | 'free' | 'pro' | 'executive' | 'enterprise'>('all');
+  const [blocked, setBlocked] = useState<'all' | 'yes' | 'no'>('all');
+  const [sortBy, setSortBy] = useState<'name' | 'role' | 'tier' | 'created' | 'sessions'>('created');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
-  const { state, load } = useDirectoryPage(submittedQuery, offset);
+  const { state, load } = useDirectoryPage({
+    query: submittedQuery, searchField, offset, role, tier, blocked, sortBy, sortDirection,
+  });
+  const changeSort = (column: typeof sortBy) => {
+    setOffset(0);
+    setSortDirection((current) => column === sortBy ? (current === 'asc' ? 'desc' : 'asc') : 'asc');
+    setSortBy(column);
+  };
 
   return (
     <>
@@ -277,11 +293,36 @@ function AdminDirectory() {
       <AdminSearchForm
         query={query}
         onQueryChange={setQuery}
+        searchField={searchField}
+        onSearchFieldChange={(field) => { setSearchField(field); setOffset(0); }}
         onSubmit={() => {
           setOffset(0);
           setSubmittedQuery(query);
         }}
       />
+      <div className="admin-directory-filters" aria-label="Фильтры учётных записей">
+        <label>Роль
+          <select value={role} onChange={(event) => { setRole(event.target.value as typeof role); setOffset(0); }}>
+            <option value="all">Все роли</option><option value="candidate">Кандидаты</option><option value="admin">Администраторы</option>
+          </select>
+        </label>
+        <label>Тариф
+          <select value={tier} onChange={(event) => { setTier(event.target.value as typeof tier); setOffset(0); }}>
+            <option value="all">Все тарифы</option><option value="free">Free</option><option value="pro">Pro</option>
+            <option value="executive">Executive</option><option value="enterprise">Enterprise</option>
+          </select>
+        </label>
+        <label>Блокировка
+          <select value={blocked} onChange={(event) => { setBlocked(event.target.value as typeof blocked); setOffset(0); }}>
+            <option value="all">Все</option><option value="yes">Заблокированы</option><option value="no">Активны</option>
+          </select>
+        </label>
+      </div>
+      <div className="admin-directory-sort-mobile admin-register-chips" aria-label="Сортировка учётных записей">
+        {([['name', 'Имя'], ['role', 'Роль'], ['tier', 'Тариф'], ['created', 'Создан'], ['sessions', 'Сессии']] as const).map(([value, label]) => (
+          <button key={value} type="button" aria-pressed={sortBy === value} onClick={() => changeSort(value)}>{label}{sortBy === value ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</button>
+        ))}
+      </div>
       <AdminDirectoryStatus state={state} onRetry={() => void load()} />
       {state.status === 'ready' && (
         <AdminDirectoryPage
@@ -291,6 +332,9 @@ function AdminDirectory() {
           selectedId={selectedUser?.id}
           onSelect={setSelectedUser}
           onOffset={setOffset}
+          sortBy={sortBy}
+          sortDirection={sortDirection}
+          onSort={changeSort}
         />
       )}
       {selectedUser && (
@@ -344,10 +388,14 @@ function AdminDirectoryStatus({ state, onRetry }: { state: DirectoryState; onRet
 function AdminSearchForm({
   query,
   onQueryChange,
+  searchField,
+  onSearchFieldChange,
   onSubmit,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
+  searchField: 'all' | 'username' | 'email' | 'displayName';
+  onSearchFieldChange: (value: 'all' | 'username' | 'email' | 'displayName') => void;
   onSubmit: () => void;
 }) {
   return (
@@ -374,6 +422,11 @@ function AdminSearchForm({
           Найти
         </button>
       </div>
+      <div className="admin-register-chips" aria-label="Поле поиска">
+        {([['all', 'Везде'], ['username', 'Логин'], ['email', 'Email'], ['displayName', 'Имя']] as const).map(([value, label]) => (
+          <button key={value} type="button" aria-pressed={searchField === value} onClick={() => onSearchFieldChange(value)}>{label}</button>
+        ))}
+      </div>
     </form>
   );
 }
@@ -390,12 +443,13 @@ function AdminTableRowActions({
   return (
     <div className="admin-table-row-actions">
       <button
-        className="admin-btn is-secondary"
+        className="admin-btn admin-icon-btn is-secondary"
         type="button"
         onClick={() => onSelect(user)}
-        title="Открыть полное управление профилем, тарифом и паролем"
+        aria-label={`Управление аккаунтом ${user.username}`}
+        title="Управление аккаунтом"
       >
-        Управление
+        <GearSix size={18} aria-hidden="true" />
       </button>
       <button
         className="admin-btn admin-btn--impersonate"
@@ -403,12 +457,13 @@ function AdminTableRowActions({
         onClick={() => onImpersonate(user)}
         title="Войти в кабинет пользователя (имперсонация)"
       >
-        Войти
+        <SignIn size={18} aria-hidden="true" /> Войти
       </button>
     </div>
   );
 }
 
+// eslint-disable-next-line max-lines-per-function -- page owns the exact row actions and pagination
 function AdminDirectoryPage({
   page,
   searched,
@@ -416,6 +471,9 @@ function AdminDirectoryPage({
   selectedId,
   onSelect,
   onOffset,
+  sortBy,
+  sortDirection,
+  onSort,
 }: {
   page: AdminUserPage;
   searched: boolean;
@@ -423,6 +481,9 @@ function AdminDirectoryPage({
   selectedId?: string;
   onSelect: (user: AdminUser) => void;
   onOffset: React.Dispatch<React.SetStateAction<number>>;
+  sortBy: 'name' | 'role' | 'tier' | 'created' | 'sessions';
+  sortDirection: 'asc' | 'desc';
+  onSort: (column: 'name' | 'role' | 'tier' | 'created' | 'sessions') => void;
 }) {
   const handleImpersonate = async (user: AdminUser) => {
     if (!window.confirm(`Войти в личный кабинет под именем @${user.username}?`)) return;
@@ -450,6 +511,9 @@ function AdminDirectoryPage({
           selectedId={selectedId}
           onSelect={onSelect}
           onImpersonate={handleImpersonate}
+          sortBy={sortBy}
+          sortDirection={sortDirection}
+          onSort={onSort}
         />
       </div>
       <AdminPagination
@@ -543,28 +607,42 @@ function AdminTableRow({
   );
 }
 
+// eslint-disable-next-line max-lines-per-function -- sortable table headings and rows stay in one semantic table
 function AdminTable({
   users,
   selectedId,
   onSelect,
   onImpersonate,
+  sortBy,
+  sortDirection,
+  onSort,
 }: {
   users: AdminUser[];
   selectedId?: string;
   onSelect: (user: AdminUser) => void;
   onImpersonate: (user: AdminUser) => void;
+  sortBy: 'name' | 'role' | 'tier' | 'created' | 'sessions';
+  sortDirection: 'asc' | 'desc';
+  onSort: (column: 'name' | 'role' | 'tier' | 'created' | 'sessions') => void;
 }) {
+  const heading = (column: typeof sortBy, label: string) => (
+    <th scope="col" aria-sort={sortBy === column ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <button className="admin-column-sort" type="button" onClick={() => onSort(column)}>
+        {label}<span aria-hidden="true">{sortBy === column ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+      </button>
+    </th>
+  );
   return (
     <div className="admin-table-scroll">
-      <table className="admin-table">
+      <table className="admin-table admin-user-table">
         <caption className="admin-visually-hidden">Учётные записи</caption>
         <thead>
           <tr>
-            <th scope="col">Аккаунт</th>
-            <th scope="col">Роль</th>
-            <th scope="col">Тариф / Статус</th>
-            <th scope="col">Создан</th>
-            <th scope="col">Сессии</th>
+            {heading('name', 'Аккаунт')}
+            {heading('role', 'Роль')}
+            {heading('tier', 'Тариф / Статус')}
+            {heading('created', 'Создан')}
+            {heading('sessions', 'Сессии')}
             <th scope="col">Действия</th>
           </tr>
         </thead>
@@ -606,14 +684,30 @@ function AdminFrame({ children }: { children: ReactNode }) {
   );
 }
 
-function useDirectoryPage(query: string, offset: number) {
+function useDirectoryPage(input: {
+  query: string;
+  searchField: 'all' | 'username' | 'email' | 'displayName';
+  offset: number;
+  role: 'all' | 'candidate' | 'admin';
+  tier: 'all' | 'free' | 'pro' | 'executive' | 'enterprise';
+  blocked: 'all' | 'yes' | 'no';
+  sortBy: 'name' | 'role' | 'tier' | 'created' | 'sessions';
+  sortDirection: 'asc' | 'desc';
+}) {
   const [state, setState] = useState<DirectoryState>({ status: 'loading' });
+  const { query, searchField, offset, role, tier, blocked, sortBy, sortDirection } = input;
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setState({ status: 'loading' });
       try {
-        const page = await listAdminUsers({ query, offset, signal });
+        const page = await listAdminUsers({
+          query, searchField, offset, signal,
+          ...(role === 'all' ? {} : { role }),
+          ...(tier === 'all' ? {} : { tier }),
+          ...(blocked === 'all' ? {} : { blocked: blocked === 'yes' }),
+          sortBy, sortDirection,
+        });
         if (!signal?.aborted) setState({ status: 'ready', page });
       } catch (reason) {
         if (!signal?.aborted) {
@@ -625,7 +719,7 @@ function useDirectoryPage(query: string, offset: number) {
         }
       }
     },
-    [offset, query],
+    [blocked, offset, query, role, searchField, sortBy, sortDirection, tier],
   );
 
   useEffect(() => {

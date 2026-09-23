@@ -43,6 +43,7 @@ describe('B207 · состояние списка площадок', () => {
   it('пустой список — это готовый ответ, а не отказ', () => {
     const state: VacancySourcesState = sourcesLoaded([]);
 
-    expect(state).toEqual({ status: 'ready', sources: [] });
+    expect(state).toEqual({ status: 'ready', sources: [], complete: true });
+    expect(sourcesLoaded([], false)).toEqual({ status: 'ready', sources: [], complete: false });
   });
 });

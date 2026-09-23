@@ -87,6 +87,20 @@ export interface AdminUserPage {
 
 export interface AdminUserQuery {
   query?: string;
+  searchField?: 'all' | 'username' | 'email' | 'displayName';
+  role?: 'candidate' | 'admin';
+  tier?: SubscriptionTier;
+  blocked?: boolean;
+  sortBy?: 'name' | 'role' | 'tier' | 'created' | 'sessions';
+  sortDirection?: 'asc' | 'desc';
+  limit: number;
+  offset: number;
+}
+
+export interface AdminAuditQuery {
+  query?: string;
+  action?: string;
+  sortDirection?: 'asc' | 'desc';
   limit: number;
   offset: number;
 }
@@ -172,7 +186,7 @@ export interface SessionAuth {
     targetUserId: string,
     actorPrincipal?: AuthPrincipal,
   ): void;
-  listAudit?(query?: { limit: number; offset: number }): AdminAuditPage;
+  listAudit?(query?: AdminAuditQuery): AdminAuditPage;
   updateAccount?(
     sessionToken: string,
     input: AccountProfileUpdate,

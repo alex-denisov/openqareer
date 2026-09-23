@@ -11,7 +11,9 @@ describe('AdminLinkedinPoolView', () => {
 
     expect(html).toContain('Аккаунты LinkedIn');
     expect(html).toContain('Идентификатор сессии');
-    expect(html).toContain('только администратору');
+    expect(html).toContain('Поиск аккаунта');
+    expect(html).toContain('Добавить аккаунт');
+    expect(html).not.toContain('Полный идентификатор виден только администратору');
     expect(html).toContain('OpenQareer Desktop');
     expect(html).not.toContain('Provider account marker');
     expect(html).not.toContain('Метка администратора');
