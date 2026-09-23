@@ -1,0 +1,73 @@
+import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
+import {
+  resolveCampaign,
+  type CampaignResolution,
+  type StoredCampaignSelection,
+} from '../vacancies/campaign';
+import type { RouteDeps } from './deps';
+
+/**
+ * Кампания = одна явная запись {роль(и), география} — не сборка из трёх
+ * независимых источников (B247, срез 1). Явный выбор кандидата живёт в
+ * `candidateWorkspace.campaign`; при его отсутствии `resolveCampaign` берёт
+ * только принятые кандидатом роли (`confirmed`/`corrected`) и черновик
+ * резюме — роли, лишь предложенные моделью и не принятые, подбор больше не
+ * задают (найдено попутно к решению архитектора).
+ *
+ * Общий вход для `vacancyRoutes.ts` (подбор) и `campaignRoutes.ts` (чтение и
+ * запись явного выбора) — оба обязаны видеть одну и ту же кампанию.
+ */
+export function readCampaign(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+): CampaignResolution {
+  const snapshot = candidateStore.getSnapshot(candidateId);
+  const memory = snapshot?.memory ?? [];
+  const resumeTargetRole = snapshot?.resume?.draft?.targetRole ?? null;
+
+  const stored = candidateStore.getCandidateWorkspace(candidateId);
+  const parsed = stored ? candidateWorkspaceSchema.safeParse(stored) : null;
+  const profileRegions = parsed?.success ? [...parsed.data.regions] : [];
+  const explicit: StoredCampaignSelection | null =
+    parsed?.success && parsed.data.campaign ? parsed.data.campaign : null;
+
+  return resolveCampaign({
+    memory: memory.map((m) => ({
+      domain: m.domain,
+      kind: m.kind,
+      statement: m.statement,
+      status: m.status,
+    })),
+    resumeTargetRole,
+    profileRegions,
+    explicit,
+  });
+}
+
+/**
+ * Плоский, сериализуемый вид кампании для ответа маршрута — баннер
+ * расхождения профиль/кампания читает конкретные значения обеих сторон
+ * отсюда, а не пересчитывает их сам (B247, срез 1).
+ */
+export function campaignMeta(campaign: CampaignResolution) {
+  return {
+    roles: { value: [...campaign.roles.value], origin: campaign.roles.origin },
+    regions: { value: [...campaign.regions.value], origin: campaign.regions.origin },
+    divergence: {
+      roles: campaign.divergence.roles
+        ? {
+            campaign: [...campaign.divergence.roles.campaign],
+            profile: [...campaign.divergence.roles.profile],
+          }
+        : null,
+      regions: campaign.divergence.regions
+        ? {
+            campaign: [...campaign.divergence.regions.campaign],
+            profile: [...campaign.divergence.regions.profile],
+          }
+        : null,
+    },
+  };
+}
+
+export type CampaignMeta = ReturnType<typeof campaignMeta>;

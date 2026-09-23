@@ -28,6 +28,8 @@ import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import { MatchedPoolSnapshots } from '../vacancies/matchedPoolSnapshot';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { buildRoleProposals, confirmChosenTitle } from '../vacancies/roleHypotheses';
+import { campaignMeta, readCampaign } from './campaignContext';
+import { registerCampaignRoutes } from './campaignRoutes';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
 import { generateVacancyPitch } from '../domain/vacancyPitchService';
 import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';
@@ -83,11 +85,11 @@ const handleHhMarket: Handler = async ({ searchVacancies }, request, reply) => {
   }
 };
 
-/** Подтверждённый профиль кандидата — то, по чему вообще можно сопоставлять. */
+/** Подтверждённые навыки кандидата — то, по чему вообще можно сопоставлять. */
 function readMatchProfile(
   candidateStore: RouteDeps['candidateStore'],
   candidateId: string,
-): { confirmedSkills: string[]; targetRoles: string[] } {
+): { confirmedSkills: string[] } {
   const snapshot = candidateStore.getSnapshot(candidateId);
   const memory = snapshot?.memory ?? [];
   const confirmedSkills = memory
@@ -96,22 +98,7 @@ function readMatchProfile(
     )
     .map((m) => m.statement);
 
-  const roleHypotheses = memory
-    .filter((m) => m.domain === 'role-evidence' || m.kind === 'hypothesis')
-    .map((m) => m.statement);
-
-  const subscriptionQueries = (snapshot?.vacancySubscriptions ?? []).map((s) => s.query);
-  const resumeTitle = snapshot?.resume?.draft?.targetRole;
-
-  const targetRoles = Array.from(
-    new Set(
-      [...roleHypotheses, ...subscriptionQueries, ...(resumeTitle ? [resumeTitle] : [])].filter(
-        Boolean,
-      ),
-    ),
-  );
-
-  return { confirmedSkills, targetRoles };
+  return { confirmedSkills };
 }
 
 /**
@@ -205,13 +192,20 @@ async function readRoleContext(
   candidateId: string,
 ): Promise<RoleContext | null> {
   const { candidateStore, multiSourceEngine, roleNamer, roleNamingFailures } = deps;
-  const { confirmedSkills, targetRoles } = readMatchProfile(candidateStore, candidateId);
+  const { confirmedSkills } = readMatchProfile(candidateStore, candidateId);
+  const campaign = readCampaign(candidateStore, candidateId);
+  const targetRoles = [...campaign.roles.value];
   // Без подтверждённого профиля подбора нет вовсе, а значит нет и рынка, по
   // которому можно назвать роль. Молчаливый пустой список сказал бы «рынок
   // ничего не назвал» там, где на самом деле некого спрашивать (B161).
   if (confirmedSkills.length === 0 && targetRoles.length === 0) return null;
 
-  const matched = await readMatchedSnapshot(multiSourceEngine, candidateId, confirmedSkills, targetRoles);
+  const matched = await readMatchedSnapshot(
+    multiSourceEngine,
+    candidateId,
+    confirmedSkills,
+    targetRoles,
+  );
 
   // Имя роли даёт модель, читающая факты кандидата; пул приписывает к нему
   // доказательство или честное «пока не найдено» (B180, срез 1в). Роль без
@@ -220,7 +214,7 @@ async function readRoleContext(
   // Язык названия решает код, а не модель: иначе смена провайдера переписывает
   // кандидату его же роли (B180, решение владельца 2026-09-03).
   const facts = candidateFacts(candidateStore, candidateId);
-  const regions = readSearchRegions(candidateStore, candidateId);
+  const regions = campaign.regions.value as CandidateRegion[];
   const { language } = resolveRoleNameLanguage({
     searchRegions: regions,
     targetRoles,
@@ -519,20 +513,6 @@ function reportRoleNamingFailures(
   log.record(failures);
 }
 
-/**
- * Рынки, на которых кандидат ищет, — его собственный ответ мастеру подбора.
- * Пустой список честен: он означает «ещё не сказал», а не «ищет везде».
- */
-function readSearchRegions(
-  candidateStore: RouteDeps['candidateStore'],
-  candidateId: string,
-): CandidateRegion[] {
-  const stored = candidateStore.getCandidateWorkspace(candidateId);
-  if (!stored) return [];
-  const parsed = candidateWorkspaceSchema.safeParse(stored);
-  return parsed.success ? [...parsed.data.regions] : [];
-}
-
 /** Факты, по которым модель называет роль: своя ссылка у каждого. */
 /** Организации кандидата по сохранённому резюме: работодатели и вузы. */
 function candidateOrganisations(
@@ -578,7 +558,11 @@ function readMatchedSnapshot(
   }
   return snapshots.readAsync(candidateId, matchProfileKey(confirmedSkills, targetRoles), () =>
     engine.getMatchedVacanciesAsync({
-      candidateId, targetRoles, confirmedSkills, confirmedFacts: confirmedSkills, preferredRemote: true,
+      candidateId,
+      targetRoles,
+      confirmedSkills,
+      confirmedFacts: confirmedSkills,
+      preferredRemote: true,
     }),
   );
 }
@@ -592,7 +576,9 @@ const handleMatchedVacancies: Handler = async (
   if (!candidate) return undefined;
   const { offset } = matchedVacanciesQuerySchema.parse(request.query);
 
-  const { confirmedSkills, targetRoles } = readMatchProfile(candidateStore, candidate.id);
+  const { confirmedSkills } = readMatchProfile(candidateStore, candidate.id);
+  const campaign = readCampaign(candidateStore, candidate.id);
+  const targetRoles = [...campaign.roles.value];
 
   // Matching an invented profile produced «Подтверждённый навык: TypeScript»
   // for a candidate who confirmed nothing, and a match percentage computed
@@ -610,13 +596,19 @@ const handleMatchedVacancies: Handler = async (
         // план первой страницы и не должен различать «нет плана» и «нечего
         // читать» (B211).
         ...(offset === 0 ? { pageOffsets: [0] } : {}),
+        campaign: campaignMeta(campaign),
       },
     };
   }
 
   // Подбор считается один раз на чтение: страницы одного чтения обязаны
   // приходить из одного списка, иначе смещение указывает не на ту запись.
-  const snapshot = await readMatchedSnapshot(multiSourceEngine, candidate.id, confirmedSkills, targetRoles);
+  const snapshot = await readMatchedSnapshot(
+    multiSourceEngine,
+    candidate.id,
+    confirmedSkills,
+    targetRoles,
+  );
   // SQL добирает кандидатов до лимита любыми свежими записями; при названной
   // роли в подбор идут только совпавшие с ней, и счётчик считает их же.
   // Записи вне рынков кампании помечены и стоят после остальных (PRB-040).
@@ -624,7 +616,7 @@ const handleMatchedVacancies: Handler = async (
     targetRoles.length > 0
       ? snapshot.filter((item) => item.explanation.roleMatch !== 'none')
       : snapshot,
-    readSearchRegions(candidateStore, candidate.id),
+    campaign.regions.value as CandidateRegion[],
   );
 
   // Весь подбор одним телом не доходит: маршрут рвёт ответ примерно на 20 460
@@ -641,6 +633,9 @@ const handleMatchedVacancies: Handler = async (
       // идти дальше, лишь из предыдущего ответа, и держит канал 73 секунды
       // шестьюдесятью кругами подряд (PRB-023, B211).
       ...(page.pageOffsets ? { pageOffsets: page.pageOffsets } : {}),
+      // Баннер расхождения профиль/кампания читает конкретные значения обеих
+      // сторон отсюда, а не пересчитывает их сам (B247, срез 1).
+      campaign: campaignMeta(campaign),
     },
   };
 };
@@ -847,8 +842,10 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
       id: vacancyId,
       title,
       company: body?.vacancy?.company ?? cluster?.canonicalCompany ?? poolVacancy?.company,
-      description: body?.vacancy?.description ?? cluster?.descriptionSummary ?? poolVacancy?.description,
-      requiredSkills: body?.vacancy?.requiredSkills ?? cluster?.skills ?? poolVacancy?.requiredSkills ?? [],
+      description:
+        body?.vacancy?.description ?? cluster?.descriptionSummary ?? poolVacancy?.description,
+      requiredSkills:
+        body?.vacancy?.requiredSkills ?? cluster?.skills ?? poolVacancy?.requiredSkills ?? [],
       responsibilities: body?.vacancy?.responsibilities ?? poolVacancy?.responsibilities ?? [],
       location: body?.vacancy?.location ?? cluster?.canonicalLocation ?? poolVacancy?.location,
       isRemote: body?.vacancy?.isRemote ?? cluster?.isRemote ?? poolVacancy?.isRemote ?? false,
@@ -916,6 +913,7 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
     withDeps(deps, handleSubmitWorkPreferences),
   );
   registerVacancyApplicationRoutes(app, deps);
+  registerCampaignRoutes(app, deps);
   app.get('/api/v1/candidate/strategy', withDeps(deps, handleReadStrategy));
   app.post(
     '/api/v1/candidate/strategy',

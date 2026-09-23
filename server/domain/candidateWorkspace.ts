@@ -13,9 +13,7 @@ import {
  */
 export const candidateWorkspaceSchema = z
   .object({
-    careerGoal: z
-      .enum(['find-job', 'choose-role', 'positioning', 'market'])
-      .optional(),
+    careerGoal: z.enum(['find-job', 'choose-role', 'positioning', 'market']).optional(),
     resumeText: z.string().max(200_000),
     resumeSource: z.enum(['pdf', 'linkedin-pdf', 'hh-pdf', 'text']),
     resumeFileName: z.string().max(300).optional(),
@@ -32,6 +30,21 @@ export const candidateWorkspaceSchema = z
     linkedinUrl: z.string().max(500).optional(),
     hhUrl: z.string().max(500).optional(),
     resumeImported: z.boolean().optional(),
+    /**
+     * The candidate's own explicit choice of what the matcher searches for —
+     * "кампания" (B247). Absent means the candidate has not chosen yet, and
+     * `resolveCampaign` falls back to the profile; this is additive to rows
+     * written before it, so no migration.
+     */
+    campaign: z
+      .object({
+        roles: z.array(z.string().trim().min(1).max(200)).max(10),
+        regions: z.array(z.enum(CANDIDATE_REGIONS)).max(CANDIDATE_REGIONS.length),
+        revision: z.number().int().min(1),
+        updatedAt: z.string(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -46,9 +59,7 @@ export type CandidateWorkspaceState = z.infer<typeof candidateWorkspaceSchema>;
  * a 500 instead of their own career context. `ru` named exactly one region;
  * `international` named none, so expanding it would invent an answer.
  */
-export function readStoredCandidateWorkspace(
-  raw: unknown,
-): CandidateWorkspaceState {
+export function readStoredCandidateWorkspace(raw: unknown): CandidateWorkspaceState {
   return candidateWorkspaceSchema.parse(withRegions(raw));
 }
 
