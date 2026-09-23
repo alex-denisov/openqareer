@@ -100,7 +100,11 @@ export function parseLanguagesSection(html: string): ParsedResumeLanguage[] {
   const languages: ParsedResumeLanguage[] = [];
   for (let i = 0; i < paragraphs.length - 1; i += 1) {
     if (!/proficiency$/iu.test(paragraphs[i + 1])) continue;
-    languages.push({ name: paragraphs[i], cefr: cefrOf(paragraphs[i + 1]) });
+    languages.push({
+      name: paragraphs[i],
+      cefr: cefrOf(paragraphs[i + 1]),
+      sourceLabel: paragraphs[i + 1],
+    });
     i += 1;
   }
   return languages;

@@ -1,4 +1,5 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import { updateAccountProfile, type AuthUser } from '../coach/coachApi';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
@@ -6,6 +7,7 @@ import { CareerHome } from './CareerHome';
 import { SearchCampaign } from '../search/SearchCampaign';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { ProfileScreenView } from '../resume/ProfileScreenView';
+import { ProfileTabs, type ProfileTab } from '../resume/profileTabs';
 import { VacancyBoard } from '../vacancies/VacancyBoard';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
 import { useVacancyApplications } from '../vacancies/useVacancyApplications';
@@ -117,6 +119,10 @@ export function CareerCabinet({
     },
     [data, onUpdateWorkspace, workspace],
   );
+  // «Профиль / Документ и форматы» — в шапке страницы, справа от заголовка
+  // «Профиль», а не рядом с карточкой кандидата: карточка — факты о человеке,
+  // вкладки решают, что показывает весь экран (B265 review round 3).
+  const [profileTab, setProfileTab] = useState<ProfileTab>('profile');
   return (
     <AppErrorBoundary
       fallbackTitle="Не удалось отобразить кабинет"
@@ -129,6 +135,7 @@ export function CareerCabinet({
           loading={data.loading && Boolean(data.snapshot)}
           error={data.error}
           onRetry={() => void data.refresh()}
+          tabs={view === 'profile' ? <ProfileTabs tab={profileTab} onTab={setProfileTab} /> : undefined}
         />
         {/* B248 §2 — the same path indicator the anonymous wizard shows
             (`CareerWorkspaceShell`), wired to the cabinet's own journey, pool
@@ -165,6 +172,7 @@ export function CareerCabinet({
             pool={pool}
             applications={vacancyApplications.applications}
             data={data}
+            profileTab={profileTab}
             onNavigate={onNavigate}
             onUpdateWorkspace={onUpdateWorkspace}
             onSavePremises={savePremises}
@@ -203,6 +211,7 @@ function CabinetSection({
   pool,
   applications,
   data,
+  profileTab,
   onNavigate,
   onUpdateWorkspace,
   onSavePremises,
@@ -222,6 +231,7 @@ function CabinetSection({
   pool: ReturnType<typeof useMatchedPool>;
   applications?: readonly VacancyApplication[];
   data: ReturnType<typeof useCareerCabinetData>;
+  profileTab: ProfileTab;
   onNavigate: (view: CareerCabinetView) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
   onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
@@ -265,6 +275,9 @@ function CabinetSection({
         memory={data.snapshot?.memory ?? []}
         importedSources={data.snapshot?.importedSources}
         onRefreshFacts={() => void data.refresh()}
+        tab={profileTab}
+        workspace={workspace}
+        onUpdateWorkspace={onUpdateWorkspace}
       />
     );
   }
@@ -322,11 +335,14 @@ function CabinetHeader({
   loading,
   error,
   onRetry,
+  tabs,
 }: {
   view: CareerCabinetView;
   loading: boolean;
   error?: string;
   onRetry: () => void;
+  /** «Профиль / Документ и форматы» — only the profile view sends one. */
+  tabs?: ReactNode;
 }) {
   return (
     <header className="career-cabinet-header">
@@ -335,22 +351,27 @@ function CabinetHeader({
         <h1>{VIEW_TITLE[view]}</h1>
         <p>{VIEW_DESCRIPTION[view]}</p>
       </div>
-      {loading || error ? (
-        <div className="career-cabinet-header-state">
-          {error ? (
-            <>
-              <span className="is-error" role="alert">
-                <WarningCircle size={16} weight="fill" />
-                {error}
-              </span>
-              <button type="button" onClick={onRetry}>
-                <ArrowClockwise size={15} />
-                Повторить
-              </button>
-            </>
-          ) : (
-            <span className="is-loading">Обновляем…</span>
-          )}
+      {tabs || loading || error ? (
+        <div className="career-cabinet-header-right">
+          {tabs}
+          {loading || error ? (
+            <div className="career-cabinet-header-state">
+              {error ? (
+                <>
+                  <span className="is-error" role="alert">
+                    <WarningCircle size={16} weight="fill" />
+                    {error}
+                  </span>
+                  <button type="button" onClick={onRetry}>
+                    <ArrowClockwise size={15} />
+                    Повторить
+                  </button>
+                </>
+              ) : (
+                <span className="is-loading">Обновляем…</span>
+              )}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </header>

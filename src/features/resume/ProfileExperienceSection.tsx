@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { CandidateMemory } from '../coach/coachApi';
 import { groupExperienceByEmployer } from './profileGrouping';
 import { addExperience, removeExperience, updateExperience } from './resumeStudioModel';
 import {
@@ -12,8 +13,27 @@ import type { ResumeDraft, ResumeExperienceInput } from './resumeTypes';
 
 interface SectionProps {
   readonly draft: ResumeDraft;
+  readonly memory?: readonly CandidateMemory[];
   readonly saving?: boolean;
   readonly onSectionSave: (next: ResumeDraft) => void;
+}
+
+/**
+ * Resolves a position's `bulletMemoryIds` against the candidate's memory —
+ * the same fact store Resume Studio's evidence picker reads — into plain
+ * responsibility text, in the order the position lists the ids (mockup
+ * "Отвечал за платёжную стратегию…" bullets under every job).
+ */
+function responsibilityBullets(
+  entry: ResumeExperienceInput,
+  memory: readonly CandidateMemory[],
+): readonly string[] {
+  if (!entry.bulletMemoryIds.length || !memory.length) return [];
+  const byId = new Map(memory.map((item) => [item.id, item.statement]));
+  return entry.bulletMemoryIds.flatMap((id) => {
+    const statement = byId.get(id)?.trim();
+    return statement ? [statement] : [];
+  });
 }
 
 const WORKPLACE_LABEL: Record<string, string> = {
@@ -104,10 +124,12 @@ function PositionEditForm({
 
 function PositionSummary({
   entry,
+  bullets,
   onEdit,
   onRemove,
 }: {
   readonly entry: ResumeExperienceInput;
+  readonly bullets: readonly string[];
   readonly onEdit: () => void;
   readonly onRemove: () => void;
 }) {
@@ -129,6 +151,13 @@ function PositionSummary({
       {periodLabel(entry) ? (
         <div className="career-profile-screen-position-dates">{periodLabel(entry)}</div>
       ) : null}
+      {bullets.length ? (
+        <ul className="career-profile-screen-position-bullets">
+          {bullets.map((bullet) => (
+            <li key={bullet}>{bullet}</li>
+          ))}
+        </ul>
+      ) : null}
       {entry.skills?.length ? (
         <div className="career-profile-screen-skill-row">
           {entry.skills.map((skill) => (
@@ -144,11 +173,13 @@ function PositionSummary({
 
 function PositionRow({
   entry,
+  bullets,
   saving,
   onSave,
   onRemove,
 }: {
   readonly entry: ResumeExperienceInput;
+  readonly bullets: readonly string[];
   readonly saving?: boolean;
   readonly onSave: (patch: Partial<ResumeExperienceInput>) => void;
   readonly onRemove: () => void;
@@ -167,16 +198,25 @@ function PositionRow({
       />
     );
   }
-  return <PositionSummary entry={entry} onEdit={() => setEditing(true)} onRemove={onRemove} />;
+  return (
+    <PositionSummary
+      entry={entry}
+      bullets={bullets}
+      onEdit={() => setEditing(true)}
+      onRemove={onRemove}
+    />
+  );
 }
 
 function CompanyGroup({
   group,
+  memory,
   saving,
   onSectionSave,
   draft,
 }: {
   readonly group: ReturnType<typeof groupExperienceByEmployer>[number];
+  readonly memory: readonly CandidateMemory[];
   readonly saving?: boolean;
   readonly draft: ResumeDraft;
   readonly onSectionSave: (next: ResumeDraft) => void;
@@ -199,6 +239,7 @@ function CompanyGroup({
         <PositionRow
           key={entry.id}
           entry={entry}
+          bullets={responsibilityBullets(entry, memory)}
           saving={saving}
           onSave={(patch) => onSectionSave(updateExperience(draft, entry.id, patch))}
           onRemove={() => onSectionSave(removeExperience(draft, entry.id))}
@@ -208,7 +249,7 @@ function CompanyGroup({
   );
 }
 
-export function ProfileExperienceSection({ draft, saving, onSectionSave }: SectionProps) {
+export function ProfileExperienceSection({ draft, memory = [], saving, onSectionSave }: SectionProps) {
   const groups = groupExperienceByEmployer(draft.experience);
   const addPosition = () => onSectionSave(addExperience(draft, `manual-${Date.now()}`));
   return (
@@ -235,6 +276,7 @@ export function ProfileExperienceSection({ draft, saving, onSectionSave }: Secti
           <CompanyGroup
             key={group.key}
             group={group}
+            memory={memory}
             saving={saving}
             draft={draft}
             onSectionSave={onSectionSave}

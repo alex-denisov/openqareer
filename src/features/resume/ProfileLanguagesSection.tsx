@@ -84,11 +84,18 @@ function LanguageRow({
     );
   }
   return (
-    <div className="career-profile-screen-lang-row">
-      <div className="career-profile-screen-lang-name">{entry.name || 'Язык не указан'}</div>
-      {entry.cefr ? <span className="career-profile-screen-cefr">{entry.cefr}</span> : null}
-      <SectionPencilButton label="Изменить язык" onClick={() => setEditing(true)} />
-      <SectionRemoveButton label="Удалить язык" onClick={onRemove} />
+    <div className="career-profile-screen-lang-item">
+      <div className="career-profile-screen-lang-row">
+        <div className="career-profile-screen-lang-name">{entry.name || 'Язык не указан'}</div>
+        {entry.cefr ? <span className="career-profile-screen-cefr">{entry.cefr}</span> : null}
+        <SectionPencilButton label="Изменить язык" onClick={() => setEditing(true)} />
+        <SectionRemoveButton label="Удалить язык" onClick={onRemove} />
+      </div>
+      {entry.sourceLabel && entry.cefr ? (
+        <p className="career-profile-screen-lang-source">
+          LinkedIn: «{entry.sourceLabel}» → {entry.cefr}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -30,6 +30,45 @@ const ACCOUNT = {
   sessions: [],
 };
 
+// B265 review round 3 — an imported LinkedIn profile already has confirmed
+// facts, so the cross-screen path indicator's «Профиль» step must read
+// "Опорные факты подтверждены", not the wizard's generic "Собираем опыт…":
+// that reason only fits a candidate with no facts at all yet
+// (`careerJourneyEngine.ts` `buildTrack`). Two responsibility facts double as
+// the experience section's bullet source (`bulletMemoryIds` below).
+const MEMORY = [
+  {
+    id: 'mem-resp-1',
+    kind: 'fact' as const,
+    domain: 'responsibility' as const,
+    statement: 'Отвечал за платёжную стратегию и roadmap для 6 продуктовых команд.',
+    confidence: 'candidate-confirmed' as const,
+    sourceMessageIds: [],
+    sensitive: false,
+    status: 'confirmed' as const,
+  },
+  {
+    id: 'mem-resp-2',
+    kind: 'fact' as const,
+    domain: 'responsibility' as const,
+    statement: 'Провёл миграцию платёжного ядра на Kubernetes без остановки сервиса.',
+    confidence: 'candidate-confirmed' as const,
+    sourceMessageIds: [],
+    sensitive: false,
+    status: 'confirmed' as const,
+  },
+  {
+    id: 'mem-outcome-1',
+    kind: 'fact' as const,
+    domain: 'outcome' as const,
+    statement: 'Сократил время выхода фич на 40% за счёт платформенной стратегии.',
+    confidence: 'candidate-confirmed' as const,
+    sourceMessageIds: [],
+    sensitive: false,
+    status: 'confirmed' as const,
+  },
+];
+
 const SNAPSHOT = {
   candidate: {
     id: CANDIDATE.candidateId,
@@ -38,7 +77,7 @@ const SNAPSHOT = {
     createdAt: '2026-08-01T00:00:00.000Z',
   },
   messages: [],
-  memory: [],
+  memory: MEMORY,
   turns: [],
   dossier: {
     sections: [],
@@ -81,7 +120,7 @@ const DRAFT = {
       location: 'Берлин, Германия',
       startDate: 'янв 2023',
       current: true,
-      bulletMemoryIds: [],
+      bulletMemoryIds: ['mem-resp-1'],
       employmentType: 'Полная занятость',
       workplaceType: 'hybrid',
       skills: ['Platform Strategy', 'Kubernetes'],
@@ -95,7 +134,7 @@ const DRAFT = {
       startDate: 'июн 2020',
       endDate: 'янв 2023',
       current: false,
-      bulletMemoryIds: [],
+      bulletMemoryIds: ['mem-resp-2'],
     },
   ],
   skills: [
@@ -124,7 +163,15 @@ const DRAFT = {
       text: 'Марина — редкий тип VP, который одинаково свободно говорит с регулятором и с инженером.',
     },
   ],
-  languages: [{ id: 'lang-1', evidenceMemoryId: 'mem-lang-1', name: 'Английский', cefr: 'C1' }],
+  languages: [
+    {
+      id: 'lang-1',
+      evidenceMemoryId: 'mem-lang-1',
+      name: 'Английский',
+      cefr: 'C1',
+      sourceLabel: 'Full professional proficiency',
+    },
+  ],
   certifications: [
     {
       id: 'cert-1',

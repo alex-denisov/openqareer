@@ -74,6 +74,7 @@ export function parsedResumeToDraft(parsed: ParsedResume): ResumeDraft {
       evidenceMemoryId: `mem-lang-${index + 1}`,
       name: lang.name,
       cefr: lang.cefr,
+      sourceLabel: lang.sourceLabel,
     })),
     additional: parsed.additional,
     certifications: parsed.certifications?.map((cert, index) => ({

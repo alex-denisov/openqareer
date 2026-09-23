@@ -165,6 +165,9 @@ export interface ResumeLanguageInput {
   readonly evidenceMemoryId: string;
   readonly name?: string;
   readonly cefr?: CefrLevel;
+  /** The source's own phrase for the level, e.g. LinkedIn's "Full professional
+   * proficiency" — shown next to the CEFR the platform inferred from it. */
+  readonly sourceLabel?: string;
 }
 
 export interface ResumeAdditionalInput {
@@ -398,6 +401,7 @@ export const resumeDraftSchema = z
             evidenceMemoryId: memoryIdSchema,
             name: labelSchema.optional(),
             cefr: z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']).optional(),
+            sourceLabel: labelSchema.optional(),
           })
           .strict(),
       )

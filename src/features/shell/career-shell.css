@@ -3862,6 +3862,14 @@
   text-transform: uppercase;
 }
 
+.career-cabinet-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .career-cabinet-header-state {
   display: grid;
   justify-items: end;
@@ -5550,6 +5558,20 @@
   .career-cabinet-header {
     min-height: 0;
     padding: 0 4px 16px;
+    flex-wrap: wrap;
+  }
+
+  .career-cabinet-header-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .career-profile-screen-tabs {
+    width: 100%;
+  }
+
+  .career-profile-screen-tabs button {
+    flex: 1;
   }
 
   .career-cabinet-header h1,
@@ -12772,6 +12794,31 @@
   font-size: var(--career-text-sm);
 }
 
+.career-profile-screen-region-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.career-profile-screen-region-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--career-target-min);
+  padding: 0 var(--career-space-3);
+  border-radius: var(--career-radius-sm);
+  border: 1px solid var(--career-line-strong);
+  background: var(--career-bg-elevated);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.career-profile-screen-region-unmatched {
+  margin: var(--career-space-2) 0 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-aux);
+}
+
 .career-profile-screen-edit-actions {
   display: flex;
   gap: var(--career-space-2);
@@ -13050,6 +13097,15 @@
   font-family: var(--font-mono, monospace);
 }
 
+.career-profile-screen-position-bullets {
+  margin: var(--career-space-2) 0 0;
+  padding-left: 18px;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  display: grid;
+  gap: 4px;
+}
+
 .career-profile-screen-edu-item + .career-profile-screen-edu-item {
   margin-top: var(--career-space-4);
   padding-top: var(--career-space-4);
@@ -13113,10 +13169,16 @@
   align-items: center;
 }
 
-.career-profile-screen-lang-row + .career-profile-screen-lang-row {
+.career-profile-screen-lang-item + .career-profile-screen-lang-item {
   margin-top: var(--career-space-3);
   padding-top: var(--career-space-3);
   border-top: 1px solid var(--career-line);
+}
+
+.career-profile-screen-lang-source {
+  margin: 4px 0 0;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-aux);
 }
 
 .career-profile-screen-cefr {
@@ -13250,8 +13312,9 @@
   flex: 1 1 480px;
 }
 
-/* "Профиль / Документ и форматы" — top-right tabs, replacing the permanent
-   header Save button (B265 owner remark #5). */
+/* "Профиль / Документ и форматы" — lives in the page header now, beside the
+   «Профиль» title (B265 review round 3), replacing the permanent header Save
+   button (B265 owner remark #5) it first sat next to the topcard for. */
 .career-profile-screen-tabs {
   display: inline-flex;
   gap: 4px;

@@ -133,12 +133,20 @@ describe('ProfileScreenSurface — states', () => {
     expect(html).toContain('Изменить навыки');
   });
 
-  it('shows the "Профиль" and "Документ и форматы" tabs instead of a permanent Save button', () => {
-    const html = renderToStaticMarkup(
-      <ProfileScreenSurface {...baseProps} draft={populatedDraft} />,
+  // The "Профиль / Документ и форматы" tabs now live in the cabinet shell's
+  // page header, beside the «Профиль» title, not in this surface (B265
+  // review round 3) — the surface only reads the controlled `tab` prop.
+  it('never renders a permanent Save button, and switches to the document menu on the "documents" tab', () => {
+    const profileHtml = renderToStaticMarkup(
+      <ProfileScreenSurface {...baseProps} draft={populatedDraft} tab="profile" />,
     );
-    expect(html).toContain('career-profile-screen-tabs');
-    expect(html).toContain('Документ и форматы');
-    expect(html).not.toContain('>Сохранить<');
+    expect(profileHtml).not.toContain('>Сохранить<');
+    expect(profileHtml).not.toContain('career-profile-screen-tabs');
+    expect(profileHtml).toContain('sec-experience');
+
+    const documentsHtml = renderToStaticMarkup(
+      <ProfileScreenSurface {...baseProps} draft={populatedDraft} tab="documents" />,
+    );
+    expect(documentsHtml).not.toContain('sec-experience');
   });
 });

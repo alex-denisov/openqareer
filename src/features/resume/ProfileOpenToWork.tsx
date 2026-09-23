@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Sparkle } from '@phosphor-icons/react';
+import { CANDIDATE_REGION_CATALOGUE, type CandidateRegion } from '../workspace/candidateRegions';
+import { mapOpenToWorkLocations } from './openToWorkRegions';
 import { openToWorkDismissalKey } from './profileEditing';
 import type { ResumeDraft } from './resumeTypes';
 
@@ -36,19 +38,30 @@ function primaryWorkMode(workplaceTypes: readonly string[]): WorkMode {
 
 export interface OpenToWorkConfirmation {
   readonly workMode: WorkMode;
-  readonly regions: readonly string[];
+  readonly regions: readonly CandidateRegion[];
+}
+
+function toggleRegion(
+  regions: readonly CandidateRegion[],
+  region: CandidateRegion,
+): readonly CandidateRegion[] {
+  return regions.includes(region)
+    ? regions.filter((entry) => entry !== region)
+    : [...regions, region];
 }
 
 function OpenToWorkFields({
   mode,
-  regionsText,
+  regions,
+  unmatchedLocations,
   onMode,
-  onRegionsText,
+  onRegions,
 }: {
   readonly mode: WorkMode;
-  readonly regionsText: string;
+  readonly regions: readonly CandidateRegion[];
+  readonly unmatchedLocations: readonly string[];
   readonly onMode: (mode: WorkMode) => void;
-  readonly onRegionsText: (value: string) => void;
+  readonly onRegions: (regions: readonly CandidateRegion[]) => void;
 }) {
   return (
     <div className="career-profile-screen-field-grid">
@@ -62,10 +75,27 @@ function OpenToWorkFields({
           ))}
         </select>
       </label>
-      <label className="career-profile-screen-field">
+      <div className="career-profile-screen-field">
         <span>Регионы</span>
-        <input value={regionsText} onChange={(event) => onRegionsText(event.target.value)} />
-      </label>
+        <div className="career-profile-screen-region-picker" role="group" aria-label="Регионы">
+          {CANDIDATE_REGION_CATALOGUE.map((region) => (
+            <label key={region.id} className="career-profile-screen-region-option">
+              <input
+                type="checkbox"
+                checked={regions.includes(region.id)}
+                onChange={() => onRegions(toggleRegion(regions, region.id))}
+              />
+              {region.label}
+            </label>
+          ))}
+        </div>
+        {unmatchedLocations.length > 0 ? (
+          <p className="career-profile-screen-region-unmatched">
+            LinkedIn также назвал {unmatchedLocations.join(', ')} — это не совпало ни с одним
+            регионом каталога, выберите его вручную выше.
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -78,25 +108,28 @@ function OpenToWorkFields({
 function OpenToWorkEditForm({
   workMode,
   regions,
+  unmatchedLocations,
   confirming,
   onCancel,
   onSave,
 }: {
   readonly workMode: WorkMode;
-  readonly regions: readonly string[];
+  readonly regions: readonly CandidateRegion[];
+  readonly unmatchedLocations: readonly string[];
   readonly confirming?: boolean;
   readonly onCancel: () => void;
   readonly onSave: (confirmation: OpenToWorkConfirmation) => void;
 }) {
   const [mode, setMode] = useState<WorkMode>(workMode);
-  const [regionsText, setRegionsText] = useState(regions.join(', '));
+  const [selectedRegions, setSelectedRegions] = useState<readonly CandidateRegion[]>(regions);
   return (
     <div className="career-profile-screen-edit-body">
       <OpenToWorkFields
         mode={mode}
-        regionsText={regionsText}
+        regions={selectedRegions}
+        unmatchedLocations={unmatchedLocations}
         onMode={setMode}
-        onRegionsText={setRegionsText}
+        onRegions={setSelectedRegions}
       />
       <div className="career-profile-screen-edit-actions">
         <button type="button" className="career-quiet-button" onClick={onCancel}>
@@ -106,15 +139,7 @@ function OpenToWorkEditForm({
           type="button"
           className="career-primary-button"
           disabled={confirming}
-          onClick={() =>
-            onSave({
-              workMode: mode,
-              regions: regionsText
-                .split(',')
-                .map((region) => region.trim())
-                .filter(Boolean),
-            })
-          }
+          onClick={() => onSave({ workMode: mode, regions: selectedRegions })}
         >
           {confirming ? 'Применяем…' : 'Сохранить и применить'}
         </button>
@@ -152,6 +177,9 @@ export function ProfileOpenToWork({
 
   const workModes = openToWork.workplaceTypes.map((mode) => WORKPLACE_LABELS[mode] ?? mode);
   const primaryMode = primaryWorkMode(openToWork.workplaceTypes);
+  const { matched: matchedRegions, unmatched: unmatchedLocations } = mapOpenToWorkLocations(
+    openToWork.locations,
+  );
 
   function dismiss() {
     setDismissed(true);
@@ -191,7 +219,8 @@ export function ProfileOpenToWork({
       {editing ? (
         <OpenToWorkEditForm
           workMode={primaryMode}
-          regions={openToWork.locations}
+          regions={matchedRegions}
+          unmatchedLocations={unmatchedLocations}
           confirming={confirming}
           onCancel={() => setEditing(false)}
           onSave={(confirmation) => {
@@ -205,7 +234,7 @@ export function ProfileOpenToWork({
             type="button"
             className="career-primary-button"
             disabled={confirming}
-            onClick={() => onConfirm({ workMode: primaryMode, regions: openToWork.locations })}
+            onClick={() => onConfirm({ workMode: primaryMode, regions: matchedRegions })}
           >
             {confirming ? 'Применяем…' : 'Подтвердить и применить к целям поиска'}
           </button>

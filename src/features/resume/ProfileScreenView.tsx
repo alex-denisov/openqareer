@@ -1,6 +1,9 @@
 import { useCallback, useState } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import { updateAccountProfile, type CandidateMemory, type ImportedSourceSummary } from '../coach/coachApi';
+import { applyRoutePremises } from '../cabinet/routePremises';
+import { normalizeCandidateRegions } from '../workspace/candidateRegions';
+import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { ProfileAboutSection } from './ProfileAboutSection';
 import { ProfileAchievementsSection } from './ProfileAchievementsSection';
 import { ProfileCoursesSection } from './ProfileCoursesSection';
@@ -14,6 +17,7 @@ import { ProfileSideRail } from './ProfileSideRail';
 import { ProfileSkillsSection } from './ProfileSkillsSection';
 import { ProfileCertificatesSection, ProfileProjectsSection } from './ProfileTileSections';
 import { ProfileTopcard } from './ProfileTopcard';
+import type { ProfileTab } from './profileTabs';
 import { importedSourceOf, type ImportedSource } from './resumeSourceCoverage';
 import { useResumeStudio } from './useResumeStudio';
 import type { ResumeDraft, ResumeStudioView } from './resumeTypes';
@@ -77,37 +81,34 @@ function ProfileEmptyState() {
   );
 }
 
+/**
+ * "Open to work" regions save through the same workspace write the wizard's
+ * region step uses (`routePremises.ts`) — `candidate_workspaces`, not a
+ * PATCH-only account column (B265 review round 3, PRB-forbidden ALTER TABLE
+ * on the prod DB) — merged into whatever regions the candidate already chose,
+ * never overwriting them.
+ */
+function workspaceWithOpenToWorkRegions(
+  workspace: CandidateWorkspace,
+  confirmation: OpenToWorkConfirmation,
+): CandidateWorkspace {
+  const regions = normalizeCandidateRegions([
+    ...(workspace.regions ?? []),
+    ...confirmation.regions,
+  ]);
+  return applyRoutePremises(workspace, {
+    targetRole: workspace.targetDirection,
+    regions,
+    workMode: confirmation.workMode,
+  });
+}
+
 function isDraftEmpty(draft: ResumeDraft): boolean {
   return (
     !draft.candidate.fullName?.trim() &&
     !draft.experience.length &&
     !draft.education.length &&
     !(draft.skills?.length ?? 0)
-  );
-}
-
-type ProfileTab = 'profile' | 'documents';
-
-function ProfileTabs({ tab, onTab }: { readonly tab: ProfileTab; readonly onTab: (tab: ProfileTab) => void }) {
-  return (
-    <div className="career-profile-screen-tabs" role="group" aria-label="Что показать">
-      <button
-        type="button"
-        className={tab === 'profile' ? 'is-active' : ''}
-        aria-pressed={tab === 'profile'}
-        onClick={() => onTab('profile')}
-      >
-        Профиль
-      </button>
-      <button
-        type="button"
-        className={tab === 'documents' ? 'is-active' : ''}
-        aria-pressed={tab === 'documents'}
-        onClick={() => onTab('documents')}
-      >
-        Документ и форматы
-      </button>
-    </div>
   );
 }
 
@@ -127,6 +128,12 @@ export interface ProfileScreenSurfaceProps {
   readonly onRefresh?: () => void;
   readonly onConfirmOpenToWork: (confirmation: OpenToWorkConfirmation) => void;
   readonly confirmingOpenToWork?: boolean;
+  /**
+   * "Профиль / Документ и форматы" now lives in the page header, beside the
+   * «Профиль» title, not next to the topcard (owner review round 3) — the
+   * cabinet shell owns the tab state and hands the current one down.
+   */
+  readonly tab?: ProfileTab;
 }
 
 /**
@@ -152,8 +159,8 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
     onRefresh,
     onConfirmOpenToWork,
     confirmingOpenToWork,
+    tab = 'profile',
   } = props;
-  const [tab, setTab] = useState<ProfileTab>('profile');
 
   if (loading) {
     return (
@@ -186,7 +193,6 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
           updatedAt={props.view?.savedAt?.updatedAt}
           onDraftChange={onDraftChange}
         />
-        <ProfileTabs tab={tab} onTab={setTab} />
       </div>
       {saveError ? (
         <p className="career-resume-error" role="alert">
@@ -207,7 +213,12 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
           <div className="career-profile-screen-layout">
             <div className="career-profile-screen-main-col">
               <ProfileAboutSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
-              <ProfileExperienceSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileExperienceSection
+                draft={draft}
+                memory={memory}
+                saving={saving}
+                onSectionSave={onSectionSave}
+              />
               <ProfileEducationSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
               <ProfileSkillsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
               <ProfileCertificatesSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
@@ -240,6 +251,43 @@ interface ProfileScreenViewProps {
   readonly memory: readonly CandidateMemory[];
   readonly importedSources?: readonly ImportedSourceSummary[];
   readonly onRefreshFacts?: () => void;
+  /** Tab state lives in the cabinet shell now — it renders next to the H1. */
+  readonly tab?: ProfileTab;
+  /**
+   * "Open to work" regions save through the same workspace write the wizard's
+   * region step uses (`routePremises.ts`) — `candidate_workspaces`, not a
+   * PATCH-only account column (B265 review round 3, PRB-forbidden ALTER
+   * TABLE on the prod DB).
+   */
+  readonly workspace?: CandidateWorkspace;
+  readonly onUpdateWorkspace?: (workspace: CandidateWorkspace) => void;
+}
+
+/**
+ * The confirm handler alone (workMode PATCH plus the workspace-region write)
+ * pulled `ProfileScreenView` past the function-length gate, so it lives in
+ * its own hook rather than shrinking the comments that explain either write.
+ */
+function useConfirmOpenToWork(
+  workspace: CandidateWorkspace | undefined,
+  onUpdateWorkspace: ((workspace: CandidateWorkspace) => void) | undefined,
+) {
+  const [confirming, setConfirming] = useState(false);
+  const confirm = useCallback(
+    async (confirmation: OpenToWorkConfirmation) => {
+      setConfirming(true);
+      try {
+        await updateAccountProfile({ workMode: confirmation.workMode });
+        if (workspace && confirmation.regions.length > 0) {
+          onUpdateWorkspace?.(workspaceWithOpenToWorkRegions(workspace, confirmation));
+        }
+      } finally {
+        setConfirming(false);
+      }
+    },
+    [workspace, onUpdateWorkspace],
+  );
+  return { confirming, confirm };
 }
 
 /**
@@ -253,9 +301,15 @@ export function ProfileScreenView({
   memory,
   importedSources,
   onRefreshFacts,
+  tab,
+  workspace,
+  onUpdateWorkspace,
 }: ProfileScreenViewProps) {
   const state = useResumeStudio(onRefreshFacts);
-  const [confirmingOtw, setConfirmingOtw] = useState(false);
+  const { confirming: confirmingOtw, confirm: confirmOpenToWork } = useConfirmOpenToWork(
+    workspace,
+    onUpdateWorkspace,
+  );
 
   // `state.setDraft` and `state.save` both key off React state, so a section's
   // edit form has to hand the freshly computed draft to both — updating
@@ -268,15 +322,6 @@ export function ProfileScreenView({
     },
     [state],
   );
-
-  const confirmOpenToWork = useCallback(async (confirmation: OpenToWorkConfirmation) => {
-    setConfirmingOtw(true);
-    try {
-      await updateAccountProfile({ workMode: confirmation.workMode, regions: confirmation.regions });
-    } finally {
-      setConfirmingOtw(false);
-    }
-  }, []);
 
   return (
     <ProfileScreenSurface
@@ -295,6 +340,7 @@ export function ProfileScreenView({
       onRefresh={onRefreshFacts}
       onConfirmOpenToWork={(confirmation) => void confirmOpenToWork(confirmation)}
       confirmingOpenToWork={confirmingOtw}
+      tab={tab}
     />
   );
 }
