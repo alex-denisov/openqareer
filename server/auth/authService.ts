@@ -117,6 +117,7 @@ interface UserRow {
   headline: string | null;
   location: string | null;
   work_mode: AccountSnapshot['profile']['workMode'];
+  regions_json: string | null;
   blocked_at: string | null;
   profile_updated_at: string | null;
 }
@@ -469,6 +470,7 @@ export class AuthService implements SessionAuth {
         headline: user.headline,
         location: user.location,
         workMode: user.work_mode,
+        regions: parseRegionsJson(user.regions_json),
         updatedAt: user.profile_updated_at,
       },
       sessions: sessions.map((session) => ({
@@ -493,11 +495,17 @@ export class AuthService implements SessionAuth {
     const normalizeNullable = (value: string | null | undefined, fallback: string | null) =>
       value === undefined ? fallback : value?.trim() || null;
     const now = new Date().toISOString();
+    const regionsJson =
+      input.regions === undefined
+        ? user.regions_json
+        : input.regions === null
+          ? null
+          : JSON.stringify(normalizeRegions(input.regions));
     this.database
       .prepare(
         `UPDATE users
          SET email = ?, display_name = ?, headline = ?, location = ?,
-             work_mode = ?, profile_updated_at = ?, updated_at = ?
+             work_mode = ?, regions_json = ?, profile_updated_at = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -506,6 +514,7 @@ export class AuthService implements SessionAuth {
         normalizeNullable(input.headline, user.headline),
         normalizeNullable(input.location, user.location),
         input.workMode === undefined ? user.work_mode : input.workMode,
+        regionsJson,
         now,
         now,
         user.id,
@@ -765,7 +774,7 @@ const USER_SELECT = `
   SELECT users.id, users.username, users.role, users.password_salt,
          users.password_hash, users.is_test, users.candidate_id,
          users.email, users.display_name, users.headline, users.location,
-         users.work_mode, users.blocked_at, users.profile_updated_at,
+         users.work_mode, users.regions_json, users.blocked_at, users.profile_updated_at,
          users.created_at AS user_created_at,
          candidates.data_class, candidates.locale,
          candidates.created_at AS candidate_created_at
@@ -787,6 +796,31 @@ function normalizeUsername(username: string): string {
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+const MAX_ACCOUNT_REGIONS = 20;
+
+/** Trimmed, deduplicated, capped — mirrors `normalizeCandidateRegions` client-side. */
+function normalizeRegions(regions: readonly string[]): readonly string[] {
+  const seen = new Set<string>();
+  for (const region of regions) {
+    const trimmed = region.trim();
+    if (trimmed) seen.add(trimmed);
+    if (seen.size >= MAX_ACCOUNT_REGIONS) break;
+  }
+  return [...seen];
+}
+
+/** A malformed or absent value reads back as "no regions chosen", never a crash. */
+function parseRegionsJson(value: string | null): readonly string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === 'string');
+  } catch {
+    return [];
+  }
 }
 
 function principalFromRow(row: UserRow): AuthPrincipal {

@@ -25,6 +25,8 @@ export interface AccountSnapshot {
     headline: string | null;
     location: string | null;
     workMode: 'office' | 'hybrid' | 'remote' | 'flexible' | null;
+    /** B265 — job-search regions offered by the Profile screen's "Open to work". */
+    regions: readonly string[];
     updatedAt: string | null;
   };
   sessions: Array<{
@@ -42,6 +44,7 @@ export interface AccountProfileUpdate {
   headline?: string | null;
   location?: string | null;
   workMode?: AccountSnapshot['profile']['workMode'];
+  regions?: readonly string[] | null;
 }
 
 export interface PasswordResetDelivery {

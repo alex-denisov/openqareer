@@ -60,6 +60,7 @@ export const accountProfileSchema = z
     headline: z.string().trim().min(2).max(220).nullable().optional(),
     location: z.string().trim().min(2).max(160).nullable().optional(),
     workMode: z.enum(['office', 'hybrid', 'remote', 'flexible']).nullable().optional(),
+    regions: z.array(z.string().trim().min(1).max(60)).max(20).nullable().optional(),
   })
   .refine((value) => Object.values(value).some((item) => item !== undefined), {
     message: 'at least one profile field is required',
