@@ -244,6 +244,22 @@ async function openProfile(page: Page): Promise<void> {
   await expect(page.locator('.career-profile-screen-view')).toBeVisible();
 }
 
+/**
+ * `.career-main` scrolls internally (`overflow: auto`), so neither
+ * `page.screenshot({ fullPage: true })` nor `locator.screenshot()` captures
+ * more than one viewport of it — the first only measures `<body>`, which
+ * never grows, and the second clips to the element's own (viewport-sized)
+ * box rather than its scrollable content. Forcing the scroller to lay out at
+ * its full content height turns the whole page into one tall flow so a
+ * plain full-page screenshot shows every section, top to bottom.
+ */
+async function screenshotFullProfilePage(page: Page, path: string): Promise<void> {
+  await page.addStyleTag({
+    content: `.career-shell, .career-main { overflow: visible !important; height: auto !important; min-height: 0 !important; }`,
+  });
+  await page.screenshot({ path, fullPage: true });
+}
+
 const SECTION_IDS = [
   'sec-about',
   'sec-experience',
@@ -280,7 +296,7 @@ test.describe('B265 Profile screen', () => {
     );
     expect(overflow).toBeLessThanOrEqual(0);
 
-    await page.screenshot({ path: testInfo.outputPath('profile-1440.png'), fullPage: true });
+    await screenshotFullProfilePage(page, testInfo.outputPath('profile-1440.png'));
 
     const accessibility = await new AxeBuilder({ page })
       .include('.career-profile-screen-view')
@@ -302,7 +318,7 @@ test.describe('B265 Profile screen', () => {
     );
     expect(overflow).toBeLessThanOrEqual(0);
 
-    await page.screenshot({ path: testInfo.outputPath('profile-390.png'), fullPage: true });
+    await screenshotFullProfilePage(page, testInfo.outputPath('profile-390.png'));
   });
 
   test('confirms the Open to work proposal without a page redirect', async ({ page }) => {
