@@ -5,41 +5,30 @@ import {
   FileText,
   Warning,
 } from '@phosphor-icons/react';
-import { APPLICATION_STAGES, type ApplicationStage } from '../../../shared/applicationStage';
+import type { ApplicationStage } from '../../../shared/applicationStage';
 import { SKIP_REASONS, type SkipReasonId } from '../../../shared/skipReasons';
 import type { ApplicationView } from './applicationsApi';
 import { waitingLabel } from './waitingLabel';
-
-const STAGE_LABEL: Record<ApplicationStage, string> = {
-  saved: 'Хочу',
-  applied: 'Откликнулся',
-  responded: 'Ответ',
-  interview: 'Интервью',
-  offer: 'Оффер',
-  rejected: 'Отказ',
-  archived: 'Архив',
-};
-
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 interface ResponsesCardProps {
   readonly application: ApplicationView;
   readonly failed: boolean;
   readonly conflicted: boolean;
-  readonly onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   readonly onRetry: () => void;
   readonly onSaveNote: (notes: string) => void;
   readonly onSkip: (reasonId: SkipReasonId) => void;
 }
 
-/** One card of the tracker board (mockup `.card`, B248/B251 S3). */
+/**
+ * One card of the tracker board (mockup `.card`, B248/B251 S3). The stage
+ * lives in the card menu, not on the face — the mockup's face shows role,
+ * company, materials and the next step only (B251 S4 acceptance review);
+ * stage change gets its own affordance in the next slice.
+ */
 export function ResponsesCard({
   application,
   failed,
   conflicted,
-  onChangeStage,
   onRetry,
   onSaveNote,
   onSkip,
@@ -55,19 +44,19 @@ export function ResponsesCard({
     closedReason: application.closedReason,
   });
 
-  const hasMaterials = application.materials.coverLetter || application.materials.resume;
-
   return (
-    <article className="career-responses-card" data-cluster={application.clusterId ?? ''}>
+    <article
+      className={`career-responses-card${label.on === 'you' ? ' is-your-turn' : ''}`}
+      data-cluster={application.clusterId ?? ''}
+    >
       <div className="career-responses-card-role">{application.vacancy?.title ?? 'Без названия'}</div>
       <div className="career-responses-card-company">
         {application.vacancy?.companyHidden
           ? 'компания скрыта'
           : application.vacancy?.company || 'компания не указана'}
       </div>
-      <MaterialsBadge hasMaterials={hasMaterials} />
+      <MaterialsBadge materials={application.materials} />
       <CardAlerts failed={failed} conflicted={conflicted} onRetry={onRetry} />
-      <StageChangeControl stage={application.stage} onChangeStage={onChangeStage} />
       <CardFooter
         application={application}
         labelText={label.text}
