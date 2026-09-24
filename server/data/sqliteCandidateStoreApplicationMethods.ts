@@ -181,6 +181,10 @@ function createArtifactApplicationMethods(
       requireCandidate(candidateId);
       return tracker.getSinceLastVisit(candidateId);
     },
+    countSystemClosuresSince(candidateId, since) {
+      requireCandidate(candidateId);
+      return tracker.countSystemClosuresSince(candidateId, since);
+    },
   };
 }
 
