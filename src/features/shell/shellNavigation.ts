@@ -4,6 +4,7 @@ export type ShellSection =
   | 'resume'
   | 'career'
   | 'opportunities'
+  | 'responses'
   | 'tariffs';
 
 export interface ShellNavigationState {

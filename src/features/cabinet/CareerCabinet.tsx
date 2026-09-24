@@ -12,6 +12,9 @@ import { VacancyBoard } from '../vacancies/VacancyBoard';
 import { VacanciesScreen } from '../vacancies/VacanciesScreen';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
 import { useVacancyApplications } from '../vacancies/useVacancyApplications';
+import { useApplications } from '../applications/useApplications';
+import type { ApplicationView } from '../applications/applicationsApi';
+import { ResponsesBoard } from '../applications/ResponsesBoard';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
 import { buildPathIndicator } from '../shell/pathIndicator';
@@ -89,6 +92,9 @@ export function CareerCabinet({
   // Задания меняют порядок ролей, а не их состав (B180, срез 3).
   const workPreferences = useWorkPreferences();
   const vacancyApplications = useVacancyApplications();
+  // B251 S3 — трекер откликов читает свой собственный API, независимо от
+  // ручного лога `useVacancyApplications` (совместимость со старым `.app`).
+  const applicationsTracker = useApplications();
   const journey = useMemo(
     () =>
       cabinetJourney({
@@ -137,6 +143,8 @@ export function CareerCabinet({
           track: journey.track,
           matchedPoolCount: pool.matched.length,
           confirmedApplications: countConfirmedApplications(vacancyApplications.applications),
+          activeResponses: countActiveResponses(applicationsTracker.applications),
+          nearestInterview: nearestInterviewOf(applicationsTracker.applications),
         })
       : undefined;
 
@@ -183,6 +191,7 @@ export function CareerCabinet({
             applications={vacancyApplications.applications}
             vacancyApplications={vacancyApplications}
             pathIndicatorSteps={pathIndicatorSteps}
+            applicationsTracker={applicationsTracker}
             data={data}
             profileTab={profileTab}
             onNavigate={onNavigate}
@@ -224,6 +233,7 @@ function CabinetSection({
   applications,
   vacancyApplications,
   pathIndicatorSteps,
+  applicationsTracker,
   data,
   profileTab,
   onNavigate,
@@ -246,6 +256,7 @@ function CabinetSection({
   applications?: readonly VacancyApplication[];
   vacancyApplications: ReturnType<typeof useVacancyApplications>;
   pathIndicatorSteps?: ReturnType<typeof buildPathIndicator>;
+  applicationsTracker: ReturnType<typeof useApplications>;
   data: ReturnType<typeof useCareerCabinetData>;
   profileTab: ProfileTab;
   onNavigate: (view: CareerCabinetView) => void;
@@ -328,6 +339,11 @@ function CabinetSection({
       </div>
     );
   }
+  if (view === 'responses') {
+    return (
+      <ResponsesBoard state={applicationsTracker} onOpenVacancies={() => onNavigate('opportunities')} />
+    );
+  }
   // Верх экрана и список — новый макет «Вакансии» (B248/B250). Загрузка,
   // ошибка и пустой пул остаются на прежнем экране до следующего среза,
   // который переносит эти состояния и детальную панель.
@@ -380,7 +396,7 @@ function CabinetHeader({
   return (
     <header className="career-cabinet-header">
       <div>
-        <span className="career-cabinet-kicker">{todayLabel()}</span>
+        <span className="career-cabinet-kicker">{view === 'responses' ? 'Пайплайн' : todayLabel()}</span>
         <h1>{VIEW_TITLE[view]}</h1>
         <p>{VIEW_DESCRIPTION[view]}</p>
       </div>
@@ -420,6 +436,7 @@ const VIEW_TITLE: Record<CareerCabinetView, string> = {
   resume: 'Резюме',
   career: 'Поиск',
   opportunities: 'Вакансии',
+  responses: 'Отклики',
 };
 
 // Шапка раздела говорит, что человек здесь получит, а не как устроен модуль
@@ -433,6 +450,8 @@ const VIEW_DESCRIPTION: Record<CareerCabinetView, string> = {
   career: 'Кампания: по какой роли ищем, что откликнуть сегодня, как идёт воронка.',
   opportunities:
     'Все вакансии по вашей роли из наших источников: фильтры, направления поиска и действия по каждой.',
+  responses:
+    'Весь активный поиск одним взглядом. Переписка, интервью и оффер живут на карточке — не отдельно.',
 };
 
 function todayLabel(): string {
@@ -441,4 +460,28 @@ function todayLabel(): string {
     day: 'numeric',
     month: 'long',
   }).format(new Date());
+}
+
+/** Cards still live on the «Отклики» board — everything but rejected/archived (B251 S4). */
+function countActiveResponses(applications: readonly ApplicationView[]): number {
+  return applications.filter(
+    (application) => application.stage !== 'rejected' && application.stage !== 'archived',
+  ).length;
+}
+
+/** The nearest scheduled interview across the tracker, for the path indicator's «Интервью» step. */
+function nearestInterviewOf(
+  applications: readonly ApplicationView[],
+): { company: string; scheduledAt: string } | null {
+  const withInterview = applications
+    .filter((application) => application.nearestInterview?.scheduledAt)
+    .sort((a, b) =>
+      (a.nearestInterview?.scheduledAt as string).localeCompare(b.nearestInterview?.scheduledAt as string),
+    );
+  const nearest = withInterview[0];
+  if (!nearest?.nearestInterview?.scheduledAt) return null;
+  return {
+    company: nearest.vacancy?.companyHidden ? 'Компания скрыта' : nearest.vacancy?.company || 'Компания не указана',
+    scheduledAt: nearest.nearestInterview.scheduledAt,
+  };
 }
