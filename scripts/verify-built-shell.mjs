@@ -233,8 +233,50 @@ async function verifyViewport(browser, baseUrl, viewport) {
       contentType: 'application/json',
       body: JSON.stringify({
         data: {
-          draft: null,
-          savedAt: null,
+          draft: {
+            schemaVersion: 2,
+            candidate: {
+              fullName: 'Марина Соколова',
+              headline: 'VP of Engineering',
+              about: 'Строю инженерные организации в финтехе.',
+              contact: {
+                email: 'm.sokolova@example.com',
+                phone: null,
+                telegram: null,
+                location: 'Берлин, Германия',
+                links: [],
+                linkedinUrl: null,
+              },
+            },
+            targetRole: 'VP of Engineering',
+            experience: [
+              {
+                id: 'exp-1',
+                chronologyMemoryId: 'mem-exp-1',
+                title: 'VP of Engineering',
+                employer: 'FinNova Bank',
+                employerGroupKey: 'finnova-bank',
+                location: 'Берлин, Германия',
+                startDate: 'янв 2023',
+                current: true,
+                bulletMemoryIds: [],
+                employmentType: 'Полная занятость',
+                workplaceType: 'hybrid',
+                skills: ['Platform Strategy'],
+              },
+            ],
+            skills: [{ id: 'skill-1', name: 'Engineering Leadership' }],
+            education: [],
+            courses: [],
+            tests: [],
+            recommendations: [],
+            languages: [],
+            achievements: [],
+          },
+          savedAt: {
+            createdAt: '2026-09-21T09:00:00.000Z',
+            updatedAt: '2026-09-21T09:00:00.000Z',
+          },
           projection: {
             master: {
               kind: 'master',
@@ -1055,7 +1097,14 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: пул вакансий не отрисовался (${await vacancyRows.count()})`,
   );
   // Возраст — счётный, без процентов и без выдуманной даты публикации.
-  await page.locator('.vac-age', { hasText: '2 дня' }).first().waitFor();
+  // На узких экранах (<=900px) колонка возраста скрыта дизайном (career-shell.css),
+  // поэтому там достаточно проверить наличие узла, а не видимость.
+  const vacAge = page.locator('.vac-age', { hasText: '2 дня' }).first();
+  if (viewport.width > 900) {
+    await vacAge.waitFor();
+  } else {
+    await vacAge.waitFor({ state: 'attached' });
+  }
   // Фильтр свежести обязан отсечь запись девятнадцатидневной давности.
   await page.getByRole('button', { name: '7 дней', exact: true }).click();
   assert(
@@ -1097,12 +1146,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // into a separate Resume Studio page (that link is dead in the B248 IA).
   await page.locator('button[aria-label="Профиль"]:visible').click();
   await page.locator('.career-profile-screen-view').first().waitFor();
-  await page.screenshot({ path: `output/playwright/debug-profile-${viewport.name}.png` });
   await page
     .getByRole('group', { name: 'Что показать' })
     .getByRole('button', { name: 'Документ и форматы' })
     .click();
-  await page.screenshot({ path: `output/playwright/debug-profile-tab-${viewport.name}.png` });
   // The tab switch renders the document menu's own (still closed) toggle
   // button with the same accessible name — it is the one outside the tab
   // group, and the only «Документ и форматы» button left once the tab bar
@@ -1258,9 +1305,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     interactiveMs,
     overflow,
     accountRestart,
-    profileFactReview,
     campaignFunnel,
-    reasonedAction,
     campaignQueue,
   };
 }
@@ -1424,7 +1469,6 @@ try {
     candidateResults.push({
       viewport: result.viewport,
       campaignFunnel: result.campaignFunnel,
-      reasonedAction: result.reasonedAction,
       campaignQueue: result.campaignQueue,
     });
   }
