@@ -12778,20 +12778,18 @@
   gap: 8px;
 }
 
+/* Простые галки совпадения (приёмка B250): без кружка-заливки, только
+   значок в цвете статуса. */
 .fit-dot {
   width: 18px;
   height: 18px;
-  border-radius: 50%;
   display: grid;
   place-items: center;
   font-size: var(--career-text-aux);
-  border: 1px solid var(--career-line-strong);
 }
 
 .fit-dot.is-yes {
   color: var(--career-success);
-  border-color: var(--career-success);
-  background: var(--career-success-soft);
 }
 
 .fit-dot.is-no {

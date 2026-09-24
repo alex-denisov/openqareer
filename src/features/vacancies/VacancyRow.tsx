@@ -1,5 +1,6 @@
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { vacancyAge } from './vacancyFilters';
+import { formatCompensationCompact } from './vacancyCompensation';
 import { FitDot } from './VacanciesScreen';
 
 /**
@@ -41,7 +42,7 @@ export function VacancyRow({
           <FitDot isYes={explanation.levelMatch === 'target'} title="Уровень" />
           <FitDot isYes={!explanation.outsideGeography} title="География" />
         </span>
-        <span className="vac-comp">{compensationLabel(cluster.salary)}</span>
+        <span className="vac-comp">{formatCompensationCompact(cluster.salary)}</span>
         <span className="vac-age">{age.label}</span>
       </button>
     </li>
@@ -61,14 +62,4 @@ function vacancySubtitle(cluster: MatchedVacancyItem['cluster']): string {
   const parts = [cluster.canonicalCompany, cluster.canonicalLocation].filter(Boolean);
   if (cluster.isRemote) parts.push('удалённо');
   return parts.join(' · ');
-}
-
-function compensationLabel(salary: MatchedVacancyItem['cluster']['salary']): string {
-  if (!salary || (salary.from === undefined && salary.to === undefined)) {
-    return 'не указана';
-  }
-  const currency = salary.currency ?? '';
-  const from = salary.from ? `от ${salary.from.toLocaleString('ru-RU')}` : '';
-  const to = salary.to ? `до ${salary.to.toLocaleString('ru-RU')}` : '';
-  return `${[from, to].filter(Boolean).join(' ')} ${currency}`.trim();
 }

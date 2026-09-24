@@ -109,19 +109,29 @@ function explanation(id: string, overrides: Partial<Record<string, unknown>> = {
 
 const MATCHED_ITEMS = [
   {
-    cluster: cluster('c-1', 'VP Technology Operations', 'Genetec'),
+    cluster: cluster('c-1', 'VP Technology Operations', 'Genetec', {
+      canonicalLocation: 'Канада',
+      isRemote: true,
+      salary: { from: 190000, to: 240000, currency: 'USD', gross: true },
+    }),
     explanation: explanation('c-1'),
   },
   {
-    cluster: cluster('c-2', 'VP Technology Ops (гипотеза)', 'Careem'),
+    cluster: cluster('c-2', 'VP Technology Ops (гипотеза)', 'Careem', {
+      salary: { from: 150000, currency: 'USD', gross: true },
+    }),
     explanation: explanation('c-2'),
   },
   {
-    cluster: cluster('c-3', 'COO', 'Noon', { canonicalLocation: 'Европа', isRemote: true }),
+    cluster: cluster('c-3', 'COO', 'Noon', {
+      canonicalLocation: 'Европа',
+      isRemote: true,
+      salary: { to: 220000, currency: 'USD', gross: true },
+    }),
     explanation: explanation('c-3', { levelMatch: 'related' }),
   },
   {
-    cluster: cluster('c-4', 'Chief of Staff', 'Emirates NBD'),
+    cluster: cluster('c-4', 'Chief of Staff', 'Emirates NBD', { salary: null }),
     explanation: explanation('c-4', { outsideGeography: true }),
   },
   {
@@ -218,7 +228,7 @@ test.describe('B250 vacancies screen', () => {
     await expect(filters.getByText('VP / C-level')).toBeVisible();
 
     const listHead = page.locator('.vacancies-list-head');
-    await expect(listHead).toContainText('61 вакансий');
+    await expect(listHead).toContainText('61 вакансия');
 
     // The default role chip is the primary campaign role, so the list starts
     // filtered to the titles that match it — the same rule the server used
@@ -228,12 +238,18 @@ test.describe('B250 vacancies screen', () => {
     await expect(rows.first()).toContainText('VP Technology Operations');
     await expect(rows.first()).toContainText('Genetec');
 
+    // Вилка показана компактно: диапазон, а не полные суммы.
+    await expect(rows.first()).toContainText('$190k–$240k');
+
     await rows.first().locator('.vac-row').click();
     await expect(rows.first().locator('.vac-row')).toHaveAttribute('aria-pressed', 'true');
+    await expect(rows.first().locator('.vac-row')).toHaveClass(/is-selected/);
 
     await filters.getByText(/COO \(6\).*гипотеза/).click();
     await expect(rows).toHaveCount(1);
     await expect(rows.first()).toContainText('Noon');
+    // Только верхняя граница вилки — компактно, с префиксом «до».
+    await expect(rows.first()).toContainText('до $220k');
   });
 
   test('the screen fits 1440 and 390 with no horizontal overflow', async ({ page }, testInfo) => {
