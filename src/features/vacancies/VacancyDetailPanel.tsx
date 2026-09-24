@@ -13,17 +13,14 @@ import type { VacancyApplications } from './useVacancyApplications';
  * четырёх полей ещё не построен (`mockup-data-gap.md`), так что сегодня блок
  * скрыт целиком, а не подставляет пустые строки.
  */
-export function VacancyDetailPanel({
-  item,
-  now,
-  applications,
-  onBack,
-}: {
+interface VacancyDetailPanelProps {
   readonly item: MatchedVacancyItem;
   readonly now: string;
   readonly applications?: VacancyApplications;
   readonly onBack: () => void;
-}) {
+}
+
+export function VacancyDetailPanel({ item, now, applications, onBack }: VacancyDetailPanelProps) {
   const { cluster, explanation } = item;
   const age = vacancyAge(cluster, now);
   const source = vacancySourceLabels(cluster.sources)[0];
@@ -38,104 +35,114 @@ export function VacancyDetailPanel({
         <span>Назад</span>
       </button>
 
-      <div className="vacancies-detail-head">
-        <span className="vac-logo vacancies-detail-logo" aria-hidden="true">
-          {logoInitials(cluster.canonicalCompany)}
-        </span>
-        <div>
-          <h2 className="vacancies-detail-title">{cluster.canonicalTitle}</h2>
-          <div className="vacancies-detail-company">
-            {[cluster.canonicalCompany, cluster.canonicalLocation, cluster.isRemote ? 'удалённо' : null]
-              .filter(Boolean)
-              .join(' · ')}
-          </div>
-        </div>
-      </div>
+      <VacancyDetailHead cluster={cluster} />
+      <VacancyDetailMetaRow explanation={explanation} age={age} source={source} />
 
-      <div className="vacancies-detail-meta-row">
-        {explanation.levelMatch ? (
-          <span className="vacancies-chip is-selected">Уровень совпадает</span>
-        ) : null}
-        <span className="vacancies-chip vacancies-chip-success">
-          {age.days === 0 ? 'Сегодня в базе' : `${age.label} в базе`}
-        </span>
-        {source ? <span className="vacancies-chip">Опубликована на {source}</span> : null}
-      </div>
-
-      {signals.length > 0 ? (
-        <dl className="vacancies-signals">
-          {signals.map(({ label, value }) => (
-            <div className="vacancies-signal" key={label}>
-              <dt>{label}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
-
-      {explanation.matchingPoints.length > 0 ? (
-        <div className="vacancies-req-block">
-          <h4>Совпадает по фактам профиля</h4>
-          <ul className="vacancies-req-list">
-            {explanation.matchingPoints.map((point) => (
-              <li className="vacancies-req-yes" key={point}>
-                <Check size={14} weight="bold" aria-hidden="true" />
-                <span>{point}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      {explanation.missingPoints.length > 0 ? (
-        <div className="vacancies-req-block">
-          <h4>Не подтверждено — спросят на интервью</h4>
-          <ul className="vacancies-req-list">
-            {explanation.missingPoints.map((point) => (
-              <li className="vacancies-req-no" key={point}>
-                <Warning size={14} weight="bold" aria-hidden="true" />
-                <span>{point}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      <VacancySignalGrid signals={signals} />
+      <VacancyRequirementList
+        title="Совпадает по фактам профиля"
+        points={explanation.matchingPoints}
+        tone="yes"
+      />
+      <VacancyRequirementList
+        title="Не подтверждено — спросят на интервью"
+        points={explanation.missingPoints}
+        tone="no"
+      />
 
       <div className="vacancies-req-block">
         <h4>Вилка</h4>
         <p className="vacancies-comp-note">{formatCompensationCompact(cluster.salary)}</p>
       </div>
 
-      <div className="vacancies-detail-actions">
-        {alreadyApplied ? (
-          <span className="vacancies-chip is-selected vacancies-detail-applied">Отклик отмечен</span>
-        ) : (
-          <a
-            className="vacancies-btn vacancies-btn-primary"
-            href={cluster.primaryUrl}
-            target="_blank"
-            rel="noreferrer"
-            onClick={() =>
-              applications?.record(cluster.id, 'opened', {
-                title: cluster.canonicalTitle,
-                company: cluster.canonicalCompany ?? '',
-                url: cluster.primaryUrl,
-                source: cluster.sources[0]?.sourceId ?? '',
-              })
-            }
-          >
-            Откликнуться
-          </a>
-        )}
+      <VacancyDetailActions
+        cluster={cluster}
+        alreadyApplied={alreadyApplied}
+        applications={applications}
+      />
+    </div>
+  );
+}
+
+function VacancyDetailHead({ cluster }: { readonly cluster: MatchedVacancyItem['cluster'] }) {
+  return (
+    <div className="vacancies-detail-head">
+      <span className="vac-logo vacancies-detail-logo" aria-hidden="true">
+        {logoInitials(cluster.canonicalCompany)}
+      </span>
+      <div>
+        <h2 className="vacancies-detail-title">{cluster.canonicalTitle}</h2>
+        <div className="vacancies-detail-company">
+          {[cluster.canonicalCompany, cluster.canonicalLocation, cluster.isRemote ? 'удалённо' : null]
+            .filter(Boolean)
+            .join(' · ')}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VacancyDetailMetaRow({
+  explanation,
+  age,
+  source,
+}: {
+  readonly explanation: MatchedVacancyItem['explanation'];
+  readonly age: ReturnType<typeof vacancyAge>;
+  readonly source?: string;
+}) {
+  return (
+    <div className="vacancies-detail-meta-row">
+      {explanation.levelMatch ? (
+        <span className="vacancies-chip is-selected">Уровень совпадает</span>
+      ) : null}
+      <span className="vacancies-chip vacancies-chip-success">
+        {age.days === 0 ? 'Сегодня в базе' : `${age.label} в базе`}
+      </span>
+      {source ? <span className="vacancies-chip">Опубликована на {source}</span> : null}
+    </div>
+  );
+}
+
+function VacancyDetailActions({
+  cluster,
+  alreadyApplied,
+  applications,
+}: {
+  readonly cluster: MatchedVacancyItem['cluster'];
+  readonly alreadyApplied: boolean;
+  readonly applications?: VacancyApplications;
+}) {
+  return (
+    <div className="vacancies-detail-actions">
+      {alreadyApplied ? (
+        <span className="vacancies-chip is-selected vacancies-detail-applied">Отклик отмечен</span>
+      ) : (
         <a
-          className="vacancies-btn vacancies-btn-secondary"
+          className="vacancies-btn vacancies-btn-primary"
           href={cluster.primaryUrl}
           target="_blank"
           rel="noreferrer"
+          onClick={() =>
+            applications?.record(cluster.id, 'opened', {
+              title: cluster.canonicalTitle,
+              company: cluster.canonicalCompany ?? '',
+              url: cluster.primaryUrl,
+              source: cluster.sources[0]?.sourceId ?? '',
+            })
+          }
         >
-          Ещё · {openTargetLabel(cluster.sources)}
+          Откликнуться
         </a>
-      </div>
+      )}
+      <a
+        className="vacancies-btn vacancies-btn-secondary"
+        href={cluster.primaryUrl}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Ещё · {openTargetLabel(cluster.sources)}
+      </a>
     </div>
   );
 }
@@ -163,4 +170,48 @@ interface VacancySignal {
 function vacancySignals(cluster: MatchedVacancyItem['cluster']): readonly VacancySignal[] {
   void cluster;
   return [];
+}
+
+function VacancySignalGrid({
+  signals,
+}: {
+  readonly signals: readonly { readonly label: string; readonly value: string }[];
+}) {
+  if (signals.length === 0) return null;
+  return (
+    <dl className="vacancies-signals">
+      {signals.map(({ label, value }) => (
+        <div className="vacancies-signal" key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function VacancyRequirementList({
+  title,
+  points,
+  tone,
+}: {
+  readonly title: string;
+  readonly points: readonly string[];
+  readonly tone: 'yes' | 'no';
+}) {
+  if (points.length === 0) return null;
+  const Icon = tone === 'yes' ? Check : Warning;
+  return (
+    <div className="vacancies-req-block">
+      <h4>{title}</h4>
+      <ul className="vacancies-req-list">
+        {points.map((point) => (
+          <li className={`vacancies-req-${tone}`} key={point}>
+            <Icon size={14} weight="bold" aria-hidden="true" />
+            <span>{point}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }

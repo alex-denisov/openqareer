@@ -39,15 +39,7 @@ export interface VacanciesPathIndicator {
   readonly onNavigate: (destination: PathDestination) => void;
 }
 
-export function VacanciesScreen({
-  matched,
-  total,
-  campaign,
-  candidateLevel,
-  now = new Date().toISOString(),
-  pathIndicator,
-  applications,
-}: {
+interface VacanciesScreenProps {
   readonly matched: readonly MatchedVacancyItem[];
   readonly total: number;
   readonly campaign?: CampaignMetaView;
@@ -56,7 +48,13 @@ export function VacanciesScreen({
   /** B248 §2 — тот же индикатор пути, что и на остальных экранах кампании. */
   readonly pathIndicator?: VacanciesPathIndicator;
   readonly applications?: VacancyApplications;
-}) {
+}
+
+function useVacanciesScreenBoard(
+  matched: readonly MatchedVacancyItem[],
+  campaign: CampaignMetaView | undefined,
+  now: string,
+) {
   const roles = campaign?.roles.value ?? [];
   const regions = campaign?.regions.value ?? [];
   const [state, setState] = useState<VacanciesScreenState>({
@@ -67,55 +65,120 @@ export function VacanciesScreen({
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
-  const filtered = useMemo(
-    () => filterByScreenState(matched, state, now),
-    [matched, state, now],
-  );
-
-  const roleHypotheses = campaign?.roleHypotheses ?? [];
-  const primaryRole = state.role ?? roles[0];
+  const filtered = useMemo(() => filterByScreenState(matched, state, now), [matched, state, now]);
   const effectiveId = selectedId ?? filtered[0]?.cluster.id;
-  const selectedItem = filtered.find((item) => item.cluster.id === effectiveId);
+
+  return {
+    roles,
+    regions,
+    state,
+    setState,
+    filtered,
+    effectiveId,
+    selectedItem: filtered.find((item) => item.cluster.id === effectiveId),
+    roleHypotheses: campaign?.roleHypotheses ?? [],
+    primaryRole: state.role ?? roles[0],
+    mobileDetailOpen,
+    onSelect: (id: string) => {
+      setSelectedId(id);
+      setMobileDetailOpen(true);
+    },
+    onBack: () => setMobileDetailOpen(false),
+  };
+}
+
+export function VacanciesScreen({
+  matched,
+  total,
+  campaign,
+  candidateLevel,
+  now = new Date().toISOString(),
+  pathIndicator,
+  applications,
+}: VacanciesScreenProps) {
+  const board = useVacanciesScreenBoard(matched, campaign, now);
 
   return (
     <div className="vacancies-screen">
-      <VacanciesHeader primaryRole={primaryRole} />
+      <VacanciesHeader primaryRole={board.primaryRole} />
       {pathIndicator ? (
         <CareerPathIndicator steps={pathIndicator.steps} onNavigate={pathIndicator.onNavigate} />
       ) : null}
-      <div className="vacancies-layout">
-        <VacanciesFilters
-          roleHypotheses={roleHypotheses}
-          regions={regions}
-          candidateLevel={candidateLevel}
-          state={state}
-          onChange={setState}
-          onReset={() => setState({ ...EMPTY_STATE, role: roles[0], regions })}
-        />
-        <VacanciesList
-          total={total}
-          items={filtered}
-          now={now}
-          selectedId={effectiveId}
-          onSelect={(id) => {
-            setSelectedId(id);
-            setMobileDetailOpen(true);
-          }}
-        />
-        <aside
-          className={`vacancies-detail-col${mobileDetailOpen ? ' is-open' : ''}`}
-          aria-label="Карточка вакансии"
-        >
-          {selectedItem ? (
-            <VacancyDetailPanel
-              item={selectedItem}
-              now={now}
-              applications={applications}
-              onBack={() => setMobileDetailOpen(false)}
-            />
-          ) : null}
-        </aside>
-      </div>
+      <VacanciesLayout
+        roleHypotheses={board.roleHypotheses}
+        regions={board.regions}
+        candidateLevel={candidateLevel}
+        state={board.state}
+        onChange={board.setState}
+        onReset={() => board.setState({ ...EMPTY_STATE, role: board.roles[0], regions: board.regions })}
+        total={total}
+        filtered={board.filtered}
+        now={now}
+        effectiveId={board.effectiveId}
+        selectedItem={board.selectedItem}
+        applications={applications}
+        mobileDetailOpen={board.mobileDetailOpen}
+        onSelect={board.onSelect}
+        onBack={board.onBack}
+      />
+    </div>
+  );
+}
+
+interface VacanciesLayoutProps {
+  readonly roleHypotheses: NonNullable<CampaignMetaView['roleHypotheses']>;
+  readonly regions: readonly string[];
+  readonly candidateLevel?: string | null;
+  readonly state: VacanciesScreenState;
+  readonly onChange: (updater: (prev: VacanciesScreenState) => VacanciesScreenState) => void;
+  readonly onReset: () => void;
+  readonly total: number;
+  readonly filtered: readonly MatchedVacancyItem[];
+  readonly now: string;
+  readonly effectiveId?: string;
+  readonly selectedItem?: MatchedVacancyItem;
+  readonly applications?: VacancyApplications;
+  readonly mobileDetailOpen: boolean;
+  readonly onSelect: (id: string) => void;
+  readonly onBack: () => void;
+}
+
+function VacanciesLayout({
+  roleHypotheses,
+  regions,
+  candidateLevel,
+  state,
+  onChange,
+  onReset,
+  total,
+  filtered,
+  now,
+  effectiveId,
+  selectedItem,
+  applications,
+  mobileDetailOpen,
+  onSelect,
+  onBack,
+}: VacanciesLayoutProps) {
+  return (
+    <div className="vacancies-layout">
+      <VacanciesFilters
+        roleHypotheses={roleHypotheses}
+        regions={regions}
+        candidateLevel={candidateLevel}
+        state={state}
+        onChange={onChange}
+        onReset={onReset}
+      />
+      <VacanciesList total={total} items={filtered} now={now} selectedId={effectiveId} onSelect={onSelect} />
+      <aside
+        className={`vacancies-detail-col${mobileDetailOpen ? ' is-open' : ''}`}
+        aria-label="Карточка вакансии"
+      >
+        {selectedItem ? (
+          <VacancyDetailPanel item={selectedItem} now={now} applications={applications} onBack={onBack} />
+        ) : null}
+      </aside>
     </div>
   );
 }
