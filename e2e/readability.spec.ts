@@ -5,6 +5,7 @@ import {
   candidateSnapshot,
   matchedVacancyPage,
   roleHypotheses,
+  todaySnapshot,
   workspace,
 } from './fixtures/readabilityWorkspace';
 
@@ -46,20 +47,32 @@ function measure(minFontPx: number): ReadabilityFacts {
     const fold = element.closest('details:not([open])');
     return !fold || element.closest('summary') !== null;
   });
+  // B248 — the approved mockups set micro-labels (eyebrows, chips, ages,
+  // fit dots) in `--career-text-aux`, declared as auxiliary and "not a
+  // seventh step of the B232 scale". Exactly that one size is allowed under
+  // the floor and kept out of the six-size count; anything else under 13 px
+  // still fails.
+  const probe = document.createElement('span');
+  probe.style.fontSize = 'var(--career-text-aux)';
+  main.append(probe);
+  const microPx = Number.parseFloat(getComputedStyle(probe).fontSize);
+  probe.remove();
   const sizes = new Map<number, number>();
   const under13: string[] = [];
   const boxes: { rect: DOMRect; text: string }[] = [];
   for (const element of withText) {
     const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
-    sizes.set(fontSize, (sizes.get(fontSize) ?? 0) + 1);
+    const isMicro = fontSize === microPx;
+    if (!isMicro) sizes.set(fontSize, (sizes.get(fontSize) ?? 0) + 1);
     const text = element.textContent?.trim().slice(0, 40) ?? '';
-    if (fontSize < minFontPx) {
+    if (fontSize < minFontPx && !isMicro) {
       under13.push(`${fontSize}px ${element.className.toString().slice(0, 50)} «${text}»`);
     }
     const rect = element.getBoundingClientRect();
     // Текст в SVG масштабируется вместе с viewBox: computed 13 px, на экране
     // 6. Высота бокса однострочного узла не может быть меньше кегля.
-    if (rect.height > 0 && rect.height < minFontPx - 1 && text.length > 0) {
+    const floorPx = isMicro ? microPx : minFontPx;
+    if (rect.height > 0 && rect.height < floorPx - 1 && text.length > 0) {
       under13.push(`box ${Math.round(rect.height)}px ${element.tagName.toLowerCase()} «${text}»`);
     }
     if (rect.width && rect.height) boxes.push({ rect, text });
@@ -130,6 +143,17 @@ async function mockSignedInCabinet(page: Page): Promise<string[]> {
     }
     if (path.endsWith('/candidate/workspace')) {
       return route.fulfill({ json: { data: workspace } });
+    }
+    if (path.endsWith('/candidate/today')) {
+      return route.fulfill({ json: { data: todaySnapshot } });
+    }
+    // The readability fixture has no tracked applications yet; an empty
+    // list is the honest state, not an unknown route.
+    if (path.endsWith('/candidate/applications')) {
+      return route.fulfill({ json: { data: [] } });
+    }
+    if (path.endsWith('/candidate/visits') && route.request().method() === 'POST') {
+      return route.fulfill({ json: { data: { since: null } } });
     }
     if (path.endsWith('/candidate/me')) {
       return route.fulfill({
@@ -243,9 +267,9 @@ async function openSection(page: Page, label: (typeof SECTIONS)[number]): Promis
     await nav.getByRole('button', { name: label, exact: true }).click();
   }
   const landmark = {
-    Сегодня: page.locator('.career-profile-tabs'),
+    Сегодня: page.locator('.career-today'),
     Роль: page.locator('.career-campaign-tile').first(),
-    Вакансии: page.locator('.career-vacancy-row').first(),
+    Вакансии: page.locator('.vac-list-item').first(),
   }[label];
   await expect(landmark).toBeVisible();
   await page.evaluate(
@@ -370,33 +394,14 @@ test.describe('B232 readability gate', () => {
     expect(beforeContent).toBe('none');
   });
 
-  test('the vacancy list shows twenty rows and grows on request', async ({ page }, info) => {
-    test.skip(info.project.name !== 'desktop-1440', 'one browser is enough');
-    await mockSignedInCabinet(page);
-    await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-    await openSection(page, 'Вакансии');
-
-    const rows = page.locator('.career-vacancy-row');
-    await expect(rows).toHaveCount(20);
-    await page.getByRole('button', { name: /Показать ещё/ }).click();
-    await expect(rows).toHaveCount(40);
-
-    // Смена фильтра возвращает к первой странице: «показано 40 из 12» — ложь.
-    await page.getByPlaceholder('Роль, вакансия или компания…').fill('Merchant');
-    await expect(rows).toHaveCount(16);
-    await expect(page.getByRole('button', { name: /Показать ещё/ })).toHaveCount(0);
-    await page.getByPlaceholder('Роль, вакансия или компания…').fill('');
-    await expect(rows).toHaveCount(20);
-  });
-
   /**
-   * B233 — одна ведущая вещь. На Главной глазу некуда было сесть: правая
-   * колонка из четырёх равных блоков на полтора экрана и три акцентные заливки
-   * («Проверить факты», «Начать разговор», «Улучшить блок»×N). Первое место —
-   * одно, и это следующее действие кандидата; правая колонка не длиннее левой.
+   * B233 — одна ведущая вещь. Старая Главная (свёртки и правая колонка) ушла
+   * вместе с редизайном B248; на «Сегодня» утверждённый макет
+   * (work/B248/today.html) ставит акцентную заливку только на действие пункта
+   * очереди, не больше одной на пункт, и нигде вне очереди. Разделы, которые
+   * раньше лежали в свёртках, теперь на экране «Профиль» (profile-screen.spec).
    */
-  test('the home screen has one accent-filled action and a right column no taller than the left', async ({
+  test('today fills the accent only on queue actions, at most one per item', async ({
     page,
   }, info) => {
     test.skip(info.project.name !== 'desktop-1440', 'desktop composition only');
@@ -407,7 +412,6 @@ test.describe('B232 readability gate', () => {
     await openSection(page, 'Сегодня');
 
     const composition = await page.evaluate(() => {
-      const accent = getComputedStyle(document.documentElement).getPropertyValue('--career-accent');
       const main = document.querySelector('main') ?? document.body;
       const probe = document.createElement('span');
       probe.style.color = `var(--career-accent)`;
@@ -416,35 +420,29 @@ test.describe('B232 readability gate', () => {
       probe.remove();
       const filled = [...main.querySelectorAll<HTMLElement>('button, a')]
         .filter((element) => getComputedStyle(element).backgroundColor === accentRgb)
-        .filter((element) => !element.closest('.career-rail, .career-mobile-nav'))
+        .filter((element) => !element.closest('.career-rail, .career-mobile-nav'));
+      const outsideQueue = filled
+        .filter((element) => !element.closest('.career-today-item'))
         .map((element) => element.textContent?.trim().slice(0, 40) ?? '');
-      const left = document.querySelector('.career-home-main')?.getBoundingClientRect().height ?? 0;
-      const right =
-        document.querySelector('.career-home-rail')?.getBoundingClientRect().height ?? 0;
-      return { accent: accent.trim(), filled, left: Math.round(left), right: Math.round(right) };
+      const perItem = [...main.querySelectorAll('.career-today-item')].map(
+        (item) => filled.filter((element) => item.contains(element)).length,
+      );
+      return { filled: filled.length, outsideQueue, perItem };
     });
-    expect(composition.filled, JSON.stringify(composition)).toHaveLength(1);
-    // Допуск в один шаг сетки: колонки заканчиваются вместе, а не «правая
-    // на полтора экрана длиннее», как было в аудите (3 005 против 733 px).
-    expect(composition.right, JSON.stringify(composition)).toBeLessThanOrEqual(
-      composition.left + 24,
-    );
-
-    // Остальные разделы не исчезли — они свёрнуты под профилем.
-    const folds = page.locator('.career-home-fold > summary');
-    await expect(folds).toHaveText([
-      'ATS-читаемость',
-      'Роли и рынок',
-      'Позиционирование',
-      'Карьерный консультант',
-    ]);
-    await folds.first().scrollIntoViewIfNeeded();
-    await folds.first().click();
-    await expect(page.locator('.career-home-fold[open] .career-ats-card')).toBeVisible();
-    await page.screenshot({ path: info.outputPath('Сегодня-folds-1280.png') });
+    expect(composition.filled, JSON.stringify(composition)).toBeGreaterThan(0);
+    expect(composition.outsideQueue, JSON.stringify(composition)).toEqual([]);
+    expect(Math.max(...composition.perItem), JSON.stringify(composition)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: info.outputPath('Сегодня-composition-1280.png') });
   });
 
-  test('vacancy actions expose focus tooltips and the pitch modal keeps keyboard focus', async ({
+  /**
+   * B236 — письмо-отклик. Старый список с иконкой «Отклик» и подсказкой ушёл
+   * вместе с редизайном B250; вход в генератор теперь — кнопка «Собрать
+   * письмо» в карточке вакансии (на 390 — в полноэкранной панели). Список
+   * «20 строк и Показать ещё» (B232) утверждённый макет vacancies.html
+   * заменил сплошным списком, поэтому его проверка снята.
+   */
+  test('the cover-letter modal opens from the vacancy card and keeps keyboard focus', async ({
     page,
   }, info) => {
     const unmatched = await mockSignedInCabinet(page);
@@ -463,20 +461,18 @@ test.describe('B232 readability gate', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
     await openSection(page, 'Вакансии');
+    if (info.project.name === 'mobile-390') {
+      await page.locator('.vac-list-item').first().locator('.vac-row').click();
+    }
 
-    const pitchAction = page.getByRole('button', { name: 'Отклик', exact: true }).first();
-    await pitchAction.focus();
-    await expect(
-      page.getByRole('tooltip').filter({ hasText: 'Сопроводительное письмо' }),
-    ).toBeVisible();
-    await expect(pitchAction).toHaveAttribute('aria-describedby', /.+/u);
-    await page.screenshot({ path: info.outputPath('b236-tooltip-focused.png') });
-
+    const pitchAction = page
+      .locator('.vacancies-detail-col')
+      .getByRole('button', { name: 'Собрать письмо', exact: true });
     await pitchAction.click();
     const dialog = page.getByRole('dialog', { name: /Отклик:/u });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('tab', { name: 'LinkedIn-заметка (300 знаков)' }).click();
-    await expect(dialog.getByRole('button', { name: 'Кому отправить' })).toBeVisible();
+    await expect(dialog.getByText('Здравствуйте! Рад знакомству.')).toBeVisible();
     await page.screenshot({ path: info.outputPath('b236-pitch-modal.png') });
 
     await page.keyboard.press('Escape');

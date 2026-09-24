@@ -311,6 +311,77 @@ export const candidateSnapshot = {
   vacancySubscriptions: [],
 };
 
+/** B248/today.html — the «Сегодня» screen's own digest and queue, needed
+ * once it replaced the old CareerHome as the default landing surface. */
+export const todaySnapshot = {
+  digest: {
+    waitingForYou: 3,
+    newVacancies: 9,
+    closedVacancies: 1,
+    interviewsAhead: 1,
+    nextInterview: {
+      company: 'FinCloud',
+      title: 'Head of Product, повторное интервью',
+      round: 2,
+      at: '2026-09-27T14:00:00.000Z',
+    },
+    newVacanciesCaption: {
+      campaignRole: 'Head of Product, Payments',
+      sourcesCount: 3,
+      updatedAt: '2026-09-23T09:14:00.000Z',
+    },
+    followUpCaptions: ['Ozon — 5 рабочих дней тишины'],
+  },
+  queue: [
+    {
+      kind: 'follow_up',
+      applicationId: 'app-b232-1',
+      title: 'Head of Product, Payments',
+      company: 'Ozon',
+      eyebrow: 'Follow-up · 5 рабочих дней без ответа',
+      dueAt: '2026-09-23T00:00:00.000Z',
+      salary: { from: 420000, currency: 'rub' },
+      fit: null,
+    },
+    {
+      kind: 'new_vacancy',
+      clusterId: 'cl-b232-1',
+      title: 'Group Product Manager, Growth',
+      company: 'Wildberries',
+      eyebrow: 'Новая вакансия · сегодня',
+      dueAt: null,
+      salary: { from: 380000, to: 480000, currency: 'rub' },
+      location: 'Москва · гибрид',
+      fit: { role: 'target', level: 'target', geo: true },
+    },
+    {
+      kind: 'interview',
+      applicationId: 'app-b232-2',
+      title: 'Head of Product, повторное интервью',
+      company: 'FinCloud',
+      eyebrow: 'Интервью через 4 дня',
+      dueAt: '2026-09-27T14:00:00.000Z',
+      fit: null,
+    },
+  ],
+  followUps: [
+    {
+      applicationId: 'app-b232-1',
+      company: 'Ozon',
+      title: 'Head of Product, Payments',
+      status: 'today',
+    },
+  ],
+  sinceLastVisit: {
+    since: '2026-09-23T08:00:00.000Z',
+    items: [
+      '9 новых вакансий по Head of Product, Payments',
+      'FinCloud подтвердил второй раунд',
+    ],
+  },
+  vacanciesPending: true,
+};
+
 export const roleHypotheses = [
   {
     id: 'role-1',
