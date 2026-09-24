@@ -503,6 +503,9 @@ export interface CandidateStore {
   /** `GET /today` reads the current mark without recording a visit. */
   getSinceLastVisit(candidateId: string): string | null;
 
+  /** `GET /today`: applications this candidate's tracker closed on its own since `since`. */
+  countSystemClosuresSince(candidateId: string, since: string): number;
+
   getWorkPreferenceRun(candidateId: string): StoredWorkPreferenceRun | null;
 
   saveWorkPreferenceRun(
