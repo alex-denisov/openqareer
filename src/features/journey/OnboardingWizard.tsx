@@ -99,7 +99,13 @@ export function OnboardingWizard({
   const branch: OnboardingBranch = sourceChoice === 'none' ? 'talk' : 'file';
   const ingested = ingestion.result;
 
-  useEffect(() => onStartedChange?.(true), [onStartedChange]);
+  // The account door on the rail is the only way an anonymous candidate can
+  // register, and the first step (source choice) does not need an account
+  // yet — only the import step after it does. So the shell keeps its chrome
+  // until the candidate actually leaves the source step (B249).
+  useEffect(() => {
+    if (step !== 'source') onStartedChange?.(true);
+  }, [step, onStartedChange]);
 
   useEffect(() => {
     if (step !== 'done') return;

@@ -214,12 +214,11 @@ export function CareerWorkspaceShell({
   });
 
   // The rail's account door is the only way an anonymous candidate can
-  // register while the wizard's first step is still showing source cards
-  // (B141 comment above `shouldShowIntake`). Only once an account exists does
-  // the onboarding screen go full-screen the way onboarding.html does (B249);
-  // `intakeStarted` fires the instant the wizard mounts, before that door was
-  // ever used, so it cannot be part of this check.
-  const onboardingIsFullscreen = intakeVisible && Boolean(cabinetSession);
+  // register, and the wizard's first step (source choice) does not need an
+  // account yet, so the chrome must stay put through it (B141). `onStartedChange`
+  // now fires once the wizard leaves that step, which is when onboarding.html's
+  // full-screen chrome applies (B249).
+  const onboardingIsFullscreen = intakeVisible && intakeStarted;
 
   useEffect(() => {
     if (!sessionPending) {
