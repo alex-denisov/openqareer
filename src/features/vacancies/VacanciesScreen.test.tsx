@@ -65,7 +65,7 @@ describe('VacanciesScreen (B250)', () => {
   it('shows the campaign role in the eyebrow and the total in the list hint', () => {
     const html = render();
     expect(html).toContain('Кампания · VP Technology Ops');
-    expect(html).toContain('61 вакансий');
+    expect(html).toContain('61 вакансия');
   });
 
   it('shows every role hypothesis as a chip with its vacancy count, and marks the hypothesis', () => {

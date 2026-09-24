@@ -3,6 +3,7 @@ import { Check } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import { titleMatchesRole } from '../../../shared/vacancyRoleTitleMatch';
+import { pluralRu } from '../../../shared/pluralRu';
 import { vacancyAge } from './vacancyFilters';
 import { VacancyRow } from './VacancyRow';
 
@@ -228,7 +229,8 @@ function VacanciesList({
     <section className="vacancies-list-col" aria-label="Список вакансий">
       <div className="vacancies-list-head">
         <span className="vacancies-list-hint">
-          {total} {total === 1 ? 'вакансия' : 'вакансий'} · показаны совпадающие по роли и уровню
+          {pluralRu(total, ['вакансия', 'вакансии', 'вакансий'])} · показаны совпадающие по роли и
+          уровню
         </span>
       </div>
       <ul className="vac-list">
