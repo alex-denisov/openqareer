@@ -52,7 +52,7 @@ const SNAPSHOT = {
 
 const CAMPAIGN = {
   roles: { value: ['Enterprise Architect'], origin: 'profile' },
-  regions: { value: ['United States', 'Европа'], origin: 'profile' },
+  regions: { value: ['United States', 'Philippines', 'Германия'], origin: 'profile' },
   roleHypotheses: [
     { role: 'Enterprise Architect', vacancyCount: 34, isHypothesis: false },
     { role: 'Cloud Architect', vacancyCount: 6, isHypothesis: true },
