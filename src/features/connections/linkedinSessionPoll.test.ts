@@ -2,10 +2,24 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { createLinkedInSessionImportFlow, linkedinWaitingNotice } from './linkedinSessionPoll';
+import {
+  createLinkedInSessionImportFlow,
+  detailPagesToRead,
+  linkedinWaitingNotice,
+  MAX_DETAIL_PAGES_PER_READ,
+} from './linkedinSessionPoll';
 
 const FIXTURES_DIR = join(__dirname, '__fixtures__', 'linkedin');
 const readFixture = (name: string) => readFileSync(join(FIXTURES_DIR, name), 'utf-8');
+const freshThrottle = (last?: number) => {
+  let at = last;
+  return {
+    lastReadAt: () => at,
+    markRead: (next: number) => {
+      at = next;
+    },
+  };
+};
 
 describe('LinkedIn session import flow', () => {
   it('waits through login and MFA without navigating the provider webview', async () => {
@@ -20,6 +34,8 @@ describe('LinkedIn session import flow', () => {
         captcha: false,
       }),
       readSessionPage,
+      pauseBetweenDetailReads: async () => {},
+      detailReadThrottle: freshThrottle(),
       onAuthenticated: vi.fn(),
       onProviderDataCaptured: vi.fn(),
       onReady: vi.fn(),
@@ -86,6 +102,8 @@ describe('LinkedIn session import flow', () => {
         captcha: false,
       }),
       readSessionPage,
+      pauseBetweenDetailReads: async () => {},
+      detailReadThrottle: freshThrottle(),
       onAuthenticated: async () => {
         events.push('closed');
       },
@@ -130,7 +148,11 @@ describe('LinkedIn session import flow', () => {
     const readSessionPage = vi.fn(async (url: string) => {
       const path = new URL(url).pathname;
       if (path === '/in/me/') {
-        return { ok: true, url: 'https://www.linkedin.com/in/jordanrivers-99a1b2/', body: readFixture('profile.html') };
+        return {
+          ok: true,
+          url: 'https://www.linkedin.com/in/jordanrivers-99a1b2/',
+          body: readFixture('profile.html'),
+        };
       }
       const match = pageBySuffix.find(([suffix]) => path.endsWith(suffix));
       return match
@@ -148,6 +170,8 @@ describe('LinkedIn session import flow', () => {
         captcha: false,
       }),
       readSessionPage,
+      pauseBetweenDetailReads: async () => {},
+      detailReadThrottle: freshThrottle(),
       onAuthenticated: vi.fn(),
       onProviderDataCaptured: vi.fn(),
       onReady: vi.fn(),
@@ -197,6 +221,8 @@ describe('LinkedIn capture after the sign-in is already recognised', () => {
       createLinkedInSessionImportFlow({
         inspectCurrentPage: async () => signedIn,
         readSessionPage,
+        pauseBetweenDetailReads: async () => {},
+        detailReadThrottle: freshThrottle(),
         onAuthenticated: vi.fn(),
         onProviderDataCaptured: vi.fn(),
         onReady,
@@ -213,6 +239,8 @@ describe('LinkedIn capture after the sign-in is already recognised', () => {
       createLinkedInSessionImportFlow({
         inspectCurrentPage: async () => signedIn,
         readSessionPage,
+        pauseBetweenDetailReads: async () => {},
+        detailReadThrottle: freshThrottle(),
         onAuthenticated: vi.fn(),
         onProviderDataCaptured: vi.fn(),
         onReady: vi.fn(),
@@ -233,6 +261,8 @@ describe('LinkedIn capture after the sign-in is already recognised', () => {
       createLinkedInSessionImportFlow({
         inspectCurrentPage: async () => signedIn,
         readSessionPage,
+        pauseBetweenDetailReads: async () => {},
+        detailReadThrottle: freshThrottle(),
         onAuthenticated: vi.fn(),
         onProviderDataCaptured: vi.fn(),
         onReady: vi.fn(),
@@ -253,11 +283,85 @@ describe('LinkedIn capture after the sign-in is already recognised', () => {
       createLinkedInSessionImportFlow({
         inspectCurrentPage: async () => signedIn,
         readSessionPage,
+        pauseBetweenDetailReads: async () => {},
+        detailReadThrottle: freshThrottle(),
         onAuthenticated: vi.fn(),
         onProviderDataCaptured: vi.fn(),
         onReady: vi.fn(),
         waitBeforeRetry: noWait,
       }).run(),
     ).rejects.toThrow('linkedin_authenticated_capture_failed');
+  });
+});
+
+describe('LinkedIn detail pages are read at a human pace (B266, architecture §3)', () => {
+  const signedIn = {
+    ready: true,
+    url: 'https://www.linkedin.com/feed/',
+    signedInApplicant: true,
+    login: false,
+    otp: false,
+    captcha: false,
+  };
+  const profile = {
+    ok: true,
+    url: 'https://www.linkedin.com/in/a/',
+    body: '<main><h1>A</h1></main>',
+  };
+
+  function flowWith(readSessionPage: (url: string) => Promise<unknown>, extra: object = {}) {
+    return createLinkedInSessionImportFlow({
+      inspectCurrentPage: async () => signedIn,
+      readSessionPage: readSessionPage as never,
+      onAuthenticated: vi.fn(),
+      onProviderDataCaptured: vi.fn(),
+      onReady: vi.fn(),
+      ...extra,
+    });
+  }
+
+  it('caps detail pages and always ends on contact info', () => {
+    const keys = detailPagesToRead();
+    expect(keys.filter((key) => key !== 'contactInfo').length).toBeLessThanOrEqual(
+      MAX_DETAIL_PAGES_PER_READ,
+    );
+    expect(keys.at(-1)).toBe('contactInfo');
+  });
+
+  it('pauses before every detail page', async () => {
+    const pause = vi.fn(async () => {});
+    const read = vi.fn(async () => profile);
+    await flowWith(read, {
+      pauseBetweenDetailReads: pause,
+      detailReadThrottle: freshThrottle(),
+    }).run();
+    expect(pause).toHaveBeenCalledTimes(read.mock.calls.length - 1);
+  });
+
+  it('reads only the main profile within 12 hours of the last walk', async () => {
+    const read = vi.fn(async () => profile);
+    await flowWith(read, {
+      pauseBetweenDetailReads: async () => {},
+      detailReadThrottle: freshThrottle(Date.now() - 60_000),
+    }).run();
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops the walk at the first failed detail read', async () => {
+    const read = vi.fn(async (url: string) => (url.endsWith('/in/me/') ? profile : { ok: false }));
+    await flowWith(read, {
+      pauseBetweenDetailReads: async () => {},
+      detailReadThrottle: freshThrottle(),
+    }).run();
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('the capture scripts never fake a user gesture', () => {
+  it('has no synthetic click or dispatched event', () => {
+    for (const file of ['src/features/connections/linkedinSessionPoll.ts']) {
+      const source = readFileSync(join(process.cwd(), file), 'utf-8');
+      expect(source).not.toMatch(/\.click\(|dispatchEvent/u);
+    }
   });
 });

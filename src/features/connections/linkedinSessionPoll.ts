@@ -26,7 +26,9 @@ const LINKEDIN_PROFILE_URL = 'https://www.linkedin.com/in/me/';
  * §3): one navigation per section, no synthetic clicks. Recommendations only
  * pulls "Received" (architecture §2) and contact info is the overlay route.
  */
-const DETAIL_PAGE_PATHS: Readonly<Record<Exclude<keyof LinkedInProfilePages, 'profile' | 'achievements' | 'openToWork'>, string>> = {
+const DETAIL_PAGE_PATHS: Readonly<
+  Record<Exclude<keyof LinkedInProfilePages, 'profile' | 'achievements' | 'openToWork'>, string>
+> = {
   experience: 'details/experience/',
   education: 'details/education/',
   skills: 'details/skills/',
@@ -84,6 +86,15 @@ interface LinkedInSessionImportFlowDependencies {
   ) => void | Promise<void>;
   /** Injected so tests do not sit through the real capture backoff. */
   readonly waitBeforeRetry?: (attempt: number) => Promise<void>;
+  /** Human-paced gap before each detail page (architecture §3: 3–8 s). */
+  readonly pauseBetweenDetailReads?: () => Promise<void>;
+  /** Remembers the last detail-page read so LinkedIn is walked at most once per 12 h. */
+  readonly detailReadThrottle?: DetailReadThrottle;
+}
+
+export interface DetailReadThrottle {
+  readonly lastReadAt: () => number | undefined;
+  readonly markRead: (at: number) => void;
 }
 
 export interface LinkedInSessionImportFlow {
@@ -160,44 +171,93 @@ function isSignedInLinkedInPage(page: SessionInspectionResult): boolean {
 }
 
 const MAX_DETAIL_PAGE_BYTES = 2 * 1_024 * 1_024;
+/** Hard cap on detail pages per connection, contact info not counted (architecture §3). */
+export const MAX_DETAIL_PAGES_PER_READ = 6;
+export const DETAIL_READ_INTERVAL_MS = 12 * 60 * 60 * 1_000;
+const DETAIL_PAUSE_MIN_MS = 3_000;
+const DETAIL_PAUSE_MAX_MS = 8_000;
+const DETAIL_READ_STORAGE_KEY = 'openqareer.linkedin.lastDetailReadAt';
+
+function humanPause(): Promise<void> {
+  const span = DETAIL_PAUSE_MAX_MS - DETAIL_PAUSE_MIN_MS;
+  const delay = DETAIL_PAUSE_MIN_MS + Math.random() * span;
+  return new Promise((resolve) => setTimeout(resolve, delay));
+}
+
+const storageThrottle: DetailReadThrottle = {
+  lastReadAt: () => {
+    try {
+      const raw = globalThis.localStorage?.getItem(DETAIL_READ_STORAGE_KEY);
+      const at = raw ? Number(raw) : Number.NaN;
+      return Number.isFinite(at) ? at : undefined;
+    } catch {
+      return undefined;
+    }
+  },
+  markRead: (at) => {
+    try {
+      globalThis.localStorage?.setItem(DETAIL_READ_STORAGE_KEY, String(at));
+    } catch {
+      // Storage may be unavailable; the Rust-side limit still applies.
+    }
+  },
+};
+
+type DetailPageKey = keyof typeof DETAIL_PAGE_PATHS;
 
 /**
- * Reads the fixed detail pages by URL (architecture §3: navigation, never a
- * synthetic click or dispatched event) and runs them through the structured
- * extractor. Every read is best-effort: a missing or oversized section is
- * dropped, not fatal, so a partial capture still improves on the text parse.
- * Sanitised and schema-invalid profiles fall back to the text path entirely
- * (M2 cases 22-23) so nothing half-broken reaches the server.
+ * The fixed section list, capped at `MAX_DETAIL_PAGES_PER_READ` detail pages
+ * plus the contact-info overlay. Choosing sections by the profile's own
+ * "Show all" links waits for a capture that keeps `href` (B266 follow-up):
+ * the current fixtures were taken with hrefs stripped.
+ */
+export function detailPagesToRead(): DetailPageKey[] {
+  const keys = Object.keys(DETAIL_PAGE_PATHS) as DetailPageKey[];
+  const details = keys.filter((key) => key !== 'contactInfo').slice(0, MAX_DETAIL_PAGES_PER_READ);
+  return [...details, 'contactInfo'];
+}
+
+/**
+ * Reads the detail pages by URL (architecture §3: navigation, never a
+ * synthetic click or dispatched event), one human-paced step at a time, and
+ * runs them through the structured extractor. The first failed read stops the
+ * walk (it may be a checkpoint). Within 12 h of the last walk only the main
+ * page is used. Schema-invalid profiles fall back to the text path (M2).
  */
 async function captureStructuredProfile(
   dependencies: LinkedInSessionImportFlowDependencies,
   page: { readonly body: string; readonly url: string },
 ): Promise<{ readonly profile: LinkedInProfileV2; readonly extractorVersion: string } | undefined> {
-  const base = new URL(page.url);
-  const pages: Record<string, string> = { profile: page.body };
-  const achievements: { kind: string; html: string }[] = [];
-  for (const [key, path] of Object.entries(DETAIL_PAGE_PATHS)) {
-    const detailUrl = new URL(path, base.href.endsWith('/') ? base.href : `${base.href}/`).toString();
-    const detail = await dependencies.readSessionPage(detailUrl).catch(() => ({ ok: false as const }));
-    if (detail.ok && detail.body && detail.body.length <= MAX_DETAIL_PAGE_BYTES) {
-      pages[key] = detail.body;
-    }
-  }
-  const structured = extractStructuredLinkedInProfile({
-    profile: pages.profile,
-    experience: pages.experience,
-    education: pages.education,
-    skills: pages.skills,
-    certifications: pages.certifications,
-    projects: pages.projects,
-    contactInfo: pages.contactInfo,
-    recommendations: pages.recommendations,
-    achievements: achievements.length > 0 ? (achievements as never) : undefined,
-  });
+  const pages = { profile: page.body, ...(await readLinkedDetailPages(dependencies, page)) };
+  const structured = extractStructuredLinkedInProfile(pages);
   if (!hasStructuredSubstance(structured)) return undefined;
   const valid = sanitizedAndValidLinkedInProfile(structured);
   if (!valid) return undefined;
   return { profile: valid, extractorVersion: LI_SDUI_EXTRACTOR_VERSION };
+}
+
+async function readLinkedDetailPages(
+  dependencies: LinkedInSessionImportFlowDependencies,
+  page: { readonly body: string; readonly url: string },
+): Promise<Partial<Record<DetailPageKey, string>>> {
+  const throttle = dependencies.detailReadThrottle ?? storageThrottle;
+  const last = throttle.lastReadAt();
+  const now = Date.now();
+  if (last !== undefined && now - last < DETAIL_READ_INTERVAL_MS) return {};
+  const keys = detailPagesToRead();
+  throttle.markRead(now);
+  const pause = dependencies.pauseBetweenDetailReads ?? humanPause;
+  const base = page.url.endsWith('/') ? page.url : `${page.url}/`;
+  let read: Partial<Record<DetailPageKey, string>> = {};
+  for (const key of keys) {
+    await pause();
+    const detail = await dependencies
+      .readSessionPage(new URL(DETAIL_PAGE_PATHS[key], base).toString())
+      .catch(() => ({ ok: false as const }));
+    if (!detail.ok || !detail.body) break;
+    if (detail.body.length <= MAX_DETAIL_PAGE_BYTES) read = { ...read, [key]: detail.body };
+  }
+  return read;
 }
 
 function isOwnProfileUrl(rawUrl?: string): rawUrl is string {
