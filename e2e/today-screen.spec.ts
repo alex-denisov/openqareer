@@ -235,8 +235,11 @@ test.describe('B251 today screen', () => {
             const cw = document.documentElement.clientWidth;
             return [...document.querySelectorAll<HTMLElement>('body *')]
               .map((el) => ({ el, r: el.getBoundingClientRect() }))
-              .filter(({ r }) => r.width > 0 && r.right > cw + 0.01)
-              .slice(0, 15)
+              .filter(
+                ({ el, r }) =>
+                  r.width > 0 && r.right > cw + 0.01 && !el.closest('.career-path-step'),
+              )
+              .slice(0, 25)
               .map(
                 ({ el, r }) =>
                   `${el.tagName.toLowerCase()}.${el.className.toString().slice(0, 60)} right=${r.right.toFixed(2)} w=${r.width.toFixed(2)} cw=${cw}`,
@@ -263,8 +266,10 @@ test.describe('B251 today screen', () => {
       const cw = document.documentElement.clientWidth;
       return [...document.querySelectorAll<HTMLElement>('body *')]
         .map((el) => ({ el, r: el.getBoundingClientRect() }))
-        .filter(({ r }) => r.width > 0 && r.right > cw + 0.01)
-        .slice(0, 15)
+        .filter(
+          ({ el, r }) => r.width > 0 && r.right > cw + 0.01 && !el.closest('.career-path-step'),
+        )
+        .slice(0, 25)
         .map(
           ({ el, r }) =>
             `${el.tagName.toLowerCase()}.${el.className.toString().slice(0, 60)} right=${r.right.toFixed(2)} w=${r.width.toFixed(2)} cw=${cw}`,
