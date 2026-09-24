@@ -78,61 +78,116 @@ const APPLICATIONS = [
   application({
     id: 'a-1',
     stage: 'saved',
-    vacancy: { title: 'Cloud & Infra Solution Architect', company: 'Sonsoft Inc', url: 'https://hh.ru/vacancy/1', source: 'hh' },
+    vacancy: {
+      title: 'Cloud & Infra Solution Architect',
+      company: 'Sonsoft Inc',
+      url: 'https://hh.ru/vacancy/1',
+      source: 'hh',
+    },
     whoseTurn: 'candidate',
     materials: { coverLetter: false, resume: false },
   }),
   application({
     id: 'a-2',
     stage: 'saved',
-    vacancy: { title: 'Platform Architect', company: 'Nordwind', url: 'https://hh.ru/vacancy/2', source: 'hh' },
+    vacancy: {
+      title: 'Platform Architect',
+      company: 'Nordwind',
+      url: 'https://hh.ru/vacancy/2',
+      source: 'hh',
+    },
     whoseTurn: 'candidate',
     materials: { coverLetter: false, resume: false },
   }),
   application({
     id: 'a-3',
     stage: 'applied',
-    vacancy: { title: 'Enterprise Architect, Senior Advisor', company: 'Peraton', url: 'https://hh.ru/vacancy/3', source: 'hh' },
+    vacancy: {
+      title: 'Enterprise Architect, Senior Advisor',
+      company: 'Peraton',
+      url: 'https://hh.ru/vacancy/3',
+      source: 'hh',
+    },
     whoseTurn: 'candidate',
-    followUp: { dueAt: '2026-09-24T00:00:00.000Z', urgency: 'due', source: 'auto', businessDaysSinceContact: 6 },
+    followUp: {
+      dueAt: '2026-09-24T00:00:00.000Z',
+      urgency: 'due',
+      source: 'auto',
+      businessDaysSinceContact: 6,
+    },
   }),
   application({
     id: 'a-4',
     stage: 'applied',
-    vacancy: { title: 'Business Information Architect', company: 'Genetec', url: 'https://hh.ru/vacancy/4', source: 'hh' },
+    vacancy: {
+      title: 'Business Information Architect',
+      company: 'Genetec',
+      url: 'https://hh.ru/vacancy/4',
+      source: 'hh',
+    },
     whoseTurn: 'company',
   }),
   application({
     id: 'a-5',
     stage: 'applied',
-    vacancy: { title: 'VP Technology, executive search', company: '', companyHidden: true, url: 'https://hh.ru/vacancy/5', source: 'recruiter' },
+    vacancy: {
+      title: 'VP Technology, executive search',
+      company: '',
+      companyHidden: true,
+      url: 'https://hh.ru/vacancy/5',
+      source: 'recruiter',
+    },
     whoseTurn: 'company',
   }),
   application({
     id: 'a-6',
     stage: 'responded',
-    vacancy: { title: 'Enterprise Architect Director', company: 'HRTx, Inc.', url: 'https://hh.ru/vacancy/6', source: 'hh' },
+    vacancy: {
+      title: 'Enterprise Architect Director',
+      company: 'HRTx, Inc.',
+      url: 'https://hh.ru/vacancy/6',
+      source: 'hh',
+    },
     whoseTurn: 'candidate',
   }),
   application({
     id: 'a-7',
     stage: 'interview',
-    vacancy: { title: 'Enterprise Architect Director — раунд 2', company: 'HRTx, Inc.', url: 'https://hh.ru/vacancy/6', source: 'hh' },
+    vacancy: {
+      title: 'Enterprise Architect Director — раунд 2',
+      company: 'HRTx, Inc.',
+      url: 'https://hh.ru/vacancy/6',
+      source: 'hh',
+    },
     whoseTurn: 'candidate',
-    nearestInterview: { id: 'iv-1', scheduledAt: '2026-09-26T14:00:00.000Z', prepStatus: 'not_started' },
+    nearestInterview: {
+      id: 'iv-1',
+      scheduledAt: '2026-09-26T14:00:00.000Z',
+      prepStatus: 'not_started',
+    },
   }),
   application({
     id: 'a-8',
     stage: 'rejected',
     closedReason: null,
-    vacancy: { title: 'Consultant', company: 'Pyrovio', url: 'https://hh.ru/vacancy/8', source: 'hh' },
+    vacancy: {
+      title: 'Consultant',
+      company: 'Pyrovio',
+      url: 'https://hh.ru/vacancy/8',
+      source: 'hh',
+    },
     whoseTurn: null,
   }),
   application({
     id: 'a-9',
     stage: 'archived',
     closedReason: null,
-    vacancy: { title: 'Aotearoa Board Chair', company: 'Orange Sky Australia', url: 'https://hh.ru/vacancy/9', source: 'hh' },
+    vacancy: {
+      title: 'Aotearoa Board Chair',
+      company: 'Orange Sky Australia',
+      url: 'https://hh.ru/vacancy/9',
+      source: 'hh',
+    },
     whoseTurn: null,
   }),
 ];
@@ -242,7 +297,9 @@ test.describe('B251 responses screen', () => {
 
     const columnCount = async (label: string) =>
       page
-        .locator('.career-responses-column', { has: page.getByRole('heading', { name: label, exact: true }) })
+        .locator('.career-responses-column', {
+          has: page.getByRole('heading', { name: label, exact: true }),
+        })
         .locator('.career-responses-column-count')
         .innerText();
 
@@ -306,16 +363,21 @@ test.describe('B251 responses screen', () => {
       if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: CANDIDATE } });
       if (pathname === '/api/v1/candidate/me') return route.fulfill({ json: { data: SNAPSHOT } });
       if (pathname === '/api/v1/account') return route.fulfill({ json: { data: ACCOUNT } });
-      if (pathname === '/api/v1/candidate/connections') return route.fulfill({ json: { data: [] } });
-      if (pathname === '/api/v1/candidate/workspace') return route.fulfill({ json: { data: null } });
-      if (pathname === '/api/v1/candidate/applications') return route.fulfill({ json: { data: [] } });
+      if (pathname === '/api/v1/candidate/connections')
+        return route.fulfill({ json: { data: [] } });
+      if (pathname === '/api/v1/candidate/workspace')
+        return route.fulfill({ json: { data: null } });
+      if (pathname === '/api/v1/candidate/applications')
+        return route.fulfill({ json: { data: [] } });
       return route.fulfill({ json: { data: null } });
     });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openResponses(page);
 
     await expect(page.locator('.career-responses-empty')).toContainText('Пайплайн пуст');
-    await expect(page.locator('.career-responses-empty')).toContainText('Пайплайн наполняется из очереди дня');
+    await expect(page.locator('.career-responses-empty')).toContainText(
+      'Пайплайн наполняется из очереди дня',
+    );
   });
 
   test('a load error shows the offline message and a retry action', async ({ page }) => {
@@ -326,9 +388,12 @@ test.describe('B251 responses screen', () => {
       if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: CANDIDATE } });
       if (pathname === '/api/v1/candidate/me') return route.fulfill({ json: { data: SNAPSHOT } });
       if (pathname === '/api/v1/account') return route.fulfill({ json: { data: ACCOUNT } });
-      if (pathname === '/api/v1/candidate/connections') return route.fulfill({ json: { data: [] } });
-      if (pathname === '/api/v1/candidate/workspace') return route.fulfill({ json: { data: null } });
-      if (pathname === '/api/v1/candidate/applications') return route.fulfill({ status: 500, json: { error: 'boom' } });
+      if (pathname === '/api/v1/candidate/connections')
+        return route.fulfill({ json: { data: [] } });
+      if (pathname === '/api/v1/candidate/workspace')
+        return route.fulfill({ json: { data: null } });
+      if (pathname === '/api/v1/candidate/applications')
+        return route.fulfill({ status: 500, json: { error: 'boom' } });
       return route.fulfill({ json: { data: null } });
     });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });

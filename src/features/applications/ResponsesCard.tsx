@@ -40,6 +40,18 @@ interface ResponsesCardProps {
  * company, materials and the next step only (B251 S4 acceptance review);
  * stage change gets its own affordance in the next slice.
  */
+function waitingLabelFor(application: ApplicationView) {
+  return waitingLabel({
+    stage: application.stage,
+    whoseTurn: application.whoseTurn,
+    hasMaterials: application.materials.coverLetter || application.materials.resume,
+    followUp: application.followUp,
+    nearestInterviewNeedsPrep:
+      application.nearestInterview !== null && application.nearestInterview.prepStatus !== 'ready',
+    closedReason: application.closedReason,
+  });
+}
+
 export function ResponsesCard({
   application,
   failed,
@@ -50,15 +62,7 @@ export function ResponsesCard({
   onSkip,
 }: ResponsesCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const label = waitingLabel({
-    stage: application.stage,
-    whoseTurn: application.whoseTurn,
-    hasMaterials: application.materials.coverLetter || application.materials.resume,
-    followUp: application.followUp,
-    nearestInterviewNeedsPrep:
-      application.nearestInterview !== null && application.nearestInterview.prepStatus !== 'ready',
-    closedReason: application.closedReason,
-  });
+  const label = waitingLabelFor(application);
 
   return (
     <article
