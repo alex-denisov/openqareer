@@ -139,8 +139,8 @@ describe('parseLanguagesSection (B265)', () => {
   it('reads languages only from the given page (profile.html), ignoring the empty details page', () => {
     expect(parseLanguagesSection(fixture('languages-empty-details.html'))).toEqual([]);
     expect(parseLanguagesSection(synthetic).slice(0, 2)).toEqual([
-      { name: 'English', cefr: 'C1' },
-      { name: 'Russian', cefr: 'C2' },
+      { name: 'English', cefr: 'C1', sourceLabel: 'Full professional proficiency' },
+      { name: 'Russian', cefr: 'C2', sourceLabel: 'Native or bilingual proficiency' },
     ]);
   });
 
