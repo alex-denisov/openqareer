@@ -83,6 +83,43 @@ describe('ResponsesBoard columns', () => {
     expect(html).toContain('career-responses-waiting');
   });
 
+  it('renders the loading skeleton before data arrives', () => {
+    const state: UseApplications = { ...readyState([]), status: 'loading' };
+    const html = renderToStaticMarkup(<ResponsesBoard state={state} />);
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('Загружаем отклики');
+  });
+
+  it('renders the empty pipeline copy from the mockup', () => {
+    const html = renderToStaticMarkup(<ResponsesBoard state={readyState([])} />);
+    expect(html).toContain('Пайплайн пуст');
+    expect(html).toContain('Пайплайн наполняется из очереди дня');
+  });
+
+  it('renders an offline error without the raw message', () => {
+    const state: UseApplications = {
+      ...readyState([]),
+      status: 'error',
+      offline: true,
+      error: 'Failed to fetch',
+    };
+    const html = renderToStaticMarkup(<ResponsesBoard state={state} />);
+    expect(html).toContain('Нет соединения');
+    expect(html).not.toContain('Failed to fetch');
+  });
+
+  it('renders a retry action for a non-offline load error', () => {
+    const state: UseApplications = {
+      ...readyState([]),
+      status: 'error',
+      offline: false,
+      error: 'Не удалось загрузить отклики.',
+    };
+    const html = renderToStaticMarkup(<ResponsesBoard state={state} />);
+    expect(html).toContain('Не удалось загрузить отклики.');
+    expect(html).toContain('Повторить');
+  });
+
   it('renders a hidden-company card without leaking the name', () => {
     const applications = [
       application({
