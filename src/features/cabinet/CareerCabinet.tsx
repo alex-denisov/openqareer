@@ -117,6 +117,9 @@ export function CareerCabinet({
     },
     [data, onUpdateWorkspace, workspace],
   );
+  const showsVacanciesScreen =
+    view === 'opportunities' && !pool.loading && !pool.failed && pool.matched.length > 0;
+
   return (
     <AppErrorBoundary
       fallbackTitle="Не удалось отобразить кабинет"
@@ -124,12 +127,18 @@ export function CareerCabinet({
       onReset={() => void data.refresh()}
     >
       <div className={`career-cabinet career-cabinet-view-${view}`}>
-        <CabinetHeader
-          view={view}
-          loading={data.loading && Boolean(data.snapshot)}
-          error={data.error}
-          onRetry={() => void data.refresh()}
-        />
+        {/* «Вакансии» рисует свой эйброу/заголовок/подзаголовок из данных
+            кампании (B248/B250) — общая шапка кабинета здесь дублировала бы
+            их дженериковой версией (приёмка B250). Доска-заглушка
+            (загрузка/ошибка/пусто) общей шапкой ещё пользуется. */}
+        {!showsVacanciesScreen ? (
+          <CabinetHeader
+            view={view}
+            loading={data.loading && Boolean(data.snapshot)}
+            error={data.error}
+            onRetry={() => void data.refresh()}
+          />
+        ) : null}
         {/* B248 §2 — the same path indicator the anonymous wizard shows
             (`CareerWorkspaceShell`), wired to the cabinet's own journey, pool
             and confirmed applications instead of a second read of any of

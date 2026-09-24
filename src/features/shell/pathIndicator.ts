@@ -60,14 +60,28 @@ function findTrackItem(
 
 function shortlistStepOf(input: PathIndicatorInput): PathStep {
   const campaignState = trackState(findTrackItem(input.track, 'campaign'));
+  // Пул — не финальный шаг: как только появился первый подтверждённый отклик,
+  // кандидат ушёл дальше по пути, и «Подборка» становится пройденной. До
+  // этого момента непустой пул — это «вы здесь», а не готовый чекбокс
+  // (приёмка B250: подборка отмечалась галкой, пока кандидат ещё выбирает).
   const state: PathStepState =
-    input.matchedPoolCount > 0 ? 'done' : campaignState === 'not-started' ? 'not-started' : 'in-progress';
+    input.confirmedApplications > 0
+      ? 'done'
+      : input.matchedPoolCount > 0
+        ? 'in-progress'
+        : campaignState === 'not-started'
+          ? 'not-started'
+          : 'in-progress';
   return {
     id: 'shortlist',
     label: 'Подборка',
     state,
     reason:
-      state === 'done' ? 'Кампания вернула вакансии' : 'Кампания не запущена или пул по роли пуст',
+      state === 'done'
+        ? 'Кампания вернула вакансии'
+        : input.matchedPoolCount > 0
+          ? `${input.matchedPoolCount} в подборке — вы здесь`
+          : 'Кампания не запущена или пул по роли пуст',
     destination: 'opportunities',
   };
 }

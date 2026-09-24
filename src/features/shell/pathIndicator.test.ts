@@ -40,13 +40,28 @@ describe('buildPathIndicator', () => {
     });
   });
 
-  it('marks «Подборка» done once the pool actually holds a matched vacancy', () => {
+  it('marks «Подборка» in progress («вы здесь») while the pool has matches and nothing is confirmed yet', () => {
     const steps = buildPathIndicator({
       track: [
         { id: 'campaign', label: 'Кампания поиска', status: 'active', reason: 'Готовим первое действие' },
       ],
       matchedPoolCount: 3,
       confirmedApplications: 0,
+    });
+
+    expect(steps.find((step) => step.id === 'shortlist')).toMatchObject({
+      state: 'in-progress',
+      reason: '3 в подборке — вы здесь',
+    });
+  });
+
+  it('marks «Подборка» done once the candidate has moved on to a confirmed application', () => {
+    const steps = buildPathIndicator({
+      track: [
+        { id: 'campaign', label: 'Кампания поиска', status: 'active', reason: 'Готовим первое действие' },
+      ],
+      matchedPoolCount: 3,
+      confirmedApplications: 1,
     });
 
     expect(steps.find((step) => step.id === 'shortlist')).toMatchObject({ state: 'done' });
