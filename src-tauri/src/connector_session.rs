@@ -793,6 +793,11 @@ const LINKEDIN_HREF_PATHS: &[&str] = &["/in/", "/company/", "/school/", "/detail
 const LINKEDIN_MEDIA_SRC_PREFIX: &str = "https://media.licdn.com/dms/image/";
 const LINKEDIN_SRCSET_TARGET_WIDTH: i64 = 400;
 
+// These four are the tested Rust reference for the allowlist the JS in
+// `page_sanitize_script` mirrors by hand (no per-node IPC round trip is
+// possible while walking the cloned DOM inside the page). Not called from
+// production code, only from the tests below.
+#[allow(dead_code)]
 fn linkedin_id_allowed(id: &str) -> bool {
     id.starts_with(LINKEDIN_ID_PREFIX)
 }
@@ -800,6 +805,7 @@ fn linkedin_id_allowed(id: &str) -> bool {
 /// `href` kept only for linkedin.com/*.linkedin.com hosts on the allowed
 /// paths; the query string survives solely for `/safety/go/`, where the
 /// destination lives in `?url=`.
+#[allow(dead_code)]
 fn linkedin_href_allowed(raw: &str) -> Option<String> {
     let url = Url::parse(raw).ok()?;
     let host = url.host_str()?;
@@ -823,17 +829,20 @@ fn linkedin_href_allowed(raw: &str) -> Option<String> {
     }
 }
 
+#[allow(dead_code)]
 fn linkedin_image_src_allowed(src: &str) -> bool {
     src.starts_with(LINKEDIN_MEDIA_SRC_PREFIX)
 }
 
 /// Picks the `srcset` candidate closest to 400px among the licdn variants;
 /// non-licdn and `data:` candidates are dropped.
+#[allow(dead_code)]
 fn pick_linkedin_srcset_variant(srcset: &str) -> Option<String> {
     srcset
         .split(',')
         .filter_map(|entry| {
-            let mut parts = entry.trim().split_whitespace();
+            let trimmed = entry.trim();
+            let mut parts = trimmed.split_whitespace();
             let url = parts.next()?;
             if !linkedin_image_src_allowed(url) {
                 return None;
