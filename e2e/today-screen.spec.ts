@@ -52,28 +52,80 @@ const SNAPSHOT = {
 };
 
 const TODAY_SNAPSHOT = {
-  digest: { waitingForYou: 2, newVacancies: 3, closedVacancies: 2 },
+  digest: {
+    waitingForYou: 2,
+    newVacancies: 12,
+    closedVacancies: 2,
+    interviewsAhead: 1,
+    nextInterview: {
+      company: 'HRTx Inc.',
+      title: 'Enterprise Architect Director',
+      round: 2,
+      at: '2026-09-26T14:00:00.000Z',
+    },
+    newVacanciesCaption: {
+      campaignRole: 'VP Technology Ops',
+      sourcesCount: 3,
+      updatedAt: '2026-09-23T09:14:00.000Z',
+    },
+    followUpCaptions: ['Peraton — 6 рабочих дней тишины', 'Genetec — обещанный срок истёк'],
+  },
   queue: [
     {
-      kind: 'candidate_turn',
+      kind: 'follow_up',
       applicationId: 'app-1',
-      title: 'Ответьте HR в Acme — интервью назначено',
-      dueAt: null,
+      title: 'Enterprise Architect, Senior Advisor',
+      company: 'Peraton',
+      eyebrow: 'Follow-up · 6 рабочих дней без ответа',
+      dueAt: '2026-09-23T00:00:00.000Z',
+      salary: { from: 176000, currency: 'usd' },
+      fit: null,
     },
     {
       kind: 'new_vacancy',
       clusterId: 'cl-1',
-      title: 'VP Technology Ops в Beta',
+      title: 'Business Information Architect',
+      company: 'Genetec',
+      eyebrow: 'Новая вакансия · сегодня',
       dueAt: null,
+      salary: { from: 190000, to: 240000, currency: 'usd' },
+      location: 'Canada · удалённо',
+      fit: { role: 'target', level: 'target', geo: true },
     },
     {
       kind: 'new_vacancy',
       clusterId: 'cl-2',
-      title: 'Director of Operations в Gamma',
+      title: 'Cloud & Infrastructure Solution Architect',
+      company: 'Sonsoft',
+      eyebrow: 'Новая вакансия · сегодня',
       dueAt: null,
+      salary: { from: 170000, to: 210000, currency: 'usd' },
+      location: 'US · релокация',
+      fit: { role: 'target', level: 'target', geo: false },
+    },
+    {
+      kind: 'interview',
+      applicationId: 'app-2',
+      title: 'Enterprise Architect Director, раунд 2',
+      company: 'HRTx Inc.',
+      eyebrow: 'Интервью через 2 дня',
+      dueAt: '2026-09-26T14:00:00.000Z',
+      fit: null,
     },
   ],
-  sinceLastVisit: '2026-09-23T08:00:00.000Z',
+  followUps: [
+    { applicationId: 'app-1', company: 'Peraton', title: 'Enterprise Architect', status: 'today' },
+    { applicationId: 'app-3', company: 'Genetec', title: 'обещанный ответ', status: 'overdue' },
+    { applicationId: 'app-4', company: 'HRTx', title: 'thank-you после раунда 1', status: 'sent' },
+  ],
+  sinceLastVisit: {
+    since: '2026-09-23T08:00:00.000Z',
+    items: [
+      '12 новых вакансий по VP Technology Ops, 3 по COO (гипотеза)',
+      'Genetec запросили доступность на этой неделе',
+      '2 вакансии закрылись без ответа — перенесены в архив',
+    ],
+  },
   vacanciesPending: true,
 };
 
@@ -146,16 +198,19 @@ test.describe('B251 today screen', () => {
     await openApp(page);
 
     await expect(page.locator('.career-cabinet-header h1')).toHaveText('Сегодня');
-    await expect(page.locator('.career-today-digest')).toContainText('3 новые вакансии');
-    await expect(page.locator('.career-today-digest')).toContainText('ждут вашего ответа');
-    await expect(page.locator('.career-today-digest')).toContainText('2 вакансии закрылись');
+    await expect(page.locator('.career-today-digest')).toContainText('12');
+    await expect(page.locator('.career-today-digest')).toContainText('follow-up просят действия сегодня');
+    await expect(page.locator('.career-today-digest')).toContainText('HRTx Inc.');
 
     const rows = page.locator('.career-today-item');
-    await expect(rows).toHaveCount(3);
-    await expect(rows.first()).toContainText('Следующее действие');
-    await expect(rows.first()).toContainText('Ответьте HR в Acme');
-    await expect(rows.nth(1)).not.toContainText('Следующее действие');
+    await expect(rows).toHaveCount(4);
+    await expect(rows.first()).toHaveClass(/is-first/);
+    await expect(rows.first()).toContainText('Peraton');
+    await expect(rows.nth(1)).not.toHaveClass(/is-first/);
+    await expect(page.locator('body')).not.toContainText('Следующее действие');
 
+    await expect(page.locator('.career-today-followups')).toContainText('Follow-up по срокам');
+    await expect(page.locator('.career-today-since')).toContainText('С прошлого визита');
     await expect(page.locator('.career-today-pending')).toContainText('Подбор обновляется');
   });
 
