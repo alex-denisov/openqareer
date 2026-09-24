@@ -149,6 +149,16 @@ const handleApplicationFunnel: Handler = async (deps, request, reply) => {
   return { data: candidateStore.applicationFunnel(candidate.id), meta: { requestId: request.id } };
 };
 
+/** `POST /visits` (architecture.md §4, §57): отметка визита с дебаунсом 30 минут. */
+const handleRecordVisit: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const result = candidateStore.recordCandidateVisit(candidate.id, new Date().toISOString());
+  return { data: { since: result.since }, meta: { requestId: request.id } };
+};
+
 /** Трекер откликов (B251, S1–S2, architecture.md §4). */
 export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/candidate/applications', withDeps(deps, handleListApplications));
@@ -167,6 +177,11 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
     '/api/v1/candidate/applications/:id/events',
     { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
     withDeps(deps, handleRecordApplicationEvent),
+  );
+  app.post(
+    '/api/v1/candidate/visits',
+    { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
+    withDeps(deps, handleRecordVisit),
   );
   registerApplicationMaterialsRoutes(app, deps);
   registerApplicationInterviewRoutes(app, deps);
