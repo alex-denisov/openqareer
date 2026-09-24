@@ -5,15 +5,30 @@ import {
   FileText,
   Warning,
 } from '@phosphor-icons/react';
-import type { ApplicationStage } from '../../../shared/applicationStage';
+import { APPLICATION_STAGES, type ApplicationStage } from '../../../shared/applicationStage';
 import { SKIP_REASONS, type SkipReasonId } from '../../../shared/skipReasons';
 import type { ApplicationView } from './applicationsApi';
 import { waitingLabel } from './waitingLabel';
+
+const STAGE_LABEL: Record<ApplicationStage, string> = {
+  saved: 'Хочу',
+  applied: 'Откликнулся',
+  responded: 'Ответ',
+  interview: 'Интервью',
+  offer: 'Оффер',
+  rejected: 'Отказ',
+  archived: 'Архив',
+};
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 interface ResponsesCardProps {
   readonly application: ApplicationView;
   readonly failed: boolean;
   readonly conflicted: boolean;
+  readonly onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   readonly onRetry: () => void;
   readonly onSaveNote: (notes: string) => void;
   readonly onSkip: (reasonId: SkipReasonId) => void;
@@ -29,6 +44,7 @@ export function ResponsesCard({
   application,
   failed,
   conflicted,
+  onChangeStage,
   onRetry,
   onSaveNote,
   onSkip,
@@ -55,7 +71,9 @@ export function ResponsesCard({
           ? 'компания скрыта'
           : application.vacancy?.company || 'компания не указана'}
       </div>
-      <MaterialsBadge materials={application.materials} />
+      <MaterialsBadge
+        hasMaterials={application.materials.coverLetter || application.materials.resume}
+      />
       <CardAlerts failed={failed} conflicted={conflicted} onRetry={onRetry} />
       <CardFooter
         application={application}
@@ -63,6 +81,10 @@ export function ResponsesCard({
         labelOn={label.on}
         menuOpen={menuOpen}
         onToggleMenu={() => setMenuOpen((open) => !open)}
+        onChangeStage={(stage, occurredAt) => {
+          onChangeStage(stage, occurredAt);
+          setMenuOpen(false);
+        }}
         onSaveNote={(notes) => {
           onSaveNote(notes);
           setMenuOpen(false);
@@ -82,6 +104,7 @@ interface CardFooterProps {
   labelOn: 'you' | 'them' | null;
   menuOpen: boolean;
   onToggleMenu: () => void;
+  onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   onSaveNote: (notes: string) => void;
   onSkip: (reasonId: SkipReasonId) => void;
 }
@@ -92,6 +115,7 @@ function CardFooter({
   labelOn,
   menuOpen,
   onToggleMenu,
+  onChangeStage,
   onSaveNote,
   onSkip,
 }: CardFooterProps) {
@@ -105,7 +129,12 @@ function CardFooter({
           <DotsThreeVertical size={16} />
         </button>
         {menuOpen ? (
-          <CardMenu application={application} onSaveNote={onSaveNote} onSkip={onSkip} />
+          <CardMenu
+            application={application}
+            onChangeStage={onChangeStage}
+            onSaveNote={onSaveNote}
+            onSkip={onSkip}
+          />
         ) : null}
       </div>
     </div>
@@ -114,9 +143,9 @@ function CardFooter({
 
 function MaterialsBadge({ hasMaterials }: { hasMaterials: boolean }) {
   return (
-    <div className="career-responses-card-materials">
+    <div className={`career-responses-card-materials${hasMaterials ? '' : ' is-missing'}`}>
       {hasMaterials ? <FileText size={12} /> : <Warning size={12} />}
-      {hasMaterials ? 'Материалы на карточке' : 'Письмо не собрано'}
+      {hasMaterials ? 'Письмо · резюме' : 'Письмо не собрано'}
     </div>
   );
 }
@@ -196,10 +225,12 @@ function StageChangeControl({
 
 function CardMenu({
   application,
+  onChangeStage,
   onSaveNote,
   onSkip,
 }: {
   application: ApplicationView;
+  onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   onSaveNote: (notes: string) => void;
   onSkip: (reasonId: SkipReasonId) => void;
 }) {
@@ -209,6 +240,7 @@ function CardMenu({
 
   return (
     <div className="career-responses-card-menu">
+      <StageChangeControl stage={application.stage} onChangeStage={onChangeStage} />
       {application.vacancy?.url ? (
         <a href={application.vacancy.url} target="_blank" rel="noreferrer">
           Открыть карточку вакансии

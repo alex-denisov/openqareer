@@ -12673,6 +12673,10 @@
   gap: var(--career-space-2);
 }
 
+.career-responses-card.is-your-turn {
+  border-color: color-mix(in oklch, var(--career-warning) 45%, var(--career-line));
+}
+
 .career-responses-card-role {
   font-size: var(--career-text-sm);
   font-weight: 600;
@@ -12681,6 +12685,43 @@
 .career-responses-card-company {
   font-size: var(--career-text-aux);
   color: var(--career-text-dim);
+}
+
+.career-responses-card-materials {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--career-text-aux);
+  color: var(--career-text-dim);
+}
+
+.career-responses-card-materials svg {
+  flex-shrink: 0;
+}
+
+.career-responses-card-materials.is-missing {
+  color: var(--career-warning);
+}
+
+.career-responses-card-failed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--career-text-aux);
+  color: var(--career-danger, var(--career-warning));
+}
+
+.career-responses-card-failed button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  padding: 0;
 }
 
 .career-responses-card-footer {
@@ -12729,6 +12770,115 @@
 
 .career-responses-menu-wrap {
   position: relative;
+}
+
+.career-responses-menu-wrap > button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--career-radius-sm);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--career-text-dim);
+  cursor: pointer;
+}
+
+.career-responses-menu-wrap > button:hover {
+  color: var(--career-text-soft);
+  border-color: var(--career-line);
+  background: var(--career-surface-raised);
+}
+
+.career-responses-card-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2);
+  background: var(--career-surface-raised);
+  border: 1px solid var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  box-shadow: var(--career-shadow-tooltip);
+  padding: var(--career-space-3);
+}
+
+.career-responses-card-menu a,
+.career-responses-card-menu > button {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--career-text-soft);
+  padding: 8px 9px;
+  border-radius: var(--career-radius-sm);
+  font-size: var(--career-text-aux);
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.career-responses-card-menu a:hover,
+.career-responses-card-menu > button:hover {
+  background: var(--career-surface);
+  color: var(--career-text);
+}
+
+.career-responses-stage-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2);
+  padding-bottom: var(--career-space-2);
+  border-bottom: 1px solid var(--career-line);
+}
+
+.career-responses-stage-control label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--career-text-aux);
+  color: var(--career-text-dim);
+}
+
+.career-responses-stage-control select,
+.career-responses-stage-control input {
+  background: var(--career-surface);
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  padding: 6px 8px;
+  font-size: var(--career-text-aux);
+}
+
+.career-responses-note-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--career-text-aux);
+  color: var(--career-text-dim);
+}
+
+.career-responses-note-field textarea {
+  background: var(--career-surface);
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  padding: 6px 8px;
+  font-size: var(--career-text-aux);
+  resize: vertical;
+  min-height: 44px;
+}
+
+.career-responses-reason-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .career-responses-skeleton {
