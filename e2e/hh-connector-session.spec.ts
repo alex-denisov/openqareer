@@ -161,10 +161,11 @@ async function stubCandidateApi(page: Page): Promise<void> {
 async function openHhDialog(page: Page): Promise<void> {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  await page.getByRole('button', { name: /Хочу найти работу/ }).click();
-  await page.getByRole('button', { name: 'Продолжить' }).click();
-  await expect(page.getByRole('heading', { name: 'Что уже есть?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();
+  // B249: the wizard's first (and now only fullscreen) step is the source
+  // grid — "Резюме на hh.ru" lands straight on the platform-cards screen,
+  // there is no separate "Что уже есть?" / "Импорт профиля" hop any more.
+  await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Резюме на hh.ru' }).click();
   await page
     .locator('.career-platform-card', { hasText: 'hh.ru' })
     .getByRole('button', { name: 'Подключить' })
