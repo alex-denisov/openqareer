@@ -16,6 +16,7 @@ import {
 } from '../sqliteApplicationInterviewRepository';
 import { SqliteApplicationOfferRepository, type ApplicationOfferTerms, type StoredApplicationOffer } from '../sqliteApplicationOfferRepository';
 import { SqliteVacancySkipRepository, type StoredVacancySkip, type VacancySkipOrigin } from '../sqliteVacancySkipRepository';
+import { SqliteCandidateVisitRepository, type RecordVisitResult } from '../sqliteCandidateVisitRepository';
 import type { SealedText } from '../sealedText';
 import type { VacancyApplication, VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import type { ApplicationStage } from '../../../shared/applicationStage';
@@ -43,6 +44,7 @@ export class ApplicationTrackerController {
   private readonly interviews: SqliteApplicationInterviewRepository;
   private readonly offers: SqliteApplicationOfferRepository;
   private readonly skips: SqliteVacancySkipRepository;
+  private readonly visits: SqliteCandidateVisitRepository;
 
   constructor(
     database: DatabaseSync,
@@ -54,6 +56,7 @@ export class ApplicationTrackerController {
     this.interviews = new SqliteApplicationInterviewRepository(database, sealedText);
     this.offers = new SqliteApplicationOfferRepository(database, sealedText);
     this.skips = new SqliteVacancySkipRepository(database);
+    this.visits = new SqliteCandidateVisitRepository(database);
   }
 
   listLegacy(candidateId: string): VacancyApplication[] {
@@ -197,6 +200,16 @@ export class ApplicationTrackerController {
       .list(candidateId)
       .map((skip) => ({ clusterId: skip.clusterId, status: 'skipped' as const, skipReasonId: skip.reasonId }));
     return [...saved, ...skipped];
+  }
+
+  /** `POST /visits` (architecture.md §4): moves the mark only past 30 minutes. */
+  recordVisit(candidateId: string, now: string): RecordVisitResult {
+    return this.visits.recordVisit(candidateId, now);
+  }
+
+  /** `GET /today` reads the current mark without recording a visit. */
+  getSinceLastVisit(candidateId: string): string | null {
+    return this.visits.getSinceLastVisit(candidateId);
   }
 
   private mustGetOwn(candidateId: string, applicationId: string): StoredApplication {

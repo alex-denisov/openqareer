@@ -17,6 +17,7 @@ import type {
 } from './sqliteApplicationInterviewRepository';
 import type { ApplicationOfferTerms, StoredApplicationOffer } from './sqliteApplicationOfferRepository';
 import type { StoredVacancySkip, VacancySkipOrigin } from './sqliteVacancySkipRepository';
+import type { RecordVisitResult } from './sqliteCandidateVisitRepository';
 
 /**
  * Every `CandidateStore` method that only checks the candidate exists and
@@ -70,6 +71,8 @@ export interface ApplicationTrackerMethods {
   ): StoredVacancySkip;
   deleteVacancySkip(candidateId: string, clusterId: string): boolean;
   listVacancyDecisions(candidateId: string): VacancyDecision[];
+  recordCandidateVisit(candidateId: string, now: string): RecordVisitResult;
+  getSinceLastVisit(candidateId: string): string | null;
 }
 
 type RequireCandidate = (candidateId: string) => void;
@@ -132,6 +135,8 @@ function createArtifactApplicationMethods(
   | 'createVacancySkip'
   | 'deleteVacancySkip'
   | 'listVacancyDecisions'
+  | 'recordCandidateVisit'
+  | 'getSinceLastVisit'
 > {
   return {
     linkApplicationMaterial(candidateId, applicationId, role, documentId) {
@@ -165,6 +170,14 @@ function createArtifactApplicationMethods(
     listVacancyDecisions(candidateId) {
       requireCandidate(candidateId);
       return tracker.listVacancyDecisions(candidateId);
+    },
+    recordCandidateVisit(candidateId, now) {
+      requireCandidate(candidateId);
+      return tracker.recordVisit(candidateId, now);
+    },
+    getSinceLastVisit(candidateId) {
+      requireCandidate(candidateId);
+      return tracker.getSinceLastVisit(candidateId);
     },
   };
 }
