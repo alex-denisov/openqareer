@@ -43,8 +43,8 @@ const campaign: CampaignMetaView = {
   roles: { value: ['VP Technology Ops'], origin: 'profile' },
   regions: { value: ['Дубай', 'Европа'], origin: 'profile' },
   roleHypotheses: [
-    { role: 'VP Technology Ops', isHypothesis: false },
-    { role: 'COO', isHypothesis: true },
+    { role: 'VP Technology Ops', vacancyCount: 34, isHypothesis: false },
+    { role: 'COO', vacancyCount: 6, isHypothesis: true },
   ],
 };
 
@@ -68,10 +68,10 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).toContain('61 вакансий');
   });
 
-  it('shows every role hypothesis as a chip and marks the hypothesis as such', () => {
+  it('shows every role hypothesis as a chip with its vacancy count, and marks the hypothesis', () => {
     const html = render();
-    expect(html).toContain('VP Technology Ops');
-    expect(html).toContain('COO — гипотеза');
+    expect(html).toContain('VP Technology Ops (34)');
+    expect(html).toContain('COO (6) — гипотеза');
     expect(html).toContain('vacancies-chip-hypothesis');
   });
 

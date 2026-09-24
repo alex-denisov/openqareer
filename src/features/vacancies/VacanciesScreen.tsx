@@ -150,6 +150,7 @@ function RoleHypothesesGroup({
         <RoleChip
           key={hypothesis.role}
           role={hypothesis.role}
+          vacancyCount={hypothesis.vacancyCount}
           isHypothesis={hypothesis.isHypothesis}
           isSelected={state.role === hypothesis.role}
           onSelect={() => onChange((prev) => ({ ...prev, role: hypothesis.role }))}
@@ -303,11 +304,13 @@ function Chip({
 
 function RoleChip({
   role,
+  vacancyCount,
   isHypothesis,
   isSelected,
   onSelect,
 }: {
   readonly role: string;
+  readonly vacancyCount: number;
   readonly isHypothesis: boolean;
   readonly isSelected: boolean;
   readonly onSelect: () => void;
@@ -321,7 +324,7 @@ function RoleChip({
       aria-pressed={isSelected}
       onClick={onSelect}
     >
-      {role}
+      {role} ({vacancyCount})
       {isHypothesis ? ' — гипотеза' : ''}
     </button>
   );

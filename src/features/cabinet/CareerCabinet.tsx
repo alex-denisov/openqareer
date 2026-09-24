@@ -6,6 +6,7 @@ import { CareerHome } from './CareerHome';
 import { SearchCampaign } from '../search/SearchCampaign';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { VacancyBoard } from '../vacancies/VacancyBoard';
+import { VacanciesScreen } from '../vacancies/VacanciesScreen';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
 import { useVacancyApplications } from '../vacancies/useVacancyApplications';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
@@ -288,15 +289,28 @@ function CabinetSection({
       </div>
     );
   }
+  // Верх экрана и список — новый макет «Вакансии» (B248/B250). Загрузка,
+  // ошибка и пустой пул остаются на прежнем экране до следующего среза,
+  // который переносит эти состояния и детальную панель.
+  if (pool.loading || pool.failed || pool.matched.length === 0) {
+    return (
+      <VacancyBoard
+        candidateId={session.candidateId}
+        subscriptions={data.snapshot?.vacancySubscriptions ?? []}
+        defaultQuery={targetDirection || undefined}
+        onRefresh={data.refresh}
+        pool={pool}
+        applications={applications}
+        candidateFacts={data.snapshot?.memory ?? []}
+      />
+    );
+  }
   return (
-    <VacancyBoard
-      candidateId={session.candidateId}
-      subscriptions={data.snapshot?.vacancySubscriptions ?? []}
-      defaultQuery={targetDirection || undefined}
-      onRefresh={data.refresh}
-      pool={pool}
-      applications={applications}
-      candidateFacts={data.snapshot?.memory ?? []}
+    <VacanciesScreen
+      matched={pool.matched}
+      total={pool.total || pool.matched.length}
+      campaign={pool.campaign}
+      candidateLevel={pool.candidateLevel}
     />
   );
 }
