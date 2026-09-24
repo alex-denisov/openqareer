@@ -12575,3 +12575,202 @@
     justify-content: center;
   }
 }
+
+/* «Вакансии» (B248/B250) — верх экрана и карточка списка. */
+.vacancies-desc {
+  margin: var(--career-space-2) 0 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  max-width: 62ch;
+}
+
+.vacancies-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--career-space-6);
+  align-items: start;
+}
+
+.vacancies-field-group {
+  margin-bottom: var(--career-space-5);
+}
+
+.vacancies-field-group h3 {
+  font-size: var(--career-text-aux);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--career-text-dim);
+  margin: 0 0 var(--career-space-2);
+}
+
+.vacancies-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vacancies-chip {
+  min-height: 32px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--career-line-strong);
+  background: transparent;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-aux);
+  cursor: pointer;
+}
+
+.vacancies-chip:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.vacancies-chip.is-selected {
+  color: var(--career-accent);
+  border-color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.vacancies-chip-hypothesis {
+  border-style: dashed;
+  border-color: color-mix(in oklch, var(--career-warning) 50%, var(--career-line-strong));
+  color: var(--career-warning);
+}
+
+.vacancies-reset {
+  width: 100%;
+}
+
+.vacancies-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--career-space-4);
+}
+
+.vacancies-list-hint {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-soft);
+}
+
+.vac-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2);
+}
+
+.vac-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--career-space-4);
+  padding: var(--career-space-3) var(--career-space-4);
+  border-radius: var(--career-radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  background: transparent;
+  min-height: var(--career-target-min);
+}
+
+.vac-row:hover {
+  background: var(--career-surface);
+}
+
+.vac-row.is-selected {
+  background: var(--career-surface-raised);
+  border-color: var(--career-accent);
+}
+
+.vac-row:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+}
+
+.vac-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+  border: 1px solid var(--career-line-strong);
+  display: grid;
+  place-items: center;
+  font-size: var(--career-text-aux);
+  font-weight: 700;
+  color: var(--career-text-soft);
+}
+
+.vac-main {
+  min-width: 0;
+}
+
+.vac-title {
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vac-sub {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vac-fit {
+  display: flex;
+  gap: 8px;
+}
+
+.fit-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: var(--career-text-aux);
+  border: 1px solid var(--career-line-strong);
+}
+
+.fit-dot.is-yes {
+  color: var(--career-success);
+  border-color: var(--career-success);
+  background: var(--career-success-soft);
+}
+
+.fit-dot.is-no {
+  color: var(--career-text-dim);
+}
+
+.vac-comp {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--career-text-xs);
+}
+
+.vac-age {
+  font-size: var(--career-text-aux);
+  color: var(--career-text-dim);
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .vac-row {
+    grid-template-columns: 36px 1fr auto;
+  }
+  .vac-fit,
+  .vac-age {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .vacancies-layout {
+    grid-template-columns: 1fr;
+  }
+}
