@@ -229,7 +229,13 @@ async function captureStructuredProfile(
   page: { readonly body: string; readonly url: string },
 ): Promise<{ readonly profile: LinkedInProfileV2; readonly extractorVersion: string } | undefined> {
   const pages = { profile: page.body, ...(await readLinkedDetailPages(dependencies, page)) };
-  const structured = extractStructuredLinkedInProfile(pages);
+  let structured: LinkedInProfileV2;
+  try {
+    structured = extractStructuredLinkedInProfile(pages);
+  } catch {
+    // Markup drift must degrade to the text path, never sink the import.
+    return undefined;
+  }
   if (!hasStructuredSubstance(structured)) return undefined;
   const valid = sanitizedAndValidLinkedInProfile(structured);
   if (!valid) return undefined;
@@ -254,10 +260,17 @@ async function readLinkedDetailPages(
     const detail = await dependencies
       .readSessionPage(new URL(DETAIL_PAGE_PATHS[key], base).toString())
       .catch(() => ({ ok: false as const }));
-    if (!detail.ok || !detail.body) break;
+    // A redirect to /checkpoint/, /authwall or a captcha still answers ok=true:
+    // anything but the requested section ends the walk (security review B266).
+    if (!detail.ok || !detail.body || !landedOn(detail.url, DETAIL_PAGE_PATHS[key])) break;
     if (detail.body.length <= MAX_DETAIL_PAGE_BYTES) read = { ...read, [key]: detail.body };
   }
   return read;
+}
+
+function landedOn(rawUrl: string | undefined, sectionPath: string): boolean {
+  if (!rawUrl || !isAllowedLinkedInUrl(rawUrl)) return false;
+  return new URL(rawUrl).pathname.includes(`/${sectionPath}`);
 }
 
 function isOwnProfileUrl(rawUrl?: string): rawUrl is string {

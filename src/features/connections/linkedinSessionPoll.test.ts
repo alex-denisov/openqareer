@@ -117,11 +117,12 @@ describe('LinkedIn session import flow', () => {
     const overlapping = flow.run();
     expect(overlapping).toBe(first);
     await vi.waitFor(() => expect(onReady).toHaveBeenCalledOnce());
-    // One read for the main profile, then one per fixed detail page (B266 §2).
-    expect(readSessionPage).toHaveBeenCalledTimes(8);
+    // The main profile, then one detail read that lands back on the profile
+    // (not the requested section) and so ends the walk (B266 security review).
+    expect(readSessionPage).toHaveBeenCalledTimes(2);
     expect(events).toEqual([
       'closed',
-      ...Array<string>(8).fill('read-profile'),
+      ...Array<string>(2).fill('read-profile'),
       'captured',
       'import',
     ]);
@@ -345,6 +346,23 @@ describe('LinkedIn detail pages are read at a human pace (B266, architecture §3
       detailReadThrottle: freshThrottle(Date.now() - 60_000),
     }).run();
     expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops the walk when LinkedIn redirects a section to a checkpoint', async () => {
+    const read = vi.fn(async (url: string) =>
+      url.endsWith('/in/me/')
+        ? profile
+        : {
+            ok: true,
+            url: 'https://www.linkedin.com/checkpoint/challenge/',
+            body: '<main>verify</main>',
+          },
+    );
+    await flowWith(read, {
+      pauseBetweenDetailReads: async () => {},
+      detailReadThrottle: freshThrottle(),
+    }).run();
+    expect(read).toHaveBeenCalledTimes(2);
   });
 
   it('stops the walk at the first failed detail read', async () => {

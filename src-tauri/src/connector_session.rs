@@ -868,15 +868,20 @@ fn pick_linkedin_srcset_variant(srcset: &str) -> Option<String> {
 /// tested allowlist the extractor needs (id/componentkey/data-testid/
 /// aria-hidden/href/img src+srcset) per architecture.md §3.
 fn page_sanitize_script(platform: &str) -> String {
-    let linkedin_extra = if platform == "linkedin" {
-        format!(
-            "const id=node.getAttribute('id');\
+    let linkedin_read = if platform == "linkedin" {
+        "const id=node.getAttribute('id');\
 const componentkey=node.getAttribute('componentkey');\
 const testid=node.getAttribute('data-testid');\
 const ariaHidden=node.getAttribute('aria-hidden');\
 const src=node.getAttribute('src');\
-const srcset=node.getAttribute('srcset');\
-if(id&&id.indexOf('{LINKEDIN_ID_PREFIX}')===0){{node.setAttribute('id',id);}}\
+const srcset=node.getAttribute('srcset');"
+            .to_string()
+    } else {
+        String::new()
+    };
+    let linkedin_apply = if platform == "linkedin" {
+        format!(
+            "if(id&&id.indexOf('{LINKEDIN_ID_PREFIX}')===0){{node.setAttribute('id',id);}}\
 if(componentkey&&componentkey.length<={LINKEDIN_COMPONENTKEY_MAX_CHARS}){{node.setAttribute('componentkey',componentkey);}}\
 if(testid&&testid.length<={LINKEDIN_TESTID_MAX_CHARS}){{node.setAttribute('data-testid',testid);}}\
 if(ariaHidden!==null){{node.setAttribute('aria-hidden',ariaHidden);}}\
@@ -922,15 +927,16 @@ if(/^\\/resume\\/[A-Za-z0-9_-]+$/u.test(parsed.pathname)){node.setAttribute('hre
     };
     format!(
         "(function(){{try{{\
-const source=document.querySelector('main')||document.body||document.documentElement;\
+const source=(location.pathname.indexOf('/overlay/')>=0&&document.querySelector('[role=dialog],dialog'))||document.querySelector('main')||document.body||document.documentElement;\
 const root=source.cloneNode(true);\
 root.querySelectorAll('script,style,noscript,iframe,object,embed,input,textarea,select,meta,link').forEach(function(node){{node.remove();}});\
 root.querySelectorAll('*').forEach(function(node){{\
 const qa=node.getAttribute('data-qa');\
 const className=node.getAttribute('class');\
 const href=node.getAttribute('href');\
-{linkedin_extra}\
+{linkedin_read}\
 Array.from(node.attributes).forEach(function(attribute){{node.removeAttribute(attribute.name);}});\
+{linkedin_apply}\
 if(qa&&qa.length<=160){{node.setAttribute('data-qa',qa);}}\
 if(className&&className.length<=500){{node.setAttribute('class',className);}}\
 {href_rule}\
@@ -1395,6 +1401,44 @@ https://media.licdn.com/dms/image/c 800w";
             validate_page_body("profile".to_string()).unwrap(),
             "profile"
         );
+    }
+
+    #[test]
+    fn linkedin_allowlist_is_applied_after_the_attribute_wipe() {
+        let script = page_sanitize_script("linkedin");
+        let wipe = script
+            .find("removeAttribute(attribute.name)")
+            .expect("wipe");
+        let keep_id = script.find("node.setAttribute('id',id)").expect("id rule");
+        let keep_src = script
+            .find("node.setAttribute('src',src)")
+            .expect("src rule");
+        assert!(
+            keep_id > wipe,
+            "id must be restored after the wipe, not before it"
+        );
+        assert!(
+            keep_src > wipe,
+            "src must be restored after the wipe, not before it"
+        );
+    }
+
+    #[test]
+    fn hh_sanitizer_keeps_no_linkedin_attributes() {
+        let script = page_sanitize_script("hh");
+        assert!(!script.contains("componentkey"));
+        assert!(!script.contains("srcset"));
+    }
+
+    #[test]
+    fn dump_linkedin_sanitizer_for_manual_check() {
+        if std::env::var("DUMP_SANITIZER").is_ok() {
+            std::fs::write(
+                std::env::var("DUMP_SANITIZER").unwrap(),
+                page_sanitize_script("linkedin"),
+            )
+            .unwrap();
+        }
     }
 
     #[test]
