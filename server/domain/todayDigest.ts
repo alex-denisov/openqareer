@@ -1,4 +1,20 @@
 import type { ApplicationView } from './applicationDerivedFields';
+import type { VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
+
+/** Структура зарплаты как в matched-vacancies — клиент форматирует сам. */
+export interface TodaySalary {
+  readonly from?: number;
+  readonly to?: number;
+  readonly currency?: string;
+  readonly gross?: boolean;
+}
+
+/** Fit-точки новой вакансии (B248): роль/уровень из объяснения совпадения, гео пока нечем считать. */
+export interface TodayFit {
+  readonly role: VacancyRoleMatch;
+  readonly level: VacancyRoleMatch | null;
+  readonly geo: boolean | null;
+}
 
 /** Один элемент подбора, который нужен дайджесту дня — не весь `MatchedVacancyItem`. */
 export interface TodayNewVacancy {
@@ -6,26 +22,71 @@ export interface TodayNewVacancy {
   readonly title: string;
   readonly company: string;
   readonly firstObservedAt: string;
+  readonly lastSeenAt: string;
+  readonly salary?: TodaySalary;
+  readonly location?: string;
+  readonly sourcesCount: number;
+  readonly fit: TodayFit;
 }
 
 export interface TodayQueueItem {
-  readonly kind: 'candidate_turn' | 'new_vacancy';
+  readonly kind: 'candidate_turn' | 'new_vacancy' | 'follow_up' | 'interview';
   readonly applicationId?: string;
   readonly clusterId?: string;
   readonly title: string;
+  readonly company: string | null;
+  /** Короткая причина строкой — «6 рабочих дней без ответа», «сегодня», «через 2 дня». `null` — нечего честно сказать. */
+  readonly eyebrow: string | null;
   readonly dueAt: string | null;
+  readonly salary?: TodaySalary;
+  readonly location?: string;
+  readonly fit: TodayFit | null;
+}
+
+export interface TodayNextInterview {
+  readonly company: string | null;
+  readonly title: string;
+  readonly round: number;
+  readonly at: string;
+}
+
+/** Подписи дайджеста, которые сам список чисел не несёт (макет B248 «Сегодня»). */
+export interface TodayNewVacanciesCaption {
+  readonly campaignRole: string | null;
+  readonly sourcesCount: number;
+  readonly updatedAt: string | null;
 }
 
 export interface TodayDigest {
   readonly waitingForYou: number;
   readonly newVacancies: number;
   readonly closedVacancies: number;
+  readonly interviewsAhead: number;
+  readonly nextInterview: TodayNextInterview | null;
+  readonly newVacanciesCaption: TodayNewVacanciesCaption | null;
+  /** До двух строк вида «Peraton — 6 рабочих дней тишины». */
+  readonly followUpCaptions: readonly string[];
+}
+
+export type TodayFollowUpStatus = 'today' | 'overdue' | 'sent';
+
+export interface TodayFollowUp {
+  readonly applicationId: string;
+  readonly company: string | null;
+  readonly title: string;
+  readonly status: TodayFollowUpStatus;
+}
+
+export interface TodaySinceLastVisit {
+  readonly since: string | null;
+  readonly items: readonly string[];
 }
 
 export interface TodaySnapshot {
   readonly digest: TodayDigest;
   readonly queue: TodayQueueItem[];
-  readonly sinceLastVisit: string | null;
+  readonly followUps: TodayFollowUp[];
+  readonly sinceLastVisit: TodaySinceLastVisit;
   readonly vacanciesPending: boolean;
 }
 
@@ -33,12 +94,82 @@ export interface BuildTodaySnapshotInput {
   readonly applications: readonly ApplicationView[];
   /** `undefined` — холодный кэш подбора: подбор синхронно не считаем (B230, architecture.md §97). */
   readonly newVacancies: readonly TodayNewVacancy[] | undefined;
-  readonly sinceLastVisit: string | null;
+  readonly since: string | null;
   readonly closedVacanciesSinceVisit: number;
+  /** Первая целевая роль кампании — подпись «новых вакансий», честно `null` без роли. */
+  readonly campaignRole: string | null;
+  /** Счётчики «с прошлого визита», собранные вызывающей стороной (architecture.md §57). */
+  readonly companyEventsSinceVisit: number;
+}
+
+const MAX_FOLLOW_UPS = 5;
+const MAX_FOLLOW_UP_CAPTIONS = 2;
+
+function eyebrowFor(application: ApplicationView): string | null {
+  if (application.followUp && (application.followUp.urgency === 'due' || application.followUp.urgency === 'stale')) {
+    return `${application.followUp.businessDaysSinceContact} рабочих дней без ответа`;
+  }
+  if (application.nearestInterview?.scheduledAt) {
+    const days = daysUntil(application.nearestInterview.scheduledAt);
+    if (days !== null) return days <= 0 ? 'сегодня' : `через ${days} дня`;
+  }
+  return null;
+}
+
+function daysUntil(iso: string, now = new Date().toISOString()): number | null {
+  const diffMs = new Date(iso).getTime() - new Date(now).getTime();
+  if (Number.isNaN(diffMs)) return null;
+  return Math.round(diffMs / 86_400_000);
+}
+
+function queueKindFor(application: ApplicationView): 'follow_up' | 'interview' | 'candidate_turn' {
+  if (application.followUp && (application.followUp.urgency === 'due' || application.followUp.urgency === 'stale')) {
+    return 'follow_up';
+  }
+  if (application.nearestInterview?.scheduledAt) return 'interview';
+  return 'candidate_turn';
+}
+
+function companyOf(application: ApplicationView): string | null {
+  if (!application.vacancy || application.vacancy.companyHidden) return null;
+  return application.vacancy.company || null;
+}
+
+function followUpStatusFor(application: ApplicationView): TodayFollowUpStatus | null {
+  if (application.followUp?.urgency === 'stale') return 'overdue';
+  if (application.followUp?.urgency === 'due') return 'today';
+  return null;
+}
+
+function newVacancyCaption(
+  newVacancies: readonly TodayNewVacancy[] | undefined,
+  campaignRole: string | null,
+): TodayNewVacanciesCaption | null {
+  if (!newVacancies || newVacancies.length === 0) return null;
+  const sourcesCount = newVacancies.reduce((max, vacancy) => Math.max(max, vacancy.sourcesCount), 0);
+  const updatedAt = newVacancies.reduce<string | null>(
+    (latest, vacancy) => (latest === null || vacancy.lastSeenAt > latest ? vacancy.lastSeenAt : latest),
+    null,
+  );
+  return { campaignRole, sourcesCount, updatedAt };
+}
+
+function followUpCaptionsFor(applications: readonly ApplicationView[]): string[] {
+  return applications
+    .filter(
+      (application) =>
+        application.followUp && (application.followUp.urgency === 'due' || application.followUp.urgency === 'stale'),
+    )
+    .slice(0, MAX_FOLLOW_UP_CAPTIONS)
+    .map((application) => {
+      const company = companyOf(application) ?? application.vacancy?.title ?? 'Вакансия';
+      const days = application.followUp?.businessDaysSinceContact ?? 0;
+      return `${company} — ${days} рабочих дней тишины`;
+    });
 }
 
 /**
- * Сборщик «Сегодня» (B251, S4, architecture.md §57): чистая функция, весь
+ * Сборщик «Сегодня» (B251, S4/S4b, architecture.md §57): чистая функция, весь
  * ввод-вывод — на вызывающей стороне маршрута.
  */
 export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapshot {
@@ -48,27 +179,82 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
 
   const queue: TodayQueueItem[] = [
     ...waitingApplications.map((application) => ({
-      kind: 'candidate_turn' as const,
+      kind: queueKindFor(application),
       applicationId: application.id,
       title: application.vacancy?.title ?? '',
-      dueAt: application.followUp?.dueAt ?? null,
+      company: companyOf(application),
+      eyebrow: eyebrowFor(application),
+      dueAt: application.followUp?.dueAt ?? application.nearestInterview?.scheduledAt ?? null,
+      fit: null,
     })),
     ...(input.newVacancies ?? []).map((vacancy) => ({
       kind: 'new_vacancy' as const,
       clusterId: vacancy.clusterId,
       title: vacancy.title,
+      company: vacancy.company,
+      eyebrow: 'сегодня',
       dueAt: null,
+      salary: vacancy.salary,
+      location: vacancy.location,
+      fit: vacancy.fit,
     })),
   ];
+
+  const upcomingInterviews = input.applications
+    .filter((application) => application.nearestInterview?.scheduledAt)
+    .sort((a, b) =>
+      (a.nearestInterview?.scheduledAt as string).localeCompare(b.nearestInterview?.scheduledAt as string),
+    );
+  const nextInterviewApplication = upcomingInterviews[0];
+  const nextInterview: TodayNextInterview | null = nextInterviewApplication
+    ? {
+        company: companyOf(nextInterviewApplication),
+        title: nextInterviewApplication.vacancy?.title ?? '',
+        round: nextInterviewApplication.nearestInterview?.round ?? 1,
+        at: nextInterviewApplication.nearestInterview?.scheduledAt as string,
+      }
+    : null;
+
+  const followUps: TodayFollowUp[] = input.applications
+    .map((application) => ({ application, status: followUpStatusFor(application) }))
+    .filter((entry): entry is { application: ApplicationView; status: TodayFollowUpStatus } => entry.status !== null)
+    .slice(0, MAX_FOLLOW_UPS)
+    .map(({ application, status }) => ({
+      applicationId: application.id,
+      company: companyOf(application),
+      title: application.vacancy?.title ?? '',
+      status,
+    }));
+
+  const sinceLastVisitItems: string[] = [];
+  const freshNewVacanciesCount = input.newVacancies?.length ?? 0;
+  if (freshNewVacanciesCount > 0) {
+    sinceLastVisitItems.push(
+      input.campaignRole
+        ? `${freshNewVacanciesCount} новых вакансий по роли ${input.campaignRole}`
+        : `${freshNewVacanciesCount} новых вакансий`,
+    );
+  }
+  if (input.closedVacanciesSinceVisit > 0) {
+    sinceLastVisitItems.push(`${input.closedVacanciesSinceVisit} закрыто без ответа`);
+  }
+  if (input.companyEventsSinceVisit > 0) {
+    sinceLastVisitItems.push(`${input.companyEventsSinceVisit} событие от компаний`);
+  }
 
   return {
     digest: {
       waitingForYou: waitingApplications.length,
       newVacancies: input.newVacancies?.length ?? 0,
       closedVacancies: input.closedVacanciesSinceVisit,
+      interviewsAhead: upcomingInterviews.length,
+      nextInterview,
+      newVacanciesCaption: newVacancyCaption(input.newVacancies, input.campaignRole),
+      followUpCaptions: followUpCaptionsFor(input.applications),
     },
     queue,
-    sinceLastVisit: input.sinceLastVisit,
+    followUps,
+    sinceLastVisit: { since: input.since, items: sinceLastVisitItems },
     vacanciesPending: input.newVacancies === undefined,
   };
 }
