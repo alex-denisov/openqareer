@@ -123,6 +123,49 @@ describe('ProfileScreenSurface — states', () => {
     expect(html).toContain('<li>Масштабирую команды</li>');
   });
 
+  it('renders responsibility bullets under a position from bulletMemoryIds and the language source line', () => {
+    const draft: ResumeDraft = {
+      ...populatedDraft,
+      experience: [
+        {
+          ...populatedDraft.experience[0],
+          bulletMemoryIds: ['mem-resp-1'],
+        },
+      ],
+      languages: [
+        {
+          id: 'lang-1',
+          evidenceMemoryId: 'mem-lang-1',
+          name: 'Английский',
+          cefr: 'C1',
+          sourceLabel: 'Full professional proficiency',
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <ProfileScreenSurface
+        {...baseProps}
+        draft={draft}
+        memory={[
+          {
+            id: 'mem-resp-1',
+            kind: 'fact',
+            domain: 'responsibility',
+            statement: 'Отвечал за платёжную стратегию для 6 продуктовых команд.',
+            confidence: 'candidate-confirmed',
+            sourceMessageIds: [],
+            sensitive: false,
+            status: 'confirmed',
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain('career-profile-screen-position-bullets');
+    expect(html).toContain('Отвечал за платёжную стратегию для 6 продуктовых команд.');
+    expect(html).toContain('career-profile-screen-lang-source');
+    expect(html).toContain('Full professional proficiency');
+  });
+
   it('gives every section a working pencil (owner remark #7)', () => {
     const html = renderToStaticMarkup(
       <ProfileScreenSurface {...baseProps} draft={populatedDraft} />,

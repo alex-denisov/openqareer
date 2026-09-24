@@ -444,6 +444,8 @@ test.describe('B265 Profile screen', () => {
       'Раздел действительно пуст в источнике',
     );
     await expect(page.locator('.career-profile-screen-coverage')).toBeVisible();
+    await expect(page.locator('.career-profile-screen-position-bullets li').first()).toBeVisible();
+    await expect(page.locator('.career-profile-screen-lang-source').first()).toBeVisible();
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
