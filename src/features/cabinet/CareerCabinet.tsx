@@ -326,6 +326,10 @@ function CabinetSection({
       total={pool.total || pool.matched.length}
       campaign={pool.campaign}
       candidateLevel={pool.candidateLevel}
+      applications={vacancyApplications}
+      pathIndicator={
+        pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined
+      }
     />
   );
 }
