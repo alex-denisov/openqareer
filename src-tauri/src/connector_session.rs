@@ -781,6 +781,157 @@ fn validate_page_body(body: String) -> Result<String, String> {
     Ok(body)
 }
 
+// LinkedIn-only attribute allowlist (B266, architecture.md §3). hh.ru keeps
+// the original `data-qa`/`class`/resume-href rule untouched. These helpers
+// are the tested source of truth for the constants the sanitize script below
+// embeds; the per-node walk itself still has to run inside the page (no
+// per-element IPC round trip), so the JS mirrors the same checks by hand.
+const LINKEDIN_ID_PREFIX: &str = "com.linkedin.sdui.profile.card.ref";
+const LINKEDIN_COMPONENTKEY_MAX_CHARS: usize = 200;
+const LINKEDIN_TESTID_MAX_CHARS: usize = 80;
+const LINKEDIN_HREF_PATHS: &[&str] = &["/in/", "/company/", "/school/", "/details/", "/safety/go/"];
+const LINKEDIN_MEDIA_SRC_PREFIX: &str = "https://media.licdn.com/dms/image/";
+const LINKEDIN_SRCSET_TARGET_WIDTH: i64 = 400;
+
+fn linkedin_id_allowed(id: &str) -> bool {
+    id.starts_with(LINKEDIN_ID_PREFIX)
+}
+
+/// `href` kept only for linkedin.com/*.linkedin.com hosts on the allowed
+/// paths; the query string survives solely for `/safety/go/`, where the
+/// destination lives in `?url=`.
+fn linkedin_href_allowed(raw: &str) -> Option<String> {
+    let url = Url::parse(raw).ok()?;
+    let host = url.host_str()?;
+    if host != "linkedin.com" && !host.ends_with(".linkedin.com") {
+        return None;
+    }
+    let path = url.path();
+    if !LINKEDIN_HREF_PATHS
+        .iter()
+        .any(|prefix| path.starts_with(prefix))
+    {
+        return None;
+    }
+    if path.starts_with("/safety/go/") {
+        match url.query() {
+            Some(query) => Some(format!("{path}?{query}")),
+            None => Some(path.to_string()),
+        }
+    } else {
+        Some(path.to_string())
+    }
+}
+
+fn linkedin_image_src_allowed(src: &str) -> bool {
+    src.starts_with(LINKEDIN_MEDIA_SRC_PREFIX)
+}
+
+/// Picks the `srcset` candidate closest to 400px among the licdn variants;
+/// non-licdn and `data:` candidates are dropped.
+fn pick_linkedin_srcset_variant(srcset: &str) -> Option<String> {
+    srcset
+        .split(',')
+        .filter_map(|entry| {
+            let mut parts = entry.trim().split_whitespace();
+            let url = parts.next()?;
+            if !linkedin_image_src_allowed(url) {
+                return None;
+            }
+            let width: i64 = parts
+                .next()
+                .unwrap_or("")
+                .trim_end_matches('w')
+                .parse()
+                .ok()?;
+            Some((
+                (width - LINKEDIN_SRCSET_TARGET_WIDTH).abs(),
+                url.to_string(),
+            ))
+        })
+        .min_by_key(|(diff, _)| *diff)
+        .map(|(_, url)| url)
+}
+
+/// Builds the in-page sanitizer that turns a cloned DOM subtree into the
+/// stripped-down HTML the extractor reads. hh.ru keeps the original
+/// `data-qa`/`class`/resume-href rule; LinkedIn additionally keeps a small,
+/// tested allowlist the extractor needs (id/componentkey/data-testid/
+/// aria-hidden/href/img src+srcset) per architecture.md §3.
+fn page_sanitize_script(platform: &str) -> String {
+    let linkedin_extra = if platform == "linkedin" {
+        format!(
+            "const id=node.getAttribute('id');\
+const componentkey=node.getAttribute('componentkey');\
+const testid=node.getAttribute('data-testid');\
+const ariaHidden=node.getAttribute('aria-hidden');\
+const src=node.getAttribute('src');\
+const srcset=node.getAttribute('srcset');\
+if(id&&id.indexOf('{LINKEDIN_ID_PREFIX}')===0){{node.setAttribute('id',id);}}\
+if(componentkey&&componentkey.length<={LINKEDIN_COMPONENTKEY_MAX_CHARS}){{node.setAttribute('componentkey',componentkey);}}\
+if(testid&&testid.length<={LINKEDIN_TESTID_MAX_CHARS}){{node.setAttribute('data-testid',testid);}}\
+if(ariaHidden!==null){{node.setAttribute('aria-hidden',ariaHidden);}}\
+if(node.tagName==='IMG'){{\
+if(src&&src.indexOf('{LINKEDIN_MEDIA_SRC_PREFIX}')===0){{node.setAttribute('src',src);}}\
+if(srcset){{\
+var best=null,bestDiff=Infinity;\
+srcset.split(',').forEach(function(entry){{\
+var bits=entry.trim().split(/\\s+/);\
+var u=bits[0];var w=parseInt((bits[1]||'').replace('w',''),10);\
+if(u&&u.indexOf('{LINKEDIN_MEDIA_SRC_PREFIX}')===0&&!isNaN(w)){{\
+var diff=Math.abs(w-{LINKEDIN_SRCSET_TARGET_WIDTH});\
+if(diff<bestDiff){{bestDiff=diff;best=u;}}\
+}}\
+}});\
+if(best){{node.setAttribute('srcset',best);}}\
+}}\
+}}\
+",
+        )
+    } else {
+        String::new()
+    };
+    let href_rule = if platform == "linkedin" {
+        format!(
+            "if(href){{try{{\
+const parsed=new URL(href,location.origin);\
+const hostOk=parsed.hostname==='linkedin.com'||parsed.hostname.endsWith('.linkedin.com');\
+const paths={linkedin_paths};\
+const pathOk=paths.some(function(p){{return parsed.pathname.indexOf(p)===0;}});\
+if(hostOk&&pathOk){{\
+const keepQuery=parsed.pathname.indexOf('/safety/go/')===0;\
+node.setAttribute('href',keepQuery?parsed.pathname+parsed.search:parsed.pathname);\
+}}\
+}}catch(e){{}}}}",
+            linkedin_paths = serde_json::to_string(LINKEDIN_HREF_PATHS).unwrap_or_default(),
+        )
+    } else {
+        "if(href){try{const parsed=new URL(href,location.origin);\
+if(/^\\/resume\\/[A-Za-z0-9_-]+$/u.test(parsed.pathname)){node.setAttribute('href',parsed.pathname);}\
+}catch(e){}}"
+            .to_string()
+    };
+    format!(
+        "(function(){{try{{\
+const source=document.querySelector('main')||document.body||document.documentElement;\
+const root=source.cloneNode(true);\
+root.querySelectorAll('script,style,noscript,iframe,object,embed,input,textarea,select,meta,link').forEach(function(node){{node.remove();}});\
+root.querySelectorAll('*').forEach(function(node){{\
+const qa=node.getAttribute('data-qa');\
+const className=node.getAttribute('class');\
+const href=node.getAttribute('href');\
+{linkedin_extra}\
+Array.from(node.attributes).forEach(function(attribute){{node.removeAttribute(attribute.name);}});\
+if(qa&&qa.length<=160){{node.setAttribute('data-qa',qa);}}\
+if(className&&className.length<=500){{node.setAttribute('class',className);}}\
+{href_rule}\
+}});\
+const body=root.outerHTML;\
+return body.length>{MAX_SESSION_PAGE_BODY_CHARS}?'__OPENQAREER_PAGE_TOO_LARGE__':body;\
+}}catch(e){{return '';}}}})()",
+    )
+}
+
 /// Fills the shared recogniser with the values this run is asking about.
 fn inspection_script(platform: &str) -> Result<String, String> {
     let platform_json = serde_json::to_string(platform)
@@ -898,26 +1049,7 @@ pub async fn read_session_page(
         load_lazy_sections(&window).await;
     }
 
-    let body_json = eval_json(
-        &window,
-        "(function(){try{\
-const source=document.querySelector('main')||document.body||document.documentElement;\
-const root=source.cloneNode(true);\
-root.querySelectorAll('script,style,noscript,iframe,object,embed,input,textarea,select,meta,link').forEach(function(node){node.remove();});\
-root.querySelectorAll('*').forEach(function(node){\
-const qa=node.getAttribute('data-qa');\
-const className=node.getAttribute('class');\
-const href=node.getAttribute('href');\
-Array.from(node.attributes).forEach(function(attribute){node.removeAttribute(attribute.name);});\
-if(qa&&qa.length<=160){node.setAttribute('data-qa',qa);}\
-if(className&&className.length<=500){node.setAttribute('class',className);}\
-if(href){try{const parsed=new URL(href,location.origin);if(/^\\/resume\\/[A-Za-z0-9_-]+$/u.test(parsed.pathname)){node.setAttribute('href',parsed.pathname);}}catch(e){}}\
-});\
-const body=root.outerHTML;\
-return body.length>2000000?'__OPENQAREER_PAGE_TOO_LARGE__':body;\
-}catch(e){return '';}})()",
-    )
-    .await?;
+    let body_json = eval_json(&window, &page_sanitize_script(&request.platform)).await?;
     let body = validate_page_body(
         serde_json::from_str::<String>(&body_json)
             .map_err(|error| format!("body_shape: {error}"))?,
@@ -934,6 +1066,88 @@ return body.length>2000000?'__OPENQAREER_PAGE_TOO_LARGE__':body;\
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn linkedin_id_is_allowed_only_with_the_sdui_profile_card_prefix() {
+        assert!(linkedin_id_allowed(
+            "com.linkedin.sdui.profile.card.ref-experience-1"
+        ));
+        assert!(!linkedin_id_allowed("ember-view-42"));
+        assert!(!linkedin_id_allowed(""));
+    }
+
+    #[test]
+    fn linkedin_href_keeps_allowed_paths_and_strips_query_off_them() {
+        assert_eq!(
+            linkedin_href_allowed("https://www.linkedin.com/in/jane-doe/?trk=xyz").as_deref(),
+            Some("/in/jane-doe/")
+        );
+        assert_eq!(
+            linkedin_href_allowed("https://linkedin.com/company/acme").as_deref(),
+            Some("/company/acme")
+        );
+        assert_eq!(linkedin_href_allowed("https://evil.example/in/jane"), None);
+        assert_eq!(
+            linkedin_href_allowed("https://linkedin.com/feed/update/123"),
+            None
+        );
+    }
+
+    #[test]
+    fn linkedin_href_keeps_the_query_only_for_safety_go() {
+        let kept = linkedin_href_allowed("https://linkedin.com/safety/go/?url=https%3A%2F%2Fx.com");
+        assert_eq!(kept.as_deref(), Some("/safety/go/?url=https%3A%2F%2Fx.com"));
+    }
+
+    #[test]
+    fn linkedin_image_src_is_scoped_to_the_licdn_dms_path() {
+        assert!(linkedin_image_src_allowed(
+            "https://media.licdn.com/dms/image/abc/profile.jpg"
+        ));
+        assert!(!linkedin_image_src_allowed(
+            "https://evil.example/dms/image/x"
+        ));
+        assert!(!linkedin_image_src_allowed("data:image/png;base64,AAAA"));
+    }
+
+    #[test]
+    fn srcset_variant_closest_to_400px_from_licdn_candidates_wins() {
+        let srcset = "https://media.licdn.com/dms/image/a 100w, \
+https://media.licdn.com/dms/image/b 400w, \
+https://evil.example/c 400w, \
+https://media.licdn.com/dms/image/c 800w";
+        assert_eq!(
+            pick_linkedin_srcset_variant(srcset).as_deref(),
+            Some("https://media.licdn.com/dms/image/b")
+        );
+    }
+
+    #[test]
+    fn srcset_with_no_licdn_candidates_yields_nothing() {
+        assert_eq!(
+            pick_linkedin_srcset_variant("https://evil.example/x 400w"),
+            None
+        );
+    }
+
+    #[test]
+    fn linkedin_sanitize_script_never_dispatches_or_clicks() {
+        let script = page_sanitize_script("linkedin");
+        assert!(!script.contains(".click("));
+        assert!(!script.contains("dispatchEvent"));
+        assert!(script.contains("com.linkedin.sdui.profile.card.ref"));
+        assert!(script.contains("componentkey"));
+        assert!(script.contains("media.licdn.com/dms/image/"));
+    }
+
+    #[test]
+    fn hh_sanitize_script_is_unchanged_by_the_linkedin_allowlist() {
+        let script = page_sanitize_script("hh");
+        assert!(!script.contains(".click("));
+        assert!(!script.contains("dispatchEvent"));
+        assert!(!script.contains("componentkey"));
+        assert!(script.contains("resume"));
+    }
 
     #[test]
     fn each_account_key_maps_to_its_own_store_identifier() {
