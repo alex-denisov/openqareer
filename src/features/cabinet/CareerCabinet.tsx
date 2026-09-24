@@ -9,6 +9,7 @@ import { VacancyBoard } from '../vacancies/VacancyBoard';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
 import { useVacancyApplications } from '../vacancies/useVacancyApplications';
 import { useApplications } from '../applications/useApplications';
+import type { ApplicationView } from '../applications/applicationsApi';
 import { ResponsesBoard } from '../applications/ResponsesBoard';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
@@ -146,6 +147,8 @@ export function CareerCabinet({
               confirmedApplications: countConfirmedApplications(
                 vacancyApplications.applications,
               ),
+              activeResponses: countActiveResponses(applicationsTracker.applications),
+              nearestInterview: nearestInterviewOf(applicationsTracker.applications),
             })}
             onNavigate={onNavigate}
           />
@@ -331,7 +334,7 @@ function CabinetHeader({
   return (
     <header className="career-cabinet-header">
       <div>
-        <span className="career-cabinet-kicker">{todayLabel()}</span>
+        <span className="career-cabinet-kicker">{view === 'responses' ? 'Пайплайн' : todayLabel()}</span>
         <h1>{VIEW_TITLE[view]}</h1>
         <p>{VIEW_DESCRIPTION[view]}</p>
       </div>
@@ -390,4 +393,28 @@ function todayLabel(): string {
     day: 'numeric',
     month: 'long',
   }).format(new Date());
+}
+
+/** Cards still live on the «Отклики» board — everything but rejected/archived (B251 S4). */
+function countActiveResponses(applications: readonly ApplicationView[]): number {
+  return applications.filter(
+    (application) => application.stage !== 'rejected' && application.stage !== 'archived',
+  ).length;
+}
+
+/** The nearest scheduled interview across the tracker, for the path indicator's «Интервью» step. */
+function nearestInterviewOf(
+  applications: readonly ApplicationView[],
+): { company: string; scheduledAt: string } | null {
+  const withInterview = applications
+    .filter((application) => application.nearestInterview?.scheduledAt)
+    .sort((a, b) =>
+      (a.nearestInterview?.scheduledAt as string).localeCompare(b.nearestInterview?.scheduledAt as string),
+    );
+  const nearest = withInterview[0];
+  if (!nearest?.nearestInterview?.scheduledAt) return null;
+  return {
+    company: nearest.vacancy?.companyHidden ? 'Компания скрыта' : nearest.vacancy?.company || 'Компания не указана',
+    scheduledAt: nearest.nearestInterview.scheduledAt,
+  };
 }

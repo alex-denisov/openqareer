@@ -70,6 +70,31 @@ describe('buildPathIndicator', () => {
     expect(steps.find((step) => step.id === 'responses')).toMatchObject({ state: 'done' });
   });
 
+  it('marks «Отклики» in progress — «вы здесь» — while the board has a live pipeline', () => {
+    const steps = buildPathIndicator({
+      matchedPoolCount: 3,
+      confirmedApplications: 0,
+      activeResponses: 9,
+    });
+
+    expect(steps.find((step) => step.id === 'responses')).toMatchObject({
+      state: 'in-progress',
+      reason: '9 в работе — вы здесь',
+    });
+  });
+
+  it('marks «Интервью» in progress with the nearest interview once the tracker has one', () => {
+    const steps = buildPathIndicator({
+      matchedPoolCount: 3,
+      confirmedApplications: 0,
+      activeResponses: 9,
+      nearestInterview: { company: 'HRTx, Inc.', scheduledAt: '2026-09-26T14:00:00.000Z' },
+    });
+
+    expect(steps.find((step) => step.id === 'interviews')).toMatchObject({ state: 'in-progress' });
+    expect(steps.find((step) => step.id === 'interviews')?.reason).toContain('HRTx, Inc.');
+  });
+
   it('points every step at an existing screen, never a placeholder route', () => {
     const steps = buildPathIndicator({ matchedPoolCount: 0, confirmedApplications: 0 });
     const destinations = new Set(steps.map((step) => step.destination));
