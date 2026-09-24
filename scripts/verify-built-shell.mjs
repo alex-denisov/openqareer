@@ -592,6 +592,66 @@ async function verifyViewport(browser, baseUrl, viewport) {
       body: JSON.stringify({ data: [] }),
     });
   });
+  // «Сегодня» (B251 S4b/S5): визит и снимок дня — TodayScreen читает эти
+  // ручки напрямую, не через `useCareerCabinetData`.
+  await page.route('**/api/v1/candidate/visits', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { since: '2026-08-13T08:00:00.000Z' } }),
+    });
+  });
+  await page.route('**/api/v1/candidate/today*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          digest: {
+            waitingForYou: 1,
+            newVacancies: 2,
+            closedVacancies: 0,
+            interviewsAhead: 0,
+            nextInterview: null,
+            newVacanciesCaption: null,
+            followUpCaptions: [],
+          },
+          queue: [
+            {
+              kind: 'new_vacancy',
+              clusterId: 'cluster-fresh',
+              title: 'Продуктовый аналитик',
+              company: 'FinCloud',
+              eyebrow: 'Новая вакансия',
+              dueAt: null,
+              fit: { role: 'target', level: 'target', geo: true },
+            },
+          ],
+          followUps: [],
+          sinceLastVisit: { since: '2026-08-13T08:00:00.000Z', items: [] },
+          vacanciesPending: false,
+        },
+      }),
+    });
+  });
+  // «Отклики» (B251 S3): доска читает список откликов, а канбан B165
+  // подтверждает статус здесь же (не на «Вакансиях», где карточка только
+  // открывает ссылку и помечает «opened»).
+  await page.route('**/api/v1/candidate/applications*', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: [] }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [] }),
+    });
+  });
   await page.route('**/api/v1/candidate/vacancy-sources', async (route) => {
     await route.fulfill({
       status: 200,
@@ -886,30 +946,22 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // beside it — while the strategist dialogue stays in the «Эксперт» drawer and
   // the campaign stays in «Поиске» and the collected pool in «Вакансиях».
   await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
-  await page.locator('.career-profile-surface').first().waitFor();
-  // «Главная» показывает сам профиль: место работы из разобранного резюме с
-  // периодом и счётом измеримых пунктов, а не очередь подтверждения (B179).
-  await page.getByText('Продуктовый аналитик · FinCloud', { exact: true }).waitFor();
-  await page.getByText(/1 из 2 пунктов с числом/u).waitFor();
-  await page.getByRole('heading', { name: 'Готовность профиля' }).waitFor();
-  assert(
-    (await page.getByText('Следующий шаг', { exact: true }).count()) === 0,
-    `${viewport.name}: the confirmation card the mockup dropped is still on «Главной»`,
-  );
+  // B251 S5 — «Сегодня» переехало на TodayScreen: дайджест дня и очередь
+  // решений, а не карточка профиля (`CareerHome`/`CareerProfileSurface`
+  // остались только в своих тестах после B248/B265).
+  await page.locator('.career-today').first().waitFor();
+  await page.getByText('Что изменилось с прошлого визита и что решить сегодня.').waitFor();
+  await page.locator('.career-today-digest').waitFor();
   await mkdir('output/playwright', { recursive: true });
   await page.screenshot({
     path: `output/playwright/b178-home-${viewport.name}.png`,
     fullPage: true,
   });
 
-  // B169 §8 — the strategist opens from the screen that has a reason to open
-  // it. «Пульт» оставил этот вход на «Главной», рядом с профилем (B179).
-  // Вход к консультанту свёрнут под профилем (B233): сначала раскрыть.
-  await page
-    .locator('.career-home-fold', { hasText: 'Карьерный консультант' })
-    .locator('summary')
-    .click();
-  await page.getByRole('button', { name: /(Начать|Продолжить) разговор/u }).click();
+  // B169 §8 / B248 — «Консультант» is its own rail item now, not a fold
+  // under the home profile card (that fold lived on the now-dead
+  // `CareerHome`).
+  await page.locator('button[aria-label="Консультант"]:visible').click();
   const expert = page.getByRole('dialog', { name: 'Карьерный эксперт' });
   await expert.waitFor({ state: 'visible' });
   await verifyCoachDelivery(page, expert, viewport);
@@ -991,115 +1043,46 @@ async function verifyViewport(browser, baseUrl, viewport) {
     path: `output/playwright/b104-b105-b119-decision-${viewport.name}.png`,
     fullPage: true,
   });
-  // «Вакансии» держат и пул, и регулярные выборки в панели фильтров (B181).
-  // «Вакансии» — собранный пул. Гейт обязан дойти до него: экран читает свою
-  // ручку и должен отвечать хоть чем-то честным даже на пустом подборе.
+  // «Вакансии» держат собранный пул (B248/B250): непустой пул рисует
+  // `VacanciesScreen` (список + детальная карточка), а не старую
+  // `VacancyBoard` (та осталась для загрузки/ошибки/пустого пула — ниже её
+  // не проверяем, гейт всегда мокает непустой пул).
   await page.locator('button[aria-label="Вакансии"]:visible').click();
   await page.getByRole('heading', { name: 'Вакансии', exact: true }).waitFor();
-  await page.locator('.career-vacancy-board').waitFor();
-  const vacancyRows = page.locator('.career-vacancy-row');
+  const vacancyRows = page.locator('.vac-list-item');
   assert(
     (await vacancyRows.count()) === 2,
     `${viewport.name}: пул вакансий не отрисовался (${await vacancyRows.count()})`,
   );
-  // Возраст и покрытие — счётные, без процентов и без выдуманной даты публикации.
-  await page.locator('.career-vacancy-age', { hasText: '2 дня' }).first().waitFor();
-  await page.getByText('3 из 4', { exact: true }).waitFor();
-  await page.getByText('Работодатель не указан', { exact: false }).first().waitFor();
+  // Возраст — счётный, без процентов и без выдуманной даты публикации.
+  await page.locator('.vac-age', { hasText: '2 дня' }).first().waitFor();
   // Фильтр свежести обязан отсечь запись девятнадцатидневной давности.
-  await page.getByRole('button', { name: 'до 7 дней' }).click();
+  await page.getByRole('button', { name: '7 дней', exact: true }).click();
   assert(
     (await vacancyRows.count()) === 1,
     `${viewport.name}: фильтр свежести не отсёк старую запись`,
   );
-  await page.getByRole('button', { name: 'любая' }).click();
+  await page.getByRole('button', { name: '7 дней', exact: true }).click();
   await page.screenshot({
     path: `output/playwright/b178-vacancies-${viewport.name}.png`,
     fullPage: true,
   });
-  await page.screenshot({
-    path: `output/playwright/b203-vacancies-list-${viewport.name}.png`,
-    fullPage: true,
-  });
 
-  // B203: переключение на карту и проверка честных знаменателей
-  const mapSwitchBtn = page.getByRole('radio', { name: /На карте/ });
-  await mapSwitchBtn.click();
-  await page.locator('.career-vacancy-map-view').waitFor();
-  await page.screenshot({
-    path: `output/playwright/b203-vacancies-map-${viewport.name}.png`,
-    fullPage: true,
-  });
-  await page.getByRole('radio', { name: /Список/ }).click();
-  await page.locator('.career-vacancy-board').waitFor();
-
-  // Ручной отклик (B165, срез 1, узлы 6 и 8): кандидат подтверждает отклик
-  // сам, строка после этого говорит датой, а не значком, и на сервер уходит
-  // ровно «applied» — открытие ссылки откликом не становится.
-  await page.getByRole('button', { name: 'Откликнулся' }).first().click();
-  await page.locator('.career-vacancy-applied').first().waitFor();
+  // Отклик со строки пула (B165 → B248/B250): карточка открывается по клику,
+  // «Откликнуться» ведёт на площадку и помечает запись «opened» — «applied»
+  // подтверждается на канбане «Отклики», не здесь.
+  await vacancyRows.first().locator('button').click();
+  await page.locator('.vacancies-detail-panel').waitFor();
+  await page.getByRole('link', { name: 'Откликнуться' }).click();
   const recorded = page.__recordedApplications;
   assert(
-    recorded.length === 1 && recorded[0].status === 'applied' && Boolean(recorded[0].clusterId),
-    `${viewport.name}: подтверждение отклика не ушло на сервер ${JSON.stringify(recorded)}`,
-  );
-  assert(
-    (await page.getByRole('button', { name: 'Откликнулся' }).count()) === 1,
-    `${viewport.name}: подтверждённая строка всё ещё предлагает подтвердить отклик`,
+    recorded.length === 1 && recorded[0].status === 'opened' && Boolean(recorded[0].clusterId),
+    `${viewport.name}: открытие вакансии не ушло на сервер ${JSON.stringify(recorded)}`,
   );
   await page.screenshot({
     path: `output/playwright/b165-manual-application-${viewport.name}.png`,
     fullPage: true,
   });
-
-  // Регулярные выборки живут в панели фильтров «Вакансий» (B181): источник,
-  // здоровье источника и создание проверяются здесь же, рядом с пулом.
-  // B234: форма новой выборки спрятана за «+» в блоке «Сохранённые».
-  await page.getByRole('button', { name: 'Новый запрос к площадке' }).click();
-  await page.getByRole('combobox', { name: 'Источник вакансий' }).waitFor();
-  // Реестр приходит асинхронно; по умолчанию выбрана первая отвечающая
-  // площадка (PRB-042), а закрытая hh.ru честно называет причину, когда её
-  // выбирают руками.
-  const sourceSelect = page.getByRole('combobox', { name: 'Источник вакансий' });
-  await page.getByRole('link', { name: 'Источник: Remotive' }).waitFor({ timeout: 10_000 });
-  assert(
-    (await page.getByText('площадка закрыла доступ', { exact: false }).count()) === 0,
-    `${viewport.name}: healthy default source still shows the hh.ru refusal`,
-  );
-  await sourceSelect.selectOption('hh');
-  const officialAccessNotice = page
-    .getByText('площадка закрыла доступ', { exact: false })
-    .first();
-  try {
-    await officialAccessNotice.waitFor({ state: 'visible', timeout: 10_000 });
-  } catch {
-    assert(false, `${viewport.name}: official access requirement is hidden`);
-  }
-  await sourceSelect.selectOption('remotive');
-  await page.getByRole('link', { name: 'Источник: Remotive' }).waitFor();
-  await mkdir('output/playwright', { recursive: true });
-  await page.screenshot({
-    path: `output/playwright/b134-vacancy-sources-${viewport.name}.png`,
-    fullPage: true,
-  });
-  await page.getByRole('textbox', { name: 'Роль или поисковый запрос' }).fill(
-    'product manager',
-  );
-  const vacancyCreateResponse = page.waitForResponse(
-    (response) =>
-      response.request().method() === 'POST' &&
-      new URL(response.url()).pathname ===
-        '/api/v1/candidate/vacancy-subscriptions',
-  );
-  await page.getByRole('button', { name: 'Создать' }).click();
-  await vacancyCreateResponse;
-  assert(
-    vacancyCreateSource === 'remotive',
-    `${viewport.name}: selected vacancy source was not sent to the API`,
-  );
-  // Списка найденного в панели больше нет — пул стоит на том же экране (B181).
-  // Доказательство создания: панель перешла к самой выборке с её запросом.
-  await page.locator('.career-market-query-row strong').getByText('product manager').waitFor();
 
   // «Поиск» has no rail item in the B248 IA; it opens from the path
   // indicator's «Роль» step, which every campaign screen carries.
@@ -1109,49 +1092,39 @@ async function verifyViewport(browser, baseUrl, viewport) {
     path: `output/playwright/b178-search-${viewport.name}.png`,
     fullPage: true,
   });
-  await page.locator('button[aria-label="Сегодня"]:visible').click();
-  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
-  const profileFactReview =
-    (await page.locator('.career-profile-surface').count()) === 1;
-  assert(
-    profileFactReview,
-    `${viewport.name}: candidate profile surface missing on «Сегодня»`,
-  );
-  // Раздела «Резюме» в рельсе больше нет — макет его не держит. Сборка
-  // резюме открывается из «Документы» на «Главной» (B179).
-  await page.getByRole('button', { name: 'Документы' }).click();
-  await page.getByRole('button', { name: 'Собрать резюме из профиля' }).click();
-  await page.getByRole('heading', { name: 'Resume Studio' }).waitFor().catch(() => undefined);
-  // The candidate must read what the connected platform gave the document and
-  // what it never held — an empty section with no source named reads as our
-  // failure instead of an empty source (B172 slice 3).
-  const sourceBlock = page.getByText('Что дал источник');
-  await sourceBlock.first().waitFor({ timeout: 10000 }).catch(() => undefined);
-  assert(
-    (await sourceBlock.count()) === 1,
-    `${viewport.name}: Resume Studio never names the source of the import`,
-  );
-  assert(
-    (await page.getByText('В источнике не было').count()) === 1,
-    `${viewport.name}: Resume Studio never names what the source did not hold`,
-  );
-  assert(
-    (await page.getByText(/Импорт из hh\.ru от 10 августа 2026/u).count()) === 1,
-    `${viewport.name}: the import date is missing or undated`,
-  );
+  // B265 — «Профиль» is its own screen now (`ProfileScreenView`), not a fold
+  // on «Сегодня»; «Документ и форматы» is a tab of that screen, not a route
+  // into a separate Resume Studio page (that link is dead in the B248 IA).
+  await page.locator('button[aria-label="Профиль"]:visible').click();
+  await page.locator('.career-profile-screen-view').first().waitFor();
+  await page.screenshot({ path: `output/playwright/debug-profile-${viewport.name}.png` });
+  await page
+    .getByRole('group', { name: 'Что показать' })
+    .getByRole('button', { name: 'Документ и форматы' })
+    .click();
+  await page.screenshot({ path: `output/playwright/debug-profile-tab-${viewport.name}.png` });
+  // The tab switch renders the document menu's own (still closed) toggle
+  // button with the same accessible name — it is the one outside the tab
+  // group, and the only «Документ и форматы» button left once the tab bar
+  // shows «Документ и форматы» as already active.
+  await page
+    .getByRole('button', { name: 'Документ и форматы', exact: true })
+    .last()
+    .click();
+  await page.getByRole('group', { name: 'Формат позиционирования' }).waitFor();
+  await page.getByRole('group', { name: 'Экспорт резюме' }).waitFor();
   await mkdir('output/playwright', { recursive: true });
   await page.screenshot({ path: `output/playwright/resume-source-${viewport.name}.png` });
   await page.locator('button[aria-label="Сегодня"]:visible').click();
   await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
-  // «Главная» вернулась к самому кандидату: карточка места работы из резюме и
-  // кольцо оценки, посчитанное по этому же профилю (B179).
-  const reasonedAction =
-    (await page.locator('.career-job-card').count()) >= 1 &&
-    (await page.locator('.career-score-number').count()) === 1;
-  assert(
-    reasonedAction,
-    `${viewport.name}: «Сегодня» does not show the parsed profile`,
-  );
+  await page.locator('.career-today').first().waitFor();
+
+  // «Отклики» (B251 S3) — канбан, отдельный от «Вакансий». С пустым списком
+  // (гейт не заводит здесь ни одной записи) экран обязан показать пустое
+  // состояние, а не молчать или падать.
+  await page.locator('button[aria-label="Отклики"]:visible').click();
+  await page.getByRole('heading', { name: 'Отклики', exact: true }).waitFor();
+  await page.locator('.career-responses-empty').waitFor();
 
   // B248 (owner decision 2026-09-23): the rail no longer carries its own
   // plan card. Narrow screens keep the topbar's «Тарифы» link (point 4 of
