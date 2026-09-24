@@ -354,7 +354,7 @@ export function CareerWorkspaceShell({
         id="career-rail"
         className="career-rail"
         aria-label="Основная навигация"
-        aria-hidden={expertOpen || accountOpen ? true : undefined}
+        aria-hidden={expertOpen || accountOpen || intakeVisible ? true : undefined}
       >
         <button
           className="career-brand-mark"
@@ -413,7 +413,10 @@ export function CareerWorkspaceShell({
           that live on it and nowhere else. On desktop it is not rendered at
           all: repeating the logo and offering a second, contextless «Эксперт»
           door was chrome that did nothing (B169 §6, §8). */}
-      <header className="career-topbar" aria-hidden={expertOpen || accountOpen ? true : undefined}>
+      <header
+        className="career-topbar"
+        aria-hidden={expertOpen || accountOpen || intakeVisible ? true : undefined}
+      >
         <button
           className="career-wordmark"
           type="button"
@@ -559,7 +562,7 @@ export function CareerWorkspaceShell({
       <nav
         className="career-mobile-nav"
         aria-label="Основная навигация"
-        aria-hidden={expertOpen || accountOpen ? true : undefined}
+        aria-hidden={expertOpen || accountOpen || intakeVisible ? true : undefined}
       >
         {primaryNavigation.map((item) => (
           <NavigationButton key={item.key} {...railButtonProps(item)} />

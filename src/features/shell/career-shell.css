@@ -726,6 +726,20 @@
   padding: 28px clamp(24px, 4vw, 56px) 28px;
 }
 
+/* B249: onboarding.html is full-screen — a wordmark top-left, no rail
+   alongside it. The rail, its narrow-screen topbar and the bottom nav all
+   named the same five sections the wizard has not unlocked yet, so they hid
+   nothing and confused the "Сегодня" it was supposedly on. */
+.career-shell:has(.career-intake) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.career-shell:has(.career-intake) .career-rail,
+.career-shell:has(.career-intake) .career-topbar,
+.career-shell:has(.career-intake) .career-mobile-nav {
+  display: none;
+}
+
 /* --- B248 path indicator: Профиль → Роль → Подборка → Отклики → Интервью,
    repeated on every campaign screen (`career-consultant-notes.md` §2). Three
    states only — done / active / pending — never a fourth decorative one. */

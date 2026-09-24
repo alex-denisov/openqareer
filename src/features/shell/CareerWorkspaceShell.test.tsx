@@ -168,7 +168,29 @@ describe('CareerWorkspaceShell', () => {
   });
 
   it('does not repeat the active navigation item in the top bar', () => {
-    const html = renderToStaticMarkup(<CareerWorkspaceShell onSaveWorkspace={() => undefined} />);
+    const html = renderToStaticMarkup(
+      <CareerWorkspaceShell
+        session={{
+          username: 'alexey',
+          email: 'alexey@example.com',
+          displayName: 'Мария Иванова',
+          role: 'candidate',
+          isTest: false,
+          candidateId: 'candidate-1',
+        }}
+        workspace={prepareCareerWorkspace({
+          resumeText:
+            'Синтетический профиль кандидата с достаточно длинным описанием для проверки шапки.',
+          resumeSource: 'text',
+          targetDirection: 'Руководитель продукта',
+          regions: ['ru'],
+          currentSituation: 'Проверяю шапку.',
+          constraints: '',
+          urgency: 'active',
+        })}
+        onSaveWorkspace={() => undefined}
+      />,
+    );
 
     expect(html).not.toContain('career-page-name');
     expect(html).toContain('career-topbar');
