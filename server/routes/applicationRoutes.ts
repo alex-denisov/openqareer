@@ -8,6 +8,11 @@ import { registerApplicationMaterialsRoutes } from './applicationMaterialsRoutes
 import { registerApplicationInterviewRoutes } from './applicationInterviewRoutes';
 import { registerApplicationOfferRoutes } from './applicationOfferRoutes';
 import { registerVacancySkipRoutes } from './vacancySkipRoutes';
+import { readCampaign } from './campaignContext';
+import { peekMatchedVacancies, readMatchProfile } from '../vacancies/matchedPoolContext';
+import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
+import { readTargetLevel } from './vacancyRoleContext';
+import { buildTodaySnapshot, type TodayNewVacancy } from '../domain/todayDigest';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -149,6 +154,119 @@ const handleApplicationFunnel: Handler = async (deps, request, reply) => {
   return { data: candidateStore.applicationFunnel(candidate.id), meta: { requestId: request.id } };
 };
 
+/** `POST /visits` (architecture.md §4, §57): отметка визита с дебаунсом 30 минут. */
+const handleRecordVisit: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const result = candidateStore.recordCandidateVisit(candidate.id, new Date().toISOString());
+  return { data: { since: result.since }, meta: { requestId: request.id } };
+};
+
+/**
+ * IANA timezone name, not the numeric offset the older `/applications` reads
+ * use: `/today` will need calendar-day math later (architecture.md §57), and
+ * an offset alone cannot say whether a given instant crossed midnight under
+ * DST. Validated by asking `Intl` to accept it — an invalid zone throws.
+ */
+const ianaTimezoneSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .refine((tz) => {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: tz });
+      return true;
+    } catch {
+      return false;
+    }
+  }, 'invalid_timezone');
+
+const todayQuerySchema = z.object({ tz: ianaTimezoneSchema });
+
+/**
+ * Тот же отпечаток снимка, что и у самого подбора (уровень включительно):
+ * иначе `/today` смотрел бы ключ без уровня и никогда не находил снимок,
+ * записанный с уровнем, и вечно отдавал `vacanciesPending: true`.
+ */
+function peekTodayMatchedVacancies(
+  deps: Pick<RouteDeps, 'candidateStore' | 'multiSourceEngine'>,
+  candidateId: string,
+): { matched: MatchedVacancyItem[] | undefined; targetRoles: readonly string[] } {
+  const { candidateStore, multiSourceEngine } = deps;
+  const { confirmedSkills } = readMatchProfile(candidateStore, candidateId);
+  const campaign = readCampaign(candidateStore, candidateId);
+  const targetRoles = [...campaign.roles.value];
+  const targetLevel = readTargetLevel(candidateStore, candidateId, targetRoles);
+  const matched = peekMatchedVacancies(
+    multiSourceEngine,
+    candidateId,
+    confirmedSkills,
+    targetRoles,
+    targetLevel,
+  );
+  return { matched, targetRoles };
+}
+
+/**
+ * `GET /today` (architecture.md §4, §57, §97): дайджест дня. Подбор читается
+ * из уже готового снимка (`peekMatchedVacancies`) — холодный кэш отдаёт
+ * `undefined`, а не запускает синхронный подбор в HTTP-обработчике (B230).
+ */
+const handleToday: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config, multiSourceEngine } = deps;
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  todayQuerySchema.parse(request.query ?? {});
+
+  const since = candidateStore.getSinceLastVisit(candidate.id);
+  const applications = candidateStore.listApplications(candidate.id, {
+    isVacancyGone: (clusterId) => multiSourceEngine.isKnownVacancyGone(clusterId),
+  });
+
+  const { matched, targetRoles } = peekTodayMatchedVacancies(deps, candidate.id);
+  const newVacancies: TodayNewVacancy[] | undefined = matched?.map((item) => ({
+    clusterId: item.cluster.id,
+    title: item.cluster.canonicalTitle,
+    company: item.cluster.canonicalCompany,
+    firstObservedAt: item.cluster.firstObservedAt,
+    lastSeenAt: item.cluster.lastSeenAt,
+    salary: item.cluster.salary,
+    location: item.cluster.canonicalLocation,
+    sourcesCount: new Set(item.cluster.sources.map((source) => source.sourceId)).size,
+    fit: {
+      role: item.explanation.roleMatch,
+      level: item.explanation.levelMatch ?? null,
+      // Ничего в объяснении совпадения пока не сравнивает гео кандидата с
+      // вакансией (unifiedVacancy.ts): точку не рисуем из отсутствия данных (PRB-016).
+      geo: null as boolean | null,
+    },
+  }));
+  const freshNewVacancies =
+    newVacancies === undefined
+      ? undefined
+      : newVacancies.filter(
+          (vacancy) => since === null || vacancy.firstObservedAt > since,
+        );
+
+  const closedVacanciesSinceVisit =
+    since === null ? 0 : candidateStore.countSystemClosuresSince(candidate.id, since);
+  const companyEventsSinceVisit =
+    since === null ? 0 : candidateStore.countCompanyEventsSince(candidate.id, since);
+
+  const snapshot = buildTodaySnapshot({
+    applications,
+    newVacancies: freshNewVacancies,
+    since,
+    closedVacanciesSinceVisit,
+    campaignRole: targetRoles[0] ?? null,
+    companyEventsSinceVisit,
+  });
+  return { data: snapshot, meta: { requestId: request.id } };
+};
+
 /** Трекер откликов (B251, S1–S2, architecture.md §4). */
 export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/candidate/applications', withDeps(deps, handleListApplications));
@@ -168,6 +286,12 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
     { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
     withDeps(deps, handleRecordApplicationEvent),
   );
+  app.post(
+    '/api/v1/candidate/visits',
+    { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
+    withDeps(deps, handleRecordVisit),
+  );
+  app.get('/api/v1/candidate/today', withDeps(deps, handleToday));
   registerApplicationMaterialsRoutes(app, deps);
   registerApplicationInterviewRoutes(app, deps);
   registerApplicationOfferRoutes(app, deps);

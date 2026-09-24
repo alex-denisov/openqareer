@@ -76,6 +76,18 @@ export class MatchedPoolSnapshots {
     return items;
   }
 
+  /**
+   * Читает уже посчитанный снимок, ничего не считая (B251, S4). `/today` на
+   * холодном кэше отдаёт очередь без новых вакансий и `vacanciesPending:
+   * true`, а не запускает синхронный подбор в HTTP-обработчике (B230).
+   */
+  peek(candidateId: string, profileKey: string): MatchedVacancyItem[] | undefined {
+    const key = `${candidateId} ${profileKey}`;
+    const stored = this.entries.get(key);
+    if (!stored || this.clock() - stored.storedAt >= this.ttlMs) return undefined;
+    return stored.items;
+  }
+
   /** Role hypotheses and paged vacancies share one asynchronous computation.
    * A failed read never becomes a cached empty pool; TTL starts on completion. */
   async readAsync(

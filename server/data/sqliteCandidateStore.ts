@@ -487,6 +487,10 @@ export class SqliteCandidateStore implements CandidateStore {
   declare createVacancySkip: ApplicationTrackerMethods['createVacancySkip'];
   declare deleteVacancySkip: ApplicationTrackerMethods['deleteVacancySkip'];
   declare listVacancyDecisions: ApplicationTrackerMethods['listVacancyDecisions'];
+  declare recordCandidateVisit: ApplicationTrackerMethods['recordCandidateVisit'];
+  declare getSinceLastVisit: ApplicationTrackerMethods['getSinceLastVisit'];
+  declare countSystemClosuresSince: ApplicationTrackerMethods['countSystemClosuresSince'];
+  declare countCompanyEventsSince: ApplicationTrackerMethods['countCompanyEventsSince'];
 
   saveWorkPreferenceRun(
     candidateId: string,

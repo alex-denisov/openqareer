@@ -1,0 +1,129 @@
+import { describe, expect, it } from 'vitest';
+import { buildApp } from './app';
+import { SqliteCandidateStore } from './data/sqliteCandidateStore';
+import { EMPTY_RESUME_DRAFT } from './domain/resumeDraft';
+import { apps, config, noSessions, stores, successProvider } from './appTestHarness';
+import type { MatchedVacancyItem } from './vacancies/multiSourceVacancyEngine';
+
+/** `GET /today` (B251, S4, architecture.md §4, §57, §97). */
+function pool(): MatchedVacancyItem[] {
+  return [
+    {
+      cluster: {
+        id: 'cluster-1',
+        canonicalTitle: 'Инженер данных',
+        canonicalCompany: 'Компания',
+        canonicalLocation: 'Москва',
+        isRemote: false,
+        skills: [],
+        descriptionSummary: 'Описание вакансии. '.repeat(20),
+        primaryUrl: 'https://example.test/1',
+        sources: [],
+        firstObservedAt: '2026-09-24T00:00:00.000Z',
+        lastSeenAt: '2026-09-24T00:00:00.000Z',
+        status: 'active',
+        vacanciesCount: 1,
+      },
+      explanation: {
+        clusterId: 'cluster-1',
+        roleMatch: 'target',
+        requirements: { matched: 1, total: 2 },
+        matchingPoints: ['Подтверждённый навык: SQL'],
+        missingPoints: ['Airflow'],
+        summary: 'Совпало 1 из 2 требований вакансии.',
+        calculatedAt: '2026-09-24T00:00:00.000Z',
+      },
+    },
+  ] as unknown as MatchedVacancyItem[];
+}
+
+async function createApp(options?: { withMatchingEngine?: boolean }) {
+  const candidateStore = new SqliteCandidateStore({
+    databasePath: ':memory:',
+    encryptionKey: config.dataEncryptionKey,
+  });
+  const candidate = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+  candidateStore.saveResumeDraft(
+    candidate.id,
+    { ...EMPTY_RESUME_DRAFT, targetRole: 'Инженер данных' },
+    [],
+  );
+
+  const engine = {
+    getMatchedVacanciesAsync: async () => pool(),
+    isKnownVacancyGone: () => false,
+    restore: () => ({ clusters: 0, sources: 0 }),
+  };
+
+  const app = await buildApp({
+    config,
+    coachProvider: successProvider,
+    candidateStore,
+    authService: noSessions,
+    multiSourceVacancyEngine: options?.withMatchingEngine ? (engine as never) : undefined,
+    serveStatic: false,
+  });
+  apps.push(app);
+  stores.push(candidateStore);
+  return { app, authorization: `Bearer ${candidate.accessToken}` };
+}
+
+const TODAY_URL = '/api/v1/candidate/today';
+
+describe('GET /candidate/today', () => {
+  it('returns 200 with a populated digest once the matched pool is warm', async () => {
+    const { app, authorization } = await createApp({ withMatchingEngine: true });
+
+    // Warms the shared matched-pool snapshot the same way the cabinet does,
+    // so `/today` finds a hot cache instead of `vacanciesPending`.
+    await app.inject({
+      url: '/api/v1/candidate/matched-vacancies',
+      headers: { authorization },
+    });
+
+    const response = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow`,
+      headers: { authorization },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json().data;
+    expect(body.vacanciesPending).toBe(false);
+    expect(body.digest.newVacancies).toBe(1);
+  });
+
+  it('returns 200 with vacanciesPending on a cold matching cache', async () => {
+    const { app, authorization } = await createApp();
+
+    const response = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow`,
+      headers: { authorization },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json().data;
+    expect(body.vacanciesPending).toBe(true);
+    expect(body.digest.newVacancies).toBe(0);
+  });
+
+  // The app maps every Zod validation failure to 422 (`runtime.ts`), the
+  // same single error shape every other route uses — not a one-off 400.
+  it('rejects an invalid tz', async () => {
+    const { app, authorization } = await createApp();
+
+    const response = await app.inject({
+      url: `${TODAY_URL}?tz=Not/AZone`,
+      headers: { authorization },
+    });
+
+    expect(response.statusCode).toBe(422);
+  });
+
+  it('requires an authenticated candidate', async () => {
+    const { app } = await createApp();
+
+    const response = await app.inject({ url: `${TODAY_URL}?tz=Europe/Moscow` });
+
+    expect(response.statusCode).toBe(401);
+  });
+});

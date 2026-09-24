@@ -17,6 +17,7 @@ import type {
 } from './sqliteApplicationInterviewRepository';
 import type { ApplicationOfferTerms, StoredApplicationOffer } from './sqliteApplicationOfferRepository';
 import type { StoredVacancySkip, VacancySkipOrigin } from './sqliteVacancySkipRepository';
+import type { RecordVisitResult } from './sqliteCandidateVisitRepository';
 
 /**
  * Every `CandidateStore` method that only checks the candidate exists and
@@ -70,6 +71,10 @@ export interface ApplicationTrackerMethods {
   ): StoredVacancySkip;
   deleteVacancySkip(candidateId: string, clusterId: string): boolean;
   listVacancyDecisions(candidateId: string): VacancyDecision[];
+  recordCandidateVisit(candidateId: string, now: string): RecordVisitResult;
+  getSinceLastVisit(candidateId: string): string | null;
+  countSystemClosuresSince(candidateId: string, since: string): number;
+  countCompanyEventsSince(candidateId: string, since: string): number;
 }
 
 type RequireCandidate = (candidateId: string) => void;
@@ -119,7 +124,7 @@ function createCoreApplicationMethods(
   };
 }
 
-function createArtifactApplicationMethods(
+function createInterviewApplicationMethods(
   tracker: ApplicationTrackerController,
   requireCandidate: RequireCandidate,
 ): Pick<
@@ -128,10 +133,6 @@ function createArtifactApplicationMethods(
   | 'createApplicationInterview'
   | 'patchApplicationInterview'
   | 'putApplicationOffer'
-  | 'listVacancySkips'
-  | 'createVacancySkip'
-  | 'deleteVacancySkip'
-  | 'listVacancyDecisions'
 > {
   return {
     linkApplicationMaterial(candidateId, applicationId, role, documentId) {
@@ -150,6 +151,24 @@ function createArtifactApplicationMethods(
       requireCandidate(candidateId);
       return tracker.putOffer(candidateId, applicationId, terms, respondBy);
     },
+  };
+}
+
+function createVacancyJourneyMethods(
+  tracker: ApplicationTrackerController,
+  requireCandidate: RequireCandidate,
+): Pick<
+  ApplicationTrackerMethods,
+  | 'listVacancySkips'
+  | 'createVacancySkip'
+  | 'deleteVacancySkip'
+  | 'listVacancyDecisions'
+  | 'recordCandidateVisit'
+  | 'getSinceLastVisit'
+  | 'countSystemClosuresSince'
+  | 'countCompanyEventsSince'
+> {
+  return {
     listVacancySkips(candidateId) {
       requireCandidate(candidateId);
       return tracker.listSkips(candidateId);
@@ -166,6 +185,22 @@ function createArtifactApplicationMethods(
       requireCandidate(candidateId);
       return tracker.listVacancyDecisions(candidateId);
     },
+    recordCandidateVisit(candidateId, now) {
+      requireCandidate(candidateId);
+      return tracker.recordVisit(candidateId, now);
+    },
+    getSinceLastVisit(candidateId) {
+      requireCandidate(candidateId);
+      return tracker.getSinceLastVisit(candidateId);
+    },
+    countSystemClosuresSince(candidateId, since) {
+      requireCandidate(candidateId);
+      return tracker.countSystemClosuresSince(candidateId, since);
+    },
+    countCompanyEventsSince(candidateId, since) {
+      requireCandidate(candidateId);
+      return tracker.countCompanyEventsSince(candidateId, since);
+    },
   };
 }
 
@@ -175,6 +210,7 @@ export function createApplicationTrackerMethods(
 ): ApplicationTrackerMethods {
   return {
     ...createCoreApplicationMethods(tracker, requireCandidate),
-    ...createArtifactApplicationMethods(tracker, requireCandidate),
+    ...createInterviewApplicationMethods(tracker, requireCandidate),
+    ...createVacancyJourneyMethods(tracker, requireCandidate),
   };
 }

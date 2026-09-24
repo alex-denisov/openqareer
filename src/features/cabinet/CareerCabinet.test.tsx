@@ -85,8 +85,6 @@ function renderCabinet(view: CareerCabinetView) {
       workspace={workspace}
       onNavigate={() => undefined}
       onUpdateWorkspace={() => undefined}
-      onOpenAccount={() => undefined}
-      onOpenExpert={() => undefined}
     />,
   );
 }
@@ -128,12 +126,12 @@ describe('CareerCabinet composition', () => {
     expect(html).not.toContain('Тестовый Кандидат');
   });
 
-  it('keeps the profile on screen while a later refresh is running', () => {
+  it('keeps «Сегодня» on screen while a later cabinet refresh is running', () => {
     cabinetData.current = { ...loadedData(), loading: true };
     const html = renderCabinet('today');
 
     expect(html).not.toContain('career-cabinet-skeleton');
-    expect(html).toContain('Разделы профиля');
+    expect(html).toContain('career-today');
   });
 
   it('shows the reading error with a retry when the first reading failed', () => {
@@ -174,13 +172,13 @@ describe('CareerCabinet composition', () => {
   // «Пульт»: «Главная» — это сам кандидат. Слева профиль из разобранного
   // резюме, справа оценка и позиционирование. Ни очереди подтверждения, ни
   // карточки следующего шага макет не держит (B179).
-  it('gives «Главная» the candidate profile beside the assessment, next action and ATS readability (B103, B105)', () => {
+  // B251 S5: «Сегодня» is the digest-and-queue screen, not the old profile
+  // layout — the candidate's document lives on «Резюме» instead.
+  it('gives «Сегодня» the digest-and-queue screen, not the old profile layout', () => {
     const html = renderCabinet('today');
 
-    expect(html).toContain('Разделы профиля');
-    expect(html).toContain('Готовность профиля');
-    expect(html).toContain('Один шаг на сегодня');
-    expect(html).toContain('ATS-читаемость');
+    expect(html).toContain('career-today');
+    expect(html).not.toContain('Разделы профиля');
     expect(html).not.toContain('Следующий шаг');
     expect(html).not.toContain('Подтвердить все');
     expect(html).not.toContain('Рынок и следующие шаги');

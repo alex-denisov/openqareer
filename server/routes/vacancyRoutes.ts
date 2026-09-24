@@ -26,13 +26,8 @@ import { countMatchedVacanciesByRole } from '../vacancies/vacancyRoleCounts';
 import { campaignMeta, readCampaign } from './campaignContext';
 import type { CampaignResolution } from '../vacancies/campaign';
 import { registerCampaignRoutes } from './campaignRoutes';
-import {
-  readMatchedSnapshot,
-  readMatchProfile,
-  readRoleContext,
-  readTargetLevel,
-  type RoleContext,
-} from './vacancyRoleContext';
+import { readRoleContext, readTargetLevel, type RoleContext } from './vacancyRoleContext';
+import { readMatchedSnapshot, readMatchProfile } from '../vacancies/matchedPoolContext';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
 import { generateVacancyPitch } from '../domain/vacancyPitchService';
 import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';

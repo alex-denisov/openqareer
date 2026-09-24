@@ -15,6 +15,7 @@ export interface ApplicationInterviewSummary {
   readonly id: string;
   readonly scheduledAt: string | null;
   readonly prepStatus: StoredApplicationInterview['prepStatus'];
+  readonly round: number;
 }
 
 export interface ApplicationView extends StoredApplication, ApplicationDerivedFields {}
@@ -63,7 +64,12 @@ export function deriveApplicationFields(input: DeriveApplicationFieldsInput): Ap
     whoseTurn,
     materials,
     nearestInterview: nearestInterview
-      ? { id: nearestInterview.id, scheduledAt: nearestInterview.scheduledAt, prepStatus: nearestInterview.prepStatus }
+      ? {
+          id: nearestInterview.id,
+          scheduledAt: nearestInterview.scheduledAt,
+          prepStatus: nearestInterview.prepStatus,
+          round: nearestInterview.round,
+        }
       : null,
   };
 }

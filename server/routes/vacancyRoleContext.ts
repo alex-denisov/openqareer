@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
 import { resolveRoleNameLanguage, type RoleNameLanguage } from '../domain/roleNameLanguage';
@@ -8,10 +7,10 @@ import type { NamedRole, ProposedRole } from '../../shared/roleProposals';
 import { WORK_PREFERENCE_KEY_VERSION } from '../../shared/workPreferences';
 import type { StrategyConstraints } from '../../shared/careerStrategy';
 import type { RoleNamingStageFailure } from '../providers/roleNamer';
-import { MatchedPoolSnapshots } from '../vacancies/matchedPoolSnapshot';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { buildRoleProposals } from '../vacancies/roleHypotheses';
 import { deriveCandidateTargetLevel } from '../vacancies/candidateLevel';
+import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
 
@@ -33,22 +32,6 @@ export interface RoleContext {
   readonly constraints: StrategyConstraints;
 }
 
-/** Подтверждённые навыки кандидата — то, по чему вообще можно сопоставлять. */
-export function readMatchProfile(
-  candidateStore: RouteDeps['candidateStore'],
-  candidateId: string,
-): { confirmedSkills: string[] } {
-  const snapshot = candidateStore.getSnapshot(candidateId);
-  const memory = snapshot?.memory ?? [];
-  const confirmedSkills = memory
-    .filter(
-      (m) => m.kind === 'fact' && (m.domain === 'skill' || m.confidence === 'candidate-confirmed'),
-    )
-    .map((m) => m.statement);
-
-  return { confirmedSkills };
-}
-
 /**
  * Целевой уровень кандидата (B248, срез «подключение уровня»): роль кампании
  * важнее прошлой должности — кандидат вправе целиться выше своего опыта, и
@@ -61,23 +44,6 @@ export function readTargetLevel(
 ) {
   const experience = candidateStore.getSnapshot(candidateId)?.resume?.draft.experience ?? [];
   return deriveCandidateTargetLevel({ targetRoles, experience });
-}
-
-/**
- * Отпечаток того, из чего считается подбор.
- *
- * Сменился профиль — сменился и снимок: иначе кандидат, подтвердивший навык,
- * дочитывал бы старый подбор до конца срока жизни снимка.
- */
-function matchProfileKey(confirmedSkills: readonly string[], targetRoles: readonly string[]): string {
-  return createHash('sha256')
-    .update(
-      [[...confirmedSkills].sort().join('\u0000'), [...targetRoles].sort().join('\u0000')].join(
-        '\u0001',
-      ),
-    )
-    .digest('hex')
-    .slice(0, 16);
 }
 
 // Ответы на задания меняют порядок ролей одного яруса и никогда — состав
@@ -139,44 +105,6 @@ function candidateFacts(
   return (candidateStore.getSnapshot(candidateId)?.memory ?? [])
     .filter((memory) => memory.status !== 'corrected')
     .map((memory) => ({ ref: `memory:${memory.id}`, statement: memory.statement }));
-}
-
-/**
- * Снимки подбора живут на процессе: одно чтение пула — один список.
- *
- * Кабинет читает пул шестьюдесятью запросами (PRB-023), и пересчёт на каждый из
- * них стоил и времени, и правды: между страницами проходит опрос площадок, и
- * то же смещение указывает уже на другую запись (B211).
- */
-const matchedPoolSnapshots = new WeakMap<RouteDeps['multiSourceEngine'], MatchedPoolSnapshots>();
-
-export function readMatchedSnapshot(
-  engine: RouteDeps['multiSourceEngine'],
-  candidateId: string,
-  confirmedSkills: string[],
-  targetRoles: string[],
-  targetLevel: ReturnType<typeof deriveCandidateTargetLevel>,
-): Promise<MatchedVacancyItem[]> {
-  let snapshots = matchedPoolSnapshots.get(engine);
-  if (!snapshots) {
-    snapshots = new MatchedPoolSnapshots();
-    matchedPoolSnapshots.set(engine, snapshots);
-  }
-  return snapshots.readAsync(
-    candidateId,
-    // Уровень входит в отпечаток снимка: смена целевой роли меняет и уровень,
-    // и старый снимок с прежним fit-dot «уровень» не должен пережить это.
-    `${matchProfileKey(confirmedSkills, targetRoles)}:${targetLevel ?? ''}`,
-    () =>
-      engine.getMatchedVacanciesAsync({
-        candidateId,
-        targetRoles,
-        confirmedSkills,
-        confirmedFacts: confirmedSkills,
-        preferredRemote: true,
-        ...(targetLevel ? { targetLevel } : {}),
-      }),
-  );
 }
 
 /**

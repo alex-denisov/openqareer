@@ -3,7 +3,8 @@ import type { ReactNode } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import { updateAccountProfile, type AuthUser } from '../coach/coachApi';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
-import { CareerHome } from './CareerHome';
+import { TodayScreen } from '../today/TodayScreen';
+import { useToday } from '../today/useToday';
 import { SearchCampaign } from '../search/SearchCampaign';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { ProfileScreenView } from '../resume/ProfileScreenView';
@@ -26,10 +27,7 @@ import {
   type RoutePremisesDraft,
 } from './routePremises';
 import { cabinetJourney } from './cabinetJourney';
-import { useRoleHypotheses } from '../career-map/useRoleHypotheses';
 import { useCareerStrategy, type CareerStrategyRead } from './useCareerStrategy';
-import { useWorkPreferences, type WorkPreferencesState } from './useWorkPreferences';
-import type { ProposedRole } from '../../../shared/roleProposals';
 import { countConfirmedApplications, type VacancyApplication } from '../../../shared/vacancyApplication';
 import type { CareerCabinetView } from './cabinetViews';
 
@@ -39,12 +37,9 @@ interface CareerCabinetProps {
   view: CareerCabinetView;
   session: AuthUser & { candidateId: string };
   workspace?: CandidateWorkspace;
-  importing?: boolean;
   onNavigate: (view: CareerCabinetView) => void;
   onOpenTariffs?: () => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
-  onOpenAccount: () => void;
-  onOpenExpert: () => void;
 }
 
 /**
@@ -59,12 +54,9 @@ export function CareerCabinet({
   view,
   session,
   workspace,
-  importing = false,
   onNavigate,
   onOpenTariffs,
   onUpdateWorkspace,
-  onOpenAccount,
-  onOpenExpert,
 }: CareerCabinetProps) {
   const data = useCareerCabinetData(session.candidateId);
   // Роль из разобранного резюме — такой же ответ кандидата, как поле анкеты.
@@ -81,16 +73,9 @@ export function CareerCabinet({
   // Пул читается один раз на весь кабинет: раньше каждый раздел повторял
   // полсотни страниц подбора сам (B104).
   const pool = useMatchedPool();
-  // Имя роли берётся у рынка, а не у строки резюме: на «Главной» гипотезой
-  // печаталась целая фраза из профиля, за которой нет ни одной вакансии (B180).
-  // Считает их сервер (срез 1б): в браузер пул приезжает без требований —
-  // страница подбора вырезает их ради байтового бюджета маршрута (INC-029).
-  const proposedRoles = useRoleHypotheses().roles;
   // Выбранная роль — версионированный объект, а не свободная строка анкеты:
   // кампания «Поиск» берёт направление из него (B180, срез 2).
   const strategy = useCareerStrategy();
-  // Задания меняют порядок ролей, а не их состав (B180, срез 3).
-  const workPreferences = useWorkPreferences();
   const vacancyApplications = useVacancyApplications();
   // B251 S3 — трекер откликов читает свой собственный API, независимо от
   // ручного лога `useVacancyApplications` (совместимость со старым `.app`).
@@ -181,12 +166,8 @@ export function CareerCabinet({
             view={view}
             session={session}
             workspace={workspace}
-            importing={importing}
             targetDirection={targetDirection}
-            journey={journey}
-            proposedRoles={proposedRoles}
             strategy={strategy}
-            workPreferences={workPreferences}
             pool={pool}
             applications={vacancyApplications.applications}
             vacancyApplications={vacancyApplications}
@@ -195,15 +176,27 @@ export function CareerCabinet({
             data={data}
             profileTab={profileTab}
             onNavigate={onNavigate}
-            onUpdateWorkspace={onUpdateWorkspace}
             onSavePremises={savePremises}
-            onOpenAccount={onOpenAccount}
-            onOpenExpert={onOpenExpert}
             onOpenTariffs={onOpenTariffs}
+            onUpdateWorkspace={onUpdateWorkspace}
           />
         )}
       </div>
     </AppErrorBoundary>
+  );
+}
+
+/** «Сегодня» reads its own digest through `useToday` — the cabinet's
+ * `useCareerCabinetData` snapshot has no queue or digest fields of its own. */
+function TodaySection() {
+  const { snapshot, loading, failed, refresh } = useToday();
+  return (
+    <TodayScreen
+      snapshot={snapshot}
+      loading={loading}
+      failed={failed}
+      onRetry={() => void refresh()}
+    />
   );
 }
 
@@ -223,12 +216,8 @@ function CabinetSection({
   view,
   session,
   workspace,
-  importing,
   targetDirection,
-  journey,
-  proposedRoles,
   strategy,
-  workPreferences,
   pool,
   applications,
   vacancyApplications,
@@ -237,21 +226,15 @@ function CabinetSection({
   data,
   profileTab,
   onNavigate,
-  onUpdateWorkspace,
   onSavePremises,
-  onOpenAccount,
-  onOpenExpert,
   onOpenTariffs,
+  onUpdateWorkspace,
 }: {
   view: CareerCabinetView;
   session: AuthUser & { candidateId: string };
   workspace?: CandidateWorkspace;
-  importing: boolean;
   targetDirection: string;
-  journey: ReturnType<typeof cabinetJourney>;
-  proposedRoles: readonly ProposedRole[];
   strategy: CareerStrategyRead;
-  workPreferences: WorkPreferencesState;
   pool: ReturnType<typeof useMatchedPool>;
   applications?: readonly VacancyApplication[];
   vacancyApplications: ReturnType<typeof useVacancyApplications>;
@@ -260,36 +243,12 @@ function CabinetSection({
   data: ReturnType<typeof useCareerCabinetData>;
   profileTab: ProfileTab;
   onNavigate: (view: CareerCabinetView) => void;
-  onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
   onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
-  onOpenAccount: () => void;
-  onOpenExpert: () => void;
   onOpenTariffs?: () => void;
+  onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }) {
   if (view === 'today') {
-    return (
-      <CareerHome
-        session={session}
-        snapshot={data.snapshot}
-        account={data.account}
-        workspace={workspace}
-        targetDirection={targetDirection}
-        journey={journey}
-        proposedRoles={proposedRoles}
-        strategy={strategy}
-        workPreferences={workPreferences}
-        poolComplete={pool.complete}
-        poolTotal={pool.poolTotal}
-        loading={data.loading}
-        importing={importing}
-        applications={applications}
-        onRefresh={data.refresh}
-        onNavigate={onNavigate}
-        onUpdateWorkspace={onUpdateWorkspace}
-        onOpenAccount={onOpenAccount}
-        onOpenExpert={onOpenExpert}
-      />
-    );
+    return <TodaySection />;
   }
   // B265 — the rail's «Профиль» is its own screen (topcard, Open to work,
   // every imported section, edit-in-place), not Resume Studio. «Резюме»

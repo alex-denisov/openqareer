@@ -17,6 +17,7 @@ import type {
 } from './sqliteApplicationInterviewRepository';
 import type { ApplicationOfferTerms, StoredApplicationOffer } from './sqliteApplicationOfferRepository';
 import type { StoredVacancySkip, VacancySkipOrigin } from './sqliteVacancySkipRepository';
+import type { RecordVisitResult } from './sqliteCandidateVisitRepository';
 import type {
   CoachMessage,
   CoachPhase,
@@ -495,6 +496,18 @@ export interface CandidateStore {
 
   /** Applied to the matched pool after its cache read; never part of the cache key (architecture.md §4, §7). */
   listVacancyDecisions(candidateId: string): VacancyDecision[];
+
+  /** `POST /visits` (architecture.md §4): moves the mark only past 30 minutes. */
+  recordCandidateVisit(candidateId: string, now: string): RecordVisitResult;
+
+  /** `GET /today` reads the current mark without recording a visit. */
+  getSinceLastVisit(candidateId: string): string | null;
+
+  /** `GET /today`: applications this candidate's tracker closed on its own since `since`. */
+  countSystemClosuresSince(candidateId: string, since: string): number;
+
+  /** `GET /today`: stage moves only the company could have caused since `since`. */
+  countCompanyEventsSince(candidateId: string, since: string): number;
 
   getWorkPreferenceRun(candidateId: string): StoredWorkPreferenceRun | null;
 
