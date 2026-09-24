@@ -87,7 +87,22 @@ describe('VacancyDetailPanel (B250)', () => {
     const applications = {
       applications: [],
       byCluster: new Map([
-        ['c-1', { clusterId: 'c-1', status: 'applied' as const, appliedAt: '2026-09-20T00:00:00.000Z' }],
+        [
+          'c-1',
+          {
+            clusterId: 'c-1',
+            status: 'applied' as const,
+            vacancy: {
+              title: 'Business Information Architect',
+              company: 'Genetec',
+              url: 'https://example.com/vacancy',
+              source: 'hh',
+            },
+            openedAt: '2026-09-19T00:00:00.000Z',
+            appliedAt: '2026-09-20T00:00:00.000Z',
+            confirmedBy: 'candidate' as const,
+          },
+        ],
       ]),
       unsaved: new Set<string>(),
       record: vi.fn(),
