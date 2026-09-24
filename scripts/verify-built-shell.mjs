@@ -41,7 +41,6 @@ async function verifyViewport(browser, baseUrl, viewport) {
   let connectionCatalogRequests = 0;
   let hhConnected = true;
   let hhDisconnectAttempts = 0;
-  let vacancyCreateSource = null;
   let createdVacancyView = null;
   // B159: собранный каркас спрашивает у продакшена его SHA, чтобы сказать
   // кандидату, отстала ли сборка. В гейте бэкенда нет, поэтому `/health`
@@ -750,7 +749,6 @@ async function verifyViewport(browser, baseUrl, viewport) {
       return;
     }
     const payload = route.request().postDataJSON();
-    vacancyCreateSource = payload.source;
     createdVacancyView = {
       subscription: {
         id: '00000000-0000-4000-8000-000000000134',

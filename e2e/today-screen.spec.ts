@@ -142,7 +142,10 @@ async function stubSession(page: Page): Promise<void> {
     }
     if (pathname === '/api/v1/candidate/matched-vacancies') {
       return route.fulfill({
-        json: { data: [], meta: { total: 0, nextOffset: null, campaign: null, candidateLevel: null } },
+        json: {
+          data: [],
+          meta: { total: 0, nextOffset: null, campaign: null, candidateLevel: null },
+        },
       });
     }
     if (request.method() === 'POST' && pathname === '/api/v1/candidate/visits') {
@@ -199,7 +202,9 @@ test.describe('B251 today screen', () => {
 
     await expect(page.locator('.career-cabinet-header h1')).toHaveText('Сегодня');
     await expect(page.locator('.career-today-digest')).toContainText('12');
-    await expect(page.locator('.career-today-digest')).toContainText('follow-up просят действия сегодня');
+    await expect(page.locator('.career-today-digest')).toContainText(
+      'follow-up просят действия сегодня',
+    );
     await expect(page.locator('.career-today-digest')).toContainText('HRTx Inc.');
 
     const rows = page.locator('.career-today-item');
