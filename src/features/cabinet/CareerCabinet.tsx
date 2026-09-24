@@ -119,6 +119,19 @@ export function CareerCabinet({
   );
   const showsVacanciesScreen =
     view === 'opportunities' && !pool.loading && !pool.failed && pool.matched.length > 0;
+  // B248 §2 — the same path indicator the anonymous wizard shows
+  // (`CareerWorkspaceShell`), wired to the cabinet's own journey, pool and
+  // confirmed applications instead of a second read of any of them
+  // (INC-024, B104). «Вакансии» draws it itself, after its own heading, to
+  // match the mockup order (приёмка B250 §a) — every other view keeps it here.
+  const pathIndicatorSteps =
+    journey && !(data.loading && !data.snapshot)
+      ? buildPathIndicator({
+          track: journey.track,
+          matchedPoolCount: pool.matched.length,
+          confirmedApplications: countConfirmedApplications(vacancyApplications.applications),
+        })
+      : undefined;
 
   return (
     <AppErrorBoundary
@@ -139,21 +152,8 @@ export function CareerCabinet({
             onRetry={() => void data.refresh()}
           />
         ) : null}
-        {/* B248 §2 — the same path indicator the anonymous wizard shows
-            (`CareerWorkspaceShell`), wired to the cabinet's own journey, pool
-            and confirmed applications instead of a second read of any of
-            them (INC-024, B104). */}
-        {journey && !(data.loading && !data.snapshot) ? (
-          <CareerPathIndicator
-            steps={buildPathIndicator({
-              track: journey.track,
-              matchedPoolCount: pool.matched.length,
-              confirmedApplications: countConfirmedApplications(
-                vacancyApplications.applications,
-              ),
-            })}
-            onNavigate={onNavigate}
-          />
+        {pathIndicatorSteps && !showsVacanciesScreen ? (
+          <CareerPathIndicator steps={pathIndicatorSteps} onNavigate={onNavigate} />
         ) : null}
         {/* До первого ответа сервера экран не рисует ни имени из сессии, ни
             пустых вкладок: профиль появляется целиком и один раз, а не
@@ -173,6 +173,8 @@ export function CareerCabinet({
             workPreferences={workPreferences}
             pool={pool}
             applications={vacancyApplications.applications}
+            vacancyApplications={vacancyApplications}
+            pathIndicatorSteps={pathIndicatorSteps}
             data={data}
             onNavigate={onNavigate}
             onUpdateWorkspace={onUpdateWorkspace}
@@ -211,6 +213,8 @@ function CabinetSection({
   workPreferences,
   pool,
   applications,
+  vacancyApplications,
+  pathIndicatorSteps,
   data,
   onNavigate,
   onUpdateWorkspace,
@@ -230,6 +234,8 @@ function CabinetSection({
   workPreferences: WorkPreferencesState;
   pool: ReturnType<typeof useMatchedPool>;
   applications?: readonly VacancyApplication[];
+  vacancyApplications: ReturnType<typeof useVacancyApplications>;
+  pathIndicatorSteps?: ReturnType<typeof buildPathIndicator>;
   data: ReturnType<typeof useCareerCabinetData>;
   onNavigate: (view: CareerCabinetView) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;

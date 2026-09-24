@@ -6,6 +6,10 @@ import { titleMatchesRole } from '../../../shared/vacancyRoleTitleMatch';
 import { pluralRu } from '../../../shared/pluralRu';
 import { vacancyAge } from './vacancyFilters';
 import { VacancyRow } from './VacancyRow';
+import { VacancyDetailPanel } from './VacancyDetailPanel';
+import { CareerPathIndicator } from '../shell/CareerPathIndicator';
+import type { PathDestination, PathStep } from '../shell/pathIndicator';
+import type { VacancyApplications } from './useVacancyApplications';
 
 const FRESHNESS_OPTIONS = [
   { days: 0, label: 'Сегодня' },
@@ -30,18 +34,28 @@ const EMPTY_STATE: VacanciesScreenState = { regions: [], remoteOnly: false };
  * фильтрует список тем же признаком `titleMatchesRole`, что и сервер, чтобы
  * баннер и список не расходились в счёте.
  */
+export interface VacanciesPathIndicator {
+  readonly steps: readonly PathStep[];
+  readonly onNavigate: (destination: PathDestination) => void;
+}
+
 export function VacanciesScreen({
   matched,
   total,
   campaign,
   candidateLevel,
   now = new Date().toISOString(),
+  pathIndicator,
+  applications,
 }: {
   readonly matched: readonly MatchedVacancyItem[];
   readonly total: number;
   readonly campaign?: CampaignMetaView;
   readonly candidateLevel?: string | null;
   readonly now?: string;
+  /** B248 §2 — тот же индикатор пути, что и на остальных экранах кампании. */
+  readonly pathIndicator?: VacanciesPathIndicator;
+  readonly applications?: VacancyApplications;
 }) {
   const roles = campaign?.roles.value ?? [];
   const regions = campaign?.regions.value ?? [];
@@ -51,6 +65,7 @@ export function VacanciesScreen({
     regions,
   });
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
   const filtered = useMemo(
     () => filterByScreenState(matched, state, now),
@@ -59,10 +74,15 @@ export function VacanciesScreen({
 
   const roleHypotheses = campaign?.roleHypotheses ?? [];
   const primaryRole = state.role ?? roles[0];
+  const effectiveId = selectedId ?? filtered[0]?.cluster.id;
+  const selectedItem = filtered.find((item) => item.cluster.id === effectiveId);
 
   return (
     <div className="vacancies-screen">
       <VacanciesHeader primaryRole={primaryRole} />
+      {pathIndicator ? (
+        <CareerPathIndicator steps={pathIndicator.steps} onNavigate={pathIndicator.onNavigate} />
+      ) : null}
       <div className="vacancies-layout">
         <VacanciesFilters
           roleHypotheses={roleHypotheses}
@@ -76,9 +96,25 @@ export function VacanciesScreen({
           total={total}
           items={filtered}
           now={now}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
+          selectedId={effectiveId}
+          onSelect={(id) => {
+            setSelectedId(id);
+            setMobileDetailOpen(true);
+          }}
         />
+        <aside
+          className={`vacancies-detail-col${mobileDetailOpen ? ' is-open' : ''}`}
+          aria-label="Карточка вакансии"
+        >
+          {selectedItem ? (
+            <VacancyDetailPanel
+              item={selectedItem}
+              now={now}
+              applications={applications}
+              onBack={() => setMobileDetailOpen(false)}
+            />
+          ) : null}
+        </aside>
       </div>
     </div>
   );

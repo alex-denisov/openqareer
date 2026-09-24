@@ -105,7 +105,7 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
   const profileItem = findTrackItem(input.track, 'career-picture');
   const roleItem = findTrackItem(input.track, 'role-market');
 
-  return [
+  const steps: readonly PathStep[] = [
     {
       id: 'profile',
       label: 'Профиль',
@@ -130,4 +130,25 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
       destination: 'opportunities',
     },
   ];
+
+  return keepSingleCurrentStep(steps);
+}
+
+/**
+ * Каждый шаг сейчас считается своим источником данных независимо от
+ * остальных, и это может честно дать «в процессе» сразу двум шагам (например
+ * «Роль» ещё активна в движке, а «Подборка» уже видит непустой пул). Кандидат
+ * не может одновременно быть на двух шагах пути — только первый из них
+ * остаётся «в процессе», следующие откатываются в «не начат» (приёмка B250).
+ */
+function keepSingleCurrentStep(steps: readonly PathStep[]): readonly PathStep[] {
+  let seenCurrent = false;
+  return steps.map((step) => {
+    if (step.state !== 'in-progress') return step;
+    if (!seenCurrent) {
+      seenCurrent = true;
+      return step;
+    }
+    return { ...step, state: 'not-started' };
+  });
 }

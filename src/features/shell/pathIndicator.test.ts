@@ -85,6 +85,24 @@ describe('buildPathIndicator', () => {
     expect(steps.find((step) => step.id === 'responses')).toMatchObject({ state: 'done' });
   });
 
+  it('never marks two steps «в процессе» at once, even when both sources are active', () => {
+    // «Роль» ещё активна в движке, и пул уже непустой — оба источника честно
+    // говорят «в процессе» сами по себе; кандидат физически на одном шаге.
+    const steps = buildPathIndicator({
+      track: [
+        { id: 'career-picture', label: 'Карьерная картина', status: 'complete', reason: 'Готово' },
+        { id: 'role-market', label: 'Роль и рынок', status: 'active', reason: 'Проверяем рынок' },
+      ],
+      matchedPoolCount: 5,
+      confirmedApplications: 0,
+    });
+
+    const inProgress = steps.filter((step) => step.state === 'in-progress');
+    expect(inProgress).toHaveLength(1);
+    expect(inProgress[0]?.id).toBe('role');
+    expect(steps.find((step) => step.id === 'shortlist')).toMatchObject({ state: 'not-started' });
+  });
+
   it('points every step at an existing screen, never a placeholder route', () => {
     const steps = buildPathIndicator({ matchedPoolCount: 0, confirmedApplications: 0 });
     const destinations = new Set(steps.map((step) => step.destination));
