@@ -263,7 +263,7 @@ async function seedWorkspace(page: Page): Promise<void> {
             title: 'Enterprise Architect',
             company: `Компания ${index + 1}`,
             location: 'Дубай',
-            sourceUrl: `https://hh.ru/vacancy/market-${index + 1}`,
+            sourceUrl: `https://hh.ru/vacancy/${100000 + index}`,
             publishedAt: null,
             salary: null,
           })),
