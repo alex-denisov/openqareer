@@ -181,6 +181,24 @@ describe('SqliteApplicationRepository', () => {
     });
   });
 
+  describe('countSystemClosuresSince', () => {
+    it('counts vacancies the system archived after the given time (B251, S4, /today digest)', () => {
+      const { repo } = createRepo();
+      const created = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'applied', vacancy });
+      expect(repo.countSystemClosuresSince('candidate-1', '2026-09-24T00:00:00.000Z')).toBe(0);
+      repo.archiveClosedVacancy('candidate-1', created, '2026-09-24T10:00:00.000Z');
+      expect(repo.countSystemClosuresSince('candidate-1', '2026-09-24T00:00:00.000Z')).toBe(1);
+      expect(repo.countSystemClosuresSince('candidate-1', '2026-09-24T11:00:00.000Z')).toBe(0);
+    });
+
+    it('does not count a card the candidate archived themselves', () => {
+      const { repo } = createRepo();
+      const created = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'applied', vacancy });
+      repo.patch('candidate-1', created.id, { expectedVersion: created.version, stage: 'rejected' });
+      expect(repo.countSystemClosuresSince('candidate-1', '2020-01-01T00:00:00.000Z')).toBe(0);
+    });
+  });
+
   describe('funnel', () => {
     it('counts distinct applications that ever reached each stage', () => {
       const { repo } = createRepo();

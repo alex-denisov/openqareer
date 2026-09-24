@@ -73,6 +73,7 @@ export interface ApplicationTrackerMethods {
   listVacancyDecisions(candidateId: string): VacancyDecision[];
   recordCandidateVisit(candidateId: string, now: string): RecordVisitResult;
   getSinceLastVisit(candidateId: string): string | null;
+  countSystemClosuresSince(candidateId: string, since: string): number;
 }
 
 type RequireCandidate = (candidateId: string) => void;
@@ -137,6 +138,7 @@ function createArtifactApplicationMethods(
   | 'listVacancyDecisions'
   | 'recordCandidateVisit'
   | 'getSinceLastVisit'
+  | 'countSystemClosuresSince'
 > {
   return {
     linkApplicationMaterial(candidateId, applicationId, role, documentId) {

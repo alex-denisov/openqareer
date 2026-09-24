@@ -212,6 +212,11 @@ export class ApplicationTrackerController {
     return this.visits.getSinceLastVisit(candidateId);
   }
 
+  /** `GET /today` digest: vacancies the system closed since the candidate's last visit. */
+  countSystemClosuresSince(candidateId: string, since: string): number {
+    return this.applications.countSystemClosuresSince(candidateId, since);
+  }
+
   private mustGetOwn(candidateId: string, applicationId: string): StoredApplication {
     const application = this.applications.get(candidateId, applicationId);
     if (!application) throw new ApplicationNotFoundError();

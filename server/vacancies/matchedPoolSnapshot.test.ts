@@ -27,6 +27,27 @@ describe('MatchedPoolSnapshots', () => {
     expect(second).toBe(first);
   });
 
+  it('peek reads a hot snapshot without computing (B251, S4: /today never recomputes the pool)', () => {
+    const snapshots = new MatchedPoolSnapshots();
+    let computed = 0;
+    const compute = () => {
+      computed += 1;
+      return [item('a')];
+    };
+    expect(snapshots.peek('cand-1', 'профиль-1')).toBeUndefined();
+    const items = snapshots.read('cand-1', 'профиль-1', compute);
+    expect(snapshots.peek('cand-1', 'профиль-1')).toBe(items);
+    expect(computed).toBe(1);
+  });
+
+  it('peek returns undefined once the snapshot expired', () => {
+    let now = 0;
+    const snapshots = new MatchedPoolSnapshots({ ttlMs: 10, clock: () => now });
+    snapshots.read('cand-1', 'профиль-1', () => [item('a')]);
+    now = 11;
+    expect(snapshots.peek('cand-1', 'профиль-1')).toBeUndefined();
+  });
+
   it('изменившийся профиль кандидата считается заново', () => {
     const snapshots = new MatchedPoolSnapshots();
     let computed = 0;
