@@ -217,6 +217,11 @@ export class ApplicationTrackerController {
     return this.applications.countSystemClosuresSince(candidateId, since);
   }
 
+  /** `GET /today` "с прошлого визита": stage moves that only the company could have caused. */
+  countCompanyEventsSince(candidateId: string, since: string): number {
+    return this.applications.countCompanyEventsSince(candidateId, since);
+  }
+
   private mustGetOwn(candidateId: string, applicationId: string): StoredApplication {
     const application = this.applications.get(candidateId, applicationId);
     if (!application) throw new ApplicationNotFoundError();

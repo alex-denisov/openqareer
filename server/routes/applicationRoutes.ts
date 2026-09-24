@@ -209,6 +209,17 @@ const handleToday: Handler = async (deps, request, reply) => {
     title: item.cluster.canonicalTitle,
     company: item.cluster.canonicalCompany,
     firstObservedAt: item.cluster.firstObservedAt,
+    lastSeenAt: item.cluster.lastSeenAt,
+    salary: item.cluster.salary,
+    location: item.cluster.canonicalLocation,
+    sourcesCount: new Set(item.cluster.sources.map((source) => source.sourceId)).size,
+    fit: {
+      role: item.explanation.roleMatch,
+      level: item.explanation.levelMatch ?? null,
+      // Ничего в объяснении совпадения пока не сравнивает гео кандидата с
+      // вакансией (unifiedVacancy.ts): точку не рисуем из отсутствия данных (PRB-016).
+      geo: null as boolean | null,
+    },
   }));
   const freshNewVacancies =
     newVacancies === undefined
@@ -219,12 +230,16 @@ const handleToday: Handler = async (deps, request, reply) => {
 
   const closedVacanciesSinceVisit =
     since === null ? 0 : candidateStore.countSystemClosuresSince(candidate.id, since);
+  const companyEventsSinceVisit =
+    since === null ? 0 : candidateStore.countCompanyEventsSince(candidate.id, since);
 
   const snapshot = buildTodaySnapshot({
     applications,
     newVacancies: freshNewVacancies,
-    sinceLastVisit: since,
+    since,
     closedVacanciesSinceVisit,
+    campaignRole: targetRoles[0] ?? null,
+    companyEventsSinceVisit,
   });
   return { data: snapshot, meta: { requestId: request.id } };
 };

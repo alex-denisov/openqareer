@@ -466,6 +466,23 @@ export class SqliteApplicationRepository {
     return row.count;
   }
 
+  /**
+   * `GET /today` "с прошлого визита" (B251, S4b, architecture.md §57): stage
+   * moves the candidate could not have made on their own — the company
+   * responding, inviting to interview, sending an offer, or rejecting.
+   */
+  countCompanyEventsSince(candidateId: string, since: string): number {
+    const row = this.database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM application_events
+          WHERE candidate_id = ? AND kind = 'stage'
+            AND to_stage IN ('responded', 'interview', 'offer', 'rejected')
+            AND occurred_at > ?`,
+      )
+      .get(candidateId, since) as unknown as { count: number };
+    return row.count;
+  }
+
   listEvents(candidateId: string, applicationId: string): StoredApplicationEvent[] {
     const rows = this.database
       .prepare(

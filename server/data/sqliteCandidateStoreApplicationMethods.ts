@@ -74,6 +74,7 @@ export interface ApplicationTrackerMethods {
   recordCandidateVisit(candidateId: string, now: string): RecordVisitResult;
   getSinceLastVisit(candidateId: string): string | null;
   countSystemClosuresSince(candidateId: string, since: string): number;
+  countCompanyEventsSince(candidateId: string, since: string): number;
 }
 
 type RequireCandidate = (candidateId: string) => void;
@@ -165,6 +166,7 @@ function createVacancyJourneyMethods(
   | 'recordCandidateVisit'
   | 'getSinceLastVisit'
   | 'countSystemClosuresSince'
+  | 'countCompanyEventsSince'
 > {
   return {
     listVacancySkips(candidateId) {
@@ -194,6 +196,10 @@ function createVacancyJourneyMethods(
     countSystemClosuresSince(candidateId, since) {
       requireCandidate(candidateId);
       return tracker.countSystemClosuresSince(candidateId, since);
+    },
+    countCompanyEventsSince(candidateId, since) {
+      requireCandidate(candidateId);
+      return tracker.countCompanyEventsSince(candidateId, since);
     },
   };
 }

@@ -506,6 +506,9 @@ export interface CandidateStore {
   /** `GET /today`: applications this candidate's tracker closed on its own since `since`. */
   countSystemClosuresSince(candidateId: string, since: string): number;
 
+  /** `GET /today`: stage moves only the company could have caused since `since`. */
+  countCompanyEventsSince(candidateId: string, since: string): number;
+
   getWorkPreferenceRun(candidateId: string): StoredWorkPreferenceRun | null;
 
   saveWorkPreferenceRun(

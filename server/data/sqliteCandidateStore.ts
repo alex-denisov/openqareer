@@ -490,6 +490,7 @@ export class SqliteCandidateStore implements CandidateStore {
   declare recordCandidateVisit: ApplicationTrackerMethods['recordCandidateVisit'];
   declare getSinceLastVisit: ApplicationTrackerMethods['getSinceLastVisit'];
   declare countSystemClosuresSince: ApplicationTrackerMethods['countSystemClosuresSince'];
+  declare countCompanyEventsSince: ApplicationTrackerMethods['countCompanyEventsSince'];
 
   saveWorkPreferenceRun(
     candidateId: string,
