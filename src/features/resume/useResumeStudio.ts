@@ -13,7 +13,14 @@ export interface ResumeStudioState {
   readonly saveError?: string;
   readonly setDraft: (draft: ResumeDraft) => void;
   readonly reload: () => void;
-  readonly save: () => void;
+  /**
+   * Saves the draft in hand, or `overrideDraft` when the caller just computed
+   * a new draft in the same tick and cannot wait for `setDraft` to land
+   * before saving it (e.g. a section's own "Сохранить" — B265 owner remark
+   * #5) — `setDraft` and `save` would otherwise race against React's async
+   * state update and save the value from before the edit.
+   */
+  readonly save: (overrideDraft?: ResumeDraft) => void;
 }
 
 /**
@@ -27,21 +34,25 @@ export function useResumeStudio(onSaved?: () => void): ResumeStudioState {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
 
-  const save = useCallback(async () => {
-    if (!draft) return;
-    setSaving(true);
-    setSaveError(undefined);
-    try {
-      const next = await saveResumeStudioDraft(toSavePayload(draft));
-      setView(next);
-      setDraft(draftOf(next));
-      onSaved?.();
-    } catch (reason) {
-      setSaveError(errorMessage(reason));
-    } finally {
-      setSaving(false);
-    }
-  }, [draft, onSaved]);
+  const save = useCallback(
+    async (overrideDraft?: ResumeDraft) => {
+      const toSave = overrideDraft ?? draft;
+      if (!toSave) return;
+      setSaving(true);
+      setSaveError(undefined);
+      try {
+        const next = await saveResumeStudioDraft(toSavePayload(toSave));
+        setView(next);
+        setDraft(draftOf(next));
+        onSaved?.();
+      } catch (reason) {
+        setSaveError(errorMessage(reason));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [draft, onSaved],
+  );
 
   return {
     view,
@@ -55,7 +66,7 @@ export function useResumeStudio(onSaved?: () => void): ResumeStudioState {
       setLoading(true);
       void load();
     },
-    save: () => void save(),
+    save: (overrideDraft?: ResumeDraft) => void save(overrideDraft),
   };
 }
 

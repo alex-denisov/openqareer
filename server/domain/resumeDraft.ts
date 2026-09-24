@@ -165,6 +165,9 @@ export interface ResumeLanguageInput {
   readonly evidenceMemoryId: string;
   readonly name?: string;
   readonly cefr?: CefrLevel;
+  /** The source's own phrase for the level, e.g. LinkedIn's "Full professional
+   * proficiency" — shown next to the CEFR the platform inferred from it. */
+  readonly sourceLabel?: string;
 }
 
 export interface ResumeAdditionalInput {
@@ -238,7 +241,22 @@ function withoutControlCharacters<Schema extends z.ZodString>(schema: Schema) {
 
 const longTextSchema = withoutControlCharacters(z.string().trim().max(10_000));
 const descriptionSchema = withoutControlCharacters(z.string().trim().max(5_000));
-const urlSchema = z.string().trim().max(2_000);
+// M4 hardening: a resume URL is only ever rendered as an outbound link, so it
+// must be https — javascript:/data:/http: schemes never reach the browser.
+const urlSchema = z
+  .string()
+  .trim()
+  .max(2_000)
+  .refine(
+    (value) => {
+      try {
+        return new URL(value).protocol === 'https:';
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Ссылка должна начинаться с https://.' },
+  );
 const workplaceTypeSchema = z.enum(['on_site', 'hybrid', 'remote']);
 const skillListSchema = z.array(labelSchema).max(50);
 const mediaIdSchema = z.string().trim().min(1).max(80);
@@ -383,6 +401,7 @@ export const resumeDraftSchema = z
             evidenceMemoryId: memoryIdSchema,
             name: labelSchema.optional(),
             cefr: z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']).optional(),
+            sourceLabel: labelSchema.optional(),
           })
           .strict(),
       )

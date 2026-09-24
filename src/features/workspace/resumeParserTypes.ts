@@ -111,6 +111,12 @@ export interface ParsedResumeRecommendation {
 export interface ParsedResumeLanguage {
   name: string;
   cefr?: CefrLevel;
+  /**
+   * The exact phrase the source used for the level, e.g. LinkedIn's "Full
+   * professional proficiency" — kept so the candidate can see what CEFR was
+   * inferred from, not just the inference (B265 review round 3).
+   */
+  sourceLabel?: string;
 }
 
 interface ParsedResumeContact {
