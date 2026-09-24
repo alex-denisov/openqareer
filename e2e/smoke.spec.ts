@@ -58,11 +58,15 @@ test('built career workspace is ready, operable and free of critical accessibili
   const shell = page.getByTestId('career-shell');
   await expect(shell).toBeVisible();
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy');
-  await expect(page.getByRole('heading', { name: 'С чем разобраться?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
   await expect(page.getByText('Загружаем рабочее пространство')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Хочу найти работу' })).toBeEnabled();
+  await expect(
+    page.locator('.career-onboarding-source-card', { hasText: 'PDF резюме' }),
+  ).toBeEnabled();
 
-  const accountButton = page.locator('button[aria-label="Открыть аккаунт"]:visible').last();
+  // B249 (owner, 2026-09-24): onboarding is full-screen from step 1, so an
+  // anonymous visitor reaches the account from the wizard's own top bar.
+  const accountButton = page.getByRole('button', { name: 'Войти', exact: true });
   await expect(accountButton).toBeEnabled();
   await accountButton.click();
   await expect(page.getByRole('dialog', { name: 'Аккаунт' })).toBeVisible();
@@ -144,13 +148,11 @@ test('candidate confirms one saved command and sees an honest queued state', asy
   });
 
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  // B169 §8 — the strategist is opened from the place that has a reason to
-  // open it. The contextless «Эксперт» button in the top bar is gone; на
-  // «Главной» вход к нему держит карточка консультанта (B179).
-  // Вход к консультанту свёрнут под профилем (B233): сначала раскрыть.
-  const consultantFold = page.locator('.career-home-fold', { hasText: 'Карьерный консультант' });
-  await consultantFold.locator('summary').click();
-  await page.getByRole('button', { name: /(Начать|Продолжить) разговор/u }).click();
+  // B169 §8 — no contextless «Эксперт» in the top bar. B248: the old home
+  // screen's consultant fold is gone; the rail's «Консультант» item opens the
+  // drawer once the career picture exists.
+  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+  await page.locator('button[aria-label="Консультант"]:visible').first().click();
   const dialog = page.getByRole('dialog', { name: 'Карьерный эксперт' });
   await expect(dialog.getByText('Ничего не отправлено')).toBeVisible();
 
