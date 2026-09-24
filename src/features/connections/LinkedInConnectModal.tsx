@@ -3,6 +3,7 @@ import { ArrowSquareOut, SpinnerGap, WarningCircle } from '@phosphor-icons/react
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import { setStoredSessionToken } from '../coach/apiClient';
 import type { ParsedResume } from '../workspace/resumeParser';
+import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
 import { ImportModalShell } from './ImportModalShell';
 import { PlatformLogo } from './PlatformLogo';
 import {
@@ -45,6 +46,7 @@ export interface LinkedInConnectModalProps {
   readonly onImportSuccess: (
     parsed: ParsedResume,
     rawUrl: string,
+    structured?: { readonly profile: LinkedInProfileV2; readonly extractorVersion: string },
   ) => void | Promise<void>;
   readonly onConnectionFailure: (message: string) => void;
 }
@@ -213,7 +215,7 @@ export function LinkedInConnectModal({
       },
       onReady: (result) => {
         onClose();
-        return onImportSuccess(result.parsed, result.rawUrl);
+        return onImportSuccess(result.parsed, result.rawUrl, result.structured);
       },
     });
     return sessionFlow.current;

@@ -13,9 +13,12 @@ import { LinkedInConnectModal } from './LinkedInConnectModal';
 import type { HhResumeItem } from './HhConnectModal';
 import {
   importCandidateResume,
+  importStructuredLinkedInProfile,
   type ResumeImportResult,
+  type StructuredResumeImportResult,
 } from '../resume/resumeApi';
 import type { ParsedResume } from '../workspace/resumeParser';
+import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
 import {
   applyConnectionDisconnectResult,
   connectionDisconnectNotice,
@@ -92,16 +95,27 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
     }
   }
 
-  async function handleLinkedInSessionImport(parsed: ParsedResume, sourceUrl: string) {
+  async function handleLinkedInSessionImport(
+    parsed: ParsedResume,
+    sourceUrl: string,
+    structured?: { readonly profile: LinkedInProfileV2; readonly extractorVersion: string },
+  ) {
     setBusyPlatform('linkedin');
     setNotice(undefined);
     try {
-      const persisted = await persistNativeSessionImport({
-        platform: 'linkedin',
-        parsed,
-        sourceUrl,
-        capturedAt: new Date().toISOString(),
-      });
+      const persisted = structured
+        ? await persistStructuredLinkedInImport({
+            profile: structured.profile,
+            extractorVersion: structured.extractorVersion,
+            sourceUrl,
+            capturedAt: new Date().toISOString(),
+          })
+        : await persistNativeSessionImport({
+            platform: 'linkedin',
+            parsed,
+            sourceUrl,
+            capturedAt: new Date().toISOString(),
+          });
       setConnections(persisted.connections);
       setNotice(
         `Из ${PLATFORM_LABELS.linkedin} сохранено ${factNoun(persisted.connection.factCount)}.`,
@@ -241,6 +255,63 @@ async function persistNativeSessionImport(
       { status: 'connected'; accessMode: 'native_session_snapshot' }
     > =>
       candidate.platform === input.platform &&
+      candidate.status === 'connected' &&
+      candidate.accessMode === 'native_session_snapshot',
+  );
+  if (!connection) throw new Error('native_connection_not_persisted');
+  return { connection, connections };
+}
+
+interface PersistStructuredLinkedInInput {
+  readonly profile: LinkedInProfileV2;
+  readonly extractorVersion: string;
+  readonly sourceUrl: string;
+  readonly capturedAt: string;
+}
+
+interface PersistStructuredLinkedInDependencies {
+  readonly importStructuredProfile: typeof importStructuredLinkedInProfile;
+  readonly loadConnections: typeof getConnections;
+}
+
+/**
+ * The DOM was already read and parsed on the candidate's device
+ * (`extractStructuredLinkedInProfile`, B266); this path skips the text
+ * importer entirely so the server never runs its text reader over the
+ * structured facts.
+ */
+export async function persistStructuredLinkedInImport(
+  input: PersistStructuredLinkedInInput,
+  dependencies: PersistStructuredLinkedInDependencies = {
+    importStructuredProfile: importStructuredLinkedInProfile,
+    loadConnections: getConnections,
+  },
+): Promise<{
+  readonly connection: Extract<
+    CandidateConnection,
+    { status: 'connected'; accessMode: 'native_session_snapshot' }
+  >;
+  readonly connections: CandidateConnection[];
+}> {
+  const imported: StructuredResumeImportResult = await dependencies.importStructuredProfile({
+    profile: input.profile,
+    extractorVersion: input.extractorVersion,
+    sourceUrl: input.sourceUrl,
+    capturedAt: input.capturedAt,
+  });
+  if (
+    imported.connection?.status !== 'connected' ||
+    imported.connection.accessMode !== 'native_session_snapshot'
+  ) {
+    throw new Error('native_connection_receipt_missing');
+  }
+  const connections = await dependencies.loadConnections();
+  const connection = connections.find(
+    (candidate): candidate is Extract<
+      CandidateConnection,
+      { status: 'connected'; accessMode: 'native_session_snapshot' }
+    > =>
+      candidate.platform === 'linkedin' &&
       candidate.status === 'connected' &&
       candidate.accessMode === 'native_session_snapshot',
   );

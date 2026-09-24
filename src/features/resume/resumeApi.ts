@@ -2,6 +2,7 @@ import { apiFetch, readData } from '../coach/apiClient';
 import type { ParsedResume } from '../workspace/resumeParser';
 import type { ResumeStudioView } from './resumeTypes';
 import type { ResumeDraft } from './resumeTypes';
+import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
 
 /**
  * Reads the resume as it stands now. The server rebuilds both variants from the
@@ -91,4 +92,44 @@ export async function importCandidateResume(input: ResumeImportInput): Promise<R
     }),
   });
   return readData<ResumeImportResult>(response);
+}
+
+export interface StructuredResumeImportInput {
+  readonly profile: LinkedInProfileV2;
+  readonly extractorVersion: string;
+  readonly sourceUrl: string;
+  readonly capturedAt: string;
+}
+
+export interface StructuredResumeImportResult {
+  readonly resume: ResumeStudioView;
+  readonly factCount: number;
+  readonly connection?: NativeSourceConnection;
+}
+
+/**
+ * `POST /candidate/resume/import/structured` (B265/B266). The DOM was
+ * already parsed on the candidate's device — this never sends free text, and
+ * the server never runs a model or a text reader over the payload.
+ */
+export async function importStructuredLinkedInProfile(
+  input: StructuredResumeImportInput,
+): Promise<StructuredResumeImportResult> {
+  const response = await apiFetch('/api/v1/candidate/resume/import/structured', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      schemaVersion: 2,
+      source: 'linkedin',
+      extractorVersion: input.extractorVersion,
+      sourceReceipt: {
+        platform: 'linkedin',
+        accessMode: 'native_session_snapshot',
+        sourceUrl: input.sourceUrl,
+        capturedAt: input.capturedAt,
+      },
+      profile: input.profile,
+    }),
+  });
+  return readData<StructuredResumeImportResult>(response);
 }
