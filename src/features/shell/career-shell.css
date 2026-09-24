@@ -13640,6 +13640,9 @@
   .career-profile-screen-header-row {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
 /* ============================================================================
    Tag/metric primitives (B248 mockup, docs/v1-release/tasks/work/B248/assets/
    shell.css §TAGS): shared by the redesigned onboarding and any screen that
