@@ -12711,12 +12711,6 @@
   gap: var(--career-space-2);
 }
 
-.vacancies-btn-primary {
-  flex: 1;
-  background: var(--career-accent);
-  color: var(--career-surface);
-}
-
 .vacancies-detail-applied {
   flex: 1;
   text-align: center;
@@ -12836,6 +12830,12 @@
 .vacancies-btn-secondary:hover:not(:disabled) {
   border-color: var(--career-accent);
   color: var(--career-accent);
+}
+
+.vacancies-btn-primary {
+  flex: 1;
+  background: var(--career-accent);
+  color: var(--career-surface);
 }
 
 .vacancies-reset {
