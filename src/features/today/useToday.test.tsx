@@ -33,9 +33,18 @@ describe('useToday', () => {
 
   it('visits then reads the snapshot, in order', async () => {
     const snapshot = {
-      digest: { waitingForYou: 0, newVacancies: 3, closedVacancies: 0 },
+      digest: {
+        waitingForYou: 0,
+        newVacancies: 3,
+        closedVacancies: 0,
+        interviewsAhead: 0,
+        nextInterview: null,
+        newVacanciesCaption: null,
+        followUpCaptions: [],
+      },
       queue: [],
-      sinceLastVisit: null,
+      followUps: [],
+      sinceLastVisit: { since: null, items: [] },
       vacanciesPending: false,
     };
     const calls: string[] = [];

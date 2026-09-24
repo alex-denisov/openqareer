@@ -4,12 +4,37 @@ import { TodayScreen } from './TodayScreen';
 import type { TodaySnapshot } from './todayApi';
 
 const snapshot: TodaySnapshot = {
-  digest: { waitingForYou: 2, newVacancies: 3, closedVacancies: 1 },
+  digest: {
+    waitingForYou: 2,
+    newVacancies: 3,
+    closedVacancies: 1,
+    interviewsAhead: 0,
+    nextInterview: null,
+    newVacanciesCaption: null,
+    followUpCaptions: [],
+  },
   queue: [
-    { kind: 'candidate_turn', applicationId: 'app-1', title: 'Ответьте HR в Acme', dueAt: null },
-    { kind: 'new_vacancy', clusterId: 'cl-1', title: 'VP Technology Ops в Beta', dueAt: null },
+    {
+      kind: 'candidate_turn',
+      applicationId: 'app-1',
+      title: 'Ответьте HR в Acme',
+      company: 'Acme',
+      eyebrow: null,
+      dueAt: null,
+      fit: null,
+    },
+    {
+      kind: 'new_vacancy',
+      clusterId: 'cl-1',
+      title: 'VP Technology Ops в Beta',
+      company: 'Beta',
+      eyebrow: 'сегодня',
+      dueAt: null,
+      fit: null,
+    },
   ],
-  sinceLastVisit: null,
+  followUps: [],
+  sinceLastVisit: { since: null, items: [] },
   vacanciesPending: false,
 };
 

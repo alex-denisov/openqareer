@@ -1,4 +1,5 @@
 import type { ApplicationView } from './applicationDerivedFields';
+import { pluralRu } from '../../shared/pluralRu';
 import type { VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
 
 /** Структура зарплаты как в matched-vacancies — клиент форматирует сам. */
@@ -176,8 +177,29 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
   const waitingApplications = input.applications.filter(
     (application) => application.whoseTurn === 'candidate',
   );
+  const upcomingInterviews = upcomingInterviewsOf(input.applications);
+  return {
+    digest: {
+      waitingForYou: waitingApplications.length,
+      newVacancies: input.newVacancies?.length ?? 0,
+      closedVacancies: input.closedVacanciesSinceVisit,
+      interviewsAhead: upcomingInterviews.length,
+      nextInterview: nextInterviewOf(upcomingInterviews[0]),
+      newVacanciesCaption: newVacancyCaption(input.newVacancies, input.campaignRole),
+      followUpCaptions: followUpCaptionsFor(input.applications),
+    },
+    queue: buildQueue(waitingApplications, input.newVacancies),
+    followUps: buildFollowUps(input.applications),
+    sinceLastVisit: { since: input.since, items: sinceLastVisitItemsOf(input) },
+    vacanciesPending: input.newVacancies === undefined,
+  };
+}
 
-  const queue: TodayQueueItem[] = [
+function buildQueue(
+  waitingApplications: readonly ApplicationView[],
+  newVacancies: BuildTodaySnapshotInput['newVacancies'],
+): TodayQueueItem[] {
+  return [
     ...waitingApplications.map((application) => ({
       kind: queueKindFor(application),
       applicationId: application.id,
@@ -187,7 +209,7 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
       dueAt: application.followUp?.dueAt ?? application.nearestInterview?.scheduledAt ?? null,
       fit: null,
     })),
-    ...(input.newVacancies ?? []).map((vacancy) => ({
+    ...(newVacancies ?? []).map((vacancy) => ({
       kind: 'new_vacancy' as const,
       clusterId: vacancy.clusterId,
       title: vacancy.title,
@@ -199,23 +221,28 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
       fit: vacancy.fit,
     })),
   ];
+}
 
-  const upcomingInterviews = input.applications
+function upcomingInterviewsOf(applications: readonly ApplicationView[]): ApplicationView[] {
+  return applications
     .filter((application) => application.nearestInterview?.scheduledAt)
     .sort((a, b) =>
       (a.nearestInterview?.scheduledAt as string).localeCompare(b.nearestInterview?.scheduledAt as string),
     );
-  const nextInterviewApplication = upcomingInterviews[0];
-  const nextInterview: TodayNextInterview | null = nextInterviewApplication
-    ? {
-        company: companyOf(nextInterviewApplication),
-        title: nextInterviewApplication.vacancy?.title ?? '',
-        round: nextInterviewApplication.nearestInterview?.round ?? 1,
-        at: nextInterviewApplication.nearestInterview?.scheduledAt as string,
-      }
-    : null;
+}
 
-  const followUps: TodayFollowUp[] = input.applications
+function nextInterviewOf(application: ApplicationView | undefined): TodayNextInterview | null {
+  if (!application) return null;
+  return {
+    company: companyOf(application),
+    title: application.vacancy?.title ?? '',
+    round: application.nearestInterview?.round ?? 1,
+    at: application.nearestInterview?.scheduledAt as string,
+  };
+}
+
+function buildFollowUps(applications: readonly ApplicationView[]): TodayFollowUp[] {
+  return applications
     .map((application) => ({ application, status: followUpStatusFor(application) }))
     .filter((entry): entry is { application: ApplicationView; status: TodayFollowUpStatus } => entry.status !== null)
     .slice(0, MAX_FOLLOW_UPS)
@@ -225,36 +252,24 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
       title: application.vacancy?.title ?? '',
       status,
     }));
+}
 
-  const sinceLastVisitItems: string[] = [];
-  const freshNewVacanciesCount = input.newVacancies?.length ?? 0;
-  if (freshNewVacanciesCount > 0) {
-    sinceLastVisitItems.push(
-      input.campaignRole
-        ? `${freshNewVacanciesCount} новых вакансий по роли ${input.campaignRole}`
-        : `${freshNewVacanciesCount} новых вакансий`,
-    );
+function sinceLastVisitItemsOf(input: BuildTodaySnapshotInput): string[] {
+  const items: string[] = [];
+  const freshCount = input.newVacancies?.length ?? 0;
+  if (freshCount > 0) {
+    const fresh = pluralRu(freshCount, ['новая вакансия', 'новые вакансии', 'новых вакансий']);
+    items.push(input.campaignRole ? `${fresh} по роли ${input.campaignRole}` : fresh);
   }
   if (input.closedVacanciesSinceVisit > 0) {
-    sinceLastVisitItems.push(`${input.closedVacanciesSinceVisit} закрыто без ответа`);
+    items.push(
+      `${pluralRu(input.closedVacanciesSinceVisit, ['вакансия закрылась', 'вакансии закрылись', 'вакансий закрылись'])} без ответа`,
+    );
   }
   if (input.companyEventsSinceVisit > 0) {
-    sinceLastVisitItems.push(`${input.companyEventsSinceVisit} событие от компаний`);
+    items.push(
+      pluralRu(input.companyEventsSinceVisit, ['событие от компаний', 'события от компаний', 'событий от компаний']),
+    );
   }
-
-  return {
-    digest: {
-      waitingForYou: waitingApplications.length,
-      newVacancies: input.newVacancies?.length ?? 0,
-      closedVacancies: input.closedVacanciesSinceVisit,
-      interviewsAhead: upcomingInterviews.length,
-      nextInterview,
-      newVacanciesCaption: newVacancyCaption(input.newVacancies, input.campaignRole),
-      followUpCaptions: followUpCaptionsFor(input.applications),
-    },
-    queue,
-    followUps,
-    sinceLastVisit: { since: input.since, items: sinceLastVisitItems },
-    vacanciesPending: input.newVacancies === undefined,
-  };
+  return items;
 }

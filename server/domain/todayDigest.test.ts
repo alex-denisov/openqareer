@@ -93,7 +93,7 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
       sourcesCount: 1,
       updatedAt: '2026-09-24T08:00:00.000Z',
     });
-    expect(snapshot.sinceLastVisit.items).toContain('1 новых вакансий по роли DevOps Engineer');
+    expect(snapshot.sinceLastVisit.items).toContain('1 новая вакансия по роли DevOps Engineer');
   });
 
   it('marks a stale follow-up as an overdue queue item and follow-up list entry', () => {
@@ -138,7 +138,7 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
 
     expect(snapshot.sinceLastVisit).toEqual({
       since: '2026-09-01T00:00:00.000Z',
-      items: ['2 событие от компаний'],
+      items: ['2 события от компаний'],
     });
   });
 });
