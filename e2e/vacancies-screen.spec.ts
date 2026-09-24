@@ -72,7 +72,7 @@ function cluster(
     canonicalCompany: company,
     canonicalLocation: 'Дубай',
     isRemote: false,
-    salary: { from: 25000, to: 35000, currency: 'USD', gross: true },
+    salary: { from: 170000, to: 210000, currency: 'USD', gross: true },
     descriptionSummary: '',
     skills: ['Operations', 'P&L', 'Стратегия'],
     primaryUrl: 'https://example.com/vacancy',
@@ -119,9 +119,11 @@ const MATCHED_ITEMS = [
   {
     cluster: cluster('c-2', 'Enterprise Architect, Senior', 'Peraton', {
       canonicalLocation: 'United States',
-      salary: { from: 150000, currency: 'USD', gross: true },
+      salary: { from: 180000, currency: 'USD', gross: true },
     }),
-    explanation: explanation('c-2'),
+    explanation: explanation('c-2', {
+      missingPoints: ['Опыт работы с госзаказчиками'],
+    }),
   },
   {
     cluster: cluster('c-3', 'Cloud & Infrastructure Architect', 'Sonsoft Inc', {
@@ -182,6 +184,36 @@ async function stubSession(page: Page): Promise<void> {
   });
 }
 
+// Профиль и роль подтверждены (3+ evidence, роль с fitState 'plausible' и
+// свежая выборка рынка), чтобы «Подборка» — а не «Профиль» — была текущим
+// шагом индикатора пути, когда пул вакансий уже не пуст (приёмка B250).
+const CONFIRMED_EVIDENCE_ITEMS = [
+  {
+    id: 'evidence-1',
+    kind: 'result' as const,
+    sourceExcerpt: 'Сократил время закрытия вакансий на 30%',
+    statement: 'Сократил время закрытия вакансий на 30%',
+    status: 'confirmed' as const,
+    userEdited: false,
+  },
+  {
+    id: 'evidence-2',
+    kind: 'scope' as const,
+    sourceExcerpt: 'Руководил командой архитекторов из 12 человек',
+    statement: 'Руководил командой архитекторов из 12 человек',
+    status: 'confirmed' as const,
+    userEdited: false,
+  },
+  {
+    id: 'evidence-3',
+    kind: 'scope' as const,
+    sourceExcerpt: 'Отвечал за архитектуру платформы в 3 регионах',
+    statement: 'Отвечал за архитектуру платформы в 3 регионах',
+    status: 'confirmed' as const,
+    userEdited: false,
+  },
+];
+
 async function seedWorkspace(page: Page): Promise<void> {
   await page.addInitScript(
     ({ storageKey, ownerKey, candidateId, workspace }) => {
@@ -205,6 +237,37 @@ async function seedWorkspace(page: Page): Promise<void> {
         constraints: 'Hybrid',
         urgency: 'active',
         outcomes: [],
+        analysis: {
+          evidenceMethodVersion: 'evidence-local-v1',
+          roleMethodVersion: 'role-hypotheses-local-v1',
+          evidenceItems: CONFIRMED_EVIDENCE_ITEMS,
+          questions: [],
+          roleHypotheses: [
+            {
+              id: 'role-enterprise-architect',
+              title: 'Enterprise Architect',
+              fitState: 'plausible',
+              basis: 'Опыт архитектуры платформы и управления командой',
+              evidenceIds: ['evidence-1', 'evidence-2', 'evidence-3'],
+              gaps: [],
+            },
+          ],
+        },
+        marketSample: {
+          source: 'hh',
+          query: 'Enterprise Architect',
+          found: 61,
+          fetchedAt: '2026-09-20T08:00:00.000Z',
+          items: Array.from({ length: 5 }, (_, index) => ({
+            id: `market-${index + 1}`,
+            title: 'Enterprise Architect',
+            company: `Компания ${index + 1}`,
+            location: 'Дубай',
+            sourceUrl: `https://hh.ru/vacancy/market-${index + 1}`,
+            publishedAt: null,
+            salary: null,
+          })),
+        },
       },
     },
   );
@@ -266,7 +329,9 @@ test.describe('B250 vacancies screen', () => {
     );
     expect(wideOverflow).toBeLessThanOrEqual(0);
     await page.screenshot({
-      path: '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/work/B248/impl-shots/vacancies/vacancies-1440.png',
+      path: process.env.SHOTS_DIR
+        ? `${process.env.SHOTS_DIR}/vacancies-1440.png`
+        : testInfo.outputPath('vacancies-1440.png'),
       fullPage: true,
     });
 
@@ -277,7 +342,9 @@ test.describe('B250 vacancies screen', () => {
     );
     expect(narrowOverflow).toBeLessThanOrEqual(0);
     await page.screenshot({
-      path: '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/work/B248/impl-shots/vacancies/vacancies-390.png',
+      path: process.env.SHOTS_DIR
+        ? `${process.env.SHOTS_DIR}/vacancies-390.png`
+        : testInfo.outputPath('vacancies-390.png'),
       fullPage: true,
     });
 
@@ -322,13 +389,43 @@ test.describe('B250 vacancies screen', () => {
     await expect(list).toBeVisible();
   });
 
-  test('the path indicator shows exactly one current step', async ({ page }) => {
+  test('the path indicator shows exactly one current step, and it is «Подборка»', async ({
+    page,
+  }) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
 
     await expect(page.locator('.career-path-step')).toHaveCount(5);
-    await expect(page.locator('.career-path-step[data-state="active"]')).toHaveCount(1);
+    const active = page.locator('.career-path-step[data-state="active"]');
+    await expect(active).toHaveCount(1);
+    await expect(active).toContainText('Подборка');
+    // Профиль и Роль уже подтверждены — пул непуст, поэтому предыдущие шаги
+    // пути не могут остаться «текущими» (приёмка B250).
+    await expect(page.locator('.career-path-step').nth(0)).toHaveAttribute('data-state', 'done');
+    await expect(page.locator('.career-path-step').nth(1)).toHaveAttribute('data-state', 'done');
+  });
+
+  test('shows the «Откликнуться» button on 1440 and inside the mobile panel on 390', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    const applyButton = page.locator('.vacancies-detail-col').getByRole('link', {
+      name: 'Откликнуться',
+    });
+    await expect(applyButton).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('.vac-list-item').first().locator('.vac-row').click();
+    const mobileApplyButton = page.locator('.vacancies-detail-col').getByRole('link', {
+      name: 'Откликнуться',
+    });
+    await expect(mobileApplyButton).toBeVisible();
   });
 });
