@@ -123,7 +123,7 @@ function createCoreApplicationMethods(
   };
 }
 
-function createArtifactApplicationMethods(
+function createInterviewApplicationMethods(
   tracker: ApplicationTrackerController,
   requireCandidate: RequireCandidate,
 ): Pick<
@@ -132,13 +132,6 @@ function createArtifactApplicationMethods(
   | 'createApplicationInterview'
   | 'patchApplicationInterview'
   | 'putApplicationOffer'
-  | 'listVacancySkips'
-  | 'createVacancySkip'
-  | 'deleteVacancySkip'
-  | 'listVacancyDecisions'
-  | 'recordCandidateVisit'
-  | 'getSinceLastVisit'
-  | 'countSystemClosuresSince'
 > {
   return {
     linkApplicationMaterial(candidateId, applicationId, role, documentId) {
@@ -157,6 +150,23 @@ function createArtifactApplicationMethods(
       requireCandidate(candidateId);
       return tracker.putOffer(candidateId, applicationId, terms, respondBy);
     },
+  };
+}
+
+function createVacancyJourneyMethods(
+  tracker: ApplicationTrackerController,
+  requireCandidate: RequireCandidate,
+): Pick<
+  ApplicationTrackerMethods,
+  | 'listVacancySkips'
+  | 'createVacancySkip'
+  | 'deleteVacancySkip'
+  | 'listVacancyDecisions'
+  | 'recordCandidateVisit'
+  | 'getSinceLastVisit'
+  | 'countSystemClosuresSince'
+> {
+  return {
     listVacancySkips(candidateId) {
       requireCandidate(candidateId);
       return tracker.listSkips(candidateId);
@@ -194,6 +204,7 @@ export function createApplicationTrackerMethods(
 ): ApplicationTrackerMethods {
   return {
     ...createCoreApplicationMethods(tracker, requireCandidate),
-    ...createArtifactApplicationMethods(tracker, requireCandidate),
+    ...createInterviewApplicationMethods(tracker, requireCandidate),
+    ...createVacancyJourneyMethods(tracker, requireCandidate),
   };
 }
