@@ -228,14 +228,24 @@ test.describe('B251 today screen', () => {
     const wideOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
-    console.log('DIAG1440 ' + JSON.stringify(await page.evaluate(() => {
-      const cw = document.documentElement.clientWidth;
-      return [...document.querySelectorAll<HTMLElement>('body *')]
-        .map((el) => ({ el, r: el.getBoundingClientRect() }))
-        .filter(({ r }) => r.width > 0 && r.right > cw + 0.01)
-        .slice(0, 15)
-        .map(({ el, r }) => `${el.tagName.toLowerCase()}.${el.className.toString().slice(0, 60)} right=${r.right.toFixed(2)} w=${r.width.toFixed(2)} cw=${cw}`);
-    }), null, 1));
+    console.log(
+      'DIAG1440 ' +
+        JSON.stringify(
+          await page.evaluate(() => {
+            const cw = document.documentElement.clientWidth;
+            return [...document.querySelectorAll<HTMLElement>('body *')]
+              .map((el) => ({ el, r: el.getBoundingClientRect() }))
+              .filter(({ r }) => r.width > 0 && r.right > cw + 0.01)
+              .slice(0, 15)
+              .map(
+                ({ el, r }) =>
+                  `${el.tagName.toLowerCase()}.${el.className.toString().slice(0, 60)} right=${r.right.toFixed(2)} w=${r.width.toFixed(2)} cw=${cw}`,
+              );
+          }),
+          null,
+          1,
+        ),
+    );
     expect(wideOverflow).toBeLessThanOrEqual(0);
     await page.screenshot({
       path: process.env.SHOTS_DIR
@@ -255,7 +265,10 @@ test.describe('B251 today screen', () => {
         .map((el) => ({ el, r: el.getBoundingClientRect() }))
         .filter(({ r }) => r.width > 0 && r.right > cw + 0.01)
         .slice(0, 15)
-        .map(({ el, r }) => `${el.tagName.toLowerCase()}.${el.className.toString().slice(0, 60)} right=${r.right.toFixed(2)} w=${r.width.toFixed(2)} cw=${cw}`);
+        .map(
+          ({ el, r }) =>
+            `${el.tagName.toLowerCase()}.${el.className.toString().slice(0, 60)} right=${r.right.toFixed(2)} w=${r.width.toFixed(2)} cw=${cw}`,
+        );
     });
     console.log('DIAG ' + JSON.stringify(offenders, null, 1));
     expect(narrowOverflow).toBeLessThanOrEqual(0);
