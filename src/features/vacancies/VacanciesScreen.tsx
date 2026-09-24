@@ -126,7 +126,11 @@ function VacanciesFilters({
 
       <FreshnessGroup state={state} onChange={onChange} />
 
-      <button type="button" className="btn btn-ghost btn-sm vacancies-reset" onClick={onReset}>
+      <button
+        type="button"
+        className="vacancies-btn vacancies-btn-secondary vacancies-reset"
+        onClick={onReset}
+      >
         Сбросить фильтры
       </button>
     </aside>
@@ -289,13 +293,16 @@ function Chip({
   readonly isSelected: boolean;
   readonly onClick?: () => void;
 }) {
+  if (!onClick) {
+    return <span className={`vacancies-chip${isSelected ? ' is-selected' : ''}`}>{label}</span>;
+  }
+
   return (
     <button
       type="button"
       className={`vacancies-chip${isSelected ? ' is-selected' : ''}`}
       aria-pressed={isSelected}
       onClick={onClick}
-      disabled={!onClick}
     >
       {label}
     </button>
