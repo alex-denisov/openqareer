@@ -53,7 +53,7 @@ describe('ResponsesBoard columns', () => {
       application({ id: 'a5', stage: 'rejected' }),
       application({ id: 'a6', stage: 'archived' }),
     ];
-    const html = renderToStaticMarkup(<ResponsesBoard state={readyState(applications)} />);
+    const html = renderToStaticMarkup(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
 
     ['Хочу', 'Откликнулся', 'Ответ', 'Интервью', 'Оффер', 'Отказ / Архив'].forEach((label) => {
       expect(html).toContain(label);
@@ -76,7 +76,7 @@ describe('ResponsesBoard columns', () => {
         materials: { coverLetter: true, resume: true },
       }),
     ];
-    const html = renderToStaticMarkup(<ResponsesBoard state={readyState(applications)} />);
+    const html = renderToStaticMarkup(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
 
     expect(html).toContain('Enterprise Architect');
     expect(html).toContain('Peraton');
@@ -85,13 +85,13 @@ describe('ResponsesBoard columns', () => {
 
   it('renders the loading skeleton before data arrives', () => {
     const state: UseApplications = { ...readyState([]), status: 'loading' };
-    const html = renderToStaticMarkup(<ResponsesBoard state={state} />);
+    const html = renderToStaticMarkup(<ResponsesBoard state={state} onOpenVacancies={() => {}} />);
     expect(html).toContain('aria-busy="true"');
     expect(html).toContain('Загружаем отклики');
   });
 
   it('renders the empty pipeline copy from the mockup', () => {
-    const html = renderToStaticMarkup(<ResponsesBoard state={readyState([])} />);
+    const html = renderToStaticMarkup(<ResponsesBoard state={readyState([])} onOpenVacancies={() => {}} />);
     expect(html).toContain('Пайплайн пуст');
     expect(html).toContain('Пайплайн наполняется из очереди дня');
   });
@@ -103,7 +103,7 @@ describe('ResponsesBoard columns', () => {
       offline: true,
       error: 'Failed to fetch',
     };
-    const html = renderToStaticMarkup(<ResponsesBoard state={state} />);
+    const html = renderToStaticMarkup(<ResponsesBoard state={state} onOpenVacancies={() => {}} />);
     expect(html).toContain('Нет соединения');
     expect(html).not.toContain('Failed to fetch');
   });
@@ -115,7 +115,7 @@ describe('ResponsesBoard columns', () => {
       offline: false,
       error: 'Не удалось загрузить отклики.',
     };
-    const html = renderToStaticMarkup(<ResponsesBoard state={state} />);
+    const html = renderToStaticMarkup(<ResponsesBoard state={state} onOpenVacancies={() => {}} />);
     expect(html).toContain('Не удалось загрузить отклики.');
     expect(html).toContain('Повторить');
   });
@@ -134,7 +134,7 @@ describe('ResponsesBoard columns', () => {
         },
       }),
     ];
-    const html = renderToStaticMarkup(<ResponsesBoard state={readyState(applications)} />);
+    const html = renderToStaticMarkup(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
 
     expect(html).toContain('VP Technology');
     expect(html).toContain('компания скрыта');

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowClockwise, Plus, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, Briefcase, DotsThreeVertical, WarningCircle } from '@phosphor-icons/react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { UseApplications } from './useApplications';
 import { ResponsesCard } from './ResponsesCard';
@@ -26,13 +26,19 @@ const COLUMNS: readonly Column[] = [
  * загрузка/пусто/ошибка идут раньше доски, «частично» и «без прав» — как
  * баннеры поверх карточек, которые всё ещё видны.
  */
-export function ResponsesBoard({ state }: { state: UseApplications }) {
+export function ResponsesBoard({
+  state,
+  onOpenVacancies,
+}: {
+  state: UseApplications;
+  onOpenVacancies: () => void;
+}) {
   if (state.status === 'loading') return <LoadingState />;
   if (state.status === 'error') {
     return <ErrorState message={state.error ?? ''} offline={state.offline} onRetry={state.reload} />;
   }
   if (state.applications.length === 0) return <EmptyState />;
-  return <ReadyBoard state={state} />;
+  return <ReadyBoard state={state} onOpenVacancies={onOpenVacancies} />;
 }
 
 function LoadingState() {
@@ -77,7 +83,13 @@ function ErrorState({
   );
 }
 
-function ReadyBoard({ state }: { state: UseApplications }) {
+function ReadyBoard({
+  state,
+  onOpenVacancies,
+}: {
+  state: UseApplications;
+  onOpenVacancies: () => void;
+}) {
   const [addingManual, setAddingManual] = useState(false);
   return (
     <div className="career-responses-board-wrap">
@@ -88,6 +100,7 @@ function ReadyBoard({ state }: { state: UseApplications }) {
             key={column.key}
             column={column}
             state={state}
+            onOpenVacancies={column.key === 'saved' ? onOpenVacancies : undefined}
             onAddManual={column.key === 'saved' ? () => setAddingManual(true) : undefined}
           />
         ))}
@@ -118,10 +131,12 @@ function Legend() {
 function BoardColumn({
   column,
   state,
+  onOpenVacancies,
   onAddManual,
 }: {
   column: Column;
   state: UseApplications;
+  onOpenVacancies?: () => void;
   onAddManual?: () => void;
 }) {
   const cards = state.applications.filter((application) => column.stages.includes(application.stage));
@@ -144,12 +159,60 @@ function BoardColumn({
             onSkip={(reasonId) => void state.skip(application, reasonId)}
           />
         ))}
-        {onAddManual ? (
-          <button type="button" className="career-responses-add-card" onClick={onAddManual}>
-            <Plus size={14} /> Добавить вручную
-          </button>
+        {column.key === 'offer' && cards.length === 0 ? <OfferPlaceholder /> : null}
+        {onOpenVacancies ? (
+          <AddCardControl onOpenVacancies={onOpenVacancies} onAddManual={onAddManual} />
         ) : null}
       </div>
     </section>
+  );
+}
+
+function OfferPlaceholder() {
+  return (
+    <div className="career-responses-offer-placeholder">
+      Пока пусто. Здесь появится оффер, когда компания его пришлёт — с дедлайном ответа.
+    </div>
+  );
+}
+
+function AddCardControl({
+  onOpenVacancies,
+  onAddManual,
+}: {
+  onOpenVacancies: () => void;
+  onAddManual?: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  return (
+    <div className="career-responses-add-card-row">
+      <button type="button" className="career-responses-add-card" onClick={onOpenVacancies}>
+        <Briefcase size={14} /> Добавить из «Вакансии»
+      </button>
+      {onAddManual ? (
+        <div className="career-responses-menu-wrap">
+          <button
+            type="button"
+            aria-label="Ещё способы добавить карточку"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <DotsThreeVertical size={16} />
+          </button>
+          {menuOpen ? (
+            <div className="career-responses-card-menu">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onAddManual();
+                }}
+              >
+                Добавить вручную
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }

@@ -300,7 +300,9 @@ function CabinetSection({
     );
   }
   if (view === 'responses') {
-    return <ResponsesBoard state={applicationsTracker} />;
+    return (
+      <ResponsesBoard state={applicationsTracker} onOpenVacancies={() => onNavigate('opportunities')} />
+    );
   }
   return (
     <VacancyBoard

@@ -12755,6 +12755,8 @@
   justify-content: center;
   gap: 6px;
   min-height: 44px;
+  flex: 1;
+  min-width: 0;
   border: 1px dashed var(--career-line-strong);
   border-radius: var(--career-radius-md);
   color: var(--career-text-dim);
@@ -12766,6 +12768,25 @@
 .career-responses-add-card:hover {
   color: var(--career-text-soft);
   border-color: var(--career-text-dim);
+}
+
+.career-responses-add-card-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--career-space-2);
+}
+
+.career-responses-add-card-row .career-responses-menu-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.career-responses-offer-placeholder {
+  border: 1px dashed var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-4);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-aux);
 }
 
 .career-responses-menu-wrap {
