@@ -13704,6 +13704,12 @@
   display: inline-flex;
 }
 
+.career-onboarding-exits {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+}
+
 .career-onboarding-dots {
   display: flex;
   gap: 8px;

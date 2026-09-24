@@ -1,18 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { ArrowLeft, ArrowRight } from '@phosphor-icons/react';
 import { disconnectConnection, getConnections } from '../coach/coachApi';
-import {
-  closeConnectorSession,
-  resetConnectorSession,
-} from '../connections/connectorSession';
+import { closeConnectorSession, resetConnectorSession } from '../connections/connectorSession';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import type { CandidateRegion } from '../workspace/candidateRegions';
 import { parseResumeContent } from '../workspace/resumeParser';
 import type { WorkspaceInput } from '../workspace/workspaceStorage';
-import {
-  connectedProfileSource,
-  type ConnectedProfileSource,
-} from './connectedProfileSource';
+import { connectedProfileSource, type ConnectedProfileSource } from './connectedProfileSource';
 import { IntakeSourceStep, type SourceChoice } from './IntakeSourceStep';
 import { intakeSourceLock } from './intakeSourceLock';
 import { OnboardingSourceCards } from './OnboardingSourceCards';
@@ -27,16 +21,10 @@ import {
 } from './OnboardingGeoStep';
 import { OnboardingDoneStep } from './OnboardingDoneStep';
 import { OnboardingWizardChrome } from './OnboardingWizardChrome';
-import {
-  buildParseProgressCounts,
-  buildProfileReviewRows,
-} from './profileFactReviewRows';
+import { buildParseProgressCounts, buildProfileReviewRows } from './profileFactReviewRows';
 import { buildOnboardingRoleCards } from './onboardingRoleCards';
 import { buildOnboardingWorkspaceInput } from './onboardingWorkspaceInput';
-import {
-  formatOnboardingDuration,
-  startOnboardingTimer,
-} from './onboardingTimer';
+import { formatOnboardingDuration, startOnboardingTimer } from './onboardingTimer';
 import {
   nextStep as nextStepId,
   previousStep as previousStepId,
@@ -50,6 +38,7 @@ interface OnboardingWizardProps {
   readonly onComplete: (input: WorkspaceInput) => void;
   readonly hasAccount?: boolean;
   readonly onStartedChange?: (started: boolean) => void;
+  readonly onSignIn?: () => void;
 }
 
 const emptyTalk: OnboardingTalkValues = { tasks: '', change: '', successMeasure: '' };
@@ -68,6 +57,7 @@ export function OnboardingWizard({
   onComplete,
   hasAccount = false,
   onStartedChange,
+  onSignIn,
 }: OnboardingWizardProps) {
   const isDesktop = isTauriEnvironment();
   const ingestion = useResumeIngestion(hasAccount);
@@ -274,6 +264,7 @@ export function OnboardingWizard({
         title={titleFor(step)}
         description={descriptionFor(step)}
         onSkip={() => onComplete(buildDeferredWorkspaceInput())}
+        onSignIn={hasAccount ? undefined : onSignIn}
       />
 
       {step === 'source' ? (
@@ -322,7 +313,9 @@ export function OnboardingWizard({
               Вернуться к PDF
             </button>
           ) : null}
-          {sourceChoice === 'pdf' || sourceChoice === 'profile-import' || sourceChoice === 'text' ? (
+          {sourceChoice === 'pdf' ||
+          sourceChoice === 'profile-import' ||
+          sourceChoice === 'text' ? (
             <IntakeSourceStep
               hideChoiceRow
               isDesktop={isDesktop}
@@ -456,7 +449,9 @@ export function OnboardingWizard({
       ) : null}
 
       <footer className="career-intake-actions">
-        {step === 'source' ? <span /> : (
+        {step === 'source' ? (
+          <span />
+        ) : (
           <button className="career-quiet-button" type="button" onClick={goBack}>
             <ArrowLeft size={18} />
             Назад

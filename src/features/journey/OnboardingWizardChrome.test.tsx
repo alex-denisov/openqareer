@@ -46,4 +46,19 @@ describe('OnboardingWizardChrome', () => {
     expect(html).toContain('brand-lockup');
     expect(html).toContain('aria-label="openqareer, главная"');
   });
+
+  // Owner decision 2026-09-24: step 1 is full-screen too, so the rail's
+  // account door is gone and a returning candidate signs in from here.
+  it('offers sign-in only when the shell passes a sign-in handler', () => {
+    const base = {
+      step: { id: 'source', dot: 1, total: 6 },
+      title: 'С чем разбираемся?',
+      description: 'Выберите то, что у вас уже есть.',
+      onSkip: noop,
+    } as const;
+    expect(renderToStaticMarkup(<OnboardingWizardChrome {...base} />)).not.toContain('Войти');
+    expect(renderToStaticMarkup(<OnboardingWizardChrome {...base} onSignIn={noop} />)).toContain(
+      'Войти',
+    );
+  });
 });

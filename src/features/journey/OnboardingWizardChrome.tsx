@@ -6,6 +6,9 @@ interface OnboardingWizardChromeProps {
   readonly title: string;
   readonly description: string;
   readonly onSkip: () => void;
+  /** Present only for an anonymous candidate: the rail and its account door
+   *  are hidden for the whole wizard, step 1 included (owner, 2026-09-24). */
+  readonly onSignIn?: () => void;
 }
 
 /**
@@ -25,9 +28,16 @@ export function OnboardingWizardChrome(props: OnboardingWizardChromeProps) {
         <span className="career-onboarding-brand" aria-label="openqareer, главная">
           <BrandMark variant="lockup" size={26} />
         </span>
-        <button type="button" className="career-quiet-button" onClick={props.onSkip}>
-          Отложить настройку
-        </button>
+        <div className="career-onboarding-exits">
+          {props.onSignIn ? (
+            <button type="button" className="career-quiet-button" onClick={props.onSignIn}>
+              Войти
+            </button>
+          ) : null}
+          <button type="button" className="career-quiet-button" onClick={props.onSkip}>
+            Отложить настройку
+          </button>
+        </div>
       </div>
       <ol className="career-onboarding-dots" aria-hidden="true">
         {dots.map((dot) => (

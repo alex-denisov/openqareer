@@ -29,15 +29,8 @@ import { CareerAccountPanel } from './CareerAccountPanel';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { CareerPathIndicator } from './CareerPathIndicator';
 import { buildPathIndicator } from './pathIndicator';
-import {
-  keepsIntakeAcrossIdentityChange,
-  shouldShowIntake,
-} from './intakeContinuity';
-import {
-  isSectionNavigable,
-  sectionLockReason,
-  type ShellSection,
-} from './shellNavigation';
+import { keepsIntakeAcrossIdentityChange, shouldShowIntake } from './intakeContinuity';
+import { isSectionNavigable, sectionLockReason, type ShellSection } from './shellNavigation';
 
 type ShellView = ShellSection;
 
@@ -90,8 +83,22 @@ type RailNavItem =
  * keeps its own `ShellSection` for that click-through (B248 §4 mapping).
  */
 const primaryNavigation: readonly RailNavItem[] = [
-  { key: 'today', label: 'Сегодня', icon: TodayIcon, kind: 'navigate', target: 'today', tracksActive: true },
-  { key: 'profile', label: 'Профиль', icon: ProfileIcon, kind: 'navigate', target: 'profile', tracksActive: true },
+  {
+    key: 'today',
+    label: 'Сегодня',
+    icon: TodayIcon,
+    kind: 'navigate',
+    target: 'today',
+    tracksActive: true,
+  },
+  {
+    key: 'profile',
+    label: 'Профиль',
+    icon: ProfileIcon,
+    kind: 'navigate',
+    target: 'profile',
+    tracksActive: true,
+  },
   {
     key: 'opportunities',
     label: 'Вакансии',
@@ -211,12 +218,11 @@ export function CareerWorkspaceShell({
     isTodayView: activeView === 'today',
   });
 
-  // The rail's account door is the only way an anonymous candidate can
-  // register, and the wizard's first step (source choice) does not need an
-  // account yet, so the chrome must stay put through it (B141). `onStartedChange`
-  // now fires once the wizard leaves that step, which is when onboarding.html's
-  // full-screen chrome applies (B249).
-  const onboardingIsFullscreen = intakeVisible && intakeStarted;
+  // onboarding.html is full-screen from its first step (owner decision
+  // 2026-09-24, replacing the B141 exception that kept the rail on step 1 for
+  // its account door); an anonymous candidate signs in from the wizard's own
+  // top bar instead.
+  const onboardingIsFullscreen = intakeVisible;
 
   useEffect(() => {
     if (!sessionPending) {
@@ -305,12 +311,7 @@ export function CareerWorkspaceShell({
   const resetForAccount = useCallback(
     (nextSession: AuthUser | null) => {
       setActiveView('today');
-      if (
-        !keepsIntakeAcrossIdentityChange(
-          session?.candidateId,
-          nextSession?.candidateId,
-        )
-      ) {
+      if (!keepsIntakeAcrossIdentityChange(session?.candidateId, nextSession?.candidateId)) {
         setIntakeStarted(false);
         setIntakeSeed((seed) => seed + 1);
       }
@@ -341,9 +342,7 @@ export function CareerWorkspaceShell({
   );
 
   const planName = CURRENT_PLAN.name;
-  const accountInitials = initialsFor(
-    session?.displayName ?? session?.username ?? null,
-  );
+  const accountInitials = initialsFor(session?.displayName ?? session?.username ?? null);
 
   return (
     <div
@@ -497,6 +496,7 @@ export function CareerWorkspaceShell({
               onComplete={completeIntake}
               hasAccount={Boolean(session)}
               onStartedChange={setIntakeStarted}
+              onSignIn={() => setAccountOpen(true)}
             />
           ) : null}
           {cabinetSession && !intakeVisible && activeView !== 'tariffs' ? (
@@ -565,7 +565,9 @@ export function CareerWorkspaceShell({
           {!cabinetSession && visibleWorkspace && journey && activeView === 'responses' ? (
             <div className="career-responses-signin-hint">
               <h3>Отклики появятся после входа в аккаунт</h3>
-              <p>Пайплайн откликов хранится на сервере вместе с профилем. Войдите, чтобы открыть его.</p>
+              <p>
+                Пайплайн откликов хранится на сервере вместе с профилем. Войдите, чтобы открыть его.
+              </p>
               <button type="button" onClick={onOpenLogin}>
                 Войти
               </button>
