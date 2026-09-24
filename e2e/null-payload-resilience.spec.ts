@@ -54,7 +54,11 @@ test.describe('cabinet survives unexpected null API payloads', () => {
 
     const bodyText = await page.evaluate(() => document.body.innerText);
     expect(bodyText.trim().length).toBeGreaterThan(0);
-    expect(page.getByRole('button', { name: 'Сегодня' }).first()).toBeVisible();
+    // B249: a candidate answering `{ "data": null }` on `/candidate/workspace`
+    // has no workspace, so the shell correctly opens the fullscreen
+    // diagnostic wizard (rail included) instead of the cabinet — that is the
+    // navigable, non-broken state INC-020 asks for here.
+    await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
     expect(pageErrors).toEqual([]);
 
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy');
