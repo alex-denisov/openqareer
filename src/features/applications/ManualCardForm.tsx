@@ -39,26 +39,14 @@ export function ManualCardForm({ onCancel, onSubmit }: ManualCardFormProps) {
 
   return (
     <div className="career-responses-manual-form" role="dialog" aria-label="Добавить карточку вручную">
-      <label>
-        Роль
-        <input value={title} onChange={(event) => setTitle(event.target.value)} />
-      </label>
-      <label>
-        Компания
-        <input
-          value={company}
-          onChange={(event) => setCompany(event.target.value)}
-          disabled={companyHidden}
-        />
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={companyHidden}
-          onChange={(event) => setCompanyHidden(event.target.checked)}
-        />
-        Компания скрыта рекрутером
-      </label>
+      <ManualCardFields
+        title={title}
+        onTitleChange={setTitle}
+        company={company}
+        onCompanyChange={setCompany}
+        companyHidden={companyHidden}
+        onCompanyHiddenChange={setCompanyHidden}
+      />
       {error ? (
         <p className="career-responses-card-failed" role="alert">
           {error}
@@ -73,5 +61,48 @@ export function ManualCardForm({ onCancel, onSubmit }: ManualCardFormProps) {
         </button>
       </div>
     </div>
+  );
+}
+
+interface ManualCardFieldsProps {
+  readonly title: string;
+  readonly onTitleChange: (value: string) => void;
+  readonly company: string;
+  readonly onCompanyChange: (value: string) => void;
+  readonly companyHidden: boolean;
+  readonly onCompanyHiddenChange: (value: boolean) => void;
+}
+
+function ManualCardFields({
+  title,
+  onTitleChange,
+  company,
+  onCompanyChange,
+  companyHidden,
+  onCompanyHiddenChange,
+}: ManualCardFieldsProps) {
+  return (
+    <>
+      <label>
+        Роль
+        <input value={title} onChange={(event) => onTitleChange(event.target.value)} />
+      </label>
+      <label>
+        Компания
+        <input
+          value={company}
+          onChange={(event) => onCompanyChange(event.target.value)}
+          disabled={companyHidden}
+        />
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={companyHidden}
+          onChange={(event) => onCompanyHiddenChange(event.target.checked)}
+        />
+        Компания скрыта рекрутером
+      </label>
+    </>
   );
 }

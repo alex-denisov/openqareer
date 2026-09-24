@@ -55,6 +55,8 @@ export function ResponsesCard({
     closedReason: application.closedReason,
   });
 
+  const hasMaterials = application.materials.coverLetter || application.materials.resume;
+
   return (
     <article className="career-responses-card" data-cluster={application.clusterId ?? ''}>
       <div className="career-responses-card-role">{application.vacancy?.title ?? 'Без названия'}</div>
@@ -63,16 +65,84 @@ export function ResponsesCard({
           ? 'компания скрыта'
           : application.vacancy?.company || 'компания не указана'}
       </div>
-      <div className="career-responses-card-materials">
-        {application.materials.coverLetter || application.materials.resume ? (
-          <FileText size={12} />
-        ) : (
-          <Warning size={12} />
-        )}
-        {application.materials.coverLetter || application.materials.resume
-          ? 'Материалы на карточке'
-          : 'Письмо не собрано'}
+      <MaterialsBadge hasMaterials={hasMaterials} />
+      <CardAlerts failed={failed} conflicted={conflicted} onRetry={onRetry} />
+      <StageChangeControl stage={application.stage} onChangeStage={onChangeStage} />
+      <CardFooter
+        application={application}
+        labelText={label.text}
+        labelOn={label.on}
+        menuOpen={menuOpen}
+        onToggleMenu={() => setMenuOpen((open) => !open)}
+        onSaveNote={(notes) => {
+          onSaveNote(notes);
+          setMenuOpen(false);
+        }}
+        onSkip={(reasonId) => {
+          onSkip(reasonId);
+          setMenuOpen(false);
+        }}
+      />
+    </article>
+  );
+}
+
+interface CardFooterProps {
+  application: ApplicationView;
+  labelText: string;
+  labelOn: 'you' | 'them' | null;
+  menuOpen: boolean;
+  onToggleMenu: () => void;
+  onSaveNote: (notes: string) => void;
+  onSkip: (reasonId: SkipReasonId) => void;
+}
+
+function CardFooter({
+  application,
+  labelText,
+  labelOn,
+  menuOpen,
+  onToggleMenu,
+  onSaveNote,
+  onSkip,
+}: CardFooterProps) {
+  return (
+    <div className="career-responses-card-footer">
+      <span className={`career-responses-waiting ${labelOn ? `is-on-${labelOn}` : 'is-closed'}`}>
+        {labelText}
+      </span>
+      <div className="career-responses-menu-wrap">
+        <button type="button" aria-label="Действия с карточкой" onClick={onToggleMenu}>
+          <DotsThreeVertical size={16} />
+        </button>
+        {menuOpen ? (
+          <CardMenu application={application} onSaveNote={onSaveNote} onSkip={onSkip} />
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function MaterialsBadge({ hasMaterials }: { hasMaterials: boolean }) {
+  return (
+    <div className="career-responses-card-materials">
+      {hasMaterials ? <FileText size={12} /> : <Warning size={12} />}
+      {hasMaterials ? 'Материалы на карточке' : 'Письмо не собрано'}
+    </div>
+  );
+}
+
+function CardAlerts({
+  failed,
+  conflicted,
+  onRetry,
+}: {
+  failed: boolean;
+  conflicted: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <>
       {failed ? (
         <p className="career-responses-card-failed" role="alert">
           Этап не сохранился.{' '}
@@ -86,37 +156,7 @@ export function ResponsesCard({
           Карточку изменили на другом устройстве. Обновите список.
         </p>
       ) : null}
-      <StageChangeControl stage={application.stage} onChangeStage={onChangeStage} />
-      <div className="career-responses-card-footer">
-        <span
-          className={`career-responses-waiting ${label.on ? `is-on-${label.on}` : 'is-closed'}`}
-        >
-          {label.text}
-        </span>
-        <div className="career-responses-menu-wrap">
-          <button
-            type="button"
-            aria-label="Действия с карточкой"
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            <DotsThreeVertical size={16} />
-          </button>
-          {menuOpen ? (
-            <CardMenu
-              application={application}
-              onSaveNote={(notes) => {
-                onSaveNote(notes);
-                setMenuOpen(false);
-              }}
-              onSkip={(reasonId) => {
-                onSkip(reasonId);
-                setMenuOpen(false);
-              }}
-            />
-          ) : null}
-        </div>
-      </div>
-    </article>
+    </>
   );
 }
 
