@@ -36,14 +36,16 @@ export function VacancyRow({
         <span className="vac-main">
           <span className="vac-title">{cluster.canonicalTitle}</span>
           <span className="vac-sub">{vacancySubtitle(cluster)}</span>
+          <span className="vac-meta">
+            <span className="vac-comp">{formatCompensationCompact(cluster.salary)}</span>
+            <span className="vac-age">{age.label}</span>
+            <span className="vac-fit">
+              <FitDot isYes={explanation.roleMatch === 'target'} title="Семья ролей" />
+              <FitDot isYes={explanation.levelMatch === 'target'} title="Уровень" />
+              <FitDot isYes={!explanation.outsideGeography} title="География" />
+            </span>
+          </span>
         </span>
-        <span className="vac-fit">
-          <FitDot isYes={explanation.roleMatch === 'target'} title="Семья ролей" />
-          <FitDot isYes={explanation.levelMatch === 'target'} title="Уровень" />
-          <FitDot isYes={!explanation.outsideGeography} title="География" />
-        </span>
-        <span className="vac-comp">{formatCompensationCompact(cluster.salary)}</span>
-        <span className="vac-age">{age.label}</span>
       </button>
     </li>
   );
