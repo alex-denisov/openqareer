@@ -74,8 +74,8 @@ describe('CareerWorkspaceShell', () => {
     );
 
     // «Главная» держит самого кандидата: профиль слева, оценка справа (B179).
-    expect(html).toContain('Разделы профиля');
-    expect(html).toContain('Готовность профиля');
+    expect(html).toContain('career-today');
+    expect(html).toContain('<h1>Сегодня</h1>');
     expect(html).not.toContain('Следующий шаг');
     expect(html).not.toContain('Диалог со стратегом');
     expect(html).not.toContain('Рынок и следующие шаги');
