@@ -85,7 +85,7 @@ export const workplaceTypeSchema = z.enum(['on_site', 'hybrid', 'remote']);
 
 export const cefrLevelSchema = z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
 
-const experienceSchema = z
+export const experienceSchema = z
   .object({
     title: optionalCaption,
     employer: optionalCaption,
@@ -103,7 +103,7 @@ const experienceSchema = z
   })
   .strict();
 
-const educationSchema = z
+export const educationSchema = z
   .object({
     institution: optionalCaption,
     qualification: optionalCaption,
@@ -113,7 +113,7 @@ const educationSchema = z
   })
   .strict();
 
-const certificationSchema = z
+export const certificationSchema = z
   .object({
     name: caption,
     issuer: optionalCaption,
@@ -124,7 +124,7 @@ const certificationSchema = z
   })
   .strict();
 
-const projectSchema = z
+export const projectSchema = z
   .object({
     name: caption,
     startDate: optionalDate,
@@ -145,7 +145,7 @@ export const achievementKindSchema = z.enum([
   'volunteering',
 ]);
 
-const achievementSchema = z
+export const achievementSchema = z
   .object({
     kind: achievementKindSchema,
     title: caption,
@@ -158,7 +158,7 @@ const achievementSchema = z
   })
   .strict();
 
-const courseSchema = z
+export const courseSchema = z
   .object({
     name: caption,
     institution: optionalCaption,
@@ -167,7 +167,7 @@ const courseSchema = z
   })
   .strict();
 
-const testSchema = z
+export const testSchema = z
   .object({
     name: caption,
     provider: optionalCaption,
@@ -176,7 +176,7 @@ const testSchema = z
   })
   .strict();
 
-const recommendationSchema = z
+export const recommendationSchema = z
   .object({
     recommender: optionalCaption,
     organization: optionalCaption,
@@ -188,14 +188,14 @@ const recommendationSchema = z
   })
   .strict();
 
-const languageSchema = z
+export const languageSchema = z
   .object({
     name: caption,
     cefr: cefrLevelSchema.optional(),
   })
   .strict();
 
-const openToWorkSchema = z
+export const openToWorkSchema = z
   .object({
     roles: z.array(caption).max(20),
     locations: z.array(caption).max(20),

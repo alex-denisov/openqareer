@@ -1,5 +1,15 @@
 import { parseResumeContent, type ParsedResume } from '../workspace/resumeParser';
 import { extractLinkedInProfile } from './linkedinProfileExtract';
+import {
+  extractStructuredLinkedInProfile,
+  LI_SDUI_EXTRACTOR_VERSION,
+  type LinkedInProfilePages,
+} from './linkedinProfileStructuredExtract';
+import {
+  hasStructuredSubstance,
+  sanitizedAndValidLinkedInProfile,
+} from './linkedinProfileSanitize';
+import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
 import type { SessionInspectionResult, SessionPageResult } from './connectorSession';
 import { captureSignedInPage } from './sessionCapture';
 import {
@@ -10,6 +20,21 @@ import {
 } from './sessionWaitingStage';
 
 const LINKEDIN_PROFILE_URL = 'https://www.linkedin.com/in/me/';
+
+/**
+ * Fixed LinkedIn detail-page paths read after the main profile (architecture
+ * §3): one navigation per section, no synthetic clicks. Recommendations only
+ * pulls "Received" (architecture §2) and contact info is the overlay route.
+ */
+const DETAIL_PAGE_PATHS: Readonly<Record<Exclude<keyof LinkedInProfilePages, 'profile' | 'achievements' | 'openToWork'>, string>> = {
+  experience: 'details/experience/',
+  education: 'details/education/',
+  skills: 'details/skills/',
+  certifications: 'details/certifications/',
+  projects: 'details/projects/',
+  contactInfo: 'overlay/contact-info/',
+  recommendations: 'details/recommendations/received/',
+};
 
 export type LinkedInWaitingStage = SessionWaitingStage;
 export type LinkedInWaitingNotice = SessionWaitingNotice;
@@ -42,6 +67,11 @@ export type LinkedInSessionPollResult =
       readonly parsed: ParsedResume;
       readonly rawUrl: string;
       readonly accountMarker?: string | null;
+      /** Present only when the structured capture yielded a valid, non-empty profile. */
+      readonly structured?: {
+        readonly profile: LinkedInProfileV2;
+        readonly extractorVersion: string;
+      };
     };
 
 interface LinkedInSessionImportFlowDependencies {
@@ -105,8 +135,10 @@ async function runOnce(
   if (!parsed.fullName && parsed.experience.length === 0) {
     throw new Error('linkedin_authenticated_profile_unclassified');
   }
+  const structured = await captureStructuredProfile(dependencies, page);
   const result = {
     status: 'ready' as const,
+    ...(structured ? { structured } : {}),
     parsed,
     rawUrl: page.url,
     ...(current.accountMarker ? { accountMarker: current.accountMarker } : {}),
@@ -125,6 +157,47 @@ function isSignedInLinkedInPage(page: SessionInspectionResult): boolean {
     !page.captcha &&
     isAllowedLinkedInUrl(page.url)
   );
+}
+
+const MAX_DETAIL_PAGE_BYTES = 2 * 1_024 * 1_024;
+
+/**
+ * Reads the fixed detail pages by URL (architecture §3: navigation, never a
+ * synthetic click or dispatched event) and runs them through the structured
+ * extractor. Every read is best-effort: a missing or oversized section is
+ * dropped, not fatal, so a partial capture still improves on the text parse.
+ * Sanitised and schema-invalid profiles fall back to the text path entirely
+ * (M2 cases 22-23) so nothing half-broken reaches the server.
+ */
+async function captureStructuredProfile(
+  dependencies: LinkedInSessionImportFlowDependencies,
+  page: { readonly body: string; readonly url: string },
+): Promise<{ readonly profile: LinkedInProfileV2; readonly extractorVersion: string } | undefined> {
+  const base = new URL(page.url);
+  const pages: Record<string, string> = { profile: page.body };
+  const achievements: { kind: string; html: string }[] = [];
+  for (const [key, path] of Object.entries(DETAIL_PAGE_PATHS)) {
+    const detailUrl = new URL(path, base.href.endsWith('/') ? base.href : `${base.href}/`).toString();
+    const detail = await dependencies.readSessionPage(detailUrl).catch(() => ({ ok: false as const }));
+    if (detail.ok && detail.body && detail.body.length <= MAX_DETAIL_PAGE_BYTES) {
+      pages[key] = detail.body;
+    }
+  }
+  const structured = extractStructuredLinkedInProfile({
+    profile: pages.profile,
+    experience: pages.experience,
+    education: pages.education,
+    skills: pages.skills,
+    certifications: pages.certifications,
+    projects: pages.projects,
+    contactInfo: pages.contactInfo,
+    recommendations: pages.recommendations,
+    achievements: achievements.length > 0 ? (achievements as never) : undefined,
+  });
+  if (!hasStructuredSubstance(structured)) return undefined;
+  const valid = sanitizedAndValidLinkedInProfile(structured);
+  if (!valid) return undefined;
+  return { profile: valid, extractorVersion: LI_SDUI_EXTRACTOR_VERSION };
 }
 
 function isOwnProfileUrl(rawUrl?: string): rawUrl is string {

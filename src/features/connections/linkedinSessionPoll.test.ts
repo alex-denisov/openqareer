@@ -1,5 +1,11 @@
+// @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createLinkedInSessionImportFlow, linkedinWaitingNotice } from './linkedinSessionPoll';
+
+const FIXTURES_DIR = join(__dirname, '__fixtures__', 'linkedin');
+const readFixture = (name: string) => readFileSync(join(FIXTURES_DIR, name), 'utf-8');
 
 describe('LinkedIn session import flow', () => {
   it('waits through login and MFA without navigating the provider webview', async () => {
@@ -93,8 +99,14 @@ describe('LinkedIn session import flow', () => {
     const overlapping = flow.run();
     expect(overlapping).toBe(first);
     await vi.waitFor(() => expect(onReady).toHaveBeenCalledOnce());
-    expect(readSessionPage).toHaveBeenCalledOnce();
-    expect(events).toEqual(['closed', 'read-profile', 'captured', 'import']);
+    // One read for the main profile, then one per fixed detail page (B266 §2).
+    expect(readSessionPage).toHaveBeenCalledTimes(8);
+    expect(events).toEqual([
+      'closed',
+      ...Array<string>(8).fill('read-profile'),
+      'captured',
+      'import',
+    ]);
     expect(onReady.mock.calls[0]?.[0]).toMatchObject({
       rawUrl: 'https://www.linkedin.com/in/alexey-test/',
       accountMarker: 'alexey-test',
@@ -103,6 +115,53 @@ describe('LinkedIn session import flow', () => {
 
     releaseImport?.();
     await first;
+  });
+
+  it('attaches a structured profile when the detail-page fixtures carry real sections', async () => {
+    const pageBySuffix: [suffix: string, body: string][] = [
+      ['details/experience/', readFixture('experience.html')],
+      ['details/education/', readFixture('education.html')],
+      ['details/skills/', readFixture('skills.html')],
+      ['details/certifications/', readFixture('certifications.html')],
+      ['details/projects/', readFixture('projects.html')],
+      ['overlay/contact-info/', readFixture('contact-info.html')],
+      ['details/recommendations/received/', readFixture('recommendations.html')],
+    ];
+    const readSessionPage = vi.fn(async (url: string) => {
+      const path = new URL(url).pathname;
+      if (path === '/in/me/') {
+        return { ok: true, url: 'https://www.linkedin.com/in/jordanrivers-99a1b2/', body: readFixture('profile.html') };
+      }
+      const match = pageBySuffix.find(([suffix]) => path.endsWith(suffix));
+      return match
+        ? { ok: true, url: `https://www.linkedin.com${path}`, body: match[1] }
+        : { ok: false as const };
+    });
+
+    const result = await createLinkedInSessionImportFlow({
+      inspectCurrentPage: async () => ({
+        ready: true,
+        url: 'https://www.linkedin.com/feed/',
+        signedInApplicant: true,
+        login: false,
+        otp: false,
+        captcha: false,
+      }),
+      readSessionPage,
+      onAuthenticated: vi.fn(),
+      onProviderDataCaptured: vi.fn(),
+      onReady: vi.fn(),
+    }).run();
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.structured?.extractorVersion).toBe('li-sdui-1');
+    expect(result.structured?.profile.fullName).toBe('Jordan Rivers');
+    expect(result.structured?.profile.experience.length).toBeGreaterThan(0);
+    // Company and title never collapse into each other (the P0 defect this ticket fixes).
+    const firstJob = result.structured?.profile.experience[0];
+    expect(firstJob?.title).not.toMatch(/^·/u);
+    expect(firstJob?.employer).not.toEqual(firstJob?.title);
   });
 });
 
