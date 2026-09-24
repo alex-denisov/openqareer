@@ -24,6 +24,7 @@ const RESUME_TEXT =
   'Образование: НИУ ВШЭ, прикладная математика и информатика.';
 
 const problems = [];
+const wizardColumnLefts = [];
 
 async function assertNoEmptyState(page, step) {
   const hasEmptyState = await page.getByText('Пока нечего проверять').count();
@@ -43,10 +44,58 @@ async function assertNoHorizontalScroll(page, step, viewport) {
   }
 }
 
+/** B249: the wizard column must sit centered at the same left edge on every
+ * step at 1440 — a stray `grid-column` left it pinned to the right on steps
+ * 2-6 once the onboarding rail was hidden. */
+async function assertColumnCentered(page, step, viewport) {
+  if (viewport.width !== 1440) return;
+  const box = await page.evaluate(() => {
+    const el = document.querySelector('.career-intake, .career-view, .career-start');
+    const shell = document.querySelector('.career-shell');
+    if (!el || !shell) return null;
+    const rect = el.getBoundingClientRect();
+    return {
+      left: rect.left,
+      right: window.innerWidth - rect.right,
+      isFullscreen: shell.classList.contains('career-shell--onboarding-fullscreen'),
+    };
+  });
+  if (!box) {
+    problems.push(`${step}: no wizard column element found at 1440px`);
+    return;
+  }
+  // Step 1 keeps the rail (not yet fullscreen), so the column is centered in
+  // the narrower main area next to it, not the full viewport — only the
+  // fullscreen steps (2-6) are checked against the viewport and each other.
+  if (!box.isFullscreen) return;
+  wizardColumnLefts.push({ step, left: box.left });
+  if (Math.abs(box.left - box.right) > 8) {
+    problems.push(
+      `${step}: wizard column not centered at 1440px (left=${box.left}, right=${box.right})`,
+    );
+  }
+}
+
 async function shoot(page, step, viewport) {
   await assertNoEmptyState(page, step);
   await assertNoHorizontalScroll(page, step, viewport);
+  await assertColumnCentered(page, step, viewport);
   await page.screenshot({ path: `${OUT}/${step}-${viewport.name}.png`, fullPage: true });
+}
+
+/** Compares the recorded left edges of the wizard column across all steps
+ * once the walk is done — they must all agree within 4px. */
+function assertColumnLeftIsStable() {
+  if (wizardColumnLefts.length < 2) return;
+  const [first, ...rest] = wizardColumnLefts;
+  for (const entry of rest) {
+    if (Math.abs(entry.left - first.left) > 4) {
+      problems.push(
+        `${entry.step}: wizard column left edge (${entry.left}) drifted from ` +
+          `${first.step} (${first.left}) at 1440px`,
+      );
+    }
+  }
 }
 
 /** Walks all six wizard steps once, screenshotting each at one viewport. */
@@ -119,6 +168,7 @@ try {
   await browser.close();
   await server.close();
 }
+assertColumnLeftIsStable();
 
 process.stdout.write(`${JSON.stringify({ problems }, null, 2)}\n`);
 process.stdout.write(problems.length === 0 ? 'onboarding-shots: pass\n' : 'onboarding-shots: FAIL\n');

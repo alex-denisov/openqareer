@@ -740,6 +740,14 @@
   display: none;
 }
 
+/* `.career-main` keeps `grid-column: 2` from the two-column shell. The
+   fullscreen grid above has only one track, so column 2 was an implicit
+   auto-track sized to content — it shoved the wizard to the right and left
+   column 1 empty. Pin it back to the only track that exists here. */
+.career-shell--onboarding-fullscreen .career-main {
+  grid-column: 1;
+}
+
 /* --- B248 path indicator: Профиль → Роль → Подборка → Отклики → Интервью,
    repeated on every campaign screen (`career-consultant-notes.md` §2). Three
    states only — done / active / pending — never a fourth decorative one. */
