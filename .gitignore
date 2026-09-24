@@ -13,7 +13,7 @@ openqareer.env
 *token*.json
 
 # Dependencies and generated output
-node_modules/
+node_modules
 dist/
 src-tauri/binaries/
 .vite/
