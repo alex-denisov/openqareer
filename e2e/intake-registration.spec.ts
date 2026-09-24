@@ -47,12 +47,15 @@ async function waitForLiveApp(page: Page): Promise<void> {
   );
 }
 
-/** Walks the wizard to the source step and asks for the Profile Import path. */
+/**
+ * Walks the wizard to the source step (the wizard's first screen since B249)
+ * and asks for the Profile Import path via the LinkedIn card — LinkedIn and
+ * hh.ru still share `profile-import` underneath (`intakeSourceLock`), so
+ * either card lands on the same platform-cards screen.
+ */
 async function reachProfileImportSourceStep(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /Хочу найти работу/ }).click();
-  await page.getByRole('button', { name: 'Продолжить' }).click();
-  await expect(page.getByRole('heading', { name: 'Что уже есть?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Профиль LinkedIn' }).click();
 }
 
 async function registerFromTopBar(page: Page): Promise<void> {
@@ -84,7 +87,7 @@ test.describe('B141 diagnostic survives registration', () => {
     // The account panel closes itself after a successful registration, and the
     // candidate must be looking at the step they left — not at the cabinet.
     await expect(page.getByRole('dialog', { name: 'Аккаунт' })).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: 'Что уже есть?' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Карьерный кабинет' })).toHaveCount(0);
   });
 
@@ -96,11 +99,6 @@ test.describe('B141 diagnostic survives registration', () => {
     await reachProfileImportSourceStep(page);
     const fields = page.locator('.career-source-fields');
 
-    // Explicit profile import stays selected and names the manual desktop boundary.
-    await expect(page.getByRole('button', { name: 'Импорт профиля', exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
     await expect(fields.locator('.career-web-desktop-cta')).toBeVisible();
     await expect(
       fields.getByText('Публичной загрузки приложения пока нет', { exact: false }),
@@ -129,10 +127,6 @@ test.describe('B141 diagnostic survives registration', () => {
     await reachProfileImportSourceStep(page);
     const fields = page.locator('.career-source-fields');
 
-    await expect(page.getByRole('button', { name: 'Импорт профиля', exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
     await expect(fields.locator('.career-platform-cards')).toBeVisible();
     await expect(fields.getByRole('button', { name: 'Подключить' })).toHaveCount(2);
   });
@@ -185,8 +179,8 @@ test.describe('B141 diagnostic survives registration', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
 
-    await expect(page.getByRole('heading', { name: 'С чем разобраться?' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Хочу найти работу' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'PDF резюме' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Карьерный кабинет' })).toHaveCount(0);
   });
 });
@@ -219,7 +213,7 @@ test.describe('B229 desktop session recovery', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     for (const reload of [false, true]) {
       if (reload) await page.reload({ waitUntil: 'domcontentloaded' });
-      await expect(page.getByRole('heading', { name: 'С чем разобраться?' })).toBeVisible({
+      await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible({
         timeout: 10_000,
       });
       await expect(page.getByRole('button', { name: 'Открыть аккаунт' }).first()).toBeEnabled();
@@ -267,7 +261,7 @@ test.describe('B229 desktop session recovery', () => {
       });
     });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: 'С чем разобраться?' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
     holdOldRead = true;
     // Simulate navigation while a restore still carries the old bearer token.
     await page.evaluate(() => {

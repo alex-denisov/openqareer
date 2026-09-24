@@ -68,26 +68,47 @@ async function measure(page, label, outputDirectory) {
   return { label, ...box };
 }
 
-/** The web build's three steps, with the source variants that change height. */
+/** Every one of the six onboarding.html steps, with the source variants that change height. */
 async function walkWebWizard(page, viewport, outputDirectory, results) {
   await page.goto(`${page.__baseUrl}app`, { waitUntil: 'load' });
-  await page.getByRole('heading', { name: 'С чем разобраться?' }).waitFor({ timeout: 20000 });
-  results.push(await measure(page, `${viewport.name}-step1`, outputDirectory));
+  await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor({ timeout: 20000 });
+  results.push(await measure(page, `${viewport.name}-step1-source`, outputDirectory));
 
-  await page.getByRole('button', { name: /Хочу найти работу/u }).click();
+  await page.getByRole('button', { name: 'Профиль LinkedIn' }).click();
+  results.push(await measure(page, `${viewport.name}-step1-profile-import-web`, outputDirectory));
+
+  await page.getByRole('button', { name: 'PDF резюме' }).click();
+  await page.getByRole('button', { name: 'Нет PDF под рукой — вставить текст резюме' }).click();
+  results.push(await measure(page, `${viewport.name}-step1-text`, outputDirectory));
+
+  await page.getByRole('button', { name: 'Расскажу сам' }).click();
   await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page.getByRole('heading', { name: 'Что уже есть?' }).waitFor({ timeout: 10000 });
-  results.push(await measure(page, `${viewport.name}-step2-web`, outputDirectory));
+  await page
+    .getByRole('heading', { name: 'Три вопроса о последней роли' })
+    .waitFor({ timeout: 10000 });
+  results.push(await measure(page, `${viewport.name}-step2-talk`, outputDirectory));
 
-  await page.getByRole('button', { name: 'PDF', exact: true }).first().click();
-  results.push(await measure(page, `${viewport.name}-step2-pdf`, outputDirectory));
-  await page.getByRole('button', { name: 'Текстом' }).click();
-  results.push(await measure(page, `${viewport.name}-step2-text`, outputDirectory));
-
-  await page.getByRole('button', { name: 'Без документов' }).click();
+  const [q1, q2, q3] = await page.getByRole('textbox').all();
+  await q1.fill(
+    'Руководил продуктовой командой из восьми человек и отвечал за выручку направления.',
+  );
+  await q2.fill('Меньше операционки, больше стратегии.');
+  await q3.fill('Команда выросла вдвое.');
   await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page.getByRole('heading', { name: 'Что должно измениться?' }).waitFor({ timeout: 10000 });
-  results.push(await measure(page, `${viewport.name}-step3`, outputDirectory));
+  await page.getByRole('heading', { name: 'Проверьте профиль' }).waitFor({ timeout: 10000 });
+  results.push(await measure(page, `${viewport.name}-step3-review`, outputDirectory));
+
+  await page.getByRole('button', { name: /Продолжить/u }).click();
+  await page.getByRole('heading', { name: 'На какие роли вас купят' }).waitFor({ timeout: 10000 });
+  results.push(await measure(page, `${viewport.name}-step4-roles`, outputDirectory));
+
+  await page.getByRole('button', { name: /Продолжить/u }).click();
+  await page.getByRole('heading', { name: 'География и формат' }).waitFor({ timeout: 10000 });
+  results.push(await measure(page, `${viewport.name}-step5-geo`, outputDirectory));
+
+  await page.getByRole('button', { name: /Продолжить/u }).click();
+  await page.getByRole('heading', { name: 'Первая подборка готова' }).waitFor({ timeout: 10000 });
+  results.push(await measure(page, `${viewport.name}-step6-done`, outputDirectory));
 }
 
 /**
@@ -108,11 +129,10 @@ async function walkDesktopSourceStep(browser, baseUrl, viewport, outputDirectory
   });
   await stubApi(page, { signedIn: true });
   await page.goto(`${baseUrl}app`, { waitUntil: 'load' });
-  await page.getByRole('heading', { name: 'С чем разобраться?' }).waitFor({ timeout: 20000 });
-  await page.getByRole('button', { name: /Хочу найти работу/u }).click();
-  await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page.getByRole('heading', { name: 'Что уже есть?' }).waitFor({ timeout: 10000 });
-  results.push(await measure(page, `${viewport.name}-step2-desktop`, outputDirectory));
+  // Desktop opens straight on the profile-import cards (isTauriEnvironment()).
+  await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor({ timeout: 20000 });
+  await page.locator('.career-platform-cards').waitFor({ timeout: 10000 });
+  results.push(await measure(page, `${viewport.name}-step1-profile-import-desktop`, outputDirectory));
   await context.close();
 }
 

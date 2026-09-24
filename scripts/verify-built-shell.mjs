@@ -282,6 +282,22 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
+  // B249: рассказ «своими словами» шлёт текст на тот же импорт, что PDF и
+  // коннекторы; без ответа тут шаг «Расскажу сам» падал бы 502-м на «Продолжить».
+  await page.route('**/api/v1/candidate/resume/import', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          parsed: { rawText: route.request().postDataJSON()?.text ?? '', sections: [] },
+          resume: { draft: null, savedAt: null },
+          structuredBy: 'rules',
+          factCount: 2,
+        },
+      }),
+    });
+  });
   // Гипотезы роли считает сервер (B180, срез 1б): «Главная» спрашивает их
   // отдельным маршрутом, и без ответа прогон записал бы 502, который увидел бы
   // и кандидат. Отвечаем одной настоящей гипотезой — панель должна печатать
@@ -1189,7 +1205,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: logout retained candidate workspace`,
   );
   await page.goto(`${baseUrl}app?built-shell=${viewport.name}`);
-  await page.getByRole('heading', { name: 'С чем разобраться?' }).waitFor();
+  await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor();
   const accountRestart =
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) === null;
   assert(
@@ -1197,9 +1213,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: logout/re-registration retained candidate workspace`,
   );
 
-  await page.getByRole('button', { name: /Хочу найти работу/ }).click();
-  await page.getByRole('button', { name: 'Продолжить' }).click();
-  await page.getByRole('button', { name: 'Импорт профиля' }).click();
+  await page.getByRole('button', { name: 'Профиль LinkedIn' }).click();
   assert(
     await page.locator('.career-web-desktop-cta').isVisible(),
     `${viewport.name}: profile import web CTA missing`,
@@ -1229,20 +1243,32 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await dialog.locator('#account-legal-consent').check();
   await dialog.getByRole('button', { name: 'Создать и начать' }).click();
 
-  await page.getByRole('button', { name: 'Без документов' }).click();
+  await page.getByRole('button', { name: 'Расскажу сам' }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
-  await page.getByLabel('Что происходит сейчас?').fill(
+  const [q1, q2, q3] = await page.getByRole('textbox').all();
+  await q1.fill(
     'Проверяю, что смена источника удаляет факты и ссылки от ранее выбранного профиля.',
   );
-  await page.getByRole('button', { name: 'Собрать карьерную картину' }).click();
+  await q2.fill('Меньше операционки.');
+  await q3.fill('Команда выросла вдвое.');
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await page.getByRole('heading', { name: 'Проверьте профиль' }).waitFor();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await page.getByRole('heading', { name: 'На какие роли вас купят' }).waitFor();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await page.getByRole('heading', { name: 'География и формат' }).waitFor();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await page.getByRole('heading', { name: 'Первая подборка готова' }).waitFor();
+  await page.getByRole('button', { name: 'Перейти в «Сегодня»' }).click();
   await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
   const sourceCleanWorkspace = JSON.parse(
     await page.evaluate(() => localStorage.getItem('candidate-workspace')),
   );
   assert(
-    sourceCleanWorkspace.resumeText === ''
-      && sourceCleanWorkspace.linkedinUrl === undefined
+    sourceCleanWorkspace.linkedinUrl === undefined
       && sourceCleanWorkspace.hhUrl === undefined
+      && sourceCleanWorkspace.resumeSource === 'text'
+      && !sourceCleanWorkspace.resumeText.includes('linkedin.com')
       && sourceCleanWorkspace.profileFacts?.length !== 2,
     `${viewport.name}: source switch retained stale profile evidence`,
   );
@@ -1387,7 +1413,7 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
   await page.goto(`${baseUrl}app?expired-session-restore`, {
     waitUntil: 'networkidle',
   });
-  await page.getByRole('heading', { name: 'С чем разобраться?' }).waitFor();
+  await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor();
   await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
   await page.getByRole('button', { name: 'Войти' }).click();
   await page.getByLabel('Логин').fill('returning.candidate');

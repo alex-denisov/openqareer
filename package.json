@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "start": "node dist/server.mjs",
     "render-shot": "node scripts/render_html_screenshot.js",
+    "shots:onboarding": "node scripts/capture-onboarding-shots.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

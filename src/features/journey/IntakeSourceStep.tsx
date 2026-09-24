@@ -64,6 +64,14 @@ export interface IntakeSourceStepProps {
   readonly linkedinConnected: boolean;
   /** A platform this account already imported from, as the server holds it. */
   readonly connectedSource?: ConnectedProfileSource;
+  /**
+   * The redesigned onboarding (B249) presents its own four source cards
+   * (PDF/LinkedIn/hh.ru/"расскажу сам") above this step and drives
+   * `sourceChoice`/the connector dialogs directly, so this step's own
+   * four-way chooser row would repeat the same decision — set once that outer
+   * chooser exists.
+   */
+  readonly hideChoiceRow?: boolean;
 }
 
 const SOURCE_CHOICES: ReadonlyArray<[SourceChoice, string, Icon]> = [
@@ -101,11 +109,13 @@ export function IntakeSourceStep(props: IntakeSourceStepProps) {
   const { sourceChoice, lock } = props;
   return (
     <div className="career-source-step">
-      <SourceChoiceRow
-        sourceChoice={sourceChoice}
-        lock={lock}
-        onChooseSource={props.onChooseSource}
-      />
+      {props.hideChoiceRow ? null : (
+        <SourceChoiceRow
+          sourceChoice={sourceChoice}
+          lock={lock}
+          onChooseSource={props.onChooseSource}
+        />
+      )}
 
       {sourceChoice === 'pdf' ? <PdfSource {...props} /> : null}
       {sourceChoice === 'profile-import' ? <ProfileImportSource {...props} /> : null}
@@ -117,7 +127,7 @@ export function IntakeSourceStep(props: IntakeSourceStepProps) {
             value={props.resumeText}
             onChange={(event) => props.onResumeText(event.target.value)}
             placeholder="Например: чем вы управляли, что изменили, с кем работали и за какой результат отвечали."
-            rows={8}
+            rows={4}
           />
         </label>
       ) : null}

@@ -12,7 +12,7 @@ import {
 import type { AuthUser } from '../coach/coachApi';
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
 import { CareerExpertPanel } from '../journey/CareerExpertPanel';
-import { CareerIntake } from '../journey/CareerIntake';
+import { OnboardingWizard } from '../journey/OnboardingWizard';
 import {
   CareerMapView,
   OpportunitiesView,
@@ -213,6 +213,13 @@ export function CareerWorkspaceShell({
     isTodayView: activeView === 'today',
   });
 
+  // The rail's account door is the only way an anonymous candidate can
+  // register, and the wizard's first step (source choice) does not need an
+  // account yet, so the chrome must stay put through it (B141). `onStartedChange`
+  // now fires once the wizard leaves that step, which is when onboarding.html's
+  // full-screen chrome applies (B249).
+  const onboardingIsFullscreen = intakeVisible && intakeStarted;
+
   useEffect(() => {
     if (!sessionPending) {
       setSessionWaitIsLong(false);
@@ -342,7 +349,9 @@ export function CareerWorkspaceShell({
 
   return (
     <div
-      className={`career-shell ${expertOpen ? 'expert-is-open' : ''}`}
+      className={`career-shell ${expertOpen ? 'expert-is-open' : ''} ${
+        onboardingIsFullscreen ? 'career-shell--onboarding-fullscreen' : ''
+      }`}
       data-rail={railExpanded ? 'expanded' : 'collapsed'}
       data-testid="career-shell"
     >
@@ -354,7 +363,7 @@ export function CareerWorkspaceShell({
         id="career-rail"
         className="career-rail"
         aria-label="Основная навигация"
-        aria-hidden={expertOpen || accountOpen ? true : undefined}
+        aria-hidden={expertOpen || accountOpen || onboardingIsFullscreen ? true : undefined}
       >
         <button
           className="career-brand-mark"
@@ -413,7 +422,10 @@ export function CareerWorkspaceShell({
           that live on it and nowhere else. On desktop it is not rendered at
           all: repeating the logo and offering a second, contextless «Эксперт»
           door was chrome that did nothing (B169 §6, §8). */}
-      <header className="career-topbar" aria-hidden={expertOpen || accountOpen ? true : undefined}>
+      <header
+        className="career-topbar"
+        aria-hidden={expertOpen || accountOpen || onboardingIsFullscreen ? true : undefined}
+      >
         <button
           className="career-wordmark"
           type="button"
@@ -482,11 +494,10 @@ export function CareerWorkspaceShell({
           ) : null}
 
           {intakeVisible ? (
-            <CareerIntake
+            <OnboardingWizard
               key={`intake-${intakeSeed}`}
               onComplete={completeIntake}
               hasAccount={Boolean(session)}
-              onOpenAccount={() => setAccountOpen(true)}
               onStartedChange={setIntakeStarted}
             />
           ) : null}
@@ -560,7 +571,7 @@ export function CareerWorkspaceShell({
       <nav
         className="career-mobile-nav"
         aria-label="Основная навигация"
-        aria-hidden={expertOpen || accountOpen ? true : undefined}
+        aria-hidden={expertOpen || accountOpen || onboardingIsFullscreen ? true : undefined}
       >
         {primaryNavigation.map((item) => (
           <NavigationButton key={item.key} {...railButtonProps(item)} />
