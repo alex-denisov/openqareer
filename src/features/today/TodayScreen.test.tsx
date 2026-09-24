@@ -8,33 +8,36 @@ const snapshot: TodaySnapshot = {
     waitingForYou: 2,
     newVacancies: 3,
     closedVacancies: 1,
-    interviewsAhead: 0,
-    nextInterview: null,
-    newVacanciesCaption: null,
-    followUpCaptions: [],
+    interviewsAhead: 1,
+    nextInterview: { company: 'HRTx Inc.', title: 'Enterprise Architect Director', round: 2, at: '2026-09-26T14:00:00.000Z' },
+    newVacanciesCaption: { campaignRole: 'VP Technology Ops', sourcesCount: 3, updatedAt: '2026-09-24T09:14:00.000Z' },
+    followUpCaptions: ['Peraton — 6 рабочих дней тишины', 'Genetec — обещанный срок истёк'],
   },
   queue: [
     {
-      kind: 'candidate_turn',
+      kind: 'follow_up',
       applicationId: 'app-1',
-      title: 'Ответьте HR в Acme',
-      company: 'Acme',
-      eyebrow: null,
+      title: 'Enterprise Architect, Senior Advisor',
+      company: 'Peraton',
+      eyebrow: 'Follow-up · 6 рабочих дней без ответа',
       dueAt: null,
+      salary: { from: 176000, currency: 'usd' },
       fit: null,
     },
     {
       kind: 'new_vacancy',
       clusterId: 'cl-1',
-      title: 'VP Technology Ops в Beta',
-      company: 'Beta',
-      eyebrow: 'сегодня',
+      title: 'Business Information Architect',
+      company: 'Genetec',
+      eyebrow: 'Новая вакансия · сегодня',
       dueAt: null,
-      fit: null,
+      salary: { from: 190000, to: 240000, currency: 'usd' },
+      location: 'Canada · удалённо',
+      fit: { role: 'target', level: 'target', geo: true },
     },
   ],
-  followUps: [],
-  sinceLastVisit: { since: null, items: [] },
+  followUps: [{ applicationId: 'app-1', company: 'Peraton', title: 'Enterprise Architect', status: 'today' }],
+  sinceLastVisit: { since: '2026-09-23T09:00:00.000Z', items: ['Genetec запросили доступность на этой неделе'] },
   vacanciesPending: false,
 };
 
@@ -45,28 +48,38 @@ function renderTodayScreen(props: Partial<Parameters<typeof TodayScreen>[0]> = {
 }
 
 describe('TodayScreen (B251 S5)', () => {
-  it('shows the digest counters', () => {
+  it('shows the digest counters with a basis caption under each number', () => {
     const html = renderTodayScreen();
 
-    expect(html).toContain('3 новые вакансии');
-    expect(html).toContain('ждут вашего ответа');
-    expect(html).toContain('1 вакансия закрылась');
+    expect(html).toContain('3</span>');
+    expect(html).toContain('кампания VP Technology Ops');
+    expect(html).toContain('Peraton — 6 рабочих дней тишины');
+    expect(html).toContain('HRTx Inc. · раунд 2');
   });
 
-  it('marks the first queue row as the next action, not just another item', () => {
+  it('marks the first queue row with an accent border, not an overlapping flag', () => {
     const html = renderTodayScreen();
-    const firstRowIndex = html.indexOf('<li');
-    const secondRowIndex = html.indexOf('<li', firstRowIndex + 1);
 
-    expect(html.slice(firstRowIndex, secondRowIndex)).toContain('Следующее действие');
-    expect(html.slice(firstRowIndex, secondRowIndex)).toContain('Ответьте HR в Acme');
-    expect(html.slice(secondRowIndex)).not.toContain('Следующее действие');
+    expect(html).toContain('career-today-item is-first');
+    expect(html).not.toContain('Следующее действие');
   });
 
-  it('says the pool is still updating instead of an empty digest', () => {
-    const html = renderTodayScreen({ snapshot: { ...snapshot, vacanciesPending: true } });
+  it('shows fit checks for a new vacancy and the action buttons per kind', () => {
+    const html = renderTodayScreen();
 
-    expect(html).toContain('Подбор обновляется');
+    expect(html).toContain('роль');
+    expect(html).toContain('Написать сейчас');
+    expect(html).toContain('Открыть');
+  });
+
+  it('renders follow-ups by due date and the since-last-visit digest', () => {
+    const html = renderTodayScreen();
+
+    expect(html).toContain('Follow-up по срокам');
+    expect(html).toContain('Peraton — Enterprise Architect');
+    expect(html).toContain('сегодня');
+    expect(html).toContain('С прошлого визита');
+    expect(html).toContain('Genetec запросили доступность на этой неделе');
   });
 
   it('shows a skeleton while the first reading is in flight', () => {
@@ -83,9 +96,16 @@ describe('TodayScreen (B251 S5)', () => {
     expect(html).toContain('Повторить');
   });
 
-  it('says the queue is empty rather than showing nothing', () => {
-    const html = renderTodayScreen({ snapshot: { ...snapshot, queue: [] } });
+  it('shows the empty state instead of blank panels when there is nothing to show', () => {
+    const html = renderTodayScreen({
+      snapshot: {
+        ...snapshot,
+        queue: [],
+        followUps: [],
+        sinceLastVisit: { since: null, items: [] },
+      },
+    });
 
-    expect(html).toContain('Очередь пуста — новых решений на сегодня нет.');
+    expect(html).toContain('Новых вакансий с прошлого визита нет');
   });
 });
