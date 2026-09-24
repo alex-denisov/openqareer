@@ -56,12 +56,9 @@ async function waitForLiveApp(page: Page): Promise<void> {
   );
 }
 
-async function openContextStep(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /Хочу найти работу/ }).click();
-  await page.getByRole('button', { name: 'Продолжить' }).click();
-  await page.getByRole('button', { name: 'Без документов' }).click();
-  await page.getByRole('button', { name: 'Продолжить' }).click();
-  await expect(page.getByRole('heading', { name: 'Что должно измениться?' })).toBeVisible();
+/** B249 — step 1 of onboarding.html is a grid of source cards. */
+function sourceCard(page: Page, title: string) {
+  return page.locator('.career-onboarding-source-card', { hasText: title });
 }
 
 test.describe('B140 workspace shell and intake defects', () => {
@@ -75,7 +72,7 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await sessionResolved;
     await waitForLiveApp(page);
-    await expect(page.getByRole('heading', { name: 'С чем разобраться?' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
 
     expect(await sessionGateWasSeen(page)).toBe(false);
   });
@@ -111,100 +108,20 @@ test.describe('B140 workspace shell and intake defects', () => {
     await expect(page).toHaveTitle(/Сегодня/);
   });
 
-  test('step three gives every legend the same breathing room as a label', async ({ page }) => {
+  // B249 — the old context step (legends, side-by-side controls) is gone;
+  // the wizard's layout fit is guarded by verify-intake-fits and the platform
+  // cards on web by verify-wizard-source-step.
+  test('on web a platform card explains the desktop boundary without a link', async ({ page }) => {
     await stubEmptySession(page);
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
-    await openContextStep(page);
+    await sourceCard(page, 'Профиль LinkedIn').click();
+    await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
 
-    const rows = await page.evaluate(() => {
-      const form = document.querySelector('.career-context-form');
-      if (!form) return [];
-      return [...form.children].map((child) => {
-        const heading = child.querySelector(':scope > legend, :scope > span');
-        const control = child.querySelector(
-          '.career-chip-picker, .career-segmented-control, input, textarea',
-        );
-        const headingBox = heading?.getBoundingClientRect();
-        const controlBox = control?.getBoundingClientRect();
-        return {
-          tag: child.tagName,
-          heading: heading?.textContent ?? '',
-          headingBottom: headingBox ? headingBox.bottom : null,
-          controlTop: controlBox ? controlBox.top : null,
-          controlLeft: controlBox ? controlBox.left : null,
-        };
-      });
-    });
-
-    expect(rows.length).toBeGreaterThan(0);
-    for (const row of rows) {
-      expect(row.headingBottom, `${row.heading} must be laid out`).not.toBeNull();
-      expect(row.controlTop, `${row.heading} must have a control`).not.toBeNull();
-      if (row.headingBottom === null || row.controlTop === null) continue;
-      // Every field in this form declares `gap: 8px` between its heading and
-      // its control. A rendered <legend> escapes that grid and lands flush on
-      // the chips, which is exactly what the owner saw.
-      expect(
-        Math.round(row.controlTop - row.headingBottom),
-        `«${row.heading.trim()}» leaves ${Math.round(
-          row.controlTop - row.headingBottom,
-        )}px under its heading`,
-      ).toBeGreaterThanOrEqual(6);
-    }
-  });
-
-  test('step three keeps side-by-side controls on one baseline', async ({ page }) => {
-    await stubEmptySession(page);
-
-    await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await waitForLiveApp(page);
-    await openContextStep(page);
-
-    const roleInput = page.locator('.career-context-form label', {
-      hasText: 'Какая роль интересует?',
-    });
-    const marketControl = page
-      .locator('.career-context-form fieldset', { hasText: 'Где рассматриваете работу?' })
-      .locator('.career-chip-picker');
-    const inputBox = await roleInput.locator('input').boundingBox();
-    const controlBox = await marketControl.boundingBox();
-    expect(inputBox).not.toBeNull();
-    expect(controlBox).not.toBeNull();
-    if (!inputBox || !controlBox) return;
-
-    const viewport = page.viewportSize();
-    if (!viewport || viewport.width < 900) return;
-    expect(
-      Math.abs(inputBox.y - controlBox.y),
-      'a label and a fieldset in the same grid row must start their controls together',
-    ).toBeLessThanOrEqual(2);
-  });
-
-  test('web defaults to PDF and profile import explains the manual desktop install boundary', async ({
-    page,
-  }) => {
-    await stubEmptySession(page);
-
-    await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await waitForLiveApp(page);
-    await page.getByRole('button', { name: /Хочу найти работу/ }).click();
-    await page.getByRole('button', { name: 'Продолжить' }).click();
-
-    await expect(page.getByRole('button', { name: 'PDF', exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await expect(page.getByText('Выбрать PDF')).toBeVisible();
-    await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();
-
-    const fields = page.locator('.career-source-fields');
-    await expect(fields.locator('.career-web-desktop-cta')).toBeVisible();
-    await expect(
-      fields.getByText('Публичной загрузки приложения пока нет', { exact: false }),
-    ).toBeVisible();
-    await expect(fields.getByRole('link')).toHaveCount(0);
+    const error = page.locator('.career-intake-error');
+    await expect(error).toContainText('приложении для компьютера');
+    await expect(error.getByRole('link')).toHaveCount(0);
   });
 
   test('the intake never names a button that is not on screen', async ({ page }) => {
@@ -212,10 +129,8 @@ test.describe('B140 workspace shell and intake defects', () => {
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
-    await page.getByRole('button', { name: /Хочу найти работу/ }).click();
-    await page.getByRole('button', { name: 'Продолжить' }).click();
-    await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();
-    await page.getByRole('button', { name: 'Продолжить' }).click();
+    await sourceCard(page, 'Профиль LinkedIn').click();
+    await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
 
     const error = page.locator('.career-intake-error');
     await expect(error).toBeVisible();
@@ -224,8 +139,8 @@ test.describe('B140 workspace shell and intake defects', () => {
     for (const mention of quoted) {
       const name = mention.slice(1, -1);
       await expect(
-        page.getByRole('button', { name, exact: true }),
-        `the error names «${name}», so that button must exist`,
+        page.locator('.career-onboarding').getByText(name, { exact: true }).locator('visible=true'),
+        `the error names «${name}», so it must be on screen`,
       ).toHaveCount(1);
     }
   });
@@ -235,18 +150,12 @@ test.describe('B140 workspace shell and intake defects', () => {
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
-    await page.getByRole('button', { name: /Хочу найти работу/ }).click();
-    await page.getByRole('button', { name: 'Продолжить' }).click();
-    await page.getByRole('button', { name: 'Импорт профиля', exact: true }).click();
-
-    await page.getByRole('button', { name: 'PDF', exact: true }).click();
-    await expect(page.locator('.career-pdf-source')).toBeVisible();
-
-    await page.getByRole('button', { name: 'Текстом', exact: true }).click();
-    await expect(page.locator('.career-source-textarea')).toBeVisible();
-
-    await page.getByRole('button', { name: 'Без документов', exact: true }).click();
+    await sourceCard(page, 'Профиль LinkedIn').click();
+    await sourceCard(page, 'PDF резюме').click();
+    await sourceCard(page, 'Расскажу сам').click();
     await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Что должно измениться?' })).toBeVisible();
+
+    await expect(page.locator('.career-intake-error')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Три вопроса о последней роли' })).toBeVisible();
   });
 });
