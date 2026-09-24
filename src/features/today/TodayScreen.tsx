@@ -23,57 +23,71 @@ export function TodayScreen({ snapshot, loading, failed, onRetry }: TodayScreenP
   if (!snapshot) return null;
 
   const { digest, queue, vacanciesPending } = snapshot;
-  const [nextAction, ...rest] = queue;
 
   return (
     <div className="career-today">
-      <div className="career-today-digest">
-        <DigestCard
-          value={digest.newVacancies}
-          label={pluralRu(digest.newVacancies, ['новая вакансия', 'новые вакансии', 'новых вакансий'])}
-        />
-        <DigestCard
-          value={digest.waitingForYou}
-          label="ждут вашего ответа"
-          attention={digest.waitingForYou > 0}
-        />
-        <DigestCard
-          value={digest.closedVacancies}
-          label={pluralRu(digest.closedVacancies, [
-            'вакансия закрылась',
-            'вакансии закрылись',
-            'вакансий закрылись',
-          ])}
-        />
-      </div>
-
-      {vacanciesPending ? (
-        <p className="career-today-pending">
-          <Sparkle size={16} aria-hidden="true" />
-          Подбор обновляется — новые вакансии появятся здесь без перезагрузки.
-        </p>
-      ) : null}
-
-      <section className="career-today-queue" aria-label="Очередь дня">
-        <header className="career-today-queue-head">
-          <h2>Очередь дня</h2>
-          <span className="career-today-hint">
-            {pluralRu(queue.length, ['карточка', 'карточки', 'карточек'])} · решение нужно по
-            каждой
-          </span>
-        </header>
-        {queue.length === 0 ? (
-          <p className="career-today-empty">Очередь пуста — новых решений на сегодня нет.</p>
-        ) : (
-          <ul className="career-today-list">
-            <QueueRow item={nextAction} isNextAction />
-            {rest.map((item) => (
-              <QueueRow key={queueKey(item)} item={item} />
-            ))}
-          </ul>
-        )}
-      </section>
+      <TodayDigest digest={digest} />
+      {vacanciesPending ? <TodayPendingNotice /> : null}
+      <TodayQueue queue={queue} />
     </div>
+  );
+}
+
+function TodayDigest({ digest }: { digest: TodaySnapshot['digest'] }) {
+  return (
+    <div className="career-today-digest">
+      <DigestCard
+        value={digest.newVacancies}
+        label={pluralRu(digest.newVacancies, ['новая вакансия', 'новые вакансии', 'новых вакансий'])}
+      />
+      <DigestCard
+        value={digest.waitingForYou}
+        label="ждут вашего ответа"
+        attention={digest.waitingForYou > 0}
+      />
+      <DigestCard
+        value={digest.closedVacancies}
+        label={pluralRu(digest.closedVacancies, [
+          'вакансия закрылась',
+          'вакансии закрылись',
+          'вакансий закрылись',
+        ])}
+      />
+    </div>
+  );
+}
+
+function TodayPendingNotice() {
+  return (
+    <p className="career-today-pending">
+      <Sparkle size={16} aria-hidden="true" />
+      Подбор обновляется — новые вакансии появятся здесь без перезагрузки.
+    </p>
+  );
+}
+
+function TodayQueue({ queue }: { queue: readonly TodayQueueItem[] }) {
+  const [nextAction, ...rest] = queue;
+  return (
+    <section className="career-today-queue" aria-label="Очередь дня">
+      <header className="career-today-queue-head">
+        <h2>Очередь дня</h2>
+        <span className="career-today-hint">
+          {pluralRu(queue.length, ['карточка', 'карточки', 'карточек'])} · решение нужно по
+          каждой
+        </span>
+      </header>
+      {queue.length === 0 ? (
+        <p className="career-today-empty">Очередь пуста — новых решений на сегодня нет.</p>
+      ) : (
+        <ul className="career-today-list">
+          <QueueRow item={nextAction} isNextAction />
+          {rest.map((item) => (
+            <QueueRow key={queueKey(item)} item={item} />
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

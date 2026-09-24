@@ -185,7 +185,7 @@ export function CareerWorkspaceShell({
   const [intakeSeed, setIntakeSeed] = useState(0);
   // The wizard's import keeps running after the cabinet mounts; «Сегодня» must
   // not print a confident zero over it (B160 §3).
-  const [importing, setImporting] = useState(false);
+  const [, setImporting] = useState(false);
   const visibleWorkspace = sessionPending ? undefined : workspace;
   const cabinetSession =
     !sessionPending && session?.candidateId
@@ -496,12 +496,9 @@ export function CareerWorkspaceShell({
               view={activeView as CareerCabinetView}
               session={cabinetSession}
               workspace={visibleWorkspace}
-              importing={importing}
               onNavigate={navigate}
               onOpenTariffs={() => navigate('tariffs')}
               onUpdateWorkspace={onUpdateWorkspace}
-              onOpenAccount={() => setAccountOpen(true)}
-              onOpenExpert={openExpert}
             />
           ) : null}
           {!cabinetSession && visibleWorkspace && journey && activeView !== 'tariffs' ? (
