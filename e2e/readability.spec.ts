@@ -24,6 +24,7 @@ const SECTIONS = ['Сегодня', 'Роль', 'Вакансии'] as const;
 const DESKTOP_WIDTHS = [1176, 1280, 1440] as const;
 const MAX_DISTINCT_SIZES = 6;
 const MIN_FONT_PX = 13;
+const CAPTION_SLACK_PX = 4;
 
 interface ReadabilityFacts {
   readonly textNodes: number;
@@ -381,6 +382,39 @@ test.describe('B232 readability gate', () => {
    * floated between «Сегодня» and «Профиль» in the bottom nav, with nothing
    * for it to mark there. Colour alone still names the active item.
    */
+  /**
+   * CI 2026-09-25: «Консультант» in a fifth of 390 px ran 1.3 px past the
+   * screen on Linux fonts and failed every screen's overflow check. Every
+   * caption must fit its own button, so the strip never depends on metrics.
+   */
+  test('every bottom-nav caption fits its button and the screen', async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile-390', 'phone only');
+    await mockSignedInCabinet(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    const spills = await page.evaluate((minSlack) => {
+      const cw = document.documentElement.clientWidth;
+      return [...document.querySelectorAll<HTMLElement>('.career-mobile-nav .career-nav-button')]
+        .map((button) => {
+          const caption = button.querySelector('span')?.getBoundingClientRect();
+          const box = button.getBoundingClientRect();
+          if (!caption) return null;
+          // 4 px of headroom on each side absorbs font-metric drift between
+          // macOS and the Linux CI runner.
+          const slack = Math.min(
+            box.right - caption.right,
+            caption.left - box.left,
+            cw - caption.right,
+          );
+          return slack < minSlack
+            ? `${button.textContent?.trim()} slack ${slack.toFixed(2)}px`
+            : null;
+        })
+        .filter(Boolean);
+    }, CAPTION_SLACK_PX);
+    expect(spills).toEqual([]);
+  });
+
   test('the bottom nav carries no stray active-tick bar between icons', async ({ page }, info) => {
     test.skip(info.project.name !== 'mobile-390', 'phone only');
     await mockSignedInCabinet(page);

@@ -3439,7 +3439,11 @@
     bottom: 0;
     z-index: 30;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    /* Content-sized columns with the spare width between them: five equal
+       fifths left «Консультант» 1.3 px past a 390 px screen on Linux fonts
+       (CI 2026-09-25), while the other four captions sat in empty space. */
+    grid-template-columns: repeat(5, auto);
+    justify-content: space-around;
     border-top: 1px solid var(--career-line-strong);
     background: oklch(14% 0.022 255 / 0.98);
     padding-bottom: env(safe-area-inset-bottom);
@@ -3454,7 +3458,7 @@
     gap: 4px;
     border: 0;
     border-radius: 0;
-    padding: 7px 2px;
+    padding: 7px 6px;
     font-size: var(--career-text-xs);
   }
 
