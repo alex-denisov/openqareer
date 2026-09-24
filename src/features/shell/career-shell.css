@@ -730,13 +730,13 @@
    alongside it. The rail, its narrow-screen topbar and the bottom nav all
    named the same five sections the wizard has not unlocked yet, so they hid
    nothing and confused the "Сегодня" it was supposedly on. */
-.career-shell:has(.career-intake) {
+.career-shell--onboarding-fullscreen {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.career-shell:has(.career-intake) .career-rail,
-.career-shell:has(.career-intake) .career-topbar,
-.career-shell:has(.career-intake) .career-mobile-nav {
+.career-shell--onboarding-fullscreen .career-rail,
+.career-shell--onboarding-fullscreen .career-topbar,
+.career-shell--onboarding-fullscreen .career-mobile-nav {
   display: none;
 }
 

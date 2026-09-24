@@ -213,6 +213,14 @@ export function CareerWorkspaceShell({
     isTodayView: activeView === 'today',
   });
 
+  // The rail's account door is the only way an anonymous candidate can
+  // register while the wizard's first step is still showing source cards
+  // (B141 comment above `shouldShowIntake`). Only once an account exists does
+  // the onboarding screen go full-screen the way onboarding.html does (B249);
+  // `intakeStarted` fires the instant the wizard mounts, before that door was
+  // ever used, so it cannot be part of this check.
+  const onboardingIsFullscreen = intakeVisible && Boolean(cabinetSession);
+
   useEffect(() => {
     if (!sessionPending) {
       setSessionWaitIsLong(false);
@@ -342,7 +350,9 @@ export function CareerWorkspaceShell({
 
   return (
     <div
-      className={`career-shell ${expertOpen ? 'expert-is-open' : ''}`}
+      className={`career-shell ${expertOpen ? 'expert-is-open' : ''} ${
+        onboardingIsFullscreen ? 'career-shell--onboarding-fullscreen' : ''
+      }`}
       data-rail={railExpanded ? 'expanded' : 'collapsed'}
       data-testid="career-shell"
     >
@@ -354,7 +364,7 @@ export function CareerWorkspaceShell({
         id="career-rail"
         className="career-rail"
         aria-label="Основная навигация"
-        aria-hidden={expertOpen || accountOpen || intakeVisible ? true : undefined}
+        aria-hidden={expertOpen || accountOpen || onboardingIsFullscreen ? true : undefined}
       >
         <button
           className="career-brand-mark"
@@ -415,7 +425,7 @@ export function CareerWorkspaceShell({
           door was chrome that did nothing (B169 §6, §8). */}
       <header
         className="career-topbar"
-        aria-hidden={expertOpen || accountOpen || intakeVisible ? true : undefined}
+        aria-hidden={expertOpen || accountOpen || onboardingIsFullscreen ? true : undefined}
       >
         <button
           className="career-wordmark"
@@ -562,7 +572,7 @@ export function CareerWorkspaceShell({
       <nav
         className="career-mobile-nav"
         aria-label="Основная навигация"
-        aria-hidden={expertOpen || accountOpen || intakeVisible ? true : undefined}
+        aria-hidden={expertOpen || accountOpen || onboardingIsFullscreen ? true : undefined}
       >
         {primaryNavigation.map((item) => (
           <NavigationButton key={item.key} {...railButtonProps(item)} />
