@@ -8702,6 +8702,153 @@
   overflow-y: auto;
 }
 
+/* ---- «Сегодня» (B251 S5): дайджест дня и очередь решений ---------------- */
+
+.career-today {
+  display: grid;
+  gap: var(--career-space-6);
+}
+
+.career-today-digest {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--career-space-4);
+}
+
+.career-today-digest-card {
+  display: grid;
+  gap: var(--career-space-1);
+  padding: var(--career-space-4);
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-lg);
+  background: var(--career-surface);
+}
+
+.career-today-digest-card.is-attention {
+  border-color: var(--career-warning);
+  background: var(--career-warning-soft);
+}
+
+.career-today-digest-number {
+  font-size: var(--career-text-xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.career-today-digest-label {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-today-pending {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding: var(--career-space-3) var(--career-space-4);
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface-soft);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-today-queue {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.career-today-queue-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--career-space-2);
+  flex-wrap: wrap;
+}
+
+.career-today-queue-head h2 {
+  margin: 0;
+  font-size: var(--career-text-md);
+  letter-spacing: -0.01em;
+}
+
+.career-today-hint {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-today-list {
+  display: grid;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-today-item {
+  display: grid;
+  gap: var(--career-space-1);
+  padding: var(--career-space-3) var(--career-space-4);
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.career-today-item.is-next-action {
+  border-color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.career-today-item-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  color: var(--career-accent-ink);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.career-today-item-kind {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-today-item-title {
+  font-size: var(--career-text-sm);
+}
+
+.career-today-empty {
+  margin: 0;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-today-state {
+  display: grid;
+  justify-items: start;
+  gap: var(--career-space-2);
+  padding: var(--career-space-5);
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-lg);
+}
+
+.career-today-state h3 {
+  margin: 0;
+  font-size: var(--career-text-md);
+}
+
+.career-today-state p {
+  margin: 0;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+@media (max-width: 640px) {
+  .career-today-digest {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Узкий экран: рельс уходит под профиль, а не жмёт его до нечитаемого. */
 @media (max-width: 1180px) {
   .career-home {

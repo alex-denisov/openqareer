@@ -2,7 +2,8 @@ import { useCallback, useMemo } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import { updateAccountProfile, type AuthUser } from '../coach/coachApi';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
-import { CareerHome } from './CareerHome';
+import { TodayScreen } from '../today/TodayScreen';
+import { useToday } from '../today/useToday';
 import { SearchCampaign } from '../search/SearchCampaign';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { VacancyBoard } from '../vacancies/VacancyBoard';
@@ -177,6 +178,20 @@ export function CareerCabinet({
   );
 }
 
+/** «Сегодня» reads its own digest through `useToday` — the cabinet's
+ * `useCareerCabinetData` snapshot has no queue or digest fields of its own. */
+function TodaySection() {
+  const { snapshot, loading, failed, refresh } = useToday();
+  return (
+    <TodayScreen
+      snapshot={snapshot}
+      loading={loading}
+      failed={failed}
+      onRetry={() => void refresh()}
+    />
+  );
+}
+
 function CabinetSkeleton() {
   return (
     <div className="career-cabinet-skeleton" aria-busy="true" aria-label="Читаем ваш профиль">
@@ -229,29 +244,7 @@ function CabinetSection({
   onOpenTariffs?: () => void;
 }) {
   if (view === 'today') {
-    return (
-      <CareerHome
-        session={session}
-        snapshot={data.snapshot}
-        account={data.account}
-        workspace={workspace}
-        targetDirection={targetDirection}
-        journey={journey}
-        proposedRoles={proposedRoles}
-        strategy={strategy}
-        workPreferences={workPreferences}
-        poolComplete={pool.complete}
-        poolTotal={pool.poolTotal}
-        loading={data.loading}
-        importing={importing}
-        applications={applications}
-        onRefresh={data.refresh}
-        onNavigate={onNavigate}
-        onUpdateWorkspace={onUpdateWorkspace}
-        onOpenAccount={onOpenAccount}
-        onOpenExpert={onOpenExpert}
-      />
-    );
+    return <TodaySection />;
   }
   // B248 (owner review 2026-09-23) — the rail's «Профиль» opens the resume
   // surface, not a second copy of «Сегодня». B265 replaces this with its own
