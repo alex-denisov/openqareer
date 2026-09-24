@@ -61,107 +61,183 @@ export function VacanciesScreen({
 
   return (
     <div className="vacancies-screen">
-      <header className="career-view-heading">
-        <div>
-          <p className="career-eyebrow">
-            {primaryRole ? `Кампания · ${primaryRole}` : 'Кампания'}
-          </p>
-          <h1>Вакансии</h1>
-          <p className="vacancies-desc">
-            Отсортировано по совпадению с профилем. Откройте карточку — решение «Откликнуться»
-            принимается там же, без перехода на площадку.
-          </p>
-        </div>
-      </header>
-
+      <VacanciesHeader primaryRole={primaryRole} />
       <div className="vacancies-layout">
-        <aside className="vacancies-filters" aria-label="Фильтры">
-          {roleHypotheses.length > 0 ? (
-            <FieldGroup title="Роль кампании">
-              {roleHypotheses.map((hypothesis) => (
-                <RoleChip
-                  key={hypothesis.role}
-                  role={hypothesis.role}
-                  isHypothesis={hypothesis.isHypothesis}
-                  isSelected={state.role === hypothesis.role}
-                  onSelect={() => setState((prev) => ({ ...prev, role: hypothesis.role }))}
-                />
-              ))}
-            </FieldGroup>
-          ) : null}
-
-          {regions.length > 0 ? (
-            <FieldGroup title="География">
-              {regions.map((region) => (
-                <Chip
-                  key={region}
-                  label={region}
-                  isSelected={state.regions.includes(region)}
-                  onClick={() =>
-                    setState((prev) => ({ ...prev, regions: toggleRegion(prev.regions, region) }))
-                  }
-                />
-              ))}
-              <Chip
-                label="Удалённо"
-                isSelected={state.remoteOnly}
-                onClick={() => setState((prev) => ({ ...prev, remoteOnly: !prev.remoteOnly }))}
-              />
-            </FieldGroup>
-          ) : null}
-
-          {candidateLevel ? (
-            <FieldGroup title="Уровень">
-              <Chip label={candidateLevel} isSelected />
-            </FieldGroup>
-          ) : null}
-
-          <FieldGroup title="Свежесть">
-            {FRESHNESS_OPTIONS.map((option) => (
-              <Chip
-                key={option.days}
-                label={option.label}
-                isSelected={state.freshnessDays === option.days}
-                onClick={() =>
-                  setState((prev) => ({
-                    ...prev,
-                    freshnessDays: prev.freshnessDays === option.days ? undefined : option.days,
-                  }))
-                }
-              />
-            ))}
-          </FieldGroup>
-
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm vacancies-reset"
-            onClick={() => setState({ ...EMPTY_STATE, role: roles[0], regions })}
-          >
-            Сбросить фильтры
-          </button>
-        </aside>
-
-        <section className="vacancies-list-col" aria-label="Список вакансий">
-          <div className="vacancies-list-head">
-            <span className="vacancies-list-hint">
-              {total} {total === 1 ? 'вакансия' : 'вакансий'} · показаны совпадающие по роли и
-              уровню
-            </span>
-          </div>
-          <ul className="vac-list">
-            {filtered.map((item) => (
-              <VacancyRow
-                key={item.cluster.id}
-                item={item}
-                now={now}
-                isSelected={selectedId === item.cluster.id}
-                onSelect={() => setSelectedId(item.cluster.id)}
-              />
-            ))}
-          </ul>
-        </section>
+        <VacanciesFilters
+          roleHypotheses={roleHypotheses}
+          regions={regions}
+          candidateLevel={candidateLevel}
+          state={state}
+          onChange={setState}
+          onReset={() => setState({ ...EMPTY_STATE, role: roles[0], regions })}
+        />
+        <VacanciesList
+          total={total}
+          items={filtered}
+          now={now}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+        />
       </div>
     </div>
+  );
+}
+
+function VacanciesHeader({ primaryRole }: { readonly primaryRole?: string }) {
+  return (
+    <header className="career-view-heading">
+      <div>
+        <p className="career-eyebrow">{primaryRole ? `Кампания · ${primaryRole}` : 'Кампания'}</p>
+        <h1>Вакансии</h1>
+        <p className="vacancies-desc">
+          Отсортировано по совпадению с профилем. Откройте карточку — решение «Откликнуться»
+          принимается там же, без перехода на площадку.
+        </p>
+      </div>
+    </header>
+  );
+}
+
+function VacanciesFilters({
+  roleHypotheses,
+  regions,
+  candidateLevel,
+  state,
+  onChange,
+  onReset,
+}: {
+  readonly roleHypotheses: NonNullable<CampaignMetaView['roleHypotheses']>;
+  readonly regions: readonly string[];
+  readonly candidateLevel?: string | null;
+  readonly state: VacanciesScreenState;
+  readonly onChange: (updater: (prev: VacanciesScreenState) => VacanciesScreenState) => void;
+  readonly onReset: () => void;
+}) {
+  return (
+    <aside className="vacancies-filters" aria-label="Фильтры">
+      <RoleHypothesesGroup roleHypotheses={roleHypotheses} state={state} onChange={onChange} />
+      <RegionsGroup regions={regions} state={state} onChange={onChange} />
+
+      {candidateLevel ? (
+        <FieldGroup title="Уровень">
+          <Chip label={candidateLevel} isSelected />
+        </FieldGroup>
+      ) : null}
+
+      <FreshnessGroup state={state} onChange={onChange} />
+
+      <button type="button" className="btn btn-ghost btn-sm vacancies-reset" onClick={onReset}>
+        Сбросить фильтры
+      </button>
+    </aside>
+  );
+}
+
+interface FilterGroupProps {
+  readonly state: VacanciesScreenState;
+  readonly onChange: (updater: (prev: VacanciesScreenState) => VacanciesScreenState) => void;
+}
+
+function RoleHypothesesGroup({
+  roleHypotheses,
+  state,
+  onChange,
+}: FilterGroupProps & { readonly roleHypotheses: NonNullable<CampaignMetaView['roleHypotheses']> }) {
+  if (roleHypotheses.length === 0) return null;
+  return (
+    <FieldGroup title="Роль кампании">
+      {roleHypotheses.map((hypothesis) => (
+        <RoleChip
+          key={hypothesis.role}
+          role={hypothesis.role}
+          isHypothesis={hypothesis.isHypothesis}
+          isSelected={state.role === hypothesis.role}
+          onSelect={() => onChange((prev) => ({ ...prev, role: hypothesis.role }))}
+        />
+      ))}
+    </FieldGroup>
+  );
+}
+
+function RegionsGroup({
+  regions,
+  state,
+  onChange,
+}: FilterGroupProps & { readonly regions: readonly string[] }) {
+  if (regions.length === 0) return null;
+  return (
+    <FieldGroup title="География">
+      {regions.map((region) => (
+        <Chip
+          key={region}
+          label={region}
+          isSelected={state.regions.includes(region)}
+          onClick={() =>
+            onChange((prev) => ({ ...prev, regions: toggleRegion(prev.regions, region) }))
+          }
+        />
+      ))}
+      <Chip
+        label="Удалённо"
+        isSelected={state.remoteOnly}
+        onClick={() => onChange((prev) => ({ ...prev, remoteOnly: !prev.remoteOnly }))}
+      />
+    </FieldGroup>
+  );
+}
+
+function FreshnessGroup({ state, onChange }: FilterGroupProps) {
+  return (
+    <FieldGroup title="Свежесть">
+      {FRESHNESS_OPTIONS.map((option) => (
+        <Chip
+          key={option.days}
+          label={option.label}
+          isSelected={state.freshnessDays === option.days}
+          onClick={() =>
+            onChange((prev) => ({
+              ...prev,
+              freshnessDays: prev.freshnessDays === option.days ? undefined : option.days,
+            }))
+          }
+        />
+      ))}
+    </FieldGroup>
+  );
+}
+
+function VacanciesList({
+  total,
+  items,
+  now,
+  selectedId,
+  onSelect,
+}: {
+  readonly total: number;
+  readonly items: readonly MatchedVacancyItem[];
+  readonly now: string;
+  readonly selectedId?: string;
+  readonly onSelect: (id: string) => void;
+}) {
+  return (
+    <section className="vacancies-list-col" aria-label="Список вакансий">
+      <div className="vacancies-list-head">
+        <span className="vacancies-list-hint">
+          {total} {total === 1 ? 'вакансия' : 'вакансий'} · показаны совпадающие по роли и уровню
+        </span>
+      </div>
+      <ul className="vac-list">
+        {items.map((item) => (
+          <VacancyRow
+            key={item.cluster.id}
+            item={item}
+            now={now}
+            isSelected={selectedId === item.cluster.id}
+            onSelect={() => onSelect(item.cluster.id)}
+          />
+        ))}
+      </ul>
+    </section>
   );
 }
 

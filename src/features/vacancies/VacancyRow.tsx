@@ -22,33 +22,28 @@ export function VacancyRow({
   const { cluster, explanation } = item;
   const age = vacancyAge(cluster, now);
   return (
-    <li
-      className={`vac-row${isSelected ? ' is-selected' : ''}`}
-      tabIndex={0}
-      role="button"
-      aria-pressed={isSelected}
-      onClick={onSelect}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
-    >
-      <span className="vac-logo" aria-hidden="true">
-        {logoInitials(cluster.canonicalCompany)}
-      </span>
-      <div className="vac-main">
-        <div className="vac-title">{cluster.canonicalTitle}</div>
-        <div className="vac-sub">{vacancySubtitle(cluster)}</div>
-      </div>
-      <div className="vac-fit">
-        <FitDot isYes={explanation.roleMatch === 'target'} title="Семья ролей" />
-        <FitDot isYes={explanation.levelMatch === 'target'} title="Уровень" />
-        <FitDot isYes={!explanation.outsideGeography} title="География" />
-      </div>
-      <span className="vac-comp">{compensationLabel(cluster.salary)}</span>
-      <span className="vac-age">{age.label}</span>
+    <li className="vac-list-item">
+      <button
+        type="button"
+        className={`vac-row${isSelected ? ' is-selected' : ''}`}
+        aria-pressed={isSelected}
+        onClick={onSelect}
+      >
+        <span className="vac-logo" aria-hidden="true">
+          {logoInitials(cluster.canonicalCompany)}
+        </span>
+        <span className="vac-main">
+          <span className="vac-title">{cluster.canonicalTitle}</span>
+          <span className="vac-sub">{vacancySubtitle(cluster)}</span>
+        </span>
+        <span className="vac-fit">
+          <FitDot isYes={explanation.roleMatch === 'target'} title="Семья ролей" />
+          <FitDot isYes={explanation.levelMatch === 'target'} title="Уровень" />
+          <FitDot isYes={!explanation.outsideGeography} title="География" />
+        </span>
+        <span className="vac-comp">{compensationLabel(cluster.salary)}</span>
+        <span className="vac-age">{age.label}</span>
+      </button>
     </li>
   );
 }
@@ -75,5 +70,5 @@ function compensationLabel(salary: MatchedVacancyItem['cluster']['salary']): str
   const currency = salary.currency ?? '';
   const from = salary.from ? `от ${salary.from.toLocaleString('ru-RU')}` : '';
   const to = salary.to ? `до ${salary.to.toLocaleString('ru-RU')}` : '';
-  return `${[from, to].filter(Boolean).join(' ')} ${currency}`.trim();
+  return `${[from, to].filter(Boolean).join(' ')} ${currency}`.trim();
 }

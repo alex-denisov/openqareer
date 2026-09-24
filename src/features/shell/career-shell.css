@@ -12662,8 +12662,13 @@
   gap: var(--career-space-2);
 }
 
+.vac-list-item {
+  display: block;
+}
+
 .vac-row {
   display: grid;
+  width: 100%;
   grid-template-columns: 36px minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: var(--career-space-4);
@@ -12673,6 +12678,10 @@
   cursor: pointer;
   background: transparent;
   min-height: var(--career-target-min);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  appearance: none;
 }
 
 .vac-row:hover {
@@ -12703,10 +12712,13 @@
 }
 
 .vac-main {
+  display: block;
   min-width: 0;
+  text-align: left;
 }
 
 .vac-title {
+  display: block;
   font-size: var(--career-text-sm);
   font-weight: 600;
   white-space: nowrap;
@@ -12715,6 +12727,7 @@
 }
 
 .vac-sub {
+  display: block;
   font-size: var(--career-text-xs);
   color: var(--career-text-dim);
   white-space: nowrap;
