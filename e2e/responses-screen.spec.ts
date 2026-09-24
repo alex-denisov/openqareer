@@ -204,7 +204,6 @@ async function seedWorkspace(page: Page): Promise<void> {
             },
           ],
         },
-        marketSample: null,
       },
     },
   );
@@ -229,7 +228,6 @@ async function stubSession(page: Page): Promise<void> {
 async function openResponses(page: Page): Promise<void> {
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
   await page.locator('button[aria-label="Отклики"]:visible').first().click();
-  await expect(page.locator('.career-responses-board-wrap')).toBeVisible();
 }
 
 test.describe('B251 responses screen', () => {
@@ -275,7 +273,8 @@ test.describe('B251 responses screen', () => {
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await openResponses(page);
-    let overflow1440 = await page.evaluate(
+    await expect(page.locator('.career-responses-board-wrap')).toBeVisible();
+    const overflow1440 = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow1440).toBeLessThanOrEqual(0);
@@ -287,7 +286,7 @@ test.describe('B251 responses screen', () => {
     });
 
     await page.setViewportSize({ width: 390, height: 844 });
-    let overflow390 = await page.evaluate(
+    const overflow390 = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow390).toBeLessThanOrEqual(0);
