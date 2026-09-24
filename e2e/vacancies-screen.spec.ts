@@ -51,12 +51,12 @@ const SNAPSHOT = {
 };
 
 const CAMPAIGN = {
-  roles: { value: ['VP Technology Ops'], origin: 'profile' },
-  regions: { value: ['Дубай', 'Европа'], origin: 'profile' },
+  roles: { value: ['Enterprise Architect'], origin: 'profile' },
+  regions: { value: ['United States', 'Европа'], origin: 'profile' },
   roleHypotheses: [
-    { role: 'VP Technology Ops', vacancyCount: 34, isHypothesis: false },
-    { role: 'COO', vacancyCount: 6, isHypothesis: true },
-    { role: 'Chief of Staff', vacancyCount: 3, isHypothesis: true },
+    { role: 'Enterprise Architect', vacancyCount: 34, isHypothesis: false },
+    { role: 'Cloud Architect', vacancyCount: 6, isHypothesis: true },
+    { role: 'Solutions Architect', vacancyCount: 3, isHypothesis: true },
   ],
 };
 
@@ -109,7 +109,7 @@ function explanation(id: string, overrides: Partial<Record<string, unknown>> = {
 
 const MATCHED_ITEMS = [
   {
-    cluster: cluster('c-1', 'VP Technology Operations', 'Genetec', {
+    cluster: cluster('c-1', 'Business Information Architect', 'Genetec', {
       canonicalLocation: 'Канада',
       isRemote: true,
       salary: { from: 190000, to: 240000, currency: 'USD', gross: true },
@@ -117,33 +117,38 @@ const MATCHED_ITEMS = [
     explanation: explanation('c-1'),
   },
   {
-    cluster: cluster('c-2', 'VP Technology Ops (гипотеза)', 'Careem', {
+    cluster: cluster('c-2', 'Enterprise Architect, Senior', 'Peraton', {
+      canonicalLocation: 'United States',
       salary: { from: 150000, currency: 'USD', gross: true },
     }),
     explanation: explanation('c-2'),
   },
   {
-    cluster: cluster('c-3', 'COO', 'Noon', {
-      canonicalLocation: 'Европа',
-      isRemote: true,
+    cluster: cluster('c-3', 'Cloud & Infrastructure Architect', 'Sonsoft Inc', {
+      canonicalLocation: 'United States',
       salary: { to: 220000, currency: 'USD', gross: true },
     }),
     explanation: explanation('c-3', { levelMatch: 'related' }),
   },
   {
-    cluster: cluster('c-4', 'Chief of Staff', 'Emirates NBD', { salary: null }),
+    cluster: cluster('c-4', 'Enterprise Architect Director', 'HRTx, Inc.', {
+      canonicalLocation: 'Philippines',
+      salary: null,
+    }),
     explanation: explanation('c-4', { outsideGeography: true }),
   },
   {
-    cluster: cluster('c-5', 'VP Technology Operations', 'Talabat'),
+    cluster: cluster('c-5', 'Enterprise Solutions Architect', 'Acme Corp', {
+      canonicalLocation: 'Германия',
+    }),
     explanation: explanation('c-5'),
   },
   {
     cluster: cluster(
       'c-6',
-      'Vice President, Technology Operations & Platform Engineering for Emerging Markets',
+      'Principal Enterprise Architect for Global Platform Modernization Program',
       'A Very Long Company Name For Overflow Testing LLC',
-      { canonicalLocation: 'Дубай, Объединённые Арабские Эмираты' },
+      { canonicalLocation: 'Германия, удалённо', isRemote: true },
     ),
     explanation: explanation('c-6'),
   },
@@ -219,12 +224,12 @@ test.describe('B250 vacancies screen', () => {
     await openVacancies(page);
 
     await expect(page.locator('.vacancies-screen h1')).toHaveText('Вакансии');
-    await expect(page.locator('.career-eyebrow')).toContainText('VP Technology Ops');
+    await expect(page.locator('.career-eyebrow')).toContainText('Enterprise Architect');
 
     const filters = page.locator('.vacancies-filters');
-    await expect(filters.getByText('VP Technology Ops (34)')).toBeVisible();
-    await expect(filters.getByText(/COO \(6\).*гипотеза/)).toBeVisible();
-    await expect(filters.getByText(/Chief of Staff \(3\).*гипотеза/)).toBeVisible();
+    await expect(filters.getByText('Enterprise Architect (34)')).toBeVisible();
+    await expect(filters.getByText(/Cloud Architect \(6\).*гипотеза/)).toBeVisible();
+    await expect(filters.getByText(/Solutions Architect \(3\).*гипотеза/)).toBeVisible();
     await expect(filters.getByText('VP / C-level')).toBeVisible();
 
     const listHead = page.locator('.vacancies-list-head');
@@ -234,20 +239,17 @@ test.describe('B250 vacancies screen', () => {
     // filtered to the titles that match it — the same rule the server used
     // to count the chip (B248).
     const rows = page.locator('.vac-list-item');
-    await expect(rows).toHaveCount(3);
-    await expect(rows.first()).toContainText('VP Technology Operations');
-    await expect(rows.first()).toContainText('Genetec');
-
-    // Вилка показана компактно: диапазон, а не полные суммы.
-    await expect(rows.first()).toContainText('$190k–$240k');
+    await expect(rows).toHaveCount(4);
+    await expect(rows.first()).toContainText('Enterprise Architect, Senior');
+    await expect(rows.first()).toContainText('Peraton');
 
     await rows.first().locator('.vac-row').click();
     await expect(rows.first().locator('.vac-row')).toHaveAttribute('aria-pressed', 'true');
     await expect(rows.first().locator('.vac-row')).toHaveClass(/is-selected/);
 
-    await filters.getByText(/COO \(6\).*гипотеза/).click();
+    await filters.getByText(/Cloud Architect \(6\).*гипотеза/).click();
     await expect(rows).toHaveCount(1);
-    await expect(rows.first()).toContainText('Noon');
+    await expect(rows.first()).toContainText('Sonsoft Inc');
     // Только верхняя граница вилки — компактно, с префиксом «до».
     await expect(rows.first()).toContainText('до $220k');
   });
@@ -280,5 +282,53 @@ test.describe('B250 vacancies screen', () => {
     });
 
     void testInfo;
+  });
+
+  test('shows the detail panel beside the list on 1440 with the first row selected', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    const detail = page.locator('.vacancies-detail-col');
+    await expect(detail).toBeVisible();
+    await expect(detail).toContainText('Enterprise Architect, Senior');
+    await expect(detail).toContainText('Peraton');
+  });
+
+  test('on 390 selecting a row opens the panel full-screen and «Назад» returns to the list', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    const list = page.locator('.vacancies-list-col');
+    const detail = page.locator('.vacancies-detail-col');
+    await expect(list).toBeVisible();
+    await expect(detail).not.toBeVisible();
+
+    await page.locator('.vac-list-item').first().locator('.vac-row').click();
+    await expect(detail).toBeVisible();
+    await expect(list).not.toBeVisible();
+
+    await detail.getByText('Назад').click();
+    await expect(detail).not.toBeVisible();
+    await expect(list).toBeVisible();
+  });
+
+  test('the path indicator shows exactly one current step', async ({ page }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    await expect(page.locator('.career-path-step')).toHaveCount(5);
+    await expect(page.locator('.career-path-step[data-state="active"]')).toHaveCount(1);
   });
 });
