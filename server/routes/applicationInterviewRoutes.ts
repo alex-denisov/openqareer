@@ -2,17 +2,18 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, withDeps } from './helpers';
+import { isoDateField } from './isoDateField';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 const createInterviewSchema = z.object({
   round: z.number().int().positive(),
-  scheduledAt: z.string().trim().min(1).nullable().optional(),
+  scheduledAt: isoDateField.nullable().optional(),
   format: z.string().trim().max(120).nullable().optional(),
 });
 
 const patchInterviewSchema = z.object({
-  scheduledAt: z.string().trim().min(1).nullable().optional(),
+  scheduledAt: isoDateField.nullable().optional(),
   format: z.string().trim().max(120).nullable().optional(),
   prepStatus: z.enum(['none', 'ready']).optional(),
   prep: z.string().max(20_000).nullable().optional(),
@@ -37,7 +38,12 @@ const handlePatchInterview: Handler = async (deps, request, reply) => {
   if (!candidate) return undefined;
   const params = request.params as { id: string; iid: string };
   const body = patchInterviewSchema.parse(request.body);
-  const patched = candidateStore.patchApplicationInterview(candidate.id, params.id, params.iid, body);
+  const patched = candidateStore.patchApplicationInterview(
+    candidate.id,
+    params.id,
+    params.iid,
+    body,
+  );
   return { data: patched, meta: { requestId: request.id } };
 };
 

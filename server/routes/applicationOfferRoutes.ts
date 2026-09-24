@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, withDeps } from './helpers';
+import { isoDateField } from './isoDateField';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -14,7 +15,7 @@ const putOfferSchema = z.object({
     location: z.string().trim().max(200).optional(),
     startDate: z.string().trim().max(40).optional(),
   }),
-  respondBy: z.string().trim().min(1).nullable().optional(),
+  respondBy: isoDateField.nullable().optional(),
 });
 
 const handlePutOffer: Handler = async (deps, request, reply) => {
@@ -24,7 +25,12 @@ const handlePutOffer: Handler = async (deps, request, reply) => {
   if (!candidate) return undefined;
   const applicationId = (request.params as { id: string }).id;
   const body = putOfferSchema.parse(request.body);
-  const offer = candidateStore.putApplicationOffer(candidate.id, applicationId, body.terms, body.respondBy ?? null);
+  const offer = candidateStore.putApplicationOffer(
+    candidate.id,
+    applicationId,
+    body.terms,
+    body.respondBy ?? null,
+  );
   return { data: offer, meta: { requestId: request.id } };
 };
 

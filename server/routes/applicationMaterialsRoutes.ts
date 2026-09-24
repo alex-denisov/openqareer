@@ -16,7 +16,12 @@ const handleLinkMaterial: Handler = async (deps, request, reply) => {
   const params = request.params as { id: string; role: string };
   const role = roleParamSchema.parse(params.role);
   const body = linkMaterialSchema.parse(request.body);
-  const linked = candidateStore.linkApplicationMaterial(candidate.id, params.id, role, body.documentId);
+  const linked = candidateStore.linkApplicationMaterial(
+    candidate.id,
+    params.id,
+    role,
+    body.documentId,
+  );
   return { data: linked, meta: { requestId: request.id } };
 };
 

@@ -4,6 +4,7 @@ import { APPLICATION_STAGES } from '../../shared/applicationStage';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, withDeps } from './helpers';
 import { timezoneOffsetSchema } from './timezoneQuery';
+import { isoDateField } from './isoDateField';
 import { registerApplicationMaterialsRoutes } from './applicationMaterialsRoutes';
 import { registerApplicationInterviewRoutes } from './applicationInterviewRoutes';
 import { registerApplicationOfferRoutes } from './applicationOfferRoutes';
@@ -61,7 +62,7 @@ const createApplicationSchema = z
     // `clusterId`) or a card with no vacancy in the pool at all.
     manualVacancy: z.union([vacancySnapshotSchema, manualVacancySchema]).optional(),
     stage: stageSchema,
-    occurredAt: z.string().trim().min(1).optional(),
+    occurredAt: isoDateField.optional(),
   })
   .refine((body) => Boolean(body.clusterId) || Boolean(body.manualVacancy), {
     message: 'clusterId_or_manualVacancy_required',
@@ -82,10 +83,10 @@ function normalizeVacancySnapshot(
 const patchApplicationSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
   stage: stageSchema.optional(),
-  occurredAt: z.string().trim().min(1).optional(),
+  occurredAt: isoDateField.optional(),
   notes: z.string().max(20_000).nullable().optional(),
   processProfile: z.enum(['standard', 'executive']).optional(),
-  followUpDueAt: z.string().trim().min(1).nullable().optional(),
+  followUpDueAt: isoDateField.nullable().optional(),
 });
 
 const listApplicationsQuerySchema = z.object({ tz: timezoneOffsetSchema });
@@ -132,7 +133,7 @@ const handlePatchApplication: Handler = async (deps, request, reply) => {
 
 const recordEventSchema = z.object({
   kind: z.enum(['follow_up_sent', 'thank_you_sent', 'promise']),
-  occurredAt: z.string().trim().min(1),
+  occurredAt: isoDateField,
   note: z.string().max(4_000).nullable().optional(),
 });
 
@@ -247,9 +248,7 @@ const handleToday: Handler = async (deps, request, reply) => {
   const freshNewVacancies =
     newVacancies === undefined
       ? undefined
-      : newVacancies.filter(
-          (vacancy) => since === null || vacancy.firstObservedAt > since,
-        );
+      : newVacancies.filter((vacancy) => since === null || vacancy.firstObservedAt > since);
 
   const closedVacanciesSinceVisit =
     since === null ? 0 : candidateStore.countSystemClosuresSince(candidate.id, since);
