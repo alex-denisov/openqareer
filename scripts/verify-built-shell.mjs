@@ -1248,9 +1248,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: profile import web CTA advertises a public download`,
   );
 
-  // The account lives on the rail on desktop and in the narrow-screen bar on
-  // mobile; both carry the same accessible name (B169 §6).
-  await page.locator('button[aria-label="Открыть аккаунт"]:visible').first().click();
+  // B249 (owner, 2026-09-24): the wizard is full-screen from step 1, so an
+  // anonymous visitor opens the account from the wizard's own «Войти».
+  await page.locator('.career-onboarding-top').getByRole('button', { name: 'Войти' }).click();
   const dialog = page.getByRole('dialog', { name: 'Аккаунт' });
   await dialog.waitFor({ state: 'visible' });
   await dialog.getByRole('button', { name: 'Создать аккаунт' }).click();
@@ -1430,11 +1430,12 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
     waitUntil: 'networkidle',
   });
   await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor();
-  await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
-  await page.getByRole('button', { name: 'Войти' }).click();
-  await page.getByLabel('Логин').fill('returning.candidate');
-  await page.getByLabel('Пароль').fill('returning-candidate-password');
-  await page.getByRole('button', { name: 'Войти' }).click();
+  await page.locator('.career-onboarding-top').getByRole('button', { name: 'Войти' }).click();
+  const signInDialog = page.getByRole('dialog', { name: 'Аккаунт' });
+  await signInDialog.getByRole('button', { name: 'Войти' }).first().click();
+  await signInDialog.getByLabel('Логин').fill('returning.candidate');
+  await signInDialog.getByLabel('Пароль').fill('returning-candidate-password');
+  await signInDialog.getByRole('button', { name: 'Войти' }).last().click();
   await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
   const matchingOwnerRestored =
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) !== null;
