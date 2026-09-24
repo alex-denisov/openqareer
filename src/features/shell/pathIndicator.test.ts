@@ -40,13 +40,28 @@ describe('buildPathIndicator', () => {
     });
   });
 
-  it('marks «Подборка» done once the pool actually holds a matched vacancy', () => {
+  it('marks «Подборка» in progress («вы здесь») while the pool has matches and nothing is confirmed yet', () => {
     const steps = buildPathIndicator({
       track: [
         { id: 'campaign', label: 'Кампания поиска', status: 'active', reason: 'Готовим первое действие' },
       ],
       matchedPoolCount: 3,
       confirmedApplications: 0,
+    });
+
+    expect(steps.find((step) => step.id === 'shortlist')).toMatchObject({
+      state: 'in-progress',
+      reason: '3 в подборке — вы здесь',
+    });
+  });
+
+  it('marks «Подборка» done once the candidate has moved on to a confirmed application', () => {
+    const steps = buildPathIndicator({
+      track: [
+        { id: 'campaign', label: 'Кампания поиска', status: 'active', reason: 'Готовим первое действие' },
+      ],
+      matchedPoolCount: 3,
+      confirmedApplications: 1,
     });
 
     expect(steps.find((step) => step.id === 'shortlist')).toMatchObject({ state: 'done' });
@@ -68,6 +83,24 @@ describe('buildPathIndicator', () => {
     const steps = buildPathIndicator({ matchedPoolCount: 0, confirmedApplications: 1 });
 
     expect(steps.find((step) => step.id === 'responses')).toMatchObject({ state: 'done' });
+  });
+
+  it('never marks two steps «в процессе» at once, even when both sources are active', () => {
+    // «Роль» ещё активна в движке, и пул уже непустой — оба источника честно
+    // говорят «в процессе» сами по себе; кандидат физически на одном шаге.
+    const steps = buildPathIndicator({
+      track: [
+        { id: 'career-picture', label: 'Карьерная картина', status: 'complete', reason: 'Готово' },
+        { id: 'role-market', label: 'Роль и рынок', status: 'active', reason: 'Проверяем рынок' },
+      ],
+      matchedPoolCount: 5,
+      confirmedApplications: 0,
+    });
+
+    const inProgress = steps.filter((step) => step.state === 'in-progress');
+    expect(inProgress).toHaveLength(1);
+    expect(inProgress[0]?.id).toBe('role');
+    expect(steps.find((step) => step.id === 'shortlist')).toMatchObject({ state: 'not-started' });
   });
 
   it('points every step at an existing screen, never a placeholder route', () => {

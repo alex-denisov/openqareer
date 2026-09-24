@@ -20,6 +20,8 @@ import type { RouteDeps } from './deps';
 export function readCampaign(
   candidateStore: RouteDeps['candidateStore'],
   candidateId: string,
+  /** Порог значимости роли (B247, срез 2) — есть только после чтения пула. */
+  vacancyCountsByRole?: Readonly<Record<string, number>>,
 ): CampaignResolution {
   const snapshot = candidateStore.getSnapshot(candidateId);
   const memory = snapshot?.memory ?? [];
@@ -41,6 +43,7 @@ export function readCampaign(
     resumeTargetRole,
     profileRegions,
     explicit,
+    ...(vacancyCountsByRole ? { vacancyCountsByRole } : {}),
   });
 }
 
@@ -67,6 +70,9 @@ export function campaignMeta(campaign: CampaignResolution) {
           }
         : null,
     },
+    ...(campaign.roleHypotheses
+      ? { roleHypotheses: campaign.roleHypotheses.map((flag) => ({ ...flag })) }
+      : {}),
   };
 }
 

@@ -10,12 +10,29 @@ import { CoachApiError as CoachApiErrorClass, apiFetch, throwApiError } from './
  * растить `coachApi.ts` за его же потолок в 800 строк.
  */
 
+/** Роль кампании ниже порога значимости (B247, срез 2) — баннер «Вакансий». */
+export interface CampaignRoleHypothesis {
+  readonly role: string;
+  readonly vacancyCount: number;
+  readonly isHypothesis: boolean;
+}
+
+export interface CampaignMetaView {
+  readonly roles: { readonly value: readonly string[]; readonly origin: string };
+  readonly regions: { readonly value: readonly string[]; readonly origin: string };
+  readonly roleHypotheses?: readonly CampaignRoleHypothesis[];
+}
+
 export interface MatchedVacancyPage {
   readonly items: MatchedVacancyItem[];
   readonly total: number;
   readonly nextOffset: number | null;
   /** Смещения всех страниц пула — приходят только с первой (B211). */
   readonly pageOffsets?: readonly number[];
+  /** Кампания и гипотезы роли — приходят только с первой страницей (B248). */
+  readonly campaign?: CampaignMetaView;
+  /** Целевой уровень кандидата, выведенный сервером (B248) — с первой страницей. */
+  readonly candidateLevel?: string | null;
 }
 
 /**
@@ -35,7 +52,13 @@ export async function getMatchedVacancyPage(
   }
   const envelope = (await response.json()) as {
     data?: unknown;
-    meta?: { total?: unknown; nextOffset?: unknown; pageOffsets?: unknown };
+    meta?: {
+      total?: unknown;
+      nextOffset?: unknown;
+      pageOffsets?: unknown;
+      campaign?: CampaignMetaView;
+      candidateLevel?: string | null;
+    };
   };
   if (!Array.isArray(envelope.data)) {
     throw new CoachApiErrorClass('Ответ сервиса не разобран.', 'malformed_response', false);
@@ -51,7 +74,16 @@ export async function getMatchedVacancyPage(
     Array.isArray(planned) && planned.every((entry) => typeof entry === 'number')
       ? (planned as number[])
       : undefined;
-  return { items, total, nextOffset, ...(pageOffsets ? { pageOffsets } : {}) };
+  return {
+    items,
+    total,
+    nextOffset,
+    ...(pageOffsets ? { pageOffsets } : {}),
+    ...(envelope.meta?.campaign ? { campaign: envelope.meta.campaign } : {}),
+    ...(envelope.meta?.candidateLevel !== undefined
+      ? { candidateLevel: envelope.meta.candidateLevel }
+      : {}),
+  };
 }
 
 export async function getMatchedVacancies(signal?: AbortSignal): Promise<MatchedVacancyItem[]> {

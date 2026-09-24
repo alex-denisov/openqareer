@@ -60,14 +60,28 @@ function findTrackItem(
 
 function shortlistStepOf(input: PathIndicatorInput): PathStep {
   const campaignState = trackState(findTrackItem(input.track, 'campaign'));
+  // Пул — не финальный шаг: как только появился первый подтверждённый отклик,
+  // кандидат ушёл дальше по пути, и «Подборка» становится пройденной. До
+  // этого момента непустой пул — это «вы здесь», а не готовый чекбокс
+  // (приёмка B250: подборка отмечалась галкой, пока кандидат ещё выбирает).
   const state: PathStepState =
-    input.matchedPoolCount > 0 ? 'done' : campaignState === 'not-started' ? 'not-started' : 'in-progress';
+    input.confirmedApplications > 0
+      ? 'done'
+      : input.matchedPoolCount > 0
+        ? 'in-progress'
+        : campaignState === 'not-started'
+          ? 'not-started'
+          : 'in-progress';
   return {
     id: 'shortlist',
     label: 'Подборка',
     state,
     reason:
-      state === 'done' ? 'Кампания вернула вакансии' : 'Кампания не запущена или пул по роли пуст',
+      state === 'done'
+        ? 'Кампания вернула вакансии'
+        : input.matchedPoolCount > 0
+          ? `${input.matchedPoolCount} в подборке — вы здесь`
+          : 'Кампания не запущена или пул по роли пуст',
     destination: 'opportunities',
   };
 }
@@ -91,7 +105,7 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
   const profileItem = findTrackItem(input.track, 'career-picture');
   const roleItem = findTrackItem(input.track, 'role-market');
 
-  return [
+  const steps: readonly PathStep[] = [
     {
       id: 'profile',
       label: 'Профиль',
@@ -116,4 +130,25 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
       destination: 'opportunities',
     },
   ];
+
+  return keepSingleCurrentStep(steps);
+}
+
+/**
+ * Каждый шаг сейчас считается своим источником данных независимо от
+ * остальных, и это может честно дать «в процессе» сразу двум шагам (например
+ * «Роль» ещё активна в движке, а «Подборка» уже видит непустой пул). Кандидат
+ * не может одновременно быть на двух шагах пути — только первый из них
+ * остаётся «в процессе», следующие откатываются в «не начат» (приёмка B250).
+ */
+function keepSingleCurrentStep(steps: readonly PathStep[]): readonly PathStep[] {
+  let seenCurrent = false;
+  return steps.map((step) => {
+    if (step.state !== 'in-progress') return step;
+    if (!seenCurrent) {
+      seenCurrent = true;
+      return step;
+    }
+    return { ...step, state: 'not-started' };
+  });
 }

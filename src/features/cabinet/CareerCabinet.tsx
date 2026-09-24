@@ -9,6 +9,7 @@ import { ResumeStudio } from '../resume/ResumeStudio';
 import { ProfileScreenView } from '../resume/ProfileScreenView';
 import { ProfileTabs, type ProfileTab } from '../resume/profileTabs';
 import { VacancyBoard } from '../vacancies/VacancyBoard';
+import { VacanciesScreen } from '../vacancies/VacanciesScreen';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
 import { useVacancyApplications } from '../vacancies/useVacancyApplications';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
@@ -123,6 +124,22 @@ export function CareerCabinet({
   // «Профиль», а не рядом с карточкой кандидата: карточка — факты о человеке,
   // вкладки решают, что показывает весь экран (B265 review round 3).
   const [profileTab, setProfileTab] = useState<ProfileTab>('profile');
+  const showsVacanciesScreen =
+    view === 'opportunities' && !pool.loading && !pool.failed && pool.matched.length > 0;
+  // B248 §2 — the same path indicator the anonymous wizard shows
+  // (`CareerWorkspaceShell`), wired to the cabinet's own journey, pool and
+  // confirmed applications instead of a second read of any of them
+  // (INC-024, B104). «Вакансии» draws it itself, after its own heading, to
+  // match the mockup order (приёмка B250 §a) — every other view keeps it here.
+  const pathIndicatorSteps =
+    journey && !(data.loading && !data.snapshot)
+      ? buildPathIndicator({
+          track: journey.track,
+          matchedPoolCount: pool.matched.length,
+          confirmedApplications: countConfirmedApplications(vacancyApplications.applications),
+        })
+      : undefined;
+
   return (
     <AppErrorBoundary
       fallbackTitle="Не удалось отобразить кабинет"
@@ -130,28 +147,21 @@ export function CareerCabinet({
       onReset={() => void data.refresh()}
     >
       <div className={`career-cabinet career-cabinet-view-${view}`}>
-        <CabinetHeader
-          view={view}
-          loading={data.loading && Boolean(data.snapshot)}
-          error={data.error}
-          onRetry={() => void data.refresh()}
-          tabs={view === 'profile' ? <ProfileTabs tab={profileTab} onTab={setProfileTab} /> : undefined}
-        />
-        {/* B248 §2 — the same path indicator the anonymous wizard shows
-            (`CareerWorkspaceShell`), wired to the cabinet's own journey, pool
-            and confirmed applications instead of a second read of any of
-            them (INC-024, B104). */}
-        {journey && !(data.loading && !data.snapshot) ? (
-          <CareerPathIndicator
-            steps={buildPathIndicator({
-              track: journey.track,
-              matchedPoolCount: pool.matched.length,
-              confirmedApplications: countConfirmedApplications(
-                vacancyApplications.applications,
-              ),
-            })}
-            onNavigate={onNavigate}
+        {/* «Вакансии» рисует свой эйброу/заголовок/подзаголовок из данных
+            кампании (B248/B250) — общая шапка кабинета здесь дублировала бы
+            их дженериковой версией (приёмка B250). Доска-заглушка
+            (загрузка/ошибка/пусто) общей шапкой ещё пользуется. */}
+        {!showsVacanciesScreen ? (
+          <CabinetHeader
+            view={view}
+            loading={data.loading && Boolean(data.snapshot)}
+            error={data.error}
+            onRetry={() => void data.refresh()}
+            tabs={view === 'profile' ? <ProfileTabs tab={profileTab} onTab={setProfileTab} /> : undefined}
           />
+        ) : null}
+        {pathIndicatorSteps && !showsVacanciesScreen ? (
+          <CareerPathIndicator steps={pathIndicatorSteps} onNavigate={onNavigate} />
         ) : null}
         {/* До первого ответа сервера экран не рисует ни имени из сессии, ни
             пустых вкладок: профиль появляется целиком и один раз, а не
@@ -171,6 +181,8 @@ export function CareerCabinet({
             workPreferences={workPreferences}
             pool={pool}
             applications={vacancyApplications.applications}
+            vacancyApplications={vacancyApplications}
+            pathIndicatorSteps={pathIndicatorSteps}
             data={data}
             profileTab={profileTab}
             onNavigate={onNavigate}
@@ -210,6 +222,8 @@ function CabinetSection({
   workPreferences,
   pool,
   applications,
+  vacancyApplications,
+  pathIndicatorSteps,
   data,
   profileTab,
   onNavigate,
@@ -230,6 +244,8 @@ function CabinetSection({
   workPreferences: WorkPreferencesState;
   pool: ReturnType<typeof useMatchedPool>;
   applications?: readonly VacancyApplication[];
+  vacancyApplications: ReturnType<typeof useVacancyApplications>;
+  pathIndicatorSteps?: ReturnType<typeof buildPathIndicator>;
   data: ReturnType<typeof useCareerCabinetData>;
   profileTab: ProfileTab;
   onNavigate: (view: CareerCabinetView) => void;
@@ -312,15 +328,32 @@ function CabinetSection({
       </div>
     );
   }
+  // Верх экрана и список — новый макет «Вакансии» (B248/B250). Загрузка,
+  // ошибка и пустой пул остаются на прежнем экране до следующего среза,
+  // который переносит эти состояния и детальную панель.
+  if (pool.loading || pool.failed || pool.matched.length === 0) {
+    return (
+      <VacancyBoard
+        candidateId={session.candidateId}
+        subscriptions={data.snapshot?.vacancySubscriptions ?? []}
+        defaultQuery={targetDirection || undefined}
+        onRefresh={data.refresh}
+        pool={pool}
+        applications={applications}
+        candidateFacts={data.snapshot?.memory ?? []}
+      />
+    );
+  }
   return (
-    <VacancyBoard
-      candidateId={session.candidateId}
-      subscriptions={data.snapshot?.vacancySubscriptions ?? []}
-      defaultQuery={targetDirection || undefined}
-      onRefresh={data.refresh}
-      pool={pool}
-      applications={applications}
-      candidateFacts={data.snapshot?.memory ?? []}
+    <VacanciesScreen
+      matched={pool.matched}
+      total={pool.total || pool.matched.length}
+      campaign={pool.campaign}
+      candidateLevel={pool.candidateLevel}
+      applications={vacancyApplications}
+      pathIndicator={
+        pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined
+      }
     />
   );
 }

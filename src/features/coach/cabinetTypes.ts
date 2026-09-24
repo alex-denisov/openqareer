@@ -174,10 +174,22 @@ interface VacancyCluster {
   companyFeatures?: VacancyCompanyFeatures;
 }
 
+export interface VacancyMatchingFact {
+  readonly text: string;
+  /** Только когда совпадение связано с подтверждённым фактом профиля (B248). */
+  readonly factId?: string;
+}
+
 interface VacancyMatchExplanation {
   clusterId: string;
   /** Совпадение названия вакансии с целевыми ролями кандидата. */
   roleMatch: VacancyRoleMatch;
+  /**
+   * Совпадение по уровню (IC/лид/head/VP/C-level) — третий fit-dot рядом с
+   * ролью и гео (B248). `undefined` — кандидат не назвал уровень или заголовок
+   * вакансии не даёт сигнала: точка не рисуется, а не подставляет совпадение.
+   */
+  levelMatch?: VacancyRoleMatch;
   /**
    * Требования вакансии: сколько перечислено и сколько подтверждено.
    * `undefined` — требований нет, и соответствие не выдумывается (PRB-016).
@@ -185,6 +197,8 @@ interface VacancyMatchExplanation {
   requirements?: VacancyRequirementCoverage;
   matchingPoints: string[];
   missingPoints: string[];
+  /** Совпадение со ссылкой на факт профиля, тот же порядок, что и `matchingPoints`. */
+  matchingFacts?: readonly VacancyMatchingFact[];
   /**
    * Настоящее число совпавших и недостающих требований. Списки приходят
    * обрезанными до видимых трёх (INC-029), поэтому покрытие считается отсюда.
@@ -193,6 +207,11 @@ interface VacancyMatchExplanation {
   outsideGeography?: boolean;
   matchingCount?: number;
   missingCount?: number;
+  /** Решение кандидата «Сохранить»/«Пропустить», уже применённое к странице (B248). */
+  candidateDecision?: {
+    readonly status: 'saved' | 'skipped';
+    readonly skipReasonId?: string;
+  };
   summary: string;
   calculatedAt: string;
 }
