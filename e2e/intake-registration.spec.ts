@@ -59,7 +59,7 @@ async function reachProfileImportSourceStep(page: Page): Promise<void> {
 }
 
 async function registerFromTopBar(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Открыть аккаунт' }).first().click();
+  await page.getByRole('button', { name: 'Войти' }).click();
   const dialog = page.getByRole('dialog', { name: 'Аккаунт' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Создать аккаунт' }).click();
@@ -216,7 +216,11 @@ test.describe('B229 desktop session recovery', () => {
       await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible({
         timeout: 10_000,
       });
-      await expect(page.getByRole('button', { name: 'Открыть аккаунт' }).first()).toBeEnabled();
+      // B249: the fullscreen wizard hides the account door once a session
+      // exists (`shouldShowIntake` only renders it once `sessionPending` is
+      // false), so the heading appearing is itself proof the 2s restore
+      // finished — no "Войти" door remains for an authenticated candidate.
+      await expect(page.getByRole('button', { name: 'Войти' })).toHaveCount(0);
       await expect(page.getByText('Не удалось проверить аккаунт.', { exact: false })).toHaveCount(
         0,
       );
@@ -271,21 +275,22 @@ test.describe('B229 desktop session recovery', () => {
     await oldReadStarted;
     await page.getByLabel('Email или логин').fill(nextCandidate.email);
     await page.getByLabel('Пароль', { exact: true }).fill('synthetic-passphrase-2026');
+    // B249's fullscreen wizard shows no account door while the diagnostic is
+    // still on screen, so the race is read from the bearer header the
+    // workspace fetch carries rather than from account-panel text.
+    const workspaceRequestAfterLogin = page.waitForRequest(
+      (request) => request.url().includes('/api/v1/candidate/workspace'),
+      { timeout: 5_000 },
+    );
     await page.getByRole('button', { name: 'Войти в кабинет' }).click();
     await expect(page).toHaveURL(/\/app$/);
-    // Narrow viewports print initials («НК») instead of the full name;
-    // both differ from the old account's «Диагностика» / «Д».
-    const newAccount = /Новый кандидат|^НК$/u;
-    await expect(page.getByRole('button', { name: 'Открыть аккаунт' }).first()).toHaveText(
-      newAccount,
+    expect((await workspaceRequestAfterLogin).headers()['authorization']).toBe(
+      'Bearer desktop-next-session',
     );
     const staleResponse = page.waitForResponse('**/api/v1/auth/me');
     releaseOldRead();
     await (await staleResponse).finished();
     await waitForLiveApp(page);
-    await expect(page.getByRole('button', { name: 'Открыть аккаунт' }).first()).toHaveText(
-      newAccount,
-    );
     expect(await page.evaluate(() => localStorage.getItem('openqareer_session_token'))).toBe(
       'desktop-next-session',
     );
