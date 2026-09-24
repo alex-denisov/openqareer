@@ -14124,6 +14124,7 @@
 .vacancies-detail-actions {
   display: flex;
   gap: var(--career-space-2);
+  flex-wrap: wrap;
 }
 
 .vacancies-detail-applied {

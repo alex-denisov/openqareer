@@ -18,7 +18,9 @@ function item(
       descriptionSummary: '',
       skills: [],
       primaryUrl: 'https://example.com/vacancy',
-      sources: [{ sourceType: 'hh', sourceId: 'c-1', sourceName: 'hh.ru', sourceUrl: '', observedAt: '' }],
+      sources: [
+        { sourceType: 'hh', sourceId: 'c-1', sourceName: 'hh.ru', sourceUrl: '', observedAt: '' },
+      ],
       firstObservedAt: '2026-09-21T08:00:00.000Z',
       lastSeenAt: '2026-09-24T08:00:00.000Z',
       status: 'active',
@@ -115,5 +117,12 @@ describe('VacancyDetailPanel (B250)', () => {
   it('renders a «Назад» control for the mobile full-screen panel', () => {
     const html = render();
     expect(html).toContain('Назад');
+  });
+
+  // Regression found while migrating B232: the new screen replaced the old
+  // board, and with it the only door to the cover-letter generator.
+  it('keeps the cover-letter generator reachable from the detail actions', () => {
+    const html = render();
+    expect(html).toContain('Собрать письмо');
   });
 });

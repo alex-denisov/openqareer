@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ArrowLeft, Check, Warning } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
@@ -5,6 +6,7 @@ import { vacancyAge } from './vacancyFilters';
 import { formatCompensationCompact } from './vacancyCompensation';
 import { openTargetLabel } from './vacancyOpenTarget';
 import type { VacancyApplications } from './useVacancyApplications';
+import { VacancyPitchModal } from './VacancyPitchModal';
 
 /**
  * Детальная панель «Вакансии» (B248/B250) — макет `vacancies.html`. Сетка
@@ -73,7 +75,11 @@ function VacancyDetailHead({ cluster }: { readonly cluster: MatchedVacancyItem['
       <div>
         <h2 className="vacancies-detail-title">{cluster.canonicalTitle}</h2>
         <div className="vacancies-detail-company">
-          {[cluster.canonicalCompany, cluster.canonicalLocation, cluster.isRemote ? 'удалённо' : null]
+          {[
+            cluster.canonicalCompany,
+            cluster.canonicalLocation,
+            cluster.isRemote ? 'удалённо' : null,
+          ]
             .filter(Boolean)
             .join(' · ')}
         </div>
@@ -143,7 +149,40 @@ function VacancyDetailActions({
       >
         Ещё · {openTargetLabel(cluster.sources)}
       </a>
+      <VacancyPitchDoor cluster={cluster} />
     </div>
+  );
+}
+
+/** The old board's cover-letter door (B232): the new screen must not drop a
+ *  feature the candidate already had on prod. */
+function VacancyPitchDoor({ cluster }: { readonly cluster: MatchedVacancyItem['cluster'] }) {
+  const [pitchOpen, setPitchOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        className="vacancies-btn vacancies-btn-secondary"
+        onClick={() => setPitchOpen(true)}
+      >
+        Собрать письмо
+      </button>
+      {pitchOpen ? (
+        <VacancyPitchModal
+          isOpen
+          onClose={() => setPitchOpen(false)}
+          vacancy={{
+            id: cluster.id,
+            title: cluster.canonicalTitle,
+            company: cluster.canonicalCompany,
+            location: cluster.canonicalLocation,
+            isRemote: cluster.isRemote,
+            skills: cluster.skills,
+            descriptionSummary: cluster.descriptionSummary,
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
