@@ -1,3 +1,4 @@
+import { BrandMark } from '../brand/BrandMark';
 import type { OnboardingStepInfo } from './onboardingWizardSteps';
 
 interface OnboardingWizardChromeProps {
@@ -17,10 +18,13 @@ export function OnboardingWizardChrome(props: OnboardingWizardChromeProps) {
   const dots = Array.from({ length: props.step.total }, (_, index) => index + 1);
   return (
     <header className="career-onboarding-header">
-      {/* The shell's own rail already carries the wordmark (`BrandMark`); a
-          second one here only spent vertical space onboarding.html does not
-          have to share with the rest of the app's chrome. */}
+      {/* B249: onboarding.html is full-screen — the shell hides its own rail
+          (and the wordmark it carried) for the whole diagnostic, so this is
+          now the only sign on the screen. */}
       <div className="career-onboarding-top">
+        <span className="career-onboarding-brand" aria-label="openqareer, главная">
+          <BrandMark variant="lockup" size={26} />
+        </span>
         <button type="button" className="career-quiet-button" onClick={props.onSkip}>
           Отложить настройку
         </button>

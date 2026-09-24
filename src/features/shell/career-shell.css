@@ -12629,8 +12629,12 @@
 .career-onboarding-top {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   margin-bottom: var(--career-space-3);
+}
+
+.career-onboarding-brand {
+  display: inline-flex;
 }
 
 .career-onboarding-dots {

@@ -30,4 +30,20 @@ describe('OnboardingWizardChrome', () => {
     );
     expect(html).toContain('Отложить настройку');
   });
+
+  // B249: the shell hides its own rail while onboarding is running (the
+  // mockup is full-screen, onboarding.html), so the wordmark has to live
+  // here instead.
+  it('carries its own wordmark now that the shell rail is hidden', () => {
+    const html = renderToStaticMarkup(
+      <OnboardingWizardChrome
+        step={{ id: 'source', dot: 1, total: 6 }}
+        title="С чем разбираемся?"
+        description="Выберите то, что у вас уже есть."
+        onSkip={noop}
+      />,
+    );
+    expect(html).toContain('brand-lockup');
+    expect(html).toContain('aria-label="openqareer, главная"');
+  });
 });
