@@ -26,19 +26,25 @@ export interface AccountProfilePatch {
 }
 
 /**
- * The screen shows `headline || targetDirection`, so the editor has to open on
- * the same value the candidate is looking at — otherwise saving an untouched
- * form would silently rewrite the role to the other store's copy.
+ * The editor opens on the same resolved role the candidate is looking at.
+ * Otherwise saving an untouched form would silently rewrite the role to an
+ * older store's copy.
  */
 export function routePremisesDraft({
   workspace,
   account,
+  visibleTargetRole,
 }: {
   workspace?: CandidateWorkspace;
   account?: AccountSnapshot;
+  visibleTargetRole?: string;
 }): RoutePremisesDraft {
   return {
-    targetRole: account?.profile.headline?.trim() || workspace?.targetDirection?.trim() || '',
+    targetRole:
+      visibleTargetRole?.trim() ||
+      account?.profile.headline?.trim() ||
+      workspace?.targetDirection?.trim() ||
+      '',
     regions: normalizeCandidateRegions(workspace?.regions ?? []),
     workMode: account?.profile.workMode ?? null,
   };

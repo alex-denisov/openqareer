@@ -5,6 +5,7 @@ import { CareerRoutePremises } from '../search/RoutePremises';
 import type { CareerCabinetView } from './cabinetViews';
 import type { CandidateSnapshot } from '../coach/coachApi';
 import type { CareerCabinetData } from './useCareerCabinetData';
+import type { MatchedPool } from '../vacancies/useMatchedPool';
 
 // Разделы читают три источника одним хуком; здесь он отвечает сразу, чтобы
 // проверять состав экрана, а не сеть. Первый тест ниже переключает его в
@@ -12,6 +13,11 @@ import type { CareerCabinetData } from './useCareerCabinetData';
 const cabinetData = vi.hoisted(() => ({ current: undefined as unknown as CareerCabinetData }));
 vi.mock('./useCareerCabinetData', () => ({
   useCareerCabinetData: () => cabinetData.current,
+}));
+
+const matchedPool = vi.hoisted(() => ({ current: undefined as unknown as MatchedPool }));
+vi.mock('../vacancies/useMatchedPool', () => ({
+  useMatchedPool: () => matchedPool.current,
 }));
 
 const loadedSnapshot = {
@@ -51,6 +57,14 @@ function loadedData(): CareerCabinetData {
 
 beforeEach(() => {
   cabinetData.current = loadedData();
+  matchedPool.current = {
+    matched: [],
+    total: 0,
+    poolTotal: 0,
+    loading: false,
+    failed: false,
+    complete: true,
+  };
 });
 
 const session = {
@@ -154,6 +168,28 @@ describe('CareerCabinet composition', () => {
     expect(html).toContain('Где');
     expect(html).toContain('Россия');
     expect(html).not.toContain('Не указана');
+  });
+
+  it('shows the campaign role instead of an old wizard direction after profile import', () => {
+    cabinetData.current = {
+      ...loadedData(),
+      account: {
+        profile: { headline: 'VP of Engineering' },
+      } as CareerCabinetData['account'],
+    };
+    matchedPool.current = {
+      ...matchedPool.current,
+      campaign: {
+        roles: { value: ['VP of Technology & Operations'], origin: 'explicit' },
+        regions: { value: ['ru'], origin: 'explicit' },
+      },
+    };
+
+    const html = renderCabinet('career');
+
+    expect(html).toContain('Кампания: «VP of Technology &amp; Operations»');
+    expect(html).toContain('<dd>VP of Technology &amp; Operations</dd>');
+    expect(html).not.toContain('Senior Software Engineer');
   });
 
   it('says plainly that no region was chosen rather than guessing one', () => {

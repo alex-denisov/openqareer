@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import { updateAccountProfile, type AuthUser } from '../coach/coachApi';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
+import { visibleTargetDirection } from '../workspace/workspacePresentation';
 import { TodayScreen } from '../today/TodayScreen';
 import { useToday } from '../today/useToday';
 import { SearchCampaign } from '../search/SearchCampaign';
@@ -61,20 +62,28 @@ export function CareerCabinet({
   onUpdateWorkspace,
 }: CareerCabinetProps) {
   const data = useCareerCabinetData(session.candidateId);
-  // Роль из разобранного резюме — такой же ответ кандидата, как поле анкеты.
-  // Без неё «Позиционирование» писало «Не названа» рядом с той же ролью в
-  // шапке профиля (B179).
-  const targetDirection =
-    data.account?.profile.headline?.trim() ||
-    workspace?.targetDirection?.trim() ||
-    data.snapshot?.resume?.draft?.targetRole?.trim() ||
-    '';
   // Карьерная картина вошедшего кандидата: анкета плюс факты с сервера.
   // Без неё «ATS-читаемость» и «Следующее действие» показывали пустые
   // состояния тому, у кого разобрано резюме (B103, B105).
   // Пул читается один раз на весь кабинет: раньше каждый раздел повторял
   // полсотни страниц подбора сам (B104).
   const pool = useMatchedPool();
+  const campaignRoles = pool.campaign?.roles.value;
+  // Кампания — текущая цель поиска. Импортированный headline и роль резюме
+  // идут следом; старый ответ мастера остаётся в данных, но не перекрывает их.
+  const targetDirection = visibleTargetDirection({
+    campaignRoles,
+    profileHeadline: data.account?.profile.headline,
+    resumeTargetRole: data.snapshot?.resume?.draft?.targetRole,
+    wizardTargetDirection: workspace?.targetDirection,
+  });
+  const journeyWorkspace = useMemo(
+    () =>
+      workspace && targetDirection !== workspace.targetDirection
+        ? { ...workspace, targetDirection }
+        : workspace,
+    [targetDirection, workspace],
+  );
   // Выбранная роль — версионированный объект, а не свободная строка анкеты:
   // кампания «Поиск» берёт направление из него (B180, срез 2).
   const strategy = useCareerStrategy();
@@ -85,12 +94,12 @@ export function CareerCabinet({
   const journey = useMemo(
     () =>
       cabinetJourney({
-        workspace,
+        workspace: journeyWorkspace,
         memory: data.snapshot?.memory ?? [],
         targetDirection,
         pool: pool.matched,
       }),
-    [workspace, data.snapshot?.memory, targetDirection, pool.matched],
+    [journeyWorkspace, data.snapshot?.memory, targetDirection, pool.matched],
   );
 
   const savePremises = useCallback(
@@ -292,7 +301,11 @@ function CabinetSection({
         <SearchCampaign
           targetDirection={targetDirection}
           strategy={strategy.strategy}
-          premises={routePremisesDraft({ workspace, account: data.account })}
+          premises={routePremisesDraft({
+            workspace,
+            account: data.account,
+            visibleTargetRole: targetDirection,
+          })}
           premisesLoading={data.loading}
           onSavePremises={onSavePremises}
           onOpenVacancies={() => onNavigate('opportunities')}
