@@ -1,5 +1,6 @@
 import { ROLE_TAXONOMY, type FunctionCode } from '../../../shared/roleTaxonomy';
-import { LEVEL_RANK, inferSeniorityLevel } from '../levelMatcher';
+import { LEVEL_RANK } from '../levelMatcher';
+import { inferRulesLevel } from './rulesLevel';
 
 /**
  * Фолбэк без модели (B267 §3): опорные слова словаря дают функцию, уже
@@ -38,6 +39,31 @@ function escapeRegExp(text: string): string {
 }
 
 /**
+ * Общие для должностей слова без привязки к функции: заголовок явно называет
+ * роль, но словарь не знает домена (B267 S1 §3). Возвращаем честный код
+ * `other` вместо пустого списка — это ограничено ≤10% выборки в тесте на
+ * фикстуре, а не используется как замена словарю.
+ */
+const GENERIC_ROLE_WORD = new RegExp(
+  '(?<![\\p{L}])(' +
+    [
+      'manager', 'director', 'specialist', 'analyst', 'coordinator', 'supervisor', 'associate',
+      'executive', 'lead', 'expert', 'administrator', 'representative', 'consultant', 'intern',
+      'apprentice', 'partner', 'officer', 'staff', 'agent', 'clerk', 'driver', 'guide', 'buyer',
+      'strategist', 'principal', 'leader', 'processor', 'trainee', 'apprenticeship',
+      'ejecutivo', 'ejecutiva', 'especialista', 'gerente', 'diretor', 'directora', 'executivo',
+      'executiva', 'vendedor', 'vendedora', 'consultor', 'consultora', 'analista', 'coordenador',
+      'coordenadora', 'responsable', 'ingeniero', 'responsavel',
+    ].join('|') +
+    ')(?![\\p{L}])',
+  'iu',
+);
+
+function pickFallbackFunction(normalizedTitle: string): FunctionCode[] {
+  return GENERIC_ROLE_WORD.test(normalizedTitle) ? ['other'] : [];
+}
+
+/**
  * Более длинный (специфичный) якорь побеждает: «vp of engineering» важнее
  * общего «engineer» в том же названии. При равной длине сохраняется порядок
  * словаря — не больше двух функций на строку (B267 §2).
@@ -58,10 +84,10 @@ function pickTopFunctions(hits: readonly AnchorHit[]): FunctionCode[] {
 export function rulesParse(title: string): RulesParseResult {
   const normalized = ` ${title.toLowerCase()} `;
   const hits = findAnchorHits(normalized);
-  const functions = pickTopFunctions(hits);
-  const level = inferSeniorityLevel(title);
+  const specificFunctions = pickTopFunctions(hits);
+  const functions = specificFunctions.length > 0 ? specificFunctions : pickFallbackFunction(normalized);
   return {
     functions,
-    levelRank: level ? LEVEL_RANK[level] : null,
+    levelRank: LEVEL_RANK[inferRulesLevel(title)],
   };
 }

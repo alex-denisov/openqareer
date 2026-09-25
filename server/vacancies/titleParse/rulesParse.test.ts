@@ -10,8 +10,23 @@ describe('rulesParse (B267 S1)', () => {
     expect(rulesParse('Junior Developer').levelRank).toBe(LEVEL_RANK.ic);
   });
 
-  it('returns levelRank null when the title names no level', () => {
-    expect(rulesParse('Developer').levelRank).toBeNull();
+  // B267 S1: реальная выборка держала null-уровень у 68% строк, потому что
+  // «нет явного маркера» читалось как «неизвестно». Обычный IC-заголовок без
+  // слов уровня — это IC, а не пустой ответ (CPO-отчёт, Software Engineer).
+  it('defaults to ic level when the title names no level marker', () => {
+    expect(rulesParse('Developer').levelRank).toBe(LEVEL_RANK.ic);
+    expect(rulesParse('Software Engineer').levelRank).toBe(LEVEL_RANK.ic);
+    expect(rulesParse('Account Executive').levelRank).toBe(LEVEL_RANK.ic);
+  });
+
+  it('reads Director as head, not c-level, unless it is Senior Director or VP', () => {
+    expect(rulesParse('Director, Demand Generation').levelRank).toBe(LEVEL_RANK.head);
+    expect(rulesParse('Senior Director, Product Management').levelRank).toBe(LEVEL_RANK.vp);
+    expect(rulesParse('VP of PMO').levelRank).toBe(LEVEL_RANK.vp);
+  });
+
+  it('reads CIO in parentheses as c-level even inside a RU director title', () => {
+    expect(rulesParse('Директор по ИТ (CIO)').levelRank).toBe(LEVEL_RANK['c-level']);
   });
 
   it('prefers the more specific multi-word anchor', () => {
