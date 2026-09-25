@@ -443,9 +443,7 @@ test.describe('B265 Profile screen', () => {
     for (const id of SECTION_IDS) {
       await expect(page.locator(`#${id}`)).toBeAttached();
     }
-    await expect(page.locator('#sec-courses')).toContainText(
-      'Раздел действительно пуст в источнике',
-    );
+    await expect(page.locator('#sec-courses')).toContainText('Импорт из LinkedIn курсов не нашёл');
     await expect(page.locator('.career-profile-screen-coverage')).toBeVisible();
     await expect(page.locator('.career-profile-screen-position-bullets li').first()).toBeVisible();
     await expect(page.locator('.career-profile-screen-lang-source').first()).toBeVisible();
