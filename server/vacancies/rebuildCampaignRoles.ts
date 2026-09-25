@@ -35,7 +35,7 @@ export async function rebuildCampaignRoles(
       // рабочего пространства выглядели бы правкой кандидата (origin explicit).
       roles: latest.campaign?.roles ?? [],
       regions: latest.campaign?.regions ?? [],
-      revision: latest.campaign?.revision ?? 0,
+      revision: latest.campaign?.revision ?? 1,
       updatedAt: latest.campaign?.updatedAt ?? new Date().toISOString(),
       ...(latest.campaign?.dismissed ? { dismissed: latest.campaign.dismissed } : {}),
       auto: {
