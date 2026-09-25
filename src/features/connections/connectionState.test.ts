@@ -161,7 +161,7 @@ describe('disconnecting forgets the sign-in on this device (B266)', () => {
     expect(calls).toEqual(['server', 'device']);
     expect(outcome.device).toBe('forgotten');
     expect(connectionDisconnectNotice(outcome.result, outcome.device)).toContain(
-      'Вход в LinkedIn на этом устройстве забыт',
+      'Входы в LinkedIn и hh.ru на этом устройстве забыты',
     );
   });
 

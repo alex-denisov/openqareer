@@ -33,7 +33,7 @@ describe('AccountConnections', () => {
     expect(html).toContain('LinkedIn');
     expect(html).toContain('Подключено');
     expect(html).toContain('Отключить LinkedIn');
-    expect(html).toContain('вход в неё в приложении будет забыт');
+    expect(html).toContain('входы в LinkedIn и hh.ru в приложении будут забыты');
   });
 
   // The wizard deliberately holds one source at a time (owner decision, B171).

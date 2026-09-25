@@ -446,7 +446,7 @@ function disconnectBoundaryCopy(
   connection: Extract<CandidateConnection, { status: 'connected' }>,
 ): string {
   return connection.accessMode === 'native_session_snapshot'
-    ? 'Связь с площадкой отключится, вход в неё в приложении будет забыт. Уже добавленные факты останутся в профиле.'
+    ? 'Связь с площадкой отключится, входы в LinkedIn и hh.ru в приложении будут забыты. Уже добавленные факты останутся в профиле.'
     : 'Сохранённый доступ и копия профиля будут удалены. Если площадка показывает OpenQareer в своих настройках, отзовите доступ и там.';
 }
 

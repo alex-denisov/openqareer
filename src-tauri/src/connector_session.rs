@@ -412,6 +412,9 @@ pub async fn open_session_window(
 
     if let Some(existing) = app.get_webview(&label) {
         if !existing.url().is_ok_and(|current| current == url) {
+            if request.platform == "linkedin" && request.session_key.is_none() {
+                tokio::time::sleep(pace_linkedin_navigation(app)).await;
+            }
             let _ = existing.navigate(url);
         }
         resize_session_window_for(
@@ -1101,6 +1104,16 @@ fn admit_linkedin_read(app: &AppHandle, path: &str) -> Result<Duration, String> 
     guard
         .admit(std::time::Instant::now(), is_detail_page(path))
         .map_err(str::to_string)
+}
+
+/// Spaces a sign-in window navigation without spending the read budget; a
+/// poisoned guard only skips the pause, it never blocks the sign-in.
+fn pace_linkedin_navigation(app: &AppHandle) -> Duration {
+    app.state::<LinkedInReadGuardState>()
+        .0
+        .lock()
+        .map(|mut guard| guard.pace(std::time::Instant::now()))
+        .unwrap_or_default()
 }
 
 pub async fn read_session_page(

@@ -19,7 +19,8 @@ export function connectionDisconnectNotice(
   const retained =
     'Импортированные данные остаются в вашем профиле; удалить их можно отдельно в разделе данных.';
   if (device === 'forgotten') {
-    return `${label} отключён. Вход в ${label} на этом устройстве забыт. ${retained}`;
+    // One device store serves both platforms, so both sign-ins go (B266 review).
+    return `${label} отключён. Входы в LinkedIn и hh.ru на этом устройстве забыты. ${retained}`;
   }
   if (device === 'failed') {
     return `${label} отключён, но вход в ${label} на этом устройстве забыть не удалось. Перезапустите приложение и отключите ${label} ещё раз. ${retained}`;
