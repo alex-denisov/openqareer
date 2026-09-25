@@ -119,6 +119,7 @@ const careerCommandExecutor = new CareerCommandConnectorRouter({
 const vacancyEngine = composeVacancyEngine({
   databasePath: config.databasePath,
   recluster: { mode: 'off' },
+  matchMode: config.matchMode,
 });
 const { engine: multiSourceEngine, hhCrawlSettings } = vacancyEngine;
 const roleNamingCache = new SqliteRoleNamingCache({

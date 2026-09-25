@@ -25,6 +25,7 @@ import { candidateRoleFunctionCodes } from './titleParse/candidateRoleFunctions'
 import { LEVEL_RANK } from './levelMatcher';
 import type { SourceObservations } from './sourceHealthVerdict';
 import type { CandidateMatchProfile } from './vacancyMatcher';
+import type { FunctionCode } from '../../shared/roleTaxonomy';
 import {
   clusterProjectionOf,
   DEFAULT_MATCH_CANDIDATE_LIMIT,
@@ -229,6 +230,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   /** Докуда дошло заполнение `vacancy_cluster_keys` по старым кластерам (B230). */
   private clusterKeysBackfillCursor = 0;
   private clusterKeysBackfillComplete = false;
+  /** Раз увидели строку в `vacancy_semantic` — считаем таблицу наполненной насовсем:
+   * обслуживатель её не опустошает, а лишний запрос на каждого кандидата не нужен. */
+  private semanticTableSeenReady = false;
 
   constructor(options: SqliteVacancyPoolStoreOptions) {
     this.matchReader = options.matchReader;
@@ -530,6 +534,48 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     };
   }
 
+  private isSemanticTableReady(): boolean {
+    if (this.semanticTableSeenReady) return true;
+    const row = this.database.prepare('SELECT 1 FROM vacancy_semantic LIMIT 1').get();
+    this.semanticTableSeenReady = row !== undefined;
+    return this.semanticTableSeenReady;
+  }
+
+  /**
+   * Единая точка входа режима (B267 S3, план §5): пусто означает legacy —
+   * флаг выключен, роли кампании не свелись к известной функции, или
+   * `vacancy_semantic` ещё не наполнена обслуживателем (S2 не догнал S3 по
+   * времени на этом инстансе).
+   */
+  resolveSemanticFunctions(candidate: CandidateMatchProfile): FunctionCode[] {
+    if (this.matchMode !== 'semantic') return [];
+    const codes = candidateRoleFunctionCodes(candidate.targetRoles);
+    if (codes.length === 0) return [];
+    if (!this.isSemanticTableReady()) {
+      console.warn(
+        JSON.stringify({ event: 'vacancy-match-semantic-not-ready', candidateId: candidate.candidateId }),
+      );
+      return [];
+    }
+    return codes;
+  }
+
+  private semanticQuery(
+    candidate: CandidateMatchProfile,
+    functionCodes: readonly FunctionCode[],
+    window: FreshnessWindow,
+    preferRemote: boolean,
+    limit: number,
+  ): { sql: string; params: SQLInputValue[] } {
+    return buildSemanticMatchQuery({
+      functionCodes,
+      levelRank: candidate.targetLevel ? LEVEL_RANK[candidate.targetLevel] : null,
+      window,
+      preferRemote,
+      limit,
+    });
+  }
+
   queryMatchCandidates(
     candidate: CandidateMatchProfile,
     options?: MatchCandidateQueryOptions,
@@ -538,6 +584,15 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     if (limit <= 0) return [];
     const window = freshnessWindow(options?.nowMs);
     const preferRemote = Boolean(candidate.preferredRemote);
+
+    const semanticFunctions = candidate.semanticRoleFunctions?.length
+      ? candidate.semanticRoleFunctions
+      : this.resolveSemanticFunctions(candidate);
+    if (semanticFunctions.length > 0) {
+      const query = this.semanticQuery(candidate, semanticFunctions, window, preferRemote, limit);
+      return this.readVacancies(query.sql, query.params);
+    }
+
     const terms = extractMatchTerms(candidate);
 
     const results: UnifiedVacancy[] = [];
@@ -575,8 +630,23 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     if (limit <= 0) return [];
     const window = freshnessWindow(options?.nowMs);
     const preferRemote = Boolean(candidate.preferredRemote);
-    const terms = extractMatchTerms(candidate);
     this.matchReader ??= new VacancyMatchReader(this.databasePath);
+
+    const semanticFunctions = candidate.semanticRoleFunctions?.length
+      ? candidate.semanticRoleFunctions
+      : this.resolveSemanticFunctions(candidate);
+    if (semanticFunctions.length > 0) {
+      const query = this.semanticQuery(candidate, semanticFunctions, window, preferRemote, limit);
+      const rows = await this.readMatchRows(query, false);
+      const results: UnifiedVacancy[] = [];
+      for (const row of rows) {
+        const item = parseVacancy(row.payload);
+        if (item) results.push(item);
+      }
+      return results;
+    }
+
+    const terms = extractMatchTerms(candidate);
     const results: UnifiedVacancy[] = [];
     const seenIds = new Set<string>();
     for (const phase of terms.length ? [terms, []] : [[]]) {

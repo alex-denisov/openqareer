@@ -128,7 +128,8 @@ export interface ServerConfig {
   dataEncryptionKey: Buffer;
   databasePath: string;
   /** Смысловой подбор вакансий по функции и уровню, флаг B267 S3. */
-  matchMode: 'legacy' | 'semantic';
+  /** Необязательно для тестовых литералов `ServerConfig`: отсутствие значит legacy. */
+  matchMode?: 'legacy' | 'semantic';
   /** Encrypted browser runtime root; must be outside the repository in production. */
   linkedinRuntimeRoot?: string;
   model: string;
