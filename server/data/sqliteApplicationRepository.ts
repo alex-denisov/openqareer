@@ -196,38 +196,21 @@ export class SqliteApplicationRepository {
     const stageChanged = nextStage !== current.stage;
     const occurredAt = input.occurredAt ?? now;
     const nextNotes = input.notes !== undefined ? input.notes : current.notes;
-    this.database
-      .prepare(
-        `UPDATE applications SET
-           stage = ?,
-           notes_cipher = ?,
-           process_profile = ?,
-           follow_up_due_at = ?,
-           stage_changed_at = ?,
-           version = version + 1,
-           updated_at = ?
-         WHERE candidate_id = ? AND id = ?`,
-      )
-      .run(
-        nextStage,
-        nextNotes === null ? null : this.sealedText.seal(nextNotes, notesAssociatedData(candidateId, id)),
-        input.processProfile ?? current.processProfile,
-        input.followUpDueAt !== undefined ? input.followUpDueAt : current.followUpDueAt,
-        stageChanged ? occurredAt : current.stageChangedAt,
-        now,
+    const nextNotesCipher =
+      nextNotes === null ? null : this.sealedText.seal(nextNotes, notesAssociatedData(candidateId, id));
+    return this.transaction(() =>
+      this.persistPatch(
         candidateId,
         id,
-      );
-    if (stageChanged) {
-      this.insertEvent(candidateId, id, {
-        kind: 'stage',
-        fromStage: current.stage,
-        toStage: nextStage,
+        input,
+        current,
+        nextStage,
+        stageChanged,
         occurredAt,
-        provenance: 'candidate',
-      }, now);
-    }
-    return this.get(candidateId, id) as StoredApplication;
+        now,
+        nextNotesCipher,
+      ),
+    );
   }
 
   /**
@@ -542,6 +525,61 @@ export class SqliteApplicationRepository {
         event.provenance,
         payloadCipher,
       );
+  }
+
+  private persistPatch(
+    candidateId: string,
+    id: string,
+    input: PatchApplicationInput,
+    current: StoredApplication,
+    nextStage: ApplicationStage,
+    stageChanged: boolean,
+    occurredAt: string,
+    now: string,
+    nextNotesCipher: string | null,
+  ): StoredApplication {
+    const result = this.database
+      .prepare(
+        `UPDATE applications SET
+           stage = ?, notes_cipher = ?, process_profile = ?, follow_up_due_at = ?,
+           stage_changed_at = ?, version = version + 1, updated_at = ?
+         WHERE candidate_id = ? AND id = ? AND version = ?`,
+      )
+      .run(
+        nextStage,
+        nextNotesCipher,
+        input.processProfile ?? current.processProfile,
+        input.followUpDueAt !== undefined ? input.followUpDueAt : current.followUpDueAt,
+        stageChanged ? occurredAt : current.stageChangedAt,
+        now,
+        candidateId,
+        id,
+        input.expectedVersion,
+      );
+    if (result.changes !== 1) throw new ApplicationVersionConflictError();
+    if (stageChanged) {
+      this.insertEvent(candidateId, id, {
+        kind: 'stage',
+        fromStage: current.stage,
+        toStage: nextStage,
+        occurredAt,
+        provenance: 'candidate',
+      }, now);
+    }
+    return this.get(candidateId, id) as StoredApplication;
+  }
+
+  private transaction<T>(operation: () => T): T {
+    if (this.database.isTransaction) return operation();
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const result = operation();
+      this.database.exec('COMMIT');
+      return result;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   private toApplication(row: ApplicationRow): StoredApplication {

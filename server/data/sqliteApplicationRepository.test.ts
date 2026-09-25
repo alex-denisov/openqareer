@@ -13,6 +13,16 @@ const vacancy = {
   source: 'src-remotive',
 };
 
+class ConcurrentPatchSealedText extends SealedText {
+  onSeal: (() => void) | undefined;
+
+  override seal(plainText: string, associatedData: string): string {
+    this.onSeal?.();
+    this.onSeal = undefined;
+    return super.seal(plainText, associatedData);
+  }
+}
+
 function createRepo(): { repo: SqliteApplicationRepository; database: DatabaseSync } {
   const database = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true });
   database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;');
@@ -74,6 +84,49 @@ describe('SqliteApplicationRepository', () => {
     expect(() =>
       repo.patch('candidate-1', created.id, { expectedVersion: created.version, stage: 'responded' }),
     ).toThrow(ApplicationVersionConflictError);
+  });
+
+  it('rejects a concurrent stale patch without overwriting the first update or adding its event', () => {
+    const database = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true });
+    database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;');
+    database.exec(MIGRATION_33);
+    database.prepare("INSERT INTO candidates (id) VALUES ('candidate-1')").run();
+    const key = randomBytes(32);
+    const coordinatedSealedText = new ConcurrentPatchSealedText(key);
+    const repo = new SqliteApplicationRepository(database, coordinatedSealedText);
+    const firstRepo = new SqliteApplicationRepository(database, new SealedText(key));
+    const created = repo.create(
+      'candidate-1',
+      { clusterId: 'cluster-1', stage: 'saved' },
+      '2026-09-26T00:00:00.000Z',
+    );
+    coordinatedSealedText.onSeal = () => {
+      firstRepo.patch(
+        'candidate-1',
+        created.id,
+        { expectedVersion: created.version, stage: 'applied' },
+        '2026-09-26T00:01:00.000Z',
+      );
+    };
+
+    expect(() =>
+      repo.patch(
+        'candidate-1',
+        created.id,
+        { expectedVersion: created.version, stage: 'responded', notes: 'second update' },
+        '2026-09-26T00:02:00.000Z',
+      ),
+    ).toThrow(ApplicationVersionConflictError);
+
+    expect(repo.get('candidate-1', created.id)).toMatchObject({
+      stage: 'applied',
+      notes: null,
+      version: 2,
+    });
+    expect(repo.listEvents('candidate-1', created.id).map((event) => event.toStage)).toEqual([
+      'saved',
+      'applied',
+    ]);
   });
 
   it('throws not-found for an unknown application id', () => {
