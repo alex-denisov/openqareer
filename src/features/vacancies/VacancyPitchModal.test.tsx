@@ -18,8 +18,10 @@ describe('VacancyPitchModal', () => {
       subject: 'Lead Frontend Engineer — Алексей Денисов | Архитектура и надежность',
       body: 'Здравствуйте!\n\nЗаинтересовала позиция Lead Frontend Engineer в компании FinTech Group.\n\nВ подтверждённом опыте: ускорил рендеринг на 40%.\n\nБуду рад обсудить задачи команды.',
     },
-    linkedInNote: 'Здравствуйте! Заинтересовала позиция Lead Frontend Engineer в FinTech Group. Опыт: ускорил рендеринг на 40%. Рад знакомству!',
-    atsCoverLetter: 'Кому: Нанимающей команде FinTech Group\nПозиция: Lead Frontend Engineer\n\nСопроводительное письмо...',
+    linkedInNote:
+      'Здравствуйте! Заинтересовала позиция Lead Frontend Engineer в FinTech Group. Опыт: ускорил рендеринг на 40%. Рад знакомству!',
+    atsCoverLetter:
+      'Кому: Нанимающей команде FinTech Group\nПозиция: Lead Frontend Engineer\n\nСопроводительное письмо...',
     usedEvidenceIds: ['mem-01', 'mem-02'],
     generatedAt: '2026-09-17T00:00:00.000Z',
   };
@@ -71,7 +73,7 @@ describe('VacancyPitchModal', () => {
     expect(html).toContain('Копировать письмо');
 
     // Evidence counter
-    expect(html).toContain('2 подтверждённых факта');
+    expect(html).toContain('2 факта');
   });
 
   it('renders LinkedIn note tab with character counter', () => {
@@ -137,5 +139,19 @@ describe('VacancyPitchModal', () => {
     // Zero forbidden word
     const forbiddenWord = ['\u0434', '\u043E', '\u0441', '\u044C', '\u0435'].join('');
     expect(html).not.toMatch(new RegExp(forbiddenWord, 'i'));
+  });
+});
+
+describe('pitch language (B266)', () => {
+  it('lets the server detect the language until the candidate picks one', async () => {
+    const { executePitchFetch } = await import('./VacancyPitchModal');
+    const onFetchPitch = vi.fn(async () => ({}) as VacancyPitchResult);
+    await executePitchFetch(
+      { id: 'v1', title: 'VP Engineering' },
+      'executive',
+      undefined,
+      onFetchPitch,
+    );
+    expect(onFetchPitch).toHaveBeenCalledWith('v1', 'executive', undefined);
   });
 });

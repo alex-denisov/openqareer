@@ -162,6 +162,6 @@ describe('VacancyDetailPanel (B250)', () => {
   // board, and with it the only door to the cover-letter generator.
   it('keeps the cover-letter generator reachable from the detail actions', () => {
     const html = render();
-    expect(html).toContain('Собрать письмо');
+    expect(html).toContain('Сопроводительное письмо');
   });
 });

@@ -10752,10 +10752,33 @@
   background: var(--career-surface-raised);
   border-bottom: 1px solid var(--career-line);
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--career-text-xs);
+}
+
+.career-pitch-meta-tags {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  font-size: var(--career-text-xs);
+}
+
+.career-pitch-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--career-warning, var(--career-text-soft));
+}
+
+.career-pitch-notice p {
+  margin: 0;
+}
+
+.career-pitch-language-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .career-pitch-evidence-tag {

@@ -2,6 +2,8 @@ import { apiFetch, readData } from '../coach/apiClient';
 
 export interface VacancyPitchPayload {
   readonly tone?: 'executive' | 'confident' | 'technical';
+  /** Overrides the letter's auto-detected language. */
+  readonly language?: 'en' | 'ru';
   readonly vacancy?: {
     readonly title?: string;
     readonly company?: string;
@@ -22,6 +24,10 @@ export interface VacancyPitchResult {
   readonly linkedInNote: string;
   readonly atsCoverLetter: string;
   readonly usedEvidenceIds: readonly string[];
+  readonly usedFacts?: readonly { id: string; basis: 'confirmed' | 'imported' }[];
+  readonly language?: 'en' | 'ru';
+  /** UI hints such as "few facts" or "requirements unmatched" — never letter text. */
+  readonly notices?: readonly string[];
   readonly generatedAt: string;
 }
 

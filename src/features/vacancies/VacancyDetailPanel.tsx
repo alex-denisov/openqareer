@@ -169,7 +169,7 @@ function VacancyPitchDoor({ cluster }: { readonly cluster: MatchedVacancyItem['c
         className="vacancies-btn vacancies-btn-secondary"
         onClick={() => setPitchOpen(true)}
       >
-        Собрать письмо
+        Сопроводительное письмо
       </button>
       {pitchOpen ? (
         <VacancyPitchModal
