@@ -1,0 +1,164 @@
+{
+  "function": {
+    "code": "construction",
+    "labelEn": "Construction & Trades",
+    "labelRu": "Строительство и рабочие специальности"
+  },
+  "families": [
+    {
+      "id": "construction.core",
+      "function": "construction",
+      "labelEn": "Construction & trades ladder",
+      "labelRu": "Лестница стройки и рабочих специальностей",
+      "coverage": "core"
+    }
+  ],
+  "roles": [
+    {
+      "id": "construction.trade.ic",
+      "function": "construction",
+      "family": "construction.core",
+      "titleEn": "Electrician / Plumber / Welder",
+      "titleRu": "Электрик / сантехник / сварщик",
+      "levels": [
+        "ic"
+      ],
+      "icBand": [
+        "grade-1-6"
+      ],
+      "variants": {
+        "en": [
+          "Electrician",
+          "Plumber",
+          "Welder",
+          "HVAC Technician"
+        ],
+        "ru": [
+          "Электрик",
+          "Сантехник",
+          "Сварщик"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "construction.engineer.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "construction.engineer.ic",
+      "function": "construction",
+      "family": "construction.core",
+      "titleEn": "Civil / Site Engineer",
+      "titleRu": "Инженер-строитель",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Civil Engineer",
+          "Site Engineer"
+        ],
+        "ru": [
+          "Инженер-строитель",
+          "Инженер ПТО"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "construction.trade.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "construction.foreman.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "construction.foreman.lead",
+      "function": "construction",
+      "family": "construction.core",
+      "titleEn": "Foreman / Site Supervisor",
+      "titleRu": "Прораб",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Foreman",
+          "Site Supervisor"
+        ],
+        "ru": [
+          "Прораб",
+          "Мастер участка"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "construction.trade.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "construction.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "construction.head",
+      "function": "construction",
+      "family": "construction.core",
+      "titleEn": "Construction Manager",
+      "titleRu": "Руководитель строительного проекта",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Construction Manager",
+          "Project Director (Construction)"
+        ],
+        "ru": [
+          "Руководитель строительного проекта",
+          "Директор по строительству"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "construction.foreman.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "construction.vp",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "construction.vp",
+      "function": "construction",
+      "family": "construction.core",
+      "titleEn": "VP of Construction",
+      "titleRu": "Вице-президент по строительству",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Construction"
+        ],
+        "ru": [
+          "Вице-президент по строительству"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "construction.head",
+          "kind": "level-down"
+        }
+      ]
+    }
+  ]
+}

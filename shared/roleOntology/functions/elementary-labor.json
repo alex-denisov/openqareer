@@ -1,0 +1,75 @@
+{
+  "function": {
+    "code": "elementary-labor",
+    "labelEn": "Manual & Elementary Labor",
+    "labelRu": "Элементарный труд"
+  },
+  "families": [
+    {
+      "id": "elementary-labor.core",
+      "function": "elementary-labor",
+      "labelEn": "Manual labor ladder",
+      "labelRu": "Лестница элементарного труда",
+      "coverage": "core"
+    }
+  ],
+  "roles": [
+    {
+      "id": "elementary-labor.worker.ic",
+      "function": "elementary-labor",
+      "family": "elementary-labor.core",
+      "titleEn": "Cleaner / Loader / Courier",
+      "titleRu": "Уборщик / грузчик / курьер",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Cleaner",
+          "Loader",
+          "Courier",
+          "Warehouse Worker",
+          "Kitchen Porter"
+        ],
+        "ru": [
+          "Уборщик",
+          "Грузчик",
+          "Курьер",
+          "Разнорабочий"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "elementary-labor.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "elementary-labor.lead",
+      "function": "elementary-labor",
+      "family": "elementary-labor.core",
+      "titleEn": "Team Lead (Cleaning/Warehouse)",
+      "titleRu": "Бригадир",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Team Lead (Cleaning/Warehouse)",
+          "Shift Lead"
+        ],
+        "ru": [
+          "Бригадир",
+          "Старший смены"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "elementary-labor.worker.ic",
+          "kind": "level-down"
+        }
+      ]
+    }
+  ]
+}

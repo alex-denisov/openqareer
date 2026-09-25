@@ -1,0 +1,166 @@
+{
+  "function": {
+    "code": "healthcare",
+    "labelEn": "Healthcare",
+    "labelRu": "Здравоохранение"
+  },
+  "families": [
+    {
+      "id": "healthcare.core",
+      "function": "healthcare",
+      "labelEn": "Healthcare ladder",
+      "labelRu": "Лестница здравоохранения",
+      "coverage": "core"
+    }
+  ],
+  "roles": [
+    {
+      "id": "healthcare.nurse.ic",
+      "function": "healthcare",
+      "family": "healthcare.core",
+      "titleEn": "Nurse / Paramedic",
+      "titleRu": "Медсестра / фельдшер",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Nurse",
+          "Paramedic",
+          "Medical Assistant"
+        ],
+        "ru": [
+          "Медсестра",
+          "Медбрат",
+          "Фельдшер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "healthcare.physician.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "healthcare.physician.ic",
+      "function": "healthcare",
+      "family": "healthcare.core",
+      "titleEn": "Physician",
+      "titleRu": "Врач",
+      "levels": [
+        "ic"
+      ],
+      "icBand": [
+        "second-category",
+        "first-category",
+        "highest-category"
+      ],
+      "variants": {
+        "en": [
+          "General Practitioner",
+          "Physician",
+          "Specialist Doctor"
+        ],
+        "ru": [
+          "Врач общей практики",
+          "Врач-специалист"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "healthcare.nurse.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "healthcare.head-dept.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "healthcare.head-dept.head",
+      "function": "healthcare",
+      "family": "healthcare.core",
+      "titleEn": "Head of Department (Medical)",
+      "titleRu": "Заведующий отделением",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Department",
+          "Department Chief (Medical)"
+        ],
+        "ru": [
+          "Заведующий отделением"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "healthcare.physician.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "healthcare.deputy.vp",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "healthcare.deputy.vp",
+      "function": "healthcare",
+      "family": "healthcare.core",
+      "titleEn": "Deputy Chief Physician",
+      "titleRu": "Заместитель главного врача",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "Deputy Chief Physician",
+          "Deputy Medical Director"
+        ],
+        "ru": [
+          "Заместитель главного врача"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "healthcare.head-dept.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "healthcare.chief-physician.c",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "healthcare.chief-physician.c",
+      "function": "healthcare",
+      "family": "healthcare.core",
+      "titleEn": "Chief Physician / Chief Medical Officer",
+      "titleRu": "Главный врач",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Medical Officer",
+          "Chief Physician",
+          "Hospital Director"
+        ],
+        "ru": [
+          "Главный врач"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "healthcare.deputy.vp",
+          "kind": "level-down"
+        }
+      ]
+    }
+  ]
+}

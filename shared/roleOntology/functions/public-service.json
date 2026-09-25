@@ -1,0 +1,45 @@
+{
+  "function": {
+    "code": "public-service",
+    "labelEn": "Public Administration & Civil Service",
+    "labelRu": "Государственная и муниципальная служба"
+  },
+  "families": [
+    {
+      "id": "public-service.generic",
+      "function": "public-service",
+      "labelEn": "Public Administration",
+      "labelRu": "Госслужба",
+      "coverage": "skeleton"
+    }
+  ],
+  "roles": [
+    {
+      "id": "public-service.generic",
+      "function": "public-service",
+      "family": "public-service.generic",
+      "titleEn": "Public Administration",
+      "titleRu": "Государственная служба",
+      "levels": [
+        "ic",
+        "head",
+        "vp",
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Civil Servant",
+          "Government Administrator",
+          "Policy Analyst",
+          "Department Head (Government)"
+        ],
+        "ru": [
+          "Госслужащий",
+          "Специалист органа власти",
+          "Начальник управления"
+        ]
+      },
+      "adjacent": []
+    }
+  ]
+}

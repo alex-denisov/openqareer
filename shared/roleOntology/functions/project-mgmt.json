@@ -1,0 +1,178 @@
+{
+  "function": {
+    "code": "project-mgmt",
+    "labelEn": "Project Management",
+    "labelRu": "Управление проектами"
+  },
+  "families": [
+    {
+      "id": "project-mgmt.delivery",
+      "function": "project-mgmt",
+      "labelEn": "Delivery & Program",
+      "labelRu": "Доставка и программы",
+      "coverage": "full"
+    },
+    {
+      "id": "project-mgmt.pmo-leadership",
+      "function": "project-mgmt",
+      "labelEn": "PMO Leadership",
+      "labelRu": "Руководство PMO",
+      "coverage": "full"
+    }
+  ],
+  "roles": [
+    {
+      "id": "project-mgmt.pm.ic",
+      "function": "project-mgmt",
+      "family": "project-mgmt.delivery",
+      "titleEn": "Project Manager",
+      "titleRu": "Менеджер проектов",
+      "levels": [
+        "ic",
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Project Manager",
+          "IT Project Manager",
+          "Technical Project Manager"
+        ],
+        "ru": [
+          "Менеджер проектов",
+          "Руководитель проекта"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "project-mgmt.program.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "project-mgmt.scrum.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "project-mgmt.program.lead",
+      "function": "project-mgmt",
+      "family": "project-mgmt.delivery",
+      "titleEn": "Program Manager",
+      "titleRu": "Программный менеджер",
+      "levels": [
+        "lead",
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Program Manager",
+          "Technical Program Manager",
+          "Delivery Manager"
+        ],
+        "ru": [
+          "Программный менеджер",
+          "Менеджер по доставке"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "project-mgmt.pm.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "project-mgmt.pmo-head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "project-mgmt.scrum.ic",
+      "function": "project-mgmt",
+      "family": "project-mgmt.delivery",
+      "titleEn": "Scrum Master / Agile Coach",
+      "titleRu": "Скрам-мастер / Agile-коуч",
+      "levels": [
+        "ic",
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Scrum Master",
+          "Agile Coach",
+          "Delivery Lead"
+        ],
+        "ru": [
+          "Скрам-мастер",
+          "Agile-коуч"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "project-mgmt.pm.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "project-mgmt.pmo-head",
+      "function": "project-mgmt",
+      "family": "project-mgmt.pmo-leadership",
+      "titleEn": "Head of PMO",
+      "titleRu": "Руководитель PMO",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of PMO",
+          "PMO Director",
+          "Director of Program Management"
+        ],
+        "ru": [
+          "Руководитель PMO",
+          "Директор проектного офиса"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "project-mgmt.program.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "project-mgmt.vp",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "project-mgmt.vp",
+      "function": "project-mgmt",
+      "family": "project-mgmt.pmo-leadership",
+      "titleEn": "VP of Delivery / Program Management",
+      "titleRu": "Вице-президент по доставке проектов",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Delivery",
+          "VP of Program Management",
+          "VP of PMO"
+        ],
+        "ru": [
+          "Вице-президент по доставке проектов"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "project-mgmt.pmo-head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "ops.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,192 @@
+{
+  "function": {
+    "code": "logistics",
+    "labelEn": "Logistics & Transport",
+    "labelRu": "Логистика и транспорт"
+  },
+  "families": [
+    {
+      "id": "logistics.core",
+      "function": "logistics",
+      "labelEn": "Logistics & transport ladder",
+      "labelRu": "Лестница логистики и транспорта",
+      "coverage": "core"
+    }
+  ],
+  "roles": [
+    {
+      "id": "logistics.driver.ic",
+      "function": "logistics",
+      "family": "logistics.core",
+      "titleEn": "Driver / Forklift Operator",
+      "titleRu": "Водитель / оператор погрузчика",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Driver",
+          "Delivery Driver",
+          "Forklift Operator",
+          "Truck Driver"
+        ],
+        "ru": [
+          "Водитель",
+          "Водитель-экспедитор",
+          "Оператор погрузчика"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "logistics.coordinator.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "logistics.coordinator.ic",
+      "function": "logistics",
+      "family": "logistics.core",
+      "titleEn": "Logistics Coordinator / Warehouse Keeper",
+      "titleRu": "Логист / кладовщик",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Logistics Coordinator",
+          "Warehouse Keeper",
+          "Dispatcher"
+        ],
+        "ru": [
+          "Логист",
+          "Кладовщик",
+          "Диспетчер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "logistics.driver.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "logistics.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "logistics.lead",
+      "function": "logistics",
+      "family": "logistics.core",
+      "titleEn": "Logistics Team Lead / Warehouse Supervisor",
+      "titleRu": "Старший логист / начальник склада",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Logistics Team Lead",
+          "Warehouse Supervisor"
+        ],
+        "ru": [
+          "Старший логист",
+          "Начальник склада"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "logistics.coordinator.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "logistics.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "logistics.head",
+      "function": "logistics",
+      "family": "logistics.core",
+      "titleEn": "Logistics Manager / Head of Supply Chain",
+      "titleRu": "Руководитель логистики",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Logistics Manager",
+          "Head of Supply Chain"
+        ],
+        "ru": [
+          "Руководитель логистики",
+          "Директор по логистике"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "logistics.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "logistics.vp",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "logistics.vp",
+      "function": "logistics",
+      "family": "logistics.core",
+      "titleEn": "VP of Supply Chain / Logistics",
+      "titleRu": "Вице-президент по логистике",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Supply Chain",
+          "VP of Logistics"
+        ],
+        "ru": [
+          "Вице-президент по логистике"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "logistics.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "logistics.chief",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "logistics.chief",
+      "function": "logistics",
+      "family": "logistics.core",
+      "titleEn": "Chief Supply Chain Officer",
+      "titleRu": "Директор по цепочке поставок",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Supply Chain Officer"
+        ],
+        "ru": [
+          "Директор по цепочке поставок"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "logistics.vp",
+          "kind": "level-down"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "function": {
+    "code": "real-estate",
+    "labelEn": "Real Estate",
+    "labelRu": "Недвижимость"
+  },
+  "families": [
+    {
+      "id": "real-estate.generic",
+      "function": "real-estate",
+      "labelEn": "Real Estate",
+      "labelRu": "Недвижимость",
+      "coverage": "skeleton"
+    }
+  ],
+  "roles": [
+    {
+      "id": "real-estate.generic",
+      "function": "real-estate",
+      "family": "real-estate.generic",
+      "titleEn": "Real Estate",
+      "titleRu": "Недвижимость",
+      "levels": [
+        "ic",
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Real Estate Agent",
+          "Head of Real Estate"
+        ],
+        "ru": [
+          "Риэлтор",
+          "Руководитель отдела недвижимости"
+        ]
+      },
+      "adjacent": []
+    }
+  ]
+}

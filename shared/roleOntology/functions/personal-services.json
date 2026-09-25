@@ -1,0 +1,105 @@
+{
+  "function": {
+    "code": "personal-services",
+    "labelEn": "Personal Services, Beauty & Fitness",
+    "labelRu": "Личные услуги, красота и спорт"
+  },
+  "families": [
+    {
+      "id": "personal-services.core",
+      "function": "personal-services",
+      "labelEn": "Personal services ladder",
+      "labelRu": "Лестница личных услуг",
+      "coverage": "core"
+    }
+  ],
+  "roles": [
+    {
+      "id": "personal-services.specialist.ic",
+      "function": "personal-services",
+      "family": "personal-services.core",
+      "titleEn": "Hairdresser / Beautician / Fitness Trainer",
+      "titleRu": "Парикмахер / косметолог / фитнес-тренер",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Hairdresser",
+          "Barber",
+          "Beautician",
+          "Fitness Trainer",
+          "Massage Therapist"
+        ],
+        "ru": [
+          "Парикмахер",
+          "Косметолог",
+          "Фитнес-тренер",
+          "Массажист"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "personal-services.senior.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "personal-services.senior.lead",
+      "function": "personal-services",
+      "family": "personal-services.core",
+      "titleEn": "Senior Stylist / Head Trainer",
+      "titleRu": "Старший мастер / ведущий тренер",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Senior Stylist",
+          "Head Trainer"
+        ],
+        "ru": [
+          "Старший мастер",
+          "Ведущий тренер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "personal-services.specialist.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "personal-services.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "personal-services.head",
+      "function": "personal-services",
+      "family": "personal-services.core",
+      "titleEn": "Salon / Fitness Club Manager",
+      "titleRu": "Управляющий салоном / фитнес-клубом",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Salon Manager",
+          "Fitness Club Manager"
+        ],
+        "ru": [
+          "Управляющий салоном",
+          "Управляющий фитнес-клубом"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "personal-services.senior.lead",
+          "kind": "level-down"
+        }
+      ]
+    }
+  ]
+}

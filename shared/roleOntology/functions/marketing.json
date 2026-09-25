@@ -1,0 +1,130 @@
+{
+  "function": {
+    "code": "marketing",
+    "labelEn": "Marketing",
+    "labelRu": "Маркетинг"
+  },
+  "families": [
+    {
+      "id": "marketing.core",
+      "function": "marketing",
+      "labelEn": "Marketing ladder",
+      "labelRu": "Лестница маркетинга",
+      "coverage": "core"
+    }
+  ],
+  "roles": [
+    {
+      "id": "marketing.specialist.ic",
+      "function": "marketing",
+      "family": "marketing.core",
+      "titleEn": "Marketing Specialist",
+      "titleRu": "Маркетолог",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Marketing Specialist",
+          "Digital Marketing Specialist",
+          "SMM Manager",
+          "Content Marketing Specialist"
+        ],
+        "ru": [
+          "Маркетолог",
+          "Специалист по digital-маркетингу",
+          "SMM-менеджер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "marketing.head",
+      "function": "marketing",
+      "family": "marketing.core",
+      "titleEn": "Head of Marketing",
+      "titleRu": "Руководитель отдела маркетинга",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Marketing",
+          "Marketing Director"
+        ],
+        "ru": [
+          "Руководитель отдела маркетинга",
+          "Директор по маркетингу"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.specialist.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "marketing.vp",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "marketing.vp",
+      "function": "marketing",
+      "family": "marketing.core",
+      "titleEn": "VP of Marketing",
+      "titleRu": "Вице-президент по маркетингу",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Marketing"
+        ],
+        "ru": [
+          "Вице-президент по маркетингу"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "marketing.cmo",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "marketing.cmo",
+      "function": "marketing",
+      "family": "marketing.core",
+      "titleEn": "Chief Marketing Officer",
+      "titleRu": "Директор по маркетингу (CMO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Marketing Officer",
+          "CMO"
+        ],
+        "ru": [
+          "Директор по маркетингу"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.vp",
+          "kind": "level-down"
+        }
+      ]
+    }
+  ]
+}

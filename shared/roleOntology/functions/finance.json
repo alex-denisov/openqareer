@@ -1,0 +1,160 @@
+{
+  "function": {
+    "code": "finance",
+    "labelEn": "Finance",
+    "labelRu": "Финансы"
+  },
+  "families": [
+    {
+      "id": "finance.core",
+      "function": "finance",
+      "labelEn": "Finance ladder",
+      "labelRu": "Лестница финансов",
+      "coverage": "core"
+    }
+  ],
+  "roles": [
+    {
+      "id": "finance.accountant.ic",
+      "function": "finance",
+      "family": "finance.core",
+      "titleEn": "Accountant / Financial Analyst",
+      "titleRu": "Бухгалтер / финансовый аналитик",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Accountant",
+          "Bookkeeper",
+          "Financial Analyst",
+          "Junior Accountant"
+        ],
+        "ru": [
+          "Бухгалтер",
+          "Финансовый аналитик"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "finance.controller.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "finance.controller.lead",
+      "function": "finance",
+      "family": "finance.core",
+      "titleEn": "Financial Controller",
+      "titleRu": "Финансовый контролёр",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Financial Controller",
+          "Senior Financial Analyst"
+        ],
+        "ru": [
+          "Финансовый контролёр",
+          "Ведущий финансовый аналитик"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "finance.accountant.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "finance.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "finance.head",
+      "function": "finance",
+      "family": "finance.core",
+      "titleEn": "Finance Manager / Head of Finance",
+      "titleRu": "Руководитель финансового отдела",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Finance Manager",
+          "Head of Finance",
+          "Finance Director"
+        ],
+        "ru": [
+          "Руководитель финансового отдела",
+          "Финансовый директор (уровень head)"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "finance.controller.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "finance.vp",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "finance.vp",
+      "function": "finance",
+      "family": "finance.core",
+      "titleEn": "VP of Finance",
+      "titleRu": "Вице-президент по финансам",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Finance"
+        ],
+        "ru": [
+          "Вице-президент по финансам"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "finance.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "finance.cfo",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "finance.cfo",
+      "function": "finance",
+      "family": "finance.core",
+      "titleEn": "Chief Financial Officer",
+      "titleRu": "Финансовый директор (CFO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Financial Officer",
+          "CFO"
+        ],
+        "ru": [
+          "Финансовый директор"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "finance.vp",
+          "kind": "level-down"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "meta": {
+    "ticket": "B267",
+    "doc": "B267-role-ontology.md",
+    "version": 2,
+    "generatedFrom": [
+      "shared/roleTaxonomy.ts",
+      "shared/roleTaxonomyBusiness.ts",
+      "server/vacancies/levelMatcher.ts"
+    ],
+    "note": "v2 (правка владельца 2026-09-25): онтология охватывает весь рынок труда, не только IT. Функции и rank-шкала (ic=0,lead=1,head=2,vp=3,c-level=4) не менялись относительно runtime. IT и технологическое руководство — coverage=full. Приоритетные массовые сферы (продажи, HR, финансы, поддержка, ритейл, HoReCa, здравоохранение, образование, логистика/транспорт, производство, стройка/рабочие специальности, личные услуги, элементарный труд, физическая охрана) — coverage=core: полная лестница ic→c-level, но не каждая нишевая роль. Остальные сферы (див. ниже) — coverage=skeleton: верхнеуровневая функция + 3-5 синонимов, дозаполняются пакетно по процессу из B267-role-ontology.md §5.",
+    "coverageLegend": {
+      "full": "Все семейства, канонические роли и лестница уровней проработаны — IT и технологическое руководство.",
+      "core": "Полная лестница ic→c-level по 1 главной семье ролей, приоритетные по доле вакансий — не все нишевые названия.",
+      "skeleton": "Только функция верхнего уровня + 3-5 синонимов, без разбивки по уровням — ждёт пакетного дозаполнения."
+    }
+  },
+  "levelRules": {
+    "scale": [
+      "ic",
+      "lead",
+      "head",
+      "vp",
+      "c-level"
+    ],
+    "rank": {
+      "ic": 0,
+      "lead": 1,
+      "head": 2,
+      "vp": 3,
+      "c-level": 4
+    },
+    "note": "Шкала не меняется относительно server/vacancies/levelMatcher.ts — это runtime-контракт (rank-дистанция даёт target/partial/none). Универсальна для всего рынка труда: разметка ниже показывает, как в неё лечь сферам без привычной 'менеджер-менеджера'-лестницы.",
+    "levels": {
+      "ic": {
+        "labelRu": "Индивидуальный вклад (IC)",
+        "definition": "Делает работу руками/головой: пишет код, лечит, учит, продаёт, водит, убирает, консультирует. Прямых подчинённых нет или 1-2 стажёра, P&L нет.",
+        "seniorityBand": {
+          "note": "Внутри ic есть отдельное измерение грейда/квалификации (junior/middle/senior/staff/principal для IT; разряд 1-6 для рабочих; категория для врачей/учителей) — НЕ меняет rank=0, нужно для точного разбора заголовка. Предложение: не трогать LEVEL_RANK, использовать необязательное поле icBand/qualificationBand.",
+          "values": [
+            "junior",
+            "middle",
+            "senior",
+            "staff",
+            "principal",
+            "distinguished"
+          ]
+        }
+      },
+      "lead": {
+        "labelRu": "Тимлид / играющий менеджер / бригадир",
+        "definition": "Первая ступень людского руководства: 1 команда/смена/бригада (3-8 человек), совмещает менеджерство с частью ручной работы."
+      },
+      "head": {
+        "labelRu": "Руководитель направления (Head/Director/старший менеджер/завотделением)",
+        "definition": "Отвечает за направление/несколько команд через lead'ов, есть бюджет найма, но не P&L всей бизнес-единицы.",
+        "directorAmbiguity": {
+          "rule": "Титул 'Director'/'Директор' без 'Vice President' и без явного 'Head of' по умолчанию размечается как head (rank=2), не как отдельная ступень.",
+          "why": "Rank-дистанция уже даёт нужный эффект без 6-й ступени: |head(2)-vp(3)|=1 → partial-match, Director корректно попадает и в head-, и в VP-подбор ±1.",
+          "byCompanyType": {
+            "startup-scaleup-ru-product": "Director = Head, часто вообще нет титула 'Director'.",
+            "international-enterprise-corp": "Director часто старше Head/Senior Manager и младше VP (Manager → Senior Manager → Director → Senior Director → VP); разметка head занижает ранг, но partial-match до vp это компенсирует.",
+            "consulting-banks": "Director часто равен Partner/Principal рангом ниже VP/MD — тоже head с partial-match до vp."
+          }
+        }
+      },
+      "vp": {
+        "labelRu": "Вице-президент направления / региональный директор",
+        "definition": "Отвечает за функцию/группу направлений целиком, часто с P&L или бюджетом уровня бизнес-юнита, подчиняется C-level. В компаниях без титула 'вице-президент' эквивалент — 'директор департамента/дивизиона', 'региональный директор сети'."
+      },
+      "c-level": {
+        "labelRu": "C-уровень / первое лицо организации",
+        "definition": "Высшее руководство всей организации или её крупной автономной единицы: CTO/CIO/CDO/CISO/CPO/COO/CEO, главный врач, ректор, министр уровня ведомства.",
+        "disambiguation": {
+          "CDO": "Chief DATA Officer (data.cdo) vs Chief DIGITAL Officer (eng-mgmt.cdo-digital) — разбирать по контексту вакансии, не сливать.",
+          "CIO-vs-CTO": "CIO (it-ops.cio) — внутренние ИТ-системы компании; CTO (eng-mgmt.cto) — технологии продукта. В малых компаниях один человек носит оба титула.",
+          "COO-tech": "COO с технологическим бэкграундом (ops.coo) часто фактически 'VP Engineering + VP Operations' в одном лице на масштабирующемся стартапе."
+        }
+      }
+    },
+    "universalMapping": {
+      "note": "Как ic/lead/head/vp/c-level ложатся на сферы без корпоративной лестницы менеджер-менеджеров.",
+      "bluecollarGrades": "Рабочий разряд (1-6, ученик→подмастерье→мастер) — квалификация, не оргуровень: любой разряд = ic, если человек не руководит бригадой. Бригадир/старший смены = lead. Начальник цеха/производства = head. Директор завода/VP по производству = vp. COO/Chief Manufacturing Officer = c-level.",
+      "medicalCategories": "Категория врача (вторая/первая/высшая) и стаж — квалификация, не оргуровень: врач без подчинённых = ic независимо от категории (высшая категория ≈ staff/principal в IC-треке). Заведующий отделением = head. Замглавврача = vp. Главный врач/CMO = c-level.",
+      "educationCategories": "Категория учителя (первая/высшая) — квалификация, не оргуровень: учитель = ic независимо от категории. Завуч/зав.кафедрой = head. Директор школы/декан = vp. Ректор/суперинтендант = c-level.",
+      "serviceRetailLadder": "Продавец/официант/кассир = ic. Старший смены/супервайзер = lead. Директор магазина/ресторана = head. Региональный/окружной менеджер сети = vp. Директор по рознице/операциям сети = c-level.",
+      "uniformedServices": "Военные/госслужба размечаются по факту руководства, не по спецзванию: рядовой состав/специалист без подчинённых = ic, командир отделения/группы = lead, начальник отдела/подразделения = head, руководитель ведомства/региона = vp, министр/директор ведомства федерального уровня = c-level. Точное соответствие званий — вне этого среза (функции defense/public-service = skeleton).",
+      "soloAndPersonalServices": "Специалист без подчинённых (парикмахер, массажист, фрилансер, ИП) = ic всегда, вне зависимости от опыта. 'Старший мастер' = lead только если формально отвечает за смену/учеников.",
+      "elementaryLabor": "Элементарный труд (уборщик, грузчик, курьер) почти всегда ic; head/vp/c-level в этой функции сознательно не заводятся — лестница ограничена ic/lead (бригадир)."
+    }
+  },
+  "iscoCrossCheck": {
+    "note": "Проверка на пропуски по верхним группам ISCO-08 (ILO, CC BY 4.0) — см. B267-role-ontology.md §1 за таблицей группа↔наши функции.",
+    "majorGroupsCovered": [
+      "1 Managers → *-mgmt/head/vp/c-level роли во всех функциях + exec-general/ops",
+      "2 Professionals → ic-роли eng/data/ai-ml/security/qa/product/design/finance/legal/healthcare(врач)/education(учитель)/research",
+      "3 Technicians & associate professionals → it-ops.sysadmin/support, healthcare.nurse, manufacturing.technician, admin.clerk",
+      "4 Clerical support workers → admin (receptionist/secretary/data entry)",
+      "5 Service & sales workers → sales, retail, hospitality, personal-services, security-services",
+      "6 Skilled agricultural/forestry/fishery workers → agriculture",
+      "7 Craft & related trades workers → construction (electrician/plumber/welder), manufacturing.technician",
+      "8 Plant & machine operators, assemblers → manufacturing.operator, logistics.driver",
+      "9 Elementary occupations → elementary-labor",
+      "0 Armed forces → defense"
+    ]
+  }
+}

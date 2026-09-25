@@ -1,0 +1,44 @@
+{
+  "function": {
+    "code": "defense",
+    "labelEn": "Defense & Armed Forces",
+    "labelRu": "Силовые структуры и оборона"
+  },
+  "families": [
+    {
+      "id": "defense.generic",
+      "function": "defense",
+      "labelEn": "Defense & Armed Forces",
+      "labelRu": "Силовые структуры",
+      "coverage": "skeleton"
+    }
+  ],
+  "roles": [
+    {
+      "id": "defense.generic",
+      "function": "defense",
+      "family": "defense.generic",
+      "titleEn": "Defense & Armed Forces",
+      "titleRu": "Силовые структуры",
+      "levels": [
+        "ic",
+        "lead",
+        "head",
+        "vp",
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Military Officer",
+          "Police Officer",
+          "Security Service Officer"
+        ],
+        "ru": [
+          "Военнослужащий",
+          "Сотрудник полиции"
+        ]
+      },
+      "adjacent": []
+    }
+  ]
+}

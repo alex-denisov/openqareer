@@ -1,0 +1,49 @@
+{
+  "function": {
+    "code": "arts-culture",
+    "labelEn": "Arts & Culture",
+    "labelRu": "Творческие профессии"
+  },
+  "families": [
+    {
+      "id": "arts-culture.generic",
+      "function": "arts-culture",
+      "labelEn": "Arts & Culture",
+      "labelRu": "Творческие профессии",
+      "coverage": "skeleton"
+    }
+  ],
+  "roles": [
+    {
+      "id": "arts-culture.generic",
+      "function": "arts-culture",
+      "family": "arts-culture.generic",
+      "titleEn": "Arts & Culture",
+      "titleRu": "Творческие профессии",
+      "levels": [
+        "ic",
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Musician",
+          "Actor",
+          "Artist",
+          "Curator"
+        ],
+        "ru": [
+          "Музыкант",
+          "Актёр",
+          "Художник",
+          "Куратор"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.generic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    }
+  ]
+}

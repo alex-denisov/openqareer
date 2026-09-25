@@ -1,0 +1,41 @@
+{
+  "function": {
+    "code": "media",
+    "labelEn": "Media & Content",
+    "labelRu": "Медиа и контент"
+  },
+  "families": [
+    {
+      "id": "media.generic",
+      "function": "media",
+      "labelEn": "Media & Content",
+      "labelRu": "Медиа и контент",
+      "coverage": "skeleton"
+    }
+  ],
+  "roles": [
+    {
+      "id": "media.generic",
+      "function": "media",
+      "family": "media.generic",
+      "titleEn": "Media & Content",
+      "titleRu": "Медиа и контент",
+      "levels": [
+        "ic",
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Content Producer",
+          "Video Editor",
+          "Head of Content"
+        ],
+        "ru": [
+          "Продюсер",
+          "Руководитель контента"
+        ]
+      },
+      "adjacent": []
+    }
+  ]
+}

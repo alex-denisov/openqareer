@@ -1,0 +1,45 @@
+{
+  "function": {
+    "code": "research",
+    "labelEn": "Research & Development",
+    "labelRu": "Исследования и разработка"
+  },
+  "families": [
+    {
+      "id": "research.generic",
+      "function": "research",
+      "labelEn": "Research & Development (non-AI)",
+      "labelRu": "Исследования и разработка (не ИИ)",
+      "coverage": "skeleton"
+    }
+  ],
+  "roles": [
+    {
+      "id": "research.generic",
+      "function": "research",
+      "family": "research.generic",
+      "titleEn": "Research & Development",
+      "titleRu": "Исследования и разработка",
+      "levels": [
+        "ic",
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Research Scientist",
+          "R&D Director"
+        ],
+        "ru": [
+          "Научный сотрудник",
+          "Директор по НИОКР"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ai-ml.research.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    }
+  ]
+}

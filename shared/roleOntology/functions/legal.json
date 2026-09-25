@@ -1,0 +1,41 @@
+{
+  "function": {
+    "code": "legal",
+    "labelEn": "Legal",
+    "labelRu": "Юридический отдел"
+  },
+  "families": [
+    {
+      "id": "legal.generic",
+      "function": "legal",
+      "labelEn": "Legal",
+      "labelRu": "Юридический отдел",
+      "coverage": "skeleton"
+    }
+  ],
+  "roles": [
+    {
+      "id": "legal.generic",
+      "function": "legal",
+      "family": "legal.generic",
+      "titleEn": "Legal",
+      "titleRu": "Юридический отдел",
+      "levels": [
+        "ic",
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Legal Counsel",
+          "Head of Legal",
+          "General Counsel"
+        ],
+        "ru": [
+          "Юрист",
+          "Руководитель юридического отдела"
+        ]
+      },
+      "adjacent": []
+    }
+  ]
+}

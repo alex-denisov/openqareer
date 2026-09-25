@@ -1,0 +1,166 @@
+{
+  "function": {
+    "code": "sales",
+    "labelEn": "Sales",
+    "labelRu": "Продажи"
+  },
+  "families": [
+    {
+      "id": "sales.core",
+      "function": "sales",
+      "labelEn": "Sales ladder",
+      "labelRu": "Лестница продаж",
+      "coverage": "core"
+    }
+  ],
+  "roles": [
+    {
+      "id": "sales.rep.ic",
+      "function": "sales",
+      "family": "sales.core",
+      "titleEn": "Sales Representative",
+      "titleRu": "Менеджер по продажам",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Sales Representative",
+          "Account Executive",
+          "Inside Sales Representative",
+          "Sales Manager"
+        ],
+        "ru": [
+          "Менеджер по продажам",
+          "Торговый представитель"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "sales.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "consulting.presales.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "sales.lead",
+      "function": "sales",
+      "family": "sales.core",
+      "titleEn": "Senior Sales / Sales Team Lead",
+      "titleRu": "Ведущий менеджер по продажам",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Senior Sales Manager",
+          "Sales Team Lead",
+          "Key Account Manager"
+        ],
+        "ru": [
+          "Ведущий менеджер по продажам",
+          "Руководитель группы продаж"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "sales.rep.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "sales.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "sales.head",
+      "function": "sales",
+      "family": "sales.core",
+      "titleEn": "Head of Sales",
+      "titleRu": "Руководитель отдела продаж",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Sales",
+          "Sales Director",
+          "Regional Sales Manager"
+        ],
+        "ru": [
+          "Руководитель отдела продаж",
+          "Директор по продажам"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "sales.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "sales.vp",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "sales.vp",
+      "function": "sales",
+      "family": "sales.core",
+      "titleEn": "VP of Sales",
+      "titleRu": "Вице-президент по продажам",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Sales",
+          "VP Sales"
+        ],
+        "ru": [
+          "Вице-президент по продажам"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "sales.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "sales.cro",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "sales.cro",
+      "function": "sales",
+      "family": "sales.core",
+      "titleEn": "Chief Revenue Officer",
+      "titleRu": "Коммерческий директор (CRO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Revenue Officer",
+          "Chief Commercial Officer"
+        ],
+        "ru": [
+          "Коммерческий директор"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "sales.vp",
+          "kind": "level-down"
+        }
+      ]
+    }
+  ]
+}

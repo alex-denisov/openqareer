@@ -1,0 +1,256 @@
+{
+  "function": {
+    "code": "ai-ml",
+    "labelEn": "AI / ML",
+    "labelRu": "Искусственный интеллект и ML"
+  },
+  "families": [
+    {
+      "id": "ai-ml.engineering",
+      "function": "ai-ml",
+      "labelEn": "ML/AI Engineering",
+      "labelRu": "Инженерия ML/AI",
+      "coverage": "full"
+    },
+    {
+      "id": "ai-ml.research",
+      "function": "ai-ml",
+      "labelEn": "AI Research",
+      "labelRu": "Исследования в ИИ",
+      "coverage": "full"
+    },
+    {
+      "id": "ai-ml.leadership",
+      "function": "ai-ml",
+      "labelEn": "AI/ML Leadership",
+      "labelRu": "Руководство ИИ/ML",
+      "coverage": "full"
+    }
+  ],
+  "roles": [
+    {
+      "id": "ai-ml.ml-engineer.ic",
+      "function": "ai-ml",
+      "family": "ai-ml.engineering",
+      "titleEn": "Machine Learning Engineer",
+      "titleRu": "Инженер машинного обучения",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Machine Learning Engineer",
+          "ML Engineer",
+          "MLOps Engineer",
+          "Applied ML Engineer"
+        ],
+        "ru": [
+          "Инженер машинного обучения",
+          "ML-инженер",
+          "MLOps-инженер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ai-ml.ai-engineer.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "data.engineer.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "ai-ml.ai-engineer.ic",
+      "function": "ai-ml",
+      "family": "ai-ml.engineering",
+      "titleEn": "AI Engineer",
+      "titleRu": "AI-инженер",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "AI Engineer",
+          "Generative AI Engineer",
+          "LLM Engineer"
+        ],
+        "ru": [
+          "AI-инженер",
+          "Инженер генеративного ИИ"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ai-ml.ml-engineer.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "ai-ml.research.ic",
+      "function": "ai-ml",
+      "family": "ai-ml.research",
+      "titleEn": "Research Scientist",
+      "titleRu": "Научный сотрудник (ML)",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Research Scientist",
+          "Applied Scientist",
+          "ML Research Scientist"
+        ],
+        "ru": [
+          "Научный сотрудник",
+          "Исследователь машинного обучения"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ai-ml.ml-engineer.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "ai-ml.lead",
+      "function": "ai-ml",
+      "family": "ai-ml.leadership",
+      "titleEn": "ML Team Lead",
+      "titleRu": "Тимлид ML",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "ML Team Lead",
+          "Lead ML Engineer",
+          "Applied AI Lead"
+        ],
+        "ru": [
+          "Тимлид ML",
+          "Ведущий ML-инженер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ai-ml.ml-engineer.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "ai-ml.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "ai-ml.head",
+      "function": "ai-ml",
+      "family": "ai-ml.leadership",
+      "titleEn": "Head of AI / ML",
+      "titleRu": "Руководитель направления AI/ML",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of AI",
+          "Head of Machine Learning",
+          "Director of AI"
+        ],
+        "ru": [
+          "Руководитель направления AI/ML",
+          "Директор по ИИ"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ai-ml.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "ai-ml.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "data.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "ai-ml.vp",
+      "function": "ai-ml",
+      "family": "ai-ml.leadership",
+      "titleEn": "VP of AI",
+      "titleRu": "Вице-президент по ИИ",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of AI",
+          "VP of Machine Learning",
+          "VP of Data Science"
+        ],
+        "ru": [
+          "Вице-президент по ИИ"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ai-ml.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "ai-ml.chief",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "data.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "eng-mgmt.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "ai-ml.chief",
+      "function": "ai-ml",
+      "family": "ai-ml.leadership",
+      "titleEn": "Chief AI Officer",
+      "titleRu": "Директор по искусственному интеллекту",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief AI Officer",
+          "CAIO"
+        ],
+        "ru": [
+          "Директор по искусственному интеллекту"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ai-ml.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "data.cdo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "eng-mgmt.cto",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "function": {
+    "code": "pr",
+    "labelEn": "PR & Communications",
+    "labelRu": "PR и коммуникации"
+  },
+  "families": [
+    {
+      "id": "pr.generic",
+      "function": "pr",
+      "labelEn": "PR & Communications",
+      "labelRu": "PR и коммуникации",
+      "coverage": "skeleton"
+    }
+  ],
+  "roles": [
+    {
+      "id": "pr.generic",
+      "function": "pr",
+      "family": "pr.generic",
+      "titleEn": "PR & Communications",
+      "titleRu": "PR и коммуникации",
+      "levels": [
+        "ic",
+        "head",
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "PR Manager",
+          "Head of Communications",
+          "Chief Communications Officer"
+        ],
+        "ru": [
+          "PR-менеджер",
+          "Руководитель по связям с общественностью"
+        ]
+      },
+      "adjacent": []
+    }
+  ]
+}
