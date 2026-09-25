@@ -8,9 +8,30 @@
     {
       "id": "sales.core",
       "function": "sales",
-      "labelEn": "Sales ladder",
-      "labelRu": "Лестница продаж",
-      "coverage": "core"
+      "labelEn": "New business sales",
+      "labelRu": "Продажи новым клиентам",
+      "coverage": "full"
+    },
+    {
+      "id": "sales.account-management",
+      "function": "sales",
+      "labelEn": "Account management",
+      "labelRu": "Управление клиентскими счетами",
+      "coverage": "full"
+    },
+    {
+      "id": "sales.sales-operations",
+      "function": "sales",
+      "labelEn": "Sales operations",
+      "labelRu": "Операции и аналитика продаж",
+      "coverage": "full"
+    },
+    {
+      "id": "sales.leadership",
+      "function": "sales",
+      "labelEn": "Sales leadership",
+      "labelRu": "Руководство продажами",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,58 +39,339 @@
       "id": "sales.rep.ic",
       "function": "sales",
       "family": "sales.core",
-      "titleEn": "Sales Representative",
-      "titleRu": "Менеджер по продажам",
+      "titleEn": "Sales Representative / Account Executive",
+      "titleRu": "Менеджер по продажам / аккаунт-менеджер",
       "levels": [
         "ic"
       ],
       "variants": {
         "en": [
           "Sales Representative",
+          "Sales Rep",
           "Account Executive",
-          "Inside Sales Representative",
-          "Sales Manager"
+          "Sales Manager",
+          "Sales Consultant",
+          "Inside Sales Representative"
         ],
         "ru": [
           "Менеджер по продажам",
-          "Торговый представитель"
+          "Специалист по продажам",
+          "Менеджер по работе с клиентами",
+          "Торговый представитель",
+          "Консультант по продажам",
+          "Менеджер отдела продаж"
         ]
       },
       "adjacent": [
         {
+          "roleId": "sales.bdr.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "sales.ae.ic",
+          "kind": "sibling-family"
+        },
+        {
           "roleId": "sales.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "sales.bdr.ic",
+      "function": "sales",
+      "family": "sales.core",
+      "titleEn": "Business Development Representative",
+      "titleRu": "Менеджер по развитию продаж",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Business Development Representative",
+          "BDR",
+          "Sales Development Representative",
+          "SDR",
+          "Lead Generation Specialist",
+          "Outbound Sales Representative"
+        ],
+        "ru": [
+          "Менеджер по развитию бизнеса",
+          "Менеджер по привлечению клиентов",
+          "Специалист по лидогенерации",
+          "Менеджер по холодным продажам",
+          "Менеджер по работе с входящими заявками",
+          "Специалист по развитию продаж"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "sales.rep.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "sales.ae.ic",
           "kind": "level-up"
         },
         {
+          "roleId": "marketing.specialist.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "sales.ae.ic",
+      "function": "sales",
+      "family": "sales.core",
+      "titleEn": "Account Executive / New Business Manager",
+      "titleRu": "Менеджер по привлечению новых клиентов",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Account Executive",
+          "New Business Manager",
+          "New Business Executive",
+          "Enterprise Account Executive",
+          "B2B Sales Manager",
+          "Business Development Manager"
+        ],
+        "ru": [
+          "Менеджер по привлечению клиентов",
+          "Менеджер по развитию бизнеса",
+          "Менеджер по корпоративным продажам",
+          "Менеджер B2B-продаж",
+          "Менеджер по работе с ключевыми клиентами",
+          "Специалист по новым продажам"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "sales.bdr.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "sales.sales-engineer.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "sales.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "sales.sales-engineer.ic",
+      "function": "sales",
+      "family": "sales.core",
+      "titleEn": "Sales Engineer / Pre-Sales Consultant",
+      "titleRu": "Инженер по продажам / пресейл-консультант",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Sales Engineer",
+          "Pre-Sales Consultant",
+          "Solutions Consultant",
+          "Solutions Engineer",
+          "Technical Sales Engineer",
+          "Presales Specialist"
+        ],
+        "ru": [
+          "Инженер по продажам",
+          "Пресейл-инженер",
+          "Пресейл-консультант",
+          "Технический консультант по продажам",
+          "Инженер предпродажной подготовки",
+          "Специалист по техническим продажам"
+        ]
+      },
+      "adjacent": [
+        {
           "roleId": "consulting.presales.ic",
           "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "sales.ae.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "eng-mgmt.em",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "sales.account-manager.ic",
+      "function": "sales",
+      "family": "sales.account-management",
+      "titleEn": "Account Manager",
+      "titleRu": "Менеджер по работе с клиентами",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Account Manager",
+          "Client Account Manager",
+          "Customer Account Manager",
+          "Relationship Manager",
+          "Client Success Manager",
+          "Account Relationship Manager"
+        ],
+        "ru": [
+          "Аккаунт-менеджер",
+          "Менеджер по работе с клиентами",
+          "Менеджер клиентского сервиса",
+          "Менеджер по сопровождению клиентов",
+          "Менеджер по развитию клиентской базы",
+          "Менеджер по работе с корпоративными клиентами"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "sales.key-account-manager.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "sales.rep.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "support.agent.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "sales.key-account-manager.lead",
+      "function": "sales",
+      "family": "sales.account-management",
+      "titleEn": "Key Account Manager",
+      "titleRu": "Менеджер по работе с ключевыми клиентами",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Key Account Manager",
+          "KAM",
+          "Senior Account Manager",
+          "Strategic Account Manager",
+          "National Account Manager",
+          "Enterprise Account Manager"
+        ],
+        "ru": [
+          "Менеджер по работе с ключевыми клиентами",
+          "КАМ",
+          "Старший аккаунт-менеджер",
+          "Менеджер по стратегическим клиентам",
+          "Менеджер по корпоративным клиентам",
+          "Руководитель ключевых клиентов"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "sales.account-manager.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "sales.lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "sales.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "support.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "sales.sales-ops.ic",
+      "function": "sales",
+      "family": "sales.sales-operations",
+      "titleEn": "Sales Operations Analyst",
+      "titleRu": "Аналитик по операциям продаж",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Sales Operations Analyst",
+          "Sales Operations Specialist",
+          "Sales Ops Analyst",
+          "Revenue Operations Analyst",
+          "Sales Enablement Specialist",
+          "CRM Sales Analyst"
+        ],
+        "ru": [
+          "Аналитик отдела продаж",
+          "Специалист по операционной поддержке продаж",
+          "Аналитик по продажам",
+          "Специалист по автоматизации продаж",
+          "Специалист по сопровождению отдела продаж",
+          "Аналитик CRM"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "sales.rep.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "finance.fp-a.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "sales.head",
+          "kind": "level-up"
         }
       ]
     },
     {
       "id": "sales.lead",
       "function": "sales",
-      "family": "sales.core",
-      "titleEn": "Senior Sales / Sales Team Lead",
-      "titleRu": "Ведущий менеджер по продажам",
+      "family": "sales.leadership",
+      "titleEn": "Sales Team Lead / Sales Manager",
+      "titleRu": "Руководитель группы продаж",
       "levels": [
         "lead"
       ],
       "variants": {
         "en": [
-          "Senior Sales Manager",
           "Sales Team Lead",
-          "Key Account Manager"
+          "Sales Manager",
+          "Team Lead, Sales",
+          "Sales Supervisor",
+          "Senior Sales Manager",
+          "Sales Group Manager"
         ],
         "ru": [
-          "Ведущий менеджер по продажам",
-          "Руководитель группы продаж"
+          "Руководитель группы продаж",
+          "Руководитель отдела продаж",
+          "Тимлид отдела продаж",
+          "Супервайзер отдела продаж",
+          "Старший менеджер по продажам",
+          "Руководитель команды продаж"
         ]
       },
       "adjacent": [
         {
-          "roleId": "sales.rep.ic",
+          "roleId": "sales.ae.ic",
           "kind": "level-down"
+        },
+        {
+          "roleId": "sales.key-account-manager.lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "sales.sales-ops.ic",
+          "kind": "sibling-family"
         },
         {
           "roleId": "sales.head",
@@ -80,7 +382,7 @@
     {
       "id": "sales.head",
       "function": "sales",
-      "family": "sales.core",
+      "family": "sales.leadership",
       "titleEn": "Head of Sales",
       "titleRu": "Руководитель отдела продаж",
       "levels": [
@@ -90,11 +392,18 @@
         "en": [
           "Head of Sales",
           "Sales Director",
-          "Regional Sales Manager"
+          "Director of Sales",
+          "Head of Business Development",
+          "Commercial Director",
+          "Sales Department Head"
         ],
         "ru": [
           "Руководитель отдела продаж",
-          "Директор по продажам"
+          "Директор по продажам",
+          "Коммерческий директор",
+          "Руководитель направления продаж",
+          "Директор департамента продаж",
+          "Начальник отдела продаж"
         ]
       },
       "adjacent": [
@@ -105,25 +414,42 @@
         {
           "roleId": "sales.vp",
           "kind": "level-up"
+        },
+        {
+          "roleId": "marketing.head",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "bizdev.head",
+          "kind": "cross-function-neighbor"
         }
       ]
     },
     {
       "id": "sales.vp",
       "function": "sales",
-      "family": "sales.core",
-      "titleEn": "VP of Sales",
+      "family": "sales.leadership",
+      "titleEn": "Vice President of Sales",
       "titleRu": "Вице-президент по продажам",
       "levels": [
         "vp"
       ],
       "variants": {
         "en": [
+          "Vice President of Sales",
           "VP of Sales",
-          "VP Sales"
+          "VP Sales",
+          "Senior Vice President, Sales",
+          "Global VP of Sales",
+          "Vice President, Commercial"
         ],
         "ru": [
-          "Вице-президент по продажам"
+          "Вице-президент по продажам",
+          "Вице-президент по коммерции",
+          "Директор по продажам группы компаний",
+          "Руководитель продаж по России",
+          "Директор по развитию продаж",
+          "Заместитель коммерческого директора"
         ]
       },
       "adjacent": [
@@ -134,31 +460,60 @@
         {
           "roleId": "sales.cro",
           "kind": "level-up"
+        },
+        {
+          "roleId": "marketing.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "bizdev.vp",
+          "kind": "cross-function-neighbor"
         }
       ]
     },
     {
       "id": "sales.cro",
       "function": "sales",
-      "family": "sales.core",
+      "family": "sales.leadership",
       "titleEn": "Chief Revenue Officer",
-      "titleRu": "Коммерческий директор (CRO)",
+      "titleRu": "Директор по выручке (CRO)",
       "levels": [
         "c-level"
       ],
       "variants": {
         "en": [
           "Chief Revenue Officer",
-          "Chief Commercial Officer"
+          "CRO",
+          "Chief Commercial Officer",
+          "Chief Sales Officer",
+          "Chief Growth and Revenue Officer",
+          "Chief Revenue & Sales Officer"
         ],
         "ru": [
-          "Коммерческий директор"
+          "Директор по выручке",
+          "Директор по коммерции",
+          "Коммерческий директор группы компаний",
+          "Директор по продажам и развитию",
+          "Руководитель коммерческого блока",
+          "Директор по доходам"
         ]
       },
       "adjacent": [
         {
           "roleId": "sales.vp",
           "kind": "level-down"
+        },
+        {
+          "roleId": "marketing.cmo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "bizdev.cgo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
         }
       ]
     }

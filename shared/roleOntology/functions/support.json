@@ -8,9 +8,37 @@
     {
       "id": "support.core",
       "function": "support",
-      "labelEn": "Customer Support ladder",
-      "labelRu": "Лестница поддержки",
-      "coverage": "core"
+      "labelEn": "Customer service",
+      "labelRu": "Клиентская поддержка",
+      "coverage": "full"
+    },
+    {
+      "id": "support.technical",
+      "function": "support",
+      "labelEn": "Technical customer support",
+      "labelRu": "Техническая поддержка клиентов",
+      "coverage": "full"
+    },
+    {
+      "id": "support.success",
+      "function": "support",
+      "labelEn": "Customer success and onboarding",
+      "labelRu": "Клиентский успех и внедрение",
+      "coverage": "full"
+    },
+    {
+      "id": "support.operations-quality",
+      "function": "support",
+      "labelEn": "Support operations and quality",
+      "labelRu": "Операции и качество поддержки",
+      "coverage": "full"
+    },
+    {
+      "id": "support.leadership",
+      "function": "support",
+      "labelEn": "Support leadership",
+      "labelRu": "Руководство поддержкой",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -19,22 +47,37 @@
       "function": "support",
       "family": "support.core",
       "titleEn": "Customer Support Agent",
-      "titleRu": "Специалист поддержки",
+      "titleRu": "Специалист поддержки клиентов",
       "levels": [
         "ic"
       ],
       "variants": {
         "en": [
           "Customer Support Agent",
-          "Technical Support Specialist",
-          "Call Center Operator"
+          "Customer Service Representative",
+          "Customer Care Specialist",
+          "Support Specialist",
+          "Call Center Agent",
+          "Customer Service Associate"
         ],
         "ru": [
-          "Специалист поддержки",
-          "Оператор call-центра"
+          "Специалист поддержки клиентов",
+          "Специалист службы поддержки",
+          "Оператор поддержки",
+          "Оператор call-центра",
+          "Специалист клиентского сервиса",
+          "Менеджер поддержки клиентов"
         ]
       },
       "adjacent": [
+        {
+          "roleId": "support.technical.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "support.success.ic",
+          "kind": "sibling-family"
+        },
         {
           "roleId": "support.lead",
           "kind": "level-up"
@@ -46,28 +89,300 @@
       ]
     },
     {
+      "id": "support.technical.ic",
+      "function": "support",
+      "family": "support.technical",
+      "titleEn": "Technical Support Specialist",
+      "titleRu": "Специалист технической поддержки",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Technical Support Specialist",
+          "Technical Support Engineer",
+          "Product Support Specialist",
+          "Application Support Analyst",
+          "Technical Customer Support Engineer",
+          "L2 Support Engineer"
+        ],
+        "ru": [
+          "Специалист технической поддержки",
+          "Инженер технической поддержки",
+          "Специалист поддержки продукта",
+          "Аналитик поддержки приложений",
+          "Инженер клиентской поддержки",
+          "Специалист поддержки второй линии"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "support.agent.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "it-ops.support.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "support.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "support.service-desk.ic",
+      "function": "support",
+      "family": "support.technical",
+      "titleEn": "Service Desk Analyst",
+      "titleRu": "Специалист service desk",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Service Desk Analyst",
+          "Help Desk Analyst",
+          "IT Service Desk Specialist",
+          "Support Desk Analyst",
+          "Service Desk Agent",
+          "First Line Support Analyst"
+        ],
+        "ru": [
+          "Специалист service desk",
+          "Специалист первой линии поддержки",
+          "Оператор службы поддержки",
+          "Специалист help desk",
+          "Аналитик сервисного стола",
+          "Сотрудник IT-службы поддержки"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "support.technical.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "it-ops.support.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "support.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "support.success.ic",
+      "function": "support",
+      "family": "support.success",
+      "titleEn": "Customer Success Manager",
+      "titleRu": "Менеджер по работе с клиентами",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Customer Success Manager",
+          "Customer Success Specialist",
+          "Client Success Manager",
+          "Customer Experience Manager",
+          "Customer Relationship Manager",
+          "CSM"
+        ],
+        "ru": [
+          "Менеджер по работе с клиентами",
+          "Customer Success Manager",
+          "Менеджер клиентского успеха",
+          "Менеджер по сопровождению клиентов",
+          "Менеджер по развитию клиентов",
+          "Специалист по клиентскому опыту"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "support.agent.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "support.onboarding.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "support.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "sales.account-manager.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "support.onboarding.ic",
+      "function": "support",
+      "family": "support.success",
+      "titleEn": "Customer Onboarding Specialist",
+      "titleRu": "Специалист по внедрению и сопровождению клиентов",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Customer Onboarding Specialist",
+          "Client Onboarding Manager",
+          "Implementation Specialist",
+          "Customer Implementation Manager",
+          "Onboarding Consultant",
+          "Customer Adoption Specialist"
+        ],
+        "ru": [
+          "Специалист по внедрению клиентов",
+          "Менеджер по онбордингу клиентов",
+          "Менеджер по сопровождению внедрения",
+          "Консультант по внедрению",
+          "Специалист по адаптации клиентов",
+          "Менеджер клиентского внедрения"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "support.success.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "consulting.it-consultant.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "support.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "support.quality.ic",
+      "function": "support",
+      "family": "support.operations-quality",
+      "titleEn": "Support Quality Analyst",
+      "titleRu": "Специалист по качеству поддержки",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Support Quality Analyst",
+          "Customer Service Quality Analyst",
+          "Quality Assurance Specialist, Support",
+          "Support Operations Analyst",
+          "Contact Center Quality Analyst",
+          "Customer Experience Analyst"
+        ],
+        "ru": [
+          "Специалист по качеству поддержки",
+          "Аналитик качества клиентского сервиса",
+          "Специалист контроля качества поддержки",
+          "Аналитик операций поддержки",
+          "Специалист по качеству call-центра",
+          "Аналитик клиентского опыта"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "support.agent.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "qa.manual.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "support.quality-lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
       "id": "support.lead",
       "function": "support",
-      "family": "support.core",
-      "titleEn": "Senior Support / Support Team Lead",
-      "titleRu": "Ведущий специалист поддержки",
+      "family": "support.leadership",
+      "titleEn": "Support Team Lead",
+      "titleRu": "Руководитель группы поддержки",
       "levels": [
         "lead"
       ],
       "variants": {
         "en": [
+          "Support Team Lead",
+          "Customer Support Team Lead",
           "Senior Support Specialist",
-          "Support Team Lead"
+          "Support Supervisor",
+          "Technical Support Lead",
+          "Customer Service Team Lead"
         ],
         "ru": [
-          "Ведущий специалист поддержки",
-          "Тимлид поддержки"
+          "Руководитель группы поддержки",
+          "Тимлид поддержки",
+          "Старший специалист поддержки",
+          "Супервайзер службы поддержки",
+          "Руководитель технической поддержки",
+          "Руководитель команды клиентского сервиса"
         ]
       },
       "adjacent": [
         {
           "roleId": "support.agent.ic",
           "kind": "level-down"
+        },
+        {
+          "roleId": "support.quality-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "support.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "support.technical.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "support.quality-lead",
+      "function": "support",
+      "family": "support.operations-quality",
+      "titleEn": "Support Quality Lead",
+      "titleRu": "Руководитель качества поддержки",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Support Quality Lead",
+          "Customer Service Quality Lead",
+          "Support Operations Lead",
+          "Support QA Lead",
+          "Customer Experience Team Lead",
+          "Support Performance Lead"
+        ],
+        "ru": [
+          "Руководитель качества поддержки",
+          "Руководитель контроля качества сервиса",
+          "Руководитель операций поддержки",
+          "Руководитель QA поддержки",
+          "Руководитель клиентского опыта",
+          "Руководитель эффективности поддержки"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "support.quality.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "support.lead",
+          "kind": "sibling-family"
         },
         {
           "roleId": "support.head",
@@ -78,7 +393,7 @@
     {
       "id": "support.head",
       "function": "support",
-      "family": "support.core",
+      "family": "support.leadership",
       "titleEn": "Head of Customer Support",
       "titleRu": "Руководитель службы поддержки",
       "levels": [
@@ -87,11 +402,19 @@
       "variants": {
         "en": [
           "Head of Customer Support",
-          "Customer Success Director"
+          "Customer Support Director",
+          "Director of Customer Service",
+          "Head of Customer Success",
+          "Customer Experience Director",
+          "Support Department Head"
         ],
         "ru": [
           "Руководитель службы поддержки",
-          "Директор по работе с клиентами"
+          "Директор по клиентскому сервису",
+          "Директор по поддержке клиентов",
+          "Руководитель клиентского успеха",
+          "Директор по работе с клиентами",
+          "Начальник отдела поддержки"
         ]
       },
       "adjacent": [
@@ -100,33 +423,112 @@
           "kind": "level-down"
         },
         {
+          "roleId": "support.quality-lead",
+          "kind": "sibling-family"
+        },
+        {
           "roleId": "support.vp",
           "kind": "level-up"
+        },
+        {
+          "roleId": "sales.head",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "product.head",
+          "kind": "cross-function-neighbor"
         }
       ]
     },
     {
       "id": "support.vp",
       "function": "support",
-      "family": "support.core",
-      "titleEn": "VP of Customer Success",
+      "family": "support.leadership",
+      "titleEn": "Vice President of Customer Success",
       "titleRu": "Вице-президент по клиентскому сервису",
       "levels": [
         "vp"
       ],
       "variants": {
         "en": [
+          "Vice President of Customer Success",
           "VP of Customer Success",
-          "VP of Support"
+          "VP of Support",
+          "Vice President, Customer Experience",
+          "Senior Vice President, Customer Operations",
+          "VP Client Services"
         ],
         "ru": [
-          "Вице-президент по клиентскому сервису"
+          "Вице-президент по клиентскому сервису",
+          "Вице-президент по работе с клиентами",
+          "Вице-президент по поддержке",
+          "Директор клиентского департамента",
+          "Руководитель клиентских операций",
+          "Вице-президент по клиентскому успеху"
         ]
       },
       "adjacent": [
         {
           "roleId": "support.head",
           "kind": "level-down"
+        },
+        {
+          "roleId": "support.cco",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "sales.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "ops.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "support.cco",
+      "function": "support",
+      "family": "support.leadership",
+      "titleEn": "Chief Customer Officer",
+      "titleRu": "Директор по работе с клиентами (CCO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Customer Officer",
+          "CCO",
+          "Chief Customer Experience Officer",
+          "Chief Client Officer",
+          "Chief Customer Success Officer",
+          "Chief Service Officer"
+        ],
+        "ru": [
+          "Директор по работе с клиентами",
+          "Директор по клиентскому опыту",
+          "Директор по клиентскому успеху",
+          "Директор по сервису",
+          "Руководитель клиентского блока",
+          "CCO"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "support.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "sales.cro",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "marketing.cmo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
         }
       ]
     }

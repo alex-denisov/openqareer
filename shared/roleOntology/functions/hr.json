@@ -8,9 +8,51 @@
     {
       "id": "hr.core",
       "function": "hr",
-      "labelEn": "HR ladder",
-      "labelRu": "Лестница HR",
-      "coverage": "core"
+      "labelEn": "HR generalist and business partnering",
+      "labelRu": "HR-общее направление и бизнес-партнёрство",
+      "coverage": "full"
+    },
+    {
+      "id": "hr.talent-acquisition",
+      "function": "hr",
+      "labelEn": "Talent acquisition and recruitment",
+      "labelRu": "Подбор и привлечение персонала",
+      "coverage": "full"
+    },
+    {
+      "id": "hr.people-operations",
+      "function": "hr",
+      "labelEn": "People operations and employee relations",
+      "labelRu": "HR-операции и отношения с сотрудниками",
+      "coverage": "full"
+    },
+    {
+      "id": "hr.reward",
+      "function": "hr",
+      "labelEn": "Compensation and benefits",
+      "labelRu": "Компенсации и льготы",
+      "coverage": "full"
+    },
+    {
+      "id": "hr.learning",
+      "function": "hr",
+      "labelEn": "Learning and development",
+      "labelRu": "Обучение и развитие",
+      "coverage": "full"
+    },
+    {
+      "id": "hr.analytics",
+      "function": "hr",
+      "labelEn": "People analytics",
+      "labelRu": "Аналитика персонала",
+      "coverage": "full"
+    },
+    {
+      "id": "hr.leadership",
+      "function": "hr",
+      "labelEn": "HR leadership",
+      "labelRu": "Руководство персоналом",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,27 +60,338 @@
       "id": "hr.specialist.ic",
       "function": "hr",
       "family": "hr.core",
-      "titleEn": "Recruiter / HR Specialist",
-      "titleRu": "Рекрутер / HR-специалист",
+      "titleEn": "HR Specialist / HR Generalist",
+      "titleRu": "HR-специалист / HR-дженералист",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "HR Specialist",
+          "HR Generalist",
+          "Human Resources Specialist",
+          "People Operations Specialist",
+          "HR Coordinator",
+          "Personnel Specialist"
+        ],
+        "ru": [
+          "HR-специалист",
+          "HR-дженералист",
+          "Специалист по персоналу",
+          "Специалист отдела кадров",
+          "Менеджер по персоналу",
+          "Координатор HR"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "hr.recruiter.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "hr.hr-ops.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "hr.bp.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "hr.recruiter.ic",
+      "function": "hr",
+      "family": "hr.talent-acquisition",
+      "titleEn": "Recruiter / Talent Acquisition Specialist",
+      "titleRu": "Рекрутер / специалист по подбору персонала",
       "levels": [
         "ic"
       ],
       "variants": {
         "en": [
           "Recruiter",
-          "HR Generalist",
-          "HR Specialist",
-          "Talent Acquisition Specialist"
+          "Talent Acquisition Specialist",
+          "Talent Acquisition Partner",
+          "Technical Recruiter",
+          "Corporate Recruiter",
+          "Recruitment Consultant"
         ],
         "ru": [
           "Рекрутер",
-          "HR-специалист",
-          "Специалист по подбору персонала"
+          "Специалист по подбору персонала",
+          "Менеджер по подбору персонала",
+          "IT-рекрутер",
+          "Специалист по поиску кандидатов",
+          "Консультант по подбору"
         ]
       },
       "adjacent": [
         {
+          "roleId": "hr.specialist.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "hr.recruiting.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "sales.bdr.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "hr.hr-ops.ic",
+      "function": "hr",
+      "family": "hr.people-operations",
+      "titleEn": "HR Operations Specialist",
+      "titleRu": "Специалист по HR-операциям",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "HR Operations Specialist",
+          "People Operations Specialist",
+          "HR Administrator",
+          "HR Operations Coordinator",
+          "People Services Specialist",
+          "HRIS Specialist"
+        ],
+        "ru": [
+          "Специалист по HR-операциям",
+          "HR-администратор",
+          "Специалист по кадровому администрированию",
+          "Специалист по кадровому делопроизводству",
+          "Координатор HR-операций",
+          "Специалист по HRIS"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "hr.specialist.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "hr.compensation.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "hr.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "admin.clerk.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "hr.compensation.ic",
+      "function": "hr",
+      "family": "hr.reward",
+      "titleEn": "Compensation and Benefits Specialist",
+      "titleRu": "Специалист по компенсациям и льготам",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Compensation and Benefits Specialist",
+          "Total Rewards Specialist",
+          "Compensation Analyst",
+          "Benefits Analyst",
+          "C&B Specialist",
+          "Rewards Analyst"
+        ],
+        "ru": [
+          "Специалист по компенсациям и льготам",
+          "Специалист по C&B",
+          "Аналитик по компенсациям",
+          "Специалист по мотивации",
+          "Специалист по льготам",
+          "Аналитик вознаграждений"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "hr.hr-ops.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.payroll.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "hr.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "hr.learning.ic",
+      "function": "hr",
+      "family": "hr.learning",
+      "titleEn": "Learning and Development Specialist",
+      "titleRu": "Специалист по обучению и развитию",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Learning and Development Specialist",
+          "L&D Specialist",
+          "Training Specialist",
+          "Learning Partner",
+          "Talent Development Specialist",
+          "Corporate Trainer"
+        ],
+        "ru": [
+          "Специалист по обучению и развитию",
+          "Менеджер по обучению персонала",
+          "Специалист по развитию талантов",
+          "Тренинг-менеджер",
+          "Корпоративный тренер",
+          "Менеджер по развитию сотрудников"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "hr.people-analytics.ic",
+          "kind": "sibling-family"
+        },
+        {
           "roleId": "hr.bp.lead",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "hr.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "hr.people-analytics.ic",
+      "function": "hr",
+      "family": "hr.analytics",
+      "titleEn": "People Analytics Specialist",
+      "titleRu": "Аналитик по персоналу",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "People Analytics Specialist",
+          "People Analyst",
+          "HR Data Analyst",
+          "Workforce Analyst",
+          "HR Reporting Analyst",
+          "People Insights Analyst"
+        ],
+        "ru": [
+          "Аналитик по персоналу",
+          "HR-аналитик",
+          "Аналитик данных о сотрудниках",
+          "Аналитик трудовых ресурсов",
+          "Аналитик HR-отчётности",
+          "Специалист по аналитике персонала"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "hr.compensation.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.fp-a.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "hr.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "hr.employee-relations.ic",
+      "function": "hr",
+      "family": "hr.people-operations",
+      "titleEn": "Employee Relations Specialist",
+      "titleRu": "Специалист по работе с сотрудниками",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Employee Relations Specialist",
+          "Employee Experience Specialist",
+          "People Relations Advisor",
+          "HR Advisor",
+          "Employee Engagement Specialist",
+          "Workplace Relations Specialist"
+        ],
+        "ru": [
+          "Специалист по работе с сотрудниками",
+          "Специалист по отношениям с персоналом",
+          "HR-консультант",
+          "Специалист по вовлечённости",
+          "Менеджер по опыту сотрудников",
+          "Специалист по внутренним коммуникациям HR"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "hr.hr-ops.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "hr.bp.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "pr.internal.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "hr.recruiting.lead",
+      "function": "hr",
+      "family": "hr.talent-acquisition",
+      "titleEn": "Talent Acquisition Lead",
+      "titleRu": "Руководитель направления подбора",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Talent Acquisition Lead",
+          "Recruiting Team Lead",
+          "Lead Recruiter",
+          "Senior Talent Acquisition Partner",
+          "Recruitment Lead",
+          "Hiring Manager, Talent Acquisition"
+        ],
+        "ru": [
+          "Руководитель направления подбора",
+          "Руководитель группы рекрутинга",
+          "Ведущий рекрутер",
+          "Руководитель отдела подбора",
+          "Старший менеджер по подбору",
+          "Тимлид рекрутинга"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "hr.recruiter.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "hr.bp.lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "hr.head",
           "kind": "level-up"
         }
       ]
@@ -55,12 +408,19 @@
       "variants": {
         "en": [
           "HR Business Partner",
-          "Senior Recruiter",
-          "HR Team Lead"
+          "HRBP",
+          "Senior HR Business Partner",
+          "People Business Partner",
+          "HR Manager",
+          "Senior HR Manager"
         ],
         "ru": [
           "HR-бизнес-партнёр",
-          "Ведущий рекрутер"
+          "HRBP",
+          "Старший HR-бизнес-партнёр",
+          "Бизнес-партнёр по персоналу",
+          "Менеджер по персоналу",
+          "Руководитель направления HR"
         ]
       },
       "adjacent": [
@@ -69,16 +429,24 @@
           "kind": "level-down"
         },
         {
+          "roleId": "hr.recruiting.lead",
+          "kind": "sibling-family"
+        },
+        {
           "roleId": "hr.head",
           "kind": "level-up"
+        },
+        {
+          "roleId": "hr.employee-relations.ic",
+          "kind": "sibling-family"
         }
       ]
     },
     {
       "id": "hr.head",
       "function": "hr",
-      "family": "hr.core",
-      "titleEn": "Head of HR",
+      "family": "hr.leadership",
+      "titleEn": "Head of Human Resources",
       "titleRu": "Руководитель отдела персонала",
       "levels": [
         "head"
@@ -86,11 +454,19 @@
       "variants": {
         "en": [
           "Head of HR",
-          "HR Director"
+          "HR Director",
+          "Human Resources Director",
+          "People Director",
+          "Head of People",
+          "HR Department Head"
         ],
         "ru": [
           "Руководитель отдела персонала",
-          "Директор по персоналу"
+          "Директор по персоналу",
+          "Руководитель HR-службы",
+          "Директор по работе с персоналом",
+          "Руководитель направления по персоналу",
+          "Начальник отдела кадров"
         ]
       },
       "adjacent": [
@@ -99,34 +475,112 @@
           "kind": "level-down"
         },
         {
-          "roleId": "hr.chro",
+          "roleId": "hr.recruiting.lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "hr.vp",
           "kind": "level-up"
+        },
+        {
+          "roleId": "finance.head",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "admin.head",
+          "kind": "cross-function-neighbor"
         }
       ]
     },
     {
-      "id": "hr.chro",
+      "id": "hr.vp",
       "function": "hr",
-      "family": "hr.core",
-      "titleEn": "Chief HR Officer",
-      "titleRu": "Директор по персоналу (CHRO)",
+      "family": "hr.leadership",
+      "titleEn": "Vice President of Human Resources",
+      "titleRu": "Вице-президент по персоналу",
       "levels": [
-        "c-level"
+        "vp"
       ],
       "variants": {
         "en": [
-          "Chief HR Officer",
-          "Chief People Officer",
-          "CHRO"
+          "Vice President of Human Resources",
+          "VP of HR",
+          "VP People",
+          "Vice President, People Operations",
+          "Senior Vice President, HR",
+          "Group HR Director"
         ],
         "ru": [
-          "Директор по персоналу"
+          "Вице-президент по персоналу",
+          "Вице-президент по работе с персоналом",
+          "Директор по персоналу группы компаний",
+          "Руководитель HR-департамента",
+          "Заместитель директора по персоналу",
+          "Директор по людям и культуре"
         ]
       },
       "adjacent": [
         {
           "roleId": "hr.head",
           "kind": "level-down"
+        },
+        {
+          "roleId": "hr.chro",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "finance.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "ops.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "hr.chro",
+      "function": "hr",
+      "family": "hr.leadership",
+      "titleEn": "Chief Human Resources Officer",
+      "titleRu": "Директор по персоналу (CHRO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Human Resources Officer",
+          "CHRO",
+          "Chief People Officer",
+          "Chief People and Culture Officer",
+          "Chief Talent Officer",
+          "Chief Human Capital Officer"
+        ],
+        "ru": [
+          "Директор по персоналу",
+          "Директор по управлению персоналом",
+          "Директор по людям и культуре",
+          "Директор по человеческому капиталу",
+          "Руководитель блока персонала",
+          "CHRO"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "hr.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "finance.cfo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "ops.coo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
         }
       ]
     }

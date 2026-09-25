@@ -8,9 +8,37 @@
     {
       "id": "finance.core",
       "function": "finance",
-      "labelEn": "Finance ladder",
-      "labelRu": "Лестница финансов",
-      "coverage": "core"
+      "labelEn": "Accounting and controllership",
+      "labelRu": "Бухгалтерский учёт и контроль",
+      "coverage": "full"
+    },
+    {
+      "id": "finance.planning-analysis",
+      "function": "finance",
+      "labelEn": "Financial planning and analysis",
+      "labelRu": "Финансовое планирование и анализ",
+      "coverage": "full"
+    },
+    {
+      "id": "finance.treasury-tax",
+      "function": "finance",
+      "labelEn": "Treasury and tax",
+      "labelRu": "Казначейство и налоги",
+      "coverage": "full"
+    },
+    {
+      "id": "finance.payroll-controls",
+      "function": "finance",
+      "labelEn": "Payroll and internal controls",
+      "labelRu": "Расчёт заработной платы и внутренний контроль",
+      "coverage": "full"
+    },
+    {
+      "id": "finance.leadership",
+      "function": "finance",
+      "labelEn": "Finance leadership",
+      "labelRu": "Руководство финансами",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,24 +46,248 @@
       "id": "finance.accountant.ic",
       "function": "finance",
       "family": "finance.core",
-      "titleEn": "Accountant / Financial Analyst",
-      "titleRu": "Бухгалтер / финансовый аналитик",
+      "titleEn": "Accountant",
+      "titleRu": "Бухгалтер",
       "levels": [
         "ic"
       ],
       "variants": {
         "en": [
           "Accountant",
+          "Staff Accountant",
+          "General Ledger Accountant",
+          "Senior Accountant",
           "Bookkeeper",
-          "Financial Analyst",
-          "Junior Accountant"
+          "Accounting Specialist"
         ],
         "ru": [
           "Бухгалтер",
-          "Финансовый аналитик"
+          "Бухгалтер на участок",
+          "Бухгалтер по первичной документации",
+          "Бухгалтер по учёту",
+          "Старший бухгалтер",
+          "Специалист по бухгалтерскому учёту"
         ]
       },
       "adjacent": [
+        {
+          "roleId": "finance.internal-control.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.payroll.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.controller.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "finance.fp-a.ic",
+      "function": "finance",
+      "family": "finance.planning-analysis",
+      "titleEn": "FP&A Analyst",
+      "titleRu": "Финансовый аналитик по планированию",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "FP&A Analyst",
+          "Financial Planning Analyst",
+          "Financial Analyst",
+          "Business Finance Analyst",
+          "Budget Analyst",
+          "Corporate Finance Analyst"
+        ],
+        "ru": [
+          "Финансовый аналитик",
+          "Финансовый аналитик FP&A",
+          "Аналитик по бюджетированию",
+          "Аналитик по планированию",
+          "Аналитик по управленческой отчётности",
+          "Аналитик корпоративных финансов"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "finance.fp-a.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "finance.controller.lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "sales.sales-ops.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "finance.treasury.ic",
+      "function": "finance",
+      "family": "finance.treasury-tax",
+      "titleEn": "Treasury Specialist",
+      "titleRu": "Специалист казначейства",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Treasury Analyst",
+          "Treasury Specialist",
+          "Cash Management Specialist",
+          "Cash Manager",
+          "Treasury Accountant",
+          "Payments Specialist"
+        ],
+        "ru": [
+          "Специалист казначейства",
+          "Казначей",
+          "Финансовый специалист по платежам",
+          "Специалист по управлению денежными средствами",
+          "Казначей-аналитик",
+          "Специалист по банковским операциям"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "finance.tax.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.accountant.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "finance.tax.ic",
+      "function": "finance",
+      "family": "finance.treasury-tax",
+      "titleEn": "Tax Accountant / Tax Specialist",
+      "titleRu": "Налоговый бухгалтер / специалист по налогам",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Tax Accountant",
+          "Tax Specialist",
+          "Tax Analyst",
+          "Corporate Tax Specialist",
+          "Tax Consultant",
+          "Tax Compliance Specialist"
+        ],
+        "ru": [
+          "Налоговый бухгалтер",
+          "Специалист по налогам",
+          "Налоговый консультант",
+          "Специалист по налоговому учёту",
+          "Аналитик по налогам",
+          "Специалист по налоговой отчётности"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "finance.treasury.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.internal-control.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.controller.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "finance.payroll.ic",
+      "function": "finance",
+      "family": "finance.payroll-controls",
+      "titleEn": "Payroll Specialist",
+      "titleRu": "Специалист по расчёту заработной платы",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Payroll Specialist",
+          "Payroll Accountant",
+          "Payroll Administrator",
+          "Payroll Analyst",
+          "Compensation Payroll Specialist",
+          "Payroll Coordinator"
+        ],
+        "ru": [
+          "Специалист по расчёту заработной платы",
+          "Бухгалтер по заработной плате",
+          "Расчётчик зарплаты",
+          "Специалист по зарплате и кадрам",
+          "Бухгалтер по расчётам с персоналом",
+          "Администратор расчёта заработной платы"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "finance.accountant.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "hr.compensation.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "finance.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "finance.internal-control.ic",
+      "function": "finance",
+      "family": "finance.payroll-controls",
+      "titleEn": "Internal Controls Specialist",
+      "titleRu": "Специалист по внутреннему контролю",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Internal Controls Specialist",
+          "Internal Control Analyst",
+          "SOX Analyst",
+          "Financial Controls Analyst",
+          "Internal Control Officer",
+          "Controls Testing Specialist"
+        ],
+        "ru": [
+          "Специалист по внутреннему контролю",
+          "Аналитик внутреннего контроля",
+          "Специалист по финансовому контролю",
+          "Специалист по контролю бизнес-процессов",
+          "Специалист SOX",
+          "Контролёр финансовых процессов"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "finance.accountant.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "audit-risk.internal-auditor.ic",
+          "kind": "cross-function-neighbor"
+        },
         {
           "roleId": "finance.controller.lead",
           "kind": "level-up"
@@ -54,17 +306,75 @@
       "variants": {
         "en": [
           "Financial Controller",
-          "Senior Financial Analyst"
+          "Controller",
+          "Senior Financial Analyst",
+          "Assistant Controller",
+          "Corporate Controller",
+          "Accounting Controller"
         ],
         "ru": [
           "Финансовый контролёр",
-          "Ведущий финансовый аналитик"
+          "Финансовый контролер",
+          "Ведущий финансовый аналитик",
+          "Заместитель финансового контролёра",
+          "Руководитель финансового контроля",
+          "Главный контролёр"
         ]
       },
       "adjacent": [
         {
           "roleId": "finance.accountant.ic",
           "kind": "level-down"
+        },
+        {
+          "roleId": "finance.internal-control.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "audit-risk.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "finance.fp-a.lead",
+      "function": "finance",
+      "family": "finance.planning-analysis",
+      "titleEn": "FP&A Manager",
+      "titleRu": "Руководитель финансового планирования и анализа",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "FP&A Manager",
+          "Financial Planning Manager",
+          "Financial Analysis Manager",
+          "Business Finance Manager",
+          "Budgeting Manager",
+          "Planning and Reporting Manager"
+        ],
+        "ru": [
+          "Руководитель FP&A",
+          "Руководитель финансового планирования",
+          "Руководитель финансовой аналитики",
+          "Руководитель бюджетирования",
+          "Руководитель управленческой отчётности",
+          "Начальник отдела планирования"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "finance.fp-a.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "finance.controller.lead",
+          "kind": "sibling-family"
         },
         {
           "roleId": "finance.head",
@@ -75,21 +385,28 @@
     {
       "id": "finance.head",
       "function": "finance",
-      "family": "finance.core",
-      "titleEn": "Finance Manager / Head of Finance",
+      "family": "finance.leadership",
+      "titleEn": "Head of Finance / Finance Director",
       "titleRu": "Руководитель финансового отдела",
       "levels": [
         "head"
       ],
       "variants": {
         "en": [
-          "Finance Manager",
           "Head of Finance",
-          "Finance Director"
+          "Finance Director",
+          "Director of Finance",
+          "Head of Financial Control",
+          "Finance Department Head",
+          "Director of Financial Planning"
         ],
         "ru": [
           "Руководитель финансового отдела",
-          "Финансовый директор (уровень head)"
+          "Финансовый директор",
+          "Директор по финансам",
+          "Руководитель финансового блока",
+          "Начальник финансового управления",
+          "Директор по управленческой отчётности"
         ]
       },
       "adjacent": [
@@ -98,26 +415,48 @@
           "kind": "level-down"
         },
         {
+          "roleId": "finance.fp-a.lead",
+          "kind": "sibling-family"
+        },
+        {
           "roleId": "finance.vp",
           "kind": "level-up"
+        },
+        {
+          "roleId": "audit-risk.head",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "hr.head",
+          "kind": "cross-function-neighbor"
         }
       ]
     },
     {
       "id": "finance.vp",
       "function": "finance",
-      "family": "finance.core",
-      "titleEn": "VP of Finance",
+      "family": "finance.leadership",
+      "titleEn": "Vice President of Finance",
       "titleRu": "Вице-президент по финансам",
       "levels": [
         "vp"
       ],
       "variants": {
         "en": [
-          "VP of Finance"
+          "Vice President of Finance",
+          "VP of Finance",
+          "VP Finance",
+          "Senior Vice President, Finance",
+          "Group Finance Director",
+          "Regional VP Finance"
         ],
         "ru": [
-          "Вице-президент по финансам"
+          "Вице-президент по финансам",
+          "Вице-президент по финансовым вопросам",
+          "Финансовый директор группы компаний",
+          "Директор финансового департамента",
+          "Заместитель финансового директора",
+          "Руководитель финансов по региону"
         ]
       },
       "adjacent": [
@@ -128,13 +467,21 @@
         {
           "roleId": "finance.cfo",
           "kind": "level-up"
+        },
+        {
+          "roleId": "ops.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "audit-risk.vp",
+          "kind": "cross-function-neighbor"
         }
       ]
     },
     {
       "id": "finance.cfo",
       "function": "finance",
-      "family": "finance.core",
+      "family": "finance.leadership",
       "titleEn": "Chief Financial Officer",
       "titleRu": "Финансовый директор (CFO)",
       "levels": [
@@ -143,16 +490,37 @@
       "variants": {
         "en": [
           "Chief Financial Officer",
-          "CFO"
+          "CFO",
+          "Chief Finance Officer",
+          "Group CFO",
+          "Chief Financial and Operating Officer",
+          "Global Chief Financial Officer"
         ],
         "ru": [
-          "Финансовый директор"
+          "Финансовый директор",
+          "Финансовый директор группы компаний",
+          "Директор по финансам и экономике",
+          "Главный финансовый директор",
+          "Руководитель финансового блока",
+          "CFO"
         ]
       },
       "adjacent": [
         {
           "roleId": "finance.vp",
           "kind": "level-down"
+        },
+        {
+          "roleId": "audit-risk.cro",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "ops.coo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
         }
       ]
     }

@@ -8,9 +8,44 @@
     {
       "id": "bizdev.generic",
       "function": "bizdev",
-      "labelEn": "Business Development",
-      "labelRu": "Развитие бизнеса",
-      "coverage": "skeleton"
+      "labelEn": "Business development generalists",
+      "labelRu": "Общее направление развития бизнеса",
+      "coverage": "full"
+    },
+    {
+      "id": "bizdev.partnerships",
+      "function": "bizdev",
+      "labelEn": "Partnerships and alliances",
+      "labelRu": "Партнёрства и альянсы",
+      "coverage": "full"
+    },
+    {
+      "id": "bizdev.channel",
+      "function": "bizdev",
+      "labelEn": "Channel and ecosystem development",
+      "labelRu": "Каналы и развитие экосистемы",
+      "coverage": "full"
+    },
+    {
+      "id": "bizdev.corporate-development",
+      "function": "bizdev",
+      "labelEn": "Corporate development and strategy",
+      "labelRu": "Корпоративное развитие и стратегия",
+      "coverage": "full"
+    },
+    {
+      "id": "bizdev.international",
+      "function": "bizdev",
+      "labelEn": "International business development",
+      "labelRu": "Международное развитие бизнеса",
+      "coverage": "full"
+    },
+    {
+      "id": "bizdev.leadership",
+      "function": "bizdev",
+      "labelEn": "Business development leadership",
+      "labelRu": "Руководство развитием бизнеса",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,25 +53,541 @@
       "id": "bizdev.generic",
       "function": "bizdev",
       "family": "bizdev.generic",
-      "titleEn": "Business Development",
-      "titleRu": "Развитие бизнеса",
+      "titleEn": "Business Development Manager",
+      "titleRu": "Менеджер по развитию бизнеса",
       "levels": [
-        "ic",
-        "head",
-        "vp"
+        "ic"
       ],
       "variants": {
         "en": [
           "Business Development Manager",
-          "Head of Business Development",
-          "Partnerships Director"
+          "Business Development Executive",
+          "Business Development Specialist",
+          "Business Development Associate",
+          "Growth Development Manager",
+          "Business Expansion Manager"
         ],
         "ru": [
           "Менеджер по развитию бизнеса",
-          "Руководитель развития бизнеса"
+          "Специалист по развитию бизнеса",
+          "Менеджер по развитию направления",
+          "Менеджер по расширению бизнеса",
+          "Менеджер по стратегическому развитию",
+          "Специалист по развитию компании"
         ]
       },
-      "adjacent": []
+      "adjacent": [
+        {
+          "roleId": "bizdev.partnerships.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "sales.ae.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "bizdev.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "bizdev.partnerships.ic",
+      "function": "bizdev",
+      "family": "bizdev.partnerships",
+      "titleEn": "Partnerships Manager",
+      "titleRu": "Менеджер по партнёрствам",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Partnerships Manager",
+          "Partnerships Specialist",
+          "Strategic Partnerships Manager",
+          "Partner Development Manager",
+          "Business Partnerships Manager",
+          "Alliances Manager"
+        ],
+        "ru": [
+          "Менеджер по партнёрствам",
+          "Менеджер по развитию партнёрской сети",
+          "Менеджер стратегических партнёрств",
+          "Менеджер по альянсам",
+          "Специалист по партнёрским программам",
+          "Менеджер по работе с партнёрами"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "bizdev.strategic-partnerships.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "bizdev.generic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "bizdev.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "sales.account-manager.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "bizdev.strategic-partnerships.ic",
+      "function": "bizdev",
+      "family": "bizdev.partnerships",
+      "titleEn": "Strategic Partnerships Manager",
+      "titleRu": "Менеджер по стратегическим партнёрствам",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Strategic Partnerships Manager",
+          "Strategic Alliances Manager",
+          "Partnerships Development Manager",
+          "Technology Partnerships Manager",
+          "Platform Partnerships Manager",
+          "Ecosystem Partnerships Manager"
+        ],
+        "ru": [
+          "Менеджер по стратегическим партнёрствам",
+          "Менеджер стратегических альянсов",
+          "Менеджер технологических партнёрств",
+          "Менеджер партнёрств платформы",
+          "Менеджер по развитию экосистемы",
+          "Специалист по стратегическим партнёрам"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "bizdev.partnerships.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "bizdev.channel.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "bizdev.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "legal.counsel.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "bizdev.channel.ic",
+      "function": "bizdev",
+      "family": "bizdev.channel",
+      "titleEn": "Channel Development Manager",
+      "titleRu": "Менеджер по развитию каналов продаж",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Channel Development Manager",
+          "Channel Manager",
+          "Partner Channel Manager",
+          "Channel Sales Manager",
+          "Indirect Sales Manager",
+          "Partner Enablement Manager"
+        ],
+        "ru": [
+          "Менеджер по развитию каналов продаж",
+          "Менеджер по партнёрскому каналу",
+          "Канал-менеджер",
+          "Менеджер непрямых продаж",
+          "Менеджер по работе с дилерами",
+          "Менеджер по развитию дистрибуции"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "bizdev.partnerships.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "sales.ae.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "bizdev.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "bizdev.corpdev.ic",
+      "function": "bizdev",
+      "family": "bizdev.corporate-development",
+      "titleEn": "Corporate Development Analyst",
+      "titleRu": "Аналитик по корпоративному развитию",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Corporate Development Analyst",
+          "Corporate Development Associate",
+          "Strategy and Corporate Development Analyst",
+          "Business Strategy Analyst",
+          "Corporate Strategy Specialist",
+          "Strategic Planning Analyst"
+        ],
+        "ru": [
+          "Аналитик по корпоративному развитию",
+          "Специалист по стратегическому развитию",
+          "Аналитик по стратегии",
+          "Аналитик по развитию бизнеса",
+          "Специалист по корпоративной стратегии",
+          "Аналитик стратегического планирования"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "bizdev.m-and-a.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.fp-a.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "bizdev.corpdev-lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "legal.counsel.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "bizdev.m-and-a.ic",
+      "function": "bizdev",
+      "family": "bizdev.corporate-development",
+      "titleEn": "M&A Associate / Investment Analyst",
+      "titleRu": "Специалист по M&A и инвестициям",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "M&A Associate",
+          "Mergers and Acquisitions Analyst",
+          "Corporate Development Associate",
+          "Investment Analyst",
+          "Strategic Investments Specialist",
+          "M&A Specialist"
+        ],
+        "ru": [
+          "Специалист по M&A",
+          "Аналитик по слияниям и поглощениям",
+          "Менеджер по корпоративному развитию",
+          "Инвестиционный аналитик",
+          "Специалист по стратегическим инвестициям",
+          "Аналитик по сделкам"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "bizdev.corpdev.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "legal.counsel.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "finance.fp-a.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "bizdev.corpdev-lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "bizdev.international.ic",
+      "function": "bizdev",
+      "family": "bizdev.international",
+      "titleEn": "International Business Development Manager",
+      "titleRu": "Менеджер по международному развитию бизнеса",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "International Business Development Manager",
+          "International Expansion Manager",
+          "Global Partnerships Manager",
+          "International Sales Development Manager",
+          "Market Expansion Specialist",
+          "Regional Business Development Manager"
+        ],
+        "ru": [
+          "Менеджер по международному развитию бизнеса",
+          "Менеджер по выходу на новые рынки",
+          "Менеджер по международным партнёрствам",
+          "Менеджер по развитию зарубежных рынков",
+          "Специалист по международной экспансии",
+          "Региональный менеджер по развитию бизнеса"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "bizdev.partnerships.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "sales.ae.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "bizdev.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "bizdev.lead",
+      "function": "bizdev",
+      "family": "bizdev.leadership",
+      "titleEn": "Business Development Lead",
+      "titleRu": "Руководитель направления развития бизнеса",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Business Development Lead",
+          "Senior Business Development Manager",
+          "Partnerships Lead",
+          "Business Development Team Lead",
+          "Strategic Partnerships Lead",
+          "Business Development Manager, Lead"
+        ],
+        "ru": [
+          "Руководитель направления развития бизнеса",
+          "Ведущий менеджер по развитию бизнеса",
+          "Руководитель партнёрств",
+          "Руководитель группы развития бизнеса",
+          "Руководитель стратегических партнёрств",
+          "Старший менеджер по развитию бизнеса"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "bizdev.partnerships.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "bizdev.corpdev-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "bizdev.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "sales.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "bizdev.corpdev-lead",
+      "function": "bizdev",
+      "family": "bizdev.corporate-development",
+      "titleEn": "Corporate Development Manager",
+      "titleRu": "Руководитель корпоративного развития",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Corporate Development Manager",
+          "Corporate Strategy Manager",
+          "M&A Manager",
+          "Strategic Development Manager",
+          "Business Strategy Manager",
+          "Corporate Development Lead"
+        ],
+        "ru": [
+          "Руководитель корпоративного развития",
+          "Руководитель стратегического развития",
+          "Руководитель направления M&A",
+          "Руководитель корпоративной стратегии",
+          "Менеджер по стратегическому развитию",
+          "Руководитель отдела развития бизнеса"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "bizdev.corpdev.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "bizdev.lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "bizdev.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "finance.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "bizdev.head",
+      "function": "bizdev",
+      "family": "bizdev.leadership",
+      "titleEn": "Head of Business Development",
+      "titleRu": "Руководитель отдела развития бизнеса",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Business Development",
+          "Business Development Director",
+          "Director of Business Development",
+          "Head of Partnerships",
+          "Head of Strategic Partnerships",
+          "Business Development Department Head"
+        ],
+        "ru": [
+          "Руководитель отдела развития бизнеса",
+          "Директор по развитию бизнеса",
+          "Руководитель направления партнёрств",
+          "Директор по стратегическим партнёрствам",
+          "Руководитель департамента развития",
+          "Директор по корпоративному развитию"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "bizdev.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "bizdev.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "sales.head",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "marketing.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "bizdev.vp",
+      "function": "bizdev",
+      "family": "bizdev.leadership",
+      "titleEn": "Vice President of Business Development",
+      "titleRu": "Вице-президент по развитию бизнеса",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "Vice President of Business Development",
+          "VP Business Development",
+          "VP of Partnerships",
+          "Vice President, Strategic Growth",
+          "Group Business Development Director",
+          "VP Corporate Development"
+        ],
+        "ru": [
+          "Вице-президент по развитию бизнеса",
+          "Вице-президент по партнёрствам",
+          "Директор по развитию группы компаний",
+          "Вице-президент по стратегическому росту",
+          "Директор по корпоративному развитию",
+          "Руководитель департамента развития бизнеса"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "bizdev.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "bizdev.cgo",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "sales.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "marketing.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "bizdev.cgo",
+      "function": "bizdev",
+      "family": "bizdev.leadership",
+      "titleEn": "Chief Growth Officer",
+      "titleRu": "Директор по развитию (CGO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Growth Officer",
+          "CGO",
+          "Chief Business Development Officer",
+          "Chief Partnerships Officer",
+          "Chief Expansion Officer",
+          "Chief Strategy and Growth Officer"
+        ],
+        "ru": [
+          "Директор по развитию",
+          "Директор по росту",
+          "Директор по развитию бизнеса",
+          "Директор по стратегическим партнёрствам",
+          "Директор по экспансии",
+          "CGO"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "bizdev.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "sales.cro",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "marketing.cmo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
+        }
+      ]
     }
   ]
 }
