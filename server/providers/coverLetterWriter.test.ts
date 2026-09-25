@@ -1,3 +1,4 @@
+import { COVER_LETTER_MAX_CHARS } from '../domain/coverLetterWriting';
 import { describe, expect, it, vi } from 'vitest';
 import type { ChatCompletionClient } from './roleNamer';
 import {
@@ -116,6 +117,21 @@ describe('LlmCoverLetterWriter', () => {
     expect(outcome.failure).toMatchObject({ kind: 'unusable_response' });
   });
 
+  it('письмо длиннее предела обрезает по предложению, а не выбрасывает (прод 25.09)', async () => {
+    const sentence = 'I led a 250-person technology organization and grew revenue four times. ';
+    const long = sentence.repeat(30).trim();
+    const writer = new LlmCoverLetterWriter({
+      apiKey: 'k',
+      model: 'm',
+      client: client(JSON.stringify({ body: long })),
+    });
+
+    const outcome = await writer.writeCoverLetter(input);
+
+    expect(outcome.body?.length).toBeLessThanOrEqual(COVER_LETTER_MAX_CHARS);
+    expect(outcome.body).toMatch(/times\.$/u);
+  });
+
   it('падает в шаблон, когда ответ не JSON', async () => {
     const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: client('не json') });
     const outcome = await writer.writeCoverLetter(input);
@@ -189,10 +205,8 @@ describe('LlmCoverLetterWriter', () => {
 
     await writer.writeCoverLetter(input);
 
-    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as Record<
-      string,
-      unknown
-    >;
+    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as Record<string, unknown>;
     expect(call.max_completion_tokens).toBeGreaterThanOrEqual(1_500);
     expect(call).not.toHaveProperty('max_tokens');
   });
@@ -209,10 +223,8 @@ describe('LlmCoverLetterWriter', () => {
 
     await writer.writeCoverLetter(input);
 
-    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as Record<
-      string,
-      unknown
-    >;
+    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as Record<string, unknown>;
     expect(call.max_tokens).toBeGreaterThanOrEqual(4_096);
     expect(call).not.toHaveProperty('max_completion_tokens');
   });
@@ -276,7 +288,11 @@ describe('LlmCoverLetterWriter', () => {
 
 describe('QueuedCoverLetterWriter', () => {
   it('спрашивает следующую ступень, когда первая молчит', async () => {
-    const first = new LlmCoverLetterWriter({ apiKey: 'k', model: 'first', client: client('не json') });
+    const first = new LlmCoverLetterWriter({
+      apiKey: 'k',
+      model: 'first',
+      client: client('не json'),
+    });
     const second = new LlmCoverLetterWriter({
       apiKey: 'k',
       model: 'second',

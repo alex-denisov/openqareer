@@ -187,6 +187,7 @@ const app = await buildApp({
     fallbacks: config.personalFallbacks,
     providerCredentials: config.providerCredentials,
     cloudflareGateway: config.cloudflareGateway,
+    vertex: config.vertex,
   }),
   serveStatic: process.env.NODE_ENV === 'production',
 });

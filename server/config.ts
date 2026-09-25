@@ -1,3 +1,4 @@
+import { readVertexConfig, type VertexConfig } from './providers/vertexAi';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
@@ -27,11 +28,17 @@ const configSchema = z.object({
   // Empty placeholders in the env file mean «not configured yet» (B266).
   OPENQAREER_TELEGRAM_BOT_TOKEN: z.preprocess(
     (value) => (value === '' ? undefined : value),
-    z.string().regex(/^\d{5,}:[A-Za-z0-9_-]{30,}$/u).optional(),
+    z
+      .string()
+      .regex(/^\d{5,}:[A-Za-z0-9_-]{30,}$/u)
+      .optional(),
   ),
   OPENQAREER_TELEGRAM_OWNER_CHAT_ID: z.preprocess(
     (value) => (value === '' ? undefined : value),
-    z.string().regex(/^-?\d{3,20}$/u).optional(),
+    z
+      .string()
+      .regex(/^-?\d{3,20}$/u)
+      .optional(),
   ),
   OPENQAREER_PREVIEW_API_TOKEN: z.string().min(32),
   OPENQAREER_DATA_ENCRYPTION_KEY: z.string().transform((value, context) => {
@@ -154,6 +161,7 @@ export interface ServerConfig {
   providerCatalogStatus?: ProviderCatalogStatus[];
   /** Тоннель Cloudflare для Gemini (B183). */
   cloudflareGateway?: CloudflareGatewayConfig;
+  vertex?: VertexConfig;
   accountEmail?: {
     apiKey: string;
     from: string;
@@ -302,6 +310,7 @@ export function readServerConfig(
     seedAccounts,
     providerCatalogStatus: getProviderCatalogStatus(environment),
     cloudflareGateway: readCloudflareGatewayConfig(environment),
+    vertex: readVertexConfig(environment),
     accountEmail,
     desktopTunnel,
   };
@@ -316,9 +325,7 @@ export function readServerConfig(
  * Одного провайдера можно назвать дважды с разными моделями: очередь состоит
  * из моделей (B183).
  */
-export function parseProviderQueue(
-  value: string | undefined,
-): readonly ProviderQueueEntry[] {
+export function parseProviderQueue(value: string | undefined): readonly ProviderQueueEntry[] {
   if (!value) return [];
   return value
     .split(',')

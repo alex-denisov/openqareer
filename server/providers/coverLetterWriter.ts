@@ -1,6 +1,8 @@
+import { z } from 'zod';
 import OpenAI from 'openai';
 import {
   COVER_LETTER_JSON_SCHEMA,
+  COVER_LETTER_MAX_CHARS,
   coverLetterBodySchema,
   coverLetterInstructions,
 } from '../domain/coverLetterWriting';
@@ -18,6 +20,7 @@ import {
   type CloudflareGatewayConfig,
 } from './cloudflareAiGateway';
 import { GeminiCoverLetterWriter } from './geminiCoverLetterWriter';
+import { VertexTokenProvider, vertexPublisherBaseUrl, type VertexConfig } from './vertexAi';
 import { selectProviderQueue, type ProviderQueueEntry, type ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
@@ -157,14 +160,27 @@ function endsMidSentence(body: string): boolean {
   return !/[.!?…](?:["'»”)\]]+)?$/u.test(body.trim());
 }
 
+/** Та же схема без верхнего предела: длинное письмо обрезается, а не выбрасывается. */
+const looseBodySchema = coverLetterBodySchema.extend({ body: z.string().trim().min(1) });
+
+/**
+ * Прод 25.09: gemini-3.8-flash писал 1 750–1 900 знаков при пределе 1 800, и
+ * отказ всего письма отдавал очередь медленным ступеням. Лишнее срезается по
+ * последнему законченному предложению в пределах лимита.
+ */
+function clipToLimit(body: string): string {
+  if (body.length <= COVER_LETTER_MAX_CHARS) return body;
+  return trimIncompleteFinalSentence(body.slice(0, COVER_LETTER_MAX_CHARS));
+}
+
 function parseBody(content: string | null): string | null {
   if (!content) return null;
   const payload = jsonPayload(content);
   if (!payload) return null;
   try {
-    const parsed = coverLetterBodySchema.safeParse(JSON.parse(payload));
+    const parsed = looseBodySchema.safeParse(JSON.parse(payload));
     if (!parsed.success) return null;
-    const body = parsed.data.body.trim();
+    const body = clipToLimit(parsed.data.body.trim());
     if (hasPlaceholder(body) || mentionsImportOrMatching(body)) return null;
     return body;
   } catch {
@@ -312,11 +328,20 @@ function writerForRoute(route: ProviderRoute): LlmCoverLetterWriter {
   });
 }
 
+/**
+ * Отказ каждой ступени — в журнал сервера: раньше виден был только общий срок,
+ * и отбракованный ответ Vertex выглядел как медленная очередь (прод 25.09).
+ */
+function logStageFailure(failure: CoverLetterFailure): void {
+  console.warn(JSON.stringify({ event: 'cover-letter-stage-refused', ...failure }));
+}
+
 /** Очередь ступеней письма: молчание одной — повод спросить следующую. */
 export class QueuedCoverLetterWriter implements CoverLetterWriter {
   constructor(
     private readonly stages: readonly CoverLetterWriter[],
     readonly descriptors: readonly string[] = [],
+    private readonly onStageFailure: (failure: CoverLetterFailure) => void = logStageFailure,
   ) {}
 
   async writeCoverLetter(input: CoverLetterWriteInput): Promise<CoverLetterOutcome> {
@@ -324,6 +349,7 @@ export class QueuedCoverLetterWriter implements CoverLetterWriter {
     for (const stage of this.stages) {
       const outcome = await stage.writeCoverLetter(input);
       if (outcome.body) return outcome;
+      if (outcome.failure) this.onStageFailure(outcome.failure);
       lastFailure = outcome.failure ?? lastFailure;
     }
     return lastFailure ? { failure: lastFailure } : {};
@@ -337,6 +363,8 @@ export interface CoverLetterWriterConfig {
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
   /** Без тоннеля Gemini с прод-хоста не доходит (B183) — ступень пропускается. */
   readonly cloudflareGateway?: CloudflareGatewayConfig;
+  /** Gemini на Vertex — голова очереди, когда настроен (решение владельца 25.09). */
+  readonly vertex?: VertexConfig;
 }
 
 export function buildCoverLetterWriter(
@@ -359,20 +387,40 @@ export function buildCoverLetterWriter(
     ...routes.filter((route) => route.provider === 'gemini'),
     ...routes.filter((route) => route.provider !== 'gemini'),
   ];
-  if (stages.length === 0) return undefined;
+  const vertexStage = config.vertex ? [vertexCoverLetterWriter(config.vertex)] : [];
+  if (stages.length === 0 && vertexStage.length === 0) return undefined;
 
   return new QueuedCoverLetterWriter(
-    stages.map((route) =>
-      route.provider === 'gemini' && gateway
-        ? new GeminiCoverLetterWriter({
-            apiKey: route.apiKey,
-            model: route.model,
-            stage: `${route.provider}:${route.model}`,
-            baseUrl: geminiGatewayBaseUrl(gateway),
-            extraHeaders: cloudflareGatewayHeaders(gateway),
-          })
-        : writerForRoute(route),
-    ),
-    stages.map((route) => `${route.provider}:${route.model}`),
+    [
+      ...vertexStage,
+      ...stages.map((route) =>
+        route.provider === 'gemini' && gateway
+          ? new GeminiCoverLetterWriter({
+              apiKey: route.apiKey,
+              model: route.model,
+              stage: `${route.provider}:${route.model}`,
+              baseUrl: geminiGatewayBaseUrl(gateway),
+              extraHeaders: cloudflareGatewayHeaders(gateway),
+            })
+          : writerForRoute(route),
+      ),
+    ],
+    [
+      ...(config.vertex ? [`vertex:${config.vertex.model}`] : []),
+      ...stages.map((route) => `${route.provider}:${route.model}`),
+    ],
   );
+}
+
+function vertexCoverLetterWriter(vertex: VertexConfig): CoverLetterWriter {
+  const tokens = new VertexTokenProvider(vertex);
+  return new GeminiCoverLetterWriter({
+    apiKey: '',
+    model: vertex.model,
+    stage: `vertex:${vertex.model}`,
+    baseUrl: vertexPublisherBaseUrl(vertex),
+    authHeaders: async () => ({ Authorization: `Bearer ${await tokens.token()}` }),
+    thinkingLevel: 'low',
+    retriesOn429: 1,
+  });
 }
