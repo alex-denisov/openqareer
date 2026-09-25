@@ -40,4 +40,46 @@ describe('rankPitchFacts', () => {
     ]);
     expect(facts[0].id).toBe('imp-c-cert-1');
   });
+
+  it('оставляет одну копию факта, повторённого разными импортами', () => {
+    // Прод 25.09: три импорта LinkedIn дали три копии «Co-Founder & COO» с разным форматом дат.
+    const facts = [
+      {
+        id: 'imp33a5fdc156-exp-4',
+        statement: 'Co-Founder & COO — Fishance (Jul 2016 — Oct 2019).',
+        domain: 'role-evidence',
+        updatedAt: '2026-09-20T00:00:00.000Z',
+      },
+      {
+        id: 'impb545a1a59d-exp-4',
+        statement: 'Co-Founder & COO — Fishance · 3 yrs 4 mos',
+        domain: 'role-evidence',
+        updatedAt: '2026-09-25T00:00:00.000Z',
+      },
+      {
+        id: 'impeebbeb2c85-exp-4',
+        statement: 'Co-Founder & COO (2016-07 — 2019-10)',
+        domain: 'role-evidence',
+        updatedAt: '2026-09-22T00:00:00.000Z',
+      },
+      {
+        id: 'impeebbeb2c85-exp-5',
+        statement: 'Co-Founder & COO — second venture',
+        domain: 'role-evidence',
+      },
+      {
+        id: 'impeebbeb2c85-exp-1',
+        statement: 'VP of Technology — Enterprise Energy',
+        domain: 'role-evidence',
+      },
+    ];
+
+    const ranked = rankPitchFacts(facts, { title: 'Chief Operating Officer' });
+
+    expect(ranked.map((fact) => fact.id).sort()).toEqual([
+      'impb545a1a59d-exp-4',
+      'impeebbeb2c85-exp-1',
+      'impeebbeb2c85-exp-5',
+    ]);
+  });
 });

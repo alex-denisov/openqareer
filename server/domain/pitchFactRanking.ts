@@ -68,6 +68,33 @@ function freshness(fact: RankablePitchFact): number {
   return Number.isNaN(value) ? 0 : value;
 }
 
+/** Повторный импорт профиля даёт копию факта с новым префиксом `imp<хеш>-` и тем же
+ * хвостом (`exp-4`); формат дат в тексте при этом может отличаться (прод 25.09). */
+const IMPORT_PREFIX = /^imp[0-9a-f]+-/iu;
+const DUPLICATE_HEAD_LENGTH = 12;
+
+function duplicateKey(fact: RankablePitchFact): string | null {
+  const key = factKey(fact);
+  if (!IMPORT_PREFIX.test(key)) return null;
+  const head = fact.statement.toLocaleLowerCase().replace(/[^\p{L}]+/gu, '');
+  return `${key.replace(IMPORT_PREFIX, '')}|${head.slice(0, DUPLICATE_HEAD_LENGTH)}`;
+}
+
+/** Из копий одного факта остаётся самая свежая; порядок входа не меняется. */
+function withoutImportDuplicates<T extends RankablePitchFact>(facts: readonly T[]): T[] {
+  const freshest = new Map<string, T>();
+  for (const fact of facts) {
+    const key = duplicateKey(fact);
+    if (key === null) continue;
+    const kept = freshest.get(key);
+    if (!kept || freshness(fact) > freshness(kept)) freshest.set(key, fact);
+  }
+  return facts.filter((fact) => {
+    const key = duplicateKey(fact);
+    return key === null || freshest.get(key) === fact;
+  });
+}
+
 const GROUP_PRIORITY: Record<FactGroup, number> = {
   'matched-experience': 0,
   experience: 1,
@@ -87,7 +114,7 @@ export function rankPitchFacts<T extends RankablePitchFact>(
   vacancy: PitchRankingVacancy,
 ): T[] {
   const vacancyWords = tokens(`${vacancy.title} ${vacancy.description ?? ''}`);
-  return facts
+  return withoutImportDuplicates(facts)
     .map((fact, index) => {
       const overlap = overlapCount(fact.statement, vacancyWords);
       return { fact, index, overlap, group: groupFor(fact, overlap) };
