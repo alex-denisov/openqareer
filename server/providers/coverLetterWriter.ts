@@ -147,6 +147,12 @@ function mentionsImportOrMatching(body: string): boolean {
   );
 }
 
+/** Прод 25.09: бесплатный провайдер закрывал JSON посреди фразы с `finish_reason: stop`,
+ * поэтому обрыв узнаётся и по самому тексту, а не только по причине остановки. */
+function endsMidSentence(body: string): boolean {
+  return !/[.!?…](?:["'»”)\]]+)?$/u.test(body.trim());
+}
+
 function parseBody(content: string | null): string | null {
   if (!content) return null;
   const payload = jsonPayload(content);
@@ -254,7 +260,7 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
         | undefined;
       const parsedBody = parseBody(choice?.message?.content ?? null);
       const body =
-        parsedBody && choice?.finish_reason === 'length'
+        parsedBody && (choice?.finish_reason === 'length' || endsMidSentence(parsedBody))
           ? trimIncompleteFinalSentence(parsedBody)
           : parsedBody;
       return body

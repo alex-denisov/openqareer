@@ -89,6 +89,33 @@ describe('LlmCoverLetterWriter', () => {
     expect(outcome.failure).toMatchObject({ kind: 'unusable_response' });
   });
 
+  it('считает оборванным текст без точки в конце, даже если провайдер ответил stop', async () => {
+    // Прод 25.09: бесплатный nemotron закрыл JSON посреди фразы с finish_reason stop.
+    const cut = client(
+      JSON.stringify({
+        body: 'I am writing about the CTO role. My career spans operations and technology. It aligns with the focus of the',
+      }),
+    );
+    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: cut });
+
+    await expect(writer.writeCoverLetter(input)).resolves.toMatchObject({
+      body: 'I am writing about the CTO role. My career spans operations and technology.',
+    });
+  });
+
+  it('отдаёт очереди следующего провайдера одно оборванное предложение', async () => {
+    const cut = client(
+      JSON.stringify({
+        body: 'I am writing to express my interest in the role. My career aligns closely with the focus of the',
+      }).replace('role. ', 'role, '),
+    );
+    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: cut });
+
+    const outcome = await writer.writeCoverLetter(input);
+    expect(outcome.body).toBeUndefined();
+    expect(outcome.failure).toMatchObject({ kind: 'unusable_response' });
+  });
+
   it('падает в шаблон, когда ответ не JSON', async () => {
     const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: client('не json') });
     const outcome = await writer.writeCoverLetter(input);
