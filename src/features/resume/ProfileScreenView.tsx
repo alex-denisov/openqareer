@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import { updateAccountProfile, type CandidateMemory, type ImportedSourceSummary } from '../coach/coachApi';
 import { applyRoutePremises } from '../cabinet/routePremises';
+import { CandidateReputationAuditView } from '../reputation/CandidateReputationAuditView';
 import { normalizeCandidateRegions } from '../workspace/candidateRegions';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { ProfileAboutSection } from './ProfileAboutSection';
@@ -207,6 +208,8 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
       />
       {tab === 'documents' ? (
         <ProfileDocumentMenu draft={draft} memory={memory} />
+      ) : tab === 'audit' ? (
+        <CandidateReputationAuditView candidateId={candidateId} />
       ) : (
         <>
           <ProfileAnchorNav />

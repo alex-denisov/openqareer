@@ -1,4 +1,4 @@
-export type ProfileTab = 'profile' | 'documents';
+export type ProfileTab = 'profile' | 'documents' | 'audit';
 
 /**
  * "Профиль / Документ и форматы" — lives in the page header, to the right of
@@ -30,6 +30,14 @@ export function ProfileTabs({
         onClick={() => onTab('documents')}
       >
         Документ и форматы
+      </button>
+      <button
+        type="button"
+        className={tab === 'audit' ? 'is-active' : ''}
+        aria-pressed={tab === 'audit'}
+        onClick={() => onTab('audit')}
+      >
+        Проверка по источникам
       </button>
     </div>
   );

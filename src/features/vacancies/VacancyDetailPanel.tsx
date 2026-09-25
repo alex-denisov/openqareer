@@ -8,6 +8,8 @@ import { openTargetLabel } from './vacancyOpenTarget';
 import type { VacancyApplications } from './useVacancyApplications';
 import { VacancyPitchModal } from './VacancyPitchModal';
 import { VacancyInfoModal } from './VacancyInfoModal';
+import { RecruiterContactsBlock } from './RecruiterContactsBlock';
+import { recruiterEnrichPayload } from './recruiterEnrichPayload';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 
 /**
@@ -59,6 +61,8 @@ export function VacancyDetailPanel({ item, now, applications, onBack }: VacancyD
         <p className="vacancies-comp-note">{formatCompensationCompact(cluster.salary)}</p>
       </div>
 
+      <VacancyRecruiterBlock cluster={cluster} />
+
       <VacancyDetailActions
         cluster={cluster}
         alreadyApplied={alreadyApplied}
@@ -108,6 +112,28 @@ function VacancyDetailMetaRow({
         {age.days === 0 ? 'Сегодня в базе' : `${age.label} в базе`}
       </span>
       {source ? <span className="vacancies-chip">Опубликована на {source}</span> : null}
+    </div>
+  );
+}
+
+/**
+ * Compact «Кто нанимает» — the search itself and its result (contact list,
+ * or an honest "not found"/error notice from `RecruiterContactsBlock`, never
+ * a spinner that never resolves) sit under the matches, above the action
+ * row (owner acceptance 2026-09-25).
+ */
+function VacancyRecruiterBlock({
+  cluster,
+}: {
+  readonly cluster: MatchedVacancyItem['cluster'];
+}) {
+  return (
+    <div className="vacancies-req-block vacancies-recruiter-block">
+      <h4>Кто нанимает</h4>
+      <RecruiterContactsBlock
+        vacancyId={cluster.id}
+        vacancyPayload={recruiterEnrichPayload(cluster)}
+      />
     </div>
   );
 }

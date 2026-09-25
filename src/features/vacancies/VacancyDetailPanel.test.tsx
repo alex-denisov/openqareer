@@ -2,10 +2,11 @@
 import { act } from 'react-dom/test-utils';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { VacancyDetailPanel } from './VacancyDetailPanel';
 import * as openExternalLinkModule from '../../services/desktop/openExternalLink';
+import * as apiClient from '../coach/apiClient';
 
 function item(
   overrides: Partial<MatchedVacancyItem['explanation']> = {},
@@ -163,5 +164,42 @@ describe('VacancyDetailPanel (B250)', () => {
   it('keeps the cover-letter generator reachable from the detail actions', () => {
     const html = render();
     expect(html).toContain('Сопроводительное письмо');
+  });
+
+  // Owner acceptance 2026-09-25: «Кто нанимает» sits under the matches,
+  // above the action row, so the candidate never has to open «Подробнее»
+  // just to look for a recruiter's contact.
+  it('offers a compact «Кто нанимает» search under the matches, above the actions', () => {
+    const html = render();
+    expect(html).toContain('Кто нанимает');
+    expect(html).toContain('Рекрутер');
+  });
+});
+
+describe('VacancyDetailPanel recruiter contacts honesty (B266)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('tells the candidate the search failed instead of spinning forever', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockRejectedValue(new Error('network down'));
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <VacancyDetailPanel item={item()} now="2026-09-24T09:00:00.000Z" onBack={vi.fn()} />,
+      );
+    });
+    const trigger = Array.from(container.querySelectorAll('button')).find(
+      (el) => el.textContent === 'Рекрутер',
+    );
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(container.textContent).toContain('network down');
+    expect(container.querySelector('.career-recruiter-loading')).toBeNull();
+    act(() => root.unmount());
+    container.remove();
   });
 });
