@@ -23,7 +23,9 @@ import type { LinkedInStructuredCapture, StructuredFallbackReason } from './link
 import {
   applyConnectionDisconnectResult,
   connectionDisconnectNotice,
+  disconnectAndForgetSession,
 } from './connectionState';
+import { resetConnectorSession } from './connectorSession';
 
 interface AccountConnectionsProps {
   connections: CandidateConnection[];
@@ -137,11 +139,15 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
     setBusyPlatform(platform);
     setNotice(undefined);
     try {
-      const result = await disconnectConnection(platform);
+      const { result, device } = await disconnectAndForgetSession(platform, {
+        disconnect: disconnectConnection,
+        forgetDeviceSession: resetConnectorSession,
+        isDesktop: isTauriEnvironment(),
+      });
       setConnections((current) =>
         current ? applyConnectionDisconnectResult(current, result) : current,
       );
-      setNotice(connectionDisconnectNotice(result));
+      setNotice(connectionDisconnectNotice(result, device));
     } catch (error) {
       setNotice(connectionManagementError(error));
     } finally {
@@ -440,7 +446,7 @@ function disconnectBoundaryCopy(
   connection: Extract<CandidateConnection, { status: 'connected' }>,
 ): string {
   return connection.accessMode === 'native_session_snapshot'
-    ? 'Отключится только связь с площадкой. Уже добавленные факты останутся в профиле.'
+    ? 'Связь с площадкой отключится, вход в неё в приложении будет забыт. Уже добавленные факты останутся в профиле.'
     : 'Сохранённый доступ и копия профиля будут удалены. Если площадка показывает OpenQareer в своих настройках, отзовите доступ и там.';
 }
 

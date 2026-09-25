@@ -3,6 +3,7 @@ import { type CandidateConnection } from '../coach/coachApi';
 import {
   applyConnectionDisconnectResult,
   connectionDisconnectNotice,
+  disconnectAndForgetSession,
 } from './connectionState';
 
 describe('connection disconnect result', () => {
@@ -138,5 +139,57 @@ describe('connection disconnect result', () => {
         status: 'disconnected',
       },
     ]);
+  });
+});
+
+describe('disconnecting forgets the sign-in on this device (B266)', () => {
+  const removed = { platform: 'linkedin', connectionRemoved: true } as never;
+
+  it('forgets the platform session in the desktop app after the server disconnect', async () => {
+    const calls: string[] = [];
+    const outcome = await disconnectAndForgetSession('linkedin', {
+      disconnect: async () => {
+        calls.push('server');
+        return removed;
+      },
+      forgetDeviceSession: async () => {
+        calls.push('device');
+        return true;
+      },
+      isDesktop: true,
+    });
+    expect(calls).toEqual(['server', 'device']);
+    expect(outcome.device).toBe('forgotten');
+    expect(connectionDisconnectNotice(outcome.result, outcome.device)).toContain(
+      'Вход в LinkedIn на этом устройстве забыт',
+    );
+  });
+
+  it('says so plainly when the device session could not be cleared', async () => {
+    const outcome = await disconnectAndForgetSession('linkedin', {
+      disconnect: async () => removed,
+      forgetDeviceSession: async () => {
+        throw new Error('bridge down');
+      },
+      isDesktop: true,
+    });
+    expect(outcome.device).toBe('failed');
+    const notice = connectionDisconnectNotice(outcome.result, outcome.device);
+    expect(notice).toContain('забыть не удалось');
+    expect(notice).not.toContain('не хранит');
+  });
+
+  it('does not touch a device session in the browser, where none is kept', async () => {
+    let touched = false;
+    const outcome = await disconnectAndForgetSession('linkedin', {
+      disconnect: async () => removed,
+      forgetDeviceSession: async () => {
+        touched = true;
+        return true;
+      },
+      isDesktop: false,
+    });
+    expect(touched).toBe(false);
+    expect(outcome.device).toBe('none');
   });
 });

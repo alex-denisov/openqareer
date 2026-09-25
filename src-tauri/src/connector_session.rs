@@ -651,8 +651,32 @@ pub async fn reset_session_window(app: &AppHandle, platform: &str) -> bool {
     if webview.clear_all_browsing_data().is_err() {
         return false;
     }
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    close_session_window(app, platform)
+    let cookies_gone = await_empty_cookie_store(&webview).await;
+    close_session_window(app, platform) && cookies_gone
+}
+
+const COOKIE_CLEAR_CHECKS: u32 = 10;
+const COOKIE_CLEAR_CHECK_INTERVAL: Duration = Duration::from_millis(300);
+
+/// `clear_all_browsing_data` only starts an asynchronous removal and never
+/// reports its end, so a disconnect used to close the window 500 ms later
+/// with the platform cookies still in place (B266: the next «Подключить»
+/// signed in silently). This waits until the store is really empty, deleting
+/// any cookie that survived, and reports failure instead of assuming success.
+async fn await_empty_cookie_store<R: tauri::Runtime>(webview: &tauri::Webview<R>) -> bool {
+    for _ in 0..COOKIE_CLEAR_CHECKS {
+        tokio::time::sleep(COOKIE_CLEAR_CHECK_INTERVAL).await;
+        let Ok(remaining) = webview.cookies() else {
+            return false;
+        };
+        if remaining.is_empty() {
+            return true;
+        }
+        for cookie in remaining {
+            let _ = webview.delete_cookie(cookie);
+        }
+    }
+    false
 }
 
 /// Builds an invisible session window, kept to the same origin allow-list as
@@ -1130,7 +1154,7 @@ mod tests {
         }
         quiet = next_quiet_readings(quiet, &scroll_state(5_000.0, true), 5_000.0);
         assert_eq!(quiet, LAZY_SCROLL_QUIET_READINGS);
-        assert!(LAZY_SCROLL_QUIET_READINGS >= 4);
+        const { assert!(LAZY_SCROLL_QUIET_READINGS >= 4) };
     }
 
     #[test]
