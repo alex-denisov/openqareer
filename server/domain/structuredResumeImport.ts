@@ -201,8 +201,14 @@ const STRUCTURED_LIST_SECTIONS = [
  */
 export function keepFilledSections(incoming: ResumeDraft, existing: ResumeDraft | undefined): ResumeDraft {
   if (!existing) return incoming;
+  // The target role is the candidate's choice and drives the campaign; an
+  // import never clears it (B266: a re-import emptied it and the shortlist
+  // fell back to the whole pool).
+  const withRole: ResumeDraft = existing.targetRole
+    ? { ...incoming, targetRole: existing.targetRole }
+    : incoming;
   const kept = STRUCTURED_LIST_SECTIONS.filter(
     (section) => (incoming[section]?.length ?? 0) === 0 && (existing[section]?.length ?? 0) > 0,
   );
-  return kept.reduce<ResumeDraft>((draft, section) => ({ ...draft, [section]: existing[section] }), incoming);
+  return kept.reduce<ResumeDraft>((draft, section) => ({ ...draft, [section]: existing[section] }), withRole);
 }

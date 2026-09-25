@@ -265,6 +265,7 @@ describe('collectMediaRequests / attachResumeMedia', () => {
 describe('keepFilledSections (B266)', () => {
   const existing = {
     candidate: {},
+    targetRole: 'VP of Technology & Operations',
     experience: [{ id: 'e1', title: 'VP', employer: 'Kaspersky' }],
     education: [{ id: 'd1', institution: 'UTM' }],
     skills: [{ id: 's1', name: 'P&L' }],
@@ -286,5 +287,10 @@ describe('keepFilledSections (B266)', () => {
     const merged = keepFilledSections(incoming, existing);
     expect(merged.experience).toEqual([{ id: 'e2', title: 'CTO', employer: 'OptiLab' }]);
     expect(merged.courses).toEqual([]);
+  });
+
+  it('never clears the candidate target role that drives the campaign', () => {
+    const incoming = { candidate: {}, experience: [], education: [], languages: [] } as never;
+    expect(keepFilledSections(incoming, existing).targetRole).toBe('VP of Technology & Operations');
   });
 });
