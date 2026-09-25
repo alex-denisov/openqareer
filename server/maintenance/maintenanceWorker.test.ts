@@ -411,3 +411,43 @@ describe('MaintenanceWorker title parse step (B267 S2)', () => {
     expect(calls).toBe(4);
   });
 });
+
+describe('MaintenanceWorker title model step (B267 S4)', () => {
+  const engineStub = {} as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
+
+  it('writes the bounded model report and daily-cap event', async () => {
+    const entries: Array<{ context: Record<string, unknown>; msg: string }> = [];
+    const log: MaintenanceLog = {
+      info: (context, msg) => entries.push({ context, msg }),
+      warn: (context, msg) => entries.push({ context, msg }),
+      error: (context, msg) => entries.push({ context, msg }),
+    };
+    const worker = new MaintenanceWorker({
+      engine: engineStub,
+      log,
+      titleModel: {
+        run: async () => ({
+          batches: 1, parsed: 12, refused: 1, frozen: 0,
+          callsToday: 2000, dailyCapReached: true, ms: 15,
+        }),
+      },
+    });
+
+    await worker.runTitleModelStep();
+
+    expect(entries.map((entry) => entry.msg)).toEqual([
+      'title-model-daily-cap-reached',
+      'title-model-step',
+    ]);
+    expect(entries[1]?.context).toMatchObject({ batches: 1, parsed: 12, callsToday: 2000 });
+  });
+
+  it('does not run a model step when it was not configured', async () => {
+    const log = silentLog();
+    const worker = new MaintenanceWorker({ engine: engineStub, log });
+
+    await worker.runTitleModelStep();
+
+    expect(log.entries).toEqual([]);
+  });
+});

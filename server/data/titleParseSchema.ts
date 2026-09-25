@@ -32,4 +32,17 @@ CREATE TABLE IF NOT EXISTS vacancy_semantic (
 CREATE INDEX IF NOT EXISTS vacancy_semantic_match
   ON vacancy_semantic(function_code, published_ms DESC, id);
 CREATE INDEX IF NOT EXISTS vacancy_semantic_title ON vacancy_semantic(title_key);
+
+CREATE TABLE IF NOT EXISTS title_parse_model_queue (
+  title_key TEXT PRIMARY KEY,
+  eligible INTEGER NOT NULL CHECK (eligible IN (0, 1)),
+  failures INTEGER NOT NULL DEFAULT 0,
+  frozen INTEGER NOT NULL DEFAULT 0 CHECK (frozen IN (0, 1))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS title_parse_model_daily (
+  utc_day TEXT PRIMARY KEY,
+  calls INTEGER NOT NULL,
+  cap_logged INTEGER NOT NULL DEFAULT 0 CHECK (cap_logged IN (0, 1))
+) STRICT;
 `;

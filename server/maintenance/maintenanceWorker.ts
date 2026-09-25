@@ -49,6 +49,7 @@ export interface MaintenanceIntervals {
   readonly catalogMs: number;
   readonly reportMs: number;
   readonly titleParseMs: number;
+  readonly titleModelMs: number;
 }
 
 /** Шаг смыслового индекса (B267 S2): одна порция разметки пула правилами. */
@@ -61,6 +62,18 @@ export interface TitleParseStep {
     passFinished: boolean;
   };
   countKeys(): number;
+}
+
+export interface TitleModelStep {
+  run(): Promise<{
+    batches: number;
+    parsed: number;
+    refused: number;
+    frozen: number;
+    callsToday: number;
+    dailyCapReached: boolean;
+    ms: number;
+  }>;
 }
 
 /**
@@ -78,6 +91,7 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   catalogMs: 1_000,
   reportMs: 60 * 1_000,
   titleParseMs: 5 * 1_000,
+  titleModelMs: 30 * 1_000,
 };
 
 /** Ключей индекса за шаг разметки: окно O(chunk), одна короткая транзакция. */
@@ -113,6 +127,9 @@ export class MaintenanceWorker {
   private readonly inFlight = new Set<Promise<unknown>>();
   private readonly manualInFlight = new Set<string>();
   private readonly titleParse?: TitleParseStep;
+  private readonly titleModel?: TitleModelStep;
+  private titleModelRunning = false;
+  private lastTitleModelLogAt = 0;
   private titleParsePass = { steps: 0, backfilled: 0, newKeys: 0, startedAt: Date.now() };
   private stopped = false;
 
@@ -122,9 +139,11 @@ export class MaintenanceWorker {
     intervals?: Partial<MaintenanceIntervals>;
     readHeap?: () => HeapReading;
     titleParse?: TitleParseStep;
+    titleModel?: TitleModelStep;
   }) {
     this.engine = options.engine;
     this.titleParse = options.titleParse;
+    this.titleModel = options.titleModel;
     this.log = options.log;
     this.intervals = { ...DEFAULT_MAINTENANCE_INTERVALS, ...options.intervals };
     this.readHeap = options.readHeap ?? readProcessHeap;
@@ -278,6 +297,30 @@ export class MaintenanceWorker {
     }
   }
 
+  /** До трёх батчей Vertex; один запуск не пересекается со следующим тиком. */
+  async runTitleModelStep(): Promise<void> {
+    if (this.stopped || !this.titleModel || this.titleModelRunning) return;
+    this.titleModelRunning = true;
+    try {
+      const report = await this.titleModel.run();
+      if (report.dailyCapReached) {
+        this.log.info({ callsToday: report.callsToday }, 'title-model-daily-cap-reached');
+      }
+      const now = Date.now();
+      if (this.lastTitleModelLogAt === 0 || now - this.lastTitleModelLogAt >= 60_000) {
+        this.log.info({ ...report }, 'title-model-step');
+        this.lastTitleModelLogAt = now;
+      }
+    } catch (error: unknown) {
+      this.log.error(
+        { errorName: errorName(error), errorMessage: errorMessage(error) },
+        'title-model-step-failed',
+      );
+    } finally {
+      this.titleModelRunning = false;
+    }
+  }
+
   /**
    * Уже размеченные окна проходятся в том же тике, пока хватает бюджета:
    * после каждого рестарта курсор начинает с начала пула, и без этого
@@ -323,6 +366,9 @@ export class MaintenanceWorker {
     every(this.intervals.catalogMs, () => this.runCatalogStep());
     every(this.intervals.reportMs, () => this.reportMemory());
     every(this.intervals.titleParseMs, () => this.runTitleParseStep());
+    every(this.intervals.titleModelMs, () =>
+      this.track(this.runTitleModelStep(), 'title-model-step-failed', undefined),
+    );
     void this.runManualSyncWave();
     void this.runSyncWave();
   }

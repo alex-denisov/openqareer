@@ -4,6 +4,7 @@ import { applySqliteBusyTimeout } from './data/sqliteBusyTimeout';
 import { createJsonLineLog } from './maintenance/jsonLineLog';
 import { MaintenanceWorker } from './maintenance/maintenanceWorker';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
+import { TitleModelStep, VertexModelTitleParser } from './vacancies/titleParse/modelTitleParser';
 import { logPoolWrites } from './maintenance/poolWriteLog';
 import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
@@ -33,7 +34,21 @@ const worker = new MaintenanceWorker({
   engine: composed.engine,
   log,
   titleParse: new SemanticBackfill(semanticDatabase),
+  ...(config.vertex
+    ? {
+        titleModel: new TitleModelStep(
+          semanticDatabase,
+          new VertexModelTitleParser(config.vertex),
+          { dailyCalls: readPositiveInteger(process.env.OPENQAREER_TITLE_MODEL_DAILY_CALLS, 2_000) },
+        ),
+      }
+    : {}),
 });
+
+function readPositiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 let shuttingDown = false;
 let restoreInFlight: Promise<unknown> | undefined;

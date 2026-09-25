@@ -33,6 +33,7 @@ interface PoolRow {
 interface ParsedTitle {
   readonly functions: readonly FunctionCode[];
   readonly levelRank: number | null;
+  readonly roleId?: string;
 }
 
 const PRUNE_CHUNK = 5_000;
@@ -159,6 +160,10 @@ export class SemanticBackfill {
       `INSERT OR IGNORE INTO vacancy_semantic (id, function_code, level_rank, title_key, published_ms, is_remote)
        VALUES (?, ?, ?, ?, ?, ?)`,
     );
+    const enqueueModel = this.database.prepare(
+      `INSERT OR IGNORE INTO title_parse_model_queue (title_key, eligible, failures, frozen)
+       VALUES (?, ?, 0, 0)`,
+    );
     const now = Date.now();
     this.database.exec('BEGIN');
     try {
@@ -171,6 +176,7 @@ export class SemanticBackfill {
           TAXONOMY_VERSION,
           now,
         );
+        enqueueModel.run(key.titleKey, isUncertain(key.parsed) ? 1 : 0);
       }
       for (const { row, titleKey, parsed } of resolved) {
         for (const code of parsed.functions) {
@@ -234,6 +240,10 @@ export class SemanticBackfill {
         .run(PRUNE_CHUNK).changes,
     );
   }
+}
+
+function isUncertain(parsed: ParsedTitle): boolean {
+  return parsed.functions.includes('other') || parsed.functions.length === 2 || !parsed.roleId;
 }
 
 function rulesParseOrOther(title: string): ParsedTitle {
