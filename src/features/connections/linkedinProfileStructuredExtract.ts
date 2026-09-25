@@ -13,6 +13,7 @@ import type {
   ParsedWorkplaceType,
 } from '../workspace/resumeParserTypes';
 import { parseEducationSection, parseExperienceSection } from './linkedinExperienceExtract';
+import { htmlToLines } from './linkedinProfileExtract';
 import {
   parseCertificationsSection,
   parseProjectsSection,
@@ -113,15 +114,27 @@ function cefrOf(proficiency: string): CefrLevel | undefined {
  */
 export function parseLanguagesSection(html: string): ParsedResumeLanguage[] {
   const body = parseFragment(html).body;
-  const fromParagraphs = languagePairs(paragraphsOf(body));
-  return fromParagraphs.length > 0 ? fromParagraphs : languagePairs(leafTextLines(body));
+  const readings = [() => paragraphsOf(body), () => htmlToLines(html), () => leafTextLines(body)];
+  for (const read of readings) {
+    const found = languagePairs(read());
+    if (found.length > 0) return found;
+  }
+  return [];
 }
 
 function languagePairs(lines: readonly string[]): ParsedResumeLanguage[] {
   const languages: ParsedResumeLanguage[] = [];
   for (let i = 0; i < lines.length - 1; i += 1) {
     const [name, label] = [lines[i], lines[i + 1]];
-    if (!/proficiency$/iu.test(label) || /proficiency$/iu.test(name) || name.length > 40) continue;
+    const isHeading = /^languages?$/iu.test(name);
+    if (
+      !/proficiency$/iu.test(label) ||
+      /proficiency$/iu.test(name) ||
+      isHeading ||
+      name.length > 40
+    ) {
+      continue;
+    }
     if (!languages.some((language) => language.name === name)) {
       languages.push({ name, cefr: cefrOf(label), sourceLabel: label });
     }

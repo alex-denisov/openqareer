@@ -80,7 +80,8 @@ function decodeEntities(text: string): string {
   });
 }
 
-function htmlToLines(html: string): string[] {
+/** Text lines of the snapshot, split at every tag — the reading the text importer uses. */
+export function htmlToLines(html: string): string[] {
   const main = /<main\b[^>]*>([\s\S]*)<\/main>/iu.exec(html)?.[1] ?? html;
   return decodeEntities(
     main

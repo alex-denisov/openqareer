@@ -339,3 +339,15 @@ describe('languages without paragraph markup (B266)', () => {
     ]);
   });
 });
+
+describe('languages written as text beside inline markup (B266)', () => {
+  it('reads pairs whose text sits next to child elements', () => {
+    const html = `<main><section><h2>Languages</h2>
+      <div>English<span class="visually-hidden"></span><div>Full professional proficiency<!----></div></div>
+      <div>Russian<span></span><div>Native or bilingual proficiency</div></div></section></main>`;
+    expect(parseLanguagesSection(html).map((language) => language.name)).toEqual([
+      'English',
+      'Russian',
+    ]);
+  });
+});
