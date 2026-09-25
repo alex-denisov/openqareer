@@ -3,11 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { VertexConfig } from '../../providers/vertexAi';
 import { MIGRATION_23, VACANCY_POOL_INDEX_TABLE } from '../../data/sqliteSchema';
 import { SemanticBackfill } from './semanticBackfill';
-import {
-  TitleModelStep,
-  VertexModelTitleParser,
-  type ModelTitleParser,
-} from './modelTitleParser';
+import { TitleModelStep, VertexModelTitleParser, type ModelTitleParser } from './modelTitleParser';
 
 const vertex: VertexConfig = {
   projectId: 'project-test',
@@ -66,6 +62,36 @@ describe('VertexModelTitleParser (B267 S4)', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the parse but drops a roleId unknown to the ontology', async () => {
+    const parser = new VertexModelTitleParser(vertex, {
+      fetchImpl: async () =>
+        vertexResponse([
+          { titleKey: 'k', functions: ['eng'], levelRank: 1, roleId: 'made.up.role' },
+        ]),
+      token: async () => 'token',
+    });
+
+    await expect(parser.parse([{ titleKey: 'k', sampleTitle: 'Team Lead' }])).resolves.toEqual([
+      { titleKey: 'k', functions: ['eng'], levelRank: 1 },
+    ]);
+  });
+
+  it('sends no enum inside array items, which Vertex rejects with 400', async () => {
+    let sent = '';
+    const parser = new VertexModelTitleParser(vertex, {
+      fetchImpl: async (_url, init) => {
+        sent = String(init?.body);
+        return vertexResponse([]);
+      },
+      token: async () => 'token',
+    });
+
+    await parser.parse([{ titleKey: 'k', sampleTitle: 'CTO' }]);
+
+    const schema = JSON.parse(sent).generationConfig.responseJsonSchema;
+    expect(schema.items.properties.functions.items).toEqual({ type: 'string' });
+  });
+
   it('rejects only a record with an unknown function code', async () => {
     const parser = new VertexModelTitleParser(vertex, {
       fetchImpl: async () =>
@@ -87,7 +113,9 @@ describe('VertexModelTitleParser (B267 S4)', () => {
   it('treats broken JSON as an unusable batch response', async () => {
     const parser = new VertexModelTitleParser(vertex, {
       fetchImpl: async () =>
-        new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{broken' }] } }] })),
+        new Response(
+          JSON.stringify({ candidates: [{ content: { parts: [{ text: '{broken' }] } }] }),
+        ),
       token: async () => 'token',
     });
 
@@ -96,7 +124,7 @@ describe('VertexModelTitleParser (B267 S4)', () => {
 });
 
 describe('TitleModelStep (B267 S4)', () => {
-  it('queues only uncertain rules parses and removes stale semantic rows after model parse', async () => {
+  it('queues only uncertain rules parses and rewrites semantic rows with the model parse', async () => {
     const db = database();
     addVacancy(db, 'exact', 'Chief Technology Officer');
     addVacancy(db, 'unknown', 'Wibble Specialist');
@@ -112,12 +140,21 @@ describe('TitleModelStep (B267 S4)', () => {
     const report = await step.run();
 
     expect(report).toMatchObject({ batches: 1, parsed: 1, refused: 0, frozen: 0 });
-    expect(db.prepare("SELECT parsed_by FROM title_parse WHERE title_key = 'chief technology officer'").get())
-      .toEqual({ parsed_by: 'rules' });
-    expect(db.prepare("SELECT parsed_by FROM title_parse WHERE title_key = 'wibble specialist'").get())
-      .toEqual({ parsed_by: 'model' });
-    expect(db.prepare("SELECT count(*) AS n FROM vacancy_semantic WHERE title_key = 'wibble specialist'").get())
-      .toEqual({ n: 0 });
+    expect(
+      db
+        .prepare("SELECT parsed_by FROM title_parse WHERE title_key = 'chief technology officer'")
+        .get(),
+    ).toEqual({ parsed_by: 'rules' });
+    expect(
+      db.prepare("SELECT parsed_by FROM title_parse WHERE title_key = 'wibble specialist'").get(),
+    ).toEqual({ parsed_by: 'model' });
+    expect(
+      db
+        .prepare(
+          "SELECT id, function_code, level_rank FROM vacancy_semantic WHERE title_key = 'wibble specialist'",
+        )
+        .all(),
+    ).toEqual([{ id: 'unknown', function_code: 'data', level_rank: 0 }]);
   });
 
   it('freezes a key after three refused responses', async () => {
