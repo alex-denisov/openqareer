@@ -388,6 +388,32 @@ describe('vacancyPitchService', () => {
     expect(pitch.notices.length).toBeGreaterThan(0);
   });
 
+  it('использует evidenceRefs выбранной роли первыми и в шаблоне', () => {
+    const pitch = generateVacancyPitch({
+      vacancy: { id: 'vac-cto', title: 'Chief Technology Officer' },
+      facts: [
+        { ...sampleFacts[0], id: 'other', statement: 'Led Technology transformation' },
+        {
+          ...sampleFacts[0],
+          id: 'evidence',
+          statement: 'VP of Technology & Operations',
+          domain: 'role-evidence',
+        },
+      ],
+      rankingContext: {
+        vacancy: { functions: ['it-ops'], levelRank: 4 },
+        campaignRole: {
+          functions: ['it-ops'],
+          levelRank: 3,
+          evidenceRefs: ['memory:evidence'],
+        },
+      },
+      language: 'en',
+    });
+
+    expect(pitch.usedEvidenceIds[0]).toBe('evidence');
+  });
+
   it('не ставит двойную точку и не выводит пустой раздел соответствия (прод 25.09)', () => {
     const pitch = generateVacancyPitch({
       vacancy: {

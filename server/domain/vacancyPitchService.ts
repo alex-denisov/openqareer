@@ -1,6 +1,10 @@
 import { stripHiddenMarkers } from '../../shared/textHygiene';
 import { isImportedMemoryId } from './resumeImport';
-import { rankPitchFacts } from './pitchFactRanking';
+import {
+  hasRoleAwarePitchRanking,
+  rankPitchFacts,
+  type PitchFactRankingContext,
+} from './pitchFactRanking';
 
 export type PitchTone = 'executive' | 'confident' | 'technical';
 export type PitchLanguage = 'en' | 'ru';
@@ -47,6 +51,8 @@ export interface GenerateVacancyPitchOptions {
   readonly tone?: PitchTone;
   /** Переопределяет язык, иначе он определяется по тексту вакансии. */
   readonly language?: PitchLanguage;
+  /** Контекст разбора роли сохраняет один порядок для шаблона и модели. */
+  readonly rankingContext?: PitchFactRankingContext;
 }
 
 export interface VacancyPitchUsedFact {
@@ -298,6 +304,7 @@ function buildEvidenceParagraph(
   facts: readonly VacancyPitchInputFact[],
   usedIds: Set<string>,
   notices: string[],
+  useRanking: boolean,
 ): string {
   if (facts.length === 0) {
     // The "too few facts" state is not letter content — it goes to `notices`
@@ -305,8 +312,9 @@ function buildEvidenceParagraph(
     notices.push(copy.noticeNoFacts);
     return '';
   }
-  const metricFact =
-    facts.find((f) => f.domain === 'outcome' || /\d+/u.test(f.statement)) ?? facts[0];
+  const metricFact = useRanking
+    ? facts[0]
+    : facts.find((f) => f.domain === 'outcome' || /\d+/u.test(f.statement)) ?? facts[0];
   if (metricFact) usedIds.add(metricFact.id);
   const otherFacts = facts.filter((f) => f.id !== metricFact?.id).slice(0, 2);
   for (const f of otherFacts) usedIds.add(f.id);
@@ -388,9 +396,11 @@ function buildLinkedInNote(
   facts: readonly VacancyPitchInputFact[],
   tone: PitchTone,
   usedIds: Set<string>,
+  useRanking: boolean,
 ): string {
-  const firstFact =
-    facts.find((f) => f.domain === 'outcome' || /\d+/u.test(f.statement)) ?? facts[0];
+  const firstFact = useRanking
+    ? facts[0]
+    : facts.find((f) => f.domain === 'outcome' || /\d+/u.test(f.statement)) ?? facts[0];
   let snippet = '';
   if (firstFact) {
     usedIds.add(firstFact.id);
@@ -438,7 +448,8 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
   const language = options.language ?? detectVacancyLanguage(vacancy);
   const copy = copyFor(language);
   const candidateName = options.candidateName?.trim() || copy.candidateFallback;
-  const usableFacts = rankPitchFacts(filterUsableFacts(options.facts), vacancy);
+  const usableFacts = rankPitchFacts(filterUsableFacts(options.facts), vacancy, options.rankingContext);
+  const useRanking = hasRoleAwarePitchRanking(options.rankingContext);
   const usedEvidenceIds = new Set<string>();
   const notices: string[] = [];
 
@@ -446,12 +457,12 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
   const subject = copy.subject(vacancy.title, candidateName, tone, Boolean(metricFact));
 
   const intro = copy.intro(vacancy.title, vacancy.company, tone);
-  const evidence = buildEvidenceParagraph(copy, usableFacts, usedEvidenceIds, notices);
+  const evidence = buildEvidenceParagraph(copy, usableFacts, usedEvidenceIds, notices, useRanking);
   const stack = buildStackParagraph(copy, vacancy, usableFacts, usedEvidenceIds, notices);
   const closing = copy.closing(tone);
 
   const emailBody = [intro, evidence, stack, closing].filter((p) => p.length > 0).join('\n\n');
-  const linkedInNote = buildLinkedInNote(copy, vacancy, usableFacts, tone, usedEvidenceIds);
+  const linkedInNote = buildLinkedInNote(copy, vacancy, usableFacts, tone, usedEvidenceIds, useRanking);
   const atsCoverLetter = buildAtsCoverLetter(
     copy,
     vacancy,

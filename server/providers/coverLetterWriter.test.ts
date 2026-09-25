@@ -284,6 +284,35 @@ describe('LlmCoverLetterWriter', () => {
       'imp-c-exp-2',
     ]);
   });
+
+  it('передаёт модели evidenceRefs выбранной роли первыми', async () => {
+    const stub = client(JSON.stringify({ body: 'Письмо.' }));
+    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
+    await writer.writeCoverLetter({
+      ...input,
+      vacancy: {
+        title: 'Chief Technology Officer',
+        rankingContext: {
+          vacancy: { functions: ['it-ops'], levelRank: 4 },
+          campaignRole: {
+            functions: ['it-ops'],
+            levelRank: 3,
+            evidenceRefs: ['memory:evidence'],
+          },
+        },
+      },
+      facts: [
+        { ref: 'memory:other', statement: 'Led Technology transformation', domain: 'outcome' },
+        { ref: 'memory:evidence', statement: 'VP of Technology & Operations', domain: 'role-evidence' },
+      ],
+    });
+    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const sent = JSON.parse(call.messages[1].content) as { facts: Array<{ ref: string }> };
+
+    expect(sent.facts[0]?.ref).toBe('memory:evidence');
+  });
 });
 
 describe('QueuedCoverLetterWriter', () => {
