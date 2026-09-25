@@ -337,3 +337,51 @@ describe('MaintenanceWorker (B230)', () => {
     await expect(worker.restore()).rejects.toThrow(/sources/);
   });
 });
+
+describe('MaintenanceWorker title parse step (B267 S2)', () => {
+  const engineStub = {} as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
+
+  function stepStub(
+    reports: Array<{ backfilled: number; newKeys: number; passFinished: boolean }>,
+  ) {
+    let call = 0;
+    return {
+      step: () => ({ scanned: 0, pruned: 0, ...reports[Math.min(call++, reports.length - 1)] }),
+      countKeys: () => 42,
+    };
+  }
+
+  it('пишет итог прохода с числом уникальных названий', () => {
+    const log = silentLog();
+    const worker = new MaintenanceWorker({
+      engine: engineStub,
+      log,
+      titleParse: stepStub([
+        { backfilled: 1000, newKeys: 300, passFinished: false },
+        { backfilled: 10, newKeys: 2, passFinished: true },
+      ]),
+    });
+
+    worker.runTitleParseStep();
+    worker.runTitleParseStep();
+
+    expect(log.entries.map((entry) => entry.msg)).toEqual(['title-parse-pass-finished']);
+  });
+
+  it('ошибка шага попадает в журнал и не роняет воркер', () => {
+    const log = silentLog();
+    const worker = new MaintenanceWorker({
+      engine: engineStub,
+      log,
+      titleParse: {
+        step: () => {
+          throw new Error('SQLITE_BUSY: database is locked');
+        },
+        countKeys: () => 0,
+      },
+    });
+
+    expect(() => worker.runTitleParseStep()).not.toThrow();
+    expect(log.entries).toEqual([{ level: 'error', msg: 'title-parse-step-failed' }]);
+  });
+});

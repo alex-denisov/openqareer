@@ -1,6 +1,9 @@
+import { DatabaseSync } from 'node:sqlite';
 import { readServerConfig } from './config';
+import { applySqliteBusyTimeout } from './data/sqliteBusyTimeout';
 import { createJsonLineLog } from './maintenance/jsonLineLog';
 import { MaintenanceWorker } from './maintenance/maintenanceWorker';
+import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
 import { logPoolWrites } from './maintenance/poolWriteLog';
 import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
@@ -21,7 +24,16 @@ const composed = composeVacancyEngine({
   // контракт B230 проверяется по `journalctl`, а не по 500 на входе (PRB-043).
   onPoolWrite: logPoolWrites(log),
 });
-const worker = new MaintenanceWorker({ engine: composed.engine, log });
+// Своё соединение для разметки смыслового индекса (B267 S2): короткие
+// транзакции порциями, WAL и busy_timeout как у остальных писателей пула.
+const semanticDatabase = new DatabaseSync(config.databasePath);
+semanticDatabase.exec('PRAGMA journal_mode = WAL;');
+applySqliteBusyTimeout(semanticDatabase);
+const worker = new MaintenanceWorker({
+  engine: composed.engine,
+  log,
+  titleParse: new SemanticBackfill(semanticDatabase),
+});
 
 let shuttingDown = false;
 let restoreInFlight: Promise<unknown> | undefined;
@@ -45,6 +57,7 @@ async function shutdown(signal: string): Promise<void> {
     process.exit(1);
     return;
   }
+  semanticDatabase.close();
   composed.close();
   log.info({ signal, waveFinished }, 'maintenance-shutdown-finished');
   process.exit(0);

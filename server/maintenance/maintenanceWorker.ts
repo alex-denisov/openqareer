@@ -48,6 +48,19 @@ export interface MaintenanceIntervals {
   readonly livenessMs: number;
   readonly catalogMs: number;
   readonly reportMs: number;
+  readonly titleParseMs: number;
+}
+
+/** Шаг смыслового индекса (B267 S2): одна порция разметки пула правилами. */
+export interface TitleParseStep {
+  step(chunk: number): {
+    scanned: number;
+    backfilled: number;
+    newKeys: number;
+    pruned: number;
+    passFinished: boolean;
+  };
+  countKeys(): number;
 }
 
 /**
@@ -64,7 +77,12 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   livenessMs: 15 * 60 * 1_000,
   catalogMs: 1_000,
   reportMs: 60 * 1_000,
+  titleParseMs: 5 * 1_000,
 };
+
+/** Ключей индекса за шаг разметки: окно O(chunk), одна короткая транзакция. */
+export const TITLE_PARSE_STEP_CHUNK = 500;
+const TITLE_PARSE_PROGRESS_EVERY = 50;
 
 /** Столько строк проекции каталога за один такт: одна короткая транзакция. */
 export const CATALOG_STEP_CHUNK = 500;
@@ -92,6 +110,8 @@ export class MaintenanceWorker {
   private readonly timers: NodeJS.Timeout[] = [];
   private readonly inFlight = new Set<Promise<unknown>>();
   private readonly manualInFlight = new Set<string>();
+  private readonly titleParse?: TitleParseStep;
+  private titleParsePass = { steps: 0, backfilled: 0, newKeys: 0, startedAt: Date.now() };
   private stopped = false;
 
   constructor(options: {
@@ -99,8 +119,10 @@ export class MaintenanceWorker {
     log: MaintenanceLog;
     intervals?: Partial<MaintenanceIntervals>;
     readHeap?: () => HeapReading;
+    titleParse?: TitleParseStep;
   }) {
     this.engine = options.engine;
+    this.titleParse = options.titleParse;
     this.log = options.log;
     this.intervals = { ...DEFAULT_MAINTENANCE_INTERVALS, ...options.intervals };
     this.readHeap = options.readHeap ?? readProcessHeap;
@@ -211,6 +233,49 @@ export class MaintenanceWorker {
     }
   }
 
+  /**
+   * Один шаг разметки пула правилами (B267 S2). Прогресс — раз в 50 шагов,
+   * итог прохода — с числом уникальных названий: оно закрывает оценку объёма
+   * разбора моделью (план B267 §3).
+   */
+  runTitleParseStep(): void {
+    if (this.stopped || !this.titleParse) return;
+    try {
+      const startedAt = Date.now();
+      const report = this.titleParse.step(TITLE_PARSE_STEP_CHUNK);
+      const pass = {
+        ...this.titleParsePass,
+        steps: this.titleParsePass.steps + 1,
+        backfilled: this.titleParsePass.backfilled + report.backfilled,
+        newKeys: this.titleParsePass.newKeys + report.newKeys,
+      };
+      const stepMs = Date.now() - startedAt;
+      if (report.passFinished) {
+        this.log.info(
+          {
+            ...pass,
+            pruned: report.pruned,
+            keys: this.titleParse.countKeys(),
+            passMs: Date.now() - pass.startedAt,
+            stepMs,
+          },
+          'title-parse-pass-finished',
+        );
+        this.titleParsePass = { steps: 0, backfilled: 0, newKeys: 0, startedAt: Date.now() };
+        return;
+      }
+      if (pass.steps % TITLE_PARSE_PROGRESS_EVERY === 0 && pass.backfilled > 0) {
+        this.log.info({ ...pass, stepMs }, 'title-parse-progress');
+      }
+      this.titleParsePass = pass;
+    } catch (error: unknown) {
+      this.log.error(
+        { errorName: errorName(error), errorMessage: errorMessage(error) },
+        'title-parse-step-failed',
+      );
+    }
+  }
+
   /** Раз в минуту — сколько занято: без этого `MemoryMax` срабатывает молча. */
   reportMemory(): void {
     const heap = this.readHeap();
@@ -238,6 +303,7 @@ export class MaintenanceWorker {
     every(this.intervals.livenessMs, () => this.runLivenessProbe());
     every(this.intervals.catalogMs, () => this.runCatalogStep());
     every(this.intervals.reportMs, () => this.reportMemory());
+    every(this.intervals.titleParseMs, () => this.runTitleParseStep());
     void this.runManualSyncWave();
     void this.runSyncWave();
   }
@@ -336,4 +402,9 @@ export class MaintenanceWorker {
 
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : 'UnknownError';
+}
+
+/** Текст ошибки SQLite без данных пула: код и сообщение движка (B266 п.12). */
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200);
 }
