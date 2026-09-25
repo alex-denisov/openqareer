@@ -1,6 +1,8 @@
+import { z } from 'zod';
 import OpenAI from 'openai';
 import {
   COVER_LETTER_JSON_SCHEMA,
+  COVER_LETTER_MAX_CHARS,
   coverLetterBodySchema,
   coverLetterInstructions,
 } from '../domain/coverLetterWriting';
@@ -158,14 +160,27 @@ function endsMidSentence(body: string): boolean {
   return !/[.!?…](?:["'»”)\]]+)?$/u.test(body.trim());
 }
 
+/** Та же схема без верхнего предела: длинное письмо обрезается, а не выбрасывается. */
+const looseBodySchema = coverLetterBodySchema.extend({ body: z.string().trim().min(1) });
+
+/**
+ * Прод 25.09: gemini-3.8-flash писал 1 750–1 900 знаков при пределе 1 800, и
+ * отказ всего письма отдавал очередь медленным ступеням. Лишнее срезается по
+ * последнему законченному предложению в пределах лимита.
+ */
+function clipToLimit(body: string): string {
+  if (body.length <= COVER_LETTER_MAX_CHARS) return body;
+  return trimIncompleteFinalSentence(body.slice(0, COVER_LETTER_MAX_CHARS));
+}
+
 function parseBody(content: string | null): string | null {
   if (!content) return null;
   const payload = jsonPayload(content);
   if (!payload) return null;
   try {
-    const parsed = coverLetterBodySchema.safeParse(JSON.parse(payload));
+    const parsed = looseBodySchema.safeParse(JSON.parse(payload));
     if (!parsed.success) return null;
-    const body = parsed.data.body.trim();
+    const body = clipToLimit(parsed.data.body.trim());
     if (hasPlaceholder(body) || mentionsImportOrMatching(body)) return null;
     return body;
   } catch {
@@ -313,11 +328,20 @@ function writerForRoute(route: ProviderRoute): LlmCoverLetterWriter {
   });
 }
 
+/**
+ * Отказ каждой ступени — в журнал сервера: раньше виден был только общий срок,
+ * и отбракованный ответ Vertex выглядел как медленная очередь (прод 25.09).
+ */
+function logStageFailure(failure: CoverLetterFailure): void {
+  console.warn(JSON.stringify({ event: 'cover-letter-stage-refused', ...failure }));
+}
+
 /** Очередь ступеней письма: молчание одной — повод спросить следующую. */
 export class QueuedCoverLetterWriter implements CoverLetterWriter {
   constructor(
     private readonly stages: readonly CoverLetterWriter[],
     readonly descriptors: readonly string[] = [],
+    private readonly onStageFailure: (failure: CoverLetterFailure) => void = logStageFailure,
   ) {}
 
   async writeCoverLetter(input: CoverLetterWriteInput): Promise<CoverLetterOutcome> {
@@ -325,6 +349,7 @@ export class QueuedCoverLetterWriter implements CoverLetterWriter {
     for (const stage of this.stages) {
       const outcome = await stage.writeCoverLetter(input);
       if (outcome.body) return outcome;
+      if (outcome.failure) this.onStageFailure(outcome.failure);
       lastFailure = outcome.failure ?? lastFailure;
     }
     return lastFailure ? { failure: lastFailure } : {};
