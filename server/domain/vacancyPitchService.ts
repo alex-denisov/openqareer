@@ -73,6 +73,14 @@ export interface VacancyPitchResponse {
 
 const LINKEDIN_NOTE_LIMIT = 300;
 
+/** При token-limit сохраняем только предложения, которые модель успела закончить. */
+export function trimIncompleteFinalSentence(text: string): string {
+  const endings = Array.from(text.matchAll(/[.!?](?:["'»”\])]+)?(?=\s|$)/gu));
+  if (endings.length < 2) return '';
+  const last = endings.at(-1);
+  return last?.index === undefined ? '' : text.slice(0, last.index + last[0].length).trim();
+}
+
 function isNegativeStatement(statement: string): boolean {
   return /(не\s+(имею|работал|владею|знаю)|нет\s+опыта|без\s+опыта|никогда\s+не)/iu.test(statement);
 }

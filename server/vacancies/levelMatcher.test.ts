@@ -2,6 +2,41 @@ import { describe, expect, it } from 'vitest';
 import { evaluateLevelMatch, inferSeniorityLevel } from './levelMatcher';
 
 describe('inferSeniorityLevel', () => {
+  it.each([
+    ['Software Engineer', undefined],
+    ['Senior Frontend Engineer', 'ic'],
+    ['Ведущий разработчик', 'ic'],
+    ['Lead Backend Developer', 'lead'],
+    ['Team Lead, Platform', 'lead'],
+    ['Тимлид разработки', 'lead'],
+    ['Head of Engineering', 'head'],
+    ['Руководитель отдела разработки', 'head'],
+    ['Director, Site Reliability Engineering', 'head'],
+    ['Director of Product Marketing', 'head'],
+    ['Директор по разработке', 'head'],
+    ['Директор департамента ИТ-инфраструктуры', 'head'],
+    ['Senior Director, Product Management', 'vp'],
+    ['Sr. Director, Technical Program Management', 'vp'],
+    ['Senior Vice President, Product', 'vp'],
+    ['Vice President, Product', 'vp'],
+    ['VP of Engineering', 'vp'],
+    ['SVP, Operations', 'vp'],
+    ['Вице-президент по технологиям', 'vp'],
+    ['Старший директор по разработке', 'vp'],
+    ['Chief Product Officer', 'c-level'],
+    ['Chief of Staff', 'c-level'],
+    ['CTO', 'c-level'],
+    ['CIO', 'c-level'],
+    ['CISO', 'c-level'],
+    ['Генеральный директор', 'c-level'],
+    ['Технический директор', 'c-level'],
+    ['Технический директор (CTO)', 'c-level'],
+    ['Директор по продукту (CPO)', 'c-level'],
+    ['Директор по информационной безопасности (CISO)', 'c-level'],
+  ] as const)('classifies %s as %s', (title, expectedLevel) => {
+    expect(inferSeniorityLevel(title)).toBe(expectedLevel);
+  });
+
   it('reads IC from a plain engineer title', () => {
     expect(inferSeniorityLevel('Senior Frontend Engineer')).toBe('ic');
   });

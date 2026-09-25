@@ -7,11 +7,16 @@ import {
   type CoverLetterOutcome,
 } from './coverLetterWriter';
 
-function client(content: string | null): ChatCompletionClient {
+function client(
+  content: string | null,
+  finishReason: 'stop' | 'length' = 'stop',
+): ChatCompletionClient {
   return {
     chat: {
       completions: {
-        create: vi.fn().mockResolvedValue({ choices: [{ message: { content } }] }),
+        create: vi.fn().mockResolvedValue({
+          choices: [{ message: { content }, finish_reason: finishReason }],
+        }),
       },
     },
   };
@@ -50,6 +55,38 @@ describe('LlmCoverLetterWriter', () => {
       body: 'Здравствуйте! Я подхожу на роль.',
       stage: 'openai:m',
     });
+  });
+
+  it('при обрыве модели убирает незаконченное предложение', async () => {
+    const writer = new LlmCoverLetterWriter({
+      apiKey: 'k',
+      model: 'm',
+      client: client(
+        JSON.stringify({
+          body: 'I led platform modernization. Delivery became predictable. Most recently as VP of Technology & IT Operations,',
+        }),
+        'length',
+      ),
+    });
+
+    await expect(writer.writeCoverLetter(input)).resolves.toMatchObject({
+      body: 'I led platform modernization. Delivery became predictable.',
+    });
+  });
+
+  it('падает в шаблон, если после обрыва осталось меньше двух предложений', async () => {
+    const writer = new LlmCoverLetterWriter({
+      apiKey: 'k',
+      model: 'm',
+      client: client(
+        JSON.stringify({ body: 'I led platform modernization. Most recently as VP,' }),
+        'length',
+      ),
+    });
+
+    const outcome = await writer.writeCoverLetter(input);
+    expect(outcome.body).toBeUndefined();
+    expect(outcome.failure).toMatchObject({ kind: 'unusable_response' });
   });
 
   it('падает в шаблон, когда ответ не JSON', async () => {

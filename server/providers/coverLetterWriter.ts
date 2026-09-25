@@ -4,7 +4,11 @@ import {
   coverLetterBodySchema,
   coverLetterInstructions,
 } from '../domain/coverLetterWriting';
-import type { PitchLanguage, PitchTone } from '../domain/vacancyPitchService';
+import {
+  trimIncompleteFinalSentence,
+  type PitchLanguage,
+  type PitchTone,
+} from '../domain/vacancyPitchService';
 import type { ChatCompletionClient } from './roleNamer';
 import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
 import { selectProviderQueue, type ProviderQueueEntry } from './providerQueue';
@@ -212,7 +216,14 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
             }
           : {}),
       });
-      const body = parseBody(response.choices[0]?.message?.content ?? null);
+      const choice = response.choices[0] as
+        | (typeof response.choices)[number] & { finish_reason?: string | null }
+        | undefined;
+      const parsedBody = parseBody(choice?.message?.content ?? null);
+      const body =
+        parsedBody && choice?.finish_reason === 'length'
+          ? trimIncompleteFinalSentence(parsedBody)
+          : parsedBody;
       return body
         ? { body, stage: this.stage }
         : { failure: { stage: this.stage, kind: 'unusable_response' } };
