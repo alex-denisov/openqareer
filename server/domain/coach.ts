@@ -1,20 +1,8 @@
 import { z } from 'zod';
 
-const COACH_PHASES = [
-  'discovery',
-  'evidence',
-  'role',
-  'market',
-  'resume',
-  'targeting',
-] as const;
+const COACH_PHASES = ['discovery', 'evidence', 'role', 'market', 'resume', 'targeting'] as const;
 
-const MEMORY_KINDS = [
-  'fact',
-  'preference',
-  'hypothesis',
-  'open-question',
-] as const;
+const MEMORY_KINDS = ['fact', 'preference', 'hypothesis', 'open-question'] as const;
 
 const MEMORY_CONFIDENCE = [
   'candidate-confirmed',
@@ -33,11 +21,7 @@ export const DOSSIER_DOMAINS = [
   'other',
 ] as const;
 
-const CAREER_ROLES = [
-  'career_consultant',
-  'career_strategist',
-  'career_expert',
-] as const;
+const CAREER_ROLES = ['career_consultant', 'career_strategist', 'career_expert'] as const;
 
 const CAREER_ACTION_KINDS = [
   'resume.draft',
@@ -66,22 +50,28 @@ export const careerActionProposalSchema = z.object({
 
 const careerTrackSchema = z.object({
   objective: z.string().trim().min(1).max(1_000),
-  alternatives: z.array(
-    z.object({
-      label: z.string().trim().min(1).max(300),
-      reason: z.string().trim().min(1).max(1_000),
-      evidenceRefs: z.array(z.string().min(1).max(80)).max(100),
-      unknowns: z.array(z.string().trim().min(1).max(300)).max(20),
-    }),
-  ).min(1).max(3),
-  milestones: z.array(
-    z.object({
-      label: z.string().trim().min(1).max(500),
-      expectedSignal: z.string().trim().min(1).max(1_000),
-      measureAfter: z.string().date(),
-      successCriterion: z.string().trim().min(1).max(1_000),
-    }),
-  ).min(1).max(12),
+  alternatives: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1).max(300),
+        reason: z.string().trim().min(1).max(1_000),
+        evidenceRefs: z.array(z.string().min(1).max(80)).max(100),
+        unknowns: z.array(z.string().trim().min(1).max(300)).max(20),
+      }),
+    )
+    .min(1)
+    .max(3),
+  milestones: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1).max(500),
+        expectedSignal: z.string().trim().min(1).max(1_000),
+        measureAfter: z.string().date(),
+        successCriterion: z.string().trim().min(1).max(1_000),
+      }),
+    )
+    .min(1)
+    .max(12),
 });
 
 const coachMessageSchema = z.object({
@@ -101,18 +91,24 @@ const marketObservationSchema = z.object({
 });
 
 const knowledgeContextSchema = z.object({
+  // `source` tells the model whether a fact still awaits the candidate's
+  // review (fresh import) or was already confirmed/corrected by them — the
+  // model treats both as known and must not ask about them again, but keeps
+  // imported facts flagged as unverified in its own reasoning (B266).
   confirmedFacts: z
     .array(
       z.object({
-        ref: z.string().regex(/^memory:[0-9a-f-]{36}$/u),
+        // Imported facts carry `imp…` ids, confirmed ones UUIDs (B266).
+        ref: z.string().regex(/^memory:[A-Za-z0-9_-]{1,120}$/u),
         kind: z.enum(MEMORY_KINDS),
         domain: z.enum(DOSSIER_DOMAINS),
         statement: z.string().trim().min(1).max(1_000),
         sourceRefs: z.array(z.string().min(1).max(80)).max(20),
         sensitive: z.boolean(),
+        source: z.enum(['imported', 'confirmed']).default('confirmed'),
       }),
     )
-    .max(12),
+    .max(40),
   documents: z
     .array(
       z.object({
@@ -152,14 +148,17 @@ export const coachTurnInputSchema = z.object({
   knowledgeContext: knowledgeContextSchema.optional(),
   marketObservations: z.array(marketObservationSchema).max(20).optional(),
   activeRole: z.enum(CAREER_ROLES).optional(),
-  priorRoleContributions: z.array(
-    z.object({
-      role: z.enum(CAREER_ROLES),
-      summary: z.string().trim().min(1).max(6_000),
-      evidenceRefs: z.array(z.string().min(1).max(80)).max(100),
-      unknowns: z.array(z.string().trim().min(1).max(300)).max(20),
-    }),
-  ).max(2).optional(),
+  priorRoleContributions: z
+    .array(
+      z.object({
+        role: z.enum(CAREER_ROLES),
+        summary: z.string().trim().min(1).max(6_000),
+        evidenceRefs: z.array(z.string().min(1).max(80)).max(100),
+        unknowns: z.array(z.string().trim().min(1).max(300)).max(20),
+      }),
+    )
+    .max(2)
+    .optional(),
 });
 
 const memoryCandidateSchema = z.object({
@@ -189,33 +188,29 @@ export const coachTurnResultSchema = z.object({
   intelligence: z
     .object({
       orchestrationRevision: z.string().min(1).max(80),
-      roleCoverage: z.array(
-        z.enum([
-          'career_consultant',
-          'career_strategist',
-          'career_expert',
-        ]),
-      ).min(1).max(3),
-      roleContributions: z.array(
-        z.object({
-          role: z.enum([
-            'career_consultant',
-            'career_strategist',
-            'career_expert',
-          ]),
-          summary: z.string().trim().min(1).max(6_000),
-          evidenceRefs: z.array(z.string().min(1).max(80)).max(100),
-          unknowns: z.array(z.string().trim().min(1).max(300)).max(20),
-          provider: z.string().min(1).max(40),
-          model: z.string().min(1).max(200),
-          promptRevision: z.string().min(1).max(80),
-          usage: z.object({
-            inputTokens: z.number().int().nonnegative(),
-            outputTokens: z.number().int().nonnegative(),
-            totalTokens: z.number().int().nonnegative(),
+      roleCoverage: z
+        .array(z.enum(['career_consultant', 'career_strategist', 'career_expert']))
+        .min(1)
+        .max(3),
+      roleContributions: z
+        .array(
+          z.object({
+            role: z.enum(['career_consultant', 'career_strategist', 'career_expert']),
+            summary: z.string().trim().min(1).max(6_000),
+            evidenceRefs: z.array(z.string().min(1).max(80)).max(100),
+            unknowns: z.array(z.string().trim().min(1).max(300)).max(20),
+            provider: z.string().min(1).max(40),
+            model: z.string().min(1).max(200),
+            promptRevision: z.string().min(1).max(80),
+            usage: z.object({
+              inputTokens: z.number().int().nonnegative(),
+              outputTokens: z.number().int().nonnegative(),
+              totalTokens: z.number().int().nonnegative(),
+            }),
           }),
-        }),
-      ).min(1).max(3),
+        )
+        .min(1)
+        .max(3),
       evidenceCoverage: z.number().min(0).max(1),
       unsupportedClaimCount: z.number().int().nonnegative(),
       marketEvidence: z
@@ -261,22 +256,12 @@ export const COACH_TURN_JSON_SCHEMA = {
           },
           sensitive: { type: 'boolean' },
         },
-        required: [
-          'kind',
-          'domain',
-          'statement',
-          'confidence',
-          'sourceMessageIds',
-          'sensitive',
-        ],
+        required: ['kind', 'domain', 'statement', 'confidence', 'sourceMessageIds', 'sensitive'],
         additionalProperties: false,
       },
     },
     nextQuestion: {
-      anyOf: [
-        { type: 'string', minLength: 1, maxLength: 1_000 },
-        { type: 'null' },
-      ],
+      anyOf: [{ type: 'string', minLength: 1, maxLength: 1_000 }, { type: 'null' }],
     },
     completeness: {
       type: 'object',
@@ -300,10 +285,7 @@ export const COACH_TURN_JSON_SCHEMA = {
       properties: {
         needsHuman: { type: 'boolean' },
         reason: {
-          anyOf: [
-            { type: 'string', minLength: 1, maxLength: 500 },
-            { type: 'null' },
-          ],
+          anyOf: [{ type: 'string', minLength: 1, maxLength: 500 }, { type: 'null' }],
         },
       },
       required: ['needsHuman', 'reason'],

@@ -6,7 +6,13 @@ import {
   type CoachTurnResult,
 } from '../../domain/coach';
 import { buildExperienceDossier } from '../../domain/dossier';
-import { isImportedMemoryId } from '../../domain/resumeImport';
+import {
+  isImportedMemoryId,
+  isResumeImportAnnouncement,
+} from '../../domain/resumeImport';
+
+/** Imported profiles run to ~50 facts; 40 keeps the block under ~1.5K tokens. */
+const KNOWN_FACTS_LIMIT = 40;
 import type { CoachProviderResult } from '../../providers/coachProvider';
 import type {
   CandidateIdentity,
@@ -101,7 +107,7 @@ export class ConversationController {
         dataClass: candidate.dataClass,
         locale: candidate.locale,
         phase: request.phase,
-        messages: this.messages(candidateId).slice(-30),
+        messages: this.modelTurns(candidateId),
         knowledgeContext: this.knowledgeContext(candidateId),
       },
     };
@@ -588,24 +594,43 @@ export class ConversationController {
     };
   }
 
+  /**
+   * Import announcements are `role: 'user'` rows for schema reasons only
+   * (B266) — the model must never read them as candidate turns.
+   */
+  private modelTurns(candidateId: string) {
+    return this.messages(candidateId)
+      .filter((message) => !isResumeImportAnnouncement(message))
+      .slice(-30);
+  }
+
   private knowledgeContext(
     candidateId: string,
   ): NonNullable<CoachTurnInput['knowledgeContext']> {
     const memory = this.memory(candidateId);
-    const confirmedFacts = memory
-      .filter(
-        (item) =>
-          item.status === 'confirmed' || item.status === 'corrected',
-      )
-      .slice(-12)
-      .map((item) => ({
-        ref: `memory:${item.id}`,
-        kind: item.kind,
-        domain: item.domain,
-        statement: item.statement,
-        sourceRefs: item.sourceMessageIds,
-        sensitive: item.sensitive,
-      }));
+    // The candidate's own imported profile counts as known context (B266):
+    // otherwise the consultant asks for experience it already holds. Confirmed
+    // facts go first; imported ones are flagged so the model keeps them as
+    // unverified. Open questions are not facts.
+    const isConfirmed = (item: (typeof memory)[number]) =>
+      item.status === 'confirmed' || item.status === 'corrected';
+    const isImported = (item: (typeof memory)[number]) =>
+      item.status === 'proposed' &&
+      item.kind !== 'open-question' &&
+      isImportedMemoryId(item.id);
+    const known = [
+      ...memory.filter(isConfirmed).slice(-12),
+      ...memory.filter(isImported),
+    ].slice(0, KNOWN_FACTS_LIMIT);
+    const confirmedFacts = known.map((item) => ({
+      ref: `memory:${item.id}`,
+      kind: item.kind,
+      domain: item.domain,
+      statement: item.statement.slice(0, 1_000),
+      sourceRefs: item.sourceMessageIds.slice(0, 20),
+      sensitive: item.sensitive,
+      source: isConfirmed(item) ? ('confirmed' as const) : ('imported' as const),
+    }));
     const openQuestions = memory
       .filter(
         (item) => item.kind === 'open-question' && item.status === 'proposed',
