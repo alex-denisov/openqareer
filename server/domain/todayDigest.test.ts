@@ -142,3 +142,24 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
     });
   });
 });
+
+describe('today queue from the shortlist (B266)', () => {
+  it('fills the queue with unreviewed shortlist vacancies when nothing is new', () => {
+    const shortlist = Array.from({ length: 12 }, (_, index) =>
+      newVacancy({ clusterId: `cluster-${index}`, title: `Role ${index}` }),
+    );
+    const applied = application({ clusterId: 'cluster-0' });
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      applications: [applied],
+      newVacancies: [newVacancy({ clusterId: 'cluster-1', title: 'Role 1' })],
+      shortlist,
+    });
+    const vacancyItems = snapshot.queue.filter((item) => item.kind !== 'candidate_turn' && item.kind !== 'follow_up' && item.kind !== 'interview');
+    expect(vacancyItems[0]).toMatchObject({ kind: 'new_vacancy', clusterId: 'cluster-1' });
+    const fromShortlist = vacancyItems.filter((item) => item.kind === 'shortlist').map((item) => item.clusterId);
+    expect(fromShortlist).not.toContain('cluster-0');
+    expect(fromShortlist).not.toContain('cluster-1');
+    expect(snapshot.queue.length).toBeLessThanOrEqual(5);
+  });
+});

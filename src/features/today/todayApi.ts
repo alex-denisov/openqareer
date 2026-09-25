@@ -36,7 +36,7 @@ export interface TodayNewVacancy {
 }
 
 export interface TodayQueueItem {
-  readonly kind: 'candidate_turn' | 'new_vacancy' | 'follow_up' | 'interview';
+  readonly kind: 'candidate_turn' | 'new_vacancy' | 'shortlist' | 'follow_up' | 'interview';
   readonly applicationId?: string;
   readonly clusterId?: string;
   readonly title: string;

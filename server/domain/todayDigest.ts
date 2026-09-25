@@ -31,7 +31,7 @@ export interface TodayNewVacancy {
 }
 
 export interface TodayQueueItem {
-  readonly kind: 'candidate_turn' | 'new_vacancy' | 'follow_up' | 'interview';
+  readonly kind: 'candidate_turn' | 'new_vacancy' | 'shortlist' | 'follow_up' | 'interview';
   readonly applicationId?: string;
   readonly clusterId?: string;
   readonly title: string;
@@ -101,9 +101,16 @@ export interface BuildTodaySnapshotInput {
   readonly campaignRole: string | null;
   /** Счётчики «с прошлого визита», собранные вызывающей стороной (architecture.md §57). */
   readonly companyEventsSinceVisit: number;
+  /**
+   * Вся подборка кампании в порядке совпадения (B266): неразобранные вакансии
+   * без отклика добирают очередь дня, когда новых с прошлого визита нет.
+   */
+  readonly shortlist?: readonly TodayNewVacancy[];
 }
 
 const MAX_FOLLOW_UPS = 5;
+/** Очередь дня — решения на сегодня, а не весь список (B266). */
+const MAX_QUEUE_ITEMS = 5;
 const MAX_FOLLOW_UP_CAPTIONS = 2;
 
 function eyebrowFor(application: ApplicationView): string | null {
@@ -188,16 +195,26 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
       newVacanciesCaption: newVacancyCaption(input.newVacancies, input.campaignRole),
       followUpCaptions: followUpCaptionsFor(input.applications),
     },
-    queue: buildQueue(waitingApplications, input.newVacancies),
+    queue: buildQueue(waitingApplications, input.newVacancies, shortlistToReview(input)),
     followUps: buildFollowUps(input.applications),
     sinceLastVisit: { since: input.since, items: sinceLastVisitItemsOf(input) },
     vacanciesPending: input.newVacancies === undefined,
   };
 }
 
+/** Лучшие по совпадению вакансии подборки, по которым ещё нет ни отклика, ни «новой». */
+function shortlistToReview(input: BuildTodaySnapshotInput): readonly TodayNewVacancy[] {
+  const taken = new Set<string>([
+    ...input.applications.flatMap((application) => (application.clusterId ? [application.clusterId] : [])),
+    ...(input.newVacancies ?? []).map((vacancy) => vacancy.clusterId),
+  ]);
+  return (input.shortlist ?? []).filter((vacancy) => !taken.has(vacancy.clusterId));
+}
+
 function buildQueue(
   waitingApplications: readonly ApplicationView[],
   newVacancies: BuildTodaySnapshotInput['newVacancies'],
+  shortlist: readonly TodayNewVacancy[],
 ): TodayQueueItem[] {
   return [
     ...waitingApplications.map((application) => ({
@@ -220,7 +237,18 @@ function buildQueue(
       location: vacancy.location,
       fit: vacancy.fit,
     })),
-  ];
+    ...shortlist.map((vacancy) => ({
+      kind: 'shortlist' as const,
+      clusterId: vacancy.clusterId,
+      title: vacancy.title,
+      company: vacancy.company,
+      eyebrow: 'в подборке, не разобрана',
+      dueAt: null,
+      salary: vacancy.salary,
+      location: vacancy.location,
+      fit: vacancy.fit,
+    })),
+  ].slice(0, Math.max(MAX_QUEUE_ITEMS, waitingApplications.length));
 }
 
 function upcomingInterviewsOf(applications: readonly ApplicationView[]): ApplicationView[] {

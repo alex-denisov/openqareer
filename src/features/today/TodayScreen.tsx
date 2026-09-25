@@ -1,4 +1,4 @@
-import { ClockCountdown, DotsThreeVertical, MagnifyingGlass, Sparkle } from '@phosphor-icons/react';
+import { ClockCountdown, DotsThreeVertical, Sparkle } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { TodayDigest, TodayFollowUp, TodayQueueItem, TodaySnapshot } from './todayApi';
 import { formatTodaySalary } from './todayCompensation';
@@ -25,26 +25,22 @@ export function TodayScreen({ snapshot, loading, failed, onRetry }: TodayScreenP
   if (!snapshot) return null;
 
   const { digest, queue, followUps, sinceLastVisit, vacanciesPending } = snapshot;
-  const isEmpty = queue.length === 0 && followUps.length === 0 && sinceLastVisit.items.length === 0;
-
+  // The digest and the queue always show (B266): an empty queue is a
+  // statement about today, not a reason to hide the counts behind one card.
   return (
     <div className="career-today">
-      <p className="career-today-subtitle">Что изменилось с прошлого визита и что решить сегодня.</p>
-      {isEmpty ? (
-        <TodayEmpty />
-      ) : (
-        <>
-          {vacanciesPending ? <TodayPendingNotice /> : null}
-          <TodayDigestRow digest={digest} />
-          <div className="career-today-panels">
-            <TodayQueue queue={queue} />
-            <div className="career-today-side">
-              <TodayFollowUps followUps={followUps} />
-              <TodaySinceLastVisit items={sinceLastVisit.items} />
-            </div>
-          </div>
-        </>
-      )}
+      <p className="career-today-subtitle">
+        Что изменилось с прошлого визита и что решить сегодня.
+      </p>
+      {vacanciesPending ? <TodayPendingNotice /> : null}
+      <TodayDigestRow digest={digest} />
+      <div className="career-today-panels">
+        <TodayQueue queue={queue} />
+        <div className="career-today-side">
+          <TodayFollowUps followUps={followUps} />
+          <TodaySinceLastVisit items={sinceLastVisit.items} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -106,12 +102,14 @@ function TodayQueue({ queue }: { queue: readonly TodayQueueItem[] }) {
       <header className="career-today-queue-head">
         <h2>Очередь дня</h2>
         <span className="career-today-hint">
-          {pluralRu(queue.length, ['карточка', 'карточки', 'карточек'])} · решение нужно по
-          каждой
+          {pluralRu(queue.length, ['карточка', 'карточки', 'карточек'])} · решение нужно по каждой
         </span>
       </header>
       {queue.length === 0 ? (
-        <p className="career-today-empty">Очередь пуста — новых решений на сегодня нет.</p>
+        <p className="career-today-empty">
+          Решений на сегодня нет: подборка разобрана. Добавьте роль или регион в «Вакансиях» —
+          подборка пополнится.
+        </p>
       ) : (
         <ul className="career-today-list">
           {queue.map((item, index) => (
@@ -125,7 +123,8 @@ function TodayQueue({ queue }: { queue: readonly TodayQueueItem[] }) {
 
 function QueueRow({ item, isFirst }: { item: TodayQueueItem; isFirst: boolean }) {
   const salary = formatTodaySalary(item.salary);
-  const secondLine = item.kind === 'new_vacancy' ? salary ?? 'не указана' : salary ?? 'Ждём вас';
+  const isVacancy = item.kind === 'new_vacancy' || item.kind === 'shortlist';
+  const secondLine = isVacancy ? (salary ?? 'вилка не указана') : (salary ?? 'Ждём вас');
   const isAccentKind = item.kind === 'follow_up' || item.kind === 'interview';
 
   return (
@@ -146,7 +145,12 @@ function QueueRow({ item, isFirst }: { item: TodayQueueItem; isFirst: boolean })
       {item.fit ? <QueueFit fit={item.fit} /> : <span className="career-today-item-fit" />}
       <div className="career-today-item-actions">
         <QueueAction item={item} />
-        <button type="button" className="career-btn-icon" aria-haspopup="menu" aria-label="Ещё действия">
+        <button
+          type="button"
+          className="career-btn-icon"
+          aria-haspopup="menu"
+          aria-label="Ещё действия"
+        >
           <DotsThreeVertical size={16} aria-hidden="true" />
         </button>
       </div>
@@ -166,7 +170,11 @@ function QueueFit({ fit }: { fit: NonNullable<TodayQueueItem['fit']> }) {
 
 function FitDot({ ok, label }: { ok: boolean | null; label: string }) {
   if (ok === null) return <span className="career-today-fit-dot is-unknown">{label} —</span>;
-  return <span className={`career-today-fit-dot${ok ? ' is-yes' : ' is-no'}`}>{ok ? label : `${label} —`}</span>;
+  return (
+    <span className={`career-today-fit-dot${ok ? ' is-yes' : ' is-no'}`}>
+      {ok ? label : `${label} —`}
+    </span>
+  );
 }
 
 function QueueAction({ item }: { item: TodayQueueItem }) {
@@ -228,6 +236,7 @@ function TodaySinceLastVisit({ items }: { items: readonly string[] }) {
 
 function queueKindLabel(item: TodayQueueItem): string {
   if (item.kind === 'new_vacancy') return 'Новая вакансия';
+  if (item.kind === 'shortlist') return 'Из подборки';
   if (item.kind === 'follow_up') return 'Follow-up';
   if (item.kind === 'interview') return 'Интервью';
   return 'Ваш ход';
@@ -243,19 +252,6 @@ function TodayPendingNotice() {
       <Sparkle size={16} aria-hidden="true" />
       Подбор обновляется — новые вакансии появятся здесь без перезагрузки.
     </p>
-  );
-}
-
-function TodayEmpty() {
-  return (
-    <div className="career-today-state">
-      <MagnifyingGlass size={28} aria-hidden="true" />
-      <h3>Новых вакансий с прошлого визита нет</h3>
-      <p>
-        Кампания не добрала новых позиций за сутки. Обычно это чинится расширением географии или
-        добавлением второй роли — обе кампании продолжают собирать вакансии в фоне.
-      </p>
-    </div>
   );
 }
 
