@@ -9,6 +9,7 @@ import {
   MIGRATION_26,
   MIGRATION_32,
   MIGRATION_33,
+  MIGRATION_35,
 } from './sqliteSchema';
 import { applyMigrations } from './store/applyMigrations';
 
@@ -435,6 +436,52 @@ describe('application tracker schema migration (B251 slice 1)', () => {
         .prepare(
           `INSERT INTO vacancy_skips (candidate_id, cluster_id, reason_id, origin, created_at)
            VALUES ('candidate-1', 'cluster-1', 'not-a-reason', 'vacancy_card', 'now')`,
+        )
+        .run(),
+    ).toThrow();
+    database.close();
+  });
+});
+
+describe('title parse and semantic index schema (B267 slice 1)', () => {
+  it('creates both empty tables on a fresh database in well under the 20s deploy window', () => {
+    const database = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true });
+
+    const startedAt = Date.now();
+    expect(() => {
+      database.exec(MIGRATION_35);
+      database.exec(MIGRATION_35);
+    }).not.toThrow();
+    expect(Date.now() - startedAt).toBeLessThan(50);
+
+    for (const table of ['title_parse', 'vacancy_semantic']) {
+      expect(
+        database
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+          .get(table),
+      ).toEqual({ name: table });
+    }
+    database.close();
+  });
+
+  it('is only CREATE TABLE/INDEX IF NOT EXISTS and never touches existing tables', () => {
+    expect(MIGRATION_35).not.toMatch(/ALTER TABLE/iu);
+    expect(MIGRATION_35).not.toMatch(/vacancy_pool_index|vacancy_cluster_input/iu);
+    const statements = MIGRATION_35.split(';').map((s) => s.trim()).filter(Boolean);
+    for (const statement of statements) {
+      expect(statement).toMatch(/^CREATE (TABLE|(UNIQUE )?INDEX) IF NOT EXISTS/iu);
+    }
+  });
+
+  it('rejects a parsed_by value outside model/rules', () => {
+    const database = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true });
+    database.exec(MIGRATION_35);
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO title_parse
+            (title_key, sample_title, functions, parsed_by, taxonomy_version, parsed_at)
+           VALUES ('cto', 'CTO', '["eng-mgmt"]', 'guess', 1, 0)`,
         )
         .run(),
     ).toThrow();
