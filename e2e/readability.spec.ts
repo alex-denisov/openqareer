@@ -501,7 +501,7 @@ test.describe('B232 readability gate', () => {
 
     const pitchAction = page
       .locator('.vacancies-detail-col')
-      .getByRole('button', { name: 'Собрать письмо', exact: true });
+      .getByRole('button', { name: 'Сопроводительное письмо', exact: true });
     await pitchAction.click();
     const dialog = page.getByRole('dialog', { name: /Отклик:/u });
     await expect(dialog).toBeVisible();

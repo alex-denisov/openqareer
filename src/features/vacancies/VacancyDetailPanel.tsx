@@ -7,6 +7,8 @@ import { formatCompensationCompact } from './vacancyCompensation';
 import { openTargetLabel } from './vacancyOpenTarget';
 import type { VacancyApplications } from './useVacancyApplications';
 import { VacancyPitchModal } from './VacancyPitchModal';
+import { VacancyInfoModal } from './VacancyInfoModal';
+import { openExternalLink } from '../../services/desktop/openExternalLink';
 
 /**
  * Детальная панель «Вакансии» (B248/B250) — макет `vacancies.html`. Сетка
@@ -119,37 +121,39 @@ function VacancyDetailActions({
   readonly alreadyApplied: boolean;
   readonly applications?: VacancyApplications;
 }) {
+  const target = openTargetLabel(cluster.sources);
+  const [infoOpen, setInfoOpen] = useState(false);
+
+  const handleApply = () => {
+    void openExternalLink(cluster.primaryUrl);
+    applications?.record(cluster.id, 'opened', {
+      title: cluster.canonicalTitle,
+      company: cluster.canonicalCompany ?? '',
+      url: cluster.primaryUrl,
+      source: cluster.sources[0]?.sourceId ?? '',
+    });
+  };
+
   return (
     <div className="vacancies-detail-actions">
       {alreadyApplied ? (
-        <span className="vacancies-chip is-selected vacancies-detail-applied">Отклик отмечен</span>
+        <span className="vacancies-chip is-selected vacancies-detail-applied">
+          Отклик отмечен · открыт {target}
+        </span>
       ) : (
-        <a
-          className="vacancies-btn vacancies-btn-primary"
-          href={cluster.primaryUrl}
-          target="_blank"
-          rel="noreferrer"
-          onClick={() =>
-            applications?.record(cluster.id, 'opened', {
-              title: cluster.canonicalTitle,
-              company: cluster.canonicalCompany ?? '',
-              url: cluster.primaryUrl,
-              source: cluster.sources[0]?.sourceId ?? '',
-            })
-          }
-        >
+        <button type="button" className="vacancies-btn vacancies-btn-primary" onClick={handleApply}>
           Откликнуться
-        </a>
+        </button>
       )}
-      <a
+      <button
+        type="button"
         className="vacancies-btn vacancies-btn-secondary"
-        href={cluster.primaryUrl}
-        target="_blank"
-        rel="noreferrer"
+        onClick={() => setInfoOpen(true)}
       >
-        Ещё · {openTargetLabel(cluster.sources)}
-      </a>
+        Подробнее
+      </button>
       <VacancyPitchDoor cluster={cluster} />
+      <VacancyInfoModal isOpen={infoOpen} onClose={() => setInfoOpen(false)} cluster={cluster} />
     </div>
   );
 }
@@ -165,7 +169,7 @@ function VacancyPitchDoor({ cluster }: { readonly cluster: MatchedVacancyItem['c
         className="vacancies-btn vacancies-btn-secondary"
         onClick={() => setPitchOpen(true)}
       >
-        Собрать письмо
+        Сопроводительное письмо
       </button>
       {pitchOpen ? (
         <VacancyPitchModal

@@ -14,6 +14,7 @@ import { CareerTooltip } from '../shell/CareerTooltip';
 
 export type PitchFormatTab = 'email' | 'linkedin' | 'ats';
 export type PitchTone = 'executive' | 'confident' | 'technical';
+export type PitchLanguage = 'en' | 'ru';
 
 export interface VacancyPitchModalProps {
   readonly isOpen: boolean;
@@ -35,8 +36,14 @@ export interface VacancyPitchModalProps {
   readonly onFetchPitch?: (
     vacancyId: string,
     tone: PitchTone,
+    language?: PitchLanguage,
   ) => Promise<VacancyPitchResult>;
 }
+
+const LANGUAGES: ReadonlyArray<{ id: PitchLanguage; label: string }> = [
+  { id: 'ru', label: 'RU' },
+  { id: 'en', label: 'EN' },
+];
 
 const TONES: ReadonlyArray<{ id: PitchTone; label: string; desc: string }> = [
   {
@@ -65,10 +72,20 @@ const FORMAT_TABS: ReadonlyArray<{
 function pluralizeFacts(count: number): string {
   const tail = count % 10;
   const teen = count % 100;
-  if (teen >= 11 && teen <= 14) return `${count} подтверждённых фактов`;
-  if (tail === 1) return `${count} подтверждённый факт`;
-  if (tail >= 2 && tail <= 4) return `${count} подтверждённых факта`;
-  return `${count} подтверждённых фактов`;
+  if (teen >= 11 && teen <= 14) return `${count} фактов`;
+  if (tail === 1) return `${count} факт`;
+  if (tail >= 2 && tail <= 4) return `${count} факта`;
+  return `${count} фактов`;
+}
+
+/** «Использовано N фактов (из профиля/подтверждённых)» — источник видно кандидату (B266). */
+function describeFactBasis(usedFacts?: readonly { basis: 'confirmed' | 'imported' }[]): string {
+  if (!usedFacts || usedFacts.length === 0) return '';
+  const confirmed = usedFacts.filter((f) => f.basis === 'confirmed').length;
+  const imported = usedFacts.filter((f) => f.basis === 'imported').length;
+  if (confirmed > 0 && imported > 0) return ' (из подтверждённых и из профиля)';
+  if (imported > 0) return ' (из профиля)';
+  return ' (подтверждённых)';
 }
 
 function downloadTxtFile(filename: string, content: string): void {
@@ -102,9 +119,7 @@ function movePitchBoundary<T extends string>(
 
 function focusPitchSelection(event: React.KeyboardEvent<HTMLButtonElement>, id: string): void {
   const group = event.currentTarget.closest<HTMLElement>('[data-pitch-group]');
-  const button = group?.querySelector<HTMLButtonElement>(
-    `[data-pitch-value="${id}"]`,
-  );
+  const button = group?.querySelector<HTMLButtonElement>(`[data-pitch-value="${id}"]`);
   button?.focus();
 }
 
@@ -140,20 +155,57 @@ function PitchHeader({
   );
 }
 
+function LanguageToggle({
+  language,
+  onLanguageChange,
+}: {
+  language: PitchLanguage;
+  onLanguageChange: (language: PitchLanguage) => void;
+}) {
+  return (
+    <div
+      className="career-pitch-language-selector"
+      role="radiogroup"
+      aria-label="Язык письма"
+      data-pitch-group="language"
+    >
+      {LANGUAGES.map((l) => (
+        <button
+          key={l.id}
+          type="button"
+          role="radio"
+          data-pitch-value={l.id}
+          aria-checked={language === l.id}
+          className={`career-tab-btn ${language === l.id ? 'is-active' : ''}`}
+          onClick={() => onLanguageChange(l.id)}
+          tabIndex={language === l.id ? 0 : -1}
+        >
+          <span>{l.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // eslint-disable-next-line max-lines-per-function
 function PitchControls({
   tone,
   tab,
+  language,
   onToneChange,
   onTabChange,
+  onLanguageChange,
 }: {
   tone: PitchTone;
   tab: PitchFormatTab;
+  language: PitchLanguage;
   onToneChange: (tone: PitchTone) => void;
   onTabChange: (tab: PitchFormatTab) => void;
+  onLanguageChange: (language: PitchLanguage) => void;
 }) {
   return (
     <section className="career-pitch-controls">
+      <LanguageToggle language={language} onLanguageChange={onLanguageChange} />
       <div
         className="career-pitch-tone-selector"
         role="radiogroup"
@@ -163,31 +215,31 @@ function PitchControls({
         {TONES.map((t) => (
           <CareerTooltip key={t.id} content={t.desc}>
             <button
-            type="button"
-            role="radio"
-            data-pitch-value={t.id}
-            aria-checked={tone === t.id}
-            className={`career-tab-btn ${tone === t.id ? 'is-active' : ''}`}
-            onClick={() => onToneChange(t.id)}
-            tabIndex={tone === t.id ? 0 : -1}
-            onKeyDown={(event) => {
-              if (event.key === 'Home' || event.key === 'End') {
-                event.preventDefault();
-                const next = movePitchBoundary(TONES, event.key === 'Home' ? 'first' : 'last');
-                onToneChange(next);
-                focusPitchSelection(event, next);
-              } else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-                event.preventDefault();
-                const next = movePitchSelection(TONES, tone, 1);
-                onToneChange(next);
-                focusPitchSelection(event, next);
-              } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-                event.preventDefault();
-                const next = movePitchSelection(TONES, tone, -1);
-                onToneChange(next);
-                focusPitchSelection(event, next);
-              }
-            }}
+              type="button"
+              role="radio"
+              data-pitch-value={t.id}
+              aria-checked={tone === t.id}
+              className={`career-tab-btn ${tone === t.id ? 'is-active' : ''}`}
+              onClick={() => onToneChange(t.id)}
+              tabIndex={tone === t.id ? 0 : -1}
+              onKeyDown={(event) => {
+                if (event.key === 'Home' || event.key === 'End') {
+                  event.preventDefault();
+                  const next = movePitchBoundary(TONES, event.key === 'Home' ? 'first' : 'last');
+                  onToneChange(next);
+                  focusPitchSelection(event, next);
+                } else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  const next = movePitchSelection(TONES, tone, 1);
+                  onToneChange(next);
+                  focusPitchSelection(event, next);
+                } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  const next = movePitchSelection(TONES, tone, -1);
+                  onToneChange(next);
+                  focusPitchSelection(event, next);
+                }
+              }}
             >
               <span>{t.label}</span>
             </button>
@@ -217,7 +269,10 @@ function PitchControls({
               onKeyDown={(event) => {
                 if (event.key === 'Home' || event.key === 'End') {
                   event.preventDefault();
-                  const next = movePitchBoundary(FORMAT_TABS, event.key === 'Home' ? 'first' : 'last');
+                  const next = movePitchBoundary(
+                    FORMAT_TABS,
+                    event.key === 'Home' ? 'first' : 'last',
+                  );
                   onTabChange(next);
                   focusPitchSelection(event, next);
                 } else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
@@ -243,13 +298,33 @@ function PitchControls({
   );
 }
 
-function PitchMetaBar({ evidenceCount }: { evidenceCount: number }) {
+function PitchMetaBar({
+  evidenceCount,
+  usedFacts,
+  notices,
+}: {
+  evidenceCount: number;
+  usedFacts?: readonly { id: string; basis: 'confirmed' | 'imported' }[];
+  notices?: readonly string[];
+}) {
   return (
     <div className="career-pitch-meta-bar">
-      <span className="career-pitch-evidence-tag">Использовано {pluralizeFacts(evidenceCount)} из профиля.</span>
-      <span className="career-pitch-safe-tag">
-        Ничего не придумано: чего нет в профиле — нет и в тексте.
-      </span>
+      <div className="career-pitch-meta-tags">
+        <span className="career-pitch-evidence-tag">
+          Использовано {pluralizeFacts(evidenceCount)}
+          {describeFactBasis(usedFacts)}.
+        </span>
+        <span className="career-pitch-safe-tag">
+          Ничего не придумано: чего нет в профиле — нет и в тексте.
+        </span>
+      </div>
+      {notices && notices.length > 0 ? (
+        <div className="career-pitch-notice" role="status">
+          {notices.map((notice) => (
+            <p key={notice}>{notice}</p>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -269,7 +344,13 @@ function EmailSubjectField({
         Тема письма
       </label>
       <div className="career-pitch-copyable-field">
-        <input id="pitch-email-subject" type="text" readOnly value={subject} className="career-pitch-input" />
+        <input
+          id="pitch-email-subject"
+          type="text"
+          readOnly
+          value={subject}
+          className="career-pitch-input"
+        />
         <button
           type="button"
           className="career-btn career-btn-secondary career-btn-sm"
@@ -305,7 +386,13 @@ function EmailPitchTab({
         <label htmlFor="pitch-email-body" className="career-pitch-field-label">
           Текст письма:
         </label>
-        <textarea id="pitch-email-body" readOnly rows={10} value={emailPitch.body} className="career-pitch-textarea" />
+        <textarea
+          id="pitch-email-body"
+          readOnly
+          rows={10}
+          value={emailPitch.body}
+          className="career-pitch-textarea"
+        />
       </div>
       <div className="career-pitch-actions">
         <button
@@ -313,7 +400,11 @@ function EmailPitchTab({
           className="career-btn career-btn-primary"
           onClick={() => onCopy(`${emailPitch.subject}\n\n${emailPitch.body}`, 'email-full')}
         >
-          {isCopied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+          {isCopied ? (
+            <Check size={16} aria-hidden="true" />
+          ) : (
+            <Copy size={16} aria-hidden="true" />
+          )}
           <span>{isCopied ? 'Скопировано в буфер' : 'Копировать письмо'}</span>
         </button>
       </div>
@@ -426,8 +517,16 @@ function AtsCoverLetterTab({
         />
       </div>
       <div className="career-pitch-actions">
-        <button type="button" className="career-btn career-btn-primary" onClick={() => onCopy(coverLetter, 'ats')}>
-          {isCopied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+        <button
+          type="button"
+          className="career-btn career-btn-primary"
+          onClick={() => onCopy(coverLetter, 'ats')}
+        >
+          {isCopied ? (
+            <Check size={16} aria-hidden="true" />
+          ) : (
+            <Copy size={16} aria-hidden="true" />
+          )}
           <span>{isCopied ? 'Скопировано в буфер' : 'Копировать текст'}</span>
         </button>
         <button type="button" className="career-btn career-btn-secondary" onClick={onDownloadTxt}>
@@ -439,14 +538,16 @@ function AtsCoverLetterTab({
   );
 }
 
-function executePitchFetch(
+export function executePitchFetch(
   vacancy: VacancyPitchModalProps['vacancy'],
   tone: PitchTone,
+  language: PitchLanguage | undefined,
   onFetchPitch?: VacancyPitchModalProps['onFetchPitch'],
 ): Promise<VacancyPitchResult> {
-  if (onFetchPitch) return onFetchPitch(vacancy.id, tone);
+  if (onFetchPitch) return onFetchPitch(vacancy.id, tone, language);
   return requestVacancyPitch(vacancy.id, {
     tone,
+    ...(language ? { language } : {}),
     vacancy: {
       title: vacancy.title,
       company: vacancy.company,
@@ -462,6 +563,7 @@ function usePitchFetcher(
   isOpen: boolean,
   vacancy: VacancyPitchModalProps['vacancy'],
   tone: PitchTone,
+  language: PitchLanguage | undefined,
   initialPitch?: VacancyPitchResult,
   onFetchPitch?: VacancyPitchModalProps['onFetchPitch'],
   onPitchReady?: VacancyPitchModalProps['onPitchReady'],
@@ -472,14 +574,14 @@ function usePitchFetcher(
 
   useEffect(() => {
     if (!isOpen) return;
-    if (initialPitch && tone === 'executive') {
+    if (initialPitch && tone === 'executive' && (!language || language === initialPitch.language)) {
       setPitch(initialPitch);
       return;
     }
     let isMounted = true;
     setLoading(true);
     setError(null);
-    executePitchFetch(vacancy, tone, onFetchPitch)
+    executePitchFetch(vacancy, tone, language, onFetchPitch)
       .then((data) => {
         if (isMounted) {
           setPitch(data);
@@ -489,14 +591,16 @@ function usePitchFetcher(
       })
       .catch((err) => {
         if (isMounted) {
-          setError(err instanceof Error ? err.message : 'Не удалось сгенерировать. Попробуйте ещё раз.');
+          setError(
+            err instanceof Error ? err.message : 'Не удалось сгенерировать. Попробуйте ещё раз.',
+          );
           setLoading(false);
         }
       });
     return () => {
       isMounted = false;
     };
-  }, [isOpen, vacancy, tone, initialPitch, onFetchPitch, onPitchReady]);
+  }, [isOpen, vacancy, tone, language, initialPitch, onFetchPitch, onPitchReady]);
 
   return { pitch, loading, error };
 }
@@ -524,8 +628,8 @@ function useModalAccessibility(
       if (e.key !== 'Tab') return;
       const focusable = Array.from(
         containerRef.current?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"]),'
-            + ' [contenteditable="true"]',
+          'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"]),' +
+            ' [contenteditable="true"]',
         ) ?? [],
       );
       if (focusable.length === 0) {
@@ -551,7 +655,6 @@ function useModalAccessibility(
   }, [isOpen, onClose, containerRef]);
 }
 
-
 interface PitchMainViewProps {
   readonly loading: boolean;
   readonly error: string | null;
@@ -568,7 +671,7 @@ function PitchMainView(props: PitchMainViewProps) {
   if (loading) {
     return (
       <div className="career-pitch-loading" aria-busy="true">
-          <p>Пишем тексты под требования вакансии…</p>
+        <p>Пишем тексты под требования вакансии…</p>
       </div>
     );
   }
@@ -638,10 +741,13 @@ function usePitchModalController(
   } = props;
   const [tab, setTab] = useState<PitchFormatTab>(initialTab);
   const [tone, setTone] = useState<PitchTone>('executive');
+  // Unset until the candidate picks one: the server detects the vacancy's language.
+  const [language, setLanguage] = useState<PitchLanguage | undefined>(undefined);
   const { pitch, loading, error } = usePitchFetcher(
     isOpen,
     vacancy,
     tone,
+    language,
     initialPitch,
     onFetchPitch,
     onPitchReady,
@@ -655,6 +761,8 @@ function usePitchModalController(
     setTab,
     tone,
     setTone,
+    language,
+    setLanguage,
     pitch,
     loading,
     error,
@@ -688,8 +796,7 @@ export function VacancyPitchModal(props: VacancyPitchModalProps) {
         ref={cardRef}
       >
         <PitchHeader title={vacancy.title} company={vacancy.company} onClose={onClose} />
-        <PitchControls tone={c.tone} tab={c.tab} onToneChange={c.setTone} onTabChange={c.setTab} />
-        {c.pitch ? <PitchMetaBar evidenceCount={c.pitch.usedEvidenceIds.length} /> : null}
+        <PitchTop c={c} />
         <main
           id="career-pitch-panel"
           className="career-pitch-body"
@@ -710,5 +817,27 @@ export function VacancyPitchModal(props: VacancyPitchModalProps) {
         </main>
       </div>
     </div>
+  );
+}
+
+function PitchTop({ c }: { c: ReturnType<typeof usePitchModalController> }) {
+  return (
+    <>
+      <PitchControls
+        tone={c.tone}
+        tab={c.tab}
+        language={c.language ?? c.pitch?.language ?? 'ru'}
+        onToneChange={c.setTone}
+        onTabChange={c.setTab}
+        onLanguageChange={c.setLanguage}
+      />
+      {c.pitch ? (
+        <PitchMetaBar
+          evidenceCount={c.pitch.usedEvidenceIds.length}
+          usedFacts={c.pitch.usedFacts}
+          notices={c.pitch.notices}
+        />
+      ) : null}
+    </>
   );
 }

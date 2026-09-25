@@ -441,7 +441,11 @@ function RoleChip({
 /** Единственная точка «есть совпадение» на всех трёх fit-dots (B248). */
 export function FitDot({ isYes, title }: { readonly isYes: boolean; readonly title: string }) {
   return (
-    <span className={`fit-dot${isYes ? ' is-yes' : ' is-no'}`} title={title}>
+    <span
+      className={`fit-dot${isYes ? ' is-yes' : ' is-no'}`}
+      title={title}
+      aria-label={`${title}: ${isYes ? 'совпадает' : 'не совпадает'}`}
+    >
       {isYes ? <Check weight="bold" size={11} /> : '—'}
     </span>
   );

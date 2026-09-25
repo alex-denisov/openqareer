@@ -7378,6 +7378,48 @@
   margin: 0;
 }
 
+/* «Подробнее» — карточка вакансии целиком внутри приложения (B266). */
+.vacancies-info-subtitle {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+  margin: 0;
+}
+
+.vacancies-info-description {
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.vacancies-info-description.is-empty {
+  color: var(--career-text-dim);
+  font-style: italic;
+}
+
+.vacancies-info-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.vacancies-info-skills li {
+  padding: 4px 10px;
+  border-radius: var(--career-radius-sm);
+  border: 1px solid var(--career-line-strong);
+  font-size: var(--career-text-aux);
+  color: var(--career-text-soft);
+}
+
+.vacancies-info-sources {
+  font-size: var(--career-text-aux);
+  color: var(--career-text-dim);
+  margin: 0;
+}
+
 .career-modal-field {
   display: flex;
   flex-direction: column;
@@ -10710,10 +10752,33 @@
   background: var(--career-surface-raised);
   border-bottom: 1px solid var(--career-line);
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--career-text-xs);
+}
+
+.career-pitch-meta-tags {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  font-size: var(--career-text-xs);
+}
+
+.career-pitch-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--career-warning, var(--career-text-soft));
+}
+
+.career-pitch-notice p {
+  margin: 0;
+}
+
+.career-pitch-language-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .career-pitch-evidence-tag {
@@ -14310,7 +14375,7 @@
 .vac-row {
   display: grid;
   width: 100%;
-  grid-template-columns: 36px minmax(0, 1fr) auto auto auto;
+  grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
   gap: var(--career-space-4);
   padding: var(--career-space-3) var(--career-space-4);
@@ -14359,10 +14424,11 @@
 }
 
 .vac-title {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-size: var(--career-text-sm);
   font-weight: 600;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -14376,9 +14442,18 @@
   text-overflow: ellipsis;
 }
 
+.vac-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+  margin-top: var(--career-space-1);
+}
+
 .vac-fit {
   display: flex;
   gap: 8px;
+  margin-left: auto;
 }
 
 /* Простые галки совпадения (приёмка B250): без кружка-заливки, только
@@ -14400,25 +14475,15 @@
 }
 
 .vac-comp {
-  text-align: right;
   font-family: var(--font-mono);
   font-size: var(--career-text-xs);
+  white-space: nowrap;
 }
 
 .vac-age {
   font-size: var(--career-text-aux);
   color: var(--career-text-dim);
   white-space: nowrap;
-}
-
-@media (max-width: 900px) {
-  .vac-row {
-    grid-template-columns: 36px 1fr auto;
-  }
-  .vac-fit,
-  .vac-age {
-    display: none;
-  }
 }
 
 @media (max-width: 760px) {
