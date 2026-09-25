@@ -29,7 +29,13 @@ import { registerCampaignRoutes } from './campaignRoutes';
 import { readRoleContext, readTargetLevel, type RoleContext } from './vacancyRoleContext';
 import { readMatchedSnapshot, readMatchProfile } from '../vacancies/matchedPoolContext';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
-import { generateVacancyPitch } from '../domain/vacancyPitchService';
+import {
+  filterUsablePitchFacts,
+  generateVacancyPitch,
+  type PitchLanguage,
+  type PitchTone,
+  type VacancyPitchInputFact,
+} from '../domain/vacancyPitchService';
 import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';
 import { registerApplicationRoutes } from './applicationRoutes';
 import { registerPlanRequestRoutes } from './planRequestRoutes';
@@ -667,6 +673,83 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
   };
 };
 
+/**
+ * Модель пишет письмо, шаблон остаётся запасом (B266, пункт 7): пустой,
+ * невалидный или упавший ответ не должен оставить кандидата без письма.
+ */
+async function writeCoverLetterBody(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  vacancy: { title: string; company?: string; requiredSkills: readonly string[] },
+  facts: readonly VacancyPitchInputFact[],
+  language: PitchLanguage,
+  tone: PitchTone,
+): Promise<{ body?: string; stage?: string }> {
+  const { coverLetterWriter } = deps;
+  if (!coverLetterWriter) return {};
+  const usableFacts = filterUsablePitchFacts(facts).map((fact) => ({
+    ref: fact.id,
+    statement: fact.statement,
+  }));
+  const outcome = await coverLetterWriter.writeCoverLetter({
+    facts: usableFacts,
+    vacancy: {
+      title: vacancy.title,
+      ...(vacancy.company ? { company: vacancy.company } : {}),
+      requirements: vacancy.requiredSkills,
+    },
+    language,
+    tone,
+  });
+  if (outcome.failure) {
+    // Причина отказа — для лога сервера, не для кандидата (тот же уговор,
+    // что и у называния ролей); текст кандидата и ключ провайдера в лог не идут.
+    request.log.warn(outcome.failure, 'cover-letter-stage-failed');
+  }
+  return outcome.body ? { body: outcome.body, stage: outcome.stage } : {};
+}
+
+/** Одна и та же вакансия собирается из тела запроса, кластера и пула один раз. */
+function resolvePitchVacancy(
+  body: z.infer<typeof vacancyPitchInputSchema>,
+  vacancyId: string,
+  cluster: ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>,
+  poolVacancy: ReturnType<NonNullable<RouteDeps['multiSourceEngine']['getVacancy']>> | undefined,
+) {
+  return {
+    id: vacancyId,
+    title: body?.vacancy?.title ?? cluster?.canonicalTitle ?? poolVacancy?.title,
+    company: body?.vacancy?.company ?? cluster?.canonicalCompany ?? poolVacancy?.company,
+    description:
+      body?.vacancy?.description ?? cluster?.descriptionSummary ?? poolVacancy?.description,
+    requiredSkills:
+      body?.vacancy?.requiredSkills ?? cluster?.skills ?? poolVacancy?.requiredSkills ?? [],
+    responsibilities: body?.vacancy?.responsibilities ?? poolVacancy?.responsibilities ?? [],
+    location: body?.vacancy?.location ?? cluster?.canonicalLocation ?? poolVacancy?.location,
+    isRemote: body?.vacancy?.isRemote ?? cluster?.isRemote ?? poolVacancy?.isRemote ?? false,
+  };
+}
+
+/** 404/410 — вакансия снята или её не было вовсе; текст отличает их для кандидата. */
+function vacancyNotFoundResponse(
+  reply: FastifyReply,
+  request: FastifyRequest,
+  multiSourceEngine: RouteDeps['multiSourceEngine'],
+  vacancyId: string,
+) {
+  if (multiSourceEngine.isKnownVacancyGone(vacancyId)) {
+    return sendError(
+      reply,
+      request,
+      410,
+      'vacancy_gone',
+      'Вакансия снята или обновилась — обновите список.',
+      false,
+    );
+  }
+  return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+}
+
 const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config, multiSourceEngine } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
@@ -678,48 +761,45 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
 
   const cluster = multiSourceEngine.getActiveCluster(vacancyId);
   const poolVacancy = !cluster ? multiSourceEngine.getVacancy?.(vacancyId) : undefined;
-
-  const title = body?.vacancy?.title ?? cluster?.canonicalTitle ?? poolVacancy?.title;
-  if (!title) {
-    if (multiSourceEngine.isKnownVacancyGone(vacancyId)) {
-      return sendError(
-        reply,
-        request,
-        410,
-        'vacancy_gone',
-        'Вакансия снята или обновилась — обновите список.',
-        false,
-      );
-    }
-    return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  const vacancy = resolvePitchVacancy(body, vacancyId, cluster, poolVacancy);
+  if (!vacancy.title) {
+    return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
   }
+  const title = vacancy.title;
 
   const snapshot = candidateStore.getSnapshot(candidate.id);
+  const facts = snapshot?.memory ?? [];
+  const tone = body?.tone ?? 'executive';
   const pitch = generateVacancyPitch({
-    vacancy: {
-      id: vacancyId,
-      title,
-      company: body?.vacancy?.company ?? cluster?.canonicalCompany ?? poolVacancy?.company,
-      description:
-        body?.vacancy?.description ?? cluster?.descriptionSummary ?? poolVacancy?.description,
-      requiredSkills:
-        body?.vacancy?.requiredSkills ?? cluster?.skills ?? poolVacancy?.requiredSkills ?? [],
-      responsibilities: body?.vacancy?.responsibilities ?? poolVacancy?.responsibilities ?? [],
-      location: body?.vacancy?.location ?? cluster?.canonicalLocation ?? poolVacancy?.location,
-      isRemote: body?.vacancy?.isRemote ?? cluster?.isRemote ?? poolVacancy?.isRemote ?? false,
-    },
+    vacancy: { ...vacancy, title },
     candidateName: snapshot?.resume?.draft?.candidate?.fullName,
-    facts: snapshot?.memory ?? [],
-    tone: body?.tone ?? 'executive',
+    facts,
+    tone,
     ...(body?.language ? { language: body.language } : {}),
   });
 
+  const written = await writeCoverLetterBody(
+    deps,
+    request,
+    { title, company: vacancy.company, requiredSkills: vacancy.requiredSkills },
+    facts,
+    pitch.language,
+    tone,
+  );
+  const atsCoverLetter = written.body ?? pitch.atsCoverLetter;
+  const responseData = {
+    ...pitch,
+    atsCoverLetter,
+    bodySource: written.body ? ('model' as const) : ('template' as const),
+    ...(written.body && written.stage ? { stage: written.stage } : {}),
+  };
+
   if (body?.applicationId) {
-    linkGeneratedCoverLetter(candidateStore, candidate.id, body.applicationId, pitch.atsCoverLetter);
+    linkGeneratedCoverLetter(candidateStore, candidate.id, body.applicationId, atsCoverLetter);
   }
 
   return {
-    data: pitch,
+    data: responseData,
     meta: { requestId: request.id },
   };
 };

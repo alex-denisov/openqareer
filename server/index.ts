@@ -3,6 +3,7 @@ import { readServerConfig } from './config';
 import { buildCoachProvider } from './providers/coachProviderFactory';
 import { buildResumeStructurer } from './providers/resumeStructurer';
 import { buildRoleNamer } from './providers/roleNamer';
+import { buildCoverLetterWriter } from './providers/coverLetterWriter';
 import { HygienicCoachProvider } from './providers/hygienicCoachProvider';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
 import { CareerOrchestrator } from './orchestration/careerOrchestrator';
@@ -176,6 +177,14 @@ const app = await buildApp({
     // Названные роли переживают рестарт: без хранилища каждый деплой снова звал
     // модель и упирался в исчерпанную бесплатную квоту (INC-035, B191).
     cacheStore: roleNamingCache,
+  }),
+  // Та же очередь провайдеров, что и у называния ролей: письмо пишет модель,
+  // шаблон остаётся запасом (B266, пункт 7).
+  coverLetterWriter: buildCoverLetterWriter({
+    personalProvider: personalProviderId,
+    model: config.model,
+    fallbacks: config.personalFallbacks,
+    providerCredentials: config.providerCredentials,
   }),
   serveStatic: process.env.NODE_ENV === 'production',
 });
