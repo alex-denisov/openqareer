@@ -76,6 +76,7 @@ const ROLE_TAXONOMY_TECH: readonly RoleFunctionDefinition[] = [
       'systems engineer', 'embedded software engineer', 'platform engineer', 'developer relations engineer',
       'software engineering', 'applications',
       'desenvolvedor', 'développeur', 'ingénieur logiciel', 'entwickler',
+      'ソフトウェア開発', 'エンジニア', '开发', '工程师',
       'developer', 'programmer', 'engineer', 'architect',
       'разработчик', 'программист', 'бэкенд', 'фронтенд', 'c++',
     ],
@@ -101,7 +102,7 @@ const ROLE_TAXONOMY_TECH: readonly RoleFunctionDefinition[] = [
       'cio', 'it infrastructure', 'it operations', 'it support', 'system administrator', 'sysadmin',
       'network engineer', 'devops engineer', 'devops', 'cloud infrastructure', 'infrastructure engineer',
       'site reliability', 'data center', 'vdi administrator', 'database administrator', 'infrastructure',
-      'infraestructura',
+      'infraestructura', 'インフラ', 'ネットワーク', 'devopsエンジニア', '运维', '网络',
       'ит-инфраструктура', 'системный администратор', 'руководитель ит-инфраструктуры', 'ит-директор',
       'администратор баз данных', 'дата-центр', 'цод', 'эксплуатации',
     ],
@@ -112,7 +113,7 @@ const ROLE_TAXONOMY_TECH: readonly RoleFunctionDefinition[] = [
     labelRu: 'Данные',
     anchors: [
       'data engineer', 'data analyst', 'data architect', 'data scientist', 'data platform',
-      'business intelligence', 'analytics engineer',
+      'business intelligence', 'analytics engineer', 'データ', '数据',
       'аналитик данных', 'инженер данных', 'дата-инженер', 'data', 'analytics',
     ],
   },
@@ -122,7 +123,7 @@ const ROLE_TAXONOMY_TECH: readonly RoleFunctionDefinition[] = [
     labelRu: 'Искусственный интеллект и ML',
     anchors: [
       'machine learning engineer', 'ml engineer', 'ai researcher', 'ai engineer', 'applied ai',
-      'generative ai', 'ai/ml',
+      'generative ai', 'ai/ml', 'aiエンジニア', '人工智能',
       'машинное обучение', 'инженер машинного обучения', 'специалист по искусственному интеллекту', 'ai', 'ml',
     ],
   },
@@ -132,7 +133,7 @@ const ROLE_TAXONOMY_TECH: readonly RoleFunctionDefinition[] = [
     labelRu: 'Информационная безопасность',
     anchors: [
       'security engineer', 'security architect', 'cybersecurity', 'infosec', 'ciso', 'endpoint', 'cyber',
-      'information security', 'security specialist', 'security research', 'blockchain security',
+      'information security', 'security specialist', 'security research', 'blockchain security', 'セキュリティ', '信息安全',
       'информационная безопасность', 'специалист по безопасности', 'инженер по безопасности',
       'специалист по информационной безопасности', 'security',
     ],
@@ -143,7 +144,7 @@ const ROLE_TAXONOMY_TECH: readonly RoleFunctionDefinition[] = [
     labelRu: 'Тестирование',
     anchors: [
       'qa engineer', 'test automation', 'quality assurance', 'software test engineer', 'test engineer',
-      'tester', 'тестировщик', 'инженер по тестированию',
+      'qaエンジニア', '测试', 'tester', 'тестировщик', 'инженер по тестированию',
     ],
   },
   {
@@ -153,6 +154,7 @@ const ROLE_TAXONOMY_TECH: readonly RoleFunctionDefinition[] = [
     anchors: [
       'cpo', 'product manager', 'product owner', 'technical product manager', 'product management',
       'product design engineer', 'product strategy', 'product strategist', 'marketplace', 'catalog',
+      'プロダクトマネージャー', '产品经理',
       'продакт-менеджер', 'менеджер продукта', 'владелец продукта', 'product',
     ],
   },
@@ -163,6 +165,7 @@ const ROLE_TAXONOMY_TECH: readonly RoleFunctionDefinition[] = [
     anchors: [
       'ux designer', 'ui designer', 'product designer', 'graphic designer', 'art director',
       'motion graphics', 'ux/ui', 'ux researcher', 'service designer', 'creative strategy',
+      'クリエイティブ', 'デザイナー', '设计师',
       'графический дизайнер', 'дизайнер', 'designer', 'design',
     ],
   },
