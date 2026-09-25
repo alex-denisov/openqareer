@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type { RouteDeps } from '../routes/deps';
+import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
 import { rebuildCampaignRoles } from './rebuildCampaignRoles';
 
 describe('rebuildCampaignRoles (B267 S5)', () => {
@@ -87,5 +88,7 @@ describe('rebuildCampaignRoles (B267 S5)', () => {
     expect(functions.has('eng-mgmt')).toBe(true);
     expect(workspace.campaign?.regions).toEqual([]);
     expect(workspace.campaign?.roles).toEqual([]);
+    // Прод 26.09: запись без прежней кампании падала на схеме (revision 0).
+    expect(candidateWorkspaceSchema.safeParse(workspace).success).toBe(true);
   });
 });
