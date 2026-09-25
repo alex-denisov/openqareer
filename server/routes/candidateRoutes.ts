@@ -544,6 +544,10 @@ const handlePutResume: Handler = async (deps, request, reply) => {
  * logo only to the session that owns it — a wrong or unknown id is a plain
  * 404, so a probe never learns whether some other candidate's mediaId exists.
  */
+function wantsJson(accept: string | undefined): boolean {
+  return (accept ?? '').split(',').some((part) => part.trim().startsWith('application/json'));
+}
+
 const handleGetCandidateMedia: Handler = async (
   { authService, candidateStore, config },
   request,
@@ -564,6 +568,11 @@ const handleGetCandidateMedia: Handler = async (
   reply.header('Cache-Control', 'private, max-age=86400');
   reply.header('ETag', mediaId);
   reply.header('X-Content-Type-Options', 'nosniff');
+  // The desktop app's native bridge carries text only and <img> cannot send
+  // its bearer token, so it asks for the bytes as JSON (B266).
+  if (wantsJson(request.headers.accept)) {
+    return { data: { mime: media.mime, base64: Buffer.from(media.bytes).toString('base64') } };
+  }
   return reply.type(media.mime).send(media.bytes);
 };
 

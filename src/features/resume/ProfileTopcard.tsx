@@ -9,6 +9,7 @@ import {
   PencilSimple,
   Phone,
 } from '@phosphor-icons/react';
+import { useCandidateMediaSrc } from './candidateMediaSrc';
 import type { ImportedSource } from './resumeSourceCoverage';
 import { patchTopcard } from './profileEditing';
 import type { ResumeDraft } from './resumeTypes';
@@ -21,18 +22,19 @@ interface ProfileTopcardProps {
 }
 
 /**
- * Photo comes from a cached-media reference (B265 §4): the endpoint serves
- * bytes only to the owning session, so a plain `<img src>` with the app's
- * cookie is enough — no signed URL, no client-side blob juggling.
+ * Photo comes from a cached-media reference (B265 §4), served only to the
+ * owning session; `useCandidateMediaSrc` picks the form the runtime can read.
  */
 function TopcardAvatar({ draft }: { readonly draft: ResumeDraft }) {
-  const mediaId = draft.candidate.photoMediaId;
+  const src = useCandidateMediaSrc(draft.candidate.photoMediaId);
+  const [broken, setBroken] = useState(false);
   const initials = initialsOf(draft.candidate.fullName);
-  if (mediaId) {
+  if (src && !broken) {
     return (
       <img
         className="career-profile-screen-avatar"
-        src={`/api/v1/candidate/media/${encodeURIComponent(mediaId)}`}
+        src={src}
+        onError={() => setBroken(true)}
         alt=""
         width={96}
         height={96}

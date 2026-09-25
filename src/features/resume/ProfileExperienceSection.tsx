@@ -9,6 +9,7 @@ import {
   SectionRemoveButton,
 } from './ProfileSectionEdit';
 import { SectionHead } from './ProfileSectionHead';
+import { useCandidateMediaSrc } from './candidateMediaSrc';
 import type { ResumeDraft, ResumeExperienceInput } from './resumeTypes';
 
 interface SectionProps {
@@ -55,11 +56,14 @@ function CompanyMark({
   readonly employer: string;
   readonly employerLogoMediaId?: string;
 }) {
-  if (employerLogoMediaId) {
+  const src = useCandidateMediaSrc(employerLogoMediaId);
+  const [broken, setBroken] = useState(false);
+  if (src && !broken) {
     return (
       <img
         className="career-profile-screen-company-logo"
-        src={`/api/v1/candidate/media/${encodeURIComponent(employerLogoMediaId)}`}
+        src={src}
+        onError={() => setBroken(true)}
         alt=""
         width={44}
         height={44}

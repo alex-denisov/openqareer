@@ -360,6 +360,18 @@ describe('POST /api/v1/candidate/resume/import/structured (B265 slice 3)', () =>
     expect(media.headers['cache-control']).toBe('private, max-age=86400');
     expect(media.headers.etag).toBe(mediaId);
     expect(media.headers['x-content-type-options']).toBe('nosniff');
+
+    // The desktop app reaches the API through a text-only native bridge and
+    // cannot hand a bearer token to <img>; it asks for JSON (B266).
+    const asJson = await app.inject({
+      method: 'GET',
+      url: `/api/v1/candidate/media/${mediaId}`,
+      headers: { authorization, accept: 'application/json' },
+    });
+    expect(asJson.statusCode).toBe(200);
+    const payload = asJson.json().data;
+    expect(payload.mime).toBe('image/jpeg');
+    expect(Buffer.from(payload.base64, 'base64').subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
   });
 
   it("serves 404, not another candidate's media, to a foreign session", async () => {
