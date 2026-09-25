@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ChatCompletionClient } from './roleNamer';
-import { LlmCoverLetterWriter, QueuedCoverLetterWriter } from './coverLetterWriter';
+import {
+  LlmCoverLetterWriter,
+  QueuedCoverLetterWriter,
+  withinTimeBudget,
+  type CoverLetterOutcome,
+} from './coverLetterWriter';
 
 function client(content: string | null): ChatCompletionClient {
   return {
@@ -152,5 +157,19 @@ describe('QueuedCoverLetterWriter', () => {
     const outcome = await queue.writeCoverLetter(input);
     expect(outcome.body).toBeUndefined();
     expect(outcome.failure).toMatchObject({ stage: 'openai:first' });
+  });
+});
+
+describe('withinTimeBudget (B266)', () => {
+  it('gives up on a writer that has not answered within the budget', async () => {
+    const hanging = new Promise<CoverLetterOutcome>(() => {});
+    const outcome = await withinTimeBudget(hanging, 20);
+    expect(outcome.body).toBeUndefined();
+    expect(outcome.failure?.kind).toBe('timeout');
+  });
+
+  it('passes a timely answer through untouched', async () => {
+    const outcome = await withinTimeBudget(Promise.resolve({ body: 'Letter', stage: 's' }), 1_000);
+    expect(outcome).toEqual({ body: 'Letter', stage: 's' });
   });
 });

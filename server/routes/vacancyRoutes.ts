@@ -36,6 +36,7 @@ import {
   type PitchTone,
   type VacancyPitchInputFact,
 } from '../domain/vacancyPitchService';
+import { COVER_LETTER_BUDGET_MS, withinTimeBudget } from '../providers/coverLetterWriter';
 import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';
 import { registerApplicationRoutes } from './applicationRoutes';
 import { registerPlanRequestRoutes } from './planRequestRoutes';
@@ -691,7 +692,7 @@ async function writeCoverLetterBody(
     ref: fact.id,
     statement: fact.statement,
   }));
-  const outcome = await coverLetterWriter.writeCoverLetter({
+  const writing = coverLetterWriter.writeCoverLetter({
     facts: usableFacts,
     vacancy: {
       title: vacancy.title,
@@ -701,6 +702,7 @@ async function writeCoverLetterBody(
     language,
     tone,
   });
+  const outcome = await withinTimeBudget(writing, COVER_LETTER_BUDGET_MS);
   if (outcome.failure) {
     // Причина отказа — для лога сервера, не для кандидата (тот же уговор,
     // что и у называния ролей); текст кандидата и ключ провайдера в лог не идут.

@@ -55,6 +55,28 @@ export interface CoverLetterWriter {
   writeCoverLetter(input: CoverLetterWriteInput): Promise<CoverLetterOutcome>;
 }
 
+/**
+ * Общий срок на письмо. Очередь ждёт до 50 с на ступень, а запрос письма на
+ * клиенте без таймаута: без срока кандидат минутами смотрел бы на спиннер.
+ * По истечении срока идёт шаблон (B266, пункт 7).
+ */
+export const COVER_LETTER_BUDGET_MS = 25_000;
+
+export async function withinTimeBudget(
+  writing: Promise<CoverLetterOutcome>,
+  budgetMs: number,
+): Promise<CoverLetterOutcome> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<CoverLetterOutcome>((resolve) => {
+    timer = setTimeout(() => resolve({ failure: { stage: 'budget', kind: 'timeout' } }), budgetMs);
+  });
+  try {
+    return await Promise.race([writing, expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Ключ провайдера не покидает процесс даже в логе (тот же уговор, что и у роли). */
 function failureDetail(text: string, apiKey: string): string | undefined {
   const trimmed = text.trim().slice(0, 600);
@@ -234,7 +256,9 @@ export interface CoverLetterWriterConfig {
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
 }
 
-export function buildCoverLetterWriter(config: CoverLetterWriterConfig): CoverLetterWriter | undefined {
+export function buildCoverLetterWriter(
+  config: CoverLetterWriterConfig,
+): CoverLetterWriter | undefined {
   const provider: ProviderId = config.personalProvider ?? 'openai';
   const stages = selectProviderQueue({
     head: { provider, ...(config.model ? { model: config.model } : {}) },
@@ -254,8 +278,7 @@ export function buildCoverLetterWriter(config: CoverLetterWriterConfig): CoverLe
           structuredOutput:
             modelRegistry[route.provider].models.find((item) => item.id === route.model)
               ?.structuredOutput ?? false,
-          requireParameters:
-            route.provider === 'openrouter' && isMutableModelAlias(route.model),
+          requireParameters: route.provider === 'openrouter' && isMutableModelAlias(route.model),
         }),
     ),
     stages.map((route) => `${route.provider}:${route.model}`),
