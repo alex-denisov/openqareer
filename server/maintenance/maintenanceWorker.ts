@@ -83,6 +83,8 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
 /** Ключей индекса за шаг разметки: окно O(chunk), одна короткая транзакция. */
 export const TITLE_PARSE_STEP_CHUNK = 500;
 const TITLE_PARSE_PROGRESS_EVERY = 50;
+/** Сколько тик может проходить уже размеченные окна подряд. */
+const TITLE_PARSE_IDLE_BUDGET_MS = 300;
 
 /** Столько строк проекции каталога за один такт: одна короткая транзакция. */
 export const CATALOG_STEP_CHUNK = 500;
@@ -242,7 +244,7 @@ export class MaintenanceWorker {
     if (this.stopped || !this.titleParse) return;
     try {
       const startedAt = Date.now();
-      const report = this.titleParse.step(TITLE_PARSE_STEP_CHUNK);
+      const report = this.stepThroughLabelled(this.titleParse, startedAt);
       const pass = {
         ...this.titleParsePass,
         steps: this.titleParsePass.steps + 1,
@@ -274,6 +276,23 @@ export class MaintenanceWorker {
         'title-parse-step-failed',
       );
     }
+  }
+
+  /**
+   * Уже размеченные окна проходятся в том же тике, пока хватает бюджета:
+   * после каждого рестарта курсор начинает с начала пула, и без этого
+   * холостой проход размеченного диапазона занимал больше часа.
+   */
+  private stepThroughLabelled(step: TitleParseStep, startedAt: number) {
+    let report = step.step(TITLE_PARSE_STEP_CHUNK);
+    while (
+      report.backfilled === 0 &&
+      !report.passFinished &&
+      Date.now() - startedAt < TITLE_PARSE_IDLE_BUDGET_MS
+    ) {
+      report = step.step(TITLE_PARSE_STEP_CHUNK);
+    }
+    return report;
   }
 
   /** Раз в минуту — сколько занято: без этого `MemoryMax` срабатывает молча. */

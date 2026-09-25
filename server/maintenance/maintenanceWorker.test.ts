@@ -384,4 +384,30 @@ describe('MaintenanceWorker title parse step (B267 S2)', () => {
     expect(() => worker.runTitleParseStep()).not.toThrow();
     expect(log.entries).toEqual([{ level: 'error', msg: 'title-parse-step-failed' }]);
   });
+
+  it('в одном тике проходит уже размеченные окна подряд, пока не найдёт работу', () => {
+    const log = silentLog();
+    let calls = 0;
+    const worker = new MaintenanceWorker({
+      engine: engineStub,
+      log,
+      titleParse: {
+        step: () => {
+          calls += 1;
+          return {
+            scanned: 0,
+            pruned: 0,
+            newKeys: 0,
+            passFinished: false,
+            backfilled: calls < 4 ? 0 : 7,
+          };
+        },
+        countKeys: () => 0,
+      },
+    });
+
+    worker.runTitleParseStep();
+
+    expect(calls).toBe(4);
+  });
 });
