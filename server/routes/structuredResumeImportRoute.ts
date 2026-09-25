@@ -40,23 +40,37 @@ function structuredImportDigest(
 
 type StructuredImportBody = z.infer<typeof structuredResumeImportSchema>;
 
+type ImportLog = Parameters<Handler>[1]['log'];
+
 async function resolveStructuredMedia(
   candidateId: string,
   profile: StructuredImportBody['profile'],
+  log: ImportLog,
 ): Promise<ReadonlyMap<string, DownloadedMedia>> {
   const mediaRequests = collectMediaRequests(profile);
   if (mediaRequests.length === 0) return new Map();
-  return resolveCandidateMedia({ candidateId, items: mediaRequests, fetchImpl: fetch });
+  const media = await resolveCandidateMedia({ candidateId, items: mediaRequests, fetchImpl: fetch });
+  const photoMissing = Boolean(profile.photoSourceUrl) && !media.has(profile.photoSourceUrl ?? '');
+  const requested = new Set(mediaRequests.map((item) => item.sourceUrl)).size;
+  if (photoMissing || media.size < requested) {
+    // Source URLs carry signed licdn tokens, so only the counts are logged.
+    log.warn(
+      { requested, downloaded: media.size, photoMissing },
+      'structured_import_media_incomplete',
+    );
+  }
+  return media;
 }
 
 async function commitStructuredImport(
   deps: Parameters<Handler>[0],
+  log: ImportLog,
   candidateId: string,
   body: StructuredImportBody,
   importDigest: string,
   plan: ReturnType<typeof planStructuredResumeImport>,
 ) {
-  const mediaBySourceUrl = await resolveStructuredMedia(candidateId, body.profile);
+  const mediaBySourceUrl = await resolveStructuredMedia(candidateId, body.profile, log);
   const draft = keepFilledSections(
     attachResumeMedia(plan.draft, body.profile, mediaBySourceUrl),
     deps.candidateStore.getSnapshot(candidateId)?.resume?.draft,
@@ -124,6 +138,6 @@ export const handleImportStructuredResume: Handler = async (deps, request, reply
     );
   }
 
-  const data = await commitStructuredImport(deps, candidate.id, body, importDigest, plan);
+  const data = await commitStructuredImport(deps, request.log, candidate.id, body, importDigest, plan);
   return { data, meta: { requestId: request.id } };
 };

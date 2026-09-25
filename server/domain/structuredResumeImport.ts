@@ -207,8 +207,15 @@ export function keepFilledSections(incoming: ResumeDraft, existing: ResumeDraft 
   const withRole: ResumeDraft = existing.targetRole
     ? { ...incoming, targetRole: existing.targetRole }
     : incoming;
+  // A photo download can fail on any re-import (expired licdn link, timeout);
+  // that must not blank the portrait the candidate already has (B266).
+  const oldPhoto = existing.candidate?.photoMediaId;
+  const withPhoto: ResumeDraft =
+    oldPhoto && !withRole.candidate?.photoMediaId
+      ? { ...withRole, candidate: { ...withRole.candidate, photoMediaId: oldPhoto } }
+      : withRole;
   const kept = STRUCTURED_LIST_SECTIONS.filter(
     (section) => (incoming[section]?.length ?? 0) === 0 && (existing[section]?.length ?? 0) > 0,
   );
-  return kept.reduce<ResumeDraft>((draft, section) => ({ ...draft, [section]: existing[section] }), withRole);
+  return kept.reduce<ResumeDraft>((draft, section) => ({ ...draft, [section]: existing[section] }), withPhoto);
 }

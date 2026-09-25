@@ -289,6 +289,18 @@ describe('keepFilledSections (B266)', () => {
     expect(merged.courses).toEqual([]);
   });
 
+  it('keeps the existing photo when the re-import could not download a new one', () => {
+    const withPhoto = { ...(existing as object), candidate: { photoMediaId: 'photo-old' } } as never;
+    const incoming = { candidate: {}, experience: [], education: [], languages: [] } as never;
+    expect(keepFilledSections(incoming, withPhoto).candidate.photoMediaId).toBe('photo-old');
+  });
+
+  it('takes the freshly downloaded photo over the old one', () => {
+    const withPhoto = { ...(existing as object), candidate: { photoMediaId: 'photo-old' } } as never;
+    const incoming = { candidate: { photoMediaId: 'photo-new' }, experience: [], education: [], languages: [] } as never;
+    expect(keepFilledSections(incoming, withPhoto).candidate.photoMediaId).toBe('photo-new');
+  });
+
   it('never clears the candidate target role that drives the campaign', () => {
     const incoming = { candidate: {}, experience: [], education: [], languages: [] } as never;
     expect(keepFilledSections(incoming, existing).targetRole).toBe('VP of Technology & Operations');
