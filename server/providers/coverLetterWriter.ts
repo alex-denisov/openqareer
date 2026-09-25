@@ -9,6 +9,7 @@ import {
   type PitchLanguage,
   type PitchTone,
 } from '../domain/vacancyPitchService';
+import { rankPitchFacts } from '../domain/pitchFactRanking';
 import type { ChatCompletionClient } from './roleNamer';
 import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
 import { selectProviderQueue, type ProviderQueueEntry } from './providerQueue';
@@ -24,11 +25,15 @@ const MAX_REQUIREMENTS = 20;
 export interface CoverLetterFact {
   readonly ref: string;
   readonly statement: string;
+  readonly domain?: string;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
 }
 
 export interface CoverLetterVacancy {
   readonly title: string;
   readonly company?: string;
+  readonly description?: string;
   readonly requirements?: readonly string[];
 }
 
@@ -140,6 +145,7 @@ function parseBody(content: string | null): string | null {
 }
 
 function serializeInput(input: CoverLetterWriteInput): string {
+  const rankedFacts = rankPitchFacts(input.facts, input.vacancy);
   return JSON.stringify({
     vacancy: {
       title: input.vacancy.title.slice(0, MAX_TITLE),
@@ -148,7 +154,7 @@ function serializeInput(input: CoverLetterWriteInput): string {
         .slice(0, MAX_REQUIREMENTS)
         .map((requirement) => requirement.slice(0, MAX_REQUIREMENT)),
     },
-    facts: input.facts.slice(0, MAX_FACTS).map((fact) => ({
+    facts: rankedFacts.slice(0, MAX_FACTS).map((fact) => ({
       ref: fact.ref,
       statement: fact.statement.slice(0, MAX_STATEMENT),
     })),

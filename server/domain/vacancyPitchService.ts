@@ -1,5 +1,6 @@
 import { stripHiddenMarkers } from '../../shared/textHygiene';
 import { isImportedMemoryId } from './resumeImport';
+import { rankPitchFacts } from './pitchFactRanking';
 
 export type PitchTone = 'executive' | 'confident' | 'technical';
 export type PitchLanguage = 'en' | 'ru';
@@ -24,6 +25,8 @@ export interface VacancyPitchInputFact {
   readonly sourceMessageIds?: readonly string[];
   readonly sensitive?: boolean;
   readonly status?: 'proposed' | 'confirmed' | 'corrected';
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
 }
 
 export interface VacancyPitchInputVacancy {
@@ -356,10 +359,10 @@ function buildStackParagraph(
   }
 
   if (missingSkills.length > 0) {
-    parts.push(copy.stackMissing(missingSkills.slice(0, 3).join(', ')));
+    notices.push(copy.stackMissing(missingSkills.slice(0, 3).join(', ')));
   }
 
-  return `${parts.join('. ')}.`;
+  return parts.length > 0 ? `${parts.join('. ')}.` : '';
 }
 
 function buildLinkedInNote(
@@ -416,7 +419,7 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
   const language = options.language ?? detectVacancyLanguage(vacancy);
   const copy = copyFor(language);
   const candidateName = options.candidateName?.trim() || copy.candidateFallback;
-  const usableFacts = filterUsableFacts(options.facts);
+  const usableFacts = rankPitchFacts(filterUsableFacts(options.facts), vacancy);
   const usedEvidenceIds = new Set<string>();
   const notices: string[] = [];
 

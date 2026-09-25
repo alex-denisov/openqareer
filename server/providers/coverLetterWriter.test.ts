@@ -165,6 +165,47 @@ describe('LlmCoverLetterWriter', () => {
     const sent = JSON.parse(call.messages[1].content) as { facts: unknown[] };
     expect(sent.facts.length).toBe(40);
   });
+
+  it('перед лимитом ставит опыт по роли выше сертификатов', async () => {
+    const stub = client(JSON.stringify({ body: 'Письмо.' }));
+    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
+    await writer.writeCoverLetter({
+      ...input,
+      vacancy: {
+        title: 'Chief Product Technology Officer',
+        description: 'Own product strategy and operations.',
+      },
+      facts: [
+        { ref: 'imp-c-cert-1', statement: 'ITIL 4 Foundation', domain: 'other' },
+        { ref: 'imp-c-cert-2', statement: 'Agile Fundamentals', domain: 'other' },
+        { ref: 'imp-c-cert-3', statement: 'AWS Fundamentals', domain: 'other' },
+        {
+          ref: 'imp-c-exp-1',
+          statement: 'VP Product & Operations — Commerce Platform',
+          domain: 'role-evidence',
+        },
+        {
+          ref: 'imp-c-ach-1-1',
+          statement: 'Led product transformation across three business units',
+          domain: 'outcome',
+        },
+        {
+          ref: 'imp-c-exp-2',
+          statement: 'VP of Engineering — Infrastructure Group',
+          domain: 'role-evidence',
+        },
+      ],
+    });
+    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const sent = JSON.parse(call.messages[1].content) as { facts: Array<{ ref: string }> };
+    expect(sent.facts.slice(0, 3).map((fact) => fact.ref)).toEqual([
+      'imp-c-exp-1',
+      'imp-c-ach-1-1',
+      'imp-c-exp-2',
+    ]);
+  });
 });
 
 describe('QueuedCoverLetterWriter', () => {

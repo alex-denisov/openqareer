@@ -681,7 +681,12 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
 async function writeCoverLetterBody(
   deps: RouteDeps,
   request: FastifyRequest,
-  vacancy: { title: string; company?: string; requiredSkills: readonly string[] },
+  vacancy: {
+    title: string;
+    company?: string;
+    description?: string;
+    requiredSkills: readonly string[];
+  },
   facts: readonly VacancyPitchInputFact[],
   language: PitchLanguage,
   tone: PitchTone,
@@ -691,12 +696,16 @@ async function writeCoverLetterBody(
   const usableFacts = filterUsablePitchFacts(facts).map((fact) => ({
     ref: fact.id,
     statement: fact.statement,
+    domain: fact.domain,
+    createdAt: fact.createdAt,
+    updatedAt: fact.updatedAt,
   }));
   const writing = coverLetterWriter.writeCoverLetter({
     facts: usableFacts,
     vacancy: {
       title: vacancy.title,
       ...(vacancy.company ? { company: vacancy.company } : {}),
+      ...(vacancy.description ? { description: vacancy.description } : {}),
       requirements: vacancy.requiredSkills,
     },
     language,
@@ -768,12 +777,13 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
     return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
   }
   const title = vacancy.title;
+  const pitchVacancy = { ...vacancy, title };
 
   const snapshot = candidateStore.getSnapshot(candidate.id);
   const facts = snapshot?.memory ?? [];
   const tone = body?.tone ?? 'executive';
   const pitch = generateVacancyPitch({
-    vacancy: { ...vacancy, title },
+    vacancy: pitchVacancy,
     candidateName: snapshot?.resume?.draft?.candidate?.fullName,
     facts,
     tone,
@@ -783,7 +793,7 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   const written = await writeCoverLetterBody(
     deps,
     request,
-    { title, company: vacancy.company, requiredSkills: vacancy.requiredSkills },
+    pitchVacancy,
     facts,
     pitch.language,
     tone,

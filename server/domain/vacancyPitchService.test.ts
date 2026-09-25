@@ -117,9 +117,8 @@ describe('vacancyPitchService', () => {
 
     // Does not claim to be a Kafka/Kubernetes veteran, but cites existing adjacent skills
     expect(pitch.usedEvidenceIds).toContain('mem-003');
-    expect(pitch.emailPitch.body).toMatch(/Kafka|Kubernetes/i);
-    // Honest coverage gap, without an invented adjacent-fit claim.
-    expect(pitch.emailPitch.body).toContain('нет подтверждённых фактов');
+    expect(pitch.emailPitch.body).not.toMatch(/Kafka|Kubernetes/i);
+    expect(pitch.notices).toContain('В профиле нет подтверждённых фактов по требованиям: Kafka, Kubernetes');
   });
 
   it('adapts phrasing based on selected tone', () => {
@@ -197,7 +196,8 @@ describe('vacancyPitchService', () => {
       vacancy: { id: 'vac-empty', title: 'Бухгалтер', requiredSkills: ['Excel'] },
       facts: [],
     });
-    expect(empty.emailPitch.body).toContain('нет подтверждённых фактов');
+    expect(empty.emailPitch.body).not.toContain('нет подтверждённых фактов');
+    expect(empty.notices.length).toBeGreaterThan(0);
     expect(empty.emailPitch.body).not.toContain('смежный фундамент');
     expect(empty.emailPitch.body).not.toContain('быстрому освоению');
 
@@ -335,11 +335,50 @@ describe('vacancyPitchService', () => {
       'не сопоставлены с подтверждёнными',
       'not selected',
       'have not been matched',
+      'has no confirmed facts',
     ];
     for (const marker of serviceMarkers) {
       expect(noFacts.emailPitch.body).not.toContain(marker);
       expect(noFacts.atsCoverLetter).not.toContain(marker);
     }
     expect(noFacts.notices.length).toBeGreaterThan(0);
+  });
+
+  it('выбирает для шаблонного письма опыт VP, а не первые сертификаты', () => {
+    const fact = (id: string, statement: string, domain: string): VacancyPitchInputFact => ({
+      id,
+      statement,
+      domain,
+      kind: 'fact',
+      sourceMessageIds: ['resume-import-1'],
+      sensitive: false,
+      status: 'confirmed',
+    });
+    const pitch = generateVacancyPitch({
+      vacancy: {
+        id: 'vac-cpto',
+        title: 'Chief Product Technology Officer',
+        description: 'Own product strategy, technology, and operations.',
+        requiredSkills: ['Product & Operations'],
+      },
+      facts: [
+        fact('imp-c-cert-1', 'ITIL 4 Foundation', 'other'),
+        fact('imp-c-cert-2', 'Agile Fundamentals', 'other'),
+        fact('imp-c-cert-3', 'AWS Fundamentals', 'other'),
+        fact('imp-c-exp-1', 'VP Product & Operations — Commerce Platform', 'role-evidence'),
+        fact('imp-c-ach-1-1', 'Led product transformation across three business units', 'outcome'),
+        fact('imp-c-exp-2', 'VP of Engineering — Infrastructure Group', 'role-evidence'),
+      ],
+      language: 'en',
+    });
+
+    expect(pitch.usedEvidenceIds.slice(0, 3)).toEqual([
+      'imp-c-ach-1-1',
+      'imp-c-exp-1',
+      'imp-c-exp-2',
+    ]);
+    expect(pitch.emailPitch.body).not.toContain('has no confirmed facts');
+    expect(pitch.atsCoverLetter).not.toContain('has no confirmed facts');
+    expect(pitch.notices.length).toBeGreaterThan(0);
   });
 });
