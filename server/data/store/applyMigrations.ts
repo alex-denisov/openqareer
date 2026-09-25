@@ -30,6 +30,7 @@ import {
   MIGRATION_32,
   MIGRATION_33,
   MIGRATION_34,
+  MIGRATION_35,
 } from '../sqliteSchema';
 
 const MIGRATIONS = [
@@ -67,6 +68,7 @@ const MIGRATIONS = [
   MIGRATION_32,
   MIGRATION_33,
   MIGRATION_34,
+  MIGRATION_35,
 ];
 
 export function applyMigrations(

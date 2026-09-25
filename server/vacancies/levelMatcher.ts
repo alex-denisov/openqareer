@@ -9,7 +9,8 @@ import { normalizeTextForComparison } from './vacancyFingerprint';
  */
 export type SeniorityLevel = 'ic' | 'lead' | 'head' | 'vp' | 'c-level';
 
-const LEVEL_RANK: Record<SeniorityLevel, number> = {
+/** Экспортируется для `rulesParse` (B267 S1): `level_rank` в `title_parse` — та же шкала. */
+export const LEVEL_RANK: Record<SeniorityLevel, number> = {
   ic: 0,
   lead: 1,
   head: 2,

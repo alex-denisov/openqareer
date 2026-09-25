@@ -1050,3 +1050,7 @@ CREATE TABLE IF NOT EXISTS plan_requests (
   UNIQUE(candidate_id, plan_id)
 ) STRICT;
 `;
+
+// B267 срез 1 — модель разбора названий вакансий. Вынесена в
+// `titleParseSchema.ts`, чтобы держать этот файл под гейтом 800 строк.
+export { MIGRATION_35 } from './titleParseSchema';
