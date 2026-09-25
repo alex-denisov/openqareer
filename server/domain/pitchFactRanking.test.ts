@@ -41,6 +41,63 @@ describe('rankPitchFacts', () => {
     expect(facts[0].id).toBe('imp-c-cert-1');
   });
 
+  it('для CTO ставит опыт руководителя выше сертификата', () => {
+    const facts = [
+      { id: 'cert:itil', statement: 'ITIL 4 Foundation', domain: 'other' },
+      {
+        id: 'experience:vp-tech',
+        statement: 'VP of Technology & Operations',
+        domain: 'role-evidence',
+      },
+    ] as const;
+
+    const ranked = rankPitchFacts(facts, { title: 'Chief Technology Officer' }, {
+      vacancy: { functions: ['it-ops'], levelRank: 4 },
+      campaignRole: { functions: ['it-ops'], levelRank: 3, evidenceRefs: [] },
+    });
+
+    expect(ranked.map((fact) => fact.id)).toEqual(['experience:vp-tech', 'cert:itil']);
+  });
+
+  it('ставит evidenceRefs выбранной роли кампании первыми', () => {
+    const facts = [
+      { id: 'memory:other', statement: 'Led Technology transformation', domain: 'outcome' },
+      { id: 'memory:evidence', statement: 'VP of Technology & Operations', domain: 'role-evidence' },
+    ] as const;
+
+    const ranked = rankPitchFacts(facts, { title: 'Chief Technology Officer' }, {
+      vacancy: { functions: ['it-ops'], levelRank: 4 },
+      campaignRole: { functions: ['it-ops'], levelRank: 3, evidenceRefs: ['memory:evidence'] },
+    });
+
+    expect(ranked[0]?.id).toBe('memory:evidence');
+  });
+
+  it('для IC разбора сохраняет прежний порядок', () => {
+    const facts = [
+      { id: 'memory:skill', statement: 'TypeScript', domain: 'skill' },
+      { id: 'memory:experience', statement: 'VP of Technology', domain: 'role-evidence' },
+    ] as const;
+
+    const ranked = rankPitchFacts(facts, { title: 'Software Engineer' }, {
+      vacancy: { functions: ['eng'], levelRank: 0 },
+      campaignRole: { functions: ['eng'], levelRank: 0, evidenceRefs: [] },
+    });
+
+    expect(ranked.map((fact) => fact.id)).toEqual(['memory:experience', 'memory:skill']);
+  });
+
+  it('без разбора сохраняет прежний порядок', () => {
+    const facts = [
+      { id: 'memory:skill', statement: 'TypeScript', domain: 'skill' },
+      { id: 'memory:experience', statement: 'VP of Technology', domain: 'role-evidence' },
+    ] as const;
+
+    const ranked = rankPitchFacts(facts, { title: 'Unknown title' });
+
+    expect(ranked.map((fact) => fact.id)).toEqual(['memory:experience', 'memory:skill']);
+  });
+
   it('оставляет одну копию факта, повторённого разными импортами', () => {
     // Прод 25.09: три импорта LinkedIn дали три копии «Co-Founder & COO» с разным форматом дат.
     const facts = [

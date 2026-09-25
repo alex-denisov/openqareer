@@ -11,7 +11,7 @@ import {
   type PitchLanguage,
   type PitchTone,
 } from '../domain/vacancyPitchService';
-import { rankPitchFacts } from '../domain/pitchFactRanking';
+import { rankPitchFacts, type PitchFactRankingContext } from '../domain/pitchFactRanking';
 import type { ChatCompletionClient } from './roleNamer';
 import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
 import {
@@ -60,6 +60,8 @@ export interface CoverLetterVacancy {
   readonly company?: string;
   readonly description?: string;
   readonly requirements?: readonly string[];
+  /** Не попадает в текст вакансии: только задаёт порядок фактов в промпте. */
+  readonly rankingContext?: PitchFactRankingContext;
 }
 
 export interface CoverLetterWriteInput {
@@ -206,7 +208,7 @@ export function acceptModelBody(
 }
 
 export function serializeInput(input: CoverLetterWriteInput): string {
-  const rankedFacts = rankPitchFacts(input.facts, input.vacancy);
+  const rankedFacts = rankPitchFacts(input.facts, input.vacancy, input.vacancy.rankingContext);
   return JSON.stringify({
     vacancy: {
       title: input.vacancy.title.slice(0, MAX_TITLE),

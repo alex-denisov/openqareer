@@ -37,6 +37,9 @@ import {
   type VacancyPitchInputFact,
 } from '../domain/vacancyPitchService';
 import { COVER_LETTER_BUDGET_MS, withinTimeBudget } from '../providers/coverLetterWriter';
+import type { PitchFactRankingContext } from '../domain/pitchFactRanking';
+import { LEVEL_RANK } from '../vacancies/levelMatcher';
+import { rulesParse } from '../vacancies/titleParse/rulesParse';
 import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';
 import { registerApplicationRoutes } from './applicationRoutes';
 import { registerPlanRequestRoutes } from './planRequestRoutes';
@@ -698,6 +701,7 @@ async function writeCoverLetterBody(
   facts: readonly VacancyPitchInputFact[],
   language: PitchLanguage,
   tone: PitchTone,
+  rankingContext?: PitchFactRankingContext,
 ): Promise<{ body?: string; stage?: string }> {
   const { coverLetterWriter } = deps;
   if (!coverLetterWriter) return {};
@@ -715,6 +719,7 @@ async function writeCoverLetterBody(
       ...(vacancy.company ? { company: vacancy.company } : {}),
       ...(vacancy.description ? { description: vacancy.description } : {}),
       requirements: vacancy.requiredSkills,
+      ...(rankingContext ? { rankingContext } : {}),
     },
     language,
     tone,
@@ -726,6 +731,31 @@ async function writeCoverLetterBody(
     request.log.warn(outcome.failure, 'cover-letter-stage-failed');
   }
   return outcome.body ? { body: outcome.body, stage: outcome.stage } : {};
+}
+
+/** Роль кампании применима, только если её функция совпала с разбором вакансии. */
+function pitchRankingContext(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+  vacancyTitle: string,
+): PitchFactRankingContext | undefined {
+  const vacancy = rulesParse(vacancyTitle);
+  if (vacancy.functions.length === 0 || vacancy.levelRank === null) return undefined;
+  const stored = candidateStore.getCandidateWorkspace(candidateId);
+  const selected = new Set(readCampaign(candidateStore, candidateId).roles.value);
+  const role = stored?.campaign?.auto?.roles.find((item) => {
+    const functions = rulesParse(item.title).functions;
+    return selected.has(item.title) && functions.some((code) => vacancy.functions.includes(code));
+  });
+  if (!role) return undefined;
+  return {
+    vacancy: { functions: vacancy.functions, levelRank: vacancy.levelRank },
+    campaignRole: {
+      functions: rulesParse(role.title).functions,
+      levelRank: role.level === null ? null : LEVEL_RANK[role.level],
+      evidenceRefs: role.evidenceRefs,
+    },
+  };
 }
 
 /** Одна и та же вакансия собирается из тела запроса, кластера и пула один раз. */
@@ -774,7 +804,6 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-
   const vacancyId = (request.params as { id: string }).id;
   const body = vacancyPitchInputSchema.parse(request.body ?? {});
 
@@ -786,6 +815,7 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   }
   const title = vacancy.title;
   const pitchVacancy = { ...vacancy, title };
+  const rankingContext = pitchRankingContext(candidateStore, candidate.id, title);
 
   const snapshot = candidateStore.getSnapshot(candidate.id);
   const facts = snapshot?.memory ?? [];
@@ -795,6 +825,7 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
     candidateName: snapshot?.resume?.draft?.candidate?.fullName,
     facts,
     tone,
+    ...(rankingContext ? { rankingContext } : {}),
     ...(body?.language ? { language: body.language } : {}),
   });
 
@@ -805,21 +836,19 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
     facts,
     pitch.language,
     tone,
+    rankingContext,
   );
   const atsCoverLetter = written.body ?? pitch.atsCoverLetter;
-  const responseData = {
-    ...pitch,
-    atsCoverLetter,
-    bodySource: written.body ? ('model' as const) : ('template' as const),
-    ...(written.body && written.stage ? { stage: written.stage } : {}),
-  };
-
   if (body?.applicationId) {
     linkGeneratedCoverLetter(candidateStore, candidate.id, body.applicationId, atsCoverLetter);
   }
-
   return {
-    data: responseData,
+    data: {
+      ...pitch,
+      atsCoverLetter,
+      bodySource: written.body ? ('model' as const) : ('template' as const),
+      ...(written.body && written.stage ? { stage: written.stage } : {}),
+    },
     meta: { requestId: request.id },
   };
 };

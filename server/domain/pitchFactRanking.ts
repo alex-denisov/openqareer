@@ -1,3 +1,6 @@
+import type { FunctionCode } from '../../shared/roleTaxonomy';
+import { rulesParse } from '../vacancies/titleParse/rulesParse';
+
 export interface RankablePitchFact {
   readonly id?: string;
   readonly ref?: string;
@@ -10,6 +13,22 @@ export interface RankablePitchFact {
 export interface PitchRankingVacancy {
   readonly title: string;
   readonly description?: string;
+}
+
+export interface PitchVacancyAnalysis {
+  readonly functions: readonly FunctionCode[];
+  readonly levelRank: number | null;
+}
+
+export interface PitchCampaignRole {
+  readonly functions: readonly FunctionCode[];
+  readonly levelRank: number | null;
+  readonly evidenceRefs: readonly string[];
+}
+
+export interface PitchFactRankingContext {
+  readonly vacancy: PitchVacancyAnalysis;
+  readonly campaignRole?: PitchCampaignRole;
 }
 
 const EXPERIENCE_DOMAINS = new Set(['role-evidence', 'responsibility', 'outcome']);
@@ -28,10 +47,23 @@ const VACANCY_STOP_WORDS = new Set([
   'это',
 ]);
 
-type FactGroup = 'matched-experience' | 'experience' | 'project' | 'skill' | 'other' | 'tail';
+type FactGroup =
+  | 'campaign-evidence'
+  | 'matching-position'
+  | 'matched-experience'
+  | 'experience'
+  | 'project'
+  | 'skill'
+  | 'other'
+  | 'tail';
 
 function factKey(fact: RankablePitchFact): string {
   return fact.id ?? fact.ref ?? '';
+}
+
+function factRefs(fact: RankablePitchFact): readonly string[] {
+  const refs = [fact.id, fact.ref].filter((ref): ref is string => Boolean(ref));
+  return refs.flatMap((ref) => (ref.startsWith('memory:') ? [ref, ref.slice('memory:'.length)] : [ref, `memory:${ref}`]));
 }
 
 function isIdKind(fact: RankablePitchFact, kind: string): boolean {
@@ -61,6 +93,43 @@ function groupFor(fact: RankablePitchFact, overlap: number): FactGroup {
   if (fact.domain === 'skill') return 'skill';
   if (isIdKind(fact, 'edu') || isIdKind(fact, 'cert')) return 'tail';
   return 'other';
+}
+
+function hasSharedFunction(left: readonly FunctionCode[], right: readonly FunctionCode[]): boolean {
+  return left.some((code) => right.includes(code));
+}
+
+function usableCampaignRole(context: PitchFactRankingContext | undefined): PitchCampaignRole | undefined {
+  const role = context?.campaignRole;
+  if (!role || context.vacancy.functions.length === 0 || role.functions.length === 0) return undefined;
+  return hasSharedFunction(context.vacancy.functions, role.functions) ? role : undefined;
+}
+
+/** Без полного разбора сохраняется порядок шаблона прежних выпусков. */
+export function hasRoleAwarePitchRanking(context: PitchFactRankingContext | undefined): boolean {
+  return context?.vacancy.levelRank !== null && usableCampaignRole(context) !== undefined;
+}
+
+function isPositionForVacancy(
+  fact: RankablePitchFact,
+  context: PitchFactRankingContext | undefined,
+): boolean {
+  if (!isExperience(fact) || !context || context.vacancy.levelRank === null) return false;
+  const parsed = rulesParse(fact.statement);
+  return (
+    parsed.levelRank === context.vacancy.levelRank &&
+    hasSharedFunction(parsed.functions, context.vacancy.functions)
+  );
+}
+
+function semanticGroup(
+  fact: RankablePitchFact,
+  context: PitchFactRankingContext | undefined,
+): FactGroup | undefined {
+  const role = usableCampaignRole(context);
+  if (!role || !hasRoleAwarePitchRanking(context)) return undefined;
+  if (factRefs(fact).some((ref) => role.evidenceRefs.includes(ref))) return 'campaign-evidence';
+  return isPositionForVacancy(fact, context) ? 'matching-position' : undefined;
 }
 
 function freshness(fact: RankablePitchFact): number {
@@ -102,12 +171,14 @@ function withoutImportDuplicates<T extends RankablePitchFact>(facts: readonly T[
 }
 
 const GROUP_PRIORITY: Record<FactGroup, number> = {
-  'matched-experience': 0,
-  experience: 1,
-  project: 2,
-  skill: 3,
-  other: 4,
-  tail: 5,
+  'campaign-evidence': 0,
+  'matching-position': 1,
+  'matched-experience': 2,
+  experience: 3,
+  project: 4,
+  skill: 5,
+  other: 6,
+  tail: 7,
 };
 
 /**
@@ -118,17 +189,21 @@ const GROUP_PRIORITY: Record<FactGroup, number> = {
 export function rankPitchFacts<T extends RankablePitchFact>(
   facts: readonly T[],
   vacancy: PitchRankingVacancy,
+  context?: PitchFactRankingContext,
 ): T[] {
   const vacancyWords = tokens(`${vacancy.title} ${vacancy.description ?? ''}`);
   return withoutImportDuplicates(facts)
     .map((fact, index) => {
       const overlap = overlapCount(fact.statement, vacancyWords);
-      return { fact, index, overlap, group: groupFor(fact, overlap) };
+      return { fact, index, overlap, group: semanticGroup(fact, context) ?? groupFor(fact, overlap) };
     })
     .sort((left, right) => {
       const groupDifference = GROUP_PRIORITY[left.group] - GROUP_PRIORITY[right.group];
       if (groupDifference !== 0) return groupDifference;
-      if (left.group === 'matched-experience' && left.overlap !== right.overlap) {
+      if (
+        (left.group === 'matched-experience' || left.group === 'matching-position') &&
+        left.overlap !== right.overlap
+      ) {
         return right.overlap - left.overlap;
       }
       const freshnessDifference = freshness(right.fact) - freshness(left.fact);
