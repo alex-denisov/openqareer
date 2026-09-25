@@ -13,7 +13,14 @@ import { geminiResponseSchema } from './geminiSchema';
 import { PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
 export interface GeminiCoverLetterWriterOptions {
+  /** Ключ AI Studio; у Vertex пусто — доступ даёт `authHeaders`. */
   readonly apiKey: string;
+  /** Vertex: заголовок `Authorization` с токеном сервисного аккаунта. */
+  readonly authHeaders?: () => Promise<Record<string, string>>;
+  /** Gemini 3 по умолчанию тратит весь вывод на рассуждение (замер 25.09: «...»). */
+  readonly thinkingLevel?: 'low' | 'high';
+  /** Vertex отвечает 429 при нехватке общей мощности — один повтор помогает. */
+  readonly retriesOn429?: number;
   readonly model: string;
   readonly baseUrl: string;
   readonly stage?: string;
@@ -47,16 +54,7 @@ export class GeminiCoverLetterWriter implements CoverLetterWriter {
     if (input.facts.length === 0) return {};
     const stage = this.options.stage ?? this.options.model;
     try {
-      const response = await this.fetchImpl(this.endpoint(), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': this.options.apiKey,
-          ...(this.options.extraHeaders ?? {}),
-        },
-        body: JSON.stringify(requestBody(input)),
-        signal: AbortSignal.timeout(this.options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS),
-      });
+      const response = await this.send(input, this.options.retriesOn429 ?? 0);
       if (!response.ok) {
         const detail = failureDetail(await response.text().catch(() => ''), this.options.apiKey);
         return {
@@ -76,13 +74,32 @@ export class GeminiCoverLetterWriter implements CoverLetterWriter {
     }
   }
 
+  private async send(input: CoverLetterWriteInput, retries: number): Promise<Response> {
+    const response = await this.fetchImpl(this.endpoint(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.options.apiKey ? { 'x-goog-api-key': this.options.apiKey } : {}),
+        ...(this.options.extraHeaders ?? {}),
+        ...((await this.options.authHeaders?.()) ?? {}),
+      },
+      body: JSON.stringify(requestBody(input, this.options.thinkingLevel)),
+      signal: AbortSignal.timeout(this.options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS),
+    });
+    if (response.status === 429 && retries > 0) {
+      await response.body?.cancel();
+      return this.send(input, retries - 1);
+    }
+    return response;
+  }
+
   private endpoint(): string {
     const base = this.options.baseUrl.replace(/\/+$/u, '');
     return `${base}/models/${encodeURIComponent(this.options.model)}:generateContent`;
   }
 }
 
-function requestBody(input: CoverLetterWriteInput) {
+function requestBody(input: CoverLetterWriteInput, thinkingLevel?: 'low' | 'high') {
   return {
     systemInstruction: { parts: [{ text: coverLetterInstructions(input.language, input.tone) }] },
     contents: [{ role: 'user', parts: [{ text: serializeInput(input) }] }],
@@ -90,6 +107,7 @@ function requestBody(input: CoverLetterWriteInput) {
       responseMimeType: 'application/json',
       responseJsonSchema: geminiResponseSchema(COVER_LETTER_JSON_SCHEMA.schema),
       maxOutputTokens: COVER_LETTER_REASONING_TOKENS,
+      ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
     },
   };
 }

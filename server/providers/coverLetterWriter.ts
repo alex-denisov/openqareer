@@ -18,6 +18,7 @@ import {
   type CloudflareGatewayConfig,
 } from './cloudflareAiGateway';
 import { GeminiCoverLetterWriter } from './geminiCoverLetterWriter';
+import { VertexTokenProvider, vertexPublisherBaseUrl, type VertexConfig } from './vertexAi';
 import { selectProviderQueue, type ProviderQueueEntry, type ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
@@ -337,6 +338,8 @@ export interface CoverLetterWriterConfig {
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
   /** Без тоннеля Gemini с прод-хоста не доходит (B183) — ступень пропускается. */
   readonly cloudflareGateway?: CloudflareGatewayConfig;
+  /** Gemini на Vertex — голова очереди, когда настроен (решение владельца 25.09). */
+  readonly vertex?: VertexConfig;
 }
 
 export function buildCoverLetterWriter(
@@ -359,20 +362,40 @@ export function buildCoverLetterWriter(
     ...routes.filter((route) => route.provider === 'gemini'),
     ...routes.filter((route) => route.provider !== 'gemini'),
   ];
-  if (stages.length === 0) return undefined;
+  const vertexStage = config.vertex ? [vertexCoverLetterWriter(config.vertex)] : [];
+  if (stages.length === 0 && vertexStage.length === 0) return undefined;
 
   return new QueuedCoverLetterWriter(
-    stages.map((route) =>
-      route.provider === 'gemini' && gateway
-        ? new GeminiCoverLetterWriter({
-            apiKey: route.apiKey,
-            model: route.model,
-            stage: `${route.provider}:${route.model}`,
-            baseUrl: geminiGatewayBaseUrl(gateway),
-            extraHeaders: cloudflareGatewayHeaders(gateway),
-          })
-        : writerForRoute(route),
-    ),
-    stages.map((route) => `${route.provider}:${route.model}`),
+    [
+      ...vertexStage,
+      ...stages.map((route) =>
+        route.provider === 'gemini' && gateway
+          ? new GeminiCoverLetterWriter({
+              apiKey: route.apiKey,
+              model: route.model,
+              stage: `${route.provider}:${route.model}`,
+              baseUrl: geminiGatewayBaseUrl(gateway),
+              extraHeaders: cloudflareGatewayHeaders(gateway),
+            })
+          : writerForRoute(route),
+      ),
+    ],
+    [
+      ...(config.vertex ? [`vertex:${config.vertex.model}`] : []),
+      ...stages.map((route) => `${route.provider}:${route.model}`),
+    ],
   );
+}
+
+function vertexCoverLetterWriter(vertex: VertexConfig): CoverLetterWriter {
+  const tokens = new VertexTokenProvider(vertex);
+  return new GeminiCoverLetterWriter({
+    apiKey: '',
+    model: vertex.model,
+    stage: `vertex:${vertex.model}`,
+    baseUrl: vertexPublisherBaseUrl(vertex),
+    authHeaders: async () => ({ Authorization: `Bearer ${await tokens.token()}` }),
+    thinkingLevel: 'low',
+    retriesOn429: 1,
+  });
 }
