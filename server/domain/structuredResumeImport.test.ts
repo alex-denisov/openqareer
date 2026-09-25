@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { carriesProfileSubstance } from './resumeImport';
 import {
+  keepFilledSections,
   attachResumeMedia,
   collectMediaRequests,
   linkedinProfileV2ToParsedResume,
@@ -258,5 +259,32 @@ describe('collectMediaRequests / attachResumeMedia', () => {
 
     const draft = attachResumeMedia(plan.draft, profile, media);
     expect(draft.experience[0].employerLogoMediaId).toBe('logo-id');
+  });
+});
+
+describe('keepFilledSections (B266)', () => {
+  const existing = {
+    candidate: {},
+    experience: [{ id: 'e1', title: 'VP', employer: 'Kaspersky' }],
+    education: [{ id: 'd1', institution: 'UTM' }],
+    skills: [{ id: 's1', name: 'P&L' }],
+    languages: [],
+    courses: [{ id: 'c1', name: 'garbage from the text era' }],
+  } as never;
+
+  it('keeps existing entries for sections the re-import did not read', () => {
+    const incoming = { candidate: {}, experience: [], education: [], skills: [], languages: [{ id: 'l1', name: 'English' }] } as never;
+    const merged = keepFilledSections(incoming, existing);
+    expect(merged.experience).toHaveLength(1);
+    expect(merged.education).toHaveLength(1);
+    expect(merged.skills).toHaveLength(1);
+    expect(merged.languages).toHaveLength(1);
+  });
+
+  it('lets a section that was read replace the old one, and never revives courses', () => {
+    const incoming = { candidate: {}, experience: [{ id: 'e2', title: 'CTO', employer: 'OptiLab' }], education: [], languages: [], courses: [] } as never;
+    const merged = keepFilledSections(incoming, existing);
+    expect(merged.experience).toEqual([{ id: 'e2', title: 'CTO', employer: 'OptiLab' }]);
+    expect(merged.courses).toEqual([]);
   });
 });

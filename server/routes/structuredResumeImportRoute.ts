@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { carriesProfileSubstance, newImportMemoryIdPrefix } from '../domain/resumeImport';
 import {
   attachResumeMedia,
+  keepFilledSections,
   canonicalJson,
   collectMediaRequests,
   linkedinProfileV2ToParsedResume,
@@ -56,7 +57,10 @@ async function commitStructuredImport(
   plan: ReturnType<typeof planStructuredResumeImport>,
 ) {
   const mediaBySourceUrl = await resolveStructuredMedia(candidateId, body.profile);
-  const draft = attachResumeMedia(plan.draft, body.profile, mediaBySourceUrl);
+  const draft = keepFilledSections(
+    attachResumeMedia(plan.draft, body.profile, mediaBySourceUrl),
+    deps.candidateStore.getSnapshot(candidateId)?.resume?.draft,
+  );
   const committed = deps.candidateStore.commitResumeImport(candidateId, {
     evidence: {
       sourceLabel: 'Импорт: профиль LinkedIn',

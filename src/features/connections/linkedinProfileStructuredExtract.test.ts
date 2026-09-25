@@ -62,7 +62,9 @@ describe('parseExperienceSection (B265)', () => {
 
   it('reads skills from the "X, Y and +4 skills" line without expanding the +N', () => {
     const withSkills = roles.find((role) => role.skills && role.skills.length > 0);
-    expect(withSkills?.skills).toEqual(expect.arrayContaining(['n8n', 'Software as a Service (SaaS)']));
+    expect(withSkills?.skills).toEqual(
+      expect.arrayContaining(['n8n', 'Software as a Service (SaaS)']),
+    );
     expect(withSkills?.skills?.some((skill) => skill.includes('+'))).toBe(false);
   });
 
@@ -104,7 +106,11 @@ describe('parseCertificationsSection (B265)', () => {
     expect(withExpiry?.issuedAt).toBe('Jan 2023');
     expect(withExpiry?.expiresAt).toBe('Jan 2028');
     expect(certifications[0]).toEqual(
-      expect.objectContaining({ name: 'Delivery Fundamentals', issuer: 'Synthetic Alliance', issuedAt: 'Apr 2023' }),
+      expect.objectContaining({
+        name: 'Delivery Fundamentals',
+        issuer: 'Synthetic Alliance',
+        issuedAt: 'Apr 2023',
+      }),
     );
   });
 });
@@ -159,7 +165,9 @@ describe('parseLanguagesSection (B265)', () => {
   });
 
   it('keeps an unknown proficiency label without a CEFR mapping (no silent guess)', () => {
-    const [language] = parseLanguagesSection(synthetic.replace(/[\s\S]*(Klingon)/u, '<p>$1</p>') + '<p>Beginner proficiency</p>');
+    const [language] = parseLanguagesSection(
+      synthetic.replace(/[\s\S]*(Klingon)/u, '<p>$1</p>') + '<p>Beginner proficiency</p>',
+    );
     expect(language.name).toBe('Klingon');
     expect(language.cefr).toBeUndefined();
   });
@@ -182,19 +190,36 @@ describe('parseRecommendationsSection (B265)', () => {
 describe('parseAchievementCard (B265)', () => {
   it('merges honors/publications/patents/organizations/volunteering into one shape with a kind', () => {
     const honor = parseAchievementCard(fixture('achievements-honor.html'), 'honor');
-    const publication = parseAchievementCard(fixture('achievements-publication.html'), 'publication');
+    const publication = parseAchievementCard(
+      fixture('achievements-publication.html'),
+      'publication',
+    );
     const patent = parseAchievementCard(fixture('achievements-patent.html'), 'patent');
-    const organization = parseAchievementCard(fixture('achievements-organization.html'), 'organization');
-    const volunteering = parseAchievementCard(fixture('achievements-volunteering.html'), 'volunteering');
+    const organization = parseAchievementCard(
+      fixture('achievements-organization.html'),
+      'organization',
+    );
+    const volunteering = parseAchievementCard(
+      fixture('achievements-volunteering.html'),
+      'volunteering',
+    );
 
     expect(honor).toEqual(
-      expect.objectContaining({ kind: 'honor', title: 'Platform Team of the Year', issuer: 'Northwind Labs' }),
+      expect.objectContaining({
+        kind: 'honor',
+        title: 'Platform Team of the Year',
+        issuer: 'Northwind Labs',
+      }),
     );
     expect(publication?.url).toBe('https://example.com/publications/scaling-on-call');
     expect(patent?.kind).toBe('patent');
     expect(organization).toEqual(expect.objectContaining({ kind: 'organization', role: 'Member' }));
     expect(volunteering).toEqual(
-      expect.objectContaining({ kind: 'volunteering', title: 'Mentor', issuer: 'Synthetic Code for Good' }),
+      expect.objectContaining({
+        kind: 'volunteering',
+        title: 'Mentor',
+        issuer: 'Synthetic Code for Good',
+      }),
     );
   });
 });
@@ -297,5 +322,20 @@ describe('sections LinkedIn leaves only on the main profile (B266)', () => {
       education: fixture('education.html'),
     });
     expect(profile.education.length).toBe(2);
+  });
+});
+
+describe('languages without paragraph markup (B266)', () => {
+  it('pairs a language with its proficiency from plain leaf text', () => {
+    const html = `<main><section><div><span>Languages</span></div>
+      <div><div><span aria-hidden="true">English</span></div><div><span>Full professional proficiency</span></div></div>
+      <div><div><span aria-hidden="true">Russian</span></div><div><span>Native or bilingual proficiency</span></div></div>
+      </section></main>`;
+    expect(
+      parseLanguagesSection(html).map((language) => [language.name, language.sourceLabel]),
+    ).toEqual([
+      ['English', 'Full professional proficiency'],
+      ['Russian', 'Native or bilingual proficiency'],
+    ]);
   });
 });

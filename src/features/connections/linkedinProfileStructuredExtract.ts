@@ -105,20 +105,37 @@ function cefrOf(proficiency: string): CefrLevel | undefined {
   return CEFR_BY_LINKEDIN_LABEL[label];
 }
 
-/** Languages live only on `profile.html`; the details page renders a false empty state (B264 §6). */
+/**
+ * Languages live on `profile.html`; the details page can render a false empty
+ * state (B264 §6). Rows are «<language>» followed by «… proficiency»: read as
+ * paragraphs first, then as leaf text lines — the live card does not always
+ * use `<p>` (B266: the text importer saw the pair, this parser did not).
+ */
 export function parseLanguagesSection(html: string): ParsedResumeLanguage[] {
-  const paragraphs = paragraphsOf(parseFragment(html).body);
+  const body = parseFragment(html).body;
+  const fromParagraphs = languagePairs(paragraphsOf(body));
+  return fromParagraphs.length > 0 ? fromParagraphs : languagePairs(leafTextLines(body));
+}
+
+function languagePairs(lines: readonly string[]): ParsedResumeLanguage[] {
   const languages: ParsedResumeLanguage[] = [];
-  for (let i = 0; i < paragraphs.length - 1; i += 1) {
-    if (!/proficiency$/iu.test(paragraphs[i + 1])) continue;
-    languages.push({
-      name: paragraphs[i],
-      cefr: cefrOf(paragraphs[i + 1]),
-      sourceLabel: paragraphs[i + 1],
-    });
+  for (let i = 0; i < lines.length - 1; i += 1) {
+    const [name, label] = [lines[i], lines[i + 1]];
+    if (!/proficiency$/iu.test(label) || /proficiency$/iu.test(name) || name.length > 40) continue;
+    if (!languages.some((language) => language.name === name)) {
+      languages.push({ name, cefr: cefrOf(label), sourceLabel: label });
+    }
     i += 1;
   }
   return languages;
+}
+
+/** Text of every element without element children, in document order. */
+function leafTextLines(root: Element): string[] {
+  return Array.from(root.querySelectorAll('*'))
+    .filter((element) => element.children.length === 0)
+    .map((element) => element.textContent?.replace(/\s+/gu, ' ').trim() ?? '')
+    .filter(Boolean);
 }
 
 const CONTACT_LABELS = new Set(['Your profile', 'Website', 'Phone', 'Email']);

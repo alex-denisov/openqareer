@@ -180,3 +180,29 @@ export function collectMediaRequests(
   }
   return requests;
 }
+
+/** Sections a structured LinkedIn read produces; courses/tests are not among them. */
+const STRUCTURED_LIST_SECTIONS = [
+  'experience',
+  'education',
+  'skills',
+  'languages',
+  'certifications',
+  'projects',
+  'recommendations',
+  'achievements',
+] as const;
+
+/**
+ * A LinkedIn details page can come back empty (lazy render, the 12 h read
+ * throttle, a stopped walk). An empty section in a structured import then
+ * means "not read", not "deleted": the candidate's existing entries stay
+ * (B266) instead of the re-import wiping a filled profile.
+ */
+export function keepFilledSections(incoming: ResumeDraft, existing: ResumeDraft | undefined): ResumeDraft {
+  if (!existing) return incoming;
+  const kept = STRUCTURED_LIST_SECTIONS.filter(
+    (section) => (incoming[section]?.length ?? 0) === 0 && (existing[section]?.length ?? 0) > 0,
+  );
+  return kept.reduce<ResumeDraft>((draft, section) => ({ ...draft, [section]: existing[section] }), incoming);
+}
