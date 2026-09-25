@@ -213,6 +213,8 @@ install -o root -g root -m 0755 \
   "$SCRIPT_DIR/openqareer-activate" /usr/local/bin/openqareer-activate
 install -o root -g root -m 0755 \
   "$SCRIPT_DIR/openqareer-rollback" /usr/local/bin/openqareer-rollback
+install -o root -g root -m 0755 \
+  "$SCRIPT_DIR/openqareer-env-set" /usr/local/bin/openqareer-env-set
 install -o root -g root -m 0644 \
   "$SCRIPT_DIR/openqareer-static.service" \
   /etc/systemd/system/openqareer-static.service
