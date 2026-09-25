@@ -70,6 +70,7 @@ describe('vacancyPitchService', () => {
       candidateName: 'Алексей Денисов',
       facts: sampleFacts,
       tone: 'executive',
+      language: 'ru',
     });
 
     expect(pitch.vacancyId).toBe('vac-101');
@@ -95,6 +96,7 @@ describe('vacancyPitchService', () => {
         candidateName: 'Алексей Денисов',
         facts: sampleFacts,
         tone,
+        language: 'ru',
       });
 
       expect(pitch.linkedInNote.length).toBeLessThanOrEqual(300);
@@ -110,6 +112,7 @@ describe('vacancyPitchService', () => {
       candidateName: 'Алексей Денисов',
       facts: sampleFacts,
       tone: 'technical',
+      language: 'ru',
     });
 
     // Does not claim to be a Kafka/Kubernetes veteran, but cites existing adjacent skills
@@ -125,6 +128,7 @@ describe('vacancyPitchService', () => {
       candidateName: 'Алексей Денисов',
       facts: sampleFacts,
       tone: 'executive',
+      language: 'ru',
     });
 
     const techPitch = generateVacancyPitch({
@@ -132,6 +136,7 @@ describe('vacancyPitchService', () => {
       candidateName: 'Алексей Денисов',
       facts: sampleFacts,
       tone: 'technical',
+      language: 'ru',
     });
 
     const confPitch = generateVacancyPitch({
@@ -139,6 +144,7 @@ describe('vacancyPitchService', () => {
       candidateName: 'Алексей Денисов',
       facts: sampleFacts,
       tone: 'confident',
+      language: 'ru',
     });
 
     expect(execPitch.emailPitch.body).not.toBe(techPitch.emailPitch.body);
@@ -152,6 +158,7 @@ describe('vacancyPitchService', () => {
       vacancy: sampleVacancy,
       candidateName: 'Алексей Денисов',
       facts: sampleFacts,
+      language: 'ru',
     });
 
     const allText = [
@@ -240,5 +247,78 @@ describe('vacancyPitchService', () => {
     expect(text).not.toContain('PRIVATE_SYNTHETIC_HEALTH_FACT');
     expect(text).not.toContain('Предполагаемый опыт');
     expect(pitch.usedEvidenceIds).toEqual([]);
+  });
+
+  it('writes in English for an English-language vacancy detected from its own text', () => {
+    const pitch = generateVacancyPitch({
+      vacancy: {
+        id: 'vac-en',
+        title: 'Senior Platform Engineer',
+        company: 'Acme Corp',
+        description: 'We are hiring a senior engineer to own our payments platform.',
+        requiredSkills: ['Go', 'Kubernetes'],
+      },
+      candidateName: 'Alexey Denisov',
+      facts: sampleFacts,
+    });
+
+    expect(pitch.language).toBe('en');
+    expect(pitch.emailPitch.body).toMatch(/Hello!/);
+    expect(pitch.emailPitch.body).not.toMatch(/Здравствуйте/);
+  });
+
+  it('detects Russian from vacancy text even when the title is transliterated Latin', () => {
+    const pitch = generateVacancyPitch({
+      vacancy: {
+        id: 'vac-ru-desc',
+        title: 'Backend Engineer',
+        description: 'Ищем инженера для команды платежей.',
+      },
+      facts: [],
+    });
+    expect(pitch.language).toBe('ru');
+  });
+
+  it('uses imported (proposed) facts from the candidate profile when there are zero confirmed facts', () => {
+    const importedOnly: VacancyPitchInputFact[] = [
+      {
+        id: 'imp-001',
+        statement: 'Спроектировал и запустил платежный шлюз с обработкой 15 000 RPS',
+        domain: 'outcome',
+        kind: 'fact',
+        sourceMessageIds: ['resume-import-1'],
+        sensitive: false,
+        status: 'proposed',
+      },
+    ];
+
+    const pitch = generateVacancyPitch({
+      vacancy: sampleVacancy,
+      candidateName: 'Алексей Денисов',
+      facts: importedOnly,
+      language: 'ru',
+    });
+
+    expect(pitch.usedEvidenceIds).toContain('imp-001');
+    expect(pitch.usedFacts).toContainEqual({ id: 'imp-001', basis: 'imported' });
+    expect(pitch.emailPitch.body).toContain('15 000 RPS');
+  });
+
+  it('never puts a service phrase about missing facts or unmatched requirements into the letter body, on any path', () => {
+    const noFacts = generateVacancyPitch({
+      vacancy: { id: 'vac-no-facts', title: 'Бухгалтер', requiredSkills: ['Excel'] },
+      facts: [],
+    });
+    const serviceMarkers = [
+      'не выбраны',
+      'не сопоставлены с подтверждёнными',
+      'not selected',
+      'have not been matched',
+    ];
+    for (const marker of serviceMarkers) {
+      expect(noFacts.emailPitch.body).not.toContain(marker);
+      expect(noFacts.atsCoverLetter).not.toContain(marker);
+    }
+    expect(noFacts.notices.length).toBeGreaterThan(0);
   });
 });
