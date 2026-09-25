@@ -3,6 +3,7 @@
 
 mod automation_worker;
 mod connector_session;
+mod linkedin_read_guard;
 mod network_probe;
 mod sidecar_lifecycle;
 mod tunnel_manager;
@@ -343,6 +344,7 @@ fn main() {
         })
         .manage(app_state)
         .manage(CandidateSessionAccount::default())
+        .manage(linkedin_read_guard::LinkedInReadGuardState::default())
         .invoke_handler(tauri::generate_handler![
             open_external_url,
             probe_network_status,

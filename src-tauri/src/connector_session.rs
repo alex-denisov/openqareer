@@ -6,6 +6,7 @@
 //! the main window is declared in `tauri.conf.json`, so WKWebView/WebView2
 //! silently refuse the request and no window ever appears (B149).
 
+use crate::linkedin_read_guard::{is_detail_page, LinkedInReadGuardState};
 use serde::{Deserialize, Serialize};
 use std::fs::create_dir_all;
 use std::path::PathBuf;
@@ -1089,6 +1090,19 @@ async fn load_lazy_sections(window: &Webview) {
     tokio::time::sleep(PAGE_SETTLE_DELAY).await;
 }
 
+/// The candidate's LinkedIn session is paced here, not only in the web layer
+/// (B266 security WARN); see `linkedin_read_guard`.
+fn admit_linkedin_read(app: &AppHandle, path: &str) -> Result<Duration, String> {
+    let state = app.state::<LinkedInReadGuardState>();
+    let mut guard = state
+        .0
+        .lock()
+        .map_err(|_| "linkedin_read_guard_unavailable".to_string())?;
+    guard
+        .admit(std::time::Instant::now(), is_detail_page(path))
+        .map_err(str::to_string)
+}
+
 pub async fn read_session_page(
     app: &AppHandle,
     request: &SessionWindowRequest,
@@ -1097,6 +1111,9 @@ pub async fn read_session_page(
     let window = app
         .get_webview(&label)
         .ok_or_else(|| "session_window_missing".to_string())?;
+    if request.platform == "linkedin" && request.session_key.is_none() {
+        tokio::time::sleep(admit_linkedin_read(app, url.path())?).await;
+    }
 
     let already_there = window.url().is_ok_and(|current| current == url);
     if !already_there {
