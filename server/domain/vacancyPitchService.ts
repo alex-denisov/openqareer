@@ -111,7 +111,9 @@ function factBasis(fact: VacancyPitchInputFact): PitchFactBasis {
  */
 /** Notes the consultant kept about the import itself are not candidate evidence. */
 function isAboutTheImportItself(statement: string): boolean {
-  return /импортировал|импорт резюме|imported (?:a|the|his|her) (?:resume|profile)/iu.test(statement);
+  return /импортировал|импорт резюме|imported (?:a|the|his|her) (?:resume|profile)/iu.test(
+    statement,
+  );
 }
 
 /**
@@ -234,7 +236,8 @@ const RU_COPY: Copy = {
 const EN_COPY: Copy = {
   subject: (title, candidateName, tone, hasMetric) => {
     if (tone === 'technical') return `${title} — ${candidateName} | Technical context of the role`;
-    if (tone === 'confident') return `Application for ${title}: ${candidateName} — role scope discussion`;
+    if (tone === 'confident')
+      return `Application for ${title}: ${candidateName} — role scope discussion`;
     const suffix = hasMetric ? 'Proven results' : 'Role goals and scope';
     return `${title} — ${candidateName} | ${suffix}`;
   },
@@ -302,21 +305,35 @@ function buildEvidenceParagraph(
     notices.push(copy.noticeNoFacts);
     return '';
   }
-  const metricFact = facts.find((f) => f.domain === 'outcome' || /\d+/u.test(f.statement)) ?? facts[0];
+  const metricFact =
+    facts.find((f) => f.domain === 'outcome' || /\d+/u.test(f.statement)) ?? facts[0];
   if (metricFact) usedIds.add(metricFact.id);
   const otherFacts = facts.filter((f) => f.id !== metricFact?.id).slice(0, 2);
   for (const f of otherFacts) usedIds.add(f.id);
   const statements = [metricFact?.statement, ...otherFacts.map((f) => f.statement)].filter(
     (s): s is string => Boolean(s),
   );
-  return `${copy.evidenceIntro} ${statements.join('. ')}.`;
+  return `${copy.evidenceIntro} ${joinSentences(statements)}`;
+}
+
+/** Факты часто уже кончаются точкой — склейка не должна давать «..» (прод 25.09). */
+function joinSentences(statements: readonly string[]): string {
+  return statements
+    .map((statement) => statement.trim().replace(/[.;,\s]+$/u, ''))
+    .filter(Boolean)
+    .map((statement) => `${statement}.`)
+    .join(' ');
 }
 
 function hasPositiveSkillEvidence(fact: VacancyPitchInputFact, requirement: string): boolean {
   if (fact.domain !== 'skill') return false;
   const statement = fact.statement.toLocaleLowerCase();
   const skill = requirement.toLocaleLowerCase();
-  if (!new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(skill)}([^\\p{L}\\p{N}]|$)`, 'iu').test(statement)) {
+  if (
+    !new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(skill)}([^\\p{L}\\p{N}]|$)`, 'iu').test(
+      statement,
+    )
+  ) {
     return false;
   }
   return !isNegativeStatement(statement);
@@ -372,7 +389,8 @@ function buildLinkedInNote(
   tone: PitchTone,
   usedIds: Set<string>,
 ): string {
-  const firstFact = facts.find((f) => f.domain === 'outcome' || /\d+/u.test(f.statement)) ?? facts[0];
+  const firstFact =
+    facts.find((f) => f.domain === 'outcome' || /\d+/u.test(f.statement)) ?? facts[0];
   let snippet = '';
   if (firstFact) {
     usedIds.add(firstFact.id);
@@ -380,6 +398,11 @@ function buildLinkedInNote(
   }
   const note = copy.linkedIn(vacancy, tone, firstFact ? snippet : '');
   return truncateSafely(note, LINKEDIN_NOTE_LIMIT);
+}
+
+/** Заголовок без содержимого кандидату не нужен — раздел просто опускается. */
+function section(heading: string, body: string): string[] {
+  return body.trim() ? [heading, body, ''] : [];
 }
 
 function buildAtsCoverLetter(
@@ -401,12 +424,8 @@ function buildAtsCoverLetter(
     '',
     intro,
     '',
-    copy.ats.resultsHeading,
-    evidence,
-    '',
-    copy.ats.fitHeading,
-    stack,
-    '',
+    ...section(copy.ats.resultsHeading, evidence),
+    ...section(copy.ats.fitHeading, stack),
     closing,
     '',
     copy.ats.signOff,
@@ -433,7 +452,15 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
 
   const emailBody = [intro, evidence, stack, closing].filter((p) => p.length > 0).join('\n\n');
   const linkedInNote = buildLinkedInNote(copy, vacancy, usableFacts, tone, usedEvidenceIds);
-  const atsCoverLetter = buildAtsCoverLetter(copy, vacancy, candidateName, intro, evidence, stack, closing);
+  const atsCoverLetter = buildAtsCoverLetter(
+    copy,
+    vacancy,
+    candidateName,
+    intro,
+    evidence,
+    stack,
+    closing,
+  );
 
   const basisById = new Map(usableFacts.map((fact) => [fact.id, factBasis(fact)] as const));
   const usedFacts: VacancyPitchUsedFact[] = Array.from(usedEvidenceIds).map((id) => ({

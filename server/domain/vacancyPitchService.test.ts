@@ -19,7 +19,8 @@ describe('vacancyPitchService', () => {
   const sampleFacts: VacancyPitchInputFact[] = [
     {
       id: 'mem-001',
-      statement: 'Спроектировал и запустил платежный шлюз с обработкой 15 000 RPS на Node.js и PostgreSQL',
+      statement:
+        'Спроектировал и запустил платежный шлюз с обработкой 15 000 RPS на Node.js и PostgreSQL',
       domain: 'outcome',
       kind: 'fact',
       sourceMessageIds: ['m1'],
@@ -28,7 +29,8 @@ describe('vacancyPitchService', () => {
     },
     {
       id: 'mem-002',
-      statement: 'Снизил p99 задержку микросервисов с 450мс до 80мс через кэширование и тюнинг запросов',
+      statement:
+        'Снизил p99 задержку микросервисов с 450мс до 80мс через кэширование и тюнинг запросов',
       domain: 'outcome',
       kind: 'fact',
       sourceMessageIds: ['m2'],
@@ -118,7 +120,9 @@ describe('vacancyPitchService', () => {
     // Does not claim to be a Kafka/Kubernetes veteran, but cites existing adjacent skills
     expect(pitch.usedEvidenceIds).toContain('mem-003');
     expect(pitch.emailPitch.body).not.toMatch(/Kafka|Kubernetes/i);
-    expect(pitch.notices).toContain('В профиле нет подтверждённых фактов по требованиям: Kafka, Kubernetes');
+    expect(pitch.notices).toContain(
+      'В профиле нет подтверждённых фактов по требованиям: Kafka, Kubernetes',
+    );
   });
 
   it('adapts phrasing based on selected tone', () => {
@@ -215,7 +219,9 @@ describe('vacancyPitchService', () => {
         },
       ],
     });
-    expect(negative.emailPitch.body).not.toContain('подтверждён практический опыт работы со стеком: Excel');
+    expect(negative.emailPitch.body).not.toContain(
+      'подтверждён практический опыт работы со стеком: Excel',
+    );
     expect(negative.usedEvidenceIds).toEqual([]);
   });
 
@@ -380,5 +386,33 @@ describe('vacancyPitchService', () => {
     expect(pitch.emailPitch.body).not.toContain('has no confirmed facts');
     expect(pitch.atsCoverLetter).not.toContain('has no confirmed facts');
     expect(pitch.notices.length).toBeGreaterThan(0);
+  });
+
+  it('не ставит двойную точку и не выводит пустой раздел соответствия (прод 25.09)', () => {
+    const pitch = generateVacancyPitch({
+      vacancy: {
+        id: 'vac-9',
+        title: 'SVP of Technical Product Management',
+        company: '2 Hour Learning',
+      },
+      candidateName: 'Alexey Denisov',
+      facts: [
+        {
+          id: 'imp1-ach-3-1',
+          kind: 'fact',
+          domain: 'outcome',
+          statement: 'Raised FCR from 5% to 83% through AI-powered search.',
+          confidence: 'candidate-reported',
+          sourceMessageIds: ['m1'],
+          sensitive: false,
+          status: 'proposed',
+        } as VacancyPitchInputFact,
+      ],
+      language: 'en',
+    });
+
+    expect(pitch.atsCoverLetter).not.toMatch(/\.\./u);
+    expect(pitch.emailPitch.body).not.toMatch(/\.\./u);
+    expect(pitch.atsCoverLetter).not.toMatch(/:\n\s*\n/u);
   });
 });
