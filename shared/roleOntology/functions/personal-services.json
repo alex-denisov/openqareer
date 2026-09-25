@@ -8,9 +8,23 @@
     {
       "id": "personal-services.core",
       "function": "personal-services",
-      "labelEn": "Personal services ladder",
-      "labelRu": "Лестница личных услуг",
-      "coverage": "core"
+      "labelEn": "Beauty & Grooming",
+      "labelRu": "Красота и уход",
+      "coverage": "full"
+    },
+    {
+      "id": "personal-services.wellness",
+      "function": "personal-services",
+      "labelEn": "Wellness & Fitness",
+      "labelRu": "Фитнес и wellness",
+      "coverage": "full"
+    },
+    {
+      "id": "personal-services.leadership",
+      "function": "personal-services",
+      "labelEn": "Personal Services Operations",
+      "labelRu": "Руководство предприятиями услуг",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -20,29 +34,88 @@
       "family": "personal-services.core",
       "titleEn": "Hairdresser / Beautician / Fitness Trainer",
       "titleRu": "Парикмахер / косметолог / фитнес-тренер",
-      "levels": [
-        "ic"
-      ],
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Hairdresser",
-          "Barber",
-          "Beautician",
-          "Fitness Trainer",
-          "Massage Therapist"
-        ],
-        "ru": [
-          "Парикмахер",
-          "Косметолог",
-          "Фитнес-тренер",
-          "Массажист"
-        ]
+        "en": ["Hairdresser", "Beautician", "Beauty Therapist", "Fitness Trainer", "Personal Trainer", "Stylist"] ,
+        "ru": ["Парикмахер", "Стилист", "Косметолог", "Мастер салона красоты", "Фитнес-тренер", "Персональный тренер"]
       },
+      "icBand": ["apprentice", "qualified", "master"],
       "adjacent": [
-        {
-          "roleId": "personal-services.senior.lead",
-          "kind": "level-up"
-        }
+        {"roleId": "personal-services.nail.ic", "kind": "sibling-family"},
+        {"roleId": "personal-services.massage.ic", "kind": "sibling-family"},
+        {"roleId": "personal-services.senior.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "personal-services.nail.ic",
+      "function": "personal-services",
+      "family": "personal-services.core",
+      "titleEn": "Nail Technician",
+      "titleRu": "Мастер ногтевого сервиса",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Nail Technician", "Manicurist", "Nail Artist", "Nail Specialist", "Pedicurist", "Nail Care Therapist"],
+        "ru": ["Мастер ногтевого сервиса", "Мастер маникюра", "Мастер педикюра", "Нейл-мастер", "Специалист ногтевого сервиса", "Мастер маникюра и педикюра"]
+      },
+      "icBand": ["apprentice", "qualified", "master"],
+      "adjacent": [
+        {"roleId": "personal-services.specialist.ic", "kind": "sibling-family"},
+        {"roleId": "personal-services.senior.lead", "kind": "level-up"},
+        {"roleId": "personal-services.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "personal-services.massage.ic",
+      "function": "personal-services",
+      "family": "personal-services.wellness",
+      "titleEn": "Massage Therapist",
+      "titleRu": "Массажист",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Massage Therapist", "Massage Practitioner", "Spa Therapist", "Bodywork Therapist", "Sports Massage Therapist", "Wellness Therapist"],
+        "ru": ["Массажист", "Массажист-эстетист", "Специалист по массажу", "Специалист SPA", "Массажист по телу", "Спортивный массажист"]
+      },
+      "icBand": ["apprentice", "qualified", "master"],
+      "adjacent": [
+        {"roleId": "personal-services.specialist.ic", "kind": "sibling-family"},
+        {"roleId": "personal-services.fitness.ic", "kind": "sibling-family"},
+        {"roleId": "personal-services.senior.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "personal-services.fitness.ic",
+      "function": "personal-services",
+      "family": "personal-services.wellness",
+      "titleEn": "Fitness / Personal Trainer",
+      "titleRu": "Фитнес-тренер / инструктор",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Fitness Trainer", "Personal Trainer", "Fitness Instructor", "Gym Instructor", "Group Exercise Instructor", "Strength and Conditioning Coach"],
+        "ru": ["Фитнес-тренер", "Персональный тренер", "Инструктор тренажёрного зала", "Инструктор групповых программ", "Тренер по фитнесу", "Инструктор по физической подготовке"]
+      },
+      "icBand": ["apprentice", "qualified", "master"],
+      "adjacent": [
+        {"roleId": "personal-services.massage.ic", "kind": "sibling-family"},
+        {"roleId": "personal-services.specialist.ic", "kind": "sibling-family"},
+        {"roleId": "personal-services.fitness.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "personal-services.therapy.ic",
+      "function": "personal-services",
+      "family": "personal-services.wellness",
+      "titleEn": "Wellness / Spa Specialist",
+      "titleRu": "Специалист wellness и SPA",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Spa Specialist", "Wellness Specialist", "Spa Therapist", "Aesthetic Therapist", "Wellness Consultant", "Body Care Specialist"],
+        "ru": ["Специалист SPA", "Wellness-специалист", "SPA-терапевт", "Эстетист", "Консультант по wellness", "Специалист по уходу за телом"]
+      },
+      "icBand": ["apprentice", "qualified", "master"],
+      "adjacent": [
+        {"roleId": "personal-services.massage.ic", "kind": "sibling-family"},
+        {"roleId": "personal-services.nail.ic", "kind": "sibling-family"},
+        {"roleId": "personal-services.senior.lead", "kind": "level-up"}
       ]
     },
     {
@@ -51,54 +124,102 @@
       "family": "personal-services.core",
       "titleEn": "Senior Stylist / Head Trainer",
       "titleRu": "Старший мастер / ведущий тренер",
-      "levels": [
-        "lead"
-      ],
+      "levels": ["lead"],
       "variants": {
-        "en": [
-          "Senior Stylist",
-          "Head Trainer"
-        ],
-        "ru": [
-          "Старший мастер",
-          "Ведущий тренер"
-        ]
+        "en": ["Senior Stylist", "Lead Beauty Specialist", "Senior Personal Trainer", "Head Trainer", "Senior Nail Technician", "Beauty Team Lead"],
+        "ru": ["Старший мастер", "Ведущий стилист", "Старший косметолог", "Ведущий фитнес-тренер", "Старший тренер", "Руководитель команды мастеров"]
       },
       "adjacent": [
-        {
-          "roleId": "personal-services.specialist.ic",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "personal-services.head",
-          "kind": "level-up"
-        }
+        {"roleId": "personal-services.specialist.ic", "kind": "level-down"},
+        {"roleId": "personal-services.fitness.lead", "kind": "sibling-family"},
+        {"roleId": "personal-services.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "personal-services.fitness.lead",
+      "function": "personal-services",
+      "family": "personal-services.wellness",
+      "titleEn": "Fitness Department Lead",
+      "titleRu": "Руководитель фитнес-направления",
+      "levels": ["lead", "head"],
+      "variants": {
+        "en": ["Fitness Department Lead", "Fitness Manager", "Head Trainer", "Gym Manager", "Wellness Program Lead", "Personal Training Manager"],
+        "ru": ["Руководитель фитнес-направления", "Фитнес-менеджер", "Руководитель тренерского состава", "Управляющий тренажёрным залом", "Руководитель wellness-программ", "Менеджер персональных тренировок"]
+      },
+      "adjacent": [
+        {"roleId": "personal-services.fitness.ic", "kind": "level-down"},
+        {"roleId": "personal-services.senior.lead", "kind": "sibling-family"},
+        {"roleId": "personal-services.head", "kind": "level-up"}
       ]
     },
     {
       "id": "personal-services.head",
       "function": "personal-services",
-      "family": "personal-services.core",
+      "family": "personal-services.leadership",
       "titleEn": "Salon / Fitness Club Manager",
       "titleRu": "Управляющий салоном / фитнес-клубом",
-      "levels": [
-        "head"
-      ],
+      "levels": ["head"],
       "variants": {
-        "en": [
-          "Salon Manager",
-          "Fitness Club Manager"
-        ],
-        "ru": [
-          "Управляющий салоном",
-          "Управляющий фитнес-клубом"
-        ]
+        "en": ["Salon Manager", "Beauty Salon Director", "Fitness Club Manager", "Spa Manager", "Wellness Center Manager", "Personal Services Manager"],
+        "ru": ["Управляющий салоном красоты", "Директор салона", "Управляющий фитнес-клубом", "Управляющий SPA-центром", "Руководитель wellness-центра", "Директор предприятия услуг"]
       },
       "adjacent": [
-        {
-          "roleId": "personal-services.senior.lead",
-          "kind": "level-down"
-        }
+        {"roleId": "personal-services.senior.lead", "kind": "level-down"},
+        {"roleId": "personal-services.fitness.lead", "kind": "sibling-family"},
+        {"roleId": "personal-services.regional.vp", "kind": "level-up"},
+        {"roleId": "hospitality.manager.head", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "personal-services.spa-head.head",
+      "function": "personal-services",
+      "family": "personal-services.leadership",
+      "titleEn": "Head of Spa & Wellness Operations",
+      "titleRu": "Руководитель сети SPA и wellness",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Head of Spa Operations", "Wellness Operations Director", "Spa Network Manager", "Head of Beauty Operations", "Regional Spa Manager", "Wellness Business Manager"],
+        "ru": ["Руководитель SPA-направления", "Директор wellness-операций", "Руководитель сети SPA", "Директор по операциям салонов", "Региональный управляющий SPA", "Руководитель wellness-бизнеса"]
+      },
+      "adjacent": [
+        {"roleId": "personal-services.head", "kind": "sibling-family"},
+        {"roleId": "personal-services.fitness.lead", "kind": "level-down"},
+        {"roleId": "personal-services.regional.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "personal-services.regional.vp",
+      "function": "personal-services",
+      "family": "personal-services.leadership",
+      "titleEn": "Regional Director of Personal Services",
+      "titleRu": "Региональный директор сети салонов и клубов",
+      "levels": ["vp"],
+      "variants": {
+        "en": ["Regional Director Beauty", "Regional Fitness Director", "VP Wellness Operations", "Director of Salon Operations", "Regional Operations Director Personal Services", "Multi-site Services Director"],
+        "ru": ["Региональный директор сети салонов", "Региональный директор фитнес-клубов", "Директор по операционной деятельности салонов", "Вице-президент по wellness", "Директор сети предприятий услуг", "Руководитель региона по услугам"]
+      },
+      "adjacent": [
+        {"roleId": "personal-services.head", "kind": "level-down"},
+        {"roleId": "personal-services.spa-head.head", "kind": "sibling-family"},
+        {"roleId": "personal-services.coo", "kind": "level-up"},
+        {"roleId": "ops.vp", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "personal-services.coo",
+      "function": "personal-services",
+      "family": "personal-services.leadership",
+      "titleEn": "Chief Operating Officer, Personal Services",
+      "titleRu": "Операционный директор сети услуг",
+      "levels": ["c-level"],
+      "variants": {
+        "en": ["Chief Operating Officer Beauty", "Chief Wellness Officer", "COO Fitness and Wellness", "Chief Services Officer", "Personal Services Executive", "Beauty Group Operations Director"],
+        "ru": ["Операционный директор сети услуг", "Операционный директор сети салонов", "Директор по операциям фитнес-сети", "Директор по wellness-бизнесу", "Директор сервисной компании", "Руководитель сети красоты и спорта"]
+      },
+      "adjacent": [
+        {"roleId": "personal-services.regional.vp", "kind": "level-down"},
+        {"roleId": "ops.coo", "kind": "cross-function-neighbor"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
       ]
     }
   ]

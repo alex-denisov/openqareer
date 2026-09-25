@@ -8,9 +8,30 @@
     {
       "id": "hospitality.core",
       "function": "hospitality",
-      "labelEn": "Hospitality ladder",
-      "labelRu": "Лестница гостеприимства",
-      "coverage": "core"
+      "labelEn": "Food & Beverage",
+      "labelRu": "Рестораны и питание",
+      "coverage": "full"
+    },
+    {
+      "id": "hospitality.front-office",
+      "function": "hospitality",
+      "labelEn": "Front Office & Guest Services",
+      "labelRu": "Приём и обслуживание гостей",
+      "coverage": "full"
+    },
+    {
+      "id": "hospitality.housekeeping",
+      "function": "hospitality",
+      "labelEn": "Housekeeping & Property Operations",
+      "labelRu": "Хаускипинг и эксплуатация объектов",
+      "coverage": "full"
+    },
+    {
+      "id": "hospitality.leadership",
+      "function": "hospitality",
+      "labelEn": "Hospitality Leadership",
+      "labelRu": "Руководство гостинично-ресторанным бизнесом",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -20,28 +41,84 @@
       "family": "hospitality.core",
       "titleEn": "Waiter / Cook / Barista",
       "titleRu": "Официант / повар / бариста",
-      "levels": [
-        "ic"
-      ],
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Waiter",
-          "Waitress",
-          "Barista",
-          "Cook",
-          "Chef de Partie"
-        ],
-        "ru": [
-          "Официант",
-          "Повар",
-          "Бариста"
-        ]
+        "en": ["Waiter", "Server", "Cook", "Line Cook", "Barista", "Food and Beverage Associate"],
+        "ru": ["Официант", "Повар", "Повар горячего цеха", "Бариста", "Работник зала", "Сотрудник ресторана"]
       },
       "adjacent": [
-        {
-          "roleId": "hospitality.chef.lead",
-          "kind": "level-up"
-        }
+        {"roleId": "hospitality.bartender.ic", "kind": "sibling-family"},
+        {"roleId": "hospitality.chef.lead", "kind": "level-up"},
+        {"roleId": "hospitality.fnb-supervisor.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "hospitality.bartender.ic",
+      "function": "hospitality",
+      "family": "hospitality.core",
+      "titleEn": "Bartender / Barista",
+      "titleRu": "Бармен / бариста",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Bartender", "Barista", "Mixologist", "Bar Staff", "Beverage Specialist", "Coffee Specialist"],
+        "ru": ["Бармен", "Бариста", "Миксолог", "Сотрудник бара", "Специалист по напиткам", "Бармен-бариста"]
+      },
+      "adjacent": [
+        {"roleId": "hospitality.waiter.ic", "kind": "sibling-family"},
+        {"roleId": "hospitality.fnb-supervisor.lead", "kind": "level-up"},
+        {"roleId": "hospitality.chef.lead", "kind": "sibling-family"}
+      ]
+    },
+    {
+      "id": "hospitality.front-desk.ic",
+      "function": "hospitality",
+      "family": "hospitality.front-office",
+      "titleEn": "Front Desk / Guest Services Agent",
+      "titleRu": "Администратор гостиницы / службы приёма",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Front Desk Agent", "Receptionist", "Guest Services Agent", "Hotel Receptionist", "Front Office Associate", "Guest Relations Agent"],
+        "ru": ["Администратор гостиницы", "Администратор службы приёма", "Ресепшионист", "Специалист службы приёма и размещения", "Сотрудник ресепшн", "Менеджер по работе с гостями"]
+      },
+      "adjacent": [
+        {"roleId": "hospitality.front-office.lead", "kind": "level-up"},
+        {"roleId": "hospitality.waiter.ic", "kind": "sibling-family"},
+        {"roleId": "hospitality.manager.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "hospitality.housekeeping.ic",
+      "function": "hospitality",
+      "family": "hospitality.housekeeping",
+      "titleEn": "Housekeeper / Room Attendant",
+      "titleRu": "Горничная / сотрудник службы уборки",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Housekeeper", "Room Attendant", "Hotel Housekeeping Associate", "Cleaner Hotel", "Public Area Attendant", "Housekeeping Assistant"],
+        "ru": ["Горничная", "Сотрудник службы уборки", "Уборщик гостиницы", "Работник номерного фонда", "Сотрудник хозяйственной службы", "Помощник горничной"]
+      },
+      "adjacent": [
+        {"roleId": "hospitality.housekeeping.lead", "kind": "level-up"},
+        {"roleId": "hospitality.front-desk.ic", "kind": "sibling-family"},
+        {"roleId": "hospitality.manager.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "hospitality.events.ic",
+      "function": "hospitality",
+      "family": "hospitality.front-office",
+      "titleEn": "Events / Banqueting Coordinator",
+      "titleRu": "Координатор мероприятий и банкетов",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Events Coordinator", "Conference Coordinator", "Banqueting Coordinator", "Wedding Coordinator Hotel", "Catering Coordinator", "Event Services Specialist"],
+        "ru": ["Координатор мероприятий", "Банкетный менеджер", "Координатор конференций", "Менеджер банкетной службы", "Координатор кейтеринга", "Специалист по мероприятиям"]
+      },
+      "adjacent": [
+        {"roleId": "hospitality.front-desk.ic", "kind": "sibling-family"},
+        {"roleId": "hospitality.front-office.lead", "kind": "level-up"},
+        {"roleId": "hospitality.manager.head", "kind": "level-up"},
+        {"roleId": "project-mgmt.pm.ic", "kind": "cross-function-neighbor"}
       ]
     },
     {
@@ -50,84 +127,153 @@
       "family": "hospitality.core",
       "titleEn": "Sous Chef / Shift Manager",
       "titleRu": "Су-шеф / старший смены",
-      "levels": [
-        "lead"
-      ],
+      "levels": ["lead"],
       "variants": {
-        "en": [
-          "Sous Chef",
-          "Shift Manager"
-        ],
-        "ru": [
-          "Су-шеф",
-          "Старший смены"
-        ]
+        "en": ["Sous Chef", "Kitchen Supervisor", "Restaurant Shift Manager", "Food and Beverage Supervisor", "Senior Chef", "Kitchen Team Lead"],
+        "ru": ["Су-шеф", "Шеф-повар смены", "Старший смены ресторана", "Супервайзер ресторана", "Старший повар", "Руководитель кухонной смены"]
       },
       "adjacent": [
-        {
-          "roleId": "hospitality.waiter.ic",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "hospitality.manager.head",
-          "kind": "level-up"
-        }
+        {"roleId": "hospitality.waiter.ic", "kind": "level-down"},
+        {"roleId": "hospitality.fnb-supervisor.lead", "kind": "sibling-family"},
+        {"roleId": "hospitality.executive-chef.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "hospitality.fnb-supervisor.lead",
+      "function": "hospitality",
+      "family": "hospitality.core",
+      "titleEn": "Food & Beverage Supervisor",
+      "titleRu": "Супервайзер ресторана / службы питания",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Food and Beverage Supervisor", "Restaurant Supervisor", "F&B Team Lead", "Restaurant Shift Supervisor", "Dining Room Supervisor", "Service Supervisor"],
+        "ru": ["Супервайзер ресторана", "Супервайзер службы питания", "Старший администратор ресторана", "Руководитель смены ресторана", "Менеджер зала", "Руководитель ресторанной смены"]
+      },
+      "adjacent": [
+        {"roleId": "hospitality.waiter.ic", "kind": "level-down"},
+        {"roleId": "hospitality.chef.lead", "kind": "sibling-family"},
+        {"roleId": "hospitality.restaurant-manager.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "hospitality.front-office.lead",
+      "function": "hospitality",
+      "family": "hospitality.front-office",
+      "titleEn": "Front Office Supervisor / Duty Manager",
+      "titleRu": "Старший администратор / менеджер службы приёма",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Front Office Supervisor", "Duty Manager", "Front Desk Supervisor", "Guest Services Supervisor", "Assistant Front Office Manager", "Reception Manager"],
+        "ru": ["Старший администратор", "Менеджер службы приёма", "Супервайзер ресепшн", "Менеджер по работе с гостями", "Заместитель руководителя службы приёма", "Старший менеджер гостиницы"]
+      },
+      "adjacent": [
+        {"roleId": "hospitality.front-desk.ic", "kind": "level-down"},
+        {"roleId": "hospitality.events.ic", "kind": "sibling-family"},
+        {"roleId": "hospitality.manager.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "hospitality.housekeeping.lead",
+      "function": "hospitality",
+      "family": "hospitality.housekeeping",
+      "titleEn": "Housekeeping Supervisor",
+      "titleRu": "Супервайзер службы номерного фонда",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Housekeeping Supervisor", "Floor Supervisor", "Executive Housekeeper Assistant", "Housekeeping Team Lead", "Rooms Division Supervisor", "Housekeeping Shift Manager"],
+        "ru": ["Супервайзер службы номерного фонда", "Старшая горничная", "Супервайзер хаускипинга", "Руководитель службы уборки", "Старший администратор номерного фонда", "Менеджер смены хаускипинга"]
+      },
+      "adjacent": [
+        {"roleId": "hospitality.housekeeping.ic", "kind": "level-down"},
+        {"roleId": "hospitality.front-office.lead", "kind": "sibling-family"},
+        {"roleId": "hospitality.manager.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "hospitality.executive-chef.head",
+      "function": "hospitality",
+      "family": "hospitality.leadership",
+      "titleEn": "Executive Chef",
+      "titleRu": "Шеф-повар / руководитель кухни",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Executive Chef", "Head Chef", "Chef de Cuisine", "Kitchen Director", "Culinary Director", "Chef Manager"],
+        "ru": ["Шеф-повар", "Бренд-шеф", "Руководитель кухни", "Директор кухни", "Шеф-повар ресторана", "Кулинарный директор"]
+      },
+      "adjacent": [
+        {"roleId": "hospitality.chef.lead", "kind": "level-down"},
+        {"roleId": "hospitality.restaurant-manager.head", "kind": "sibling-family"},
+        {"roleId": "hospitality.vp", "kind": "level-up"}
       ]
     },
     {
       "id": "hospitality.manager.head",
       "function": "hospitality",
-      "family": "hospitality.core",
+      "family": "hospitality.leadership",
       "titleEn": "Hotel / Restaurant Manager",
       "titleRu": "Управляющий отелем / рестораном",
-      "levels": [
-        "head"
-      ],
+      "levels": ["head"],
       "variants": {
-        "en": [
-          "Hotel Manager",
-          "Restaurant Manager",
-          "F&B Manager"
-        ],
-        "ru": [
-          "Управляющий отелем",
-          "Управляющий рестораном"
-        ]
+        "en": ["Hotel Manager", "General Manager Hotel", "Restaurant Manager", "Hospitality Manager", "Property Manager Hotel", "Hotel Operations Manager"],
+        "ru": ["Управляющий отелем", "Генеральный менеджер отеля", "Управляющий рестораном", "Менеджер гостиницы", "Руководитель гостиничного комплекса", "Операционный менеджер отеля"]
       },
       "adjacent": [
-        {
-          "roleId": "hospitality.chef.lead",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "hospitality.vp",
-          "kind": "level-up"
-        }
+        {"roleId": "hospitality.front-office.lead", "kind": "level-down"},
+        {"roleId": "hospitality.housekeeping.lead", "kind": "sibling-family"},
+        {"roleId": "hospitality.restaurant-manager.head", "kind": "sibling-family"},
+        {"roleId": "hospitality.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "hospitality.restaurant-manager.head",
+      "function": "hospitality",
+      "family": "hospitality.leadership",
+      "titleEn": "Restaurant Operations Manager",
+      "titleRu": "Директор по операционной деятельности ресторана",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Restaurant Operations Manager", "Restaurant General Manager", "Restaurant Director", "Food and Beverage Manager", "Head of Restaurant Operations", "Multi-unit Restaurant Manager"],
+        "ru": ["Директор ресторана", "Управляющий рестораном", "Руководитель ресторанных операций", "Директор по ресторанному бизнесу", "Менеджер ресторанной сети", "Руководитель службы питания"]
+      },
+      "adjacent": [
+        {"roleId": "hospitality.fnb-supervisor.lead", "kind": "level-down"},
+        {"roleId": "hospitality.manager.head", "kind": "sibling-family"},
+        {"roleId": "hospitality.vp", "kind": "level-up"}
       ]
     },
     {
       "id": "hospitality.vp",
       "function": "hospitality",
-      "family": "hospitality.core",
+      "family": "hospitality.leadership",
       "titleEn": "VP of Hospitality Operations",
-      "titleRu": "Директор по гостиничным операциям",
-      "levels": [
-        "vp"
-      ],
+      "titleRu": "Директор по гостиничным и ресторанным операциям",
+      "levels": ["vp"],
       "variants": {
-        "en": [
-          "VP of Hospitality Operations",
-          "F&B Director"
-        ],
-        "ru": [
-          "Директор по гостиничным операциям"
-        ]
+        "en": ["VP of Hospitality Operations", "VP Hotel Operations", "Vice President Hospitality", "Regional Director of Hotels", "Hospitality Operations Director", "Director of Hotel Operations"],
+        "ru": ["Директор по гостиничным операциям", "Директор по гостеприимству", "Вице-президент по гостиничному бизнесу", "Региональный директор отелей", "Директор гостиничной сети", "Руководитель операционного блока HoReCa"]
       },
       "adjacent": [
-        {
-          "roleId": "hospitality.manager.head",
-          "kind": "level-down"
-        }
+        {"roleId": "hospitality.manager.head", "kind": "level-down"},
+        {"roleId": "hospitality.restaurant-manager.head", "kind": "sibling-family"},
+        {"roleId": "hospitality.chief", "kind": "level-up"},
+        {"roleId": "ops.vp", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "hospitality.chief",
+      "function": "hospitality",
+      "family": "hospitality.leadership",
+      "titleEn": "Chief Hospitality Officer",
+      "titleRu": "Директор гостинично-ресторанной сети",
+      "levels": ["c-level"],
+      "variants": {
+        "en": ["Chief Hospitality Officer", "Chief Operating Officer Hospitality", "Chief Hotel Officer", "Hospitality Executive Director", "Chief Guest Experience Officer", "Hospitality Group CEO"],
+        "ru": ["Директор гостинично-ресторанной сети", "Операционный директор сети отелей", "Директор гостиничного бизнеса", "Директор по гостеприимству", "Директор по клиентскому опыту в HoReCa", "Руководитель гостиничной группы"]
+      },
+      "adjacent": [
+        {"roleId": "hospitality.vp", "kind": "level-down"},
+        {"roleId": "ops.coo", "kind": "cross-function-neighbor"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
       ]
     }
   ]

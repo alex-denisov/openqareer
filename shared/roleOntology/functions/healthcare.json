@@ -8,9 +8,30 @@
     {
       "id": "healthcare.core",
       "function": "healthcare",
-      "labelEn": "Healthcare ladder",
-      "labelRu": "Лестница здравоохранения",
-      "coverage": "core"
+      "labelEn": "Clinical Care & Nursing",
+      "labelRu": "Клиническая помощь и сестринское дело",
+      "coverage": "full"
+    },
+    {
+      "id": "healthcare.diagnostics",
+      "function": "healthcare",
+      "labelEn": "Diagnostics & Laboratory Medicine",
+      "labelRu": "Диагностика и лабораторная медицина",
+      "coverage": "full"
+    },
+    {
+      "id": "healthcare.pharmacy",
+      "function": "healthcare",
+      "labelEn": "Pharmacy",
+      "labelRu": "Фармация",
+      "coverage": "full"
+    },
+    {
+      "id": "healthcare.operations",
+      "function": "healthcare",
+      "labelEn": "Healthcare Operations Leadership",
+      "labelRu": "Руководство медицинскими организациями",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,28 +39,18 @@
       "id": "healthcare.nurse.ic",
       "function": "healthcare",
       "family": "healthcare.core",
-      "titleEn": "Nurse / Paramedic",
-      "titleRu": "Медсестра / фельдшер",
-      "levels": [
-        "ic"
-      ],
+      "titleEn": "Registered Nurse / Paramedic",
+      "titleRu": "Медицинская сестра / фельдшер",
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Nurse",
-          "Paramedic",
-          "Medical Assistant"
-        ],
-        "ru": [
-          "Медсестра",
-          "Медбрат",
-          "Фельдшер"
-        ]
+        "en": ["Registered Nurse", "RN", "Staff Nurse", "Nurse", "Paramedic", "Medical Assistant"],
+        "ru": ["Медицинская сестра", "Медицинский брат", "Медсестра", "Фельдшер", "Постовая медсестра", "Медицинская сестра палатная"]
       },
+      "qualificationBand": ["second-category", "first-category", "highest-category"],
       "adjacent": [
-        {
-          "roleId": "healthcare.physician.ic",
-          "kind": "sibling-family"
-        }
+        {"roleId": "healthcare.physician.ic", "kind": "sibling-family"},
+        {"roleId": "healthcare.allied-health.ic", "kind": "sibling-family"},
+        {"roleId": "healthcare.nursing.lead", "kind": "level-up"}
       ]
     },
     {
@@ -48,118 +59,212 @@
       "family": "healthcare.core",
       "titleEn": "Physician",
       "titleRu": "Врач",
-      "levels": [
-        "ic"
-      ],
-      "icBand": [
-        "second-category",
-        "first-category",
-        "highest-category"
-      ],
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "General Practitioner",
-          "Physician",
-          "Specialist Doctor"
-        ],
-        "ru": [
-          "Врач общей практики",
-          "Врач-специалист"
-        ]
+        "en": ["Physician", "Doctor", "Medical Doctor", "General Practitioner", "Specialist Physician", "Attending Physician"],
+        "ru": ["Врач", "Врач общей практики", "Врач-специалист", "Лечащий врач", "Доктор", "Врач-терапевт"]
+      },
+      "icBand": ["second-category", "first-category", "highest-category"],
+      "adjacent": [
+        {"roleId": "healthcare.nurse.ic", "kind": "sibling-family"},
+        {"roleId": "healthcare.allied-health.ic", "kind": "sibling-family"},
+        {"roleId": "healthcare.head-dept.head", "kind": "level-up"},
+        {"roleId": "healthcare.medical-director.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "healthcare.allied-health.ic",
+      "function": "healthcare",
+      "family": "healthcare.core",
+      "titleEn": "Allied Health Specialist",
+      "titleRu": "Специалист реабилитационной и коррекционной медицины",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Physiotherapist", "Physical Therapist", "Occupational Therapist", "Rehabilitation Specialist", "Speech Therapist", "Clinical Therapist"],
+        "ru": ["Физиотерапевт", "Физический терапевт", "Реабилитолог", "Эрготерапевт", "Логопед", "Специалист по реабилитации"]
+      },
+      "qualificationBand": ["specialist", "senior-specialist", "highest-category"],
+      "adjacent": [
+        {"roleId": "healthcare.nurse.ic", "kind": "sibling-family"},
+        {"roleId": "healthcare.physician.ic", "kind": "sibling-family"},
+        {"roleId": "healthcare.lab.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "healthcare.nursing.lead",
+      "function": "healthcare",
+      "family": "healthcare.core",
+      "titleEn": "Nurse Manager / Charge Nurse",
+      "titleRu": "Старшая медицинская сестра",
+      "levels": ["lead", "head"],
+      "variants": {
+        "en": ["Charge Nurse", "Nurse Manager", "Nursing Supervisor", "Head Nurse", "Senior Nurse", "Ward Manager"],
+        "ru": ["Старшая медицинская сестра", "Старшая медсестра", "Главная медсестра отделения", "Руководитель сестринской службы", "Медсестра-координатор", "Сестра-хозяйка"]
       },
       "adjacent": [
-        {
-          "roleId": "healthcare.nurse.ic",
-          "kind": "sibling-family"
-        },
-        {
-          "roleId": "healthcare.head-dept.head",
-          "kind": "level-up"
-        }
+        {"roleId": "healthcare.nurse.ic", "kind": "level-down"},
+        {"roleId": "healthcare.head-dept.head", "kind": "level-up"},
+        {"roleId": "healthcare.physician.ic", "kind": "cross-function-neighbor"}
       ]
     },
     {
       "id": "healthcare.head-dept.head",
       "function": "healthcare",
       "family": "healthcare.core",
-      "titleEn": "Head of Department (Medical)",
-      "titleRu": "Заведующий отделением",
-      "levels": [
-        "head"
-      ],
+      "titleEn": "Head of Medical Department",
+      "titleRu": "Заведующий медицинским отделением",
+      "levels": ["head"],
       "variants": {
-        "en": [
-          "Head of Department",
-          "Department Chief (Medical)"
-        ],
-        "ru": [
-          "Заведующий отделением"
-        ]
+        "en": ["Head of Department", "Department Chief", "Medical Department Head", "Clinical Department Director", "Ward Director", "Chief of Medicine"],
+        "ru": ["Заведующий отделением", "Заведующий медицинским отделением", "Руководитель отделения", "Начальник отделения", "Заведующий клиническим отделением", "Руководитель клиники"]
       },
       "adjacent": [
-        {
-          "roleId": "healthcare.physician.ic",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "healthcare.deputy.vp",
-          "kind": "level-up"
-        }
+        {"roleId": "healthcare.physician.ic", "kind": "level-down"},
+        {"roleId": "healthcare.nursing.lead", "kind": "sibling-family"},
+        {"roleId": "healthcare.medical-director.head", "kind": "level-up"},
+        {"roleId": "healthcare.deputy.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "healthcare.medical-director.head",
+      "function": "healthcare",
+      "family": "healthcare.core",
+      "titleEn": "Medical Director / Clinical Director",
+      "titleRu": "Медицинский директор / клинический директор",
+      "levels": ["head", "vp"],
+      "variants": {
+        "en": ["Medical Director", "Clinical Director", "Director of Clinical Services", "Medical Operations Director", "Clinical Services Lead", "Director of Medicine"],
+        "ru": ["Медицинский директор", "Клинический директор", "Директор по медицинской деятельности", "Руководитель клинических направлений", "Директор клиники", "Заместитель директора по медицине"]
+      },
+      "adjacent": [
+        {"roleId": "healthcare.head-dept.head", "kind": "level-down"},
+        {"roleId": "healthcare.deputy.vp", "kind": "sibling-family"},
+        {"roleId": "healthcare.hospital-ops.vp", "kind": "sibling-family"},
+        {"roleId": "healthcare.chief-physician.c", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "healthcare.lab.ic",
+      "function": "healthcare",
+      "family": "healthcare.diagnostics",
+      "titleEn": "Medical Laboratory Scientist",
+      "titleRu": "Врач / специалист клинической лабораторной диагностики",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Medical Laboratory Scientist", "Clinical Laboratory Scientist", "Medical Lab Technologist", "Laboratory Technician", "Clinical Lab Analyst", "Pathology Technician"],
+        "ru": ["Врач КЛД", "Специалист клинической лабораторной диагностики", "Лаборант", "Фельдшер-лаборант", "Лабораторный диагност", "Медицинский технолог"]
+      },
+      "qualificationBand": ["specialist", "senior-specialist", "highest-category"],
+      "adjacent": [
+        {"roleId": "healthcare.allied-health.ic", "kind": "sibling-family"},
+        {"roleId": "healthcare.pharmacist.ic", "kind": "sibling-family"},
+        {"roleId": "healthcare.diagnostics.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "healthcare.diagnostics.lead",
+      "function": "healthcare",
+      "family": "healthcare.diagnostics",
+      "titleEn": "Laboratory / Diagnostics Manager",
+      "titleRu": "Заведующий лабораторией / диагностикой",
+      "levels": ["lead", "head"],
+      "variants": {
+        "en": ["Laboratory Manager", "Lab Manager", "Head of Laboratory", "Diagnostics Manager", "Pathology Lab Manager", "Clinical Diagnostics Lead"],
+        "ru": ["Заведующий лабораторией", "Руководитель лаборатории", "Начальник лаборатории", "Руководитель диагностики", "Заведующий отделом КЛД", "Старший врач лаборатории"]
+      },
+      "adjacent": [
+        {"roleId": "healthcare.lab.ic", "kind": "level-down"},
+        {"roleId": "healthcare.physician.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "healthcare.medical-director.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "healthcare.pharmacist.ic",
+      "function": "healthcare",
+      "family": "healthcare.pharmacy",
+      "titleEn": "Pharmacist / Clinical Pharmacist",
+      "titleRu": "Фармацевт / клинический фармаколог",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Pharmacist", "Clinical Pharmacist", "Hospital Pharmacist", "Pharmacy Specialist", "Dispensing Pharmacist", "Medication Management Pharmacist"],
+        "ru": ["Фармацевт", "Провизор", "Клинический фармаколог", "Фармацевт больницы", "Специалист аптеки", "Провизор-аналитик"]
+      },
+      "qualificationBand": ["specialist", "senior-specialist", "highest-category"],
+      "adjacent": [
+        {"roleId": "healthcare.lab.ic", "kind": "sibling-family"},
+        {"roleId": "healthcare.physician.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "healthcare.pharmacy.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "healthcare.pharmacy.lead",
+      "function": "healthcare",
+      "family": "healthcare.pharmacy",
+      "titleEn": "Pharmacy Manager / Chief Pharmacist",
+      "titleRu": "Заведующий аптекой / главный фармацевт",
+      "levels": ["lead", "head"],
+      "variants": {
+        "en": ["Pharmacy Manager", "Chief Pharmacist", "Head Pharmacist", "Hospital Pharmacy Manager", "Pharmacy Department Head", "Lead Pharmacist"],
+        "ru": ["Заведующий аптекой", "Главный фармацевт", "Заведующий отделом фармации", "Руководитель аптечного направления", "Заведующий больничной аптекой", "Старший провизор"]
+      },
+      "adjacent": [
+        {"roleId": "healthcare.pharmacist.ic", "kind": "level-down"},
+        {"roleId": "healthcare.diagnostics.lead", "kind": "sibling-family"},
+        {"roleId": "healthcare.medical-director.head", "kind": "cross-function-neighbor"}
       ]
     },
     {
       "id": "healthcare.deputy.vp",
       "function": "healthcare",
-      "family": "healthcare.core",
-      "titleEn": "Deputy Chief Physician",
+      "family": "healthcare.operations",
+      "titleEn": "Deputy Chief Physician / Deputy Medical Director",
       "titleRu": "Заместитель главного врача",
-      "levels": [
-        "vp"
-      ],
+      "levels": ["vp"],
       "variants": {
-        "en": [
-          "Deputy Chief Physician",
-          "Deputy Medical Director"
-        ],
-        "ru": [
-          "Заместитель главного врача"
-        ]
+        "en": ["Deputy Chief Physician", "Deputy Medical Director", "Associate Medical Director", "Deputy Hospital Director", "Chief Physician Deputy", "Vice Medical Director"],
+        "ru": ["Заместитель главного врача", "Заместитель медицинского директора", "Заместитель директора по медицине", "Заместитель руководителя клиники", "Замглавврача", "Заместитель главного врача по лечебной работе"]
       },
       "adjacent": [
-        {
-          "roleId": "healthcare.head-dept.head",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "healthcare.chief-physician.c",
-          "kind": "level-up"
-        }
+        {"roleId": "healthcare.head-dept.head", "kind": "level-down"},
+        {"roleId": "healthcare.medical-director.head", "kind": "sibling-family"},
+        {"roleId": "healthcare.hospital-ops.vp", "kind": "sibling-family"},
+        {"roleId": "healthcare.chief-physician.c", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "healthcare.hospital-ops.vp",
+      "function": "healthcare",
+      "family": "healthcare.operations",
+      "titleEn": "VP / Director of Hospital Operations",
+      "titleRu": "Директор по операционной деятельности клиники",
+      "levels": ["vp"],
+      "variants": {
+        "en": ["Director of Hospital Operations", "VP of Healthcare Operations", "Hospital Operations Director", "Director of Clinic Operations", "Healthcare Operations VP", "Hospital General Manager"],
+        "ru": ["Директор по операционной деятельности клиники", "Директор по госпитальным операциям", "Руководитель операционной деятельности медицинского центра", "Директор клиники", "Директор сети клиник", "Управляющий медицинским центром"]
+      },
+      "adjacent": [
+        {"roleId": "healthcare.medical-director.head", "kind": "sibling-family"},
+        {"roleId": "healthcare.deputy.vp", "kind": "sibling-family"},
+        {"roleId": "healthcare.chief-physician.c", "kind": "level-up"},
+        {"roleId": "ops.vp", "kind": "cross-function-neighbor"}
       ]
     },
     {
       "id": "healthcare.chief-physician.c",
       "function": "healthcare",
-      "family": "healthcare.core",
+      "family": "healthcare.operations",
       "titleEn": "Chief Physician / Chief Medical Officer",
-      "titleRu": "Главный врач",
-      "levels": [
-        "c-level"
-      ],
+      "titleRu": "Главный врач / медицинский директор",
+      "levels": ["c-level"],
       "variants": {
-        "en": [
-          "Chief Medical Officer",
-          "Chief Physician",
-          "Hospital Director"
-        ],
-        "ru": [
-          "Главный врач"
-        ]
+        "en": ["Chief Medical Officer", "Chief Physician", "CMO Healthcare", "Medical Executive Director", "Hospital Medical Director", "Chief of Medical Affairs"],
+        "ru": ["Главный врач", "Медицинский директор", "Главный врач клиники", "Директор по медицинской деятельности", "Руководитель медицинской организации", "Главный врач больницы"]
       },
       "adjacent": [
-        {
-          "roleId": "healthcare.deputy.vp",
-          "kind": "level-down"
-        }
+        {"roleId": "healthcare.deputy.vp", "kind": "level-down"},
+        {"roleId": "healthcare.hospital-ops.vp", "kind": "sibling-family"},
+        {"roleId": "healthcare.medical-director.head", "kind": "level-down"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
       ]
     }
   ]

@@ -8,9 +8,37 @@
     {
       "id": "extraction-energy.generic",
       "function": "extraction-energy",
-      "labelEn": "Extraction & Energy",
-      "labelRu": "Добыча и энергетика",
-      "coverage": "skeleton"
+      "labelEn": "Extraction & Energy Leadership",
+      "labelRu": "Руководство добычей и энергетикой",
+      "coverage": "full"
+    },
+    {
+      "id": "extraction-energy.mining",
+      "function": "extraction-energy",
+      "labelEn": "Mining & Metals",
+      "labelRu": "Горнодобыча и металлургическое сырьё",
+      "coverage": "full"
+    },
+    {
+      "id": "extraction-energy.oil-gas",
+      "function": "extraction-energy",
+      "labelEn": "Oil, Gas & Drilling",
+      "labelRu": "Нефть, газ и бурение",
+      "coverage": "full"
+    },
+    {
+      "id": "extraction-energy.power",
+      "function": "extraction-energy",
+      "labelEn": "Power Generation & Utilities",
+      "labelRu": "Энергетика и коммунальная инфраструктура",
+      "coverage": "full"
+    },
+    {
+      "id": "extraction-energy.safety",
+      "function": "extraction-energy",
+      "labelEn": "Industrial Safety & Environment",
+      "labelRu": "Промышленная безопасность и экология",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,28 +46,317 @@
       "id": "extraction-energy.generic",
       "function": "extraction-energy",
       "family": "extraction-energy.generic",
-      "titleEn": "Extraction & Energy",
-      "titleRu": "Добыча и энергетика",
-      "levels": [
-        "ic",
-        "head",
-        "vp",
-        "c-level"
-      ],
+      "titleEn": "Extraction & Energy Executive",
+      "titleRu": "Руководитель добывающего и энергетического бизнеса",
+      "levels": ["head", "vp", "c-level"],
       "variants": {
-        "en": [
-          "Mining Engineer",
-          "Drilling Engineer",
-          "Power Engineer",
-          "Process Engineer (Oil & Gas)"
-        ],
-        "ru": [
-          "Горный инженер",
-          "Инженер-буровик",
-          "Энергетик"
-        ]
+        "en": ["Extraction and Energy Executive", "Resources Executive", "Energy Business Leader", "Mining and Energy Director", "Natural Resources Executive", "Energy Sector Leader"],
+        "ru": ["Руководитель добывающего бизнеса", "Руководитель энергетического бизнеса", "Директор по добыче и энергетике", "Руководитель ресурсной компании", "Директор природоресурсного дивизиона", "Руководитель энергетического сектора"]
       },
-      "adjacent": []
+      "adjacent": [
+        {"roleId": "extraction-energy.vp", "kind": "level-down"},
+        {"roleId": "extraction-energy.mine-manager.head", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.chief.c", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "extraction-energy.miner.ic",
+      "function": "extraction-energy",
+      "family": "extraction-energy.mining",
+      "titleEn": "Mining Operator / Miner",
+      "titleRu": "Горнорабочий / оператор горных работ",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Miner", "Mining Operator", "Underground Mining Operator", "Open Pit Mining Operator", "Drill Rig Operator", "Mine Production Worker"],
+        "ru": ["Горнорабочий", "Оператор горных работ", "Машинист горных машин", "Подземный горнорабочий", "Рабочий карьера", "Оператор буровой установки"]
+      },
+      "icBand": ["grade-1-6"],
+      "adjacent": [
+        {"roleId": "extraction-energy.mining-engineer.ic", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.shift-lead", "kind": "level-up"},
+        {"roleId": "manufacturing.operator.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "extraction-energy.mining-engineer.ic",
+      "function": "extraction-energy",
+      "family": "extraction-energy.mining",
+      "titleEn": "Mining Engineer",
+      "titleRu": "Горный инженер",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Mining Engineer", "Mine Planning Engineer", "Rock Mechanics Engineer", "Mining Production Engineer", "Open Pit Engineer", "Underground Mining Engineer"],
+        "ru": ["Горный инженер", "Инженер по горным работам", "Инженер по планированию горных работ", "Инженер шахты", "Инженер карьера", "Инженер по добыче"]
+      },
+      "icBand": ["junior", "middle", "senior"],
+      "adjacent": [
+        {"roleId": "extraction-energy.miner.ic", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.geologist.ic", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.mine-manager.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "extraction-energy.geologist.ic",
+      "function": "extraction-energy",
+      "family": "extraction-energy.mining",
+      "titleEn": "Geologist / Exploration Specialist",
+      "titleRu": "Геолог / специалист по разведке месторождений",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Geologist", "Exploration Geologist", "Mining Geologist", "Resource Geologist", "Geoscientist", "Exploration Specialist"],
+        "ru": ["Геолог", "Геолог-разведчик", "Горный геолог", "Геолог по запасам", "Специалист по недропользованию", "Геолог по поиску месторождений"]
+      },
+      "adjacent": [
+        {"roleId": "extraction-energy.mining-engineer.ic", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.petroleum.ic", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.exploration-lead", "kind": "level-up"},
+        {"roleId": "research.scientist.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "extraction-energy.drilling.ic",
+      "function": "extraction-energy",
+      "family": "extraction-energy.oil-gas",
+      "titleEn": "Drilling Engineer",
+      "titleRu": "Инженер по бурению",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Drilling Engineer", "Well Engineer", "Drilling Operations Engineer", "Completion Engineer", "Rig Engineer", "Directional Drilling Engineer"],
+        "ru": ["Инженер по бурению", "Инженер по строительству скважин", "Инженер по буровым работам", "Инженер по заканчиванию скважин", "Инженер буровой", "Инженер по наклонно-направленному бурению"]
+      },
+      "icBand": ["junior", "middle", "senior"],
+      "adjacent": [
+        {"roleId": "extraction-energy.petroleum.ic", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.drilling-lead", "kind": "level-up"},
+        {"roleId": "extraction-energy.mining-engineer.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "extraction-energy.petroleum.ic",
+      "function": "extraction-energy",
+      "family": "extraction-energy.oil-gas",
+      "titleEn": "Petroleum / Reservoir Engineer",
+      "titleRu": "Инженер по разработке месторождений нефти и газа",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Petroleum Engineer", "Reservoir Engineer", "Production Engineer Oil and Gas", "Field Development Engineer", "Petrophysicist", "Well Performance Engineer"],
+        "ru": ["Инженер по разработке месторождений", "Нефтяной инженер", "Инженер по добыче нефти и газа", "Инженер по разработке скважин", "Петрофизик", "Инженер по оптимизации добычи"]
+      },
+      "icBand": ["junior", "middle", "senior"],
+      "adjacent": [
+        {"roleId": "extraction-energy.drilling.ic", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.geologist.ic", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.oil-gas-lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "extraction-energy.power.ic",
+      "function": "extraction-energy",
+      "family": "extraction-energy.power",
+      "titleEn": "Power Systems Engineer",
+      "titleRu": "Инженер энергетических систем",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Power Systems Engineer", "Electrical Power Engineer", "Energy Engineer", "Power Plant Engineer", "Utilities Engineer", "Grid Operations Engineer"],
+        "ru": ["Инженер энергетических систем", "Инженер-энергетик", "Инженер электростанции", "Инженер по эксплуатации энергосистем", "Инженер по электроснабжению", "Инженер по сетям"]
+      },
+      "icBand": ["junior", "middle", "senior"],
+      "adjacent": [
+        {"roleId": "extraction-energy.power-operations.head", "kind": "level-up"},
+        {"roleId": "manufacturing.technician.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "it-ops.infra.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "extraction-energy.hse.ic",
+      "function": "extraction-energy",
+      "family": "extraction-energy.safety",
+      "titleEn": "Industrial HSE Specialist",
+      "titleRu": "Специалист по промышленной безопасности и экологии",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["HSE Specialist", "Industrial Safety Specialist", "EHS Advisor", "Occupational Safety Engineer", "Environmental Specialist", "Process Safety Engineer"],
+        "ru": ["Специалист по промышленной безопасности", "Инженер по охране труда", "Специалист HSE", "Инженер по экологической безопасности", "Специалист по охране окружающей среды", "Инженер по безопасности технологических процессов"]
+      },
+      "adjacent": [
+        {"roleId": "extraction-energy.safety-lead", "kind": "level-up"},
+        {"roleId": "construction.safety.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "security-services.safety.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "extraction-energy.shift-lead",
+      "function": "extraction-energy",
+      "family": "extraction-energy.mining",
+      "titleEn": "Mining / Drilling Shift Supervisor",
+      "titleRu": "Начальник смены добычи / бурения",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Mining Shift Supervisor", "Drilling Shift Supervisor", "Mine Shift Boss", "Field Operations Supervisor", "Production Shift Lead Mining", "Rig Supervisor"],
+        "ru": ["Начальник смены добычи", "Начальник смены бурения", "Горный мастер", "Руководитель смены месторождения", "Мастер горного участка", "Супервайзер буровой"]
+      },
+      "adjacent": [
+        {"roleId": "extraction-energy.miner.ic", "kind": "level-down"},
+        {"roleId": "extraction-energy.drilling.ic", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.mine-manager.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "extraction-energy.drilling-lead",
+      "function": "extraction-energy",
+      "family": "extraction-energy.oil-gas",
+      "titleEn": "Drilling Operations Lead",
+      "titleRu": "Руководитель буровых работ",
+      "levels": ["lead", "head"],
+      "variants": {
+        "en": ["Drilling Operations Lead", "Drilling Superintendent", "Well Operations Supervisor", "Rig Operations Manager", "Drilling Team Lead", "Field Drilling Supervisor"],
+        "ru": ["Руководитель буровых работ", "Суперинтендант по бурению", "Начальник буровой службы", "Руководитель буровой бригады", "Супервайзер бурения", "Начальник отдела бурения"]
+      },
+      "adjacent": [
+        {"roleId": "extraction-energy.drilling.ic", "kind": "level-down"},
+        {"roleId": "extraction-energy.oil-gas-lead", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.oil-gas-head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "extraction-energy.exploration-lead",
+      "function": "extraction-energy",
+      "family": "extraction-energy.mining",
+      "titleEn": "Head of Exploration",
+      "titleRu": "Руководитель геологоразведки",
+      "levels": ["lead", "head"],
+      "variants": {
+        "en": ["Head of Exploration", "Exploration Manager", "Geology Team Lead", "Resource Exploration Manager", "Chief Geologist", "Exploration Director"],
+        "ru": ["Руководитель геологоразведки", "Начальник геологоразведочной партии", "Главный геолог", "Руководитель отдела разведки", "Директор по разведке", "Руководитель геологического направления"]
+      },
+      "adjacent": [
+        {"roleId": "extraction-energy.geologist.ic", "kind": "level-down"},
+        {"roleId": "extraction-energy.mine-manager.head", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "extraction-energy.oil-gas-lead",
+      "function": "extraction-energy",
+      "family": "extraction-energy.oil-gas",
+      "titleEn": "Oil & Gas Production Lead",
+      "titleRu": "Руководитель добычи нефти и газа",
+      "levels": ["lead", "head"],
+      "variants": {
+        "en": ["Oil and Gas Production Lead", "Production Superintendent", "Field Production Manager", "Upstream Operations Lead", "Production Team Lead Oil and Gas", "Asset Operations Manager"],
+        "ru": ["Руководитель добычи нефти и газа", "Начальник добычи", "Руководитель промысла", "Суперинтендант по добыче", "Руководитель производственного актива", "Начальник нефтегазового промысла"]
+      },
+      "adjacent": [
+        {"roleId": "extraction-energy.petroleum.ic", "kind": "level-down"},
+        {"roleId": "extraction-energy.drilling-lead", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.oil-gas-head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "extraction-energy.safety-lead",
+      "function": "extraction-energy",
+      "family": "extraction-energy.safety",
+      "titleEn": "HSE / Industrial Safety Manager",
+      "titleRu": "Руководитель промышленной безопасности и HSE",
+      "levels": ["lead", "head"],
+      "variants": {
+        "en": ["HSE Manager", "Industrial Safety Manager", "EHS Manager", "Process Safety Manager", "Head of HSE", "Environmental Health and Safety Lead"],
+        "ru": ["Руководитель HSE", "Руководитель промышленной безопасности", "Начальник службы охраны труда", "Руководитель экологической безопасности", "Начальник отдела производственной безопасности", "Директор по промышленной безопасности"]
+      },
+      "adjacent": [
+        {"roleId": "extraction-energy.hse.ic", "kind": "level-down"},
+        {"roleId": "extraction-energy.mine-manager.head", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.vp", "kind": "level-up"},
+        {"roleId": "security-services.safety.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "extraction-energy.mine-manager.head",
+      "function": "extraction-energy",
+      "family": "extraction-energy.generic",
+      "titleEn": "Mine Manager / Asset Manager",
+      "titleRu": "Директор рудника / руководитель добывающего актива",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Mine Manager", "Mining Operations Manager", "Asset Manager Mining", "Mine General Manager", "Mining Site Director", "Head of Mine Operations"],
+        "ru": ["Директор рудника", "Руководитель добывающего актива", "Начальник горного производства", "Управляющий рудником", "Директор горного предприятия", "Руководитель шахты"]
+      },
+      "adjacent": [
+        {"roleId": "extraction-energy.mining-engineer.ic", "kind": "level-down"},
+        {"roleId": "extraction-energy.shift-lead", "kind": "level-down"},
+        {"roleId": "extraction-energy.vp", "kind": "level-up"},
+        {"roleId": "extraction-energy.safety-lead", "kind": "sibling-family"}
+      ]
+    },
+    {
+      "id": "extraction-energy.oil-gas-head",
+      "function": "extraction-energy",
+      "family": "extraction-energy.generic",
+      "titleEn": "Head of Oil & Gas Operations",
+      "titleRu": "Руководитель нефтегазовых операций",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Head of Oil and Gas Operations", "Upstream Operations Director", "Oilfield Operations Manager", "Oil and Gas Asset Director", "Head of Production Oil and Gas", "Field Operations Director"],
+        "ru": ["Руководитель нефтегазовых операций", "Директор по добыче нефти и газа", "Руководитель нефтепромысла", "Директор производственного актива", "Начальник нефтегазового производства", "Директор по операционной деятельности месторождения"]
+      },
+      "adjacent": [
+        {"roleId": "extraction-energy.oil-gas-lead", "kind": "level-down"},
+        {"roleId": "extraction-energy.drilling-lead", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.vp", "kind": "level-up"},
+        {"roleId": "extraction-energy.safety-lead", "kind": "sibling-family"}
+      ]
+    },
+    {
+      "id": "extraction-energy.power-operations.head",
+      "function": "extraction-energy",
+      "family": "extraction-energy.power",
+      "titleEn": "Power Operations Manager",
+      "titleRu": "Руководитель энергетических операций",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Power Operations Manager", "Power Plant Manager", "Head of Energy Operations", "Utilities Operations Director", "Grid Operations Manager", "Energy Generation Manager"],
+        "ru": ["Руководитель энергетических операций", "Директор электростанции", "Начальник энергохозяйства", "Руководитель энергогенерации", "Директор по эксплуатации энергосистем", "Руководитель энергетического комплекса"]
+      },
+      "adjacent": [
+        {"roleId": "extraction-energy.power.ic", "kind": "level-down"},
+        {"roleId": "extraction-energy.vp", "kind": "level-up"},
+        {"roleId": "manufacturing.head", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "extraction-energy.vp",
+      "function": "extraction-energy",
+      "family": "extraction-energy.generic",
+      "titleEn": "VP of Energy / Natural Resources",
+      "titleRu": "Директор по энергетике и природным ресурсам",
+      "levels": ["vp"],
+      "variants": {
+        "en": ["VP of Energy", "VP Natural Resources", "Vice President Mining", "VP Oil and Gas", "Energy Division Director", "Executive Director of Resources"],
+        "ru": ["Директор по энергетике", "Директор по природным ресурсам", "Вице-президент по добыче", "Директор по нефти и газу", "Руководитель энергетического дивизиона", "Директор ресурсного направления"]
+      },
+      "adjacent": [
+        {"roleId": "extraction-energy.mine-manager.head", "kind": "level-down"},
+        {"roleId": "extraction-energy.oil-gas-head", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.power-operations.head", "kind": "sibling-family"},
+        {"roleId": "extraction-energy.chief.c", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "extraction-energy.chief.c",
+      "function": "extraction-energy",
+      "family": "extraction-energy.generic",
+      "titleEn": "Chief Energy / Resources Officer",
+      "titleRu": "Директор по добыче и энергетике",
+      "levels": ["c-level"],
+      "variants": {
+        "en": ["Chief Energy Officer", "Chief Resources Officer", "Chief Mining Officer", "Chief Oil and Gas Officer", "Chief Operating Officer Energy", "Natural Resources Executive Director"],
+        "ru": ["Директор по добыче и энергетике", "Директор по природным ресурсам", "Директор по горнодобыче", "Директор нефтегазового бизнеса", "Операционный директор энергетической компании", "Руководитель ресурсного холдинга"]
+      },
+      "adjacent": [
+        {"roleId": "extraction-energy.vp", "kind": "level-down"},
+        {"roleId": "ops.coo", "kind": "cross-function-neighbor"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
+      ]
     }
   ]
 }

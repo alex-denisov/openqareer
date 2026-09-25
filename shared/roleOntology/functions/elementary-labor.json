@@ -8,9 +8,23 @@
     {
       "id": "elementary-labor.core",
       "function": "elementary-labor",
-      "labelEn": "Manual labor ladder",
-      "labelRu": "Лестница элементарного труда",
-      "coverage": "core"
+      "labelEn": "Cleaning & Facility Work",
+      "labelRu": "Уборка и хозяйственные работы",
+      "coverage": "full"
+    },
+    {
+      "id": "elementary-labor.warehouse-delivery",
+      "function": "elementary-labor",
+      "labelEn": "Warehouse, Packing & Delivery",
+      "labelRu": "Склад, упаковка и доставка",
+      "coverage": "full"
+    },
+    {
+      "id": "elementary-labor.team-leadership",
+      "function": "elementary-labor",
+      "labelEn": "Frontline Team Leadership",
+      "labelRu": "Руководство рабочей бригадой",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -20,55 +34,170 @@
       "family": "elementary-labor.core",
       "titleEn": "Cleaner / Loader / Courier",
       "titleRu": "Уборщик / грузчик / курьер",
-      "levels": [
-        "ic"
-      ],
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Cleaner",
-          "Loader",
-          "Courier",
-          "Warehouse Worker",
-          "Kitchen Porter"
-        ],
-        "ru": [
-          "Уборщик",
-          "Грузчик",
-          "Курьер",
-          "Разнорабочий"
-        ]
+        "en": ["Cleaner", "Loader", "Courier", "General Laborer", "Facilities Worker", "Manual Worker"],
+        "ru": ["Уборщик", "Уборщица", "Грузчик", "Курьер", "Разнорабочий", "Рабочий по хозяйству"]
       },
       "adjacent": [
-        {
-          "roleId": "elementary-labor.lead",
-          "kind": "level-up"
-        }
+        {"roleId": "elementary-labor.cleaner.ic", "kind": "sibling-family"},
+        {"roleId": "elementary-labor.loader.ic", "kind": "sibling-family"},
+        {"roleId": "elementary-labor.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "elementary-labor.cleaner.ic",
+      "function": "elementary-labor",
+      "family": "elementary-labor.core",
+      "titleEn": "Cleaner / Housekeeping Worker",
+      "titleRu": "Уборщик помещений / работник клининга",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Cleaner", "Housekeeping Worker", "Janitor", "Custodian", "Cleaning Operative", "Office Cleaner"],
+        "ru": ["Уборщик помещений", "Уборщица", "Работник клининга", "Уборщик производственных помещений", "Дворник-уборщик", "Сотрудник клининговой службы"]
+      },
+      "adjacent": [
+        {"roleId": "elementary-labor.worker.ic", "kind": "sibling-family"},
+        {"roleId": "hospitality.housekeeping.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "elementary-labor.cleaning-lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "elementary-labor.loader.ic",
+      "function": "elementary-labor",
+      "family": "elementary-labor.warehouse-delivery",
+      "titleEn": "Loader / Warehouse Operative",
+      "titleRu": "Грузчик / рабочий склада",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Loader", "Warehouse Operative", "Warehouse Worker", "Material Handler", "Manual Handling Operative", "Loading Assistant"],
+        "ru": ["Грузчик", "Рабочий склада", "Комплектовщик-грузчик", "Разнорабочий склада", "Рабочий по погрузке", "Оператор складских работ"]
+      },
+      "adjacent": [
+        {"roleId": "elementary-labor.worker.ic", "kind": "sibling-family"},
+        {"roleId": "elementary-labor.picker.ic", "kind": "sibling-family"},
+        {"roleId": "elementary-labor.warehouse-lead", "kind": "level-up"},
+        {"roleId": "logistics.coordinator.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "elementary-labor.courier.ic",
+      "function": "elementary-labor",
+      "family": "elementary-labor.warehouse-delivery",
+      "titleEn": "Courier / Delivery Worker",
+      "titleRu": "Курьер / доставщик",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Courier", "Delivery Driver", "Delivery Worker", "Bike Courier", "Last Mile Courier", "Parcel Delivery Associate"],
+        "ru": ["Курьер", "Вело-курьер", "Пеший курьер", "Курьер по доставке", "Водитель-курьер", "Сотрудник службы доставки"]
+      },
+      "adjacent": [
+        {"roleId": "elementary-labor.picker.ic", "kind": "sibling-family"},
+        {"roleId": "logistics.driver.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "elementary-labor.delivery-lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "elementary-labor.picker.ic",
+      "function": "elementary-labor",
+      "family": "elementary-labor.warehouse-delivery",
+      "titleEn": "Picker / Packer",
+      "titleRu": "Комплектовщик / упаковщик",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Picker", "Packer", "Order Picker", "Warehouse Picker", "Packing Operative", "Fulfillment Associate"],
+        "ru": ["Комплектовщик", "Упаковщик", "Сборщик заказов", "Комплектовщик склада", "Рабочий упаковки", "Сотрудник фулфилмента"]
+      },
+      "adjacent": [
+        {"roleId": "elementary-labor.loader.ic", "kind": "sibling-family"},
+        {"roleId": "elementary-labor.courier.ic", "kind": "sibling-family"},
+        {"roleId": "elementary-labor.warehouse-lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "elementary-labor.waste.ic",
+      "function": "elementary-labor",
+      "family": "elementary-labor.core",
+      "titleEn": "Waste Collection / Recycling Worker",
+      "titleRu": "Рабочий по сбору отходов / сортировщик",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Waste Collection Worker", "Recycling Operative", "Waste Sorter", "Refuse Collector", "Environmental Services Worker", "Waste Handler"],
+        "ru": ["Рабочий по сбору отходов", "Сортировщик отходов", "Оператор сортировки", "Мусоросборщик", "Рабочий экологической службы", "Рабочий полигона"]
+      },
+      "adjacent": [
+        {"roleId": "elementary-labor.worker.ic", "kind": "sibling-family"},
+        {"roleId": "elementary-labor.cleaner.ic", "kind": "sibling-family"},
+        {"roleId": "elementary-labor.cleaning-lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "elementary-labor.cleaning-lead",
+      "function": "elementary-labor",
+      "family": "elementary-labor.team-leadership",
+      "titleEn": "Cleaning Team Lead / Supervisor",
+      "titleRu": "Бригадир клининга",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Cleaning Team Lead", "Cleaning Supervisor", "Janitorial Supervisor", "Housekeeping Team Lead", "Cleaning Shift Supervisor", "Facilities Cleaning Supervisor"],
+        "ru": ["Бригадир клининга", "Старший уборщик", "Бригадир уборщиков", "Супервайзер клининга", "Старший смены уборки", "Руководитель клининговой бригады"]
+      },
+      "adjacent": [
+        {"roleId": "elementary-labor.cleaner.ic", "kind": "level-down"},
+        {"roleId": "elementary-labor.waste.ic", "kind": "sibling-family"},
+        {"roleId": "elementary-labor.lead", "kind": "sibling-family"}
       ]
     },
     {
       "id": "elementary-labor.lead",
       "function": "elementary-labor",
-      "family": "elementary-labor.core",
-      "titleEn": "Team Lead (Cleaning/Warehouse)",
-      "titleRu": "Бригадир",
-      "levels": [
-        "lead"
-      ],
+      "family": "elementary-labor.team-leadership",
+      "titleEn": "Team Lead, Cleaning / Warehouse",
+      "titleRu": "Бригадир рабочей бригады",
+      "levels": ["lead"],
       "variants": {
-        "en": [
-          "Team Lead (Cleaning/Warehouse)",
-          "Shift Lead"
-        ],
-        "ru": [
-          "Бригадир",
-          "Старший смены"
-        ]
+        "en": ["Team Lead Manual Operations", "Warehouse Team Lead", "General Labor Team Lead", "Shift Lead Warehouse", "Frontline Supervisor", "Manual Operations Supervisor"],
+        "ru": ["Бригадир", "Бригадир склада", "Старший рабочий", "Руководитель рабочей смены", "Старший смены", "Супервайзер линейного персонала"]
       },
       "adjacent": [
-        {
-          "roleId": "elementary-labor.worker.ic",
-          "kind": "level-down"
-        }
+        {"roleId": "elementary-labor.worker.ic", "kind": "level-down"},
+        {"roleId": "elementary-labor.warehouse-lead", "kind": "sibling-family"},
+        {"roleId": "elementary-labor.delivery-lead", "kind": "sibling-family"}
+      ]
+    },
+    {
+      "id": "elementary-labor.warehouse-lead",
+      "function": "elementary-labor",
+      "family": "elementary-labor.team-leadership",
+      "titleEn": "Warehouse Shift Lead",
+      "titleRu": "Бригадир складской смены",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Warehouse Shift Lead", "Warehouse Team Leader", "Picking Team Lead", "Packing Team Supervisor", "Fulfillment Shift Lead", "Warehouse Floor Supervisor"],
+        "ru": ["Бригадир складской смены", "Старший комплектовщик", "Руководитель смены комплектации", "Супервайзер упаковки", "Старший смены фулфилмента", "Бригадир склада"]
+      },
+      "adjacent": [
+        {"roleId": "elementary-labor.loader.ic", "kind": "level-down"},
+        {"roleId": "elementary-labor.picker.ic", "kind": "level-down"},
+        {"roleId": "elementary-labor.lead", "kind": "sibling-family"},
+        {"roleId": "logistics.lead", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "elementary-labor.delivery-lead",
+      "function": "elementary-labor",
+      "family": "elementary-labor.team-leadership",
+      "titleEn": "Delivery Team Lead",
+      "titleRu": "Бригадир курьеров / руководитель доставки",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Delivery Team Lead", "Courier Team Lead", "Last Mile Supervisor", "Delivery Shift Supervisor", "Courier Operations Lead", "Route Team Supervisor"],
+        "ru": ["Бригадир курьеров", "Руководитель доставки", "Старший курьер", "Супервайзер курьерской службы", "Руководитель смены доставки", "Координатор курьерской команды"]
+      },
+      "adjacent": [
+        {"roleId": "elementary-labor.courier.ic", "kind": "level-down"},
+        {"roleId": "elementary-labor.lead", "kind": "sibling-family"},
+        {"roleId": "logistics.transport.lead", "kind": "cross-function-neighbor"}
       ]
     }
   ]

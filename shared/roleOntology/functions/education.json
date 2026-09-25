@@ -8,9 +8,23 @@
     {
       "id": "education.core",
       "function": "education",
-      "labelEn": "Education ladder",
-      "labelRu": "Лестница образования",
-      "coverage": "core"
+      "labelEn": "Teaching & Learning",
+      "labelRu": "Преподавание и обучение",
+      "coverage": "full"
+    },
+    {
+      "id": "education.academic-leadership",
+      "function": "education",
+      "labelEn": "Academic Leadership",
+      "labelRu": "Академическое руководство",
+      "coverage": "full"
+    },
+    {
+      "id": "education.learning-operations",
+      "function": "education",
+      "labelEn": "Learning Operations & Student Services",
+      "labelRu": "Организация обучения и сопровождение учащихся",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,116 +32,246 @@
       "id": "education.teacher.ic",
       "function": "education",
       "family": "education.core",
-      "titleEn": "Teacher",
+      "titleEn": "Teacher / Instructor",
       "titleRu": "Учитель / преподаватель",
-      "levels": [
-        "ic"
-      ],
-      "icBand": [
-        "first-category",
-        "highest-category"
-      ],
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Teacher",
-          "Tutor",
-          "Lecturer"
-        ],
-        "ru": [
-          "Учитель",
-          "Преподаватель"
-        ]
+        "en": ["Teacher", "School Teacher", "Subject Teacher", "Instructor", "Classroom Teacher", "Faculty Teacher"],
+        "ru": ["Учитель", "Преподаватель", "Педагог", "Учитель-предметник", "Учитель начальных классов", "Преподаватель дисциплины"]
+      },
+      "icBand": ["first-category", "highest-category"],
+      "adjacent": [
+        {"roleId": "education.lecturer.ic", "kind": "sibling-family"},
+        {"roleId": "education.specialist.ic", "kind": "sibling-family"},
+        {"roleId": "education.academic-coordinator.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "education.lecturer.ic",
+      "function": "education",
+      "family": "education.core",
+      "titleEn": "Lecturer / Professor",
+      "titleRu": "Преподаватель вуза / профессор",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Lecturer", "University Lecturer", "Assistant Professor", "Associate Professor", "Professor", "College Faculty"],
+        "ru": ["Преподаватель вуза", "Доцент", "Профессор", "Ассистент кафедры", "Старший преподаватель", "Преподаватель университета"]
+      },
+      "qualificationBand": ["assistant-professor", "associate-professor", "professor"],
+      "adjacent": [
+        {"roleId": "education.teacher.ic", "kind": "sibling-family"},
+        {"roleId": "education.researcher.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "education.department-head.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "education.early-childhood.ic",
+      "function": "education",
+      "family": "education.core",
+      "titleEn": "Early Childhood Educator",
+      "titleRu": "Воспитатель детского сада",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Early Childhood Educator", "Preschool Teacher", "Kindergarten Teacher", "Childcare Teacher", "Early Years Teacher", "Nursery Practitioner"],
+        "ru": ["Воспитатель", "Воспитатель детского сада", "Педагог дошкольного образования", "Воспитатель дошкольной группы", "Педагог раннего развития", "Воспитатель группы"]
+      },
+      "icBand": ["first-category", "highest-category"],
+      "adjacent": [
+        {"roleId": "education.teacher.ic", "kind": "sibling-family"},
+        {"roleId": "education.specialist.ic", "kind": "sibling-family"},
+        {"roleId": "education.academic-coordinator.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "education.specialist.ic",
+      "function": "education",
+      "family": "education.core",
+      "titleEn": "Special Education / Student Support Specialist",
+      "titleRu": "Специалист по сопровождению и коррекционной педагогике",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Special Education Teacher", "Special Educational Needs Teacher", "School Counselor", "Student Support Specialist", "Learning Support Teacher", "Educational Psychologist"],
+        "ru": ["Учитель-дефектолог", "Учитель-логопед", "Школьный психолог", "Педагог-психолог", "Специалист по сопровождению", "Коррекционный педагог"]
+      },
+      "qualificationBand": ["specialist", "senior-specialist", "highest-category"],
+      "adjacent": [
+        {"roleId": "education.teacher.ic", "kind": "sibling-family"},
+        {"roleId": "education.early-childhood.ic", "kind": "sibling-family"},
+        {"roleId": "education.student-services.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "education.instructional-designer.ic",
+      "function": "education",
+      "family": "education.learning-operations",
+      "titleEn": "Instructional Designer / Methodologist",
+      "titleRu": "Методист / разработчик образовательных программ",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Instructional Designer", "Learning Designer", "Curriculum Designer", "Education Methodologist", "Training Methodologist", "L&D Content Specialist"],
+        "ru": ["Методист", "Разработчик образовательных программ", "Методист учебного отдела", "Специалист по учебно-методической работе", "Разработчик курсов", "Методолог обучения"]
       },
       "adjacent": [
-        {
-          "roleId": "education.head",
-          "kind": "level-up"
-        }
+        {"roleId": "education.teacher.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "education.learning-coordinator.lead", "kind": "level-up"},
+        {"roleId": "project-mgmt.pm.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "education.academic-coordinator.lead",
+      "function": "education",
+      "family": "education.learning-operations",
+      "titleEn": "Academic Coordinator / Program Lead",
+      "titleRu": "Академический координатор / руководитель программы",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Academic Coordinator", "Program Coordinator", "Course Lead", "Academic Program Lead", "Curriculum Lead", "Lead Instructor"],
+        "ru": ["Академический координатор", "Координатор образовательной программы", "Руководитель образовательной программы", "Куратор курса", "Руководитель учебного направления", "Старший преподаватель-координатор"]
+      },
+      "adjacent": [
+        {"roleId": "education.teacher.ic", "kind": "level-down"},
+        {"roleId": "education.instructional-designer.ic", "kind": "sibling-family"},
+        {"roleId": "education.head", "kind": "level-up"}
       ]
     },
     {
       "id": "education.head",
       "function": "education",
-      "family": "education.core",
+      "family": "education.academic-leadership",
       "titleEn": "Deputy Principal / Head of Department",
       "titleRu": "Завуч / заведующий кафедрой",
-      "levels": [
-        "head"
-      ],
+      "levels": ["head"],
       "variants": {
-        "en": [
-          "Deputy Principal",
-          "Head of Department (Academic)"
-        ],
-        "ru": [
-          "Завуч",
-          "Заведующий кафедрой"
-        ]
+        "en": ["Deputy Principal", "Vice Principal", "Head of Department", "Department Chair", "Head of Faculty", "Academic Department Head"],
+        "ru": ["Завуч", "Заместитель директора школы", "Заведующий кафедрой", "Руководитель кафедры", "Декан факультета", "Начальник учебного отдела"]
       },
       "adjacent": [
-        {
-          "roleId": "education.teacher.ic",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "education.principal.vp",
-          "kind": "level-up"
-        }
+        {"roleId": "education.academic-coordinator.lead", "kind": "level-down"},
+        {"roleId": "education.department-head.head", "kind": "sibling-family"},
+        {"roleId": "education.principal.vp", "kind": "level-up"},
+        {"roleId": "education.student-services.head", "kind": "sibling-family"}
+      ]
+    },
+    {
+      "id": "education.department-head.head",
+      "function": "education",
+      "family": "education.academic-leadership",
+      "titleEn": "Department Chair / Academic Director",
+      "titleRu": "Заведующий кафедрой / академический директор",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Department Chair", "Academic Director", "Director of Studies", "Head of Faculty", "Academic Affairs Director", "School Academic Director"],
+        "ru": ["Заведующий кафедрой", "Академический директор", "Директор по учебной работе", "Руководитель факультета", "Директор по академическим вопросам", "Начальник учебного управления"]
+      },
+      "adjacent": [
+        {"roleId": "education.lecturer.ic", "kind": "level-down"},
+        {"roleId": "education.head", "kind": "sibling-family"},
+        {"roleId": "education.principal.vp", "kind": "level-up"},
+        {"roleId": "education.provost.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "education.student-services.head",
+      "function": "education",
+      "family": "education.learning-operations",
+      "titleEn": "Head of Student Services",
+      "titleRu": "Руководитель службы сопровождения учащихся",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Head of Student Services", "Student Affairs Director", "Director of Student Support", "Student Services Manager", "Head of Learner Support", "Student Experience Director"],
+        "ru": ["Руководитель службы сопровождения", "Директор по работе со студентами", "Руководитель отдела по работе с учащимися", "Начальник отдела сопровождения", "Директор по студенческим сервисам", "Руководитель службы поддержки студентов"]
+      },
+      "adjacent": [
+        {"roleId": "education.specialist.ic", "kind": "level-down"},
+        {"roleId": "education.head", "kind": "sibling-family"},
+        {"roleId": "education.principal.vp", "kind": "level-up"}
       ]
     },
     {
       "id": "education.principal.vp",
       "function": "education",
-      "family": "education.core",
+      "family": "education.academic-leadership",
       "titleEn": "School Principal / Dean",
       "titleRu": "Директор школы / декан",
-      "levels": [
-        "vp"
-      ],
+      "levels": ["vp"],
       "variants": {
-        "en": [
-          "School Principal",
-          "Dean"
-        ],
-        "ru": [
-          "Директор школы",
-          "Декан"
-        ]
+        "en": ["School Principal", "Headteacher", "Dean", "School Director", "Campus Principal", "Dean of Faculty"],
+        "ru": ["Директор школы", "Руководитель школы", "Декан", "Директор образовательного учреждения", "Директор кампуса", "Декан факультета"]
       },
       "adjacent": [
-        {
-          "roleId": "education.head",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "education.rector.c",
-          "kind": "level-up"
-        }
+        {"roleId": "education.head", "kind": "level-down"},
+        {"roleId": "education.department-head.head", "kind": "sibling-family"},
+        {"roleId": "education.provost.vp", "kind": "sibling-family"},
+        {"roleId": "education.rector.c", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "education.provost.vp",
+      "function": "education",
+      "family": "education.academic-leadership",
+      "titleEn": "Provost / Director of Education",
+      "titleRu": "Проректор / директор по образованию",
+      "levels": ["vp"],
+      "variants": {
+        "en": ["Provost", "Vice Provost", "Director of Education", "Vice President of Academic Affairs", "Chief Academic Officer", "Academic Vice President"],
+        "ru": ["Проректор", "Проректор по учебной работе", "Директор по образованию", "Руководитель образовательного направления", "Заместитель ректора по учебной работе", "Директор по академической деятельности"]
+      },
+      "adjacent": [
+        {"roleId": "education.department-head.head", "kind": "level-down"},
+        {"roleId": "education.principal.vp", "kind": "sibling-family"},
+        {"roleId": "education.rector.c", "kind": "level-up"},
+        {"roleId": "hr.head", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "education.learning-coordinator.lead",
+      "function": "education",
+      "family": "education.learning-operations",
+      "titleEn": "Learning Operations Lead",
+      "titleRu": "Руководитель учебного процесса",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Learning Operations Lead", "Training Operations Lead", "Education Operations Lead", "Learning Delivery Lead", "Course Operations Manager", "Training Coordinator Lead"],
+        "ru": ["Руководитель учебного процесса", "Руководитель образовательных операций", "Руководитель организации обучения", "Старший координатор обучения", "Руководитель учебного отдела", "Менеджер учебного процесса"]
+      },
+      "adjacent": [
+        {"roleId": "education.instructional-designer.ic", "kind": "level-down"},
+        {"roleId": "education.academic-coordinator.lead", "kind": "sibling-family"},
+        {"roleId": "education.student-services.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "education.researcher.ic",
+      "function": "education",
+      "family": "education.core",
+      "titleEn": "Education Researcher",
+      "titleRu": "Исследователь в сфере образования",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Education Researcher", "Educational Research Analyst", "Learning Scientist", "Research Associate in Education", "Pedagogy Researcher", "Education Policy Researcher"],
+        "ru": ["Исследователь в сфере образования", "Аналитик образовательных данных", "Научный сотрудник в образовании", "Исследователь педагогики", "Аналитик образовательной политики", "Специалист по исследованию обучения"]
+      },
+      "adjacent": [
+        {"roleId": "education.lecturer.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "research.scientist.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "education.department-head.head", "kind": "level-up"}
       ]
     },
     {
       "id": "education.rector.c",
       "function": "education",
-      "family": "education.core",
+      "family": "education.academic-leadership",
       "titleEn": "Rector / Superintendent",
-      "titleRu": "Ректор",
-      "levels": [
-        "c-level"
-      ],
+      "titleRu": "Ректор / руководитель системы образования",
+      "levels": ["c-level"],
       "variants": {
-        "en": [
-          "Rector",
-          "Superintendent of Schools"
-        ],
-        "ru": [
-          "Ректор"
-        ]
+        "en": ["Rector", "University President", "Superintendent of Schools", "Chief Education Officer", "President of the University", "Education System Director"],
+        "ru": ["Ректор", "Президент университета", "Руководитель системы образования", "Начальник управления образования", "Директор образовательного холдинга", "Руководитель образовательной организации"]
       },
       "adjacent": [
-        {
-          "roleId": "education.principal.vp",
-          "kind": "level-down"
-        }
+        {"roleId": "education.principal.vp", "kind": "level-down"},
+        {"roleId": "education.provost.vp", "kind": "level-down"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
       ]
     }
   ]

@@ -8,9 +8,23 @@
     {
       "id": "agriculture.core",
       "function": "agriculture",
-      "labelEn": "Agriculture ladder",
-      "labelRu": "Лестница сельского хозяйства",
-      "coverage": "core"
+      "labelEn": "Crop & Livestock Production",
+      "labelRu": "Растениеводство и животноводство",
+      "coverage": "full"
+    },
+    {
+      "id": "agriculture.technology-quality",
+      "function": "agriculture",
+      "labelEn": "Agricultural Technology & Quality",
+      "labelRu": "Агротехнологии и качество",
+      "coverage": "full"
+    },
+    {
+      "id": "agriculture.leadership",
+      "function": "agriculture",
+      "labelEn": "Agricultural Operations Leadership",
+      "labelRu": "Руководство агробизнесом",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -20,51 +34,193 @@
       "family": "agriculture.core",
       "titleEn": "Agronomist / Livestock Specialist",
       "titleRu": "Агроном / зоотехник",
-      "levels": [
-        "ic"
-      ],
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Agronomist",
-          "Livestock Specialist",
-          "Farm Veterinarian"
-        ],
-        "ru": [
-          "Агроном",
-          "Зоотехник"
-        ]
+        "en": ["Agronomist", "Crop Specialist", "Livestock Specialist", "Animal Scientist", "Agricultural Specialist", "Farm Production Specialist"],
+        "ru": ["Агроном", "Зоотехник", "Агроном-консультант", "Специалист по животноводству", "Специалист сельского хозяйства", "Специалист по производству"]
+      },
+      "qualificationBand": ["specialist", "senior-specialist", "chief-specialist"],
+      "adjacent": [
+        {"roleId": "agriculture.horticulture.ic", "kind": "sibling-family"},
+        {"roleId": "agriculture.farm-worker.ic", "kind": "sibling-family"},
+        {"roleId": "agriculture.field-lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "agriculture.farm-worker.ic",
+      "function": "agriculture",
+      "family": "agriculture.core",
+      "titleEn": "Farm Worker / Tractor Operator",
+      "titleRu": "Рабочий сельского хозяйства / тракторист",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Farm Worker", "Farm Hand", "Tractor Operator", "Agricultural Worker", "Field Worker", "Livestock Worker"],
+        "ru": ["Рабочий сельского хозяйства", "Тракторист", "Механизатор", "Рабочий фермы", "Полевой рабочий", "Рабочий животноводства"]
+      },
+      "qualificationBand": ["tractor-certified", "livestock-qualified", "senior-worker"],
+      "adjacent": [
+        {"roleId": "agriculture.specialist.ic", "kind": "sibling-family"},
+        {"roleId": "agriculture.machinery.ic", "kind": "sibling-family"},
+        {"roleId": "agriculture.field-lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "agriculture.horticulture.ic",
+      "function": "agriculture",
+      "family": "agriculture.core",
+      "titleEn": "Horticulture / Greenhouse Specialist",
+      "titleRu": "Агроном по растениеводству / специалист тепличного хозяйства",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Horticulturist", "Greenhouse Specialist", "Crop Production Specialist", "Plant Production Manager", "Horticulture Agronomist", "Protected Crops Specialist"],
+        "ru": ["Агроном по растениеводству", "Агроном тепличного хозяйства", "Специалист по растениеводству", "Специалист тепличного комплекса", "Агроном-садовод", "Специалист по защищённому грунту"]
+      },
+      "qualificationBand": ["specialist", "senior-specialist", "chief-specialist"],
+      "adjacent": [
+        {"roleId": "agriculture.specialist.ic", "kind": "sibling-family"},
+        {"roleId": "agriculture.quality.ic", "kind": "sibling-family"},
+        {"roleId": "agriculture.field-lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "agriculture.machinery.ic",
+      "function": "agriculture",
+      "family": "agriculture.technology-quality",
+      "titleEn": "Agricultural Machinery Technician",
+      "titleRu": "Механик сельскохозяйственной техники",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Agricultural Machinery Technician", "Farm Equipment Mechanic", "Agricultural Mechanic", "Farm Machinery Specialist", "Irrigation Technician", "Precision Agriculture Technician"],
+        "ru": ["Механик сельскохозяйственной техники", "Механик по ремонту тракторов", "Инженер-механик в АПК", "Специалист по сельхозтехнике", "Техник по орошению", "Специалист точного земледелия"]
       },
       "adjacent": [
-        {
-          "roleId": "agriculture.head",
-          "kind": "level-up"
-        }
+        {"roleId": "agriculture.farm-worker.ic", "kind": "sibling-family"},
+        {"roleId": "agriculture.technology-lead", "kind": "level-up"},
+        {"roleId": "manufacturing.technician.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "agriculture.quality.ic",
+      "function": "agriculture",
+      "family": "agriculture.technology-quality",
+      "titleEn": "Agricultural Quality / Food Safety Specialist",
+      "titleRu": "Специалист по качеству и безопасности пищевой продукции",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Agricultural Quality Specialist", "Food Safety Specialist", "Quality Assurance Agronomist", "Farm Quality Inspector", "Food Quality Coordinator", "Agricultural Compliance Specialist"],
+        "ru": ["Специалист по качеству сельхозпродукции", "Специалист по пищевой безопасности", "Агроном по качеству", "Инспектор качества продукции", "Координатор качества", "Специалист по соответствию в АПК"]
+      },
+      "adjacent": [
+        {"roleId": "agriculture.specialist.ic", "kind": "sibling-family"},
+        {"roleId": "agriculture.horticulture.ic", "kind": "sibling-family"},
+        {"roleId": "agriculture.technology-lead", "kind": "level-up"},
+        {"roleId": "manufacturing.quality-inspector.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "agriculture.field-lead",
+      "function": "agriculture",
+      "family": "agriculture.core",
+      "titleEn": "Farm / Field Supervisor",
+      "titleRu": "Бригадир / руководитель полевых работ",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Farm Supervisor", "Field Supervisor", "Crop Supervisor", "Livestock Supervisor", "Farm Team Lead", "Agricultural Operations Lead"],
+        "ru": ["Бригадир полеводческой бригады", "Руководитель полевых работ", "Старший агроном", "Руководитель фермы смены", "Бригадир животноводческой фермы", "Старший специалист хозяйства"]
+      },
+      "adjacent": [
+        {"roleId": "agriculture.specialist.ic", "kind": "level-down"},
+        {"roleId": "agriculture.farm-worker.ic", "kind": "level-down"},
+        {"roleId": "agriculture.head", "kind": "level-up"},
+        {"roleId": "agriculture.technology-lead", "kind": "sibling-family"}
+      ]
+    },
+    {
+      "id": "agriculture.technology-lead",
+      "function": "agriculture",
+      "family": "agriculture.technology-quality",
+      "titleEn": "Agricultural Technology Lead",
+      "titleRu": "Руководитель агротехнологического направления",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Agricultural Technology Lead", "Senior Agronomist", "Crop Technology Manager", "Farm Technology Supervisor", "Precision Agriculture Lead", "Agri-Quality Lead"],
+        "ru": ["Руководитель агротехнологического направления", "Главный агроном", "Руководитель технологии производства", "Старший агроном", "Руководитель точного земледелия", "Руководитель качества в АПК"]
+      },
+      "adjacent": [
+        {"roleId": "agriculture.specialist.ic", "kind": "level-down"},
+        {"roleId": "agriculture.quality.ic", "kind": "sibling-family"},
+        {"roleId": "agriculture.head", "kind": "level-up"}
       ]
     },
     {
       "id": "agriculture.head",
       "function": "agriculture",
-      "family": "agriculture.core",
+      "family": "agriculture.leadership",
       "titleEn": "Farm Manager",
       "titleRu": "Управляющий фермой / хозяйством",
-      "levels": [
-        "head"
-      ],
+      "levels": ["head"],
       "variants": {
-        "en": [
-          "Farm Manager",
-          "Head of Agricultural Production"
-        ],
-        "ru": [
-          "Управляющий фермой",
-          "Руководитель хозяйства"
-        ]
+        "en": ["Farm Manager", "Farm Director", "Agricultural Operations Manager", "Ranch Manager", "Estate Manager Agriculture", "Head of Farm Operations"],
+        "ru": ["Управляющий фермой", "Директор хозяйства", "Руководитель агропредприятия", "Управляющий сельхозпредприятием", "Директор фермы", "Начальник производства в АПК"]
       },
       "adjacent": [
-        {
-          "roleId": "agriculture.specialist.ic",
-          "kind": "level-down"
-        }
+        {"roleId": "agriculture.field-lead", "kind": "level-down"},
+        {"roleId": "agriculture.technology-lead", "kind": "sibling-family"},
+        {"roleId": "agriculture.operations.head", "kind": "sibling-family"},
+        {"roleId": "agriculture.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "agriculture.operations.head",
+      "function": "agriculture",
+      "family": "agriculture.leadership",
+      "titleEn": "Head of Agricultural Operations",
+      "titleRu": "Руководитель производственных операций в АПК",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Head of Agricultural Operations", "Director of Farm Operations", "Agriculture Operations Director", "Head of Crop Production", "Head of Livestock Operations", "Agribusiness Operations Manager"],
+        "ru": ["Руководитель производственных операций в АПК", "Директор по сельскохозяйственным операциям", "Директор растениеводства", "Директор животноводства", "Руководитель аграрного производства", "Операционный директор агрохолдинга"]
+      },
+      "adjacent": [
+        {"roleId": "agriculture.head", "kind": "sibling-family"},
+        {"roleId": "agriculture.technology-lead", "kind": "level-down"},
+        {"roleId": "agriculture.vp", "kind": "level-up"},
+        {"roleId": "logistics.head", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "agriculture.vp",
+      "function": "agriculture",
+      "family": "agriculture.leadership",
+      "titleEn": "VP of Agriculture / Agribusiness",
+      "titleRu": "Директор по сельскому хозяйству / агробизнесу",
+      "levels": ["vp"],
+      "variants": {
+        "en": ["VP of Agriculture", "VP Agribusiness", "Agriculture Division Director", "Executive Director Agriculture", "Chief Agriculture Executive", "VP Farm Operations"],
+        "ru": ["Директор по сельскому хозяйству", "Директор по агробизнесу", "Руководитель аграрного дивизиона", "Исполнительный директор АПК", "Директор сельскохозяйственного направления", "Директор по производству агрохолдинга"]
+      },
+      "adjacent": [
+        {"roleId": "agriculture.head", "kind": "level-down"},
+        {"roleId": "agriculture.operations.head", "kind": "sibling-family"},
+        {"roleId": "agriculture.chief", "kind": "level-up"},
+        {"roleId": "ops.vp", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "agriculture.chief",
+      "function": "agriculture",
+      "family": "agriculture.leadership",
+      "titleEn": "Chief Agriculture Officer",
+      "titleRu": "Директор агрохолдинга / руководитель агробизнеса",
+      "levels": ["c-level"],
+      "variants": {
+        "en": ["Chief Agriculture Officer", "Chief Agribusiness Officer", "Agribusiness CEO", "Chief Farm Operations Officer", "Agriculture Group Director", "Agri-food Executive"],
+        "ru": ["Директор агрохолдинга", "Руководитель агробизнеса", "Генеральный директор агрохолдинга", "Директор по аграрному бизнесу", "Руководитель сельскохозяйственной группы", "Операционный директор агрохолдинга"]
+      },
+      "adjacent": [
+        {"roleId": "agriculture.vp", "kind": "level-down"},
+        {"roleId": "ops.coo", "kind": "cross-function-neighbor"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
       ]
     }
   ]

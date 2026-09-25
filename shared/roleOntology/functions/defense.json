@@ -8,9 +8,30 @@
     {
       "id": "defense.generic",
       "function": "defense",
-      "labelEn": "Defense & Armed Forces",
-      "labelRu": "Силовые структуры",
-      "coverage": "skeleton"
+      "labelEn": "Defense Command",
+      "labelRu": "Командование и руководство обороной",
+      "coverage": "full"
+    },
+    {
+      "id": "defense.operations",
+      "function": "defense",
+      "labelEn": "Military Operations",
+      "labelRu": "Военные операции",
+      "coverage": "full"
+    },
+    {
+      "id": "defense.intelligence",
+      "function": "defense",
+      "labelEn": "Defense Intelligence & Analysis",
+      "labelRu": "Военная разведка и анализ",
+      "coverage": "full"
+    },
+    {
+      "id": "defense.support",
+      "function": "defense",
+      "labelEn": "Defense Logistics, Engineering & Medical",
+      "labelRu": "Военная логистика, инженерия и медицина",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,27 +39,228 @@
       "id": "defense.generic",
       "function": "defense",
       "family": "defense.generic",
-      "titleEn": "Defense & Armed Forces",
-      "titleRu": "Силовые структуры",
-      "levels": [
-        "ic",
-        "lead",
-        "head",
-        "vp",
-        "c-level"
-      ],
+      "titleEn": "Defense & Armed Forces Executive",
+      "titleRu": "Руководитель силового или оборонного ведомства",
+      "levels": ["ic", "lead", "head", "vp", "c-level"],
       "variants": {
-        "en": [
-          "Military Officer",
-          "Police Officer",
-          "Security Service Officer"
-        ],
-        "ru": [
-          "Военнослужащий",
-          "Сотрудник полиции"
-        ]
+        "en": ["Defense Executive", "Armed Forces Leader", "Defense Organization Director", "Military Command Executive", "Defense Sector Leader", "Senior Defense Official"],
+        "ru": ["Руководитель силового ведомства", "Руководитель оборонной организации", "Военный руководитель", "Руководитель системы обороны", "Старший представитель оборонного ведомства", "Руководитель силовой структуры"]
       },
-      "adjacent": []
+      "adjacent": [
+        {"roleId": "defense.force-commander.vp", "kind": "level-down"},
+        {"roleId": "defense.chief.c", "kind": "level-up"},
+        {"roleId": "public-service.agency-head.c", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "defense.service-member.ic",
+      "function": "defense",
+      "family": "defense.operations",
+      "titleEn": "Military Service Member / Operator",
+      "titleRu": "Военнослужащий / специалист подразделения",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Military Service Member", "Soldier", "Sailor", "Airman", "Military Operator", "Enlisted Service Member"],
+        "ru": ["Военнослужащий", "Военнослужащий по контракту", "Солдат", "Матрос", "Специалист подразделения", "Военный специалист"]
+      },
+      "adjacent": [
+        {"roleId": "defense.intelligence.ic", "kind": "sibling-family"},
+        {"roleId": "defense.squad-leader.lead", "kind": "level-up"},
+        {"roleId": "defense.logistics.ic", "kind": "sibling-family"}
+      ]
+    },
+    {
+      "id": "defense.intelligence.ic",
+      "function": "defense",
+      "family": "defense.intelligence",
+      "titleEn": "Defense Intelligence Analyst",
+      "titleRu": "Военный аналитик / специалист разведки",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Defense Intelligence Analyst", "Military Intelligence Analyst", "Intelligence Officer", "All-Source Analyst", "Threat Intelligence Analyst Defense", "Strategic Intelligence Specialist"],
+        "ru": ["Военный аналитик", "Офицер военной разведки", "Специалист разведки", "Аналитик угроз", "Аналитик разведывательной информации", "Специалист стратегического анализа"]
+      },
+      "adjacent": [
+        {"roleId": "defense.service-member.ic", "kind": "sibling-family"},
+        {"roleId": "defense.intelligence-lead.lead", "kind": "level-up"},
+        {"roleId": "security.analyst.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "public-service.policy-analyst.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "defense.logistics.ic",
+      "function": "defense",
+      "family": "defense.support",
+      "titleEn": "Defense Logistics Specialist",
+      "titleRu": "Специалист военной логистики",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Defense Logistics Specialist", "Military Logistics Officer", "Logistics Officer", "Supply Officer", "Defense Supply Specialist", "Military Movement Coordinator"],
+        "ru": ["Специалист военной логистики", "Офицер тыла", "Начальник службы снабжения", "Специалист материального обеспечения", "Военный логист", "Специалист транспортного обеспечения"]
+      },
+      "adjacent": [
+        {"roleId": "defense.service-member.ic", "kind": "sibling-family"},
+        {"roleId": "defense.support-lead.lead", "kind": "level-up"},
+        {"roleId": "logistics.head", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "defense.engineer.ic",
+      "function": "defense",
+      "family": "defense.support",
+      "titleEn": "Military / Defense Engineer",
+      "titleRu": "Военный инженер / инженер оборонных систем",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Military Engineer", "Defense Engineer", "Combat Engineer", "Systems Engineer Defense", "Aerospace Defense Engineer", "Weapon Systems Engineer"],
+        "ru": ["Военный инженер", "Инженер оборонных систем", "Инженер инженерных войск", "Инженер вооружения", "Инженер военно-космических систем", "Инженер военной техники"]
+      },
+      "adjacent": [
+        {"roleId": "defense.service-member.ic", "kind": "sibling-family"},
+        {"roleId": "defense.support-lead.lead", "kind": "level-up"},
+        {"roleId": "eng.architecture.software", "kind": "cross-function-neighbor"},
+        {"roleId": "manufacturing.technician.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "defense.medic.ic",
+      "function": "defense",
+      "family": "defense.support",
+      "titleEn": "Military Medic / Medical Officer",
+      "titleRu": "Военный медик / врач воинской части",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Military Medic", "Combat Medic", "Military Physician", "Medical Officer", "Defense Health Specialist", "Field Medic"],
+        "ru": ["Военный медик", "Военный врач", "Фельдшер воинской части", "Военно-полевой врач", "Медицинский офицер", "Санитарный инструктор"]
+      },
+      "adjacent": [
+        {"roleId": "defense.service-member.ic", "kind": "sibling-family"},
+        {"roleId": "healthcare.physician.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "defense.support-lead.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "defense.squad-leader.lead",
+      "function": "defense",
+      "family": "defense.operations",
+      "titleEn": "Squad / Platoon Leader",
+      "titleRu": "Командир отделения / взвода",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Squad Leader", "Platoon Leader", "Section Commander", "Unit Team Leader", "Small Unit Commander", "Tactical Team Leader"],
+        "ru": ["Командир отделения", "Командир взвода", "Командир группы", "Начальник боевой группы", "Руководитель тактической группы", "Командир подразделения"]
+      },
+      "adjacent": [
+        {"roleId": "defense.service-member.ic", "kind": "level-down"},
+        {"roleId": "defense.unit-commander.head", "kind": "level-up"},
+        {"roleId": "defense.intelligence-lead.lead", "kind": "sibling-family"}
+      ]
+    },
+    {
+      "id": "defense.intelligence-lead.lead",
+      "function": "defense",
+      "family": "defense.intelligence",
+      "titleEn": "Defense Intelligence Team Lead",
+      "titleRu": "Руководитель группы военной разведки",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Defense Intelligence Team Lead", "Intelligence Section Chief", "Senior Intelligence Officer", "Intelligence Analysis Lead", "Targeting Team Lead", "Military Intelligence Supervisor"],
+        "ru": ["Руководитель группы военной разведки", "Начальник разведывательного отдела", "Старший офицер разведки", "Руководитель аналитической группы", "Начальник разведывательного направления", "Руководитель группы анализа"]
+      },
+      "adjacent": [
+        {"roleId": "defense.intelligence.ic", "kind": "level-down"},
+        {"roleId": "defense.squad-leader.lead", "kind": "sibling-family"},
+        {"roleId": "defense.staff-director.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "defense.support-lead.lead",
+      "function": "defense",
+      "family": "defense.support",
+      "titleEn": "Defense Support Operations Lead",
+      "titleRu": "Руководитель службы обеспечения",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Defense Support Operations Lead", "Logistics Unit Lead", "Maintenance Unit Commander", "Military Medical Team Lead", "Supply Team Supervisor", "Base Support Supervisor"],
+        "ru": ["Руководитель службы обеспечения", "Начальник службы тыла", "Командир подразделения обеспечения", "Руководитель ремонтной службы", "Руководитель группы снабжения", "Супервайзер обеспечения базы"]
+      },
+      "adjacent": [
+        {"roleId": "defense.logistics.ic", "kind": "level-down"},
+        {"roleId": "defense.engineer.ic", "kind": "sibling-family"},
+        {"roleId": "defense.unit-commander.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "defense.unit-commander.head",
+      "function": "defense",
+      "family": "defense.operations",
+      "titleEn": "Unit Commander / Battalion Commander",
+      "titleRu": "Командир воинской части / подразделения",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Unit Commander", "Battalion Commander", "Regiment Commander", "Commanding Officer", "Military Unit Commander", "Tactical Unit Commander"],
+        "ru": ["Командир воинской части", "Командир батальона", "Командир полка", "Командир подразделения", "Начальник военной части", "Командир тактического соединения"]
+      },
+      "adjacent": [
+        {"roleId": "defense.squad-leader.lead", "kind": "level-down"},
+        {"roleId": "defense.support-lead.lead", "kind": "sibling-family"},
+        {"roleId": "defense.staff-director.head", "kind": "sibling-family"},
+        {"roleId": "defense.force-commander.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "defense.staff-director.head",
+      "function": "defense",
+      "family": "defense.generic",
+      "titleEn": "Defense Staff Director",
+      "titleRu": "Начальник штаба / директор оборонной программы",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Chief of Staff Defense", "Defense Staff Director", "Director of Military Operations", "Defense Program Director", "Head of Defense Planning", "Military Staff Chief"],
+        "ru": ["Начальник штаба", "Директор оборонной программы", "Начальник оперативного управления", "Руководитель военного планирования", "Начальник штаба соединения", "Директор программы обороны"]
+      },
+      "adjacent": [
+        {"roleId": "defense.intelligence-lead.lead", "kind": "level-down"},
+        {"roleId": "defense.unit-commander.head", "kind": "sibling-family"},
+        {"roleId": "defense.force-commander.vp", "kind": "level-up"},
+        {"roleId": "public-service.department-head.head", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "defense.force-commander.vp",
+      "function": "defense",
+      "family": "defense.generic",
+      "titleEn": "Defense Force / Service Commander",
+      "titleRu": "Командующий видом или родом войск",
+      "levels": ["vp"],
+      "variants": {
+        "en": ["Force Commander", "Service Chief", "Commander of Military District", "Defense Forces Commander", "Chief of Operations", "Deputy Chief of Defense"],
+        "ru": ["Командующий видом войск", "Командующий родом войск", "Командующий военным округом", "Главнокомандующий объединением", "Начальник оперативного управления", "Заместитель начальника обороны"]
+      },
+      "adjacent": [
+        {"roleId": "defense.unit-commander.head", "kind": "level-down"},
+        {"roleId": "defense.staff-director.head", "kind": "sibling-family"},
+        {"roleId": "defense.chief.c", "kind": "level-up"},
+        {"roleId": "public-service.regional-director.vp", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "defense.chief.c",
+      "function": "defense",
+      "family": "defense.generic",
+      "titleEn": "Chief of Defense / Defense Agency Head",
+      "titleRu": "Руководитель оборонного ведомства",
+      "levels": ["c-level"],
+      "variants": {
+        "en": ["Chief of Defense", "Chief of Defence", "Secretary of Defense", "Defense Minister", "Head of Armed Forces", "Chief Defense Executive"],
+        "ru": ["Руководитель оборонного ведомства", "Министр обороны", "Начальник генерального штаба", "Главнокомандующий вооружёнными силами", "Руководитель военного ведомства", "Глава оборонной организации"]
+      },
+      "adjacent": [
+        {"roleId": "defense.force-commander.vp", "kind": "level-down"},
+        {"roleId": "defense.staff-director.head", "kind": "level-down"},
+        {"roleId": "public-service.agency-head.c", "kind": "cross-function-neighbor"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
+      ]
     }
   ]
 }

@@ -8,9 +8,30 @@
     {
       "id": "arts-culture.generic",
       "function": "arts-culture",
-      "labelEn": "Arts & Culture",
-      "labelRu": "Творческие профессии",
-      "coverage": "skeleton"
+      "labelEn": "Arts & Culture Leadership",
+      "labelRu": "Руководство в культуре и искусстве",
+      "coverage": "full"
+    },
+    {
+      "id": "arts-culture.creative-practice",
+      "function": "arts-culture",
+      "labelEn": "Creative Practice",
+      "labelRu": "Творческая практика",
+      "coverage": "full"
+    },
+    {
+      "id": "arts-culture.performing-production",
+      "function": "arts-culture",
+      "labelEn": "Performing Arts & Production",
+      "labelRu": "Сценические искусства и продюсирование",
+      "coverage": "full"
+    },
+    {
+      "id": "arts-culture.institutions",
+      "function": "arts-culture",
+      "labelEn": "Cultural Institutions & Heritage",
+      "labelRu": "Культурные учреждения и наследие",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,31 +39,212 @@
       "id": "arts-culture.generic",
       "function": "arts-culture",
       "family": "arts-culture.generic",
-      "titleEn": "Arts & Culture",
-      "titleRu": "Творческие профессии",
-      "levels": [
-        "ic",
-        "head"
-      ],
+      "titleEn": "Arts & Culture Executive",
+      "titleRu": "Руководитель культурного проекта или учреждения",
+      "levels": ["head", "vp", "c-level"],
       "variants": {
-        "en": [
-          "Musician",
-          "Actor",
-          "Artist",
-          "Curator"
-        ],
-        "ru": [
-          "Музыкант",
-          "Актёр",
-          "Художник",
-          "Куратор"
-        ]
+        "en": ["Arts and Culture Executive", "Cultural Organization Director", "Arts Executive", "Cultural Sector Leader", "Creative Institution Director", "Arts Program Executive"],
+        "ru": ["Руководитель культурного учреждения", "Директор культурного проекта", "Руководитель в сфере искусства", "Директор творческой организации", "Руководитель культурной программы", "Руководитель учреждения культуры"]
       },
       "adjacent": [
-        {
-          "roleId": "media.generic",
-          "kind": "cross-function-neighbor"
-        }
+        {"roleId": "arts-culture.institution-director.head", "kind": "level-down"},
+        {"roleId": "arts-culture.vp", "kind": "level-up"},
+        {"roleId": "arts-culture.executive-director.c", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "arts-culture.artist.ic",
+      "function": "arts-culture",
+      "family": "arts-culture.creative-practice",
+      "titleEn": "Visual Artist / Illustrator",
+      "titleRu": "Художник / иллюстратор",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Visual Artist", "Illustrator", "Concept Artist", "Fine Artist", "Graphic Artist", "Art Director Creative"],
+        "ru": ["Художник", "Иллюстратор", "Концепт-художник", "Живописец", "График", "Художник-постановщик"]
+      },
+      "icBand": ["junior", "middle", "senior", "principal"],
+      "adjacent": [
+        {"roleId": "arts-culture.curator.ic", "kind": "sibling-family"},
+        {"roleId": "design.craft.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "arts-culture.producer.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "arts-culture.performer.ic",
+      "function": "arts-culture",
+      "family": "arts-culture.performing-production",
+      "titleEn": "Performer / Musician / Actor",
+      "titleRu": "Артист / музыкант / актёр",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Actor", "Performing Artist", "Musician", "Vocalist", "Dancer", "Stage Performer"],
+        "ru": ["Актёр", "Артист", "Музыкант", "Вокалист", "Танцовщик", "Артист сцены"]
+      },
+      "icBand": ["junior", "middle", "senior", "principal"],
+      "adjacent": [
+        {"roleId": "arts-culture.producer.lead", "kind": "level-up"},
+        {"roleId": "arts-culture.artistic-director.head", "kind": "level-up"},
+        {"roleId": "media.generic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "arts-culture.writer.ic",
+      "function": "arts-culture",
+      "family": "arts-culture.creative-practice",
+      "titleEn": "Writer / Playwright",
+      "titleRu": "Писатель / драматург",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Writer", "Author", "Playwright", "Screenwriter", "Poet", "Scriptwriter"],
+        "ru": ["Писатель", "Автор", "Драматург", "Сценарист", "Поэт", "Литературный автор"]
+      },
+      "icBand": ["junior", "middle", "senior", "principal"],
+      "adjacent": [
+        {"roleId": "arts-culture.editor.ic", "kind": "sibling-family"},
+        {"roleId": "arts-culture.producer.lead", "kind": "level-up"},
+        {"roleId": "media.generic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "arts-culture.editor.ic",
+      "function": "arts-culture",
+      "family": "arts-culture.creative-practice",
+      "titleEn": "Literary / Cultural Editor",
+      "titleRu": "Литературный / культурный редактор",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Literary Editor", "Cultural Editor", "Content Editor Arts", "Editorial Specialist", "Manuscript Editor", "Publishing Editor"],
+        "ru": ["Литературный редактор", "Культурный редактор", "Редактор рукописей", "Редактор издательства", "Редактор культурных проектов", "Выпускающий редактор"]
+      },
+      "adjacent": [
+        {"roleId": "arts-culture.writer.ic", "kind": "sibling-family"},
+        {"roleId": "arts-culture.curator.ic", "kind": "sibling-family"},
+        {"roleId": "arts-culture.producer.lead", "kind": "level-up"},
+        {"roleId": "media.generic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "arts-culture.curator.ic",
+      "function": "arts-culture",
+      "family": "arts-culture.institutions",
+      "titleEn": "Curator / Collections Specialist",
+      "titleRu": "Куратор / специалист по музейным коллекциям",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Curator", "Assistant Curator", "Collections Specialist", "Exhibition Curator", "Museum Collections Manager", "Curatorial Researcher"],
+        "ru": ["Куратор", "Помощник куратора", "Хранитель музейных предметов", "Куратор выставок", "Специалист музейных коллекций", "Научный сотрудник музея"]
+      },
+      "adjacent": [
+        {"roleId": "arts-culture.artist.ic", "kind": "sibling-family"},
+        {"roleId": "arts-culture.archivist.ic", "kind": "sibling-family"},
+        {"roleId": "arts-culture.institution-director.head", "kind": "level-up"},
+        {"roleId": "research.scientist.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "arts-culture.archivist.ic",
+      "function": "arts-culture",
+      "family": "arts-culture.institutions",
+      "titleEn": "Archivist / Heritage Specialist",
+      "titleRu": "Архивист / специалист по культурному наследию",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Archivist", "Digital Archivist", "Heritage Specialist", "Records Curator", "Collections Archivist", "Cultural Heritage Researcher"],
+        "ru": ["Архивист", "Археограф", "Специалист по культурному наследию", "Хранитель архивных фондов", "Архивариус", "Научный сотрудник архива"]
+      },
+      "adjacent": [
+        {"roleId": "arts-culture.curator.ic", "kind": "sibling-family"},
+        {"roleId": "arts-culture.institution-director.head", "kind": "level-up"},
+        {"roleId": "research.scientist.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "arts-culture.producer.lead",
+      "function": "arts-culture",
+      "family": "arts-culture.performing-production",
+      "titleEn": "Arts Producer / Production Lead",
+      "titleRu": "Продюсер творческого проекта",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Arts Producer", "Creative Producer", "Theatre Producer", "Film and Stage Producer", "Production Lead Arts", "Cultural Project Producer"],
+        "ru": ["Продюсер творческого проекта", "Креативный продюсер", "Театральный продюсер", "Продюсер мероприятий", "Руководитель постановочного проекта", "Продюсер культурных проектов"]
+      },
+      "adjacent": [
+        {"roleId": "arts-culture.performer.ic", "kind": "sibling-family"},
+        {"roleId": "arts-culture.artist.ic", "kind": "sibling-family"},
+        {"roleId": "arts-culture.artistic-director.head", "kind": "level-up"},
+        {"roleId": "project-mgmt.pm.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "arts-culture.artistic-director.head",
+      "function": "arts-culture",
+      "family": "arts-culture.performing-production",
+      "titleEn": "Artistic Director",
+      "titleRu": "Художественный руководитель",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Artistic Director", "Creative Director Arts", "Theatre Artistic Director", "Head of Artistic Programming", "Creative Head Performing Arts", "Artistic Programme Director"],
+        "ru": ["Художественный руководитель", "Арт-директор театра", "Креативный директор культурного проекта", "Руководитель художественной программы", "Главный режиссёр", "Директор художественных программ"]
+      },
+      "adjacent": [
+        {"roleId": "arts-culture.producer.lead", "kind": "level-down"},
+        {"roleId": "arts-culture.institution-director.head", "kind": "sibling-family"},
+        {"roleId": "arts-culture.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "arts-culture.institution-director.head",
+      "function": "arts-culture",
+      "family": "arts-culture.institutions",
+      "titleEn": "Museum / Cultural Institution Director",
+      "titleRu": "Директор музея / учреждения культуры",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Museum Director", "Cultural Institution Director", "Gallery Director", "Theatre General Manager", "Heritage Site Director", "Head of Cultural Institution"],
+        "ru": ["Директор музея", "Директор учреждения культуры", "Директор галереи", "Директор театра", "Руководитель культурного центра", "Директор объекта культурного наследия"]
+      },
+      "adjacent": [
+        {"roleId": "arts-culture.curator.ic", "kind": "level-down"},
+        {"roleId": "arts-culture.artistic-director.head", "kind": "sibling-family"},
+        {"roleId": "arts-culture.vp", "kind": "level-up"},
+        {"roleId": "arts-culture.executive-director.c", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "arts-culture.vp",
+      "function": "arts-culture",
+      "family": "arts-culture.generic",
+      "titleEn": "VP / Director of Arts and Culture",
+      "titleRu": "Директор культурного направления",
+      "levels": ["vp"],
+      "variants": {
+        "en": ["VP of Arts and Culture", "Cultural Programs Director", "Director of Cultural Affairs", "Arts Portfolio Director", "Executive Director Arts Programs", "Regional Arts Director"],
+        "ru": ["Директор культурного направления", "Директор по культуре", "Руководитель культурных программ", "Директор арт-направления", "Директор культурного портфеля", "Региональный директор по культуре"]
+      },
+      "adjacent": [
+        {"roleId": "arts-culture.institution-director.head", "kind": "level-down"},
+        {"roleId": "arts-culture.artistic-director.head", "kind": "sibling-family"},
+        {"roleId": "arts-culture.executive-director.c", "kind": "level-up"},
+        {"roleId": "exec-general.gm", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "arts-culture.executive-director.c",
+      "function": "arts-culture",
+      "family": "arts-culture.generic",
+      "titleEn": "Executive Director of Arts Organization",
+      "titleRu": "Генеральный директор культурной организации",
+      "levels": ["c-level"],
+      "variants": {
+        "en": ["Executive Director Arts Organization", "Chief Executive Arts", "CEO Cultural Institution", "Managing Director Museum", "Cultural Organization CEO", "Executive Director Culture"],
+        "ru": ["Генеральный директор культурной организации", "Директор культурного учреждения", "Генеральный директор музея", "Руководитель театральной организации", "Директор фонда культуры", "Руководитель арт-организации"]
+      },
+      "adjacent": [
+        {"roleId": "arts-culture.vp", "kind": "level-down"},
+        {"roleId": "arts-culture.institution-director.head", "kind": "level-down"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
       ]
     }
   ]
