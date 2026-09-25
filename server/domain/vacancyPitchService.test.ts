@@ -282,7 +282,7 @@ describe('vacancyPitchService', () => {
   it('uses imported (proposed) facts from the candidate profile when there are zero confirmed facts', () => {
     const importedOnly: VacancyPitchInputFact[] = [
       {
-        id: 'imp-001',
+        id: 'impe12a7b15ff-exp-1',
         statement: 'Спроектировал и запустил платежный шлюз с обработкой 15 000 RPS',
         domain: 'outcome',
         kind: 'fact',
@@ -299,9 +299,30 @@ describe('vacancyPitchService', () => {
       language: 'ru',
     });
 
-    expect(pitch.usedEvidenceIds).toContain('imp-001');
-    expect(pitch.usedFacts).toContainEqual({ id: 'imp-001', basis: 'imported' });
+    expect(pitch.usedEvidenceIds).toContain('impe12a7b15ff-exp-1');
+    expect(pitch.usedFacts).toContainEqual({ id: 'impe12a7b15ff-exp-1', basis: 'imported' });
     expect(pitch.emailPitch.body).toContain('15 000 RPS');
+  });
+
+  it('leaves out consultant notes and notes about the import itself (B266)', () => {
+    const pitch = generateVacancyPitch({
+      vacancy: { id: 'vac-meta', title: 'VP of Technology', requiredSkills: [] },
+      facts: [
+        {
+          id: 'c94f0000-0000-4000-8000-000000000001',
+          statement: 'Кандидат импортировал PDF-резюме «cv.pdf» (5 событий).',
+          domain: 'other',
+          kind: 'fact',
+          sourceMessageIds: ['m1'],
+          sensitive: false,
+          status: 'proposed',
+        },
+      ],
+      language: 'en',
+    });
+    expect(pitch.emailPitch.body).not.toContain('импортировал');
+    expect(pitch.emailPitch.body).not.toMatch(/have not been matched/u);
+    expect(pitch.usedEvidenceIds).toEqual([]);
   });
 
   it('never puts a service phrase about missing facts or unmatched requirements into the letter body, on any path', () => {

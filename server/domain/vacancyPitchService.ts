@@ -1,4 +1,5 @@
 import { stripHiddenMarkers } from '../../shared/textHygiene';
+import { isImportedMemoryId } from './resumeImport';
 
 export type PitchTone = 'executive' | 'confident' | 'technical';
 export type PitchLanguage = 'en' | 'ru';
@@ -97,10 +98,18 @@ function factBasis(fact: VacancyPitchInputFact): PitchFactBasis {
  * Отрицательные и отклонённые формулировки по-прежнему исключены: кандидат
  * не должен процитировать рекрутеру то, чего у него нет.
  */
+/** Notes the consultant kept about the import itself are not candidate evidence. */
+function isAboutTheImportItself(statement: string): boolean {
+  return /импортировал|импорт резюме|imported (?:a|the|his|her) (?:resume|profile)/iu.test(statement);
+}
+
 function filterUsableFacts(facts: readonly VacancyPitchInputFact[]): VacancyPitchInputFact[] {
   return facts.filter(
     (fact) =>
-      (fact.status === 'confirmed' || fact.status === 'corrected' || fact.status === 'proposed') &&
+      (fact.status === 'confirmed' ||
+        fact.status === 'corrected' ||
+        (fact.status === 'proposed' && isImportedMemoryId(fact.id))) &&
+      !isAboutTheImportItself(fact.statement) &&
       fact.kind === 'fact' &&
       fact.sensitive !== true &&
       Boolean(fact.statement.trim()) &&
@@ -303,9 +312,9 @@ function buildStackParagraph(
   notices: string[],
 ): string {
   const reqSkills = vacancy.requiredSkills ?? [];
-  if (reqSkills.length === 0) {
-    return copy.stackEmpty;
-  }
+  // Nothing to match is a state for the notice line, never a sentence the
+  // candidate would copy to a recruiter (B266).
+  if (reqSkills.length === 0) return '';
 
   const matchedSkills: string[] = [];
   const missingSkills: string[] = [];
