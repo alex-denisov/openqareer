@@ -192,4 +192,15 @@ describe('ProfileScreenSurface — states', () => {
     );
     expect(documentsHtml).not.toContain('sec-experience');
   });
+
+  // Owner acceptance 2026-09-25: the self-audit view was orphaned behind a
+  // dead host after B248 — it must reach the candidate through the profile
+  // screen's own tab row, not a screen nobody renders.
+  it('switches to the self-audit view on the "audit" tab', () => {
+    const auditHtml = renderToStaticMarkup(
+      <ProfileScreenSurface {...baseProps} draft={populatedDraft} tab="audit" candidateId="cand-1" />,
+    );
+    expect(auditHtml).not.toContain('sec-experience');
+    expect(auditHtml).toContain('career-reputation-surface');
+  });
 });
