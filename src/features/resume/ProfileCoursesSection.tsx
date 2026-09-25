@@ -118,12 +118,9 @@ export function ProfileCoursesSection({ draft, saving, onSectionSave, importedLa
         <div className="career-profile-screen-state-block">
           <BookOpen size={22} />
           <h3>
-            {importedLabel ? `${importedLabel} не передал курсы для этого профиля` : 'Курсы не заполнены'}
+            {importedLabel ? `Импорт из ${importedLabel} курсов не нашёл` : 'Курсы не заполнены'}
           </h3>
-          <p>
-            Раздел действительно пуст в источнике — это не ошибка импорта. Добавьте курсы вручную,
-            если они у вас есть.
-          </p>
+          <p>Если курсы у вас есть, добавьте их вручную.</p>
         </div>
       ) : (
         <div className="career-profile-screen-tile-grid">

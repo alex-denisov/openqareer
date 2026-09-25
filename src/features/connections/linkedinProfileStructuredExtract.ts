@@ -7,6 +7,7 @@
 import type { CefrLevel } from '../resume/resumeTypes';
 import type {
   ParsedResumeAchievement,
+  ParsedResumeCourse,
   ParsedResumeAchievementKind,
   ParsedResumeLanguage,
   ParsedResumeOpenToWork,
@@ -16,6 +17,7 @@ import { parseEducationSection, parseExperienceSection } from './linkedinExperie
 import { htmlToLines } from './linkedinProfileExtract';
 import {
   parseCertificationsSection,
+  parseCoursesSection,
   parseProjectsSection,
   parseRecommendationsSection,
   parseSkillsSection,
@@ -51,7 +53,7 @@ function emptyLinkedInProfileV2() {
     experience: [] as ReturnType<typeof parseExperienceSection>,
     skills: [] as string[],
     education: [] as ReturnType<typeof parseEducationSection>,
-    courses: [] as never[],
+    courses: [] as ParsedResumeCourse[],
     tests: [] as never[],
     recommendations: [] as ReturnType<typeof parseRecommendationsSection>,
     languages: [] as ParsedResumeLanguage[],
@@ -270,6 +272,7 @@ export interface LinkedInProfilePages {
   readonly contactInfo?: string;
   readonly recommendations?: string;
   readonly languages?: string;
+  readonly courses?: string;
   readonly achievements?: readonly {
     readonly kind: ParsedResumeAchievementKind;
     readonly html: string;
@@ -342,6 +345,7 @@ export function extractStructuredLinkedInProfileTolerant(
       () => (pages.recommendations ? parseRecommendationsSection(pages.recommendations) : []),
       [],
     ),
+    courses: section('courses', () => firstNonEmpty(pages.courses, pages.profile, parseCoursesSection), []),
     languages: section('languages', () => firstNonEmpty(pages.languages, pages.profile, parseLanguagesSection), []),
     achievements: section(
       'achievements',

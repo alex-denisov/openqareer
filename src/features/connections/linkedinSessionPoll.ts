@@ -38,6 +38,7 @@ const DETAIL_PAGE_PATHS: Readonly<
   contactInfo: 'overlay/contact-info/',
   recommendations: 'details/recommendations/received/',
   languages: 'details/languages/',
+  courses: 'details/courses/',
 };
 
 export type LinkedInWaitingStage = SessionWaitingStage;
@@ -223,6 +224,12 @@ const storageThrottle: DetailReadThrottle = {
 type DetailPageKey = keyof typeof DETAIL_PAGE_PATHS;
 
 /**
+ * Recommendations are other people's names and words (INC-023) and cost a
+ * page of the capped walk; courses take that slot (B266).
+ */
+const DETAIL_PAGES_NOT_WALKED: ReadonlySet<DetailPageKey> = new Set(['recommendations']);
+
+/**
  * The fixed section list, capped at `MAX_DETAIL_PAGES_PER_READ` detail pages
  * plus the contact-info overlay. Choosing sections by the profile's own
  * "Show all" links waits for a capture that keeps `href` (B266 follow-up):
@@ -230,7 +237,9 @@ type DetailPageKey = keyof typeof DETAIL_PAGE_PATHS;
  */
 export function detailPagesToRead(): DetailPageKey[] {
   const keys = Object.keys(DETAIL_PAGE_PATHS) as DetailPageKey[];
-  const details = keys.filter((key) => key !== 'contactInfo').slice(0, MAX_DETAIL_PAGES_PER_READ);
+  const details = keys
+    .filter((key) => key !== 'contactInfo' && !DETAIL_PAGES_NOT_WALKED.has(key))
+    .slice(0, MAX_DETAIL_PAGES_PER_READ);
   return [...details, 'contactInfo'];
 }
 

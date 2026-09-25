@@ -1,9 +1,10 @@
 /**
- * Certifications, Projects, Skills and Recommendations cards (B265 §2;
+ * Certifications, Courses, Projects, Skills and Recommendations cards (B265 §2;
  * anatomy in docs/v1-release/tasks/work/B264/linkedin-profile-structure.md §2).
  */
 import type {
   ParsedResumeCertification,
+  ParsedResumeCourse,
   ParsedResumeProject,
   ParsedResumeRecommendation,
 } from '../workspace/resumeParserTypes';
@@ -113,4 +114,25 @@ export function parseRecommendationsSection(html: string): ParsedResumeRecommend
   return items
     .map((item) => readOneRecommendation(item))
     .filter((rec): rec is ParsedResumeRecommendation => Boolean(rec));
+}
+
+/** The details page and the main-profile preview card, found by key, never by the word «Courses». */
+const COURSE_CARD_SELECTOR =
+  '[componentkey$="CourseDetailsSection"], [componentkey$="CourseTopLevelSection"]';
+const ASSOCIATED_WITH = /^Associated with\s+/u;
+
+/**
+ * Reads the courses card: each course title may be followed by an
+ * «Associated with <organisation>» line (B266; LinkedIn shows no year here).
+ */
+export function parseCoursesSection(html: string): ParsedResumeCourse[] {
+  const card = parseFragment(html).querySelector(COURSE_CARD_SELECTOR);
+  if (!card) return [];
+  const lines = paragraphsOf(card).filter((line) => !/^courses?$/iu.test(line));
+  return lines.reduce<ParsedResumeCourse[]>((courses, line) => {
+    if (!ASSOCIATED_WITH.test(line)) return [...courses, { name: line }];
+    const last = courses.at(-1);
+    if (!last || last.institution) return courses;
+    return [...courses.slice(0, -1), { ...last, institution: line.replace(ASSOCIATED_WITH, '') }];
+  }, []);
 }

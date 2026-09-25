@@ -189,6 +189,8 @@ describe('LinkedIn session import flow', () => {
       ['details/skills/', readFixture('skills.html')],
       ['details/certifications/', readFixture('certifications.html')],
       ['details/projects/', readFixture('projects.html')],
+      ['details/languages/', '<main></main>'],
+      ['details/courses/', readFixture('courses.html')],
       ['overlay/contact-info/', readFixture('contact-info.html')],
       ['details/recommendations/received/', readFixture('recommendations.html')],
     ];
@@ -233,6 +235,7 @@ describe('LinkedIn session import flow', () => {
     const firstJob = result.structured?.profile.experience[0];
     expect(firstJob?.title).not.toMatch(/^·/u);
     expect(firstJob?.employer).not.toEqual(firstJob?.title);
+    expect(result.structured?.profile.courses).toHaveLength(3);
   });
 });
 
@@ -373,6 +376,13 @@ describe('LinkedIn detail pages are read at a human pace (B266, architecture §3
       MAX_DETAIL_PAGES_PER_READ,
     );
     expect(keys.at(-1)).toBe('contactInfo');
+  });
+
+  it('reads courses and languages, and leaves recommendations (third-party data) out of the walk', () => {
+    const keys = detailPagesToRead();
+    expect(keys).toContain('courses');
+    expect(keys).toContain('languages');
+    expect(keys).not.toContain('recommendations');
   });
 
   it('pauses before every detail page', async () => {

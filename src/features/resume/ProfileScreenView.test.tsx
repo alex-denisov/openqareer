@@ -78,7 +78,7 @@ describe('ProfileScreenSurface — states', () => {
     expect(html).toContain('Technical University of Munich');
     expect(html).toContain('Kubernetes');
     expect(html).toContain('sec-courses');
-    expect(html).toContain('Раздел действительно пуст в источнике');
+    expect(html).toContain('Если курсы у вас есть, добавьте их вручную.');
     expect(html).toContain('career-profile-screen-coverage');
   });
 

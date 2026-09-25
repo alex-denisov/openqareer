@@ -6,6 +6,7 @@ import { decodeSafetyGoUrl } from './linkedinDom';
 import { parseEducationSection, parseExperienceSection } from './linkedinExperienceExtract';
 import {
   parseCertificationsSection,
+  parseCoursesSection,
   parseProjectsSection,
   parseRecommendationsSection,
   parseSkillsSection,
@@ -388,5 +389,50 @@ describe('extractStructuredLinkedInProfileTolerant (B266)', () => {
     expect(profile.achievements).toEqual([]);
     expect(profile.fullName).toBe('Jordan Rivers');
     expect(profile.about).toMatch(/^I build/u);
+  });
+});
+
+const MAIN_PROFILE_COURSES_CARD = `<main><section componentkey="c1">
+<div componentkey="com.linkedin.sdui.profile.card.refSynthCourseTopLevelSection">
+<h2>Courses</h2>
+<div><p>Incident Command Basics</p><div><figure aria-hidden="true"></figure><p>Associated with Meridian Security</p></div></div>
+<div><p>Cloud Cost Control</p></div>
+<a componentkey="synth_courses_showAll" href="https://www.linkedin.com/in/synth/details/courses/">Show all</a>
+</div></section></main>`;
+
+describe('parseCoursesSection (B266)', () => {
+  it('reads every course with the organisation it is associated with', () => {
+    expect(parseCoursesSection(fixture('courses.html'))).toEqual([
+      { name: 'Customer Care & Communication Skills', institution: 'Meridian Security' },
+      { name: 'DevOps Engineering & Automation', institution: 'Northshore Tech Academy' },
+      { name: 'Synthetic Framework v3 Service Lifecycle Fundamentals', institution: 'Meridian Security' },
+    ]);
+  });
+
+  it('reads the preview card on the main profile, a course without an organisation included', () => {
+    expect(parseCoursesSection(MAIN_PROFILE_COURSES_CARD)).toEqual([
+      { name: 'Incident Command Basics', institution: 'Meridian Security' },
+      { name: 'Cloud Cost Control' },
+    ]);
+  });
+
+  it('ignores paragraphs outside the courses card', () => {
+    expect(parseCoursesSection('<main><p>Why am I seeing this ad?</p></main>')).toEqual([]);
+  });
+
+  it('takes courses from the details page and falls back to the main profile', () => {
+    const fromDetails = extractStructuredLinkedInProfile({
+      profile: MAIN_PROFILE_COURSES_CARD,
+      courses: fixture('courses.html'),
+    });
+    expect(fromDetails.courses).toHaveLength(3);
+    const fromMain = extractStructuredLinkedInProfile({
+      profile: MAIN_PROFILE_COURSES_CARD,
+      courses: '<main></main>',
+    });
+    expect(fromMain.courses.map((course) => course.name)).toEqual([
+      'Incident Command Basics',
+      'Cloud Cost Control',
+    ]);
   });
 });
