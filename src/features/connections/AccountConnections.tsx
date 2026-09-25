@@ -367,10 +367,13 @@ export function AccountConnections({
                   </button>
                   <small>{disconnectBoundaryCopy(connection)}</small>
                 </>
-              ) : connection.status === 'imported' ? (
+              ) : connection.status === 'imported' && !isDesktop ? (
                 <p>{importedWithoutConnectionCopy(connection.importedAt)}</p>
               ) : isDesktop ? (
                 <div className="career-connection-panel">
+                  {connection.status === 'imported' ? (
+                    <p>{`Профиль импортирован ${importDate(connection.importedAt)}`}</p>
+                  ) : null}
                   <button
                     className="career-primary-button"
                     type="button"

@@ -169,6 +169,30 @@ describe('AccountConnections', () => {
     expect(html).not.toContain('Не подключено');
   });
 
+  it('lets the desktop app reconnect an imported-but-disconnected profile (B266)', () => {
+    const html = renderToStaticMarkup(
+      <AccountConnections
+        isDesktop
+        connections={[
+          {
+            platform: 'linkedin',
+            available: true,
+            status: 'imported',
+            capabilities: ['resume_read'],
+            importsCareerHistory: true,
+            importedAt: '2026-09-25T09:00:00.000Z',
+          },
+        ]}
+        onDisconnect={() => undefined}
+        onSessionImport={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Профиль импортирован');
+    expect(html).toContain('Подключить LinkedIn');
+    expect(html).not.toContain('обновить в приложении');
+  });
+
   it('offers LinkedIn through the restored desktop session flow', () => {
     const html = renderToStaticMarkup(
       <AccountConnections
