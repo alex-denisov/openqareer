@@ -1,0 +1,400 @@
+{
+  "function": {
+    "code": "it-ops",
+    "labelEn": "IT Operations",
+    "labelRu": "ИТ-инфраструктура"
+  },
+  "families": [
+    {
+      "id": "it-ops.sysadmin-support",
+      "function": "it-ops",
+      "labelEn": "SysAdmin & IT Support",
+      "labelRu": "Системное администрирование и поддержка",
+      "coverage": "full"
+    },
+    {
+      "id": "it-ops.network-infra",
+      "function": "it-ops",
+      "labelEn": "Network & Infrastructure",
+      "labelRu": "Сети и инфраструктура",
+      "coverage": "full"
+    },
+    {
+      "id": "it-ops.sre-devops",
+      "function": "it-ops",
+      "labelEn": "SRE & DevOps",
+      "labelRu": "SRE и DevOps",
+      "coverage": "full"
+    },
+    {
+      "id": "it-ops.leadership",
+      "function": "it-ops",
+      "labelEn": "IT Operations Leadership",
+      "labelRu": "Руководство ИТ-инфраструктурой",
+      "coverage": "full"
+    }
+  ],
+  "roles": [
+    {
+      "id": "it-ops.sysadmin.ic",
+      "function": "it-ops",
+      "family": "it-ops.sysadmin-support",
+      "titleEn": "System Administrator",
+      "titleRu": "Системный администратор",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "System Administrator",
+          "SysAdmin",
+          "IT Administrator",
+          "Windows Administrator",
+          "Linux Administrator"
+        ],
+        "ru": [
+          "Системный администратор",
+          "Администратор Windows",
+          "Администратор Linux"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "it-ops.support.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "it-ops.network.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "it-ops.support.ic",
+      "function": "it-ops",
+      "family": "it-ops.sysadmin-support",
+      "titleEn": "IT Support Engineer",
+      "titleRu": "Специалист технической поддержки",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "IT Support Engineer",
+          "Helpdesk Engineer",
+          "Technical Support Engineer",
+          "Service Desk Analyst"
+        ],
+        "ru": [
+          "Специалист технической поддержки",
+          "Инженер поддержки",
+          "Специалист Service Desk"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "it-ops.sysadmin.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "support.agent.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "it-ops.network.ic",
+      "function": "it-ops",
+      "family": "it-ops.network-infra",
+      "titleEn": "Network Engineer",
+      "titleRu": "Сетевой инженер",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Network Engineer",
+          "Network Administrator",
+          "NOC Engineer"
+        ],
+        "ru": [
+          "Сетевой инженер",
+          "Администратор сети"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "it-ops.infra.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "it-ops.infra.ic",
+      "function": "it-ops",
+      "family": "it-ops.network-infra",
+      "titleEn": "Infrastructure Engineer",
+      "titleRu": "Инженер инфраструктуры",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Infrastructure Engineer",
+          "Cloud Infrastructure Engineer",
+          "Platform Engineer"
+        ],
+        "ru": [
+          "Инженер инфраструктуры",
+          "Инженер облачной инфраструктуры"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "it-ops.devops.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "it-ops.network.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "it-ops.devops.ic",
+      "function": "it-ops",
+      "family": "it-ops.sre-devops",
+      "titleEn": "DevOps Engineer",
+      "titleRu": "DevOps-инженер",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "DevOps Engineer",
+          "Cloud DevOps Engineer",
+          "CI/CD Engineer"
+        ],
+        "ru": [
+          "DevOps-инженер",
+          "Инженер DevOps"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "it-ops.sre.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "it-ops.infra.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "it-ops.sre.ic",
+      "function": "it-ops",
+      "family": "it-ops.sre-devops",
+      "titleEn": "Site Reliability Engineer",
+      "titleRu": "Инженер по надёжности (SRE)",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Site Reliability Engineer",
+          "SRE",
+          "Reliability Engineer"
+        ],
+        "ru": [
+          "Инженер по надёжности",
+          "SRE-инженер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "it-ops.devops.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "eng.backend.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "it-ops.devops.lead",
+      "function": "it-ops",
+      "family": "it-ops.sre-devops",
+      "titleEn": "DevOps / SRE Team Lead",
+      "titleRu": "Тимлид DevOps/SRE",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "DevOps Team Lead",
+          "SRE Team Lead",
+          "Lead DevOps Engineer"
+        ],
+        "ru": [
+          "Тимлид DevOps",
+          "Ведущий инженер SRE"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "it-ops.devops.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "it-ops.devops-head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "it-ops.head",
+      "function": "it-ops",
+      "family": "it-ops.leadership",
+      "titleEn": "Head of IT Operations",
+      "titleRu": "Руководитель ИТ-инфраструктуры",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of IT Operations",
+          "IT Operations Manager",
+          "Head of Infrastructure",
+          "IT Director",
+          "Director of IT Operations"
+        ],
+        "ru": [
+          "Руководитель ИТ-инфраструктуры",
+          "ИТ-директор",
+          "Начальник отдела эксплуатации"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "it-ops.devops-head",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "it-ops.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "eng-mgmt.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "it-ops.devops-head",
+      "function": "it-ops",
+      "family": "it-ops.leadership",
+      "titleEn": "Head of DevOps / SRE / Platform",
+      "titleRu": "Руководитель DevOps/SRE/Platform",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of DevOps",
+          "Head of SRE",
+          "Director of Platform Engineering"
+        ],
+        "ru": [
+          "Руководитель DevOps",
+          "Руководитель SRE"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "it-ops.devops.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "it-ops.head",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "it-ops.vp",
+      "function": "it-ops",
+      "family": "it-ops.leadership",
+      "titleEn": "VP of IT / Infrastructure",
+      "titleRu": "Вице-президент по ИТ / инфраструктуре",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of IT",
+          "VP of Infrastructure",
+          "VP of Technology Operations",
+          "VP of Platform Engineering"
+        ],
+        "ru": [
+          "Вице-президент по ИТ",
+          "Вице-президент по инфраструктуре"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "it-ops.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "it-ops.cio",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "eng-mgmt.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "ops.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "it-ops.cio",
+      "function": "it-ops",
+      "family": "it-ops.leadership",
+      "titleEn": "Chief Information Officer",
+      "titleRu": "Директор по информационным технологиям (CIO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Information Officer",
+          "CIO"
+        ],
+        "ru": [
+          "Директор по информационным технологиям",
+          "CIO"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "it-ops.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng-mgmt.cto",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "ops.coo",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    }
+  ]
+}

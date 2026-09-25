@@ -1,0 +1,483 @@
+{
+  "function": {
+    "code": "eng",
+    "labelEn": "Software Engineering",
+    "labelRu": "Разработка"
+  },
+  "families": [
+    {
+      "id": "eng.backend",
+      "function": "eng",
+      "labelEn": "Backend",
+      "labelRu": "Backend-разработка",
+      "coverage": "full"
+    },
+    {
+      "id": "eng.frontend",
+      "function": "eng",
+      "labelEn": "Frontend",
+      "labelRu": "Frontend-разработка",
+      "coverage": "full"
+    },
+    {
+      "id": "eng.fullstack",
+      "function": "eng",
+      "labelEn": "Full-Stack",
+      "labelRu": "Full-stack разработка",
+      "coverage": "full"
+    },
+    {
+      "id": "eng.mobile",
+      "function": "eng",
+      "labelEn": "Mobile",
+      "labelRu": "Мобильная разработка",
+      "coverage": "full"
+    },
+    {
+      "id": "eng.principal-track",
+      "function": "eng",
+      "labelEn": "Principal IC track",
+      "labelRu": "Экспертный IC-трек",
+      "coverage": "full"
+    },
+    {
+      "id": "eng.architecture",
+      "function": "eng",
+      "labelEn": "Software / Solutions / Enterprise Architecture",
+      "labelRu": "Архитектура ПО и предприятия",
+      "coverage": "full"
+    }
+  ],
+  "roles": [
+    {
+      "id": "eng.backend.ic",
+      "function": "eng",
+      "family": "eng.backend",
+      "titleEn": "Backend Engineer",
+      "titleRu": "Backend-разработчик",
+      "levels": [
+        "ic"
+      ],
+      "icBand": [
+        "junior",
+        "middle",
+        "senior"
+      ],
+      "variants": {
+        "en": [
+          "Backend Developer",
+          "Backend Engineer",
+          "Software Engineer, Backend",
+          "Java Developer",
+          "Python Developer",
+          "Go Developer",
+          "Node.js Developer",
+          ".NET Developer"
+        ],
+        "ru": [
+          "Backend-разработчик",
+          "Разработчик Backend",
+          "Java-разработчик",
+          "Python-разработчик",
+          "Go-разработчик",
+          "Программист"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng.backend.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "eng.frontend.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "eng.fullstack.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "eng.principal.ic",
+          "kind": "path-alt"
+        }
+      ]
+    },
+    {
+      "id": "eng.backend.lead",
+      "function": "eng",
+      "family": "eng.backend",
+      "titleEn": "Backend Tech Lead",
+      "titleRu": "Тимлид Backend-разработки",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Backend Tech Lead",
+          "Lead Backend Engineer",
+          "Backend Team Lead"
+        ],
+        "ru": [
+          "Тимлид Backend",
+          "Ведущий backend-разработчик",
+          "Технический лидер команды"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng.backend.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng-mgmt.em",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "eng.frontend.ic",
+      "function": "eng",
+      "family": "eng.frontend",
+      "titleEn": "Frontend Engineer",
+      "titleRu": "Frontend-разработчик",
+      "levels": [
+        "ic"
+      ],
+      "icBand": [
+        "junior",
+        "middle",
+        "senior"
+      ],
+      "variants": {
+        "en": [
+          "Frontend Developer",
+          "Frontend Engineer",
+          "UI Engineer",
+          "React Developer",
+          "Angular Developer",
+          "JavaScript Developer"
+        ],
+        "ru": [
+          "Frontend-разработчик",
+          "Разработчик Frontend",
+          "React-разработчик",
+          "JavaScript-разработчик"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng.frontend.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "eng.backend.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "design.craft.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "eng.frontend.lead",
+      "function": "eng",
+      "family": "eng.frontend",
+      "titleEn": "Frontend Tech Lead",
+      "titleRu": "Тимлид Frontend-разработки",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Frontend Tech Lead",
+          "Lead Frontend Engineer"
+        ],
+        "ru": [
+          "Тимлид Frontend",
+          "Ведущий frontend-разработчик"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng.frontend.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng-mgmt.em",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "eng.fullstack.ic",
+      "function": "eng",
+      "family": "eng.fullstack",
+      "titleEn": "Full-Stack Engineer",
+      "titleRu": "Full-stack разработчик",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Full Stack Developer",
+          "Full-Stack Engineer",
+          "Fullstack Developer"
+        ],
+        "ru": [
+          "Full-stack разработчик",
+          "Фулстек-разработчик"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng.backend.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "eng.frontend.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "eng.mobile.ic",
+      "function": "eng",
+      "family": "eng.mobile",
+      "titleEn": "Mobile Engineer",
+      "titleRu": "Мобильный разработчик",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "iOS Developer",
+          "Android Developer",
+          "Mobile Engineer",
+          "React Native Developer",
+          "Flutter Developer",
+          "Swift Developer",
+          "Kotlin Developer"
+        ],
+        "ru": [
+          "iOS-разработчик",
+          "Android-разработчик",
+          "Мобильный разработчик",
+          "Flutter-разработчик"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng.mobile.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "eng.fullstack.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "eng.mobile.lead",
+      "function": "eng",
+      "family": "eng.mobile",
+      "titleEn": "Mobile Tech Lead",
+      "titleRu": "Тимлид мобильной разработки",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Mobile Tech Lead",
+          "Lead iOS Engineer",
+          "Lead Android Engineer"
+        ],
+        "ru": [
+          "Тимлид мобильной разработки",
+          "Ведущий iOS-разработчик"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng.mobile.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng-mgmt.em",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "eng.principal.ic",
+      "function": "eng",
+      "family": "eng.principal-track",
+      "titleEn": "Principal / Staff Engineer",
+      "titleRu": "Главный инженер (принципал)",
+      "levels": [
+        "ic"
+      ],
+      "icBand": [
+        "staff",
+        "principal",
+        "distinguished"
+      ],
+      "variants": {
+        "en": [
+          "Staff Engineer",
+          "Principal Engineer",
+          "Distinguished Engineer",
+          "Senior Staff Engineer"
+        ],
+        "ru": [
+          "Главный инженер",
+          "Ведущий инженер-эксперт",
+          "Принципал-инженер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng.backend.ic",
+          "kind": "path-alt"
+        },
+        {
+          "roleId": "eng-mgmt.em",
+          "kind": "path-alt"
+        },
+        {
+          "roleId": "eng.architecture.software",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "eng.architecture.solutions",
+      "function": "eng",
+      "family": "eng.architecture",
+      "titleEn": "Solutions Architect",
+      "titleRu": "Архитектор решений",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Solutions Architect",
+          "Solution Architect",
+          "Technical Architect",
+          "Cloud Solutions Architect"
+        ],
+        "ru": [
+          "Архитектор решений",
+          "Технический архитектор",
+          "Solution-архитектор"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng.architecture.software",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "consulting.presales.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "eng.architecture.software",
+      "function": "eng",
+      "family": "eng.architecture",
+      "titleEn": "Software / Systems Architect",
+      "titleRu": "Архитектор ПО / системный архитектор",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Software Architect",
+          "Systems Architect",
+          "Application Architect"
+        ],
+        "ru": [
+          "Архитектор ПО",
+          "Программный архитектор",
+          "Системный архитектор"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng.principal.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "eng.architecture.enterprise",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "eng.architecture.enterprise",
+      "function": "eng",
+      "family": "eng.architecture",
+      "titleEn": "Enterprise Architect",
+      "titleRu": "Архитектор предприятия",
+      "levels": [
+        "ic",
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Enterprise Architect",
+          "Head of Enterprise Architecture"
+        ],
+        "ru": [
+          "Архитектор предприятия",
+          "Руководитель архитектуры предприятия"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng.architecture.software",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng.architecture.chief",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "eng.architecture.chief",
+      "function": "eng",
+      "family": "eng.architecture",
+      "titleEn": "Chief Architect",
+      "titleRu": "Главный архитектор",
+      "levels": [
+        "head",
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "Chief Architect",
+          "Chief Technology Architect",
+          "VP of Architecture",
+          "Director of Architecture"
+        ],
+        "ru": [
+          "Главный архитектор",
+          "Директор по архитектуре"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng.architecture.enterprise",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng-mgmt.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    }
+  ]
+}

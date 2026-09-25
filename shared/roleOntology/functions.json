@@ -1,0 +1,217 @@
+[
+  {
+    "code": "eng",
+    "labelEn": "Software Engineering",
+    "labelRu": "Разработка"
+  },
+  {
+    "code": "eng-mgmt",
+    "labelEn": "Engineering Management",
+    "labelRu": "Руководство разработкой"
+  },
+  {
+    "code": "it-ops",
+    "labelEn": "IT Operations",
+    "labelRu": "ИТ-инфраструктура"
+  },
+  {
+    "code": "data",
+    "labelEn": "Data",
+    "labelRu": "Данные"
+  },
+  {
+    "code": "ai-ml",
+    "labelEn": "AI / ML",
+    "labelRu": "Искусственный интеллект и ML"
+  },
+  {
+    "code": "security",
+    "labelEn": "Information Security",
+    "labelRu": "Информационная безопасность"
+  },
+  {
+    "code": "qa",
+    "labelEn": "QA",
+    "labelRu": "Тестирование"
+  },
+  {
+    "code": "product",
+    "labelEn": "Product Management",
+    "labelRu": "Управление продуктом"
+  },
+  {
+    "code": "design",
+    "labelEn": "Design",
+    "labelRu": "Дизайн"
+  },
+  {
+    "code": "ops",
+    "labelEn": "Operations",
+    "labelRu": "Операционное управление"
+  },
+  {
+    "code": "sales",
+    "labelEn": "Sales",
+    "labelRu": "Продажи"
+  },
+  {
+    "code": "bizdev",
+    "labelEn": "Business Development",
+    "labelRu": "Развитие бизнеса"
+  },
+  {
+    "code": "marketing",
+    "labelEn": "Marketing",
+    "labelRu": "Маркетинг"
+  },
+  {
+    "code": "pr",
+    "labelEn": "PR & Communications",
+    "labelRu": "PR и коммуникации"
+  },
+  {
+    "code": "support",
+    "labelEn": "Customer Support",
+    "labelRu": "Поддержка клиентов"
+  },
+  {
+    "code": "finance",
+    "labelEn": "Finance",
+    "labelRu": "Финансы"
+  },
+  {
+    "code": "audit-risk",
+    "labelEn": "Audit & Risk",
+    "labelRu": "Аудит и риски"
+  },
+  {
+    "code": "hr",
+    "labelEn": "Human Resources",
+    "labelRu": "Персонал"
+  },
+  {
+    "code": "legal",
+    "labelEn": "Legal",
+    "labelRu": "Юридический отдел"
+  },
+  {
+    "code": "procurement",
+    "labelEn": "Procurement",
+    "labelRu": "Закупки"
+  },
+  {
+    "code": "logistics",
+    "labelEn": "Logistics & Transport",
+    "labelRu": "Логистика и транспорт"
+  },
+  {
+    "code": "manufacturing",
+    "labelEn": "Manufacturing",
+    "labelRu": "Производство"
+  },
+  {
+    "code": "retail",
+    "labelEn": "Retail",
+    "labelRu": "Розничная торговля"
+  },
+  {
+    "code": "hospitality",
+    "labelEn": "Hospitality",
+    "labelRu": "Гостеприимство"
+  },
+  {
+    "code": "agriculture",
+    "labelEn": "Agriculture",
+    "labelRu": "Сельское хозяйство"
+  },
+  {
+    "code": "healthcare",
+    "labelEn": "Healthcare",
+    "labelRu": "Здравоохранение"
+  },
+  {
+    "code": "education",
+    "labelEn": "Education",
+    "labelRu": "Образование"
+  },
+  {
+    "code": "consulting",
+    "labelEn": "Consulting",
+    "labelRu": "Консалтинг"
+  },
+  {
+    "code": "project-mgmt",
+    "labelEn": "Project Management",
+    "labelRu": "Управление проектами"
+  },
+  {
+    "code": "research",
+    "labelEn": "Research & Development",
+    "labelRu": "Исследования и разработка"
+  },
+  {
+    "code": "exec-general",
+    "labelEn": "General Management",
+    "labelRu": "Общее руководство"
+  },
+  {
+    "code": "admin",
+    "labelEn": "Office Administration & Clerical",
+    "labelRu": "Административная и офисная работа"
+  },
+  {
+    "code": "real-estate",
+    "labelEn": "Real Estate",
+    "labelRu": "Недвижимость"
+  },
+  {
+    "code": "construction",
+    "labelEn": "Construction & Trades",
+    "labelRu": "Строительство и рабочие специальности"
+  },
+  {
+    "code": "media",
+    "labelEn": "Media & Content",
+    "labelRu": "Медиа и контент"
+  },
+  {
+    "code": "personal-services",
+    "labelEn": "Personal Services, Beauty & Fitness",
+    "labelRu": "Личные услуги, красота и спорт"
+  },
+  {
+    "code": "elementary-labor",
+    "labelEn": "Manual & Elementary Labor",
+    "labelRu": "Элементарный труд"
+  },
+  {
+    "code": "security-services",
+    "labelEn": "Physical Security & Safety",
+    "labelRu": "Физическая охрана и безопасность труда"
+  },
+  {
+    "code": "public-service",
+    "labelEn": "Public Administration & Civil Service",
+    "labelRu": "Государственная и муниципальная служба"
+  },
+  {
+    "code": "defense",
+    "labelEn": "Defense & Armed Forces",
+    "labelRu": "Силовые структуры и оборона"
+  },
+  {
+    "code": "arts-culture",
+    "labelEn": "Arts & Culture",
+    "labelRu": "Творческие профессии"
+  },
+  {
+    "code": "extraction-energy",
+    "labelEn": "Extraction & Energy",
+    "labelRu": "Добыча и энергетика"
+  },
+  {
+    "code": "other",
+    "labelEn": "Other",
+    "labelRu": "Другое"
+  }
+]

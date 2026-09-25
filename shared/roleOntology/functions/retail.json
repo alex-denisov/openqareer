@@ -1,0 +1,128 @@
+{
+  "function": {
+    "code": "retail",
+    "labelEn": "Retail",
+    "labelRu": "Розничная торговля"
+  },
+  "families": [
+    {
+      "id": "retail.core",
+      "function": "retail",
+      "labelEn": "Retail ladder",
+      "labelRu": "Лестница розницы",
+      "coverage": "core"
+    }
+  ],
+  "roles": [
+    {
+      "id": "retail.sales-assistant.ic",
+      "function": "retail",
+      "family": "retail.core",
+      "titleEn": "Sales Assistant / Cashier",
+      "titleRu": "Продавец-консультант / кассир",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Sales Assistant",
+          "Cashier",
+          "Retail Associate"
+        ],
+        "ru": [
+          "Продавец-консультант",
+          "Кассир"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "retail.store-manager.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "retail.store-manager.lead",
+      "function": "retail",
+      "family": "retail.core",
+      "titleEn": "Store Manager",
+      "titleRu": "Директор магазина",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Store Manager",
+          "Shift Supervisor"
+        ],
+        "ru": [
+          "Директор магазина",
+          "Старший смены"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "retail.sales-assistant.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "retail.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "retail.head",
+      "function": "retail",
+      "family": "retail.core",
+      "titleEn": "Regional Retail Manager",
+      "titleRu": "Региональный менеджер розничной сети",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Regional Retail Manager",
+          "District Manager"
+        ],
+        "ru": [
+          "Региональный менеджер розничной сети"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "retail.store-manager.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "retail.vp",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "retail.vp",
+      "function": "retail",
+      "family": "retail.core",
+      "titleEn": "VP of Retail Operations",
+      "titleRu": "Вице-президент по розничным продажам",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Retail Operations"
+        ],
+        "ru": [
+          "Вице-президент по розничным продажам"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "retail.head",
+          "kind": "level-down"
+        }
+      ]
+    }
+  ]
+}

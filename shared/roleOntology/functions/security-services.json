@@ -1,0 +1,98 @@
+{
+  "function": {
+    "code": "security-services",
+    "labelEn": "Physical Security & Safety",
+    "labelRu": "Физическая охрана и безопасность труда"
+  },
+  "families": [
+    {
+      "id": "security-services.core",
+      "function": "security-services",
+      "labelEn": "Physical security ladder",
+      "labelRu": "Лестница физической охраны",
+      "coverage": "core"
+    }
+  ],
+  "roles": [
+    {
+      "id": "security-services.guard.ic",
+      "function": "security-services",
+      "family": "security-services.core",
+      "titleEn": "Security Guard / Safety Officer",
+      "titleRu": "Охранник / специалист по охране труда",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Security Guard",
+          "Safety Officer"
+        ],
+        "ru": [
+          "Охранник",
+          "Специалист по охране труда"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "security-services.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "security-services.lead",
+      "function": "security-services",
+      "family": "security-services.core",
+      "titleEn": "Senior Security Guard / Shift Lead",
+      "titleRu": "Старший охранник",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Senior Security Guard",
+          "Shift Security Lead"
+        ],
+        "ru": [
+          "Старший охранник"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "security-services.guard.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "security-services.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "security-services.head",
+      "function": "security-services",
+      "family": "security-services.core",
+      "titleEn": "Head of Security (Physical)",
+      "titleRu": "Начальник службы безопасности",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Security",
+          "Facility Security Manager"
+        ],
+        "ru": [
+          "Начальник службы безопасности"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "security-services.lead",
+          "kind": "level-down"
+        }
+      ]
+    }
+  ]
+}

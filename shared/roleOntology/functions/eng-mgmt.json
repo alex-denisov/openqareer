@@ -1,0 +1,272 @@
+{
+  "function": {
+    "code": "eng-mgmt",
+    "labelEn": "Engineering Management",
+    "labelRu": "Руководство разработкой"
+  },
+  "families": [
+    {
+      "id": "eng-mgmt.leadership",
+      "function": "eng-mgmt",
+      "labelEn": "Engineering Leadership",
+      "labelRu": "Руководство разработкой",
+      "coverage": "full"
+    },
+    {
+      "id": "eng-mgmt.digital-transformation",
+      "function": "eng-mgmt",
+      "labelEn": "Digital Transformation",
+      "labelRu": "Цифровая трансформация",
+      "coverage": "full"
+    }
+  ],
+  "roles": [
+    {
+      "id": "eng-mgmt.em",
+      "function": "eng-mgmt",
+      "family": "eng-mgmt.leadership",
+      "titleEn": "Engineering Manager",
+      "titleRu": "Руководитель группы разработки",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Engineering Manager",
+          "Development Team Lead",
+          "Software Engineering Manager"
+        ],
+        "ru": [
+          "Руководитель группы разработки",
+          "Менеджер по разработке",
+          "Тимлид разработки"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng.backend.lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "eng-mgmt.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "eng-mgmt.head",
+      "function": "eng-mgmt",
+      "family": "eng-mgmt.leadership",
+      "titleEn": "Head of Engineering",
+      "titleRu": "Руководитель отдела разработки",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Engineering",
+          "Head of Technology",
+          "Director of Engineering",
+          "Engineering Director"
+        ],
+        "ru": [
+          "Руководитель отдела разработки",
+          "Директор по разработке",
+          "Начальник управления разработки"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng-mgmt.em",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng-mgmt.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "it-ops.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "eng-mgmt.vp",
+      "function": "eng-mgmt",
+      "family": "eng-mgmt.leadership",
+      "titleEn": "VP of Engineering / Technology",
+      "titleRu": "Вице-президент по разработке / технологиям",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Engineering",
+          "VP Engineering",
+          "VP of Technology",
+          "VP of Software Engineering",
+          "Vice President, Engineering"
+        ],
+        "ru": [
+          "Вице-президент по разработке",
+          "Вице-президент по технологиям",
+          "Директор департамента разработки"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng-mgmt.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng-mgmt.cto",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "it-ops.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "ops.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "eng-mgmt.cto",
+      "function": "eng-mgmt",
+      "family": "eng-mgmt.leadership",
+      "titleEn": "Chief Technology Officer",
+      "titleRu": "Технический директор (CTO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Technology Officer",
+          "CTO",
+          "Chief Technology & Product Officer"
+        ],
+        "ru": [
+          "Технический директор",
+          "Директор по технологиям",
+          "CTO"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng-mgmt.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "it-ops.cio",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "ops.coo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "eng-mgmt.digital-transform.lead",
+      "function": "eng-mgmt",
+      "family": "eng-mgmt.digital-transformation",
+      "titleEn": "Digital Transformation Manager",
+      "titleRu": "Менеджер цифровой трансформации",
+      "levels": [
+        "lead",
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Digital Transformation Manager",
+          "Digital Transformation Lead",
+          "Head of Digital"
+        ],
+        "ru": [
+          "Менеджер цифровой трансформации",
+          "Руководитель цифровой трансформации"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng-mgmt.digital-transform.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "consulting.it-consultant.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "eng-mgmt.digital-transform.vp",
+      "function": "eng-mgmt",
+      "family": "eng-mgmt.digital-transformation",
+      "titleEn": "VP / Director of Digital Transformation",
+      "titleRu": "Директор / вице-президент по цифровой трансформации",
+      "levels": [
+        "head",
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "Director of Digital Transformation",
+          "VP of Digital Transformation"
+        ],
+        "ru": [
+          "Директор по цифровой трансформации",
+          "Вице-президент по цифровой трансформации"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng-mgmt.digital-transform.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng-mgmt.cdo-digital",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "eng-mgmt.cdo-digital",
+      "function": "eng-mgmt",
+      "family": "eng-mgmt.digital-transformation",
+      "titleEn": "Chief Digital Officer",
+      "titleRu": "Директор по цифровой трансформации (CDO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Digital Officer"
+        ],
+        "ru": [
+          "Директор по цифровой трансформации",
+          "Chief Digital Officer"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "eng-mgmt.digital-transform.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng-mgmt.cto",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "data.cdo",
+          "kind": "disambiguation-pair"
+        }
+      ]
+    }
+  ]
+}

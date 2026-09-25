@@ -1,0 +1,245 @@
+{
+  "function": {
+    "code": "security",
+    "labelEn": "Information Security",
+    "labelRu": "Информационная безопасность"
+  },
+  "families": [
+    {
+      "id": "security.engineering-ops",
+      "function": "security",
+      "labelEn": "Security Engineering & SOC",
+      "labelRu": "Инженерия безопасности и SOC",
+      "coverage": "full"
+    },
+    {
+      "id": "security.architecture",
+      "function": "security",
+      "labelEn": "Security Architecture",
+      "labelRu": "Архитектура безопасности",
+      "coverage": "full"
+    },
+    {
+      "id": "security.leadership",
+      "function": "security",
+      "labelEn": "Security Leadership",
+      "labelRu": "Руководство ИБ",
+      "coverage": "full"
+    }
+  ],
+  "roles": [
+    {
+      "id": "security.engineer.ic",
+      "function": "security",
+      "family": "security.engineering-ops",
+      "titleEn": "Security Engineer",
+      "titleRu": "Инженер по безопасности",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Security Engineer",
+          "Application Security Engineer",
+          "AppSec Engineer",
+          "Cloud Security Engineer"
+        ],
+        "ru": [
+          "Инженер по безопасности",
+          "Специалист по прикладной безопасности"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "security.analyst.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "eng.backend.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "security.analyst.ic",
+      "function": "security",
+      "family": "security.engineering-ops",
+      "titleEn": "SOC / Security Analyst",
+      "titleRu": "Аналитик SOC / ИБ",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "SOC Analyst",
+          "Security Analyst",
+          "Incident Response Analyst"
+        ],
+        "ru": [
+          "Аналитик SOC",
+          "Аналитик информационной безопасности"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "security.engineer.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "security.architect.ic",
+      "function": "security",
+      "family": "security.architecture",
+      "titleEn": "Security Architect",
+      "titleRu": "Архитектор безопасности",
+      "levels": [
+        "ic",
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Security Architect",
+          "Cybersecurity Architect"
+        ],
+        "ru": [
+          "Архитектор безопасности"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "security.engineer.ic",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "eng.architecture.software",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "security.lead",
+      "function": "security",
+      "family": "security.leadership",
+      "titleEn": "Security Team Lead",
+      "titleRu": "Тимлид ИБ",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Security Team Lead",
+          "Lead Security Engineer"
+        ],
+        "ru": [
+          "Тимлид ИБ",
+          "Ведущий специалист по ИБ"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "security.engineer.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "security.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "security.head",
+      "function": "security",
+      "family": "security.leadership",
+      "titleEn": "Head of Security",
+      "titleRu": "Руководитель отдела ИБ",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Security",
+          "Security Director",
+          "Director of Information Security"
+        ],
+        "ru": [
+          "Руководитель отдела ИБ",
+          "Директор по информационной безопасности"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "security.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "security.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "it-ops.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "security.vp",
+      "function": "security",
+      "family": "security.leadership",
+      "titleEn": "VP of Security",
+      "titleRu": "Вице-президент по ИБ",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Security",
+          "VP of Cybersecurity"
+        ],
+        "ru": [
+          "Вице-президент по информационной безопасности"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "security.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "security.ciso",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "security.ciso",
+      "function": "security",
+      "family": "security.leadership",
+      "titleEn": "Chief Information Security Officer",
+      "titleRu": "Директор по информационной безопасности (CISO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Information Security Officer",
+          "CISO"
+        ],
+        "ru": [
+          "Директор по информационной безопасности",
+          "CISO"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "security.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "it-ops.cio",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    }
+  ]
+}

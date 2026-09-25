@@ -1,0 +1,186 @@
+{
+  "function": {
+    "code": "consulting",
+    "labelEn": "Consulting",
+    "labelRu": "Консалтинг"
+  },
+  "families": [
+    {
+      "id": "consulting.presales-delivery",
+      "function": "consulting",
+      "labelEn": "IT Consulting & Presales",
+      "labelRu": "ИТ-консалтинг и пресейл",
+      "coverage": "full"
+    },
+    {
+      "id": "consulting.leadership",
+      "function": "consulting",
+      "labelEn": "Consulting Leadership",
+      "labelRu": "Руководство консалтинговой практикой",
+      "coverage": "full"
+    }
+  ],
+  "roles": [
+    {
+      "id": "consulting.it-consultant.ic",
+      "function": "consulting",
+      "family": "consulting.presales-delivery",
+      "titleEn": "IT Consultant",
+      "titleRu": "ИТ-консультант",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "IT Consultant",
+          "Technology Consultant",
+          "Implementation Consultant"
+        ],
+        "ru": [
+          "ИТ-консультант",
+          "Консультант по внедрению"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "consulting.presales.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "eng-mgmt.digital-transform.lead",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "consulting.presales.ic",
+      "function": "consulting",
+      "family": "consulting.presales-delivery",
+      "titleEn": "Solutions Consultant / Presales Engineer",
+      "titleRu": "Пресейл-инженер / консультант по решениям",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Solutions Consultant",
+          "Presales Engineer",
+          "Sales Engineer",
+          "Solutions Engineer"
+        ],
+        "ru": [
+          "Пресейл-инженер",
+          "Консультант по решениям",
+          "Solution-консультант"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "consulting.it-consultant.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "eng.architecture.solutions",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "sales.rep.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "consulting.presales.lead",
+      "function": "consulting",
+      "family": "consulting.presales-delivery",
+      "titleEn": "Presales Manager / Principal Consultant",
+      "titleRu": "Руководитель пресейла / ведущий консультант",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Presales Manager",
+          "Practice Lead",
+          "Principal Consultant"
+        ],
+        "ru": [
+          "Руководитель пресейла",
+          "Ведущий консультант"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "consulting.presales.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "consulting.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "consulting.head",
+      "function": "consulting",
+      "family": "consulting.leadership",
+      "titleEn": "Head of Consulting / Presales",
+      "titleRu": "Руководитель практики консалтинга",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Presales",
+          "Head of Consulting",
+          "Practice Director"
+        ],
+        "ru": [
+          "Руководитель практики консалтинга",
+          "Директор практики"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "consulting.presales.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "consulting.vp",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "consulting.vp",
+      "function": "consulting",
+      "family": "consulting.leadership",
+      "titleEn": "VP / Partner, Consulting",
+      "titleRu": "Партнёр / вице-президент консалтинговой практики",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Consulting",
+          "Partner",
+          "Engagement Director"
+        ],
+        "ru": [
+          "Партнёр консалтинговой практики",
+          "Вице-президент по консалтингу"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "consulting.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng-mgmt.digital-transform.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    }
+  ]
+}

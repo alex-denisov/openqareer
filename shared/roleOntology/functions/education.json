@@ -1,0 +1,134 @@
+{
+  "function": {
+    "code": "education",
+    "labelEn": "Education",
+    "labelRu": "Образование"
+  },
+  "families": [
+    {
+      "id": "education.core",
+      "function": "education",
+      "labelEn": "Education ladder",
+      "labelRu": "Лестница образования",
+      "coverage": "core"
+    }
+  ],
+  "roles": [
+    {
+      "id": "education.teacher.ic",
+      "function": "education",
+      "family": "education.core",
+      "titleEn": "Teacher",
+      "titleRu": "Учитель / преподаватель",
+      "levels": [
+        "ic"
+      ],
+      "icBand": [
+        "first-category",
+        "highest-category"
+      ],
+      "variants": {
+        "en": [
+          "Teacher",
+          "Tutor",
+          "Lecturer"
+        ],
+        "ru": [
+          "Учитель",
+          "Преподаватель"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "education.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "education.head",
+      "function": "education",
+      "family": "education.core",
+      "titleEn": "Deputy Principal / Head of Department",
+      "titleRu": "Завуч / заведующий кафедрой",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Deputy Principal",
+          "Head of Department (Academic)"
+        ],
+        "ru": [
+          "Завуч",
+          "Заведующий кафедрой"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "education.teacher.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "education.principal.vp",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "education.principal.vp",
+      "function": "education",
+      "family": "education.core",
+      "titleEn": "School Principal / Dean",
+      "titleRu": "Директор школы / декан",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "School Principal",
+          "Dean"
+        ],
+        "ru": [
+          "Директор школы",
+          "Декан"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "education.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "education.rector.c",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "education.rector.c",
+      "function": "education",
+      "family": "education.core",
+      "titleEn": "Rector / Superintendent",
+      "titleRu": "Ректор",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Rector",
+          "Superintendent of Schools"
+        ],
+        "ru": [
+          "Ректор"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "education.principal.vp",
+          "kind": "level-down"
+        }
+      ]
+    }
+  ]
+}

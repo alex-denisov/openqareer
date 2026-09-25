@@ -1,0 +1,79 @@
+{
+  "function": {
+    "code": "exec-general",
+    "labelEn": "General Management",
+    "labelRu": "Общее руководство"
+  },
+  "families": [
+    {
+      "id": "exec-general.top",
+      "function": "exec-general",
+      "labelEn": "General/Executive Management",
+      "labelRu": "Общее руководство",
+      "coverage": "full"
+    }
+  ],
+  "roles": [
+    {
+      "id": "exec-general.ceo",
+      "function": "exec-general",
+      "family": "exec-general.top",
+      "titleEn": "Chief Executive Officer",
+      "titleRu": "Генеральный директор",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Executive Officer",
+          "CEO",
+          "Managing Director"
+        ],
+        "ru": [
+          "Генеральный директор"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ops.coo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "eng-mgmt.cto",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "exec-general.gm",
+      "function": "exec-general",
+      "family": "exec-general.top",
+      "titleEn": "General Manager",
+      "titleRu": "Генеральный менеджер",
+      "levels": [
+        "head",
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "General Manager",
+          "Country Manager"
+        ],
+        "ru": [
+          "Генеральный менеджер",
+          "Директор филиала"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ops.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "level-up"
+        }
+      ]
+    }
+  ]
+}

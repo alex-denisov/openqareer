@@ -1,0 +1,71 @@
+{
+  "function": {
+    "code": "agriculture",
+    "labelEn": "Agriculture",
+    "labelRu": "Сельское хозяйство"
+  },
+  "families": [
+    {
+      "id": "agriculture.core",
+      "function": "agriculture",
+      "labelEn": "Agriculture ladder",
+      "labelRu": "Лестница сельского хозяйства",
+      "coverage": "core"
+    }
+  ],
+  "roles": [
+    {
+      "id": "agriculture.specialist.ic",
+      "function": "agriculture",
+      "family": "agriculture.core",
+      "titleEn": "Agronomist / Livestock Specialist",
+      "titleRu": "Агроном / зоотехник",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Agronomist",
+          "Livestock Specialist",
+          "Farm Veterinarian"
+        ],
+        "ru": [
+          "Агроном",
+          "Зоотехник"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "agriculture.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "agriculture.head",
+      "function": "agriculture",
+      "family": "agriculture.core",
+      "titleEn": "Farm Manager",
+      "titleRu": "Управляющий фермой / хозяйством",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Farm Manager",
+          "Head of Agricultural Production"
+        ],
+        "ru": [
+          "Управляющий фермой",
+          "Руководитель хозяйства"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "agriculture.specialist.ic",
+          "kind": "level-down"
+        }
+      ]
+    }
+  ]
+}

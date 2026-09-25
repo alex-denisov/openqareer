@@ -1,0 +1,204 @@
+{
+  "function": {
+    "code": "design",
+    "labelEn": "Design",
+    "labelRu": "Дизайн"
+  },
+  "families": [
+    {
+      "id": "design.craft",
+      "function": "design",
+      "labelEn": "Product/UX Design",
+      "labelRu": "Продуктовый/UX-дизайн",
+      "coverage": "full"
+    },
+    {
+      "id": "design.leadership",
+      "function": "design",
+      "labelEn": "Design Leadership",
+      "labelRu": "Руководство дизайном",
+      "coverage": "full"
+    }
+  ],
+  "roles": [
+    {
+      "id": "design.craft.ic",
+      "function": "design",
+      "family": "design.craft",
+      "titleEn": "UX/UI Designer",
+      "titleRu": "UX/UI-дизайнер",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "UX Designer",
+          "UI Designer",
+          "UX/UI Designer",
+          "Product Designer"
+        ],
+        "ru": [
+          "UX/UI-дизайнер",
+          "Продуктовый дизайнер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "design.researcher.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "product.pm.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "design.researcher.ic",
+      "function": "design",
+      "family": "design.craft",
+      "titleEn": "UX Researcher",
+      "titleRu": "UX-исследователь",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "UX Researcher",
+          "User Researcher"
+        ],
+        "ru": [
+          "UX-исследователь"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "design.craft.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "design.lead",
+      "function": "design",
+      "family": "design.leadership",
+      "titleEn": "Design Team Lead",
+      "titleRu": "Тимлид дизайна",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Design Team Lead",
+          "Lead Product Designer"
+        ],
+        "ru": [
+          "Тимлид дизайна",
+          "Ведущий дизайнер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "design.craft.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "design.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "design.head",
+      "function": "design",
+      "family": "design.leadership",
+      "titleEn": "Head of Design",
+      "titleRu": "Руководитель дизайна",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Design",
+          "Design Director",
+          "Director of UX"
+        ],
+        "ru": [
+          "Руководитель дизайна",
+          "Директор по дизайну"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "design.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "design.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "product.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "design.vp",
+      "function": "design",
+      "family": "design.leadership",
+      "titleEn": "VP of Design",
+      "titleRu": "Вице-президент по дизайну",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Design",
+          "VP of UX"
+        ],
+        "ru": [
+          "Вице-президент по дизайну"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "design.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "design.cdo",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "design.cdo",
+      "function": "design",
+      "family": "design.leadership",
+      "titleEn": "Chief Design Officer",
+      "titleRu": "Директор по дизайну (редкий C-титул)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Design Officer"
+        ],
+        "ru": [
+          "Директор по дизайну"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "design.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "product.cpo",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    }
+  ]
+}

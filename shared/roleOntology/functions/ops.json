@@ -1,0 +1,158 @@
+{
+  "function": {
+    "code": "ops",
+    "labelEn": "Operations",
+    "labelRu": "Операционное управление"
+  },
+  "families": [
+    {
+      "id": "ops.leadership",
+      "function": "ops",
+      "labelEn": "Operations Leadership (incl. COO-tech)",
+      "labelRu": "Операционное руководство (в т.ч. технологический COO)",
+      "coverage": "full"
+    }
+  ],
+  "roles": [
+    {
+      "id": "ops.manager.lead",
+      "function": "ops",
+      "family": "ops.leadership",
+      "titleEn": "Operations Manager",
+      "titleRu": "Операционный менеджер",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Operations Manager",
+          "Business Operations Manager",
+          "IT Operations Manager"
+        ],
+        "ru": [
+          "Операционный менеджер",
+          "Руководитель операционного отдела"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ops.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "ops.head",
+      "function": "ops",
+      "family": "ops.leadership",
+      "titleEn": "Head of Operations",
+      "titleRu": "Руководитель операций",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Operations",
+          "Director of Operations",
+          "Operations Director"
+        ],
+        "ru": [
+          "Руководитель операций",
+          "Директор по операциям"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ops.manager.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "ops.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "it-ops.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "ops.vp",
+      "function": "ops",
+      "family": "ops.leadership",
+      "titleEn": "VP of Operations",
+      "titleRu": "Вице-президент по операциям",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Operations",
+          "VP of Technology & Operations",
+          "VP of Technology Operations"
+        ],
+        "ru": [
+          "Вице-президент по операциям",
+          "Вице-президент по технологиям и операциям"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ops.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "ops.coo",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "eng-mgmt.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "it-ops.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "ops.coo",
+      "function": "ops",
+      "family": "ops.leadership",
+      "titleEn": "Chief Operating Officer",
+      "titleRu": "Операционный директор (COO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Operating Officer",
+          "COO",
+          "COO of Technology"
+        ],
+        "ru": [
+          "Операционный директор",
+          "COO"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "ops.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng-mgmt.cto",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "it-ops.cio",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    }
+  ]
+}

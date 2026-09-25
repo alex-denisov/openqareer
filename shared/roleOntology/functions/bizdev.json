@@ -1,0 +1,42 @@
+{
+  "function": {
+    "code": "bizdev",
+    "labelEn": "Business Development",
+    "labelRu": "Развитие бизнеса"
+  },
+  "families": [
+    {
+      "id": "bizdev.generic",
+      "function": "bizdev",
+      "labelEn": "Business Development",
+      "labelRu": "Развитие бизнеса",
+      "coverage": "skeleton"
+    }
+  ],
+  "roles": [
+    {
+      "id": "bizdev.generic",
+      "function": "bizdev",
+      "family": "bizdev.generic",
+      "titleEn": "Business Development",
+      "titleRu": "Развитие бизнеса",
+      "levels": [
+        "ic",
+        "head",
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "Business Development Manager",
+          "Head of Business Development",
+          "Partnerships Director"
+        ],
+        "ru": [
+          "Менеджер по развитию бизнеса",
+          "Руководитель развития бизнеса"
+        ]
+      },
+      "adjacent": []
+    }
+  ]
+}

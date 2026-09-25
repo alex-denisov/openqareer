@@ -1,0 +1,257 @@
+{
+  "function": {
+    "code": "data",
+    "labelEn": "Data",
+    "labelRu": "Данные"
+  },
+  "families": [
+    {
+      "id": "data.engineering",
+      "function": "data",
+      "labelEn": "Data Engineering",
+      "labelRu": "Инженерия данных",
+      "coverage": "full"
+    },
+    {
+      "id": "data.analytics",
+      "function": "data",
+      "labelEn": "Analytics & BI",
+      "labelRu": "Аналитика и BI",
+      "coverage": "full"
+    },
+    {
+      "id": "data.leadership",
+      "function": "data",
+      "labelEn": "Data Leadership",
+      "labelRu": "Руководство данными",
+      "coverage": "full"
+    }
+  ],
+  "roles": [
+    {
+      "id": "data.engineer.ic",
+      "function": "data",
+      "family": "data.engineering",
+      "titleEn": "Data Engineer",
+      "titleRu": "Инженер данных",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Data Engineer",
+          "ETL Developer",
+          "Analytics Engineer",
+          "Big Data Engineer"
+        ],
+        "ru": [
+          "Инженер данных",
+          "Дата-инженер",
+          "ETL-разработчик"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "data.analyst.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "ai-ml.ml-engineer.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "data.analyst.ic",
+      "function": "data",
+      "family": "data.analytics",
+      "titleEn": "Data Analyst",
+      "titleRu": "Аналитик данных",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Data Analyst",
+          "BI Analyst",
+          "BI Developer",
+          "Business Intelligence Analyst"
+        ],
+        "ru": [
+          "Аналитик данных",
+          "BI-аналитик",
+          "Бизнес-аналитик данных"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "data.engineer.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "data.architect.ic",
+      "function": "data",
+      "family": "data.engineering",
+      "titleEn": "Data Architect",
+      "titleRu": "Архитектор данных",
+      "levels": [
+        "ic",
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Data Architect",
+          "Head of Data Architecture"
+        ],
+        "ru": [
+          "Архитектор данных"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "data.engineer.ic",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "eng.architecture.software",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "data.lead",
+      "function": "data",
+      "family": "data.leadership",
+      "titleEn": "Data Team Lead",
+      "titleRu": "Тимлид данных",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Data Team Lead",
+          "Analytics Lead",
+          "Lead Data Engineer"
+        ],
+        "ru": [
+          "Тимлид дата-инженеров",
+          "Руководитель группы аналитики"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "data.engineer.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "data.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "data.head",
+      "function": "data",
+      "family": "data.leadership",
+      "titleEn": "Head of Data",
+      "titleRu": "Руководитель направления данных",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Data",
+          "Director of Data",
+          "Data Director"
+        ],
+        "ru": [
+          "Руководитель направления данных",
+          "Директор по данным"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "data.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "data.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "ai-ml.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "data.vp",
+      "function": "data",
+      "family": "data.leadership",
+      "titleEn": "VP of Data",
+      "titleRu": "Вице-президент по данным",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Data",
+          "VP of Analytics",
+          "VP of Data & Analytics"
+        ],
+        "ru": [
+          "Вице-президент по данным"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "data.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "data.cdo",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "ai-ml.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "data.cdo",
+      "function": "data",
+      "family": "data.leadership",
+      "titleEn": "Chief Data Officer",
+      "titleRu": "Директор по данным (CDO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Data Officer"
+        ],
+        "ru": [
+          "Директор по данным",
+          "Chief Data Officer"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "data.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "ai-ml.chief",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "eng-mgmt.cdo-digital",
+          "kind": "disambiguation-pair"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "function": {
+    "code": "extraction-energy",
+    "labelEn": "Extraction & Energy",
+    "labelRu": "Добыча и энергетика"
+  },
+  "families": [
+    {
+      "id": "extraction-energy.generic",
+      "function": "extraction-energy",
+      "labelEn": "Extraction & Energy",
+      "labelRu": "Добыча и энергетика",
+      "coverage": "skeleton"
+    }
+  ],
+  "roles": [
+    {
+      "id": "extraction-energy.generic",
+      "function": "extraction-energy",
+      "family": "extraction-energy.generic",
+      "titleEn": "Extraction & Energy",
+      "titleRu": "Добыча и энергетика",
+      "levels": [
+        "ic",
+        "head",
+        "vp",
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Mining Engineer",
+          "Drilling Engineer",
+          "Power Engineer",
+          "Process Engineer (Oil & Gas)"
+        ],
+        "ru": [
+          "Горный инженер",
+          "Инженер-буровик",
+          "Энергетик"
+        ]
+      },
+      "adjacent": []
+    }
+  ]
+}

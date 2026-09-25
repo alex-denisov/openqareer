@@ -1,0 +1,134 @@
+{
+  "function": {
+    "code": "hr",
+    "labelEn": "Human Resources",
+    "labelRu": "Персонал"
+  },
+  "families": [
+    {
+      "id": "hr.core",
+      "function": "hr",
+      "labelEn": "HR ladder",
+      "labelRu": "Лестница HR",
+      "coverage": "core"
+    }
+  ],
+  "roles": [
+    {
+      "id": "hr.specialist.ic",
+      "function": "hr",
+      "family": "hr.core",
+      "titleEn": "Recruiter / HR Specialist",
+      "titleRu": "Рекрутер / HR-специалист",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Recruiter",
+          "HR Generalist",
+          "HR Specialist",
+          "Talent Acquisition Specialist"
+        ],
+        "ru": [
+          "Рекрутер",
+          "HR-специалист",
+          "Специалист по подбору персонала"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "hr.bp.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "hr.bp.lead",
+      "function": "hr",
+      "family": "hr.core",
+      "titleEn": "HR Business Partner",
+      "titleRu": "HR-бизнес-партнёр",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "HR Business Partner",
+          "Senior Recruiter",
+          "HR Team Lead"
+        ],
+        "ru": [
+          "HR-бизнес-партнёр",
+          "Ведущий рекрутер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "hr.specialist.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "hr.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "hr.head",
+      "function": "hr",
+      "family": "hr.core",
+      "titleEn": "Head of HR",
+      "titleRu": "Руководитель отдела персонала",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of HR",
+          "HR Director"
+        ],
+        "ru": [
+          "Руководитель отдела персонала",
+          "Директор по персоналу"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "hr.bp.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "hr.chro",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "hr.chro",
+      "function": "hr",
+      "family": "hr.core",
+      "titleEn": "Chief HR Officer",
+      "titleRu": "Директор по персоналу (CHRO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief HR Officer",
+          "Chief People Officer",
+          "CHRO"
+        ],
+        "ru": [
+          "Директор по персоналу"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "hr.head",
+          "kind": "level-down"
+        }
+      ]
+    }
+  ]
+}

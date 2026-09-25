@@ -1,0 +1,42 @@
+{
+  "function": {
+    "code": "procurement",
+    "labelEn": "Procurement",
+    "labelRu": "Закупки"
+  },
+  "families": [
+    {
+      "id": "procurement.generic",
+      "function": "procurement",
+      "labelEn": "Procurement",
+      "labelRu": "Закупки",
+      "coverage": "skeleton"
+    }
+  ],
+  "roles": [
+    {
+      "id": "procurement.generic",
+      "function": "procurement",
+      "family": "procurement.generic",
+      "titleEn": "Procurement",
+      "titleRu": "Закупки",
+      "levels": [
+        "ic",
+        "head",
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Procurement Manager",
+          "Head of Procurement",
+          "Chief Procurement Officer"
+        ],
+        "ru": [
+          "Менеджер по закупкам",
+          "Директор по закупкам"
+        ]
+      },
+      "adjacent": []
+    }
+  ]
+}

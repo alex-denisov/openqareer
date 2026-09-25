@@ -1,0 +1,176 @@
+{
+  "function": {
+    "code": "qa",
+    "labelEn": "QA",
+    "labelRu": "Тестирование"
+  },
+  "families": [
+    {
+      "id": "qa.engineering",
+      "function": "qa",
+      "labelEn": "QA Engineering",
+      "labelRu": "Инженерия качества",
+      "coverage": "full"
+    },
+    {
+      "id": "qa.leadership",
+      "function": "qa",
+      "labelEn": "QA Leadership",
+      "labelRu": "Руководство QA",
+      "coverage": "full"
+    }
+  ],
+  "roles": [
+    {
+      "id": "qa.manual.ic",
+      "function": "qa",
+      "family": "qa.engineering",
+      "titleEn": "QA Engineer",
+      "titleRu": "Инженер по тестированию",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "QA Engineer",
+          "Manual QA Engineer",
+          "Software Tester",
+          "Quality Assurance Specialist"
+        ],
+        "ru": [
+          "Тестировщик",
+          "Инженер по тестированию",
+          "QA-инженер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "qa.automation.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "qa.automation.ic",
+      "function": "qa",
+      "family": "qa.engineering",
+      "titleEn": "QA Automation Engineer",
+      "titleRu": "Инженер по автоматизации тестирования",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "QA Automation Engineer",
+          "SDET",
+          "Test Automation Engineer"
+        ],
+        "ru": [
+          "Инженер по автоматизации тестирования",
+          "SDET"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "qa.manual.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "eng.backend.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "qa.lead",
+      "function": "qa",
+      "family": "qa.leadership",
+      "titleEn": "QA Team Lead",
+      "titleRu": "Тимлид QA",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "QA Team Lead",
+          "Lead QA Engineer",
+          "QA Manager"
+        ],
+        "ru": [
+          "Тимлид QA",
+          "Руководитель группы тестирования"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "qa.manual.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "qa.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "qa.head",
+      "function": "qa",
+      "family": "qa.leadership",
+      "titleEn": "Head of QA",
+      "titleRu": "Руководитель отдела тестирования",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of QA",
+          "QA Director",
+          "Director of Quality Engineering"
+        ],
+        "ru": [
+          "Руководитель отдела тестирования",
+          "Директор по качеству"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "qa.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "qa.vp",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "qa.vp",
+      "function": "qa",
+      "family": "qa.leadership",
+      "titleEn": "VP of Quality",
+      "titleRu": "Вице-президент по качеству",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Quality Engineering",
+          "VP of QA"
+        ],
+        "ru": [
+          "Вице-президент по качеству"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "qa.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng-mgmt.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    }
+  ]
+}

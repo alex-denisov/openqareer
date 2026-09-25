@@ -1,0 +1,42 @@
+{
+  "function": {
+    "code": "audit-risk",
+    "labelEn": "Audit & Risk",
+    "labelRu": "Аудит и риски"
+  },
+  "families": [
+    {
+      "id": "audit-risk.generic",
+      "function": "audit-risk",
+      "labelEn": "Audit & Risk",
+      "labelRu": "Аудит и риски",
+      "coverage": "skeleton"
+    }
+  ],
+  "roles": [
+    {
+      "id": "audit-risk.generic",
+      "function": "audit-risk",
+      "family": "audit-risk.generic",
+      "titleEn": "Audit & Risk",
+      "titleRu": "Аудит и риски",
+      "levels": [
+        "ic",
+        "head",
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Risk Manager",
+          "Compliance Officer",
+          "Chief Risk Officer"
+        ],
+        "ru": [
+          "Риск-менеджер",
+          "Директор по комплаенсу"
+        ]
+      },
+      "adjacent": []
+    }
+  ]
+}

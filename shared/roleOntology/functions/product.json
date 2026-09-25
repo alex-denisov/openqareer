@@ -1,0 +1,186 @@
+{
+  "function": {
+    "code": "product",
+    "labelEn": "Product Management",
+    "labelRu": "Управление продуктом"
+  },
+  "families": [
+    {
+      "id": "product.management",
+      "function": "product",
+      "labelEn": "Product Management",
+      "labelRu": "Управление продуктом",
+      "coverage": "full"
+    },
+    {
+      "id": "product.leadership",
+      "function": "product",
+      "labelEn": "Product Leadership",
+      "labelRu": "Руководство продуктом",
+      "coverage": "full"
+    }
+  ],
+  "roles": [
+    {
+      "id": "product.pm.ic",
+      "function": "product",
+      "family": "product.management",
+      "titleEn": "Product Manager",
+      "titleRu": "Продакт-менеджер",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Product Manager",
+          "Product Owner",
+          "Technical Product Manager",
+          "Senior Product Manager"
+        ],
+        "ru": [
+          "Продакт-менеджер",
+          "Менеджер продукта",
+          "Владелец продукта"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "product.principal.ic",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "design.craft.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "product.principal.ic",
+      "function": "product",
+      "family": "product.management",
+      "titleEn": "Principal / Group Product Manager",
+      "titleRu": "Главный продакт-менеджер",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Principal Product Manager",
+          "Group Product Manager"
+        ],
+        "ru": [
+          "Главный продакт-менеджер",
+          "Групповой продакт-менеджер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "product.pm.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "product.head",
+          "kind": "path-alt"
+        }
+      ]
+    },
+    {
+      "id": "product.head",
+      "function": "product",
+      "family": "product.leadership",
+      "titleEn": "Head of Product",
+      "titleRu": "Руководитель продукта",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Product",
+          "Director of Product",
+          "Product Director"
+        ],
+        "ru": [
+          "Руководитель продукта",
+          "Директор по продукту"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "product.pm.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "product.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "eng-mgmt.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "product.vp",
+      "function": "product",
+      "family": "product.leadership",
+      "titleEn": "VP of Product",
+      "titleRu": "Вице-президент по продукту",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "VP of Product",
+          "VP Product Management"
+        ],
+        "ru": [
+          "Вице-президент по продукту"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "product.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "product.cpo",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "eng-mgmt.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "product.cpo",
+      "function": "product",
+      "family": "product.leadership",
+      "titleEn": "Chief Product Officer",
+      "titleRu": "Директор по продукту (CPO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Product Officer",
+          "CPO"
+        ],
+        "ru": [
+          "Директор по продукту",
+          "CPO"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "product.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "eng-mgmt.cto",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    }
+  ]
+}
