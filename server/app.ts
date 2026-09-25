@@ -58,6 +58,7 @@ interface BuildAppOptions {
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
   roleNamer?: RoleNamer;
+  campaignRoleModel?: RouteDeps['campaignRoleModel'];
   coverLetterWriter?: CoverLetterWriter;
   recruiterContactsRepo?: SqliteRecruiterContactsRepository;
   candidateReputationRepo?: SqliteCandidateReputationRepository;
@@ -239,6 +240,7 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Rou
     importProfile = importPublicProfileUrl,
     resumeStructurer,
     roleNamer,
+    campaignRoleModel,
     coverLetterWriter,
     recruiterContactsRepo,
     candidateReputationRepo,
@@ -257,6 +259,7 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Rou
     importProfile,
     resumeStructurer,
     roleNamer,
+    campaignRoleModel,
     coverLetterWriter,
     recruiterContactsRepo:
       recruiterContactsRepo ??

@@ -3,6 +3,7 @@ import { readServerConfig } from './config';
 import { buildCoachProvider } from './providers/coachProviderFactory';
 import { buildResumeStructurer } from './providers/resumeStructurer';
 import { buildRoleNamer } from './providers/roleNamer';
+import { VertexCampaignRoleModel } from './providers/campaignRoleModel';
 import { buildCoverLetterWriter } from './providers/coverLetterWriter';
 import { HygienicCoachProvider } from './providers/hygienicCoachProvider';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
@@ -180,6 +181,7 @@ const app = await buildApp({
     // модель и упирался в исчерпанную бесплатную квоту (INC-035, B191).
     cacheStore: roleNamingCache,
   }),
+  campaignRoleModel: config.vertex ? new VertexCampaignRoleModel(config.vertex) : undefined,
   // Та же очередь провайдеров, что и у называния ролей: письмо пишет модель,
   // шаблон остаётся запасом (B266, пункт 7).
   coverLetterWriter: buildCoverLetterWriter({

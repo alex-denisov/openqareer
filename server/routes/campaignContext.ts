@@ -43,6 +43,7 @@ export function readCampaign(
     resumeTargetRole,
     profileRegions,
     explicit,
+    auto: parsed?.success ? (parsed.data.campaign?.auto ?? null) : null,
     ...(vacancyCountsByRole ? { vacancyCountsByRole } : {}),
   });
 }

@@ -28,6 +28,7 @@ import {
 import { preferStructuredResume } from '../domain/resumeStructuring';
 import { structureWithinBudget } from '../providers/resumeStructurer';
 import { handleImportStructuredResume } from './structuredResumeImportRoute';
+import { rebuildCampaignRoles } from '../vacancies/rebuildCampaignRoles';
 import { parseResumeContent } from '../../src/features/workspace/resumeParser';
 import { normalizeResumeSourceText } from '../../src/features/workspace/resumeSourceText';
 import type { CandidateStore } from '../data/candidateStore';
@@ -387,6 +388,9 @@ async function importResumeIntoDossier(
     candidate.id,
     resumeImportCommit(candidate.id, body, plan),
   );
+  void rebuildCampaignRoles(deps, candidate.id).catch((error) => {
+    request.log.error({ error }, 'campaign_roles_rebuild_failed');
+  });
   return {
     data: {
       parsed: read.resume,

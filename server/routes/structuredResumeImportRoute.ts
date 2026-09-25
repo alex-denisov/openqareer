@@ -15,6 +15,7 @@ import type { Handler } from './candidateRoutes';
 import { resumeStudioView } from './candidateRoutes';
 import { structuredResumeImportSchema } from './schemas';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, sendError } from './helpers';
+import { rebuildCampaignRoles } from '../vacancies/rebuildCampaignRoles';
 
 /**
  * `POST /candidate/resume/import/structured` (B265 §2, slice 3). The DOM was
@@ -142,5 +143,8 @@ export const handleImportStructuredResume: Handler = async (deps, request, reply
   }
 
   const data = await commitStructuredImport(deps, request.log, candidate.id, body, importDigest, plan);
+  void rebuildCampaignRoles(deps, candidate.id).catch((error) => {
+    request.log.error({ error }, 'campaign_roles_rebuild_failed');
+  });
   return { data, meta: { requestId: request.id } };
 };
