@@ -12,6 +12,12 @@ import {
 import { rankPitchFacts } from '../domain/pitchFactRanking';
 import type { ChatCompletionClient } from './roleNamer';
 import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
+import {
+  cloudflareGatewayHeaders,
+  geminiGatewayBaseUrl,
+  type CloudflareGatewayConfig,
+} from './cloudflareAiGateway';
+import { GeminiCoverLetterWriter } from './geminiCoverLetterWriter';
 import { selectProviderQueue, type ProviderQueueEntry, type ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
@@ -35,9 +41,7 @@ function outputLimit(provider: ProviderId, thinkingLevel?: 'low' | 'high'): Reco
   const budget = coverLetterOutputBudget(thinkingLevel);
   // Новые модели OpenAI принимают только современное имя; OpenRouter и его
   // совместимые модели по-прежнему ждут старое имя параметра.
-  return provider === 'openai'
-    ? { max_completion_tokens: budget }
-    : { max_tokens: budget };
+  return provider === 'openai' ? { max_completion_tokens: budget } : { max_tokens: budget };
 }
 
 export interface CoverLetterFact {
@@ -105,13 +109,13 @@ export async function withinTimeBudget(
 }
 
 /** Ключ провайдера не покидает процесс даже в логе (тот же уговор, что и у роли). */
-function failureDetail(text: string, apiKey: string): string | undefined {
+export function failureDetail(text: string, apiKey: string): string | undefined {
   const trimmed = text.trim().slice(0, 600);
   if (trimmed.length === 0) return undefined;
   return apiKey.length > 0 ? trimmed.split(apiKey).join('[REDACTED]') : trimmed;
 }
 
-function thrownFailure(stage: string, error: unknown, apiKey: string): CoverLetterFailure {
+export function thrownFailure(stage: string, error: unknown, apiKey: string): CoverLetterFailure {
   const name = error instanceof Error ? error.name : '';
   if (name === 'TimeoutError' || name === 'AbortError' || name === 'APIConnectionTimeoutError') {
     return { stage, kind: 'timeout' };
@@ -168,7 +172,24 @@ function parseBody(content: string | null): string | null {
   }
 }
 
-function serializeInput(input: CoverLetterWriteInput): string {
+/**
+ * Общая приёмка ответа любой ступени: JSON по схеме, без заглушек, без
+ * оборванного хвоста. Обрыв узнаётся и по причине остановки, и по тексту.
+ */
+export function acceptModelBody(
+  content: string | null,
+  cutByLimit: boolean,
+  stage: string,
+): CoverLetterOutcome {
+  const parsedBody = parseBody(content);
+  const body =
+    parsedBody && (cutByLimit || endsMidSentence(parsedBody))
+      ? trimIncompleteFinalSentence(parsedBody)
+      : parsedBody;
+  return body ? { body, stage } : { failure: { stage, kind: 'unusable_response' } };
+}
+
+export function serializeInput(input: CoverLetterWriteInput): string {
   const rankedFacts = rankPitchFacts(input.facts, input.vacancy);
   return JSON.stringify({
     vacancy: {
@@ -256,16 +277,12 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
           : {}),
       });
       const choice = response.choices[0] as
-        | (typeof response.choices)[number] & { finish_reason?: string | null }
-        | undefined;
-      const parsedBody = parseBody(choice?.message?.content ?? null);
-      const body =
-        parsedBody && (choice?.finish_reason === 'length' || endsMidSentence(parsedBody))
-          ? trimIncompleteFinalSentence(parsedBody)
-          : parsedBody;
-      return body
-        ? { body, stage: this.stage }
-        : { failure: { stage: this.stage, kind: 'unusable_response' } };
+        ((typeof response.choices)[number] & { finish_reason?: string | null }) | undefined;
+      return acceptModelBody(
+        choice?.message?.content ?? null,
+        choice?.finish_reason === 'length',
+        this.stage,
+      );
     } catch (error) {
       return { failure: thrownFailure(this.stage, error, this.apiKey) };
     }
@@ -318,21 +335,44 @@ export interface CoverLetterWriterConfig {
   readonly model?: string;
   readonly fallbacks?: readonly ProviderQueueEntry[];
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
+  /** Без тоннеля Gemini с прод-хоста не доходит (B183) — ступень пропускается. */
+  readonly cloudflareGateway?: CloudflareGatewayConfig;
 }
 
 export function buildCoverLetterWriter(
   config: CoverLetterWriterConfig,
 ): CoverLetterWriter | undefined {
   const provider: ProviderId = config.personalProvider ?? 'openai';
-  const stages = selectProviderQueue({
+  const gateway = config.cloudflareGateway;
+  const routes = selectProviderQueue({
     head: { provider, ...(config.model ? { model: config.model } : {}) },
     fallbacks: config.fallbacks,
     credentials: config.providerCredentials ?? {},
-  }).filter((route) => speaksChatCompletions(route.provider));
+  }).filter(
+    (route) =>
+      speaksChatCompletions(route.provider) ||
+      (route.provider === 'gemini' && gateway !== undefined),
+  );
+  // Gemini — голова, как у называния ролей: бесплатный nemotron писал письмо
+  // дольше срока в 25 с (замер 25.09).
+  const stages = [
+    ...routes.filter((route) => route.provider === 'gemini'),
+    ...routes.filter((route) => route.provider !== 'gemini'),
+  ];
   if (stages.length === 0) return undefined;
 
   return new QueuedCoverLetterWriter(
-    stages.map(writerForRoute),
+    stages.map((route) =>
+      route.provider === 'gemini' && gateway
+        ? new GeminiCoverLetterWriter({
+            apiKey: route.apiKey,
+            model: route.model,
+            stage: `${route.provider}:${route.model}`,
+            baseUrl: geminiGatewayBaseUrl(gateway),
+            extraHeaders: cloudflareGatewayHeaders(gateway),
+          })
+        : writerForRoute(route),
+    ),
     stages.map((route) => `${route.provider}:${route.model}`),
   );
 }
