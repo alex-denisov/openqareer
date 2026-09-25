@@ -69,6 +69,28 @@ describe('VacancyInfoModal (B266)', () => {
     expect(document.body.textContent).toContain('Figma');
   });
 
+  it('says the text is only the beginning when the server marks it truncated (B266)', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            id: 'c',
+            description: 'Lead the platform…',
+            truncated: true,
+            skills: [],
+            responsibilities: [],
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    await act(async () => {
+      root.render(<VacancyInfoModal isOpen onClose={vi.fn()} cluster={cluster()} />);
+    });
+    expect(document.body.textContent).toContain('Lead the platform…');
+    expect(document.body.textContent).toContain('Площадка отдала только начало описания');
+  });
+
   it('shows a fallback instead of nothing when no text exists anywhere', async () => {
     vi.spyOn(apiClient, 'apiFetch').mockRejectedValue(new Error('offline'));
     await act(async () => {

@@ -94,6 +94,7 @@ function VacancyDescription({
       </p>
     );
   }
+  const partial = detail.status === 'ready' && detail.detail.truncated;
   return (
     <div className="vacancies-info-description">
       {text
@@ -103,6 +104,11 @@ function VacancyDescription({
         .map((paragraph, index) => (
           <p key={index}>{paragraph}</p>
         ))}
+      {partial ? (
+        <p className="is-empty">
+          Площадка отдала только начало описания — полный текст откройте на площадке.
+        </p>
+      ) : null}
     </div>
   );
 }

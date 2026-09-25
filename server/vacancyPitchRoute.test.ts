@@ -271,9 +271,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     const { cookie, candidateId } = await login(app);
     candidates.importResumeEvidence(candidateId, {
       sourceLabel: 'test-import',
-      entries: [
-        { memoryId: 'mem-201', domain: 'skill', statement: 'Владею TypeScript, Node.js' },
-      ],
+      entries: [{ memoryId: 'mem-201', domain: 'skill', statement: 'Владею TypeScript, Node.js' }],
     });
     candidates.reviewMemories(candidateId, ['mem-201'], 'confirm');
 
@@ -299,9 +297,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     const { cookie, candidateId } = await login(app);
     candidates.importResumeEvidence(candidateId, {
       sourceLabel: 'test-import',
-      entries: [
-        { memoryId: 'mem-202', domain: 'skill', statement: 'Владею TypeScript, Node.js' },
-      ],
+      entries: [{ memoryId: 'mem-202', domain: 'skill', statement: 'Владею TypeScript, Node.js' }],
     });
     candidates.reviewMemories(candidateId, ['mem-202'], 'confirm');
 
@@ -466,6 +462,38 @@ describe('GET /api/v1/candidate/vacancies/:id/detail (B266)', () => {
       truncated: false,
     });
     expect(response.json().data.description).toBe(fullText.trim());
+  });
+
+  it('marks an old Jobicy record whose full text is only the excerpt as truncated (B266)', async () => {
+    const jobicyCluster = { ...cluster, id: 'cluster-src-jobicy:151631' };
+    const { app, poolStore } = await createApp([jobicyCluster]);
+    const excerpt = 'We are hiring a VP of Technology to lead platform, delivery and…';
+    const vacancies = normalizeJsonSource(
+      'src-jobicy',
+      {
+        jobs: [
+          {
+            id: 151631,
+            url: 'https://jobicy.com/jobs/151631-vp-technology',
+            jobTitle: 'VP of Technology',
+            companyName: 'Arctic Wolf',
+            jobExcerpt: excerpt,
+            jobDescription: excerpt,
+            pubDate: '2026-09-17 00:00:00',
+          },
+        ],
+      },
+      { observedAt: '2026-09-17T00:00:00.000Z' },
+    );
+    poolStore.replaceSourceSlice('src-jobicy', vacancies);
+    const { cookie } = await login(app);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/vacancies/cluster-src-jobicy%3A151631/detail',
+      headers: { cookie },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({ description: excerpt, truncated: true });
   });
 
   it('marks the cluster summary as truncated when the source record is unavailable', async () => {

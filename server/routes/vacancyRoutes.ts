@@ -437,7 +437,13 @@ const handleMatchedVacancies: Handler = async (
     targetRoles,
     targetLevel,
   );
-  const matched = finishMatchedVacancies(snapshot, targetRoles, campaign, candidateStore, candidate.id);
+  const matched = finishMatchedVacancies(
+    snapshot,
+    targetRoles,
+    campaign,
+    candidateStore,
+    candidate.id,
+  );
   // Гипотеза роли (B247, срез 2): порог считается по тому же снимку, что и
   // сам подбор — до фильтра по роли/гео, иначе роль без вакансий в её же
   // рынке выглядела бы гипотезой из-за чужого фильтра, а не своего счёта.
@@ -651,13 +657,21 @@ const vacancyPitchInputSchema = z
  * list trims `descriptionSummary` for payload size; the source vacancy keeps
  * the full description under `cluster-<vacancyId>`, so one read serves it.
  */
+/** Площадки вроде Jobicy до C05 клали выжимку и в полный текст: короткий текст с многоточием — не описание. */
+const EXCERPT_MAX_CHARS = 600;
+function looksLikeExcerpt(text: string): boolean {
+  return text.length < EXCERPT_MAX_CHARS && /(?:…|\.\.\.)\s*$/u.test(text);
+}
+
 const handleVacancyDetail: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config, multiSourceEngine } = deps;
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const clusterId = (request.params as { id: string }).id;
   const cluster = multiSourceEngine.getActiveCluster(clusterId);
-  const sourceId = clusterId.startsWith('cluster-') ? clusterId.slice('cluster-'.length) : clusterId;
+  const sourceId = clusterId.startsWith('cluster-')
+    ? clusterId.slice('cluster-'.length)
+    : clusterId;
   const full = multiSourceEngine.getVacancy?.(sourceId);
   if (!cluster && !full) {
     if (multiSourceEngine.isKnownVacancyGone(clusterId)) {
@@ -672,7 +686,7 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
     (longest, value) => (value.length > longest.length ? value : longest),
     '',
   );
-  const truncated = description.length === 0;
+  const truncated = description.length === 0 || looksLikeExcerpt(description);
   return {
     data: {
       id: clusterId,
