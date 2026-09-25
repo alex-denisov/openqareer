@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Idempotent upsert of allow-listed keys into the application env file.
+#
+# Reads KEY=VALUE lines on stdin (never on the command line, which is visible
+# in `ps`), replaces or appends each key, keeps a timestamped backup, restores
+# root:openqareer-deploy 0640 and prints only key names and what happened.
+# Running it again with the same input changes nothing. The service is not
+# restarted here: the caller does that once, after every key is in place.
+set -Eeuo pipefail
+
+readonly ENV_FILE="${OPENQAREER_ENV_FILE:-/etc/openqareer/openqareer.env}"
+readonly ENV_OWNER="${OPENQAREER_ENV_OWNER:-root:openqareer-deploy}"
+readonly ALLOWED_KEYS='^OPENQAREER_TELEGRAM_(BOT_TOKEN|OWNER_CHAT_ID)$'
+readonly VALUE_PATTERN='^[A-Za-z0-9:_.-]{1,200}$'
+
+fail() {
+  printf 'openqareer-env-set: %s\n' "$1" >&2
+  exit 1
+}
+
+[[ -f "$ENV_FILE" ]] || fail "$ENV_FILE does not exist"
+
+candidate="$(mktemp)"
+trap 'rm -f -- "$candidate"' EXIT
+cp -- "$ENV_FILE" "$candidate"
+
+changed=0
+while IFS= read -r line || [[ -n "$line" ]]; do
+  [[ -z "$line" || "$line" == \#* ]] && continue
+  key="${line%%=*}"
+  value="${line#*=}"
+  [[ "$key" =~ $ALLOWED_KEYS ]] || fail "key not allowed: $key"
+  [[ "$value" =~ $VALUE_PATTERN ]] || fail "value for $key has an unexpected shape"
+  if grep -qxF -- "$key=$value" "$candidate"; then
+    printf '%s unchanged\n' "$key"
+    continue
+  fi
+  filtered="$(mktemp)"
+  grep -v -- "^$key=" "$candidate" >"$filtered" || true
+  printf '%s=%s\n' "$key" "$value" >>"$filtered"
+  mv -- "$filtered" "$candidate"
+  printf '%s set\n' "$key"
+  changed=1
+done
+
+if [[ "$changed" -eq 0 ]]; then
+  printf 'no changes\n'
+  exit 0
+fi
+
+backup="$ENV_FILE.bak-$(date -u +%Y%m%dT%H%M%SZ)"
+cp -p -- "$ENV_FILE" "$backup"
+chmod 0600 "$backup"
+install -m 0640 "$candidate" "$ENV_FILE"
+chown "$ENV_OWNER" "$ENV_FILE"
+printf 'written; backup %s\n' "$backup"
