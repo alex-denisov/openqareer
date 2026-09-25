@@ -1,19 +1,14 @@
 import { useState } from 'react';
 import { ChatCircleDots, Check } from '@phosphor-icons/react';
 import { CURRENT_PLAN, tariffPackages as packages } from './tariffPackages';
+import { usePlanRequests, type PlanRequestState } from './planRequestApi';
 
-
-export function CareerTariffsView({
-  onOpenCoach,
-}: {
-  onOpenCoach: () => void;
-}) {
+export function CareerTariffsView({ onOpenCoach }: { onOpenCoach: () => void }) {
   // Экран открывается на плане, который у кандидата действительно есть.
   // Раньше он открывался на «Настройке поиска» — платном тарифе, который никто
   // не подключал и подключить нельзя: оплаты в продукте нет.
-  const [selected, setSelected] = useState<(typeof packages)[number]['id']>(
-    CURRENT_PLAN.id,
-  );
+  const [selected, setSelected] = useState<(typeof packages)[number]['id']>(CURRENT_PLAN.id);
+  const requests = usePlanRequests();
   const plan = packages.find((item) => item.id === selected) ?? packages[0];
   return (
     <div className="career-view career-simple-view">
@@ -25,11 +20,7 @@ export function CareerTariffsView({
             Оплата не подключена: сейчас у всех план «{CURRENT_PLAN.name}».
           </p>
         </div>
-        <button
-          className="career-icon-text-button"
-          type="button"
-          onClick={onOpenCoach}
-        >
+        <button className="career-icon-text-button" type="button" onClick={onOpenCoach}>
           <ChatCircleDots size={18} aria-hidden="true" />
           Помочь выбрать
         </button>
@@ -51,13 +42,17 @@ export function CareerTariffsView({
                 ) : null}
               </span>
               <strong>{item.price}</strong>
-              <small>{item.status} · {item.time}</small>
+              <small>
+                {item.status} · {item.time}
+              </small>
             </button>
           ))}
         </div>
         <section className="career-plan-detail" aria-live="polite">
           <div>
-            <p className="career-plan-time">{plan.status} · {plan.time}</p>
+            <p className="career-plan-time">
+              {plan.status} · {plan.time}
+            </p>
             <h2>{plan.name}</h2>
             <strong className="career-plan-price">{plan.price}</strong>
           </div>
@@ -74,14 +69,47 @@ export function CareerTariffsView({
             <p className="career-plan-standing">
               Это ваш план сейчас. Всё перечисленное работает без оплаты.
             </p>
+          ) : plan.id === 'setup' ? (
+            <PlanRequestAction
+              state={requests.states.consultant ?? 'idle'}
+              onSend={() => requests.send('consultant')}
+            />
           ) : (
             <p className="career-plan-standing">
-              Оплата не подключена — перейти на этот план пока нельзя. Мы не
-              берём деньги за то, чего ещё не умеем делать.
+              Оплата не подключена — перейти на этот план пока нельзя. Мы не берём деньги за то,
+              чего ещё не умеем делать.
             </p>
           )}
         </section>
       </div>
     </div>
+  );
+}
+
+/** The request is shown as sent only after the server stored it (B266). */
+function PlanRequestAction({ state, onSend }: { state: PlanRequestState; onSend: () => void }) {
+  if (state === 'sent') {
+    return (
+      <p className="career-plan-standing" role="status">
+        Заявка отправлена — свяжемся в течение рабочего дня
+      </p>
+    );
+  }
+  return (
+    <>
+      <button
+        className="career-primary-button"
+        type="button"
+        disabled={state === 'sending'}
+        onClick={onSend}
+      >
+        {state === 'sending' ? 'Отправляем…' : 'Оставить заявку'}
+      </button>
+      {state === 'failed' ? (
+        <p className="career-plan-standing" role="alert">
+          Заявка не ушла — проверьте соединение и попробуйте ещё раз.
+        </p>
+      ) : null}
+    </>
   );
 }

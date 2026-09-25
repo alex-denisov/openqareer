@@ -661,10 +661,52 @@ describe('рельс «Пульт»', () => {
     const html = railHtml();
 
     expect(html).toContain(`План «${CURRENT_PLAN.name}»`);
-    // B248: тариф больше не карточка рядом с разделами — один аватар внизу
-    // рельса, тариф открывается из панели аккаунта (CareerAccountPanel.test.tsx).
-    expect(html).not.toContain('career-plan-card');
     expect(html).toContain('career-account-button');
+  });
+
+  /**
+   * Владелец, 2026-09-25 — заменяет решение B248 «тарифы только из панели
+   * аккаунта»: тарифы должны быть видны и продавать, а не прятаться за
+   * аватаром. Свёрнутый рельс показывает только иконку с именем плана в
+   * доступном имени; клик открывает существующий экран тарифов.
+   */
+  it('показывает иконку плана в свёрнутом рельсе, ведущую на экран тарифов', () => {
+    const html = railHtml();
+    const plan = html.match(/<button class="career-rail-plan[^]*?<\/button>/u);
+
+    expect(plan).not.toBeNull();
+    expect(plan![0]).toContain(`aria-label="Тарифы, план ${CURRENT_PLAN.name}"`);
+    expect(plan![0]).not.toContain('career-rail-plan-text');
+  });
+
+  it('подсвечивает пункт плана как активный на экране тарифов', () => {
+    const html = renderToStaticMarkup(
+      <CareerWorkspaceShell
+        session={{
+          username: 'alexey',
+          email: 'alexey@example.com',
+          displayName: 'Мария Иванова',
+          role: 'candidate',
+          isTest: false,
+          candidateId: 'candidate-1',
+        }}
+        workspace={prepareCareerWorkspace({
+          resumeText:
+            'Синтетический профиль кандидата с достаточно длинным описанием для проверки рельса.',
+          resumeSource: 'text',
+          targetDirection: 'Руководитель продукта',
+          regions: ['ru'],
+          currentSituation: 'Проверяю навигацию.',
+          constraints: '',
+          urgency: 'active',
+        })}
+        initialView="tariffs"
+      />,
+    );
+    const plan = html.match(/<button class="career-rail-plan[^]*?<\/button>/u);
+
+    expect(plan).not.toBeNull();
+    expect(plan![0]).toContain('is-active');
   });
 
   it('не тратит пункт меню на ручку раскрытия', () => {

@@ -508,6 +508,9 @@ export interface CandidateStore {
 
   /** `GET /today`: stage moves only the company could have caused since `since`. */
   countCompanyEventsSince(candidateId: string, since: string): number;
+  /** B266: a paid-plan request, idempotent per candidate and plan. */
+  requestPlan?(candidateId: string, planId: PlanRequestId, note?: string): StoredPlanRequest;
+  listPlanRequests?(candidateId: string): StoredPlanRequest[];
 
   getWorkPreferenceRun(candidateId: string): StoredWorkPreferenceRun | null;
 
@@ -560,4 +563,11 @@ export interface CandidateStore {
   exportCandidate(candidateId: string): CandidateExport;
   deleteCandidate(candidateId: string): boolean;
   close(): void;
+}
+
+export type PlanRequestId = 'consultant' | 'automation';
+
+export interface StoredPlanRequest {
+  readonly planId: PlanRequestId;
+  readonly createdAt: string;
 }

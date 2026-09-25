@@ -35,6 +35,7 @@ import type {
   StoredNativeSourceConnection,
   NativeSourceReceiptInput,
 } from './candidateStore';
+import { insertPlanRequest, selectPlanRequests } from './store/planRequestStore';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import { SealedText } from './sealedText';
 import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
@@ -491,6 +492,9 @@ export class SqliteCandidateStore implements CandidateStore {
   declare getSinceLastVisit: ApplicationTrackerMethods['getSinceLastVisit'];
   declare countSystemClosuresSince: ApplicationTrackerMethods['countSystemClosuresSince'];
   declare countCompanyEventsSince: ApplicationTrackerMethods['countCompanyEventsSince'];
+
+  requestPlan: CandidateStore['requestPlan'] = (id, plan, note) => insertPlanRequest(this.database, id, plan, note);
+  listPlanRequests: CandidateStore['listPlanRequests'] = (id) => selectPlanRequests(this.database, id);
 
   saveWorkPreferenceRun(
     candidateId: string,

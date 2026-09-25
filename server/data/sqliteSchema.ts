@@ -1034,3 +1034,19 @@ CREATE TABLE IF NOT EXISTS candidate_media (
 // B251 срез 1 — модель трекера откликов. Вынесена в `applicationTrackerSchema.ts`,
 // чтобы держать этот файл под гейтом 800 строк; см. подробности там.
 export { MIGRATION_33 } from './applicationTrackerSchema';
+
+/**
+ * B266 — a candidate asks for a paid plan before payment is wired. One row per
+ * candidate and plan; a new small table, no change to existing ones, so it
+ * adds nothing to the deploy health window.
+ */
+export const MIGRATION_34 = `
+CREATE TABLE IF NOT EXISTS plan_requests (
+  id TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL,
+  plan_id TEXT NOT NULL,
+  note TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(candidate_id, plan_id)
+) STRICT;
+`;

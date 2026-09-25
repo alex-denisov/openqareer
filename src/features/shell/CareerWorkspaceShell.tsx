@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
-import { CaretLeft, CaretRight, ShieldCheck } from '@phosphor-icons/react';
+import { CaretLeft, CaretRight, Crown, ShieldCheck } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import {
   VacanciesIcon,
@@ -47,6 +47,8 @@ interface CareerWorkspaceShellProps {
   onRetrySession?: () => void;
   onOpenLogin?: () => void;
   onSessionChange?: (session: AuthUser | null) => void;
+  /** Deep-links the shell straight to a section, e.g. a «Тарифы» link. */
+  initialView?: ShellView;
 }
 
 type SectionIcon = (props: SectionIconProps) => ReactElement;
@@ -170,8 +172,9 @@ export function CareerWorkspaceShell({
   onRetrySession = () => undefined,
   onOpenLogin = () => undefined,
   onSessionChange = () => undefined,
+  initialView = 'today',
 }: CareerWorkspaceShellProps) {
-  const [activeView, setActiveView] = useState<ShellView>('today');
+  const [activeView, setActiveView] = useState<ShellView>(initialView);
   const [expertOpen, setExpertOpen] = useState(false);
   const [cabinetRevision, setCabinetRevision] = useState(0);
   const [accountOpen, setAccountOpen] = useState(
@@ -382,11 +385,27 @@ export function CareerWorkspaceShell({
               <span>Админка</span>
             </a>
           ) : null}
-          {/* B248 (owner decision 2026-09-23) — a single avatar, not a rail
-              item beside it: тариф и аккаунт живут в одной панели, which
-              opens on click. The plan name still reaches assistive tech via
-              the accessible name, since nothing here is rendered until the
-              panel opens. */}
+          {/* Owner decision 2026-09-25, replacing B248 «tariffs only from the
+              account panel»: tariffs must be visible and sell, not hide
+              behind the avatar. Expanded rail names the plan and offers
+              «Улучшить»; collapsed rail keeps the icon alone, with the plan
+              in its accessible name. */}
+          <button
+            className={`career-rail-plan ${activeView === 'tariffs' ? 'is-active' : ''}`}
+            type="button"
+            onClick={() => navigate('tariffs')}
+            aria-current={activeView === 'tariffs' ? 'page' : undefined}
+            aria-label={`Тарифы, план ${planName}`}
+            title={`Тарифы. План «${planName}»`}
+          >
+            <Crown size={railExpanded ? 18 : 20} aria-hidden="true" />
+            {railExpanded ? (
+              <span className="career-rail-plan-text">
+                <b>План · {planName}</b>
+                <span>Улучшить</span>
+              </span>
+            ) : null}
+          </button>
           <button
             className="career-account-button"
             type="button"
