@@ -220,8 +220,14 @@ function runRecruiterIntelligence(): void {
       if (result.claimed > 0) app.log.info(result, 'recruiter-intelligence-completed');
     })
     .catch((error: unknown) => {
+      // The SQLite message and code name the cause (locked, busy, schema);
+      // they carry no candidate data (B266: 273 failures a day, cause unseen).
       app.log.error(
-        { errorName: error instanceof Error ? error.name : 'UnknownError' },
+        {
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+          errorCode: (error as { code?: unknown } | null)?.code,
+          errorMessage: error instanceof Error ? error.message.slice(0, 200) : undefined,
+        },
         'recruiter-intelligence-failed',
       );
     });

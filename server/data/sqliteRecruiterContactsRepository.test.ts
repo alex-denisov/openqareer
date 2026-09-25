@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { RecruiterContact } from '../../shared/recruiterContact';
 import { SqliteRecruiterContactsRepository } from './sqliteRecruiterContactsRepository';
 
@@ -157,5 +157,22 @@ describe('SqliteRecruiterContactsRepository', () => {
     expect(repo.claimJobs()).toEqual([]);
     repo.finishJob(job.id, 'failed', 'vacancy_not_found');
     expect(repo.getJob('candidate-a', 'vac-101')?.errorCode).toBe('vacancy_not_found');
+  });
+
+  // B266: the worker polls every 5 s; an empty queue must not take the write
+  // lock the maintenance process competes for (273 lock failures a day on prod).
+  it('does not open a write transaction when nothing is queued', () => {
+    const { repo, db } = createRepo();
+    const exec = vi.spyOn(db, 'exec');
+    expect(repo.claimJobs()).toEqual([]);
+    expect(exec.mock.calls.some(([sql]) => /BEGIN/u.test(String(sql)))).toBe(false);
+  });
+
+  it('still reclaims a stale running job when nothing is queued', () => {
+    const { repo } = createRepo();
+    repo.enqueueJob('candidate-a', 'vac-101', '2026-09-22T10:00:00.000Z');
+    repo.claimJobs(1, '2026-09-22T10:00:01.000Z');
+    const reclaimed = repo.claimJobs(1, '2026-09-22T10:30:00.000Z');
+    expect(reclaimed).toHaveLength(1);
   });
 });

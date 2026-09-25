@@ -291,9 +291,12 @@ export class SqliteRecruiterContactsRepository {
 
   claimJobs(limit = 1, now = new Date().toISOString()): RecruiterContactJob[] {
     const boundedLimit = Math.max(1, Math.min(4, Math.trunc(limit)));
+    const staleBefore = new Date(new Date(now).getTime() - 10 * 60 * 1_000).toISOString();
+    // The worker polls every 5 s: a read decides whether there is work at
+    // all, so an empty queue never takes the write lock (B266).
+    if (!this.hasClaimableJob(staleBefore)) return [];
     this.database.exec('BEGIN IMMEDIATE');
     try {
-      const staleBefore = new Date(new Date(now).getTime() - 10 * 60 * 1_000).toISOString();
       this.database
         .prepare(
           `UPDATE recruiter_contact_jobs
@@ -327,6 +330,19 @@ export class SqliteRecruiterContactsRepository {
       this.database.exec('ROLLBACK');
       throw error;
     }
+  }
+
+  private hasClaimableJob(staleBefore: string): boolean {
+    return (
+      this.database
+        .prepare(
+          `SELECT 1 FROM recruiter_contact_jobs
+            WHERE status = 'queued'
+               OR (status = 'running' AND started_at IS NOT NULL AND started_at <= ?)
+            LIMIT 1`,
+        )
+        .get(staleBefore) !== undefined
+    );
   }
 
   finishJob(jobId: string, status: Extract<RecruiterContactJobStatus, 'ready' | 'failed'>, errorCode?: string): void {
