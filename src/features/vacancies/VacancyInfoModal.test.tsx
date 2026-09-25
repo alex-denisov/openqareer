@@ -77,7 +77,7 @@ describe('VacancyInfoModal (B266)', () => {
   });
 
   it('opens the source link through the shared external-link utility, not a dead anchor', () => {
-    const spy = vi.spyOn(openExternalLinkModule, 'openExternalLink').mockResolvedValue();
+    const spy = vi.spyOn(openExternalLinkModule, 'openExternalLink').mockResolvedValue(true);
     act(() => {
       root.render(<VacancyInfoModal isOpen onClose={vi.fn()} cluster={cluster()} />);
     });

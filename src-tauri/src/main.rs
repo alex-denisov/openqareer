@@ -68,6 +68,26 @@ async fn stop_tunnel(state: State<'_, AppState>) -> Result<TunnelStatusReport, S
     state.tunnel.stop().await
 }
 
+/// Opens a third-party link (vacancy board, source page) in the candidate's
+/// default browser (B266). A WebView swallows `target="_blank"`, and only
+/// http(s) may ever reach the OS: vacancy URLs come from external boards.
+#[tauri::command]
+fn open_external_url(app: AppHandle, url: String) -> Result<(), String> {
+    let parsed = external_web_url(&url)?;
+    #[allow(deprecated)]
+    tauri_plugin_shell::ShellExt::shell(&app)
+        .open(parsed.as_str(), None)
+        .map_err(|error| format!("open_external_url: {error}"))
+}
+
+fn external_web_url(raw: &str) -> Result<Url, String> {
+    let parsed = Url::parse(raw).map_err(|_| "open_external_url: not a URL".to_string())?;
+    match parsed.scheme() {
+        "https" | "http" => Ok(parsed),
+        _ => Err("open_external_url: only http(s) links open outside the app".to_string()),
+    }
+}
+
 #[tauri::command]
 async fn execute_local_action(request: LocalActionRequest) -> Result<LocalActionResult, String> {
     execute_candidate_action_safely(request).await
@@ -324,6 +344,7 @@ fn main() {
         .manage(app_state)
         .manage(CandidateSessionAccount::default())
         .invoke_handler(tauri::generate_handler![
+            open_external_url,
             probe_network_status,
             get_tunnel_status,
             start_tunnel,
@@ -370,6 +391,24 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn external_links_are_web_only() {
+        assert!(super::external_web_url("https://jobs.example.com/1").is_ok());
+        assert!(super::external_web_url("http://jobs.example.com/1").is_ok());
+        for bad in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "smb://h/s",
+            "vscode://x",
+            "nope",
+        ] {
+            assert!(
+                super::external_web_url(bad).is_err(),
+                "{bad} must be refused"
+            );
+        }
+    }
+
     use super::*;
 
     #[test]

@@ -90,7 +90,7 @@ describe('VacancyDetailPanel (B250)', () => {
   });
 
   it('opens the source through the shared external-link utility and records the click', () => {
-    const openSpy = vi.spyOn(openExternalLinkModule, 'openExternalLink').mockResolvedValue();
+    const openSpy = vi.spyOn(openExternalLinkModule, 'openExternalLink').mockResolvedValue(true);
     const record = vi.fn();
     const applications = {
       applications: [],
