@@ -662,11 +662,19 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
     }
     return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
   }
-  const description = (full?.fullDescription ?? full?.description ?? cluster?.descriptionSummary ?? '').trim();
+  const sourceDescriptions = [full?.fullDescription, full?.description]
+    .map((value) => value?.trim() ?? '')
+    .filter(Boolean);
+  const description = sourceDescriptions.reduce(
+    (longest, value) => (value.length > longest.length ? value : longest),
+    '',
+  );
+  const truncated = description.length === 0;
   return {
     data: {
       id: clusterId,
-      description,
+      description: description || cluster?.descriptionSummary?.trim() || '',
+      truncated,
       skills: cluster?.skills?.length ? cluster.skills : (full?.requiredSkills ?? []),
       responsibilities: full?.responsibilities ?? [],
     },

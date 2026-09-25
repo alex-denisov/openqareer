@@ -11,6 +11,7 @@ import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
 import { MemoryVacancyPoolStore } from './vacancies/memoryVacancyPoolStore';
 import type { VacancyCluster } from './domain/unifiedVacancy';
 import type { CoverLetterWriter } from './providers/coverLetterWriter';
+import { normalizeJsonSource } from './vacancies/jsonSourceAdapters';
 
 const resources: Array<{
   app: Awaited<ReturnType<typeof buildApp>>;
@@ -103,7 +104,7 @@ async function createApp(
   });
 
   resources.push({ app, auth, candidates, directory });
-  return { app, candidates, multiSourceEngine };
+  return { app, candidates, multiSourceEngine, poolStore };
 }
 
 async function login(app: Awaited<ReturnType<typeof buildApp>>) {
@@ -429,20 +430,58 @@ describe('GET /api/v1/candidate/vacancies/:id/detail (B266)', () => {
     expect(response.statusCode).toBe(401);
   });
 
-  it('returns the full source description, not the trimmed summary', async () => {
-    const { app, multiSourceEngine } = await createApp([cluster]);
+  it('returns the full pooled Jobicy description, not its excerpt or the cluster summary', async () => {
+    const jobicyCluster = { ...cluster, id: 'cluster-src-jobicy:151630' };
+    const { app, poolStore } = await createApp([jobicyCluster]);
+    const excerpt = 'Short source excerpt ending early…';
     const fullText = 'Full posting: lead 250 engineers across three regions. '.repeat(20);
-    multiSourceEngine.getVacancy = ((id: string) =>
-      id === '77' ? { fullDescription: fullText, requiredSkills: [] } : undefined) as never;
+    const vacancies = normalizeJsonSource(
+      'src-jobicy',
+      {
+        jobs: [
+          {
+            id: 151630,
+            url: 'https://jobicy.com/jobs/151630-vp-technology',
+            jobTitle: 'VP of Technology',
+            companyName: 'Arctic Wolf',
+            jobExcerpt: excerpt,
+            jobDescription: fullText,
+            pubDate: '2026-09-17 00:00:00',
+          },
+        ],
+      },
+      { observedAt: '2026-09-17T00:00:00.000Z' },
+    );
+    poolStore.replaceSourceSlice('src-jobicy', vacancies);
+    const { cookie } = await login(app);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/vacancies/cluster-src-jobicy%3A151630/detail',
+      headers: { cookie },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({
+      id: 'cluster-src-jobicy:151630',
+      skills: ['Cloud', 'P&L'],
+      truncated: false,
+    });
+    expect(response.json().data.description).toBe(fullText.trim());
+  });
+
+  it('marks the cluster summary as truncated when the source record is unavailable', async () => {
+    const { app } = await createApp([cluster]);
     const { cookie } = await login(app);
     const response = await app.inject({
       method: 'GET',
       url: '/api/v1/candidate/vacancies/cluster-77/detail',
       headers: { cookie },
     });
+
     expect(response.statusCode).toBe(200);
-    expect(response.json().data).toMatchObject({ id: 'cluster-77', skills: ['Cloud', 'P&L'] });
-    expect(response.json().data.description).toBe(fullText.trim());
+    expect(response.json().data).toMatchObject({
+      description: 'Short summary only',
+      truncated: true,
+    });
   });
 
   it('answers 404 for an unknown vacancy', async () => {

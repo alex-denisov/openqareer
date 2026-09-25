@@ -4,6 +4,7 @@ import { apiFetch, readData } from '../coach/apiClient';
 export interface VacancyDetailText {
   readonly id: string;
   readonly description: string;
+  readonly truncated: boolean;
   readonly skills: readonly string[];
   readonly responsibilities: readonly string[];
 }

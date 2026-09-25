@@ -139,6 +139,7 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
         location: text(job.jobGeo) || undefined,
         isRemote: true,
         description: text(job.jobExcerpt) || text(job.jobDescription),
+        fullDescription: text(job.jobDescription) || undefined,
         skills: stringList(job.jobIndustry),
         employmentType: firstOf(job.jobType),
         experienceLevel: text(job.jobLevel) || undefined,

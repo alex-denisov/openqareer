@@ -36,6 +36,7 @@ export function buildJsonVacancy(input: {
   location?: string;
   isRemote: boolean;
   description: string;
+  fullDescription?: string;
   skills: string[];
   employmentType?: string;
   experienceLevel?: string;
@@ -48,6 +49,9 @@ export function buildJsonVacancy(input: {
   // адрес пуст и запись отсеивается как непригодная (B218 security-review).
   const url = /^https?:\/\//i.test(input.url) ? input.url : '';
   const id = `${input.sourceId}:${input.externalId || url}`;
+  const fullDescription = input.fullDescription
+    ? htmlToFeedText(input.fullDescription)
+    : undefined;
   return {
     id,
     fingerprint: id,
@@ -60,6 +64,7 @@ export function buildJsonVacancy(input: {
     // on the way out. Left as it was, the markup reached the candidate and fed
     // the skill extractor and the matcher (B164 prod walk).
     description: htmlToFeedText(input.description),
+    ...(fullDescription ? { fullDescription } : {}),
     requiredSkills: input.skills,
     employmentType: input.employmentType,
     experienceLevel: input.experienceLevel,
