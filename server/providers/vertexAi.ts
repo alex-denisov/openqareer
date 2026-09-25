@@ -131,3 +131,23 @@ export class VertexTokenProvider {
     return body.access_token;
   }
 }
+
+/** Пауза перед повтором после 429: общая мощность Vertex освобождается за секунды. */
+export const VERTEX_RETRY_DELAY_MS = 1_000;
+
+/**
+ * Vertex отвечает 429 при нехватке общей мощности (замеры 25.09: примерно
+ * каждый третий вызов подряд). Повтор после паузы — та же логика для всех
+ * ступеней Gemini.
+ */
+export async function retryOn429(
+  send: () => Promise<Response>,
+  retries: number,
+  delayMs: number = VERTEX_RETRY_DELAY_MS,
+): Promise<Response> {
+  const response = await send();
+  if (response.status !== 429 || retries <= 0) return response;
+  await response.body?.cancel();
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+  return retryOn429(send, retries - 1, delayMs);
+}

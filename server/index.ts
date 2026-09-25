@@ -175,6 +175,7 @@ const app = await buildApp({
     // Голова называния — Gemini, и без тоннеля она не строится (решение
     // владельца 2026-09-03).
     cloudflareGateway: config.cloudflareGateway,
+    vertex: config.vertex,
     // Названные роли переживают рестарт: без хранилища каждый деплой снова звал
     // модель и упирался в исчерпанную бесплатную квоту (INC-035, B191).
     cacheStore: roleNamingCache,

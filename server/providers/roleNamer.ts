@@ -1,3 +1,9 @@
+import {
+  retryOn429,
+  VertexTokenProvider,
+  vertexPublisherBaseUrl,
+  type VertexConfig,
+} from './vertexAi';
 import { createHash } from 'node:crypto';
 import { HygienicRoleNamer } from './hygienicRoleNamer';
 import OpenAI from 'openai';
@@ -15,7 +21,7 @@ import {
 import { geminiResponseSchema } from './geminiSchema';
 import type { NamedRole } from '../../shared/roleProposals';
 import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
-import { selectProviderQueue, type ProviderQueueEntry } from './providerQueue';
+import { selectProviderQueue, type ProviderQueueEntry, type ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
 /** Весь профиль в этот вызов не едет: роли называются по подтверждённым фактам. */
@@ -270,6 +276,13 @@ export interface GeminiRoleNamerOptions {
   model: string;
   baseUrl: string;
   extraHeaders?: Record<string, string>;
+  /** Vertex: `Authorization` с токеном сервисного аккаунта вместо ключа AI Studio. */
+  authHeaders?: () => Promise<Record<string, string>>;
+  /** Gemini 3 без ограничения тратит весь вывод на рассуждение (замер 25.09). */
+  thinkingLevel?: 'low' | 'high';
+  /** Vertex: повторы после 429 (нехватка общей мощности). */
+  retriesOn429?: number;
+  retryDelayMs?: number;
   /** Имя ступени в очереди — оно же уходит в провенанс ответа. */
   stage?: string;
   timeoutMs?: number;
@@ -283,23 +296,19 @@ export class GeminiRoleNamer implements RoleNamer {
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
-  async nameRoles(
-    facts: readonly CandidateFact[],
-    language: RoleNameLanguage,
-  ): Promise<RoleNamingOutcome> {
-    if (facts.length === 0) return { roles: [] };
-    const stage = this.options.stage ?? this.options.model;
-    try {
-      const response = await this.fetchImpl(
-        `${this.options.baseUrl.replace(/\/+$/u, '')}/models/${encodeURIComponent(
-          this.options.model,
-        )}:generateContent`,
-        {
+  private send(facts: readonly CandidateFact[], language: RoleNameLanguage): Promise<Response> {
+    const url = `${this.options.baseUrl.replace(/\/+$/u, '')}/models/${encodeURIComponent(
+      this.options.model,
+    )}:generateContent`;
+    return retryOn429(
+      async () =>
+        this.fetchImpl(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-goog-api-key': this.options.apiKey,
+            ...(this.options.apiKey ? { 'x-goog-api-key': this.options.apiKey } : {}),
             ...(this.options.extraHeaders ?? {}),
+            ...((await this.options.authHeaders?.()) ?? {}),
           },
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: roleNamingInstructions(language) }] },
@@ -309,11 +318,26 @@ export class GeminiRoleNamer implements RoleNamer {
               // Gemini отвергает ограничения длины и размера (B183); годность
               // ответа всё равно решает zod.
               responseJsonSchema: geminiResponseSchema(ROLE_NAMING_JSON_SCHEMA.schema),
+              ...(this.options.thinkingLevel
+                ? { thinkingConfig: { thinkingLevel: this.options.thinkingLevel } }
+                : {}),
             },
           }),
           signal: AbortSignal.timeout(this.options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS),
-        },
-      );
+        }),
+      this.options.retriesOn429 ?? 0,
+      this.options.retryDelayMs,
+    );
+  }
+
+  async nameRoles(
+    facts: readonly CandidateFact[],
+    language: RoleNameLanguage,
+  ): Promise<RoleNamingOutcome> {
+    if (facts.length === 0) return { roles: [] };
+    const stage = this.options.stage ?? this.options.model;
+    try {
+      const response = await this.send(facts, language);
       if (!response.ok) {
         return { roles: [], failures: [await refusal(response, stage, this.options.apiKey)] };
       }
@@ -495,6 +519,8 @@ export interface RoleNamerConfig {
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
   /** Без тоннеля ступень Gemini не строится вовсе — как и у хода коуча. */
   readonly cloudflareGateway?: CloudflareGatewayConfig;
+  /** Gemini на Vertex — голова очереди называния, когда настроен (решение владельца 25.09). */
+  readonly vertex?: VertexConfig;
   /** Хранилище названных ролей: без него кэш теряется при каждом деплое (B191). */
   readonly cacheStore?: RoleNamingCacheStore;
 }
@@ -537,7 +563,8 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
         (route.provider === 'gemini' && config.cloudflareGateway !== undefined),
     ),
   );
-  if (stages.length === 0) return undefined;
+  const vertexStages = config.vertex ? [vertexRoleNamer(config.vertex)] : [];
+  if (stages.length === 0 && vertexStages.length === 0) return undefined;
 
   const gateway = config.cloudflareGateway;
   return new CachedRoleNamer(
@@ -545,33 +572,53 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
     // пережить рестарт вместе с ним (B210, B191).
     new HygienicRoleNamer({
       inner: new QueuedRoleNamer(
-        stages.map((route) =>
-          route.provider === 'gemini' && gateway
-            ? new GeminiRoleNamer({
-                apiKey: route.apiKey,
-                model: route.model,
-                stage: `${route.provider}:${route.model}`,
-                baseUrl: geminiGatewayBaseUrl(gateway),
-                extraHeaders: cloudflareGatewayHeaders(gateway),
-              })
-            : new LlmRoleNamer({
-                apiKey: route.apiKey,
-                model: route.model,
-                stage: `${route.provider}:${route.model}`,
-                baseUrl:
-                  route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
-                structuredOutput:
-                  modelRegistry[route.provider].models.find((item) => item.id === route.model)
-                    ?.structuredOutput ?? false,
-                // Условие имеет смысл только у пула: у названной модели OpenRouter
-                // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
-                requireParameters:
-                  route.provider === 'openrouter' && isMutableModelAlias(route.model),
-              }),
-        ),
-        stages.map((route) => `${route.provider}:${route.model}`),
+        [...vertexStages, ...stages.map((route) => routeRoleNamer(route, gateway))],
+        [
+          ...(config.vertex ? [`vertex:${config.vertex.model}`] : []),
+          ...stages.map((route) => `${route.provider}:${route.model}`),
+        ],
       ),
     }),
     { ...(config.cacheStore ? { store: config.cacheStore } : {}) },
   );
+}
+
+function vertexRoleNamer(vertex: VertexConfig): RoleNamer {
+  const tokens = new VertexTokenProvider(vertex);
+  return new GeminiRoleNamer({
+    apiKey: '',
+    model: vertex.model,
+    stage: `vertex:${vertex.model}`,
+    baseUrl: vertexPublisherBaseUrl(vertex),
+    authHeaders: async () => ({ Authorization: `Bearer ${await tokens.token()}` }),
+    thinkingLevel: 'low',
+    retriesOn429: 2,
+  });
+}
+
+/** Ступень называния по маршруту очереди: Gemini — через тоннель, остальные — chat-completions. */
+function routeRoleNamer(
+  route: ProviderRoute,
+  gateway: CloudflareGatewayConfig | undefined,
+): RoleNamer {
+  return route.provider === 'gemini' && gateway
+    ? new GeminiRoleNamer({
+        apiKey: route.apiKey,
+        model: route.model,
+        stage: `${route.provider}:${route.model}`,
+        baseUrl: geminiGatewayBaseUrl(gateway),
+        extraHeaders: cloudflareGatewayHeaders(gateway),
+      })
+    : new LlmRoleNamer({
+        apiKey: route.apiKey,
+        model: route.model,
+        stage: `${route.provider}:${route.model}`,
+        baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
+        structuredOutput:
+          modelRegistry[route.provider].models.find((item) => item.id === route.model)
+            ?.structuredOutput ?? false,
+        // Условие имеет смысл только у пула: у названной модели OpenRouter
+        // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
+        requireParameters: route.provider === 'openrouter' && isMutableModelAlias(route.model),
+      });
 }

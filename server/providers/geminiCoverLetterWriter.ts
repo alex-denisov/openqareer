@@ -11,6 +11,7 @@ import {
 } from './coverLetterWriter';
 import { geminiResponseSchema } from './geminiSchema';
 import { PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
+import { retryOn429 } from './vertexAi';
 
 export interface GeminiCoverLetterWriterOptions {
   /** Ключ AI Studio; у Vertex пусто — доступ даёт `authHeaders`. */
@@ -21,6 +22,7 @@ export interface GeminiCoverLetterWriterOptions {
   readonly thinkingLevel?: 'low' | 'high';
   /** Vertex отвечает 429 при нехватке общей мощности — один повтор помогает. */
   readonly retriesOn429?: number;
+  readonly retryDelayMs?: number;
   readonly model: string;
   readonly baseUrl: string;
   readonly stage?: string;
@@ -74,23 +76,23 @@ export class GeminiCoverLetterWriter implements CoverLetterWriter {
     }
   }
 
-  private async send(input: CoverLetterWriteInput, retries: number): Promise<Response> {
-    const response = await this.fetchImpl(this.endpoint(), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(this.options.apiKey ? { 'x-goog-api-key': this.options.apiKey } : {}),
-        ...(this.options.extraHeaders ?? {}),
-        ...((await this.options.authHeaders?.()) ?? {}),
-      },
-      body: JSON.stringify(requestBody(input, this.options.thinkingLevel)),
-      signal: AbortSignal.timeout(this.options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS),
-    });
-    if (response.status === 429 && retries > 0) {
-      await response.body?.cancel();
-      return this.send(input, retries - 1);
-    }
-    return response;
+  private send(input: CoverLetterWriteInput, retries: number): Promise<Response> {
+    return retryOn429(
+      async () =>
+        this.fetchImpl(this.endpoint(), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(this.options.apiKey ? { 'x-goog-api-key': this.options.apiKey } : {}),
+            ...(this.options.extraHeaders ?? {}),
+            ...((await this.options.authHeaders?.()) ?? {}),
+          },
+          body: JSON.stringify(requestBody(input, this.options.thinkingLevel)),
+          signal: AbortSignal.timeout(this.options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS),
+        }),
+      retries,
+      this.options.retryDelayMs,
+    );
   }
 
   private endpoint(): string {

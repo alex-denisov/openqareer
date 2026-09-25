@@ -42,9 +42,9 @@ describe('LlmRoleNamer', () => {
       ),
     });
 
-    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [
-      { title: 'Продакт-менеджер', reason: 'вёл продукты', evidenceRefs: ['memory:1'] },
-    ] });
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({
+      roles: [{ title: 'Продакт-менеджер', reason: 'вёл продукты', evidenceRefs: ['memory:1'] }],
+    });
   });
 
   it('возвращает пусто, когда модель ответила не по схеме', async () => {
@@ -162,9 +162,9 @@ describe('LlmRoleNamer: ответ свободной модели', () => {
       ),
     });
 
-    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [
-      { title: 'Продакт-менеджер', reason: 'вёл продукты', evidenceRefs: ['memory:1'] },
-    ] });
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({
+      roles: [{ title: 'Продакт-менеджер', reason: 'вёл продукты', evidenceRefs: ['memory:1'] }],
+    });
   });
 
   it('читает ответ, где модель назвала поля по-своему', async () => {
@@ -184,18 +184,25 @@ describe('LlmRoleNamer: ответ свободной модели', () => {
       ),
     });
 
-    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [
-      {
-        title: 'Product Manager (Fintech)',
-        reason: 'Девять лет вёл внутренние продукты',
-        evidenceRefs: ['memory:1'],
-      },
-    ] });
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({
+      roles: [
+        {
+          title: 'Product Manager (Fintech)',
+          reason: 'Девять лет вёл внутренние продукты',
+          evidenceRefs: ['memory:1'],
+        },
+      ],
+    });
   });
 
   it('не просит json_object у модели без структурированного вывода', async () => {
     const stub = client('{"roles":[]}');
-    const namer = new LlmRoleNamer({ apiKey: 'k', model: 'm', client: stub, structuredOutput: false });
+    const namer = new LlmRoleNamer({
+      apiKey: 'k',
+      model: 'm',
+      client: stub,
+      structuredOutput: false,
+    });
 
     await namer.nameRoles(facts, 'ru');
 
@@ -222,8 +229,7 @@ describe('LlmRoleNamer и структурированный вывод OpenRout
     await namer.nameRoles(facts, 'ru');
 
     const body = vi.mocked(stub.chat.completions.create).mock.calls[0]?.[0] as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     expect(body?.response_format).toMatchObject({ type: 'json_schema' });
     expect(body?.provider).toEqual({ require_parameters: true });
   });
@@ -243,9 +249,9 @@ describe('QueuedRoleNamer', () => {
 
     const queued = new QueuedRoleNamer([first, second, third]);
 
-    await expect(queued.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [
-      { title: 'COO', reason: 'вёл операции', evidenceRefs: ['memory:1'] },
-    ] });
+    await expect(queued.nameRoles(facts, 'ru')).resolves.toMatchObject({
+      roles: [{ title: 'COO', reason: 'вёл операции', evidenceRefs: ['memory:1'] }],
+    });
     // Молчание первой ступени — повод спросить следующую, а не отдать пусто.
     expect(first.nameRoles).toHaveBeenCalled();
     // Ступень за ответившей не тревожится.
@@ -288,8 +294,55 @@ describe('buildRoleNamer', () => {
     expect(namedRoleHygieneIsWired(built)).toBe(true);
   });
 
+  it('ставит Vertex первым, когда он настроен (решение владельца 25.09)', () => {
+    const built = buildRoleNamer({
+      personalProvider: 'openrouter',
+      model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+      providerCredentials: { openrouter: 'k' },
+      vertex: {
+        projectId: 'p',
+        clientEmail: 'bot@p.iam.gserviceaccount.com',
+        privateKey: 'unused-in-this-test',
+        model: 'gemini-3.8-flash',
+        location: 'global',
+      },
+    });
+
+    expect(describeRoleNamerQueue(built)[0]).toBe('vertex:gemini-3.8-flash');
+  });
+
+  it('ступень Gemini передаёт thinkingLevel и заголовок доступа Vertex', async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ roles: [] }) }] } }],
+          }),
+        ),
+    );
+    const namer = new GeminiRoleNamer({
+      apiKey: '',
+      model: 'gemini-3.8-flash',
+      baseUrl: 'https://aiplatform.googleapis.com/v1/projects/p/locations/global/publishers/google',
+      authHeaders: async () => ({ Authorization: 'Bearer tok' }),
+      thinkingLevel: 'low',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    await namer.nameRoles([{ id: 'f1', statement: 'VP of Technology' } as never], 'en');
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+    expect((init.headers as Record<string, string>)['x-goog-api-key']).toBeUndefined();
+    expect(JSON.parse(String(init.body)).generationConfig.thinkingConfig).toEqual({
+      thinkingLevel: 'low',
+    });
+  });
+
   it('без ключей ступеней нет вовсе', () => {
-    expect(buildRoleNamer({ personalProvider: 'openrouter', providerCredentials: {} })).toBeUndefined();
+    expect(
+      buildRoleNamer({ personalProvider: 'openrouter', providerCredentials: {} }),
+    ).toBeUndefined();
   });
 });
 
@@ -301,9 +354,7 @@ describe('GeminiRoleNamer', () => {
           parts: [
             {
               text: JSON.stringify({
-                roles: [
-                  { title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] },
-                ],
+                roles: [{ title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] }],
               }),
             },
           ],
@@ -328,9 +379,9 @@ describe('GeminiRoleNamer', () => {
       },
     });
 
-    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [
-      { title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] },
-    ] });
+    await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({
+      roles: [{ title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] }],
+    });
 
     expect(calls[0]?.url).toBe(
       'https://gateway.test/google-ai-studio/v1beta/models/gemini-3.6-flash:generateContent',
@@ -394,8 +445,7 @@ describe('язык названия у ступеней и кэша', () => {
     await namer.nameRoles(facts, 'en');
 
     const body = vi.mocked(stub.chat.completions.create).mock.calls[0]?.[0] as
-      | { messages: Array<{ content: string }> }
-      | undefined;
+      { messages: Array<{ content: string }> } | undefined;
     expect(body?.messages[0]?.content).toContain('английск');
   });
 
@@ -438,7 +488,9 @@ describe('провенанс ступени называния', () => {
       model: 'm',
       stage: 'openrouter:openrouter/free',
       client: client(
-        JSON.stringify({ roles: [{ title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] }] }),
+        JSON.stringify({
+          roles: [{ title: 'CTO', reason: 'вёл технологии', evidenceRefs: ['memory:2'] }],
+        }),
       ),
     });
 
@@ -448,7 +500,12 @@ describe('провенанс ступени называния', () => {
   });
 
   it('молчание ступени ступенью не называется', async () => {
-    const namer = new LlmRoleNamer({ apiKey: 'k', model: 'm', stage: 'openrouter:x', client: client(null) });
+    const namer = new LlmRoleNamer({
+      apiKey: 'k',
+      model: 'm',
+      stage: 'openrouter:x',
+      client: client(null),
+    });
     const outcome = await namer.nameRoles(facts, 'en');
     expect(outcome.roles).toEqual([]);
     expect(outcome.stage).toBeUndefined();
@@ -466,7 +523,8 @@ describe('причина молчания ступени (B186)', () => {
       model: 'gemini-3.6-flash',
       stage: 'gemini:gemini-3.6-flash',
       baseUrl: 'https://gateway.test/v1beta',
-      fetchImpl: async () => new Response('{"error":{"status":"RESOURCE_EXHAUSTED"}}', { status: 429 }),
+      fetchImpl: async () =>
+        new Response('{"error":{"status":"RESOURCE_EXHAUSTED"}}', { status: 429 }),
     });
 
     const outcome = await namer.nameRoles(facts, 'ru');
@@ -505,9 +563,12 @@ describe('причина молчания ступени (B186)', () => {
       stage: 'gemini:gemini-3.6-flash',
       baseUrl: 'https://gateway.test/v1beta',
       fetchImpl: async () =>
-        new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'не json' }] } }] }), {
-          status: 200,
-        }),
+        new Response(
+          JSON.stringify({ candidates: [{ content: { parts: [{ text: 'не json' }] } }] }),
+          {
+            status: 200,
+          },
+        ),
     });
 
     expect((await namer.nameRoles(facts, 'ru')).failures).toEqual([
@@ -519,9 +580,9 @@ describe('причина молчания ступени (B186)', () => {
     const failing: ChatCompletionClient = {
       chat: {
         completions: {
-          create: vi.fn().mockRejectedValue(
-            Object.assign(new Error('429 Too Many Requests'), { status: 429 }),
-          ),
+          create: vi
+            .fn()
+            .mockRejectedValue(Object.assign(new Error('429 Too Many Requests'), { status: 429 })),
         },
       },
     };
