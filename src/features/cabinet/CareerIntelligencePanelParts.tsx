@@ -13,8 +13,6 @@ export const fallbackSources = [
   { id: 'remotive', name: 'Remotive', market: 'Международный remote' },
 ] as const;
 
-export { FollowUpActionCard } from '../applications/FollowUpActionCard';
-
 export function SourceAttribution({ source }: { source: VacancySourceRegistryEntry }) {
   return (
     <a
