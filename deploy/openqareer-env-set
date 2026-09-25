@@ -10,7 +10,7 @@ set -Eeuo pipefail
 
 readonly ENV_FILE="${OPENQAREER_ENV_FILE:-/etc/openqareer/openqareer.env}"
 readonly ENV_OWNER="${OPENQAREER_ENV_OWNER:-root:openqareer-deploy}"
-readonly ALLOWED_KEYS='^OPENQAREER_(TELEGRAM_(BOT_TOKEN|OWNER_CHAT_ID)|VERTEX_(SERVICE_ACCOUNT_B64|MODEL|LOCATION))$'
+readonly ALLOWED_KEYS='^OPENQAREER_(TELEGRAM_(BOT_TOKEN|OWNER_CHAT_ID)|VERTEX_(SERVICE_ACCOUNT_B64|MODEL|LOCATION)|MATCH_MODE)$'
 readonly VALUE_PATTERN='^[A-Za-z0-9:_.-]{1,200}$'
 # Ключ сервисного аккаунта Vertex (B266) — JSON в base64 одной строкой.
 readonly BASE64_KEY='^OPENQAREER_VERTEX_SERVICE_ACCOUNT_B64$'
