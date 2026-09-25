@@ -90,6 +90,27 @@ export function parseTopCard(html: string): TopCard {
   };
 }
 
+const ABOUT_CARD_SELECTOR = '[componentkey^="com.linkedin.sdui.profile.card."][componentkey$="About"]';
+
+/**
+ * The summary lives in the About card's expandable text box; «…more» is only
+ * visual, the full text is already in the DOM (B264 §6). The card is found by
+ * its key, never by the word «About», which the page footer also carries.
+ */
+export function parseAboutSection(html: string): string | undefined {
+  const card = parseFragment(html).querySelector(ABOUT_CARD_SELECTOR);
+  const box = card?.querySelector('[data-testid="expandable-text-box"]');
+  if (!box) return undefined;
+  const clone = box.cloneNode(true) as Element;
+  clone.querySelectorAll('[data-testid="expandable-text-button"]').forEach((node) => node.remove());
+  clone.querySelectorAll('br').forEach((node) => node.replaceWith('\n'));
+  const lines = (clone.textContent ?? '')
+    .split('\n')
+    .map((line) => line.replace(/\s+/gu, ' ').trim())
+    .filter((line) => line.length > 0);
+  return lines.length > 0 ? lines.join('\n') : undefined;
+}
+
 const CEFR_BY_LINKEDIN_LABEL: Readonly<Record<string, CefrLevel>> = {
   elementary: 'A2',
   'limited working': 'B1',
@@ -270,6 +291,7 @@ export function extractStructuredLinkedInProfile(pages: LinkedInProfilePages): L
     fullName: topCard.fullName,
     headline: topCard.headline,
     photoSourceUrl: topCard.photoSourceUrl,
+    about: parseAboutSection(pages.profile),
     contact: { ...base.contact, ...contact, location: topCard.location },
     experience: pages.experience ? parseExperienceSection(pages.experience) : [],
     education: firstNonEmpty(pages.education, pages.profile, parseEducationSection),

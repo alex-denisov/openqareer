@@ -990,8 +990,28 @@ pub async fn inspect_session_page_for(
 /// view; a snapshot of the untouched page held the top card and the footer
 /// alone (B264). Scrolls the window and LinkedIn's own scroll container until
 /// the page stops growing, within a fixed step budget, then returns to the top.
-const LAZY_SCROLL_MAX_STEPS: usize = 16;
-const LAZY_SCROLL_STEP_DELAY: Duration = Duration::from_millis(600);
+/// A single "at the end" reading was not enough: LinkedIn appends the next
+/// chunk (Languages on the profile, skills past the tenth) a beat after the
+/// scroll lands, so the walk now waits for several quiet readings (B266).
+const LAZY_SCROLL_MAX_STEPS: usize = 40;
+const LAZY_SCROLL_STEP_DELAY: Duration = Duration::from_millis(900);
+/// ±30 % around the step delay: no fixed-interval clockwork (security §3).
+const LAZY_SCROLL_JITTER_PERCENT: u64 = 30;
+
+/// The step delay spread by `LAZY_SCROLL_JITTER_PERCENT`, driven by `seed`.
+fn jittered_step_delay(seed: u64) -> Duration {
+    let base = LAZY_SCROLL_STEP_DELAY.as_millis() as u64;
+    let spread = base * LAZY_SCROLL_JITTER_PERCENT / 100;
+    Duration::from_millis(base - spread + seed % (2 * spread + 1))
+}
+
+fn clock_seed() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| u64::from(elapsed.subsec_nanos()))
+        .unwrap_or(0)
+}
+const LAZY_SCROLL_QUIET_READINGS: usize = 2;
 const LAZY_SCROLL_SCRIPT: &str = "(function(){try{\
 var step=Math.max(600,window.innerHeight);\
 var box=document.querySelector('main');\
@@ -1009,17 +1029,28 @@ struct LazyScrollState {
     at_end: bool,
 }
 
+/// Counts consecutive readings where the page sits at its end and has not grown.
+fn next_quiet_readings(quiet: usize, state: &LazyScrollState, last_height: f64) -> usize {
+    if state.at_end && (state.height - last_height).abs() < 1.0 {
+        quiet + 1
+    } else {
+        0
+    }
+}
+
 async fn load_lazy_sections(window: &Webview) {
     let mut last_height = -1.0;
+    let mut quiet = 0;
     for _ in 0..LAZY_SCROLL_MAX_STEPS {
         let Ok(raw) = eval_json(window, LAZY_SCROLL_SCRIPT).await else {
             break;
         };
-        tokio::time::sleep(LAZY_SCROLL_STEP_DELAY).await;
+        tokio::time::sleep(jittered_step_delay(clock_seed())).await;
         let Ok(state) = serde_json::from_str::<LazyScrollState>(&raw) else {
             break;
         };
-        if state.at_end && (state.height - last_height).abs() < 1.0 {
+        quiet = next_quiet_readings(quiet, &state, last_height);
+        if quiet >= LAZY_SCROLL_QUIET_READINGS {
             break;
         }
         last_height = state.height;
@@ -1083,6 +1114,36 @@ pub async fn read_session_page(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn scroll_state(height: f64, at_end: bool) -> LazyScrollState {
+        LazyScrollState { height, at_end }
+    }
+
+    #[test]
+    fn lazy_scroll_waits_for_two_quiet_readings_before_stopping() {
+        let first = next_quiet_readings(0, &scroll_state(5_000.0, true), 5_000.0);
+        assert_eq!(first, 1);
+        assert!(first < LAZY_SCROLL_QUIET_READINGS);
+        assert_eq!(
+            next_quiet_readings(first, &scroll_state(5_000.0, true), 5_000.0),
+            LAZY_SCROLL_QUIET_READINGS
+        );
+    }
+
+    #[test]
+    fn lazy_scroll_step_delay_stays_within_thirty_percent() {
+        for seed in [0, 1, 269, 270, 540, 541, 999_999_937] {
+            let delay = jittered_step_delay(seed).as_millis();
+            assert!((630..=1_170).contains(&delay), "{delay}");
+        }
+        assert_ne!(jittered_step_delay(0), jittered_step_delay(540));
+    }
+
+    #[test]
+    fn lazy_scroll_restarts_the_count_when_linkedin_appends_a_chunk() {
+        assert_eq!(next_quiet_readings(1, &scroll_state(7_400.0, true), 5_000.0), 0);
+        assert_eq!(next_quiet_readings(1, &scroll_state(5_000.0, false), 5_000.0), 0);
+    }
 
     #[test]
     fn linkedin_id_is_allowed_only_with_the_sdui_profile_card_prefix() {

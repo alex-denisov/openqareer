@@ -13,6 +13,7 @@ import {
 import {
   LI_SDUI_EXTRACTOR_VERSION,
   extractStructuredLinkedInProfile,
+  parseAboutSection,
   parseAchievementCard,
   parseContactInfo,
   parseLanguagesSection,
@@ -349,5 +350,29 @@ describe('languages written as text beside inline markup (B266)', () => {
       'English',
       'Russian',
     ]);
+  });
+});
+
+describe('About card (B266)', () => {
+  it('reads the summary from the About card, one line per LinkedIn line break', () => {
+    expect(parseAboutSection(fixture('about.html'))).toBe(
+      [
+        'I build and scale technology organizations.',
+        'Over 15+ years I have led IT and cloud operations.',
+        '• 4x revenue growth across two divisions.',
+        'Open to VP of Technology roles.',
+      ].join('\n'),
+    );
+  });
+
+  it('ignores the footer «About» link and other cards when the About card is absent', () => {
+    expect(parseAboutSection(fixture('profile.html'))).toBeUndefined();
+  });
+
+  it('carries the summary into the assembled profile', () => {
+    const profile = extractStructuredLinkedInProfile({
+      profile: fixture('profile.html') + fixture('about.html'),
+    });
+    expect(profile.about).toMatch(/^I build and scale technology organizations\./u);
   });
 });
