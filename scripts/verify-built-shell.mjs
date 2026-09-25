@@ -339,6 +339,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
+  // B266: экран «Тарифы» спрашивает уже отправленные заявки на план.
+  await page.route('**/api/v1/candidate/plan-requests', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [] }) });
+  });
   // Гипотезы роли считает сервер (B180, срез 1б): «Главная» спрашивает их
   // отдельным маршрутом, и без ответа прогон записал бы 502, который увидел бы
   // и кандидат. Отвечаем одной настоящей гипотезой — панель должна печатать
