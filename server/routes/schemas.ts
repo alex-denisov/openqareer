@@ -346,6 +346,8 @@ export const resumeImportSchema = z
     text: z.string().min(10).max(500_000),
     source: z.enum(['pdf', 'linkedin', 'hh', 'text']),
     fileName: z.string().trim().max(200).optional(),
+    /** Why the device's LinkedIn structured capture fell back to text (B266). */
+    structuredFallback: z.enum(['extract_failed', 'no_substance', 'schema_rejected']).optional(),
     sourceReceipt: z
       .object({
         platform: z.enum(['hh', 'linkedin']),
@@ -424,6 +426,8 @@ export const structuredResumeImportSchema = z
     schemaVersion: z.literal(2),
     source: z.literal('linkedin'),
     extractorVersion: z.string().trim().min(1).max(60),
+    /** Field paths (never values) the device removed to pass the schema (B266). */
+    droppedFields: z.array(z.string().regex(/^[A-Za-z0-9_.:[\]]{1,120}$/u)).max(40).optional(),
     sourceReceipt: z
       .object({
         platform: z.literal('linkedin'),

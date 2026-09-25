@@ -283,30 +283,77 @@ export interface LinkedInProfilePages {
  * yields a partial-but-honest result (no silent fabrication).
  */
 export function extractStructuredLinkedInProfile(pages: LinkedInProfilePages): LinkedInProfileV2 {
-  const topCard = parseTopCard(pages.profile);
-  const contact = pages.contactInfo ? parseContactInfo(pages.contactInfo) : { links: [] };
+  return extractStructuredLinkedInProfileTolerant(pages).profile;
+}
+
+/** Runs one section parser; a throw is recorded by name and yields `empty`. */
+function sectionReader(failedSections: string[]) {
+  return function section<T>(name: string, read: () => T, empty: T): T {
+    try {
+      return read();
+    } catch {
+      failedSections.push(name);
+      return empty;
+    }
+  };
+}
+
+export interface TolerantExtraction {
+  readonly profile: LinkedInProfileV2;
+  /** Sections whose parser threw on this markup; each one is left empty (B266). */
+  readonly failedSections: readonly string[];
+}
+
+/**
+ * Same assembly, but one section's parser throwing on unfamiliar markup
+ * empties that section only — the rest of the profile still goes through the
+ * structured path instead of the text importer (B266).
+ */
+export function extractStructuredLinkedInProfileTolerant(
+  pages: LinkedInProfilePages,
+): TolerantExtraction {
+  const failedSections: string[] = [];
+  const section = sectionReader(failedSections);
+  const topCard = section('topCard', () => parseTopCard(pages.profile), {} as TopCard);
+  const contact = section(
+    'contact',
+    () => (pages.contactInfo ? parseContactInfo(pages.contactInfo) : { links: [] }),
+    { links: [] as string[] },
+  );
   const base = emptyLinkedInProfileV2();
-  return {
+  const profile: LinkedInProfileV2 = {
     ...base,
     fullName: topCard.fullName,
     headline: topCard.headline,
     photoSourceUrl: topCard.photoSourceUrl,
-    about: parseAboutSection(pages.profile),
+    about: section('about', () => parseAboutSection(pages.profile), undefined),
     contact: { ...base.contact, ...contact, location: topCard.location },
-    experience: pages.experience ? parseExperienceSection(pages.experience) : [],
-    education: firstNonEmpty(pages.education, pages.profile, parseEducationSection),
-    certifications: pages.certifications ? parseCertificationsSection(pages.certifications) : [],
-    projects: pages.projects ? parseProjectsSection(pages.projects) : [],
-    skills: pages.skills ? parseSkillsSection(pages.skills) : [],
-    recommendations: pages.recommendations
-      ? parseRecommendationsSection(pages.recommendations)
-      : [],
-    languages: firstNonEmpty(pages.languages, pages.profile, parseLanguagesSection),
-    achievements: (pages.achievements ?? [])
-      .map(({ kind, html }) => parseAchievementCard(html, kind))
-      .filter((achievement): achievement is ParsedResumeAchievement => Boolean(achievement)),
-    openToWork: parseOpenToWork(pages.profile),
+    experience: section('experience', () => (pages.experience ? parseExperienceSection(pages.experience) : []), []),
+    education: section('education', () => firstNonEmpty(pages.education, pages.profile, parseEducationSection), []),
+    certifications: section(
+      'certifications',
+      () => (pages.certifications ? parseCertificationsSection(pages.certifications) : []),
+      [],
+    ),
+    projects: section('projects', () => (pages.projects ? parseProjectsSection(pages.projects) : []), []),
+    skills: section('skills', () => (pages.skills ? parseSkillsSection(pages.skills) : []), []),
+    recommendations: section(
+      'recommendations',
+      () => (pages.recommendations ? parseRecommendationsSection(pages.recommendations) : []),
+      [],
+    ),
+    languages: section('languages', () => firstNonEmpty(pages.languages, pages.profile, parseLanguagesSection), []),
+    achievements: section(
+      'achievements',
+      () =>
+        (pages.achievements ?? [])
+          .map(({ kind, html }) => parseAchievementCard(html, kind))
+          .filter((achievement): achievement is ParsedResumeAchievement => Boolean(achievement)),
+      [],
+    ),
+    openToWork: section('openToWork', () => parseOpenToWork(pages.profile), undefined),
   };
+  return { profile, failedSections };
 }
 
 /**

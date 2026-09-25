@@ -19,6 +19,7 @@ import {
 } from '../resume/resumeApi';
 import type { ParsedResume } from '../workspace/resumeParser';
 import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
+import type { LinkedInStructuredCapture, StructuredFallbackReason } from './linkedinSessionPoll';
 import {
   applyConnectionDisconnectResult,
   connectionDisconnectNotice,
@@ -98,7 +99,8 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
   async function handleLinkedInSessionImport(
     parsed: ParsedResume,
     sourceUrl: string,
-    structured?: { readonly profile: LinkedInProfileV2; readonly extractorVersion: string },
+    structured?: LinkedInStructuredCapture,
+    structuredFallback?: StructuredFallbackReason,
   ) {
     setBusyPlatform('linkedin');
     setNotice(undefined);
@@ -107,12 +109,14 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
         ? await persistStructuredLinkedInImport({
             profile: structured.profile,
             extractorVersion: structured.extractorVersion,
+            ...(structured.droppedFields ? { droppedFields: structured.droppedFields } : {}),
             sourceUrl,
             capturedAt: new Date().toISOString(),
           })
         : await persistNativeSessionImport({
             platform: 'linkedin',
             parsed,
+            ...(structuredFallback ? { structuredFallback } : {}),
             sourceUrl,
             capturedAt: new Date().toISOString(),
           });
@@ -194,6 +198,7 @@ interface PersistHhSessionInput {
 interface PersistNativeSessionInput {
   readonly platform: 'hh' | 'linkedin';
   readonly parsed: ParsedResume;
+  readonly structuredFallback?: StructuredFallbackReason;
   readonly sourceUrl: string;
   readonly capturedAt: string;
 }
@@ -235,6 +240,7 @@ async function persistNativeSessionImport(
   const imported: ResumeImportResult = await dependencies.importResume({
     text: input.parsed.rawText,
     source: input.platform,
+    ...(input.structuredFallback ? { structuredFallback: input.structuredFallback } : {}),
     sourceReceipt: {
       platform: input.platform,
       accessMode: 'native_session_snapshot',
@@ -265,6 +271,7 @@ async function persistNativeSessionImport(
 interface PersistStructuredLinkedInInput {
   readonly profile: LinkedInProfileV2;
   readonly extractorVersion: string;
+  readonly droppedFields?: readonly string[];
   readonly sourceUrl: string;
   readonly capturedAt: string;
 }
@@ -296,6 +303,7 @@ export async function persistStructuredLinkedInImport(
   const imported: StructuredResumeImportResult = await dependencies.importStructuredProfile({
     profile: input.profile,
     extractorVersion: input.extractorVersion,
+    ...(input.droppedFields ? { droppedFields: input.droppedFields } : {}),
     sourceUrl: input.sourceUrl,
     capturedAt: input.capturedAt,
   });

@@ -1,13 +1,14 @@
 import { parseResumeContent, type ParsedResume } from '../workspace/resumeParser';
 import { extractLinkedInProfile } from './linkedinProfileExtract';
 import {
-  extractStructuredLinkedInProfile,
+  extractStructuredLinkedInProfileTolerant,
+  type TolerantExtraction,
   LI_SDUI_EXTRACTOR_VERSION,
   type LinkedInProfilePages,
 } from './linkedinProfileStructuredExtract';
 import {
   hasStructuredSubstance,
-  sanitizedAndValidLinkedInProfile,
+  validLinkedInProfileWithDrops,
 } from './linkedinProfileSanitize';
 import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
 import type { SessionInspectionResult, SessionPageResult } from './connectorSession';
@@ -71,11 +72,23 @@ export type LinkedInSessionPollResult =
       readonly rawUrl: string;
       readonly accountMarker?: string | null;
       /** Present only when the structured capture yielded a valid, non-empty profile. */
-      readonly structured?: {
-        readonly profile: LinkedInProfileV2;
-        readonly extractorVersion: string;
-      };
+      readonly structured?: LinkedInStructuredCapture;
+      /** Why the structured capture fell back to the text path, when it did. */
+      readonly structuredFallback?: StructuredFallbackReason;
     };
+
+export interface LinkedInStructuredCapture {
+  readonly profile: LinkedInProfileV2;
+  readonly extractorVersion: string;
+  /** Field paths removed to pass the schema — never values (B266). */
+  readonly droppedFields?: readonly string[];
+}
+
+export type StructuredFallbackReason = 'extract_failed' | 'no_substance' | 'schema_rejected';
+
+type StructuredOutcome =
+  | { readonly structured: LinkedInStructuredCapture }
+  | { readonly fallback: StructuredFallbackReason };
 
 interface LinkedInSessionImportFlowDependencies {
   readonly inspectCurrentPage: () => Promise<SessionInspectionResult>;
@@ -147,10 +160,12 @@ async function runOnce(
   if (!parsed.fullName && parsed.experience.length === 0) {
     throw new Error('linkedin_authenticated_profile_unclassified');
   }
-  const structured = await captureStructuredProfile(dependencies, page);
+  const outcome = await captureStructuredProfile(dependencies, page);
   const result = {
     status: 'ready' as const,
-    ...(structured ? { structured } : {}),
+    ...('structured' in outcome
+      ? { structured: outcome.structured }
+      : { structuredFallback: outcome.fallback }),
     parsed,
     rawUrl: page.url,
     ...(current.accountMarker ? { accountMarker: current.accountMarker } : {}),
@@ -229,19 +244,29 @@ export function detailPagesToRead(): DetailPageKey[] {
 async function captureStructuredProfile(
   dependencies: LinkedInSessionImportFlowDependencies,
   page: { readonly body: string; readonly url: string },
-): Promise<{ readonly profile: LinkedInProfileV2; readonly extractorVersion: string } | undefined> {
+): Promise<StructuredOutcome> {
   const pages = { profile: page.body, ...(await readLinkedDetailPages(dependencies, page)) };
-  let structured: LinkedInProfileV2;
+  let extraction: TolerantExtraction;
   try {
-    structured = extractStructuredLinkedInProfile(pages);
+    extraction = extractStructuredLinkedInProfileTolerant(pages);
   } catch {
     // Markup drift must degrade to the text path, never sink the import.
-    return undefined;
+    return { fallback: 'extract_failed' };
   }
-  if (!hasStructuredSubstance(structured)) return undefined;
-  const valid = sanitizedAndValidLinkedInProfile(structured);
-  if (!valid) return undefined;
-  return { profile: valid, extractorVersion: LI_SDUI_EXTRACTOR_VERSION };
+  if (!hasStructuredSubstance(extraction.profile)) return { fallback: 'no_substance' };
+  const valid = validLinkedInProfileWithDrops(extraction.profile);
+  if (!valid) return { fallback: 'schema_rejected' };
+  const droppedFields = [
+    ...extraction.failedSections.map((name) => `section:${name}`),
+    ...valid.dropped,
+  ];
+  return {
+    structured: {
+      profile: valid.profile,
+      extractorVersion: LI_SDUI_EXTRACTOR_VERSION,
+      ...(droppedFields.length > 0 ? { droppedFields } : {}),
+    },
+  };
 }
 
 async function readLinkedDetailPages(

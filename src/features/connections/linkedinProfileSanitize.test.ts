@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeLinkedInProfileV2 } from './linkedinProfileSanitize';
+import { sanitizeLinkedInProfileV2, validLinkedInProfileWithDrops } from './linkedinProfileSanitize';
 import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
 
 function baseProfile(): LinkedInProfileV2 {
@@ -49,5 +49,34 @@ describe('sanitizeLinkedInProfileV2', () => {
     const profile = { ...baseProfile(), skills: ['ok', 'y'.repeat(400)] };
     const result = sanitizeLinkedInProfileV2(profile);
     expect(linkedinProfileV2Schema.safeParse(result).success).toBe(true);
+  });
+});
+
+describe('validLinkedInProfileWithDrops (B266)', () => {
+  it('drops a bad contact field instead of rejecting the whole profile', () => {
+    const profile = {
+      ...baseProfile(),
+      skills: ['P&L'],
+      contact: { links: [], email: 'not an email', phone: '+971 50 000 0000' },
+    } as LinkedInProfileV2;
+    const result = validLinkedInProfileWithDrops(profile);
+    expect(result?.profile.contact.email).toBeUndefined();
+    expect(result?.profile.contact.phone).toBe('+971 50 000 0000');
+    expect(result?.profile.skills).toEqual(['P&L']);
+    expect(result?.dropped).toEqual(['contact.email']);
+  });
+
+  it('trims lists to the schema ceiling and reports it', () => {
+    const links = Array.from({ length: 25 }, (_, i) => `https://example.com/${i}`);
+    const skills = Array.from({ length: 120 }, (_, i) => `Skill ${i}`);
+    const profile = { ...baseProfile(), skills, contact: { links } } as LinkedInProfileV2;
+    const result = validLinkedInProfileWithDrops(profile);
+    expect(result?.profile.skills).toHaveLength(100);
+    expect(result?.profile.contact.links).toHaveLength(20);
+    expect(result?.dropped).toEqual(expect.arrayContaining(['skills', 'contact.links']));
+  });
+
+  it('reports nothing for a clean profile', () => {
+    expect(validLinkedInProfileWithDrops(baseProfile())?.dropped).toEqual([]);
   });
 });

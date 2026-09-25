@@ -495,6 +495,9 @@ function nativeImportDigest(
 const handleImportResume: Handler = async (deps, request, reply) => {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
   const body = resumeImportSchema.parse(request.body);
+  if (body.structuredFallback) {
+    request.log.warn({ reason: body.structuredFallback }, 'linkedin_structured_fallback');
+  }
   return importResumeIntoDossier(deps, request, reply, body);
 };
 

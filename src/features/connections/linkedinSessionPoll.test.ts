@@ -136,6 +136,37 @@ describe('LinkedIn session import flow', () => {
     await first;
   });
 
+  it('says why the structured capture fell back to text (B266)', async () => {
+    const result = await createLinkedInSessionImportFlow({
+      inspectCurrentPage: async () => ({
+        ready: true,
+        url: 'https://www.linkedin.com/feed/',
+        signedInApplicant: true,
+        login: false,
+        otp: false,
+        captcha: false,
+      }),
+      readSessionPage: async (url: string) =>
+        new URL(url).pathname === '/in/me/'
+          ? {
+              ok: true,
+              url: 'https://www.linkedin.com/in/alexey-test/',
+              body: '<main><div>Alexey Test</div><div>Experience</div><div>Engineer</div><div>OpenQareer</div><div>2020 - Present</div></main>',
+            }
+          : { ok: false as const },
+      pauseBetweenDetailReads: async () => {},
+      detailReadThrottle: freshThrottle(),
+      onAuthenticated: vi.fn(),
+      onProviderDataCaptured: vi.fn(),
+      onReady: vi.fn(),
+    }).run();
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.structured).toBeUndefined();
+    expect(result.structuredFallback).toBe('no_substance');
+  });
+
   it('attaches a structured profile when the detail-page fixtures carry real sections', async () => {
     const pageBySuffix: [suffix: string, body: string][] = [
       ['details/experience/', readFixture('experience.html')],

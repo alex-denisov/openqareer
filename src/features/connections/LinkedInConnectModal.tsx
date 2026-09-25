@@ -3,7 +3,6 @@ import { ArrowSquareOut, SpinnerGap, WarningCircle } from '@phosphor-icons/react
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import { setStoredSessionToken } from '../coach/apiClient';
 import type { ParsedResume } from '../workspace/resumeParser';
-import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
 import { ImportModalShell } from './ImportModalShell';
 import { PlatformLogo } from './PlatformLogo';
 import {
@@ -27,8 +26,10 @@ import {
   createLinkedInSessionImportFlow,
   linkedinWaitingNotice,
   type LinkedInSessionImportFlow,
+  type LinkedInStructuredCapture,
   type LinkedInSessionPollResult,
   type LinkedInWaitingNotice,
+  type StructuredFallbackReason,
 } from './linkedinSessionPoll';
 import {
   endLinkedInProtectedRoute,
@@ -46,7 +47,8 @@ export interface LinkedInConnectModalProps {
   readonly onImportSuccess: (
     parsed: ParsedResume,
     rawUrl: string,
-    structured?: { readonly profile: LinkedInProfileV2; readonly extractorVersion: string },
+    structured?: LinkedInStructuredCapture,
+    structuredFallback?: StructuredFallbackReason,
   ) => void | Promise<void>;
   readonly onConnectionFailure: (message: string) => void;
 }
@@ -215,7 +217,12 @@ export function LinkedInConnectModal({
       },
       onReady: (result) => {
         onClose();
-        return onImportSuccess(result.parsed, result.rawUrl, result.structured);
+        return onImportSuccess(
+          result.parsed,
+          result.rawUrl,
+          result.structured,
+          result.structuredFallback,
+        );
       },
     });
     return sessionFlow.current;

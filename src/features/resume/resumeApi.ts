@@ -63,6 +63,8 @@ export interface ResumeImportResult {
 type ResumeImportInput = {
   readonly text: string;
   readonly fileName?: string;
+  /** Why a LinkedIn structured capture fell back to text — logged server-side (B266). */
+  readonly structuredFallback?: 'extract_failed' | 'no_substance' | 'schema_rejected';
 } & (
   | {
       readonly source: 'hh' | 'linkedin';
@@ -89,6 +91,7 @@ export async function importCandidateResume(input: ResumeImportInput): Promise<R
       source: input.source,
       ...(input.fileName ? { fileName: input.fileName } : {}),
       ...(input.sourceReceipt ? { sourceReceipt: input.sourceReceipt } : {}),
+      ...(input.structuredFallback ? { structuredFallback: input.structuredFallback } : {}),
     }),
   });
   return readData<ResumeImportResult>(response);
@@ -99,6 +102,8 @@ export interface StructuredResumeImportInput {
   readonly extractorVersion: string;
   readonly sourceUrl: string;
   readonly capturedAt: string;
+  /** Field paths the device removed to pass the schema — logged server-side (B266). */
+  readonly droppedFields?: readonly string[];
 }
 
 export interface StructuredResumeImportResult {
@@ -129,6 +134,7 @@ export async function importStructuredLinkedInProfile(
         capturedAt: input.capturedAt,
       },
       profile: input.profile,
+      ...(input.droppedFields?.length ? { droppedFields: input.droppedFields } : {}),
     }),
   });
   return readData<StructuredResumeImportResult>(response);

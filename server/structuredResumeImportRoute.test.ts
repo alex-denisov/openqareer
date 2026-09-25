@@ -147,6 +147,25 @@ describe('POST /api/v1/candidate/resume/import/structured (B265 slice 3)', () =>
     expect(resume.json().data.draft.candidate.headline).toBe('VP of Technology & Operations');
   });
 
+  it('accepts the field paths the device dropped, and refuses values posing as paths (B266)', async () => {
+    const { app, authorization } = await createApp();
+    const accepted = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import/structured',
+      headers: { authorization },
+      payload: structuredBody({ droppedFields: ['contact.email', 'skills', 'experience[].title', 'section:about'] }),
+    });
+    expect(accepted.statusCode).toBe(200);
+
+    const oversized = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import/structured',
+      headers: { authorization },
+      payload: structuredBody({ droppedFields: ['alexey@example.com is my email'] }),
+    });
+    expect(oversized.statusCode).toBe(422);
+  });
+
   it('rejects a payload without schemaVersion: 2 (422 validation_failed, not 500)', async () => {
     const { app, authorization } = await createApp();
     const { schemaVersion: _drop, ...withoutVersion } = structuredBody();

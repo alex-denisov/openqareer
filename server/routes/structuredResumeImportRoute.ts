@@ -104,6 +104,9 @@ export const handleImportStructuredResume: Handler = async (deps, request, reply
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const body = structuredResumeImportSchema.parse(request.body);
+  if (body.droppedFields?.length) {
+    request.log.warn({ droppedFields: body.droppedFields }, 'linkedin_structured_fields_dropped');
+  }
   const importDigest = structuredImportDigest(candidate.id, body.sourceReceipt, body.profile);
 
   const replay = candidateStore.findNativeSourceConnectionByDigest(

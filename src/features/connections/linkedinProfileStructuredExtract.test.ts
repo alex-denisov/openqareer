@@ -13,6 +13,7 @@ import {
 import {
   LI_SDUI_EXTRACTOR_VERSION,
   extractStructuredLinkedInProfile,
+  extractStructuredLinkedInProfileTolerant,
   parseAboutSection,
   parseAchievementCard,
   parseContactInfo,
@@ -374,5 +375,18 @@ describe('About card (B266)', () => {
       profile: fixture('profile.html') + fixture('about.html'),
     });
     expect(profile.about).toMatch(/^I build and scale technology organizations\./u);
+  });
+});
+
+describe('extractStructuredLinkedInProfileTolerant (B266)', () => {
+  it('empties only the section whose parser threw and names it', () => {
+    const { profile, failedSections } = extractStructuredLinkedInProfileTolerant({
+      profile: fixture('profile.html') + fixture('about.html'),
+      achievements: 'not a list' as never,
+    });
+    expect(failedSections).toEqual(['achievements']);
+    expect(profile.achievements).toEqual([]);
+    expect(profile.fullName).toBe('Jordan Rivers');
+    expect(profile.about).toMatch(/^I build/u);
   });
 });
