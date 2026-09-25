@@ -25,4 +25,15 @@ describe('openExternalLink (B266)', () => {
     await openExternalLink('');
     expect(openSpy).not.toHaveBeenCalled();
   });
+
+  it.each(['file:///etc/passwd', 'javascript:alert(1)', 'smb://host/share', 'not a url'])(
+    'never opens a non-web link from a third-party board: %s',
+    async (url) => {
+      vi.spyOn(desktopBridge, 'isTauriEnvironment').mockReturnValue(false);
+      const openSpy = vi.fn();
+      vi.stubGlobal('open', openSpy);
+      await openExternalLink(url);
+      expect(openSpy).not.toHaveBeenCalled();
+    },
+  );
 });

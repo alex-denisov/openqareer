@@ -8,11 +8,21 @@ import { isTauriEnvironment } from './desktopBridge';
  * `window.open`.
  */
 export async function openExternalLink(url: string): Promise<void> {
-  if (!url) return;
+  if (!isWebUrl(url)) return;
   if (isTauriEnvironment()) {
     const { open } = await import('@tauri-apps/plugin-shell');
     await open(url);
     return;
   }
   window.open(url, '_blank', 'noopener');
+}
+
+/** Vacancy links come from third-party boards: only http(s) ever reaches the OS. */
+function isWebUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'https:' || protocol === 'http:';
+  } catch {
+    return false;
+  }
 }
