@@ -82,4 +82,20 @@ describe('rankPitchFacts', () => {
       'impeebbeb2c85-exp-5',
     ]);
   });
+
+  it('убирает один и тот же текст под разными хвостами идентификатора', () => {
+    // Прод 25.09: «Drove CSAT from 23% to 68%…» пришёл как resp-3-2 и как ach-3-1.
+    const statement = 'Drove CSAT from 23% to 68% and FCR from 5% to 83%.';
+    const facts = [
+      { id: 'imp33a5fdc156-resp-3-2', statement, domain: 'responsibility' },
+      { id: 'impb545a1a59d-ach-3-1', statement: ` ${statement.toUpperCase()} `, domain: 'outcome' },
+      {
+        id: 'imp33a5fdc156-resp-3-4',
+        statement: 'Modernized the support stack.',
+        domain: 'responsibility',
+      },
+    ];
+
+    expect(rankPitchFacts(facts, { title: 'SVP' })).toHaveLength(2);
+  });
 });

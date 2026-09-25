@@ -89,9 +89,15 @@ function withoutImportDuplicates<T extends RankablePitchFact>(facts: readonly T[
     const kept = freshest.get(key);
     if (!kept || freshness(fact) > freshness(kept)) freshest.set(key, fact);
   }
+  const seenText = new Set<string>();
   return facts.filter((fact) => {
     const key = duplicateKey(fact);
-    return key === null || freshest.get(key) === fact;
+    if (key !== null && freshest.get(key) !== fact) return false;
+    // Тот же текст под другим хвостом (resp-3-2 и ach-3-1) — тоже копия.
+    const text = fact.statement.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+    if (seenText.has(text)) return false;
+    seenText.add(text);
+    return true;
   });
 }
 
