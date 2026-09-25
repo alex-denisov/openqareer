@@ -36,6 +36,7 @@ const DETAIL_PAGE_PATHS: Readonly<
   projects: 'details/projects/',
   contactInfo: 'overlay/contact-info/',
   recommendations: 'details/recommendations/received/',
+  languages: 'details/languages/',
 };
 
 export type LinkedInWaitingStage = SessionWaitingStage;
@@ -172,11 +173,12 @@ function isSignedInLinkedInPage(page: SessionInspectionResult): boolean {
 
 const MAX_DETAIL_PAGE_BYTES = 2 * 1_024 * 1_024;
 /** Hard cap on detail pages per connection, contact info not counted (architecture §3). */
-export const MAX_DETAIL_PAGES_PER_READ = 6;
+export const MAX_DETAIL_PAGES_PER_READ = 7;
 export const DETAIL_READ_INTERVAL_MS = 12 * 60 * 60 * 1_000;
 const DETAIL_PAUSE_MIN_MS = 3_000;
 const DETAIL_PAUSE_MAX_MS = 8_000;
-const DETAIL_READ_STORAGE_KEY = 'openqareer.linkedin.lastDetailReadAt';
+// v2: the section list grew (languages), so the first walk after the update runs in full.
+const DETAIL_READ_STORAGE_KEY = 'openqareer.linkedin.lastDetailReadAt.v2';
 
 function humanPause(): Promise<void> {
   const span = DETAIL_PAUSE_MAX_MS - DETAIL_PAUSE_MIN_MS;

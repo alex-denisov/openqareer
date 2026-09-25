@@ -1120,7 +1120,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // подтверждается на канбане «Отклики», не здесь.
   await vacancyRows.first().locator('button').click();
   await page.locator('.vacancies-detail-panel').waitFor();
-  await page.getByRole('link', { name: 'Откликнуться' }).click();
+  await page.getByRole('button', { name: 'Откликнуться' }).click();
   const recorded = page.__recordedApplications;
   assert(
     recorded.length === 1 && recorded[0].status === 'opened' && Boolean(recorded[0].clusterId),

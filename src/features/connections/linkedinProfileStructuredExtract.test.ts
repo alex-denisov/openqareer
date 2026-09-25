@@ -281,3 +281,21 @@ describe('decodeSafetyGoUrl (B265 security)', () => {
     expect(decodeSafetyGoUrl(wrap(doubly))).toBeUndefined();
   });
 });
+
+describe('sections LinkedIn leaves only on the main profile (B266)', () => {
+  it('takes education from the main profile when its details page came back empty', () => {
+    const profile = extractStructuredLinkedInProfile({
+      profile: fixture('education.html'),
+      education: '<main></main>',
+    });
+    expect(profile.education.length).toBe(2);
+  });
+
+  it('prefers a non-empty details page over the main profile', () => {
+    const profile = extractStructuredLinkedInProfile({
+      profile: '<main></main>',
+      education: fixture('education.html'),
+    });
+    expect(profile.education.length).toBe(2);
+  });
+});

@@ -786,7 +786,9 @@ fn validate_page_body(body: String) -> Result<String, String> {
 // are the tested source of truth for the constants the sanitize script below
 // embeds; the per-node walk itself still has to run inside the page (no
 // per-element IPC round trip), so the JS mirrors the same checks by hand.
-const LINKEDIN_ID_PREFIX: &str = "com.linkedin.sdui.profile.card.ref";
+/// Every profile anchor the extractor reads lives under this namespace: section
+/// cards (`…profile.card.ref…`) and skill rows (`…profile.skill(…)`) (B266).
+const LINKEDIN_ID_PREFIX: &str = "com.linkedin.sdui.profile.";
 const LINKEDIN_COMPONENTKEY_MAX_CHARS: usize = 200;
 const LINKEDIN_TESTID_MAX_CHARS: usize = 80;
 const LINKEDIN_HREF_PATHS: &[&str] = &["/in/", "/company/", "/school/", "/details/", "/safety/go/"];
@@ -1150,7 +1152,7 @@ https://media.licdn.com/dms/image/c 800w";
         let script = page_sanitize_script("linkedin");
         assert!(!script.contains(".click("));
         assert!(!script.contains("dispatchEvent"));
-        assert!(script.contains("com.linkedin.sdui.profile.card.ref"));
+        assert!(script.contains("com.linkedin.sdui.profile."));
         assert!(script.contains("componentkey"));
         assert!(script.contains("media.licdn.com/dms/image/"));
     }
@@ -1401,6 +1403,14 @@ https://media.licdn.com/dms/image/c 800w";
             validate_page_body("profile".to_string()).unwrap(),
             "profile"
         );
+    }
+
+    #[test]
+    fn linkedin_skill_row_ids_survive_the_allowlist() {
+        assert!("com.linkedin.sdui.profile.skill(urn:li:fsd_skill:(A,1))"
+            .starts_with(LINKEDIN_ID_PREFIX));
+        assert!("com.linkedin.sdui.profile.card.refEXPERIENCE".starts_with(LINKEDIN_ID_PREFIX));
+        assert!(!"ember123".starts_with(LINKEDIN_ID_PREFIX));
     }
 
     #[test]

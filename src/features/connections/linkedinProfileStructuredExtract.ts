@@ -19,16 +19,19 @@ import {
   parseRecommendationsSection,
   parseSkillsSection,
 } from './linkedinCredentialExtract';
-import { decodeSafetyGoUrl, mediaSourceUrl, paragraphsOf, parseFragment, textOf } from './linkedinDom';
+import {
+  decodeSafetyGoUrl,
+  mediaSourceUrl,
+  paragraphsOf,
+  parseFragment,
+  textOf,
+} from './linkedinDom';
 
 /** Logged with the payload so a markup drift shows up server-side (architecture §2). */
 export const LI_SDUI_EXTRACTOR_VERSION = 'li-sdui-1';
 
 /** The "form" of ParsedResume v2 sent over the wire — no `rawText` (architecture §2). */
-export type LinkedInProfileV2 = Omit<
-  ReturnType<typeof emptyLinkedInProfileV2>,
-  never
->;
+export type LinkedInProfileV2 = Omit<ReturnType<typeof emptyLinkedInProfileV2>, never>;
 
 function emptyLinkedInProfileV2() {
   return {
@@ -78,7 +81,12 @@ export function parseTopCard(html: string): TopCard {
   let locationIndex = contactIndex - 1;
   while (locationIndex >= 0 && paragraphs[locationIndex] === '·') locationIndex -= 1;
   const location = contactIndex > 0 && locationIndex >= 0 ? paragraphs[locationIndex] : undefined;
-  return { fullName, headline, photoSourceUrl, location: location === headline ? undefined : location };
+  return {
+    fullName,
+    headline,
+    photoSourceUrl,
+    location: location === headline ? undefined : location,
+  };
 }
 
 const CEFR_BY_LINKEDIN_LABEL: Readonly<Record<string, CefrLevel>> = {
@@ -90,7 +98,10 @@ const CEFR_BY_LINKEDIN_LABEL: Readonly<Record<string, CefrLevel>> = {
 };
 
 function cefrOf(proficiency: string): CefrLevel | undefined {
-  const label = proficiency.replace(/\s*proficiency$/iu, '').trim().toLowerCase();
+  const label = proficiency
+    .replace(/\s*proficiency$/iu, '')
+    .trim()
+    .toLowerCase();
   return CEFR_BY_LINKEDIN_LABEL[label];
 }
 
@@ -207,7 +218,11 @@ export interface LinkedInProfilePages {
   readonly skills?: string;
   readonly contactInfo?: string;
   readonly recommendations?: string;
-  readonly achievements?: readonly { readonly kind: ParsedResumeAchievementKind; readonly html: string }[];
+  readonly languages?: string;
+  readonly achievements?: readonly {
+    readonly kind: ParsedResumeAchievementKind;
+    readonly html: string;
+  }[];
   readonly openToWork?: string;
 }
 
@@ -227,15 +242,30 @@ export function extractStructuredLinkedInProfile(pages: LinkedInProfilePages): L
     photoSourceUrl: topCard.photoSourceUrl,
     contact: { ...base.contact, ...contact, location: topCard.location },
     experience: pages.experience ? parseExperienceSection(pages.experience) : [],
-    education: pages.education ? parseEducationSection(pages.education) : [],
+    education: firstNonEmpty(pages.education, pages.profile, parseEducationSection),
     certifications: pages.certifications ? parseCertificationsSection(pages.certifications) : [],
     projects: pages.projects ? parseProjectsSection(pages.projects) : [],
     skills: pages.skills ? parseSkillsSection(pages.skills) : [],
-    recommendations: pages.recommendations ? parseRecommendationsSection(pages.recommendations) : [],
-    languages: parseLanguagesSection(pages.profile),
+    recommendations: pages.recommendations
+      ? parseRecommendationsSection(pages.recommendations)
+      : [],
+    languages: firstNonEmpty(pages.languages, pages.profile, parseLanguagesSection),
     achievements: (pages.achievements ?? [])
       .map(({ kind, html }) => parseAchievementCard(html, kind))
       .filter((achievement): achievement is ParsedResumeAchievement => Boolean(achievement)),
     openToWork: parseOpenToWork(pages.profile),
   };
+}
+
+/**
+ * A details page LinkedIn renders lazily can come back empty; a short section
+ * (a few schools, two languages) then lives only on the main profile (B266).
+ */
+function firstNonEmpty<T>(
+  detailsHtml: string | undefined,
+  profileHtml: string,
+  parse: (html: string) => T[],
+): T[] {
+  const fromDetails = detailsHtml ? parse(detailsHtml) : [];
+  return fromDetails.length > 0 ? fromDetails : parse(profileHtml);
 }

@@ -416,14 +416,14 @@ test.describe('B250 vacancies screen', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
 
-    const applyButton = page.locator('.vacancies-detail-col').getByRole('link', {
+    const applyButton = page.locator('.vacancies-detail-col').getByRole('button', {
       name: 'Откликнуться',
     });
     await expect(applyButton).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator('.vac-list-item').first().locator('.vac-row').click();
-    const mobileApplyButton = page.locator('.vacancies-detail-col').getByRole('link', {
+    const mobileApplyButton = page.locator('.vacancies-detail-col').getByRole('button', {
       name: 'Откликнуться',
     });
     await expect(mobileApplyButton).toBeVisible();
