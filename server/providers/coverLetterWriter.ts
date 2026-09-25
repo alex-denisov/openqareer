@@ -11,7 +11,7 @@ import {
 } from '../domain/vacancyPitchService';
 import type { ChatCompletionClient } from './roleNamer';
 import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
-import { selectProviderQueue, type ProviderQueueEntry } from './providerQueue';
+import { selectProviderQueue, type ProviderQueueEntry, type ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
 /** Столько же, сколько идёт в называние ролей — тот же входной бюджет (B266). */
@@ -20,6 +20,24 @@ const MAX_STATEMENT = 400;
 const MAX_TITLE = 200;
 const MAX_REQUIREMENT = 120;
 const MAX_REQUIREMENTS = 20;
+
+/** Письмо должно влезть и без рассуждения, и после JSON-обёртки. */
+export const COVER_LETTER_ANSWER_TOKENS = 1_500;
+/** Рассуждающая модель делит этот же потолок между мыслью и письмом (B266). */
+export const COVER_LETTER_REASONING_TOKENS = 4_096;
+
+export function coverLetterOutputBudget(thinkingLevel?: 'low' | 'high'): number {
+  return thinkingLevel ? COVER_LETTER_REASONING_TOKENS : COVER_LETTER_ANSWER_TOKENS;
+}
+
+function outputLimit(provider: ProviderId, thinkingLevel?: 'low' | 'high'): Record<string, number> {
+  const budget = coverLetterOutputBudget(thinkingLevel);
+  // Новые модели OpenAI принимают только современное имя; OpenRouter и его
+  // совместимые модели по-прежнему ждут старое имя параметра.
+  return provider === 'openai'
+    ? { max_completion_tokens: budget }
+    : { max_tokens: budget };
+}
 
 export interface CoverLetterFact {
   readonly ref: string;
@@ -158,6 +176,10 @@ function serializeInput(input: CoverLetterWriteInput): string {
 export interface LlmCoverLetterWriterOptions {
   apiKey: string;
   model: string;
+  /** Провайдер определяет имя параметра потолка вывода. */
+  provider?: ProviderId;
+  /** Уровень рассуждения модели из реестра требует общего запаса токенов. */
+  thinkingLevel?: 'low' | 'high';
   baseUrl?: string;
   timeoutMs?: number;
   structuredOutput?: boolean;
@@ -182,10 +204,14 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
   private readonly structuredOutput: boolean;
   private readonly requireParameters: boolean;
   private readonly stage: string;
+  private readonly provider: ProviderId;
+  private readonly thinkingLevel: 'low' | 'high' | undefined;
 
   constructor(options: LlmCoverLetterWriterOptions) {
     this.apiKey = options.apiKey;
     this.model = options.model;
+    this.provider = options.provider ?? 'openai';
+    this.thinkingLevel = options.thinkingLevel;
     this.stage = options.stage ?? options.model;
     this.structuredOutput = options.structuredOutput ?? false;
     this.requireParameters = options.requireParameters ?? false;
@@ -209,6 +235,7 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
           { role: 'system', content: coverLetterInstructions(input.language, input.tone) },
           { role: 'user', content: serializeInput(input) },
         ],
+        ...outputLimit(this.provider, this.thinkingLevel),
         ...(this.structuredOutput
           ? {
               response_format: { type: 'json_schema', json_schema: COVER_LETTER_JSON_SCHEMA },
@@ -240,6 +267,20 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
  */
 function speaksChatCompletions(provider: ProviderId): boolean {
   return provider === 'openai' || modelRegistry[provider].transport === 'openai-compatible-chat';
+}
+
+function writerForRoute(route: ProviderRoute): LlmCoverLetterWriter {
+  const definition = modelRegistry[route.provider].models.find((item) => item.id === route.model);
+  return new LlmCoverLetterWriter({
+    apiKey: route.apiKey,
+    model: route.model,
+    provider: route.provider,
+    stage: `${route.provider}:${route.model}`,
+    baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
+    structuredOutput: definition?.structuredOutput ?? false,
+    thinkingLevel: definition?.thinkingLevel,
+    requireParameters: route.provider === 'openrouter' && isMutableModelAlias(route.model),
+  });
 }
 
 /** Очередь ступеней письма: молчание одной — повод спросить следующую. */
@@ -279,19 +320,7 @@ export function buildCoverLetterWriter(
   if (stages.length === 0) return undefined;
 
   return new QueuedCoverLetterWriter(
-    stages.map(
-      (route) =>
-        new LlmCoverLetterWriter({
-          apiKey: route.apiKey,
-          model: route.model,
-          stage: `${route.provider}:${route.model}`,
-          baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
-          structuredOutput:
-            modelRegistry[route.provider].models.find((item) => item.id === route.model)
-              ?.structuredOutput ?? false,
-          requireParameters: route.provider === 'openrouter' && isMutableModelAlias(route.model),
-        }),
-    ),
+    stages.map(writerForRoute),
     stages.map((route) => `${route.provider}:${route.model}`),
   );
 }
