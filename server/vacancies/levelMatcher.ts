@@ -19,10 +19,9 @@ export const LEVEL_RANK: Record<SeniorityLevel, number> = {
 };
 
 /**
- * Порядок важен: «C-level» проверяется раньше «lead», иначе «Chief Product
- * Officer» подхватило бы менее специфичное правило первым не бывает здесь,
- * но правило head проверяется после lead, чтобы «tech lead» не читалось как
- * head через слово «lead» внутри «leadership».
+ * Порядок важен: C-level проверяется раньше VP и head, чтобы генеральный или
+ * технический директор, а также CxO, не понижались до обычного директора.
+ * Senior Director проверяется раньше Director и потому остаётся VP.
  */
 const LEVEL_MARKERS: readonly { readonly level: SeniorityLevel; readonly markers: readonly string[] }[] = [
   {
@@ -35,13 +34,32 @@ const LEVEL_MARKERS: readonly { readonly level: SeniorityLevel; readonly markers
       'coo',
       'cfo',
       'cmo',
+      'ciso',
+      'chro',
+      'cro',
+      'cio',
       'gendirector',
       'генеральный директор',
+      'технический директор',
     ],
   },
   {
     level: 'vp',
-    markers: ['vice president', 'vice-president', 'vp of', 'vp,', ' vp ', 'вице-президент'],
+    markers: [
+      'senior director',
+      'sr. director',
+      'sr director',
+      'senior vice president',
+      'vice president',
+      'vice-president',
+      'svp',
+      'evp',
+      'vp of',
+      'vp,',
+      ' vp ',
+      'вице-президент',
+      'старший директор',
+    ],
   },
   {
     level: 'head',
@@ -65,6 +83,20 @@ const LEVEL_MARKERS: readonly { readonly level: SeniorityLevel; readonly markers
   },
 ];
 
+function hasCxOTitle(normalizedTitle: string): boolean {
+  return /(?:^|\s)c\p{L}o(?:\s|$)/u.test(normalizedTitle);
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
+function containsMarker(normalizedTitle: string, marker: string): boolean {
+  const normalizedMarker = normalizeTextForComparison(marker);
+  const pattern = new RegExp(`(?:^|\\s)${escapeRegExp(normalizedMarker)}(?:\\s|$)`, 'u');
+  return pattern.test(normalizedTitle);
+}
+
 /**
  * Уровень из заголовка вакансии. `undefined` — заголовок не назвал уровень:
  * fit-dot «уровень» в этом случае не рисуется, а не подставляет IC по
@@ -72,8 +104,9 @@ const LEVEL_MARKERS: readonly { readonly level: SeniorityLevel; readonly markers
  */
 export function inferSeniorityLevel(title: string): SeniorityLevel | undefined {
   const norm = ` ${normalizeTextForComparison(title)} `;
+  if (hasCxOTitle(norm)) return 'c-level';
   for (const { level, markers } of LEVEL_MARKERS) {
-    if (markers.some((marker) => norm.includes(marker))) {
+    if (markers.some((marker) => containsMarker(norm, marker))) {
       return level;
     }
   }
