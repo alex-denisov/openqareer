@@ -435,7 +435,9 @@ function importDate(iso: string): string {
 function connectionCopy(connection: Extract<CandidateConnection, { status: 'connected' }>): string {
   if (connection.accessMode === 'native_session_snapshot') {
     const label = PLATFORM_LABELS[connection.platform];
-    return `Из ${label} сохранено ${factNoun(connection.factCount)}. Ваша сессия на площадке не хранится.`;
+    // The server never gets the session, but the desktop app keeps the
+    // sign-in until «Отключить» (B266: the old line said nothing was kept).
+    return `Из ${label} сохранено ${factNoun(connection.factCount)}. Вход в ${label} остаётся только в приложении на этом устройстве и на сервер OpenQareer не передаётся.`;
   }
   return connection.platform === 'linkedin'
     ? 'Профиль прочитан из вашей сессии на площадке; опыт добавлен в раздел «Резюме».'

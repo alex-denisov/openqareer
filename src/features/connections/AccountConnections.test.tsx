@@ -141,7 +141,8 @@ describe('AccountConnections', () => {
     );
 
     expect(html).toContain('Из hh.ru сохранено 7 фактов');
-    expect(html).toContain('Ваша сессия на площадке не хранится');
+    expect(html).toContain('Вход в hh.ru остаётся только в приложении на этом устройстве');
+    expect(html).not.toContain('сессия на площадке не хранится');
     expect(html).toContain('Уже добавленные факты останутся в профиле');
     expect(html).not.toContain('токены');
   });
