@@ -271,6 +271,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CLUSTERS_TABLE);
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
     this.database.exec(VACANCY_CLUSTER_KEYS_TABLE);
+    // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
+    // но собственное соединение пула должно видеть таблицу и вне прод-файла
+    // (например, `:memory:` в тестах, где второго соединения не будет).
+    this.database.exec(MIGRATION_35);
     this.ensureColumn('vacancy_clusters', 'representative', VACANCY_CLUSTER_REPRESENTATIVE_COLUMN);
     const keysState = this.database
       .prepare('SELECT cursor_rowid, completed FROM cluster_keys_backfill_state WHERE id = 1')

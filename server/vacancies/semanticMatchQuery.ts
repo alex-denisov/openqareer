@@ -18,34 +18,53 @@ export interface SemanticMatchQueryInput {
 }
 
 const ALIVE = 'i.expired = 0';
-const REMOTE_ORDER = '(CASE WHEN i.is_remote = 1 THEN 1 ELSE 0 END)';
+
+/**
+ * Одна ветка на код функции (план §5 п.3): у массовой функции (`eng` ≈ 30 %
+ * пула) `IN (...)` + `GROUP BY` по всем кодам сразу сортировал сотни тысяч
+ * совпавших строк одним temp b-tree (замер до правки — 957–1542 мс на 750
+ * тыс. строк). Каждая ветка использует `vacancy_semantic_match` напрямую под
+ * свой `ORDER BY published_ms DESC LIMIT`, без полной сортировки функции;
+ * слияние веток идёт уже по ограниченному числу строк (после правки — 3–9 мс
+ * на том же наборе, см. `semanticMatchQuery.bench.test.ts`).
+ */
+function buildFunctionBranch(levelFilter: string): string {
+  return `SELECT * FROM (
+    SELECT s.id AS id, s.published_ms AS p, i.is_remote AS remote
+    FROM vacancy_semantic s INDEXED BY vacancy_semantic_match
+    JOIN vacancy_pool_index i ON i.id = s.id
+    WHERE s.function_code = ? ${levelFilter}
+      AND s.published_ms BETWEEN ? AND ? AND ${ALIVE} AND i.is_active = 1
+    ORDER BY s.published_ms DESC
+    LIMIT ?
+  )`;
+}
 
 export function buildSemanticMatchQuery(
   input: SemanticMatchQueryInput,
 ): { sql: string; params: SQLInputValue[] } {
-  const functionPlaceholders = input.functionCodes.map(() => '?').join(',');
   const levelFilter =
     input.levelRank === null ? '' : 'AND (s.level_rank IS NULL OR s.level_rank BETWEEN ? AND ?)';
+  const branch = buildFunctionBranch(levelFilter);
+  const branches = input.functionCodes.map(() => branch).join('\nUNION ALL\n');
+  const remoteOrder = '(CASE WHEN remote = 1 THEN 1 ELSE 0 END)';
   const order = `${input.preferRemote ? 'r DESC, ' : ''}p DESC`;
-  const sql = `WITH selected AS MATERIALIZED (
-      SELECT s.id, max(s.published_ms) AS p, max(${REMOTE_ORDER}) AS r
-      FROM vacancy_semantic s INDEXED BY vacancy_semantic_match
-      JOIN vacancy_pool_index i ON i.id = s.id
-      WHERE s.function_code IN (${functionPlaceholders})
-        ${levelFilter}
-        AND s.published_ms BETWEEN ? AND ? AND ${ALIVE} AND i.is_active = 1
-      GROUP BY s.id
+  const sql = `WITH candidates AS (${branches}),
+    selected AS (
+      SELECT id, max(p) AS p, max(${remoteOrder}) AS r
+      FROM candidates
+      GROUP BY id
       ORDER BY ${order}
       LIMIT ?
     ) SELECT c.cluster_json AS payload FROM selected sel
       JOIN vacancy_cluster_input c ON c.id = sel.id
       ORDER BY ${input.preferRemote ? 'sel.r DESC, ' : ''}sel.p DESC, sel.id ASC`;
-  const params: SQLInputValue[] = [
-    ...input.functionCodes,
-    ...(input.levelRank === null ? [] : [input.levelRank - 1, input.levelRank + 1]),
-    input.window.fromMs,
-    input.window.toMs,
-    input.limit,
-  ];
+  const params: SQLInputValue[] = [];
+  for (const code of input.functionCodes) {
+    params.push(code);
+    if (input.levelRank !== null) params.push(input.levelRank - 1, input.levelRank + 1);
+    params.push(input.window.fromMs, input.window.toMs, input.limit);
+  }
+  params.push(input.limit);
   return { sql, params };
 }
