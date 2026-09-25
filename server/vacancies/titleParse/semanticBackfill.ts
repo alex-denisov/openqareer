@@ -20,6 +20,7 @@ export interface SemanticBackfillReport {
   readonly newKeys: number;
   readonly pruned: number;
   readonly passFinished: boolean;
+  readonly relabeled: number;
 }
 
 interface PoolRow {
@@ -35,10 +36,14 @@ interface ParsedTitle {
 }
 
 const PRUNE_CHUNK = 5_000;
+/** Названий на переразбор за шаг: удаление строк индекса идёт по `title_key`. */
+const RELABEL_CHUNK = 200;
 
 export class SemanticBackfill {
   private readonly database: DatabaseSync;
   private cursor = '';
+  /** Устаревших разборов не осталось — до рестарта таблицу больше не обходим. */
+  private relabelDone = false;
 
   constructor(database: DatabaseSync) {
     this.database = database;
@@ -51,13 +56,59 @@ export class SemanticBackfill {
    * LIMIT по совпадениям на размеченном пуле обходил бы весь индекс за шаг.
    */
   step(chunk: number): SemanticBackfillReport {
+    const relabeled = this.relabelStale(RELABEL_CHUNK);
     const windowEnd = this.windowEnd(chunk);
     const rows = this.readWindow(windowEnd);
     const { backfilled, newKeys } = this.writeChunk(rows);
     const passFinished = windowEnd === null;
     this.cursor = windowEnd ?? '';
     const pruned = passFinished ? this.pruneOrphans() : 0;
-    return { scanned: rows.length, backfilled, newKeys, pruned, passFinished };
+    return { scanned: rows.length, backfilled, newKeys, pruned, passFinished, relabeled };
+  }
+
+  /**
+   * Смена словаря (`TAXONOMY_VERSION`): разбор правилами старой версии
+   * пересчитывается, строки индекса по этому названию удаляются, и ближайший
+   * проход наполнения вставляет их заново уже с новым разбором. Модельный
+   * разбор не трогается — он главнее правил.
+   */
+  private relabelStale(limit: number): number {
+    if (this.relabelDone) return 0;
+    const stale = this.database
+      .prepare(
+        `SELECT title_key, sample_title FROM title_parse
+         WHERE parsed_by = 'rules' AND taxonomy_version < ? LIMIT ?`,
+      )
+      .all(TAXONOMY_VERSION, limit) as { title_key: string; sample_title: string }[];
+    if (stale.length === 0) {
+      this.relabelDone = true;
+      return 0;
+    }
+    const parsed = stale.map((row) => ({ ...row, parsed: rulesParseOrOther(row.sample_title) }));
+    const update = this.database.prepare(
+      `UPDATE title_parse SET functions = ?, level_rank = ?, taxonomy_version = ?, parsed_at = ?
+       WHERE title_key = ? AND parsed_by = 'rules'`,
+    );
+    const drop = this.database.prepare('DELETE FROM vacancy_semantic WHERE title_key = ?');
+    const now = Date.now();
+    this.database.exec('BEGIN');
+    try {
+      for (const row of parsed) {
+        update.run(
+          JSON.stringify(row.parsed.functions),
+          row.parsed.levelRank,
+          TAXONOMY_VERSION,
+          now,
+          row.title_key,
+        );
+        drop.run(row.title_key);
+      }
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+    return stale.length;
   }
 
   /** Сколько названий уже в кеше — для журнала в конце прохода. */

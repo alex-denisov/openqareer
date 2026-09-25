@@ -96,7 +96,6 @@ describe.skipIf(!process.env.BENCH)('buildSemanticMatchQuery bench (B267 S3)', (
       try {
         const vpMs = timeQuery(database, ['eng-mgmt', 'it-ops', 'ops'], 3);
         const devMs = timeQuery(database, ['eng'], 0);
-        // eslint-disable-next-line no-console -- замер только в ручном BENCH-прогоне, не в CI
         console.log(`B267 S3 bench: VP=${vpMs.toFixed(1)}ms, DEV=${devMs.toFixed(1)}ms`);
         expect(vpMs).toBeLessThan(300);
         expect(devMs).toBeLessThan(300);

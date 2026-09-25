@@ -137,4 +137,27 @@ describe('SemanticBackfill (B267 S2)', () => {
     expect(report.backfilled).toBe(1_000);
     expect(elapsed).toBeLessThan(1_000);
   });
+
+  it('переразбирает названия старой версии словаря и пересобирает их строки индекса', () => {
+    const database = poolDatabase();
+    addVacancy(database, 'v1', 'Chief Technology Officer');
+    const backfill = new SemanticBackfill(database);
+    database
+      .prepare(
+        `INSERT INTO title_parse (title_key, sample_title, functions, level_rank, role_label, parsed_by, model, taxonomy_version, priority, parsed_at)
+         VALUES ('chief technology officer', 'Chief Technology Officer', '["other"]', 4, NULL, 'rules', NULL, 1, 0, 0)`,
+      )
+      .run();
+    database
+      .prepare(
+        `INSERT INTO vacancy_semantic (id, function_code, level_rank, title_key, published_ms, is_remote)
+         VALUES ('v1', 'other', 4, 'chief technology officer', 1000, 1)`,
+      )
+      .run();
+
+    const report = backfill.step(100);
+
+    expect(report.relabeled).toBe(1);
+    expect(semanticRows(database).map((row) => row.function_code)).toEqual(['eng-mgmt']);
+  });
 });
