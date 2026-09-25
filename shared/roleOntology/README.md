@@ -37,13 +37,15 @@
 
 ## 3. Глубина наполнения по сферам
 
-| Coverage | Сферы | Что внутри |
-|---|---|---|
-| `full` (IT и техническое руководство) | eng, eng-mgmt, it-ops, data, ai-ml, security (ИБ), qa, product, design, project-mgmt, consulting, ops, exec-general | 13 функций, 33 семейства, 80 канонических ролей, у каждой 5-9 вариантов EN+RU, полная лестница ic→c-level там, где она реально существует |
-| `core` (17 массовых нетех-сфер) | sales, marketing, hr, finance, support, admin (canцелярия), retail, hospitality, healthcare, education, logistics, manufacturing (вкл. рабочих), construction (вкл. рабочие специальности), agriculture, personal-services, elementary-labor, security-services | Полная лестница ic→c-level (или до потолка, где c-level не существует — элементарный труд), 4-6 ролей на функцию, 2-5 вариантов на роль — приоритет отдан массовым названиям, не каждому нишевому |
-| `skeleton` (12 сфер, дозаполнение позже) | bizdev, pr, audit-risk, legal, procurement, real-estate, media, research (не-AI), public-service, defense, arts-culture, extraction-energy | 1 запись на функцию, 3-5 синонимов, без разбивки по уровням |
+С 25.09 все 43 функции и 169 семейств — `coverage: full`: 451 каноническая роль, 4 851 вариант названия EN+RU.
 
-Приоритет `core` vs `skeleton` — по оценочной доле вакансий в пуле (hh.ru/LinkedIn/Indeed): продажи, поддержка, розница, HoReCa, логистика/водители, производство/рабочие, стройка/рабочие специальности, здравоохранение, образование, HR, финансы, админ-персонал, элементарный труд (курьер/грузчик — одна из самых массовых категорий на hh.ru) и физическая охрана дают заметно больше объёма, чем аудит/юристы/недвижимость/госслужба/оборона/добыча/творческие профессии — это грубая прикидка по объёму, не измерение (аналогично методике оценки в исходном исследовании B267-ontology-research.md §«Оценка покрытия»).
+| Этап | Сферы | Кто |
+|---|---|---|
+| Исходный каркас | IT и техническое руководство (13 функций, 80 ролей) — сразу `full`; остальные — `core`/`skeleton` | карьерный консультант |
+| Дозаполнение C11a | sales, marketing, finance, hr, legal, procurement, audit-risk, bizdev, pr, admin, support, real-estate, media: 32 → 160 ролей | Codex по шаблону §5, выборочная проверка CPO |
+| Дозаполнение C11b | healthcare, education, logistics, manufacturing, construction, retail, hospitality, agriculture, extraction-energy, public-service, defense, arts-culture, personal-services, elementary-labor, security-services, research: 49 → 208 ролей | Codex по шаблону §5, выборочная проверка CPO |
+
+Проверка — `roleOntology.test.ts` (уникальность id, ссылки `adjacent`, уровни шкалы, варианты без дублей). Выборка вариантов — реальные формы с hh.ru/LinkedIn («Врач КЛД», «КАМ», «Торговый представитель»); единичные натянутые варианты («Директор по доходам») не мешают разбору, но при чистке словаря удаляются первыми.
 
 ## 4. Пример автонабора: VP of Technology & Operations
 
