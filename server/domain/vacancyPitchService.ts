@@ -103,6 +103,17 @@ function isAboutTheImportItself(statement: string): boolean {
   return /импортировал|импорт резюме|imported (?:a|the|his|her) (?:resume|profile)/iu.test(statement);
 }
 
+/**
+ * Экспортируется для сопроводительного письма от модели (B266, пункт 7):
+ * тот же фильтр, что и у шаблона — импорт-о-себе и отрицания не должны
+ * попасть в вызов модели, если их не пускают в шаблонное письмо.
+ */
+export function filterUsablePitchFacts(
+  facts: readonly VacancyPitchInputFact[],
+): VacancyPitchInputFact[] {
+  return filterUsableFacts(facts);
+}
+
 function filterUsableFacts(facts: readonly VacancyPitchInputFact[]): VacancyPitchInputFact[] {
   return facts.filter(
     (fact) =>

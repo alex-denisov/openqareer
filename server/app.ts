@@ -16,6 +16,7 @@ import type { CoachProvider } from './providers/coachProvider';
 import type { ResumeStructurer } from './providers/resumeStructurer';
 import type { RoleNamer } from './providers/roleNamer';
 import { RoleNamingFailureLog } from './providers/roleNamingFailureLog';
+import type { CoverLetterWriter } from './providers/coverLetterWriter';
 import type { SessionAuth } from './auth/authService';
 import type { VacancySample } from './domain/vacancy';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
@@ -57,6 +58,7 @@ interface BuildAppOptions {
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
   roleNamer?: RoleNamer;
+  coverLetterWriter?: CoverLetterWriter;
   recruiterContactsRepo?: SqliteRecruiterContactsRepository;
   candidateReputationRepo?: SqliteCandidateReputationRepository;
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
@@ -237,6 +239,7 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Rou
     importProfile = importPublicProfileUrl,
     resumeStructurer,
     roleNamer,
+    coverLetterWriter,
     recruiterContactsRepo,
     candidateReputationRepo,
     linkedinPool,
@@ -254,6 +257,7 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Rou
     importProfile,
     resumeStructurer,
     roleNamer,
+    coverLetterWriter,
     recruiterContactsRepo:
       recruiterContactsRepo ??
       new SqliteRecruiterContactsRepository({ databasePath: config.databasePath }),

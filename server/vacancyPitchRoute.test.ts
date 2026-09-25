@@ -10,6 +10,7 @@ import { AuthService } from './auth/authService';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
 import { MemoryVacancyPoolStore } from './vacancies/memoryVacancyPoolStore';
 import type { VacancyCluster } from './domain/unifiedVacancy';
+import type { CoverLetterWriter } from './providers/coverLetterWriter';
 
 const resources: Array<{
   app: Awaited<ReturnType<typeof buildApp>>;
@@ -33,7 +34,10 @@ afterEach(async () => {
   }
 });
 
-async function createApp(clusters: VacancyCluster[] = [], options: { persisted?: boolean } = {}) {
+async function createApp(
+  clusters: VacancyCluster[] = [],
+  options: { persisted?: boolean; coverLetterWriter?: CoverLetterWriter } = {},
+) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-pitch-routes-'));
   const databasePath = join(directory, 'app.db');
   const candidates = new SqliteCandidateStore({
@@ -95,6 +99,7 @@ async function createApp(clusters: VacancyCluster[] = [], options: { persisted?:
     authService: auth,
     multiSourceVacancyEngine: multiSourceEngine,
     serveStatic: false,
+    ...(options.coverLetterWriter ? { coverLetterWriter: options.coverLetterWriter } : {}),
   });
 
   resources.push({ app, auth, candidates, directory });
@@ -251,6 +256,66 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     });
 
     expect(json.data.linkedInNote.length).toBeLessThanOrEqual(300);
+  });
+
+  // B266, пункт 7: письмо пишет модель, шаблон — запас.
+  it('uses the model letter and reports its stage when the writer succeeds', async () => {
+    const writer: CoverLetterWriter = {
+      writeCoverLetter: async () => ({
+        body: 'Здравствуйте! Пишу по вакансии от модели.',
+        stage: 'openai:gpt-test',
+      }),
+    };
+    const { app, candidates } = await createApp([sampleCluster], { coverLetterWriter: writer });
+    const { cookie, candidateId } = await login(app);
+    candidates.importResumeEvidence(candidateId, {
+      sourceLabel: 'test-import',
+      entries: [
+        { memoryId: 'mem-201', domain: 'skill', statement: 'Владею TypeScript, Node.js' },
+      ],
+    });
+    candidates.reviewMemories(candidateId, ['mem-201'], 'confirm');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    const data = response.json().data;
+    expect(data.bodySource).toBe('model');
+    expect(data.stage).toBe('openai:gpt-test');
+    expect(data.atsCoverLetter).toBe('Здравствуйте! Пишу по вакансии от модели.');
+  });
+
+  it('falls back to the template letter when the writer fails', async () => {
+    const writer: CoverLetterWriter = {
+      writeCoverLetter: async () => ({ failure: { stage: 'openai:gpt-test', kind: 'timeout' } }),
+    };
+    const { app, candidates } = await createApp([sampleCluster], { coverLetterWriter: writer });
+    const { cookie, candidateId } = await login(app);
+    candidates.importResumeEvidence(candidateId, {
+      sourceLabel: 'test-import',
+      entries: [
+        { memoryId: 'mem-202', domain: 'skill', statement: 'Владею TypeScript, Node.js' },
+      ],
+    });
+    candidates.reviewMemories(candidateId, ['mem-202'], 'confirm');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    const data = response.json().data;
+    expect(data.bodySource).toBe('template');
+    expect(data.stage).toBeUndefined();
+    expect(data.atsCoverLetter).toContain('Senior Platform Engineer');
   });
 
   // B251, S2, architecture.md §4: an optional `applicationId` saves the

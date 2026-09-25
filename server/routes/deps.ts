@@ -9,6 +9,7 @@ import type { CoachProvider } from '../providers/coachProvider';
 import type { ResumeStructurer } from '../providers/resumeStructurer';
 import type { RoleNamer } from '../providers/roleNamer';
 import type { RoleNamingFailureLog } from '../providers/roleNamingFailureLog';
+import type { CoverLetterWriter } from '../providers/coverLetterWriter';
 import type { VacancySample } from '../domain/vacancy';
 import type { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyIntelligenceService } from '../vacancies/vacancyIntelligenceService';
@@ -51,6 +52,8 @@ export interface RouteDeps {
   resumeStructurer?: ResumeStructurer;
   /** Роли называет модель по фактам кандидата (B180, срез 1в). */
   roleNamer?: RoleNamer;
+  /** Сопроводительное письмо пишет модель, шаблон — запас (B266, пункт 7). */
+  coverLetterWriter?: CoverLetterWriter;
   /** Окно последних отказов ступеней называния — для администратора (INC-035). */
   roleNamingFailures: RoleNamingFailureLog;
   searchRemotive?: (input: { text: string; perPage?: number }) => Promise<VacancySample>;
