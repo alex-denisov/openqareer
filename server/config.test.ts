@@ -284,3 +284,26 @@ describe('очередь моделей (B183)', () => {
     ).toThrow(/unknown synthetic fallback provider/);
   });
 });
+
+describe('owner Telegram alerts config (B266)', () => {
+  it('treats empty placeholders as not configured', () => {
+    const config = readServerConfig(
+      { ...validEnvironment, OPENQAREER_TELEGRAM_BOT_TOKEN: '', OPENQAREER_TELEGRAM_OWNER_CHAT_ID: '' },
+      import.meta.url,
+    );
+    expect(config.telegramBotToken).toBeUndefined();
+    expect(config.telegramOwnerChatId).toBeUndefined();
+  });
+
+  it('reads a filled token and chat id', () => {
+    const config = readServerConfig(
+      {
+        ...validEnvironment,
+        OPENQAREER_TELEGRAM_BOT_TOKEN: '123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh',
+        OPENQAREER_TELEGRAM_OWNER_CHAT_ID: '987654321',
+      },
+      import.meta.url,
+    );
+    expect(config.telegramOwnerChatId).toBe('987654321');
+  });
+});
