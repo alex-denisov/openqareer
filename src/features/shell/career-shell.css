@@ -3154,7 +3154,7 @@
 
 .career-dialogue-turn code {
   font-family: var(--career-font-mono, ui-monospace, monospace);
-  font-size: 0.95em;
+  font-size: var(--career-text-xs);
 }
 
 .career-role-coverage,
