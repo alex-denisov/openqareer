@@ -17,6 +17,7 @@ import {
   type CoachResult,
 } from '../coach/coachApi';
 import type { CareerJourney } from './careerJourneyEngine';
+import { consultantTurns } from './consultantHistory';
 import { CareerActionProposalList } from './CareerCommandActions';
 
 interface CareerExpertPanelProps {
@@ -57,6 +58,7 @@ export function CareerExpertPanel({
   }>();
   const panel = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const historyEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const returnFocusTo =
@@ -189,11 +191,16 @@ export function CareerExpertPanel({
     }
   }
 
+  const turns = consultantTurns(snapshot?.messages);
   const showLiveMessage =
     liveResult &&
     !snapshot?.messages.some(
       (message) => message.role === 'assistant' && message.content === liveResult.message,
     );
+  // After a reply lands, the newest turn is what the candidate came for.
+  useEffect(() => {
+    historyEndRef.current?.scrollIntoView?.({ block: 'end' });
+  }, [turns.length, showLiveMessage]);
   const latestStoredTurn = [...(snapshot?.turns ?? [])]
     .reverse()
     .find((turn) => turn.status === 'completed' && turn.result);
@@ -241,9 +248,9 @@ export function CareerExpertPanel({
           </p>
         </div>
 
-        {snapshot?.messages.length || showLiveMessage ? (
+        {turns.length || showLiveMessage ? (
           <div className="career-dialogue-history" aria-label="История диалога">
-            {snapshot?.messages.map((message) => (
+            {turns.map((message) => (
               <article className={`career-dialogue-turn is-${message.role}`} key={message.id}>
                 <span>{message.role === 'user' ? 'Вы' : 'Карьерный консультант'}</span>
                 {message.content
@@ -261,6 +268,7 @@ export function CareerExpertPanel({
                   .map((paragraph, index) => (paragraph ? <p key={index}>{paragraph}</p> : null))}
               </article>
             ) : null}
+            <div ref={historyEndRef} aria-hidden="true" />
           </div>
         ) : null}
 
@@ -362,8 +370,8 @@ export function ExpertWaitingRow({ question }: { question: string }) {
       <span>Вы</span>
       <p>{question}</p>
       <p>
-        <Spinner size={16} /> Консультант читает ваши факты и рынок — ответ занимает до полутора минут.
-        Не закрывайте панель.
+        <Spinner size={16} /> Консультант читает ваши факты и рынок — ответ занимает до полутора
+        минут. Не закрывайте панель.
       </p>
     </article>
   );

@@ -110,7 +110,9 @@ export function planResumeImport(
       ...(certifications.length ? { certifications } : {}),
       ...(projects.length ? { projects } : {}),
       ...(achievements.length ? { achievements } : {}),
-      ...(planOpenToWork(parsed) ? { sourceSuggestions: { openToWork: planOpenToWork(parsed) } } : {}),
+      ...(planOpenToWork(parsed)
+        ? { sourceSuggestions: { openToWork: planOpenToWork(parsed) } }
+        : {}),
     },
   };
 }
@@ -240,7 +242,9 @@ function planOpenToWork(
     return undefined;
   }
   return {
-    roles: openToWork.roles.map((role) => clamp(role, MAX_LABEL) ?? '').slice(0, MAX_OPEN_TO_WORK_ROLES),
+    roles: openToWork.roles
+      .map((role) => clamp(role, MAX_LABEL) ?? '')
+      .slice(0, MAX_OPEN_TO_WORK_ROLES),
     locations: openToWork.locations
       .map((location) => clamp(location, MAX_LABEL) ?? '')
       .slice(0, MAX_OPEN_TO_WORK_LOCATIONS),
@@ -273,22 +277,17 @@ function planTests(parsed: ParsedResume, prefix: string): ResumeDraft['tests'] {
     }));
 }
 
-function planRecommendations(
-  parsed: ParsedResume,
-  prefix: string,
-): ResumeDraft['recommendations'] {
-  return parsed.recommendations
-    .slice(0, MAX_RECOMMENDATIONS)
-    .map((item, index) => ({
-      id: `${prefix}-rec-${index + 1}`,
-      recommender: label(item.recommender),
-      organization: label(item.organization),
-      position: label(item.position),
-      text: item.text ? clamp(item.text, 5_000) : undefined,
-      contact: label(item.contact),
-      relationship: label(item.relationship),
-      date: clamp(item.date, MAX_DATE),
-    }));
+function planRecommendations(parsed: ParsedResume, prefix: string): ResumeDraft['recommendations'] {
+  return parsed.recommendations.slice(0, MAX_RECOMMENDATIONS).map((item, index) => ({
+    id: `${prefix}-rec-${index + 1}`,
+    recommender: label(item.recommender),
+    organization: label(item.organization),
+    position: label(item.position),
+    text: item.text ? clamp(item.text, 5_000) : undefined,
+    contact: label(item.contact),
+    relationship: label(item.relationship),
+    date: clamp(item.date, MAX_DATE),
+  }));
 }
 
 function planAdditional(parsed: ParsedResume): ResumeDraft['additional'] {
@@ -374,9 +373,7 @@ function planEducation(
         memoryId,
         domain: 'other',
         statement: statement(
-          [entry.institution, entry.qualification, entry.endDate]
-            .filter(Boolean)
-            .join(', '),
+          [entry.institution, entry.qualification, entry.endDate].filter(Boolean).join(', '),
         ),
       });
       return {
@@ -404,9 +401,7 @@ function planLanguages(
       evidence.push({
         memoryId,
         domain: 'other',
-        statement: statement(
-          entry.cefr ? `${entry.name} — ${entry.cefr}` : entry.name,
-        ),
+        statement: statement(entry.cefr ? `${entry.name} — ${entry.cefr}` : entry.name),
       });
       return {
         id: memoryId,
@@ -504,13 +499,38 @@ export function newImportMemoryIdPrefix(randomId: string): string {
   return `${IMPORT_MEMORY_ID_PREFIX}${randomId.replace(/-/gu, '').slice(0, 10)}`;
 }
 
-const IMPORTED_MEMORY_ID = new RegExp(
-  `^${IMPORT_MEMORY_ID_PREFIX}[0-9a-f]{10}-`,
-  'u',
-);
+const IMPORTED_MEMORY_ID = new RegExp(`^${IMPORT_MEMORY_ID_PREFIX}[0-9a-f]{10}-`, 'u');
 
 export function isImportedMemoryId(memoryId: string): boolean {
   return IMPORTED_MEMORY_ID.test(memoryId);
+}
+
+/**
+ * Every import announcement message (`conversationController.
+ * importResumeEvidenceInTransaction`) carries this prefix so it can be told
+ * apart from an actual candidate reply. It is a `role: 'user'` row for schema
+ * reasons only — the candidate never typed it, so it must never reach the
+ * model as a conversation turn, and the UI must never label it "Вы:" (B266).
+ */
+export const RESUME_IMPORT_MESSAGE_ID_PREFIX = 'resume-import:';
+
+export function isResumeImportMessageId(messageId: string): boolean {
+  return messageId.startsWith(RESUME_IMPORT_MESSAGE_ID_PREFIX);
+}
+
+const IMPORT_ANNOUNCEMENT_TEXT = /^Импорт: /u;
+
+/**
+ * Older imports wrote the announcement under a random id, so the text is
+ * checked as well: a `user` row reading «Импорт: …» is an event, not a turn.
+ */
+export function isResumeImportAnnouncement(message: {
+  readonly id: string;
+  readonly role: string;
+  readonly content: string;
+}): boolean {
+  if (isResumeImportMessageId(message.id)) return true;
+  return message.role === 'user' && IMPORT_ANNOUNCEMENT_TEXT.test(message.content);
 }
 
 function safePrefix(value: string): string {
