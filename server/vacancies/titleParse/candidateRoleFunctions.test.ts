@@ -3,7 +3,9 @@ import { candidateRoleFunctionCodes } from './candidateRoleFunctions';
 
 describe('candidateRoleFunctionCodes (B267 S3)', () => {
   it('переводит роль кампании в коды функций', () => {
-    expect(candidateRoleFunctionCodes(['VP of Technology & Operations'])).toEqual(['ops']);
+    expect(candidateRoleFunctionCodes(['VP of Technology & Operations'])).toEqual(
+      expect.arrayContaining(['ops', 'eng-mgmt']),
+    );
   });
 
   it('не включает общий код other и пустые строки', () => {

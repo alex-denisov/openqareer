@@ -79,7 +79,11 @@ const ANCHOR_MATCHERS: readonly AnchorMatcher[] = ROLE_TAXONOMY.flatMap((definit
   }),
 );
 
-function matchesAnchor(normalizedTitle: string, matcher: AnchorMatcher, compactTitle: boolean): boolean {
+function matchesAnchor(
+  normalizedTitle: string,
+  matcher: AnchorMatcher,
+  compactTitle: boolean,
+): boolean {
   if (!normalizedTitle.includes(matcher.anchor)) return false;
   if (matcher.pattern === null) return true;
   if (compactTitle && matcher.compactPattern) return matcher.compactPattern.test(normalizedTitle);
@@ -118,8 +122,29 @@ function findOntologyVariant(normalizedTitle: string): OntologyVariant | undefin
   return undefined;
 }
 
+/**
+ * Точное совпадение с вариантом — одна функция роли, если название не составное. Частичное совпадение
+ * внутри составного названия («VP of Technology & Operations» → роль
+ * `ops.vp`) дополняется функциями опорных слов: иначе вторая половина
+ * названия терялась (B267 S3, 26.09). Не больше двух функций.
+ */
+function ontologyFunctions(
+  variant: OntologyVariant,
+  normalizedKey: string,
+  normalizedTitle: string,
+): FunctionCode[] {
+  const compound = COMPOUND_TITLE.test(normalizedTitle);
+  if (ONTOLOGY_VARIANTS.exact.has(normalizedKey) && !compound) return [variant.function];
+  const anchorFunctions = pickTopFunctions(findAnchorHits(normalizedTitle));
+  return [...new Set([variant.function, ...anchorFunctions])].slice(0, 2);
+}
+
+/** Составное название: две роли через союз — функции обеих половин. */
+const COMPOUND_TITLE = /\s(?:&|and|и)\s|\//u;
+
 function levelRankForOntologyRole(title: string, variant: OntologyVariant): number {
-  if (!hasRulesLevelMarker(title) && variant.levels.length === 1) return LEVEL_RANK[variant.levels[0]];
+  if (!hasRulesLevelMarker(title) && variant.levels.length === 1)
+    return LEVEL_RANK[variant.levels[0]];
   return LEVEL_RANK[inferRulesLevel(title)];
 }
 
@@ -132,13 +157,53 @@ function levelRankForOntologyRole(title: string, variant: OntologyVariant): numb
 const GENERIC_ROLE_WORD = new RegExp(
   '(?<![\\p{L}])(' +
     [
-      'manager', 'director', 'specialist', 'analyst', 'coordinator', 'supervisor', 'associate',
-      'executive', 'lead', 'expert', 'administrator', 'representative', 'consultant', 'intern',
-      'apprentice', 'partner', 'officer', 'staff', 'agent', 'clerk', 'driver', 'guide', 'buyer',
-      'strategist', 'principal', 'leader', 'processor', 'trainee', 'apprenticeship',
-      'ejecutivo', 'ejecutiva', 'especialista', 'gerente', 'diretor', 'directora', 'executivo',
-      'executiva', 'vendedor', 'vendedora', 'consultor', 'consultora', 'analista', 'coordenador',
-      'coordenadora', 'responsable', 'ingeniero', 'responsavel',
+      'manager',
+      'director',
+      'specialist',
+      'analyst',
+      'coordinator',
+      'supervisor',
+      'associate',
+      'executive',
+      'lead',
+      'expert',
+      'administrator',
+      'representative',
+      'consultant',
+      'intern',
+      'apprentice',
+      'partner',
+      'officer',
+      'staff',
+      'agent',
+      'clerk',
+      'driver',
+      'guide',
+      'buyer',
+      'strategist',
+      'principal',
+      'leader',
+      'processor',
+      'trainee',
+      'apprenticeship',
+      'ejecutivo',
+      'ejecutiva',
+      'especialista',
+      'gerente',
+      'diretor',
+      'directora',
+      'executivo',
+      'executiva',
+      'vendedor',
+      'vendedora',
+      'consultor',
+      'consultora',
+      'analista',
+      'coordenador',
+      'coordenadora',
+      'responsable',
+      'ingeniero',
+      'responsavel',
     ].join('|') +
     ')(?![\\p{L}])',
   'iu',
@@ -156,7 +221,9 @@ function pickFallbackFunction(normalizedTitle: string): FunctionCode[] {
 function pickTopFunctions(hits: readonly AnchorHit[]): FunctionCode[] {
   const bestByCode = new Map<FunctionCode, number>();
   for (const hit of hits) {
-    const specificity = CJK_SCRIPT.test(hit.anchor) ? hit.anchor.length : hit.anchor.split(' ').length;
+    const specificity = CJK_SCRIPT.test(hit.anchor)
+      ? hit.anchor.length
+      : hit.anchor.split(' ').length;
     const current = bestByCode.get(hit.code) ?? 0;
     if (specificity > current) bestByCode.set(hit.code, specificity);
   }
@@ -169,17 +236,18 @@ function pickTopFunctions(hits: readonly AnchorHit[]): FunctionCode[] {
 export function rulesParse(title: string): RulesParseResult {
   const normalizedKey = normalizeTitleKey(title);
   const ontologyVariant = findOntologyVariant(normalizedKey);
+  const normalized = ` ${title.toLowerCase()} `;
   if (ontologyVariant) {
     return {
-      functions: [ontologyVariant.function],
+      functions: ontologyFunctions(ontologyVariant, normalizedKey, normalized),
       levelRank: levelRankForOntologyRole(title, ontologyVariant),
       roleId: ontologyVariant.roleId,
     };
   }
-  const normalized = ` ${title.toLowerCase()} `;
   const hits = findAnchorHits(normalized);
   const specificFunctions = pickTopFunctions(hits);
-  const functions = specificFunctions.length > 0 ? specificFunctions : pickFallbackFunction(normalized);
+  const functions =
+    specificFunctions.length > 0 ? specificFunctions : pickFallbackFunction(normalized);
   return {
     functions,
     levelRank: LEVEL_RANK[inferRulesLevel(title)],

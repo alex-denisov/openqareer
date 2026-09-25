@@ -14,7 +14,8 @@ import { ROLE_TAXONOMY_BUSINESS } from './roleTaxonomyBusiness';
 
 // 2 — полные названия руководителей (Chief Technology/Information Officer,
 // директор по ИТ) и RU CTO/CIO как C-level (B267 S3, 25.09).
-export const TAXONOMY_VERSION = 2;
+// 3 — онтология ролей как первый слой разбора (C12), составные названия (26.09).
+export const TAXONOMY_VERSION = 3;
 
 export type FunctionCode =
   | 'eng'
