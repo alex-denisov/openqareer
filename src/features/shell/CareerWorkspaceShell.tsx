@@ -25,7 +25,7 @@ import { CareerTariffsView } from './CareerTariffsView';
 import { CURRENT_PLAN } from './tariffPackages';
 import { initialsFor } from './accountIdentity';
 import { createIntakeCompletion } from './intakeCompletion';
-import { CareerAccountPanel } from './CareerAccountPanel';
+import { CareerAccountPanel, type AccountSection } from './CareerAccountPanel';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { CareerPathIndicator } from './CareerPathIndicator';
 import { buildPathIndicator } from './pathIndicator';
@@ -180,6 +180,7 @@ export function CareerWorkspaceShell({
   const [accountOpen, setAccountOpen] = useState(
     () => typeof window !== 'undefined' && window.location.pathname === '/auth/reset-password',
   );
+  const [accountSection, setAccountSection] = useState<AccountSection>('security');
   const [sessionWaitIsLong, setSessionWaitIsLong] = useState(false);
   const [railExpanded, setRailExpanded] = useState(
     () => typeof window !== 'undefined' && readRailPreference(),
@@ -310,7 +311,14 @@ export function CareerWorkspaceShell({
     setExpertOpen(false);
   }
 
-  const closeAccount = useCallback(() => setAccountOpen(false), []);
+  const closeAccount = useCallback(() => {
+    setAccountOpen(false);
+    setAccountSection('security');
+  }, []);
+  const openConnections = useCallback(() => {
+    setAccountSection('connections');
+    setAccountOpen(true);
+  }, []);
   const resetForAccount = useCallback(
     (nextSession: AuthUser | null) => {
       setActiveView('today');
@@ -526,6 +534,7 @@ export function CareerWorkspaceShell({
               workspace={visibleWorkspace}
               onNavigate={navigate}
               onOpenTariffs={() => navigate('tariffs')}
+              onOpenConnections={openConnections}
               onUpdateWorkspace={onUpdateWorkspace}
             />
           ) : null}
@@ -637,6 +646,7 @@ export function CareerWorkspaceShell({
           />
           <CareerAccountPanel
             initialUser={session}
+            initialSection={accountSection}
             onClose={closeAccount}
             onIdentityChange={resetForAccount}
             onDataChanged={() => setCabinetRevision((revision) => revision + 1)}

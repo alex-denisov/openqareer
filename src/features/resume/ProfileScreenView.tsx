@@ -126,7 +126,8 @@ export interface ProfileScreenSurfaceProps {
   readonly onRetry: () => void;
   readonly onDraftChange: (draft: ResumeDraft) => void;
   readonly onSectionSave: (next: ResumeDraft) => void;
-  readonly onRefresh?: () => void;
+  /** Opens «Аккаунт → Подключения», where a real re-import starts (B266). */
+  readonly onOpenConnections?: () => void;
   readonly onConfirmOpenToWork: (confirmation: OpenToWorkConfirmation) => void;
   readonly confirmingOpenToWork?: boolean;
   /**
@@ -157,7 +158,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
     onRetry,
     onDraftChange,
     onSectionSave,
-    onRefresh,
+    onOpenConnections,
     onConfirmOpenToWork,
     confirmingOpenToWork,
     tab = 'profile',
@@ -239,8 +240,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
             <ProfileSideRail
               draft={draft}
               importedSource={importedSource}
-              onRefresh={() => onRefresh?.()}
-              refreshing={false}
+              onOpenConnections={onOpenConnections}
             />
           </div>
         </>
@@ -254,6 +254,7 @@ interface ProfileScreenViewProps {
   readonly memory: readonly CandidateMemory[];
   readonly importedSources?: readonly ImportedSourceSummary[];
   readonly onRefreshFacts?: () => void;
+  readonly onOpenConnections?: () => void;
   /** Tab state lives in the cabinet shell now — it renders next to the H1. */
   readonly tab?: ProfileTab;
   /**
@@ -304,6 +305,7 @@ export function ProfileScreenView({
   memory,
   importedSources,
   onRefreshFacts,
+  onOpenConnections,
   tab,
   workspace,
   onUpdateWorkspace,
@@ -340,7 +342,7 @@ export function ProfileScreenView({
       onRetry={state.reload}
       onDraftChange={state.setDraft}
       onSectionSave={onSectionSave}
-      onRefresh={onRefreshFacts}
+      onOpenConnections={onOpenConnections}
       onConfirmOpenToWork={(confirmation) => void confirmOpenToWork(confirmation)}
       confirmingOpenToWork={confirmingOtw}
       tab={tab}

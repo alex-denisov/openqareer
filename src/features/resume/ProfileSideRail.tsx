@@ -1,10 +1,10 @@
 import {
-  ArrowClockwise,
   CheckCircle,
   EnvelopeSimple,
   Globe,
   PaperPlaneTilt,
   Phone,
+  PlugsConnected,
 } from '@phosphor-icons/react';
 import { resumeSourceCoverage, type ImportedSource } from './resumeSourceCoverage';
 import type { ResumeDraft } from './resumeTypes';
@@ -12,13 +12,11 @@ import type { ResumeDraft } from './resumeTypes';
 function SourceCoveragePanel({
   draft,
   importedSource,
-  onRefresh,
-  refreshing,
+  onOpenConnections,
 }: {
   readonly draft: ResumeDraft;
   readonly importedSource?: ImportedSource;
-  readonly onRefresh: () => void;
-  readonly refreshing?: boolean;
+  readonly onOpenConnections?: () => void;
 }) {
   const coverage = resumeSourceCoverage(draft);
   const total = coverage.filled.length + coverage.empty.length;
@@ -43,19 +41,18 @@ function SourceCoveragePanel({
         {coverage.empty.map((section) => (
           <li key={section.id} className="is-missing">
             <span>{section.label}</span>
-            <span>пусто в источнике</span>
+            <span>не заполнено</span>
           </li>
         ))}
       </ul>
-      <button
-        type="button"
-        className="career-quiet-button"
-        disabled={refreshing}
-        onClick={onRefresh}
-      >
-        <ArrowClockwise size={14} />
-        {refreshing ? 'Обновляем…' : 'Обновить импорт'}
-      </button>
+      {/* A re-import is a new read of the source, which lives in the
+          account's connections; this card only re-read the server (B266). */}
+      {onOpenConnections ? (
+        <button type="button" className="career-quiet-button" onClick={onOpenConnections}>
+          <PlugsConnected size={14} />
+          Импорт и подключения
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -89,21 +86,18 @@ function ContactsPanel({ draft }: { readonly draft: ResumeDraft }) {
 export function ProfileSideRail({
   draft,
   importedSource,
-  onRefresh,
-  refreshing,
+  onOpenConnections,
 }: {
   readonly draft: ResumeDraft;
   readonly importedSource?: ImportedSource;
-  readonly onRefresh: () => void;
-  readonly refreshing?: boolean;
+  readonly onOpenConnections?: () => void;
 }) {
   return (
     <aside className="career-profile-screen-side-col" aria-label="Источник и контакты">
       <SourceCoveragePanel
         draft={draft}
         importedSource={importedSource}
-        onRefresh={onRefresh}
-        refreshing={refreshing}
+        onOpenConnections={onOpenConnections}
       />
       <ContactsPanel draft={draft} />
     </aside>

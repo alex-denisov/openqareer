@@ -56,3 +56,27 @@ describe('CareerAccountPanel tariffs entry point', () => {
     expect(html).not.toContain('career-account-tariffs-button');
   });
 });
+
+describe('CareerAccountPanel initial section (B266)', () => {
+  const user = {
+    username: 'jordan',
+    email: 'jordan@example.com',
+    displayName: 'Jordan Rivers',
+    role: 'candidate',
+    isTest: true,
+    candidateId: 'c-1',
+  } as const;
+
+  it('opens on «Подключения» when the profile asks for a re-import', () => {
+    const html = renderToStaticMarkup(
+      <CareerAccountPanel
+        initialUser={user as never}
+        initialSection="connections"
+        onClose={() => undefined}
+        onIdentityChange={() => undefined}
+      />,
+    );
+    const active = /<button[^>]*class="is-active"[^>]*>([^<]*)</u.exec(html)?.[1];
+    expect(active).toBe('Подключения');
+  });
+});

@@ -39,6 +39,7 @@ interface CareerCabinetProps {
   workspace?: CandidateWorkspace;
   onNavigate: (view: CareerCabinetView) => void;
   onOpenTariffs?: () => void;
+  onOpenConnections?: () => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }
 
@@ -56,6 +57,7 @@ export function CareerCabinet({
   workspace,
   onNavigate,
   onOpenTariffs,
+  onOpenConnections,
   onUpdateWorkspace,
 }: CareerCabinetProps) {
   const data = useCareerCabinetData(session.candidateId);
@@ -178,6 +180,7 @@ export function CareerCabinet({
             onNavigate={onNavigate}
             onSavePremises={savePremises}
             onOpenTariffs={onOpenTariffs}
+            onOpenConnections={onOpenConnections}
             onUpdateWorkspace={onUpdateWorkspace}
           />
         )}
@@ -228,6 +231,7 @@ function CabinetSection({
   onNavigate,
   onSavePremises,
   onOpenTariffs,
+  onOpenConnections,
   onUpdateWorkspace,
 }: {
   view: CareerCabinetView;
@@ -245,6 +249,7 @@ function CabinetSection({
   onNavigate: (view: CareerCabinetView) => void;
   onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
   onOpenTariffs?: () => void;
+  onOpenConnections?: () => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }) {
   if (view === 'today') {
@@ -261,6 +266,7 @@ function CabinetSection({
         memory={data.snapshot?.memory ?? []}
         importedSources={data.snapshot?.importedSources}
         onRefreshFacts={() => void data.refresh()}
+        onOpenConnections={onOpenConnections}
         tab={profileTab}
         workspace={workspace}
         onUpdateWorkspace={onUpdateWorkspace}

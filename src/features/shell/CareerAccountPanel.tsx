@@ -53,10 +53,12 @@ interface CareerAccountPanelProps {
   tariffsPlanName?: string;
   tariffsAvailable?: boolean;
   tariffsLockedReason?: string;
+  /** The tab to open on; the profile's re-import opens «Подключения» (B266). */
+  initialSection?: AccountSection;
 }
 
 type AuthMode = 'choose' | 'login' | 'register' | 'forgot' | 'reset';
-type AccountSection = 'connections' | 'security' | 'data';
+export type AccountSection = 'connections' | 'security' | 'data';
 
 /**
  * The drawer holds account settings only. It used to also carry shortcuts into
@@ -84,6 +86,7 @@ export function CareerAccountPanel({
   tariffsPlanName,
   tariffsAvailable = false,
   tariffsLockedReason,
+  initialSection = 'security',
 }: CareerAccountPanelProps) {
   const resetToken = resetTokenFromLocation();
   const [user, setUser] = useState<AuthUser | null | undefined>(initialUser);
@@ -92,7 +95,7 @@ export function CareerAccountPanel({
   // B248: the panel now also opens for «Тарифы» alone (owner decision
   // 2026-09-23). «Подключения» reads a network catalog on mount, so it must
   // stay an explicit choice, not the tab every opening reason mounts first.
-  const [section, setSection] = useState<AccountSection>('security');
+  const [section, setSection] = useState<AccountSection>(initialSection);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
