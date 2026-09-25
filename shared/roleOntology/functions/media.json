@@ -8,9 +8,51 @@
     {
       "id": "media.generic",
       "function": "media",
-      "labelEn": "Media & Content",
-      "labelRu": "Медиа и контент",
-      "coverage": "skeleton"
+      "labelEn": "Media and content generalists",
+      "labelRu": "Общие роли в медиа и контенте",
+      "coverage": "full"
+    },
+    {
+      "id": "media.editorial",
+      "function": "media",
+      "labelEn": "Editorial and journalism",
+      "labelRu": "Редакция и журналистика",
+      "coverage": "full"
+    },
+    {
+      "id": "media.video",
+      "function": "media",
+      "labelEn": "Video and post-production",
+      "labelRu": "Видео и постпродакшен",
+      "coverage": "full"
+    },
+    {
+      "id": "media.audio",
+      "function": "media",
+      "labelEn": "Audio and podcast production",
+      "labelRu": "Аудио и подкасты",
+      "coverage": "full"
+    },
+    {
+      "id": "media.production",
+      "function": "media",
+      "labelEn": "Media production",
+      "labelRu": "Медиапродакшен",
+      "coverage": "full"
+    },
+    {
+      "id": "media.social",
+      "function": "media",
+      "labelEn": "Social and digital content",
+      "labelRu": "Социальный и digital-контент",
+      "coverage": "full"
+    },
+    {
+      "id": "media.leadership",
+      "function": "media",
+      "labelEn": "Media leadership",
+      "labelRu": "Руководство медиафункцией",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,24 +60,671 @@
       "id": "media.generic",
       "function": "media",
       "family": "media.generic",
-      "titleEn": "Media & Content",
-      "titleRu": "Медиа и контент",
+      "titleEn": "Content Producer",
+      "titleRu": "Продюсер контента",
       "levels": [
-        "ic",
-        "head"
+        "ic"
       ],
       "variants": {
         "en": [
           "Content Producer",
-          "Video Editor",
-          "Head of Content"
+          "Content Creator",
+          "Media Specialist",
+          "Content Specialist",
+          "Digital Content Producer",
+          "Media Content Manager"
         ],
         "ru": [
-          "Продюсер",
-          "Руководитель контента"
+          "Продюсер контента",
+          "Контент-продюсер",
+          "Специалист по контенту",
+          "Контент-специалист",
+          "Медиаспециалист",
+          "Менеджер контента"
         ]
       },
-      "adjacent": []
+      "adjacent": [
+        {
+          "roleId": "media.writer.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.video.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.editorial-lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "marketing.content.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "media.writer.ic",
+      "function": "media",
+      "family": "media.editorial",
+      "titleEn": "Writer / Journalist",
+      "titleRu": "Автор / журналист",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Writer",
+          "Journalist",
+          "Staff Writer",
+          "News Writer",
+          "Reporter",
+          "Editorial Writer"
+        ],
+        "ru": [
+          "Автор",
+          "Журналист",
+          "Корреспондент",
+          "Редакционный автор",
+          "Новостной журналист",
+          "Обозреватель"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.editor.ic",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "media.generic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "pr.press.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "media.editor.ic",
+      "function": "media",
+      "family": "media.editorial",
+      "titleEn": "Editor",
+      "titleRu": "Редактор",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Editor",
+          "Copy Editor",
+          "Content Editor",
+          "News Editor",
+          "Managing Editor",
+          "Editorial Specialist"
+        ],
+        "ru": [
+          "Редактор",
+          "Литературный редактор",
+          "Контент-редактор",
+          "Выпускающий редактор",
+          "Шеф-редактор",
+          "Редактор новостей"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.writer.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "media.editorial-lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "legal.ip.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "media.video.ic",
+      "function": "media",
+      "family": "media.video",
+      "titleEn": "Video Editor / Videographer",
+      "titleRu": "Видеомонтажёр / оператор",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Video Editor",
+          "Videographer",
+          "Video Producer",
+          "Motion Video Editor",
+          "Post-Production Editor",
+          "Video Content Specialist"
+        ],
+        "ru": [
+          "Видеомонтажёр",
+          "Видеооператор",
+          "Видеопродюсер",
+          "Монтажёр видео",
+          "Специалист по видеоконтенту",
+          "Режиссёр монтажа"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.producer.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.photo.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.video-lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "marketing.social.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "media.producer.ic",
+      "function": "media",
+      "family": "media.production",
+      "titleEn": "Media Producer",
+      "titleRu": "Медиапродюсер",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Media Producer",
+          "Content Producer",
+          "Executive Producer",
+          "Creative Producer",
+          "Production Coordinator",
+          "Video Production Manager"
+        ],
+        "ru": [
+          "Медиапродюсер",
+          "Контент-продюсер",
+          "Исполнительный продюсер",
+          "Креативный продюсер",
+          "Координатор производства контента",
+          "Продюсер видеопроизводства"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.video.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.audio.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.production-lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "media.generic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "media.audio.ic",
+      "function": "media",
+      "family": "media.audio",
+      "titleEn": "Audio Producer / Podcast Producer",
+      "titleRu": "Аудиопродюсер / продюсер подкастов",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Audio Producer",
+          "Podcast Producer",
+          "Podcast Editor",
+          "Audio Content Producer",
+          "Sound Producer",
+          "Audio Production Specialist"
+        ],
+        "ru": [
+          "Аудиопродюсер",
+          "Продюсер подкастов",
+          "Редактор подкастов",
+          "Продюсер аудиоконтента",
+          "Звукорежиссёр",
+          "Специалист по аудиопроизводству"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.producer.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.writer.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "media.production-lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "media.social.ic",
+      "function": "media",
+      "family": "media.social",
+      "titleEn": "Social Media Content Specialist",
+      "titleRu": "Специалист по контенту социальных сетей",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Social Media Content Specialist",
+          "Social Media Editor",
+          "Social Content Producer",
+          "Community Content Manager",
+          "Social Media Creator",
+          "Short-Form Video Creator"
+        ],
+        "ru": [
+          "Специалист по контенту социальных сетей",
+          "Редактор социальных сетей",
+          "Продюсер контента для соцсетей",
+          "Контент-креатор",
+          "Создатель коротких видео",
+          "Менеджер контента социальных сетей"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.generic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "marketing.social.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "media.social-lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "media.photo.ic",
+      "function": "media",
+      "family": "media.production",
+      "titleEn": "Photographer / Visual Content Producer",
+      "titleRu": "Фотограф / продюсер визуального контента",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Photographer",
+          "Commercial Photographer",
+          "Visual Content Producer",
+          "Photo Editor",
+          "Content Photographer",
+          "Studio Photographer"
+        ],
+        "ru": [
+          "Фотограф",
+          "Коммерческий фотограф",
+          "Продюсер визуального контента",
+          "Фоторедактор",
+          "Контент-фотограф",
+          "Студийный фотограф"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.video.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.producer.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.production-lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "media.editorial-lead",
+      "function": "media",
+      "family": "media.editorial",
+      "titleEn": "Editorial Lead",
+      "titleRu": "Руководитель редакции",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Editorial Lead",
+          "Senior Editor",
+          "Lead Editor",
+          "Editorial Team Lead",
+          "News Desk Lead",
+          "Content Editorial Lead"
+        ],
+        "ru": [
+          "Руководитель редакции",
+          "Шеф-редактор",
+          "Выпускающий редактор",
+          "Руководитель редакторской группы",
+          "Руководитель новостной службы",
+          "Ведущий редактор"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.editor.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "media.production-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "pr.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "media.video-lead",
+      "function": "media",
+      "family": "media.video",
+      "titleEn": "Video Production Lead",
+      "titleRu": "Руководитель видеопроизводства",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Video Production Lead",
+          "Senior Video Producer",
+          "Video Team Lead",
+          "Post-Production Lead",
+          "Video Content Lead",
+          "Lead Video Editor"
+        ],
+        "ru": [
+          "Руководитель видеопроизводства",
+          "Старший видеопродюсер",
+          "Руководитель видеогруппы",
+          "Руководитель постпродакшена",
+          "Руководитель видеоконтента",
+          "Ведущий видеомонтажёр"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.video.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "media.production-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "media.production-lead",
+      "function": "media",
+      "family": "media.production",
+      "titleEn": "Media Production Lead",
+      "titleRu": "Руководитель медиапродакшена",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Media Production Lead",
+          "Senior Producer",
+          "Production Manager",
+          "Media Production Manager",
+          "Content Production Lead",
+          "Creative Production Lead"
+        ],
+        "ru": [
+          "Руководитель медиапродакшена",
+          "Старший продюсер",
+          "Руководитель производства контента",
+          "Менеджер медиапроизводства",
+          "Руководитель креативного производства",
+          "Руководитель продюсерской группы"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.producer.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "media.video-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "media.editorial-lead",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "media.social-lead",
+      "function": "media",
+      "family": "media.social",
+      "titleEn": "Social Content Lead",
+      "titleRu": "Руководитель направления контента в соцсетях",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Social Content Lead",
+          "Social Media Lead",
+          "Senior Social Media Manager",
+          "Social Editorial Lead",
+          "Social Video Lead",
+          "Community Content Lead"
+        ],
+        "ru": [
+          "Руководитель направления контента в соцсетях",
+          "Руководитель социальных медиа",
+          "Старший SMM-менеджер",
+          "Руководитель редакции социальных сетей",
+          "Руководитель видеоконтента в соцсетях",
+          "Руководитель контентной команды"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.social.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "media.editorial-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "marketing.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "media.head",
+      "function": "media",
+      "family": "media.leadership",
+      "titleEn": "Head of Content and Media",
+      "titleRu": "Руководитель медиа и контента",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Content",
+          "Head of Media",
+          "Content Director",
+          "Editorial Director",
+          "Head of Content Production",
+          "Media Department Head"
+        ],
+        "ru": [
+          "Руководитель медиа и контента",
+          "Руководитель контентного направления",
+          "Директор по контенту",
+          "Редакционный директор",
+          "Руководитель медиапродакшена",
+          "Директор по медиа"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.editorial-lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "media.production-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "pr.head",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "marketing.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "media.vp",
+      "function": "media",
+      "family": "media.leadership",
+      "titleEn": "Vice President of Content and Media",
+      "titleRu": "Вице-президент по медиа и контенту",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "Vice President of Content",
+          "VP Media",
+          "VP Content and Editorial",
+          "Global Head of Content",
+          "Senior Vice President, Media",
+          "Global Content Director"
+        ],
+        "ru": [
+          "Вице-президент по контенту",
+          "Вице-президент по медиа",
+          "Директор по контенту группы компаний",
+          "Руководитель глобального контентного направления",
+          "Вице-президент по редакционной политике",
+          "Директор департамента медиа"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "media.cco",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "pr.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "marketing.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "media.cco",
+      "function": "media",
+      "family": "media.leadership",
+      "titleEn": "Chief Content Officer",
+      "titleRu": "Директор по контенту (CCO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Content Officer",
+          "CCO",
+          "Chief Media Officer",
+          "Chief Editorial Officer",
+          "Chief Content and Experience Officer",
+          "Global Chief Content Officer"
+        ],
+        "ru": [
+          "Директор по контенту",
+          "Директор по медиа",
+          "Главный редакционный директор",
+          "Директор по контенту и коммуникациям",
+          "Руководитель контентного блока",
+          "CCO"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "media.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "pr.cco",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "marketing.cmo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
+        }
+      ]
     }
   ]
 }

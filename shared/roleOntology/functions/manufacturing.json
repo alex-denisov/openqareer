@@ -8,9 +8,30 @@
     {
       "id": "manufacturing.core",
       "function": "manufacturing",
-      "labelEn": "Manufacturing ladder incl. line workers",
-      "labelRu": "Лестница производства, включая рабочих",
-      "coverage": "core"
+      "labelEn": "Production & Assembly",
+      "labelRu": "Производство и сборка",
+      "coverage": "full"
+    },
+    {
+      "id": "manufacturing.maintenance",
+      "function": "manufacturing",
+      "labelEn": "Maintenance & Process Engineering",
+      "labelRu": "Обслуживание и инженерия производства",
+      "coverage": "full"
+    },
+    {
+      "id": "manufacturing.quality",
+      "function": "manufacturing",
+      "labelEn": "Quality & Continuous Improvement",
+      "labelRu": "Качество и непрерывные улучшения",
+      "coverage": "full"
+    },
+    {
+      "id": "manufacturing.leadership",
+      "function": "manufacturing",
+      "labelEn": "Manufacturing Leadership",
+      "labelRu": "Руководство производством",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -20,173 +41,210 @@
       "family": "manufacturing.core",
       "titleEn": "Machine Operator / Assembler",
       "titleRu": "Оператор станка / сборщик",
-      "levels": [
-        "ic"
-      ],
-      "icBand": [
-        "grade-1-6"
-      ],
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Machine Operator",
-          "Assembly Line Worker",
-          "CNC Operator"
-        ],
-        "ru": [
-          "Оператор станка",
-          "Сборщик",
-          "Оператор ЧПУ"
-        ]
+        "en": ["Machine Operator", "Assembly Line Worker", "Production Operator", "CNC Operator", "Manufacturing Operator", "Assembler"],
+        "ru": ["Оператор станка", "Оператор производственной линии", "Оператор ЧПУ", "Сборщик", "Производственный рабочий", "Оператор оборудования"]
       },
+      "icBand": ["grade-1-6"],
       "adjacent": [
-        {
-          "roleId": "manufacturing.technician.ic",
-          "kind": "sibling-family"
-        }
+        {"roleId": "manufacturing.technician.ic", "kind": "sibling-family"},
+        {"roleId": "manufacturing.quality-inspector.ic", "kind": "sibling-family"},
+        {"roleId": "manufacturing.shift-lead", "kind": "level-up"}
       ]
     },
     {
       "id": "manufacturing.technician.ic",
       "function": "manufacturing",
-      "family": "manufacturing.core",
+      "family": "manufacturing.maintenance",
       "titleEn": "Maintenance / Process Technician",
       "titleRu": "Наладчик оборудования / технолог",
-      "levels": [
-        "ic"
-      ],
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Maintenance Technician",
-          "Quality Technician",
-          "Process Technician"
-        ],
-        "ru": [
-          "Технолог",
-          "Наладчик оборудования"
-        ]
+        "en": ["Maintenance Technician", "Equipment Technician", "Process Technician", "Manufacturing Technician", "Industrial Maintenance Technician", "Production Technician"],
+        "ru": ["Наладчик оборудования", "Техник-механик", "Технолог", "Техник по обслуживанию оборудования", "Производственный техник", "Техник по эксплуатации"]
+      },
+      "icBand": ["grade-1-6"],
+      "adjacent": [
+        {"roleId": "manufacturing.operator.ic", "kind": "sibling-family"},
+        {"roleId": "manufacturing.process-engineer.ic", "kind": "level-up"},
+        {"roleId": "manufacturing.maintenance.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "manufacturing.quality-inspector.ic",
+      "function": "manufacturing",
+      "family": "manufacturing.quality",
+      "titleEn": "Quality Inspector / Quality Technician",
+      "titleRu": "Контролёр качества / специалист ОТК",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Quality Inspector", "Quality Technician", "Quality Control Inspector", "QC Inspector", "Quality Assurance Technician", "Manufacturing Quality Specialist"],
+        "ru": ["Контролёр качества", "Контролёр ОТК", "Специалист ОТК", "Инспектор по качеству", "Техник по качеству", "Специалист контроля качества"]
+      },
+      "icBand": ["grade-1-6"],
+      "adjacent": [
+        {"roleId": "manufacturing.operator.ic", "kind": "sibling-family"},
+        {"roleId": "manufacturing.process-engineer.ic", "kind": "sibling-family"},
+        {"roleId": "manufacturing.quality.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "manufacturing.process-engineer.ic",
+      "function": "manufacturing",
+      "family": "manufacturing.maintenance",
+      "titleEn": "Process / Manufacturing Engineer",
+      "titleRu": "Инженер-технолог / инженер производства",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Process Engineer", "Manufacturing Engineer", "Production Engineer", "Industrial Engineer", "Process Improvement Engineer", "Operations Engineer"],
+        "ru": ["Инженер-технолог", "Инженер производства", "Инженер по процессам", "Промышленный инженер", "Инженер по совершенствованию процессов", "Инженер по организации производства"]
+      },
+      "icBand": ["junior", "middle", "senior"],
+      "adjacent": [
+        {"roleId": "manufacturing.technician.ic", "kind": "sibling-family"},
+        {"roleId": "manufacturing.quality-inspector.ic", "kind": "sibling-family"},
+        {"roleId": "manufacturing.maintenance.lead", "kind": "level-up"},
+        {"roleId": "manufacturing.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "manufacturing.production-planner.ic",
+      "function": "manufacturing",
+      "family": "manufacturing.core",
+      "titleEn": "Production Planner",
+      "titleRu": "Планировщик производства",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Production Planner", "Production Scheduler", "Manufacturing Planner", "Production Control Specialist", "Master Production Scheduler", "Materials and Production Planner"],
+        "ru": ["Планировщик производства", "Диспетчер производства", "Специалист по планированию производства", "Производственный диспетчер", "Планировщик загрузки производства", "Специалист производственного планирования"]
       },
       "adjacent": [
-        {
-          "roleId": "manufacturing.operator.ic",
-          "kind": "sibling-family"
-        }
+        {"roleId": "manufacturing.process-engineer.ic", "kind": "sibling-family"},
+        {"roleId": "logistics.planner.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "manufacturing.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "manufacturing.maintenance.lead",
+      "function": "manufacturing",
+      "family": "manufacturing.maintenance",
+      "titleEn": "Maintenance Team Lead",
+      "titleRu": "Старший мастер по обслуживанию оборудования",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Maintenance Team Lead", "Maintenance Supervisor", "Engineering Shift Lead", "Reliability Team Lead", "Maintenance Foreman", "Lead Maintenance Technician"],
+        "ru": ["Старший мастер по ремонту", "Руководитель службы ремонта", "Мастер по обслуживанию оборудования", "Старший инженер по эксплуатации", "Начальник смены ремонтной службы", "Ведущий наладчик"]
+      },
+      "adjacent": [
+        {"roleId": "manufacturing.technician.ic", "kind": "level-down"},
+        {"roleId": "manufacturing.process-engineer.ic", "kind": "sibling-family"},
+        {"roleId": "manufacturing.head", "kind": "level-up"}
       ]
     },
     {
       "id": "manufacturing.shift-lead",
       "function": "manufacturing",
       "family": "manufacturing.core",
-      "titleEn": "Shift Supervisor",
+      "titleEn": "Shift Supervisor / Line Supervisor",
       "titleRu": "Старший смены / мастер участка",
-      "levels": [
-        "lead"
-      ],
+      "levels": ["lead"],
       "variants": {
-        "en": [
-          "Shift Supervisor",
-          "Line Supervisor"
-        ],
-        "ru": [
-          "Старший смены",
-          "Мастер участка"
-        ]
+        "en": ["Shift Supervisor", "Line Supervisor", "Production Shift Lead", "Shift Manager", "Production Foreman", "Manufacturing Team Lead"],
+        "ru": ["Старший смены", "Мастер участка", "Мастер производства", "Начальник смены", "Руководитель производственной смены", "Бригадир производства"]
       },
       "adjacent": [
-        {
-          "roleId": "manufacturing.operator.ic",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "manufacturing.head",
-          "kind": "level-up"
-        }
+        {"roleId": "manufacturing.operator.ic", "kind": "level-down"},
+        {"roleId": "manufacturing.maintenance.lead", "kind": "sibling-family"},
+        {"roleId": "manufacturing.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "manufacturing.quality.lead",
+      "function": "manufacturing",
+      "family": "manufacturing.quality",
+      "titleEn": "Quality Team Lead",
+      "titleRu": "Руководитель группы качества",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Quality Team Lead", "QC Supervisor", "Quality Assurance Lead", "Quality Control Supervisor", "Senior Quality Engineer", "Quality Shift Lead"],
+        "ru": ["Руководитель группы качества", "Начальник ОТК", "Руководитель контроля качества", "Старший специалист по качеству", "Супервайзер ОТК", "Руководитель службы качества"]
+      },
+      "adjacent": [
+        {"roleId": "manufacturing.quality-inspector.ic", "kind": "level-down"},
+        {"roleId": "manufacturing.process-engineer.ic", "kind": "sibling-family"},
+        {"roleId": "manufacturing.quality.head", "kind": "level-up"}
       ]
     },
     {
       "id": "manufacturing.head",
       "function": "manufacturing",
-      "family": "manufacturing.core",
+      "family": "manufacturing.leadership",
       "titleEn": "Production Manager / Plant Manager",
       "titleRu": "Начальник производства / директор завода",
-      "levels": [
-        "head"
-      ],
+      "levels": ["head"],
       "variants": {
-        "en": [
-          "Production Manager",
-          "Plant Manager"
-        ],
-        "ru": [
-          "Начальник производства",
-          "Директор завода"
-        ]
+        "en": ["Production Manager", "Plant Manager", "Head of Production", "Manufacturing Manager", "Factory Manager", "Production Director"],
+        "ru": ["Начальник производства", "Директор завода", "Руководитель производства", "Директор по производству", "Начальник производственного цеха", "Управляющий производством"]
       },
       "adjacent": [
-        {
-          "roleId": "manufacturing.shift-lead",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "manufacturing.vp",
-          "kind": "level-up"
-        }
+        {"roleId": "manufacturing.shift-lead", "kind": "level-down"},
+        {"roleId": "manufacturing.maintenance.lead", "kind": "sibling-family"},
+        {"roleId": "manufacturing.quality.head", "kind": "sibling-family"},
+        {"roleId": "manufacturing.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "manufacturing.quality.head",
+      "function": "manufacturing",
+      "family": "manufacturing.leadership",
+      "titleEn": "Head of Quality / Quality Director",
+      "titleRu": "Руководитель службы качества",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Head of Quality", "Quality Director", "Quality Manager", "Director of Quality Assurance", "Head of Quality Control", "Quality Systems Director"],
+        "ru": ["Руководитель службы качества", "Директор по качеству", "Начальник отдела качества", "Руководитель ОТК", "Директор по обеспечению качества", "Начальник службы контроля качества"]
+      },
+      "adjacent": [
+        {"roleId": "manufacturing.quality.lead", "kind": "level-down"},
+        {"roleId": "manufacturing.head", "kind": "sibling-family"},
+        {"roleId": "manufacturing.vp", "kind": "level-up"},
+        {"roleId": "ops.head", "kind": "cross-function-neighbor"}
       ]
     },
     {
       "id": "manufacturing.vp",
       "function": "manufacturing",
-      "family": "manufacturing.core",
+      "family": "manufacturing.leadership",
       "titleEn": "VP of Manufacturing",
       "titleRu": "Вице-президент по производству",
-      "levels": [
-        "vp"
-      ],
+      "levels": ["vp"],
       "variants": {
-        "en": [
-          "VP of Manufacturing",
-          "VP of Operations (Plant)"
-        ],
-        "ru": [
-          "Вице-президент по производству"
-        ]
+        "en": ["VP of Manufacturing", "VP Manufacturing Operations", "Vice President of Production", "Manufacturing Vice President", "VP of Plant Operations", "Executive Director of Manufacturing"],
+        "ru": ["Вице-президент по производству", "Директор по производственным операциям", "Руководитель производственного блока", "Директор по управлению производством", "Вице-президент по заводским операциям", "Директор производственного направления"]
       },
       "adjacent": [
-        {
-          "roleId": "manufacturing.head",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "manufacturing.coo",
-          "kind": "level-up"
-        }
+        {"roleId": "manufacturing.head", "kind": "level-down"},
+        {"roleId": "manufacturing.quality.head", "kind": "sibling-family"},
+        {"roleId": "manufacturing.coo", "kind": "level-up"},
+        {"roleId": "ops.vp", "kind": "cross-function-neighbor"}
       ]
     },
     {
       "id": "manufacturing.coo",
       "function": "manufacturing",
-      "family": "manufacturing.core",
+      "family": "manufacturing.leadership",
       "titleEn": "Chief Manufacturing Officer",
       "titleRu": "Производственный директор",
-      "levels": [
-        "c-level"
-      ],
+      "levels": ["c-level"],
       "variants": {
-        "en": [
-          "Chief Manufacturing Officer"
-        ],
-        "ru": [
-          "Производственный директор"
-        ]
+        "en": ["Chief Manufacturing Officer", "Chief Operations Officer Manufacturing", "Chief Production Officer", "Manufacturing Executive", "Chief Plant Operations Officer", "COO Manufacturing"],
+        "ru": ["Производственный директор", "Директор по производству", "Директор производственного блока", "Операционный директор производства", "Руководитель производственной компании", "Директор по производственным операциям"]
       },
       "adjacent": [
-        {
-          "roleId": "manufacturing.vp",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "ops.coo",
-          "kind": "cross-function-neighbor"
-        }
+        {"roleId": "manufacturing.vp", "kind": "level-down"},
+        {"roleId": "ops.coo", "kind": "cross-function-neighbor"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
       ]
     }
   ]

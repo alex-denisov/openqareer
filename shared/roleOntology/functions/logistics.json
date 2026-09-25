@@ -8,9 +8,30 @@
     {
       "id": "logistics.core",
       "function": "logistics",
-      "labelEn": "Logistics & transport ladder",
-      "labelRu": "Лестница логистики и транспорта",
-      "coverage": "core"
+      "labelEn": "Transport & Delivery",
+      "labelRu": "Транспорт и доставка",
+      "coverage": "full"
+    },
+    {
+      "id": "logistics.warehouse",
+      "function": "logistics",
+      "labelEn": "Warehousing & Fulfillment",
+      "labelRu": "Склад и фулфилмент",
+      "coverage": "full"
+    },
+    {
+      "id": "logistics.planning",
+      "function": "logistics",
+      "labelEn": "Freight & Logistics Planning",
+      "labelRu": "Планирование перевозок и логистика",
+      "coverage": "full"
+    },
+    {
+      "id": "logistics.leadership",
+      "function": "logistics",
+      "labelEn": "Supply Chain Leadership",
+      "labelRu": "Руководство цепочкой поставок",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -20,172 +41,243 @@
       "family": "logistics.core",
       "titleEn": "Driver / Forklift Operator",
       "titleRu": "Водитель / оператор погрузчика",
-      "levels": [
-        "ic"
-      ],
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Driver",
-          "Delivery Driver",
-          "Forklift Operator",
-          "Truck Driver"
-        ],
-        "ru": [
-          "Водитель",
-          "Водитель-экспедитор",
-          "Оператор погрузчика"
-        ]
+        "en": ["Truck Driver", "Delivery Driver", "HGV Driver", "Forklift Operator", "Courier Driver", "Class 1 Driver"],
+        "ru": ["Водитель", "Водитель-экспедитор", "Водитель грузового автомобиля", "Водитель категории C", "Водитель погрузчика", "Машинист погрузчика"]
       },
+      "qualificationBand": ["driver-class-b", "driver-class-c", "forklift-certified"],
       "adjacent": [
-        {
-          "roleId": "logistics.coordinator.ic",
-          "kind": "sibling-family"
-        }
+        {"roleId": "logistics.coordinator.ic", "kind": "sibling-family"},
+        {"roleId": "logistics.dispatcher.ic", "kind": "sibling-family"},
+        {"roleId": "logistics.transport.lead", "kind": "level-up"}
       ]
     },
     {
       "id": "logistics.coordinator.ic",
       "function": "logistics",
-      "family": "logistics.core",
+      "family": "logistics.warehouse",
       "titleEn": "Logistics Coordinator / Warehouse Keeper",
       "titleRu": "Логист / кладовщик",
-      "levels": [
-        "ic"
-      ],
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Logistics Coordinator",
-          "Warehouse Keeper",
-          "Dispatcher"
-        ],
-        "ru": [
-          "Логист",
-          "Кладовщик",
-          "Диспетчер"
-        ]
+        "en": ["Logistics Coordinator", "Warehouse Keeper", "Warehouse Associate", "Logistics Specialist", "Inventory Clerk", "Warehouse Administrator"],
+        "ru": ["Логист", "Кладовщик", "Специалист по логистике", "Специалист склада", "Оператор склада", "Администратор склада"]
       },
       "adjacent": [
-        {
-          "roleId": "logistics.driver.ic",
-          "kind": "sibling-family"
-        },
-        {
-          "roleId": "logistics.lead",
-          "kind": "level-up"
-        }
+        {"roleId": "logistics.driver.ic", "kind": "sibling-family"},
+        {"roleId": "logistics.freight-forwarder.ic", "kind": "sibling-family"},
+        {"roleId": "logistics.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "logistics.dispatcher.ic",
+      "function": "logistics",
+      "family": "logistics.core",
+      "titleEn": "Transport Dispatcher",
+      "titleRu": "Диспетчер транспортной логистики",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Transport Dispatcher", "Fleet Dispatcher", "Dispatch Coordinator", "Route Planner", "Delivery Dispatcher", "Transport Operations Coordinator"],
+        "ru": ["Диспетчер транспортной логистики", "Диспетчер", "Диспетчер автопарка", "Логист-диспетчер", "Координатор доставки", "Специалист по маршрутизации"]
+      },
+      "adjacent": [
+        {"roleId": "logistics.driver.ic", "kind": "sibling-family"},
+        {"roleId": "logistics.fleet.ic", "kind": "sibling-family"},
+        {"roleId": "logistics.transport.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "logistics.fleet.ic",
+      "function": "logistics",
+      "family": "logistics.core",
+      "titleEn": "Fleet Specialist",
+      "titleRu": "Специалист по автопарку",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Fleet Specialist", "Fleet Coordinator", "Fleet Administrator", "Vehicle Operations Specialist", "Fleet Maintenance Coordinator", "Transport Asset Specialist"],
+        "ru": ["Специалист по автопарку", "Координатор автопарка", "Менеджер автопарка", "Специалист транспортного отдела", "Администратор автопарка", "Специалист по эксплуатации транспорта"]
+      },
+      "adjacent": [
+        {"roleId": "logistics.dispatcher.ic", "kind": "sibling-family"},
+        {"roleId": "logistics.driver.ic", "kind": "sibling-family"},
+        {"roleId": "logistics.transport.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "logistics.freight-forwarder.ic",
+      "function": "logistics",
+      "family": "logistics.planning",
+      "titleEn": "Freight Forwarder / Import Specialist",
+      "titleRu": "Экспедитор / специалист по международным перевозкам",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Freight Forwarder", "Shipping Specialist", "Import Export Specialist", "International Logistics Specialist", "Customs Logistics Specialist", "Freight Operations Specialist"],
+        "ru": ["Экспедитор", "Специалист по международным перевозкам", "Специалист ВЭД", "Логист ВЭД", "Специалист по импортным операциям", "Специалист по грузоперевозкам"]
+      },
+      "adjacent": [
+        {"roleId": "logistics.coordinator.ic", "kind": "sibling-family"},
+        {"roleId": "logistics.planner.ic", "kind": "sibling-family"},
+        {"roleId": "logistics.planning.head", "kind": "level-up"},
+        {"roleId": "procurement.generic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "logistics.planner.ic",
+      "function": "logistics",
+      "family": "logistics.planning",
+      "titleEn": "Supply Chain / Logistics Planner",
+      "titleRu": "Планировщик цепочки поставок",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Supply Chain Planner", "Logistics Planner", "Demand Planner", "Distribution Planner", "Transportation Planner", "Materials Planner"],
+        "ru": ["Планировщик цепочки поставок", "Логист-планировщик", "Специалист по планированию поставок", "Планировщик транспортировки", "Специалист по распределению", "Планировщик материалов"]
+      },
+      "adjacent": [
+        {"roleId": "logistics.freight-forwarder.ic", "kind": "sibling-family"},
+        {"roleId": "logistics.coordinator.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "logistics.planning.head", "kind": "level-up"},
+        {"roleId": "procurement.generic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "logistics.transport.lead",
+      "function": "logistics",
+      "family": "logistics.core",
+      "titleEn": "Transport Team Lead / Fleet Supervisor",
+      "titleRu": "Старший диспетчер / руководитель транспортной группы",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Transport Team Lead", "Fleet Supervisor", "Dispatch Team Lead", "Delivery Operations Lead", "Senior Transport Coordinator", "Transport Shift Supervisor"],
+        "ru": ["Старший диспетчер", "Руководитель транспортной группы", "Супервайзер автопарка", "Старший логист по транспорту", "Руководитель службы доставки", "Начальник транспортной смены"]
+      },
+      "adjacent": [
+        {"roleId": "logistics.driver.ic", "kind": "level-down"},
+        {"roleId": "logistics.dispatcher.ic", "kind": "level-down"},
+        {"roleId": "logistics.head", "kind": "level-up"},
+        {"roleId": "logistics.warehouse.lead", "kind": "sibling-family"}
       ]
     },
     {
       "id": "logistics.lead",
       "function": "logistics",
-      "family": "logistics.core",
+      "family": "logistics.warehouse",
       "titleEn": "Logistics Team Lead / Warehouse Supervisor",
       "titleRu": "Старший логист / начальник склада",
-      "levels": [
-        "lead"
-      ],
+      "levels": ["lead"],
       "variants": {
-        "en": [
-          "Logistics Team Lead",
-          "Warehouse Supervisor"
-        ],
-        "ru": [
-          "Старший логист",
-          "Начальник склада"
-        ]
+        "en": ["Logistics Team Lead", "Warehouse Supervisor", "Warehouse Shift Supervisor", "Senior Logistics Coordinator", "Fulfillment Team Lead", "Warehouse Lead"],
+        "ru": ["Старший логист", "Начальник склада", "Супервайзер склада", "Старший координатор логистики", "Руководитель складской смены", "Начальник смены склада"]
       },
       "adjacent": [
-        {
-          "roleId": "logistics.coordinator.ic",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "logistics.head",
-          "kind": "level-up"
-        }
+        {"roleId": "logistics.coordinator.ic", "kind": "level-down"},
+        {"roleId": "logistics.warehouse.lead", "kind": "sibling-family"},
+        {"roleId": "logistics.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "logistics.warehouse.lead",
+      "function": "logistics",
+      "family": "logistics.warehouse",
+      "titleEn": "Fulfillment / Warehouse Operations Lead",
+      "titleRu": "Руководитель складской смены и фулфилмента",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Fulfillment Lead", "Warehouse Operations Lead", "Distribution Center Supervisor", "Warehouse Operations Supervisor", "Fulfillment Supervisor", "Inventory Operations Lead"],
+        "ru": ["Руководитель фулфилмента", "Руководитель складских операций", "Супервайзер распределительного центра", "Руководитель складской смены", "Супервайзер фулфилмента", "Старший специалист по складским операциям"]
+      },
+      "adjacent": [
+        {"roleId": "logistics.lead", "kind": "sibling-family"},
+        {"roleId": "logistics.coordinator.ic", "kind": "level-down"},
+        {"roleId": "logistics.warehouse.head", "kind": "level-up"}
       ]
     },
     {
       "id": "logistics.head",
       "function": "logistics",
-      "family": "logistics.core",
+      "family": "logistics.leadership",
       "titleEn": "Logistics Manager / Head of Supply Chain",
-      "titleRu": "Руководитель логистики",
-      "levels": [
-        "head"
-      ],
+      "titleRu": "Руководитель логистики / цепочки поставок",
+      "levels": ["head"],
       "variants": {
-        "en": [
-          "Logistics Manager",
-          "Head of Supply Chain"
-        ],
-        "ru": [
-          "Руководитель логистики",
-          "Директор по логистике"
-        ]
+        "en": ["Logistics Manager", "Head of Supply Chain", "Supply Chain Manager", "Logistics Director", "Head of Logistics", "Distribution Manager"],
+        "ru": ["Руководитель логистики", "Руководитель цепочки поставок", "Директор по логистике", "Начальник отдела логистики", "Директор по снабжению и логистике", "Руководитель распределения"]
       },
       "adjacent": [
-        {
-          "roleId": "logistics.lead",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "logistics.vp",
-          "kind": "level-up"
-        }
+        {"roleId": "logistics.transport.lead", "kind": "level-down"},
+        {"roleId": "logistics.warehouse.lead", "kind": "level-down"},
+        {"roleId": "logistics.planning.head", "kind": "sibling-family"},
+        {"roleId": "logistics.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "logistics.warehouse.head",
+      "function": "logistics",
+      "family": "logistics.leadership",
+      "titleEn": "Warehouse / Distribution Center Manager",
+      "titleRu": "Директор склада / распределительного центра",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Warehouse Manager", "Distribution Center Manager", "DC Manager", "Head of Warehouse", "Fulfillment Center Manager", "Warehouse Operations Manager"],
+        "ru": ["Директор склада", "Руководитель распределительного центра", "Начальник складского комплекса", "Руководитель склада", "Директор фулфилмент-центра", "Руководитель складских операций"]
+      },
+      "adjacent": [
+        {"roleId": "logistics.warehouse.lead", "kind": "level-down"},
+        {"roleId": "logistics.head", "kind": "sibling-family"},
+        {"roleId": "logistics.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "logistics.planning.head",
+      "function": "logistics",
+      "family": "logistics.leadership",
+      "titleEn": "Head of Logistics Planning",
+      "titleRu": "Руководитель планирования поставок",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Head of Logistics Planning", "Supply Chain Planning Manager", "Head of Transport Planning", "Demand and Supply Planning Manager", "Logistics Planning Director", "Head of Distribution Planning"],
+        "ru": ["Руководитель планирования логистики", "Руководитель планирования цепочки поставок", "Начальник отдела транспортного планирования", "Руководитель планирования спроса и поставок", "Директор по логистическому планированию", "Начальник отдела распределения"]
+      },
+      "adjacent": [
+        {"roleId": "logistics.planner.ic", "kind": "level-down"},
+        {"roleId": "logistics.head", "kind": "sibling-family"},
+        {"roleId": "logistics.vp", "kind": "level-up"},
+        {"roleId": "procurement.generic", "kind": "cross-function-neighbor"}
       ]
     },
     {
       "id": "logistics.vp",
       "function": "logistics",
-      "family": "logistics.core",
+      "family": "logistics.leadership",
       "titleEn": "VP of Supply Chain / Logistics",
-      "titleRu": "Вице-президент по логистике",
-      "levels": [
-        "vp"
-      ],
+      "titleRu": "Вице-президент по цепочке поставок и логистике",
+      "levels": ["vp"],
       "variants": {
-        "en": [
-          "VP of Supply Chain",
-          "VP of Logistics"
-        ],
-        "ru": [
-          "Вице-президент по логистике"
-        ]
+        "en": ["VP of Supply Chain", "VP of Logistics", "Vice President Supply Chain", "Chief Supply Chain Executive", "Supply Chain Vice President", "VP Distribution"],
+        "ru": ["Вице-президент по цепочке поставок", "Вице-президент по логистике", "Директор по цепям поставок", "Руководитель департамента логистики", "Вице-президент по снабжению", "Директор по распределению"]
       },
       "adjacent": [
-        {
-          "roleId": "logistics.head",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "logistics.chief",
-          "kind": "level-up"
-        }
+        {"roleId": "logistics.head", "kind": "level-down"},
+        {"roleId": "logistics.warehouse.head", "kind": "sibling-family"},
+        {"roleId": "logistics.chief", "kind": "level-up"},
+        {"roleId": "ops.vp", "kind": "cross-function-neighbor"}
       ]
     },
     {
       "id": "logistics.chief",
       "function": "logistics",
-      "family": "logistics.core",
+      "family": "logistics.leadership",
       "titleEn": "Chief Supply Chain Officer",
       "titleRu": "Директор по цепочке поставок",
-      "levels": [
-        "c-level"
-      ],
+      "levels": ["c-level"],
       "variants": {
-        "en": [
-          "Chief Supply Chain Officer"
-        ],
-        "ru": [
-          "Директор по цепочке поставок"
-        ]
+        "en": ["Chief Supply Chain Officer", "CSCO", "Chief Logistics Officer", "Chief Distribution Officer", "Executive Vice President Supply Chain", "Chief Operations and Supply Chain Officer"],
+        "ru": ["Директор по цепочке поставок", "Директор по логистике", "Директор по снабжению", "Директор по дистрибуции", "Руководитель цепочки поставок", "Директор по операциям и логистике"]
       },
       "adjacent": [
-        {
-          "roleId": "logistics.vp",
-          "kind": "level-down"
-        }
+        {"roleId": "logistics.vp", "kind": "level-down"},
+        {"roleId": "ops.coo", "kind": "cross-function-neighbor"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
       ]
     }
   ]

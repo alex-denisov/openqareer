@@ -8,9 +8,30 @@
     {
       "id": "retail.core",
       "function": "retail",
-      "labelEn": "Retail ladder",
-      "labelRu": "Лестница розницы",
-      "coverage": "core"
+      "labelEn": "Store Operations & Customer Service",
+      "labelRu": "Работа магазина и обслуживание покупателей",
+      "coverage": "full"
+    },
+    {
+      "id": "retail.merchandising",
+      "function": "retail",
+      "labelEn": "Merchandising & Buying",
+      "labelRu": "Мерчандайзинг и закупки",
+      "coverage": "full"
+    },
+    {
+      "id": "retail.digital",
+      "function": "retail",
+      "labelEn": "E-commerce & Retail Marketing",
+      "labelRu": "Электронная торговля и маркетинг розницы",
+      "coverage": "full"
+    },
+    {
+      "id": "retail.leadership",
+      "function": "retail",
+      "labelEn": "Retail Leadership",
+      "labelRu": "Руководство розничной сетью",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -20,25 +41,104 @@
       "family": "retail.core",
       "titleEn": "Sales Assistant / Cashier",
       "titleRu": "Продавец-консультант / кассир",
-      "levels": [
-        "ic"
-      ],
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Sales Assistant",
-          "Cashier",
-          "Retail Associate"
-        ],
-        "ru": [
-          "Продавец-консультант",
-          "Кассир"
-        ]
+        "en": ["Sales Assistant", "Retail Sales Associate", "Store Associate", "Cashier", "Retail Assistant", "Customer Advisor"],
+        "ru": ["Продавец-консультант", "Продавец", "Кассир", "Кассир-продавец", "Специалист торгового зала", "Менеджер по продажам в магазине"]
       },
       "adjacent": [
-        {
-          "roleId": "retail.store-manager.lead",
-          "kind": "level-up"
-        }
+        {"roleId": "retail.shift-supervisor.lead", "kind": "level-up"},
+        {"roleId": "retail.merchandiser.ic", "kind": "sibling-family"},
+        {"roleId": "sales.rep.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "retail.merchandiser.ic",
+      "function": "retail",
+      "family": "retail.merchandising",
+      "titleEn": "Merchandiser",
+      "titleRu": "Мерчандайзер",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Merchandiser", "Visual Merchandiser", "Retail Merchandiser", "Field Merchandiser", "Merchandising Specialist", "Category Merchandiser"],
+        "ru": ["Мерчандайзер", "Визуальный мерчандайзер", "Торговый мерчандайзер", "Мерчандайзер сети", "Специалист по мерчандайзингу", "Категорийный мерчандайзер"]
+      },
+      "adjacent": [
+        {"roleId": "retail.visual.ic", "kind": "sibling-family"},
+        {"roleId": "retail.sales-assistant.ic", "kind": "sibling-family"},
+        {"roleId": "retail.merchandising.lead", "kind": "level-up"},
+        {"roleId": "marketing.specialist.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "retail.visual.ic",
+      "function": "retail",
+      "family": "retail.merchandising",
+      "titleEn": "Visual Merchandising Specialist",
+      "titleRu": "Специалист по визуальному мерчандайзингу",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Visual Merchandising Specialist", "Visual Merchandiser", "Store Display Specialist", "Retail Display Coordinator", "VM Specialist", "Window Display Specialist"],
+        "ru": ["Специалист по визуальному мерчандайзингу", "Визуальный мерчандайзер", "Оформитель торгового зала", "Специалист по оформлению магазинов", "VM-специалист", "Дизайнер витрин"]
+      },
+      "adjacent": [
+        {"roleId": "retail.merchandiser.ic", "kind": "sibling-family"},
+        {"roleId": "retail.sales-assistant.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "retail.merchandising.lead", "kind": "level-up"},
+        {"roleId": "design.craft.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "retail.buyer.ic",
+      "function": "retail",
+      "family": "retail.merchandising",
+      "titleEn": "Retail Buyer / Category Specialist",
+      "titleRu": "Байер / категорийный менеджер",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Retail Buyer", "Category Specialist", "Assistant Buyer", "Merchandise Planner", "Category Analyst", "Purchasing Specialist Retail"],
+        "ru": ["Байер", "Категорийный менеджер", "Менеджер по закупкам в рознице", "Ассистент байера", "Специалист по ассортименту", "Аналитик категории"]
+      },
+      "adjacent": [
+        {"roleId": "retail.merchandiser.ic", "kind": "sibling-family"},
+        {"roleId": "retail.merchandising.lead", "kind": "level-up"},
+        {"roleId": "procurement.generic", "kind": "cross-function-neighbor"},
+        {"roleId": "retail.ecommerce.ic", "kind": "sibling-family"}
+      ]
+    },
+    {
+      "id": "retail.ecommerce.ic",
+      "function": "retail",
+      "family": "retail.digital",
+      "titleEn": "E-commerce Retail Specialist",
+      "titleRu": "Специалист по электронной торговле",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["E-commerce Specialist", "E-commerce Manager", "Online Merchandiser", "Marketplace Specialist", "Digital Retail Specialist", "Online Store Coordinator"],
+        "ru": ["Специалист по электронной торговле", "Менеджер интернет-магазина", "Менеджер маркетплейсов", "E-commerce менеджер", "Онлайн-мерчандайзер", "Специалист по онлайн-продажам"]
+      },
+      "adjacent": [
+        {"roleId": "retail.buyer.ic", "kind": "sibling-family"},
+        {"roleId": "retail.sales-assistant.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "retail.digital.lead", "kind": "level-up"},
+        {"roleId": "marketing.specialist.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "retail.shift-supervisor.lead",
+      "function": "retail",
+      "family": "retail.core",
+      "titleEn": "Retail Shift Supervisor",
+      "titleRu": "Старший продавец / администратор смены",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Retail Shift Supervisor", "Senior Sales Associate", "Floor Supervisor", "Duty Manager Retail", "Retail Team Lead", "Store Shift Lead"],
+        "ru": ["Старший продавец", "Администратор магазина", "Старший кассир", "Супервайзер торгового зала", "Руководитель смены магазина", "Старший менеджер торгового зала"]
+      },
+      "adjacent": [
+        {"roleId": "retail.sales-assistant.ic", "kind": "level-down"},
+        {"roleId": "retail.store-manager.lead", "kind": "level-up"},
+        {"roleId": "retail.merchandising.lead", "kind": "sibling-family"}
       ]
     },
     {
@@ -47,81 +147,121 @@
       "family": "retail.core",
       "titleEn": "Store Manager",
       "titleRu": "Директор магазина",
-      "levels": [
-        "lead"
-      ],
+      "levels": ["lead", "head"],
       "variants": {
-        "en": [
-          "Store Manager",
-          "Shift Supervisor"
-        ],
-        "ru": [
-          "Директор магазина",
-          "Старший смены"
-        ]
+        "en": ["Store Manager", "Store Director", "Branch Manager Retail", "Retail Store Manager", "Shop Manager", "Store Operations Manager"],
+        "ru": ["Директор магазина", "Управляющий магазином", "Руководитель магазина", "Администратор магазина", "Директор торговой точки", "Менеджер магазина"]
       },
       "adjacent": [
-        {
-          "roleId": "retail.sales-assistant.ic",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "retail.head",
-          "kind": "level-up"
-        }
+        {"roleId": "retail.shift-supervisor.lead", "kind": "level-down"},
+        {"roleId": "retail.area-manager.head", "kind": "level-up"},
+        {"roleId": "retail.head", "kind": "level-up"},
+        {"roleId": "retail.sales-assistant.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "retail.merchandising.lead",
+      "function": "retail",
+      "family": "retail.merchandising",
+      "titleEn": "Merchandising Team Lead",
+      "titleRu": "Руководитель отдела мерчандайзинга",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Merchandising Team Lead", "Merchandising Supervisor", "Visual Merchandising Lead", "Category Team Lead", "Merchandising Manager", "Retail Buying Lead"],
+        "ru": ["Руководитель отдела мерчандайзинга", "Старший мерчандайзер", "Руководитель группы мерчандайзинга", "Руководитель визуального мерчандайзинга", "Менеджер по мерчандайзингу", "Руководитель категорийной команды"]
+      },
+      "adjacent": [
+        {"roleId": "retail.merchandiser.ic", "kind": "level-down"},
+        {"roleId": "retail.buyer.ic", "kind": "sibling-family"},
+        {"roleId": "retail.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "retail.digital.lead",
+      "function": "retail",
+      "family": "retail.digital",
+      "titleEn": "Head of E-commerce Retail",
+      "titleRu": "Руководитель интернет-торговли",
+      "levels": ["lead", "head"],
+      "variants": {
+        "en": ["E-commerce Lead", "Head of E-commerce", "Online Retail Manager", "Marketplace Lead", "Digital Commerce Manager", "E-commerce Operations Lead"],
+        "ru": ["Руководитель интернет-магазина", "Руководитель e-commerce", "Руководитель онлайн-торговли", "Руководитель маркетплейсов", "Директор по электронной коммерции", "Руководитель цифровой розницы"]
+      },
+      "adjacent": [
+        {"roleId": "retail.ecommerce.ic", "kind": "level-down"},
+        {"roleId": "retail.merchandising.lead", "kind": "sibling-family"},
+        {"roleId": "retail.vp", "kind": "level-up"},
+        {"roleId": "marketing.head", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "retail.area-manager.head",
+      "function": "retail",
+      "family": "retail.leadership",
+      "titleEn": "Area / District Retail Manager",
+      "titleRu": "Территориальный / окружной менеджер розницы",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Area Manager Retail", "District Manager", "Regional Store Manager", "Multi-site Retail Manager", "Retail Area Director", "Territory Manager Retail"],
+        "ru": ["Территориальный менеджер", "Региональный менеджер магазинов", "Окружной менеджер", "Менеджер по региону", "Руководитель группы магазинов", "Директор кластера магазинов"]
+      },
+      "adjacent": [
+        {"roleId": "retail.store-manager.lead", "kind": "level-down"},
+        {"roleId": "retail.head", "kind": "sibling-family"},
+        {"roleId": "retail.vp", "kind": "level-up"}
       ]
     },
     {
       "id": "retail.head",
       "function": "retail",
-      "family": "retail.core",
+      "family": "retail.leadership",
       "titleEn": "Regional Retail Manager",
-      "titleRu": "Региональный менеджер розничной сети",
-      "levels": [
-        "head"
-      ],
+      "titleRu": "Региональный директор розничной сети",
+      "levels": ["head"],
       "variants": {
-        "en": [
-          "Regional Retail Manager",
-          "District Manager"
-        ],
-        "ru": [
-          "Региональный менеджер розничной сети"
-        ]
+        "en": ["Regional Retail Manager", "Head of Retail", "Retail Operations Director", "Regional Retail Director", "Head of Store Operations", "Retail Network Director"],
+        "ru": ["Региональный директор розничной сети", "Руководитель розницы", "Директор по розничным операциям", "Региональный директор", "Руководитель сети магазинов", "Директор розничной сети"]
       },
       "adjacent": [
-        {
-          "roleId": "retail.store-manager.lead",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "retail.vp",
-          "kind": "level-up"
-        }
+        {"roleId": "retail.area-manager.head", "kind": "level-down"},
+        {"roleId": "retail.store-manager.lead", "kind": "sibling-family"},
+        {"roleId": "retail.vp", "kind": "level-up"},
+        {"roleId": "retail.cro", "kind": "level-up"}
       ]
     },
     {
       "id": "retail.vp",
       "function": "retail",
-      "family": "retail.core",
+      "family": "retail.leadership",
       "titleEn": "VP of Retail Operations",
-      "titleRu": "Вице-президент по розничным продажам",
-      "levels": [
-        "vp"
-      ],
+      "titleRu": "Вице-президент по розничным операциям",
+      "levels": ["vp"],
       "variants": {
-        "en": [
-          "VP of Retail Operations"
-        ],
-        "ru": [
-          "Вице-президент по розничным продажам"
-        ]
+        "en": ["VP of Retail", "VP Retail Operations", "Vice President Retail", "Retail Operations Vice President", "Executive Retail Director", "VP Store Operations"],
+        "ru": ["Вице-президент по розничным операциям", "Вице-президент по рознице", "Директор по розничной сети", "Руководитель розничного бизнеса", "Исполнительный директор по рознице", "Директор по операциям магазинов"]
       },
       "adjacent": [
-        {
-          "roleId": "retail.head",
-          "kind": "level-down"
-        }
+        {"roleId": "retail.head", "kind": "level-down"},
+        {"roleId": "retail.digital.lead", "kind": "sibling-family"},
+        {"roleId": "retail.cro", "kind": "level-up"},
+        {"roleId": "ops.vp", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "retail.cro",
+      "function": "retail",
+      "family": "retail.leadership",
+      "titleEn": "Chief Retail Officer",
+      "titleRu": "Коммерческий директор розничного бизнеса",
+      "levels": ["c-level"],
+      "variants": {
+        "en": ["Chief Retail Officer", "Chief Commercial Officer Retail", "Chief Operating Officer Retail", "Retail Executive Director", "Chief Merchandising Officer", "Retail Business Director"],
+        "ru": ["Коммерческий директор розничного бизнеса", "Директор по рознице", "Операционный директор розничной сети", "Директор по продажам и рознице", "Директор по мерчандайзингу", "Руководитель розничного направления"]
+      },
+      "adjacent": [
+        {"roleId": "retail.vp", "kind": "level-down"},
+        {"roleId": "sales.cro", "kind": "cross-function-neighbor"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
       ]
     }
   ]

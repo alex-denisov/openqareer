@@ -8,9 +8,30 @@
     {
       "id": "public-service.generic",
       "function": "public-service",
-      "labelEn": "Public Administration",
-      "labelRu": "Госслужба",
-      "coverage": "skeleton"
+      "labelEn": "Public Administration Leadership",
+      "labelRu": "Руководство государственным управлением",
+      "coverage": "full"
+    },
+    {
+      "id": "public-service.civil-administration",
+      "function": "public-service",
+      "labelEn": "Civil Administration",
+      "labelRu": "Государственное администрирование",
+      "coverage": "full"
+    },
+    {
+      "id": "public-service.policy-regulation",
+      "function": "public-service",
+      "labelEn": "Policy & Regulatory Administration",
+      "labelRu": "Политика и регулирование",
+      "coverage": "full"
+    },
+    {
+      "id": "public-service.local-government",
+      "function": "public-service",
+      "labelEn": "Municipal & Regional Government",
+      "labelRu": "Муниципальное и региональное управление",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,28 +39,244 @@
       "id": "public-service.generic",
       "function": "public-service",
       "family": "public-service.generic",
-      "titleEn": "Public Administration",
-      "titleRu": "Государственная служба",
-      "levels": [
-        "ic",
-        "head",
-        "vp",
-        "c-level"
-      ],
+      "titleEn": "Public Administration Executive",
+      "titleRu": "Руководитель государственного управления",
+      "levels": ["ic", "head", "vp", "c-level"],
       "variants": {
-        "en": [
-          "Civil Servant",
-          "Government Administrator",
-          "Policy Analyst",
-          "Department Head (Government)"
-        ],
-        "ru": [
-          "Госслужащий",
-          "Специалист органа власти",
-          "Начальник управления"
-        ]
+        "en": ["Public Administration Executive", "Civil Service Executive", "Government Executive", "Public Sector Leader", "Government Department Executive", "Public Service Director"],
+        "ru": ["Руководитель государственного управления", "Государственный служащий руководящего уровня", "Руководитель государственного органа", "Руководитель публичного сектора", "Директор государственного департамента", "Руководитель государственной службы"]
       },
-      "adjacent": []
+      "adjacent": [
+        {"roleId": "public-service.agency-head.c", "kind": "level-up"},
+        {"roleId": "public-service.department-head.head", "kind": "level-down"},
+        {"roleId": "public-service.regional-director.vp", "kind": "sibling-family"}
+      ]
+    },
+    {
+      "id": "public-service.civil-servant.ic",
+      "function": "public-service",
+      "family": "public-service.civil-administration",
+      "titleEn": "Civil Service Specialist",
+      "titleRu": "Специалист государственной службы",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Civil Service Specialist", "Government Affairs Specialist", "Public Administration Specialist", "Policy Officer", "Government Program Officer", "Public Sector Specialist"],
+        "ru": ["Специалист государственной службы", "Государственный служащий", "Главный специалист администрации", "Специалист органа власти", "Советник государственного органа", "Специалист государственного управления"]
+      },
+      "adjacent": [
+        {"roleId": "public-service.policy-analyst.ic", "kind": "sibling-family"},
+        {"roleId": "public-service.department-lead", "kind": "level-up"},
+        {"roleId": "admin.clerk.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "public-service.policy-analyst.ic",
+      "function": "public-service",
+      "family": "public-service.policy-regulation",
+      "titleEn": "Public Policy Analyst",
+      "titleRu": "Аналитик государственной политики",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Policy Analyst", "Public Policy Advisor", "Government Policy Specialist", "Policy Research Analyst", "Legislative Analyst", "Public Affairs Analyst"],
+        "ru": ["Аналитик государственной политики", "Эксперт по государственному управлению", "Советник по вопросам политики", "Аналитик нормативного регулирования", "Эксперт законодательного анализа", "Специалист по публичной политике"]
+      },
+      "adjacent": [
+        {"roleId": "public-service.civil-servant.ic", "kind": "sibling-family"},
+        {"roleId": "public-service.regulatory.ic", "kind": "sibling-family"},
+        {"roleId": "public-service.policy-head.head", "kind": "level-up"},
+        {"roleId": "research.scientist.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "public-service.finance.ic",
+      "function": "public-service",
+      "family": "public-service.civil-administration",
+      "titleEn": "Public Finance Specialist",
+      "titleRu": "Специалист по государственным финансам",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Public Finance Specialist", "Government Budget Analyst", "Public Sector Accountant", "Treasury Specialist", "Budget Officer", "Government Financial Analyst"],
+        "ru": ["Специалист по государственным финансам", "Аналитик бюджета", "Специалист казначейства", "Главный бухгалтер государственного учреждения", "Финансовый специалист администрации", "Эксперт по бюджетному планированию"]
+      },
+      "adjacent": [
+        {"roleId": "public-service.civil-servant.ic", "kind": "sibling-family"},
+        {"roleId": "public-service.department-head.head", "kind": "level-up"},
+        {"roleId": "finance.accountant.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "finance.head", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "public-service.regulatory.ic",
+      "function": "public-service",
+      "family": "public-service.policy-regulation",
+      "titleEn": "Regulatory Inspector / Compliance Specialist",
+      "titleRu": "Инспектор / специалист государственного надзора",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Regulatory Inspector", "Compliance Officer Government", "Government Inspector", "Regulatory Affairs Specialist", "Public Safety Inspector", "Licensing Specialist"],
+        "ru": ["Государственный инспектор", "Инспектор государственного надзора", "Специалист по лицензированию", "Специалист нормативного контроля", "Инспектор по соблюдению требований", "Эксперт регулирующего органа"]
+      },
+      "adjacent": [
+        {"roleId": "public-service.policy-analyst.ic", "kind": "sibling-family"},
+        {"roleId": "public-service.department-lead", "kind": "level-up"},
+        {"roleId": "legal.generic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "public-service.diplomat.ic",
+      "function": "public-service",
+      "family": "public-service.policy-regulation",
+      "titleEn": "Diplomatic / Foreign Service Officer",
+      "titleRu": "Дипломатический работник",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Foreign Service Officer", "Diplomatic Officer", "Political Officer", "Consular Officer", "International Affairs Officer", "Diplomatic Attaché"],
+        "ru": ["Дипломатический работник", "Сотрудник дипломатической службы", "Атташе", "Консул", "Советник дипломатической службы", "Специалист международных отношений"]
+      },
+      "adjacent": [
+        {"roleId": "public-service.policy-analyst.ic", "kind": "sibling-family"},
+        {"roleId": "public-service.diplomatic-lead", "kind": "level-up"},
+        {"roleId": "public-service.regional-director.vp", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "public-service.department-lead",
+      "function": "public-service",
+      "family": "public-service.civil-administration",
+      "titleEn": "Government Section Chief / Team Lead",
+      "titleRu": "Начальник отдела / руководитель группы госслужбы",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Government Team Lead", "Section Chief", "Unit Head Government", "Senior Policy Officer", "Government Program Lead", "Civil Service Team Manager"],
+        "ru": ["Начальник отдела", "Руководитель отдела государственного органа", "Руководитель группы", "Заместитель начальника отдела", "Старший государственный служащий", "Руководитель направления администрации"]
+      },
+      "adjacent": [
+        {"roleId": "public-service.civil-servant.ic", "kind": "level-down"},
+        {"roleId": "public-service.regulatory.ic", "kind": "sibling-family"},
+        {"roleId": "public-service.department-head.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "public-service.diplomatic-lead",
+      "function": "public-service",
+      "family": "public-service.policy-regulation",
+      "titleEn": "Senior Diplomatic Officer / Mission Lead",
+      "titleRu": "Старший дипломатический работник / руководитель миссии",
+      "levels": ["lead", "head"],
+      "variants": {
+        "en": ["Senior Foreign Service Officer", "Mission Lead", "Consular Chief", "Political Counselor", "Deputy Head of Mission", "Diplomatic Mission Manager"],
+        "ru": ["Старший дипломатический работник", "Руководитель консульского отдела", "Советник посольства", "Заместитель главы дипломатической миссии", "Руководитель дипломатического направления", "Начальник консульской службы"]
+      },
+      "adjacent": [
+        {"roleId": "public-service.diplomat.ic", "kind": "level-down"},
+        {"roleId": "public-service.policy-head.head", "kind": "sibling-family"},
+        {"roleId": "public-service.regional-director.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "public-service.department-head.head",
+      "function": "public-service",
+      "family": "public-service.generic",
+      "titleEn": "Head of Government Department",
+      "titleRu": "Руководитель департамента государственного органа",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Head of Government Department", "Department Director Government", "Directorate Head", "Government Department Manager", "Deputy Director General Government", "Head of Public Administration Unit"],
+        "ru": ["Руководитель департамента государственного органа", "Директор департамента", "Начальник управления", "Руководитель государственного управления", "Заместитель руководителя ведомства", "Директор государственного департамента"]
+      },
+      "adjacent": [
+        {"roleId": "public-service.department-lead", "kind": "level-down"},
+        {"roleId": "public-service.policy-head.head", "kind": "sibling-family"},
+        {"roleId": "public-service.deputy-director.vp", "kind": "level-up"},
+        {"roleId": "public-service.agency-head.c", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "public-service.policy-head.head",
+      "function": "public-service",
+      "family": "public-service.policy-regulation",
+      "titleEn": "Head of Policy / Regulatory Affairs",
+      "titleRu": "Руководитель направления политики и регулирования",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Head of Policy", "Director of Policy", "Head of Regulatory Affairs", "Policy Department Director", "Chief Regulatory Officer Public Sector", "Head of Legislative Affairs"],
+        "ru": ["Руководитель направления государственной политики", "Директор по регулированию", "Руководитель нормативного блока", "Начальник управления законодательной работы", "Директор департамента политики", "Руководитель регуляторного направления"]
+      },
+      "adjacent": [
+        {"roleId": "public-service.policy-analyst.ic", "kind": "level-down"},
+        {"roleId": "public-service.diplomatic-lead", "kind": "sibling-family"},
+        {"roleId": "public-service.deputy-director.vp", "kind": "level-up"},
+        {"roleId": "legal.generic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "public-service.municipal.head",
+      "function": "public-service",
+      "family": "public-service.local-government",
+      "titleEn": "Municipal Administration Manager",
+      "titleRu": "Руководитель муниципального управления",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Municipal Administration Manager", "City Department Director", "Municipal Services Director", "Town Manager", "Head of Municipal Administration", "Local Government Director"],
+        "ru": ["Руководитель муниципального управления", "Начальник управления администрации города", "Директор муниципального учреждения", "Руководитель администрации района", "Глава муниципального управления", "Руководитель муниципальных служб"]
+      },
+      "adjacent": [
+        {"roleId": "public-service.civil-servant.ic", "kind": "level-down"},
+        {"roleId": "public-service.department-head.head", "kind": "sibling-family"},
+        {"roleId": "public-service.regional-director.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "public-service.deputy-director.vp",
+      "function": "public-service",
+      "family": "public-service.generic",
+      "titleEn": "Deputy Director of Government Agency",
+      "titleRu": "Заместитель руководителя государственного ведомства",
+      "levels": ["vp"],
+      "variants": {
+        "en": ["Deputy Director Government Agency", "Deputy Head of Agency", "Associate Agency Director", "Vice Director Public Administration", "Deputy Commissioner", "Deputy Secretary Government"],
+        "ru": ["Заместитель руководителя ведомства", "Заместитель директора государственного учреждения", "Заместитель главы администрации", "Заместитель руководителя службы", "Заместитель руководителя агентства", "Заместитель министра"]
+      },
+      "adjacent": [
+        {"roleId": "public-service.department-head.head", "kind": "level-down"},
+        {"roleId": "public-service.regional-director.vp", "kind": "sibling-family"},
+        {"roleId": "public-service.agency-head.c", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "public-service.regional-director.vp",
+      "function": "public-service",
+      "family": "public-service.local-government",
+      "titleEn": "Regional Government Director",
+      "titleRu": "Руководитель регионального органа власти",
+      "levels": ["vp"],
+      "variants": {
+        "en": ["Regional Government Director", "Regional Administrator", "Regional Commissioner", "Governor's Office Director", "Regional Executive Director", "Head of Regional Administration"],
+        "ru": ["Руководитель регионального органа власти", "Руководитель региональной администрации", "Региональный министр", "Председатель регионального ведомства", "Директор администрации региона", "Руководитель исполнительного органа региона"]
+      },
+      "adjacent": [
+        {"roleId": "public-service.municipal.head", "kind": "level-down"},
+        {"roleId": "public-service.deputy-director.vp", "kind": "sibling-family"},
+        {"roleId": "public-service.agency-head.c", "kind": "level-up"},
+        {"roleId": "exec-general.gm", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "public-service.agency-head.c",
+      "function": "public-service",
+      "family": "public-service.generic",
+      "titleEn": "Agency Director / Minister",
+      "titleRu": "Руководитель ведомства / министр",
+      "levels": ["c-level"],
+      "variants": {
+        "en": ["Agency Director", "Minister", "Secretary of State", "Commissioner", "Director General Government Agency", "Cabinet Minister"],
+        "ru": ["Руководитель ведомства", "Министр", "Глава федерального агентства", "Руководитель службы", "Генеральный директор государственного агентства", "Руководитель органа исполнительной власти"]
+      },
+      "adjacent": [
+        {"roleId": "public-service.deputy-director.vp", "kind": "level-down"},
+        {"roleId": "public-service.regional-director.vp", "kind": "sibling-family"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
+      ]
     }
   ]
 }

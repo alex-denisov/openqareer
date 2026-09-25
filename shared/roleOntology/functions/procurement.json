@@ -8,9 +8,44 @@
     {
       "id": "procurement.generic",
       "function": "procurement",
-      "labelEn": "Procurement",
-      "labelRu": "Закупки",
-      "coverage": "skeleton"
+      "labelEn": "Procurement generalists",
+      "labelRu": "Общие закупки",
+      "coverage": "full"
+    },
+    {
+      "id": "procurement.sourcing",
+      "function": "procurement",
+      "labelEn": "Sourcing and purchasing",
+      "labelRu": "Снабжение и закупки",
+      "coverage": "full"
+    },
+    {
+      "id": "procurement.category",
+      "function": "procurement",
+      "labelEn": "Category management",
+      "labelRu": "Категорийное управление",
+      "coverage": "full"
+    },
+    {
+      "id": "procurement.supplier-operations",
+      "function": "procurement",
+      "labelEn": "Supplier management and procurement operations",
+      "labelRu": "Управление поставщиками и операции закупок",
+      "coverage": "full"
+    },
+    {
+      "id": "procurement.contracts",
+      "function": "procurement",
+      "labelEn": "Procurement contracts",
+      "labelRu": "Контракты в закупках",
+      "coverage": "full"
+    },
+    {
+      "id": "procurement.leadership",
+      "function": "procurement",
+      "labelEn": "Procurement leadership",
+      "labelRu": "Руководство закупками",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,25 +53,487 @@
       "id": "procurement.generic",
       "function": "procurement",
       "family": "procurement.generic",
-      "titleEn": "Procurement",
-      "titleRu": "Закупки",
+      "titleEn": "Procurement Specialist",
+      "titleRu": "Специалист по закупкам",
       "levels": [
-        "ic",
-        "head",
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Procurement Specialist",
+          "Procurement Coordinator",
+          "Procurement Officer",
+          "Purchasing Specialist",
+          "Procurement Associate",
+          "Procurement Administrator"
+        ],
+        "ru": [
+          "Специалист по закупкам",
+          "Менеджер по закупкам",
+          "Специалист отдела снабжения",
+          "Специалист по закупочной деятельности",
+          "Координатор закупок",
+          "Специалист по снабжению"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "procurement.buyer.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "procurement.procurement-analyst.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "procurement.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "procurement.buyer.ic",
+      "function": "procurement",
+      "family": "procurement.sourcing",
+      "titleEn": "Buyer / Purchasing Specialist",
+      "titleRu": "Менеджер по закупкам",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Buyer",
+          "Purchasing Specialist",
+          "Purchasing Agent",
+          "Procurement Buyer",
+          "Commodity Buyer",
+          "Purchasing Manager"
+        ],
+        "ru": [
+          "Менеджер по закупкам",
+          "Специалист по закупкам",
+          "Специалист по снабжению",
+          "Байер",
+          "Менеджер по закупке товаров",
+          "Специалист по материально-техническому снабжению"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "procurement.generic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "procurement.strategic-sourcing.ic",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "procurement.supplier-manager.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "procurement.strategic-sourcing.ic",
+      "function": "procurement",
+      "family": "procurement.sourcing",
+      "titleEn": "Strategic Sourcing Specialist",
+      "titleRu": "Специалист по стратегическим закупкам",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Strategic Sourcing Specialist",
+          "Sourcing Specialist",
+          "Sourcing Manager",
+          "Strategic Procurement Specialist",
+          "Category Sourcing Specialist",
+          "Sourcing Analyst"
+        ],
+        "ru": [
+          "Специалист по стратегическим закупкам",
+          "Менеджер по стратегическим закупкам",
+          "Специалист по поиску поставщиков",
+          "Менеджер по снабжению",
+          "Специалист по выбору поставщиков",
+          "Аналитик по закупкам"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "procurement.buyer.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "procurement.category-manager.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "procurement.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "procurement.category-manager.ic",
+      "function": "procurement",
+      "family": "procurement.category",
+      "titleEn": "Category Manager",
+      "titleRu": "Категорийный менеджер",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Category Manager",
+          "Procurement Category Manager",
+          "Category Buyer",
+          "Category Specialist",
+          "Strategic Category Manager",
+          "Category Lead"
+        ],
+        "ru": [
+          "Категорийный менеджер",
+          "Менеджер категории",
+          "Менеджер по управлению категорией",
+          "Категорийный специалист",
+          "Менеджер по закупкам категории",
+          "Руководитель категории"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "procurement.strategic-sourcing.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "procurement.supplier-manager.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "procurement.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "retail.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "procurement.procurement-analyst.ic",
+      "function": "procurement",
+      "family": "procurement.supplier-operations",
+      "titleEn": "Procurement Analyst",
+      "titleRu": "Аналитик по закупкам",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Procurement Analyst",
+          "Purchasing Analyst",
+          "Spend Analyst",
+          "Procurement Data Analyst",
+          "Sourcing Analyst",
+          "Procurement Operations Analyst"
+        ],
+        "ru": [
+          "Аналитик по закупкам",
+          "Аналитик отдела снабжения",
+          "Аналитик закупочной деятельности",
+          "Аналитик расходов",
+          "Аналитик данных закупок",
+          "Специалист по аналитике закупок"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "procurement.generic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.fp-a.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "procurement.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "procurement.supplier-manager.ic",
+      "function": "procurement",
+      "family": "procurement.supplier-operations",
+      "titleEn": "Supplier Relationship Manager",
+      "titleRu": "Менеджер по работе с поставщиками",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Supplier Relationship Manager",
+          "Supplier Manager",
+          "Vendor Manager",
+          "Supplier Performance Manager",
+          "Vendor Relationship Specialist",
+          "Supplier Development Manager"
+        ],
+        "ru": [
+          "Менеджер по работе с поставщиками",
+          "Менеджер по управлению поставщиками",
+          "Менеджер по развитию поставщиков",
+          "Специалист по поставщикам",
+          "Менеджер по качеству поставщиков",
+          "Менеджер по взаимоотношениям с поставщиками"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "procurement.buyer.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "procurement.category-manager.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "logistics.coordinator.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "procurement.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "procurement.contracts.ic",
+      "function": "procurement",
+      "family": "procurement.contracts",
+      "titleEn": "Procurement Contracts Specialist",
+      "titleRu": "Специалист по договорам закупок",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Procurement Contracts Specialist",
+          "Procurement Contract Manager",
+          "Contract Specialist, Procurement",
+          "Commercial Contracts Manager",
+          "Procurement Contract Administrator",
+          "Supplier Contracts Specialist"
+        ],
+        "ru": [
+          "Специалист по договорам закупок",
+          "Менеджер договоров закупки",
+          "Специалист по контрактам",
+          "Договорной менеджер в закупках",
+          "Администратор договоров с поставщиками",
+          "Специалист договорного отдела закупок"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "legal.contracts.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "procurement.supplier-manager.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "procurement.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "procurement.lead",
+      "function": "procurement",
+      "family": "procurement.leadership",
+      "titleEn": "Procurement Team Lead",
+      "titleRu": "Руководитель группы закупок",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Procurement Team Lead",
+          "Procurement Lead",
+          "Senior Procurement Manager",
+          "Sourcing Team Lead",
+          "Purchasing Team Lead",
+          "Procurement Supervisor"
+        ],
+        "ru": [
+          "Руководитель группы закупок",
+          "Руководитель направления закупок",
+          "Ведущий менеджер по закупкам",
+          "Руководитель отдела снабжения",
+          "Старший менеджер по закупкам",
+          "Тимлид закупок"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "procurement.strategic-sourcing.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "procurement.category-manager.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "procurement.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "procurement.contracts.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "procurement.head",
+      "function": "procurement",
+      "family": "procurement.leadership",
+      "titleEn": "Head of Procurement",
+      "titleRu": "Руководитель отдела закупок",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Procurement",
+          "Procurement Director",
+          "Director of Procurement",
+          "Head of Purchasing",
+          "Chief Procurement Manager",
+          "Procurement Department Head"
+        ],
+        "ru": [
+          "Руководитель отдела закупок",
+          "Директор по закупкам",
+          "Руководитель службы снабжения",
+          "Директор департамента закупок",
+          "Начальник управления закупок",
+          "Руководитель закупочной функции"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "procurement.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "procurement.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "finance.head",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "logistics.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "procurement.vp",
+      "function": "procurement",
+      "family": "procurement.leadership",
+      "titleEn": "Vice President of Procurement",
+      "titleRu": "Вице-президент по закупкам",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "Vice President of Procurement",
+          "VP Procurement",
+          "VP of Supply Management",
+          "Group Procurement Director",
+          "Senior Vice President, Procurement",
+          "Vice President, Strategic Sourcing"
+        ],
+        "ru": [
+          "Вице-президент по закупкам",
+          "Вице-президент по снабжению",
+          "Директор по закупкам группы компаний",
+          "Директор по управлению поставками",
+          "Заместитель директора по закупкам",
+          "Вице-президент по стратегическим закупкам"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "procurement.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "procurement.cpo",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "finance.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "ops.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "procurement.cpo",
+      "function": "procurement",
+      "family": "procurement.leadership",
+      "titleEn": "Chief Procurement Officer",
+      "titleRu": "Директор по закупкам (CPO)",
+      "levels": [
         "c-level"
       ],
       "variants": {
         "en": [
-          "Procurement Manager",
-          "Head of Procurement",
-          "Chief Procurement Officer"
+          "Chief Procurement Officer",
+          "CPO",
+          "Chief Purchasing Officer",
+          "Chief Supply Management Officer",
+          "Chief Sourcing Officer",
+          "Group Chief Procurement Officer"
         ],
         "ru": [
-          "Менеджер по закупкам",
-          "Директор по закупкам"
+          "Директор по закупкам",
+          "Директор по снабжению",
+          "Руководитель закупочной функции",
+          "Директор по управлению цепочкой поставок",
+          "Директор по стратегическим закупкам",
+          "CPO"
         ]
       },
-      "adjacent": []
+      "adjacent": [
+        {
+          "roleId": "procurement.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "finance.cfo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "ops.coo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
+        }
+      ]
     }
   ]
 }

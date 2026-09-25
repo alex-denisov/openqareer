@@ -8,9 +8,44 @@
     {
       "id": "admin.core",
       "function": "admin",
-      "labelEn": "Clerical & office administration ladder",
-      "labelRu": "Лестница офисной/канцелярской работы",
-      "coverage": "core"
+      "labelEn": "Clerical and office administration",
+      "labelRu": "Канцелярская и офисная работа",
+      "coverage": "full"
+    },
+    {
+      "id": "admin.front-office",
+      "function": "admin",
+      "labelEn": "Front office and reception",
+      "labelRu": "Фронт-офис и ресепшен",
+      "coverage": "full"
+    },
+    {
+      "id": "admin.executive-support",
+      "function": "admin",
+      "labelEn": "Executive and team support",
+      "labelRu": "Помощь руководителям и командам",
+      "coverage": "full"
+    },
+    {
+      "id": "admin.records-data",
+      "function": "admin",
+      "labelEn": "Records and data administration",
+      "labelRu": "Документооборот и данные",
+      "coverage": "full"
+    },
+    {
+      "id": "admin.office-operations",
+      "function": "admin",
+      "labelEn": "Office operations and facilities coordination",
+      "labelRu": "Офисные операции и хозяйственная координация",
+      "coverage": "full"
+    },
+    {
+      "id": "admin.leadership",
+      "function": "admin",
+      "labelEn": "Administration leadership",
+      "labelRu": "Руководство административной функцией",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,25 +53,38 @@
       "id": "admin.clerk.ic",
       "function": "admin",
       "family": "admin.core",
-      "titleEn": "Receptionist / Secretary",
-      "titleRu": "Секретарь / ресепшионист",
+      "titleEn": "Administrative Clerk",
+      "titleRu": "Административный специалист",
       "levels": [
         "ic"
       ],
       "variants": {
         "en": [
-          "Receptionist",
-          "Secretary",
-          "Data Entry Clerk",
-          "Administrative Assistant"
+          "Administrative Clerk",
+          "Administrative Assistant",
+          "Office Clerk",
+          "Clerical Assistant",
+          "Office Administrator",
+          "Administrative Specialist"
         ],
         "ru": [
+          "Административный специалист",
+          "Администратор офиса",
+          "Офисный специалист",
           "Секретарь",
-          "Оператор ввода данных",
-          "Ресепшионист"
+          "Делопроизводитель",
+          "Специалист административного отдела"
         ]
       },
       "adjacent": [
+        {
+          "roleId": "admin.receptionist.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "admin.data-entry.ic",
+          "kind": "sibling-family"
+        },
         {
           "roleId": "admin.office-manager.lead",
           "kind": "level-up"
@@ -44,27 +92,337 @@
       ]
     },
     {
+      "id": "admin.receptionist.ic",
+      "function": "admin",
+      "family": "admin.front-office",
+      "titleEn": "Receptionist / Front Desk Administrator",
+      "titleRu": "Администратор ресепшен",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Receptionist",
+          "Front Desk Administrator",
+          "Front Office Coordinator",
+          "Guest Services Receptionist",
+          "Office Receptionist",
+          "Reception Desk Specialist"
+        ],
+        "ru": [
+          "Администратор ресепшен",
+          "Ресепшионист",
+          "Секретарь на ресепшен",
+          "Администратор офиса",
+          "Специалист стойки регистрации",
+          "Офисный администратор"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "admin.clerk.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "admin.office-coordinator.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "admin.office-manager.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "admin.data-entry.ic",
+      "function": "admin",
+      "family": "admin.records-data",
+      "titleEn": "Data Entry Clerk",
+      "titleRu": "Оператор ввода данных",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Data Entry Clerk",
+          "Data Entry Operator",
+          "Data Entry Specialist",
+          "Records Clerk",
+          "Document Processing Specialist",
+          "Data Administration Assistant"
+        ],
+        "ru": [
+          "Оператор ввода данных",
+          "Оператор базы данных",
+          "Специалист по вводу данных",
+          "Оператор обработки документов",
+          "Специалист по работе с документами",
+          "Архивариус"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "admin.clerk.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "admin.records.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "admin.office-manager.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "admin.records.ic",
+      "function": "admin",
+      "family": "admin.records-data",
+      "titleEn": "Records and Document Specialist",
+      "titleRu": "Специалист по документообороту",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Records Specialist",
+          "Document Control Specialist",
+          "Document Management Specialist",
+          "Records Administrator",
+          "Document Controller",
+          "Records and Information Coordinator"
+        ],
+        "ru": [
+          "Специалист по документообороту",
+          "Специалист по делопроизводству",
+          "Документовед",
+          "Администратор документооборота",
+          "Специалист по архиву",
+          "Контролёр документов"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "admin.data-entry.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "legal.paralegal.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "admin.office-coordinator.ic",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "admin.executive-assistant.ic",
+      "function": "admin",
+      "family": "admin.executive-support",
+      "titleEn": "Executive Assistant",
+      "titleRu": "Помощник руководителя",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Executive Assistant",
+          "Personal Assistant",
+          "Executive Secretary",
+          "Management Assistant",
+          "Assistant to the CEO",
+          "C-Suite Assistant"
+        ],
+        "ru": [
+          "Помощник руководителя",
+          "Персональный ассистент",
+          "Ассистент руководителя",
+          "Секретарь руководителя",
+          "Помощник генерального директора",
+          "Ассистент топ-менеджера"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "admin.office-manager.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "admin.office-coordinator.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "legal.paralegal.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "admin.office-coordinator.ic",
+      "function": "admin",
+      "family": "admin.office-operations",
+      "titleEn": "Office Coordinator",
+      "titleRu": "Координатор офиса",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Office Coordinator",
+          "Office Administrator",
+          "Office Operations Coordinator",
+          "Workplace Coordinator",
+          "Office Services Coordinator",
+          "Administrative Coordinator"
+        ],
+        "ru": [
+          "Координатор офиса",
+          "Офис-координатор",
+          "Координатор административных процессов",
+          "Координатор офисных операций",
+          "Административный координатор",
+          "Специалист по офисной инфраструктуре"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "admin.receptionist.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "admin.facilities.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "admin.office-manager.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "admin.facilities.ic",
+      "function": "admin",
+      "family": "admin.office-operations",
+      "titleEn": "Facilities Coordinator",
+      "titleRu": "Координатор хозяйственного обеспечения",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Facilities Coordinator",
+          "Facilities Administrator",
+          "Workplace Services Specialist",
+          "Facilities Assistant",
+          "Office Facilities Manager",
+          "Building Services Coordinator"
+        ],
+        "ru": [
+          "Координатор хозяйственного обеспечения",
+          "Специалист АХО",
+          "Администратор хозяйственного отдела",
+          "Специалист по эксплуатации офиса",
+          "Менеджер офисной инфраструктуры",
+          "Координатор административно-хозяйственной деятельности"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "admin.office-coordinator.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "admin.office-manager.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "procurement.buyer.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
       "id": "admin.office-manager.lead",
       "function": "admin",
-      "family": "admin.core",
-      "titleEn": "Office Manager / Executive Assistant",
-      "titleRu": "Офис-менеджер / помощник руководителя",
+      "family": "admin.office-operations",
+      "titleEn": "Office Manager",
+      "titleRu": "Офис-менеджер",
       "levels": [
         "lead"
       ],
       "variants": {
         "en": [
           "Office Manager",
-          "Executive Assistant"
+          "Senior Office Manager",
+          "Workplace Manager",
+          "Office Operations Manager",
+          "Administrative Manager",
+          "Facilities Manager"
         ],
         "ru": [
           "Офис-менеджер",
-          "Помощник руководителя"
+          "Старший офис-менеджер",
+          "Менеджер по эксплуатации офиса",
+          "Руководитель офисных операций",
+          "Административный менеджер",
+          "Менеджер АХО"
         ]
       },
       "adjacent": [
         {
-          "roleId": "admin.clerk.ic",
+          "roleId": "admin.office-coordinator.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "admin.executive-assistant.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "admin.admin-coordinator.lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "admin.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "admin.admin-coordinator.lead",
+      "function": "admin",
+      "family": "admin.executive-support",
+      "titleEn": "Administrative Team Lead",
+      "titleRu": "Руководитель административной группы",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Administrative Team Lead",
+          "Administrative Services Manager",
+          "Senior Administrative Manager",
+          "Executive Support Lead",
+          "Business Support Manager",
+          "Administration Supervisor"
+        ],
+        "ru": [
+          "Руководитель административной группы",
+          "Руководитель административной службы",
+          "Старший административный менеджер",
+          "Руководитель службы поддержки руководства",
+          "Менеджер бизнес-поддержки",
+          "Супервайзер административного отдела"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "admin.office-manager.lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "admin.executive-assistant.ic",
           "kind": "level-down"
         },
         {
@@ -76,7 +434,7 @@
     {
       "id": "admin.head",
       "function": "admin",
-      "family": "admin.core",
+      "family": "admin.leadership",
       "titleEn": "Head of Administration",
       "titleRu": "Руководитель административного отдела",
       "levels": [
@@ -85,17 +443,133 @@
       "variants": {
         "en": [
           "Head of Administration",
-          "Administrative Director"
+          "Administrative Director",
+          "Director of Administration",
+          "Head of Office Operations",
+          "Head of Corporate Services",
+          "Administration Department Head"
         ],
         "ru": [
           "Руководитель административного отдела",
-          "Административный директор"
+          "Административный директор",
+          "Директор по административным вопросам",
+          "Руководитель офисных операций",
+          "Директор по корпоративным сервисам",
+          "Начальник административного управления"
         ]
       },
       "adjacent": [
         {
           "roleId": "admin.office-manager.lead",
           "kind": "level-down"
+        },
+        {
+          "roleId": "admin.admin-coordinator.lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "admin.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "hr.head",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "procurement.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "admin.vp",
+      "function": "admin",
+      "family": "admin.leadership",
+      "titleEn": "Vice President of Administration",
+      "titleRu": "Вице-президент по административным вопросам",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "Vice President of Administration",
+          "VP Administration",
+          "Vice President, Corporate Services",
+          "Group Administration Director",
+          "Senior Vice President, Administration",
+          "VP Workplace Services"
+        ],
+        "ru": [
+          "Вице-президент по административным вопросам",
+          "Вице-президент по корпоративным сервисам",
+          "Директор по административным вопросам группы компаний",
+          "Руководитель административного департамента",
+          "Директор по офисной инфраструктуре",
+          "Заместитель директора по административным вопросам"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "admin.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "admin.cao",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "hr.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "ops.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "admin.cao",
+      "function": "admin",
+      "family": "admin.leadership",
+      "titleEn": "Chief Administrative Officer",
+      "titleRu": "Директор по административным вопросам (CAO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Administrative Officer",
+          "CAO",
+          "Chief Corporate Services Officer",
+          "Chief Workplace Officer",
+          "Chief Operations and Administration Officer",
+          "Group Chief Administrative Officer"
+        ],
+        "ru": [
+          "Директор по административным вопросам",
+          "Директор по корпоративным сервисам",
+          "Директор по обеспечению деятельности",
+          "Руководитель административного блока",
+          "Директор по офисной инфраструктуре",
+          "CAO"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "admin.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "ops.coo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "hr.chro",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
         }
       ]
     }

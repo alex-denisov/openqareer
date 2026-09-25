@@ -8,9 +8,44 @@
     {
       "id": "marketing.core",
       "function": "marketing",
-      "labelEn": "Marketing ladder",
-      "labelRu": "Лестница маркетинга",
-      "coverage": "core"
+      "labelEn": "Marketing strategy and generalists",
+      "labelRu": "Маркетинговая стратегия и общий профиль",
+      "coverage": "full"
+    },
+    {
+      "id": "marketing.growth",
+      "function": "marketing",
+      "labelEn": "Growth and performance marketing",
+      "labelRu": "Growth- и performance-маркетинг",
+      "coverage": "full"
+    },
+    {
+      "id": "marketing.content",
+      "function": "marketing",
+      "labelEn": "Content and social media",
+      "labelRu": "Контент и социальные медиа",
+      "coverage": "full"
+    },
+    {
+      "id": "marketing.product-brand",
+      "function": "marketing",
+      "labelEn": "Product and brand marketing",
+      "labelRu": "Продуктовый и бренд-маркетинг",
+      "coverage": "full"
+    },
+    {
+      "id": "marketing.operations",
+      "function": "marketing",
+      "labelEn": "Marketing operations and analytics",
+      "labelRu": "Маркетинговые операции и аналитика",
+      "coverage": "full"
+    },
+    {
+      "id": "marketing.leadership",
+      "function": "marketing",
+      "labelEn": "Marketing leadership",
+      "labelRu": "Руководство маркетингом",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -19,24 +54,415 @@
       "function": "marketing",
       "family": "marketing.core",
       "titleEn": "Marketing Specialist",
-      "titleRu": "Маркетолог",
+      "titleRu": "Специалист по маркетингу",
       "levels": [
         "ic"
       ],
       "variants": {
         "en": [
           "Marketing Specialist",
-          "Digital Marketing Specialist",
-          "SMM Manager",
-          "Content Marketing Specialist"
+          "Marketing Manager",
+          "Marketing Executive",
+          "Marketing Coordinator",
+          "Marketing Associate",
+          "Marketing Generalist"
         ],
         "ru": [
+          "Специалист по маркетингу",
+          "Менеджер по маркетингу",
           "Маркетолог",
-          "Специалист по digital-маркетингу",
-          "SMM-менеджер"
+          "Координатор маркетинга",
+          "Ведущий специалист по маркетингу",
+          "Менеджер по продвижению"
         ]
       },
       "adjacent": [
+        {
+          "roleId": "marketing.performance.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "marketing.content.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "marketing.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "marketing.performance.ic",
+      "function": "marketing",
+      "family": "marketing.growth",
+      "titleEn": "Performance Marketing Specialist",
+      "titleRu": "Специалист по performance-маркетингу",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Performance Marketing Specialist",
+          "Performance Marketing Manager",
+          "Digital Marketing Specialist",
+          "Paid Media Specialist",
+          "PPC Manager",
+          "Growth Marketing Specialist"
+        ],
+        "ru": [
+          "Специалист по performance-маркетингу",
+          "Менеджер по интернет-маркетингу",
+          "Специалист по контекстной рекламе",
+          "Менеджер по платному трафику",
+          "Digital-маркетолог",
+          "Специалист по привлечению трафика"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.seo.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "marketing.analyst.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "marketing.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "marketing.seo.ic",
+      "function": "marketing",
+      "family": "marketing.growth",
+      "titleEn": "SEO Specialist",
+      "titleRu": "SEO-специалист",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "SEO Specialist",
+          "SEO Manager",
+          "SEO Analyst",
+          "Search Engine Optimization Specialist",
+          "Organic Growth Specialist",
+          "SEO Consultant"
+        ],
+        "ru": [
+          "SEO-специалист",
+          "SEO-оптимизатор",
+          "Менеджер по SEO",
+          "Специалист по поисковому продвижению",
+          "SEO-маркетолог",
+          "Аналитик поискового трафика"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.performance.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "marketing.content.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "marketing.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "marketing.content.ic",
+      "function": "marketing",
+      "family": "marketing.content",
+      "titleEn": "Content Marketing Specialist",
+      "titleRu": "Специалист по контент-маркетингу",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Content Marketing Specialist",
+          "Content Manager",
+          "Content Writer",
+          "Content Strategist",
+          "Editorial Content Manager",
+          "B2B Content Specialist"
+        ],
+        "ru": [
+          "Специалист по контент-маркетингу",
+          "Контент-менеджер",
+          "Редактор контента",
+          "Контент-маркетолог",
+          "Копирайтер-маркетолог",
+          "Специалист по созданию контента"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.social.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "marketing.seo.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "pr.generic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "marketing.social.ic",
+      "function": "marketing",
+      "family": "marketing.content",
+      "titleEn": "Social Media Manager",
+      "titleRu": "Менеджер социальных сетей",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Social Media Manager",
+          "Social Media Specialist",
+          "SMM Manager",
+          "Community Manager",
+          "Social Media Editor",
+          "Social Content Manager"
+        ],
+        "ru": [
+          "Менеджер социальных сетей",
+          "SMM-менеджер",
+          "Специалист по социальным сетям",
+          "Комьюнити-менеджер",
+          "Редактор социальных сетей",
+          "Контент-менеджер соцсетей"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.content.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "pr.generic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "marketing.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "marketing.product.ic",
+      "function": "marketing",
+      "family": "marketing.product-brand",
+      "titleEn": "Product Marketing Manager",
+      "titleRu": "Продуктовый маркетолог",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Product Marketing Manager",
+          "Product Marketing Specialist",
+          "Product Marketer",
+          "Go-to-Market Manager",
+          "GTM Manager",
+          "Product Communications Manager"
+        ],
+        "ru": [
+          "Продуктовый маркетолог",
+          "Менеджер по продуктовому маркетингу",
+          "Специалист по выводу продукта на рынок",
+          "GTM-менеджер",
+          "Менеджер по продвижению продукта",
+          "Маркетолог продукта"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.brand.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "product.pm.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "marketing.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "marketing.brand.ic",
+      "function": "marketing",
+      "family": "marketing.product-brand",
+      "titleEn": "Brand Manager",
+      "titleRu": "Бренд-менеджер",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Brand Manager",
+          "Assistant Brand Manager",
+          "Brand Marketing Manager",
+          "Brand Specialist",
+          "Brand Strategist",
+          "Integrated Marketing Manager"
+        ],
+        "ru": [
+          "Бренд-менеджер",
+          "Менеджер по бренду",
+          "Менеджер по маркетингу бренда",
+          "Специалист по развитию бренда",
+          "Бренд-маркетолог",
+          "Менеджер интегрированных коммуникаций"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.product.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "pr.generic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "marketing.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "marketing.crm.ic",
+      "function": "marketing",
+      "family": "marketing.operations",
+      "titleEn": "CRM and Lifecycle Marketing Specialist",
+      "titleRu": "Специалист по CRM-маркетингу",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "CRM Marketing Specialist",
+          "Lifecycle Marketing Manager",
+          "Retention Marketing Manager",
+          "Email Marketing Manager",
+          "Customer Marketing Specialist",
+          "Marketing Automation Specialist"
+        ],
+        "ru": [
+          "CRM-маркетолог",
+          "Менеджер по CRM-маркетингу",
+          "Менеджер по удержанию клиентов",
+          "Email-маркетолог",
+          "Специалист по автоматизации маркетинга",
+          "Маркетолог по работе с клиентской базой"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.analyst.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "sales.account-manager.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "marketing.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "marketing.analyst.ic",
+      "function": "marketing",
+      "family": "marketing.operations",
+      "titleEn": "Marketing Analyst",
+      "titleRu": "Маркетинговый аналитик",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Marketing Analyst",
+          "Digital Marketing Analyst",
+          "Marketing Data Analyst",
+          "Growth Analyst",
+          "Customer Insights Analyst",
+          "Marketing Intelligence Analyst"
+        ],
+        "ru": [
+          "Маркетинговый аналитик",
+          "Аналитик по маркетингу",
+          "Аналитик digital-маркетинга",
+          "Аналитик по привлечению клиентов",
+          "Аналитик клиентских данных",
+          "Аналитик эффективности маркетинга"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.crm.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "sales.sales-ops.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "marketing.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "marketing.lead",
+      "function": "marketing",
+      "family": "marketing.leadership",
+      "titleEn": "Marketing Team Lead",
+      "titleRu": "Руководитель группы маркетинга",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Marketing Team Lead",
+          "Senior Marketing Manager",
+          "Marketing Lead",
+          "Growth Marketing Lead",
+          "Digital Marketing Lead",
+          "Marketing Supervisor"
+        ],
+        "ru": [
+          "Руководитель группы маркетинга",
+          "Ведущий маркетолог",
+          "Руководитель направления маркетинга",
+          "Руководитель digital-маркетинга",
+          "Руководитель направления привлечения",
+          "Старший менеджер по маркетингу"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.performance.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "marketing.product.ic",
+          "kind": "sibling-family"
+        },
         {
           "roleId": "marketing.head",
           "kind": "level-up"
@@ -46,7 +472,7 @@
     {
       "id": "marketing.head",
       "function": "marketing",
-      "family": "marketing.core",
+      "family": "marketing.leadership",
       "titleEn": "Head of Marketing",
       "titleRu": "Руководитель отдела маркетинга",
       "levels": [
@@ -55,39 +481,65 @@
       "variants": {
         "en": [
           "Head of Marketing",
-          "Marketing Director"
+          "Marketing Director",
+          "Director of Marketing",
+          "Head of Digital Marketing",
+          "Head of Growth",
+          "Marketing Department Head"
         ],
         "ru": [
           "Руководитель отдела маркетинга",
-          "Директор по маркетингу"
+          "Директор по маркетингу",
+          "Руководитель digital-маркетинга",
+          "Директор по интернет-маркетингу",
+          "Руководитель направления маркетинга",
+          "Начальник отдела маркетинга"
         ]
       },
       "adjacent": [
         {
-          "roleId": "marketing.specialist.ic",
+          "roleId": "marketing.lead",
           "kind": "level-down"
         },
         {
           "roleId": "marketing.vp",
           "kind": "level-up"
+        },
+        {
+          "roleId": "sales.head",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "pr.head",
+          "kind": "cross-function-neighbor"
         }
       ]
     },
     {
       "id": "marketing.vp",
       "function": "marketing",
-      "family": "marketing.core",
-      "titleEn": "VP of Marketing",
+      "family": "marketing.leadership",
+      "titleEn": "Vice President of Marketing",
       "titleRu": "Вице-президент по маркетингу",
       "levels": [
         "vp"
       ],
       "variants": {
         "en": [
-          "VP of Marketing"
+          "Vice President of Marketing",
+          "VP of Marketing",
+          "VP Marketing",
+          "Senior Vice President, Marketing",
+          "VP of Growth",
+          "Global Marketing VP"
         ],
         "ru": [
-          "Вице-президент по маркетингу"
+          "Вице-президент по маркетингу",
+          "Вице-президент по развитию",
+          "Директор по маркетингу группы компаний",
+          "Руководитель маркетинга по России",
+          "Вице-президент по продвижению",
+          "Директор департамента маркетинга"
         ]
       },
       "adjacent": [
@@ -98,13 +550,21 @@
         {
           "roleId": "marketing.cmo",
           "kind": "level-up"
+        },
+        {
+          "roleId": "sales.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "bizdev.vp",
+          "kind": "cross-function-neighbor"
         }
       ]
     },
     {
       "id": "marketing.cmo",
       "function": "marketing",
-      "family": "marketing.core",
+      "family": "marketing.leadership",
       "titleEn": "Chief Marketing Officer",
       "titleRu": "Директор по маркетингу (CMO)",
       "levels": [
@@ -113,16 +573,37 @@
       "variants": {
         "en": [
           "Chief Marketing Officer",
-          "CMO"
+          "CMO",
+          "Chief Growth Officer",
+          "Chief Brand Officer",
+          "Chief Marketing and Growth Officer",
+          "Chief Commercial Marketing Officer"
         ],
         "ru": [
-          "Директор по маркетингу"
+          "Директор по маркетингу",
+          "Директор по маркетингу и развитию",
+          "Директор по бренду",
+          "Директор по росту",
+          "Руководитель маркетингового блока",
+          "Chief Marketing Officer"
         ]
       },
       "adjacent": [
         {
           "roleId": "marketing.vp",
           "kind": "level-down"
+        },
+        {
+          "roleId": "sales.cro",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "pr.cco",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
         }
       ]
     }

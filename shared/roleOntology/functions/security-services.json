@@ -8,9 +8,23 @@
     {
       "id": "security-services.core",
       "function": "security-services",
-      "labelEn": "Physical security ladder",
-      "labelRu": "Лестница физической охраны",
-      "coverage": "core"
+      "labelEn": "Guarding & Loss Prevention",
+      "labelRu": "Охрана и предотвращение потерь",
+      "coverage": "full"
+    },
+    {
+      "id": "security-services.safety",
+      "function": "security-services",
+      "labelEn": "Occupational & Fire Safety",
+      "labelRu": "Охрана труда и пожарная безопасность",
+      "coverage": "full"
+    },
+    {
+      "id": "security-services.leadership",
+      "function": "security-services",
+      "labelEn": "Physical Security Leadership",
+      "labelRu": "Руководство физической безопасностью",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -20,78 +34,193 @@
       "family": "security-services.core",
       "titleEn": "Security Guard / Safety Officer",
       "titleRu": "Охранник / специалист по охране труда",
-      "levels": [
-        "ic"
-      ],
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Security Guard",
-          "Safety Officer"
-        ],
-        "ru": [
-          "Охранник",
-          "Специалист по охране труда"
-        ]
+        "en": ["Security Guard", "Security Officer", "Protection Officer", "Site Security Officer", "Safety Officer", "Security Specialist"],
+        "ru": ["Охранник", "Сотрудник службы безопасности", "Контролёр охраны", "Охранник объекта", "Специалист по безопасности объекта", "Специалист по охране труда"]
       },
       "adjacent": [
-        {
-          "roleId": "security-services.lead",
-          "kind": "level-up"
-        }
+        {"roleId": "security-services.cctv.ic", "kind": "sibling-family"},
+        {"roleId": "security-services.shift-supervisor.lead", "kind": "level-up"},
+        {"roleId": "security.engineer.ic", "kind": "disambiguation-pair"}
       ]
     },
     {
-      "id": "security-services.lead",
+      "id": "security-services.cctv.ic",
       "function": "security-services",
       "family": "security-services.core",
-      "titleEn": "Senior Security Guard / Shift Lead",
-      "titleRu": "Старший охранник",
-      "levels": [
-        "lead"
-      ],
+      "titleEn": "CCTV / Access Control Operator",
+      "titleRu": "Оператор видеонаблюдения / контроля доступа",
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Senior Security Guard",
-          "Shift Security Lead"
-        ],
-        "ru": [
-          "Старший охранник"
-        ]
+        "en": ["CCTV Operator", "Control Room Operator", "Access Control Officer", "Security Monitoring Operator", "Surveillance Operator", "Security Systems Operator"],
+        "ru": ["Оператор видеонаблюдения", "Оператор пункта централизованной охраны", "Оператор контроля доступа", "Оператор поста наблюдения", "Специалист видеомониторинга", "Оператор охранной системы"]
       },
       "adjacent": [
-        {
-          "roleId": "security-services.guard.ic",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "security-services.head",
-          "kind": "level-up"
-        }
+        {"roleId": "security-services.guard.ic", "kind": "sibling-family"},
+        {"roleId": "security-services.loss-prevention.ic", "kind": "sibling-family"},
+        {"roleId": "security-services.shift-supervisor.lead", "kind": "level-up"},
+        {"roleId": "security.engineer.ic", "kind": "disambiguation-pair"}
+      ]
+    },
+    {
+      "id": "security-services.loss-prevention.ic",
+      "function": "security-services",
+      "family": "security-services.core",
+      "titleEn": "Loss Prevention Specialist",
+      "titleRu": "Специалист по предотвращению потерь",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Loss Prevention Specialist", "Loss Prevention Officer", "Retail Security Specialist", "Asset Protection Associate", "Shrinkage Prevention Officer", "Fraud and Loss Prevention Specialist"],
+        "ru": ["Специалист по предотвращению потерь", "Специалист по экономической безопасности объекта", "Сотрудник службы предотвращения потерь", "Специалист по сохранности ТМЦ", "Инспектор торгового зала", "Специалист по внутренней безопасности"]
+      },
+      "adjacent": [
+        {"roleId": "security-services.guard.ic", "kind": "sibling-family"},
+        {"roleId": "security-services.cctv.ic", "kind": "sibling-family"},
+        {"roleId": "security-services.shift-supervisor.lead", "kind": "level-up"},
+        {"roleId": "retail.store-manager.lead", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "security-services.safety.ic",
+      "function": "security-services",
+      "family": "security-services.safety",
+      "titleEn": "Occupational Health & Safety Specialist",
+      "titleRu": "Специалист по охране труда",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Occupational Health and Safety Specialist", "Health and Safety Officer", "HSE Specialist", "Safety Engineer", "EHS Coordinator", "Workplace Safety Advisor"],
+        "ru": ["Специалист по охране труда", "Инженер по охране труда", "Специалист HSE", "Специалист по промышленной безопасности", "Инженер по безопасности", "Координатор охраны труда"]
+      },
+      "adjacent": [
+        {"roleId": "security-services.fire-safety.ic", "kind": "sibling-family"},
+        {"roleId": "security-services.safety-lead.lead", "kind": "level-up"},
+        {"roleId": "construction.safety.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "extraction-energy.hse.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "security-services.fire-safety.ic",
+      "function": "security-services",
+      "family": "security-services.safety",
+      "titleEn": "Fire Safety Specialist",
+      "titleRu": "Специалист по пожарной безопасности",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Fire Safety Specialist", "Fire Safety Officer", "Fire Prevention Officer", "Fire Protection Engineer", "Emergency Preparedness Specialist", "Fire Compliance Inspector"],
+        "ru": ["Специалист по пожарной безопасности", "Инженер по пожарной безопасности", "Инспектор пожарной безопасности", "Специалист по противопожарной защите", "Специалист ГО и ЧС", "Эксперт пожарного контроля"]
+      },
+      "adjacent": [
+        {"roleId": "security-services.safety.ic", "kind": "sibling-family"},
+        {"roleId": "security-services.safety-lead.lead", "kind": "level-up"},
+        {"roleId": "construction.safety.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "security-services.shift-supervisor.lead",
+      "function": "security-services",
+      "family": "security-services.core",
+      "titleEn": "Security Shift Supervisor",
+      "titleRu": "Старший охранник / начальник смены охраны",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Security Shift Supervisor", "Senior Security Officer", "Security Shift Lead", "Guard Supervisor", "Security Team Leader", "Site Security Supervisor"],
+        "ru": ["Старший охранник", "Начальник смены охраны", "Старший сотрудник службы безопасности", "Супервайзер охраны", "Руководитель охранной смены", "Старший по объекту"]
+      },
+      "adjacent": [
+        {"roleId": "security-services.guard.ic", "kind": "level-down"},
+        {"roleId": "security-services.cctv.ic", "kind": "sibling-family"},
+        {"roleId": "security-services.head", "kind": "level-up"},
+        {"roleId": "security-services.safety-lead.lead", "kind": "sibling-family"}
+      ]
+    },
+    {
+      "id": "security-services.safety-lead.lead",
+      "function": "security-services",
+      "family": "security-services.safety",
+      "titleEn": "Safety Team Lead",
+      "titleRu": "Руководитель группы охраны труда",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Safety Team Lead", "HSE Team Lead", "Safety Supervisor", "Fire Safety Lead", "Occupational Safety Supervisor", "EHS Team Supervisor"],
+        "ru": ["Руководитель группы охраны труда", "Старший специалист HSE", "Супервайзер охраны труда", "Руководитель пожарной безопасности", "Старший инженер по безопасности", "Руководитель группы промышленной безопасности"]
+      },
+      "adjacent": [
+        {"roleId": "security-services.safety.ic", "kind": "level-down"},
+        {"roleId": "security-services.fire-safety.ic", "kind": "sibling-family"},
+        {"roleId": "security-services.hse-manager.head", "kind": "level-up"}
       ]
     },
     {
       "id": "security-services.head",
       "function": "security-services",
-      "family": "security-services.core",
-      "titleEn": "Head of Security (Physical)",
-      "titleRu": "Начальник службы безопасности",
-      "levels": [
-        "head"
-      ],
+      "family": "security-services.leadership",
+      "titleEn": "Head of Physical Security",
+      "titleRu": "Начальник службы физической безопасности",
+      "levels": ["head"],
       "variants": {
-        "en": [
-          "Head of Security",
-          "Facility Security Manager"
-        ],
-        "ru": [
-          "Начальник службы безопасности"
-        ]
+        "en": ["Head of Physical Security", "Head of Security Operations", "Security Manager", "Director of Site Security", "Head of Guarding Services", "Physical Security Director"],
+        "ru": ["Начальник службы физической безопасности", "Начальник службы безопасности", "Руководитель физической охраны", "Директор по безопасности объекта", "Руководитель охранных услуг", "Начальник службы охраны"]
       },
       "adjacent": [
-        {
-          "roleId": "security-services.lead",
-          "kind": "level-down"
-        }
+        {"roleId": "security-services.shift-supervisor.lead", "kind": "level-down"},
+        {"roleId": "security-services.hse-manager.head", "kind": "sibling-family"},
+        {"roleId": "security-services.vp", "kind": "level-up"},
+        {"roleId": "security-services.cso", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "security-services.hse-manager.head",
+      "function": "security-services",
+      "family": "security-services.leadership",
+      "titleEn": "Head of HSE / Safety",
+      "titleRu": "Руководитель охраны труда и промышленной безопасности",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Head of HSE", "HSE Manager", "Safety Director", "Head of Occupational Safety", "Fire and Safety Director", "EHS Director"],
+        "ru": ["Руководитель охраны труда", "Директор по HSE", "Начальник службы промышленной безопасности", "Руководитель службы безопасности труда", "Директор по охране труда и пожарной безопасности", "Начальник отдела ОТ и ПБ"]
+      },
+      "adjacent": [
+        {"roleId": "security-services.safety-lead.lead", "kind": "level-down"},
+        {"roleId": "security-services.head", "kind": "sibling-family"},
+        {"roleId": "security-services.vp", "kind": "level-up"},
+        {"roleId": "security-services.cso", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "security-services.vp",
+      "function": "security-services",
+      "family": "security-services.leadership",
+      "titleEn": "VP / Regional Director of Physical Security",
+      "titleRu": "Директор по физической безопасности сети",
+      "levels": ["vp"],
+      "variants": {
+        "en": ["VP of Physical Security", "Regional Security Director", "Vice President Security Operations", "Security Operations Executive", "Director of Security Network", "VP Corporate Security Operations"],
+        "ru": ["Директор по физической безопасности сети", "Директор по безопасности объектов", "Вице-президент по безопасности", "Руководитель региональной службы безопасности", "Директор по охранным операциям", "Руководитель корпоративной безопасности объектов"]
+      },
+      "adjacent": [
+        {"roleId": "security-services.head", "kind": "level-down"},
+        {"roleId": "security-services.hse-manager.head", "kind": "sibling-family"},
+        {"roleId": "security-services.cso", "kind": "level-up"},
+        {"roleId": "security.vp", "kind": "disambiguation-pair"}
+      ]
+    },
+    {
+      "id": "security-services.cso",
+      "function": "security-services",
+      "family": "security-services.leadership",
+      "titleEn": "Chief Security Officer, Physical Security",
+      "titleRu": "Директор по физической безопасности",
+      "levels": ["c-level"],
+      "variants": {
+        "en": ["Chief Security Officer Physical", "Chief Security Officer", "Chief Corporate Security Officer", "Chief Protection Officer", "Chief Safety and Security Officer", "Corporate Security Executive"],
+        "ru": ["Директор по физической безопасности", "Директор по корпоративной безопасности", "Директор службы безопасности", "Директор по охране объектов", "Директор по безопасности и защите", "Руководитель корпоративной охраны"]
+      },
+      "adjacent": [
+        {"roleId": "security-services.vp", "kind": "level-down"},
+        {"roleId": "security-services.head", "kind": "level-down"},
+        {"roleId": "security.ciso", "kind": "disambiguation-pair"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
       ]
     }
   ]

@@ -8,9 +8,44 @@
     {
       "id": "real-estate.generic",
       "function": "real-estate",
-      "labelEn": "Real Estate",
-      "labelRu": "Недвижимость",
-      "coverage": "skeleton"
+      "labelEn": "Real estate brokerage generalists",
+      "labelRu": "Общие роли в недвижимости",
+      "coverage": "full"
+    },
+    {
+      "id": "real-estate.brokerage",
+      "function": "real-estate",
+      "labelEn": "Brokerage and leasing",
+      "labelRu": "Брокеридж и аренда",
+      "coverage": "full"
+    },
+    {
+      "id": "real-estate.property-management",
+      "function": "real-estate",
+      "labelEn": "Property and facility management",
+      "labelRu": "Управление объектами недвижимости",
+      "coverage": "full"
+    },
+    {
+      "id": "real-estate.development-investment",
+      "function": "real-estate",
+      "labelEn": "Development and investment",
+      "labelRu": "Девелопмент и инвестиции",
+      "coverage": "full"
+    },
+    {
+      "id": "real-estate.valuation-analysis",
+      "function": "real-estate",
+      "labelEn": "Valuation and real estate analysis",
+      "labelRu": "Оценка и аналитика недвижимости",
+      "coverage": "full"
+    },
+    {
+      "id": "real-estate.leadership",
+      "function": "real-estate",
+      "labelEn": "Real estate leadership",
+      "labelRu": "Руководство недвижимостью",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,23 +53,637 @@
       "id": "real-estate.generic",
       "function": "real-estate",
       "family": "real-estate.generic",
-      "titleEn": "Real Estate",
-      "titleRu": "Недвижимость",
+      "titleEn": "Real Estate Agent",
+      "titleRu": "Специалист по недвижимости",
       "levels": [
-        "ic",
-        "head"
+        "ic"
       ],
       "variants": {
         "en": [
           "Real Estate Agent",
-          "Head of Real Estate"
+          "Real Estate Specialist",
+          "Real Estate Consultant",
+          "Property Consultant",
+          "Real Estate Sales Agent",
+          "Realty Advisor"
         ],
         "ru": [
+          "Специалист по недвижимости",
           "Риэлтор",
-          "Руководитель отдела недвижимости"
+          "Агент по недвижимости",
+          "Консультант по недвижимости",
+          "Менеджер по продаже недвижимости",
+          "Эксперт по недвижимости"
         ]
       },
-      "adjacent": []
+      "adjacent": [
+        {
+          "roleId": "real-estate.broker.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "real-estate.leasing.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "real-estate.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "real-estate.broker.ic",
+      "function": "real-estate",
+      "family": "real-estate.brokerage",
+      "titleEn": "Real Estate Broker",
+      "titleRu": "Брокер по недвижимости",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Real Estate Broker",
+          "Commercial Real Estate Broker",
+          "Residential Property Broker",
+          "Real Estate Brokerage Consultant",
+          "Licensed Real Estate Broker",
+          "Property Broker"
+        ],
+        "ru": [
+          "Брокер по недвижимости",
+          "Риэлтор-брокер",
+          "Брокер коммерческой недвижимости",
+          "Брокер жилой недвижимости",
+          "Специалист по брокерским услугам",
+          "Агент по коммерческой недвижимости"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "real-estate.generic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "real-estate.leasing.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "real-estate.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "legal.counsel.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "real-estate.leasing.ic",
+      "function": "real-estate",
+      "family": "real-estate.brokerage",
+      "titleEn": "Leasing Manager",
+      "titleRu": "Менеджер по аренде недвижимости",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Leasing Manager",
+          "Leasing Specialist",
+          "Property Leasing Consultant",
+          "Commercial Leasing Manager",
+          "Tenant Representative",
+          "Lease Administrator"
+        ],
+        "ru": [
+          "Менеджер по аренде недвижимости",
+          "Специалист по аренде",
+          "Менеджер по коммерческой аренде",
+          "Консультант по аренде недвижимости",
+          "Менеджер по работе с арендаторами",
+          "Администратор договоров аренды"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "real-estate.broker.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "real-estate.property-manager.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "real-estate.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "legal.contracts.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "real-estate.property-manager.ic",
+      "function": "real-estate",
+      "family": "real-estate.property-management",
+      "titleEn": "Property Manager",
+      "titleRu": "Менеджер по управлению недвижимостью",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Property Manager",
+          "Real Estate Property Manager",
+          "Building Manager",
+          "Property Operations Manager",
+          "Facilities Property Manager",
+          "Community Manager, Property"
+        ],
+        "ru": [
+          "Менеджер по управлению недвижимостью",
+          "Управляющий объектом недвижимости",
+          "Менеджер объекта",
+          "Управляющий зданием",
+          "Специалист по эксплуатации недвижимости",
+          "Менеджер по эксплуатации объектов"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "real-estate.facilities.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "real-estate.leasing.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "real-estate.property-lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "ops.manager.lead",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "real-estate.facilities.ic",
+      "function": "real-estate",
+      "family": "real-estate.property-management",
+      "titleEn": "Facilities Manager",
+      "titleRu": "Менеджер по эксплуатации объектов",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Facilities Manager",
+          "Facilities Coordinator",
+          "Facilities Operations Specialist",
+          "Building Operations Manager",
+          "Property Facilities Manager",
+          "Technical Facilities Manager"
+        ],
+        "ru": [
+          "Менеджер по эксплуатации объектов",
+          "Менеджер по эксплуатации недвижимости",
+          "Специалист по эксплуатации зданий",
+          "Инженер по эксплуатации объектов",
+          "Координатор эксплуатации",
+          "Управляющий объектом"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "real-estate.property-manager.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "admin.facilities.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "real-estate.property-lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "real-estate.analyst.ic",
+      "function": "real-estate",
+      "family": "real-estate.valuation-analysis",
+      "titleEn": "Real Estate Analyst",
+      "titleRu": "Аналитик по недвижимости",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Real Estate Analyst",
+          "Property Analyst",
+          "Real Estate Investment Analyst",
+          "Real Estate Research Analyst",
+          "Portfolio Analyst, Real Estate",
+          "Market Analyst, Real Estate"
+        ],
+        "ru": [
+          "Аналитик по недвижимости",
+          "Аналитик рынка недвижимости",
+          "Инвестиционный аналитик недвижимости",
+          "Аналитик объектов недвижимости",
+          "Аналитик портфеля недвижимости",
+          "Специалист по аналитике недвижимости"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "real-estate.appraiser.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.fp-a.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "real-estate.development.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "real-estate.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "real-estate.appraiser.ic",
+      "function": "real-estate",
+      "family": "real-estate.valuation-analysis",
+      "titleEn": "Real Estate Appraiser",
+      "titleRu": "Оценщик недвижимости",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Real Estate Appraiser",
+          "Property Valuation Analyst",
+          "Valuation Specialist, Real Estate",
+          "Real Estate Valuation Consultant",
+          "Property Valuation Surveyor",
+          "Senior Real Estate Appraiser"
+        ],
+        "ru": [
+          "Оценщик недвижимости",
+          "Специалист по оценке недвижимости",
+          "Оценщик объектов недвижимости",
+          "Эксперт по оценке недвижимости",
+          "Консультант по оценке недвижимости",
+          "Старший оценщик"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "real-estate.analyst.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "real-estate.development.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "real-estate.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "real-estate.development.ic",
+      "function": "real-estate",
+      "family": "real-estate.development-investment",
+      "titleEn": "Real Estate Development Manager",
+      "titleRu": "Менеджер по девелопменту недвижимости",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Real Estate Development Manager",
+          "Property Development Specialist",
+          "Real Estate Development Analyst",
+          "Development Project Manager",
+          "Real Estate Investment Manager",
+          "Development Associate"
+        ],
+        "ru": [
+          "Менеджер по девелопменту недвижимости",
+          "Специалист по развитию недвижимости",
+          "Менеджер проектов в недвижимости",
+          "Аналитик по девелопменту",
+          "Менеджер по инвестициям в недвижимость",
+          "Специалист по развитию объектов"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "real-estate.analyst.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "construction.engineer.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "real-estate.development-lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "finance.fp-a.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "real-estate.property-lead",
+      "function": "real-estate",
+      "family": "real-estate.property-management",
+      "titleEn": "Property Management Lead",
+      "titleRu": "Руководитель управления недвижимостью",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Property Management Lead",
+          "Senior Property Manager",
+          "Property Operations Lead",
+          "Facilities Team Lead",
+          "Building Operations Lead",
+          "Real Estate Operations Manager"
+        ],
+        "ru": [
+          "Руководитель управления недвижимостью",
+          "Старший менеджер по недвижимости",
+          "Руководитель эксплуатации объектов",
+          "Руководитель группы управляющих",
+          "Руководитель операционной деятельности объектов",
+          "Менеджер по эксплуатации недвижимости"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "real-estate.property-manager.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "real-estate.development-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "real-estate.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "ops.manager.lead",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "real-estate.development-lead",
+      "function": "real-estate",
+      "family": "real-estate.development-investment",
+      "titleEn": "Real Estate Development Lead",
+      "titleRu": "Руководитель направления девелопмента",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Real Estate Development Lead",
+          "Senior Development Manager",
+          "Development Director, Projects",
+          "Real Estate Investment Lead",
+          "Property Development Lead",
+          "Development Team Lead"
+        ],
+        "ru": [
+          "Руководитель направления девелопмента",
+          "Старший менеджер по девелопменту",
+          "Руководитель проектов недвижимости",
+          "Руководитель инвестиционного направления",
+          "Руководитель развития объектов",
+          "Руководитель группы девелопмента"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "real-estate.development.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "real-estate.property-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "real-estate.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "construction.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "real-estate.lead",
+      "function": "real-estate",
+      "family": "real-estate.brokerage",
+      "titleEn": "Real Estate Brokerage Lead",
+      "titleRu": "Руководитель группы по недвижимости",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Real Estate Team Lead",
+          "Brokerage Team Lead",
+          "Senior Real Estate Manager",
+          "Real Estate Sales Lead",
+          "Brokerage Manager",
+          "Realty Team Manager"
+        ],
+        "ru": [
+          "Руководитель группы по недвижимости",
+          "Руководитель отдела недвижимости",
+          "Старший менеджер по недвижимости",
+          "Руководитель продаж недвижимости",
+          "Руководитель брокерского отдела",
+          "Руководитель команды риэлторов"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "real-estate.generic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "real-estate.property-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "real-estate.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "sales.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "real-estate.head",
+      "function": "real-estate",
+      "family": "real-estate.leadership",
+      "titleEn": "Head of Real Estate",
+      "titleRu": "Руководитель отдела недвижимости",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Real Estate",
+          "Real Estate Director",
+          "Director of Real Estate",
+          "Head of Property",
+          "Real Estate Department Head",
+          "Head of Property Development"
+        ],
+        "ru": [
+          "Руководитель отдела недвижимости",
+          "Директор по недвижимости",
+          "Директор департамента недвижимости",
+          "Руководитель направления недвижимости",
+          "Директор по развитию недвижимости",
+          "Начальник управления недвижимостью"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "real-estate.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "real-estate.property-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "real-estate.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "construction.head",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "finance.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "real-estate.vp",
+      "function": "real-estate",
+      "family": "real-estate.leadership",
+      "titleEn": "Vice President of Real Estate",
+      "titleRu": "Вице-президент по недвижимости",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "Vice President of Real Estate",
+          "VP Real Estate",
+          "VP Property Development",
+          "Group Real Estate Director",
+          "Senior Vice President, Real Estate",
+          "VP of Property Investments"
+        ],
+        "ru": [
+          "Вице-президент по недвижимости",
+          "Вице-президент по девелопменту",
+          "Директор по недвижимости группы компаний",
+          "Вице-президент по инвестициям в недвижимость",
+          "Директор департамента развития недвижимости",
+          "Заместитель директора по недвижимости"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "real-estate.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "real-estate.chief",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "finance.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "construction.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "real-estate.chief",
+      "function": "real-estate",
+      "family": "real-estate.leadership",
+      "titleEn": "Chief Real Estate Officer",
+      "titleRu": "Директор по недвижимости (CREO)",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Real Estate Officer",
+          "CREO",
+          "Chief Property Officer",
+          "Chief Development Officer, Real Estate",
+          "Chief Investment Officer, Real Estate",
+          "Group Chief Real Estate Officer"
+        ],
+        "ru": [
+          "Директор по недвижимости",
+          "Директор по девелопменту",
+          "Директор по инвестициям в недвижимость",
+          "Директор по управлению недвижимостью",
+          "Руководитель блока недвижимости",
+          "CREO"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "real-estate.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "finance.cfo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "construction.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
+        }
+      ]
     }
   ]
 }

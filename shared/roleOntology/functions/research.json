@@ -8,9 +8,30 @@
     {
       "id": "research.generic",
       "function": "research",
-      "labelEn": "Research & Development (non-AI)",
-      "labelRu": "Исследования и разработка (не ИИ)",
-      "coverage": "skeleton"
+      "labelEn": "Research & Development Leadership",
+      "labelRu": "Руководство исследованиями и разработкой",
+      "coverage": "full"
+    },
+    {
+      "id": "research.scientific",
+      "function": "research",
+      "labelEn": "Scientific Research",
+      "labelRu": "Научные исследования",
+      "coverage": "full"
+    },
+    {
+      "id": "research.applied",
+      "function": "research",
+      "labelEn": "Applied & Industry Research",
+      "labelRu": "Прикладные и отраслевые исследования",
+      "coverage": "full"
+    },
+    {
+      "id": "research.operations",
+      "function": "research",
+      "labelEn": "Research Operations & Programs",
+      "labelRu": "Организация исследований и программы",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,27 +39,286 @@
       "id": "research.generic",
       "function": "research",
       "family": "research.generic",
-      "titleEn": "Research & Development",
-      "titleRu": "Исследования и разработка",
-      "levels": [
-        "ic",
-        "head"
-      ],
+      "titleEn": "Research & Development Executive",
+      "titleRu": "Руководитель исследований и разработок",
+      "levels": ["ic", "head", "vp", "c-level"],
       "variants": {
-        "en": [
-          "Research Scientist",
-          "R&D Director"
-        ],
-        "ru": [
-          "Научный сотрудник",
-          "Директор по НИОКР"
-        ]
+        "en": ["Research and Development Executive", "R&D Executive", "Research Leader", "Research Organization Director", "R&D Sector Leader", "Scientific Organization Executive"],
+        "ru": ["Руководитель исследований и разработок", "Руководитель R&D", "Директор научного направления", "Руководитель исследовательской организации", "Директор по исследованиям", "Научный руководитель организации"]
       },
       "adjacent": [
-        {
-          "roleId": "ai-ml.research.ic",
-          "kind": "cross-function-neighbor"
-        }
+        {"roleId": "research.head", "kind": "level-down"},
+        {"roleId": "research.vp", "kind": "level-up"},
+        {"roleId": "research.cso", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "research.assistant.ic",
+      "function": "research",
+      "family": "research.scientific",
+      "titleEn": "Research Assistant",
+      "titleRu": "Младший научный сотрудник / ассистент исследователя",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Research Assistant", "Research Associate", "Junior Researcher", "Research Intern", "Laboratory Research Assistant", "Research Fellow Assistant"],
+        "ru": ["Младший научный сотрудник", "Ассистент исследователя", "Лаборант-исследователь", "Стажёр-исследователь", "Младший исследователь", "Ассистент лаборатории"]
+      },
+      "icBand": ["junior", "middle", "senior"],
+      "adjacent": [
+        {"roleId": "research.scientist.ic", "kind": "level-up"},
+        {"roleId": "research.lab-technician.ic", "kind": "sibling-family"},
+        {"roleId": "research.team-lead.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "research.scientist.ic",
+      "function": "research",
+      "family": "research.scientific",
+      "titleEn": "Research Scientist",
+      "titleRu": "Научный сотрудник / исследователь",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Research Scientist", "Scientist", "Senior Research Scientist", "Research Fellow", "Scientific Researcher", "Principal Scientist"],
+        "ru": ["Научный сотрудник", "Исследователь", "Старший научный сотрудник", "Научный специалист", "Учёный-исследователь", "Ведущий научный сотрудник"]
+      },
+      "icBand": ["junior", "middle", "senior", "principal"],
+      "adjacent": [
+        {"roleId": "research.assistant.ic", "kind": "level-down"},
+        {"roleId": "research.lab-technician.ic", "kind": "sibling-family"},
+        {"roleId": "research.team-lead.lead", "kind": "level-up"},
+        {"roleId": "ai-ml.research.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "research.lab-technician.ic",
+      "function": "research",
+      "family": "research.scientific",
+      "titleEn": "Research Laboratory Technician",
+      "titleRu": "Лаборант / техник исследовательской лаборатории",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Research Laboratory Technician", "Lab Technician", "Research Technician", "Laboratory Technologist", "Scientific Laboratory Assistant", "Experimental Technician"],
+        "ru": ["Лаборант", "Лаборант-исследователь", "Техник исследовательской лаборатории", "Лабораторный техник", "Научный лаборант", "Техник экспериментальной лаборатории"]
+      },
+      "icBand": ["junior", "middle", "senior"],
+      "adjacent": [
+        {"roleId": "research.assistant.ic", "kind": "sibling-family"},
+        {"roleId": "research.scientist.ic", "kind": "sibling-family"},
+        {"roleId": "research.lab-manager.head", "kind": "level-up"},
+        {"roleId": "healthcare.lab.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "research.data-analyst.ic",
+      "function": "research",
+      "family": "research.applied",
+      "titleEn": "Research Data Analyst",
+      "titleRu": "Аналитик исследовательских данных",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Research Data Analyst", "Quantitative Research Analyst", "Research Analyst", "Data Analyst R&D", "Statistical Analyst", "Survey Research Analyst"],
+        "ru": ["Аналитик исследовательских данных", "Аналитик исследований", "Количественный аналитик", "Статистик-аналитик", "Аналитик данных R&D", "Аналитик социологических исследований"]
+      },
+      "icBand": ["junior", "middle", "senior"],
+      "adjacent": [
+        {"roleId": "research.scientist.ic", "kind": "sibling-family"},
+        {"roleId": "data.analyst.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "research.applied-lead.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "research.clinical.ic",
+      "function": "research",
+      "family": "research.applied",
+      "titleEn": "Clinical Research Coordinator",
+      "titleRu": "Координатор клинических исследований",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Clinical Research Coordinator", "Clinical Research Associate", "Clinical Trial Coordinator", "Research Study Coordinator", "Clinical Data Coordinator", "Clinical Research Specialist"],
+        "ru": ["Координатор клинических исследований", "Специалист по клиническим исследованиям", "Менеджер клинических исследований", "Координатор клинических испытаний", "Специалист исследовательского центра", "Координатор протокола"]
+      },
+      "adjacent": [
+        {"roleId": "research.data-analyst.ic", "kind": "sibling-family"},
+        {"roleId": "research.scientist.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "research.clinical-lead.lead", "kind": "level-up"},
+        {"roleId": "healthcare.physician.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "research.policy.ic",
+      "function": "research",
+      "family": "research.applied",
+      "titleEn": "Policy / Social Researcher",
+      "titleRu": "Исследователь социальной и государственной политики",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Policy Researcher", "Social Researcher", "Public Policy Research Analyst", "Market and Social Researcher", "Political Researcher", "Qualitative Researcher"],
+        "ru": ["Исследователь государственной политики", "Социолог-исследователь", "Аналитик социальной политики", "Исследователь общественного мнения", "Политический аналитик-исследователь", "Качественный исследователь"]
+      },
+      "adjacent": [
+        {"roleId": "research.data-analyst.ic", "kind": "sibling-family"},
+        {"roleId": "public-service.policy-analyst.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "research.applied-lead.lead", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "research.team-lead.lead",
+      "function": "research",
+      "family": "research.scientific",
+      "titleEn": "Research Team Lead",
+      "titleRu": "Руководитель исследовательской группы",
+      "levels": ["lead"],
+      "variants": {
+        "en": ["Research Team Lead", "Senior Research Lead", "Research Group Leader", "Scientific Team Lead", "Lead Researcher", "Research Supervisor"],
+        "ru": ["Руководитель исследовательской группы", "Руководитель группы исследований", "Ведущий научный сотрудник", "Научный руководитель группы", "Старший исследователь", "Руководитель лабораторной группы"]
+      },
+      "adjacent": [
+        {"roleId": "research.scientist.ic", "kind": "level-down"},
+        {"roleId": "research.assistant.ic", "kind": "sibling-family"},
+        {"roleId": "research.head", "kind": "level-up"},
+        {"roleId": "research.principal-investigator.lead", "kind": "sibling-family"}
+      ]
+    },
+    {
+      "id": "research.principal-investigator.lead",
+      "function": "research",
+      "family": "research.scientific",
+      "titleEn": "Principal Investigator / Research Lead",
+      "titleRu": "Руководитель исследования / главный исследователь",
+      "levels": ["lead", "head"],
+      "variants": {
+        "en": ["Principal Investigator", "Research Lead", "Study Lead", "Scientific Project Lead", "Principal Researcher", "Research Program Lead"],
+        "ru": ["Главный исследователь", "Руководитель исследования", "Руководитель научного проекта", "Научный руководитель проекта", "Руководитель программы исследований", "Ответственный исследователь"]
+      },
+      "adjacent": [
+        {"roleId": "research.scientist.ic", "kind": "level-down"},
+        {"roleId": "research.team-lead.lead", "kind": "sibling-family"},
+        {"roleId": "research.program-manager.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "research.applied-lead.lead",
+      "function": "research",
+      "family": "research.applied",
+      "titleEn": "Applied Research Lead",
+      "titleRu": "Руководитель прикладных исследований",
+      "levels": ["lead", "head"],
+      "variants": {
+        "en": ["Applied Research Lead", "Industry Research Lead", "Research and Insights Lead", "Market Research Team Lead", "Applied Science Lead", "Research Consulting Lead"],
+        "ru": ["Руководитель прикладных исследований", "Руководитель отраслевых исследований", "Руководитель аналитических исследований", "Руководитель команды маркетинговых исследований", "Руководитель прикладной науки", "Руководитель исследовательского консалтинга"]
+      },
+      "adjacent": [
+        {"roleId": "research.data-analyst.ic", "kind": "level-down"},
+        {"roleId": "research.policy.ic", "kind": "sibling-family"},
+        {"roleId": "research.program-manager.head", "kind": "level-up"},
+        {"roleId": "consulting.head", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "research.clinical-lead.lead",
+      "function": "research",
+      "family": "research.applied",
+      "titleEn": "Clinical Research Lead",
+      "titleRu": "Руководитель клинических исследований",
+      "levels": ["lead", "head"],
+      "variants": {
+        "en": ["Clinical Research Lead", "Clinical Trial Manager", "Clinical Study Manager", "Clinical Operations Lead", "Senior Clinical Research Associate", "Clinical Program Lead"],
+        "ru": ["Руководитель клинических исследований", "Менеджер клинических исследований", "Руководитель клинического проекта", "Руководитель клинических операций", "Старший специалист клинических исследований", "Руководитель программы испытаний"]
+      },
+      "adjacent": [
+        {"roleId": "research.clinical.ic", "kind": "level-down"},
+        {"roleId": "research.program-manager.head", "kind": "level-up"},
+        {"roleId": "healthcare.medical-director.head", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "research.lab-manager.head",
+      "function": "research",
+      "family": "research.operations",
+      "titleEn": "Research Laboratory Manager",
+      "titleRu": "Руководитель исследовательской лаборатории",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Research Laboratory Manager", "Lab Manager R&D", "Head of Research Laboratory", "Laboratory Director", "Research Facility Manager", "Scientific Laboratory Head"],
+        "ru": ["Руководитель исследовательской лаборатории", "Начальник лаборатории", "Директор лаборатории", "Заведующий лабораторией", "Руководитель научной лаборатории", "Руководитель исследовательского центра"]
+      },
+      "adjacent": [
+        {"roleId": "research.lab-technician.ic", "kind": "level-down"},
+        {"roleId": "research.principal-investigator.lead", "kind": "sibling-family"},
+        {"roleId": "research.head", "kind": "level-up"},
+        {"roleId": "healthcare.diagnostics.lead", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "research.program-manager.head",
+      "function": "research",
+      "family": "research.operations",
+      "titleEn": "Research Program Manager",
+      "titleRu": "Руководитель программы исследований",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Research Program Manager", "Research Portfolio Manager", "Scientific Program Director", "R&D Program Manager", "Research Operations Manager", "Research Project Director"],
+        "ru": ["Руководитель программы исследований", "Директор научной программы", "Менеджер программы R&D", "Руководитель портфеля исследований", "Руководитель исследовательских операций", "Директор исследовательского проекта"]
+      },
+      "adjacent": [
+        {"roleId": "research.principal-investigator.lead", "kind": "sibling-family"},
+        {"roleId": "research.applied-lead.lead", "kind": "sibling-family"},
+        {"roleId": "research.head", "kind": "level-up"},
+        {"roleId": "project-mgmt.pmo-head", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "research.head",
+      "function": "research",
+      "family": "research.generic",
+      "titleEn": "Head of Research / R&D",
+      "titleRu": "Руководитель исследований и разработок",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Head of Research", "Head of R&D", "Research Director", "Director of Scientific Research", "R&D Director", "Research Department Head"],
+        "ru": ["Руководитель исследований", "Руководитель R&D", "Директор по исследованиям", "Директор научных исследований", "Директор по НИОКР", "Начальник исследовательского отдела"]
+      },
+      "adjacent": [
+        {"roleId": "research.lab-manager.head", "kind": "sibling-family"},
+        {"roleId": "research.program-manager.head", "kind": "sibling-family"},
+        {"roleId": "research.vp", "kind": "level-up"},
+        {"roleId": "ai-ml.head", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "research.vp",
+      "function": "research",
+      "family": "research.generic",
+      "titleEn": "VP of Research / R&D",
+      "titleRu": "Вице-президент по исследованиям и разработкам",
+      "levels": ["vp"],
+      "variants": {
+        "en": ["VP of Research", "VP of R&D", "Vice President Research", "Executive Director of R&D", "Research and Innovation VP", "VP Scientific Programs"],
+        "ru": ["Вице-президент по исследованиям", "Вице-президент по НИОКР", "Директор исследовательского блока", "Руководитель научно-технического направления", "Директор по инновациям и исследованиям", "Вице-президент по научным программам"]
+      },
+      "adjacent": [
+        {"roleId": "research.head", "kind": "level-down"},
+        {"roleId": "research.cso", "kind": "level-up"},
+        {"roleId": "ai-ml.vp", "kind": "cross-function-neighbor"},
+        {"roleId": "eng-mgmt.vp", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "research.cso",
+      "function": "research",
+      "family": "research.generic",
+      "titleEn": "Chief Scientific Officer",
+      "titleRu": "Директор по науке / главный научный руководитель",
+      "levels": ["c-level"],
+      "variants": {
+        "en": ["Chief Scientific Officer", "CSO", "Chief Research Officer", "Chief R&D Officer", "Chief Science Executive", "Scientific Director Executive"],
+        "ru": ["Директор по науке", "Главный научный руководитель", "Директор по НИОКР", "Главный научный сотрудник организации", "Руководитель научно-технического блока", "Научный директор"]
+      },
+      "adjacent": [
+        {"roleId": "research.vp", "kind": "level-down"},
+        {"roleId": "research.head", "kind": "level-down"},
+        {"roleId": "ai-ml.chief", "kind": "cross-function-neighbor"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
       ]
     }
   ]

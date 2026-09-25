@@ -8,9 +8,44 @@
     {
       "id": "audit-risk.generic",
       "function": "audit-risk",
-      "labelEn": "Audit & Risk",
-      "labelRu": "Аудит и риски",
-      "coverage": "skeleton"
+      "labelEn": "Risk and compliance generalists",
+      "labelRu": "Общее направление рисков и комплаенса",
+      "coverage": "full"
+    },
+    {
+      "id": "audit-risk.internal-audit",
+      "function": "audit-risk",
+      "labelEn": "Internal audit",
+      "labelRu": "Внутренний аудит",
+      "coverage": "full"
+    },
+    {
+      "id": "audit-risk.risk",
+      "function": "audit-risk",
+      "labelEn": "Enterprise and operational risk",
+      "labelRu": "Корпоративные и операционные риски",
+      "coverage": "full"
+    },
+    {
+      "id": "audit-risk.compliance",
+      "function": "audit-risk",
+      "labelEn": "Compliance and regulatory risk",
+      "labelRu": "Комплаенс и регуляторные риски",
+      "coverage": "full"
+    },
+    {
+      "id": "audit-risk.fraud-governance",
+      "function": "audit-risk",
+      "labelEn": "Fraud, controls and governance",
+      "labelRu": "Противодействие мошенничеству, контроль и управление",
+      "coverage": "full"
+    },
+    {
+      "id": "audit-risk.leadership",
+      "function": "audit-risk",
+      "labelEn": "Audit and risk leadership",
+      "labelRu": "Руководство аудитом и рисками",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,25 +53,617 @@
       "id": "audit-risk.generic",
       "function": "audit-risk",
       "family": "audit-risk.generic",
-      "titleEn": "Audit & Risk",
-      "titleRu": "Аудит и риски",
+      "titleEn": "Risk and Compliance Analyst",
+      "titleRu": "Аналитик по рискам и комплаенсу",
       "levels": [
-        "ic",
-        "head",
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Risk Analyst",
+          "Compliance Analyst",
+          "Risk and Compliance Specialist",
+          "Enterprise Risk Analyst",
+          "Risk Officer",
+          "Risk Management Specialist"
+        ],
+        "ru": [
+          "Риск-аналитик",
+          "Аналитик по рискам",
+          "Специалист по рискам и комплаенсу",
+          "Риск-менеджер",
+          "Специалист по управлению рисками",
+          "Специалист по комплаенсу"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "audit-risk.risk-analyst.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "audit-risk.compliance.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "audit-risk.risk-lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "audit-risk.internal-auditor.ic",
+      "function": "audit-risk",
+      "family": "audit-risk.internal-audit",
+      "titleEn": "Internal Auditor",
+      "titleRu": "Внутренний аудитор",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Internal Auditor",
+          "Internal Audit Specialist",
+          "Internal Audit Analyst",
+          "Senior Internal Auditor",
+          "IT Internal Auditor",
+          "Internal Controls Auditor"
+        ],
+        "ru": [
+          "Внутренний аудитор",
+          "Специалист внутреннего аудита",
+          "Аналитик внутреннего аудита",
+          "Старший внутренний аудитор",
+          "Аудитор бизнес-процессов",
+          "Аудитор внутреннего контроля"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "finance.internal-control.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "audit-risk.audit-lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "audit-risk.fraud.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "audit-risk.risk-analyst.ic",
+      "function": "audit-risk",
+      "family": "audit-risk.risk",
+      "titleEn": "Enterprise Risk Analyst",
+      "titleRu": "Аналитик по управлению рисками",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Enterprise Risk Analyst",
+          "Operational Risk Analyst",
+          "Risk Analyst",
+          "Credit Risk Analyst",
+          "Market Risk Analyst",
+          "Risk Modelling Analyst"
+        ],
+        "ru": [
+          "Аналитик по управлению рисками",
+          "Риск-аналитик",
+          "Аналитик операционных рисков",
+          "Аналитик кредитных рисков",
+          "Аналитик рыночных рисков",
+          "Специалист по моделированию рисков"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "audit-risk.generic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "audit-risk.risk-lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "finance.fp-a.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "audit-risk.compliance.ic",
+      "function": "audit-risk",
+      "family": "audit-risk.compliance",
+      "titleEn": "Compliance Officer",
+      "titleRu": "Специалист по комплаенсу",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Compliance Officer",
+          "Compliance Specialist",
+          "Compliance Analyst",
+          "Regulatory Compliance Specialist",
+          "AML Compliance Officer",
+          "Ethics and Compliance Specialist"
+        ],
+        "ru": [
+          "Специалист по комплаенсу",
+          "Комплаенс-офицер",
+          "Аналитик по комплаенсу",
+          "Специалист по регуляторному соответствию",
+          "Специалист по ПОД/ФТ",
+          "Специалист по этике и комплаенсу"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "legal.compliance.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "audit-risk.generic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "audit-risk.compliance-lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "audit-risk.fraud.ic",
+      "function": "audit-risk",
+      "family": "audit-risk.fraud-governance",
+      "titleEn": "Fraud and Investigations Specialist",
+      "titleRu": "Специалист по противодействию мошенничеству",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Fraud Analyst",
+          "Fraud Investigator",
+          "Fraud Prevention Specialist",
+          "Financial Crime Analyst",
+          "Anti-Fraud Specialist",
+          "Investigations Analyst"
+        ],
+        "ru": [
+          "Аналитик по противодействию мошенничеству",
+          "Специалист по фрод-мониторингу",
+          "Специалист по расследованиям",
+          "Аналитик финансовых преступлений",
+          "Специалист по предотвращению мошенничества",
+          "Фрод-аналитик"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "audit-risk.internal-auditor.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "legal.litigation.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "audit-risk.fraud-lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "audit-risk.governance.ic",
+      "function": "audit-risk",
+      "family": "audit-risk.fraud-governance",
+      "titleEn": "Governance and Controls Specialist",
+      "titleRu": "Специалист по корпоративному управлению и контролям",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Governance Specialist",
+          "Corporate Governance Analyst",
+          "Controls Specialist",
+          "GRC Analyst",
+          "Governance, Risk and Compliance Analyst",
+          "Business Controls Specialist"
+        ],
+        "ru": [
+          "Специалист по корпоративному управлению",
+          "Аналитик по корпоративному управлению",
+          "Специалист по контролям",
+          "GRC-аналитик",
+          "Аналитик управления, рисков и соответствия",
+          "Специалист по бизнес-контролям"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "audit-risk.internal-auditor.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.internal-control.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "audit-risk.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "audit-risk.audit-lead",
+      "function": "audit-risk",
+      "family": "audit-risk.internal-audit",
+      "titleEn": "Internal Audit Lead",
+      "titleRu": "Руководитель группы внутреннего аудита",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Internal Audit Lead",
+          "Lead Internal Auditor",
+          "Senior Internal Auditor",
+          "Internal Audit Manager",
+          "Internal Controls Audit Manager",
+          "Audit Team Lead"
+        ],
+        "ru": [
+          "Руководитель группы внутреннего аудита",
+          "Ведущий внутренний аудитор",
+          "Руководитель внутреннего аудита",
+          "Менеджер по внутреннему аудиту",
+          "Руководитель аудиторской группы",
+          "Старший аудитор"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "audit-risk.internal-auditor.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "audit-risk.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "audit-risk.governance.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "audit-risk.risk-lead",
+      "function": "audit-risk",
+      "family": "audit-risk.risk",
+      "titleEn": "Risk Management Lead",
+      "titleRu": "Руководитель направления управления рисками",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Risk Management Lead",
+          "Risk Manager",
+          "Enterprise Risk Manager",
+          "Operational Risk Manager",
+          "Senior Risk Manager",
+          "Risk Team Lead"
+        ],
+        "ru": [
+          "Руководитель направления управления рисками",
+          "Риск-менеджер",
+          "Руководитель управления рисками",
+          "Руководитель операционных рисков",
+          "Старший риск-менеджер",
+          "Руководитель группы рисков"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "audit-risk.risk-analyst.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "audit-risk.compliance-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "audit-risk.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "finance.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "audit-risk.compliance-lead",
+      "function": "audit-risk",
+      "family": "audit-risk.compliance",
+      "titleEn": "Compliance Manager",
+      "titleRu": "Руководитель направления комплаенса",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Compliance Manager",
+          "Compliance Lead",
+          "Senior Compliance Officer",
+          "Regulatory Compliance Manager",
+          "AML Compliance Manager",
+          "Compliance Team Lead"
+        ],
+        "ru": [
+          "Руководитель направления комплаенса",
+          "Руководитель комплаенс-функции",
+          "Старший комплаенс-офицер",
+          "Менеджер по регуляторному соответствию",
+          "Руководитель ПОД/ФТ",
+          "Руководитель группы комплаенса"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "audit-risk.compliance.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "audit-risk.risk-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "audit-risk.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "legal.compliance.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "audit-risk.fraud-lead",
+      "function": "audit-risk",
+      "family": "audit-risk.fraud-governance",
+      "titleEn": "Fraud Prevention Manager",
+      "titleRu": "Руководитель направления противодействия мошенничеству",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Fraud Prevention Manager",
+          "Fraud Operations Manager",
+          "Fraud Team Lead",
+          "Investigations Manager",
+          "Financial Crime Manager",
+          "Anti-Fraud Lead"
+        ],
+        "ru": [
+          "Руководитель направления противодействия мошенничеству",
+          "Руководитель фрод-мониторинга",
+          "Руководитель группы расследований",
+          "Менеджер по финансовым преступлениям",
+          "Руководитель антифрод-функции",
+          "Руководитель операционного риска мошенничества"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "audit-risk.fraud.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "audit-risk.audit-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "audit-risk.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "audit-risk.head",
+      "function": "audit-risk",
+      "family": "audit-risk.leadership",
+      "titleEn": "Head of Risk and Compliance",
+      "titleRu": "Руководитель по рискам и комплаенсу",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Risk",
+          "Head of Compliance",
+          "Head of Internal Audit",
+          "Director of Risk and Compliance",
+          "Risk and Compliance Director",
+          "Head of GRC"
+        ],
+        "ru": [
+          "Руководитель по рискам и комплаенсу",
+          "Директор по рискам",
+          "Директор по комплаенсу",
+          "Руководитель внутреннего аудита",
+          "Директор по внутреннему контролю",
+          "Руководитель GRC"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "audit-risk.risk-lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "audit-risk.audit-lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "audit-risk.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "legal.head",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "finance.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "audit-risk.vp",
+      "function": "audit-risk",
+      "family": "audit-risk.leadership",
+      "titleEn": "Vice President of Risk and Compliance",
+      "titleRu": "Вице-президент по рискам и комплаенсу",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "Vice President of Risk",
+          "VP Risk and Compliance",
+          "VP Compliance",
+          "Group Risk Director",
+          "Senior Vice President, Risk",
+          "Vice President, Enterprise Risk"
+        ],
+        "ru": [
+          "Вице-президент по рискам",
+          "Вице-президент по рискам и комплаенсу",
+          "Директор по рискам группы компаний",
+          "Вице-президент по управлению рисками",
+          "Заместитель директора по рискам",
+          "Руководитель департамента рисков"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "audit-risk.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "audit-risk.cro",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "finance.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "legal.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "audit-risk.cro",
+      "function": "audit-risk",
+      "family": "audit-risk.leadership",
+      "titleEn": "Chief Risk Officer",
+      "titleRu": "Директор по рискам (CRO)",
+      "levels": [
         "c-level"
       ],
       "variants": {
         "en": [
-          "Risk Manager",
-          "Compliance Officer",
-          "Chief Risk Officer"
+          "Chief Risk Officer",
+          "CRO",
+          "Chief Compliance and Risk Officer",
+          "Chief Risk and Control Officer",
+          "Group Chief Risk Officer",
+          "Chief Governance Officer"
         ],
         "ru": [
-          "Риск-менеджер",
-          "Директор по комплаенсу"
+          "Директор по рискам",
+          "Директор по рискам и комплаенсу",
+          "Главный директор по рискам",
+          "Директор по внутреннему контролю и рискам",
+          "Руководитель риск-блока",
+          "CRO"
         ]
       },
-      "adjacent": []
+      "adjacent": [
+        {
+          "roleId": "audit-risk.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "audit-risk.chief-audit",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "legal.general-counsel",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "finance.cfo",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "audit-risk.chief-audit",
+      "function": "audit-risk",
+      "family": "audit-risk.leadership",
+      "titleEn": "Chief Audit Executive",
+      "titleRu": "Главный аудитор",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "Chief Audit Executive",
+          "Chief Internal Auditor",
+          "CAE",
+          "Chief Audit Officer",
+          "Group Head of Internal Audit",
+          "Executive Director, Internal Audit"
+        ],
+        "ru": [
+          "Главный аудитор",
+          "Руководитель службы внутреннего аудита",
+          "Директор по внутреннему аудиту",
+          "Директор службы внутреннего контроля",
+          "Главный внутренний аудитор",
+          "CAE"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "audit-risk.audit-lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "audit-risk.cro",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.cfo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
+        }
+      ]
     }
   ]
 }

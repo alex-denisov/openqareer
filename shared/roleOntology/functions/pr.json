@@ -8,9 +8,44 @@
     {
       "id": "pr.generic",
       "function": "pr",
-      "labelEn": "PR & Communications",
-      "labelRu": "PR и коммуникации",
-      "coverage": "skeleton"
+      "labelEn": "Public relations generalists",
+      "labelRu": "Связи с общественностью",
+      "coverage": "full"
+    },
+    {
+      "id": "pr.media-relations",
+      "function": "pr",
+      "labelEn": "Media relations and press office",
+      "labelRu": "Работа со СМИ и пресс-служба",
+      "coverage": "full"
+    },
+    {
+      "id": "pr.corporate-internal",
+      "function": "pr",
+      "labelEn": "Corporate and internal communications",
+      "labelRu": "Корпоративные и внутренние коммуникации",
+      "coverage": "full"
+    },
+    {
+      "id": "pr.public-affairs",
+      "function": "pr",
+      "labelEn": "Public affairs and government relations",
+      "labelRu": "Общественные и государственные связи",
+      "coverage": "full"
+    },
+    {
+      "id": "pr.digital",
+      "function": "pr",
+      "labelEn": "Digital communications and social media",
+      "labelRu": "Digital-коммуникации и социальные медиа",
+      "coverage": "full"
+    },
+    {
+      "id": "pr.leadership",
+      "function": "pr",
+      "labelEn": "Communications leadership",
+      "labelRu": "Руководство коммуникациями",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,25 +53,487 @@
       "id": "pr.generic",
       "function": "pr",
       "family": "pr.generic",
-      "titleEn": "PR & Communications",
-      "titleRu": "PR и коммуникации",
+      "titleEn": "Public Relations Specialist",
+      "titleRu": "Специалист по связям с общественностью",
       "levels": [
-        "ic",
-        "head",
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "PR Specialist",
+          "Public Relations Specialist",
+          "PR Manager",
+          "Communications Specialist",
+          "Public Relations Executive",
+          "Communications Coordinator"
+        ],
+        "ru": [
+          "PR-менеджер",
+          "Специалист по связям с общественностью",
+          "Менеджер по коммуникациям",
+          "Специалист по внешним коммуникациям",
+          "PR-специалист",
+          "Координатор по связям с общественностью"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "pr.press.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "pr.corporate.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "pr.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "marketing.content.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "pr.press.ic",
+      "function": "pr",
+      "family": "pr.media-relations",
+      "titleEn": "Press Officer / Media Relations Specialist",
+      "titleRu": "Специалист по работе со СМИ",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Press Officer",
+          "Media Relations Specialist",
+          "Media Relations Manager",
+          "Press Secretary",
+          "Press Manager",
+          "Publicity Manager"
+        ],
+        "ru": [
+          "Специалист по работе со СМИ",
+          "Менеджер по работе со СМИ",
+          "Пресс-секретарь",
+          "Пресс-менеджер",
+          "Специалист пресс-службы",
+          "Менеджер по связям с медиа"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "pr.generic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.writer.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "pr.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "pr.corporate.ic",
+      "function": "pr",
+      "family": "pr.corporate-internal",
+      "titleEn": "Corporate Communications Specialist",
+      "titleRu": "Специалист по корпоративным коммуникациям",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Corporate Communications Specialist",
+          "Corporate Communications Manager",
+          "Corporate Affairs Specialist",
+          "External Communications Manager",
+          "Corporate Communications Advisor",
+          "Communications Business Partner"
+        ],
+        "ru": [
+          "Специалист по корпоративным коммуникациям",
+          "Менеджер по корпоративным коммуникациям",
+          "Специалист по внешним коммуникациям",
+          "Менеджер по связям с общественностью",
+          "Советник по коммуникациям",
+          "Специалист по корпоративному PR"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "pr.internal.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "pr.press.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "pr.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "marketing.brand.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "pr.internal.ic",
+      "function": "pr",
+      "family": "pr.corporate-internal",
+      "titleEn": "Internal Communications Specialist",
+      "titleRu": "Специалист по внутренним коммуникациям",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Internal Communications Specialist",
+          "Internal Communications Manager",
+          "Employee Communications Specialist",
+          "Employee Engagement Manager",
+          "Internal Communications Advisor",
+          "People Communications Specialist"
+        ],
+        "ru": [
+          "Специалист по внутренним коммуникациям",
+          "Менеджер по внутренним коммуникациям",
+          "Менеджер по коммуникациям с сотрудниками",
+          "Специалист по вовлечённости сотрудников",
+          "Менеджер по внутренним связям",
+          "Специалист по коммуникациям с персоналом"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "pr.corporate.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "hr.employee-relations.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "pr.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "pr.public-affairs.ic",
+      "function": "pr",
+      "family": "pr.public-affairs",
+      "titleEn": "Public Affairs Specialist",
+      "titleRu": "Специалист по общественным связям",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Public Affairs Specialist",
+          "Government Relations Specialist",
+          "Government Affairs Manager",
+          "Public Policy Specialist",
+          "GR Manager",
+          "Stakeholder Relations Specialist"
+        ],
+        "ru": [
+          "Специалист по общественным связям",
+          "Менеджер по взаимодействию с органами власти",
+          "GR-менеджер",
+          "Специалист по государственным связям",
+          "Менеджер по взаимодействию с регуляторами",
+          "Специалист по публичной политике"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "pr.corporate.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "legal.compliance.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "pr.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "pr.social.ic",
+      "function": "pr",
+      "family": "pr.digital",
+      "titleEn": "Digital Communications Specialist",
+      "titleRu": "Специалист по digital-коммуникациям",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Digital Communications Specialist",
+          "Digital PR Manager",
+          "Social Media Communications Manager",
+          "Online Reputation Manager",
+          "Digital Communications Coordinator",
+          "Social PR Manager"
+        ],
+        "ru": [
+          "Специалист по digital-коммуникациям",
+          "Digital PR-менеджер",
+          "Менеджер социальных коммуникаций",
+          "Менеджер онлайн-репутации",
+          "Специалист по цифровым коммуникациям",
+          "SMM и PR-менеджер"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "marketing.social.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "pr.press.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "pr.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "pr.events.ic",
+      "function": "pr",
+      "family": "pr.generic",
+      "titleEn": "Communications and Events Specialist",
+      "titleRu": "Специалист по коммуникациям и мероприятиям",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Communications and Events Specialist",
+          "PR Events Manager",
+          "Events and Communications Coordinator",
+          "Corporate Events Manager",
+          "Experiential Marketing and PR Manager",
+          "Event Communications Specialist"
+        ],
+        "ru": [
+          "Специалист по коммуникациям и мероприятиям",
+          "Менеджер PR-мероприятий",
+          "Менеджер по корпоративным мероприятиям",
+          "Координатор мероприятий и коммуникаций",
+          "Менеджер по event-коммуникациям",
+          "Специалист по деловым мероприятиям"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "pr.generic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "marketing.brand.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "pr.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "pr.lead",
+      "function": "pr",
+      "family": "pr.leadership",
+      "titleEn": "Communications Lead",
+      "titleRu": "Руководитель направления коммуникаций",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Communications Lead",
+          "PR Team Lead",
+          "Senior PR Manager",
+          "Communications Manager",
+          "Media Relations Lead",
+          "Public Affairs Lead"
+        ],
+        "ru": [
+          "Руководитель направления коммуникаций",
+          "Руководитель группы PR",
+          "Ведущий PR-менеджер",
+          "Менеджер по коммуникациям",
+          "Руководитель пресс-службы",
+          "Руководитель направления внешних связей"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "pr.corporate.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "pr.press.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "pr.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "marketing.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "pr.head",
+      "function": "pr",
+      "family": "pr.leadership",
+      "titleEn": "Head of Communications",
+      "titleRu": "Руководитель отдела коммуникаций",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Communications",
+          "Communications Director",
+          "PR Director",
+          "Director of Public Relations",
+          "Head of Corporate Communications",
+          "Head of Public Affairs"
+        ],
+        "ru": [
+          "Руководитель отдела коммуникаций",
+          "Директор по коммуникациям",
+          "Директор по связям с общественностью",
+          "Руководитель корпоративных коммуникаций",
+          "Директор по PR",
+          "Руководитель пресс-службы"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "pr.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "pr.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "marketing.head",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "media.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "pr.vp",
+      "function": "pr",
+      "family": "pr.leadership",
+      "titleEn": "Vice President of Communications",
+      "titleRu": "Вице-президент по коммуникациям",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "Vice President of Communications",
+          "VP Communications",
+          "VP Public Relations",
+          "Global Communications VP",
+          "Senior Vice President, Communications",
+          "Vice President, Corporate Affairs"
+        ],
+        "ru": [
+          "Вице-президент по коммуникациям",
+          "Вице-президент по связям с общественностью",
+          "Директор по коммуникациям группы компаний",
+          "Вице-президент по корпоративным отношениям",
+          "Руководитель департамента коммуникаций",
+          "Заместитель директора по коммуникациям"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "pr.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "pr.cco",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "marketing.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "bizdev.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "pr.cco",
+      "function": "pr",
+      "family": "pr.leadership",
+      "titleEn": "Chief Communications Officer",
+      "titleRu": "Директор по коммуникациям (CCO)",
+      "levels": [
         "c-level"
       ],
       "variants": {
         "en": [
-          "PR Manager",
-          "Head of Communications",
-          "Chief Communications Officer"
+          "Chief Communications Officer",
+          "CCO",
+          "Chief Corporate Affairs Officer",
+          "Chief Public Affairs Officer",
+          "Chief Reputation Officer",
+          "Chief Communications and Brand Officer"
         ],
         "ru": [
-          "PR-менеджер",
-          "Руководитель по связям с общественностью"
+          "Директор по коммуникациям",
+          "Директор по корпоративным отношениям",
+          "Директор по связям с общественностью",
+          "Директор по репутации",
+          "Руководитель коммуникационного блока",
+          "CCO"
         ]
       },
-      "adjacent": []
+      "adjacent": [
+        {
+          "roleId": "pr.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "marketing.cmo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "legal.general-counsel",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
+        }
+      ]
     }
   ]
 }

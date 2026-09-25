@@ -8,9 +8,51 @@
     {
       "id": "legal.generic",
       "function": "legal",
-      "labelEn": "Legal",
-      "labelRu": "Юридический отдел",
-      "coverage": "skeleton"
+      "labelEn": "Legal generalists",
+      "labelRu": "Юридическое сопровождение",
+      "coverage": "full"
+    },
+    {
+      "id": "legal.commercial",
+      "function": "legal",
+      "labelEn": "Commercial and corporate legal",
+      "labelRu": "Коммерческое и корпоративное право",
+      "coverage": "full"
+    },
+    {
+      "id": "legal.employment",
+      "function": "legal",
+      "labelEn": "Employment law",
+      "labelRu": "Трудовое право",
+      "coverage": "full"
+    },
+    {
+      "id": "legal.compliance",
+      "function": "legal",
+      "labelEn": "Regulatory and compliance legal",
+      "labelRu": "Регуляторное право и комплаенс",
+      "coverage": "full"
+    },
+    {
+      "id": "legal.disputes",
+      "function": "legal",
+      "labelEn": "Disputes and litigation",
+      "labelRu": "Судебная и претензионная работа",
+      "coverage": "full"
+    },
+    {
+      "id": "legal.ip-privacy",
+      "function": "legal",
+      "labelEn": "Intellectual property and privacy",
+      "labelRu": "Интеллектуальная собственность и данные",
+      "coverage": "full"
+    },
+    {
+      "id": "legal.leadership",
+      "function": "legal",
+      "labelEn": "Legal leadership",
+      "labelRu": "Руководство юридической функцией",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -18,24 +60,567 @@
       "id": "legal.generic",
       "function": "legal",
       "family": "legal.generic",
-      "titleEn": "Legal",
-      "titleRu": "Юридический отдел",
+      "titleEn": "Legal Generalist",
+      "titleRu": "Юрист общего профиля",
       "levels": [
-        "ic",
-        "head"
+        "ic"
       ],
       "variants": {
         "en": [
           "Legal Counsel",
-          "Head of Legal",
-          "General Counsel"
+          "Legal Specialist",
+          "Legal Advisor",
+          "In-House Counsel",
+          "Corporate Lawyer",
+          "Legal Generalist"
         ],
         "ru": [
           "Юрист",
-          "Руководитель юридического отдела"
+          "Юрисконсульт",
+          "Юрист общего профиля",
+          "Внутренний юрист",
+          "Специалист юридического отдела",
+          "Правовой консультант"
         ]
       },
-      "adjacent": []
+      "adjacent": [
+        {
+          "roleId": "legal.counsel.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "legal.contracts.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "legal.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "legal.counsel.ic",
+      "function": "legal",
+      "family": "legal.commercial",
+      "titleEn": "Commercial Counsel",
+      "titleRu": "Юрист по коммерческому праву",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Commercial Counsel",
+          "Commercial Lawyer",
+          "Business Counsel",
+          "Legal Counsel, Commercial",
+          "Commercial Legal Advisor",
+          "Corporate Counsel"
+        ],
+        "ru": [
+          "Юрист по коммерческому праву",
+          "Коммерческий юрист",
+          "Юрист по сопровождению бизнеса",
+          "Юрисконсульт по коммерческим вопросам",
+          "Ведущий юрист по коммерческому праву",
+          "Юрист по договорной работе"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "legal.generic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "legal.contracts.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "legal.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "bizdev.corpdev.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "legal.contracts.ic",
+      "function": "legal",
+      "family": "legal.commercial",
+      "titleEn": "Contracts Manager / Contract Counsel",
+      "titleRu": "Юрист по договорной работе",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Contract Counsel",
+          "Contracts Manager",
+          "Contract Specialist",
+          "Commercial Contracts Counsel",
+          "Contract Administrator",
+          "Contracts Lawyer"
+        ],
+        "ru": [
+          "Юрист по договорной работе",
+          "Специалист по договорной работе",
+          "Юрист по сопровождению договоров",
+          "Менеджер по контрактам",
+          "Договорной юрист",
+          "Администратор договоров"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "legal.counsel.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "procurement.contracts.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "legal.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "legal.employment.ic",
+      "function": "legal",
+      "family": "legal.employment",
+      "titleEn": "Employment Counsel",
+      "titleRu": "Юрист по трудовому праву",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Employment Counsel",
+          "Employment Lawyer",
+          "Labor Law Specialist",
+          "Employment Legal Advisor",
+          "HR Legal Counsel",
+          "Labor Relations Counsel"
+        ],
+        "ru": [
+          "Юрист по трудовому праву",
+          "Трудовой юрист",
+          "Юрисконсульт по трудовым вопросам",
+          "Специалист по трудовому законодательству",
+          "Юрист по кадровым вопросам",
+          "Консультант по трудовому праву"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "legal.generic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "hr.employee-relations.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "legal.litigation.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "legal.compliance.ic",
+      "function": "legal",
+      "family": "legal.compliance",
+      "titleEn": "Compliance Counsel",
+      "titleRu": "Юрист по комплаенсу",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Compliance Counsel",
+          "Compliance Lawyer",
+          "Regulatory Counsel",
+          "Legal Compliance Specialist",
+          "Regulatory Affairs Counsel",
+          "Ethics and Compliance Counsel"
+        ],
+        "ru": [
+          "Юрист по комплаенсу",
+          "Юрист по регуляторным вопросам",
+          "Специалист по правовому комплаенсу",
+          "Юрисконсульт по соблюдению требований",
+          "Юрист по нормативному регулированию",
+          "Специалист по этике и комплаенсу"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "audit-risk.compliance.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "legal.privacy.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "legal.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "legal.privacy.ic",
+      "function": "legal",
+      "family": "legal.ip-privacy",
+      "titleEn": "Privacy Counsel / Data Protection Officer",
+      "titleRu": "Юрист по защите данных",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Privacy Counsel",
+          "Data Protection Officer",
+          "DPO",
+          "Data Privacy Specialist",
+          "Privacy Legal Advisor",
+          "Information Governance Counsel"
+        ],
+        "ru": [
+          "Юрист по защите персональных данных",
+          "Специалист по защите данных",
+          "Ответственный за обработку персональных данных",
+          "Юрист по приватности",
+          "Консультант по защите информации",
+          "Специалист по информационному праву"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "legal.compliance.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "security.analyst.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "legal.ip.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "legal.litigation.ic",
+      "function": "legal",
+      "family": "legal.disputes",
+      "titleEn": "Litigation Counsel",
+      "titleRu": "Юрист по судебной работе",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Litigation Counsel",
+          "Litigation Lawyer",
+          "Disputes Counsel",
+          "Legal Disputes Specialist",
+          "Claims Counsel",
+          "Litigation Associate"
+        ],
+        "ru": [
+          "Юрист по судебной работе",
+          "Судебный юрист",
+          "Юрист по спорам",
+          "Специалист по претензионной работе",
+          "Юрист по взысканию задолженности",
+          "Юрист судебно-претензионного отдела"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "legal.employment.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "legal.lead",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "audit-risk.fraud.ic",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "legal.ip.ic",
+      "function": "legal",
+      "family": "legal.ip-privacy",
+      "titleEn": "Intellectual Property Counsel",
+      "titleRu": "Юрист по интеллектуальной собственности",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Intellectual Property Counsel",
+          "IP Lawyer",
+          "IP Counsel",
+          "Trademark Counsel",
+          "Patent Counsel",
+          "Intellectual Property Specialist"
+        ],
+        "ru": [
+          "Юрист по интеллектуальной собственности",
+          "Юрист по товарным знакам",
+          "Патентный юрист",
+          "Специалист по интеллектуальной собственности",
+          "IP-юрист",
+          "Юрисконсульт по авторскому праву"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "legal.privacy.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "media.editor.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "legal.head",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "legal.paralegal.ic",
+      "function": "legal",
+      "family": "legal.generic",
+      "titleEn": "Paralegal / Legal Assistant",
+      "titleRu": "Помощник юриста",
+      "levels": [
+        "ic"
+      ],
+      "variants": {
+        "en": [
+          "Paralegal",
+          "Legal Assistant",
+          "Legal Secretary",
+          "Junior Legal Specialist",
+          "Legal Operations Assistant",
+          "Legal Clerk"
+        ],
+        "ru": [
+          "Помощник юриста",
+          "Помощник адвоката",
+          "Секретарь юридического отдела",
+          "Младший юрист",
+          "Юридический ассистент",
+          "Секретарь-референт юридического отдела"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "legal.generic",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "admin.executive-assistant.ic",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "legal.contracts.ic",
+          "kind": "sibling-family"
+        }
+      ]
+    },
+    {
+      "id": "legal.lead",
+      "function": "legal",
+      "family": "legal.leadership",
+      "titleEn": "Legal Team Lead",
+      "titleRu": "Руководитель направления юридической работы",
+      "levels": [
+        "lead"
+      ],
+      "variants": {
+        "en": [
+          "Legal Team Lead",
+          "Lead Legal Counsel",
+          "Senior Legal Counsel",
+          "Legal Practice Lead",
+          "Senior Corporate Lawyer",
+          "Legal Manager"
+        ],
+        "ru": [
+          "Руководитель направления юридической работы",
+          "Ведущий юрисконсульт",
+          "Старший юрист",
+          "Руководитель группы юристов",
+          "Руководитель юридической практики",
+          "Менеджер юридического отдела"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "legal.counsel.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "legal.compliance.ic",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "legal.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "audit-risk.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "legal.head",
+      "function": "legal",
+      "family": "legal.leadership",
+      "titleEn": "Head of Legal",
+      "titleRu": "Руководитель юридического отдела",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Head of Legal",
+          "Legal Director",
+          "Director of Legal",
+          "Head of Legal Affairs",
+          "General Counsel, Legal Department",
+          "Legal Department Head"
+        ],
+        "ru": [
+          "Руководитель юридического отдела",
+          "Директор по правовым вопросам",
+          "Начальник юридического управления",
+          "Руководитель юридической службы",
+          "Директор юридического департамента",
+          "Руководитель правового блока"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "legal.lead",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "legal.vp",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "audit-risk.head",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "finance.head",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "legal.vp",
+      "function": "legal",
+      "family": "legal.leadership",
+      "titleEn": "Vice President, Legal",
+      "titleRu": "Вице-президент по правовым вопросам",
+      "levels": [
+        "vp"
+      ],
+      "variants": {
+        "en": [
+          "Vice President, Legal",
+          "VP Legal",
+          "Vice President of Legal Affairs",
+          "Senior Vice President, Legal",
+          "Group Legal Director",
+          "Deputy General Counsel"
+        ],
+        "ru": [
+          "Вице-президент по правовым вопросам",
+          "Вице-президент по юридическим вопросам",
+          "Директор по правовым вопросам группы компаний",
+          "Заместитель генерального юрисконсульта",
+          "Руководитель юридической функции",
+          "Директор юридического департамента"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "legal.head",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "legal.general-counsel",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "audit-risk.vp",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "finance.vp",
+          "kind": "cross-function-neighbor"
+        }
+      ]
+    },
+    {
+      "id": "legal.general-counsel",
+      "function": "legal",
+      "family": "legal.leadership",
+      "titleEn": "General Counsel",
+      "titleRu": "Генеральный юрисконсульт",
+      "levels": [
+        "c-level"
+      ],
+      "variants": {
+        "en": [
+          "General Counsel",
+          "Chief Legal Officer",
+          "CLO",
+          "Chief Legal and Compliance Officer",
+          "Group General Counsel",
+          "Chief Counsel"
+        ],
+        "ru": [
+          "Генеральный юрисконсульт",
+          "Директор по правовым вопросам",
+          "Главный юрисконсульт",
+          "Руководитель юридического блока",
+          "Директор по праву и комплаенсу",
+          "CLO"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "legal.vp",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "audit-risk.cro",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "finance.cfo",
+          "kind": "cross-function-neighbor"
+        },
+        {
+          "roleId": "exec-general.ceo",
+          "kind": "cross-function-neighbor"
+        }
+      ]
     }
   ]
 }

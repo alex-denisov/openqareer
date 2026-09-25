@@ -8,9 +8,23 @@
     {
       "id": "construction.core",
       "function": "construction",
-      "labelEn": "Construction & trades ladder",
-      "labelRu": "Лестница стройки и рабочих специальностей",
-      "coverage": "core"
+      "labelEn": "Building Trades & Site Work",
+      "labelRu": "Строительные рабочие и работы на площадке",
+      "coverage": "full"
+    },
+    {
+      "id": "construction.engineering",
+      "function": "construction",
+      "labelEn": "Construction Engineering & Estimating",
+      "labelRu": "Строительная инженерия и сметное дело",
+      "coverage": "full"
+    },
+    {
+      "id": "construction.leadership",
+      "function": "construction",
+      "labelEn": "Construction Project Leadership",
+      "labelRu": "Руководство строительными проектами",
+      "coverage": "full"
     }
   ],
   "roles": [
@@ -20,60 +34,87 @@
       "family": "construction.core",
       "titleEn": "Electrician / Plumber / Welder",
       "titleRu": "Электрик / сантехник / сварщик",
-      "levels": [
-        "ic"
-      ],
-      "icBand": [
-        "grade-1-6"
-      ],
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Electrician",
-          "Plumber",
-          "Welder",
-          "HVAC Technician"
-        ],
-        "ru": [
-          "Электрик",
-          "Сантехник",
-          "Сварщик"
-        ]
+        "en": ["Electrician", "Plumber", "Welder", "HVAC Technician", "Carpenter", "Construction Tradesperson"],
+        "ru": ["Электрик", "Сантехник", "Сварщик", "Монтажник", "Строительный рабочий", "Мастер строительных работ"]
       },
+      "icBand": ["grade-1-6"],
       "adjacent": [
-        {
-          "roleId": "construction.engineer.ic",
-          "kind": "sibling-family"
-        }
+        {"roleId": "construction.engineer.ic", "kind": "sibling-family"},
+        {"roleId": "construction.surveyor.ic", "kind": "sibling-family"},
+        {"roleId": "construction.foreman.lead", "kind": "level-up"}
       ]
     },
     {
       "id": "construction.engineer.ic",
       "function": "construction",
-      "family": "construction.core",
+      "family": "construction.engineering",
       "titleEn": "Civil / Site Engineer",
-      "titleRu": "Инженер-строитель",
-      "levels": [
-        "ic"
-      ],
+      "titleRu": "Инженер-строитель / инженер ПТО",
+      "levels": ["ic"],
       "variants": {
-        "en": [
-          "Civil Engineer",
-          "Site Engineer"
-        ],
-        "ru": [
-          "Инженер-строитель",
-          "Инженер ПТО"
-        ]
+        "en": ["Civil Engineer", "Site Engineer", "Construction Engineer", "Project Engineer", "Field Engineer", "Structural Engineer"],
+        "ru": ["Инженер-строитель", "Инженер ПТО", "Прораб-инженер", "Инженер проекта", "Полевой инженер", "Инженер строительного контроля"]
+      },
+      "icBand": ["junior", "middle", "senior"],
+      "adjacent": [
+        {"roleId": "construction.trade.ic", "kind": "sibling-family"},
+        {"roleId": "construction.surveyor.ic", "kind": "sibling-family"},
+        {"roleId": "construction.foreman.lead", "kind": "level-up"},
+        {"roleId": "construction.site-manager.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "construction.surveyor.ic",
+      "function": "construction",
+      "family": "construction.engineering",
+      "titleEn": "Quantity Surveyor / Land Surveyor",
+      "titleRu": "Сметчик / инженер-геодезист",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Quantity Surveyor", "Cost Estimator", "Land Surveyor", "Construction Surveyor", "Survey Engineer", "Cost Engineer"],
+        "ru": ["Сметчик", "Инженер-сметчик", "Инженер-геодезист", "Геодезист", "Специалист по сметам", "Инженер по стоимости строительства"]
       },
       "adjacent": [
-        {
-          "roleId": "construction.trade.ic",
-          "kind": "sibling-family"
-        },
-        {
-          "roleId": "construction.foreman.lead",
-          "kind": "level-up"
-        }
+        {"roleId": "construction.engineer.ic", "kind": "sibling-family"},
+        {"roleId": "construction.estimator.ic", "kind": "sibling-family"},
+        {"roleId": "construction.project-manager.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "construction.estimator.ic",
+      "function": "construction",
+      "family": "construction.engineering",
+      "titleEn": "Construction Estimator",
+      "titleRu": "Инженер-сметчик",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Construction Estimator", "Estimator", "Cost Estimator", "Estimating Engineer", "Preconstruction Estimator", "Tender Estimator"],
+        "ru": ["Инженер-сметчик", "Сметчик", "Специалист по ценообразованию", "Сметчик строительства", "Инженер по подготовке тендеров", "Специалист сметного отдела"]
+      },
+      "adjacent": [
+        {"roleId": "construction.surveyor.ic", "kind": "sibling-family"},
+        {"roleId": "construction.engineer.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "construction.project-manager.head", "kind": "level-up"},
+        {"roleId": "finance.accountant.ic", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "construction.safety.ic",
+      "function": "construction",
+      "family": "construction.core",
+      "titleEn": "Construction Health & Safety Specialist",
+      "titleRu": "Специалист по охране труда на строительстве",
+      "levels": ["ic"],
+      "variants": {
+        "en": ["Construction Safety Specialist", "Site Safety Officer", "HSE Specialist", "Health and Safety Advisor", "Construction Safety Engineer", "EHS Coordinator"],
+        "ru": ["Специалист по охране труда", "Инженер по охране труда", "Специалист HSE", "Инженер по промышленной безопасности", "Специалист по безопасности строительства", "Инспектор строительной безопасности"]
+      },
+      "adjacent": [
+        {"roleId": "construction.engineer.ic", "kind": "sibling-family"},
+        {"roleId": "security-services.safety.ic", "kind": "cross-function-neighbor"},
+        {"roleId": "construction.site-manager.head", "kind": "level-up"}
       ]
     },
     {
@@ -81,83 +122,122 @@
       "function": "construction",
       "family": "construction.core",
       "titleEn": "Foreman / Site Supervisor",
-      "titleRu": "Прораб",
-      "levels": [
-        "lead"
-      ],
+      "titleRu": "Прораб / мастер участка",
+      "levels": ["lead"],
       "variants": {
-        "en": [
-          "Foreman",
-          "Site Supervisor"
-        ],
-        "ru": [
-          "Прораб",
-          "Мастер участка"
-        ]
+        "en": ["Foreman", "Site Supervisor", "Construction Supervisor", "General Foreman", "Works Supervisor", "Trade Supervisor"],
+        "ru": ["Прораб", "Мастер участка", "Начальник участка", "Производитель работ", "Старший прораб", "Руководитель строительного участка"]
       },
       "adjacent": [
-        {
-          "roleId": "construction.trade.ic",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "construction.head",
-          "kind": "level-up"
-        }
+        {"roleId": "construction.trade.ic", "kind": "level-down"},
+        {"roleId": "construction.engineer.ic", "kind": "sibling-family"},
+        {"roleId": "construction.site-manager.head", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "construction.site-manager.head",
+      "function": "construction",
+      "family": "construction.leadership",
+      "titleEn": "Site Manager / Construction Manager",
+      "titleRu": "Руководитель строительного участка / проекта",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Site Manager", "Construction Manager", "Project Construction Manager", "Senior Site Manager", "Construction Superintendent", "Site Director"],
+        "ru": ["Руководитель строительного участка", "Руководитель строительного проекта", "Начальник строительства", "Начальник участка", "Директор строительного объекта", "Руководитель работ"]
+      },
+      "adjacent": [
+        {"roleId": "construction.foreman.lead", "kind": "level-down"},
+        {"roleId": "construction.safety.ic", "kind": "sibling-family"},
+        {"roleId": "construction.project-manager.head", "kind": "sibling-family"},
+        {"roleId": "construction.vp", "kind": "level-up"}
+      ]
+    },
+    {
+      "id": "construction.project-manager.head",
+      "function": "construction",
+      "family": "construction.leadership",
+      "titleEn": "Construction Project Manager / Project Director",
+      "titleRu": "Руководитель строительного проекта / директор по строительству",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Construction Project Manager", "Project Director Construction", "Construction Director", "Head of Construction Projects", "Capital Projects Manager", "Development Project Director"],
+        "ru": ["Руководитель строительного проекта", "Директор по строительству", "Руководитель проектов строительства", "Директор строительных проектов", "Руководитель капитального строительства", "Директор по реализации проектов"]
+      },
+      "adjacent": [
+        {"roleId": "construction.engineer.ic", "kind": "level-down"},
+        {"roleId": "construction.site-manager.head", "kind": "sibling-family"},
+        {"roleId": "construction.vp", "kind": "level-up"},
+        {"roleId": "project-mgmt.pmo-head", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "construction.design-manager.head",
+      "function": "construction",
+      "family": "construction.leadership",
+      "titleEn": "Design / BIM Manager",
+      "titleRu": "Руководитель проектирования / BIM-менеджер",
+      "levels": ["head"],
+      "variants": {
+        "en": ["Design Manager", "BIM Manager", "Head of Design", "Engineering Design Manager", "BIM Coordination Manager", "Technical Design Director"],
+        "ru": ["Руководитель проектирования", "BIM-менеджер", "Главный инженер проекта", "Руководитель отдела проектирования", "Руководитель BIM-координации", "Технический директор проекта"]
+      },
+      "adjacent": [
+        {"roleId": "construction.engineer.ic", "kind": "level-down"},
+        {"roleId": "construction.project-manager.head", "kind": "sibling-family"},
+        {"roleId": "construction.vp", "kind": "level-up"},
+        {"roleId": "eng.architecture.enterprise", "kind": "cross-function-neighbor"}
       ]
     },
     {
       "id": "construction.head",
       "function": "construction",
-      "family": "construction.core",
-      "titleEn": "Construction Manager",
-      "titleRu": "Руководитель строительного проекта",
-      "levels": [
-        "head"
-      ],
+      "family": "construction.leadership",
+      "titleEn": "Head of Construction",
+      "titleRu": "Руководитель строительного направления",
+      "levels": ["head"],
       "variants": {
-        "en": [
-          "Construction Manager",
-          "Project Director (Construction)"
-        ],
-        "ru": [
-          "Руководитель строительного проекта",
-          "Директор по строительству"
-        ]
+        "en": ["Head of Construction", "Construction Department Head", "Construction Operations Manager", "Director of Construction Delivery", "Head of Building Operations", "Construction Portfolio Manager"],
+        "ru": ["Руководитель строительного направления", "Начальник отдела строительства", "Руководитель строительных операций", "Директор по строительным работам", "Начальник управления строительства", "Руководитель портфеля строительных проектов"]
       },
       "adjacent": [
-        {
-          "roleId": "construction.foreman.lead",
-          "kind": "level-down"
-        },
-        {
-          "roleId": "construction.vp",
-          "kind": "level-up"
-        }
+        {"roleId": "construction.site-manager.head", "kind": "sibling-family"},
+        {"roleId": "construction.project-manager.head", "kind": "sibling-family"},
+        {"roleId": "construction.vp", "kind": "level-up"}
       ]
     },
     {
       "id": "construction.vp",
       "function": "construction",
-      "family": "construction.core",
+      "family": "construction.leadership",
       "titleEn": "VP of Construction",
       "titleRu": "Вице-президент по строительству",
-      "levels": [
-        "vp"
-      ],
+      "levels": ["vp"],
       "variants": {
-        "en": [
-          "VP of Construction"
-        ],
-        "ru": [
-          "Вице-президент по строительству"
-        ]
+        "en": ["VP of Construction", "Vice President Construction", "Construction Executive Director", "VP Capital Projects", "Development and Construction VP", "Executive Director of Construction"],
+        "ru": ["Вице-президент по строительству", "Директор по строительству", "Руководитель строительного блока", "Вице-президент по капитальному строительству", "Директор по развитию и строительству", "Исполнительный директор по строительству"]
       },
       "adjacent": [
-        {
-          "roleId": "construction.head",
-          "kind": "level-down"
-        }
+        {"roleId": "construction.head", "kind": "level-down"},
+        {"roleId": "construction.project-manager.head", "kind": "sibling-family"},
+        {"roleId": "construction.coo", "kind": "level-up"},
+        {"roleId": "ops.vp", "kind": "cross-function-neighbor"}
+      ]
+    },
+    {
+      "id": "construction.coo",
+      "function": "construction",
+      "family": "construction.leadership",
+      "titleEn": "Chief Construction Officer",
+      "titleRu": "Директор строительной компании",
+      "levels": ["c-level"],
+      "variants": {
+        "en": ["Chief Construction Officer", "Chief Development Officer Construction", "Chief Projects Officer", "Construction COO", "Chief Building Executive", "Executive Construction Director"],
+        "ru": ["Директор строительной компании", "Операционный директор строительной компании", "Директор по строительным проектам", "Руководитель строительного бизнеса", "Директор по капитальному строительству", "Исполнительный директор строительного холдинга"]
+      },
+      "adjacent": [
+        {"roleId": "construction.vp", "kind": "level-down"},
+        {"roleId": "ops.coo", "kind": "cross-function-neighbor"},
+        {"roleId": "exec-general.ceo", "kind": "cross-function-neighbor"}
       ]
     }
   ]
