@@ -9,8 +9,17 @@ const snapshot: TodaySnapshot = {
     newVacancies: 3,
     closedVacancies: 1,
     interviewsAhead: 1,
-    nextInterview: { company: 'HRTx Inc.', title: 'Enterprise Architect Director', round: 2, at: '2026-09-26T14:00:00.000Z' },
-    newVacanciesCaption: { campaignRole: 'VP Technology Ops', sourcesCount: 3, updatedAt: '2026-09-24T09:14:00.000Z' },
+    nextInterview: {
+      company: 'HRTx Inc.',
+      title: 'Enterprise Architect Director',
+      round: 2,
+      at: '2026-09-26T14:00:00.000Z',
+    },
+    newVacanciesCaption: {
+      campaignRole: 'VP Technology Ops',
+      sourcesCount: 3,
+      updatedAt: '2026-09-24T09:14:00.000Z',
+    },
     followUpCaptions: ['Peraton — 6 рабочих дней тишины', 'Genetec — обещанный срок истёк'],
   },
   queue: [
@@ -36,8 +45,13 @@ const snapshot: TodaySnapshot = {
       fit: { role: 'target', level: 'target', geo: true },
     },
   ],
-  followUps: [{ applicationId: 'app-1', company: 'Peraton', title: 'Enterprise Architect', status: 'today' }],
-  sinceLastVisit: { since: '2026-09-23T09:00:00.000Z', items: ['Genetec запросили доступность на этой неделе'] },
+  followUps: [
+    { applicationId: 'app-1', company: 'Peraton', title: 'Enterprise Architect', status: 'today' },
+  ],
+  sinceLastVisit: {
+    since: '2026-09-23T09:00:00.000Z',
+    items: ['Genetec запросили доступность на этой неделе'],
+  },
   vacanciesPending: false,
 };
 
@@ -96,7 +110,7 @@ describe('TodayScreen (B251 S5)', () => {
     expect(html).toContain('Повторить');
   });
 
-  it('shows the empty state instead of blank panels when there is nothing to show', () => {
+  it('keeps the digest and says what to do when the queue is empty', () => {
     const html = renderTodayScreen({
       snapshot: {
         ...snapshot,
@@ -106,6 +120,9 @@ describe('TodayScreen (B251 S5)', () => {
       },
     });
 
-    expect(html).toContain('Новых вакансий с прошлого визита нет');
+    expect(html).toContain('Очередь дня');
+    expect(html).toContain('career-today-digest');
+    expect(html).toContain('Добавьте роль или регион');
+    expect(html).not.toContain('Новых вакансий с прошлого визита нет');
   });
 });

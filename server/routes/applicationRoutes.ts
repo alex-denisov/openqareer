@@ -262,6 +262,7 @@ const handleToday: Handler = async (deps, request, reply) => {
     closedVacanciesSinceVisit,
     campaignRole: targetRoles[0] ?? null,
     companyEventsSinceVisit,
+    ...(newVacancies ? { shortlist: newVacancies } : {}),
   });
   return { data: snapshot, meta: { requestId: request.id } };
 };
