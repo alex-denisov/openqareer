@@ -635,6 +635,37 @@ const vacancyPitchInputSchema = z
   })
   .optional();
 
+/**
+ * Full text of one vacancy for the in-app «Подробнее» (B266). The matched
+ * list trims `descriptionSummary` for payload size; the source vacancy keeps
+ * the full description under `cluster-<vacancyId>`, so one read serves it.
+ */
+const handleVacancyDetail: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config, multiSourceEngine } = deps;
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const clusterId = (request.params as { id: string }).id;
+  const cluster = multiSourceEngine.getActiveCluster(clusterId);
+  const sourceId = clusterId.startsWith('cluster-') ? clusterId.slice('cluster-'.length) : clusterId;
+  const full = multiSourceEngine.getVacancy?.(sourceId);
+  if (!cluster && !full) {
+    if (multiSourceEngine.isKnownVacancyGone(clusterId)) {
+      return sendError(reply, request, 410, 'vacancy_gone', 'Вакансия снята с площадки.', false);
+    }
+    return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  }
+  const description = (full?.fullDescription ?? full?.description ?? cluster?.descriptionSummary ?? '').trim();
+  return {
+    data: {
+      id: clusterId,
+      description,
+      skills: cluster?.skills?.length ? cluster.skills : (full?.requiredSkills ?? []),
+      responsibilities: full?.responsibilities ?? [],
+    },
+    meta: { requestId: request.id },
+  };
+};
+
 const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config, multiSourceEngine } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
@@ -758,6 +789,7 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
     withDeps(deps, handleHhMarket),
   );
   app.get('/api/v1/candidate/matched-vacancies', withDeps(deps, handleMatchedVacancies));
+  app.get('/api/v1/candidate/vacancies/:id/detail', withDeps(deps, handleVacancyDetail));
   app.get('/api/v1/candidate/role-hypotheses', withDeps(deps, handleRoleHypotheses));
   app.get('/api/v1/candidate/work-preferences', withDeps(deps, handleReadWorkPreferences));
   app.post(

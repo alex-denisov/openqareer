@@ -3,6 +3,7 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import { ImportModalShell } from '../connections/ImportModalShell';
+import { useVacancyDetail, type VacancyDetailState } from './vacancyDetailApi';
 
 interface VacancyInfoModalProps {
   readonly isOpen: boolean;
@@ -19,6 +20,11 @@ interface VacancyInfoModalProps {
  */
 export function VacancyInfoModal({ isOpen, onClose, cluster }: VacancyInfoModalProps) {
   const sources = vacancySourceLabels(cluster.sources);
+  const detail = useVacancyDetail(cluster.id, isOpen);
+  const skills =
+    detail.status === 'ready' && detail.detail.skills.length > 0
+      ? detail.detail.skills
+      : cluster.skills;
   return (
     <ImportModalShell
       isOpen={isOpen}
@@ -28,23 +34,13 @@ export function VacancyInfoModal({ isOpen, onClose, cluster }: VacancyInfoModalP
       icon={<Info size={18} aria-hidden="true" />}
     >
       <div className="career-modal-body vacancies-info-body">
-        <p className="vacancies-info-subtitle">
-          {[cluster.canonicalCompany, cluster.canonicalLocation, cluster.isRemote ? 'удалённо' : null]
-            .filter(Boolean)
-            .join(' · ')}
-        </p>
+        <p className="vacancies-info-subtitle">{infoSubtitle(cluster)}</p>
 
-        {cluster.descriptionSummary ? (
-          <p className="vacancies-info-description">{cluster.descriptionSummary}</p>
-        ) : (
-          <p className="vacancies-info-description is-empty">
-            Полное описание не сохранено — только сводка совпадений на карточке.
-          </p>
-        )}
+        <VacancyDescription detail={detail} summary={cluster.descriptionSummary} />
 
-        {cluster.skills.length > 0 ? (
+        {skills.length > 0 ? (
           <ul className="vacancies-info-skills">
-            {cluster.skills.map((skill) => (
+            {skills.map((skill) => (
               <li key={skill}>{skill}</li>
             ))}
           </ul>
@@ -68,4 +64,41 @@ export function VacancyInfoModal({ isOpen, onClose, cluster }: VacancyInfoModalP
       </div>
     </ImportModalShell>
   );
+}
+
+function VacancyDescription({
+  detail,
+  summary,
+}: {
+  readonly detail: VacancyDetailState;
+  readonly summary: string;
+}) {
+  if (detail.status === 'loading' || detail.status === 'idle') {
+    return <p className="vacancies-info-description is-empty">Загружаем описание…</p>;
+  }
+  const text = detail.status === 'ready' ? detail.detail.description : summary;
+  if (!text) {
+    return (
+      <p className="vacancies-info-description is-empty">
+        Площадка не отдала текст вакансии — откройте её на площадке.
+      </p>
+    );
+  }
+  return (
+    <div className="vacancies-info-description">
+      {text
+        .split(/\n{2,}|\n/u)
+        .map((paragraph) => paragraph.trim())
+        .filter(Boolean)
+        .map((paragraph, index) => (
+          <p key={index}>{paragraph}</p>
+        ))}
+    </div>
+  );
+}
+
+function infoSubtitle(cluster: MatchedVacancyItem['cluster']): string {
+  return [cluster.canonicalCompany, cluster.canonicalLocation, cluster.isRemote ? 'удалённо' : null]
+    .filter(Boolean)
+    .join(' · ');
 }

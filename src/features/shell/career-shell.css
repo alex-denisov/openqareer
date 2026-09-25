@@ -7389,7 +7389,13 @@
   font-size: var(--career-text-sm);
   line-height: 1.5;
   margin: 0;
-  white-space: pre-wrap;
+  max-height: 55vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.vacancies-info-description p {
+  margin: 0 0 var(--career-space-3);
 }
 
 .vacancies-info-description.is-empty {

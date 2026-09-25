@@ -3,6 +3,7 @@ import { act } from 'react-dom/test-utils';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as openExternalLinkModule from '../../services/desktop/openExternalLink';
+import * as apiClient from '../coach/apiClient';
 import { VacancyInfoModal } from './VacancyInfoModal';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 
@@ -59,21 +60,23 @@ describe('VacancyInfoModal (B266)', () => {
     expect(document.body.textContent).toBe('');
   });
 
-  it('shows the full description and skills when open', () => {
-    act(() => {
+  it('falls back to the card summary and skills when the full text is unavailable', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockRejectedValue(new Error('offline'));
+    await act(async () => {
       root.render(<VacancyInfoModal isOpen onClose={vi.fn()} cluster={cluster()} />);
     });
     expect(document.body.textContent).toContain('Full description text about the role.');
     expect(document.body.textContent).toContain('Figma');
   });
 
-  it('shows a fallback instead of nothing when the description is missing', () => {
-    act(() => {
+  it('shows a fallback instead of nothing when no text exists anywhere', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockRejectedValue(new Error('offline'));
+    await act(async () => {
       root.render(
         <VacancyInfoModal isOpen onClose={vi.fn()} cluster={cluster({ descriptionSummary: '' })} />,
       );
     });
-    expect(document.body.textContent).toContain('Полное описание не сохранено');
+    expect(document.body.textContent).toContain('Площадка не отдала текст вакансии');
   });
 
   it('opens the source link through the shared external-link utility, not a dead anchor', () => {
@@ -88,5 +91,46 @@ describe('VacancyInfoModal (B266)', () => {
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(spy).toHaveBeenCalledWith('https://boards.example/1');
+  });
+});
+
+describe('VacancyInfoModal full text (B266)', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    document.body.innerHTML = '';
+    vi.restoreAllMocks();
+  });
+
+  it('shows the full description from the server, not the empty list summary', async () => {
+    const fetchSpy = vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(new Response('{}'));
+    vi.spyOn(apiClient, 'readData').mockResolvedValue({
+      id: 'c-1',
+      description: 'Lead 250 engineers across three regions.\nOwn the P&L.',
+      skills: ['Cloud'],
+      responsibilities: [],
+    } as never);
+    await act(async () => {
+      root.render(
+        <VacancyInfoModal
+          isOpen
+          onClose={vi.fn()}
+          cluster={cluster({ descriptionSummary: '', skills: [] })}
+        />,
+      );
+    });
+    expect(fetchSpy).toHaveBeenCalledWith('/api/v1/candidate/vacancies/c-1/detail');
+    expect(document.body.textContent).toContain('Lead 250 engineers across three regions.');
+    expect(document.body.textContent).toContain('Own the P&L.');
+    expect(document.body.textContent).toContain('Cloud');
   });
 });

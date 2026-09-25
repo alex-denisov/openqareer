@@ -98,7 +98,7 @@ async function createApp(clusters: VacancyCluster[] = [], options: { persisted?:
   });
 
   resources.push({ app, auth, candidates, directory });
-  return { app, candidates };
+  return { app, candidates, multiSourceEngine };
 }
 
 async function login(app: Awaited<ReturnType<typeof buildApp>>) {
@@ -276,7 +276,9 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     expect(response.statusCode).toBe(200);
 
     const documents = candidates.getSnapshot(candidateId)?.documents ?? [];
-    const letter = documents.find((doc) => doc.kind === 'cover_letter' && doc.source === 'generated');
+    const letter = documents.find(
+      (doc) => doc.kind === 'cover_letter' && doc.source === 'generated',
+    );
     expect(letter).toBeDefined();
 
     const application = candidates
@@ -333,5 +335,59 @@ describe('POST /api/v1/vacancies/:id/enrich-contacts', () => {
       vacancyId: 'cluster-77',
       status: 'queued',
     });
+  });
+});
+
+describe('GET /api/v1/candidate/vacancies/:id/detail (B266)', () => {
+  const cluster: VacancyCluster = {
+    id: 'cluster-77',
+    canonicalTitle: 'VP of Technology',
+    canonicalCompany: 'Arctic Wolf',
+    canonicalLocation: 'United States',
+    isRemote: true,
+    descriptionSummary: 'Short summary only',
+    skills: ['Cloud', 'P&L'],
+    primaryUrl: 'https://example.com/vacancies/77',
+    sources: [],
+    firstObservedAt: '2026-09-17T00:00:00.000Z',
+    lastSeenAt: '2026-09-17T00:00:00.000Z',
+    status: 'active',
+    vacanciesCount: 1,
+  };
+
+  it('requires a signed-in candidate', async () => {
+    const { app } = await createApp([cluster]);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/vacancies/cluster-77/detail',
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('returns the full source description, not the trimmed summary', async () => {
+    const { app, multiSourceEngine } = await createApp([cluster]);
+    const fullText = 'Full posting: lead 250 engineers across three regions. '.repeat(20);
+    multiSourceEngine.getVacancy = ((id: string) =>
+      id === '77' ? { fullDescription: fullText, requiredSkills: [] } : undefined) as never;
+    const { cookie } = await login(app);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/vacancies/cluster-77/detail',
+      headers: { cookie },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({ id: 'cluster-77', skills: ['Cloud', 'P&L'] });
+    expect(response.json().data.description).toBe(fullText.trim());
+  });
+
+  it('answers 404 for an unknown vacancy', async () => {
+    const { app } = await createApp([cluster]);
+    const { cookie } = await login(app);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/vacancies/cluster-nope/detail',
+      headers: { cookie },
+    });
+    expect(response.statusCode).toBe(404);
   });
 });
