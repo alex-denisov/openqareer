@@ -6,18 +6,19 @@ import { apps, config, noSessions, stores, successProvider } from './appTestHarn
 import type { MatchedVacancyItem } from './vacancies/multiSourceVacancyEngine';
 
 /** `GET /today` (B251, S4, architecture.md §4, §57, §97). */
-function pool(): MatchedVacancyItem[] {
-  return [
-    {
+function pool(roleMatches: readonly ('target' | 'partial' | 'none')[] = ['target']): MatchedVacancyItem[] {
+  return roleMatches.map((roleMatch, index) => {
+    const clusterId = `cluster-${index + 1}`;
+    return {
       cluster: {
-        id: 'cluster-1',
-        canonicalTitle: 'Инженер данных',
+        id: clusterId,
+        canonicalTitle: `Инженер данных ${index + 1}`,
         canonicalCompany: 'Компания',
         canonicalLocation: 'Москва',
         isRemote: false,
         skills: [],
         descriptionSummary: 'Описание вакансии. '.repeat(20),
-        primaryUrl: 'https://example.test/1',
+        primaryUrl: `https://example.test/${index + 1}`,
         sources: [],
         firstObservedAt: '2026-09-24T00:00:00.000Z',
         lastSeenAt: '2026-09-24T00:00:00.000Z',
@@ -25,19 +26,22 @@ function pool(): MatchedVacancyItem[] {
         vacanciesCount: 1,
       },
       explanation: {
-        clusterId: 'cluster-1',
-        roleMatch: 'target',
+        clusterId,
+        roleMatch,
         requirements: { matched: 1, total: 2 },
         matchingPoints: ['Подтверждённый навык: SQL'],
         missingPoints: ['Airflow'],
         summary: 'Совпало 1 из 2 требований вакансии.',
         calculatedAt: '2026-09-24T00:00:00.000Z',
       },
-    },
-  ] as unknown as MatchedVacancyItem[];
+    };
+  }) as unknown as MatchedVacancyItem[];
 }
 
-async function createApp(options?: { withMatchingEngine?: boolean }) {
+async function createApp(options?: {
+  withMatchingEngine?: boolean;
+  roleMatches?: readonly ('target' | 'partial' | 'none')[];
+}) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',
     encryptionKey: config.dataEncryptionKey,
@@ -50,7 +54,7 @@ async function createApp(options?: { withMatchingEngine?: boolean }) {
   );
 
   const engine = {
-    getMatchedVacanciesAsync: async () => pool(),
+    getMatchedVacanciesAsync: async () => pool(options?.roleMatches),
     isKnownVacancyGone: () => false,
     restore: () => ({ clusters: 0, sources: 0 }),
   };
@@ -90,6 +94,32 @@ describe('GET /candidate/today', () => {
     const body = response.json().data;
     expect(body.vacanciesPending).toBe(false);
     expect(body.digest.newVacancies).toBe(1);
+  });
+
+  it('excludes vacancies without a role match from today\'s new-vacancy digest and queue', async () => {
+    const { app, authorization } = await createApp({
+      withMatchingEngine: true,
+      roleMatches: ['target', 'partial', 'none'],
+    });
+
+    await app.inject({
+      url: '/api/v1/candidate/matched-vacancies',
+      headers: { authorization },
+    });
+    const response = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow`,
+      headers: { authorization },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json().data;
+    expect(body.digest.newVacancies).toBe(2);
+    const newVacancyIds = body.queue
+      .filter((item: { kind: string }) => item.kind === 'new_vacancy')
+      .map((item: { clusterId?: string }) => item.clusterId);
+    expect(newVacancyIds).toHaveLength(2);
+    expect(newVacancyIds).not.toContain('cluster-3');
+    expect(body.sinceLastVisit.items).toContain('2 новые вакансии по роли Инженер данных');
   });
 
   it('returns 200 with vacanciesPending on a cold matching cache', async () => {

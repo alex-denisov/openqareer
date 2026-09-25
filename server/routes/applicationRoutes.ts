@@ -248,7 +248,10 @@ const handleToday: Handler = async (deps, request, reply) => {
   const freshNewVacancies =
     newVacancies === undefined
       ? undefined
-      : newVacancies.filter((vacancy) => since === null || vacancy.firstObservedAt > since);
+      : newVacancies.filter(
+          (vacancy) =>
+            vacancy.fit.role !== 'none' && (since === null || vacancy.firstObservedAt > since),
+        );
 
   const closedVacanciesSinceVisit =
     since === null ? 0 : candidateStore.countSystemClosuresSince(candidate.id, since);
