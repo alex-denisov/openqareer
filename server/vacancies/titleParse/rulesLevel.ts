@@ -17,24 +17,56 @@ import type { SeniorityLevel } from '../levelMatcher';
  *    Executive») действительно рядовые позиции.
  */
 const C_LEVEL_MARKERS = [
-  'chief', 'cto', 'cpo', 'ceo', 'coo', 'cfo', 'cmo', 'ciso', 'chro', 'cro', 'cio',
-  'generaldirector', 'генеральный директор',
+  'chief',
+  'cto',
+  'cpo',
+  'ceo',
+  'coo',
+  'cfo',
+  'cmo',
+  'ciso',
+  'chro',
+  'cro',
+  'cio',
+  'generaldirector',
+  'генеральный директор',
+  'технический директор',
+  'директор по информационным технологиям',
 ];
 
 const VP_MARKERS = [
-  'vice president', 'vice-president', 'vp of', 'vp,', ' vp ', 'svp', 'evp',
-  'senior director', 'sr. director', 'sr director', 'вице-президент',
+  'vice president',
+  'vice-president',
+  'vp of',
+  'vp,',
+  ' vp ',
+  'svp',
+  'evp',
+  'senior director',
+  'sr. director',
+  'sr director',
+  'вице-президент',
 ];
 
 const HEAD_MARKERS = [
-  'head of', 'head,', ' head ', 'director', 'руководитель отдела', 'руководитель направления',
-  'руководитель', 'директор', 'ディレクター', '責任者', 'マネージャー', '部長',
-  '主管', '总监', '经理',
+  'head of',
+  'head,',
+  ' head ',
+  'director',
+  'руководитель отдела',
+  'руководитель направления',
+  'руководитель',
+  'директор',
+  'ディレクター',
+  '責任者',
+  'マネージャー',
+  '部長',
+  '主管',
+  '总监',
+  '经理',
 ];
 
-const LEAD_MARKERS = [
-  'tech lead', 'team lead', 'lead ', 'lead,', 'тимлид', 'тим-лид', 'リーダー',
-];
+const LEAD_MARKERS = ['tech lead', 'team lead', 'lead ', 'lead,', 'тимлид', 'тим-лид', 'リーダー'];
 
 const CJK_SCRIPT = /[\u3040-\u30ff\u3400-\u9fff]/u;
 

@@ -1538,17 +1538,29 @@ export class MultiSourceVacancyEngine {
     return this.reclusterInFlight;
   }
 
+  /**
+   * Один и тот же кандидат (с уже решённым режимом) идёт и в запрос, и в
+   * объяснение (B267 S3): иначе таблица могла наполниться между двумя
+   * вызовами `resolveSemanticFunctions`, и `roleMatch` объяснял бы не то,
+   * что нашёл запрос.
+   */
+  private withResolvedSemanticFunctions(candidate: CandidateMatchProfile): CandidateMatchProfile {
+    const functions = this.pool.resolveSemanticFunctions?.(candidate);
+    return functions?.length ? { ...candidate, semanticRoleFunctions: functions } : candidate;
+  }
+
   public getMatchedVacancies(candidate: CandidateMatchProfile): MatchedVacancyItem[] {
+    const effective = this.withResolvedSemanticFunctions(candidate);
     const clusters =
       typeof this.pool.queryMatchCandidates === 'function'
-        ? clusterVacancies(this.pool.queryMatchCandidates(candidate)).filter(
+        ? clusterVacancies(this.pool.queryMatchCandidates(effective)).filter(
             (c) => c.status === 'active',
           )
         : this.getActiveClusters();
 
     const matched: MatchedVacancyItem[] = [];
     for (const cluster of clusters) {
-      const explanation = matchCandidateWithVacancy(candidate, cluster);
+      const explanation = matchCandidateWithVacancy(effective, cluster);
       matched.push({ cluster, explanation });
     }
 
@@ -1559,13 +1571,14 @@ export class MultiSourceVacancyEngine {
     candidate: CandidateMatchProfile,
   ): Promise<MatchedVacancyItem[]> {
     if (!this.pool.queryMatchCandidatesAsync) return this.getMatchedVacancies(candidate);
-    const clusters = clusterVacancies(await this.pool.queryMatchCandidatesAsync(candidate)).filter(
+    const effective = this.withResolvedSemanticFunctions(candidate);
+    const clusters = clusterVacancies(await this.pool.queryMatchCandidatesAsync(effective)).filter(
       (cluster) => cluster.status === 'active',
     );
     return clusters
       .map((cluster) => ({
         cluster,
-        explanation: matchCandidateWithVacancy(candidate, cluster),
+        explanation: matchCandidateWithVacancy(effective, cluster),
       }))
       .sort(compareMatchedVacancies);
   }

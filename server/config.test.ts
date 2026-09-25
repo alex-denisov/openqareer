@@ -38,6 +38,21 @@ describe('server configuration', () => {
     ).toThrow();
   });
 
+  it('подбор по умолчанию остаётся legacy, флаг включает semantic (B267 S3)', () => {
+    expect(readServerConfig(validEnvironment, import.meta.url)).toMatchObject({
+      matchMode: 'legacy',
+    });
+    expect(
+      readServerConfig(
+        { ...validEnvironment, OPENQAREER_MATCH_MODE: 'semantic' },
+        import.meta.url,
+      ),
+    ).toMatchObject({ matchMode: 'semantic' });
+    expect(() =>
+      readServerConfig({ ...validEnvironment, OPENQAREER_MATCH_MODE: 'other' }, import.meta.url),
+    ).toThrow();
+  });
+
   it('fails fast when either server-side secret is absent', () => {
     expect(() =>
       readServerConfig(

@@ -2,6 +2,7 @@ import type { UnifiedVacancy, VacancyCluster, VacancySourceConfig } from '../dom
 import type { ClusterRepresentative, VacancyClusterLookup } from './vacancyDeduplicator';
 import type { SourceObservations } from './sourceHealthVerdict';
 import type { CandidateMatchProfile } from './vacancyMatcher';
+import type { FunctionCode } from '../../shared/roleTaxonomy';
 import type {
   ClusterProjection,
   FreshnessWindow,
@@ -87,6 +88,12 @@ export interface VacancyPoolStore {
     candidate: CandidateMatchProfile,
     options?: MatchCandidateQueryOptions,
   ): Promise<UnifiedVacancy[]>;
+  /**
+   * Режим подбора для этого кандидата (B267 S3): пусто — legacy. Вызывающая
+   * сторона (движок) использует тот же результат и для запроса, и для
+   * объяснения `roleMatch`, чтобы оба не разошлись по режиму.
+   */
+  resolveSemanticFunctions?(candidate: CandidateMatchProfile): readonly FunctionCode[];
   /**
    * Один шаг дочитывания колонок запросов у записей, сделанных до B221.
    * Возвращает, сколько строк обработано; ноль — дочитывать нечего. Пул в
