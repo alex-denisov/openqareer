@@ -613,6 +613,8 @@ const handleDeleteSubscription: Handler = async (deps, request, reply) => {
 const vacancyPitchInputSchema = z
   .object({
     tone: z.enum(['executive', 'confident', 'technical']).optional(),
+    /** Overrides language auto-detected from the vacancy's own text (B266). */
+    language: z.enum(['en', 'ru']).optional(),
     /**
      * B251, S2, architecture.md §4: when set, the generated cover letter is
      * saved to `candidate_documents` (`cover_letter`, `generated`) and linked
@@ -677,6 +679,7 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
     candidateName: snapshot?.resume?.draft?.candidate?.fullName,
     facts: snapshot?.memory ?? [],
     tone: body?.tone ?? 'executive',
+    ...(body?.language ? { language: body.language } : {}),
   });
 
   if (body?.applicationId) {
