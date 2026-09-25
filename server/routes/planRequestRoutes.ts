@@ -32,7 +32,7 @@ const handleCreatePlanRequest: Handler = async (deps, request, reply) => {
   );
   const stored = candidateStore.requestPlan(candidate.id, parsed.data.planId, parsed.data.note);
   request.log.info({ planId: stored.planId, isRepeat }, 'plan_request_received');
-  if (!isRepeat) void alertOwner(deps, candidate, stored.planId, parsed.data.note);
+  if (!isRepeat) void alertOwner(deps, request, candidate, stored.planId, parsed.data.note);
   return { data: stored, meta: { requestId: request.id } };
 };
 
@@ -43,6 +43,7 @@ const PLAN_TITLES: Readonly<Record<string, string>> = {
 
 async function alertOwner(
   deps: RouteDeps,
+  request: FastifyRequest,
   candidate: { readonly id: string },
   planId: string,
   note: string | undefined,
@@ -53,7 +54,10 @@ async function alertOwner(
     `Кандидат: ${fullName ? `${fullName} · ` : ''}${candidate.id}`,
     note ? `Комментарий: ${note}` : null,
   ].filter(Boolean);
-  await notifyOwner(deps.config, lines.join('\n'));
+  // Only the outcome is logged: whether the owner was told is otherwise
+  // invisible on the server (B266), and the token never reaches a log.
+  const outcome = await notifyOwner(deps.config, lines.join('\n'));
+  request.log.info({ planId, outcome }, 'plan_request_owner_alert');
 }
 
 const handleListPlanRequests: Handler = async (deps, request, reply) => {
