@@ -152,4 +152,47 @@ describe('Explainable Vacancy Matcher', () => {
       expect(explanation.levelMatch).toBeUndefined();
     });
   });
+
+  describe('semanticRoleFunctions (B267 S3)', () => {
+    const ctoCandidate: CandidateMatchProfile = {
+      candidateId: 'cand-cto',
+      targetRoles: ['CTO'],
+      confirmedSkills: [],
+      confirmedFacts: [],
+      semanticRoleFunctions: ['eng-mgmt'],
+      targetLevel: 'c-level',
+    };
+
+    it('target — функция и уровень совпали', () => {
+      const explanation = matchCandidateWithVacancy(ctoCandidate, {
+        ...sampleCluster,
+        canonicalTitle: 'CTO',
+      });
+      expect(explanation.roleMatch).toBe('target');
+    });
+
+    it('partial — функция совпала, уровень соседний', () => {
+      const explanation = matchCandidateWithVacancy(ctoCandidate, {
+        ...sampleCluster,
+        canonicalTitle: 'VP of Engineering',
+      });
+      expect(explanation.roleMatch).toBe('partial');
+    });
+
+    it('partial — уровень кандидата неизвестен, известна только функция', () => {
+      const explanation = matchCandidateWithVacancy(
+        { ...ctoCandidate, targetLevel: undefined },
+        { ...sampleCluster, canonicalTitle: 'VP of Engineering' },
+      );
+      expect(explanation.roleMatch).toBe('partial');
+    });
+
+    it('none — функция не совпала, продажи не проходят как совпадение', () => {
+      const explanation = matchCandidateWithVacancy(ctoCandidate, {
+        ...sampleCluster,
+        canonicalTitle: 'VP of Channel Sales',
+      });
+      expect(explanation.roleMatch).toBe('none');
+    });
+  });
 });

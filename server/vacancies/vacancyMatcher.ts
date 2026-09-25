@@ -1,7 +1,9 @@
 import type { VacancyCluster, VacancyMatchExplanation } from '../domain/unifiedVacancy';
 import type { VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
+import type { FunctionCode } from '../../shared/roleTaxonomy';
 import { normalizeTextForComparison } from './vacancyFingerprint';
-import { evaluateLevelMatch, type SeniorityLevel } from './levelMatcher';
+import { evaluateLevelMatch, LEVEL_RANK, type SeniorityLevel } from './levelMatcher';
+import { rulesParse } from './titleParse/rulesParse';
 
 /**
  * Объяснение соответствия состоит только из измеримого. Сводный балл убран
@@ -24,6 +26,13 @@ export interface CandidateMatchProfile {
    * остаётся строкой, как раньше.
    */
   confirmedSkillFacts?: readonly { readonly id: string; readonly label: string }[];
+  /**
+   * Коды функций из ролей кампании (B267 S3): их наличие переключает
+   * `roleMatch` на разбор названия вакансии вместо сравнения строк. Пусто —
+   * подбор для этого кандидата остаётся на legacy-сравнении (например, ни
+   * одна роль не свелась к известной функции).
+   */
+  semanticRoleFunctions?: readonly FunctionCode[];
 }
 
 interface MatchingFactPoint {
@@ -82,6 +91,42 @@ function evaluateRole(targetRoles: string[], vacancyTitle: string) {
   return { roleMatch, matchingPoints };
 }
 
+/**
+ * Смысловая оценка (B267 S3): функция вакансии — из разбора названия
+ * правилами, а не из подстроки. `none` не выходит из этой функции ложью —
+ * SQL-подбор уже не приносит вакансию без совпавшей функции, здесь только
+ * защита для прямого вызова (тесты, будущая переоценка снимка).
+ */
+function evaluateSemanticRole(
+  roleFunctions: readonly FunctionCode[],
+  targetLevel: SeniorityLevel | undefined,
+  vacancyTitle: string,
+) {
+  const parsed = rulesParse(vacancyTitle);
+  const matchingPoints: string[] = [];
+  if (!parsed.functions.some((code) => roleFunctions.includes(code))) {
+    return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints };
+  }
+
+  const targetRank = targetLevel ? LEVEL_RANK[targetLevel] : undefined;
+  let roleMatch: VacancyRoleMatch;
+  if (targetRank === undefined || parsed.levelRank === null) {
+    // Уровень одной из сторон неизвестен — известна только функция.
+    roleMatch = 'partial';
+  } else {
+    const distance = Math.abs(parsed.levelRank - targetRank);
+    roleMatch = distance === 0 ? 'target' : distance === 1 ? 'partial' : 'none';
+  }
+  if (roleMatch !== 'none') {
+    matchingPoints.push(
+      roleMatch === 'target'
+        ? 'Функция и уровень роли совпадают.'
+        : 'Функция роли совпадает, уровень — соседняя ступень.',
+    );
+  }
+  return { roleMatch, matchingPoints };
+}
+
 const ROLE_SENTENCE: Record<VacancyRoleMatch, string> = {
   target: 'Название совпадает с целевой ролью.',
   partial: 'Название частично совпадает с целевой ролью.',
@@ -109,7 +154,9 @@ export function matchCandidateWithVacancy(
     vacancySkills,
     candidate.confirmedSkillFacts,
   );
-  const roleEval = evaluateRole(candidate.targetRoles, vacancy.canonicalTitle);
+  const roleEval = candidate.semanticRoleFunctions?.length
+    ? evaluateSemanticRole(candidate.semanticRoleFunctions, candidate.targetLevel, vacancy.canonicalTitle)
+    : evaluateRole(candidate.targetRoles, vacancy.canonicalTitle);
   const levelMatch = evaluateLevelMatch(candidate.targetLevel, vacancy.canonicalTitle);
 
   const locationPoints: string[] = [];

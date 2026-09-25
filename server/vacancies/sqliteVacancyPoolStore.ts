@@ -16,9 +16,13 @@ import {
   VACANCY_SOURCE_OBSERVATIONS_COLUMN,
   VACANCY_SOURCE_SYNC_REQUESTED_AT_COLUMN,
   VACANCY_SOURCE_SYNC_STARTED_AT_COLUMN,
+  MIGRATION_35,
 } from '../data/sqliteSchema';
 import { MATCH_ORDER_SCHEMA } from './vacancyMatchIndex';
 import { VacancyMatchReader, type MatchRowReader } from './vacancyMatchReader';
+import { buildSemanticMatchQuery } from './semanticMatchQuery';
+import { candidateRoleFunctionCodes } from './titleParse/candidateRoleFunctions';
+import { LEVEL_RANK } from './levelMatcher';
 import type { SourceObservations } from './sourceHealthVerdict';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 import {
@@ -205,6 +209,8 @@ export interface SqliteVacancyPoolStoreOptions {
   readonly writeChunkSize?: number;
   /** Свидетель каждой транзакции записи и итога замены среза — для журнала обслуживателя. */
   readonly onWrite?: (event: PoolWriteEvent) => void;
+  /** Подбор по смыслу вместо LIKE по описанию (B267 S3); по умолчанию старое поведение. */
+  readonly matchMode?: 'legacy' | 'semantic';
 }
 
 export class SqliteVacancyPoolStore implements VacancyPoolStore {
@@ -213,6 +219,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private matchReader?: MatchRowReader;
   private readonly writeChunkSize: number;
   private readonly onWrite?: (event: PoolWriteEvent) => void;
+  readonly matchMode: 'legacy' | 'semantic';
   /** Докуда дошёл фоновый проход по `rowid`: каждый шаг начинает с него, а не с начала таблицы. */
   private backfillCursor = 0;
   /** Докуда дошёл bounded materialized-catalog pass. */
@@ -230,6 +237,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       Math.floor(options.writeChunkSize ?? DEFAULT_POOL_WRITE_CHUNK),
     );
     this.onWrite = options.onWrite;
+    this.matchMode = options.matchMode ?? 'legacy';
     if (options.databasePath !== ':memory:') {
       mkdirSync(dirname(options.databasePath), { recursive: true });
     }
