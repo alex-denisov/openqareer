@@ -19,6 +19,7 @@ import {
 import type { CareerJourney } from './careerJourneyEngine';
 import { consultantTurns } from './consultantHistory';
 import { CareerActionProposalList } from './CareerCommandActions';
+import { ConsultantMessage } from './ConsultantMessage';
 
 interface CareerExpertPanelProps {
   journey?: CareerJourney;
@@ -253,19 +254,21 @@ export function CareerExpertPanel({
             {turns.map((message) => (
               <article className={`career-dialogue-turn is-${message.role}`} key={message.id}>
                 <span>{message.role === 'user' ? 'Вы' : 'Карьерный консультант'}</span>
-                {message.content
-                  .split('\n')
-                  .map((paragraph, index) =>
-                    paragraph ? <p key={`${message.id}-${index}`}>{paragraph}</p> : null,
-                  )}
+                {message.role === 'assistant' ? (
+                  <ConsultantMessage text={message.content} />
+                ) : (
+                  message.content
+                    .split('\n')
+                    .map((paragraph, index) =>
+                      paragraph ? <p key={`${message.id}-${index}`}>{paragraph}</p> : null,
+                    )
+                )}
               </article>
             ))}
             {showLiveMessage ? (
               <article className="career-dialogue-turn is-assistant" aria-live="polite">
                 <span>Карьерный консультант</span>
-                {liveResult.message
-                  .split('\n')
-                  .map((paragraph, index) => (paragraph ? <p key={index}>{paragraph}</p> : null))}
+                <ConsultantMessage text={liveResult.message} />
               </article>
             ) : null}
             <div ref={historyEndRef} aria-hidden="true" />

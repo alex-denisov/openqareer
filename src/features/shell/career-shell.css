@@ -3129,6 +3129,34 @@
   line-height: 1.5;
 }
 
+/* Consultant replies rendered from markdown (B266, ConsultantMessage). */
+.career-dialogue-turn ul,
+.career-dialogue-turn ol {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.career-dialogue-turn li + li {
+  margin-top: 2px;
+}
+
+.career-dialogue-turn strong {
+  color: var(--career-text);
+  font-weight: 600;
+}
+
+.career-dialogue-turn p.career-dialogue-heading {
+  margin-top: 10px;
+}
+
+.career-dialogue-turn code {
+  font-family: var(--career-font-mono, ui-monospace, monospace);
+  font-size: 0.95em;
+}
+
 .career-role-coverage,
 .career-track-card,
 .career-action-proposals {
