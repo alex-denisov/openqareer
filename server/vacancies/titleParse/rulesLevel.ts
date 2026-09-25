@@ -87,6 +87,13 @@ function containsAny(normalizedTitle: string, markers: readonly string[]): boole
   });
 }
 
+/** Отличает явно названный уровень от штатного IC-фолбэка. */
+export function hasRulesLevelMarker(title: string): boolean {
+  const normalized = ` ${title.toLowerCase()} `;
+  return [C_LEVEL_MARKERS, VP_MARKERS, HEAD_MARKERS, LEAD_MARKERS]
+    .some((markers) => containsAny(normalized, markers));
+}
+
 /** Заголовок нормализуется до нижнего регистра с пробелами по краям для якорей с пробелами внутри. */
 export function inferRulesLevel(title: string): SeniorityLevel {
   const normalized = ` ${title.toLowerCase()} `;

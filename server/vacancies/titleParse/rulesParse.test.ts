@@ -2,8 +2,59 @@ import { describe, expect, it } from 'vitest';
 import { rulesParse } from './rulesParse';
 import { LEVEL_RANK } from '../levelMatcher';
 import type { FunctionCode } from '../../../shared/roleTaxonomy';
+import { ontology } from '../../../shared/roleOntology';
+
+const ONTOLOGY_FUNCTION_VARIANTS = ontology.roles
+  .slice()
+  .sort((left, right) => left.function.localeCompare(right.function) || left.id.localeCompare(right.id))
+  .reduce<readonly { readonly title: string; readonly function: string }[]>((samples, role) => {
+    if (samples.some((sample) => sample.function === role.function) || samples.length === 30) return samples;
+    const variants = [...role.variants.en, ...role.variants.ru];
+    const title = variants[role.id.length % variants.length];
+    return [...samples, { title, function: role.function }];
+  }, []);
 
 describe('rulesParse (B267 S1)', () => {
+  it('uses exact ontology variants before anchor words', () => {
+    expect(rulesParse('Врач КЛД')).toMatchObject({
+      functions: ['healthcare'], levelRank: LEVEL_RANK.ic, roleId: 'healthcare.lab.ic',
+    });
+    expect(rulesParse('Торговый представитель')).toMatchObject({
+      functions: ['sales'], levelRank: LEVEL_RANK.ic, roleId: 'sales.rep.ic',
+    });
+    expect(rulesParse('Key Account Manager')).toMatchObject({
+      functions: ['sales'], levelRank: LEVEL_RANK.lead, roleId: 'sales.key-account-manager.lead',
+    });
+    expect(rulesParse('Главный врач')).toMatchObject({
+      functions: ['healthcare'], levelRank: LEVEL_RANK['c-level'], roleId: 'healthcare.chief-physician.c',
+    });
+  });
+
+  it('uses the longest multi-word ontology variant inside a title', () => {
+    expect(rulesParse('Hiring: Key Account Manager in B2B')).toMatchObject({
+      functions: ['sales'], roleId: 'sales.key-account-manager.lead',
+    });
+  });
+
+  it('maps 30 deterministic ontology variants from different functions to their functions', () => {
+    expect(ONTOLOGY_FUNCTION_VARIANTS).toHaveLength(30);
+    for (const sample of ONTOLOGY_FUNCTION_VARIANTS) {
+      expect(rulesParse(sample.title)).toMatchObject({
+        functions: [sample.function],
+      });
+    }
+  });
+
+  it('parses 5,000 titles within 500 ms', () => {
+    const titles = Array.from(
+      { length: 5_000 },
+      (_, index) => `Open ${ONTOLOGY_FUNCTION_VARIANTS[index % ONTOLOGY_FUNCTION_VARIANTS.length].title} role`,
+    );
+    const startedAt = performance.now();
+    titles.forEach((title) => rulesParse(title));
+    expect(performance.now() - startedAt).toBeLessThan(500);
+  });
+
   it('reads the level from an existing marker word', () => {
     expect(rulesParse('Chief Technology Officer').levelRank).toBe(LEVEL_RANK['c-level']);
     expect(rulesParse('Team Lead Backend').levelRank).toBe(LEVEL_RANK.lead);
@@ -34,11 +85,9 @@ describe('rulesParse (B267 S1)', () => {
     expect(rulesParse('VP of Engineering').functions).toEqual(['eng-mgmt']);
   });
 
-  it('picks two functions for a dual-scope title', () => {
+  it('prefers an exact ontology role over dual-scope anchors', () => {
     const result = rulesParse('VP of Technology & Operations');
-    expect(result.functions).toContain('eng-mgmt');
-    expect(result.functions).toContain('ops');
-    expect(result.functions.length).toBeLessThanOrEqual(2);
+    expect(result).toMatchObject({ functions: ['ops'], roleId: 'ops.vp' });
   });
 
   it('does not confuse VP Channel Sales with engineering management', () => {

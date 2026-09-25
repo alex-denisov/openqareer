@@ -1,6 +1,8 @@
 import { ROLE_TAXONOMY, type FunctionCode } from '../../../shared/roleTaxonomy';
+import { ontology, type OntologyLevel } from '../../../shared/roleOntology';
 import { LEVEL_RANK } from '../levelMatcher';
-import { inferRulesLevel } from './rulesLevel';
+import { hasRulesLevelMarker, inferRulesLevel } from './rulesLevel';
+import { normalizeTitleKey } from './normalizeTitleKey';
 
 /**
  * Фолбэк без модели (B267 §3): опорные слова словаря дают функцию, уже
@@ -10,6 +12,13 @@ import { inferRulesLevel } from './rulesLevel';
 export interface RulesParseResult {
   readonly functions: readonly FunctionCode[];
   readonly levelRank: number | null;
+  readonly roleId?: string;
+}
+
+interface OntologyVariant {
+  readonly function: FunctionCode;
+  readonly levels: readonly OntologyLevel[];
+  readonly roleId: string;
 }
 
 interface AnchorHit {
@@ -24,6 +33,37 @@ interface AnchorMatcher extends AnchorHit {
 
 const CJK_SCRIPT = /[\u3040-\u30ff\u3400-\u9fff]/u;
 const COMPACT_CJK_LATIN_ANCHORS: ReadonlySet<string> = new Set(['pm', 'pl']);
+
+function createOntologyVariantIndex(): Readonly<{
+  readonly exact: ReadonlyMap<string, OntologyVariant>;
+  readonly multiWord: ReadonlyMap<string, OntologyVariant>;
+}> {
+  const exact = new Map<string, OntologyVariant>();
+  const multiWord = new Map<string, OntologyVariant>();
+  for (const role of ontology.roles) {
+    for (const variant of [...role.variants.en, ...role.variants.ru]) {
+      const normalized = normalizeTitleKey(variant);
+      if (!normalized) continue;
+      const parts = normalized.split(/\s+/u);
+      const entry = Object.freeze({
+        function: role.function as FunctionCode,
+        levels: role.levels as readonly OntologyLevel[],
+        roleId: role.id,
+      });
+      if (!exact.has(normalized)) exact.set(normalized, entry);
+      if (parts.length < 2) continue;
+      const phrase = wordsFromTitle(normalized).join(' ');
+      if (phrase) multiWord.set(phrase, multiWord.get(phrase) ?? entry);
+    }
+  }
+  return Object.freeze({ exact, multiWord });
+}
+
+const ONTOLOGY_VARIANTS = createOntologyVariantIndex();
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
 
 const ANCHOR_MATCHERS: readonly AnchorMatcher[] = ROLE_TAXONOMY.flatMap((definition) =>
   definition.anchors.map((anchor) => {
@@ -61,8 +101,26 @@ function findAnchorHits(normalizedTitle: string): AnchorHit[] {
   return hits;
 }
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+function wordsFromTitle(normalizedTitle: string): readonly string[] {
+  return normalizedTitle.match(/\p{L}+/gu) ?? [];
+}
+
+function findOntologyVariant(normalizedTitle: string): OntologyVariant | undefined {
+  const exact = ONTOLOGY_VARIANTS.exact.get(normalizedTitle);
+  if (exact) return exact;
+  const words = wordsFromTitle(normalizedTitle);
+  for (let length = words.length; length >= 2; length -= 1) {
+    for (let start = 0; start <= words.length - length; start += 1) {
+      const entry = ONTOLOGY_VARIANTS.multiWord.get(words.slice(start, start + length).join(' '));
+      if (entry) return entry;
+    }
+  }
+  return undefined;
+}
+
+function levelRankForOntologyRole(title: string, variant: OntologyVariant): number {
+  if (!hasRulesLevelMarker(title) && variant.levels.length === 1) return LEVEL_RANK[variant.levels[0]];
+  return LEVEL_RANK[inferRulesLevel(title)];
 }
 
 /**
@@ -109,6 +167,15 @@ function pickTopFunctions(hits: readonly AnchorHit[]): FunctionCode[] {
 }
 
 export function rulesParse(title: string): RulesParseResult {
+  const normalizedKey = normalizeTitleKey(title);
+  const ontologyVariant = findOntologyVariant(normalizedKey);
+  if (ontologyVariant) {
+    return {
+      functions: [ontologyVariant.function],
+      levelRank: levelRankForOntologyRole(title, ontologyVariant),
+      roleId: ontologyVariant.roleId,
+    };
+  }
   const normalized = ` ${title.toLowerCase()} `;
   const hits = findAnchorHits(normalized);
   const specificFunctions = pickTopFunctions(hits);
