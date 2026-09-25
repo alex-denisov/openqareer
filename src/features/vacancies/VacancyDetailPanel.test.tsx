@@ -1,7 +1,11 @@
+// @vitest-environment jsdom
+import { act } from 'react-dom/test-utils';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { VacancyDetailPanel } from './VacancyDetailPanel';
+import * as openExternalLinkModule from '../../services/desktop/openExternalLink';
 
 function item(
   overrides: Partial<MatchedVacancyItem['explanation']> = {},
@@ -79,10 +83,45 @@ describe('VacancyDetailPanel (B250)', () => {
     expect(html).not.toContain('vacancies-signals');
   });
 
-  it('shows a primary apply button that opens the source and records the click', () => {
+  it('shows a primary apply button', () => {
     const html = render();
     expect(html).toContain('Откликнуться');
-    expect(html).toContain('https://example.com/vacancy');
+    expect(html).toContain('<button');
+  });
+
+  it('opens the source through the shared external-link utility and records the click', () => {
+    const openSpy = vi.spyOn(openExternalLinkModule, 'openExternalLink').mockResolvedValue();
+    const record = vi.fn();
+    const applications = {
+      applications: [],
+      byCluster: new Map(),
+      unsaved: new Set<string>(),
+      record,
+    };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <VacancyDetailPanel item={item()} now="2026-09-24T09:00:00.000Z" onBack={vi.fn()} applications={applications} />,
+      );
+    });
+    const button = Array.from(container.querySelectorAll('button')).find(
+      (el) => el.textContent === 'Откликнуться',
+    );
+    act(() => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(openSpy).toHaveBeenCalledWith('https://example.com/vacancy');
+    expect(record).toHaveBeenCalledWith('c-1', 'opened', expect.objectContaining({ url: 'https://example.com/vacancy' }));
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('replaces the dead «Ещё» anchor with an in-app «Подробнее» door', () => {
+    const html = render();
+    expect(html).toContain('Подробнее');
+    expect(html).not.toContain('Ещё ·');
   });
 
   it('shows an already-applied state instead of the apply button once confirmed', () => {

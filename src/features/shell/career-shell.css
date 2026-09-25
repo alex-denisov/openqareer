@@ -7378,6 +7378,48 @@
   margin: 0;
 }
 
+/* «Подробнее» — карточка вакансии целиком внутри приложения (B266). */
+.vacancies-info-subtitle {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+  margin: 0;
+}
+
+.vacancies-info-description {
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.vacancies-info-description.is-empty {
+  color: var(--career-text-dim);
+  font-style: italic;
+}
+
+.vacancies-info-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.vacancies-info-skills li {
+  padding: 4px 10px;
+  border-radius: var(--career-radius-sm);
+  border: 1px solid var(--career-line-strong);
+  font-size: var(--career-text-aux);
+  color: var(--career-text-soft);
+}
+
+.vacancies-info-sources {
+  font-size: var(--career-text-aux);
+  color: var(--career-text-dim);
+  margin: 0;
+}
+
 .career-modal-field {
   display: flex;
   flex-direction: column;
