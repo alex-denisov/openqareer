@@ -4,6 +4,19 @@ import {
   normalizeCandidateRegions,
   regionsFromLegacyMarket,
 } from '../../src/features/workspace/candidateRegions';
+import { ONTOLOGY_LEVELS } from '../../shared/roleOntology';
+
+const campaignRoleProposalSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().trim().min(1).max(200),
+  titleRu: z.string().trim().min(1).max(200),
+  functions: z.array(z.string().min(1)).min(1).max(2),
+  level: z.enum(ONTOLOGY_LEVELS).nullable(),
+  kind: z.enum(['primary', 'adjacent']),
+  synonyms: z.array(z.string().trim().min(1).max(200)).max(6),
+  evidenceRefs: z.array(z.string().min(1)).min(1),
+  reason: z.string().trim().min(1).max(500),
+}).strict();
 
 /**
  * The candidate's own answers to the diagnostic wizard — the part of the
@@ -42,6 +55,13 @@ export const candidateWorkspaceSchema = z
         regions: z.array(z.enum(CANDIDATE_REGIONS)).max(CANDIDATE_REGIONS.length),
         revision: z.number().int().min(1),
         updatedAt: z.string(),
+        auto: z.object({
+          roles: z.array(campaignRoleProposalSchema).max(10),
+          factsDigest: z.string().min(1),
+          generatedAt: z.string(),
+          model: z.string().min(1),
+        }).strict().optional(),
+        dismissed: z.array(z.string().min(1)).max(451).optional(),
       })
       .strict()
       .optional(),

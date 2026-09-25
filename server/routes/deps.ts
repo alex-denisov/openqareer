@@ -52,6 +52,8 @@ export interface RouteDeps {
   resumeStructurer?: ResumeStructurer;
   /** Роли называет модель по фактам кандидата (B180, срез 1в). */
   roleNamer?: RoleNamer;
+  /** Выбирает id авторолей только из переданной онтологии (B267 S5). */
+  campaignRoleModel?: import('../vacancies/campaignRoleSet').CampaignRoleModel;
   /** Сопроводительное письмо пишет модель, шаблон — запас (B266, пункт 7). */
   coverLetterWriter?: CoverLetterWriter;
   /** Окно последних отказов ступеней называния — для администратора (INC-035). */

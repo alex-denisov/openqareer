@@ -87,6 +87,31 @@ describe('resolveCampaign (B247, срез 1)', () => {
     });
   });
 
+  it('соблюдает приоритет explicit > model > profile', () => {
+    const auto = {
+      roles: [
+        {
+          id: 'eng-mgmt.cto', title: 'Chief Technology Officer', titleRu: 'Технический директор (CTO)',
+          functions: ['eng-mgmt'] as const, level: 'c-level' as const, kind: 'primary' as const,
+          synonyms: ['CTO'], evidenceRefs: ['memory:1'], reason: 'Опыт руководства технологиями',
+        },
+      ],
+      factsDigest: 'digest', generatedAt: '2026-09-25T00:00:00.000Z', model: 'fixture',
+    };
+    const base = {
+      memory: [fact({ statement: 'VP Tech', domain: 'role-evidence' })],
+      resumeTargetRole: null, profileRegions: [], auto,
+    };
+
+    expect(resolveCampaign({ ...base, explicit: null }).roles).toEqual({
+      value: ['Chief Technology Officer'], origin: 'model',
+    });
+    expect(resolveCampaign({
+      ...base,
+      explicit: { roles: ['COO'], regions: [], revision: 1, updatedAt: '2026-09-25T00:00:00.000Z' },
+    }).roles).toEqual({ value: ['COO'], origin: 'explicit' });
+  });
+
   it('явный выбор, совпадающий с профилем, не считается расхождением', () => {
     const resolution = resolveCampaign({
       memory: [fact({ statement: 'VP Tech', domain: 'role-evidence', status: 'confirmed' })],

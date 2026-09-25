@@ -29,7 +29,7 @@ export interface StoredCampaignSelection {
   readonly updatedAt: string;
 }
 
-export type CampaignFieldOrigin = 'explicit' | 'profile' | 'default';
+export type CampaignFieldOrigin = 'explicit' | 'model' | 'profile' | 'default';
 
 export interface CampaignField<T> {
   readonly value: T;
@@ -92,6 +92,7 @@ export interface ResolveCampaignInput {
   readonly resumeTargetRole?: string | null;
   readonly profileRegions: readonly string[];
   readonly explicit: StoredCampaignSelection | null;
+  readonly auto?: import('./campaignRoleSet').StoredAutoCampaign | null;
   /** Число подобранных вакансий на роль кампании — вход порога значимости. */
   readonly vacancyCountsByRole?: Readonly<Record<string, number>>;
 }
@@ -127,10 +128,14 @@ function profileRoles(
 
 function resolveField(
   explicitValues: readonly string[] | undefined,
+  modelValues: readonly string[],
   profileValues: readonly string[],
 ): CampaignField<readonly string[]> {
   if (explicitValues && explicitValues.length > 0) {
     return { value: explicitValues, origin: 'explicit' };
+  }
+  if (modelValues.length > 0) {
+    return { value: modelValues, origin: 'model' };
   }
   if (profileValues.length > 0) {
     return { value: profileValues, origin: 'profile' };
@@ -156,9 +161,10 @@ function divergenceOf(
 export function resolveCampaign(input: ResolveCampaignInput): CampaignResolution {
   const derivedRoles = profileRoles(input.memory, input.resumeTargetRole);
   const derivedRegions = input.profileRegions;
+  const modelRoles = input.auto?.roles.map((role) => role.title) ?? [];
 
-  const roles = resolveField(input.explicit?.roles, derivedRoles);
-  const regions = resolveField(input.explicit?.regions, derivedRegions);
+  const roles = resolveField(input.explicit?.roles, modelRoles, derivedRoles);
+  const regions = resolveField(input.explicit?.regions, [], derivedRegions);
 
   return {
     roles,
