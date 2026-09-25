@@ -16,7 +16,7 @@ export const ROLE_TAXONOMY_BUSINESS: readonly RoleFunctionDefinition[] = [
       'account executive', 'account manager', 'account director', 'account representative', 'key account manager',
       'territory executive', 'territory account', 'sales development representative', 'business development representative',
       'inside sales', 'relationship manager', 'client partner', 'ejecutivo de ventas', 'executivo de vendas',
-      'vendedor', 'vendas', 'consultor comercial', 'channel',
+      'vendedor', 'vendas', 'consultor comercial', 'channel', '営業', '销售',
       'менеджер по продажам', 'руководитель отдела продаж', 'директор по продажам', 'sales', 'comercial', 'venta', 'ventas', 'accounts', 'deal desk',
     ],
   },
@@ -27,6 +27,7 @@ export const ROLE_TAXONOMY_BUSINESS: readonly RoleFunctionDefinition[] = [
     anchors: [
       'business development manager', 'business development', 'partnerships manager', 'partner manager',
       'deployment strategist', 'partner development', 'partner agreements', 'partner', 'ecosystem', 'corporate development',
+      '业务发展',
       'развитие бизнеса', 'менеджер по развитию',
     ],
   },
@@ -38,6 +39,7 @@ export const ROLE_TAXONOMY_BUSINESS: readonly RoleFunctionDefinition[] = [
       'cmo', 'head of growth', 'growth marketing', 'growth', 'marketing manager', 'marketing director',
       'product marketing', 'demand generation', 'digital marketing', 'content marketing', 'brand design',
       'paid media', 'seo', 'campaigns', 'consumer insights', 'insights', 'social media',
+      'マーケティング', '市场营销',
       'маркетолог', 'директор по маркетингу', 'руководитель отдела маркетинга', 'marketing',
     ],
   },
@@ -58,6 +60,7 @@ export const ROLE_TAXONOMY_BUSINESS: readonly RoleFunctionDefinition[] = [
     anchors: [
       'customer support', 'technical support', 'support specialist', 'customer success', 'customer service',
       'call center', 'client services', 'kundenservice', 'customer retention', 'retention', 'fidelización',
+      'カスタマーサポート', '客户支持',
       'служба поддержки', 'специалист поддержки',
     ],
   },
@@ -68,7 +71,7 @@ export const ROLE_TAXONOMY_BUSINESS: readonly RoleFunctionDefinition[] = [
     anchors: [
       'cfo', 'financial analyst', 'finance manager', 'accounting', 'accountant', 'payroll',
       'fp&a', 'treasury', 'capital markets', 'financial data', 'tax', 'accounts payable', 'financial controls',
-      'credit analyst',
+      'credit analyst', '経理', '财务', '会计',
       'финансовый директор', 'финансовый аналитик', 'бухгалтер', 'экономист', 'finance',
     ],
   },
@@ -89,7 +92,7 @@ export const ROLE_TAXONOMY_BUSINESS: readonly RoleFunctionDefinition[] = [
     anchors: [
       'hr manager', 'hr business partner', 'hrbp', 'human resources', 'recruiter', 'recruiting',
       'talent acquisition', 'talent brand', 'people operations', 'employee engagement', 'compensation',
-      'people leader', 'business partner de rh',
+      'people leader', 'business partner de rh', '人事',
       'менеджер по персоналу', 'рекрутер',
     ],
   },
@@ -97,7 +100,7 @@ export const ROLE_TAXONOMY_BUSINESS: readonly RoleFunctionDefinition[] = [
     code: 'legal',
     labelEn: 'Legal',
     labelRu: 'Юридический отдел',
-    anchors: ['legal counsel', 'lawyer', 'attorney', 'trademark counsel', 'corporate counsel', 'counsel', 'юрист', 'юрисконсульт'],
+    anchors: ['legal counsel', 'lawyer', 'attorney', 'trademark counsel', 'corporate counsel', 'counsel', '法務', 'юрист', 'юрисконсульт'],
   },
   {
     code: 'procurement',
@@ -105,7 +108,7 @@ export const ROLE_TAXONOMY_BUSINESS: readonly RoleFunctionDefinition[] = [
     labelRu: 'Закупки',
     anchors: [
       'procurement manager', 'purchasing manager', 'sourcing manager', 'site procurement',
-      'закупки', 'менеджер по закупкам', 'vendor',
+      '購買', '采购', 'закупки', 'менеджер по закупкам', 'vendor',
     ],
   },
   {
@@ -114,7 +117,7 @@ export const ROLE_TAXONOMY_BUSINESS: readonly RoleFunctionDefinition[] = [
     labelRu: 'Логистика',
     anchors: [
       'logistics manager', 'supply chain manager', 'supply chain', 'warehouse', 'shipping', 'material planning',
-      'логист', 'логистика',
+      '物流', 'логист', 'логистика',
     ],
   },
   {
@@ -125,7 +128,7 @@ export const ROLE_TAXONOMY_BUSINESS: readonly RoleFunctionDefinition[] = [
       'production manager', 'manufacturing engineer', 'production supervisor', 'facilities technician',
       'maintenance technician', 'controls technician', 'propulsion technician', 'automotive technician',
       'module equipment technician', 'building maintenance', 'quality technician', 'technician',
-      'производство', 'технолог',
+      '製造', '生产', 'производство', 'технолог',
     ],
   },
   {
@@ -162,7 +165,7 @@ export const ROLE_TAXONOMY_BUSINESS: readonly RoleFunctionDefinition[] = [
     code: 'consulting',
     labelEn: 'Consulting',
     labelRu: 'Консалтинг',
-    anchors: ['management consultant', 'consultant', 'консультант'],
+    anchors: ['management consultant', 'consultant', 'コンサルタント', '咨询顾问', 'консультант'],
   },
   {
     code: 'project-mgmt',
@@ -170,7 +173,7 @@ export const ROLE_TAXONOMY_BUSINESS: readonly RoleFunctionDefinition[] = [
     labelRu: 'Управление проектами',
     anchors: [
       'project manager', 'program manager', 'scrum master', 'technical program manager',
-      'engagement manager', 'pmo', 'delivery manager',
+      'engagement manager', 'pmo', 'delivery manager', 'プロジェクトマネージャー', '项目经理', 'pm', 'pl',
       'менеджер проектов', 'руководитель проекта', 'проджект-менеджер',
     ],
   },
@@ -209,7 +212,7 @@ export const ROLE_TAXONOMY_BUSINESS: readonly RoleFunctionDefinition[] = [
     code: 'construction',
     labelEn: 'Construction',
     labelRu: 'Строительство',
-    anchors: ['civil engineer', 'construction manager', 'прораб', 'инженер-строитель'],
+    anchors: ['civil engineer', 'construction manager', '建築施工管理', '建筑施工', 'прораб', 'инженер-строитель'],
   },
   {
     code: 'media',

@@ -17,19 +17,19 @@ const FIXTURE_PATH = join(__dirname, '__fixtures__', 'realTitles.txt');
 const REAL_TITLES = readFileSync(FIXTURE_PATH, 'utf8').split('\n').filter((line) => line.trim().length > 0);
 
 describe('rulesParse coverage on the real title sample (B267 S1)', () => {
-  it('names a function for at least 90% of 800 real titles', () => {
+  it('names a function for at least 90% of real titles', () => {
     const empty = REAL_TITLES.filter((title) => rulesParse(title).functions.length === 0);
     const coverage = (REAL_TITLES.length - empty.length) / REAL_TITLES.length;
     expect(coverage, `${empty.length} titles got no function, e.g.:\n${empty.slice(0, 10).join('\n')}`).toBeGreaterThanOrEqual(0.9);
   });
 
-  it('names a level for at least 95% of 800 real titles (null level ≤5%)', () => {
+  it('names a level for at least 95% of real titles (null level ≤5%)', () => {
     const withoutLevel = REAL_TITLES.filter((title) => rulesParse(title).levelRank === null);
     const coverage = (REAL_TITLES.length - withoutLevel.length) / REAL_TITLES.length;
     expect(coverage, `${withoutLevel.length} titles got a null level`).toBeGreaterThanOrEqual(0.95);
   });
 
-  it('names "other" for at most 10% of 800 real titles', () => {
+  it('names "other" for at most 10% of real titles', () => {
     const other = REAL_TITLES.filter((title) => rulesParse(title).functions.includes('other'));
     const share = other.length / REAL_TITLES.length;
     expect(share, `${other.length} titles fell back to "other"`).toBeLessThanOrEqual(0.1);
@@ -153,6 +153,61 @@ const RU_EXEC_SAMPLE: readonly [string, FunctionCode, number][] = [
   ['Руководитель ИТ-инфраструктуры', 'it-ops', LEVEL_RANK.head],
 ];
 
+// C08: отдельная ручная разметка названий без пробелов между смысловыми
+// частями. Ожидания заданы по смыслу роли, независимо от словаря парсера.
+const CJK_SAMPLE: readonly [string, FunctionCode, number][] = [
+  ['インフラエンジニア', 'it-ops', LEVEL_RANK.ic],
+  ['ネットワークエンジニア', 'it-ops', LEVEL_RANK.ic],
+  ['ITコンサルタント', 'consulting', LEVEL_RANK.ic],
+  ['DevOpsエンジニア', 'it-ops', LEVEL_RANK.ic],
+  ['クリエイティブディレクター', 'design', LEVEL_RANK.head],
+  ['経理リーダー', 'finance', LEVEL_RANK.lead],
+  ['営業部長', 'sales', LEVEL_RANK.head],
+  ['マーケティングマネージャー', 'marketing', LEVEL_RANK.head],
+  ['人事責任者', 'hr', LEVEL_RANK.head],
+  ['プロダクトマネージャー', 'product', LEVEL_RANK.head],
+  ['UXデザイナー', 'design', LEVEL_RANK.ic],
+  ['ソフトウェア開発エンジニア', 'eng', LEVEL_RANK.ic],
+  ['セキュリティエンジニア', 'security', LEVEL_RANK.ic],
+  ['QAエンジニア', 'qa', LEVEL_RANK.ic],
+  ['カスタマーサポート責任者', 'support', LEVEL_RANK.head],
+  ['プロジェクトマネージャー', 'project-mgmt', LEVEL_RANK.head],
+  ['建築施工管理技士', 'construction', LEVEL_RANK.ic],
+  ['建築施工管理部長', 'construction', LEVEL_RANK.head],
+  ['データエンジニア', 'data', LEVEL_RANK.ic],
+  ['AIエンジニア', 'ai-ml', LEVEL_RANK.ic],
+  ['法務責任者', 'legal', LEVEL_RANK.head],
+  ['購買マネージャー', 'procurement', LEVEL_RANK.head],
+  ['物流リーダー', 'logistics', LEVEL_RANK.lead],
+  ['製造部長', 'manufacturing', LEVEL_RANK.head],
+  ['システム開発PM', 'project-mgmt', LEVEL_RANK.ic],
+  ['Web開発PL', 'project-mgmt', LEVEL_RANK.ic],
+  ['IT运维项目现场主管', 'it-ops', LEVEL_RANK.head],
+  ['网络工程师', 'it-ops', LEVEL_RANK.ic],
+  ['DevOps工程师', 'it-ops', LEVEL_RANK.ic],
+  ['软件开发工程师', 'eng', LEVEL_RANK.ic],
+  ['后端开发工程师', 'eng', LEVEL_RANK.ic],
+  ['数据工程师', 'data', LEVEL_RANK.ic],
+  ['人工智能工程师', 'ai-ml', LEVEL_RANK.ic],
+  ['信息安全工程师', 'security', LEVEL_RANK.ic],
+  ['测试工程师', 'qa', LEVEL_RANK.ic],
+  ['产品经理', 'product', LEVEL_RANK.head],
+  ['视觉设计师', 'design', LEVEL_RANK.ic],
+  ['销售经理', 'sales', LEVEL_RANK.head],
+  ['市场营销总监', 'marketing', LEVEL_RANK.head],
+  ['财务经理', 'finance', LEVEL_RANK.head],
+  ['会计主管', 'finance', LEVEL_RANK.head],
+  ['人事经理', 'hr', LEVEL_RANK.head],
+  ['客户支持主管', 'support', LEVEL_RANK.head],
+  ['项目经理', 'project-mgmt', LEVEL_RANK.head],
+  ['管理咨询顾问', 'consulting', LEVEL_RANK.ic],
+  ['采购经理', 'procurement', LEVEL_RANK.head],
+  ['物流主管', 'logistics', LEVEL_RANK.head],
+  ['生产总监', 'manufacturing', LEVEL_RANK.head],
+  ['建筑施工经理', 'construction', LEVEL_RANK.head],
+  ['业务发展总监', 'bizdev', LEVEL_RANK.head],
+];
+
 describe('rulesParse precision on the manually labeled sample (B267 S1)', () => {
   const LABELED = [...REAL_SAMPLE, ...RU_EXEC_SAMPLE];
 
@@ -173,6 +228,26 @@ describe('rulesParse precision on the manually labeled sample (B267 S1)', () => 
       if (levelRank !== expectedLevel) misses.push(`${title} -> ${levelRank} (expected ${expectedLevel})`);
     }
     const accuracy = (LABELED.length - misses.length) / LABELED.length;
+    expect(accuracy, `level misses:\n${misses.join('\n')}`).toBeGreaterThanOrEqual(0.85);
+  });
+});
+
+describe('rulesParse precision on manually labeled JA/ZH titles (B267 C08)', () => {
+  it(`names the correct function for at least 85% of ${CJK_SAMPLE.length} titles`, () => {
+    const misses = CJK_SAMPLE.flatMap(([title, expected]) => {
+      const { functions } = rulesParse(title);
+      return functions.includes(expected) ? [] : [`${title} -> ${functions.join(',')} (expected ${expected})`];
+    });
+    const accuracy = (CJK_SAMPLE.length - misses.length) / CJK_SAMPLE.length;
+    expect(accuracy, `function misses:\n${misses.join('\n')}`).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it(`names the correct level for at least 85% of ${CJK_SAMPLE.length} titles`, () => {
+    const misses = CJK_SAMPLE.flatMap(([title, , expected]) => {
+      const { levelRank } = rulesParse(title);
+      return levelRank === expected ? [] : [`${title} -> ${levelRank} (expected ${expected})`];
+    });
+    const accuracy = (CJK_SAMPLE.length - misses.length) / CJK_SAMPLE.length;
     expect(accuracy, `level misses:\n${misses.join('\n')}`).toBeGreaterThanOrEqual(0.85);
   });
 });

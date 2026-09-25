@@ -17,18 +17,45 @@ interface AnchorHit {
   readonly anchor: string;
 }
 
+interface AnchorMatcher extends AnchorHit {
+  readonly compactPattern: RegExp | null;
+  readonly pattern: RegExp | null;
+}
+
+const CJK_SCRIPT = /[\u3040-\u30ff\u3400-\u9fff]/u;
+const COMPACT_CJK_LATIN_ANCHORS: ReadonlySet<string> = new Set(['pm', 'pl']);
+
+const ANCHOR_MATCHERS: readonly AnchorMatcher[] = ROLE_TAXONOMY.flatMap((definition) =>
+  definition.anchors.map((anchor) => {
+    const compactLatin = COMPACT_CJK_LATIN_ANCHORS.has(anchor);
+    return {
+      code: definition.code,
+      anchor,
+      compactPattern: compactLatin ? new RegExp(`(?<![a-z])${anchor}(?![a-z])`, 'u') : null,
+      pattern: CJK_SCRIPT.test(anchor)
+        ? null
+        : new RegExp(`(?<![\\p{L}])${escapeRegExp(anchor)}(?![\\p{L}])`, 'u'),
+    };
+  }),
+);
+
+function matchesAnchor(normalizedTitle: string, matcher: AnchorMatcher, compactTitle: boolean): boolean {
+  if (!normalizedTitle.includes(matcher.anchor)) return false;
+  if (matcher.pattern === null) return true;
+  if (compactTitle && matcher.compactPattern) return matcher.compactPattern.test(normalizedTitle);
+  return matcher.pattern.test(normalizedTitle);
+}
+
 /**
  * Заголовок нормализуется до нижнего регистра и границ по не-буквам, чтобы
  * якорь «vp sales» не совпал внутри «vp salesforce».
  */
 function findAnchorHits(normalizedTitle: string): AnchorHit[] {
   const hits: AnchorHit[] = [];
-  for (const definition of ROLE_TAXONOMY) {
-    for (const anchor of definition.anchors) {
-      const pattern = new RegExp(`(?<![\\p{L}])${escapeRegExp(anchor)}(?![\\p{L}])`, 'u');
-      if (pattern.test(normalizedTitle)) {
-        hits.push({ code: definition.code, anchor });
-      }
+  const compactTitle = CJK_SCRIPT.test(normalizedTitle);
+  for (const matcher of ANCHOR_MATCHERS) {
+    if (matchesAnchor(normalizedTitle, matcher, compactTitle)) {
+      hits.push({ code: matcher.code, anchor: matcher.anchor });
     }
   }
   return hits;
@@ -71,9 +98,9 @@ function pickFallbackFunction(normalizedTitle: string): FunctionCode[] {
 function pickTopFunctions(hits: readonly AnchorHit[]): FunctionCode[] {
   const bestByCode = new Map<FunctionCode, number>();
   for (const hit of hits) {
-    const wordCount = hit.anchor.split(' ').length;
+    const specificity = CJK_SCRIPT.test(hit.anchor) ? hit.anchor.length : hit.anchor.split(' ').length;
     const current = bestByCode.get(hit.code) ?? 0;
-    if (wordCount > current) bestByCode.set(hit.code, wordCount);
+    if (specificity > current) bestByCode.set(hit.code, specificity);
   }
   return [...bestByCode.entries()]
     .sort((a, b) => b[1] - a[1])

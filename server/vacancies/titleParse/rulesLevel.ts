@@ -28,12 +28,15 @@ const VP_MARKERS = [
 
 const HEAD_MARKERS = [
   'head of', 'head,', ' head ', 'director', 'руководитель отдела', 'руководитель направления',
-  'руководитель', 'директор',
+  'руководитель', 'директор', 'ディレクター', '責任者', 'マネージャー', '部長',
+  '主管', '总监', '经理',
 ];
 
 const LEAD_MARKERS = [
-  'tech lead', 'team lead', 'lead ', 'lead,', 'тимлид', 'тим-лид',
+  'tech lead', 'team lead', 'lead ', 'lead,', 'тимлид', 'тим-лид', 'リーダー',
 ];
+
+const CJK_SCRIPT = /[\u3040-\u30ff\u3400-\u9fff]/u;
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
@@ -46,6 +49,7 @@ function escapeRegExp(text: string): string {
 function containsAny(normalizedTitle: string, markers: readonly string[]): boolean {
   return markers.some((marker) => {
     const trimmed = marker.trim();
+    if (CJK_SCRIPT.test(trimmed)) return normalizedTitle.includes(trimmed);
     const pattern = new RegExp(`(?<![\\p{L}])${escapeRegExp(trimmed)}(?![\\p{L}])`, 'u');
     return pattern.test(normalizedTitle);
   });
