@@ -1011,7 +1011,9 @@ fn clock_seed() -> u64 {
         .map(|elapsed| u64::from(elapsed.subsec_nanos()))
         .unwrap_or(0)
 }
-const LAZY_SCROLL_QUIET_READINGS: usize = 2;
+// Four quiet readings (~3.6 s): through the tunnel LinkedIn's lower cards
+// (Languages) arrive well after the scroll lands (B266, live walk 3).
+const LAZY_SCROLL_QUIET_READINGS: usize = 4;
 const LAZY_SCROLL_SCRIPT: &str = "(function(){try{\
 var step=Math.max(600,window.innerHeight);\
 var box=document.querySelector('main');\
@@ -1120,14 +1122,15 @@ mod tests {
     }
 
     #[test]
-    fn lazy_scroll_waits_for_two_quiet_readings_before_stopping() {
-        let first = next_quiet_readings(0, &scroll_state(5_000.0, true), 5_000.0);
-        assert_eq!(first, 1);
-        assert!(first < LAZY_SCROLL_QUIET_READINGS);
-        assert_eq!(
-            next_quiet_readings(first, &scroll_state(5_000.0, true), 5_000.0),
-            LAZY_SCROLL_QUIET_READINGS
-        );
+    fn lazy_scroll_waits_for_several_quiet_readings_before_stopping() {
+        let mut quiet = 0;
+        for _ in 0..LAZY_SCROLL_QUIET_READINGS - 1 {
+            quiet = next_quiet_readings(quiet, &scroll_state(5_000.0, true), 5_000.0);
+            assert!(quiet < LAZY_SCROLL_QUIET_READINGS);
+        }
+        quiet = next_quiet_readings(quiet, &scroll_state(5_000.0, true), 5_000.0);
+        assert_eq!(quiet, LAZY_SCROLL_QUIET_READINGS);
+        assert!(LAZY_SCROLL_QUIET_READINGS >= 4);
     }
 
     #[test]

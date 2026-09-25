@@ -257,6 +257,7 @@ async function captureStructuredProfile(
   const valid = validLinkedInProfileWithDrops(extraction.profile);
   if (!valid) return { fallback: 'schema_rejected' };
   const droppedFields = [
+    ...missingProfileCards(page.body),
     ...extraction.failedSections.map((name) => `section:${name}`),
     ...valid.dropped,
   ];
@@ -267,6 +268,20 @@ async function captureStructuredProfile(
       ...(droppedFields.length > 0 ? { droppedFields } : {}),
     },
   };
+}
+
+/** Main-profile cards the structured import leans on (About, Languages, Education). */
+const EXPECTED_PROFILE_CARDS = ['About', 'LanguageTopLevel', 'EducationTopLevelSection'] as const;
+
+/**
+ * Names the expected cards the main-profile snapshot did not carry — a card
+ * LinkedIn had not rendered yet looks exactly like an empty section, so the
+ * server log needs to tell the two apart (B266). Card names only, no content.
+ */
+export function missingProfileCards(profileHtml: string): string[] {
+  return EXPECTED_PROFILE_CARDS.filter(
+    (card) => !new RegExp(`componentkey="com\\.linkedin\\.sdui\\.profile\\.card\\.[^"]*${card}"`, 'u').test(profileHtml),
+  ).map((card) => `missing:${card}`);
 }
 
 async function readLinkedDetailPages(

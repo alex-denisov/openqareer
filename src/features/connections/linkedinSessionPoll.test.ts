@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createLinkedInSessionImportFlow,
+  missingProfileCards,
   detailPagesToRead,
   linkedinWaitingNotice,
   MAX_DETAIL_PAGES_PER_READ,
@@ -165,6 +166,20 @@ describe('LinkedIn session import flow', () => {
     if (result.status !== 'ready') return;
     expect(result.structured).toBeUndefined();
     expect(result.structuredFallback).toBe('no_substance');
+  });
+
+  it('names the profile cards the snapshot did not carry (B266)', () => {
+    expect(missingProfileCards('<div componentkey="com.linkedin.sdui.profile.card.refXAbout"></div>')).toEqual([
+      'missing:LanguageTopLevel',
+      'missing:EducationTopLevelSection',
+    ]);
+    expect(
+      missingProfileCards(
+        ['About', 'LanguageTopLevel', 'EducationTopLevelSection']
+          .map((card) => `<div componentkey="com.linkedin.sdui.profile.card.refX${card}"></div>`)
+          .join(''),
+      ),
+    ).toEqual([]);
   });
 
   it('attaches a structured profile when the detail-page fixtures carry real sections', async () => {
