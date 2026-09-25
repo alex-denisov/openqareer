@@ -168,6 +168,8 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
         pinned: true,
         lifecycle: 'preview',
         structuredOutput: true,
+        // Nemotron расходует общий потолок и на рассуждение, и на ответ.
+        thinkingLevel: 'high',
       },
       {
         // Названы владельцем поимённо для замера B185 (2026-09-03). Оба

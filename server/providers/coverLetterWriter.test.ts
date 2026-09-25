@@ -151,6 +151,45 @@ describe('LlmCoverLetterWriter', () => {
     expect(call.messages[0].content).toContain('английском');
   });
 
+  it('для OpenAI задаёт современный лимит завершения', async () => {
+    const stub = client(JSON.stringify({ body: 'Письмо.' }));
+    const writer = new LlmCoverLetterWriter({
+      apiKey: 'k',
+      model: 'gpt-5.6-luna',
+      provider: 'openai',
+      client: stub,
+    });
+
+    await writer.writeCoverLetter(input);
+
+    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+    expect(call.max_completion_tokens).toBeGreaterThanOrEqual(1_500);
+    expect(call).not.toHaveProperty('max_tokens');
+  });
+
+  it('для рассуждающей модели OpenRouter резервирует общий бюджет ответа', async () => {
+    const stub = client(JSON.stringify({ body: 'Письмо.' }));
+    const writer = new LlmCoverLetterWriter({
+      apiKey: 'k',
+      model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+      provider: 'openrouter',
+      thinkingLevel: 'high',
+      client: stub,
+    });
+
+    await writer.writeCoverLetter(input);
+
+    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+    expect(call.max_tokens).toBeGreaterThanOrEqual(4_096);
+    expect(call).not.toHaveProperty('max_completion_tokens');
+  });
+
   it('отправляет не больше 40 фактов', async () => {
     const many = Array.from({ length: 60 }, (_, i) => ({
       ref: `memory:${i}`,
