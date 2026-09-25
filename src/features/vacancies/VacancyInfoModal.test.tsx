@@ -134,3 +134,50 @@ describe('VacancyInfoModal full text (B266)', () => {
     expect(document.body.textContent).toContain('Cloud');
   });
 });
+
+describe('VacancyInfoModal recruiter contacts (B266)', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    document.body.innerHTML = '';
+    vi.restoreAllMocks();
+  });
+
+  it('offers the full «Кто нанимает» search inside the modal', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockRejectedValue(new Error('offline'));
+    await act(async () => {
+      root.render(<VacancyInfoModal isOpen onClose={vi.fn()} cluster={cluster()} />);
+    });
+    expect(document.body.textContent).toContain('Кто нанимает');
+    expect(document.body.textContent).toContain('Рекрутер');
+  });
+
+  it('tells the candidate why nothing came back instead of spinning forever', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockImplementation((path: unknown) => {
+      if (typeof path === 'string' && path.includes('enrich-contacts')) {
+        return Promise.reject(new Error('recruiter search failed'));
+      }
+      return Promise.reject(new Error('offline'));
+    });
+    await act(async () => {
+      root.render(<VacancyInfoModal isOpen onClose={vi.fn()} cluster={cluster()} />);
+    });
+    const trigger = Array.from(document.body.querySelectorAll('button')).find(
+      (el) => el.textContent === 'Рекрутер',
+    );
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(document.body.textContent).toContain('recruiter search failed');
+    expect(document.querySelector('.career-recruiter-loading')).toBeNull();
+  });
+});

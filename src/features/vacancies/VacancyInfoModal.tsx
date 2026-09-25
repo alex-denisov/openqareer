@@ -4,6 +4,8 @@ import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import { ImportModalShell } from '../connections/ImportModalShell';
 import { useVacancyDetail, type VacancyDetailState } from './vacancyDetailApi';
+import { RecruiterContactsBlock } from './RecruiterContactsBlock';
+import { recruiterEnrichPayload } from './recruiterEnrichPayload';
 
 interface VacancyInfoModalProps {
   readonly isOpen: boolean;
@@ -49,6 +51,14 @@ export function VacancyInfoModal({ isOpen, onClose, cluster }: VacancyInfoModalP
         {sources.length > 0 ? (
           <p className="vacancies-info-sources">Источники: {sources.join(', ')}</p>
         ) : null}
+
+        <div className="vacancies-info-recruiter">
+          <h4>Кто нанимает</h4>
+          <RecruiterContactsBlock
+            vacancyId={cluster.id}
+            vacancyPayload={recruiterEnrichPayload(cluster)}
+          />
+        </div>
 
         {cluster.primaryUrl ? (
           <button
