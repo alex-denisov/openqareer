@@ -12,10 +12,10 @@ interface OnboardingWizardChromeProps {
 }
 
 /**
- * The dots, eyebrow and title every step of onboarding.html shares. The
- * mockup always shows six dots regardless of branch (`onboardingWizardSteps`
- * fixes the slot count), and "Отложить настройку" is the one way out on
- * every step, not just the first.
+ * The dots, eyebrow and title every step of onboarding.html shares. The dot
+ * count follows the selected branch: file intake has one combined role and
+ * region confirmation, while the profileless talk branch stays shorter.
+ * "Отложить настройку" is the one way out on every step, not just the first.
  */
 export function OnboardingWizardChrome(props: OnboardingWizardChromeProps) {
   const dots = Array.from({ length: props.step.total }, (_, index) => index + 1);

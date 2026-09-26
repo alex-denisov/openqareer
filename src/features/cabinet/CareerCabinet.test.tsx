@@ -292,14 +292,14 @@ describe('CareerCabinet composition', () => {
   });
 });
 
-describe('CareerCabinet regular selections (B181)', () => {
+describe('CareerCabinet vacancies tab (B181, B250)', () => {
   it('не оставляет регулярные выборки на экране кампании', () => {
     const html = renderCabinet('career');
     expect(html).not.toContain('Регулярные выборки');
     expect(html).not.toContain('Регулярный поиск');
   });
 
-  it('показывает их в разделе «Вакансии»', () => {
-    expect(renderCabinet('opportunities')).toContain('Новый запрос к площадке');
+  it('показывает пустое состояние, если для подбора не выбрана роль', () => {
+    expect(renderCabinet('opportunities')).toContain('Для подбора не выбрана роль');
   });
 });

@@ -6,7 +6,7 @@ describe('OnboardingWizard', () => {
   it('opens on the source step with all four mockup cards and a way to defer setup', () => {
     const html = renderToStaticMarkup(<OnboardingWizard onComplete={() => undefined} />);
     expect(html).toContain('С чем разбираемся?');
-    expect(html).toContain('Шаг 1 из 6');
+    expect(html).toContain('Шаг 1 из 5');
     expect(html).toContain('PDF резюме');
     expect(html).toContain('Профиль LinkedIn');
     expect(html).toContain('Резюме на hh.ru');
