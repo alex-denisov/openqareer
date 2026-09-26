@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
@@ -307,6 +307,19 @@ describe.each(implementations)('VacancyPoolStore parity: %s', (_name, open) => {
     ).toBe(1);
     store.replaceSourceSlice('mirror', []);
     expect(store.countSourceSlice('mirror').total).toBe(0);
+  });
+
+  it('clears an empty replacement even when two source reads share one clock millisecond', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(NOW));
+    try {
+      const store = open();
+      store.replaceSourceSlice('mirror', [vacancy('m1', 'board')]);
+      store.replaceSourceSlice('mirror', []);
+      expect(store.countSourceSlice('mirror').total).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('pre-filters candidate match pool with remote preference and fill (B221 срез 2)', () => {

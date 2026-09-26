@@ -801,7 +801,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     vacancies: readonly UnifiedVacancy[],
     tally: WriteTally,
   ): string {
-    const storedAt = new Date().toISOString();
+    const storedAt = this.nextSliceTimestamp(sourceId);
     const insert = this.prepareUpsert();
     const index = this.prepareIndexUpsert();
     const projection = this.prepareProjectionUpsert();
@@ -824,7 +824,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     vacancies: readonly UnifiedVacancy[],
     tally: WriteTally,
   ): Promise<string> {
-    const storedAt = new Date().toISOString();
+    const storedAt = this.nextSliceTimestamp(sourceId);
     const insert = this.prepareUpsert();
     const index = this.prepareIndexUpsert();
     const projection = this.prepareProjectionUpsert();
@@ -840,6 +840,21 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       await yieldToEventLoop();
     }
     return storedAt;
+  }
+
+  /**
+   * `stored_at` distinguishes the current source read from the previous one.
+   * Wall-clock milliseconds can repeat on two adjacent ticks, including an
+   * empty replacement, which would leave the old row alive because the stale
+   * predicate deliberately uses `<` (not `<=`) to protect newly inserted rows.
+   */
+  private nextSliceTimestamp(sourceId: string): string {
+    const row = this.database
+      .prepare('SELECT MAX(stored_at) AS stored_at FROM vacancy_pool WHERE source_id = ?')
+      .get(sourceId) as { stored_at: string | null };
+    const previous = Date.parse(row.stored_at ?? '');
+    const next = Number.isNaN(previous) ? Date.now() : Math.max(Date.now(), previous + 1);
+    return new Date(next).toISOString();
   }
 
   /**
