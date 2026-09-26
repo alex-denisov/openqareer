@@ -7,6 +7,7 @@ const snapshot: TodaySnapshot = {
   digest: {
     waitingForYou: 2,
     newVacancies: 3,
+    followUpsDueToday: 1,
     closedVacancies: 1,
     interviewsAhead: 1,
     nextInterview: {
@@ -66,6 +67,7 @@ describe('TodayScreen (B251 S5)', () => {
     const html = renderTodayScreen();
 
     expect(html).toContain('3</span>');
+    expect(html).toContain('follow-up назначено на сегодня');
     expect(html).toContain('кампания VP Technology Ops');
     expect(html).toContain('Peraton — 6 рабочих дней тишины');
     expect(html).toContain('HRTx Inc. · раунд 2');
@@ -123,6 +125,6 @@ describe('TodayScreen (B251 S5)', () => {
     expect(html).toContain('Очередь дня');
     expect(html).toContain('career-today-digest');
     expect(html).toContain('Добавьте роль или регион');
-    expect(html).not.toContain('Новых вакансий с прошлого визита нет');
+    expect(html).toContain('Новых вакансий и событий нет.');
   });
 });

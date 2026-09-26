@@ -55,6 +55,7 @@ const TODAY_SNAPSHOT = {
   digest: {
     waitingForYou: 2,
     newVacancies: 12,
+    followUpsDueToday: 2,
     closedVacancies: 2,
     interviewsAhead: 1,
     nextInterview: {
@@ -129,7 +130,26 @@ const TODAY_SNAPSHOT = {
   vacanciesPending: true,
 };
 
-async function stubSession(page: Page): Promise<void> {
+const EMPTY_TODAY_SNAPSHOT = {
+  ...TODAY_SNAPSHOT,
+  digest: {
+    ...TODAY_SNAPSHOT.digest,
+    waitingForYou: 0,
+    newVacancies: 0,
+    followUpsDueToday: 0,
+    closedVacancies: 0,
+    interviewsAhead: 0,
+    nextInterview: null,
+    newVacanciesCaption: null,
+    followUpCaptions: [],
+  },
+  queue: [],
+  followUps: [],
+  sinceLastVisit: { since: '2026-09-23T08:00:00.000Z', items: [] },
+  vacanciesPending: false,
+};
+
+async function stubSession(page: Page, todaySnapshot = TODAY_SNAPSHOT): Promise<void> {
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -149,10 +169,10 @@ async function stubSession(page: Page): Promise<void> {
       });
     }
     if (request.method() === 'POST' && pathname === '/api/v1/candidate/visits') {
-      return route.fulfill({ json: { data: { since: TODAY_SNAPSHOT.sinceLastVisit } } });
+      return route.fulfill({ json: { data: { since: todaySnapshot.sinceLastVisit.since } } });
     }
     if (pathname === '/api/v1/candidate/today') {
-      return route.fulfill({ json: { data: TODAY_SNAPSHOT } });
+      return route.fulfill({ json: { data: todaySnapshot } });
     }
     return route.fulfill({ json: { data: null } });
   });
@@ -203,7 +223,7 @@ test.describe('B251 today screen', () => {
     await expect(page.locator('.career-cabinet-header h1')).toHaveText('Сегодня');
     await expect(page.locator('.career-today-digest')).toContainText('12');
     await expect(page.locator('.career-today-digest')).toContainText(
-      'follow-up просят действия сегодня',
+      'follow-up назначено на сегодня',
     );
     await expect(page.locator('.career-today-digest')).toContainText('HRTx Inc.');
 
@@ -250,5 +270,17 @@ test.describe('B251 today screen', () => {
     });
 
     void testInfo;
+  });
+
+  test('keeps the since-last-visit block visible with an honest empty state', async ({ page }) => {
+    await stubSession(page, EMPTY_TODAY_SNAPSHOT);
+    await seedWorkspace(page);
+    await openApp(page);
+
+    await expect(page.locator('.career-today-digest')).toContainText('0');
+    await expect(page.locator('.career-today-since')).toBeVisible();
+    await expect(page.locator('.career-today-since')).toContainText(
+      'Новых вакансий и событий нет.',
+    );
   });
 });

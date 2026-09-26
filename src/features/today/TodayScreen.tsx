@@ -51,17 +51,17 @@ function TodayDigestRow({ digest }: { digest: TodayDigest }) {
       <DigestCard
         value={digest.newVacancies}
         label={pluralRu(digest.newVacancies, [
-          'новая релевантная вакансия за сутки',
-          'новые релевантные вакансии за сутки',
-          'новых релевантных вакансий за сутки',
+          'новая релевантная вакансия с прошлого визита',
+          'новые релевантные вакансии с прошлого визита',
+          'новых релевантных вакансий с прошлого визита',
         ])}
         basis={digestBasis('new', digest)}
       />
       <DigestCard
-        value={digest.waitingForYou}
-        label="follow-up просят действия сегодня"
+        value={digest.followUpsDueToday}
+        label="follow-up назначено на сегодня"
         basis={digestBasis('followUp', digest)}
-        attention={digest.waitingForYou > 0}
+        attention={digest.followUpsDueToday > 0}
       />
       <DigestCard
         value={digest.interviewsAhead}
@@ -221,15 +221,18 @@ function TodayFollowUps({ followUps }: { followUps: readonly TodayFollowUp[] }) 
 }
 
 function TodaySinceLastVisit({ items }: { items: readonly string[] }) {
-  if (items.length === 0) return null;
   return (
     <section className="career-today-since" aria-label="С прошлого визита">
       <h2>С прошлого визита</h2>
-      <ul>
-        {items.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
+      {items.length > 0 ? (
+        <ul>
+          {items.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="career-today-since-empty">Новых вакансий и событий нет.</p>
+      )}
     </section>
   );
 }

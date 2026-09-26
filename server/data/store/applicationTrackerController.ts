@@ -17,6 +17,7 @@ import {
 import { SqliteApplicationOfferRepository, type ApplicationOfferTerms, type StoredApplicationOffer } from '../sqliteApplicationOfferRepository';
 import { SqliteVacancySkipRepository, type StoredVacancySkip, type VacancySkipOrigin } from '../sqliteVacancySkipRepository';
 import { SqliteCandidateVisitRepository, type RecordVisitResult } from '../sqliteCandidateVisitRepository';
+import type { SqliteWorkspaceRepository } from '../sqliteWorkspaceRepository';
 import type { SealedText } from '../sealedText';
 import type { VacancyApplication, VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import type { ApplicationStage } from '../../../shared/applicationStage';
@@ -50,6 +51,7 @@ export class ApplicationTrackerController {
     database: DatabaseSync,
     sealedText: SealedText,
     private readonly legacyApplications: SqliteVacancyApplicationRepository,
+    private readonly workspaces: SqliteWorkspaceRepository,
   ) {
     this.applications = new SqliteApplicationRepository(database, sealedText);
     this.materials = new SqliteApplicationMaterialsRepository(database);
@@ -204,12 +206,18 @@ export class ApplicationTrackerController {
 
   /** `POST /visits` (architecture.md §4): moves the mark only past 30 minutes. */
   recordVisit(candidateId: string, now: string): RecordVisitResult {
+    const workspaceVisit = this.workspaces.recordVisit(
+      candidateId,
+      now,
+      this.visits.getLastVisitedAt(candidateId),
+    );
+    if (workspaceVisit) return workspaceVisit;
     return this.visits.recordVisit(candidateId, now);
   }
 
   /** `GET /today` reads the current mark without recording a visit. */
   getSinceLastVisit(candidateId: string): string | null {
-    return this.visits.getSinceLastVisit(candidateId);
+    return this.workspaces.getSinceLastVisit(candidateId) ?? this.visits.getSinceLastVisit(candidateId);
   }
 
   /** `GET /today` digest: vacancies the system closed since the candidate's last visit. */

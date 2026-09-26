@@ -43,6 +43,9 @@ export const candidateWorkspaceSchema = z
     linkedinUrl: z.string().max(500).optional(),
     hhUrl: z.string().max(500).optional(),
     resumeImported: z.boolean().optional(),
+    /** Candidate-local visit marks used by the Today digest; kept with the encrypted workspace JSON. */
+    lastVisitedAt: z.string().datetime().optional(),
+    previousVisitedAt: z.string().datetime().optional(),
     /**
      * The candidate's own explicit choice of what the matcher searches for —
      * "кампания" (B247). Absent means the candidate has not chosen yet, and

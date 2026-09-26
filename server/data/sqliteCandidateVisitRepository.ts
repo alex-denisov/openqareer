@@ -1,9 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-const VISIT_DEBOUNCE_MS = 30 * 60 * 1000;
+export const VISIT_DEBOUNCE_MS = 30 * 60 * 1000;
 
 interface VisitRow {
   last_visited_at: string | null;
+  previous_visited_at: string | null;
 }
 
 export interface RecordVisitResult {
@@ -49,6 +50,13 @@ export class SqliteCandidateVisitRepository {
   }
 
   getSinceLastVisit(candidateId: string): string | null {
+    const row = this.database
+      .prepare('SELECT last_visited_at, previous_visited_at FROM candidate_visits WHERE candidate_id = ?')
+      .get(candidateId) as unknown as VisitRow | undefined;
+    return row?.previous_visited_at ?? row?.last_visited_at ?? null;
+  }
+
+  getLastVisitedAt(candidateId: string): string | null {
     const row = this.database
       .prepare('SELECT last_visited_at FROM candidate_visits WHERE candidate_id = ?')
       .get(candidateId) as unknown as VisitRow | undefined;

@@ -7838,6 +7838,12 @@
   font-size: var(--career-text-xs);
 }
 
+.career-today-since-empty {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
 .career-today-since li {
   display: flex;
   gap: 8px;

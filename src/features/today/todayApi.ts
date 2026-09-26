@@ -64,6 +64,7 @@ export interface TodayNewVacanciesCaption {
 export interface TodayDigest {
   readonly waitingForYou: number;
   readonly newVacancies: number;
+  readonly followUpsDueToday: number;
   readonly closedVacancies: number;
   readonly interviewsAhead: number;
   readonly nextInterview: TodayNextInterview | null;

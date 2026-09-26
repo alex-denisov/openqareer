@@ -860,12 +860,13 @@ function createRepositories(
   sealedText: SealedText,
 ): StoreRepositories {
   const legacyApplications = new SqliteVacancyApplicationRepository(database, sealedText);
+  const workspaceRepository = new SqliteWorkspaceRepository(database, sealedText);
   return {
-    applicationTracker: new ApplicationTrackerController(database, sealedText, legacyApplications),
+    applicationTracker: new ApplicationTrackerController(database, sealedText, legacyApplications, workspaceRepository),
     assessmentsRepository: new SqliteAssessmentRepository(database, sealedText),
     marketRepository: new SqliteMarketRepository(database, sealedText),
     resumeRepository: new SqliteResumeRepository(database, sealedText),
-    workspaceRepository: new SqliteWorkspaceRepository(database, sealedText),
+    workspaceRepository,
     careerCommandRepository: new SqliteCareerCommandRepository(database, sealedText),
     documentRepository: new SqliteDocumentRepository(database, sealedText),
     vacancyRepository: new SqliteVacancyRepository(database, sealedText),

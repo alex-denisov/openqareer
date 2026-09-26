@@ -317,6 +317,7 @@ export const todaySnapshot = {
   digest: {
     waitingForYou: 3,
     newVacancies: 9,
+    followUpsDueToday: 2,
     closedVacancies: 1,
     interviewsAhead: 1,
     nextInterview: {

@@ -5,6 +5,7 @@ import {
   readStoredCandidateWorkspace,
   type CandidateWorkspaceState,
 } from '../domain/candidateWorkspace';
+import { VISIT_DEBOUNCE_MS, type RecordVisitResult } from './sqliteCandidateVisitRepository';
 
 interface WorkspaceRow {
   workspace_cipher: string;
@@ -58,6 +59,46 @@ export class SqliteWorkspaceRepository {
         this.sealedText.open(row.workspace_cipher, associatedData(candidateId)),
       ) as unknown,
     );
+  }
+
+  /**
+   * Stores visit marks in the encrypted workspace JSON without adding a
+   * database column. `legacyLastVisitedAt` bridges candidates who visited
+   * before this field was introduced.
+   */
+  recordVisit(
+    candidateId: string,
+    now: string,
+    legacyLastVisitedAt: string | null,
+  ): RecordVisitResult | null {
+    const current = this.get(candidateId);
+    if (!current) return null;
+
+    const lastVisitedAt = current.lastVisitedAt ?? legacyLastVisitedAt;
+    if (!lastVisitedAt) {
+      this.save(candidateId, { ...current, lastVisitedAt: now, previousVisitedAt: now });
+      return { since: null };
+    }
+
+    const elapsedMs = Date.parse(now) - Date.parse(lastVisitedAt);
+    if (elapsedMs >= VISIT_DEBOUNCE_MS) {
+      this.save(candidateId, { ...current, lastVisitedAt: now, previousVisitedAt: lastVisitedAt });
+      return { since: lastVisitedAt };
+    }
+
+    if (current.lastVisitedAt === undefined) {
+      this.save(candidateId, {
+        ...current,
+        lastVisitedAt,
+        previousVisitedAt: current.previousVisitedAt ?? lastVisitedAt,
+      });
+    }
+    return { since: current.previousVisitedAt ?? lastVisitedAt };
+  }
+
+  getSinceLastVisit(candidateId: string): string | null {
+    const current = this.get(candidateId);
+    return current?.previousVisitedAt ?? current?.lastVisitedAt ?? null;
   }
 }
 

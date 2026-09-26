@@ -107,7 +107,39 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
     expect(snapshot.followUps).toEqual([
       { applicationId: 'app-1', company: 'FinCloud', title: 'Продуктовый аналитик', status: 'overdue' },
     ]);
-    expect(snapshot.digest.followUpCaptions).toEqual(['FinCloud — 6 рабочих дней тишины']);
+    expect(snapshot.digest.followUpsDueToday).toBe(0);
+    expect(snapshot.digest.followUpCaptions).toEqual([]);
+  });
+
+  it('counts only follow-ups due today, independent of the capped sidebar list', () => {
+    const due = Array.from({ length: 6 }, (_, index) =>
+      application({
+        id: `due-${index}`,
+        followUp: {
+          dueAt: '2026-09-24T00:00:00.000Z',
+          urgency: 'due',
+          source: 'standard_schedule',
+          businessDaysSinceContact: 5,
+        },
+      }),
+    );
+    const overdue = application({
+      id: 'overdue',
+      followUp: {
+        dueAt: '2026-09-22T00:00:00.000Z',
+        urgency: 'stale',
+        source: 'standard_schedule',
+        businessDaysSinceContact: 7,
+      },
+    });
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      applications: [...due, overdue],
+      newVacancies: [],
+    });
+
+    expect(snapshot.digest.followUpsDueToday).toBe(6);
+    expect(snapshot.followUps).toHaveLength(5);
   });
 
   it('surfaces the nearest interview across applications', () => {

@@ -61,6 +61,7 @@ export interface TodayNewVacanciesCaption {
 export interface TodayDigest {
   readonly waitingForYou: number;
   readonly newVacancies: number;
+  readonly followUpsDueToday: number;
   readonly closedVacancies: number;
   readonly interviewsAhead: number;
   readonly nextInterview: TodayNextInterview | null;
@@ -164,10 +165,7 @@ function newVacancyCaption(
 
 function followUpCaptionsFor(applications: readonly ApplicationView[]): string[] {
   return applications
-    .filter(
-      (application) =>
-        application.followUp && (application.followUp.urgency === 'due' || application.followUp.urgency === 'stale'),
-    )
+    .filter((application) => application.followUp?.urgency === 'due')
     .slice(0, MAX_FOLLOW_UP_CAPTIONS)
     .map((application) => {
       const company = companyOf(application) ?? application.vacancy?.title ?? 'Вакансия';
@@ -189,6 +187,7 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
     digest: {
       waitingForYou: waitingApplications.length,
       newVacancies: input.newVacancies?.length ?? 0,
+      followUpsDueToday: input.applications.filter((application) => application.followUp?.urgency === 'due').length,
       closedVacancies: input.closedVacanciesSinceVisit,
       interviewsAhead: upcomingInterviews.length,
       nextInterview: nextInterviewOf(upcomingInterviews[0]),
