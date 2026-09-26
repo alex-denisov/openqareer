@@ -56,6 +56,8 @@ export interface RouteDeps {
   campaignRoleModel?: import('../vacancies/campaignRoleSet').CampaignRoleModel;
   /** Сопроводительное письмо пишет модель, шаблон — запас (B266, пункт 7). */
   coverLetterWriter?: CoverLetterWriter;
+  /** Кеш разбора названий вакансий: модельный результат приоритетнее правил (B267 S6). */
+  titleParseStore: Pick<import('../vacancies/titleParse/sqliteTitleParseStore').SqliteTitleParseStore, 'getByKey'>;
   /** Окно последних отказов ступеней называния — для администратора (INC-035). */
   roleNamingFailures: RoleNamingFailureLog;
   searchRemotive?: (input: { text: string; perPage?: number }) => Promise<VacancySample>;

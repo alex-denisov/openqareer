@@ -12,6 +12,10 @@ import { MemoryVacancyPoolStore } from './vacancies/memoryVacancyPoolStore';
 import type { VacancyCluster } from './domain/unifiedVacancy';
 import type { CoverLetterWriter } from './providers/coverLetterWriter';
 import { normalizeJsonSource } from './vacancies/jsonSourceAdapters';
+import {
+  SqliteTitleParseStore,
+  type TitleParseEntry,
+} from './vacancies/titleParse/sqliteTitleParseStore';
 
 const resources: Array<{
   app: Awaited<ReturnType<typeof buildApp>>;
@@ -37,7 +41,11 @@ afterEach(async () => {
 
 async function createApp(
   clusters: VacancyCluster[] = [],
-  options: { persisted?: boolean; coverLetterWriter?: CoverLetterWriter } = {},
+  options: {
+    persisted?: boolean;
+    coverLetterWriter?: CoverLetterWriter;
+    titleParse?: TitleParseEntry;
+  } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-pitch-routes-'));
   const databasePath = join(directory, 'app.db');
@@ -46,6 +54,8 @@ async function createApp(
     encryptionKey: Buffer.alloc(32, 8),
   });
   const auth = new AuthService({ databasePath });
+  const titleParseStore = new SqliteTitleParseStore({ databasePath });
+  if (options.titleParse) titleParseStore.insertIfMissing(options.titleParse);
   await auth.seedAccounts(
     [
       {
@@ -101,6 +111,7 @@ async function createApp(
     multiSourceVacancyEngine: multiSourceEngine,
     serveStatic: false,
     ...(options.coverLetterWriter ? { coverLetterWriter: options.coverLetterWriter } : {}),
+    titleParseStore,
   });
 
   resources.push({ app, auth, candidates, directory });
@@ -257,6 +268,146 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     });
 
     expect(json.data.linkedInNote.length).toBeLessThanOrEqual(300);
+  });
+
+  it('uses the stored model parse and ontology campaign role to put its evidence first (B267 S6)', async () => {
+    const opaqueTitle = 'Principal Systems Steward';
+    const { app, candidates } = await createApp(
+      [{ ...sampleCluster, canonicalTitle: opaqueTitle }],
+      {
+        titleParse: {
+          titleKey: 'principal systems steward',
+          sampleTitle: opaqueTitle,
+          functions: ['eng-mgmt'],
+          levelRank: 4,
+          roleLabel: 'Chief Technology Officer',
+          parsedBy: 'model',
+          model: 'test-title-model',
+          taxonomyVersion: 1,
+          priority: 0,
+        },
+      },
+    );
+    const { cookie, candidateId } = await login(app);
+    candidates.saveCandidateWorkspace(candidateId, {
+      resumeText: '',
+      resumeSource: 'text',
+      targetDirection: '',
+      regions: [],
+      currentSituation: '',
+      constraints: '',
+      urgency: 'exploring',
+      campaign: {
+        roles: [],
+        regions: [],
+        revision: 1,
+        updatedAt: '2026-09-26T00:00:00.000Z',
+        auto: {
+          roles: [
+            {
+              id: 'eng-mgmt.cto',
+              title: 'Chief Technology Officer',
+              titleRu: 'Технический директор',
+              functions: ['other'],
+              level: 'c-level',
+              kind: 'primary',
+              synonyms: [],
+              evidenceRefs: ['memory:role-evidence'],
+              reason: 'Подтверждённый опыт технического руководства.',
+            },
+          ],
+          factsDigest: 'test-digest',
+          generatedAt: '2026-09-26T00:00:00.000Z',
+          model: 'test',
+        },
+      },
+    });
+    candidates.importResumeEvidence(candidateId, {
+      sourceLabel: 'test-import',
+      entries: [
+        {
+          memoryId: 'memory:other',
+          domain: 'outcome',
+          statement: 'Improved a delivery process.',
+        },
+        {
+          memoryId: 'memory:role-evidence',
+          domain: 'role-evidence',
+          statement: 'Chief Technology Officer leading an engineering organisation.',
+        },
+      ],
+    });
+    candidates.reviewMemories(candidateId, ['memory:other', 'memory:role-evidence'], 'confirm');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.usedEvidenceIds[0]).toBe('memory:role-evidence');
+  });
+
+  it('keeps the rules parser path when no stored title parse exists (B267 S6)', async () => {
+    const { app, candidates } = await createApp([sampleCluster]);
+    const { cookie, candidateId } = await login(app);
+    candidates.saveCandidateWorkspace(candidateId, {
+      resumeText: '',
+      resumeSource: 'text',
+      targetDirection: '',
+      regions: [],
+      currentSituation: '',
+      constraints: '',
+      urgency: 'exploring',
+      campaign: {
+        roles: [],
+        regions: [],
+        revision: 1,
+        updatedAt: '2026-09-26T00:00:00.000Z',
+        auto: {
+          roles: [
+            {
+              id: 'removed.role',
+              title: 'Senior Platform Engineer',
+              titleRu: 'Старший платформенный инженер',
+              functions: ['other'],
+              level: 'ic',
+              kind: 'primary',
+              synonyms: [],
+              evidenceRefs: ['memory:rules-evidence'],
+              reason: 'Подтверждённый инженерный опыт.',
+            },
+          ],
+          factsDigest: 'test-digest',
+          generatedAt: '2026-09-26T00:00:00.000Z',
+          model: 'test',
+        },
+      },
+    });
+    candidates.importResumeEvidence(candidateId, {
+      sourceLabel: 'test-import',
+      entries: [
+        { memoryId: 'memory:other', domain: 'outcome', statement: 'Improved a delivery process.' },
+        {
+          memoryId: 'memory:rules-evidence',
+          domain: 'role-evidence',
+          statement: 'Senior Platform Engineer building distributed systems.',
+        },
+      ],
+    });
+    candidates.reviewMemories(candidateId, ['memory:other', 'memory:rules-evidence'], 'confirm');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.usedEvidenceIds[0]).toBe('memory:rules-evidence');
   });
 
   // B266, пункт 7: письмо пишет модель, шаблон — запас.

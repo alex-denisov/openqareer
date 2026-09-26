@@ -39,7 +39,6 @@ import {
 } from '../domain/vacancyPitchService';
 import { COVER_LETTER_BUDGET_MS, withinTimeBudget } from '../providers/coverLetterWriter';
 import type { PitchFactRankingContext } from '../domain/pitchFactRanking';
-import { LEVEL_RANK } from '../vacancies/levelMatcher';
 import { rulesParse } from '../vacancies/titleParse/rulesParse';
 import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';
 import { registerApplicationRoutes } from './applicationRoutes';
@@ -53,6 +52,7 @@ import {
   withDeps,
 } from './helpers';
 import { hhMarketQuerySchema } from './schemas';
+import { pitchRankingContext } from './pitchRankingContext';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -734,31 +734,6 @@ async function writeCoverLetterBody(
   return outcome.body ? { body: outcome.body, stage: outcome.stage } : {};
 }
 
-/** Роль кампании применима, только если её функция совпала с разбором вакансии. */
-function pitchRankingContext(
-  candidateStore: RouteDeps['candidateStore'],
-  candidateId: string,
-  vacancyTitle: string,
-): PitchFactRankingContext | undefined {
-  const vacancy = rulesParse(vacancyTitle);
-  if (vacancy.functions.length === 0 || vacancy.levelRank === null) return undefined;
-  const stored = candidateStore.getCandidateWorkspace(candidateId);
-  const selected = new Set(readCampaign(candidateStore, candidateId).roles.value);
-  const role = stored?.campaign?.auto?.roles.find((item) => {
-    const functions = rulesParse(item.title).functions;
-    return selected.has(item.title) && functions.some((code) => vacancy.functions.includes(code));
-  });
-  if (!role) return undefined;
-  return {
-    vacancy: { functions: vacancy.functions, levelRank: vacancy.levelRank },
-    campaignRole: {
-      functions: rulesParse(role.title).functions,
-      levelRank: role.level === null ? null : LEVEL_RANK[role.level],
-      evidenceRefs: role.evidenceRefs,
-    },
-  };
-}
-
 /** Одна и та же вакансия собирается из тела запроса, кластера и пула один раз. */
 function resolvePitchVacancy(
   body: z.infer<typeof vacancyPitchInputSchema>,
@@ -816,7 +791,12 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   }
   const title = vacancy.title;
   const pitchVacancy = { ...vacancy, title };
-  const rankingContext = pitchRankingContext(candidateStore, candidate.id, title);
+  const rankingContext = pitchRankingContext(
+    candidateStore,
+    deps.titleParseStore,
+    candidate.id,
+    title,
+  );
 
   const snapshot = candidateStore.getSnapshot(candidate.id);
   const facts = snapshot?.memory ?? [];
