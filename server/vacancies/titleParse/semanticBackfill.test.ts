@@ -48,7 +48,12 @@ describe('SemanticBackfill (B267 S2)', () => {
 
     const report = backfill.step(100);
 
-    expect(report).toMatchObject({ scanned: 3, backfilled: 3, newKeys: 2 });
+    expect(report).toMatchObject({
+      scanned: 3,
+      poolRowsScanned: 4,
+      backfilled: 3,
+      newKeys: 2,
+    });
     const rows = semanticRows(database);
     expect(rows.map((row) => row.id)).not.toContain('gone');
     expect(rows.find((row) => row.id === 'v2')?.function_code).toBe('sales');
@@ -80,8 +85,34 @@ describe('SemanticBackfill (B267 S2)', () => {
     const again = backfill.step(10);
 
     expect([first.backfilled, second.backfilled, third.backfilled]).toEqual([10, 10, 5]);
+    expect([first.poolRowsScanned, second.poolRowsScanned, third.poolRowsScanned]).toEqual([
+      10, 10, 5,
+    ]);
     expect(third.passFinished).toBe(true);
     expect(again.backfilled).toBe(0);
+    expect(database.prepare('SELECT count(DISTINCT id) AS n FROM vacancy_semantic').get()).toEqual({
+      n: 25,
+    });
+  });
+
+  it('свежий экземпляр после рестарта пропускает готовые окна и завершает хвост', () => {
+    const database = poolDatabase();
+    for (let index = 0; index < 25; index += 1)
+      addVacancy(database, `v${String(index).padStart(2, '0')}`, 'Software Engineer');
+    const beforeRestart = new SemanticBackfill(database);
+    beforeRestart.step(10);
+    beforeRestart.step(10);
+
+    const afterRestart = new SemanticBackfill(database);
+    const first = afterRestart.step(10);
+    const second = afterRestart.step(10);
+    const final = afterRestart.step(10);
+
+    expect([first.backfilled, second.backfilled, final.backfilled]).toEqual([0, 0, 5]);
+    expect([first.poolRowsScanned, second.poolRowsScanned, final.poolRowsScanned]).toEqual([
+      10, 10, 5,
+    ]);
+    expect(final.passFinished).toBe(true);
     expect(database.prepare('SELECT count(DISTINCT id) AS n FROM vacancy_semantic').get()).toEqual({
       n: 25,
     });

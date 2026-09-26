@@ -16,6 +16,8 @@ import { rulesParse } from './rulesParse';
 
 export interface SemanticBackfillReport {
   readonly scanned: number;
+  /** Индексные строки, пройденные курсором, включая размеченные и expired. */
+  readonly poolRowsScanned: number;
   readonly backfilled: number;
   readonly newKeys: number;
   readonly pruned: number;
@@ -61,10 +63,19 @@ export class SemanticBackfill {
     const windowEnd = this.windowEnd(chunk);
     const rows = this.readWindow(windowEnd);
     const { backfilled, newKeys } = this.writeChunk(rows);
+    const poolRowsScanned = windowEnd === null ? this.countRemainingRows() : chunk;
     const passFinished = windowEnd === null;
     this.cursor = windowEnd ?? '';
     const pruned = passFinished ? this.pruneOrphans() : 0;
-    return { scanned: rows.length, backfilled, newKeys, pruned, passFinished, relabeled };
+    return {
+      scanned: rows.length,
+      poolRowsScanned,
+      backfilled,
+      newKeys,
+      pruned,
+      passFinished,
+      relabeled,
+    };
   }
 
   /**
@@ -124,6 +135,15 @@ export class SemanticBackfill {
       .prepare('SELECT id FROM vacancy_pool_index WHERE id > ? ORDER BY id LIMIT 1 OFFSET ?')
       .get(this.cursor, chunk - 1) as { id: string } | undefined;
     return row?.id ?? null;
+  }
+
+  /** При `windowEnd === null` на хвосте осталось меньше одного chunk. */
+  private countRemainingRows(): number {
+    return (
+      this.database
+        .prepare('SELECT count(*) AS n FROM vacancy_pool_index WHERE id > ?')
+        .get(this.cursor) as { n: number }
+    ).n;
   }
 
   private readWindow(windowEnd: string | null): PoolRow[] {
