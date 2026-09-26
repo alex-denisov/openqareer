@@ -38,6 +38,7 @@ import { registerErrorHandler, registerStaticDelivery } from './routes/runtime';
 import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContactsRepository';
 import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
 import { registerReputationAuditRoutes } from './routes/reputationAuditRoutes';
+import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
 
 
 interface BuildAppOptions {
@@ -60,6 +61,8 @@ interface BuildAppOptions {
   roleNamer?: RoleNamer;
   campaignRoleModel?: RouteDeps['campaignRoleModel'];
   coverLetterWriter?: CoverLetterWriter;
+  /** Инъекция нужна тестам; в runtime стор открывает общую базу пула. */
+  titleParseStore?: SqliteTitleParseStore;
   recruiterContactsRepo?: SqliteRecruiterContactsRepository;
   candidateReputationRepo?: SqliteCandidateReputationRepository;
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
@@ -77,6 +80,7 @@ interface AppServices {
   careerCommandDispatcher: CareerCommandDispatcher | null;
   vacancyIntelligence: VacancyIntelligenceService;
   multiSourceEngine: MultiSourceVacancyEngine;
+  titleParseStore: SqliteTitleParseStore;
 }
 
 function createServices(
@@ -89,6 +93,7 @@ function createServices(
     | 'multiSourceVacancyEngine'
     | 'searchVacancies'
     | 'searchRemotive'
+    | 'titleParseStore'
   >,
 ): AppServices {
   const { candidateStore } = options;
@@ -118,6 +123,7 @@ function createServices(
           options.searchRemotive ?? searchRemotiveVacancies,
         ),
       }),
+    titleParseStore: options.titleParseStore ?? new SqliteTitleParseStore({ databasePath: options.config.databasePath }),
   };
 }
 
@@ -302,6 +308,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
   const deps = assembleRouteDeps(options, services);
   const app = await createFastifyBase(config, logDestination);
+  app.addHook('onClose', () => services.titleParseStore.close());
   await registerApiRoutes(app, deps);
   registerErrorHandler(app);
   await registerStaticDelivery(app, config, serveStatic);
