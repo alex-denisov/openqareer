@@ -38,7 +38,6 @@ import {
 } from '../domain/vacancyPitchService';
 import { COVER_LETTER_BUDGET_MS, withinTimeBudget } from '../providers/coverLetterWriter';
 import type { PitchFactRankingContext } from '../domain/pitchFactRanking';
-import { rulesParse } from '../vacancies/titleParse/rulesParse';
 import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';
 import { registerApplicationRoutes } from './applicationRoutes';
 import { registerPlanRequestRoutes } from './planRequestRoutes';
@@ -393,6 +392,28 @@ function finishMatchedVacancies(
   return applyVacancyDecisions(roleFiltered, candidateStore.listVacancyDecisions(candidateId));
 }
 
+function unconfirmedMatchedVacanciesResponse(
+  request: FastifyRequest,
+  campaign: CampaignResolution,
+  offset: number,
+) {
+  return {
+    data: [],
+    meta: {
+      requestId: request.id,
+      reason: 'candidate_profile_unconfirmed',
+      total: 0,
+      offset,
+      nextOffset: null,
+      // Пустой пул — это одна страница, а не отсутствие плана: клиент читает
+      // план первой страницы и не должен различать «нет плана» и «нечего
+      // читать» (B211).
+      ...(offset === 0 ? { pageOffsets: [0] } : {}),
+      campaign: campaignMeta(campaign),
+    },
+  };
+}
+
 const handleMatchedVacancies: Handler = async (
   { authService, candidateStore, config, multiSourceEngine },
   request,
@@ -410,21 +431,7 @@ const handleMatchedVacancies: Handler = async (
   // for a candidate who confirmed nothing, and a match percentage computed
   // from it. No confirmed profile means no match claim (B161).
   if (confirmedSkills.length === 0 && targetRoles.length === 0) {
-    return {
-      data: [],
-      meta: {
-        requestId: request.id,
-        reason: 'candidate_profile_unconfirmed',
-        total: 0,
-        offset,
-        nextOffset: null,
-        // Пустой пул — это одна страница, а не отсутствие плана: клиент читает
-        // план первой страницы и не должен различать «нет плана» и «нечего
-        // читать» (B211).
-        ...(offset === 0 ? { pageOffsets: [0] } : {}),
-        campaign: campaignMeta(campaign),
-      },
-    };
+    return unconfirmedMatchedVacanciesResponse(request, campaign, offset);
   }
 
   // Подбор считается один раз на чтение: страницы одного чтения обязаны
@@ -804,12 +811,7 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   }
   const title = vacancy.title;
   const pitchVacancy = { ...vacancy, title };
-  const rankingContext = pitchRankingContext(
-    candidateStore,
-    deps.titleParseStore,
-    candidate.id,
-    title,
-  );
+  const rankingContext = pitchRankingContext(candidateStore, deps.titleParseStore, candidate.id, title);
 
   const snapshot = candidateStore.getSnapshot(candidate.id);
   const facts = snapshot?.memory ?? [];
@@ -823,15 +825,7 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
     ...(body?.language ? { language: body.language } : {}),
   });
 
-  const written = await writeCoverLetterBody(
-    deps,
-    request,
-    pitchVacancy,
-    facts,
-    pitch.language,
-    tone,
-    rankingContext,
-  );
+  const written = await writeCoverLetterBody(deps, request, pitchVacancy, facts, pitch.language, tone, rankingContext);
   const atsCoverLetter = written.body ?? pitch.atsCoverLetter;
   if (body?.applicationId) {
     linkGeneratedCoverLetter(candidateStore, candidate.id, body.applicationId, atsCoverLetter);
