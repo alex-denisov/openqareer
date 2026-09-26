@@ -459,6 +459,7 @@ export const structuredResumeImportSchema = z
           });
         }
       }),
+    // The shared profile schema repairs older flat language/level rows before import planning.
     profile: linkedinProfileV2Schema,
   })
   .strict();

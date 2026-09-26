@@ -109,6 +109,43 @@ function v2Draft() {
 }
 
 describe('resumeDraftSchema — v2 extension for reading (B265 slice 1)', () => {
+  it('joins old LinkedIn proficiency rows to the language before them while parsing stored snapshots', () => {
+    const parsed = resumeDraftSchema.parse({
+      ...v1Draft(),
+      languages: [
+        { id: 'language-en', evidenceMemoryId: 'memory-en', name: 'English' },
+        {
+          id: 'level-en',
+          evidenceMemoryId: 'memory-level-en',
+          name: 'Full professional proficiency',
+        },
+        { id: 'language-ru', evidenceMemoryId: 'memory-ru', name: 'Russian' },
+        {
+          id: 'level-ru',
+          evidenceMemoryId: 'memory-level-ru',
+          name: 'Родной или двуязычный',
+        },
+      ],
+    });
+
+    expect(parsed.languages).toEqual([
+      {
+        id: 'language-en',
+        evidenceMemoryId: 'memory-en',
+        name: 'English',
+        cefr: 'C1',
+        sourceLabel: 'Full professional proficiency',
+      },
+      {
+        id: 'language-ru',
+        evidenceMemoryId: 'memory-ru',
+        name: 'Russian',
+        cefr: 'C2',
+        sourceLabel: 'Родной или двуязычный',
+      },
+    ]);
+  });
+
   it('accepts a v2 draft with every new optional field', () => {
     const draft = resumeDraftSchema.parse(v2Draft());
     expect(draft.schemaVersion).toBe(2);

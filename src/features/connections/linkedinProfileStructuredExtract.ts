@@ -4,7 +4,10 @@
  * only assembles the pages the caller happened to capture. The text-based
  * `extractLinkedInProfile` (B264) stays untouched as the fallback path.
  */
-import type { CefrLevel } from '../resume/resumeTypes';
+import {
+  isLinkedInProficiencyLabel,
+  linkedInCefrForProficiency,
+} from '../../../shared/linkedinProfileV2';
 import type {
   ParsedResumeAchievement,
   ParsedResumeCourse,
@@ -113,22 +116,6 @@ export function parseAboutSection(html: string): string | undefined {
   return lines.length > 0 ? lines.join('\n') : undefined;
 }
 
-const CEFR_BY_LINKEDIN_LABEL: Readonly<Record<string, CefrLevel>> = {
-  elementary: 'A2',
-  'limited working': 'B1',
-  'professional working': 'B2',
-  'full professional': 'C1',
-  'native or bilingual': 'C2',
-};
-
-function cefrOf(proficiency: string): CefrLevel | undefined {
-  const label = proficiency
-    .replace(/\s*proficiency$/iu, '')
-    .trim()
-    .toLowerCase();
-  return CEFR_BY_LINKEDIN_LABEL[label];
-}
-
 /**
  * Languages live on `profile.html`; the details page can render a false empty
  * state (B264 §6). Rows are «<language>» followed by «… proficiency»: read as
@@ -151,15 +138,15 @@ function languagePairs(lines: readonly string[]): ParsedResumeLanguage[] {
     const [name, label] = [lines[i], lines[i + 1]];
     const isHeading = /^languages?$/iu.test(name);
     if (
-      !/proficiency$/iu.test(label) ||
-      /proficiency$/iu.test(name) ||
+      !isLinkedInProficiencyLabel(label) ||
+      isLinkedInProficiencyLabel(name) ||
       isHeading ||
       name.length > 40
     ) {
       continue;
     }
     if (!languages.some((language) => language.name === name)) {
-      languages.push({ name, cefr: cefrOf(label), sourceLabel: label });
+      languages.push({ name, cefr: linkedInCefrForProficiency(label), sourceLabel: label });
     }
     i += 1;
   }

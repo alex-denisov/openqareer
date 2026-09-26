@@ -147,6 +147,86 @@ describe('POST /api/v1/candidate/resume/import/structured (B265 slice 3)', () =>
     expect(resume.json().data.draft.candidate.headline).toBe('VP of Technology & Operations');
   });
 
+  it('pairs flat LinkedIn language levels and carries courses into the saved resume', async () => {
+    const { app, authorization } = await createApp();
+    const profile = {
+      ...structuredBody().profile,
+      languages: [
+        { name: 'English' },
+        { name: 'Full professional proficiency' },
+        { name: 'Russian' },
+        { name: 'Native or bilingual proficiency' },
+      ],
+      courses: [
+        {
+          name: 'Cloud Cost Management',
+          institution: 'Northwind Academy',
+          year: '2024',
+          certificateUrl: 'https://example.test/certificates/cloud-cost',
+        },
+      ],
+    };
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import/structured',
+      headers: { authorization },
+      payload: structuredBody({ profile }),
+    });
+    expect(imported.statusCode).toBe(200);
+
+    const saved = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/resume',
+      headers: { authorization },
+    });
+    expect(saved.json().data.draft.languages).toEqual([
+      expect.objectContaining({
+        name: 'English',
+        cefr: 'C1',
+        sourceLabel: 'Full professional proficiency',
+      }),
+      expect.objectContaining({
+        name: 'Russian',
+        cefr: 'C2',
+        sourceLabel: 'Native or bilingual proficiency',
+      }),
+    ]);
+    expect(saved.json().data.draft.courses).toEqual([
+      expect.objectContaining({
+        name: 'Cloud Cost Management',
+        institution: 'Northwind Academy',
+        year: '2024',
+        certificateUrl: 'https://example.test/certificates/cloud-cost',
+      }),
+    ]);
+  });
+
+  it('treats prototype property names as unknown languages, not proficiency levels', async () => {
+    const { app, authorization } = await createApp();
+    const profile = {
+      ...structuredBody().profile,
+      languages: [{ name: 'English' }, { name: 'constructor' }, { name: '__proto__' }],
+    };
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import/structured',
+      headers: { authorization },
+      payload: structuredBody({ profile }),
+    });
+
+    expect(imported.statusCode).toBe(200);
+    const saved = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/resume',
+      headers: { authorization },
+    });
+    expect(
+      saved.json().data.draft.languages.map((language: { name?: string }) => language.name),
+    ).toEqual(['English', 'constructor', '__proto__']);
+  });
+
   it('accepts the field paths the device dropped, and refuses values posing as paths (B266)', async () => {
     const { app, authorization } = await createApp();
     const accepted = await app.inject({

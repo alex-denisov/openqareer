@@ -167,6 +167,21 @@ describe('parseLanguagesSection (B265)', () => {
     }
   });
 
+  it('maps Russian LinkedIn proficiency labels to the same CEFR levels', () => {
+    const pairs: [string, string][] = [
+      ['Начальный уровень', 'A2'],
+      ['Ограниченный рабочий уровень', 'B1'],
+      ['Профессиональный рабочий уровень', 'B2'],
+      ['Полный профессиональный уровень', 'C1'],
+      ['Родной или двуязычный уровень', 'C2'],
+    ];
+    for (const [level, cefr] of pairs) {
+      const [language] = parseLanguagesSection(`<p>Test</p><p>${level}</p>`);
+      expect(language.cefr).toBe(cefr);
+      expect(language.name).toBe('Test');
+    }
+  });
+
   it('keeps an unknown proficiency label without a CEFR mapping (no silent guess)', () => {
     const [language] = parseLanguagesSection(
       synthetic.replace(/[\s\S]*(Klingon)/u, '<p>$1</p>') + '<p>Beginner proficiency</p>',

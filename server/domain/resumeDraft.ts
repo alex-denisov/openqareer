@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mergeLinkedInLanguageLevels } from '../../shared/linkedinProfileV2';
 
 export type CefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 
@@ -488,6 +489,8 @@ export const resumeDraftSchema = z
       .strict()
       .optional(),
   })
-  .strict();
-
-
+  .strict()
+  .transform((draft) => ({
+    ...draft,
+    languages: mergeLinkedInLanguageLevels(draft.languages),
+  }));

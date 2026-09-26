@@ -1,4 +1,5 @@
 import type { ParsedResume } from '../../src/features/workspace/resumeParser';
+import { mergeLinkedInLanguageLevels } from '../../shared/linkedinProfileV2';
 import type { DOSSIER_DOMAINS } from './coach';
 import type { ResumeDraft } from './resumeDraft';
 
@@ -261,6 +262,7 @@ function planCourses(parsed: ParsedResume, prefix: string): ResumeDraft['courses
       name: clamp(course.name, MAX_LABEL) ?? '',
       institution: label(course.institution),
       year: clamp(course.year, MAX_DATE),
+      certificateUrl: httpsUrl(course.certificateUrl),
     }));
 }
 
@@ -393,7 +395,7 @@ function planLanguages(
   prefix: string,
   evidence: ResumeImportEvidence[],
 ): ResumeDraft['languages'] {
-  return parsed.languages
+  return mergeLinkedInLanguageLevels(parsed.languages)
     .filter((entry) => hasWords(entry.name))
     .slice(0, MAX_LANGUAGES)
     .map((entry, index) => {
@@ -408,6 +410,7 @@ function planLanguages(
         evidenceMemoryId: memoryId,
         name: label(entry.name),
         cefr: entry.cefr,
+        sourceLabel: label(entry.sourceLabel),
       };
     });
 }
@@ -546,6 +549,16 @@ function statement(value: string): string {
 function clamp(value: string | undefined, max: number): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed.slice(0, max) : undefined;
+}
+
+function httpsUrl(value: string | undefined): string | undefined {
+  const trimmed = clamp(value, 2_000);
+  if (!trimmed) return undefined;
+  try {
+    return new URL(trimmed).protocol === 'https:' ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function label(value: string | undefined): string | undefined {

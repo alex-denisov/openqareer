@@ -26,6 +26,84 @@ const optionalDate = z.string().trim().max(30).optional();
 const longText = z.string().trim().max(LONG_TEXT_MAX).optional();
 const description = z.string().trim().max(DESCRIPTION_MAX).optional();
 
+const LINKEDIN_PROFICIENCY_LEVELS: ReadonlyMap<string, z.infer<typeof cefrLevelSchema>> = new Map([
+  ['elementary', 'A2'],
+  ['начальный', 'A2'],
+  ['начальный уровень', 'A2'],
+  ['limited working', 'B1'],
+  ['ограниченный рабочий', 'B1'],
+  ['ограниченный рабочий уровень', 'B1'],
+  ['professional working', 'B2'],
+  ['профессиональный рабочий', 'B2'],
+  ['профессиональный рабочий уровень', 'B2'],
+  ['full professional', 'C1'],
+  ['полный профессиональный', 'C1'],
+  ['полный профессиональный уровень', 'C1'],
+  ['native or bilingual', 'C2'],
+  ['родной или двуязычный', 'C2'],
+  ['родной или двуязычный уровень', 'C2'],
+]);
+
+function normaliseProficiencyLabel(value: string): string {
+  return value
+    .normalize('NFC')
+    .trim()
+    .toLowerCase()
+    .replace(/[.,:;()]/gu, ' ')
+    .replace(/\s+/gu, ' ');
+}
+
+function proficiencyBaseLabel(value: string): string {
+  return normaliseProficiencyLabel(value).replace(
+    /\s+(?:proficiency|уровень(?:\s+владения)?)$/u,
+    '',
+  );
+}
+
+export function linkedInCefrForProficiency(
+  value: string,
+): z.infer<typeof cefrLevelSchema> | undefined {
+  const normalised = normaliseProficiencyLabel(value);
+  return (
+    LINKEDIN_PROFICIENCY_LEVELS.get(normalised) ??
+    LINKEDIN_PROFICIENCY_LEVELS.get(proficiencyBaseLabel(value))
+  );
+}
+
+export function isLinkedInProficiencyLabel(value: string): boolean {
+  return (
+    linkedInCefrForProficiency(value) !== undefined ||
+    /(?:^|\s)proficiency$/iu.test(normaliseProficiencyLabel(value))
+  );
+}
+
+export interface LinkedInLanguageLike {
+  readonly name?: string;
+  readonly cefr?: z.infer<typeof cefrLevelSchema>;
+  readonly sourceLabel?: string;
+}
+
+/** Repairs old flat language rows while keeping the first row's identity. */
+export function mergeLinkedInLanguageLevels<T extends LinkedInLanguageLike>(
+  entries: readonly T[],
+): T[] {
+  const merged: T[] = [];
+  for (const entry of entries) {
+    if (!isLinkedInProficiencyLabel(entry.name ?? '')) {
+      merged.push(entry);
+      continue;
+    }
+    const previous = merged.at(-1);
+    if (!previous?.name?.trim()) continue;
+    merged[merged.length - 1] = {
+      ...previous,
+      cefr: previous.cefr ?? linkedInCefrForProficiency(entry.name ?? ''),
+      sourceLabel: previous.sourceLabel ?? entry.sourceLabel ?? entry.name,
+    } as T;
+  }
+  return merged;
+}
+
 /** Any `https:` URL — used for generic profile links, not LinkedIn media. */
 const httpsUrl = z
   .string()
@@ -192,6 +270,7 @@ export const languageSchema = z
   .object({
     name: caption,
     cefr: cefrLevelSchema.optional(),
+    sourceLabel: optionalCaption,
   })
   .strict();
 
@@ -233,7 +312,12 @@ export const linkedinProfileV2Schema = z
     courses: z.array(courseSchema).max(50).default([]),
     tests: z.array(testSchema).max(50).default([]),
     recommendations: z.array(recommendationSchema).max(50).default([]),
-    languages: z.array(languageSchema).max(30).default([]),
+    languages: z
+      .array(languageSchema)
+      .max(60)
+      .transform(mergeLinkedInLanguageLevels)
+      .pipe(z.array(languageSchema).max(30))
+      .default([]),
     additional: z
       .object({
         citizenship: optionalCaption,
