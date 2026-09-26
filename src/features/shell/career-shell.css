@@ -7802,6 +7802,7 @@
 
 .career-today-followup-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--career-space-3);
@@ -7825,6 +7826,18 @@
 
 .career-today-followup-when.is-today,
 .career-today-followup-when.is-overdue {
+  color: var(--career-warning);
+}
+
+.career-today-followup-action {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--career-space-2);
+}
+
+.career-today-followup-action [role='alert'] {
   color: var(--career-warning);
 }
 
@@ -13190,6 +13203,19 @@
   font-size: var(--career-text-aux);
   cursor: pointer;
   padding: 0;
+}
+
+.career-responses-follow-up-action {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--career-space-2);
+}
+
+.career-responses-follow-up-action [role='alert'] {
+  align-self: center;
+  margin-right: var(--career-space-2);
+  color: var(--career-warning);
+  font-size: var(--career-text-aux);
 }
 
 .career-responses-card-footer {

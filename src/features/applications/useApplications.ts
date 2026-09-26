@@ -6,6 +6,7 @@ import {
   createVacancySkip,
   listApplications,
   patchApplication,
+  recordFollowUpSent,
   type ApplicationView,
   type CreateApplicationInput,
 } from './applicationsApi';
@@ -39,6 +40,7 @@ export interface UseApplications {
   readonly reload: () => void;
   readonly changeStage: (id: string, stage: ApplicationStage, occurredAt?: string) => void;
   readonly retryStageChange: (id: string) => void;
+  readonly markFollowUpSent: (id: string) => Promise<void>;
   readonly saveNote: (id: string, notes: string) => void;
   readonly addManualCard: (input: CreateApplicationInput) => Promise<void>;
   readonly skip: (application: ApplicationView, reasonId: SkipReasonId) => Promise<void>;
@@ -124,6 +126,11 @@ export function useApplications(): UseApplications {
     [changeStage, failedChanges],
   );
 
+  const markFollowUpSent = useCallback(async (id: string) => {
+    const saved = await recordFollowUpSent(id);
+    setApplications((list) => replaceApplication(list, saved));
+  }, []);
+
   const saveNote = useCallback((id: string, notes: string) => {
     setApplications((snapshot) => {
       const current = snapshot.find((application) => application.id === id);
@@ -163,6 +170,7 @@ export function useApplications(): UseApplications {
     reload,
     changeStage,
     retryStageChange,
+    markFollowUpSent,
     saveNote,
     addManualCard,
     skip,

@@ -198,13 +198,14 @@ export function CareerCabinet({
 /** «Сегодня» reads its own digest through `useToday` — the cabinet's
  * `useCareerCabinetData` snapshot has no queue or digest fields of its own. */
 function TodaySection() {
-  const { snapshot, loading, failed, refresh } = useToday();
+  const { snapshot, loading, failed, refresh, markFollowUpSent } = useToday();
   return (
     <TodayScreen
       snapshot={snapshot}
       loading={loading}
       failed={failed}
       onRetry={() => void refresh()}
+      onMarkFollowUpSent={markFollowUpSent}
     />
   );
 }

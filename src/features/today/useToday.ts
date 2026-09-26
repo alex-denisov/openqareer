@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getTodaySnapshot, recordCandidateVisit, type TodaySnapshot } from './todayApi';
+import { recordFollowUpSent } from '../applications/applicationsApi';
 
 export interface TodayRead {
   readonly snapshot: TodaySnapshot | null;
@@ -7,6 +8,7 @@ export interface TodayRead {
   /** Маршрут не ответил — не «данных нет», а поломка (B148 §5). */
   readonly failed: boolean;
   refresh(): Promise<void>;
+  markFollowUpSent(applicationId: string): Promise<void>;
 }
 
 /**
@@ -35,11 +37,16 @@ export function useToday(): TodayRead {
     }
   }, []);
 
+  const markFollowUpSent = useCallback(async (applicationId: string) => {
+    await recordFollowUpSent(applicationId);
+    await load();
+  }, [load]);
+
   useEffect(() => {
     const controller = new AbortController();
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
 
-  return { snapshot, loading, failed, refresh: () => load() };
+  return { snapshot, loading, failed, refresh: () => load(), markFollowUpSent };
 }

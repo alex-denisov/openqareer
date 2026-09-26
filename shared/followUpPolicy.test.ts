@@ -30,64 +30,84 @@ describe('businessDaysBetween / addBusinessDays', () => {
   });
 });
 
-describe('computeFollowUpStatus — standard profile', () => {
+describe('computeFollowUpStatus — application follow-up schedule', () => {
   const lastContactAt = '2024-01-01T09:00:00Z';
 
-  it('is upcoming before the 5th business day', () => {
+  it('is upcoming before calendar day 5 and exposes the UTC deadline', () => {
     const status = computeFollowUpStatus({
       processProfile: 'standard',
       lastContactAt,
-      now: '2024-01-03T09:00:00Z',
+      now: '2024-01-05T23:59:59Z',
     });
     expect(status.urgency).toBe('upcoming');
     expect(status.source).toBe('standard_schedule');
-    expect(status.dueAt).toBe('2024-01-08T00:00:00.000Z');
+    expect(status.dueAt).toBe('2024-01-06T00:00:00.000Z');
+    expect(status.daysSinceContact).toBe(4);
   });
 
-  it('is due from the 5th business day', () => {
+  it('is due on day 5 and advances the second reminder to day 8', () => {
     const status = computeFollowUpStatus({
       processProfile: 'standard',
       lastContactAt,
-      now: '2024-01-08T09:00:00Z',
+      now: '2024-01-06T00:00:00Z',
     });
     expect(status.urgency).toBe('due');
-    expect(status.businessDaysSinceContact).toBe(5);
+    expect(status.dueAt).toBe('2024-01-09T00:00:00.000Z');
+    expect(status.daysSinceContact).toBe(5);
+
+    const second = computeFollowUpStatus({
+      processProfile: 'standard',
+      lastContactAt,
+      now: '2024-01-09T12:00:00Z',
+    });
+    expect(second.urgency).toBe('due');
+    expect(second.dueAt).toBe('2024-01-15T00:00:00.000Z');
+    expect(second.daysSinceContact).toBe(8);
   });
 
-  it('is stale after the 10th business day', () => {
+  it('becomes stale at day 14, regardless of the viewer timezone', () => {
+    const beforeStale = computeFollowUpStatus({
+      processProfile: 'standard',
+      lastContactAt,
+      now: '2024-01-14T23:59:59Z',
+      timezoneOffsetMinutes: 180,
+    });
+    expect(beforeStale.urgency).toBe('due');
+
     const status = computeFollowUpStatus({
       processProfile: 'standard',
       lastContactAt,
-      now: '2024-01-15T09:00:00Z',
+      now: '2024-01-15T00:00:00Z',
+      timezoneOffsetMinutes: -480,
     });
     expect(status.urgency).toBe('stale');
-    expect(status.businessDaysSinceContact).toBe(10);
+    expect(status.daysSinceContact).toBe(14);
   });
 });
 
 describe('computeFollowUpStatus — executive profile', () => {
   const lastContactAt = '2024-01-01T09:00:00Z';
 
-  it('opens the window on calendar day 7 and closes it on day 10', () => {
+  it('uses the same 5/8/14 calendar schedule for the sent stage', () => {
     const beforeWindow = computeFollowUpStatus({
       processProfile: 'executive',
       lastContactAt,
-      now: '2024-01-06T09:00:00Z',
+      now: '2024-01-05T09:00:00Z',
     });
     expect(beforeWindow.urgency).toBe('upcoming');
 
     const insideWindow = computeFollowUpStatus({
       processProfile: 'executive',
       lastContactAt,
-      now: '2024-01-08T09:00:00Z',
+      now: '2024-01-06T09:00:00Z',
     });
     expect(insideWindow.urgency).toBe('due');
-    expect(insideWindow.source).toBe('executive_window');
+    expect(insideWindow.source).toBe('standard_schedule');
 
     const afterWindow = computeFollowUpStatus({
       processProfile: 'executive',
       lastContactAt,
-      now: '2024-01-12T09:00:00Z',
+      now: '2024-01-15T00:00:00Z',
     });
     expect(afterWindow.urgency).toBe('stale');
   });

@@ -1,5 +1,6 @@
 import type { ApplicationTurn } from '../../../shared/applicationTurn';
 import type { FollowUpStatus } from '../../../shared/followUpPolicy';
+import { pluralRu } from '../../../shared/pluralRu';
 import { SKIP_REASONS } from '../../../shared/skipReasons';
 
 /**
@@ -34,7 +35,8 @@ function candidateTurnLabel(input: WaitingLabelInput): string {
   if (input.stage === 'saved' && !input.hasMaterials) return 'Соберите письмо';
   if (input.followUp?.urgency === 'stale') return 'Follow-up просрочен';
   if (input.followUp?.urgency === 'due') {
-    return `Follow-up сегодня · ${input.followUp.businessDaysSinceContact} раб. дн.`;
+    const days = input.followUp.daysSinceContact;
+    return `Follow-up сегодня · ${pluralRu(days, ['день', 'дня', 'дней'])}`;
   }
   if (input.nearestInterviewNeedsPrep) return 'Подготовиться к интервью';
   if (input.stage === 'offer') return 'Примите решение по офферу';

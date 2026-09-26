@@ -151,7 +151,7 @@ describe('applications route · S2 materials/interviews/offer/events', () => {
   });
 
   it('records a follow-up-sent event without changing the stage', async () => {
-    const { app, authorization } = await createApp();
+    const { app, authorization, candidateStore } = await createApp();
     const id = await createCard(app, authorization, 'cluster-1');
     const response = await app.inject({
       method: 'POST',
@@ -161,6 +161,19 @@ describe('applications route · S2 materials/interviews/offer/events', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().data.stage).toBe('applied');
+    expect(response.json().data.followUp).toMatchObject({
+      source: 'standard_schedule',
+      dueAt: '2030-01-06T00:00:00.000Z',
+    });
+
+    const other = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+    const foreign = await app.inject({
+      method: 'POST',
+      url: `${APPLICATIONS_URL}/${id}/events`,
+      headers: { authorization: `Bearer ${other.accessToken}`, ...ORIGIN },
+      payload: { kind: 'follow_up_sent', occurredAt: '2030-02-01T00:00:00.000Z' },
+    });
+    expect(foreign.statusCode).toBe(404);
   });
 
   it('creates an interview round and patches its prep', async () => {

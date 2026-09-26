@@ -1,10 +1,5 @@
 import { useState } from 'react';
-import {
-  ArrowClockwise,
-  DotsThreeVertical,
-  FileText,
-  Warning,
-} from '@phosphor-icons/react';
+import { ArrowClockwise, DotsThreeVertical, FileText, Warning } from '@phosphor-icons/react';
 import { APPLICATION_STAGES, type ApplicationStage } from '../../../shared/applicationStage';
 import { SKIP_REASONS, type SkipReasonId } from '../../../shared/skipReasons';
 import type { ApplicationView } from './applicationsApi';
@@ -31,6 +26,7 @@ interface ResponsesCardProps {
   readonly onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   readonly onRetry: () => void;
   readonly onSaveNote: (notes: string) => void;
+  readonly onMarkFollowUpSent: () => Promise<void>;
   readonly onSkip: (reasonId: SkipReasonId) => void;
 }
 
@@ -59,9 +55,9 @@ export function ResponsesCard({
   onChangeStage,
   onRetry,
   onSaveNote,
+  onMarkFollowUpSent,
   onSkip,
 }: ResponsesCardProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const label = waitingLabelFor(application);
 
   return (
@@ -69,7 +65,9 @@ export function ResponsesCard({
       className={`career-responses-card${label.on === 'you' ? ' is-your-turn' : ''}`}
       data-cluster={application.clusterId ?? ''}
     >
-      <div className="career-responses-card-role">{application.vacancy?.title ?? 'Без названия'}</div>
+      <div className="career-responses-card-role">
+        {application.vacancy?.title ?? 'Без названия'}
+      </div>
       <div className="career-responses-card-company">
         {application.vacancy?.companyHidden
           ? 'компания скрыта'
@@ -83,22 +81,49 @@ export function ResponsesCard({
         application={application}
         labelText={label.text}
         labelOn={label.on}
-        menuOpen={menuOpen}
-        onToggleMenu={() => setMenuOpen((open) => !open)}
-        onChangeStage={(stage, occurredAt) => {
-          onChangeStage(stage, occurredAt);
-          setMenuOpen(false);
-        }}
-        onSaveNote={(notes) => {
-          onSaveNote(notes);
-          setMenuOpen(false);
-        }}
-        onSkip={(reasonId) => {
-          onSkip(reasonId);
-          setMenuOpen(false);
-        }}
+        onChangeStage={onChangeStage}
+        onSaveNote={onSaveNote}
+        onSkip={onSkip}
       />
+      <FollowUpSentControl application={application} onMark={onMarkFollowUpSent} />
     </article>
+  );
+}
+
+function FollowUpSentControl({
+  application,
+  onMark,
+}: {
+  application: ApplicationView;
+  onMark: () => Promise<void>;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+  if (
+    application.stage !== 'applied' ||
+    (application.followUp?.urgency !== 'due' && application.followUp?.urgency !== 'stale')
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="career-responses-follow-up-action">
+      {failed ? <span role="alert">Не удалось сохранить отметку.</span> : null}
+      <button
+        type="button"
+        className="career-btn career-btn-secondary career-btn-sm"
+        disabled={saving}
+        onClick={() => {
+          setSaving(true);
+          setFailed(false);
+          void onMark()
+            .catch(() => setFailed(true))
+            .finally(() => setSaving(false));
+        }}
+      >
+        {saving ? 'Сохраняем…' : 'Отметить follow-up отправленным'}
+      </button>
+    </div>
   );
 }
 
@@ -106,8 +131,6 @@ interface CardFooterProps {
   application: ApplicationView;
   labelText: string;
   labelOn: 'you' | 'them' | null;
-  menuOpen: boolean;
-  onToggleMenu: () => void;
   onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   onSaveNote: (notes: string) => void;
   onSkip: (reasonId: SkipReasonId) => void;
@@ -117,27 +140,39 @@ function CardFooter({
   application,
   labelText,
   labelOn,
-  menuOpen,
-  onToggleMenu,
   onChangeStage,
   onSaveNote,
   onSkip,
 }: CardFooterProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div className="career-responses-card-footer">
       <span className={`career-responses-waiting ${labelOn ? `is-on-${labelOn}` : 'is-closed'}`}>
         {labelText}
       </span>
       <div className="career-responses-menu-wrap">
-        <button type="button" aria-label="Действия с карточкой" onClick={onToggleMenu}>
+        <button
+          type="button"
+          aria-label="Действия с карточкой"
+          onClick={() => setMenuOpen((open) => !open)}
+        >
           <DotsThreeVertical size={16} />
         </button>
         {menuOpen ? (
           <CardMenu
             application={application}
-            onChangeStage={onChangeStage}
-            onSaveNote={onSaveNote}
-            onSkip={onSkip}
+            onChangeStage={(stage, occurredAt) => {
+              onChangeStage(stage, occurredAt);
+              setMenuOpen(false);
+            }}
+            onSaveNote={(notes) => {
+              onSaveNote(notes);
+              setMenuOpen(false);
+            }}
+            onSkip={(reasonId) => {
+              onSkip(reasonId);
+              setMenuOpen(false);
+            }}
           />
         ) : null}
       </div>

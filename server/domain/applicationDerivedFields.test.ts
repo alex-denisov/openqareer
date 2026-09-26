@@ -50,8 +50,8 @@ describe('deriveApplicationFields', () => {
       interviews: [],
       now: '2024-01-09T09:00:00Z',
     });
-    // last contact is the follow-up sent on 01-08; one business day later is upcoming.
-    expect(result.followUp?.businessDaysSinceContact).toBe(1);
+    // Last contact is the follow-up sent on 01-08; the next UTC day is upcoming.
+    expect(result.followUp?.daysSinceContact).toBe(1);
     expect(result.whoseTurn).toBe('company');
   });
 

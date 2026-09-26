@@ -36,7 +36,7 @@ export interface TodayQueueItem {
   readonly clusterId?: string;
   readonly title: string;
   readonly company: string | null;
-  /** Короткая причина строкой — «6 рабочих дней без ответа», «сегодня», «через 2 дня». `null` — нечего честно сказать. */
+  /** Короткая причина строкой — «6 дней без ответа», «сегодня», «через 2 дня». `null` — нечего честно сказать. */
   readonly eyebrow: string | null;
   readonly dueAt: string | null;
   readonly salary?: TodaySalary;
@@ -66,7 +66,7 @@ export interface TodayDigest {
   readonly interviewsAhead: number;
   readonly nextInterview: TodayNextInterview | null;
   readonly newVacanciesCaption: TodayNewVacanciesCaption | null;
-  /** До двух строк вида «Peraton — 6 рабочих дней тишины». */
+  /** До двух строк вида «Peraton — 6 дней тишины». */
   readonly followUpCaptions: readonly string[];
 }
 
@@ -116,7 +116,8 @@ const MAX_FOLLOW_UP_CAPTIONS = 2;
 
 function eyebrowFor(application: ApplicationView): string | null {
   if (application.followUp && (application.followUp.urgency === 'due' || application.followUp.urgency === 'stale')) {
-    return `${application.followUp.businessDaysSinceContact} рабочих дней без ответа`;
+    const days = application.followUp.daysSinceContact;
+    return `${pluralRu(days, ['день', 'дня', 'дней'])} без ответа`;
   }
   if (application.nearestInterview?.scheduledAt) {
     const days = daysUntil(application.nearestInterview.scheduledAt);
@@ -169,8 +170,8 @@ function followUpCaptionsFor(applications: readonly ApplicationView[]): string[]
     .slice(0, MAX_FOLLOW_UP_CAPTIONS)
     .map((application) => {
       const company = companyOf(application) ?? application.vacancy?.title ?? 'Вакансия';
-      const days = application.followUp?.businessDaysSinceContact ?? 0;
-      return `${company} — ${days} рабочих дней тишины`;
+      const days = application.followUp?.daysSinceContact ?? 0;
+      return `${company} — ${pluralRu(days, ['день', 'дня', 'дней'])} тишины`;
     });
 }
 

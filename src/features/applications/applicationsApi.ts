@@ -63,6 +63,18 @@ export async function patchApplication(
   return readDataObject<ApplicationView>(response);
 }
 
+export async function recordFollowUpSent(applicationId: string): Promise<ApplicationView> {
+  const response = await apiFetch(
+    `/api/v1/candidate/applications/${encodeURIComponent(applicationId)}/events`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'follow_up_sent', occurredAt: new Date().toISOString() }),
+    },
+  );
+  return readDataObject<ApplicationView>(response);
+}
+
 export interface CreatedVacancySkip {
   readonly candidateId: string;
   readonly clusterId: string;

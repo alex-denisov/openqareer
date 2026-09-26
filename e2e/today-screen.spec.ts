@@ -69,7 +69,7 @@ const TODAY_SNAPSHOT = {
       sourcesCount: 3,
       updatedAt: '2026-09-23T09:14:00.000Z',
     },
-    followUpCaptions: ['Peraton — 6 рабочих дней тишины', 'Genetec — обещанный срок истёк'],
+    followUpCaptions: ['Peraton — 6 дней тишины', 'Genetec — обещанный срок истёк'],
   },
   queue: [
     {
@@ -77,7 +77,7 @@ const TODAY_SNAPSHOT = {
       applicationId: 'app-1',
       title: 'Enterprise Architect, Senior Advisor',
       company: 'Peraton',
-      eyebrow: 'Follow-up · 6 рабочих дней без ответа',
+      eyebrow: 'Follow-up · 6 дней без ответа',
       dueAt: '2026-09-23T00:00:00.000Z',
       salary: { from: 176000, currency: 'usd' },
       fit: null,
@@ -150,6 +150,7 @@ const EMPTY_TODAY_SNAPSHOT = {
 };
 
 async function stubSession(page: Page, todaySnapshot = TODAY_SNAPSHOT): Promise<void> {
+  let followUpSent = false;
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -171,8 +172,22 @@ async function stubSession(page: Page, todaySnapshot = TODAY_SNAPSHOT): Promise<
     if (request.method() === 'POST' && pathname === '/api/v1/candidate/visits') {
       return route.fulfill({ json: { data: { since: todaySnapshot.sinceLastVisit.since } } });
     }
+    if (request.method() === 'POST' && pathname === '/api/v1/candidate/applications/app-1/events') {
+      followUpSent = true;
+      return route.fulfill({ json: { data: { id: 'app-1' } } });
+    }
     if (pathname === '/api/v1/candidate/today') {
-      return route.fulfill({ json: { data: todaySnapshot } });
+      const data = followUpSent
+        ? {
+            ...todaySnapshot,
+            digest: { ...todaySnapshot.digest, followUpsDueToday: 0, followUpCaptions: [] },
+            queue: todaySnapshot.queue.filter(
+              (item: { kind: string }) => item.kind !== 'follow_up',
+            ),
+            followUps: [],
+          }
+        : todaySnapshot;
+      return route.fulfill({ json: { data } });
     }
     return route.fulfill({ json: { data: null } });
   });
@@ -237,6 +252,20 @@ test.describe('B251 today screen', () => {
     await expect(page.locator('.career-today-followups')).toContainText('Follow-up по срокам');
     await expect(page.locator('.career-today-since')).toContainText('С прошлого визита');
     await expect(page.locator('.career-today-pending')).toContainText('Подбор обновляется');
+    const sentFollowUp = page.locator('.career-today-followups li').filter({ hasText: 'HRTx' });
+    await expect(sentFollowUp.getByRole('button')).toHaveCount(0);
+  });
+
+  test('marks a follow-up as sent from the day queue and removes it after refresh', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await openApp(page);
+
+    await page.getByRole('button', { name: 'Отметить отправленным' }).first().click();
+    await expect(page.getByRole('button', { name: 'Отметить отправленным' })).toHaveCount(0);
+    await expect(page.locator('.career-today-followups')).toHaveCount(0);
   });
 
   test('the screen fits 1440 and 390 with no horizontal overflow', async ({ page }, testInfo) => {

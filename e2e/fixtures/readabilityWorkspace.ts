@@ -331,7 +331,7 @@ export const todaySnapshot = {
       sourcesCount: 3,
       updatedAt: '2026-09-23T09:14:00.000Z',
     },
-    followUpCaptions: ['Ozon — 5 рабочих дней тишины'],
+    followUpCaptions: ['Ozon — 5 дней тишины'],
   },
   queue: [
     {
@@ -339,7 +339,7 @@ export const todaySnapshot = {
       applicationId: 'app-b232-1',
       title: 'Head of Product, Payments',
       company: 'Ozon',
-      eyebrow: 'Follow-up · 5 рабочих дней без ответа',
+      eyebrow: 'Follow-up · 5 дней без ответа',
       dueAt: '2026-09-23T00:00:00.000Z',
       salary: { from: 420000, currency: 'rub' },
       fit: null,
