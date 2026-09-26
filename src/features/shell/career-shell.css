@@ -3871,10 +3871,6 @@
 
 
 
-.career-memory-status.is-proposed {
-  color: var(--career-warning);
-  background: var(--career-warning-soft);
-}
 
 
 
@@ -4277,13 +4273,7 @@
 
 
 
-.career-cabinet-focus-layout.is-track {
-  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.78fr);
-}
 
-.career-cabinet-focus-layout.is-market {
-  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.7fr);
-}
 
 .career-profile-surface.is-expanded .career-profile-surface-body {
   /* Раньше 540 px держали левую колонку рядом с длинным рельсом; теперь под
@@ -4655,12 +4645,6 @@
     padding-inline: 22px;
   }
 
-  .career-command-center,
-  .career-cabinet-focus-layout,
-  .career-cabinet-focus-layout.is-track,
-  .career-cabinet-focus-layout.is-market {
-    grid-template-columns: minmax(0, 1fr);
-  }
 
 
 
@@ -8570,13 +8554,7 @@
 
 
 
-.career-job-bullets li.is-measured > span:first-child {
-  color: var(--career-success);
-}
 
-.career-job-bullets li.is-measured {
-  color: var(--career-text);
-}
 
 
 
@@ -8846,29 +8824,8 @@
   }
 }
 
-.career-automation-list {
-  display: grid;
-  gap: 9px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
 
-.career-automation-list li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 0;
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
-}
 
-.career-automation-list li > span:first-child {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
 
 .career-automation-panel > header {
   flex-wrap: wrap;
