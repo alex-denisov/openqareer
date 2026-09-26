@@ -24,6 +24,7 @@ import { confirmChosenTitle } from '../vacancies/roleHypotheses';
 import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
 import { countMatchedVacanciesByRole } from '../vacancies/vacancyRoleCounts';
 import { campaignMeta, readCampaign } from './campaignContext';
+import { unconfirmedCandidateMatchResponse } from './matchedVacancyResponse';
 import type { CampaignResolution } from '../vacancies/campaign';
 import { registerCampaignRoutes } from './campaignRoutes';
 import { readRoleContext, readTargetLevel, type RoleContext } from './vacancyRoleContext';
@@ -410,21 +411,7 @@ const handleMatchedVacancies: Handler = async (
   // for a candidate who confirmed nothing, and a match percentage computed
   // from it. No confirmed profile means no match claim (B161).
   if (confirmedSkills.length === 0 && targetRoles.length === 0) {
-    return {
-      data: [],
-      meta: {
-        requestId: request.id,
-        reason: 'candidate_profile_unconfirmed',
-        total: 0,
-        offset,
-        nextOffset: null,
-        // Пустой пул — это одна страница, а не отсутствие плана: клиент читает
-        // план первой страницы и не должен различать «нет плана» и «нечего
-        // читать» (B211).
-        ...(offset === 0 ? { pageOffsets: [0] } : {}),
-        campaign: campaignMeta(campaign),
-      },
-    };
+    return unconfirmedCandidateMatchResponse(request.id, offset, campaign);
   }
 
   // Подбор считается один раз на чтение: страницы одного чтения обязаны
