@@ -51,6 +51,7 @@ export function readCampaign(
     profileRegions,
     explicit,
     auto: parsed?.success ? (parsed.data.campaign?.auto ?? null) : null,
+    evidenceByRef: new Map(memory.map((fact) => [`memory:${fact.id}`, fact.statement])),
     ...(vacancyCountsByRole ? { vacancyCountsByRole } : {}),
   });
 }

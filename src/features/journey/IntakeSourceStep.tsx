@@ -134,8 +134,7 @@ export function IntakeSourceStep(props: IntakeSourceStepProps) {
 
       {sourceChoice === 'none' ? (
         <p className="career-inline-note">
-          Это нормальный старт. Сначала зададим один вопрос об опыте и не будем
-          оценивать резюме, которого нет.
+          Укажите роль и регион для начала подбора.
         </p>
       ) : null}
 

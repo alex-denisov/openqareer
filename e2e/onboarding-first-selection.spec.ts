@@ -1,0 +1,314 @@
+import { writeFileSync } from 'node:fs';
+import AxeBuilder from '@axe-core/playwright';
+import { expect, test, type Page } from '@playwright/test';
+
+const CANDIDATE = {
+  username: 'qa.candidate',
+  email: 'qa.candidate@example.test',
+  displayName: 'QA Candidate',
+  role: 'candidate' as const,
+  candidateId: 'candidate-c37',
+};
+
+const ACCOUNT = {
+  username: CANDIDATE.username,
+  email: CANDIDATE.email,
+  displayName: CANDIDATE.displayName,
+  profile: {
+    headline: '',
+    location: '',
+    workMode: 'hybrid',
+    updatedAt: '2026-09-26T00:00:00.000Z',
+  },
+  sessions: [],
+};
+
+const SNAPSHOT = {
+  candidate: {
+    id: CANDIDATE.candidateId,
+    dataClass: 'synthetic',
+    locale: 'ru-RU',
+    createdAt: '2026-09-26T00:00:00.000Z',
+  },
+  messages: [],
+  memory: [],
+  turns: [],
+  dossier: {
+    sections: [],
+    confirmedCount: 0,
+    proposedCount: 0,
+    readiness: { complete: false, unresolvedQuestions: 0, checks: [] },
+  },
+  documents: [],
+  assessments: [],
+  germanyMarket: null,
+  vacancySubscriptions: [],
+};
+
+const PARSED_RESUME = {
+  targetRole: 'VP of Operations',
+  contact: { location: 'Dubai', links: [] },
+  experience: [
+    {
+      title: 'VP of Operations',
+      employer: 'Example Co',
+      current: true,
+      responsibilities: ['Led regional operations'],
+      achievements: ['Expanded into four markets'],
+    },
+  ],
+  skills: ['Operations'],
+  education: [],
+  courses: [],
+  tests: [],
+  recommendations: [],
+  languages: [],
+  rawText: 'VP of Operations. Led regional operations. Expanded into four markets.',
+};
+
+const MODEL_ROLE = {
+  id: 'ops.vp',
+  title: 'VP of Operations',
+  titleRu: 'Вице-президент по операциям',
+  level: 'vp',
+  kind: 'primary',
+  reason: 'Опыт управления региональными операциями.',
+  evidenceRefs: ['memory:fact-1'],
+  evidence: ['Руководил операциями в четырёх регионах.'],
+};
+
+function campaign(
+  origin: 'profile' | 'model' | 'explicit',
+  roles = origin === 'model' ? [MODEL_ROLE] : [],
+) {
+  return {
+    roles: {
+      value: origin === 'profile' ? ['VP of Operations'] : roles.map((role) => role.title),
+      origin,
+    },
+    regions: { value: ['mena'], origin: 'profile' },
+    remoteOnly: false,
+    autoRoles: roles,
+    divergence: { roles: null, regions: null },
+  };
+}
+
+async function stubFirstLogin(page: Page) {
+  let workspace: unknown = null;
+  let rebuildRequested = false;
+  let campaignReads = 0;
+  let campaignSave: { roles: readonly unknown[]; regions: readonly string[] } | undefined;
+  let savedCampaign = campaign('profile', []);
+  await page.route('**/api/v1/**', async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: CANDIDATE } });
+    if (pathname === '/api/v1/account') return route.fulfill({ json: { data: ACCOUNT } });
+    if (pathname === '/api/v1/candidate/me') return route.fulfill({ json: { data: SNAPSHOT } });
+    if (pathname === '/api/v1/candidate/connections') return route.fulfill({ json: { data: [] } });
+    if (pathname === '/api/v1/candidate/workspace' && request.method() === 'GET') {
+      return route.fulfill({ json: { data: workspace } });
+    }
+    if (pathname === '/api/v1/candidate/workspace' && request.method() === 'PUT') {
+      workspace = request.postDataJSON()?.workspace ?? null;
+      return route.fulfill({ json: { data: workspace } });
+    }
+    if (pathname === '/api/v1/candidate/resume/import' && request.method() === 'POST') {
+      return route.fulfill({
+        json: { data: { parsed: PARSED_RESUME, resume: {}, structuredBy: 'rules', factCount: 1 } },
+      });
+    }
+    if (pathname === '/api/v1/candidate/campaign/roles/rebuild' && request.method() === 'POST') {
+      rebuildRequested = true;
+      campaignReads = 0;
+      return route.fulfill({ status: 202, json: { data: { status: 'queued' } } });
+    }
+    if (pathname === '/api/v1/candidate/campaign' && request.method() === 'GET') {
+      if (!rebuildRequested) return route.fulfill({ json: { data: campaign('profile', []) } });
+      campaignReads += 1;
+      return route.fulfill({ json: { data: campaign(campaignReads === 1 ? 'profile' : 'model') } });
+    }
+    if (pathname === '/api/v1/candidate/campaign' && request.method() === 'POST') {
+      campaignSave = request.postDataJSON();
+      const roleTitles =
+        campaignSave?.roles.map((role) =>
+          typeof role === 'string' ? role : (role as { title: string }).title,
+        ) ?? [];
+      savedCampaign = {
+        ...campaign('explicit', []),
+        roles: { value: roleTitles, origin: 'explicit' },
+        regions: { value: campaignSave?.regions ?? [], origin: 'explicit' },
+      };
+      return route.fulfill({ json: { data: savedCampaign } });
+    }
+    if (pathname === '/api/v1/candidate/matched-vacancies') {
+      return route.fulfill({
+        json: {
+          data: [],
+          meta: {
+            total: 0,
+            nextOffset: null,
+            campaign: savedCampaign,
+            candidateLevel: null,
+          },
+        },
+      });
+    }
+    if (pathname === '/api/v1/candidate/visits' && request.method() === 'POST') {
+      return route.fulfill({ json: { data: { since: null } } });
+    }
+    return route.fulfill({ json: { data: null } });
+  });
+
+  return {
+    savedCampaign: () => campaignSave,
+    modelRebuildRequested: () => rebuildRequested,
+    campaignReadCount: () => campaignReads,
+  };
+}
+
+async function openNewCandidate(page: Page): Promise<void> {
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+  await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
+}
+
+async function captureCampaignHarness(page: Page, path: string): Promise<void> {
+  const rendered = await page.evaluate(async () => {
+    const shell = document.querySelector<HTMLElement>('.career-shell');
+    if (!shell) throw new Error('campaign_render_not_found');
+    const linkedStyles = Array.from(
+      document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
+    );
+    const linkedCss = await Promise.all(
+      linkedStyles.map((style) => fetch(style.href).then((response) => response.text())),
+    );
+    const inlineCss = Array.from(document.querySelectorAll('style')).map(
+      (style) => style.textContent ?? '',
+    );
+    return {
+      css: [...inlineCss, ...linkedCss].join('\n'),
+      html: shell.outerHTML,
+    };
+  });
+  writeFileSync(
+    path,
+    `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${rendered.css}</style></head><body>${rendered.html}</body></html>`,
+  );
+  const colors = Array.from(new Set(rendered.css.match(/oklch\([^)]*\)/gu) ?? []));
+  const resolvedColors = await page.evaluate((values) => {
+    const context = document.createElement('canvas').getContext('2d');
+    if (!context) throw new Error('canvas_context_missing');
+    return values.map((color) => {
+      if (!CSS.supports('color', color)) return [color, color] as const;
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data;
+      return [color, `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`] as const;
+    });
+  }, colors);
+  const replacements = new Map(resolvedColors);
+  const rgbCss = rendered.css.replace(
+    /oklch\([^)]*\)/gu,
+    (color) => replacements.get(color) ?? color,
+  );
+  writeFileSync(
+    path.replace(/\.html$/u, '.rgb.html'),
+    `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${rgbCss}</style></head><body>${rendered.html}</body></html>`,
+  );
+}
+
+test.describe('B249 first selection onboarding', () => {
+  test('waits for model roles, saves the confirmed campaign and opens vacancies', async ({
+    page,
+  }, testInfo) => {
+    const startedAt = Date.now();
+    const api = await stubFirstLogin(page);
+    await openNewCandidate(page);
+
+    await page.getByRole('button', { name: 'Нет PDF под рукой — вставить текст резюме' }).click();
+    await page
+      .getByLabel('Опыт, проекты или фрагмент резюме')
+      .fill(
+        'VP of Operations\nSummary\nLed regional operations for four markets. Managed a team of twenty.',
+      );
+    await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
+    await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
+    await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
+
+    await expect(page.getByText('Запрос отправлен модели')).toBeVisible();
+    const role = page.getByRole('button', { name: /Вице-президент по операциям/ });
+    await expect(role).toHaveAttribute('aria-pressed', 'true');
+    await expect(role).toContainText('управления региональными операциями');
+    await expect(role).toContainText('Руководил операциями в четырёх регионах.');
+    const accessibility = await new AxeBuilder({ page }).analyze();
+    expect(
+      accessibility.violations.filter((violation) =>
+        ['critical', 'serious'].includes(violation.impact ?? ''),
+      ),
+    ).toEqual([]);
+    await page.screenshot({
+      path: testInfo.outputPath('onboarding-model-confirmation.png'),
+      fullPage: true,
+    });
+    await captureCampaignHarness(page, testInfo.outputPath('onboarding-model-confirmation.html'));
+
+    if (testInfo.project.name === 'desktop-1440') {
+      const originalViewport = page.viewportSize();
+      await page.setViewportSize({ width: 280, height: 844 });
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(1);
+      if (originalViewport) await page.setViewportSize(originalViewport);
+    }
+
+    await page.getByRole('button', { name: 'Добавить роль', exact: true }).click();
+    await page.getByLabel('Новая роль').fill('Operations Director');
+    await page.getByRole('button', { name: 'Добавить', exact: true }).click();
+    await page.getByRole('button', { name: 'EU', exact: true }).click();
+    await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
+
+    await expect(page.getByRole('heading', { name: 'Первая подборка готова' })).toBeVisible();
+    expect(api.modelRebuildRequested()).toBe(true);
+    expect(api.campaignReadCount()).toBeGreaterThanOrEqual(2);
+    expect(api.savedCampaign()).toMatchObject({
+      roles: [{ id: 'ops.vp', title: 'VP of Operations' }, 'Operations Director'],
+      regions: ['mena', 'eu'],
+    });
+
+    await page.getByRole('button', { name: 'Перейти в «Вакансии»' }).click();
+    await expect(page.getByRole('heading', { name: 'Вакансии', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Для подбора не выбрана роль' })).toHaveCount(0);
+    const elapsedMs = Date.now() - startedAt;
+    console.log(`C37 mocked-model first-selection elapsed_ms=${elapsedMs}`);
+    expect(elapsedMs).toBeLessThan(5 * 60 * 1_000);
+  });
+
+  test('lets a candidate without a profile start with one role and one region', async ({
+    page,
+  }, testInfo) => {
+    const api = await stubFirstLogin(page);
+    await openNewCandidate(page);
+
+    await page.locator('.career-onboarding-source-card', { hasText: 'Расскажу сам' }).click();
+    await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
+    await expect(page.getByLabel('На какую роль ищете работу?')).toBeVisible();
+    await page.getByLabel('На какую роль ищете работу?').fill('Аналитик данных');
+    await page.getByRole('button', { name: 'Россия', exact: true }).click();
+    await page.screenshot({
+      path: testInfo.outputPath('onboarding-quick-start.png'),
+      fullPage: true,
+    });
+    await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
+
+    await expect(page.getByRole('heading', { name: 'Первая подборка готова' })).toBeVisible();
+    expect(api.modelRebuildRequested()).toBe(false);
+    expect(api.savedCampaign()).toMatchObject({ roles: ['Аналитик данных'], regions: ['ru'] });
+
+    await page.getByRole('button', { name: 'Перейти в «Вакансии»' }).click();
+    await expect(page.getByRole('heading', { name: 'Вакансии', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Для подбора не выбрана роль' })).toHaveCount(0);
+  });
+});

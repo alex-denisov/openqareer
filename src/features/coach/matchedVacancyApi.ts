@@ -1,5 +1,10 @@
 import type { MatchedVacancyItem } from './cabinetTypes';
-import { CoachApiError as CoachApiErrorClass, apiFetch, readData, throwApiError } from './apiClient';
+import {
+  CoachApiError as CoachApiErrorClass,
+  apiFetch,
+  readData,
+  throwApiError,
+} from './apiClient';
 
 /**
  * Чтение подбора живёт отдельно от общего API кабинета.
@@ -18,10 +23,25 @@ export interface CampaignRoleHypothesis {
 }
 
 export interface CampaignMetaView {
-  readonly roles: { readonly value: readonly string[]; readonly origin: string };
-  readonly regions: { readonly value: readonly string[]; readonly origin: string };
+  readonly roles: {
+    readonly value: readonly string[];
+    readonly origin: 'explicit' | 'model' | 'profile' | 'default';
+  };
+  readonly regions: {
+    readonly value: readonly string[];
+    readonly origin: 'explicit' | 'model' | 'profile' | 'default';
+  };
   readonly remoteOnly?: boolean;
-  readonly autoRoles?: readonly { readonly id: string; readonly title: string; readonly kind: 'primary' | 'adjacent' }[];
+  readonly autoRoles?: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly titleRu: string;
+    readonly level: 'ic' | 'lead' | 'head' | 'vp' | 'c-level' | null;
+    readonly kind: 'primary' | 'adjacent';
+    readonly reason: string;
+    readonly evidenceRefs: readonly string[];
+    readonly evidence: readonly string[];
+  }[];
   readonly roleHypotheses?: readonly CampaignRoleHypothesis[];
 }
 
@@ -103,6 +123,16 @@ export async function saveCandidateCampaign(
     body: JSON.stringify(input),
   });
   return readData<CampaignMetaView>(response);
+}
+
+export async function getCandidateCampaign(signal?: AbortSignal): Promise<CampaignMetaView> {
+  const response = await apiFetch('/api/v1/candidate/campaign', { signal });
+  return readData<CampaignMetaView>(response);
+}
+
+export async function rebuildCandidateCampaignRoles(): Promise<void> {
+  const response = await apiFetch('/api/v1/candidate/campaign/roles/rebuild', { method: 'POST' });
+  await readData<{ status: 'queued' }>(response);
 }
 
 export async function getMatchedVacancies(signal?: AbortSignal): Promise<MatchedVacancyItem[]> {

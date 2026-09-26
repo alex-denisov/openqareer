@@ -44,8 +44,26 @@ const campaign: CampaignMetaView = {
   regions: { value: ['Дубай', 'Европа'], origin: 'profile' },
   remoteOnly: false,
   autoRoles: [
-    { id: 'primary', title: 'VP Technology Ops', kind: 'primary' },
-    { id: 'adjacent', title: 'COO', kind: 'adjacent' },
+    {
+      id: 'primary',
+      title: 'VP Technology Ops',
+      titleRu: 'Вице-президент по технологиям',
+      level: 'vp',
+      kind: 'primary',
+      reason: 'Управлял технологическими операциями.',
+      evidenceRefs: ['memory:1'],
+      evidence: ['Управлял технологическими операциями.'],
+    },
+    {
+      id: 'adjacent',
+      title: 'COO',
+      titleRu: 'Операционный директор',
+      level: 'c-level',
+      kind: 'adjacent',
+      reason: 'Руководил операциями.',
+      evidenceRefs: ['memory:2'],
+      evidence: ['Руководил операциями.'],
+    },
   ],
   roleHypotheses: [
     { role: 'VP Technology Ops', vacancyCount: 34, isHypothesis: false },
@@ -56,9 +74,7 @@ const campaign: CampaignMetaView = {
 function campaignWithCount(vacancyCount: number): CampaignMetaView {
   return {
     ...campaign,
-    roleHypotheses: [
-      { role: 'VP Technology Ops', vacancyCount, isHypothesis: vacancyCount < 8 },
-    ],
+    roleHypotheses: [{ role: 'VP Technology Ops', vacancyCount, isHypothesis: vacancyCount < 8 }],
   };
 }
 

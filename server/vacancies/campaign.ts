@@ -81,7 +81,9 @@ export interface CampaignResolution {
   readonly roles: CampaignField<readonly string[]>;
   readonly regions: CampaignField<readonly string[]>;
   readonly remoteOnly: boolean;
-  readonly autoRoles: readonly { readonly id: string; readonly title: string; readonly kind: 'primary' | 'adjacent' }[];
+  readonly autoRoles: readonly (import('./campaignRoleSet').CampaignRoleProposal & {
+    readonly evidence: readonly string[];
+  })[];
   readonly divergence: CampaignDivergence;
   /**
    * `undefined`, пока вызывающая сторона не прочитала пул и не посчитала
@@ -96,6 +98,7 @@ export interface ResolveCampaignInput {
   readonly profileRegions: readonly string[];
   readonly explicit: StoredCampaignSelection | null;
   readonly auto?: import('./campaignRoleSet').StoredAutoCampaign | null;
+  readonly evidenceByRef?: ReadonlyMap<string, string>;
   /** Число подобранных вакансий на роль кампании — вход порога значимости. */
   readonly vacancyCountsByRole?: Readonly<Record<string, number>>;
 }
@@ -173,7 +176,13 @@ export function resolveCampaign(input: ResolveCampaignInput): CampaignResolution
     roles,
     regions,
     remoteOnly: input.explicit?.remoteOnly ?? false,
-    autoRoles: (input.auto?.roles ?? []).map(({ id, title, kind }) => ({ id, title, kind })),
+    autoRoles: (input.auto?.roles ?? []).map((role) => ({
+      ...role,
+      evidence: role.evidenceRefs.flatMap((ref) => {
+        const statement = input.evidenceByRef?.get(ref);
+        return statement ? [statement] : [];
+      }),
+    })),
     divergence: {
       roles: divergenceOf(roles, derivedRoles),
       regions: divergenceOf(regions, derivedRegions),

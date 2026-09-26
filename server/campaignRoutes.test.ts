@@ -125,3 +125,81 @@ describe('POST /api/v1/candidate/campaign', () => {
     expect(saved?.dismissed ?? []).not.toContain('ops.coo');
   });
 });
+
+describe('GET /api/v1/candidate/campaign', () => {
+  it('returns model-role details from only the authenticated candidate workspace', async () => {
+    const automatic = (id: string, title: string) => ({
+      roles: [
+        {
+          id,
+          title,
+          titleRu: title,
+          functions: ['ops'],
+          level: 'head' as const,
+          kind: 'primary' as const,
+          synonyms: [],
+          evidenceRefs: ['memory:fact-1'],
+          reason: `Основание для ${title}.`,
+        },
+      ],
+      factsDigest: 'digest',
+      generatedAt: '2026-09-26T00:00:00.000Z',
+      model: 'test-model',
+    });
+    const { app, candidateStore, candidate } = await createAppWithWorkspace({
+      resumeText: '',
+      resumeSource: 'text',
+      targetDirection: '',
+      regions: [],
+      currentSituation: '',
+      constraints: '',
+      urgency: 'active',
+      campaign: {
+        roles: [],
+        regions: [],
+        revision: 1,
+        updatedAt: '2026-09-26T00:00:00.000Z',
+        auto: automatic('ops.head', 'Head of Operations'),
+      },
+    });
+    const other = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+    candidateStore.saveCandidateWorkspace(other.id, {
+      resumeText: '',
+      resumeSource: 'text',
+      targetDirection: '',
+      regions: [],
+      currentSituation: '',
+      constraints: '',
+      urgency: 'active',
+      campaign: {
+        roles: [],
+        regions: [],
+        revision: 1,
+        updatedAt: '2026-09-26T00:00:00.000Z',
+        auto: automatic('support.head', 'Head of Support'),
+      },
+    });
+
+    const own = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/campaign',
+      headers: { authorization: `Bearer ${candidate.accessToken}` },
+    });
+    const foreign = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/campaign',
+      headers: { authorization: `Bearer ${other.accessToken}` },
+    });
+
+    expect(own.statusCode).toBe(200);
+    expect(own.json().data.autoRoles[0]).toMatchObject({
+      id: 'ops.head',
+      reason: 'Основание для Head of Operations.',
+      evidenceRefs: ['memory:fact-1'],
+      evidence: [],
+    });
+    expect(foreign.statusCode).toBe(200);
+    expect(foreign.json().data.autoRoles[0].id).toBe('support.head');
+    expect(foreign.json().data.autoRoles[0].title).toBe('Head of Support');
+  });
+});

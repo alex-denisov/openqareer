@@ -1,6 +1,6 @@
 import type { CandidateRegion } from '../workspace/candidateRegions';
 import type { ResumeSource, WorkspaceInput } from '../workspace/workspaceStorage';
-import type { OnboardingFormat } from './OnboardingGeoStep';
+import type { OnboardingFormat } from './onboardingFormat';
 import type { OnboardingTalkValues } from './OnboardingTalkStep';
 import type { SourceChoice } from './IntakeSourceStep';
 import type { IngestedResume } from './useResumeIngestion';
@@ -9,7 +9,7 @@ export interface OnboardingWorkspaceInputState {
   readonly sourceChoice: SourceChoice;
   readonly ingested?: IngestedResume;
   readonly talk: OnboardingTalkValues;
-  /** The role the candidate picked on step 4, if any. */
+  /** Primary role selected on the combined role-and-region step. */
   readonly selectedRoleTitle?: string;
   readonly regions: readonly CandidateRegion[];
   readonly format: OnboardingFormat;
@@ -51,8 +51,7 @@ export function buildOnboardingWorkspaceInput(
     resumeSource,
     resumeFileName: ingested?.file?.name,
     resumePageCount: ingested?.file?.pages,
-    // The role chosen on step 4 is a deliberate decision and outranks the
-    // parser's own guess; the guess only stands in until one is made.
+    // The candidate's explicit primary role outranks the parser's suggestion.
     targetDirection: state.selectedRoleTitle ?? ingested?.parsed.targetRole ?? '',
     regions: state.regions,
     currentSituation: ingested ? '' : talkSummary(state.talk),
