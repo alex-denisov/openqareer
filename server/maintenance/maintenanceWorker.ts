@@ -56,6 +56,7 @@ export interface MaintenanceIntervals {
 export interface TitleParseStep {
   step(chunk: number): {
     scanned: number;
+    poolRowsScanned: number;
     backfilled: number;
     newKeys: number;
     pruned: number;
@@ -96,7 +97,7 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
 
 /** Ключей индекса за шаг разметки: окно O(chunk), одна короткая транзакция. */
 export const TITLE_PARSE_STEP_CHUNK = 500;
-const TITLE_PARSE_PROGRESS_EVERY = 50;
+const TITLE_PARSE_PROGRESS_INTERVAL_MS = 5 * 60 * 1_000;
 /** Сколько тик может проходить уже размеченные окна подряд. */
 const TITLE_PARSE_IDLE_BUDGET_MS = 300;
 
@@ -130,7 +131,16 @@ export class MaintenanceWorker {
   private readonly titleModel?: TitleModelStep;
   private titleModelRunning = false;
   private lastTitleModelLogAt = 0;
-  private titleParsePass = { steps: 0, backfilled: 0, newKeys: 0, startedAt: Date.now() };
+  private lastTitleParseProgressAt = Date.now();
+  private lastTitleParseStepAt = Date.now();
+  private lastTitleParseStepMs = 0;
+  private titleParsePass = {
+    steps: 0,
+    poolRowsScanned: 0,
+    backfilled: 0,
+    newKeys: 0,
+    startedAt: Date.now(),
+  };
   private stopped = false;
 
   constructor(options: {
@@ -255,22 +265,25 @@ export class MaintenanceWorker {
   }
 
   /**
-   * Один шаг разметки пула правилами (B267 S2). Прогресс — раз в 50 шагов,
-   * итог прохода — с числом уникальных названий: оно закрывает оценку объёма
-   * разбора моделью (план B267 §3).
+   * Один шаг разметки пула правилами (B267 S2). Отдельный heartbeat раз в
+   * пять минут показывает объём просмотренных индексных строк, включая уже
+   * размеченные окна; итог сообщает число уникальных названий для S4.
    */
   runTitleParseStep(): void {
     if (this.stopped || !this.titleParse) return;
     try {
       const startedAt = Date.now();
       const report = this.stepThroughLabelled(this.titleParse, startedAt);
+      const stepMs = Date.now() - startedAt;
+      this.lastTitleParseStepAt = Date.now();
+      this.lastTitleParseStepMs = stepMs;
       const pass = {
         ...this.titleParsePass,
         steps: this.titleParsePass.steps + 1,
+        poolRowsScanned: this.titleParsePass.poolRowsScanned + report.poolRowsScanned,
         backfilled: this.titleParsePass.backfilled + report.backfilled,
         newKeys: this.titleParsePass.newKeys + report.newKeys,
       };
-      const stepMs = Date.now() - startedAt;
       if (report.passFinished) {
         this.log.info(
           {
@@ -282,19 +295,40 @@ export class MaintenanceWorker {
           },
           'title-parse-pass-finished',
         );
-        this.titleParsePass = { steps: 0, backfilled: 0, newKeys: 0, startedAt: Date.now() };
+        this.lastTitleParseProgressAt = Date.now();
+        this.titleParsePass = {
+          steps: 0,
+          poolRowsScanned: 0,
+          backfilled: 0,
+          newKeys: 0,
+          startedAt: Date.now(),
+        };
         return;
       }
-      if (pass.steps % TITLE_PARSE_PROGRESS_EVERY === 0 && pass.backfilled > 0) {
-        this.log.info({ ...pass, stepMs }, 'title-parse-progress');
-      }
       this.titleParsePass = pass;
+      this.reportTitleParseProgress();
     } catch (error: unknown) {
       this.log.error(
         { errorName: errorName(error), errorMessage: errorMessage(error) },
         'title-parse-step-failed',
       );
     }
+  }
+
+  /** Периодический снимок окон S2, даже если все строки в них уже размечены. */
+  reportTitleParseProgress(): void {
+    if (this.stopped || !this.titleParse) return;
+    const now = Date.now();
+    if (now - this.lastTitleParseProgressAt < TITLE_PARSE_PROGRESS_INTERVAL_MS) return;
+    this.log.info(
+      {
+        ...this.titleParsePass,
+        lastStepAt: this.lastTitleParseStepAt,
+        lastStepMs: this.lastTitleParseStepMs,
+      },
+      'title-parse-progress',
+    );
+    this.lastTitleParseProgressAt = now;
   }
 
   /** До трёх батчей Vertex; один запуск не пересекается со следующим тиком. */
@@ -328,14 +362,16 @@ export class MaintenanceWorker {
    */
   private stepThroughLabelled(step: TitleParseStep, startedAt: number) {
     let report = step.step(TITLE_PARSE_STEP_CHUNK);
+    let poolRowsScanned = report.poolRowsScanned;
     while (
       report.backfilled === 0 &&
       !report.passFinished &&
       Date.now() - startedAt < TITLE_PARSE_IDLE_BUDGET_MS
     ) {
       report = step.step(TITLE_PARSE_STEP_CHUNK);
+      poolRowsScanned += report.poolRowsScanned;
     }
-    return report;
+    return { ...report, poolRowsScanned };
   }
 
   /** Раз в минуту — сколько занято: без этого `MemoryMax` срабатывает молча. */
@@ -366,6 +402,7 @@ export class MaintenanceWorker {
     every(this.intervals.catalogMs, () => this.runCatalogStep());
     every(this.intervals.reportMs, () => this.reportMemory());
     every(this.intervals.titleParseMs, () => this.runTitleParseStep());
+    every(TITLE_PARSE_PROGRESS_INTERVAL_MS, () => this.reportTitleParseProgress());
     every(this.intervals.titleModelMs, () =>
       this.track(this.runTitleModelStep(), 'title-model-step-failed', undefined),
     );

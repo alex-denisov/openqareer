@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Worker } from 'node:worker_threads';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import { composeVacancyEngine } from '../vacancies/composeVacancyEngine';
 import { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
@@ -342,7 +342,12 @@ describe('MaintenanceWorker title parse step (B267 S2)', () => {
   const engineStub = {} as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
 
   function stepStub(
-    reports: Array<{ backfilled: number; newKeys: number; passFinished: boolean }>,
+    reports: Array<{
+      backfilled: number;
+      newKeys: number;
+      passFinished: boolean;
+      poolRowsScanned: number;
+    }>,
   ) {
     let call = 0;
     return {
@@ -352,20 +357,138 @@ describe('MaintenanceWorker title parse step (B267 S2)', () => {
   }
 
   it('пишет итог прохода с числом уникальных названий', () => {
-    const log = silentLog();
+    const entries: Array<{ context: Record<string, unknown>; msg: string }> = [];
+    const log: MaintenanceLog = {
+      info: (context, msg) => entries.push({ context, msg }),
+      warn: (context, msg) => entries.push({ context, msg }),
+      error: (context, msg) => entries.push({ context, msg }),
+    };
     const worker = new MaintenanceWorker({
       engine: engineStub,
       log,
       titleParse: stepStub([
-        { backfilled: 1000, newKeys: 300, passFinished: false },
-        { backfilled: 10, newKeys: 2, passFinished: true },
+        { backfilled: 1000, newKeys: 300, poolRowsScanned: 1000, passFinished: false },
+        { backfilled: 10, newKeys: 2, poolRowsScanned: 10, passFinished: true },
       ]),
     });
 
     worker.runTitleParseStep();
     worker.runTitleParseStep();
 
-    expect(log.entries.map((entry) => entry.msg)).toEqual(['title-parse-pass-finished']);
+    expect(entries.map((entry) => entry.msg)).toEqual(['title-parse-pass-finished']);
+    expect(entries[0]?.context).toMatchObject({
+      poolRowsScanned: 1_010,
+      backfilled: 1_010,
+      newKeys: 302,
+      keys: 42,
+    });
+  });
+
+  it('пишет progress heartbeat по времени даже при проходе уже размеченных окон', () => {
+    const entries: Array<{ context: Record<string, unknown>; msg: string }> = [];
+    const log: MaintenanceLog = {
+      info: (context, msg) => entries.push({ context, msg }),
+      warn: (context, msg) => entries.push({ context, msg }),
+      error: (context, msg) => entries.push({ context, msg }),
+    };
+    const startedAt = 1_000_000;
+    let now = startedAt;
+    let calls = 0;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      const worker = new MaintenanceWorker({
+        engine: engineStub,
+        log,
+        titleParse: {
+          step: () => {
+            calls += 1;
+            if (calls === 2) now += 300;
+            return {
+              scanned: 0,
+              poolRowsScanned: 500,
+              pruned: 0,
+              newKeys: 0,
+              passFinished: false,
+              backfilled: 0,
+            };
+          },
+          countKeys: () => 42,
+        },
+      });
+
+      now = startedAt + 5 * 60 * 1_000;
+      worker.runTitleParseStep();
+
+      const progress = entries.filter((entry) => entry.msg === 'title-parse-progress');
+      expect(progress).toHaveLength(1);
+      expect(progress[0]?.context).toMatchObject({
+        poolRowsScanned: 1_000,
+        backfilled: 0,
+        steps: 1,
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('heartbeat reports stale step counters on its own five-minute timer', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(1_000_000));
+    const entries: Array<{ context: Record<string, unknown>; msg: string }> = [];
+    const log: MaintenanceLog = {
+      info: (context, msg) => entries.push({ context, msg }),
+      warn: (context, msg) => entries.push({ context, msg }),
+      error: (context, msg) => entries.push({ context, msg }),
+    };
+    const engine = {
+      getSources: () => [],
+      restoreAsync: async () => ({ restored: 0 }),
+      syncSource: async () => ({ sourceId: 'none', status: 'unknown_source', fetched: 0, kept: 0 }),
+      syncDue: async () => [],
+      getRequestedSourceSyncs: () => [],
+      markSourceSyncStarted: () => false,
+      clearSourceSyncRequest: () => false,
+      probeDueLinks: async () => undefined,
+      runCatalogMaintenanceStep: () => undefined,
+      runClusterKeysBackfillStep: () => 0,
+      clusterKeysReady: true,
+      poolSize: 0,
+    } as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
+    const worker = new MaintenanceWorker({
+      engine,
+      log,
+      intervals: {
+        manualSyncMs: 600_000,
+        syncMs: 600_000,
+        livenessMs: 600_000,
+        catalogMs: 600_000,
+        reportMs: 600_000,
+        titleParseMs: 600_000,
+        titleModelMs: 600_000,
+      },
+      titleParse: {
+        step: () => ({
+          scanned: 0,
+          poolRowsScanned: 500,
+          pruned: 0,
+          newKeys: 0,
+          passFinished: false,
+          backfilled: 0,
+        }),
+        countKeys: () => 0,
+      },
+    });
+    try {
+      worker.start();
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1_000);
+
+      const progress = entries.filter((entry) => entry.msg === 'title-parse-progress');
+      expect(progress).toHaveLength(1);
+      expect(progress[0]?.context).toMatchObject({ steps: 0, poolRowsScanned: 0 });
+    } finally {
+      await worker.stop();
+      vi.useRealTimers();
+    }
   });
 
   it('ошибка шага попадает в журнал и не роняет воркер', () => {
@@ -396,6 +519,7 @@ describe('MaintenanceWorker title parse step (B267 S2)', () => {
           calls += 1;
           return {
             scanned: 0,
+            poolRowsScanned: 500,
             pruned: 0,
             newKeys: 0,
             passFinished: false,
@@ -427,8 +551,13 @@ describe('MaintenanceWorker title model step (B267 S4)', () => {
       log,
       titleModel: {
         run: async () => ({
-          batches: 1, parsed: 12, refused: 1, frozen: 0,
-          callsToday: 2000, dailyCapReached: true, ms: 15,
+          batches: 1,
+          parsed: 12,
+          refused: 1,
+          frozen: 0,
+          callsToday: 2000,
+          dailyCapReached: true,
+          ms: 15,
         }),
       },
     });
