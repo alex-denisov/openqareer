@@ -249,6 +249,9 @@ test.describe('B156 truthful market intelligence boundary', () => {
     await expect(marketSearch.getByRole('button', { name: 'Собрать сейчас' })).toBeVisible();
     await expect(marketSearch.getByRole('button', { name: 'Остановить сбор' })).toBeVisible();
     await expect(marketSearch.getByRole('button', { name: 'Удалить запрос' })).toBeVisible();
+    await expect(
+      page.getByText(/Площадки с проблемным статусом: источник не определён/u),
+    ).toBeVisible();
 
     for (const fabricatedOutcome of [
       'Авто-поднятие резюме',

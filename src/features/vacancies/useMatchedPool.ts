@@ -166,8 +166,7 @@ async function failureSourceLabel(): Promise<string | undefined> {
     const unhealthy = sources.filter(
       (source) => source.health.status !== 'healthy' && source.health.status !== 'not_checked',
     );
-    const namedSources = unhealthy.length > 0 ? unhealthy : sources;
-    return namedSources.slice(0, 3).map((source) => source.name).join(', ') || undefined;
+    return unhealthy.slice(0, 3).map((source) => source.name).join(', ') || undefined;
   } catch {
     return undefined;
   }
