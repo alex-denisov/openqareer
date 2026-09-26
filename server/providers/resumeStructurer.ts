@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import {
   RESUME_STRUCTURING_INSTRUCTIONS,
   RESUME_STRUCTURING_JSON_SCHEMA,
+  RESUME_STRUCTURING_PROMPT_REVISION,
   structuredResumeSchema,
   structuredResumeToParsed,
   type StructuredResume,
@@ -66,6 +67,8 @@ export async function structureWithinBudget(
 export interface ResumeStructurer {
   /** Returns `null` when the provider could not produce a valid answer. */
   structure(sourceText: string): Promise<ParsedResume | null>;
+  /** Optional for test and third-party adapters; production structurers always provide it. */
+  readonly provenance?: Readonly<{ model: string; promptRevision: string }>;
 }
 
 export interface LlmResumeStructurerOptions {
@@ -86,9 +89,11 @@ export class LlmResumeStructurer implements ResumeStructurer {
   private readonly client: ChatCompletionClient;
   private readonly model: string;
   private readonly structuredOutput: boolean;
+  readonly provenance: Readonly<{ model: string; promptRevision: string }>;
 
   constructor(options: LlmResumeStructurerOptions) {
     this.model = options.model;
+    this.provenance = { model: options.model, promptRevision: RESUME_STRUCTURING_PROMPT_REVISION };
     this.structuredOutput = options.structuredOutput ?? true;
     this.client =
       options.client ??

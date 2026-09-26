@@ -18,9 +18,11 @@ import type { ResumeStructurer } from './resumeStructurer';
 export class HygienicResumeStructurer implements ResumeStructurer {
   /** Открыт наружу, чтобы сборка могла назвать, что именно она обернула. */
   readonly inner: ResumeStructurer;
+  readonly provenance: ResumeStructurer['provenance'];
 
   constructor(options: { inner: ResumeStructurer }) {
     this.inner = options.inner;
+    this.provenance = options.inner.provenance;
   }
 
   async structure(sourceText: string): Promise<ParsedResume | null> {

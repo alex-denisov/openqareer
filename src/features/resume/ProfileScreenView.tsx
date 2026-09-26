@@ -193,6 +193,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
           draft={draft}
           importedSource={importedSource}
           updatedAt={props.view?.savedAt?.updatedAt}
+          reader={props.view?.reader ?? null}
           onDraftChange={onDraftChange}
         />
       </div>

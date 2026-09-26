@@ -606,11 +606,7 @@ export class SqliteCandidateStore implements CandidateStore {
     if (input.media?.length) {
       this.candidateMediaRepository.saveMany(candidateId, input.media);
     }
-    const resume = this.resumeRepository.save(
-      candidateId,
-      input.draft,
-      projection.evidenceSnapshot,
-    );
+    const resume = this.resumeRepository.save(candidateId, input.draft, projection.evidenceSnapshot, input.reader);
     this.candidateMediaRepository.pruneUnreferenced(candidateId, referencedMediaIds(input.draft));
     const sourceConnection = input.sourceReceipt
       ? this.sourceConnections.upsert(candidateId, input.sourceReceipt, evidence)

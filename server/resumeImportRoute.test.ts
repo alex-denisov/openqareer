@@ -6,7 +6,7 @@ import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import type { CoachProvider } from './providers/coachProvider';
 import type { ResumeStructurer } from './providers/resumeStructurer';
 import type { ResumeStudioProjection } from './domain/resumeStudio';
-import type { ParsedResume } from '../src/features/workspace/resumeParser';
+import { parseResumeContent, type ParsedResume } from '../src/features/workspace/resumeParser';
 
 const config: ServerConfig = {
   host: '127.0.0.1',
@@ -139,6 +139,62 @@ function nativeLinkedInImportBody(text = LINKEDIN_MARKDOWN) {
 }
 
 describe('POST /api/v1/candidate/resume/import', () => {
+  it('persists model reader provenance in the resume and candidate snapshot (B184)', async () => {
+    const structurer: ResumeStructurer = {
+      provenance: { model: 'openai:gpt-5.6-mini', promptRevision: 'resume-structuring-v1' },
+      async structure() {
+        return {
+          ...parseResumeContent(LINKEDIN_MARKDOWN),
+          rawText: LINKEDIN_MARKDOWN,
+        };
+      },
+    };
+    const { app, authorization } = await createApp(structurer);
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: importBody(),
+    });
+
+    expect(imported.statusCode).toBe(200);
+    expect(imported.json().data.resume.reader).toMatchObject({
+      method: 'model',
+      model: 'openai:gpt-5.6-mini',
+      promptRevision: 'resume-structuring-v1',
+      readAt: expect.any(String),
+    });
+
+    const snapshot = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/me',
+      headers: { authorization },
+    });
+    expect(snapshot.json().data.resume.reader).toMatchObject({
+      method: 'model',
+      model: 'openai:gpt-5.6-mini',
+    });
+  });
+
+  it('records rules rather than inventing a model when no structurer is configured (B184)', async () => {
+    const { app, authorization } = await createApp();
+    const imported = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: importBody(),
+    });
+
+    expect(imported.statusCode).toBe(200);
+    expect(imported.json().data.resume.reader).toMatchObject({
+      method: 'rules',
+      model: null,
+      promptRevision: null,
+      readAt: expect.any(String),
+    });
+  });
+
   it('commits a native hh snapshot and exposes a reload-visible session connection', async () => {
     const { app, authorization } = await createApp();
 
@@ -787,4 +843,3 @@ describe('INC-037 · импорт не ждёт модель дольше сво
     expect(elapsed).toBeLessThan(5_000);
   });
 });
-

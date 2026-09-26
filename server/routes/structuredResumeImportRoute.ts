@@ -87,6 +87,8 @@ async function commitStructuredImport(
       })),
     },
     draft,
+    // A native structured snapshot bypasses both resume readers, so it must not inherit old provenance.
+    reader: null,
     sourceReceipt: { ...body.sourceReceipt, importDigest },
     media: [...mediaBySourceUrl.values()],
   });
