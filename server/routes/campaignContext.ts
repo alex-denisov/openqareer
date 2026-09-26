@@ -4,6 +4,7 @@ import {
   type CampaignResolution,
   type StoredCampaignSelection,
 } from '../vacancies/campaign';
+import { regionOfVacancy } from '../vacancies/vacancyGeography';
 import type { RouteDeps } from './deps';
 
 /**
@@ -26,10 +27,16 @@ export function readCampaign(
   const snapshot = candidateStore.getSnapshot(candidateId);
   const memory = snapshot?.memory ?? [];
   const resumeTargetRole = snapshot?.resume?.draft?.targetRole ?? null;
+  const profileLocation = snapshot?.resume?.draft.candidate.contact?.location;
 
   const stored = candidateStore.getCandidateWorkspace(candidateId);
   const parsed = stored ? candidateWorkspaceSchema.safeParse(stored) : null;
-  const profileRegions = parsed?.success ? [...parsed.data.regions] : [];
+  const inferredRegion = regionOfVacancy({ location: profileLocation });
+  const profileRegions = inferredRegion
+    ? [inferredRegion]
+    : parsed?.success
+      ? [...parsed.data.regions]
+      : [];
   const explicit: StoredCampaignSelection | null =
     parsed?.success && parsed.data.campaign ? parsed.data.campaign : null;
 
