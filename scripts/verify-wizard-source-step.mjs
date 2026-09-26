@@ -2,9 +2,9 @@
  * Walks the changed wizard flows in real Chromium against the built bundle.
  *
  * Covers, at 1440x900 and 390x844:
- *  - step 3 with the seven regions the owner named (B158);
- *  - step 2 on the web, which must offer the desktop CTA and no platform login;
- *  - step 2 in the desktop shell with hh.ru already connected: the release
+ *  - the profileless quick-start with the seven regions the owner named (B158/C37);
+ *  - the source step on the web, which must offer the desktop CTA and no platform login;
+ *  - the source step in the desktop shell with hh.ru already connected: the release
  *    notice under the cards, «Отключить» in place of «Подключить», and the
  *    DELETE the button must actually issue (B169).
  */
@@ -175,47 +175,31 @@ async function checkSourceLockSitsUnderItsSource(page, viewport) {
 const EXPECTED_REGIONS = ['Россия', 'СНГ', 'US', 'EU', 'MENA', 'APAC', 'LATAM'];
 
 /**
- * 2) Step five ("География и формат") offers exactly the seven regions the
- * owner named — reached via the "расскажу сам" branch, which skips the
- * document steps entirely (onboarding.html step 2b/talk).
+ * The profileless quick-start shows one role and the seven region choices on
+ * the same step, then leaves persistence to the signed-in acceptance path.
  */
-async function checkRegionsOnStepFive(page, viewport) {
+async function checkRegionsOnQuickStart(page, viewport) {
   await page.getByRole('button', { name: 'Сменить источник' }).click();
   await page.getByRole('button', { name: 'Расскажу сам' }).click();
   await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page
-    .getByRole('heading', { name: 'Три вопроса о последней роли' })
-    .waitFor({ timeout: 10000 });
-  const [q1, q2, q3] = await page.getByRole('textbox').all();
-  await q1.fill(
-    'Руководил продуктовой командой из восьми человек и отвечал за выручку направления.',
-  );
-  await q2.fill('Меньше операционки, больше стратегии.');
-  await q3.fill('Команда выросла вдвое.');
-  await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page.getByRole('heading', { name: 'Проверьте профиль' }).waitFor({ timeout: 10000 });
-  await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page.getByRole('heading', { name: 'На какие роли вас купят' }).waitFor({ timeout: 10000 });
-  await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page.getByRole('heading', { name: 'География и формат' }).waitFor({ timeout: 10000 });
+  await page.getByRole('heading', { name: 'Роль и регион' }).waitFor({ timeout: 10000 });
+  await page.getByRole('textbox', { name: 'На какую роль ищете работу?' }).fill('Аналитик данных');
 
-  const regions = await page
-    .getByRole('group', { name: 'Где рассматриваете работу' })
-    .getByRole('button')
-    .allInnerTexts();
+  const regionGroup = page.getByRole('group', { name: 'Где рассматриваете работу' });
+  const regions = await regionGroup.getByRole('button').allInnerTexts();
   if (JSON.stringify(regions.map((item) => item.trim())) !== JSON.stringify(EXPECTED_REGIONS)) {
     problems.push(`${viewport.name}: regions are ${JSON.stringify(regions)}`);
   }
-  const eu = page.getByRole('button', { name: 'EU', exact: true });
+  const eu = regionGroup.getByRole('button', { name: 'EU', exact: true });
   await eu.click();
   if ((await eu.getAttribute('aria-pressed')) !== 'true') {
     problems.push(`${viewport.name}: EU does not select`);
   }
   const wide = await overflow(page);
   if (wide.horizontal > 1) {
-    problems.push(`${viewport.name}: step 5 overflows by ${wide.horizontal}px`);
+    problems.push(`${viewport.name}: role-and-region step overflows by ${wide.horizontal}px`);
   }
-  await page.screenshot({ path: `${OUT}/web-${viewport.name}-step5.png` });
+  await page.screenshot({ path: `${OUT}/web-${viewport.name}-quick-start.png` });
 }
 
 /** 3) A connected platform shows its sign-out where «Подключить» used to be. */
@@ -277,7 +261,7 @@ async function webWalk(browser, baseUrl, viewport) {
   await reachSourceStep(page, baseUrl);
   await checkWebOffersNoPlatformLogin(page, viewport);
   await checkSourceLockSitsUnderItsSource(page, viewport);
-  await checkRegionsOnStepFive(page, viewport);
+  await checkRegionsOnQuickStart(page, viewport);
   await context.close();
 }
 

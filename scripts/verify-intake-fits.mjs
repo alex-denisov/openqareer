@@ -1,5 +1,6 @@
 /**
- * B169 §2 — proves each wizard step fits the screen it is given.
+ * B169 §2 — measures the shipped source chooser and profileless quick-start
+ * steps at the deliberately short viewports below.
  *
  * The owner's report was that the wizard scrolls: "визард должен быть весь без
  * скролла, нужно чтобы все элементы помещались на одном моем экране". A
@@ -68,7 +69,7 @@ async function measure(page, label, outputDirectory) {
   return { label, ...box };
 }
 
-/** Every one of the six onboarding.html steps, with the source variants that change height. */
+/** The web source chooser and profileless role-and-region step. */
 async function walkWebWizard(page, viewport, outputDirectory, results) {
   await page.goto(`${page.__baseUrl}app`, { waitUntil: 'load' });
   await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor({ timeout: 20000 });
@@ -83,32 +84,12 @@ async function walkWebWizard(page, viewport, outputDirectory, results) {
 
   await page.getByRole('button', { name: 'Расскажу сам' }).click();
   await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page
-    .getByRole('heading', { name: 'Три вопроса о последней роли' })
-    .waitFor({ timeout: 10000 });
-  results.push(await measure(page, `${viewport.name}-step2-talk`, outputDirectory));
+  await page.getByRole('heading', { name: 'Роль и регион' }).waitFor({ timeout: 10000 });
+  results.push(await measure(page, `${viewport.name}-step2-role-region-empty`, outputDirectory));
 
-  const [q1, q2, q3] = await page.getByRole('textbox').all();
-  await q1.fill(
-    'Руководил продуктовой командой из восьми человек и отвечал за выручку направления.',
-  );
-  await q2.fill('Меньше операционки, больше стратегии.');
-  await q3.fill('Команда выросла вдвое.');
-  await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page.getByRole('heading', { name: 'Проверьте профиль' }).waitFor({ timeout: 10000 });
-  results.push(await measure(page, `${viewport.name}-step3-review`, outputDirectory));
-
-  await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page.getByRole('heading', { name: 'На какие роли вас купят' }).waitFor({ timeout: 10000 });
-  results.push(await measure(page, `${viewport.name}-step4-roles`, outputDirectory));
-
-  await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page.getByRole('heading', { name: 'География и формат' }).waitFor({ timeout: 10000 });
-  results.push(await measure(page, `${viewport.name}-step5-geo`, outputDirectory));
-
-  await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page.getByRole('heading', { name: 'Первая подборка готова' }).waitFor({ timeout: 10000 });
-  results.push(await measure(page, `${viewport.name}-step6-done`, outputDirectory));
+  await page.getByRole('textbox', { name: 'На какую роль ищете работу?' }).fill('Аналитик данных');
+  await page.getByRole('button', { name: 'Россия', exact: true }).click();
+  results.push(await measure(page, `${viewport.name}-step2-role-region-filled`, outputDirectory));
 }
 
 /**
