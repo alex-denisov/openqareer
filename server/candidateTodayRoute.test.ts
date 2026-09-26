@@ -8,7 +8,10 @@ import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseSt
 import { normalizeTitleKey } from './vacancies/titleParse/normalizeTitleKey';
 
 /** `GET /today` (B251, S4, architecture.md §4, §57, §97). */
-function pool(roleMatches: readonly ('target' | 'partial' | 'none')[] = ['target']): MatchedVacancyItem[] {
+function pool(
+  roleMatches: readonly ('target' | 'partial' | 'none')[] = ['target'],
+  remoteFlags: readonly boolean[] = [],
+): MatchedVacancyItem[] {
   return roleMatches.map((roleMatch, index) => {
     const clusterId = `cluster-${index + 1}`;
     return {
@@ -17,7 +20,7 @@ function pool(roleMatches: readonly ('target' | 'partial' | 'none')[] = ['target
         canonicalTitle: `Инженер данных ${index + 1}`,
         canonicalCompany: 'Компания',
         canonicalLocation: 'Москва',
-        isRemote: false,
+        isRemote: remoteFlags[index] ?? false,
         skills: [],
         descriptionSummary: 'Описание вакансии. '.repeat(20),
         primaryUrl: `https://example.test/${index + 1}`,
@@ -43,8 +46,10 @@ function pool(roleMatches: readonly ('target' | 'partial' | 'none')[] = ['target
 async function createApp(options?: {
   withMatchingEngine?: boolean;
   roleMatches?: readonly ('target' | 'partial' | 'none')[];
+  remoteFlags?: readonly boolean[];
   experienceTitle?: string;
   titleParseStore?: SqliteTitleParseStore;
+  remoteOnly?: boolean;
 }) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',
@@ -70,9 +75,27 @@ async function createApp(options?: {
     },
     [],
   );
+  if (options?.remoteOnly) {
+    candidateStore.saveCandidateWorkspace(candidate.id, {
+      resumeText: '',
+      resumeSource: 'text',
+      targetDirection: 'Инженер данных',
+      regions: ['ru'],
+      currentSituation: '',
+      constraints: '',
+      urgency: 'active',
+      campaign: {
+        roles: ['Инженер данных'],
+        regions: ['ru'],
+        remoteOnly: true,
+        revision: 1,
+        updatedAt: '2026-09-24T00:00:00.000Z',
+      },
+    });
+  }
 
   const engine = {
-    getMatchedVacanciesAsync: async () => pool(options?.roleMatches),
+    getMatchedVacanciesAsync: async () => pool(options?.roleMatches, options?.remoteFlags),
     isKnownVacancyGone: () => false,
     restore: () => ({ clusters: 0, sources: 0 }),
   };
@@ -153,6 +176,34 @@ describe('GET /candidate/today', () => {
     const body = response.json().data;
     expect(body.vacanciesPending).toBe(true);
     expect(body.digest.newVacancies).toBe(0);
+  });
+
+  it('applies the explicit remote-only campaign choice to Vacancies and Today', async () => {
+    const { app, authorization } = await createApp({
+      withMatchingEngine: true,
+      roleMatches: ['target', 'target'],
+      remoteFlags: [false, true],
+      remoteOnly: true,
+    });
+
+    const vacancies = await app.inject({
+      url: '/api/v1/candidate/matched-vacancies',
+      headers: { authorization },
+    });
+    expect(vacancies.statusCode).toBe(200);
+    expect(vacancies.json().data).toHaveLength(1);
+    expect(vacancies.json().data[0].cluster.isRemote).toBe(true);
+    expect(vacancies.json().meta.campaign.remoteOnly).toBe(true);
+
+    const today = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow`,
+      headers: { authorization },
+    });
+    expect(today.statusCode).toBe(200);
+    expect(today.json().data.digest.newVacancies).toBe(1);
+    expect(today.json().data.queue.map((item: { clusterId?: string }) => item.clusterId)).toEqual([
+      'cluster-2',
+    ]);
   });
 
   // The app maps every Zod validation failure to 422 (`runtime.ts`), the

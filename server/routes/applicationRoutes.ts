@@ -208,7 +208,10 @@ function peekTodayMatchedVacancies(
     targetRoles,
     targetLevel,
   );
-  return { matched, targetRoles };
+  return {
+    matched: matched?.filter((item) => !campaign.remoteOnly || item.cluster.isRemote),
+    targetRoles,
+  };
 }
 
 /**

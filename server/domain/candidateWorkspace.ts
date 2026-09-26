@@ -56,6 +56,7 @@ export const candidateWorkspaceSchema = z
       .object({
         roles: z.array(z.string().trim().min(1).max(200)).max(10),
         regions: z.array(z.enum(CANDIDATE_REGIONS)).max(CANDIDATE_REGIONS.length),
+        remoteOnly: z.boolean().optional(),
         revision: z.number().int().min(1),
         updatedAt: z.string(),
         auto: z.object({

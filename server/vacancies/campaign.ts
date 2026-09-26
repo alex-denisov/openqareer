@@ -25,6 +25,7 @@ export interface CampaignMemoryFact {
 export interface StoredCampaignSelection {
   readonly roles: readonly string[];
   readonly regions: readonly string[];
+  readonly remoteOnly?: boolean;
   readonly revision: number;
   readonly updatedAt: string;
 }
@@ -79,6 +80,8 @@ export function annotateRoleHypotheses(
 export interface CampaignResolution {
   readonly roles: CampaignField<readonly string[]>;
   readonly regions: CampaignField<readonly string[]>;
+  readonly remoteOnly: boolean;
+  readonly autoRoles: readonly { readonly id: string; readonly title: string; readonly kind: 'primary' | 'adjacent' }[];
   readonly divergence: CampaignDivergence;
   /**
    * `undefined`, пока вызывающая сторона не прочитала пул и не посчитала
@@ -169,6 +172,8 @@ export function resolveCampaign(input: ResolveCampaignInput): CampaignResolution
   return {
     roles,
     regions,
+    remoteOnly: input.explicit?.remoteOnly ?? false,
+    autoRoles: (input.auto?.roles ?? []).map(({ id, title, kind }) => ({ id, title, kind })),
     divergence: {
       roles: divergenceOf(roles, derivedRoles),
       regions: divergenceOf(regions, derivedRegions),

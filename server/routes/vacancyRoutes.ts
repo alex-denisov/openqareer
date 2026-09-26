@@ -383,13 +383,16 @@ function finishMatchedVacancies(
   candidateStore: RouteDeps['candidateStore'],
   candidateId: string,
 ): MatchedVacancyItem[] {
+  const geographyAndRemote = campaign.remoteOnly
+    ? snapshot.filter((item) => item.cluster.isRemote)
+    : snapshot;
   // SQL добирает кандидатов до лимита любыми свежими записями; при названной
   // роли в подбор идут только совпавшие с ней, и счётчик считает их же.
   // Записи вне рынков кампании помечены и стоят после остальных (PRB-040).
   const roleFiltered = markGeography(
     targetRoles.length > 0
-      ? snapshot.filter((item) => item.explanation.roleMatch !== 'none')
-      : snapshot,
+      ? geographyAndRemote.filter((item) => item.explanation.roleMatch !== 'none')
+      : geographyAndRemote,
     campaign.regions.value as CandidateRegion[],
   );
   return applyVacancyDecisions(roleFiltered, candidateStore.listVacancyDecisions(candidateId));
@@ -456,7 +459,10 @@ const handleMatchedVacancies: Handler = async (
   // Гипотеза роли (B247, срез 2): порог считается по тому же снимку, что и
   // сам подбор — до фильтра по роли/гео, иначе роль без вакансий в её же
   // рынке выглядела бы гипотезой из-за чужого фильтра, а не своего счёта.
-  const vacancyCountsByRole = countMatchedVacanciesByRole(snapshot, targetRoles);
+  const hypothesisSnapshot = campaign.remoteOnly
+    ? snapshot.filter((item) => item.cluster.isRemote)
+    : snapshot;
+  const vacancyCountsByRole = countMatchedVacanciesByRole(hypothesisSnapshot, targetRoles);
   const campaignWithHypotheses = readCampaign(candidateStore, candidate.id, vacancyCountsByRole);
 
   // Весь подбор одним телом не доходит: маршрут рвёт ответ примерно на 20 460

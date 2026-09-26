@@ -10,7 +10,6 @@ import { SearchCampaign } from '../search/SearchCampaign';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { ProfileScreenView } from '../resume/ProfileScreenView';
 import { ProfileTabs, type ProfileTab } from '../resume/profileTabs';
-import { VacancyBoard } from '../vacancies/VacancyBoard';
 import { VacanciesScreen } from '../vacancies/VacanciesScreen';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
 import { useVacancyApplications } from '../vacancies/useVacancyApplications';
@@ -29,7 +28,7 @@ import {
 } from './routePremises';
 import { cabinetJourney } from './cabinetJourney';
 import { useCareerStrategy, type CareerStrategyRead } from './useCareerStrategy';
-import { countConfirmedApplications, type VacancyApplication } from '../../../shared/vacancyApplication';
+import { countConfirmedApplications } from '../../../shared/vacancyApplication';
 import type { CareerCabinetView } from './cabinetViews';
 
 export type { CareerCabinetView } from './cabinetViews';
@@ -126,8 +125,7 @@ export function CareerCabinet({
   // «Профиль», а не рядом с карточкой кандидата: карточка — факты о человеке,
   // вкладки решают, что показывает весь экран (B265 review round 3).
   const [profileTab, setProfileTab] = useState<ProfileTab>('profile');
-  const showsVacanciesScreen =
-    view === 'opportunities' && !pool.loading && !pool.failed && pool.matched.length > 0;
+  const showsVacanciesScreen = view === 'opportunities';
   // B248 §2 — the same path indicator the anonymous wizard shows
   // (`CareerWorkspaceShell`), wired to the cabinet's own journey, pool and
   // confirmed applications instead of a second read of any of them
@@ -180,7 +178,6 @@ export function CareerCabinet({
             targetDirection={targetDirection}
             strategy={strategy}
             pool={pool}
-            applications={vacancyApplications.applications}
             vacancyApplications={vacancyApplications}
             pathIndicatorSteps={pathIndicatorSteps}
             applicationsTracker={applicationsTracker}
@@ -231,7 +228,6 @@ function CabinetSection({
   targetDirection,
   strategy,
   pool,
-  applications,
   vacancyApplications,
   pathIndicatorSteps,
   applicationsTracker,
@@ -249,7 +245,6 @@ function CabinetSection({
   targetDirection: string;
   strategy: CareerStrategyRead;
   pool: ReturnType<typeof useMatchedPool>;
-  applications?: readonly VacancyApplication[];
   vacancyApplications: ReturnType<typeof useVacancyApplications>;
   pathIndicatorSteps?: ReturnType<typeof buildPathIndicator>;
   applicationsTracker: ReturnType<typeof useApplications>;
@@ -322,28 +317,16 @@ function CabinetSection({
       <ResponsesBoard state={applicationsTracker} onOpenVacancies={() => onNavigate('opportunities')} />
     );
   }
-  // Верх экрана и список — новый макет «Вакансии» (B248/B250). Загрузка,
-  // ошибка и пустой пул остаются на прежнем экране до следующего среза,
-  // который переносит эти состояния и детальную панель.
-  if (pool.loading || pool.failed || pool.matched.length === 0) {
-    return (
-      <VacancyBoard
-        candidateId={session.candidateId}
-        subscriptions={data.snapshot?.vacancySubscriptions ?? []}
-        defaultQuery={targetDirection || undefined}
-        onRefresh={data.refresh}
-        pool={pool}
-        applications={applications}
-        candidateFacts={data.snapshot?.memory ?? []}
-      />
-    );
-  }
   return (
     <VacanciesScreen
       matched={pool.matched}
       total={pool.total || pool.matched.length}
       campaign={pool.campaign}
       candidateLevel={pool.candidateLevel}
+      loading={pool.loading}
+      failed={pool.failed}
+      failureSourceLabel={pool.failureSourceLabel}
+      onRetry={pool.refresh}
       applications={vacancyApplications}
       pathIndicator={
         pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined

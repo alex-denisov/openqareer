@@ -64,6 +64,8 @@ export function campaignMeta(campaign: CampaignResolution) {
   return {
     roles: { value: [...campaign.roles.value], origin: campaign.roles.origin },
     regions: { value: [...campaign.regions.value], origin: campaign.regions.origin },
+    remoteOnly: campaign.remoteOnly,
+    autoRoles: campaign.autoRoles.map((role) => ({ ...role })),
     divergence: {
       roles: campaign.divergence.roles
         ? {

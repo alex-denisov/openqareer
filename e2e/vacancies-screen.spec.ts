@@ -53,6 +53,11 @@ const SNAPSHOT = {
 const CAMPAIGN = {
   roles: { value: ['Enterprise Architect'], origin: 'profile' },
   regions: { value: ['United States', 'Philippines', 'Германия'], origin: 'profile' },
+  remoteOnly: false,
+  autoRoles: [
+    { id: 'architect.primary', title: 'Enterprise Architect', kind: 'primary' as const },
+    { id: 'architect.cloud', title: 'Cloud Architect', kind: 'adjacent' as const },
+  ],
   roleHypotheses: [
     { role: 'Enterprise Architect', vacancyCount: 34, isHypothesis: false },
     { role: 'Cloud Architect', vacancyCount: 6, isHypothesis: true },
@@ -157,7 +162,18 @@ const MATCHED_ITEMS = [
   },
 ];
 
-async function stubSession(page: Page): Promise<void> {
+interface VacancyStubScenario {
+  readonly matchedItems?: typeof MATCHED_ITEMS;
+  readonly total?: number;
+  readonly campaign?: typeof CAMPAIGN;
+  readonly failMatched?: boolean;
+  readonly campaignUpdates?: unknown[];
+  readonly matchedReadCount?: { value: number };
+}
+
+async function stubSession(page: Page, scenario: VacancyStubScenario = {}): Promise<void> {
+  let currentCampaign = scenario.campaign ?? CAMPAIGN;
+  let matchedReads = 0;
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -168,14 +184,49 @@ async function stubSession(page: Page): Promise<void> {
     if (pathname === '/api/v1/candidate/workspace') {
       return route.fulfill({ json: { data: null } });
     }
-    if (pathname === '/api/v1/candidate/matched-vacancies') {
+    if (pathname === '/api/v1/candidate/vacancy-sources') {
       return route.fulfill({
         json: {
-          data: MATCHED_ITEMS,
+          data: [
+            { id: 'hh', name: 'hh.ru', health: { status: 'healthy' } },
+            { id: 'remotive', name: 'Remotive', health: { status: 'unavailable' } },
+          ],
+        },
+      });
+    }
+    if (request.method() === 'POST' && pathname === '/api/v1/candidate/campaign') {
+      const update = request.postDataJSON() as {
+        roles: Array<string | { id: string; title: string }>;
+        regions: string[];
+        remoteOnly?: boolean;
+      };
+      scenario.campaignUpdates?.push(update);
+      const roles = update.roles.map((role) => (typeof role === 'string' ? role : role.title));
+      currentCampaign = {
+        ...currentCampaign,
+        roles: { value: roles, origin: 'explicit' },
+        regions: { value: update.regions, origin: 'explicit' },
+        remoteOnly: update.remoteOnly ?? false,
+        roleHypotheses: roles.map((role) => ({ role, vacancyCount: 0, isHypothesis: true })),
+      };
+      return route.fulfill({ json: { data: currentCampaign } });
+    }
+    if (pathname === '/api/v1/candidate/matched-vacancies') {
+      matchedReads += 1;
+      if (scenario.matchedReadCount) scenario.matchedReadCount.value = matchedReads;
+      if (scenario.failMatched) {
+        return route.fulfill({
+          status: 503,
+          json: { error: { code: 'source_unavailable', message: 'Подбор не ответил.' } },
+        });
+      }
+      return route.fulfill({
+        json: {
+          data: scenario.matchedItems ?? MATCHED_ITEMS,
           meta: {
-            total: 61,
+            total: scenario.total ?? 61,
             nextOffset: null,
-            campaign: CAMPAIGN,
+            campaign: currentCampaign,
             candidateLevel: 'VP / C-level',
           },
         },
@@ -437,5 +488,84 @@ test.describe('B250 vacancies screen', () => {
       name: 'Откликнуться',
     });
     await expect(mobileApplyButton).toBeVisible();
+  });
+
+  test('low role coverage exposes explicit campaign changes', async ({ page }, testInfo) => {
+    const updates: unknown[] = [];
+    const lowCampaign = {
+      ...CAMPAIGN,
+      roleHypotheses: [{ role: 'Enterprise Architect', vacancyCount: 5, isHypothesis: true }],
+    };
+    await stubSession(page, {
+      campaign: lowCampaign,
+      matchedItems: MATCHED_ITEMS.slice(0, 5),
+      total: 5,
+      campaignUpdates: updates,
+    });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    const banner = page.locator('.vacancy-hypothesis-banner');
+    await expect(banner).toContainText('Это гипотеза, не результат.');
+    await expect(banner).toContainText('По роли Enterprise Architect найдено 5 вакансий');
+    await page.screenshot({
+      path: testInfo.outputPath('vacancies-hypothesis.png'),
+      fullPage: true,
+    });
+    await banner.getByRole('button', { name: /Добавить смежную роль/ }).click();
+    await expect.poll(() => updates.length).toBe(1);
+    expect(
+      (updates[0] as { roles: Array<string | { id: string; title: string }> }).roles,
+    ).toContainEqual({ id: 'architect.cloud', title: 'Cloud Architect' });
+
+    await banner.getByRole('button', { name: 'Расширить географию' }).click();
+    await banner.getByRole('button', { name: 'Добавить EU' }).click();
+    await expect.poll(() => updates.length).toBe(2);
+    expect((updates[1] as { regions: string[] }).regions).toContain('eu');
+
+    await banner.getByRole('button', { name: 'Добавить «Удалённо»' }).click();
+    await expect.poll(() => updates.length).toBe(3);
+    expect((updates[2] as { remoteOnly: boolean }).remoteOnly).toBe(true);
+  });
+
+  test('shows a zero-result hypothesis and names a source when loading fails', async ({
+    page,
+  }, testInfo) => {
+    await stubSession(page, {
+      matchedItems: [],
+      total: 0,
+      campaign: {
+        ...CAMPAIGN,
+        roleHypotheses: [{ role: 'Enterprise Architect', vacancyCount: 0, isHypothesis: true }],
+      },
+    });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+    await expect(page.locator('.vacancies-state')).toContainText(
+      'По роли Enterprise Architect пока нет вакансий',
+    );
+    await expect(page.locator('.vacancy-hypothesis-banner')).toContainText(
+      'По роли Enterprise Architect найдено 0 вакансий',
+    );
+    await page.screenshot({ path: testInfo.outputPath('vacancies-empty.png'), fullPage: true });
+
+    const errorPage = await page.context().newPage();
+    const matchedReadCount = { value: 0 };
+    await stubSession(errorPage, { failMatched: true, matchedReadCount });
+    await seedWorkspace(errorPage);
+    await errorPage.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(errorPage);
+    await expect(errorPage.locator('.vacancies-state.is-error')).toContainText('Remotive');
+    const retry = errorPage.getByRole('button', { name: 'Повторить' });
+    await expect(retry).toBeVisible();
+    await errorPage.screenshot({
+      path: testInfo.outputPath('vacancies-error.png'),
+      fullPage: true,
+    });
+    await retry.click();
+    await expect.poll(() => matchedReadCount.value).toBeGreaterThan(1);
+    await errorPage.close();
   });
 });

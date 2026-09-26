@@ -1,5 +1,5 @@
 import type { MatchedVacancyItem } from './cabinetTypes';
-import { CoachApiError as CoachApiErrorClass, apiFetch, throwApiError } from './apiClient';
+import { CoachApiError as CoachApiErrorClass, apiFetch, readData, throwApiError } from './apiClient';
 
 /**
  * Чтение подбора живёт отдельно от общего API кабинета.
@@ -20,7 +20,15 @@ export interface CampaignRoleHypothesis {
 export interface CampaignMetaView {
   readonly roles: { readonly value: readonly string[]; readonly origin: string };
   readonly regions: { readonly value: readonly string[]; readonly origin: string };
+  readonly remoteOnly?: boolean;
+  readonly autoRoles?: readonly { readonly id: string; readonly title: string; readonly kind: 'primary' | 'adjacent' }[];
   readonly roleHypotheses?: readonly CampaignRoleHypothesis[];
+}
+
+export interface CandidateCampaignUpdate {
+  readonly roles: readonly (string | { readonly id: string; readonly title: string })[];
+  readonly regions: readonly string[];
+  readonly remoteOnly?: boolean;
 }
 
 export interface MatchedVacancyPage {
@@ -84,6 +92,17 @@ export async function getMatchedVacancyPage(
       ? { candidateLevel: envelope.meta.candidateLevel }
       : {}),
   };
+}
+
+export async function saveCandidateCampaign(
+  input: CandidateCampaignUpdate,
+): Promise<CampaignMetaView> {
+  const response = await apiFetch('/api/v1/candidate/campaign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return readData<CampaignMetaView>(response);
 }
 
 export async function getMatchedVacancies(signal?: AbortSignal): Promise<MatchedVacancyItem[]> {

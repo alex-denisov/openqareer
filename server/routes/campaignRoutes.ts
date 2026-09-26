@@ -49,6 +49,7 @@ const campaignRoleChoiceSchema = z.union([
 const campaignChoiceSchema = z.object({
   roles: z.array(campaignRoleChoiceSchema).max(10),
   regions: z.array(z.enum(CANDIDATE_REGIONS)).max(CANDIDATE_REGIONS.length),
+  remoteOnly: z.boolean().optional(),
 });
 
 const WORKSPACE_REQUIRED = {
@@ -80,14 +81,21 @@ const handleSaveCampaign: Handler = async (deps, request, reply) => {
   const kept = new Set(body.roles.flatMap((role) =>
     typeof role === 'string' ? [role] : [role.id, role.title].filter((value): value is string => Boolean(value)),
   ));
+  const previouslyChosen = new Set(stored.campaign?.roles ?? []);
   const removedAutoIds = (stored.campaign?.auto?.roles ?? [])
-    .filter((role) => !kept.has(role.id) && !kept.has(role.title))
+    .filter(
+      (role) =>
+        (previouslyChosen.has(role.id) || previouslyChosen.has(role.title)) &&
+        !kept.has(role.id) &&
+        !kept.has(role.title),
+    )
     .map((role) => role.id);
   candidateStore.saveCandidateWorkspace(candidate.id, {
     ...stored,
     campaign: {
       roles,
       regions: body.regions,
+      remoteOnly: body.remoteOnly ?? stored.campaign?.remoteOnly ?? false,
       revision: previousRevision + 1,
       updatedAt: new Date().toISOString(),
       ...(stored.campaign?.auto ? { auto: stored.campaign.auto } : {}),
