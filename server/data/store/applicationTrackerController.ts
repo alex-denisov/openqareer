@@ -18,6 +18,7 @@ import { SqliteApplicationOfferRepository, type ApplicationOfferTerms, type Stor
 import { SqliteVacancySkipRepository, type StoredVacancySkip, type VacancySkipOrigin } from '../sqliteVacancySkipRepository';
 import { SqliteCandidateVisitRepository, type RecordVisitResult } from '../sqliteCandidateVisitRepository';
 import type { SqliteWorkspaceRepository } from '../sqliteWorkspaceRepository';
+import type { SqliteDocumentRepository } from '../sqliteDocumentRepository';
 import type { SealedText } from '../sealedText';
 import type { VacancyApplication, VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import type { ApplicationStage } from '../../../shared/applicationStage';
@@ -25,7 +26,7 @@ import type { SkipReasonId } from '../../../shared/skipReasons';
 import type { VacancyDecision } from '../../vacancies/applyVacancyDecisions';
 import { deriveApplicationFields, type ApplicationView } from '../../domain/applicationDerivedFields';
 import { defaultProcessProfile } from '../../vacancies/processProfileDefault';
-import { ApplicationNotFoundError } from './errors';
+import { ApplicationNotFoundError, CandidateDocumentNotFoundError } from './errors';
 
 export interface ReadApplicationOptions {
   readonly now?: string;
@@ -52,6 +53,7 @@ export class ApplicationTrackerController {
     sealedText: SealedText,
     private readonly legacyApplications: SqliteVacancyApplicationRepository,
     private readonly workspaces: SqliteWorkspaceRepository,
+    private readonly documents: SqliteDocumentRepository,
   ) {
     this.applications = new SqliteApplicationRepository(database, sealedText);
     this.materials = new SqliteApplicationMaterialsRepository(database);
@@ -140,6 +142,9 @@ export class ApplicationTrackerController {
     documentId: string,
   ): StoredApplicationMaterial {
     this.mustGetOwn(candidateId, applicationId);
+    if (!this.documents.belongsToCandidate(candidateId, documentId)) {
+      throw new CandidateDocumentNotFoundError();
+    }
     const linked = this.materials.link(applicationId, role, documentId);
     this.applications.recordMaterialEvent(candidateId, applicationId, role, documentId);
     return linked;
@@ -238,7 +243,9 @@ export class ApplicationTrackerController {
 
   private toView(application: StoredApplication, options: ReadApplicationOptions): ApplicationView {
     const events = this.applications.listEvents(application.candidateId, application.id);
-    const materials = this.materials.list(application.id);
+    const materials = this.materials
+      .list(application.id)
+      .filter((material) => this.documents.belongsToCandidate(application.candidateId, material.documentId));
     const interviews = this.interviews.list(application.id);
     const derived = deriveApplicationFields({
       application,

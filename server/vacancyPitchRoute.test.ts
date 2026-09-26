@@ -175,6 +175,32 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     expect(response.statusCode).toBe(403);
   });
 
+  it('does not save a generated document for another candidate application', async () => {
+    const { app, candidates } = await createApp([sampleCluster]);
+    const { cookie, candidateId } = await login(app);
+    const otherCandidate = candidates.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+    const foreignApplication = candidates.createApplication(otherCandidate.id, {
+      stage: 'applied',
+      manualVacancy: {
+        title: 'Senior Platform Engineer',
+        company: 'CloudScale Inc',
+        url: 'https://example.com/vacancies/99',
+        source: 'remotive',
+      },
+    });
+    const documentsBefore = candidates.getSnapshot(candidateId).documents.length;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: { applicationId: foreignApplication.id },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(candidates.getSnapshot(candidateId).documents).toHaveLength(documentsBefore);
+  });
+
   it('returns 404 when vacancy is not found and no override provided', async () => {
     const { app } = await createApp([]);
     const { cookie } = await login(app);

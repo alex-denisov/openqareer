@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from './app';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
@@ -69,6 +73,81 @@ describe('applications route · S2 materials/interviews/offer/events', () => {
     });
     expect(linked.statusCode).toBe(200);
     expect(linked.json().data).toMatchObject({ role: 'resume', documentId: document.id });
+  });
+
+  it('rejects a resume document owned by another candidate', async () => {
+    const { app, authorization, candidateStore } = await createApp();
+    const applicationId = await createCard(app, authorization, 'cluster-1');
+    const otherCandidate = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+    const { document } = candidateStore.saveDocument(otherCandidate.id, {
+      kind: 'resume',
+      source: 'upload',
+      fileName: 'private-resume.txt',
+      mimeType: 'text/plain',
+      contentBase64: Buffer.from('other candidate resume').toString('base64'),
+      parseStatus: 'not_applicable',
+    });
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: `${APPLICATIONS_URL}/${applicationId}/materials/resume`,
+      headers: { authorization, ...ORIGIN },
+      payload: { documentId: document.id },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const applications = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    const ownCard = applications.json().data.find((entry: { id: string }) => entry.id === applicationId);
+    expect(ownCard.materials.resume).toBe(false);
+  });
+
+  it('does not report a legacy material link to another candidate document', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'openqareer-material-read-'));
+    const databasePath = join(directory, 'candidate.db');
+    const candidateStore = new SqliteCandidateStore({
+      databasePath,
+      encryptionKey: config.dataEncryptionKey,
+    });
+    const candidate = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+    const app = await buildApp({
+      config: { ...config, databasePath },
+      coachProvider: successProvider,
+      candidateStore,
+      authService: noSessions,
+      serveStatic: false,
+    });
+    const authorization = `Bearer ${candidate.accessToken}`;
+    const other = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+
+    try {
+      const applicationId = await createCard(app, authorization, 'cluster-1');
+      const { document } = candidateStore.saveDocument(other.id, {
+        kind: 'resume',
+        source: 'upload',
+        fileName: 'private-resume.txt',
+        mimeType: 'text/plain',
+        contentBase64: Buffer.from('other candidate resume').toString('base64'),
+        parseStatus: 'not_applicable',
+      });
+      const database = new DatabaseSync(databasePath);
+      database
+        .prepare(
+          `INSERT INTO application_materials (application_id, role, document_id, linked_at)
+           VALUES (?, 'resume', ?, ?)`,
+        )
+        .run(applicationId, document.id, '2026-09-26T00:00:00.000Z');
+      database.close();
+
+      const response = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+      const ownCard = response.json().data.find((entry: { id: string }) => entry.id === applicationId);
+
+      expect(response.statusCode).toBe(200);
+      expect(ownCard.materials.resume).toBe(false);
+    } finally {
+      await app.close();
+      candidateStore.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('records a follow-up-sent event without changing the stage', async () => {

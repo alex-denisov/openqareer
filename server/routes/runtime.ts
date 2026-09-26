@@ -6,7 +6,11 @@ import { ZodError } from 'zod';
 import { legalSlugFromPath } from '../../shared/legalRegistry';
 import { CoachProviderError } from '../providers/coachProvider';
 import { CandidateNotFoundError, CandidateStoreConflictError } from '../data/sqliteCandidateStore';
-import { ApplicationNotFoundError, ApplicationVersionConflictError } from '../data/store/errors';
+import {
+  ApplicationNotFoundError,
+  ApplicationVersionConflictError,
+  CandidateDocumentNotFoundError,
+} from '../data/store/errors';
 import {
   CareerCommandApprovalError,
   CareerCommandConflictError,
@@ -143,6 +147,12 @@ const mappedErrors: MappedError[] = [
     status: 404,
     code: 'application_not_found',
     message: 'Отклик не найден.',
+  },
+  {
+    match: (e) => e instanceof CandidateDocumentNotFoundError,
+    status: 404,
+    code: 'document_not_found',
+    message: 'Документ не найден.',
   },
 ];
 

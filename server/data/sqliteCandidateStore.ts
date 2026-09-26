@@ -476,6 +476,7 @@ export class SqliteCandidateStore implements CandidateStore {
   declare listVacancyApplications: ApplicationTrackerMethods['listVacancyApplications'];
   declare recordVacancyApplication: ApplicationTrackerMethods['recordVacancyApplication'];
   declare listApplications: ApplicationTrackerMethods['listApplications'];
+  declare getApplication: ApplicationTrackerMethods['getApplication'];
   declare createApplication: ApplicationTrackerMethods['createApplication'];
   declare patchApplication: ApplicationTrackerMethods['patchApplication'];
   declare recordApplicationEvent: ApplicationTrackerMethods['recordApplicationEvent'];
@@ -861,14 +862,15 @@ function createRepositories(
 ): StoreRepositories {
   const legacyApplications = new SqliteVacancyApplicationRepository(database, sealedText);
   const workspaceRepository = new SqliteWorkspaceRepository(database, sealedText);
+  const documentRepository = new SqliteDocumentRepository(database, sealedText);
   return {
-    applicationTracker: new ApplicationTrackerController(database, sealedText, legacyApplications, workspaceRepository),
+    applicationTracker: new ApplicationTrackerController(database, sealedText, legacyApplications, workspaceRepository, documentRepository),
     assessmentsRepository: new SqliteAssessmentRepository(database, sealedText),
     marketRepository: new SqliteMarketRepository(database, sealedText),
     resumeRepository: new SqliteResumeRepository(database, sealedText),
     workspaceRepository,
     careerCommandRepository: new SqliteCareerCommandRepository(database, sealedText),
-    documentRepository: new SqliteDocumentRepository(database, sealedText),
+    documentRepository,
     vacancyRepository: new SqliteVacancyRepository(database, sealedText),
     careerStrategyRepository: new SqliteCareerStrategyRepository(database, sealedText),
     workPreferenceRepository: new SqliteWorkPreferenceRepository(database, sealedText),

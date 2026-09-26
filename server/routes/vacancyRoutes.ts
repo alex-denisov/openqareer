@@ -810,6 +810,9 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   if (!candidate) return undefined;
   const vacancyId = (request.params as { id: string }).id;
   const body = vacancyPitchInputSchema.parse(request.body ?? {});
+  if (body?.applicationId && !candidateStore.getApplication(candidate.id, body.applicationId)) {
+    return sendError(reply, request, 404, 'application_not_found', 'Отклик не найден.', false);
+  }
 
   const cluster = multiSourceEngine.getActiveCluster(vacancyId);
   const poolVacancy = !cluster ? multiSourceEngine.getVacancy?.(vacancyId) : undefined;
