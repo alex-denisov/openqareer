@@ -41,6 +41,8 @@ import type {
   ResumeEvidenceFreshness,
   ResumeStudioProjection,
 } from '../../../server/domain/resumeStudio';
+export type { ResumeReaderProvenance } from '../../../server/data/candidateStore';
+import type { ResumeReaderProvenance } from '../../../server/data/candidateStore';
 
 /** Response body of `GET`/`PUT /api/v1/candidate/resume`. */
 export interface ResumeStudioView {
@@ -48,6 +50,7 @@ export interface ResumeStudioView {
   readonly savedAt: { readonly createdAt: string; readonly updatedAt: string } | null;
   readonly projection: ResumeStudioProjection;
   readonly evidenceFreshness: ResumeEvidenceFreshness;
+  readonly reader?: ResumeReaderProvenance | null;
 }
 
 export type ResumeVariantId = 'master' | 'germany';

@@ -82,6 +82,29 @@ describe('ProfileScreenSurface — states', () => {
     expect(html).toContain('career-profile-screen-coverage');
   });
 
+  it('names a model reader and keeps an older import honestly unknown (B184)', () => {
+    const modelHtml = renderToStaticMarkup(
+      <ProfileScreenSurface
+        {...baseProps}
+        draft={populatedDraft}
+        view={{
+          reader: {
+            method: 'model',
+            model: 'openai:gpt-5.6-mini',
+            promptRevision: 'resume-structuring-v1',
+            readAt: '2026-09-26T10:00:00.000Z',
+          },
+        } as never}
+      />,
+    );
+    const unknownHtml = renderToStaticMarkup(
+      <ProfileScreenSurface {...baseProps} draft={populatedDraft} view={{ reader: null } as never} />,
+    );
+
+    expect(modelHtml).toContain('Резюме прочитано: модель openai:gpt-5.6-mini, 26 сентября 2026 г.');
+    expect(unknownHtml).toContain('Резюме прочитано: неизвестно');
+  });
+
   it('surfaces a save error next to the save action without hiding the document', () => {
     const html = renderToStaticMarkup(
       <ProfileScreenSurface

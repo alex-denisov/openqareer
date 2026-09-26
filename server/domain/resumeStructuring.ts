@@ -123,6 +123,9 @@ export const structuredResumeSchema = z.object({
 
 export type StructuredResume = z.infer<typeof structuredResumeSchema>;
 
+/** Increment this deliberately whenever the reader instructions change. */
+export const RESUME_STRUCTURING_PROMPT_REVISION = 'resume-structuring-v1';
+
 export const RESUME_STRUCTURING_INSTRUCTIONS = `You convert one resume into JSON.
 
 Absolute rules:

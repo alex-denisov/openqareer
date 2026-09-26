@@ -12,12 +12,13 @@ import {
 import { useCandidateMediaSrc } from './candidateMediaSrc';
 import type { ImportedSource } from './resumeSourceCoverage';
 import { patchTopcard } from './profileEditing';
-import type { ResumeDraft } from './resumeTypes';
+import type { ResumeDraft, ResumeReaderProvenance } from './resumeTypes';
 
 interface ProfileTopcardProps {
   readonly draft: ResumeDraft;
   readonly importedSource?: ImportedSource;
   readonly updatedAt?: string;
+  readonly reader: ResumeReaderProvenance | null;
   readonly onDraftChange: (draft: ResumeDraft) => void;
 }
 
@@ -199,6 +200,7 @@ export function ProfileTopcard({
   draft,
   importedSource,
   updatedAt,
+  reader,
   onDraftChange,
 }: ProfileTopcardProps) {
   const fullName = draft.candidate.fullName?.trim();
@@ -232,6 +234,7 @@ export function ProfileTopcard({
                 Обновлено {formatDate(updatedAt)}
               </span>
             ) : null}
+            <span>Резюме прочитано: {readerLabel(reader)}</span>
           </div>
           <ContactRow draft={draft} />
         </div>
@@ -239,6 +242,12 @@ export function ProfileTopcard({
       </div>
     </section>
   );
+}
+
+function readerLabel(reader: ResumeReaderProvenance | null): string {
+  if (!reader) return 'неизвестно';
+  if (reader.method === 'rules') return 'правилами';
+  return `модель ${reader.model}, ${formatDate(reader.readAt)}`;
 }
 
 function formatDate(value: string): string {

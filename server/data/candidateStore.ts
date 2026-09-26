@@ -147,8 +147,19 @@ export interface CandidateDocumentWithContent extends StoredCandidateDocument {
 export interface StoredResumeDraft {
   draft: ResumeDraft;
   evidenceSnapshot: ResumeEvidenceSnapshot[];
+  /** Кто прочитал исходное резюме при последнем импорте; старые записи честно null. */
+  reader: ResumeReaderProvenance | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ResumeReaderProvenance {
+  readonly method: 'model' | 'rules';
+  /** Модель есть только при `method: model`; правила не получают выдуманный id. */
+  readonly model: string | null;
+  /** Ревизия инструкций модели; у правил промпта нет. */
+  readonly promptRevision: string | null;
+  readonly readAt: string;
 }
 
 export interface StoredGermanyMarket {
@@ -275,6 +286,8 @@ type ExportedNativeSourceConnection = Pick<
 export interface ResumeImportCommit {
   readonly evidence: ResumeEvidenceImport;
   readonly draft: ResumeDraft;
+  /** Передаётся только импортом; ручное сохранение сохраняет прежнюю запись. */
+  readonly reader?: ResumeReaderProvenance | null;
   readonly sourceReceipt?: NativeSourceReceiptInput;
   /**
    * Photo/logo bytes already downloaded by the caller (B265 §4) — the fetch

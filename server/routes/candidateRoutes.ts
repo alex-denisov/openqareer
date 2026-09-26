@@ -31,7 +31,8 @@ import { handleImportStructuredResume } from './structuredResumeImportRoute';
 import { rebuildCampaignRoles } from '../vacancies/rebuildCampaignRoles';
 import { parseResumeContent } from '../../src/features/workspace/resumeParser';
 import { normalizeResumeSourceText } from '../../src/features/workspace/resumeSourceText';
-import type { CandidateStore } from '../data/candidateStore';
+import type { CandidateStore, ResumeReaderProvenance } from '../data/candidateStore';
+import { modelReaderProvenance, rulesReaderProvenance } from '../domain/resumeReaderProvenance';
 import { CandidateDocumentRetentionError } from '../data/sqliteCandidateStore';
 import { buildDocumentTextPage } from '../data/documentTextPage';
 import {
@@ -73,6 +74,7 @@ interface ResumeStudioView {
   savedAt: { createdAt: string; updatedAt: string } | null;
   projection: ResumeStudioProjection;
   evidenceFreshness: ResumeEvidenceFreshness;
+  reader: ResumeReaderProvenance | null;
 }
 
 /**
@@ -95,6 +97,7 @@ export function resumeStudioView(candidateStore: CandidateStore, candidateId: st
       stored?.evidenceSnapshot ?? projection.evidenceSnapshot,
       snapshot.memory,
     ),
+    reader: stored?.reader ?? null,
   };
 }
 
@@ -106,24 +109,22 @@ export function resumeStudioView(candidateStore: CandidateStore, candidateId: st
 async function readResume(
   text: string,
   structurer?: RouteDeps['resumeStructurer'],
-): Promise<{
-  resume: ReturnType<typeof parseResumeContent>;
-  structuredBy: 'model' | 'rules';
-}> {
+): Promise<{ resume: ReturnType<typeof parseResumeContent>; structuredBy: 'model' | 'rules'; reader: ResumeReaderProvenance }> {
   // Both readers must see the same document. The model was handed the raw
   // extraction while only the rules parser repaired it, so on an hh.ru export
   // the model read `Проживает : Москва`, echoed the spacing into every title and
   // lost the fields the rules parser had already found (B178).
   const source = normalizeResumeSourceText(text);
   const deterministic = parseResumeContent(source);
-  if (!structurer) return { resume: deterministic, structuredBy: 'rules' };
+  if (!structurer) return { resume: deterministic, structuredBy: 'rules', reader: rulesReaderProvenance() };
   // Модель — улучшение, а не условие: без потолка кандидат ждал её отказа
   // шесть с половиной минут (INC-037).
   const structured = await structureWithinBudget(source, structurer);
-  if (!structured) return { resume: deterministic, structuredBy: 'rules' };
+  if (!structured) return { resume: deterministic, structuredBy: 'rules', reader: rulesReaderProvenance() };
   return {
     resume: preferStructuredResume(structured, deterministic),
     structuredBy: 'model',
+    reader: modelReaderProvenance(structurer),
   };
 }
 
@@ -386,7 +387,7 @@ async function importResumeIntoDossier(
   }
   const committed = candidateStore.commitResumeImport(
     candidate.id,
-    resumeImportCommit(candidate.id, body, plan),
+    resumeImportCommit(candidate.id, body, plan, read.reader),
   );
   void rebuildCampaignRoles(deps, candidate.id).catch((error) => {
     request.log.error({ error }, 'campaign_roles_rebuild_failed');
@@ -440,6 +441,7 @@ function resumeImportCommit(
   candidateId: string,
   body: z.infer<typeof resumeImportSchema>,
   plan: ReturnType<typeof planResumeImport>,
+  reader: ReturnType<typeof rulesReaderProvenance>,
 ) {
   return {
     evidence: {
@@ -452,6 +454,7 @@ function resumeImportCommit(
       })),
     },
     draft: plan.draft,
+    reader,
     sourceReceipt: body.sourceReceipt
       ? {
           ...body.sourceReceipt,

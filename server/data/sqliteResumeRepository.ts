@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
 import { resumeDraftSchema, type ResumeDraft } from '../domain/resumeDraft';
-import type { StoredResumeDraft } from './candidateStore';
+import type { ResumeReaderProvenance, StoredResumeDraft } from './candidateStore';
 import type { SealedText } from './sealedText';
 
 interface ResumeRow {
@@ -13,6 +13,11 @@ interface ResumeRow {
 }
 
 type SealedField = 'draft' | 'evidence-snapshot';
+
+interface StoredResumeEnvelope {
+  readonly draft: ResumeDraft;
+  readonly reader: ResumeReaderProvenance | null;
+}
 
 const evidenceSnapshotSchema = z
   .array(
@@ -25,6 +30,27 @@ const evidenceSnapshotSchema = z
       .strict(),
   )
   .max(200);
+
+const readerSchema = z
+  .object({
+    method: z.enum(['model', 'rules']),
+    model: z.string().min(1).max(200).nullable(),
+    promptRevision: z.string().min(1).max(100).nullable(),
+    readAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.method === 'model' && (!value.model || !value.promptRevision)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'model provenance requires id and prompt revision' });
+    }
+    if (value.method === 'rules' && (value.model !== null || value.promptRevision !== null)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'rules provenance has no model metadata' });
+    }
+  });
+
+const storedResumeEnvelopeSchema = z
+  .object({ draft: resumeDraftSchema, reader: readerSchema.nullable() })
+  .strict();
 
 /**
  * Stores the candidate-entered resume draft and the evidence snapshot approved
@@ -41,9 +67,11 @@ export class SqliteResumeRepository {
     candidateId: string,
     draft: ResumeDraft,
     evidenceSnapshot: readonly ResumeEvidenceSnapshot[],
+    reader?: ResumeReaderProvenance | null,
   ): StoredResumeDraft {
     const parsedDraft = resumeDraftSchema.parse(draft);
     const parsedSnapshot = evidenceSnapshotSchema.parse(evidenceSnapshot);
+    const parsedReader = reader === undefined ? this.get(candidateId)?.reader ?? null : readerSchema.nullable().parse(reader);
     const now = new Date().toISOString();
     const written = this.database
       .prepare(
@@ -58,7 +86,7 @@ export class SqliteResumeRepository {
       )
       .get(
         candidateId,
-        this.seal(candidateId, 'draft', parsedDraft),
+        this.seal(candidateId, 'draft', { draft: parsedDraft, reader: parsedReader }),
         this.seal(candidateId, 'evidence-snapshot', parsedSnapshot),
         now,
         now,
@@ -66,6 +94,7 @@ export class SqliteResumeRepository {
     return {
       draft: parsedDraft,
       evidenceSnapshot: parsedSnapshot,
+      reader: parsedReader,
       createdAt: written.created_at,
       updatedAt: written.updated_at,
     };
@@ -79,13 +108,13 @@ export class SqliteResumeRepository {
       )
       .get(candidateId) as ResumeRow | undefined;
     if (!row) return null;
+    const stored = readStoredResume(this.open(candidateId, 'draft', row.draft_cipher));
     return {
-      draft: resumeDraftSchema.parse(
-        this.open(candidateId, 'draft', row.draft_cipher),
-      ),
+      draft: stored.draft,
       evidenceSnapshot: evidenceSnapshotSchema.parse(
         this.open(candidateId, 'evidence-snapshot', row.evidence_snapshot_cipher),
       ),
+      reader: stored.reader,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -107,6 +136,13 @@ export class SqliteResumeRepository {
       this.sealedText.open(value, associatedData(candidateId, field)),
     ) as unknown;
   }
+}
+
+/** Rows before B184 stored the bare draft: treating it as unknown avoids a false model claim. */
+function readStoredResume(value: unknown): StoredResumeEnvelope {
+  const legacy = resumeDraftSchema.safeParse(value);
+  if (legacy.success) return { draft: legacy.data, reader: null };
+  return storedResumeEnvelopeSchema.parse(value);
 }
 
 function associatedData(candidateId: string, field: SealedField): string {
