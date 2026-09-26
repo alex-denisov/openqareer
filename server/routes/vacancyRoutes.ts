@@ -39,7 +39,6 @@ import {
 } from '../domain/vacancyPitchService';
 import { COVER_LETTER_BUDGET_MS, withinTimeBudget } from '../providers/coverLetterWriter';
 import type { PitchFactRankingContext } from '../domain/pitchFactRanking';
-import { rulesParse } from '../vacancies/titleParse/rulesParse';
 import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';
 import { registerApplicationRoutes } from './applicationRoutes';
 import { registerPlanRequestRoutes } from './planRequestRoutes';
@@ -791,12 +790,7 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   }
   const title = vacancy.title;
   const pitchVacancy = { ...vacancy, title };
-  const rankingContext = pitchRankingContext(
-    candidateStore,
-    deps.titleParseStore,
-    candidate.id,
-    title,
-  );
+  const rankingContext = pitchRankingContext(candidateStore, deps.titleParseStore, candidate.id, title);
 
   const snapshot = candidateStore.getSnapshot(candidate.id);
   const facts = snapshot?.memory ?? [];
@@ -810,15 +804,7 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
     ...(body?.language ? { language: body.language } : {}),
   });
 
-  const written = await writeCoverLetterBody(
-    deps,
-    request,
-    pitchVacancy,
-    facts,
-    pitch.language,
-    tone,
-    rankingContext,
-  );
+  const written = await writeCoverLetterBody(deps, request, pitchVacancy, facts, pitch.language, tone, rankingContext);
   const atsCoverLetter = written.body ?? pitch.atsCoverLetter;
   if (body?.applicationId) {
     linkGeneratedCoverLetter(candidateStore, candidate.id, body.applicationId, atsCoverLetter);
