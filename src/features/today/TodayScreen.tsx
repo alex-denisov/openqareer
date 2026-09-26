@@ -3,6 +3,7 @@ import { pluralRu } from '../../../shared/pluralRu';
 import type { TodayDigest, TodayFollowUp, TodayQueueItem, TodaySnapshot } from './todayApi';
 import { formatTodaySalary } from './todayCompensation';
 import { companyInitials, digestBasis, followUpStatusLabel } from './todayFormat';
+import { vacancyLevelMatchLabel } from '../vacancies/vacancyLevelMatch';
 
 /**
  * «Сегодня» (B251 S5): дайджест дня, очередь решений, follow-up по срокам и
@@ -162,16 +163,26 @@ function QueueFit({ fit }: { fit: NonNullable<TodayQueueItem['fit']> }) {
   return (
     <div className="career-today-item-fit">
       <FitDot ok={fit.role !== 'none'} label="роль" />
-      <FitDot ok={fit.level === null ? null : fit.level !== 'none'} label="уровень" />
+      <FitDot
+        ok={fit.level === 'match' ? true : fit.level === 'unknown' ? null : false}
+        label="уровень"
+        title={vacancyLevelMatchLabel(fit.level)}
+      />
       <FitDot ok={fit.geo} label="гео" />
     </div>
   );
 }
 
-function FitDot({ ok, label }: { ok: boolean | null; label: string }) {
-  if (ok === null) return <span className="career-today-fit-dot is-unknown">{label} —</span>;
+function FitDot({ ok, label, title }: { ok: boolean | null; label: string; title?: string }) {
+  if (ok === null) {
+    return (
+      <span className="career-today-fit-dot is-unknown" title={title} aria-label={title}>
+        {label} —
+      </span>
+    );
+  }
   return (
-    <span className={`career-today-fit-dot${ok ? ' is-yes' : ' is-no'}`}>
+    <span className={`career-today-fit-dot${ok ? ' is-yes' : ' is-no'}`} title={title}>
       {ok ? label : `${label} —`}
     </span>
   );

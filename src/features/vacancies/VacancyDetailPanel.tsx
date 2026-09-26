@@ -11,6 +11,8 @@ import { VacancyInfoModal } from './VacancyInfoModal';
 import { RecruiterContactsBlock } from './RecruiterContactsBlock';
 import { recruiterEnrichPayload } from './recruiterEnrichPayload';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
+import type { VacancyLevelMatch } from '../../../shared/vacancyMatchOrder';
+import { vacancyLevelMatchLabel } from './vacancyLevelMatch';
 
 /**
  * Детальная панель «Вакансии» (B248/B250) — макет `vacancies.html`. Сетка
@@ -105,14 +107,25 @@ function VacancyDetailMetaRow({
 }) {
   return (
     <div className="vacancies-detail-meta-row">
-      {explanation.levelMatch ? (
-        <span className="vacancies-chip is-selected">Уровень совпадает</span>
-      ) : null}
+      <VacancyLevelChip match={explanation.levelMatch} />
       <span className="vacancies-chip vacancies-chip-success">
         {age.days === 0 ? 'Сегодня в базе' : `${age.label} в базе`}
       </span>
       {source ? <span className="vacancies-chip">Опубликована на {source}</span> : null}
     </div>
+  );
+}
+
+function VacancyLevelChip({ match }: { readonly match: VacancyLevelMatch }) {
+  const label = vacancyLevelMatchLabel(match);
+  return (
+    <span
+      className={`vacancies-chip${match === 'match' ? ' is-selected' : ''}${match === 'unknown' ? ' is-unknown' : ''}`}
+      title={label}
+      aria-label={label}
+    >
+      {label}
+    </span>
   );
 }
 

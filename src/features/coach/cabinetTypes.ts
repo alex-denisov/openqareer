@@ -1,4 +1,5 @@
 import type {
+  VacancyLevelMatch,
   VacancyRequirementCoverage,
   VacancyRoleMatch,
 } from '../../../shared/vacancyMatchOrder';
@@ -186,10 +187,9 @@ interface VacancyMatchExplanation {
   roleMatch: VacancyRoleMatch;
   /**
    * Совпадение по уровню (IC/лид/head/VP/C-level) — третий fit-dot рядом с
-   * ролью и гео (B248). `undefined` — кандидат не назвал уровень или заголовок
-   * вакансии не даёт сигнала: точка не рисуется, а не подставляет совпадение.
+   * ролью и гео (B248). Неизвестный разбор показывается явно.
    */
-  levelMatch?: VacancyRoleMatch;
+  levelMatch: VacancyLevelMatch;
   /**
    * Требования вакансии: сколько перечислено и сколько подтверждено.
    * `undefined` — требований нет, и соответствие не выдумывается (PRB-016).
@@ -220,4 +220,3 @@ export interface MatchedVacancyItem {
   cluster: VacancyCluster;
   explanation: VacancyMatchExplanation;
 }
-

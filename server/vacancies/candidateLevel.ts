@@ -11,6 +11,7 @@ import { inferSeniorityLevel, type SeniorityLevel } from './levelMatcher';
 export interface CandidateLevelInput {
   readonly targetRoles: readonly string[];
   readonly experience: readonly Pick<ResumeExperienceInput, 'title' | 'current' | 'endDate'>[];
+  readonly campaignLevel?: SeniorityLevel;
 }
 
 /** Последняя должность — текущая (`current: true`), иначе первая в списке. */
@@ -27,6 +28,7 @@ export function deriveCandidateTargetLevel(input: CandidateLevelInput): Seniorit
     const level = inferSeniorityLevel(role);
     if (level) return level;
   }
+  if (input.campaignLevel) return input.campaignLevel;
   const lastTitle = lastPositionTitle(input.experience);
   return lastTitle ? inferSeniorityLevel(lastTitle) : undefined;
 }

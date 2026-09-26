@@ -43,7 +43,7 @@ const snapshot: TodaySnapshot = {
       dueAt: null,
       salary: { from: 190000, to: 240000, currency: 'usd' },
       location: 'Canada · удалённо',
-      fit: { role: 'target', level: 'target', geo: true },
+      fit: { role: 'target', level: 'match', geo: true },
     },
   ],
   followUps: [

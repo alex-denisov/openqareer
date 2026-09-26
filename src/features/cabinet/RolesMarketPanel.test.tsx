@@ -44,6 +44,7 @@ function poolOf(count: number): MatchedVacancyItem[] {
     explanation: {
       clusterId: `cluster-${index}`,
       roleMatch: 'none' as const,
+      levelMatch: 'unknown' as const,
       matchingPoints: [],
       missingPoints: [],
       summary: '',

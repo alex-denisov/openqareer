@@ -67,24 +67,27 @@ describe('inferSeniorityLevel', () => {
 });
 
 describe('evaluateLevelMatch', () => {
-  it('is target when candidate level equals the vacancy level', () => {
-    expect(evaluateLevelMatch('head', 'Head of Engineering')).toBe('target');
+  it('counts the same and adjacent steps as a level match', () => {
+    expect(evaluateLevelMatch('head', 'Head of Engineering')).toBe('match');
+    expect(evaluateLevelMatch('vp', 'CTO')).toBe('match');
+    expect(evaluateLevelMatch('vp', 'Head of Engineering')).toBe('match');
   });
 
-  it('is partial when the vacancy is one step away from the candidate level', () => {
-    expect(evaluateLevelMatch('head', 'VP of Engineering')).toBe('partial');
-    expect(evaluateLevelMatch('head', 'Lead Backend Developer')).toBe('partial');
+  it('reports when the vacancy is below or above the candidate target', () => {
+    expect(evaluateLevelMatch('vp', 'Senior Frontend Engineer')).toBe('below');
+    expect(evaluateLevelMatch('ic', 'VP of Engineering')).toBe('above');
   });
 
-  it('is none when the vacancy is two or more steps away', () => {
-    expect(evaluateLevelMatch('c-level', 'Senior Frontend Engineer')).toBe('none');
+  it('uses a stored title parse when one is available', () => {
+    expect(evaluateLevelMatch('ic', 'Engineer II', 3)).toBe('above');
+    expect(evaluateLevelMatch('vp', 'CTO', null)).toBe('unknown');
   });
 
-  it('is undefined when the candidate never named a target level', () => {
-    expect(evaluateLevelMatch(undefined, 'Head of Engineering')).toBeUndefined();
+  it('is unknown when the candidate never named a target level', () => {
+    expect(evaluateLevelMatch(undefined, 'Head of Engineering')).toBe('unknown');
   });
 
-  it('is undefined when the vacancy title gives no seniority signal', () => {
-    expect(evaluateLevelMatch('head', 'Frontend Engineer')).toBeUndefined();
+  it('is unknown when the vacancy title gives no seniority signal', () => {
+    expect(evaluateLevelMatch('head', 'Frontend Engineer')).toBe('unknown');
   });
 });

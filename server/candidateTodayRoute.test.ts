@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildApp } from './app';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { EMPTY_RESUME_DRAFT } from './domain/resumeDraft';
 import { apps, config, noSessions, stores, successProvider } from './appTestHarness';
 import type { MatchedVacancyItem } from './vacancies/multiSourceVacancyEngine';
+import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
+import { normalizeTitleKey } from './vacancies/titleParse/normalizeTitleKey';
 
 /** `GET /today` (B251, S4, architecture.md §4, §57, §97). */
 function pool(roleMatches: readonly ('target' | 'partial' | 'none')[] = ['target']): MatchedVacancyItem[] {
@@ -41,6 +43,8 @@ function pool(roleMatches: readonly ('target' | 'partial' | 'none')[] = ['target
 async function createApp(options?: {
   withMatchingEngine?: boolean;
   roleMatches?: readonly ('target' | 'partial' | 'none')[];
+  experienceTitle?: string;
+  titleParseStore?: SqliteTitleParseStore;
 }) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',
@@ -49,7 +53,21 @@ async function createApp(options?: {
   const candidate = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
   candidateStore.saveResumeDraft(
     candidate.id,
-    { ...EMPTY_RESUME_DRAFT, targetRole: 'Инженер данных' },
+    {
+      ...EMPTY_RESUME_DRAFT,
+      targetRole: 'Инженер данных',
+      experience: options?.experienceTitle
+        ? [
+            {
+              id: 'experience-1',
+              chronologyMemoryId: 'chronology-1',
+              title: options.experienceTitle,
+              current: true,
+              bulletMemoryIds: [],
+            },
+          ]
+        : [],
+    },
     [],
   );
 
@@ -65,6 +83,7 @@ async function createApp(options?: {
     candidateStore,
     authService: noSessions,
     multiSourceVacancyEngine: options?.withMatchingEngine ? (engine as never) : undefined,
+    titleParseStore: options?.titleParseStore,
     serveStatic: false,
   });
   apps.push(app);
@@ -155,5 +174,39 @@ describe('GET /candidate/today', () => {
     const response = await app.inject({ url: `${TODAY_URL}?tz=Europe/Moscow` });
 
     expect(response.statusCode).toBe(401);
+  });
+});
+
+describe('GET /candidate/matched-vacancies level explanation', () => {
+  it('uses the stored title parse to classify a vacancy when title rules cannot', async () => {
+    const titleParseStore = new SqliteTitleParseStore({ databasePath: ':memory:' });
+    titleParseStore.insertIfMissing({
+      titleKey: normalizeTitleKey('Инженер данных 1'),
+      sampleTitle: 'Инженер данных 1',
+      functions: [],
+      levelRank: 0,
+      roleLabel: null,
+      parsedBy: 'rules',
+      model: null,
+      taxonomyVersion: 1,
+      priority: 0,
+    });
+    expect(titleParseStore.getByKey(normalizeTitleKey('Инженер данных 1'))?.levelRank).toBe(0);
+    const getByKey = vi.spyOn(titleParseStore, 'getByKey');
+    const { app, authorization } = await createApp({
+      withMatchingEngine: true,
+      experienceTitle: 'VP Technology Operations',
+      titleParseStore,
+    });
+
+    const response = await app.inject({
+      url: '/api/v1/candidate/matched-vacancies',
+      headers: { authorization },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().meta.candidateLevel).toBe('vp');
+    expect(getByKey).toHaveBeenCalledWith('инженер данных');
+    expect(response.json().data[0].explanation.levelMatch).toBe('below');
   });
 });

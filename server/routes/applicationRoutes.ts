@@ -239,7 +239,7 @@ const handleToday: Handler = async (deps, request, reply) => {
     sourcesCount: new Set(item.cluster.sources.map((source) => source.sourceId)).size,
     fit: {
       role: item.explanation.roleMatch,
-      level: item.explanation.levelMatch ?? null,
+      level: item.explanation.levelMatch ?? 'unknown',
       // Ничего в объяснении совпадения пока не сравнивает гео кандидата с
       // вакансией (unifiedVacancy.ts): точку не рисуем из отсутствия данных (PRB-016).
       geo: null as boolean | null,

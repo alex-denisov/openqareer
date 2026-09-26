@@ -136,12 +136,12 @@ describe('Explainable Vacancy Matcher', () => {
         { ...strongCandidate, targetLevel: 'lead' },
         sampleCluster,
       );
-      expect(explanation.levelMatch).toBe('target');
+      expect(explanation.levelMatch).toBe('match');
     });
 
     it('не называет уровень, когда кандидат его не указал', () => {
       const explanation = matchCandidateWithVacancy(strongCandidate, sampleCluster);
-      expect(explanation.levelMatch).toBeUndefined();
+      expect(explanation.levelMatch).toBe('unknown');
     });
 
     it('не называет уровень, когда заголовок вакансии не даёт сигнала об уровне', () => {
@@ -149,7 +149,7 @@ describe('Explainable Vacancy Matcher', () => {
         { ...strongCandidate, targetLevel: 'head' },
         { ...sampleCluster, canonicalTitle: 'Frontend Engineer' },
       );
-      expect(explanation.levelMatch).toBeUndefined();
+      expect(explanation.levelMatch).toBe('unknown');
     });
   });
 

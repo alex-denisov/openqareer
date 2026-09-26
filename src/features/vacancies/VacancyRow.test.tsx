@@ -25,7 +25,7 @@ function item(overrides: Partial<MatchedVacancyItem['cluster']> = {}): MatchedVa
     explanation: {
       clusterId: 'c-1',
       roleMatch: 'target',
-      levelMatch: 'target',
+      levelMatch: 'match',
       outsideGeography: false,
       matchingPoints: [],
       missingPoints: [],
@@ -72,6 +72,18 @@ describe('VacancyRow (B250)', () => {
     };
     const html = render({ item: missGeo });
     expect(html).toContain('fit-dot is-no');
+  });
+
+  it('keeps an unknown level neutral and names the missing signal', () => {
+    const unknown: MatchedVacancyItem = {
+      ...item(),
+      explanation: { ...item().explanation, levelMatch: 'unknown' },
+    };
+    const html = render({ item: unknown });
+
+    expect(html).toContain('fit-dot is-unknown');
+    expect(html).toContain('title="Уровень не распознан"');
+    expect(html).toContain('aria-label="Уровень не распознан"');
   });
 
   it('is a real button, not a non-interactive element carrying a role', () => {

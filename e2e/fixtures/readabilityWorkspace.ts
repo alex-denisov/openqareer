@@ -353,7 +353,7 @@ export const todaySnapshot = {
       dueAt: null,
       salary: { from: 380000, to: 480000, currency: 'rub' },
       location: 'Москва · гибрид',
-      fit: { role: 'target', level: 'target', geo: true },
+      fit: { role: 'target', level: 'match', geo: true },
     },
     {
       kind: 'interview',

@@ -91,7 +91,7 @@ const TODAY_SNAPSHOT = {
       dueAt: null,
       salary: { from: 190000, to: 240000, currency: 'usd' },
       location: 'Canada · удалённо',
-      fit: { role: 'target', level: 'target', geo: true },
+      fit: { role: 'target', level: 'match', geo: true },
     },
     {
       kind: 'new_vacancy',
@@ -102,7 +102,7 @@ const TODAY_SNAPSHOT = {
       dueAt: null,
       salary: { from: 170000, to: 210000, currency: 'usd' },
       location: 'US · релокация',
-      fit: { role: 'target', level: 'target', geo: false },
+      fit: { role: 'target', level: 'match', geo: false },
     },
     {
       kind: 'interview',

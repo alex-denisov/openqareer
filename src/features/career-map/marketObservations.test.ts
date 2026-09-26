@@ -33,6 +33,7 @@ function vacancy(
     explanation: {
       clusterId: id,
       roleMatch: 'none',
+      levelMatch: 'unknown',
       matchingPoints: [],
       missingPoints: [],
       summary: '',

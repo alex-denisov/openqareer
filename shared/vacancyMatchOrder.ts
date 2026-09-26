@@ -7,6 +7,7 @@
  */
 
 export type VacancyRoleMatch = 'target' | 'partial' | 'none';
+export type VacancyLevelMatch = 'match' | 'below' | 'above' | 'unknown';
 
 export interface VacancyRequirementCoverage {
   readonly matched: number;

@@ -305,6 +305,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     multiSourceVacancyEngine,
     searchVacancies,
     searchRemotive,
+    titleParseStore: options.titleParseStore,
   });
   const deps = assembleRouteDeps(options, services);
   const app = await createFastifyBase(config, logDestination);

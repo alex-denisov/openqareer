@@ -12765,6 +12765,11 @@
   background: var(--career-accent-soft);
 }
 
+.vacancies-chip.is-unknown {
+  color: var(--career-text-dim);
+  border-color: var(--career-line);
+}
+
 .vacancies-chip-hypothesis {
   border-style: dashed;
   border-color: color-mix(in oklch, var(--career-warning) 50%, var(--career-line-strong));
@@ -12945,6 +12950,10 @@
 
 .fit-dot.is-no {
   color: var(--career-text-dim);
+}
+
+.fit-dot.is-unknown {
+  color: var(--career-text-soft);
 }
 
 .vac-comp {

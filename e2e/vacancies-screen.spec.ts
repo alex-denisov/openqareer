@@ -97,7 +97,7 @@ function explanation(id: string, overrides: Partial<Record<string, unknown>> = {
   return {
     clusterId: id,
     roleMatch: 'target',
-    levelMatch: 'target',
+    levelMatch: 'match',
     outsideGeography: false,
     matchingPoints: ['Опыт управления P&L', 'Международная команда'],
     missingPoints: [],
@@ -122,6 +122,7 @@ const MATCHED_ITEMS = [
       salary: { from: 180000, currency: 'USD', gross: true },
     }),
     explanation: explanation('c-2', {
+      levelMatch: 'below',
       missingPoints: ['Опыт работы с госзаказчиками'],
     }),
   },
@@ -130,7 +131,7 @@ const MATCHED_ITEMS = [
       canonicalLocation: 'United States',
       salary: { to: 220000, currency: 'USD', gross: true },
     }),
-    explanation: explanation('c-3', { levelMatch: 'related' }),
+    explanation: explanation('c-3', { levelMatch: 'unknown' }),
   },
   {
     cluster: cluster('c-4', 'Enterprise Architect Director', 'HRTx, Inc.', {
@@ -309,10 +310,19 @@ test.describe('B250 vacancies screen', () => {
     await rows.first().locator('.vac-row').click();
     await expect(rows.first().locator('.vac-row')).toHaveAttribute('aria-pressed', 'true');
     await expect(rows.first().locator('.vac-row')).toHaveClass(/is-selected/);
+    await expect(rows.first().locator('.fit-dot').nth(1)).toHaveAttribute(
+      'title',
+      'Вакансия ниже целевого уровня',
+    );
 
     await filters.getByText(/Cloud Architect \(6\).*гипотеза/).click();
     await expect(rows).toHaveCount(1);
     await expect(rows.first()).toContainText('Sonsoft Inc');
+    await expect(rows.first().locator('.fit-dot').nth(1)).toHaveClass(/is-unknown/);
+    await expect(rows.first().locator('.fit-dot').nth(1)).toHaveAttribute(
+      'title',
+      'Уровень не распознан',
+    );
     // Только верхняя граница вилки — компактно, с префиксом «до».
     await expect(rows.first()).toContainText('до $220k');
   });

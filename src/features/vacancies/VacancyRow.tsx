@@ -2,6 +2,8 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { vacancyAge } from './vacancyFilters';
 import { formatCompensationCompact } from './vacancyCompensation';
 import { FitDot } from './VacanciesScreen';
+import type { VacancyLevelMatch } from '../../../shared/vacancyMatchOrder';
+import { vacancyLevelMatchLabel } from './vacancyLevelMatch';
 
 /**
  * Одна строка списка «Вакансии» (B248/B250): логотип-инициалы, заголовок и
@@ -41,13 +43,25 @@ export function VacancyRow({
             <span className="vac-age">{age.label}</span>
             <span className="vac-fit">
               <FitDot isYes={explanation.roleMatch === 'target'} title="Семья ролей" />
-              <FitDot isYes={explanation.levelMatch === 'target'} title="Уровень" />
+              <VacancyLevelDot match={explanation.levelMatch} />
               <FitDot isYes={!explanation.outsideGeography} title="География" />
             </span>
           </span>
         </span>
       </button>
     </li>
+  );
+}
+
+function VacancyLevelDot({ match }: { readonly match: VacancyLevelMatch }) {
+  const title = vacancyLevelMatchLabel(match);
+  return (
+    <FitDot
+      isYes={match === 'match'}
+      isUnknown={match === 'unknown'}
+      title={title}
+      ariaLabel={title}
+    />
   );
 }
 

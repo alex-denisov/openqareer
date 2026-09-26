@@ -33,6 +33,7 @@ function makeItem(
     explanation: {
       clusterId: id,
       roleMatch: "target",
+      levelMatch: "unknown",
       requirements: { matched: 1, total: 1 },
       matchingPoints: ["React"],
       missingPoints: [],

@@ -1,6 +1,6 @@
 import type { ApplicationView } from './applicationDerivedFields';
 import { pluralRu } from '../../shared/pluralRu';
-import type { VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
+import type { VacancyLevelMatch, VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
 
 /** Структура зарплаты как в matched-vacancies — клиент форматирует сам. */
 export interface TodaySalary {
@@ -13,7 +13,7 @@ export interface TodaySalary {
 /** Fit-точки новой вакансии (B248): роль/уровень из объяснения совпадения, гео пока нечем считать. */
 export interface TodayFit {
   readonly role: VacancyRoleMatch;
-  readonly level: VacancyRoleMatch | null;
+  readonly level: VacancyLevelMatch;
   readonly geo: boolean | null;
 }
 

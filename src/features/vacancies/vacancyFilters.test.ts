@@ -42,6 +42,7 @@ function item(
     explanation: {
       clusterId: id,
       roleMatch: 'target',
+      levelMatch: 'unknown',
       requirements: { matched: 2, total: 3 },
       matchingPoints: ['SQL', 'A/B-тесты'],
       missingPoints: ['Kubernetes'],

@@ -28,7 +28,7 @@ function matchedItem(
     explanation: {
       clusterId: id,
       roleMatch: 'target',
-      levelMatch: 'target',
+      levelMatch: 'match',
       outsideGeography: false,
       matchingPoints: [],
       missingPoints: [],

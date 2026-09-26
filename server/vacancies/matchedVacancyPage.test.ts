@@ -41,6 +41,7 @@ function item(index: number): MatchedVacancyItem {
     explanation: {
       clusterId: `cluster-${index}`,
       roleMatch: 'target' as const,
+      levelMatch: 'unknown' as const,
       requirements: { matched: 12, total: 52 },
       matchingPoints: Array.from({ length: 12 }, (_, p) => `Подтверждённый навык: навык-${p}`),
       missingPoints: Array.from({ length: 40 }, (_, p) => `навык-${index}-${p}`),
@@ -132,6 +133,7 @@ describe('buildMatchedVacancyPage', () => {
       explanation: {
         clusterId: 'cluster-miro',
         roleMatch: 'target',
+        levelMatch: 'unknown',
         requirements: { matched: 2, total: 2 },
         matchingPoints: ['React', 'TS'],
         missingPoints: [],

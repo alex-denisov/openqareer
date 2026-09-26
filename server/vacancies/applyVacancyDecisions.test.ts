@@ -21,6 +21,7 @@ function item(clusterId: string): MatchedVacancyItem {
     explanation: {
       clusterId,
       roleMatch: 'target',
+      levelMatch: 'unknown',
       matchingPoints: [],
       missingPoints: [],
       summary: 'summary',

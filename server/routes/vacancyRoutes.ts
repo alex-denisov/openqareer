@@ -52,6 +52,8 @@ import {
 } from './helpers';
 import { hhMarketQuerySchema } from './schemas';
 import { pitchRankingContext } from './pitchRankingContext';
+import { evaluateLevelMatch } from '../vacancies/levelMatcher';
+import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -393,8 +395,29 @@ function finishMatchedVacancies(
   return applyVacancyDecisions(roleFiltered, candidateStore.listVacancyDecisions(candidateId));
 }
 
+function addStoredVacancyLevels(
+  items: readonly MatchedVacancyItem[],
+  candidateLevel: ReturnType<typeof readTargetLevel>,
+  titleParseStore: RouteDeps['titleParseStore'],
+): MatchedVacancyItem[] {
+  return items.map((item) => {
+    const parsed = titleParseStore.getByKey(normalizeTitleKey(item.cluster.canonicalTitle));
+    return {
+      ...item,
+      explanation: {
+        ...item.explanation,
+        levelMatch: evaluateLevelMatch(
+          candidateLevel,
+          item.cluster.canonicalTitle,
+          parsed?.levelRank,
+        ),
+      },
+    };
+  });
+}
+
 const handleMatchedVacancies: Handler = async (
-  { authService, candidateStore, config, multiSourceEngine },
+  { authService, candidateStore, config, multiSourceEngine, titleParseStore },
   request,
   reply,
 ) => {
@@ -440,7 +463,7 @@ const handleMatchedVacancies: Handler = async (
   // байт (INC-029). Экран забирает пул страницами внутри доказанного бюджета.
   const page = buildMatchedVacancyPage(matched, offset);
   return {
-    data: page.items,
+    data: addStoredVacancyLevels(page.items, targetLevel, titleParseStore),
     meta: {
       requestId: request.id,
       total: page.total,

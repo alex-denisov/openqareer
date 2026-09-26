@@ -33,7 +33,7 @@ function newVacancy(overrides: Partial<TodayNewVacancy> = {}): TodayNewVacancy {
     firstObservedAt: '2026-09-24T08:00:00.000Z',
     lastSeenAt: '2026-09-24T08:00:00.000Z',
     sourcesCount: 1,
-    fit: { role: 'target', level: null, geo: null },
+    fit: { role: 'target', level: 'unknown', geo: null },
     ...overrides,
   };
 }
@@ -87,7 +87,7 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
     expect(snapshot.digest.closedVacancies).toBe(2);
     const item = snapshot.queue.find((entry) => entry.kind === 'new_vacancy');
     expect(item?.eyebrow).toBe('сегодня');
-    expect(item?.fit).toEqual({ role: 'target', level: null, geo: null });
+    expect(item?.fit).toEqual({ role: 'target', level: 'unknown', geo: null });
     expect(snapshot.digest.newVacanciesCaption).toEqual({
       campaignRole: 'DevOps Engineer',
       sourcesCount: 1,
