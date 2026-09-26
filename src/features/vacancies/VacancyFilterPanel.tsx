@@ -95,14 +95,14 @@ export function VacancyFilterPanel({
 }
 
 /** «Сохранённые»: выборки пилюлями, «+» раскрывает форму новой выборки. */
-function SavedSearchesFold({
+export function SavedSearchesFold({
   subscriptions,
   defaultQuery,
   onRefresh,
 }: {
   readonly subscriptions: readonly VacancySubscription[];
   readonly defaultQuery?: string;
-  readonly onRefresh: () => Promise<void>;
+  readonly onRefresh?: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -135,7 +135,7 @@ function SavedSearchesFold({
         <SavedSearchesPanel
           subscriptions={subscriptions}
           defaultQuery={defaultQuery}
-          onRefresh={onRefresh}
+          onRefresh={onRefresh ?? (async () => undefined)}
           createOpen={open}
           onCreated={() => setOpen(false)}
         />

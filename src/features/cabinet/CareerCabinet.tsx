@@ -329,6 +329,9 @@ function CabinetSection({
       failureSourceLabel={pool.failureSourceLabel}
       onRetry={pool.refresh}
       applications={vacancyApplications}
+      subscriptions={data.snapshot?.vacancySubscriptions ?? []}
+      defaultQuery={pool.campaign?.roles.value[0] || targetDirection || undefined}
+      onRefreshSavedSearch={data.refresh}
       pathIndicator={
         pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined
       }

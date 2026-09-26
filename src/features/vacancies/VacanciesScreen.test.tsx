@@ -133,6 +133,14 @@ describe('VacanciesScreen (B250)', () => {
     expect(eight).not.toContain('vacancy-hypothesis-banner');
   });
 
+  it('keeps saved-search controls available when the matched pool is empty', () => {
+    const html = render({ matched: [], total: 0, subscriptions: [] });
+
+    expect(html).toContain('career-vacancy-saved');
+    expect(html).toContain('Новый запрос к площадке');
+    expect(html).toContain('По роли VP Technology Ops пока нет вакансий');
+  });
+
   it('names the available source and offers a retry when loading fails', () => {
     const html = render({ failed: true, failureSourceLabel: 'Remotive', onRetry: () => {} });
 

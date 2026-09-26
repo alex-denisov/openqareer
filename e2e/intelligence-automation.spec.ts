@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { writeFileSync } from 'node:fs';
 
 const REGISTERED_CANDIDATE = {
   username: 'intelligence.candidate',
@@ -148,6 +149,46 @@ async function waitForLiveApp(page: Page): Promise<void> {
   );
 }
 
+async function captureVacanciesHarness(page: Page, path: string): Promise<void> {
+  const rendered = await page.evaluate(async () => {
+    const shell = document.querySelector<HTMLElement>('.career-shell');
+    if (!shell) throw new Error('vacancies_render_not_found');
+    const linkedStyles = Array.from(
+      document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
+    );
+    const linkedCss = await Promise.all(
+      linkedStyles.map((style) => fetch(style.href).then((response) => response.text())),
+    );
+    const inlineCss = Array.from(document.querySelectorAll('style')).map(
+      (style) => style.textContent ?? '',
+    );
+    return { css: [...inlineCss, ...linkedCss].join('\n'), html: shell.outerHTML };
+  });
+  const pageHtml = (css: string) =>
+    `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body>${rendered.html}</body></html>`;
+  writeFileSync(path, pageHtml(rendered.css));
+
+  const colors = Array.from(new Set(rendered.css.match(/oklch\([^)]*\)/gu) ?? []));
+  const resolvedColors = await page.evaluate((values) => {
+    const context = document.createElement('canvas').getContext('2d');
+    if (!context) throw new Error('canvas_context_missing');
+    return values.map((color) => {
+      if (!CSS.supports('color', color)) return [color, color] as const;
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data;
+      return [color, `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`] as const;
+    });
+  }, colors);
+  const replacements = new Map(resolvedColors);
+  const rgbCss = rendered.css.replace(
+    /oklch\([^)]*\)/gu,
+    (color) => replacements.get(color) ?? color,
+  );
+  writeFileSync(path.replace(/\.html$/u, '.rgb.html'), pageHtml(rgbCss));
+}
+
 async function seedWorkspace(page: Page): Promise<void> {
   await page.addInitScript(
     ({ storageKey, ownerKey, candidateId, workspace }) => {
@@ -188,7 +229,7 @@ async function openOpportunities(page: Page): Promise<void> {
 test.describe('B156 truthful market intelligence boundary', () => {
   test('candidate sees the source-backed vacancy search without fabricated outcomes', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -226,6 +267,11 @@ test.describe('B156 truthful market intelligence boundary', () => {
       .analyze();
     const criticalViolations = accessibility.violations.filter((v) => v.impact === 'critical');
     expect(criticalViolations).toEqual([]);
+    await page.screenshot({
+      path: testInfo.outputPath('vacancies-saved-search.png'),
+      fullPage: true,
+    });
+    await captureVacanciesHarness(page, testInfo.outputPath('vacancies-saved-search.html'));
   });
 
   test('the source picker names the hh.ru access refusal before a search is spent on it', async ({

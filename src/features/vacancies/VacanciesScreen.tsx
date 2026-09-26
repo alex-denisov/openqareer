@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Check } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
+import type { VacancySubscription } from '../coach/coachApi';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import { titleMatchesRole } from '../../../shared/vacancyRoleTitleMatch';
 import { pluralRu } from '../../../shared/pluralRu';
@@ -8,6 +9,7 @@ import { vacancyAge } from './vacancyFilters';
 import { VacancyRow } from './VacancyRow';
 import { VacancyDetailPanel } from './VacancyDetailPanel';
 import { VacancyHypothesisBanner } from './VacancyHypothesisBanner';
+import { SavedSearchesFold } from './VacancyFilterPanel';
 import { useVacancyCampaignActions } from './useVacancyCampaignActions';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
 import type { PathDestination, PathStep } from '../shell/pathIndicator';
@@ -55,6 +57,9 @@ interface VacanciesScreenProps {
   /** B248 §2 — тот же индикатор пути, что и на остальных экранах кампании. */
   readonly pathIndicator?: VacanciesPathIndicator;
   readonly applications?: VacancyApplications;
+  readonly subscriptions?: readonly VacancySubscription[];
+  readonly defaultQuery?: string;
+  readonly onRefreshSavedSearch?: () => Promise<void>;
 }
 
 function useVacanciesScreenBoard(
@@ -119,26 +124,27 @@ export function VacanciesScreen({
   now = new Date().toISOString(),
   pathIndicator,
   applications,
+  subscriptions = [],
+  defaultQuery,
+  onRefreshSavedSearch,
 }: VacanciesScreenProps) {
   const [activeCampaign, setActiveCampaign] = useActiveCampaign(campaign);
   const board = useVacanciesScreenBoard(matched, activeCampaign, now);
   const actions = useVacancyCampaignActions(activeCampaign, {
-    onCampaignUpdated: (updated, selectedRole) =>
-      applyCampaignUpdate(updated, selectedRole, setActiveCampaign, board.setState),
+    onCampaignUpdated: campaignUpdateHandler(setActiveCampaign, board.setState),
     onRetry,
   });
+  const savedSearches = savedSearchControls(subscriptions, defaultQuery, onRefreshSavedSearch);
 
   return (
     <div className="vacancies-screen">
-      <VacanciesHeader primaryRole={board.primaryRole} />
-      {pathIndicator ? (
-        <CareerPathIndicator steps={pathIndicator.steps} onNavigate={pathIndicator.onNavigate} />
-      ) : null}
+      <VacanciesScreenHeader primaryRole={board.primaryRole} pathIndicator={pathIndicator} />
       <VacanciesScreenBody
         loading={loading}
         failed={failed}
         failureSourceLabel={failureSourceLabel}
         onRetry={onRetry}
+        savedSearches={savedSearches}
       >
         <VacanciesResults
           matched={matched}
@@ -147,6 +153,7 @@ export function VacanciesScreen({
           candidateLevel={candidateLevel}
           now={now}
           applications={applications}
+          savedSearches={savedSearches}
           board={board}
           actions={actions}
           onRetry={onRetry}
@@ -154,6 +161,45 @@ export function VacanciesScreen({
         />
       </VacanciesScreenBody>
     </div>
+  );
+}
+
+function savedSearchControls(
+  subscriptions: readonly VacancySubscription[],
+  defaultQuery: string | undefined,
+  onRefreshSavedSearch: (() => Promise<void>) | undefined,
+): ReactNode {
+  return (
+    <SavedSearchesFold
+      subscriptions={subscriptions}
+      defaultQuery={defaultQuery}
+      onRefresh={onRefreshSavedSearch}
+    />
+  );
+}
+
+function campaignUpdateHandler(
+  setCampaign: ReturnType<typeof useActiveCampaign>[1],
+  setScreenState: ReturnType<typeof useVacanciesScreenBoard>['setState'],
+) {
+  return (updated: CampaignMetaView, selectedRole: string | undefined) =>
+    applyCampaignUpdate(updated, selectedRole, setCampaign, setScreenState);
+}
+
+function VacanciesScreenHeader({
+  primaryRole,
+  pathIndicator,
+}: {
+  readonly primaryRole?: string;
+  readonly pathIndicator?: VacanciesPathIndicator;
+}) {
+  return (
+    <>
+      <VacanciesHeader primaryRole={primaryRole} />
+      {pathIndicator ? (
+        <CareerPathIndicator steps={pathIndicator.steps} onNavigate={pathIndicator.onNavigate} />
+      ) : null}
+    </>
   );
 }
 
@@ -185,16 +231,32 @@ function VacanciesScreenBody({
   failed,
   failureSourceLabel,
   onRetry,
+  savedSearches,
   children,
 }: {
   readonly loading: boolean;
   readonly failed: boolean;
   readonly failureSourceLabel?: string;
   readonly onRetry?: () => void;
+  readonly savedSearches: ReactNode;
   readonly children: ReactNode;
 }) {
-  if (loading) return <VacanciesLoadingState />;
-  if (failed) return <VacanciesErrorState sourceLabel={failureSourceLabel} onRetry={onRetry} />;
+  if (loading) {
+    return (
+      <div className="vacancies-content">
+        {savedSearches}
+        <VacanciesLoadingState />
+      </div>
+    );
+  }
+  if (failed) {
+    return (
+      <div className="vacancies-content">
+        {savedSearches}
+        <VacanciesErrorState sourceLabel={failureSourceLabel} onRetry={onRetry} />
+      </div>
+    );
+  }
   return children;
 }
 
@@ -205,6 +267,7 @@ interface VacanciesResultsProps {
   readonly candidateLevel?: string | null;
   readonly now: string;
   readonly applications?: VacancyApplications;
+  readonly savedSearches: ReactNode;
   readonly board: ReturnType<typeof useVacanciesScreenBoard>;
   readonly actions: ReturnType<typeof useVacancyCampaignActions>;
   readonly onRetry?: () => void;
@@ -216,7 +279,10 @@ function VacanciesResults(props: VacanciesResultsProps) {
     <div className="vacancies-content">
       <VacancyHypothesisSection campaign={props.campaign} board={props.board} actions={props.actions} />
       {props.matched.length === 0 ? (
-        <VacanciesEmptyState role={props.board.primaryRole} onRetry={props.onRetry} />
+        <>
+          {props.savedSearches}
+          <VacanciesEmptyState role={props.board.primaryRole} onRetry={props.onRetry} />
+        </>
       ) : (
         <VacanciesLayout
           roleHypotheses={props.board.roleHypotheses}
@@ -239,6 +305,7 @@ function VacanciesResults(props: VacanciesResultsProps) {
           effectiveId={props.board.effectiveId}
           selectedItem={props.board.selectedItem}
           applications={props.applications}
+          savedSearches={props.savedSearches}
           mobileDetailOpen={props.board.mobileDetailOpen}
           onSelect={props.board.onSelect}
           onBack={props.board.onBack}
@@ -355,57 +422,36 @@ interface VacanciesLayoutProps {
   readonly effectiveId?: string;
   readonly selectedItem?: MatchedVacancyItem;
   readonly applications?: VacancyApplications;
+  readonly savedSearches: ReactNode;
   readonly mobileDetailOpen: boolean;
   readonly onSelect: (id: string) => void;
   readonly onBack: () => void;
   readonly onToggleRemote: () => void;
 }
 
-function VacanciesLayout({
-  roleHypotheses,
-  regions,
-  remoteOnly,
-  candidateLevel,
-  state,
-  onChange,
-  onReset,
-  total,
-  filtered,
-  now,
-  effectiveId,
-  selectedItem,
-  applications,
-  mobileDetailOpen,
-  onSelect,
-  onBack,
-  onToggleRemote,
-}: VacanciesLayoutProps) {
+function VacanciesLayout(props: VacanciesLayoutProps) {
   return (
     <div className="vacancies-layout">
-      <VacanciesFilters
-        roleHypotheses={roleHypotheses}
-        regions={regions}
-        remoteOnly={remoteOnly}
-        candidateLevel={candidateLevel}
-        state={state}
-        onChange={onChange}
-        onReset={onReset}
-        onToggleRemote={onToggleRemote}
-      />
+      <VacanciesFilters {...props} />
       <VacanciesList
-        total={total}
-        items={filtered}
-        now={now}
-        selectedId={effectiveId}
-        onSelect={onSelect}
-        onReset={onReset}
+        total={props.total}
+        items={props.filtered}
+        now={props.now}
+        selectedId={props.effectiveId}
+        onSelect={props.onSelect}
+        onReset={props.onReset}
       />
       <aside
-        className={`vacancies-detail-col${mobileDetailOpen ? ' is-open' : ''}`}
+        className={`vacancies-detail-col${props.mobileDetailOpen ? ' is-open' : ''}`}
         aria-label="Карточка вакансии"
       >
-        {selectedItem ? (
-          <VacancyDetailPanel item={selectedItem} now={now} applications={applications} onBack={onBack} />
+        {props.selectedItem ? (
+          <VacancyDetailPanel
+            item={props.selectedItem}
+            now={props.now}
+            applications={props.applications}
+            onBack={props.onBack}
+          />
         ) : null}
       </aside>
     </div>
@@ -436,6 +482,7 @@ function VacanciesFilters({
   onChange,
   onReset,
   onToggleRemote,
+  savedSearches,
 }: {
   readonly roleHypotheses: NonNullable<CampaignMetaView['roleHypotheses']>;
   readonly regions: readonly string[];
@@ -445,6 +492,7 @@ function VacanciesFilters({
   readonly onChange: (updater: (prev: VacanciesScreenState) => VacanciesScreenState) => void;
   readonly onReset: () => void;
   readonly onToggleRemote: () => void;
+  readonly savedSearches: ReactNode;
 }) {
   return (
     <aside className="vacancies-filters" aria-label="Фильтры">
@@ -459,6 +507,7 @@ function VacanciesFilters({
       ) : null}
 
       <FreshnessGroup state={state} onChange={onChange} />
+      {savedSearches}
 
       <button
         type="button"
