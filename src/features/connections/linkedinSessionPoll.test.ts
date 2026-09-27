@@ -385,6 +385,37 @@ describe('LinkedIn detail pages are read at a human pace (B266, architecture §3
     expect(keys).not.toContain('recommendations');
   });
 
+  it('does not let the pre-courses throttle skip details/courses on a repeat import', async () => {
+    localStorage.clear();
+    localStorage.setItem('openqareer.linkedin.lastDetailReadAt.v2', String(Date.now()));
+    const read = vi.fn(async (url: string) => {
+      const path = new URL(url).pathname;
+      if (path === '/in/me/')
+        return {
+          ok: true,
+          url: 'https://www.linkedin.com/in/jordanrivers-99a1b2/',
+          body: readFixture('profile.html'),
+        };
+      return {
+        ok: true,
+        url,
+        body: path.endsWith('/details/courses/') ? readFixture('courses.html') : '<main></main>',
+      };
+    });
+
+    try {
+      const result = await flowWith(read, { pauseBetweenDetailReads: async () => {} }).run();
+
+      expect(read.mock.calls.map(([url]) => url)).toContain(
+        'https://www.linkedin.com/in/jordanrivers-99a1b2/details/courses/',
+      );
+      expect(result).toMatchObject({ structured: { profile: { courses: expect.any(Array) } } });
+      if (result.status === 'ready') expect(result.structured?.profile.courses).toHaveLength(3);
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('pauses before every detail page', async () => {
     const pause = vi.fn(async () => {});
     const read = vi.fn(async () => profile);

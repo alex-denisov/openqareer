@@ -193,8 +193,8 @@ export const MAX_DETAIL_PAGES_PER_READ = 7;
 export const DETAIL_READ_INTERVAL_MS = 12 * 60 * 60 * 1_000;
 const DETAIL_PAUSE_MIN_MS = 3_000;
 const DETAIL_PAUSE_MAX_MS = 8_000;
-// v2: the section list grew (languages), so the first walk after the update runs in full.
-const DETAIL_READ_STORAGE_KEY = 'openqareer.linkedin.lastDetailReadAt.v2';
+// v3: courses were added after v2, so an older completed walk must not skip them.
+const DETAIL_READ_STORAGE_KEY = 'openqareer.linkedin.lastDetailReadAt.v3';
 
 function humanPause(): Promise<void> {
   const span = DETAIL_PAUSE_MAX_MS - DETAIL_PAUSE_MIN_MS;
