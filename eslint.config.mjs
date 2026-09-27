@@ -58,6 +58,9 @@ export default tseslint.config(
       '.remember/**',
       '.zcode/**',
       'coverage/**',
+      // Local, owner-only docs and one-off probe scripts; neither is in git.
+      'docs/**',
+      'e2e/cjm/.tmp/**',
       'dist/**',
       'node_modules/**',
       'output/**',

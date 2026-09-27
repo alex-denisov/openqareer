@@ -249,8 +249,8 @@ async function measureOneQuery(query, state) {
   }
 
   const duplicateCount = returnedCount - uniqueIds.size;
-  const status =
-    stopReason === 'empty_page' || stopReason === 'page_limit' ? 'complete' : 'partial';
+  // Упор в предел страниц — это потолок канала, а не конец выдачи: полнота не доказана.
+  const status = stopReason === 'empty_page' ? 'complete' : 'partial';
   return {
     ...emptyQueryResult(query, status, stopReason),
     elapsedMs: Math.max(0, Math.round(state.now() - queryStarted)),

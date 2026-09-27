@@ -88,6 +88,19 @@ describe('LinkedIn guest measurement', () => {
     });
   });
 
+  it('reports a query that hits the page cap as partial, not complete', async () => {
+    let id = 0;
+    const result = await measureGuestQueries({
+      queries: [QUERY_DUBAI],
+      fetchPage: async () => htmlResponse(200, `<li data-entity-urn="urn:li:jobPosting:${++id}">`),
+      sleep: async () => {},
+      now: () => 0,
+      random: () => 0.5,
+    });
+
+    expect(result.queries[0]).toMatchObject({ stopReason: 'page_limit', status: 'partial' });
+  });
+
   it.each([429, 999])('stops all queries on HTTP %s without retrying', async (status) => {
     const calls = [];
     const result = await measureGuestQueries({

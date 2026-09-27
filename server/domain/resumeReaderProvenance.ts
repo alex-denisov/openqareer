@@ -5,11 +5,14 @@ export function rulesReaderProvenance(): ResumeReaderProvenance {
   return { method: 'rules', model: null, promptRevision: null, readAt: new Date().toISOString() };
 }
 
-export function modelReaderProvenance(structurer: ResumeStructurer): ResumeReaderProvenance {
+/** Без метаданных модели провенанс неизвестен: `null`, а не утверждение «читала модель unknown». */
+export function modelReaderProvenance(structurer: ResumeStructurer): ResumeReaderProvenance | null {
+  const provenance = structurer.provenance;
+  if (!provenance) return null;
   return {
     method: 'model',
-    model: structurer.provenance?.model ?? 'unknown',
-    promptRevision: structurer.provenance?.promptRevision ?? 'unknown',
+    model: provenance.model,
+    promptRevision: provenance.promptRevision,
     readAt: new Date().toISOString(),
   };
 }

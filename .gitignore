@@ -36,6 +36,8 @@ blob-report/
 .playwright-cli/
 screenshots/
 output/
+# One-off CJM probe scripts (local only)
+e2e/cjm/.tmp/
 
 # Runtime and local tooling
 bin/
