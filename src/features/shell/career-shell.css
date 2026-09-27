@@ -13087,7 +13087,9 @@
 }
 
 @media (max-width: 760px) {
+  /* The path is its own horizontal scroller; keep its scroll range inside the page viewport. */
   .career-main:has(.career-cabinet-view-opportunities) {
+    overflow-x: clip;
     padding-top: var(--career-space-3);
   }
 
