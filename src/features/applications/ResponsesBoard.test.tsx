@@ -36,6 +36,7 @@ function readyState(applications: readonly ApplicationView[]): UseApplications {
     conflicts: new Set(),
     reload: () => {},
     changeStage: () => {},
+    scheduleInterview: async () => {},
     retryStageChange: () => {},
     markFollowUpSent: async () => {},
     saveNote: () => {},

@@ -411,6 +411,12 @@ test.describe('B251 responses screen', () => {
     await expect(page.locator('.career-responses-empty')).toContainText(
       'Пайплайн наполняется из очереди дня',
     );
+    await expect(page.locator('.career-responses-empty')).toContainText(
+      'Откликнитесь на вакансию из подборки',
+    );
+    await expect(
+      page.locator('.career-responses-empty').getByRole('button', { name: 'Вакансии' }),
+    ).toBeVisible();
   });
 
   test('a load error shows the offline message and a retry action', async ({ page }) => {

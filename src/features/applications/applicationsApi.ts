@@ -63,6 +63,29 @@ export async function patchApplication(
   return readDataObject<ApplicationView>(response);
 }
 
+export interface ScheduleApplicationInterviewInput {
+  readonly round: number;
+  readonly scheduledAt?: string | null;
+}
+
+/** Creates the interview record the stage change alone does not: `stage` and
+ * `nearestInterview` live in separate tables (server/data/sqliteApplicationInterviewRepository.ts,
+ * B251 S2), so «Интервью через N дней» on «Сегодня» stays empty without this call. */
+export async function createApplicationInterview(
+  applicationId: string,
+  input: ScheduleApplicationInterviewInput,
+): Promise<void> {
+  const response = await apiFetch(
+    `/api/v1/candidate/applications/${encodeURIComponent(applicationId)}/interviews`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+  await readDataObject(response);
+}
+
 export async function recordFollowUpSent(applicationId: string): Promise<ApplicationView> {
   const response = await apiFetch(
     `/api/v1/candidate/applications/${encodeURIComponent(applicationId)}/events`,

@@ -90,6 +90,25 @@ export function CareerCabinet({
   // B251 S3 — трекер откликов читает свой собственный API, независимо от
   // ручного лога `useVacancyApplications` (совместимость со старым `.app`).
   const applicationsTracker = useApplications();
+  // B251 F5 (C47) — confirming an application in «Вакансии» must land a card
+  // in «Отклики»: the two logs live in different tables (server/data), so a
+  // plain vacancyApplications.record() left the tracker empty forever.
+  const trackedVacancyApplications = useMemo(
+    () => ({
+      ...vacancyApplications,
+      record: (
+        clusterId: Parameters<typeof vacancyApplications.record>[0],
+        status: Parameters<typeof vacancyApplications.record>[1],
+        vacancy: Parameters<typeof vacancyApplications.record>[2],
+      ) => {
+        vacancyApplications.record(clusterId, status, vacancy);
+        if (status === 'applied') {
+          void applicationsTracker.addManualCard({ clusterId, stage: 'applied' });
+        }
+      },
+    }),
+    [vacancyApplications, applicationsTracker],
+  );
   const journey = useMemo(
     () =>
       cabinetJourney({
@@ -159,7 +178,11 @@ export function CareerCabinet({
             loading={data.loading && Boolean(data.snapshot)}
             error={data.error}
             onRetry={() => void data.refresh()}
-            tabs={view === 'profile' ? <ProfileTabs tab={profileTab} onTab={setProfileTab} /> : undefined}
+            tabs={
+              view === 'profile' ? (
+                <ProfileTabs tab={profileTab} onTab={setProfileTab} />
+              ) : undefined
+            }
           />
         ) : null}
         {pathIndicatorSteps && !showsVacanciesScreen ? (
@@ -178,7 +201,7 @@ export function CareerCabinet({
             targetDirection={targetDirection}
             strategy={strategy}
             pool={pool}
-            vacancyApplications={vacancyApplications}
+            vacancyApplications={trackedVacancyApplications}
             pathIndicatorSteps={pathIndicatorSteps}
             applicationsTracker={applicationsTracker}
             data={data}
@@ -316,7 +339,10 @@ function CabinetSection({
   }
   if (view === 'responses') {
     return (
-      <ResponsesBoard state={applicationsTracker} onOpenVacancies={() => onNavigate('opportunities')} />
+      <ResponsesBoard
+        state={applicationsTracker}
+        onOpenVacancies={() => onNavigate('opportunities')}
+      />
     );
   }
   return (
@@ -333,9 +359,8 @@ function CabinetSection({
       subscriptions={data.snapshot?.vacancySubscriptions ?? []}
       defaultQuery={pool.campaign?.roles.value[0] || targetDirection || undefined}
       onRefreshSavedSearch={data.refresh}
-      pathIndicator={
-        pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined
-      }
+      onOpenResponses={() => onNavigate('responses')}
+      pathIndicator={pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined}
     />
   );
 }
@@ -362,7 +387,9 @@ function CabinetHeader({
   return (
     <header className="career-cabinet-header">
       <div>
-        <span className="career-cabinet-kicker">{view === 'responses' ? 'Пайплайн' : todayLabel()}</span>
+        <span className="career-cabinet-kicker">
+          {view === 'responses' ? 'Пайплайн' : todayLabel()}
+        </span>
         <h1>{VIEW_TITLE[view]}</h1>
         <p>{VIEW_DESCRIPTION[view]}</p>
       </div>
@@ -442,12 +469,16 @@ function nearestInterviewOf(
   const withInterview = applications
     .filter((application) => application.nearestInterview?.scheduledAt)
     .sort((a, b) =>
-      (a.nearestInterview?.scheduledAt as string).localeCompare(b.nearestInterview?.scheduledAt as string),
+      (a.nearestInterview?.scheduledAt as string).localeCompare(
+        b.nearestInterview?.scheduledAt as string,
+      ),
     );
   const nearest = withInterview[0];
   if (!nearest?.nearestInterview?.scheduledAt) return null;
   return {
-    company: nearest.vacancy?.companyHidden ? 'Компания скрыта' : nearest.vacancy?.company || 'Компания не указана',
+    company: nearest.vacancy?.companyHidden
+      ? 'Компания скрыта'
+      : nearest.vacancy?.company || 'Компания не указана',
     scheduledAt: nearest.nearestInterview.scheduledAt,
   };
 }

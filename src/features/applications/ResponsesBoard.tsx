@@ -35,9 +35,11 @@ export function ResponsesBoard({
 }) {
   if (state.status === 'loading') return <LoadingState />;
   if (state.status === 'error') {
-    return <ErrorState message={state.error ?? ''} offline={state.offline} onRetry={state.reload} />;
+    return (
+      <ErrorState message={state.error ?? ''} offline={state.offline} onRetry={state.reload} />
+    );
   }
-  if (state.applications.length === 0) return <EmptyState />;
+  if (state.applications.length === 0) return <EmptyState onOpenVacancies={onOpenVacancies} />;
   return <ReadyBoard state={state} onOpenVacancies={onOpenVacancies} />;
 }
 
@@ -51,7 +53,7 @@ function LoadingState() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ onOpenVacancies }: { onOpenVacancies: () => void }) {
   return (
     <div className="career-responses-empty">
       <h3>Пайплайн пуст</h3>
@@ -59,6 +61,16 @@ function EmptyState() {
         Откликов ещё нет. Пайплайн наполняется из очереди дня — как только вы откликнетесь на первую
         вакансию, здесь появится карточка с материалами и следующим шагом.
       </p>
+      <p className="career-responses-empty-step">
+        Откликнитесь на вакансию из подборки, чтобы начать.
+      </p>
+      <button
+        type="button"
+        className="career-btn career-btn-primary career-btn-sm"
+        onClick={onOpenVacancies}
+      >
+        <Briefcase size={14} /> Вакансии
+      </button>
     </div>
   );
 }
@@ -139,7 +151,9 @@ function BoardColumn({
   onOpenVacancies?: () => void;
   onAddManual?: () => void;
 }) {
-  const cards = state.applications.filter((application) => column.stages.includes(application.stage));
+  const cards = state.applications.filter((application) =>
+    column.stages.includes(application.stage),
+  );
   return (
     <section className="career-responses-column" aria-label={column.label}>
       <header className="career-responses-column-head">
@@ -153,7 +167,12 @@ function BoardColumn({
             application={application}
             failed={state.failedChanges.has(application.id)}
             conflicted={state.conflicts.has(application.id)}
-            onChangeStage={(stage, occurredAt) => state.changeStage(application.id, stage, occurredAt)}
+            onChangeStage={(stage, occurredAt) =>
+              state.changeStage(application.id, stage, occurredAt)
+            }
+            onScheduleInterview={(scheduledAt) =>
+              state.scheduleInterview(application.id, scheduledAt)
+            }
             onRetry={() => state.retryStageChange(application.id)}
             onSaveNote={(notes) => state.saveNote(application.id, notes)}
             onMarkFollowUpSent={() => state.markFollowUpSent(application.id)}

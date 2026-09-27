@@ -126,7 +126,7 @@ describe('VacancyDetailPanel (B250)', () => {
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(openSpy).toHaveBeenCalledWith('https://example.com/vacancy');
-    expect(record).toHaveBeenCalledWith('c-1', 'opened', expect.objectContaining({ url: 'https://example.com/vacancy' }));
+    expect(record).toHaveBeenCalledWith('c-1', 'applied', expect.objectContaining({ url: 'https://example.com/vacancy' }));
     act(() => root.unmount());
     container.remove();
   });
