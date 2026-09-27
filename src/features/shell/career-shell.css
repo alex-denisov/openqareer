@@ -13129,17 +13129,61 @@
 
 .vac-fit {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: var(--career-space-1);
   margin-left: auto;
+}
+
+.vac-fit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  padding: 1px var(--career-space-1);
+  border-radius: var(--career-radius-sm);
+  font-size: var(--career-text-aux);
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.vac-fit-chip .vac-fit-label {
+  color: var(--career-text-dim);
+}
+
+.vac-fit-chip.is-yes {
+  background: var(--career-success-soft);
+  color: var(--career-success);
+}
+.vac-fit-chip.is-yes .vac-fit-status {
+  color: var(--career-success);
+}
+
+.vac-fit-chip.is-nearby {
+  background: var(--career-warning-soft);
+  color: var(--career-warning);
+}
+.vac-fit-chip.is-nearby .vac-fit-status {
+  color: var(--career-warning);
+}
+
+.vac-fit-chip.is-no {
+  background: var(--career-surface);
+  color: var(--career-text-dim);
+}
+.vac-fit-chip.is-no .vac-fit-status {
+  color: var(--career-text-dim);
+}
+
+.vac-fit-chip.is-unknown {
+  background: var(--career-surface);
+  color: var(--career-text-soft);
+}
+.vac-fit-chip.is-unknown .vac-fit-status {
+  color: var(--career-text-soft);
 }
 
 /* Простые галки совпадения (приёмка B250): без кружка-заливки, только
    значок в цвете статуса. */
 .fit-dot {
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
   font-size: var(--career-text-aux);
 }
 

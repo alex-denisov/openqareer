@@ -69,14 +69,18 @@ describe('VacancyDetailPanel (B250)', () => {
     const html = render();
     expect(html).toContain('Совпадает по фактам профиля');
     expect(html).toContain('Опыт управления P&amp;L');
-    expect(html).toContain('Не подтверждено');
+    expect(html).toContain('Требования вакансии, которых нет в вашем профиле');
+    expect(html).toContain(
+      'Подтвердите опытом в профиле — или будьте готовы обсудить на интервью',
+    );
+    expect(html).toContain('Добавить в профиль');
     expect(html).toContain('Опыт публичной компании');
   });
 
   it('hides the matched/unconfirmed blocks when there is nothing to show', () => {
     const html = render({ item: item({ matchingPoints: [], missingPoints: [] }) });
     expect(html).not.toContain('Совпадает по фактам профиля');
-    expect(html).not.toContain('Не подтверждено');
+    expect(html).not.toContain('Требования вакансии, которых нет в вашем профиле');
   });
 
   it('hides the company-signal grid entirely — no enrichment field exists yet', () => {

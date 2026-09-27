@@ -97,4 +97,30 @@ describe('VacancyRow (B250)', () => {
     expect(html).toContain('is-selected');
     expect(html).toContain('aria-pressed="true"');
   });
+
+  it('renders three chips «Роль», «Уровень», «Гео» with text status (совпадает/рядом/нет)', () => {
+    const html = render();
+    expect(html).toContain('Роль');
+    expect(html).toContain('Уровень');
+    expect(html).toContain('Гео');
+    expect(html).toContain('совпадает');
+  });
+
+  it('renders status «рядом» when role or level is partially matching', () => {
+    const nearby: MatchedVacancyItem = {
+      ...item(),
+      explanation: { ...item().explanation, roleMatch: 'partial', levelMatch: 'below' },
+    };
+    const html = render({ item: nearby });
+    expect(html).toContain('рядом');
+  });
+
+  it('renders status «нет» when role or geo does not match', () => {
+    const noMatch: MatchedVacancyItem = {
+      ...item(),
+      explanation: { ...item().explanation, roleMatch: 'none', outsideGeography: true },
+    };
+    const html = render({ item: noMatch });
+    expect(html).toContain('нет');
+  });
 });

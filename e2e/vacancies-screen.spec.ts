@@ -356,10 +356,14 @@ test.describe('B250 vacancies screen', () => {
     const listHead = page.locator('.vacancies-list-head');
     await expect(listHead).toContainText('61 вакансия');
 
-    // The default role chip is the primary campaign role, so the list starts
-    // filtered to the titles that match it — the same rule the server used
-    // to count the chip (B248).
+    // C56: По умолчанию выбраны «Все роли кампании» (все 6 вакансий пула).
     const rows = page.locator('.vac-list-item');
+    await expect(rows).toHaveCount(6);
+    await expect(rows.first()).toContainText('Business Information Architect');
+    await expect(rows.first()).toContainText('Genetec');
+
+    // Клик по конкретной роли («Enterprise Architect (34)») сужает список до неё (B248).
+    await filters.getByText('Enterprise Architect (34)').click();
     await expect(rows).toHaveCount(4);
     await expect(rows.first()).toContainText('Enterprise Architect, Senior');
     await expect(rows.first()).toContainText('Peraton');
@@ -372,6 +376,7 @@ test.describe('B250 vacancies screen', () => {
       'Вакансия ниже целевого уровня',
     );
 
+    await filters.getByText('Enterprise Architect (34)').click();
     await filters.getByText(/Cloud Architect \(6\).*гипотеза/).click();
     await expect(rows).toHaveCount(1);
     await expect(rows.first()).toContainText('Sonsoft Inc');
@@ -437,8 +442,8 @@ test.describe('B250 vacancies screen', () => {
 
     const detail = page.locator('.vacancies-detail-col');
     await expect(detail).toBeVisible();
-    await expect(detail).toContainText('Enterprise Architect, Senior');
-    await expect(detail).toContainText('Peraton');
+    await expect(detail).toContainText('Business Information Architect');
+    await expect(detail).toContainText('Genetec');
   });
 
   test('on 390 selecting a row opens the panel full-screen and «Назад» returns to the list', async ({
