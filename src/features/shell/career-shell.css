@@ -3233,6 +3233,7 @@
   .career-shell {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 58px minmax(0, 1fr) 72px;
+    overflow-x: clip;
     background:
       radial-gradient(circle at 100% 0%, oklch(33% 0.055 255 / 0.18), transparent 22rem),
       var(--career-bg);
