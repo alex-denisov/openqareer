@@ -20,13 +20,12 @@ describe('candidate workspace visit marks', () => {
     const first = '2026-09-24T10:00:00.000Z';
 
     expect(store.recordCandidateVisit(candidate.id, first)).toEqual({ since: null });
-    expect(store.getCandidateWorkspace(candidate.id)).toMatchObject({
-      lastVisitedAt: first,
-      previousVisitedAt: first,
-    });
+    expect(store.getCandidateWorkspace(candidate.id)?.lastVisitedAt).toBe(first);
+    expect(store.getCandidateWorkspace(candidate.id)?.previousVisitedAt).toBeUndefined();
+    expect(store.getSinceLastVisit(candidate.id)).toBeNull();
 
     const beforeBoundary = store.recordCandidateVisit(candidate.id, '2026-09-24T10:29:59.000Z');
-    expect(beforeBoundary.since).toBe(first);
+    expect(beforeBoundary.since).toBeNull();
     expect(store.getCandidateWorkspace(candidate.id)?.lastVisitedAt).toBe(first);
 
     const boundary = store.recordCandidateVisit(candidate.id, '2026-09-24T10:30:00.000Z');
@@ -46,6 +45,7 @@ describe('candidate workspace visit marks', () => {
     store.saveCandidateWorkspace(second.id, WORKSPACE);
 
     store.recordCandidateVisit(first.id, '2026-09-24T10:00:00.000Z');
+    store.recordCandidateVisit(first.id, '2026-09-24T11:00:00.000Z');
 
     expect(store.getSinceLastVisit(first.id)).toBe('2026-09-24T10:00:00.000Z');
     expect(store.getSinceLastVisit(second.id)).toBeNull();

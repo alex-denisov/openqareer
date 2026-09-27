@@ -15,9 +15,7 @@ const workspace = {
 
 /** A payload written by a client from before B158 replaced `market`. */
 function withoutRegions(value: object): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([key]) => key !== 'regions'),
-  );
+  return Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'regions'));
 }
 
 /**
@@ -66,6 +64,44 @@ describe('candidate workspace persistence', () => {
       urgency: 'active',
       currentSituation: 'Ищу работу за рубежом и рассматриваю релокацию.',
     });
+  });
+
+  it('keeps the campaign and visit marks when the client saves its part of the workspace', async () => {
+    const app = await createApp();
+    const headers = { authorization: candidateAuthorization(app), origin: 'http://localhost:3000' };
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/workspace',
+      headers,
+      payload: { workspace },
+    });
+    const campaign = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/campaign',
+      headers,
+      payload: { roles: ['VP Technology Ops'], regions: ['mena'], remoteOnly: true },
+    });
+    expect(campaign.statusCode).toBe(200);
+    await app.inject({ method: 'POST', url: '/api/v1/candidate/visits', headers });
+    const before = (
+      await app.inject({ method: 'GET', url: '/api/v1/candidate/workspace', headers })
+    ).json().data;
+
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/workspace',
+      headers,
+      payload: { workspace: { ...workspace, urgency: 'exploring' } },
+    });
+    const after = (
+      await app.inject({ method: 'GET', url: '/api/v1/candidate/workspace', headers })
+    ).json().data;
+
+    expect(after.urgency).toBe('exploring');
+    expect(after.campaign).toEqual(before.campaign);
+    expect(after.campaign.remoteOnly).toBe(true);
+    expect(after.lastVisitedAt).toBe(before.lastVisitedAt);
+    expect(after.lastVisitedAt).toBeDefined();
   });
 
   it('replaces the previous answers instead of accumulating them', async () => {

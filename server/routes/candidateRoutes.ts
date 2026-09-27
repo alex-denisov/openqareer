@@ -7,11 +7,8 @@ import {
   buildSnapshotHead,
   buildTurnPage,
 } from '../data/candidateSnapshotPage';
-import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
-import {
-  evaluateProductCase,
-  productCaseSubmissionSchema,
-} from '../domain/assessment';
+import { handleGetWorkspace, handlePutWorkspace } from './workspaceHandlers';
+import { evaluateProductCase, productCaseSubmissionSchema } from '../domain/assessment';
 import { evaluateGermanyMarket, germanyMarketSubmissionSchema } from '../domain/germanyMarket';
 import {
   buildResumeStudioProjection,
@@ -82,7 +79,10 @@ interface ResumeStudioView {
  * it with the evidence the candidate approved when the draft was saved, so a
  * revoked fact surfaces instead of surviving inside a generated document.
  */
-export function resumeStudioView(candidateStore: CandidateStore, candidateId: string): ResumeStudioView {
+export function resumeStudioView(
+  candidateStore: CandidateStore,
+  candidateId: string,
+): ResumeStudioView {
   const snapshot = candidateStore.getSnapshot(candidateId);
   const stored = snapshot.resume;
   const projection = buildResumeStudioProjection({
@@ -109,18 +109,24 @@ export function resumeStudioView(candidateStore: CandidateStore, candidateId: st
 async function readResume(
   text: string,
   structurer?: RouteDeps['resumeStructurer'],
-): Promise<{ resume: ReturnType<typeof parseResumeContent>; structuredBy: 'model' | 'rules'; reader: ResumeReaderProvenance }> {
+): Promise<{
+  resume: ReturnType<typeof parseResumeContent>;
+  structuredBy: 'model' | 'rules';
+  reader: ResumeReaderProvenance | null;
+}> {
   // Both readers must see the same document. The model was handed the raw
   // extraction while only the rules parser repaired it, so on an hh.ru export
   // the model read `Проживает : Москва`, echoed the spacing into every title and
   // lost the fields the rules parser had already found (B178).
   const source = normalizeResumeSourceText(text);
   const deterministic = parseResumeContent(source);
-  if (!structurer) return { resume: deterministic, structuredBy: 'rules', reader: rulesReaderProvenance() };
+  if (!structurer)
+    return { resume: deterministic, structuredBy: 'rules', reader: rulesReaderProvenance() };
   // Модель — улучшение, а не условие: без потолка кандидат ждал её отказа
   // шесть с половиной минут (INC-037).
   const structured = await structureWithinBudget(source, structurer);
-  if (!structured) return { resume: deterministic, structuredBy: 'rules', reader: rulesReaderProvenance() };
+  if (!structured)
+    return { resume: deterministic, structuredBy: 'rules', reader: rulesReaderProvenance() };
   return {
     resume: preferStructuredResume(structured, deterministic),
     structuredBy: 'model',
@@ -150,7 +156,11 @@ const messagesQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
-const handleGetSnapshot: Handler = async ({ authService, candidateStore, config }, request, reply) => {
+const handleGetSnapshot: Handler = async (
+  { authService, candidateStore, config },
+  request,
+  reply,
+) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const { memoryOffset } = snapshotQuerySchema.parse(request.query);
@@ -161,7 +171,11 @@ const handleGetSnapshot: Handler = async ({ authService, candidateStore, config 
 };
 
 /** Память страницами: голова снимка её не несёт (INC-030). */
-const handleGetMemory: Handler = async ({ authService, candidateStore, config }, request, reply) => {
+const handleGetMemory: Handler = async (
+  { authService, candidateStore, config },
+  request,
+  reply,
+) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const { offset } = messagesQuerySchema.parse(request.query);
@@ -216,7 +230,8 @@ const handleGetMessages: Handler = async (
 };
 
 const handleDeleteCandidate: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, candidateReputationRepo, recruiterContactsRepo, config } = deps;
+  const { authService, candidateStore, candidateReputationRepo, recruiterContactsRepo, config } =
+    deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
@@ -238,44 +253,13 @@ const handleExportCandidate: Handler = async (
   return {
     data: {
       ...candidateStore.exportCandidate(candidate.id),
-      reputationAudits: candidateReputationRepo?.listAudits(candidate.id, { trustedOnly: true }) ?? [],
+      reputationAudits:
+        candidateReputationRepo?.listAudits(candidate.id, { trustedOnly: true }) ?? [],
       // Keep the singular key for clients that have not migrated yet.
-      reputationAudit: candidateReputationRepo?.getLatestAudit(candidate.id, { trustedOnly: true }) ?? null,
+      reputationAudit:
+        candidateReputationRepo?.getLatestAudit(candidate.id, { trustedOnly: true }) ?? null,
     },
     meta: { requestId: request.id, exportedAt: new Date().toISOString() },
-  };
-};
-
-const handleGetWorkspace: Handler = async (
-  { authService, candidateStore, config },
-  request,
-  reply,
-) => {
-  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
-  if (!candidate) return undefined;
-  return {
-    data: candidateStore.getCandidateWorkspace(candidate.id),
-    meta: { requestId: request.id },
-  };
-};
-
-/**
- * The wizard's answers are the candidate's own words; no engine can recompute
- * them. Keeping them only in browser storage meant signing out erased the
- * candidate's career context (INC-024).
- */
-const handlePutWorkspace: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, config } = deps;
-  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
-  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
-  if (!candidate) return undefined;
-  const body = z
-    .object({ workspace: candidateWorkspaceSchema })
-    .strict()
-    .parse(request.body);
-  return {
-    data: candidateStore.saveCandidateWorkspace(candidate.id, body.workspace),
-    meta: { requestId: request.id },
   };
 };
 
@@ -441,7 +425,7 @@ function resumeImportCommit(
   candidateId: string,
   body: z.infer<typeof resumeImportSchema>,
   plan: ReturnType<typeof planResumeImport>,
-  reader: ReturnType<typeof rulesReaderProvenance>,
+  reader: ReturnType<typeof rulesReaderProvenance> | null,
 ) {
   return {
     evidence: {
@@ -672,15 +656,14 @@ const handleSaveDocument: Handler = async (deps, request, reply) => {
   }
 };
 
-function loadCandidateDocument(
-  deps: RouteDeps,
-  request: FastifyRequest,
-  reply: FastifyReply,
-) {
+function loadCandidateDocument(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const { authService, candidateStore, config } = deps;
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return null;
-  const documentId = z.string().uuid().parse((request.params as { documentId: string }).documentId);
+  const documentId = z
+    .string()
+    .uuid()
+    .parse((request.params as { documentId: string }).documentId);
   const document = candidateStore.getDocument(candidate.id, documentId);
   if (!document) {
     sendError(reply, request, 404, 'document_not_found', 'Документ не найден.', false);
@@ -709,10 +692,14 @@ const handleGetDocumentText: Handler = async (deps, request, reply) => {
   const { offset } = documentTextQuerySchema.parse(request.query ?? {});
   // Reserve the exact worst-case JSON envelope, including request id and offsets.
   const text = document.extractedText ?? '';
-  const envelopeBytes = Buffer.byteLength(JSON.stringify({
-    data: { text: '' },
-    meta: { requestId: request.id, offset, nextOffset: text.length, length: text.length },
-  }), 'utf8') + 4; // null may be wider than a short numeric nextOffset
+  const envelopeBytes =
+    Buffer.byteLength(
+      JSON.stringify({
+        data: { text: '' },
+        meta: { requestId: request.id, offset, nextOffset: text.length, length: text.length },
+      }),
+      'utf8',
+    ) + 4; // null may be wider than a short numeric nextOffset
   const page = buildDocumentTextPage(text, offset, 12_288 - envelopeBytes);
   return {
     data: { text: page.text },
@@ -742,7 +729,10 @@ const handleSetRetention: Handler = async (deps, request, reply) => {
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  const documentId = z.string().uuid().parse((request.params as { documentId: string }).documentId);
+  const documentId = z
+    .string()
+    .uuid()
+    .parse((request.params as { documentId: string }).documentId);
   const body = documentRetentionSchema.parse(request.body);
   try {
     const document = candidateStore.setDocumentRetention(
@@ -775,17 +765,17 @@ const handleDeleteDocument: Handler = async (deps, request, reply) => {
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  const documentId = z.string().uuid().parse((request.params as { documentId: string }).documentId);
+  const documentId = z
+    .string()
+    .uuid()
+    .parse((request.params as { documentId: string }).documentId);
   if (!candidateStore.deleteDocument(candidate.id, documentId)) {
     return sendError(reply, request, 404, 'document_not_found', 'Документ не найден.', false);
   }
   return reply.code(204).send();
 };
 
-async function registerCandidateLifecycle(
-  app: FastifyInstance,
-  deps: RouteDeps,
-): Promise<void> {
+async function registerCandidateLifecycle(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   app.post(
     '/api/v1/candidates',
     {

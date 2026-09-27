@@ -76,7 +76,8 @@ export class SqliteWorkspaceRepository {
 
     const lastVisitedAt = current.lastVisitedAt ?? legacyLastVisitedAt;
     if (!lastVisitedAt) {
-      this.save(candidateId, { ...current, lastVisitedAt: now, previousVisitedAt: now });
+      // Первый визит: прошлого визита нет, `since` остаётся пустым и в GET /today.
+      this.save(candidateId, { ...current, lastVisitedAt: now });
       return { since: null };
     }
 
@@ -93,12 +94,12 @@ export class SqliteWorkspaceRepository {
         previousVisitedAt: current.previousVisitedAt ?? lastVisitedAt,
       });
     }
-    return { since: current.previousVisitedAt ?? lastVisitedAt };
+    return { since: current.previousVisitedAt ?? (current.lastVisitedAt ? null : lastVisitedAt) };
   }
 
   getSinceLastVisit(candidateId: string): string | null {
     const current = this.get(candidateId);
-    return current?.previousVisitedAt ?? current?.lastVisitedAt ?? null;
+    return current?.previousVisitedAt ?? null;
   }
 }
 

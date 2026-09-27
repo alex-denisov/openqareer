@@ -31,6 +31,8 @@ export async function rebuildCampaignRoles(
   deps.candidateStore.saveCandidateWorkspace(candidateId, {
     ...latest,
     campaign: {
+      // Остальные поля кампании (remoteOnly и будущие) — выбор кандидата, пересборка их не трогает.
+      ...latest.campaign,
       // Без явного выбора кандидата его поля остаются пустыми: иначе регионы
       // рабочего пространства выглядели бы правкой кандидата (origin explicit).
       roles: latest.campaign?.roles ?? [],
