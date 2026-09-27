@@ -604,6 +604,12 @@ describe('POST /api/v1/vacancies/:id/enrich-contacts', () => {
   it('reads one persisted cluster instead of hydrating the whole pool (PRB-041)', async () => {
     const { app } = await createApp([cluster], { persisted: true });
     const { cookie } = await login(app);
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/search-consent',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: { granted: true },
+    });
     const response = await app.inject({
       method: 'POST',
       url: '/api/v1/vacancies/cluster-77/enrich-contacts',

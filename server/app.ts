@@ -37,7 +37,9 @@ import { registerVacancyCatalogRoutes } from './routes/vacancyCatalogRoutes';
 import { registerErrorHandler, registerStaticDelivery } from './routes/runtime';
 import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContactsRepository';
 import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
+import { SqliteSearchConsentRepository } from './data/sqliteSearchConsentRepository';
 import { registerReputationAuditRoutes } from './routes/reputationAuditRoutes';
+import { registerSearchConsentRoutes } from './routes/searchConsentRoutes';
 import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
 
 
@@ -65,6 +67,7 @@ interface BuildAppOptions {
   titleParseStore?: SqliteTitleParseStore;
   recruiterContactsRepo?: SqliteRecruiterContactsRepository;
   candidateReputationRepo?: SqliteCandidateReputationRepository;
+  searchConsentRepo?: SqliteSearchConsentRepository;
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
 
 
@@ -214,6 +217,7 @@ async function registerApiRoutes(app: FastifyInstance, deps: RouteDeps): Promise
   // Публичный каталог вакансий: без сессии, HTML собирается на запросе (B209).
   registerVacancyCatalogRoutes(app, deps);
   registerReputationAuditRoutes(app, deps);
+  registerSearchConsentRoutes(app, deps);
 }
 
 
@@ -250,6 +254,7 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Rou
     coverLetterWriter,
     recruiterContactsRepo,
     candidateReputationRepo,
+    searchConsentRepo,
     linkedinPool,
     searchVacancies = searchHhVacancies,
     hhCrawlSettings,
@@ -273,6 +278,8 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Rou
     candidateReputationRepo:
       candidateReputationRepo ??
       new SqliteCandidateReputationRepository({ databasePath: config.databasePath }),
+    searchConsentRepo:
+      searchConsentRepo ?? new SqliteSearchConsentRepository({ databasePath: config.databasePath }),
     ...(linkedinPool ? { linkedinPool } : {}),
     roleNamingFailures: new RoleNamingFailureLog(),
 

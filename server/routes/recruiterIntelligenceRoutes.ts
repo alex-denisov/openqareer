@@ -10,6 +10,47 @@ import {
   withDeps,
 } from './helpers';
 
+/** Срез 1 (B263): без согласия «Вы в поиске» сервер отклоняет запрос, а не только скрывает кнопку в UI. */
+function requireSearchConsent(
+  deps: RouteDeps,
+  candidateId: string,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): boolean {
+  if (deps.searchConsentRepo?.get(candidateId).granted) {
+    return true;
+  }
+  sendError(
+    reply,
+    request,
+    403,
+    'search_consent_required',
+    'Нужно согласие «Вы в поиске» в Профиле, чтобы искать контакт нанимающего.',
+    false,
+  );
+  return false;
+}
+
+/** Единый 404/410-ответ, когда вакансия отсутствует в серверном пуле. */
+function vacancyNotFoundError(
+  deps: RouteDeps,
+  vacancyId: string,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): unknown {
+  if (deps.multiSourceEngine?.isKnownVacancyGone?.(vacancyId)) {
+    return sendError(
+      reply,
+      request,
+      410,
+      'vacancy_gone',
+      'Вакансия снята или обновилась — обновите список.',
+      false,
+    );
+  }
+  return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена в серверном пуле.', false);
+}
+
 const enrichBodySchema = z
   .object({
     vacancy: z
@@ -31,12 +72,15 @@ async function handleEnrichContacts(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<unknown> {
-  const { authService, candidateStore, config, multiSourceEngine, recruiterContactsRepo } = deps;
+  const { authService, candidateStore, config, recruiterContactsRepo } = deps;
   if (!hasSafeMutationOrigin(request, config)) {
     return csrfError(request, reply);
   }
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) {
+    return undefined;
+  }
+  if (!requireSearchConsent(deps, candidate.id, request, reply)) {
     return undefined;
   }
 
@@ -47,17 +91,7 @@ async function handleEnrichContacts(
   }
   const vacancyInput = buildRecruiterVacancyInput(vacancyId, deps);
   if (!vacancyInput.title) {
-    if (multiSourceEngine?.isKnownVacancyGone?.(vacancyId)) {
-      return sendError(
-        reply,
-        request,
-        410,
-        'vacancy_gone',
-        'Вакансия снята или обновилась — обновите список.',
-        false,
-      );
-    }
-    return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена в серверном пуле.', false);
+    return vacancyNotFoundError(deps, vacancyId, request, reply);
   }
 
   if (!recruiterContactsRepo) {
@@ -86,6 +120,9 @@ async function handleGetContacts(
   const { authService, candidateStore, config, recruiterContactsRepo } = deps;
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
+  if (!requireSearchConsent(deps, candidate.id, request, reply)) {
+    return undefined;
+  }
   const vacancyId = (request.params as { id: string }).id;
   const contacts = recruiterContactsRepo?.getContactsByVacancyId(candidate.id, vacancyId) ?? [];
   const job = recruiterContactsRepo?.getJob(candidate.id, vacancyId) ?? null;

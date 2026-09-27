@@ -28,6 +28,7 @@ import { readProcessHeap } from './vacancies/memoryGuard';
 import { SqliteRoleNamingCache } from './data/sqliteRoleNamingCache';
 import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContactsRepository';
 import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
+import { SqliteSearchConsentRepository } from './data/sqliteSearchConsentRepository';
 import { buildRecruiterVacancyInput } from './outreach/recruiterIntelligenceInput';
 import { runRecruiterIntelligenceJobs } from './outreach/recruiterIntelligenceWorker';
 import { SqliteLinkedinPoolRepository } from './linkedinPool/sqliteLinkedinPoolRepository';
@@ -133,6 +134,9 @@ const recruiterContactsRepo = new SqliteRecruiterContactsRepository({
 const candidateReputationRepo = new SqliteCandidateReputationRepository({
   databasePath: config.databasePath,
 });
+const searchConsentRepo = new SqliteSearchConsentRepository({
+  databasePath: config.databasePath,
+});
 const linkedinPool = new SqliteLinkedinPoolRepository({
   databasePath: config.databasePath,
   encryptionKey: config.dataEncryptionKey,
@@ -148,6 +152,7 @@ const app = await buildApp({
   hhCrawlSettings,
   recruiterContactsRepo,
   candidateReputationRepo,
+  searchConsentRepo,
   linkedinPool,
   runtimeMemory: () => {
     const heap = readProcessHeap();
@@ -288,6 +293,7 @@ async function shutdown(signal: string): Promise<void> {
   vacancyEngine.close();
   recruiterContactsRepo.close();
   candidateReputationRepo.close();
+  searchConsentRepo.close();
   linkedinPool.close();
   process.exit(0);
 }

@@ -37,8 +37,32 @@ describe('recruiter intelligence API routes', () => {
     expect(response.statusCode).toBe(401);
   });
 
+  it('возвращает 403 без согласия «Вы в поиске» даже для авторизованного кандидата', async () => {
+    const app = await createApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/vacancies/vac-1/enrich-contacts',
+      headers: {
+        authorization: candidateAuthorization(app),
+        origin: 'http://localhost:3000',
+      },
+      payload: {},
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.code).toBe('search_consent_required');
+  });
+
   it('не принимает пользовательский текст вместо канонической вакансии', async () => {
     const app = await createApp();
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/search-consent',
+      headers: {
+        authorization: candidateAuthorization(app),
+        origin: 'http://localhost:3000',
+      },
+      payload: { granted: true },
+    });
     const enrichRes = await app.inject({
       method: 'POST',
       url: '/api/v1/vacancies/vac-123/enrich-contacts',
