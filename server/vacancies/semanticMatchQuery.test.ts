@@ -150,4 +150,31 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
       .all(...operationsAndMarketing.params) as Array<{ payload: string }>;
     expect(combinedRows.map((row) => JSON.parse(row.payload).id)).toContain('marketing-ops');
   });
+
+  it('filters adjacent product, finance, PMO and education functions from a Tech/Ops campaign', () => {
+    seed('ops-role', 'ops', 3, 1_000);
+    for (const [id, adjacent] of [
+      ['product-ops', 'product'],
+      ['finance-ops', 'finance'],
+      ['pmo-ops', 'project-mgmt'],
+      ['student-ops', 'education'],
+    ] as const) {
+      seed(id, 'ops', 3, 2_000);
+      database
+        .prepare(
+          'INSERT INTO vacancy_semantic (id, function_code, level_rank, title_key, published_ms, is_remote) VALUES (?,?,?,?,?,?)',
+        )
+        .run(id, adjacent, 3, id, 2_000, 0);
+    }
+    const { sql, params } = buildSemanticMatchQuery({
+      functionCodes: ['eng-mgmt', 'it-ops', 'ops'],
+      levelRank: 3,
+      window: { fromMs: 0, toMs: 5_000 },
+      preferRemote: false,
+      limit: 50,
+    });
+
+    const rows = database.prepare(sql).all(...params) as Array<{ payload: string }>;
+    expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual(['ops-role']);
+  });
 });

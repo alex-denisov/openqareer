@@ -53,8 +53,11 @@ export function buildSemanticMatchQuery(
   input: SemanticMatchQueryInput,
 ): { sql: string; params: SQLInputValue[] } {
   const levelFilter = input.levelRank === null ? '' : 'AND s.level_rank BETWEEN ? AND ?';
-  const excludedFunctions = (['sales', 'marketing'] as const).filter(
+  const excludedFunctions = (['sales', 'marketing', 'product', 'finance', 'project-mgmt', 'education'] as const).filter(
     (code) => !input.functionCodes.includes(code),
+  );
+  const excludedCommercialFunctions = excludedFunctions.filter(
+    (code): code is 'sales' | 'marketing' => code === 'sales' || code === 'marketing',
   );
   const excludedFunctionFilter = excludedFunctions.length
     ? `AND NOT EXISTS (
@@ -62,7 +65,7 @@ export function buildSemanticMatchQuery(
         WHERE excluded.id = s.id AND excluded.function_code IN (${excludedFunctions
           .map(() => '?')
           .join(', ')})
-      ) ${buildExcludedTitleFilter(excludedFunctions)}`
+      ) ${buildExcludedTitleFilter(excludedCommercialFunctions)}`
     : '';
   const branch = buildFunctionBranch(levelFilter, excludedFunctionFilter);
   const branches = input.functionCodes.map(() => branch).join('\nUNION ALL\n');
