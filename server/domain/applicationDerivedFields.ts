@@ -45,7 +45,7 @@ export function deriveApplicationFields(input: DeriveApplicationFieldsInput): Ap
   };
   const nearestInterview = pickNearestInterview(input.interviews, now);
   const followUp = FOLLOW_UP_ACTIVE_STAGES.has(input.application.stage)
-      ? computeFollowUpStatus({
+    ? computeFollowUpStatus({
         processProfile: input.application.processProfile,
         appliedAt: applicationAppliedAt(input.application, input.events),
         lastContactAt: lastContactAt(input.application, input.events),
@@ -76,7 +76,7 @@ export function deriveApplicationFields(input: DeriveApplicationFieldsInput): Ap
   };
 }
 
-/** "Последнее из событий: отклик, отправленный follow-up, ответ компании" (architecture.md §3). */
+/** The first move to `applied` anchors the fixed 5/8-day reminder schedule. */
 function applicationAppliedAt(
   application: StoredApplication,
   events: readonly StoredApplicationEvent[],
@@ -92,6 +92,7 @@ function followUpSentCount(events: readonly StoredApplicationEvent[]): number {
   return events.filter((event) => event.kind === 'follow_up_sent').length;
 }
 
+/** "Последнее из событий: отклик, отправленный follow-up, ответ компании" (architecture.md §3). */
 function lastContactAt(application: StoredApplication, events: readonly StoredApplicationEvent[]): string {
   const candidates = events
     .filter(

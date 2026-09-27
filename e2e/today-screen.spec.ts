@@ -83,7 +83,7 @@ const TODAY_SNAPSHOT = {
   digest: {
     waitingForYou: 2,
     newVacancies: 12,
-    followUpsDueToday: 2,
+    followUpsDueToday: 1,
     followUpsOverdue: 1,
     closedVacancies: 2,
     interviewsAhead: 1,
@@ -98,7 +98,7 @@ const TODAY_SNAPSHOT = {
       sourcesCount: 3,
       updatedAt: '2026-09-23T09:14:00.000Z',
     },
-    followUpCaptions: ['Peraton — 6 дней тишины', 'Genetec — обещанный срок истёк'],
+    followUpCaptions: ['Peraton — 6 дней тишины'],
   },
   queue: [
     {

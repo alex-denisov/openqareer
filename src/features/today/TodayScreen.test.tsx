@@ -22,7 +22,7 @@ const snapshot: TodaySnapshot = {
       sourcesCount: 3,
       updatedAt: '2026-09-24T09:14:00.000Z',
     },
-    followUpCaptions: ['Peraton — 6 дней тишины', 'Genetec — обещанный срок истёк'],
+    followUpCaptions: ['Peraton — 6 дней тишины'],
   },
   queue: [
     {
