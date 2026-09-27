@@ -50,6 +50,7 @@ export function TodayScreen({
       <div className="career-today-panels">
         <TodayQueue
           queue={queue}
+          sinceLastVisitItems={sinceLastVisit.items}
           onMarkFollowUpSent={onMarkFollowUpSent}
           markingFollowUpIds={markingFollowUpIds}
         />
@@ -59,7 +60,6 @@ export function TodayScreen({
             onMarkFollowUpSent={onMarkFollowUpSent}
             markingFollowUpIds={markingFollowUpIds}
           />
-          <TodaySinceLastVisit items={sinceLastVisit.items} />
         </div>
       </div>
     </div>
@@ -123,12 +123,25 @@ function DigestCard({
   );
 }
 
+/**
+ * Только факты, которых ещё нет цифрой в KPI-плитках выше (B248/design п.5,
+ * C55): счётчик новых вакансий уже показан плиткой «новая релевантная
+ * вакансия…», второй раз тем же числом — не строка-подсказка, а шум.
+ */
+function sinceHintOf(items: readonly string[]) {
+  const extra = items.filter((item) => !/вакан/u.test(item));
+  if (extra.length === 0) return null;
+  return <p className="career-today-since-hint">{extra.join(' · ')}</p>;
+}
+
 function TodayQueue({
   queue,
+  sinceLastVisitItems,
   onMarkFollowUpSent,
   markingFollowUpIds,
 }: {
   queue: readonly TodayQueueItem[];
+  sinceLastVisitItems: readonly string[];
   onMarkFollowUpSent: (applicationId: string) => Promise<void>;
   markingFollowUpIds: ReadonlySet<string>;
 }) {
@@ -140,10 +153,10 @@ function TodayQueue({
           {pluralRu(queue.length, ['карточка', 'карточки', 'карточек'])} · решение нужно по каждой
         </span>
       </header>
+      {sinceHintOf(sinceLastVisitItems)}
       {queue.length === 0 ? (
         <p className="career-today-empty">
-          Решений на сегодня нет: подборка разобрана. Добавьте роль или регион в «Вакансиях» —
-          подборка пополнится.
+          Решений на сегодня нет: подборка разобрана. Новые вакансии появятся здесь сами.
         </p>
       ) : (
         <ul className="career-today-list">
@@ -339,23 +352,6 @@ function MarkFollowUpButton({
   );
 }
 
-function TodaySinceLastVisit({ items }: { items: readonly string[] }) {
-  return (
-    <section className="career-today-since" aria-label="С прошлого визита">
-      <h2>С прошлого визита</h2>
-      {items.length > 0 ? (
-        <ul>
-          {items.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
-      ) : (
-        <p className="career-today-since-empty">Новых вакансий и событий нет.</p>
-      )}
-    </section>
-  );
-}
-
 function queueKindLabel(item: TodayQueueItem): string {
   if (item.kind === 'new_vacancy') return 'Новая вакансия';
   if (item.kind === 'shortlist') return 'Из подборки';
@@ -372,7 +368,7 @@ function TodayPendingNotice() {
   return (
     <p className="career-today-pending">
       <Sparkle size={16} aria-hidden="true" />
-      Подбор обновляется — новые вакансии появятся здесь без перезагрузки.
+      Считаем вашу подборку — секунду. Если очередь пуста дольше минуты, откройте «Вакансии».
     </p>
   );
 }

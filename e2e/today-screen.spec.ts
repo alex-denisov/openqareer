@@ -390,8 +390,11 @@ test.describe('B251 today screen', () => {
     await expect(page.locator('body')).not.toContainText('Следующее действие');
 
     await expect(page.locator('.career-today-followups')).toContainText('Follow-up по срокам');
-    await expect(page.locator('.career-today-since')).toContainText('С прошлого визита');
-    await expect(page.locator('.career-today-pending')).toContainText('Подбор обновляется');
+    await expect(page.locator('.career-today-since-hint')).toContainText(
+      'Genetec запросили доступность на этой неделе',
+    );
+    await expect(page.locator('.career-today-since')).toHaveCount(0);
+    await expect(page.locator('.career-today-pending')).toContainText('Считаем вашу подборку');
     const sentFollowUp = page.locator('.career-today-followups li').filter({ hasText: 'HRTx' });
     await expect(sentFollowUp.getByRole('button')).toHaveCount(0);
     await captureCareerHarness(page, testInfo.outputPath('today-screen.html'));
@@ -455,15 +458,16 @@ test.describe('B251 today screen', () => {
     void testInfo;
   });
 
-  test('keeps the since-last-visit block visible with an honest empty state', async ({ page }) => {
+  test('explains the next step with an honest empty queue', async ({ page }) => {
     await stubSession(page, EMPTY_TODAY_SNAPSHOT);
     await seedWorkspace(page);
     await openApp(page);
 
     await expect(page.locator('.career-today-digest')).toContainText('0');
-    await expect(page.locator('.career-today-since')).toBeVisible();
-    await expect(page.locator('.career-today-since')).toContainText(
-      'Новых вакансий и событий нет.',
+    await expect(page.locator('.career-today-since')).toHaveCount(0);
+    await expect(page.locator('.career-today-since-hint')).toHaveCount(0);
+    await expect(page.locator('.career-today-empty')).toContainText(
+      'Новые вакансии появятся здесь сами.',
     );
   });
 });

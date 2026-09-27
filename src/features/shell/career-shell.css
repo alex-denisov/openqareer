@@ -7813,11 +7813,16 @@
   font-size: var(--career-text-xs);
 }
 
-.career-today-followups h2,
-.career-today-since h2 {
+.career-today-followups h2 {
   margin: 0 0 var(--career-space-3);
   font-size: var(--career-text-md);
   letter-spacing: -0.01em;
+}
+
+.career-today-since-hint {
+  margin: 0 0 var(--career-space-3);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
 }
 
 .career-today-followups ul {
@@ -7865,37 +7870,6 @@
 
 .career-today-followup-action [role='alert'] {
   color: var(--career-warning);
-}
-
-.career-today-since ul {
-  display: grid;
-  gap: var(--career-space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
-}
-
-.career-today-since-empty {
-  margin: 0;
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
-}
-
-.career-today-since li {
-  display: flex;
-  gap: 8px;
-}
-
-.career-today-since li::before {
-  content: '';
-  flex: none;
-  width: 5px;
-  height: 5px;
-  margin-top: 7px;
-  border-radius: 999px;
-  background: var(--career-accent);
 }
 
 .career-today-state {
