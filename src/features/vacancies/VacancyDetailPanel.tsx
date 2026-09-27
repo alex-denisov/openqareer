@@ -26,9 +26,19 @@ interface VacancyDetailPanelProps {
   readonly now: string;
   readonly applications?: VacancyApplications;
   readonly onBack: () => void;
+  /** Opens «Отклики» after the candidate confirms an application (B251 F5,
+   * C47): without this door the tracker card was reachable only by rail
+   * click, and nothing told the candidate it existed. */
+  readonly onOpenResponses?: () => void;
 }
 
-export function VacancyDetailPanel({ item, now, applications, onBack }: VacancyDetailPanelProps) {
+export function VacancyDetailPanel({
+  item,
+  now,
+  applications,
+  onBack,
+  onOpenResponses,
+}: VacancyDetailPanelProps) {
   const { cluster, explanation } = item;
   const age = vacancyAge(cluster, now);
   const source = vacancySourceLabels(cluster.sources)[0];
@@ -69,6 +79,7 @@ export function VacancyDetailPanel({ item, now, applications, onBack }: VacancyD
         cluster={cluster}
         alreadyApplied={alreadyApplied}
         applications={applications}
+        onOpenResponses={onOpenResponses}
       />
     </div>
   );
@@ -135,11 +146,7 @@ function VacancyLevelChip({ match }: { readonly match: VacancyLevelMatch }) {
  * a spinner that never resolves) sit under the matches, above the action
  * row (owner acceptance 2026-09-25).
  */
-function VacancyRecruiterBlock({
-  cluster,
-}: {
-  readonly cluster: MatchedVacancyItem['cluster'];
-}) {
+function VacancyRecruiterBlock({ cluster }: { readonly cluster: MatchedVacancyItem['cluster'] }) {
   return (
     <div className="vacancies-req-block vacancies-recruiter-block">
       <h4>Кто нанимает</h4>
@@ -155,17 +162,22 @@ function VacancyDetailActions({
   cluster,
   alreadyApplied,
   applications,
+  onOpenResponses,
 }: {
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly alreadyApplied: boolean;
   readonly applications?: VacancyApplications;
+  readonly onOpenResponses?: () => void;
 }) {
   const target = openTargetLabel(cluster.sources);
   const [infoOpen, setInfoOpen] = useState(false);
 
   const handleApply = () => {
     void openExternalLink(cluster.primaryUrl);
-    applications?.record(cluster.id, 'opened', {
+    // 'applied', not 'opened' (B251 F5): the detail panel is a single-click
+    // decision, unlike the list row's separate «открыл → откликнулся» pair —
+    // and only 'applied' puts a card into the «Отклики» tracker.
+    applications?.record(cluster.id, 'applied', {
       title: cluster.canonicalTitle,
       company: cluster.canonicalCompany ?? '',
       url: cluster.primaryUrl,
@@ -176,9 +188,7 @@ function VacancyDetailActions({
   return (
     <div className="vacancies-detail-actions">
       {alreadyApplied ? (
-        <span className="vacancies-chip is-selected vacancies-detail-applied">
-          Отклик отмечен · открыт {target}
-        </span>
+        <AppliedStatus target={target} onOpenResponses={onOpenResponses} />
       ) : (
         <button type="button" className="vacancies-btn vacancies-btn-primary" onClick={handleApply}>
           Откликнуться
@@ -194,6 +204,33 @@ function VacancyDetailActions({
       <VacancyPitchDoor cluster={cluster} />
       <VacancyInfoModal isOpen={infoOpen} onClose={() => setInfoOpen(false)} cluster={cluster} />
     </div>
+  );
+}
+
+/** Chip plus the door to «Отклики» (B251 F5, C47): confirming an application
+ * has to tell the candidate the tracker card exists, not just stop talking. */
+function AppliedStatus({
+  target,
+  onOpenResponses,
+}: {
+  readonly target: string;
+  readonly onOpenResponses?: () => void;
+}) {
+  return (
+    <>
+      <span className="vacancies-chip is-selected vacancies-detail-applied">
+        Отклик отмечен · открыт {target}
+      </span>
+      {onOpenResponses ? (
+        <button
+          type="button"
+          className="vacancies-btn vacancies-btn-secondary"
+          onClick={onOpenResponses}
+        >
+          Перейти в «Отклики»
+        </button>
+      ) : null}
+    </>
   );
 }
 

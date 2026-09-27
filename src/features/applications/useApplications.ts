@@ -3,6 +3,7 @@ import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { SkipReasonId } from '../../../shared/skipReasons';
 import {
   createApplication,
+  createApplicationInterview,
   createVacancySkip,
   listApplications,
   patchApplication,
@@ -39,6 +40,10 @@ export interface UseApplications {
   readonly conflicts: ReadonlySet<string>;
   readonly reload: () => void;
   readonly changeStage: (id: string, stage: ApplicationStage, occurredAt?: string) => void;
+  /** Moves the card to `interview` and records the interview date (B251 F5):
+   * a plain stage patch never fills `nearestInterview`, so «Сегодня» and the
+   * card's own «Подготовиться» would have no date and no prep door. */
+  readonly scheduleInterview: (id: string, scheduledAt: string) => Promise<void>;
   readonly retryStageChange: (id: string) => void;
   readonly markFollowUpSent: (id: string) => Promise<void>;
   readonly saveNote: (id: string, notes: string) => void;
@@ -86,7 +91,12 @@ export function useApplications(): UseApplications {
   const reload = useCallback(() => setReloadToken((token) => token + 1), []);
 
   const writeStagePatch = useCallback(
-    (id: string, stage: ApplicationStage, occurredAt: string | undefined, snapshot: readonly ApplicationView[]) => {
+    (
+      id: string,
+      stage: ApplicationStage,
+      occurredAt: string | undefined,
+      snapshot: readonly ApplicationView[],
+    ) => {
       const current = snapshot.find((application) => application.id === id);
       if (!current) return;
       patchApplication(id, { expectedVersion: current.version, stage, occurredAt })
@@ -116,6 +126,15 @@ export function useApplications(): UseApplications {
       });
     },
     [writeStagePatch],
+  );
+
+  const scheduleInterview = useCallback(
+    async (id: string, scheduledAt: string) => {
+      changeStage(id, 'interview', scheduledAt);
+      await createApplicationInterview(id, { round: 1, scheduledAt });
+      reload();
+    },
+    [changeStage, reload],
   );
 
   const retryStageChange = useCallback(
@@ -169,6 +188,7 @@ export function useApplications(): UseApplications {
     conflicts,
     reload,
     changeStage,
+    scheduleInterview,
     retryStageChange,
     markFollowUpSent,
     saveNote,

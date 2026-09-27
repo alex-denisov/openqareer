@@ -91,6 +91,25 @@ export function CareerCabinet({
   // B251 S3 — трекер откликов читает свой собственный API, независимо от
   // ручного лога `useVacancyApplications` (совместимость со старым `.app`).
   const applicationsTracker = useApplications();
+  // B251 F5 (C47) — confirming an application in «Вакансии» must land a card
+  // in «Отклики»: the two logs live in different tables (server/data), so a
+  // plain vacancyApplications.record() left the tracker empty forever.
+  const trackedVacancyApplications = useMemo(
+    () => ({
+      ...vacancyApplications,
+      record: (
+        clusterId: Parameters<typeof vacancyApplications.record>[0],
+        status: Parameters<typeof vacancyApplications.record>[1],
+        vacancy: Parameters<typeof vacancyApplications.record>[2],
+      ) => {
+        vacancyApplications.record(clusterId, status, vacancy);
+        if (status === 'applied') {
+          void applicationsTracker.addManualCard({ clusterId, stage: 'applied' });
+        }
+      },
+    }),
+    [vacancyApplications, applicationsTracker],
+  );
   const journey = useMemo(
     () =>
       cabinetJourney({
@@ -183,7 +202,7 @@ export function CareerCabinet({
             targetDirection={targetDirection}
             strategy={strategy}
             pool={pool}
-            vacancyApplications={vacancyApplications}
+            vacancyApplications={trackedVacancyApplications}
             pathIndicatorSteps={pathIndicatorSteps}
             applicationsTracker={applicationsTracker}
             data={data}
@@ -341,6 +360,7 @@ function CabinetSection({
       subscriptions={data.snapshot?.vacancySubscriptions ?? []}
       defaultQuery={pool.campaign?.roles.value[0] || targetDirection || undefined}
       onRefreshSavedSearch={data.refresh}
+      onOpenResponses={() => onNavigate('responses')}
       pathIndicator={pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined}
     />
   );

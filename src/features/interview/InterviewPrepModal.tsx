@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Buildings,
   ChatCircleDots,
@@ -48,7 +49,7 @@ export function InterviewPrepModal(props: InterviewPrepModalProps) {
 
   if (!isOpen) return null;
 
-  return (
+  const dialog = (
     <div
       className="career-interview-backdrop"
       role="presentation"
@@ -72,6 +73,14 @@ export function InterviewPrepModal(props: InterviewPrepModalProps) {
       </div>
     </div>
   );
+
+  // Портал в `document.body` — как ImportModalShell (B148 §2): карточка
+  // отклика на мобильной ширине маскируется через `mask-image` для
+  // затухающего края горизонтального скролла колонок, а маска, как и
+  // `filter`/`transform`, создаёт containing block для потомков с
+  // `position: fixed`. Без портала модалка «прилипала» к колонке карточек
+  // вместо вьюпорта, и хедер перекрывал кнопку закрытия.
+  return typeof document === 'undefined' ? dialog : createPortal(dialog, document.body);
 }
 
 function InterviewTabContent({

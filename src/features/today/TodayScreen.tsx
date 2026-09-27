@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ClockCountdown, DotsThreeVertical, Sparkle } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
+import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import type { TodayDigest, TodayFollowUp, TodayQueueItem, TodaySnapshot } from './todayApi';
 import { formatTodaySalary } from './todayCompensation';
 import { companyInitials, digestBasis, followUpStatusLabel } from './todayFormat';
@@ -274,16 +275,38 @@ function QueueAction({
     ) : null;
   }
   if (item.kind === 'interview') {
-    return (
-      <button type="button" className="career-btn career-btn-primary career-btn-sm">
-        Подготовиться
-      </button>
-    );
+    return <PrepareInterviewButton item={item} />;
   }
   return (
     <button type="button" className="career-btn career-btn-secondary career-btn-sm">
       Открыть
     </button>
+  );
+}
+
+/** «Подготовиться» from «Сегодня» (B251 F5) opens the same interview prep
+ * material the tracker card offers — no dedicated prep screen exists yet. */
+function PrepareInterviewButton({ item }: { item: TodayQueueItem }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        className="career-btn career-btn-primary career-btn-sm"
+        onClick={() => setOpen(true)}
+      >
+        Подготовиться
+      </button>
+      <InterviewPrepModal
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        vacancy={{
+          id: item.applicationId ?? item.clusterId ?? item.title,
+          title: item.title,
+          company: item.company ?? undefined,
+        }}
+      />
+    </>
   );
 }
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowClockwise, DotsThreeVertical, FileText, Warning } from '@phosphor-icons/react';
 import { APPLICATION_STAGES, type ApplicationStage } from '../../../shared/applicationStage';
 import { SKIP_REASONS, type SkipReasonId } from '../../../shared/skipReasons';
+import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import type { ApplicationView } from './applicationsApi';
 import { waitingLabel } from './waitingLabel';
 
@@ -24,6 +25,7 @@ interface ResponsesCardProps {
   readonly failed: boolean;
   readonly conflicted: boolean;
   readonly onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
+  readonly onScheduleInterview: (scheduledAt: string) => Promise<void>;
   readonly onRetry: () => void;
   readonly onSaveNote: (notes: string) => void;
   readonly onMarkFollowUpSent: () => Promise<void>;
@@ -53,6 +55,7 @@ export function ResponsesCard({
   failed,
   conflicted,
   onChangeStage,
+  onScheduleInterview,
   onRetry,
   onSaveNote,
   onMarkFollowUpSent,
@@ -77,16 +80,49 @@ export function ResponsesCard({
         hasMaterials={application.materials.coverLetter || application.materials.resume}
       />
       <CardAlerts failed={failed} conflicted={conflicted} onRetry={onRetry} />
+      {application.stage === 'interview' ? (
+        <PrepareInterviewControl application={application} />
+      ) : null}
       <CardFooter
         application={application}
         labelText={label.text}
         labelOn={label.on}
         onChangeStage={onChangeStage}
+        onScheduleInterview={onScheduleInterview}
         onSaveNote={onSaveNote}
         onSkip={onSkip}
       />
       <FollowUpSentControl application={application} onMark={onMarkFollowUpSent} />
     </article>
+  );
+}
+
+/** «Подготовиться» from a card already in the interview stage (B251 F5) opens
+ * the same prep material «Сегодня» offers — no separate prep screen exists
+ * yet (`docs/v1-release/tasks/codex/C47-b251-interview-path-from-card.md`). */
+function PrepareInterviewControl({ application }: { application: ApplicationView }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="career-responses-prep-action">
+      <button
+        type="button"
+        className="career-btn career-btn-primary career-btn-sm"
+        onClick={() => setOpen(true)}
+      >
+        Подготовиться
+      </button>
+      <InterviewPrepModal
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        vacancy={{
+          id: application.id,
+          title: application.vacancy?.title ?? 'Без названия',
+          company: application.vacancy?.companyHidden
+            ? undefined
+            : (application.vacancy?.company ?? undefined),
+        }}
+      />
+    </div>
   );
 }
 
@@ -134,6 +170,7 @@ interface CardFooterProps {
   labelText: string;
   labelOn: 'you' | 'them' | null;
   onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
+  onScheduleInterview: (scheduledAt: string) => Promise<void>;
   onSaveNote: (notes: string) => void;
   onSkip: (reasonId: SkipReasonId) => void;
 }
@@ -143,6 +180,7 @@ function CardFooter({
   labelText,
   labelOn,
   onChangeStage,
+  onScheduleInterview,
   onSaveNote,
   onSkip,
 }: CardFooterProps) {
@@ -166,6 +204,10 @@ function CardFooter({
             onChangeStage={(stage, occurredAt) => {
               onChangeStage(stage, occurredAt);
               setMenuOpen(false);
+            }}
+            onScheduleInterview={(scheduledAt) => {
+              setMenuOpen(false);
+              return onScheduleInterview(scheduledAt);
             }}
             onSaveNote={(notes) => {
               onSaveNote(notes);
@@ -222,30 +264,21 @@ function CardAlerts({
 function StageChangeControl({
   stage,
   onChangeStage,
+  onScheduleInterview,
 }: {
   stage: ApplicationStage;
   onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
+  onScheduleInterview: (scheduledAt: string) => Promise<void>;
 }) {
   const [nextStage, setNextStage] = useState<ApplicationStage>(stage);
   const [occurredAt, setOccurredAt] = useState(todayIsoDate());
   const dirty = nextStage !== stage;
+  const movingToInterview = nextStage === 'interview';
   return (
     <div className="career-responses-stage-control">
+      <StageSelect value={nextStage} onChange={setNextStage} />
       <label>
-        Этап
-        <select
-          value={nextStage}
-          onChange={(event) => setNextStage(event.target.value as ApplicationStage)}
-        >
-          {APPLICATION_STAGES.map((value) => (
-            <option key={value} value={value}>
-              {STAGE_LABEL[value]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Дата
+        {movingToInterview ? 'Дата интервью' : 'Дата'}
         <input
           type="date"
           value={occurredAt}
@@ -255,7 +288,15 @@ function StageChangeControl({
       {dirty ? (
         <button
           type="button"
-          onClick={() => onChangeStage(nextStage, `${occurredAt}T00:00:00.000Z`)}
+          onClick={() =>
+            saveStageChange({
+              nextStage,
+              occurredAt,
+              movingToInterview,
+              onChangeStage,
+              onScheduleInterview,
+            })
+          }
         >
           Сохранить этап
         </button>
@@ -264,24 +305,71 @@ function StageChangeControl({
   );
 }
 
+function StageSelect({
+  value,
+  onChange,
+}: {
+  value: ApplicationStage;
+  onChange: (stage: ApplicationStage) => void;
+}) {
+  return (
+    <label>
+      Этап
+      <select value={value} onChange={(event) => onChange(event.target.value as ApplicationStage)}>
+        {APPLICATION_STAGES.map((stageOption) => (
+          <option key={stageOption} value={stageOption}>
+            {STAGE_LABEL[stageOption]}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function saveStageChange({
+  nextStage,
+  occurredAt,
+  movingToInterview,
+  onChangeStage,
+  onScheduleInterview,
+}: {
+  nextStage: ApplicationStage;
+  occurredAt: string;
+  movingToInterview: boolean;
+  onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
+  onScheduleInterview: (scheduledAt: string) => Promise<void>;
+}) {
+  const occurredAtIso = `${occurredAt}T00:00:00.000Z`;
+  if (movingToInterview) {
+    void onScheduleInterview(occurredAtIso);
+  } else {
+    onChangeStage(nextStage, occurredAtIso);
+  }
+}
+
 function CardMenu({
   application,
   onChangeStage,
+  onScheduleInterview,
   onSaveNote,
   onSkip,
 }: {
   application: ApplicationView;
   onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
+  onScheduleInterview: (scheduledAt: string) => Promise<void>;
   onSaveNote: (notes: string) => void;
   onSkip: (reasonId: SkipReasonId) => void;
 }) {
   const [noteDraft, setNoteDraft] = useState(application.notes ?? '');
-  const [skipping, setSkipping] = useState(false);
   const canSkip = application.stage === 'saved' && Boolean(application.clusterId);
 
   return (
     <div className="career-responses-card-menu">
-      <StageChangeControl stage={application.stage} onChangeStage={onChangeStage} />
+      <StageChangeControl
+        stage={application.stage}
+        onChangeStage={onChangeStage}
+        onScheduleInterview={onScheduleInterview}
+      />
       {application.vacancy?.url ? (
         <a href={application.vacancy.url} target="_blank" rel="noreferrer">
           Открыть карточку вакансии
@@ -295,22 +383,29 @@ function CardMenu({
           onBlur={() => onSaveNote(noteDraft)}
         />
       </label>
-      {canSkip ? (
-        <button type="button" onClick={() => setSkipping(true)}>
-          Пропустить с причиной
-        </button>
-      ) : null}
-      {skipping ? (
-        <ul className="career-responses-reason-list">
-          {SKIP_REASONS.map((reason) => (
-            <li key={reason.id}>
-              <button type="button" onClick={() => onSkip(reason.id)}>
-                {reason.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {canSkip ? <SkipControl onSkip={onSkip} /> : null}
     </div>
+  );
+}
+
+function SkipControl({ onSkip }: { onSkip: (reasonId: SkipReasonId) => void }) {
+  const [skipping, setSkipping] = useState(false);
+  if (!skipping) {
+    return (
+      <button type="button" onClick={() => setSkipping(true)}>
+        Пропустить с причиной
+      </button>
+    );
+  }
+  return (
+    <ul className="career-responses-reason-list">
+      {SKIP_REASONS.map((reason) => (
+        <li key={reason.id}>
+          <button type="button" onClick={() => onSkip(reason.id)}>
+            {reason.label}
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }

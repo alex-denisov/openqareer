@@ -51,6 +51,7 @@ interface VacanciesScreenProps {
   readonly subscriptions?: readonly VacancySubscription[];
   readonly defaultQuery?: string;
   readonly onRefreshSavedSearch?: () => Promise<void>;
+  readonly onOpenResponses?: () => void;
 }
 
 function useVacanciesScreenBoard(
@@ -119,6 +120,7 @@ export function VacanciesScreen({
   subscriptions = [],
   defaultQuery,
   onRefreshSavedSearch,
+  onOpenResponses,
 }: VacanciesScreenProps) {
   const [activeCampaign, setActiveCampaign] = useActiveCampaign(campaign);
   const board = useVacanciesScreenBoard(matched, activeCampaign, now);
@@ -148,6 +150,7 @@ export function VacanciesScreen({
           board={board}
           actions={actions}
           onRetry={onRetry}
+          onOpenResponses={onOpenResponses}
         />
       </VacanciesScreenBody>
     </div>
@@ -257,6 +260,7 @@ interface VacanciesResultsProps {
   readonly board: ReturnType<typeof useVacanciesScreenBoard>;
   readonly actions: ReturnType<typeof useVacancyCampaignActions>;
   readonly onRetry?: () => void;
+  readonly onOpenResponses?: () => void;
 }
 
 function VacanciesResults(props: VacanciesResultsProps) {
@@ -294,6 +298,7 @@ function VacanciesResults(props: VacanciesResultsProps) {
           mobileDetailOpen={props.board.mobileDetailOpen}
           onSelect={props.board.onSelect}
           onBack={props.board.onBack}
+          onOpenResponses={props.onOpenResponses}
         />
       )}
     </div>
@@ -416,6 +421,7 @@ interface VacanciesLayoutProps {
   readonly mobileDetailOpen: boolean;
   readonly onSelect: (id: string) => void;
   readonly onBack: () => void;
+  readonly onOpenResponses?: () => void;
 }
 
 function VacanciesLayout(props: VacanciesLayoutProps) {
@@ -440,6 +446,7 @@ function VacanciesLayout(props: VacanciesLayoutProps) {
             now={props.now}
             applications={props.applications}
             onBack={props.onBack}
+            onOpenResponses={props.onOpenResponses}
           />
         ) : null}
       </aside>
