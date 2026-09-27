@@ -290,6 +290,16 @@ describe('CareerCabinet composition', () => {
       expect(renderCabinet(view)).not.toContain('Данные актуальны');
     }
   });
+
+  it('uses the shared header and never puts a date in it', () => {
+    for (const view of ['today', 'profile', 'career', 'responses'] as const) {
+      expect(renderCabinet(view)).toContain('career-page-header');
+    }
+
+    const today = renderCabinet('today');
+    expect(today).toContain('Личный кабинет');
+    expect(today).not.toContain('career-cabinet-header');
+  });
 });
 
 describe('CareerCabinet vacancies tab (B181, B250)', () => {

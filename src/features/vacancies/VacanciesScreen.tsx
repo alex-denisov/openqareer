@@ -10,6 +10,7 @@ import { VacancyHypothesisBanner } from './VacancyHypothesisBanner';
 import { SavedSearchesFold } from './VacancyFilterPanel';
 import { useVacancyCampaignActions } from './useVacancyCampaignActions';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
+import { PageHeader } from '../shell/PageHeader';
 import type { PathDestination, PathStep } from '../shell/pathIndicator';
 import type { VacancyApplications } from './useVacancyApplications';
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
@@ -448,13 +449,11 @@ function VacanciesLayout(props: VacanciesLayoutProps) {
 
 function VacanciesHeader({ primaryRole }: { readonly primaryRole?: string }) {
   return (
-    <header className="career-view-heading">
-      <div>
-        <p className="career-eyebrow">{primaryRole ? `Кампания · ${primaryRole}` : 'Кампания'}</p>
-        <h1>Вакансии</h1>
-        <p className="vacancies-desc">Отклик оформляется здесь, без перехода на площадку.</p>
-      </div>
-    </header>
+    <PageHeader
+      kicker={primaryRole ? `Кампания · ${primaryRole}` : 'Кампания'}
+      title="Вакансии"
+      description="Отклик оформляется здесь, без перехода на площадку."
+    />
   );
 }
 
