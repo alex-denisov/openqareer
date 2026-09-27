@@ -1,8 +1,5 @@
 import { pluralRu } from '../../../shared/pluralRu';
-import {
-  type CandidateRegion,
-  type CandidateRegionProfile,
-} from '../workspace/candidateRegions';
+import { type CandidateRegion, type CandidateRegionProfile } from '../workspace/candidateRegions';
 
 interface VacancyHypothesisBannerProps {
   readonly role: string;
@@ -26,8 +23,8 @@ export function VacancyHypothesisBanner(props: VacancyHypothesisBannerProps) {
         <p className="vacancy-hypothesis-title">Это гипотеза, не результат.</p>
         <p>
           По роли {props.role} найдено{' '}
-          {pluralRu(props.vacancyCount, ['вакансия', 'вакансии', 'вакансий'])}. Пока мало данных
-          для вывода о рынке.
+          {pluralRu(props.vacancyCount, ['вакансия', 'вакансии', 'вакансий'])}. Пока мало данных для
+          вывода о рынке.
         </p>
       </div>
       <CampaignActionButtons {...props} />
@@ -38,8 +35,16 @@ export function VacancyHypothesisBanner(props: VacancyHypothesisBannerProps) {
           onSelect={(region) => props.onAddRegion(region.id)}
         />
       ) : null}
-      {props.saving ? <p className="vacancy-hypothesis-status" role="status">Сохраняем кампанию…</p> : null}
-      {props.error ? <p className="vacancy-hypothesis-error" role="alert">{props.error}</p> : null}
+      {props.saving ? (
+        <p className="vacancy-hypothesis-status" role="status">
+          Сохраняем кампанию…
+        </p>
+      ) : null}
+      {props.error ? (
+        <p className="vacancy-hypothesis-error" role="alert">
+          {props.error}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -76,15 +81,17 @@ function CampaignActionButtons({
       >
         {regionsOpen ? 'Скрыть регионы' : 'Расширить географию'}
       </button>
-      <button
-        type="button"
-        className={`vacancies-btn vacancies-btn-secondary${remoteOnly ? ' is-selected' : ''}`}
-        aria-pressed={remoteOnly}
-        disabled={saving}
-        onClick={onToggleRemote}
-      >
-        {remoteOnly ? 'Отключить «Удалённо»' : 'Добавить «Удалённо»'}
-      </button>
+      {/* Баннер только расширяет выдачу: «только удалённо» сужает её, поэтому здесь его можно лишь снять. */}
+      {remoteOnly ? (
+        <button
+          type="button"
+          className="vacancies-btn vacancies-btn-secondary"
+          disabled={saving}
+          onClick={onToggleRemote}
+        >
+          Показывать не только удалённые
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -98,7 +105,10 @@ function AdjacentRoleAction({
   readonly saving: boolean;
   readonly onSelect: VacancyHypothesisBannerProps['onAddAdjacentRole'];
 }) {
-  if (!role) return <span className="vacancy-hypothesis-note">Смежная роль из автонабора не предложена.</span>;
+  if (!role)
+    return (
+      <span className="vacancy-hypothesis-note">Смежная роль из автонабора не предложена.</span>
+    );
   return (
     <button
       type="button"

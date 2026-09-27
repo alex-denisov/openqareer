@@ -82,9 +82,10 @@ function useVacanciesScreenBoard(
     if (!campaign) return;
     setState((current) => ({
       ...current,
-      role: current.role && campaign.roles.value.includes(current.role)
-        ? current.role
-        : campaign.roles.value[0],
+      role:
+        current.role && campaign.roles.value.includes(current.role)
+          ? current.role
+          : campaign.roles.value[0],
       regions: current.regions.length > 0 ? current.regions : campaign.regions.value,
       remoteOnly: campaign?.remoteOnly ?? false,
     }));
@@ -157,7 +158,6 @@ export function VacanciesScreen({
           board={board}
           actions={actions}
           onRetry={onRetry}
-          onToggleRemote={() => void actions.toggleRemote()}
         />
       </VacanciesScreenBody>
     </div>
@@ -272,13 +272,16 @@ interface VacanciesResultsProps {
   readonly board: ReturnType<typeof useVacanciesScreenBoard>;
   readonly actions: ReturnType<typeof useVacancyCampaignActions>;
   readonly onRetry?: () => void;
-  readonly onToggleRemote: () => void;
 }
 
 function VacanciesResults(props: VacanciesResultsProps) {
   return (
     <div className="vacancies-content">
-      <VacancyHypothesisSection campaign={props.campaign} board={props.board} actions={props.actions} />
+      <VacancyHypothesisSection
+        campaign={props.campaign}
+        board={props.board}
+        actions={props.actions}
+      />
       {props.matched.length === 0 ? (
         <>
           {props.savedSearches}
@@ -310,7 +313,6 @@ function VacanciesResults(props: VacanciesResultsProps) {
           mobileDetailOpen={props.board.mobileDetailOpen}
           onSelect={props.board.onSelect}
           onBack={props.board.onBack}
-          onToggleRemote={props.onToggleRemote}
         />
       )}
     </div>
@@ -381,9 +383,7 @@ function VacanciesErrorState({
       <h2>Не удалось загрузить подборку</h2>
       <p>
         Не удалось загрузить общий пул вакансий.{' '}
-        {sourceLabel
-          ? `Проблемные источники: ${sourceLabel}.`
-          : 'Источник сбоя не определён.'}{' '}
+        {sourceLabel ? `Проблемные источники: ${sourceLabel}.` : 'Источник сбоя не определён.'}{' '}
         Сохранённые запросы показываются отдельно; роль и география сохранены.
       </p>
       {onRetry ? (
@@ -395,13 +395,19 @@ function VacanciesErrorState({
   );
 }
 
-function VacanciesEmptyState({ role, onRetry }: { readonly role?: string; readonly onRetry?: () => void }) {
+function VacanciesEmptyState({
+  role,
+  onRetry,
+}: {
+  readonly role?: string;
+  readonly onRetry?: () => void;
+}) {
   return (
     <section className="vacancies-state">
       <h2>{role ? `По роли ${role} пока нет вакансий` : 'Для подбора не выбрана роль'}</h2>
       <p>
-        Пустая выдача сама по себе ничего не говорит о рынке. Можно добавить смежную роль,
-        расширить регионы или включить удалённый поиск.
+        Пустая выдача сама по себе ничего не говорит о рынке. Можно добавить смежную роль, расширить
+        регионы или включить удалённый поиск.
       </p>
       {onRetry ? (
         <button type="button" className="vacancies-btn vacancies-btn-secondary" onClick={onRetry}>
@@ -430,7 +436,6 @@ interface VacanciesLayoutProps {
   readonly mobileDetailOpen: boolean;
   readonly onSelect: (id: string) => void;
   readonly onBack: () => void;
-  readonly onToggleRemote: () => void;
 }
 
 function VacanciesLayout(props: VacanciesLayoutProps) {
@@ -468,9 +473,7 @@ function VacanciesHeader({ primaryRole }: { readonly primaryRole?: string }) {
       <div>
         <p className="career-eyebrow">{primaryRole ? `Кампания · ${primaryRole}` : 'Кампания'}</p>
         <h1>Вакансии</h1>
-        <p className="vacancies-desc">
-          Отклик оформляется здесь, без перехода на площадку.
-        </p>
+        <p className="vacancies-desc">Отклик оформляется здесь, без перехода на площадку.</p>
       </div>
     </header>
   );
@@ -480,12 +483,10 @@ type VacanciesFiltersProps = Pick<
   VacanciesLayoutProps,
   | 'roleHypotheses'
   | 'regions'
-  | 'remoteOnly'
   | 'candidateLevel'
   | 'state'
   | 'onChange'
   | 'onReset'
-  | 'onToggleRemote'
   | 'savedSearches'
 >;
 
@@ -503,7 +504,10 @@ function VacanciesFilters(props: VacanciesFiltersProps) {
         <span>Фильтры и запросы</span>
         <span aria-hidden="true">{expanded ? 'Скрыть' : 'Показать'}</span>
       </button>
-      <aside className={`vacancies-filters${expanded ? ' is-mobile-open' : ''}`} aria-label="Фильтры">
+      <aside
+        className={`vacancies-filters${expanded ? ' is-mobile-open' : ''}`}
+        aria-label="Фильтры"
+      >
         <VacanciesFilterControls {...props} />
       </aside>
     </div>
@@ -513,23 +517,17 @@ function VacanciesFilters(props: VacanciesFiltersProps) {
 function VacanciesFilterControls({
   roleHypotheses,
   regions,
-  remoteOnly,
   candidateLevel,
   state,
   onChange,
   onReset,
-  onToggleRemote,
   savedSearches,
 }: VacanciesFiltersProps) {
   return (
     <>
-      <RoleHypothesesGroup
-        roleHypotheses={roleHypotheses}
-        state={state}
-        onChange={onChange}
-      />
+      <RoleHypothesesGroup roleHypotheses={roleHypotheses} state={state} onChange={onChange} />
       <RegionsGroup regions={regions} state={state} onChange={onChange} />
-      <RemoteOnlyGroup remoteOnly={remoteOnly} onToggle={onToggleRemote} />
+      <RemoteOnlyGroup state={state} onChange={onChange} />
 
       {candidateLevel ? (
         <FieldGroup title="Уровень">
@@ -550,16 +548,15 @@ function VacanciesFilterControls({
   );
 }
 
-function RemoteOnlyGroup({
-  remoteOnly,
-  onToggle,
-}: {
-  readonly remoteOnly: boolean;
-  readonly onToggle: () => void;
-}) {
+/** Локальный фильтр: кампанию на сервере меняет только баннер гипотезы, не клик по фильтру. */
+function RemoteOnlyGroup({ state, onChange }: Pick<VacanciesFiltersProps, 'state' | 'onChange'>) {
   return (
     <FieldGroup title="Формат работы">
-      <Chip label="Удалённо" isSelected={remoteOnly} onClick={onToggle} />
+      <Chip
+        label="Удалённо"
+        isSelected={state.remoteOnly}
+        onClick={() => onChange((prev) => ({ ...prev, remoteOnly: !prev.remoteOnly }))}
+      />
     </FieldGroup>
   );
 }
@@ -573,7 +570,9 @@ function RoleHypothesesGroup({
   roleHypotheses,
   state,
   onChange,
-}: FilterGroupProps & { readonly roleHypotheses: NonNullable<CampaignMetaView['roleHypotheses']> }) {
+}: FilterGroupProps & {
+  readonly roleHypotheses: NonNullable<CampaignMetaView['roleHypotheses']>;
+}) {
   if (roleHypotheses.length === 0) return null;
   return (
     <FieldGroup title="Роль кампании">
@@ -609,11 +608,6 @@ function RegionsGroup({
           }
         />
       ))}
-      <Chip
-        label="Удалённо"
-        isSelected={state.remoteOnly}
-        onClick={() => onChange((prev) => ({ ...prev, remoteOnly: !prev.remoteOnly }))}
-      />
     </FieldGroup>
   );
 }
@@ -770,8 +764,7 @@ function RoleChip({
       aria-pressed={isSelected}
       onClick={onSelect}
     >
-      {role} ({vacancyCount})
-      {isHypothesis ? ' — гипотеза' : ''}
+      {role} ({vacancyCount}){isHypothesis ? ' — гипотеза' : ''}
     </button>
   );
 }
