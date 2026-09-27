@@ -107,14 +107,22 @@ describe('TodayScreen (B251 S5)', () => {
     expect(html.match(/disabled="" aria-busy="true"/gu)).toHaveLength(2);
   });
 
-  it('renders follow-ups by due date and the since-last-visit digest', () => {
+  it('renders follow-ups by due date', () => {
     const html = renderTodayScreen();
 
     expect(html).toContain('Follow-up по срокам');
     expect(html).toContain('Peraton — Enterprise Architect');
     expect(html).toContain('сегодня');
-    expect(html).toContain('С прошлого визита');
+  });
+
+  it('shows since-last-visit facts as a hint line under the queue title, not a separate block (C55)', () => {
+    const html = renderTodayScreen();
+
+    expect(html).toContain('career-today-since-hint');
     expect(html).toContain('Genetec запросили доступность на этой неделе');
+    // No separate «С прошлого визита» section duplicating the KPI tiles.
+    expect(html).not.toContain('С прошлого визита');
+    expect(html).not.toContain('career-today-since"');
   });
 
   it('shows a skeleton while the first reading is in flight', () => {
@@ -144,7 +152,7 @@ describe('TodayScreen (B251 S5)', () => {
 
     expect(html).toContain('Очередь дня');
     expect(html).toContain('career-today-digest');
-    expect(html).toContain('Добавьте роль или регион');
-    expect(html).toContain('Новых вакансий и событий нет.');
+    expect(html).toContain('Решений на сегодня нет: подборка разобрана.');
+    expect(html).toContain('Новые вакансии появятся здесь сами.');
   });
 });

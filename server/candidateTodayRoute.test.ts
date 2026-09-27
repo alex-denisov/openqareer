@@ -164,7 +164,7 @@ describe('GET /candidate/today', () => {
     expect(body.sinceLastVisit.items).toContain('2 новые вакансии по роли Инженер данных');
   });
 
-  it('returns 200 with vacanciesPending on a cold matching cache', async () => {
+  it('returns 200 with an empty, non-pending digest when the pool has nothing to match', async () => {
     const { app, authorization } = await createApp();
 
     const response = await app.inject({
@@ -174,8 +174,26 @@ describe('GET /candidate/today', () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json().data;
-    expect(body.vacanciesPending).toBe(true);
+    expect(body.vacanciesPending).toBe(false);
     expect(body.digest.newVacancies).toBe(0);
+  });
+
+  it('builds a non-empty queue on the very first visit, without a prior Vacancies visit (B251, C55)', async () => {
+    const { app, authorization } = await createApp({ withMatchingEngine: true });
+
+    // No warm-up request to /matched-vacancies before this one: `/today`
+    // must read the matched pool itself instead of relying on a snapshot
+    // left behind by the candidate's last visit to «Вакансии».
+    const response = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow`,
+      headers: { authorization },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json().data;
+    expect(body.vacanciesPending).toBe(false);
+    expect(body.digest.newVacancies).toBe(1);
+    expect(body.queue.some((item: { kind: string }) => item.kind === 'new_vacancy')).toBe(true);
   });
 
   it('applies the explicit remote-only campaign choice to Vacancies and Today', async () => {
