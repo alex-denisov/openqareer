@@ -554,9 +554,9 @@ test.describe('B250 vacancies screen', () => {
     await expect.poll(() => updates.length).toBe(2);
     expect((updates[1] as { regions: string[] }).regions).toContain('eu');
 
-    await banner.getByRole('button', { name: 'Добавить «Удалённо»' }).click();
-    await expect.poll(() => updates.length).toBe(3);
-    expect((updates[2] as { remoteOnly: boolean }).remoteOnly).toBe(true);
+    // «Только удалённо» сужает выдачу, поэтому баннер его не предлагает — только снимает.
+    await expect(banner.getByRole('button', { name: /Удалённо/ })).toHaveCount(0);
+    expect(updates).toHaveLength(2);
   });
 
   test('shows a zero-result hypothesis and names a source when loading fails', async ({
