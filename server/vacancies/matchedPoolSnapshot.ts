@@ -20,7 +20,7 @@ import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
  * подбор, короче — не хватило бы на медленное чтение по каналу владельца
  * (65 с в том же замере).
  */
-const DEFAULT_TTL_MS = 90_000;
+const DEFAULT_TTL_MS = 10 * 60_000;
 
 /** Больше снимков одновременно не держим: это верхняя граница памяти. */
 const DEFAULT_MAX_ENTRIES = 200;
@@ -51,6 +51,14 @@ export class MatchedPoolSnapshots {
 
   get size(): number {
     return this.entries.size;
+  }
+
+  /** Смена кампании меняет смысл подбора, поэтому старые ключи кандидата не ждут TTL. */
+  deleteCandidate(candidateId: string): void {
+    const prefix = `${candidateId} `;
+    for (const key of this.entries.keys()) {
+      if (key.startsWith(prefix)) this.entries.delete(key);
+    }
   }
 
   /**
@@ -101,12 +109,17 @@ export class MatchedPoolSnapshots {
     const running = this.pending.get(key);
     if (running) return running;
     if (this.pending.size >= this.maxEntries) throw new Error('vacancy_match_queue_full');
-    const computation = Promise.resolve().then(compute).then((items) => {
-      const now = this.clock();
-      this.entries.set(key, { items, storedAt: now });
-      this.evict(now);
-      return items;
-    }).finally(() => { this.pending.delete(key); });
+    const computation = Promise.resolve()
+      .then(compute)
+      .then((items) => {
+        const now = this.clock();
+        this.entries.set(key, { items, storedAt: now });
+        this.evict(now);
+        return items;
+      })
+      .finally(() => {
+        this.pending.delete(key);
+      });
     this.pending.set(key, computation);
     return computation;
   }

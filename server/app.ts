@@ -40,7 +40,6 @@ import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReput
 import { registerReputationAuditRoutes } from './routes/reputationAuditRoutes';
 import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
 
-
 interface BuildAppOptions {
   config: ServerConfig;
   coachProvider: CoachProvider;
@@ -66,7 +65,7 @@ interface BuildAppOptions {
   recruiterContactsRepo?: SqliteRecruiterContactsRepository;
   candidateReputationRepo?: SqliteCandidateReputationRepository;
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
-
+  matchedPoolPrecompute?: RouteDeps['matchedPoolPrecompute'];
 
   /**
    * Куда пишет логгер. Прод пишет в stdout, а тест читает то же самое, что
@@ -123,7 +122,9 @@ function createServices(
           options.searchRemotive ?? searchRemotiveVacancies,
         ),
       }),
-    titleParseStore: options.titleParseStore ?? new SqliteTitleParseStore({ databasePath: options.config.databasePath }),
+    titleParseStore:
+      options.titleParseStore ??
+      new SqliteTitleParseStore({ databasePath: options.config.databasePath }),
   };
 }
 
@@ -216,7 +217,6 @@ async function registerApiRoutes(app: FastifyInstance, deps: RouteDeps): Promise
   registerReputationAuditRoutes(app, deps);
 }
 
-
 /** Аутентификация части реализаций читает кандидатов из того же хранилища. */
 function attachCandidateStore(authService: SessionAuth, candidateStore: CandidateStore): void {
   if (authService && 'setCandidateStore' in authService) {
@@ -254,6 +254,7 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Rou
     searchVacancies = searchHhVacancies,
     hhCrawlSettings,
     runtimeMemory,
+    matchedPoolPrecompute,
   } = options;
 
   return {
@@ -279,6 +280,7 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Rou
     searchVacancies,
     ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
     ...(runtimeMemory ? { runtimeMemory } : {}),
+    ...(matchedPoolPrecompute ? { matchedPoolPrecompute } : {}),
     ...services,
   };
 }

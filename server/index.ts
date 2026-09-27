@@ -31,6 +31,7 @@ import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReput
 import { buildRecruiterVacancyInput } from './outreach/recruiterIntelligenceInput';
 import { runRecruiterIntelligenceJobs } from './outreach/recruiterIntelligenceWorker';
 import { SqliteLinkedinPoolRepository } from './linkedinPool/sqliteLinkedinPoolRepository';
+import { MatchedPoolPrecompute } from './vacancies/matchedPoolPrecompute';
 
 const config = readServerConfig(process.env);
 const candidateStore = new SqliteCandidateStore({
@@ -123,6 +124,10 @@ const vacancyEngine = composeVacancyEngine({
   matchMode: config.matchMode,
 });
 const { engine: multiSourceEngine, hhCrawlSettings } = vacancyEngine;
+const matchedPoolPrecompute = new MatchedPoolPrecompute({
+  candidateStore,
+  engine: multiSourceEngine,
+});
 const roleNamingCache = new SqliteRoleNamingCache({
   databasePath: config.databasePath,
   encryptionKey: config.dataEncryptionKey,
@@ -149,6 +154,7 @@ const app = await buildApp({
   recruiterContactsRepo,
   candidateReputationRepo,
   linkedinPool,
+  matchedPoolPrecompute,
   runtimeMemory: () => {
     const heap = readProcessHeap();
     return {
@@ -194,11 +200,13 @@ const app = await buildApp({
   }),
   serveStatic: process.env.NODE_ENV === 'production',
 });
+matchedPoolPrecompute.setLogger(app.log);
 
 let vacancyRefreshTimer: NodeJS.Timeout | undefined;
 let recruiterIntelligenceTimer: NodeJS.Timeout | undefined;
 let documentRetentionTimer: NodeJS.Timeout | undefined;
 let retentionSweepTimer: NodeJS.Timeout | undefined;
+let matchedPoolPrecomputeTimer: NodeJS.Timeout | undefined;
 
 function runVacancyRefresh(): void {
   void vacancyIntelligenceService
@@ -282,6 +290,7 @@ async function shutdown(signal: string): Promise<void> {
   if (recruiterIntelligenceTimer) clearInterval(recruiterIntelligenceTimer);
   if (documentRetentionTimer) clearInterval(documentRetentionTimer);
   if (retentionSweepTimer) clearInterval(retentionSweepTimer);
+  if (matchedPoolPrecomputeTimer) clearInterval(matchedPoolPrecomputeTimer);
   await app.close();
   candidateStore.close();
   authService.close();
@@ -312,6 +321,18 @@ try {
   // Это только запуск reader: данные и SQL остаются запросом кандидата, а
   // HTTP уже слушает, когда OS начинает создавать дочерний процесс.
   setImmediate(() => vacancyEngine.pool.warmMatchReader()).unref();
+  // Снимки считаются через тот же изолированный reader, но до первого
+  // кандидатского запроса и далее без параллельного дискового шквала.
+  setImmediate(() => {
+    void matchedPoolPrecompute.run();
+  }).unref();
+  matchedPoolPrecomputeTimer = setInterval(
+    () => {
+      void matchedPoolPrecompute.run();
+    },
+    5 * 60 * 1_000,
+  );
+  matchedPoolPrecomputeTimer.unref();
   vacancyRefreshTimer = setInterval(runVacancyRefresh, 5 * 60 * 1_000);
   vacancyRefreshTimer.unref();
   recruiterIntelligenceTimer = setInterval(runRecruiterIntelligence, 5_000);

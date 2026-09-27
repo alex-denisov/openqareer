@@ -3,7 +3,7 @@ import { buildCampaignRoleSet, campaignFactsDigest } from './campaignRoleSet';
 
 /** Пересборка меняет только машинную часть кампании. */
 export async function rebuildCampaignRoles(
-  deps: Pick<RouteDeps, 'candidateStore' | 'campaignRoleModel'>,
+  deps: Pick<RouteDeps, 'candidateStore' | 'campaignRoleModel' | 'matchedPoolPrecompute'>,
   candidateId: string,
   options: { readonly force?: boolean } = {},
 ): Promise<void> {
@@ -51,4 +51,5 @@ export async function rebuildCampaignRoles(
       },
     },
   });
+  deps.matchedPoolPrecompute?.prioritizeCampaign(candidateId);
 }

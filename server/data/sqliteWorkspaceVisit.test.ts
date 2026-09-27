@@ -51,4 +51,23 @@ describe('candidate workspace visit marks', () => {
     expect(store.getSinceLastVisit(second.id)).toBeNull();
     expect(store.getCandidateWorkspace(second.id)?.lastVisitedAt).toBeUndefined();
   });
+
+  it('selects only recently active candidates with an explicit campaign for precompute', () => {
+    const store = createStore();
+    const recent = createCandidate(store);
+    const withoutCampaign = createCandidate(store);
+    const stale = createCandidate(store);
+    const campaign = {
+      roles: ['Head of Operations'], regions: ['mena'] as const, revision: 1,
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    };
+    store.saveCandidateWorkspace(recent.id, { ...WORKSPACE, campaign });
+    store.saveCandidateWorkspace(withoutCampaign.id, WORKSPACE);
+    store.saveCandidateWorkspace(stale.id, { ...WORKSPACE, campaign });
+    store.recordCandidateVisit(recent.id, '2026-09-27T10:00:00.000Z');
+    store.recordCandidateVisit(withoutCampaign.id, '2026-09-27T10:00:00.000Z');
+    store.recordCandidateVisit(stale.id, '2026-09-01T10:00:00.000Z');
+
+    expect(store.listRecentCampaignCandidateIds('2026-09-13T10:00:00.000Z')).toEqual([recent.id]);
+  });
 });

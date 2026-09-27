@@ -8,6 +8,7 @@ import {
 import { VISIT_DEBOUNCE_MS, type RecordVisitResult } from './sqliteCandidateVisitRepository';
 
 interface WorkspaceRow {
+  candidate_id?: string;
   workspace_cipher: string;
   updated_at: string;
 }
@@ -59,6 +60,23 @@ export class SqliteWorkspaceRepository {
         this.sealedText.open(row.workspace_cipher, associatedData(candidateId)),
       ) as unknown,
     );
+  }
+
+  listRecentCampaignCandidateIds(since: string): string[] {
+    const sinceMs = Date.parse(since);
+    if (!Number.isFinite(sinceMs)) return [];
+    const rows = this.database.prepare(
+      'SELECT candidate_id, workspace_cipher, updated_at FROM candidate_workspaces',
+    ).all() as WorkspaceRow[];
+    return rows.flatMap((row) => {
+      if (!row.candidate_id) return [];
+      const workspace = readStoredCandidateWorkspace(JSON.parse(
+        this.sealedText.open(row.workspace_cipher, associatedData(row.candidate_id)),
+      ) as unknown);
+      const visitedAt = workspace.lastVisitedAt;
+      if (!workspace.campaign || !visitedAt || Date.parse(visitedAt) < sinceMs) return [];
+      return [row.candidate_id];
+    });
   }
 
   /**

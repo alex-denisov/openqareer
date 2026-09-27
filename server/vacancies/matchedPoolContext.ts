@@ -78,6 +78,14 @@ export function peekMatchedVacancies(
   return snapshots.peek(candidateId, matchedSnapshotKey(confirmedSkills, targetRoles, targetLevel));
 }
 
+/** Кампания сохранена — снимок прежней кампании не должен пережить запись. */
+export function invalidateMatchedVacancies(
+  engine: RouteDeps['multiSourceEngine'],
+  candidateId: string,
+): void {
+  matchedPoolSnapshots.get(engine)?.deleteCandidate(candidateId);
+}
+
 export function readMatchedSnapshot(
   engine: RouteDeps['multiSourceEngine'],
   candidateId: string,

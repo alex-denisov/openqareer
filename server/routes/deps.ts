@@ -46,6 +46,11 @@ export interface RouteDeps {
   careerCommandDispatcher: CareerCommandDispatcher | null;
   vacancyIntelligence: VacancyIntelligenceService;
   multiSourceEngine: MultiSourceVacancyEngine;
+  /** Предрасчёт читает пул вне HTTP и получает приоритет после смены кампании. */
+  matchedPoolPrecompute?: Pick<
+    import('../vacancies/matchedPoolPrecompute').MatchedPoolPrecompute,
+    'prioritizeCampaign'
+  >;
   searchVacancies: (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
   importProfile: (url: string) => Promise<ProfileUrlImportResult>;
   /** Absent when no provider credential is configured; the rules parser runs alone. */
@@ -57,7 +62,10 @@ export interface RouteDeps {
   /** Сопроводительное письмо пишет модель, шаблон — запас (B266, пункт 7). */
   coverLetterWriter?: CoverLetterWriter;
   /** Кеш разбора названий вакансий: модельный результат приоритетнее правил (B267 S6). */
-  titleParseStore: Pick<import('../vacancies/titleParse/sqliteTitleParseStore').SqliteTitleParseStore, 'getByKey'>;
+  titleParseStore: Pick<
+    import('../vacancies/titleParse/sqliteTitleParseStore').SqliteTitleParseStore,
+    'getByKey'
+  >;
   /** Окно последних отказов ступеней называния — для администратора (INC-035). */
   roleNamingFailures: RoleNamingFailureLog;
   searchRemotive?: (input: { text: string; perPage?: number }) => Promise<VacancySample>;
