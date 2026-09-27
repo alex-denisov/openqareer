@@ -27,6 +27,8 @@ import { ProfileTopcard } from './ProfileTopcard';
 import type { ProfileTab } from './profileTabs';
 import { importedSourceOf, type ImportedSource } from './resumeSourceCoverage';
 import { useResumeStudio } from './useResumeStudio';
+import { useConsultantSuggestions } from './useConsultantSuggestions';
+import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import type { ResumeDraft, ResumeStudioView } from './resumeTypes';
 
 const ANCHORS: readonly { id: string; label: string }[] = [
@@ -139,6 +141,10 @@ export interface ProfileScreenSurfaceProps {
   readonly connections?: readonly CandidateConnection[];
   readonly onConfirmOpenToWork: (confirmation: OpenToWorkConfirmation) => void;
   readonly confirmingOpenToWork?: boolean;
+  readonly suggestions?: readonly InlineSuggestionItem[];
+  readonly onAcceptSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
+  readonly onDismissSuggestion?: (suggestion: InlineSuggestionItem) => void;
+  readonly onRevertSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
   /**
    * "Профиль / Документ и форматы" now lives in the page header, beside the
    * «Профиль» title, not next to the topcard (owner review round 3) — the
@@ -229,12 +235,24 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
           <ProfileAnchorNav />
           <div className="career-profile-screen-layout">
             <div className="career-profile-screen-main-col">
-              <ProfileAboutSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileAboutSection
+                draft={draft}
+                saving={saving}
+                onSectionSave={onSectionSave}
+                suggestions={props.suggestions}
+                onAcceptSuggestion={props.onAcceptSuggestion}
+                onDismissSuggestion={props.onDismissSuggestion}
+                onRevertSuggestion={props.onRevertSuggestion}
+              />
               <ProfileExperienceSection
                 draft={draft}
                 memory={memory}
                 saving={saving}
                 onSectionSave={onSectionSave}
+                suggestions={props.suggestions}
+                onAcceptSuggestion={props.onAcceptSuggestion}
+                onDismissSuggestion={props.onDismissSuggestion}
+                onRevertSuggestion={props.onRevertSuggestion}
               />
               <ProfileEducationSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
               <ProfileSkillsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
@@ -327,40 +345,44 @@ function useConnectionStatuses(): readonly CandidateConnection[] | undefined {
   return connections;
 }
 
-/**
- * Connects the candidate-scoped resume API to `ProfileScreenSurface` — the
- * rail's «Профиль» section, replacing Resume Studio wholesale (B265). Uses
- * the same `useResumeStudio` hook Resume Studio does, so a draft saved here
- * and one saved there can never disagree about the wire contract.
- */
-export function ProfileScreenView({
-  candidateId,
-  memory,
-  importedSources,
-  onRefreshFacts,
-  onOpenConnections,
-  tab,
-  workspace,
-  onUpdateWorkspace,
-}: ProfileScreenViewProps) {
-  const state = useResumeStudio(onRefreshFacts);
-  const connections = useConnectionStatuses();
-  const { confirming: confirmingOtw, confirm: confirmOpenToWork } = useConfirmOpenToWork(
-    workspace,
-    onUpdateWorkspace,
-  );
-
-  // `state.setDraft` and `state.save` both key off React state, so a section's
-  // edit form has to hand the freshly computed draft to both — updating
-  // state and then calling `state.save()` with no argument would race the
-  // update and persist the value from before this edit (see useResumeStudio).
-  const onSectionSave = useCallback(
+function useSectionSaveHandler(state: ReturnType<typeof useResumeStudio>) {
+  return useCallback(
     (next: ResumeDraft) => {
       state.setDraft(next);
       state.save(next);
     },
     [state],
   );
+}
+
+/**
+ * Connects the candidate-scoped resume API to `ProfileScreenSurface` — the
+ * rail's «Профиль» section, replacing Resume Studio wholesale (B265). Uses
+ * the same `useResumeStudio` hook Resume Studio does, so a draft saved here
+ * and one saved there can never disagree about the wire contract.
+ */
+export function ProfileScreenView(props: ProfileScreenViewProps) {
+  const {
+    candidateId,
+    memory,
+    importedSources,
+    onRefreshFacts,
+    onOpenConnections,
+    tab,
+    workspace,
+    onUpdateWorkspace,
+  } = props;
+  const state = useResumeStudio(onRefreshFacts);
+  const connections = useConnectionStatuses();
+  const { confirming: confirmingOtw, confirm: confirmOpenToWork } = useConfirmOpenToWork(
+    workspace,
+    onUpdateWorkspace,
+  );
+  const onSectionSave = useSectionSaveHandler(state);
+  const consultant = useConsultantSuggestions(candidateId, () => {
+    state.reload();
+    onRefreshFacts?.();
+  });
 
   return (
     <ProfileScreenSurface
@@ -381,6 +403,10 @@ export function ProfileScreenView({
       onConfirmOpenToWork={(confirmation) => void confirmOpenToWork(confirmation)}
       confirmingOpenToWork={confirmingOtw}
       tab={tab}
+      suggestions={consultant.suggestions}
+      onAcceptSuggestion={consultant.acceptSuggestion}
+      onDismissSuggestion={consultant.dismissSuggestion}
+      onRevertSuggestion={consultant.revertSuggestion}
     />
   );
 }

@@ -10,13 +10,21 @@ import {
 } from './ProfileSectionEdit';
 import { SectionHead } from './ProfileSectionHead';
 import { useCandidateMediaSrc } from './candidateMediaSrc';
+import {
+  InlineConsultantSuggestion,
+  type InlineSuggestionItem,
+} from './InlineConsultantSuggestion';
 import type { ResumeDraft, ResumeExperienceInput } from './resumeTypes';
 
-interface SectionProps {
+export interface ProfileExperienceSectionProps {
   readonly draft: ResumeDraft;
   readonly memory?: readonly CandidateMemory[];
   readonly saving?: boolean;
   readonly onSectionSave: (next: ResumeDraft) => void;
+  readonly suggestions?: readonly InlineSuggestionItem[];
+  readonly onAcceptSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
+  readonly onDismissSuggestion?: (suggestion: InlineSuggestionItem) => void;
+  readonly onRevertSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
 }
 
 /**
@@ -253,9 +261,100 @@ function CompanyGroup({
   );
 }
 
-export function ProfileExperienceSection({ draft, memory = [], saving, onSectionSave }: SectionProps) {
+function ExperienceSuggestionsList({
+  draft,
+  suggestions,
+  onSectionSave,
+  onAcceptSuggestion,
+  onDismissSuggestion,
+  onRevertSuggestion,
+}: Pick<
+  ProfileExperienceSectionProps,
+  | 'draft'
+  | 'suggestions'
+  | 'onSectionSave'
+  | 'onAcceptSuggestion'
+  | 'onDismissSuggestion'
+  | 'onRevertSuggestion'
+>) {
+  const expSuggestions = (suggestions ?? []).filter((s) => s.section === 'experience');
+  return (
+    <>
+      {expSuggestions.map((suggestion) => (
+        <InlineConsultantSuggestion
+          key={suggestion.id}
+          suggestion={suggestion}
+          onAccept={
+            onAcceptSuggestion ??
+            ((s) => {
+              if (s.experienceId) {
+                onSectionSave(updateExperience(draft, s.experienceId, { title: s.proposedText }));
+              }
+            })
+          }
+          onDismiss={onDismissSuggestion ?? (() => {})}
+          onRevert={
+            onRevertSuggestion ??
+            (suggestion.currentText !== undefined && suggestion.experienceId
+              ? () =>
+                  onSectionSave(
+                    updateExperience(draft, suggestion.experienceId!, {
+                      title: suggestion.currentText,
+                    }),
+                  )
+              : undefined)
+          }
+        />
+      ))}
+    </>
+  );
+}
+
+function ExperienceGroupsList({
+  groups,
+  memory,
+  saving,
+  draft,
+  onSectionSave,
+}: {
+  readonly groups: readonly ReturnType<typeof groupExperienceByEmployer>[number][];
+  readonly memory: readonly CandidateMemory[];
+  readonly saving?: boolean;
+  readonly draft: ResumeDraft;
+  readonly onSectionSave: (next: ResumeDraft) => void;
+}) {
+  if (!groups.length) {
+    return <p className="career-profile-screen-empty-note">Опыт работы ещё не добавлен.</p>;
+  }
+  return (
+    <>
+      {groups.map((group) => (
+        <CompanyGroup
+          key={group.key}
+          group={group}
+          memory={memory}
+          saving={saving}
+          draft={draft}
+          onSectionSave={onSectionSave}
+        />
+      ))}
+    </>
+  );
+}
+
+export function ProfileExperienceSection({
+  draft,
+  memory = [],
+  saving,
+  onSectionSave,
+  suggestions,
+  onAcceptSuggestion,
+  onDismissSuggestion,
+  onRevertSuggestion,
+}: ProfileExperienceSectionProps) {
   const groups = groupExperienceByEmployer(draft.experience);
   const addPosition = () => onSectionSave(addExperience(draft, `manual-${Date.now()}`));
+
   return (
     <section
       className="career-profile-screen-panel career-profile-screen-section"
@@ -273,20 +372,22 @@ export function ProfileExperienceSection({ draft, memory = [], saving, onSection
         imported={draft.experience.length > 0}
         action={<SectionAddButton label="Добавить место работы" onClick={addPosition} />}
       />
-      {!draft.experience.length ? (
-        <p className="career-profile-screen-empty-note">Опыт работы ещё не добавлен.</p>
-      ) : (
-        groups.map((group) => (
-          <CompanyGroup
-            key={group.key}
-            group={group}
-            memory={memory}
-            saving={saving}
-            draft={draft}
-            onSectionSave={onSectionSave}
-          />
-        ))
-      )}
+      <ExperienceGroupsList
+        groups={groups}
+        memory={memory}
+        saving={saving}
+        draft={draft}
+        onSectionSave={onSectionSave}
+      />
+      <ExperienceSuggestionsList
+        draft={draft}
+        suggestions={suggestions}
+        onSectionSave={onSectionSave}
+        onAcceptSuggestion={onAcceptSuggestion}
+        onDismissSuggestion={onDismissSuggestion}
+        onRevertSuggestion={onRevertSuggestion}
+      />
     </section>
   );
 }
+

@@ -19,9 +19,33 @@ export const hhApplicationExecutionTargetSchema = z
   })
   .strict();
 
-export type CareerCommandExecutionTarget = z.infer<
+export type HhApplicationExecutionTarget = z.infer<
   typeof hhApplicationExecutionTargetSchema
 >;
+
+export const resumeReviseExecutionTargetSchema = z
+  .object({
+    targetType: z.literal('resume_block').optional(),
+    section: z.enum(['headline', 'about', 'experience']),
+    experienceId: z.string().optional(),
+    currentText: z.string().optional(),
+    proposedText: z.string().min(1).max(10_000),
+    previousText: z.string().optional(),
+  })
+  .strict();
+
+export type ResumeReviseExecutionTarget = z.infer<
+  typeof resumeReviseExecutionTargetSchema
+>;
+
+export const careerCommandExecutionTargetSchema = z.union([
+  hhApplicationExecutionTargetSchema,
+  resumeReviseExecutionTargetSchema,
+]);
+
+export type CareerCommandExecutionTarget =
+  | z.infer<typeof hhApplicationExecutionTargetSchema>
+  | ResumeReviseExecutionTarget;
 
 export interface VerifiedCareerApproval {
   id: string;
@@ -116,7 +140,7 @@ export class CareerCommandPlanner {
       throw new CareerCommandPolicyError('invalid_approval');
     }
     const approvalId = input.approval?.id ?? null;
-    const externalWrite = proposal.risk === 'external_side_effect';
+    const requiresApproval = proposalRequiresApproval(proposal.risk);
     const createdAt = this.now().toISOString();
 
     return {
@@ -126,7 +150,7 @@ export class CareerCommandPlanner {
       capability: proposal.kind,
       proposal,
       executionTarget,
-      status: externalWrite && !approvalId ? 'awaiting_approval' : 'prepared',
+      status: requiresApproval && !approvalId ? 'awaiting_approval' : 'prepared',
       provenance: {
         strategyDecisionId: input.strategyDecisionId,
         evidenceRefs: proposal.evidenceRefs,
@@ -145,6 +169,10 @@ export class CareerCommandPlanner {
   }
 }
 
+function proposalRequiresApproval(risk: string): boolean {
+  return risk === 'external_side_effect' || risk === 'candidate_data_write';
+}
+
 /**
  * An external target is only ever accepted for the capability that can act on
  * it, and a malformed one is a policy rejection (400) rather than a crash.
@@ -154,11 +182,21 @@ function validateExecutionTarget(
   input: CareerCommandExecutionTarget | null,
 ): CareerCommandExecutionTarget | null {
   if (!input) return null;
-  const target = hhApplicationExecutionTargetSchema.safeParse(input);
-  if (!target.success || proposal.kind !== 'application.submit') {
-    throw new CareerCommandPolicyError('invalid_execution_target');
+  if (proposal.kind === 'application.submit') {
+    const target = hhApplicationExecutionTargetSchema.safeParse(input);
+    if (!target.success) {
+      throw new CareerCommandPolicyError('invalid_execution_target');
+    }
+    return target.data;
   }
-  return target.data;
+  if (proposal.kind === 'resume.revise') {
+    const target = resumeReviseExecutionTargetSchema.safeParse(input);
+    if (!target.success) {
+      throw new CareerCommandPolicyError('invalid_execution_target');
+    }
+    return target.data;
+  }
+  throw new CareerCommandPolicyError('invalid_execution_target');
 }
 
 function validateProposal(input: {

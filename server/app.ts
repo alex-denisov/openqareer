@@ -38,6 +38,7 @@ import { registerErrorHandler, registerStaticDelivery } from './routes/runtime';
 import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContactsRepository';
 import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
 import { SqliteSearchConsentRepository } from './data/sqliteSearchConsentRepository';
+import { SqliteProfileRevisionRepository } from './data/sqliteProfileRevisionRepository';
 import { registerReputationAuditRoutes } from './routes/reputationAuditRoutes';
 import { registerSearchConsentRoutes } from './routes/searchConsentRoutes';
 import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
@@ -67,6 +68,7 @@ interface BuildAppOptions {
   recruiterContactsRepo?: SqliteRecruiterContactsRepository;
   candidateReputationRepo?: SqliteCandidateReputationRepository;
   searchConsentRepo?: SqliteSearchConsentRepository;
+  profileRevisionRepo?: SqliteProfileRevisionRepository;
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
   matchedPoolPrecompute?: RouteDeps['matchedPoolPrecompute'];
 
@@ -80,6 +82,7 @@ interface BuildAppOptions {
 
 interface AppServices {
   careerCommandDispatcher: CareerCommandDispatcher | null;
+  profileRevisionRepo: SqliteProfileRevisionRepository;
   vacancyIntelligence: VacancyIntelligenceService;
   multiSourceEngine: MultiSourceVacancyEngine;
   titleParseStore: SqliteTitleParseStore;
@@ -91,6 +94,7 @@ function createServices(
     | 'config'
     | 'candidateStore'
     | 'careerCommandExecutor'
+    | 'profileRevisionRepo'
     | 'vacancyIntelligenceService'
     | 'multiSourceVacancyEngine'
     | 'searchVacancies'
@@ -99,12 +103,14 @@ function createServices(
   >,
 ): AppServices {
   const { candidateStore } = options;
-  const careerCommandDispatcher = options.careerCommandExecutor
-    ? new CareerCommandDispatcher({
-        store: candidateStore,
-        executor: options.careerCommandExecutor,
-      })
-    : null;
+  const profileRevisionRepo =
+    options.profileRevisionRepo ??
+    new SqliteProfileRevisionRepository({ databasePath: options.config.databasePath });
+  const careerCommandDispatcher = new CareerCommandDispatcher({
+    store: candidateStore,
+    executor: options.careerCommandExecutor,
+    profileRevisionRepo,
+  });
   const vacancyIntelligence =
     options.vacancyIntelligenceService ??
     new VacancyIntelligenceService({
@@ -116,6 +122,7 @@ function createServices(
     });
   return {
     careerCommandDispatcher,
+    profileRevisionRepo,
     vacancyIntelligence,
     multiSourceEngine:
       options.multiSourceVacancyEngine ??
@@ -310,6 +317,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     config,
     candidateStore,
     careerCommandExecutor,
+    profileRevisionRepo: options.profileRevisionRepo,
     vacancyIntelligenceService,
     multiSourceVacancyEngine,
     searchVacancies,
@@ -318,7 +326,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
   const deps = assembleRouteDeps(options, services);
   const app = await createFastifyBase(config, logDestination);
-  app.addHook('onClose', () => services.titleParseStore.close());
+  app.addHook('onClose', () => {
+    services.titleParseStore.close();
+    services.profileRevisionRepo.close();
+  });
   await registerApiRoutes(app, deps);
   registerErrorHandler(app);
   await registerStaticDelivery(app, config, serveStatic);

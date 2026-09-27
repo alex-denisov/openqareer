@@ -84,11 +84,12 @@ async function createCommand(
     materializeCommand({
       principal: { candidateId: candidate.id },
       proposal,
-      availableEvidenceRefs: new Set(
-        snapshot.messages
+      availableEvidenceRefs: new Set([
+        ...snapshot.messages
           .filter((message) => message.role === 'user')
           .map((message) => message.id),
-      ),
+        ...snapshot.memory.map((mem) => mem.id),
+      ]),
       strategyDecisionId: turn.idempotencyKey,
       modelInvocationIds: turn.provenance ? [turn.provenance.responseId] : [],
       idempotencyKey,
@@ -148,6 +149,26 @@ const handleApproveCommand: Handler = async (deps, request, reply) => {
   return { data: approved, meta: { requestId: request.id } };
 };
 
+const handleRevertCommand: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config, careerCommandDispatcher } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const { commandId } = careerCommandParamsSchema.parse(request.params);
+  if (!careerCommandDispatcher) {
+    return sendError(
+      reply,
+      request,
+      500,
+      'career_command_dispatcher_not_available',
+      'Диспетчер карьерных команд недоступен.',
+      false,
+    );
+  }
+  const reverted = await careerCommandDispatcher.revert(candidate.id, commandId);
+  return { data: reverted, meta: { requestId: request.id } };
+};
+
 export async function registerCareerCommandRoutes(
   app: FastifyInstance,
   deps: RouteDeps,
@@ -163,5 +184,10 @@ export async function registerCareerCommandRoutes(
     '/api/v1/candidate/career-commands/:commandId/approvals',
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     withDeps(deps, handleApproveCommand),
+  );
+  app.post(
+    '/api/v1/candidate/career-commands/:commandId/revert',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    withDeps(deps, handleRevertCommand),
   );
 }

@@ -3,12 +3,20 @@ import { parseAboutContent } from './profileAbout';
 import { updateAbout } from './profileEntryEditing';
 import { SectionEditActions, SectionPencilButton } from './ProfileSectionEdit';
 import { SectionHead } from './ProfileSectionHead';
+import {
+  InlineConsultantSuggestion,
+  type InlineSuggestionItem,
+} from './InlineConsultantSuggestion';
 import type { ResumeDraft } from './resumeTypes';
 
-interface ProfileAboutSectionProps {
+export interface ProfileAboutSectionProps {
   readonly draft: ResumeDraft;
   readonly saving?: boolean;
   readonly onSectionSave: (next: ResumeDraft) => void;
+  readonly suggestions?: readonly InlineSuggestionItem[];
+  readonly onAcceptSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
+  readonly onDismissSuggestion?: (suggestion: InlineSuggestionItem) => void;
+  readonly onRevertSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
 }
 
 function AboutEditForm({
@@ -56,7 +64,86 @@ function AboutContent({ about }: { readonly about: string }) {
   );
 }
 
-export function ProfileAboutSection({ draft, saving, onSectionSave }: ProfileAboutSectionProps) {
+function AboutSuggestionsList({
+  draft,
+  suggestions,
+  onSectionSave,
+  onAcceptSuggestion,
+  onDismissSuggestion,
+  onRevertSuggestion,
+}: Pick<
+  ProfileAboutSectionProps,
+  | 'draft'
+  | 'suggestions'
+  | 'onSectionSave'
+  | 'onAcceptSuggestion'
+  | 'onDismissSuggestion'
+  | 'onRevertSuggestion'
+>) {
+  const aboutSuggestions = (suggestions ?? []).filter((s) => s.section === 'about');
+  return (
+    <>
+      {aboutSuggestions.map((suggestion) => (
+        <InlineConsultantSuggestion
+          key={suggestion.id}
+          suggestion={suggestion}
+          onAccept={
+            onAcceptSuggestion ??
+            ((s) => onSectionSave(updateAbout(draft, s.proposedText)))
+          }
+          onDismiss={onDismissSuggestion ?? (() => {})}
+          onRevert={
+            onRevertSuggestion ??
+            (suggestion.currentText !== undefined
+              ? () => onSectionSave(updateAbout(draft, suggestion.currentText ?? ''))
+              : undefined)
+          }
+        />
+      ))}
+    </>
+  );
+}
+
+function AboutViewBody({
+  editing,
+  about,
+  draft,
+  saving,
+  onSectionSave,
+  onCancel,
+}: {
+  readonly editing: boolean;
+  readonly about?: string;
+  readonly draft: ResumeDraft;
+  readonly saving?: boolean;
+  readonly onSectionSave: (next: ResumeDraft) => void;
+  readonly onCancel: () => void;
+}) {
+  if (editing) {
+    return (
+      <AboutEditForm
+        draft={draft}
+        saving={saving}
+        onSectionSave={onSectionSave}
+        onCancel={onCancel}
+      />
+    );
+  }
+  if (about) {
+    return <AboutContent about={about} />;
+  }
+  return <p className="career-profile-screen-empty-note">Раздел «Обо мне» ещё не заполнен.</p>;
+}
+
+export function ProfileAboutSection({
+  draft,
+  saving,
+  onSectionSave,
+  suggestions,
+  onAcceptSuggestion,
+  onDismissSuggestion,
+  onRevertSuggestion,
+}: ProfileAboutSectionProps) {
   const [editing, setEditing] = useState(false);
   const about = draft.candidate.about?.trim();
 
@@ -74,21 +161,26 @@ export function ProfileAboutSection({ draft, saving, onSectionSave }: ProfileAbo
           <SectionPencilButton label="Изменить «Обо мне»" onClick={() => setEditing(true)} />
         }
       />
-      {editing ? (
-        <AboutEditForm
-          draft={draft}
-          saving={saving}
-          onSectionSave={(next) => {
-            onSectionSave(next);
-            setEditing(false);
-          }}
-          onCancel={() => setEditing(false)}
-        />
-      ) : about ? (
-        <AboutContent about={about} />
-      ) : (
-        <p className="career-profile-screen-empty-note">Раздел «Обо мне» ещё не заполнен.</p>
-      )}
+      <AboutViewBody
+        editing={editing}
+        about={about}
+        draft={draft}
+        saving={saving}
+        onSectionSave={(next) => {
+          onSectionSave(next);
+          setEditing(false);
+        }}
+        onCancel={() => setEditing(false)}
+      />
+      <AboutSuggestionsList
+        draft={draft}
+        suggestions={suggestions}
+        onSectionSave={onSectionSave}
+        onAcceptSuggestion={onAcceptSuggestion}
+        onDismissSuggestion={onDismissSuggestion}
+        onRevertSuggestion={onRevertSuggestion}
+      />
     </section>
   );
 }
+

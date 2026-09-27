@@ -12101,6 +12101,105 @@
 }
 
 /* ============================================================================
+   Inline consultant suggestion on profile sections (C58)
+   ============================================================================ */
+
+.career-consultant-suggestion {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--career-surface-raised);
+  border: 1px solid var(--career-line-strong);
+  border-left: 3px solid var(--career-accent);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.career-consultant-suggestion-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.career-consultant-suggestion-title {
+  font-size: var(--career-text-aux);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--career-text-soft);
+}
+
+.career-consultant-suggestion-rationale {
+  font-size: 13px;
+  color: var(--career-text-main);
+  font-weight: 500;
+}
+
+.career-consultant-suggestion-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  background: var(--career-surface-base);
+  border: 1px solid var(--career-line);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+@media (max-width: 600px) {
+  .career-consultant-suggestion-comparison {
+    grid-template-columns: 1fr;
+  }
+}
+
+.career-consultant-suggestion-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.career-consultant-suggestion-col-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--career-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.career-consultant-suggestion-col.is-current .career-consultant-suggestion-text {
+  color: var(--career-text-soft);
+  text-decoration: line-through;
+  opacity: 0.8;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.career-consultant-suggestion-col.is-proposed .career-consultant-suggestion-text {
+  color: var(--career-text-main);
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.career-consultant-suggestion-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.career-consultant-suggestion-status {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--career-positive);
+}
+
+/* ============================================================================
    Tag/metric primitives (B248 mockup, docs/v1-release/tasks/work/B248/assets/
    shell.css §TAGS): shared by the redesigned onboarding and any screen that
    needs the same evidence-tone vocabulary — success/warning/hypothesis.

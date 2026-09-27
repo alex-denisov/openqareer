@@ -284,6 +284,16 @@ export interface CareerCommand {
     evidenceRefs: string[];
     modelInvocationIds: string[];
   };
+  executionTarget?: {
+    targetType?: 'resume_block';
+    section?: 'headline' | 'about' | 'experience';
+    experienceId?: string;
+    currentText?: string;
+    proposedText?: string;
+    previousText?: string;
+    vacancyId?: string;
+    action?: 'apply';
+  } | null;
   execution: {
     status: 'executing' | 'completed_with_receipt' | 'paused' | 'failed' | 'native_handoff';
     updatedAt: string;
@@ -708,6 +718,7 @@ export async function prepareCareerCommand(input: {
   turnIdempotencyKey: string;
   proposalIndex: number;
   idempotencyKey?: string;
+  executionTarget?: unknown;
 }): Promise<CareerCommand> {
   const response = await apiFetch('/api/v1/candidate/career-commands', {
     method: 'POST',
@@ -718,6 +729,7 @@ export async function prepareCareerCommand(input: {
     body: JSON.stringify({
       turnIdempotencyKey: input.turnIdempotencyKey,
       proposalIndex: input.proposalIndex,
+      ...(input.executionTarget ? { executionTarget: input.executionTarget } : {}),
     }),
   });
   return readDataObject(response);
@@ -734,6 +746,16 @@ export async function approveCareerCommand(
       headers: {
         'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID(),
       },
+    },
+  );
+  return readDataObject(response);
+}
+
+export async function revertCareerCommand(commandId: string): Promise<CareerCommand> {
+  const response = await apiFetch(
+    `/api/v1/candidate/career-commands/${encodeURIComponent(commandId)}/revert`,
+    {
+      method: 'POST',
     },
   );
   return readDataObject(response);

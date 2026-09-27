@@ -3,7 +3,7 @@ import { getEmailError, getNameError, getPasswordError } from '../../shared/acco
 import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
 import { linkedinProfileV2Schema } from '../../shared/linkedinProfileV2';
 import { parseProfileUrl } from '../connectors/profileUrlImport';
-import { hhApplicationExecutionTargetSchema } from '../orchestration/careerCommandPlanner';
+import { careerCommandExecutionTargetSchema } from '../orchestration/careerCommandPlanner';
 
 function fieldGovernedBy(check: (value: string) => string | null, trim: boolean) {
   const base = trim ? z.string().trim() : z.string();
@@ -299,7 +299,7 @@ export const coachTurnRequestSchema = z.object({
 export const careerCommandRequestSchema = z.object({
   turnIdempotencyKey: z.string().uuid(),
   proposalIndex: z.number().int().min(0).max(19),
-  executionTarget: hhApplicationExecutionTargetSchema.optional(),
+  executionTarget: careerCommandExecutionTargetSchema.optional(),
 });
 
 export const careerCommandParamsSchema = z.object({

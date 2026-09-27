@@ -495,4 +495,109 @@ test.describe('B265 Profile screen', () => {
     await expect(page).toHaveURL(/\/app/);
     await expect.poll(() => patched).toMatchObject({ workMode: expect.any(String) });
   });
+
+  test('C58: inline consultant suggestion on About section: accept and revert', async ({
+    page,
+  }, testInfo) => {
+    let approvedCommandId = '';
+    let revertedCommandId = '';
+    let currentStatus = 'prepared';
+
+    const sampleCommand = {
+      commandId: 'cmd-revise-about-1',
+      candidateId: CANDIDATE.candidateId,
+      turnIdempotencyKey: 'turn-c58-1',
+      capability: 'resume.revise',
+      status: currentStatus,
+      proposal: {
+        actionKind: 'revise_profile',
+        title: 'Уточнение формулировки в разделе «Обо мне»',
+        objective: 'Сделать акцент на платформенной стратегии и финтех-комплаенсе',
+        suggestedNextState: 'confirmed',
+        estimatedRisk: 'low',
+        evidenceRefs: ['mem-resp-1a'],
+      },
+      executionTarget: {
+        section: 'about',
+        proposedText:
+          '15 лет строю инженерные организации в финтехе. Усилила стратегию платформы и комплаенс.',
+        currentText: DRAFT.candidate.about,
+      },
+      createdAt: '2026-09-28T00:00:00.000Z',
+      updatedAt: '2026-09-28T00:00:00.000Z',
+    };
+
+    await stubSession(page);
+
+    await page.route('**/api/v1/candidate/career-commands', async (route) => {
+      await route.fulfill({
+        json: {
+          data: [
+            {
+              ...sampleCommand,
+              status: currentStatus,
+            },
+          ],
+        },
+      });
+    });
+
+    await page.route('**/api/v1/candidate/career-commands/*/approvals', async (route) => {
+      const url = route.request().url();
+      const parts = url.split('/');
+      approvedCommandId = parts[parts.indexOf('career-commands') + 1];
+      currentStatus = 'completed_with_receipt';
+      await route.fulfill({
+        json: {
+          data: {
+            commandId: approvedCommandId,
+            status: 'completed_with_receipt',
+          },
+        },
+      });
+    });
+
+    await page.route('**/api/v1/candidate/career-commands/*/revert', async (route) => {
+      const url = route.request().url();
+      const parts = url.split('/');
+      revertedCommandId = parts[parts.indexOf('career-commands') + 1];
+      currentStatus = 'prepared';
+      await route.fulfill({
+        json: {
+          data: {
+            commandId: revertedCommandId,
+            status: 'prepared',
+          },
+        },
+      });
+    });
+
+    await openProfile(page);
+
+    const suggestion = page.locator('[data-testid="consultant-suggestion-cmd-revise-about-1"]');
+    await expect(suggestion).toBeVisible();
+    await expect(suggestion).toContainText('Сейчас');
+    await expect(suggestion).toContainText('Станет');
+    await expect(suggestion).toContainText('Сделать акцент на платформенной стратегии');
+
+    if (testInfo.project.name === 'desktop-1440') {
+      await suggestion.screenshot({
+        path: 'output/playwright/C58/suggestion-desktop-1440.png',
+      });
+    } else if (testInfo.project.name === 'mobile-390') {
+      await suggestion.screenshot({
+        path: 'output/playwright/C58/suggestion-mobile-390.png',
+      });
+    }
+
+    // Accept suggestion
+    await suggestion.getByRole('button', { name: 'Принять' }).click();
+    await expect.poll(() => approvedCommandId).toBe('cmd-revise-about-1');
+    await expect(suggestion).toContainText('Правка применена');
+
+    // Revert suggestion
+    await suggestion.getByRole('button', { name: 'Откатить' }).click();
+    await expect.poll(() => revertedCommandId).toBe('cmd-revise-about-1');
+    await expect(suggestion.getByRole('button', { name: 'Принять' })).toBeVisible();
+  });
 });
