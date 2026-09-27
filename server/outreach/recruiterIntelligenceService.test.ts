@@ -186,5 +186,76 @@ describe('recruiterIntelligenceService', () => {
 
       expect(contacts).toEqual([]);
     });
+
+    it('формирует внутреннюю квитанцию источника (sourceReceipt) при извлечении контакта из текста', async () => {
+      const vacancy: UnifiedVacancyInput = {
+        id: 'vac-text-receipt',
+        company: 'Starlight Tech',
+        url: 'https://careers.starlight.io/jobs/101',
+        description: 'Рекрутер: Дарья Соколова\nEmail: d.sokolova@starlight.io',
+      };
+
+      const contacts = await discoverRecruiterContacts(vacancy, {
+        mxResolver: async () => [{ exchange: 'mail.starlight.io', priority: 10 }],
+        smtpValidator: async () => true,
+      });
+
+      expect(contacts).toHaveLength(1);
+      const contact = contacts[0];
+      expect(contact.sourceReceipt).toBeDefined();
+      expect(contact.sourceReceipt?.source).toBe('vacancy_text');
+      expect(contact.sourceReceipt?.receiptId).toBeTruthy();
+    });
+
+    it('находит контакт рекрутера для известной компании через пул, когда в тексте вакансии контакт отсутствует', async () => {
+      const vacancy: UnifiedVacancyInput = {
+        id: 'vac-acme',
+        company: 'Acme Corp',
+        url: 'https://careers.acmecorp.com/jobs/1',
+        description: 'Мы ищем Senior Backend Engineer. Требования: Node.js, PostgreSQL.',
+      };
+
+      const contacts = await discoverRecruiterContacts(vacancy, {
+        mxResolver: async () => [{ exchange: 'mx.acmecorp.com', priority: 10 }],
+        smtpValidator: async () => true,
+        companyRecruiterFinder: async (company) => {
+          if (company === 'Acme Corp') {
+            return {
+              fullName: 'Ольга Кузнецова',
+              roleTitle: 'Head of Talent',
+              linkedinUrl: 'https://linkedin.com/in/olga-kuznetsova',
+              sourcePlatform: 'linkedin_pool',
+              confidence: 0.9,
+            };
+          }
+          return null;
+        },
+      });
+
+      expect(contacts).toHaveLength(1);
+      const contact = contacts[0];
+      expect(contact.fullName).toBe('Ольга Кузнецова');
+      expect(contact.roleTitle).toBe('Head of Talent');
+      expect(contact.sourceType).toBe('linkedin_pool');
+      expect(contact.linkedinUrl).toBe('https://linkedin.com/in/olga-kuznetsova');
+      expect(contact.email).toBe('olga.kuznetsova@acmecorp.com');
+      expect(contact.emailStatus).toBe('verified');
+      expect(contact.sourceReceipt?.source).toBe('linkedin_pool');
+    });
+
+    it('честно возвращает пустой список («пока не нашли»), если у пула нет данных', async () => {
+      const vacancy: UnifiedVacancyInput = {
+        id: 'vac-acme-empty',
+        company: 'Acme Corp',
+        url: 'https://careers.acmecorp.com/jobs/2',
+        description: 'Обычный текст без контактов внутри.',
+      };
+
+      const contacts = await discoverRecruiterContacts(vacancy, {
+        companyRecruiterFinder: async () => null,
+      });
+
+      expect(contacts).toEqual([]);
+    });
   });
 });

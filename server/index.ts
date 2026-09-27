@@ -226,6 +226,7 @@ function runRecruiterIntelligence(): void {
     repository: recruiterContactsRepo,
     resolveVacancy: (vacancyId) => buildRecruiterVacancyInput(vacancyId, { multiSourceEngine }),
     maxJobs: 1,
+    linkedinPool,
   })
     .then((result) => {
       if (result.claimed > 0) app.log.info(result, 'recruiter-intelligence-completed');

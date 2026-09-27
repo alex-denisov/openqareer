@@ -220,6 +220,10 @@ export class SqliteLinkedinPoolRepository {
     this.database.close();
   }
 
+  getDatabase(): DatabaseSync {
+    return this.database;
+  }
+
   list(input: LinkedinPoolListInput): LinkedinPoolPage {
     const where = input.state ? 'WHERE state = ?' : '';
     const params = input.state

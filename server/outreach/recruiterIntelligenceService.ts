@@ -1,8 +1,11 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import { randomUUID } from 'node:crypto';
-import type { EmailStatus, RecruiterContact } from '../../shared/recruiterContact';
+import type { EmailStatus, RecruiterContact, RecruiterSourceReceipt } from '../../shared/recruiterContact';
 import { extractDomainFromUrl } from '../domain/company';
+import type { CompanyRecruiterProfile } from '../linkedinPool/companyRecruiterDiscovery';
+import { findCompanyRecruitersFromPool } from '../linkedinPool/companyRecruiterDiscovery';
+import type { SqliteLinkedinPoolRepository } from '../linkedinPool/sqliteLinkedinPoolRepository';
 
 export interface UnifiedVacancyInput {
   readonly id: string;
@@ -25,10 +28,17 @@ export type SmtpValidator = (
   options?: { timeoutMs?: number },
 ) => Promise<boolean>;
 
+export type CompanyRecruiterFinder = (
+  company: string,
+  domain?: string,
+) => Promise<CompanyRecruiterProfile | null>;
+
 export interface DiscoveryOptions {
   readonly mxResolver?: MxResolver;
   readonly smtpValidator?: SmtpValidator;
   readonly smtpTimeoutMs?: number;
+  readonly linkedinPool?: SqliteLinkedinPoolRepository;
+  readonly companyRecruiterFinder?: CompanyRecruiterFinder;
 }
 
 const AGGREGATOR_DOMAINS = new Set([
@@ -293,28 +303,43 @@ async function resolveEmailAndStatus(
   return { email: null, status: 'unverified', confidence: 0.5 };
 }
 
-export async function discoverRecruiterContacts(
-  vacancy: UnifiedVacancyInput,
-  options?: DiscoveryOptions,
-): Promise<RecruiterContact[]> {
-  const fullText = [vacancy.contactInfo, vacancy.description, vacancy.fullDescription].filter(Boolean).join('\n');
-  const domain = extractCompanyDomain(vacancy);
-  const person = findRecruiterPerson(fullText);
-  const phones = extractPhones(fullText);
-  const tgs = extractTelegramHandles(fullText);
-  const was = extractWhatsappLinks(fullText);
-  const profiles = extractProfessionalProfiles(fullText);
-  const directEmail = extractDirectEmail(fullText);
-
-  const hasAnySignal = person || phones.length > 0 || tgs.length > 0 || directEmail || profiles.linkedinUrl;
-  if (!hasAnySignal) {
-    return [];
-  }
-
-  const emailRes = await resolveEmailAndStatus(directEmail, person, { domain, options });
+function buildSourceReceipt(
+  source: string,
+  method: string,
+  confidence: number,
+  sourceUrl?: string,
+): RecruiterSourceReceipt {
   const now = new Date().toISOString();
+  return {
+    receiptId: randomUUID(),
+    source,
+    method,
+    observedAt: now,
+    confidence,
+    sourceUrl,
+    verifiedAt: confidence >= 0.8 ? now : undefined,
+  };
+}
 
-  const contact: RecruiterContact = {
+function buildTextContact(
+  vacancy: UnifiedVacancyInput,
+  person: ExtractedPerson | undefined,
+  phones: string[],
+  tgs: string[],
+  was: string[],
+  profiles: ReturnType<typeof extractProfessionalProfiles>,
+  directEmail: string | undefined,
+  emailRes: { email: string | null; status: EmailStatus; confidence: number },
+  domain?: string,
+): RecruiterContact {
+  const now = new Date().toISOString();
+  const sourceReceipt = buildSourceReceipt(
+    directEmail || person ? 'vacancy_text' : 'public_metadata',
+    'text_parsing',
+    emailRes.confidence,
+  );
+
+  return {
     id: randomUUID(),
     vacancyId: vacancy.id,
     companyName: vacancy.company ?? 'Компания',
@@ -330,9 +355,81 @@ export async function discoverRecruiterContacts(
     twitterUrl: profiles.twitterUrl ?? null,
     sourceType: directEmail ? 'vacancy_text' : (person && domain ? 'domain_osint' : 'public_metadata'),
     confidence: emailRes.confidence,
+    sourceReceipt,
     createdAt: now,
     updatedAt: now,
   };
+}
 
-  return [contact];
+async function discoverFromPool(
+  vacancy: UnifiedVacancyInput,
+  domain: string | undefined,
+  options?: DiscoveryOptions,
+): Promise<RecruiterContact[]> {
+  if (!vacancy.company) return [];
+
+  const finder = options?.companyRecruiterFinder ?? (
+    options?.linkedinPool
+      ? (comp: string, dom?: string) => findCompanyRecruitersFromPool(comp, dom, options.linkedinPool)
+      : undefined
+  );
+  if (!finder) return [];
+
+  const poolProfile = await finder(vacancy.company, domain);
+  if (!poolProfile) return [];
+
+  const person: ExtractedPerson = {
+    fullName: poolProfile.fullName,
+    roleTitle: poolProfile.roleTitle,
+  };
+  const emailRes = await resolveEmailAndStatus(poolProfile.email, person, { domain, options });
+  const sourceReceipt = buildSourceReceipt(
+    poolProfile.sourcePlatform,
+    'company_pool_lookup',
+    emailRes.confidence,
+    poolProfile.sourceUrl,
+  );
+
+  return [{
+    id: randomUUID(),
+    vacancyId: vacancy.id,
+    companyName: vacancy.company,
+    fullName: poolProfile.fullName,
+    roleTitle: poolProfile.roleTitle,
+    email: emailRes.email,
+    emailStatus: emailRes.status,
+    phone: poolProfile.phone ?? null,
+    telegram: poolProfile.telegram ?? null,
+    whatsapp: null,
+    linkedinUrl: poolProfile.linkedinUrl ?? null,
+    githubUrl: null,
+    twitterUrl: null,
+    sourceType: poolProfile.sourcePlatform,
+    confidence: emailRes.confidence,
+    sourceReceipt,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }];
+}
+
+export async function discoverRecruiterContacts(
+  vacancy: UnifiedVacancyInput,
+  options?: DiscoveryOptions,
+): Promise<RecruiterContact[]> {
+  const fullText = [vacancy.contactInfo, vacancy.description, vacancy.fullDescription].filter(Boolean).join('\n');
+  const domain = extractCompanyDomain(vacancy);
+  const person = findRecruiterPerson(fullText);
+  const phones = extractPhones(fullText);
+  const tgs = extractTelegramHandles(fullText);
+  const was = extractWhatsappLinks(fullText);
+  const profiles = extractProfessionalProfiles(fullText);
+  const directEmail = extractDirectEmail(fullText);
+
+  const hasAnySignal = person || phones.length > 0 || tgs.length > 0 || directEmail || profiles.linkedinUrl;
+  if (!hasAnySignal) {
+    return discoverFromPool(vacancy, domain, options);
+  }
+
+  const emailRes = await resolveEmailAndStatus(directEmail, person, { domain, options });
+  return [buildTextContact(vacancy, person, phones, tgs, was, profiles, directEmail, emailRes, domain)];
 }
