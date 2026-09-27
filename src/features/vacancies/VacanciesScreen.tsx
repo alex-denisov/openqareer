@@ -174,6 +174,7 @@ function savedSearchControls(
       subscriptions={subscriptions}
       defaultQuery={defaultQuery}
       onRefresh={onRefreshSavedSearch}
+      compactOnMobile
     />
   );
 }
@@ -379,8 +380,11 @@ function VacanciesErrorState({
     <section className="vacancies-state is-error" role="alert">
       <h2>Не удалось загрузить подборку</h2>
       <p>
-        Площадки с проблемным статусом: {sourceLabel ?? 'источник не определён'}. Роль и география
-        сохранены.
+        Не удалось загрузить общий пул вакансий.{' '}
+        {sourceLabel
+          ? `Проблемные источники: ${sourceLabel}.`
+          : 'Источник сбоя не определён.'}{' '}
+        Сохранённые запросы показываются отдельно; роль и география сохранены.
       </p>
       {onRetry ? (
         <button type="button" className="vacancies-btn vacancies-btn-primary" onClick={onRetry}>
@@ -473,7 +477,40 @@ function VacanciesHeader({ primaryRole }: { readonly primaryRole?: string }) {
   );
 }
 
-function VacanciesFilters({
+type VacanciesFiltersProps = Pick<
+  VacanciesLayoutProps,
+  | 'roleHypotheses'
+  | 'regions'
+  | 'remoteOnly'
+  | 'candidateLevel'
+  | 'state'
+  | 'onChange'
+  | 'onReset'
+  | 'onToggleRemote'
+  | 'savedSearches'
+>;
+
+function VacanciesFilters(props: VacanciesFiltersProps) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="vacancies-filter-column">
+      <button
+        type="button"
+        className="vacancies-btn vacancies-btn-secondary vacancies-mobile-filter-toggle"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <span>Фильтры и сохранённые запросы</span>
+        <span aria-hidden="true">{expanded ? 'Скрыть' : 'Показать'}</span>
+      </button>
+      <aside className={`vacancies-filters${expanded ? ' is-mobile-open' : ''}`} aria-label="Фильтры">
+        <VacanciesFilterControls {...props} />
+      </aside>
+    </div>
+  );
+}
+
+function VacanciesFilterControls({
   roleHypotheses,
   regions,
   remoteOnly,
@@ -483,20 +520,14 @@ function VacanciesFilters({
   onReset,
   onToggleRemote,
   savedSearches,
-}: {
-  readonly roleHypotheses: NonNullable<CampaignMetaView['roleHypotheses']>;
-  readonly regions: readonly string[];
-  readonly remoteOnly: boolean;
-  readonly candidateLevel?: string | null;
-  readonly state: VacanciesScreenState;
-  readonly onChange: (updater: (prev: VacanciesScreenState) => VacanciesScreenState) => void;
-  readonly onReset: () => void;
-  readonly onToggleRemote: () => void;
-  readonly savedSearches: ReactNode;
-}) {
+}: VacanciesFiltersProps) {
   return (
-    <aside className="vacancies-filters" aria-label="Фильтры">
-      <RoleHypothesesGroup roleHypotheses={roleHypotheses} state={state} onChange={onChange} />
+    <>
+      <RoleHypothesesGroup
+        roleHypotheses={roleHypotheses}
+        state={state}
+        onChange={onChange}
+      />
       <RegionsGroup regions={regions} state={state} onChange={onChange} />
       <RemoteOnlyGroup remoteOnly={remoteOnly} onToggle={onToggleRemote} />
 
@@ -508,7 +539,6 @@ function VacanciesFilters({
 
       <FreshnessGroup state={state} onChange={onChange} />
       {savedSearches}
-
       <button
         type="button"
         className="vacancies-btn vacancies-btn-secondary vacancies-reset"
@@ -516,7 +546,7 @@ function VacanciesFilters({
       >
         Сбросить фильтры
       </button>
-    </aside>
+    </>
   );
 }
 

@@ -31,11 +31,17 @@ interface OnboardingCampaignStepProps {
 }
 
 const LEVEL_LABEL: Record<NonNullable<OnboardingCampaignRole['level']>, string> = {
-  ic: 'специалист',
-  lead: 'ведущий специалист / тимлид',
-  head: 'руководитель направления',
-  vp: 'вице-президент',
-  'c-level': 'руководитель компании',
+  ic: 'IC',
+  lead: 'Lead',
+  head: 'Head',
+  vp: 'VP',
+  'c-level': 'C-level',
+};
+
+const ROLE_SOURCE_LABEL: Record<OnboardingCampaignRole['source'], string> = {
+  model: 'Гипотеза модели',
+  profile: 'Из профиля',
+  candidate: 'Добавлено вами',
 };
 
 export function OnboardingCampaignStep(props: OnboardingCampaignStepProps) {
@@ -102,8 +108,13 @@ function CampaignRoleCard({
       onClick={onToggle}
     >
       <span className="career-onboarding-role-title">{role.titleRu ?? role.title}</span>
-      <span className="tag tag-hypothesis">
-        {role.level ? LEVEL_LABEL[role.level] : 'уровень уточняется'}
+      <span className="career-onboarding-role-meta">
+        <span className={`tag ${role.source === 'model' ? 'tag-hypothesis' : ''}`}>
+          {ROLE_SOURCE_LABEL[role.source]}
+        </span>
+        <span className="tag career-onboarding-role-level">
+          {role.level ? `Уровень: ${LEVEL_LABEL[role.level]}` : 'Уровень уточняется'}
+        </span>
       </span>
       <span className="career-onboarding-role-evidence">
         <span>

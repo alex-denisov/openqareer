@@ -1,6 +1,6 @@
-import { writeFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { captureCareerHarness } from './helpers/capture-career-harness';
 
 const CANDIDATE = {
   username: 'qa.candidate',
@@ -173,52 +173,6 @@ async function openNewCandidate(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
 }
 
-async function captureCampaignHarness(page: Page, path: string): Promise<void> {
-  const rendered = await page.evaluate(async () => {
-    const shell = document.querySelector<HTMLElement>('.career-shell');
-    if (!shell) throw new Error('campaign_render_not_found');
-    const linkedStyles = Array.from(
-      document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
-    );
-    const linkedCss = await Promise.all(
-      linkedStyles.map((style) => fetch(style.href).then((response) => response.text())),
-    );
-    const inlineCss = Array.from(document.querySelectorAll('style')).map(
-      (style) => style.textContent ?? '',
-    );
-    return {
-      css: [...inlineCss, ...linkedCss].join('\n'),
-      html: shell.outerHTML,
-    };
-  });
-  writeFileSync(
-    path,
-    `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${rendered.css}</style></head><body>${rendered.html}</body></html>`,
-  );
-  const colors = Array.from(new Set(rendered.css.match(/oklch\([^)]*\)/gu) ?? []));
-  const resolvedColors = await page.evaluate((values) => {
-    const context = document.createElement('canvas').getContext('2d');
-    if (!context) throw new Error('canvas_context_missing');
-    return values.map((color) => {
-      if (!CSS.supports('color', color)) return [color, color] as const;
-      context.clearRect(0, 0, 1, 1);
-      context.fillStyle = color;
-      context.fillRect(0, 0, 1, 1);
-      const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data;
-      return [color, `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`] as const;
-    });
-  }, colors);
-  const replacements = new Map(resolvedColors);
-  const rgbCss = rendered.css.replace(
-    /oklch\([^)]*\)/gu,
-    (color) => replacements.get(color) ?? color,
-  );
-  writeFileSync(
-    path.replace(/\.html$/u, '.rgb.html'),
-    `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${rgbCss}</style></head><body>${rendered.html}</body></html>`,
-  );
-}
-
 test.describe('B249 first selection onboarding', () => {
   test('waits for model roles, saves the confirmed campaign and opens vacancies', async ({
     page,
@@ -240,6 +194,8 @@ test.describe('B249 first selection onboarding', () => {
     await expect(page.getByText('Запрос отправлен модели')).toBeVisible();
     const role = page.getByRole('button', { name: /Вице-президент по операциям/ });
     await expect(role).toHaveAttribute('aria-pressed', 'true');
+    await expect(role).toContainText('Гипотеза модели');
+    await expect(role).toContainText('Уровень: VP');
     await expect(role).toContainText('управления региональными операциями');
     await expect(role).toContainText('Руководил операциями в четырёх регионах.');
     const accessibility = await new AxeBuilder({ page }).analyze();
@@ -252,7 +208,7 @@ test.describe('B249 first selection onboarding', () => {
       path: testInfo.outputPath('onboarding-model-confirmation.png'),
       fullPage: true,
     });
-    await captureCampaignHarness(page, testInfo.outputPath('onboarding-model-confirmation.html'));
+    await captureCareerHarness(page, testInfo.outputPath('onboarding-model-confirmation.html'));
 
     if (testInfo.project.name === 'desktop-1440') {
       const originalViewport = page.viewportSize();

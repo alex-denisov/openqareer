@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Info, Plus } from '@phosphor-icons/react';
 import type { VacancySubscription } from '../coach/coachApi';
 import { SavedSearchesPanel } from './SavedSearchesPanel';
@@ -95,53 +95,146 @@ export function VacancyFilterPanel({
 }
 
 /** «Сохранённые»: выборки пилюлями, «+» раскрывает форму новой выборки. */
+interface SavedSearchesFoldProps {
+  readonly subscriptions: readonly VacancySubscription[];
+  readonly defaultQuery?: string;
+  readonly onRefresh?: () => Promise<void>;
+  readonly compactOnMobile?: boolean;
+}
+
 export function SavedSearchesFold({
   subscriptions,
   defaultQuery,
   onRefresh,
+  compactOnMobile = false,
+}: SavedSearchesFoldProps) {
+  const [createOpen, setCreateOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(() =>
+    savedSearchDetailsOpen(subscriptions.length > 0, compactOnMobile),
+  );
+  useEffect(() => {
+    if (!compactOnMobile) return;
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const syncExpanded = () => setDetailsOpen(subscriptions.length > 0 && desktop.matches);
+    desktop.addEventListener('change', syncExpanded);
+    return () => desktop.removeEventListener('change', syncExpanded);
+  }, [compactOnMobile, subscriptions.length]);
+
+  return (
+    <fieldset className="career-vacancy-saved">
+      <legend>Сохранённые запросы</legend>
+      <SavedSearchesToggleRow
+        subscriptions={subscriptions}
+        detailsOpen={detailsOpen}
+        createOpen={createOpen}
+        onToggleDetails={() => setDetailsOpen((expanded) => !expanded)}
+        onToggleCreate={() => {
+          setCreateOpen((value) => !value);
+          setDetailsOpen(false);
+        }}
+      />
+      <SavedSearchesContent
+        subscriptions={subscriptions}
+        defaultQuery={defaultQuery}
+        onRefresh={onRefresh}
+        detailsOpen={detailsOpen}
+        createOpen={createOpen}
+        onShowDetails={() => setDetailsOpen(true)}
+        onCreated={() => {
+          setCreateOpen(false);
+          setDetailsOpen(true);
+        }}
+      />
+    </fieldset>
+  );
+}
+
+function SavedSearchesToggleRow({
+  subscriptions,
+  detailsOpen,
+  createOpen,
+  onToggleDetails,
+  onToggleCreate,
+}: {
+  readonly subscriptions: readonly VacancySubscription[];
+  readonly detailsOpen: boolean;
+  readonly createOpen: boolean;
+  readonly onToggleDetails: () => void;
+  readonly onToggleCreate: () => void;
+}) {
+  return (
+    <div className="career-vacancy-chips">
+      {subscriptions.map((subscription) => (
+        <button
+          type="button"
+          key={subscription.id}
+          className="career-vacancy-saved-pill"
+          aria-label={subscription.query}
+          aria-expanded={detailsOpen}
+          onClick={onToggleDetails}
+        >
+          {subscription.query}
+        </button>
+      ))}
+      <CareerTooltip content="Новый запрос к площадке. Он повторяется сам и пополняет подбор.">
+        <button
+          type="button"
+          className={createOpen ? 'is-active' : ''}
+          aria-pressed={createOpen}
+          aria-label="Новый запрос к площадке"
+          onClick={onToggleCreate}
+        >
+          <Plus size={12} aria-hidden="true" />
+        </button>
+      </CareerTooltip>
+    </div>
+  );
+}
+
+function SavedSearchesContent({
+  subscriptions,
+  defaultQuery,
+  onRefresh,
+  detailsOpen,
+  createOpen,
+  onShowDetails,
+  onCreated,
 }: {
   readonly subscriptions: readonly VacancySubscription[];
   readonly defaultQuery?: string;
   readonly onRefresh?: () => Promise<void>;
+  readonly detailsOpen: boolean;
+  readonly createOpen: boolean;
+  readonly onShowDetails: () => void;
+  readonly onCreated: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  if (subscriptions.length === 0 && !createOpen) {
+    return <p className="career-cabinet-tag">Сохранённый запрос повторяется по расписанию.</p>;
+  }
   return (
-    <fieldset className="career-vacancy-saved">
-      <legend>Сохранённые запросы</legend>
-      <div className="career-vacancy-chips">
-        {subscriptions.map((subscription) => (
-          <span key={subscription.id} className="career-vacancy-saved-pill">
-            {subscription.query}
-          </span>
-        ))}
-        <CareerTooltip content="Новый запрос к площадке. Он повторяется сам и пополняет подбор.">
-          <button
-            type="button"
-            className={open ? 'is-active' : ''}
-            aria-pressed={open}
-            aria-label="Новый запрос к площадке"
-            onClick={() => setOpen((value) => !value)}
-          >
-            <Plus size={12} aria-hidden="true" />
-          </button>
-        </CareerTooltip>
-      </div>
-      {subscriptions.length === 0 && !open ? (
-        <p className="career-cabinet-tag">
-          Сохранённый запрос повторяется по расписанию и пополняет подбор.
-        </p>
+    <>
+      {subscriptions.length > 0 && !detailsOpen && !createOpen ? (
+        <button type="button" className="career-inline-link" onClick={onShowDetails}>
+          Показать детали запроса
+        </button>
       ) : null}
-      {open || subscriptions.length > 0 ? (
+      {createOpen || (subscriptions.length > 0 && detailsOpen) ? (
         <SavedSearchesPanel
           subscriptions={subscriptions}
           defaultQuery={defaultQuery}
           onRefresh={onRefresh ?? (async () => undefined)}
-          createOpen={open}
-          onCreated={() => setOpen(false)}
+          createOpen={createOpen}
+          onCreated={onCreated}
         />
       ) : null}
-    </fieldset>
+    </>
   );
+}
+
+function savedSearchDetailsOpen(hasSubscriptions: boolean, compactOnMobile: boolean): boolean {
+  if (!hasSubscriptions) return false;
+  if (!compactOnMobile || typeof window === 'undefined') return true;
+  return window.matchMedia('(min-width: 1024px)').matches;
 }
 
 function CountryFilter({

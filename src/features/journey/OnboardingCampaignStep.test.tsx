@@ -34,7 +34,8 @@ describe('OnboardingCampaignStep', () => {
     );
 
     expect(html).toContain('Вице-президент по операциям');
-    expect(html).toContain('вице-президент');
+    expect(html).toContain('Гипотеза модели');
+    expect(html).toContain('Уровень: VP');
     expect(html).toContain('Роль опирается на управление операциями.');
     expect(html).toContain('Вёл операционную команду из 20 человек.');
     expect(html).toContain('aria-pressed="true"');

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { captureCareerHarness } from './helpers/capture-career-harness';
 
 /**
  * B250 — верх экрана «Вакансии» (баннер роли/гипотез, уровень, фильтры) и
@@ -378,7 +379,9 @@ test.describe('B250 vacancies screen', () => {
     await expect(rows.first()).toContainText('до $220k');
   });
 
-  test('the screen fits 1440 and 390 with no horizontal overflow', async ({ page }, testInfo) => {
+  test('the screen fits 1440, 390 and 320 with no horizontal overflow', async ({
+    page,
+  }, testInfo) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -402,6 +405,12 @@ test.describe('B250 vacancies screen', () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(narrowOverflow).toBeLessThanOrEqual(0);
+    await page.setViewportSize({ width: 320, height: 844 });
+    const compactOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(compactOverflow).toBeLessThanOrEqual(0);
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({
       path: process.env.SHOTS_DIR
         ? `${process.env.SHOTS_DIR}/vacancies-390.png`
@@ -509,6 +518,22 @@ test.describe('B250 vacancies screen', () => {
     const banner = page.locator('.vacancy-hypothesis-banner');
     await expect(banner).toContainText('Это гипотеза, не результат.');
     await expect(banner).toContainText('По роли Enterprise Architect найдено 5 вакансий');
+    if (testInfo.project.name === 'mobile-390') {
+      const filterToggle = page.getByRole('button', {
+        name: 'Фильтры и сохранённые запросы',
+      });
+      await expect(filterToggle).toHaveAttribute('aria-expanded', 'false');
+      const firstRow = page.locator('.vac-list-item').first();
+      await expect(firstRow).toBeVisible();
+      const firstRowBottom = await firstRow.evaluate(
+        (element) => element.getBoundingClientRect().bottom,
+      );
+      const bottomNavTop = await page
+        .locator('.career-mobile-nav')
+        .evaluate((element) => element.getBoundingClientRect().top);
+      expect(firstRowBottom).toBeLessThan(bottomNavTop);
+    }
+    await captureCareerHarness(page, testInfo.outputPath('vacancies-hypothesis.html'));
     await page.screenshot({
       path: testInfo.outputPath('vacancies-hypothesis.png'),
       fullPage: true,

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { captureCareerHarness } from './helpers/capture-career-harness';
 
 /**
  * B251 S5 — «Сегодня»: дайджест дня и очередь решений, подключённые вместо
@@ -37,7 +38,32 @@ const SNAPSHOT = {
     createdAt: '2026-09-01T12:00:00.000Z',
   },
   messages: [],
-  memory: [],
+  memory: [
+    {
+      id: 'today-profile-responsibility',
+      statement: 'Руководил технологическими операциями в четырёх странах.',
+      kind: 'fact' as const,
+      domain: 'responsibility' as const,
+      status: 'confirmed' as const,
+      sourceMessageIds: ['today-profile-1'],
+    },
+    {
+      id: 'today-profile-outcome',
+      statement: 'Сократил операционные затраты на 18 процентов.',
+      kind: 'fact' as const,
+      domain: 'outcome' as const,
+      status: 'confirmed' as const,
+      sourceMessageIds: ['today-profile-2'],
+    },
+    {
+      id: 'today-profile-team',
+      statement: 'Руководил командой из 40 специалистов.',
+      kind: 'fact' as const,
+      domain: 'role-evidence' as const,
+      status: 'confirmed' as const,
+      sourceMessageIds: ['today-profile-3'],
+    },
+  ],
   turns: [],
   dossier: {
     sections: [],
@@ -51,6 +77,8 @@ const SNAPSHOT = {
   vacancySubscriptions: [],
 };
 
+const TODAY_NEXT_INTERVIEW_AT = new Date(Date.now() + 48 * 60 * 60 * 1_000).toISOString();
+
 const TODAY_SNAPSHOT = {
   digest: {
     waitingForYou: 2,
@@ -62,7 +90,7 @@ const TODAY_SNAPSHOT = {
       company: 'HRTx Inc.',
       title: 'Enterprise Architect Director',
       round: 2,
-      at: '2026-09-26T14:00:00.000Z',
+      at: TODAY_NEXT_INTERVIEW_AT,
     },
     newVacanciesCaption: {
       campaignRole: 'VP Technology Ops',
@@ -110,7 +138,7 @@ const TODAY_SNAPSHOT = {
       title: 'Enterprise Architect Director, раунд 2',
       company: 'HRTx Inc.',
       eyebrow: 'Интервью через 2 дня',
-      dueAt: '2026-09-26T14:00:00.000Z',
+      dueAt: TODAY_NEXT_INTERVIEW_AT,
       fit: null,
     },
   ],
@@ -127,8 +155,98 @@ const TODAY_SNAPSHOT = {
       '2 вакансии закрылись без ответа — перенесены в архив',
     ],
   },
-  vacanciesPending: true,
+  vacanciesPending: false,
 };
+
+function todayApplication(
+  id: string,
+  company: string,
+  title: string,
+  stage: 'applied' | 'responded' | 'interview',
+  nearestInterview: {
+    id: string;
+    scheduledAt: string;
+    prepStatus: string;
+    round: number;
+  } | null = null,
+) {
+  return {
+    id,
+    candidateId: CANDIDATE.candidateId,
+    clusterId: null,
+    stage,
+    closedReason: null,
+    processProfile: 'standard',
+    vacancy: {
+      title,
+      company,
+      companyHidden: false,
+      url: 'https://example.com/application',
+      source: 'hh',
+    },
+    notes: null,
+    followUpDueAt: stage === 'applied' || stage === 'responded' ? TODAY_NEXT_INTERVIEW_AT : null,
+    stageChangedAt: '2026-09-20T10:00:00.000Z',
+    version: 1,
+    createdAt: '2026-09-15T10:00:00.000Z',
+    updatedAt: '2026-09-20T10:00:00.000Z',
+    followUp: null,
+    whoseTurn: 'company',
+    materials: { coverLetter: true, resume: true },
+    nearestInterview,
+  };
+}
+
+const TODAY_TRACKER_APPLICATIONS = [
+  todayApplication('app-1', 'Peraton', 'Enterprise Architect, Senior Advisor', 'applied'),
+  todayApplication('app-3', 'Genetec', 'Enterprise Architect', 'responded'),
+  todayApplication('app-2', 'HRTx Inc.', 'Enterprise Architect Director', 'interview', {
+    id: 'interview-1',
+    scheduledAt: TODAY_NEXT_INTERVIEW_AT,
+    prepStatus: 'not_started',
+    round: 2,
+  }),
+];
+
+const PENDING_TODAY_SNAPSHOT = { ...TODAY_SNAPSHOT, vacanciesPending: true };
+
+const TODAY_MATCHED_VACANCIES = Array.from({ length: 12 }, (_, index) => {
+  const id = `today-vacancy-${index + 1}`;
+  return {
+    cluster: {
+      id,
+      canonicalTitle: 'VP Technology Operations',
+      canonicalCompany: `Operations Group ${index + 1}`,
+      canonicalLocation: 'Dubai',
+      isRemote: true,
+      descriptionSummary: 'Regional technology operations leadership role.',
+      skills: ['Technology operations', 'P&L'],
+      primaryUrl: `https://example.com/vacancies/${index + 1}`,
+      sources: [
+        {
+          sourceType: 'remotive',
+          sourceId: id,
+          sourceUrl: `https://example.com/vacancies/${index + 1}`,
+          observedAt: '2026-09-23T09:14:00.000Z',
+        },
+      ],
+      firstObservedAt: '2026-09-23T09:14:00.000Z',
+      lastSeenAt: '2026-09-27T08:00:00.000Z',
+      status: 'active' as const,
+      vacanciesCount: 1,
+    },
+    explanation: {
+      clusterId: id,
+      roleMatch: 'target' as const,
+      levelMatch: 'match' as const,
+      outsideGeography: false,
+      matchingPoints: [],
+      missingPoints: [],
+      summary: '',
+      calculatedAt: '2026-09-27T08:00:00.000Z',
+    },
+  };
+});
 
 const EMPTY_TODAY_SNAPSHOT = {
   ...TODAY_SNAPSHOT,
@@ -164,10 +282,22 @@ async function stubSession(page: Page, todaySnapshot = TODAY_SNAPSHOT): Promise<
     if (pathname === '/api/v1/candidate/matched-vacancies') {
       return route.fulfill({
         json: {
-          data: [],
-          meta: { total: 0, nextOffset: null, campaign: null, candidateLevel: null },
+          data: TODAY_MATCHED_VACANCIES,
+          meta: {
+            total: TODAY_MATCHED_VACANCIES.length,
+            nextOffset: null,
+            campaign: {
+              roles: { value: ['VP Technology Ops'], origin: 'explicit' },
+              regions: { value: ['mena', 'eu'], origin: 'explicit' },
+              remoteOnly: false,
+            },
+            candidateLevel: 'VP / C-level',
+          },
         },
       });
+    }
+    if (request.method() === 'GET' && pathname === '/api/v1/candidate/applications') {
+      return route.fulfill({ json: { data: TODAY_TRACKER_APPLICATIONS } });
     }
     if (request.method() === 'POST' && pathname === '/api/v1/candidate/visits') {
       return route.fulfill({ json: { data: { since: todaySnapshot.sinceLastVisit.since } } });
@@ -230,11 +360,19 @@ async function openApp(page: Page): Promise<void> {
 test.describe('B251 today screen', () => {
   test('shows the digest and the queue with the first row marked as the next action', async ({
     page,
-  }) => {
-    await stubSession(page);
+  }, testInfo) => {
+    await stubSession(page, PENDING_TODAY_SNAPSHOT);
     await seedWorkspace(page);
     await openApp(page);
 
+    await expect(page.locator('.career-path-step').nth(0)).toHaveAttribute('data-state', 'done');
+    await expect(page.locator('.career-path-step').nth(1)).toHaveAttribute('data-state', 'active');
+    const responseStep = page.locator('.career-path-step').nth(3);
+    await expect(responseStep).toHaveAttribute('data-state', 'active');
+    await expect(responseStep).toContainText('3 в работе');
+    const interviewStep = page.locator('.career-path-step').nth(4);
+    await expect(interviewStep).toHaveAttribute('data-state', 'active');
+    await expect(interviewStep).toContainText('HRTx Inc.');
     await expect(page.locator('.career-cabinet-header h1')).toHaveText('Сегодня');
     await expect(page.locator('.career-today-digest')).toContainText('12');
     await expect(page.locator('.career-today-digest')).toContainText(
@@ -254,6 +392,7 @@ test.describe('B251 today screen', () => {
     await expect(page.locator('.career-today-pending')).toContainText('Подбор обновляется');
     const sentFollowUp = page.locator('.career-today-followups li').filter({ hasText: 'HRTx' });
     await expect(sentFollowUp.getByRole('button')).toHaveCount(0);
+    await captureCareerHarness(page, testInfo.outputPath('today-screen.html'));
   });
 
   test('marks a follow-up as sent from the day queue and removes it after refresh', async ({
@@ -287,6 +426,15 @@ test.describe('B251 today screen', () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.locator('.career-today')).toBeVisible();
+    await expect(page.locator('.career-path-step').nth(0)).toHaveAttribute('data-state', 'done');
+    await expect(page.locator('.career-path-step').nth(1)).toHaveAttribute('data-state', 'active');
+    const digestColumns = await page
+      .locator('.career-today-digest')
+      .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
+    expect(digestColumns).toBe(3);
+    await expect(
+      page.getByRole('button', { name: 'Отметить отправленным' }).first(),
+    ).toBeInViewport();
     const narrowOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
