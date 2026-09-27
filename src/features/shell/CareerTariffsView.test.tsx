@@ -32,6 +32,11 @@ describe('CareerTariffsView', () => {
     expect(html).toContain('Оплата не подключена');
   });
 
+  it('uses the same page header as the career sections', () => {
+    expect(html).toContain('career-page-header');
+    expect(html).not.toContain('career-view-heading');
+  });
+
   it('не использует внутренний жаргон вроде «адаптеров» и «test-account»', () => {
     expect(html).not.toContain('адаптер');
     expect(html).not.toContain('test-account');

@@ -375,7 +375,7 @@ test.describe('B251 today screen', () => {
     const interviewStep = page.locator('.career-path-step').nth(4);
     await expect(interviewStep).toHaveAttribute('data-state', 'active');
     await expect(interviewStep).toContainText('HRTx Inc.');
-    await expect(page.locator('.career-cabinet-header h1')).toHaveText('Сегодня');
+    await expect(page.locator('.career-page-header h1')).toHaveText('Сегодня');
     await expect(page.locator('.career-today-digest')).toContainText('12');
     await expect(page.locator('.career-today-digest')).toContainText(
       'follow-up назначено на сегодня',

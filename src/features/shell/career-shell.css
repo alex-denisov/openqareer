@@ -946,16 +946,6 @@
   animation: career-view-enter 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-
-
-
-
-
-
-
-
-
-
 @keyframes career-view-enter {
   from {
     opacity: 0;
@@ -1334,12 +1324,10 @@
   flex: none;
 }
 
-
 .career-source-account-required .career-inline-note {
   margin-top: 0;
   padding: 0;
 }
-
 
 .career-session-gate {
   max-width: 44rem;
@@ -1407,7 +1395,6 @@
   margin-top: 18px;
 }
 
-
 .career-connection-panel {
   grid-column: 1 / -1;
   display: grid;
@@ -1439,18 +1426,6 @@
   line-height: 1.5;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
 /* The connector cards are the step's main content, so they use the step's full
    measure instead of a narrow centred column that left them looking like a
    footnote (B148 §1). */
@@ -1461,19 +1436,6 @@
   width: 100%;
   margin: 22px 0 0;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 .career-source-fields label,
 .career-source-textarea,
@@ -1842,17 +1804,60 @@
   font-weight: 720;
 }
 
+.career-page-header {
+  min-height: 82px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--career-space-6);
+  padding: 0 var(--career-space-1) var(--career-space-6);
+}
+
+.career-page-header-copy {
+  min-width: 0;
+}
+
+.career-page-header h1 {
+  margin: var(--career-space-1) 0 var(--career-space-1);
+  font-size: var(--career-text-xl);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.career-page-header p {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.career-page-header-kicker,
+.career-cabinet-kicker {
+  color: var(--career-accent);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.career-page-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Вне среза C53 остаются узкие внутренние представления со старой шапкой. */
 .career-view-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
+  gap: var(--career-space-5);
   margin-bottom: 42px;
 }
 
 .career-view-heading h1 {
-  /* Заголовок раздела — тот же кегль, что у «Главной» и «Поиска»
-     (`.career-cabinet-header h1`): Тарифы были третьим стилем (B233). */
   margin: 0;
   font-size: var(--career-text-xl);
   line-height: 1.08;
@@ -2853,7 +2858,6 @@
   line-height: 1.55;
 }
 
-
 .career-dialogue-history,
 .career-intelligence-summary {
   margin-top: 12px;
@@ -2931,8 +2935,6 @@
   padding: 14px;
   background: var(--career-surface);
 }
-
-
 
 .career-track-card > strong {
   display: block;
@@ -3353,7 +3355,6 @@
     line-height: 1.07;
   }
 
-
   .career-start-stage .career-primary-actions {
     display: grid;
   }
@@ -3362,10 +3363,6 @@
   .career-start-stage .career-quiet-button {
     width: 100%;
   }
-
-
-
-
 
   .career-lead {
     font-size: var(--career-text-md);
@@ -3659,7 +3656,6 @@
     animation: none;
   }
 
-
   .career-primary-button,
   .career-nav-button {
     transition: none;
@@ -3676,49 +3672,6 @@
   width: min(100%, 1460px);
   margin-inline: auto;
   animation: career-view-enter 200ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.career-cabinet-header {
-  min-height: 82px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 0 2px 22px;
-}
-
-.career-cabinet-header > div:first-child {
-  min-width: 0;
-}
-
-.career-cabinet-header h1 {
-  margin: 4px 0 5px;
-  font-size: var(--career-text-xl);
-  line-height: 1.08;
-  letter-spacing: -0.035em;
-}
-
-.career-cabinet-header p {
-  margin: 0;
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
-  line-height: 1.5;
-}
-
-.career-cabinet-kicker {
-  color: var(--career-accent);
-  font-size: var(--career-text-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.career-cabinet-header-right {
-  display: flex;
-  align-items: center;
-  gap: var(--career-space-3);
-  flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
 .career-cabinet-header-state {
@@ -3764,8 +3717,6 @@
   font-size: var(--career-text-xs);
 }
 
-
-
 .career-coach-desk,
 .career-profile-surface,
 .career-intelligence-panel,
@@ -3773,7 +3724,6 @@
   min-width: 0;
   background: linear-gradient(180deg, oklch(19% 0.022 255 / 0.28), transparent 12rem), transparent;
 }
-
 
 .career-cabinet-panel-heading {
   width: 100%;
@@ -3798,18 +3748,6 @@
   letter-spacing: -0.02em;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
 .career-coach-message.is-user > span {
   color: var(--career-text-soft);
 }
@@ -3818,32 +3756,11 @@
   color: var(--career-text);
 }
 
-
-
-
-
-
-
-
-
-
-
 .career-cabinet-loading {
   margin: 0;
   color: var(--career-text-dim);
   font-size: var(--career-text-xs);
 }
-
-
-
-
-
-
-
-
-
-
-
 
 .career-profile-update-state button,
 .career-inline-link,
@@ -3860,9 +3777,6 @@
   font-weight: 720;
 }
 
-
-
-
 .career-profile-tabs button.is-active {
   color: var(--career-accent);
 }
@@ -3871,52 +3785,11 @@
   background: var(--career-accent);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* An import can state dozens of facts: the queue stays a panel, not a page. */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 .career-document-actions button.is-danger {
   color: var(--career-danger);
 }
-
-
-
 
 .career-cabinet-notice,
 .career-account-success {
@@ -4122,11 +3995,6 @@
   line-height: 1.45;
 }
 
-
-
-
-
-
 .career-market-create {
   display: grid;
   gap: 9px;
@@ -4284,10 +4152,6 @@
   line-height: 1.45;
 }
 
-
-
-
-
 .career-profile-surface.is-expanded .career-profile-surface-body {
   /* Раньше 540 px держали левую колонку рядом с длинным рельсом; теперь под
      профилем стоят свёрнутые разделы, и пустой запас только рвёт их от него (B233). */
@@ -4297,18 +4161,6 @@
 .career-intelligence-panel.is-expanded .career-market-watch {
   min-height: 540px;
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 .career-route-premises {
   display: grid;
@@ -4457,10 +4309,6 @@
   gap: 10px;
 }
 
-
-
-
-
 /* Complete account lifecycle */
 
 .career-account-panel {
@@ -4508,12 +4356,6 @@
   font-weight: 700;
   letter-spacing: 0.02em;
 }
-
-
-
-
-
-
 
 .career-account-tabs {
   display: grid;
@@ -4630,7 +4472,6 @@
 }
 
 @media (max-width: 1180px) {
-
   .career-command-center > .career-intelligence-panel {
     grid-column: 1 / -1;
     display: grid;
@@ -4658,10 +4499,6 @@
     padding-inline: 22px;
   }
 
-
-
-
-
   .career-command-center > .career-intelligence-panel {
     grid-row: 3;
     display: flex;
@@ -4671,7 +4508,6 @@
     border-right: 0;
     border-bottom: 1px solid var(--career-line);
   }
-
 }
 
 @media (max-width: 760px) {
@@ -4679,13 +4515,13 @@
     padding: 18px 12px 26px;
   }
 
-  .career-cabinet-header {
-    min-height: 0;
+  .career-page-header {
+    min-height: 82px;
     padding: 0 4px 16px;
     flex-wrap: wrap;
   }
 
-  .career-cabinet-header-right {
+  .career-page-header-right {
     width: 100%;
     justify-content: flex-start;
   }
@@ -4698,23 +4534,17 @@
     flex: 1;
   }
 
-  .career-cabinet-header h1,
-  .career-view-heading h1 {
+  .career-page-header h1 {
     font-size: var(--career-text-lg);
   }
 
-  .career-cabinet-header p {
+  .career-page-header p {
     font-size: var(--career-text-xs);
   }
 
   .career-cabinet-header-state {
     display: none;
   }
-
-
-
-
-
 
   /* Таргеты касания ≥ 44 px (DESIGN.md): кнопки строки вакансии и чипы
      фильтров были 28 px высотой (B232, ревью designer). */
@@ -4729,11 +4559,6 @@
 
   /* На телефоне вкладки переносятся: шесть подписей в одну строку уходили за
      край на 144 px, и «Цифровой след» существовал только на ощупь (B232). */
-
-
-
-
-
 
   .career-cabinet-panel-heading,
   .career-coach-topic,
@@ -5745,7 +5570,6 @@
   letter-spacing: 0.02em;
 }
 
-
 .career-resume-stanford-entry-header {
   display: grid;
   gap: 3px;
@@ -6495,10 +6319,6 @@
   margin: 0 0 var(--career-space-2);
 }
 
-
-
-
-
 .career-modal-error {
   display: flex;
   align-items: center;
@@ -6592,7 +6412,6 @@
   border-radius: 8px;
 }
 
-
 .career-modal-network-status.is-compact {
   min-width: 0;
   padding: 6px 10px;
@@ -6642,7 +6461,6 @@
 .career-modal-error svg {
   flex: none;
 }
-
 
 @media (prefers-reduced-motion: reduce) {
   .career-modal-backdrop {
@@ -7279,9 +7097,6 @@
 
 /* ---- «Пульт» · «Главная»: кандидат слева, оценка и разбор справа ------- */
 
-
-
-
 .career-home-panel {
   display: grid;
   gap: 12px;
@@ -7524,10 +7339,6 @@
   line-height: 1.5;
 }
 
-
-
-
-
 .career-measure-track {
   height: 5px;
   margin-top: 5px;
@@ -7577,13 +7388,6 @@
 .career-measure-fill[data-share='100'] {
   width: 100%;
 }
-
-
-
-
-
-
-
 
 /* ---- «Сегодня» (B251 S5): дайджест дня и очередь решений ---------------- */
 
@@ -7960,7 +7764,6 @@
 
 /* Узкий экран: рельс уходит под профиль, а не жмёт его до нечитаемого. */
 @media (max-width: 1180px) {
-
 }
 
 /* ---- «Пульт» · «Поиск»: кампания и её выборки в одном столбце ---------- */
@@ -8028,7 +7831,6 @@
   font-size: var(--career-text-xs);
   font-weight: 600;
 }
-
 
 .career-vacancy-role::placeholder,
 .career-vacancy-search input::placeholder {
@@ -8463,13 +8265,6 @@
    вёрстка перенесены из макета один в один, тон — фирменный.
    ========================================================================== */
 
-
-
-
-
-
-
-
 .career-pill {
   display: inline-flex;
   align-items: center;
@@ -8503,12 +8298,6 @@
   background: var(--career-surface-raised);
 }
 
-
-
-
-
-
-
 .career-job-list {
   display: flex;
   flex-direction: column;
@@ -8533,7 +8322,6 @@
 .career-job-card.is-warn {
   border-color: var(--career-warning-soft);
 }
-
 
 .career-job-card.is-good .career-job-signal {
   background: var(--career-success);
@@ -8577,29 +8365,14 @@
   font-weight: 650;
 }
 
-
 /* Работодатель и место в очереди — слова, не числа: без mono (B233). */
 .career-job-meta {
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
 }
 
-
-
-
-
-
-
-
 /* Свёрнутые разделы под профилем на Главной (B233). Заголовок раздела внутри
    не повторяется: его называет summary. */
-
-
-
-
-
-
-
 
 /* Summary называет раздел; дубль заголовка прячется только у первой секции,
    остальные (Стратегия, задания) остаются с именами (ревью designer). */
@@ -8619,18 +8392,6 @@
   width: auto;
   justify-self: start;
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 /* ==========================================================================
    B179 — «Поиск» из макета «Пульт»: кампания, плитки, воронка и очередь.
@@ -8856,9 +8617,6 @@
     overflow-wrap: anywhere;
   }
 }
-
-
-
 
 .career-automation-panel > header {
   flex-wrap: wrap;
@@ -10936,13 +10694,6 @@
    B226: Application Follow-up Tracker & Interview Prep Hub
    ========================================================================== */
 
-
-
-
-
-
-
-
 .career-followup-badge.is-accent {
   background: var(--career-accent-soft);
   color: var(--career-accent);
@@ -10955,23 +10706,11 @@
   border-color: var(--career-warning);
 }
 
-
-
-
-
-
-
-
-
-
 .career-followup-copy-btn.is-success {
   background: var(--career-success-soft);
   color: var(--career-success);
   border-color: var(--career-success);
 }
-
-
-
 
 .career-interview-backdrop {
   position: fixed;
@@ -11560,8 +11299,6 @@
   background: var(--career-surface);
 }
 
-
-
 .career-profile-screen-edit-body {
   grid-column: 1 / -1;
   margin-top: var(--career-space-3);
@@ -11671,7 +11408,6 @@
   gap: var(--career-space-2);
   flex-wrap: wrap;
 }
-
 
 .career-profile-screen-document-menu {
   border: 1px solid var(--career-line-strong);

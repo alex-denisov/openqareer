@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChatCircleDots, Check } from '@phosphor-icons/react';
 import { CURRENT_PLAN, tariffPackages as packages } from './tariffPackages';
 import { usePlanRequests, type PlanRequestState } from './planRequestApi';
+import { PageHeader } from './PageHeader';
 
 export function CareerTariffsView({ onOpenCoach }: { onOpenCoach: () => void }) {
   // Экран открывается на плане, который у кандидата действительно есть.
@@ -12,19 +13,17 @@ export function CareerTariffsView({ onOpenCoach }: { onOpenCoach: () => void }) 
   const plan = packages.find((item) => item.id === selected) ?? packages[0];
   return (
     <div className="career-view career-simple-view">
-      <header className="career-view-heading">
-        <div>
-          <p className="career-eyebrow">Тарифы</p>
-          <h1>Сколько делать за вас</h1>
-          <p className="career-plan-payment-state">
-            Оплата не подключена: сейчас у всех план «{CURRENT_PLAN.name}».
-          </p>
-        </div>
-        <button className="career-icon-text-button" type="button" onClick={onOpenCoach}>
-          <ChatCircleDots size={18} aria-hidden="true" />
-          Помочь выбрать
-        </button>
-      </header>
+      <PageHeader
+        kicker="Тарифы"
+        title="Сколько делать за вас"
+        description={`Оплата не подключена: сейчас у всех план «${CURRENT_PLAN.name}».`}
+        right={
+          <button className="career-icon-text-button" type="button" onClick={onOpenCoach}>
+            <ChatCircleDots size={18} aria-hidden="true" />
+            Помочь выбрать
+          </button>
+        }
+      />
       <div className="career-plan-layout">
         <div className="career-plan-picker" aria-label="Тарифы">
           {packages.map((item) => (

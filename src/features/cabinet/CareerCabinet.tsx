@@ -18,6 +18,7 @@ import type { ApplicationView } from '../applications/applicationsApi';
 import { ResponsesBoard } from '../applications/ResponsesBoard';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
+import { PageHeader } from '../shell/PageHeader';
 import { buildPathIndicator } from '../shell/pathIndicator';
 import { useCareerCabinetData } from './useCareerCabinetData';
 import {
@@ -159,7 +160,11 @@ export function CareerCabinet({
             loading={data.loading && Boolean(data.snapshot)}
             error={data.error}
             onRetry={() => void data.refresh()}
-            tabs={view === 'profile' ? <ProfileTabs tab={profileTab} onTab={setProfileTab} /> : undefined}
+            tabs={
+              view === 'profile' ? (
+                <ProfileTabs tab={profileTab} onTab={setProfileTab} />
+              ) : undefined
+            }
           />
         ) : null}
         {pathIndicatorSteps && !showsVacanciesScreen ? (
@@ -316,7 +321,10 @@ function CabinetSection({
   }
   if (view === 'responses') {
     return (
-      <ResponsesBoard state={applicationsTracker} onOpenVacancies={() => onNavigate('opportunities')} />
+      <ResponsesBoard
+        state={applicationsTracker}
+        onOpenVacancies={() => onNavigate('opportunities')}
+      />
     );
   }
   return (
@@ -333,9 +341,7 @@ function CabinetSection({
       subscriptions={data.snapshot?.vacancySubscriptions ?? []}
       defaultQuery={pool.campaign?.roles.value[0] || targetDirection || undefined}
       onRefreshSavedSearch={data.refresh}
-      pathIndicator={
-        pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined
-      }
+      pathIndicator={pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined}
     />
   );
 }
@@ -360,36 +366,36 @@ function CabinetHeader({
   tabs?: ReactNode;
 }) {
   return (
-    <header className="career-cabinet-header">
-      <div>
-        <span className="career-cabinet-kicker">{view === 'responses' ? 'Пайплайн' : todayLabel()}</span>
-        <h1>{VIEW_TITLE[view]}</h1>
-        <p>{VIEW_DESCRIPTION[view]}</p>
-      </div>
-      {tabs || loading || error ? (
-        <div className="career-cabinet-header-right">
-          {tabs}
-          {loading || error ? (
-            <div className="career-cabinet-header-state">
-              {error ? (
-                <>
-                  <span className="is-error" role="alert">
-                    <WarningCircle size={16} weight="fill" />
-                    {error}
-                  </span>
-                  <button type="button" onClick={onRetry}>
-                    <ArrowClockwise size={15} />
-                    Повторить
-                  </button>
-                </>
-              ) : (
-                <span className="is-loading">Обновляем…</span>
-              )}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </header>
+    <PageHeader
+      kicker={VIEW_KICKER[view]}
+      title={VIEW_TITLE[view]}
+      description={VIEW_DESCRIPTION[view]}
+      right={
+        tabs || loading || error ? (
+          <>
+            {tabs}
+            {loading || error ? (
+              <div className="career-cabinet-header-state">
+                {error ? (
+                  <>
+                    <span className="is-error" role="alert">
+                      <WarningCircle size={16} weight="fill" />
+                      {error}
+                    </span>
+                    <button type="button" onClick={onRetry}>
+                      <ArrowClockwise size={15} />
+                      Повторить
+                    </button>
+                  </>
+                ) : (
+                  <span className="is-loading">Обновляем…</span>
+                )}
+              </div>
+            ) : null}
+          </>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -403,6 +409,15 @@ const VIEW_TITLE: Record<CareerCabinetView, string> = {
   career: 'Поиск',
   opportunities: 'Вакансии',
   responses: 'Отклики',
+};
+
+const VIEW_KICKER: Record<CareerCabinetView, string> = {
+  today: 'Личный кабинет',
+  profile: 'Личный кабинет',
+  resume: 'Личный кабинет',
+  career: 'Кампания',
+  opportunities: 'Кампания',
+  responses: 'Пайплайн',
 };
 
 // Шапка раздела говорит, что человек здесь получит, а не как устроен модуль
@@ -420,14 +435,6 @@ const VIEW_DESCRIPTION: Record<CareerCabinetView, string> = {
     'Весь активный поиск одним взглядом. Переписка, интервью и оффер живут на карточке — не отдельно.',
 };
 
-function todayLabel(): string {
-  return new Intl.DateTimeFormat('ru-RU', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  }).format(new Date());
-}
-
 /** Cards still live on the «Отклики» board — everything but rejected/archived (B251 S4). */
 function countActiveResponses(applications: readonly ApplicationView[]): number {
   return applications.filter(
@@ -442,12 +449,16 @@ function nearestInterviewOf(
   const withInterview = applications
     .filter((application) => application.nearestInterview?.scheduledAt)
     .sort((a, b) =>
-      (a.nearestInterview?.scheduledAt as string).localeCompare(b.nearestInterview?.scheduledAt as string),
+      (a.nearestInterview?.scheduledAt as string).localeCompare(
+        b.nearestInterview?.scheduledAt as string,
+      ),
     );
   const nearest = withInterview[0];
   if (!nearest?.nearestInterview?.scheduledAt) return null;
   return {
-    company: nearest.vacancy?.companyHidden ? 'Компания скрыта' : nearest.vacancy?.company || 'Компания не указана',
+    company: nearest.vacancy?.companyHidden
+      ? 'Компания скрыта'
+      : nearest.vacancy?.company || 'Компания не указана',
     scheduledAt: nearest.nearestInterview.scheduledAt,
   };
 }

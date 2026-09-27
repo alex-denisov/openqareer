@@ -342,7 +342,7 @@ test.describe('B250 vacancies screen', () => {
     await openVacancies(page);
 
     await expect(page.locator('.vacancies-screen h1')).toHaveText('Вакансии');
-    await expect(page.locator('.career-eyebrow')).toContainText('Enterprise Architect');
+    await expect(page.locator('.career-page-header-kicker')).toContainText('Enterprise Architect');
 
     if (testInfo.project.name === 'mobile-390') {
       await page.getByRole('button', { name: 'Фильтры и сохранённые запросы' }).click();
