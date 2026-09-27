@@ -1127,6 +1127,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
   } else {
     await vacAge.waitFor({ state: 'attached' });
   }
+  if (viewport.width <= 1023) {
+    await page.getByRole('button', { name: 'Фильтры и сохранённые запросы' }).click();
+  }
   // Фильтр свежести обязан отсечь запись девятнадцатидневной давности.
   await page.getByRole('button', { name: '7 дней', exact: true }).click();
   assert(
