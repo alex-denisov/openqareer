@@ -135,13 +135,38 @@ function readPublishedAt(vacancy: Record<string, unknown>, fallback: string): st
   return created || fallback;
 }
 
-/** Карточка поиска отдаёт выжимку, достаточную для первичной сверки кандидата. */
-function readSnippet(vacancy: Record<string, unknown>): string {
+interface HhDescriptionData {
+  readonly description: string;
+  readonly responsibilities?: readonly string[];
+  readonly qualifications?: readonly string[];
+}
+
+/**
+ * Чтение описания и сниппета со страницы выдачи hh.ru (C62).
+ * Если полного описания нет, берётся сниппет (требования и обязанности из ответа поиска)
+ * с очисткой тегов подсветки (<highlight>).
+ */
+function readHhDescription(vacancy: Record<string, unknown>): HhDescriptionData {
+  const direct = text(vacancy.description);
+  if (direct) {
+    return { description: htmlToFeedText(direct) };
+  }
+
   const snippet = record(vacancy.snippet);
-  return [snippet.requirement, snippet.responsibility]
-    .map((value) => htmlToFeedText(text(value)))
-    .filter(Boolean)
-    .join('\n\n');
+  const requirement = htmlToFeedText(text(snippet.requirement));
+  const responsibility = htmlToFeedText(text(snippet.responsibility));
+
+  const parts = [responsibility, requirement].filter(Boolean);
+  let description = parts.join('\n\n');
+  if (!description && typeof vacancy.snippet === 'string' && vacancy.snippet.trim()) {
+    description = htmlToFeedText(vacancy.snippet);
+  }
+
+  return {
+    description,
+    ...(responsibility ? { responsibilities: [responsibility] } : {}),
+    ...(requirement ? { qualifications: [requirement] } : {}),
+  };
 }
 
 function readVacancy(value: unknown, context: HhSearchStateContext): UnifiedVacancy | null {
@@ -157,6 +182,7 @@ function readVacancy(value: unknown, context: HhSearchStateContext): UnifiedVaca
   const externalId = text(vacancy.vacancyId);
   const id = `${HH_SEARCH_SOURCE_ID}:${externalId || url}`;
   const location = htmlToFeedText(text(record(vacancy.area).name));
+  const descData = readHhDescription(vacancy);
 
   return {
     id,
@@ -166,10 +192,10 @@ function readVacancy(value: unknown, context: HhSearchStateContext): UnifiedVaca
     ...(location ? { location } : {}),
     isRemote: readIsRemote(vacancy.workFormats),
     ...(readSalary(vacancy.compensation) ? { salary: readSalary(vacancy.compensation) } : {}),
-    // Полный текст живёт на карточке вакансии, но выдача несёт честную выжимку
-    // требований и обязанностей. Она нужна до ленивого дочитывания карточки.
-    description: readSnippet(vacancy),
+    description: descData.description,
     requiredSkills: [],
+    ...(descData.responsibilities ? { responsibilities: [...descData.responsibilities] } : {}),
+    ...(descData.qualifications ? { qualifications: [...descData.qualifications] } : {}),
     ...(text(vacancy.employmentForm) ? { employmentType: text(vacancy.employmentForm) } : {}),
     ...(text(vacancy.workExperience) ? { experienceLevel: text(vacancy.workExperience) } : {}),
     url,
