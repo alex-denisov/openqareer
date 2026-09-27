@@ -3,6 +3,7 @@ import { searchRemotiveVacancies } from '../connectors/remotiveVacancySearch';
 import { HhCrawlCoordinator } from './hhCrawlCoordinator';
 import { createHhCrawlSettings, type SqliteHhCrawlSettings } from './hhCrawlSettings';
 import { buildHhPageFetcher } from './hhSearchTransport';
+import { HhVacancyDescriptionLoader } from './hhVacancyDescription';
 import { createHttpLinkProbe } from './linkLivenessProbe';
 import { buildMultiSourceFetcher, fetchRobotsTxt } from './multiSourceFetcher';
 import type { LinkProbe } from './linkLivenessProbe';
@@ -50,8 +51,9 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
   // Настройки веера обхода hh.ru: набор ролей выбирает владелец, отметка
   // глубокого прохода переживает выкат (B214).
   const hhCrawlSettings = createHhCrawlSettings({ databasePath: options.databasePath });
+  const hhPageFetcher = buildHhPageFetcher();
   const hhCrawlCoordinator = new HhCrawlCoordinator(hhCrawlSettings, {
-    fetchPage: buildHhPageFetcher(),
+    fetchPage: hhPageFetcher,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     // Быстрый проход останавливается на странице, где пул всё уже знает (B219).
     // Движок собирается ниже, поэтому спрашивается через замыкание, а не значением.
@@ -69,6 +71,10 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
     // может отдавать свежие даты у вакансий, которых на сайте уже нет (B200
     // срез 2).
     linkProbe: options.linkProbe ?? createHttpLinkProbe(),
+    descriptionLoader: new HhVacancyDescriptionLoader({
+      transport: hhPageFetcher,
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    }),
     ...(options.recluster ? { recluster: options.recluster } : {}),
   });
   return {

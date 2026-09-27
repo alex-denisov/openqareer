@@ -135,6 +135,15 @@ function readPublishedAt(vacancy: Record<string, unknown>, fallback: string): st
   return created || fallback;
 }
 
+/** Карточка поиска отдаёт выжимку, достаточную для первичной сверки кандидата. */
+function readSnippet(vacancy: Record<string, unknown>): string {
+  const snippet = record(vacancy.snippet);
+  return [snippet.requirement, snippet.responsibility]
+    .map((value) => htmlToFeedText(text(value)))
+    .filter(Boolean)
+    .join('\n\n');
+}
+
 function readVacancy(value: unknown, context: HhSearchStateContext): UnifiedVacancy | null {
   const vacancy = record(value);
   const url = text(record(vacancy.links).desktop);
@@ -157,9 +166,9 @@ function readVacancy(value: unknown, context: HhSearchStateContext): UnifiedVaca
     ...(location ? { location } : {}),
     isRemote: readIsRemote(vacancy.workFormats),
     ...(readSalary(vacancy.compensation) ? { salary: readSalary(vacancy.compensation) } : {}),
-    // Страница поиска описания не несёт — оно живёт на странице самой вакансии.
-    // Пустая строка честнее, чем склейка названия с городом под видом описания.
-    description: '',
+    // Полный текст живёт на карточке вакансии, но выдача несёт честную выжимку
+    // требований и обязанностей. Она нужна до ленивого дочитывания карточки.
+    description: readSnippet(vacancy),
     requiredSkills: [],
     ...(text(vacancy.employmentForm) ? { employmentType: text(vacancy.employmentForm) } : {}),
     ...(text(vacancy.workExperience) ? { experienceLevel: text(vacancy.workExperience) } : {}),

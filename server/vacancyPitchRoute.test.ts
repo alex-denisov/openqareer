@@ -11,6 +11,7 @@ import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
 import { MemoryVacancyPoolStore } from './vacancies/memoryVacancyPoolStore';
 import type { VacancyCluster } from './domain/unifiedVacancy';
 import type { CoverLetterWriter } from './providers/coverLetterWriter';
+import type { VacancyDescriptionLoader } from './vacancies/multiSourceVacancyEngine';
 import { normalizeJsonSource } from './vacancies/jsonSourceAdapters';
 import {
   SqliteTitleParseStore,
@@ -45,6 +46,7 @@ async function createApp(
     persisted?: boolean;
     coverLetterWriter?: CoverLetterWriter;
     titleParse?: TitleParseEntry;
+    descriptionLoader?: VacancyDescriptionLoader;
   } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-pitch-routes-'));
@@ -71,6 +73,7 @@ async function createApp(
   const multiSourceEngine = new MultiSourceVacancyEngine({
     pool: poolStore,
     recluster: { mode: 'sync' },
+    ...(options.descriptionLoader ? { descriptionLoader: options.descriptionLoader } : {}),
   });
 
   if (options.persisted) {
@@ -730,6 +733,49 @@ describe('GET /api/v1/candidate/vacancies/:id/detail (B266)', () => {
       description: 'Short summary only',
       truncated: true,
     });
+  });
+
+  it('дочитывает полное описание hh только по запросу «Подробнее» и сохраняет его', async () => {
+    const hhCluster = { ...cluster, id: 'cluster-src-hh-search:9001' };
+    const loader: VacancyDescriptionLoader = {
+      load: vi.fn().mockResolvedValue('Полный текст hh-вакансии'),
+    };
+    const { app, poolStore } = await createApp([hhCluster], { descriptionLoader: loader });
+    poolStore.mergeSourceSlice('src-hh-search', [
+      {
+        id: 'src-hh-search:9001',
+        fingerprint: 'src-hh-search:9001',
+        title: 'VP of Technology',
+        company: 'Arctic Wolf',
+        description: 'Короткий сниппет',
+        requiredSkills: [],
+        isRemote: true,
+        url: 'https://hh.ru/vacancy/9001',
+        publishedAt: '2026-09-17T00:00:00.000Z',
+        status: 'active',
+        provenance: {
+          sourceType: 'json_api',
+          sourceId: 'src-hh-search',
+          sourceUrl: 'https://hh.ru/vacancy/9001',
+          observedAt: '2026-09-17T00:00:00.000Z',
+        },
+      },
+    ]);
+    const { cookie } = await login(app);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/vacancies/cluster-src-hh-search%3A9001/detail',
+      headers: { cookie },
+    });
+
+    expect(response.json().data).toMatchObject({
+      description: 'Полный текст hh-вакансии',
+      truncated: false,
+    });
+    expect(loader.load).toHaveBeenCalledTimes(1);
+    expect(poolStore.getVacancy('src-hh-search:9001')?.fullDescription).toBe(
+      'Полный текст hh-вакансии',
+    );
   });
 
   it('answers 404 for an unknown vacancy', async () => {

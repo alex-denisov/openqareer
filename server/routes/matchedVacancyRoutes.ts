@@ -31,7 +31,7 @@ function elapsedMs(startedAt: number): number {
 
 function finishMatchedVacancies(
   snapshot: readonly MatchedVacancyItem[],
-  targetRoles: readonly string[],
+  targetRoles: string[],
   campaign: CampaignResolution,
   candidateStore: RouteDeps['candidateStore'],
   candidateId: string,
@@ -49,31 +49,129 @@ function finishMatchedVacancies(
 }
 
 function buildMatchedResponse(
-  snapshot: readonly MatchedVacancyItem[], targetRoles: readonly string[], campaign: CampaignResolution,
-  candidateStore: RouteDeps['candidateStore'], candidateId: string,
-  targetLevel: ReturnType<typeof readTargetLevel>, titleParseStore: RouteDeps['titleParseStore'], offset: number,
+  snapshot: readonly MatchedVacancyItem[],
+  targetRoles: string[],
+  campaign: CampaignResolution,
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+  targetLevel: ReturnType<typeof readTargetLevel>,
+  titleParseStore: RouteDeps['titleParseStore'],
+  offset: number,
 ) {
   const pageAndExplanationsStartedAt = performance.now();
-  const matched = finishMatchedVacancies(snapshot, targetRoles, campaign, candidateStore, candidateId);
-  const hypothesisSnapshot = campaign.remoteOnly ? snapshot.filter((item) => item.cluster.isRemote) : snapshot;
+  const matched = finishMatchedVacancies(
+    snapshot,
+    targetRoles,
+    campaign,
+    candidateStore,
+    candidateId,
+  );
+  const hypothesisSnapshot = campaign.remoteOnly
+    ? snapshot.filter((item) => item.cluster.isRemote)
+    : snapshot;
   const counts = countMatchedVacanciesByRole(hypothesisSnapshot, targetRoles);
   const campaignWithHypotheses = readCampaign(candidateStore, candidateId, counts);
   const page = buildMatchedVacancyPage(matched, offset);
   const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt);
   const titleParseStartedAt = performance.now();
-  const data = addStoredVacancyLevels(page.items, targetLevel, (key) => titleParseStore.getByKey(key));
-  return { data, page, campaignWithHypotheses, pageAndExplanationsMs, titleParseAndLevelsMs: elapsedMs(titleParseStartedAt) };
+  const data = addStoredVacancyLevels(page.items, targetLevel, (key) =>
+    titleParseStore.getByKey(key),
+  );
+  return {
+    data,
+    page,
+    campaignWithHypotheses,
+    pageAndExplanationsMs,
+    titleParseAndLevelsMs: elapsedMs(titleParseStartedAt),
+  };
 }
 
 function logMatchedTiming(
-  request: FastifyRequest, mode: 'legacy' | 'semantic', cold: boolean,
-  candidateCampaignMs: number, semanticQueryAndSqlMs: number, response: ReturnType<typeof buildMatchedResponse>, requestStartedAt: number,
+  request: FastifyRequest,
+  mode: 'legacy' | 'semantic',
+  cold: boolean,
+  candidateCampaignMs: number,
+  semanticQueryAndSqlMs: number,
+  response: ReturnType<typeof buildMatchedResponse>,
+  requestStartedAt: number,
 ): void {
-  request.log.info({
-    mode, cold, candidateCampaignMs, semanticQueryAndSqlMs, clusterJsonAndClustersMs: 0,
-    titleParseAndLevelsMs: response.titleParseAndLevelsMs,
-    pageAndExplanationsMs: response.pageAndExplanationsMs, enrichmentsMs: elapsedMs(requestStartedAt),
-  }, 'matched-vacancies-timing');
+  request.log.info(
+    {
+      mode,
+      cold,
+      candidateCampaignMs,
+      semanticQueryAndSqlMs,
+      clusterJsonAndClustersMs: 0,
+      titleParseAndLevelsMs: response.titleParseAndLevelsMs,
+      pageAndExplanationsMs: response.pageAndExplanationsMs,
+      enrichmentsMs: elapsedMs(requestStartedAt),
+    },
+    'matched-vacancies-timing',
+  );
+}
+
+function preloadFirstPageDescriptions(
+  engine: RouteDeps['multiSourceEngine'],
+  items: readonly MatchedVacancyItem[],
+  offset: number,
+): void {
+  if (offset !== 0) return;
+  if (typeof engine.preloadVacancyDescriptions !== 'function') return;
+  const ids = items.map((item) => item.cluster.id.replace(/^cluster-/u, ''));
+  void engine.preloadVacancyDescriptions(ids);
+}
+
+async function readMatchedPage(
+  engine: RouteDeps['multiSourceEngine'],
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+  confirmedSkills: string[],
+  targetRoles: string[],
+  targetLevel: ReturnType<typeof readTargetLevel>,
+  campaign: CampaignResolution,
+  titleParseStore: RouteDeps['titleParseStore'],
+  offset: number,
+) {
+  const startedAt = performance.now();
+  const snapshot = await readMatchedSnapshot(
+    engine,
+    candidateId,
+    confirmedSkills,
+    targetRoles,
+    targetLevel,
+  );
+  return {
+    response: buildMatchedResponse(
+      snapshot,
+      targetRoles,
+      campaign,
+      candidateStore,
+      candidateId,
+      targetLevel,
+      titleParseStore,
+      offset,
+    ),
+    semanticQueryAndSqlMs: elapsedMs(startedAt),
+  };
+}
+
+function matchedVacancyResponse(
+  response: ReturnType<typeof buildMatchedResponse>,
+  requestId: string,
+  targetLevel: ReturnType<typeof readTargetLevel>,
+) {
+  return {
+    data: response.data,
+    meta: {
+      requestId,
+      total: response.page.total,
+      offset: response.page.offset,
+      nextOffset: response.page.nextOffset,
+      ...(response.page.pageOffsets ? { pageOffsets: response.page.pageOffsets } : {}),
+      campaign: campaignMeta(response.campaignWithHypotheses),
+      candidateLevel: targetLevel ?? null,
+    },
+  };
 }
 
 const handleMatchedVacancies: Handler = async (
@@ -98,36 +196,32 @@ const handleMatchedVacancies: Handler = async (
   }
 
   const targetLevel = readTargetLevel(candidateStore, candidate.id, targetRoles);
-  const semanticQueryStartedAt = performance.now();
-  const snapshot = await readMatchedSnapshot(
+  const { response, semanticQueryAndSqlMs } = await readMatchedPage(
     multiSourceEngine,
+    candidateStore,
     candidate.id,
     confirmedSkills,
     targetRoles,
     targetLevel,
+    campaign,
+    titleParseStore,
+    offset,
   );
-  const semanticQueryAndSqlMs = elapsedMs(semanticQueryStartedAt);
-  const response = buildMatchedResponse(
-    snapshot, targetRoles, campaign, candidateStore, candidate.id, targetLevel, titleParseStore, offset,
-  );
+
+  // Чтение последовательное и не задерживает ответ списка: массового обхода нет.
+  preloadFirstPageDescriptions(multiSourceEngine, response.page.items, offset);
 
   logMatchedTiming(
-    request, config.matchMode ?? 'legacy', cold, candidateCampaignMs,
-    semanticQueryAndSqlMs, response, requestStartedAt,
+    request,
+    config.matchMode ?? 'legacy',
+    cold,
+    candidateCampaignMs,
+    semanticQueryAndSqlMs,
+    response,
+    requestStartedAt,
   );
 
-  return {
-    data: response.data,
-    meta: {
-      requestId: request.id,
-      total: response.page.total,
-      offset: response.page.offset,
-      nextOffset: response.page.nextOffset,
-      ...(response.page.pageOffsets ? { pageOffsets: response.page.pageOffsets } : {}),
-      campaign: campaignMeta(response.campaignWithHypotheses),
-      candidateLevel: targetLevel ?? null,
-    },
-  };
+  return matchedVacancyResponse(response, request.id, targetLevel);
 };
 
 export function registerMatchedVacancyRoutes(app: FastifyInstance, deps: RouteDeps): void {
