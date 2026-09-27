@@ -6,6 +6,9 @@ interface VacancyHypothesisBannerProps {
   readonly vacancyCount: number;
   readonly adjacentRole?: { readonly id: string; readonly title: string };
   readonly availableRegions: readonly CandidateRegionProfile[];
+  /** Кандидат сам сузил регион (`campaign.regions.origin === 'explicit'`) —
+   *  иначе кнопка предлагает первый выбор региона, а не «расширение». */
+  readonly regionsChosenExplicitly: boolean;
   readonly regionsOpen: boolean;
   readonly remoteOnly: boolean;
   readonly saving: boolean;
@@ -52,6 +55,7 @@ export function VacancyHypothesisBanner(props: VacancyHypothesisBannerProps) {
 function CampaignActionButtons({
   adjacentRole,
   availableRegions,
+  regionsChosenExplicitly,
   regionsOpen,
   remoteOnly,
   saving,
@@ -62,6 +66,7 @@ function CampaignActionButtons({
   VacancyHypothesisBannerProps,
   | 'adjacentRole'
   | 'availableRegions'
+  | 'regionsChosenExplicitly'
   | 'regionsOpen'
   | 'remoteOnly'
   | 'saving'
@@ -69,6 +74,7 @@ function CampaignActionButtons({
   | 'onToggleRegions'
   | 'onToggleRemote'
 >) {
+  const expandLabel = regionsChosenExplicitly ? 'Расширить географию' : 'Выбрать регион';
   return (
     <div className="vacancy-hypothesis-actions" aria-label="Как изменить кампанию">
       <AdjacentRoleAction role={adjacentRole} saving={saving} onSelect={onAddAdjacentRole} />
@@ -79,7 +85,7 @@ function CampaignActionButtons({
         onClick={onToggleRegions}
         disabled={saving || availableRegions.length === 0}
       >
-        {regionsOpen ? 'Скрыть регионы' : 'Расширить географию'}
+        {regionsOpen ? 'Скрыть регионы' : expandLabel}
       </button>
       {/* Баннер только расширяет выдачу: «только удалённо» сужает её, поэтому здесь его можно лишь снять. */}
       {remoteOnly ? (

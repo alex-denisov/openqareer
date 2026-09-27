@@ -1,15 +1,12 @@
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { vacancyAge } from './vacancyFilters';
 import { formatCompensationCompact } from './vacancyCompensation';
-import { FitDot } from './VacanciesScreen';
-import type { VacancyLevelMatch } from '../../../shared/vacancyMatchOrder';
-import { vacancyLevelMatchLabel } from './vacancyLevelMatch';
+import type { VacancyLevelMatch, VacancyRoleMatch } from '../../../shared/vacancyMatchOrder';
 
 /**
  * Одна строка списка «Вакансии» (B248/B250): логотип-инициалы, заголовок и
- * подзаголовок компания/гео/формат, три fit-dot (роль/уровень/гео), вилка и
- * возраст записи. Клик открывает карточку в детальной панели — сама панель
- * это следующий срез, здесь только выделение строки.
+ * подзаголовок компания/гео/формат, три чипа статуса («Роль», «Уровень», «Гео»),
+ * вилка и возраст записи.
  */
 export function VacancyRow({
   item,
@@ -24,6 +21,7 @@ export function VacancyRow({
 }) {
   const { cluster, explanation } = item;
   const age = vacancyAge(cluster, now);
+
   return (
     <li className="vac-list-item">
       <button
@@ -41,11 +39,7 @@ export function VacancyRow({
           <span className="vac-meta">
             <span className="vac-comp">{formatCompensationCompact(cluster.salary)}</span>
             <span className="vac-age">{age.label}</span>
-            <span className="vac-fit">
-              <FitDot isYes={explanation.roleMatch === 'target'} title="Семья ролей" />
-              <VacancyLevelDot match={explanation.levelMatch} />
-              <FitDot isYes={!explanation.outsideGeography} title="География" />
-            </span>
+            <VacancyFitChips explanation={explanation} />
           </span>
         </span>
       </button>
@@ -53,16 +47,110 @@ export function VacancyRow({
   );
 }
 
-function VacancyLevelDot({ match }: { readonly match: VacancyLevelMatch }) {
-  const title = vacancyLevelMatchLabel(match);
+function VacancyFitChips({
+  explanation,
+}: {
+  readonly explanation: MatchedVacancyItem['explanation'];
+}) {
+  const roleChip = roleChipDetails(explanation.roleMatch);
+  const levelChip = levelChipDetails(explanation.levelMatch);
+  const geoChip = geoChipDetails(explanation.outsideGeography);
+
   return (
-    <FitDot
-      isYes={match === 'match'}
-      isUnknown={match === 'unknown'}
-      title={title}
-      ariaLabel={title}
-    />
+    <span className="vac-fit">
+      <VacancyFitChip
+        label="Роль"
+        status={roleChip.status}
+        tone={roleChip.tone}
+        title={roleChip.title}
+      />
+      <VacancyFitChip
+        label="Уровень"
+        status={levelChip.status}
+        tone={levelChip.tone}
+        title={levelChip.title}
+        ariaLabel={levelChip.title}
+      />
+      <VacancyFitChip
+        label="Гео"
+        status={geoChip.status}
+        tone={geoChip.tone}
+        title={geoChip.title}
+      />
+    </span>
   );
+}
+
+interface VacancyFitChipProps {
+  readonly label: 'Роль' | 'Уровень' | 'Гео';
+  readonly status: 'совпадает' | 'рядом' | 'нет';
+  readonly tone: 'yes' | 'nearby' | 'no' | 'unknown';
+  readonly title: string;
+  readonly ariaLabel?: string;
+}
+
+function VacancyFitChip({ label, status, tone, title, ariaLabel }: VacancyFitChipProps) {
+  const toneClass =
+    tone === 'yes'
+      ? 'is-yes'
+      : tone === 'nearby'
+        ? 'is-nearby'
+        : tone === 'unknown'
+          ? 'is-unknown'
+          : 'is-no';
+
+  return (
+    <span
+      className={`vac-fit-chip fit-dot ${toneClass}`}
+      title={title}
+      aria-label={ariaLabel ?? `${label}: ${status}. ${title}`}
+    >
+      <span className="vac-fit-label">{label}</span>
+      <span className="vac-fit-status">{status}</span>
+    </span>
+  );
+}
+
+function roleChipDetails(roleMatch: VacancyRoleMatch): {
+  readonly status: 'совпадает' | 'рядом' | 'нет';
+  readonly tone: 'yes' | 'nearby' | 'no';
+  readonly title: string;
+} {
+  if (roleMatch === 'target') {
+    return { status: 'совпадает', tone: 'yes', title: 'Семья ролей: совпадает' };
+  }
+  if (roleMatch === 'partial') {
+    return { status: 'рядом', tone: 'nearby', title: 'Смежная роль' };
+  }
+  return { status: 'нет', tone: 'no', title: 'Семья ролей: не совпадает' };
+}
+
+function levelChipDetails(levelMatch: VacancyLevelMatch): {
+  readonly status: 'совпадает' | 'рядом' | 'нет';
+  readonly tone: 'yes' | 'nearby' | 'no' | 'unknown';
+  readonly title: string;
+} {
+  if (levelMatch === 'match') {
+    return { status: 'совпадает', tone: 'yes', title: 'Уровень совпадает' };
+  }
+  if (levelMatch === 'below') {
+    return { status: 'рядом', tone: 'nearby', title: 'Вакансия ниже целевого уровня' };
+  }
+  if (levelMatch === 'above') {
+    return { status: 'рядом', tone: 'nearby', title: 'Вакансия выше целевого уровня' };
+  }
+  return { status: 'нет', tone: 'unknown', title: 'Уровень не распознан' };
+}
+
+function geoChipDetails(outsideGeography?: boolean): {
+  readonly status: 'совпадает' | 'рядом' | 'нет';
+  readonly tone: 'yes' | 'no';
+  readonly title: string;
+} {
+  if (!outsideGeography) {
+    return { status: 'совпадает', tone: 'yes', title: 'География: совпадает' };
+  }
+  return { status: 'нет', tone: 'no', title: 'География: не совпадает' };
 }
 
 function logoInitials(company: string): string {

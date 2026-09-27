@@ -30,6 +30,9 @@ interface VacancyDetailPanelProps {
    * C47): without this door the tracker card was reachable only by rail
    * click, and nothing told the candidate it existed. */
   readonly onOpenResponses?: () => void;
+  /** Opens the profile so the candidate can add the experience that covers
+   * the requirement; without a handler the button is not rendered. */
+  readonly onAddToProfile?: () => void;
 }
 
 export function VacancyDetailPanel({
@@ -38,6 +41,7 @@ export function VacancyDetailPanel({
   applications,
   onBack,
   onOpenResponses,
+  onAddToProfile,
 }: VacancyDetailPanelProps) {
   const { cluster, explanation } = item;
   const age = vacancyAge(cluster, now);
@@ -63,9 +67,12 @@ export function VacancyDetailPanel({
         tone="yes"
       />
       <VacancyRequirementList
-        title="Не подтверждено — спросят на интервью"
+        title="Требования вакансии, которых нет в вашем профиле"
+        subtitle="Подтвердите опытом в профиле — или будьте готовы обсудить на интервью"
         points={explanation.missingPoints}
         tone="no"
+        actionLabel="Добавить в профиль"
+        onAction={onAddToProfile}
       />
 
       <div className="vacancies-req-block">
@@ -311,23 +318,41 @@ function VacancySignalGrid({
 
 function VacancyRequirementList({
   title,
+  subtitle,
   points,
   tone,
+  actionLabel,
+  onAction,
 }: {
   readonly title: string;
+  readonly subtitle?: string;
   readonly points: readonly string[];
   readonly tone: 'yes' | 'no';
+  readonly actionLabel?: string;
+  readonly onAction?: () => void;
 }) {
   if (points.length === 0) return null;
   const Icon = tone === 'yes' ? Check : Warning;
   return (
     <div className="vacancies-req-block">
       <h4>{title}</h4>
+      {subtitle ? <p className="vacancies-req-subtitle">{subtitle}</p> : null}
       <ul className="vacancies-req-list">
         {points.map((point) => (
           <li className={`vacancies-req-${tone}`} key={point}>
-            <Icon size={14} weight="bold" aria-hidden="true" />
-            <span>{point}</span>
+            <div className="vacancies-req-item-main">
+              <Icon size={14} weight="bold" aria-hidden="true" />
+              <span>{point}</span>
+            </div>
+            {actionLabel && onAction ? (
+              <button
+                type="button"
+                className="vacancies-req-action-btn"
+                onClick={onAction}
+              >
+                {actionLabel}
+              </button>
+            ) : null}
           </li>
         ))}
       </ul>

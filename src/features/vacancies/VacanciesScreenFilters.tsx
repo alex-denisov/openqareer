@@ -5,7 +5,8 @@ import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import { VacancyRow } from './VacancyRow';
 
 export interface VacanciesScreenState {
-  readonly role?: string;
+  /** Пусто = «Все роли кампании» (по умолчанию); иначе — мультивыбор. */
+  readonly roles: readonly string[];
   readonly regions: readonly string[];
   readonly remoteOnly: boolean;
   readonly freshnessDays?: number;
@@ -105,14 +106,29 @@ function RoleHypothesesGroup({
   if (roleHypotheses.length === 0) return null;
   return (
     <FieldGroup title="Роль кампании">
+      <button
+        type="button"
+        className={`vacancies-chip vacancies-chip-accent${state.roles.length === 0 ? ' is-selected' : ''}`}
+        aria-pressed={state.roles.length === 0}
+        onClick={() => onChange((prev) => ({ ...prev, roles: [] }))}
+      >
+        Все роли кампании
+      </button>
       {roleHypotheses.map((hypothesis) => (
         <RoleChip
           key={hypothesis.role}
           role={hypothesis.role}
           vacancyCount={hypothesis.vacancyCount}
           isHypothesis={hypothesis.isHypothesis}
-          isSelected={state.role === hypothesis.role}
-          onSelect={() => onChange((prev) => ({ ...prev, role: hypothesis.role }))}
+          isSelected={state.roles.includes(hypothesis.role)}
+          onSelect={() =>
+            onChange((prev) => ({
+              ...prev,
+              roles: prev.roles.includes(hypothesis.role)
+                ? prev.roles.filter((role) => role !== hypothesis.role)
+                : [...prev.roles, hypothesis.role],
+            }))
+          }
         />
       ))}
     </FieldGroup>
