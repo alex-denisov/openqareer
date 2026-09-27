@@ -1,28 +1,33 @@
-// CJM 2 — Роль и рынок: выбрать 1–3 роли и географию → кампания.
+// CJM 2 — Роль и рынок: проверить роли, географию и рынок кампании.
 // Учётка: adenisov.test (OPENQAREER_OWNER_TEST_*) — полный профиль LinkedIn.
 import { openCjmRun } from './lib/capture.mjs';
 import { ensureSession } from './lib/session.mjs';
+import { clickCabinetSection } from './lib/navigation.mjs';
 
-export async function runCjm2(outDir) {
-  const statePath = await ensureSession('owner');
+export async function runCjm2(outDir, sharedStatePath) {
+  const statePath = sharedStatePath ?? (await ensureSession('owner'));
   const run = await openCjmRun('cjm2', statePath, outDir);
 
   await run.gotoBoth('/app', 6000);
 
   await run.step('search-open', {
     wait: 3000,
-    note: 'Шаг «Роль» индикатора пути — кампания и предложенные роли',
-    act: async (page) => {
-      // «Поиск» has no rail item in the B248 IA; it opens from the path
-      // indicator's «Роль» step, which every campaign screen carries.
-      const btn = page.getByRole('button', { name: /^Роль\./ }).first();
-      await btn.click();
+    note: 'Кампания открывается через актуальную навигацию «Вакансии»',
+    act: async (page, vp) => {
+      await clickCabinetSection(page, 'Вакансии', vp);
     },
   });
 
   await run.step('search-roles', {
     wait: 5000,
-    note: 'Блок «Роли и рынок» — совпадает ли кампания с предложенными ролями и профилем',
+    note: 'Актуальный экран кампании показывает список и фильтры ролей/географии',
+    act: async (page, vp) => {
+      if (vp === '390') {
+        await page
+          .getByRole('button', { name: 'Фильтры и сохранённые запросы', exact: true })
+          .click();
+      }
+    },
   });
 
   const result = await run.close();
@@ -34,7 +39,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const r = await runCjm2(outDir);
   console.log(
     JSON.stringify(
-      { cjm: r.cjm, steps: r.steps.map((s) => s.name), consoleErrors: r.consoleErrors },
+      { cjm: r.cjm, steps: r.steps.map((s) => s.name), runtimeErrors: r.runtimeErrors },
       null,
       2,
     ),

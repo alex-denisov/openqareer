@@ -23,16 +23,17 @@ function statePathFor(role) {
 export async function ensureSession(role, { force = false } = {}) {
   mkdirSync(STATE_DIR, { recursive: true });
   const statePath = statePathFor(role);
-
-  if (!force && existsSync(statePath)) {
-    const ok = await verifySession(statePath);
-    if (ok) return statePath;
-    console.log(`[session] сохранённая сессия «${role}» невалидна, перелогин`);
-  }
-
   const { username, password } = credentialsFor(role);
   if (!username || !password) {
     throw new Error(`в env-файле нет учётной записи для роли «${role}»`);
+  }
+
+  if (!force && existsSync(statePath)) {
+    const ok = await verifySession(statePath, username);
+    if (ok) return statePath;
+    console.log(
+      `[session] сохранённая сессия «${role}» не подходит, вход выполнится один раз для этой серии`,
+    );
   }
 
   const browser = await chromium.launch();
@@ -41,11 +42,10 @@ export async function ensureSession(role, { force = false } = {}) {
   await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' });
   await page.fill('#login-identifier', username);
   await page.fill('#login-password', password);
-  await Promise.all([
-    page.waitForLoadState('networkidle').catch(() => {}),
-    page.click('button.auth-submit-btn'),
-  ]);
-  await page.waitForTimeout(3000);
+  await page.getByRole('button', { name: /Войти|Продолжить/ }).click();
+  await page
+    .waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20_000 })
+    .catch(() => {});
 
   const url = page.url();
   if (url.includes('/login')) {
@@ -58,13 +58,25 @@ export async function ensureSession(role, { force = false } = {}) {
     throw new Error(`вход под ролью «${role}» не удался: ${message ?? '(без сообщения формы)'}`);
   }
 
+  const signedInAsExpectedUser = await page
+    .evaluate(async (expectedUsername) => {
+      const response = await fetch('/api/v1/auth/me', { credentials: 'include' });
+      const body = await response.json().catch(() => null);
+      return body?.data?.username === expectedUsername;
+    }, username)
+    .catch(() => false);
+  if (!signedInAsExpectedUser) {
+    await browser.close();
+    throw new Error(`вход под ролью «${role}» не подтвердил ожидаемую учётную запись`);
+  }
+
   await context.storageState({ path: statePath });
   await browser.close();
-  console.log(`[session] «${role}»: вход выполнен, storageState сохранён в ${statePath}`);
+  console.log(`[session] «${role}»: ожидаемая учётная запись подтверждена, storageState сохранён`);
   return statePath;
 }
 
-async function verifySession(statePath) {
+async function verifySession(statePath, expectedUsername) {
   const browser = await chromium.launch();
   const context = await browser.newContext({ storageState: statePath });
   const page = await context.newPage();
@@ -73,7 +85,7 @@ async function verifySession(statePath) {
     .evaluate(async () => {
       const res = await fetch('/api/v1/auth/me', { credentials: 'include' });
       const body = await res.json().catch(() => null);
-      return Boolean(body && body.data);
+      return body?.data?.username === expectedUsername;
     })
     .catch(() => false);
   await browser.close();

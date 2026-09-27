@@ -1,45 +1,57 @@
-// CJM 1 — Первый вход: регистрация → импорт (PDF/LinkedIn/hh) → профиль.
-// Учётка: QA-кандидат (OPENQAREER_QA_CANDIDATE_*) — фиксированный тестовый
-// аккаунт первого входа, per поручению CPO (не создаём нового кандидата на
-// каждый прогон — вход ограничен по частоте).
+// CJM 1 — Профиль и документы существующего кандидата.
+// C48 использует adenisov.test для всех семи CJM; этот сценарий не изображает
+// первый вход или чистый онбординг.
 import { openCjmRun } from './lib/capture.mjs';
 import { ensureSession } from './lib/session.mjs';
+import { clickCabinetSection } from './lib/navigation.mjs';
 
-export async function runCjm1(outDir) {
-  const statePath = await ensureSession('qa-candidate');
+export async function runCjm1(outDir, sharedStatePath) {
+  const statePath = sharedStatePath ?? (await ensureSession('owner'));
   const run = await openCjmRun('cjm1', statePath, outDir);
 
   await run.gotoBoth('/app', 7000);
-  await run.step('home', {
+  await run.step('today', {
     wait: 2000,
-    note: 'Главная сразу после входа — что видит кандидат первым',
+    note: 'Существующий профиль adenisov.test; экран «Сегодня» после входа',
   });
 
-  await run.step('profile-check', {
-    wait: 2000,
-    note: 'Раскрыты складки профиля/подтверждение (если есть кнопка «Проверить факты»)',
-    act: async (page) => {
-      const btn = page.getByRole('button', { name: /Проверить факты/ }).first();
-      if (await btn.isVisible().catch(() => false)) await btn.click();
+  await run.step('profile-screen', {
+    wait: 3000,
+    note: 'Профиль через актуальную навигацию; фиксируем сохранённые разделы без редактирования',
+    act: async (page, vp) => {
+      await clickCabinetSection(page, 'Профиль', vp);
     },
   });
 
-  for (const tab of ['О себе', 'Навыки', 'Документы', 'Вы в поиске']) {
-    await run.step(`profile-tab-${tab}`, {
-      wait: 1500,
-      act: async (page) => {
-        const t = page
-          .getByRole('tab', { name: tab })
-          .or(page.getByRole('button', { name: tab, exact: true }))
-          .first();
-        if (await t.isVisible().catch(() => false)) await t.click();
-        else throw new Error(`вкладка «${tab}» не найдена`);
-      },
-    });
-  }
+  await run.step('documents', {
+    wait: 2000,
+    note: 'Актуальная вкладка «Документ и форматы» на экране профиля',
+    act: async (page) => {
+      await page
+        .getByRole('group', { name: 'Что показать' })
+        .getByRole('button', { name: 'Документ и форматы', exact: true })
+        .click();
+      await page
+        .locator('.career-profile-screen-view')
+        .getByRole('button', { name: 'Документ и форматы', exact: true })
+        .click();
+      await page.locator('.career-profile-screen-document-menu').waitFor({ state: 'visible' });
+    },
+  });
+
+  await run.step('source-audit', {
+    wait: 3000,
+    note: 'Проверка фактов по источникам; переход read-only',
+    act: async (page) => {
+      await page
+        .getByRole('group', { name: 'Что показать' })
+        .getByRole('button', { name: 'Проверка по источникам', exact: true })
+        .click();
+    },
+  });
 
   const result = await run.close();
-  return { cjm: 'CJM1', title: 'Первый вход и импорт', ...result };
+  return { cjm: 'CJM1', title: 'Профиль и документы существующего кандидата', ...result };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -47,7 +59,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const r = await runCjm1(outDir);
   console.log(
     JSON.stringify(
-      { cjm: r.cjm, steps: r.steps.map((s) => s.name), consoleErrors: r.consoleErrors },
+      { cjm: r.cjm, steps: r.steps.map((s) => s.name), runtimeErrors: r.runtimeErrors },
       null,
       2,
     ),
