@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { CANDIDATE_REGIONS } from '../../src/features/workspace/candidateRegions';
+import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import { campaignMeta, readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
 import {
@@ -40,10 +41,12 @@ const handleReadCampaign: Handler = async (deps, request, reply) => {
 
 const campaignRoleChoiceSchema = z.union([
   z.string().trim().min(1).max(200),
-  z.object({
-    id: z.string().min(1).optional(),
-    title: z.string().trim().min(1).max(200),
-  }).passthrough(),
+  z
+    .object({
+      id: z.string().min(1).optional(),
+      title: z.string().trim().min(1).max(200),
+    })
+    .passthrough(),
 ]);
 
 const campaignChoiceSchema = z.object({
@@ -57,6 +60,21 @@ const WORKSPACE_REQUIRED = {
   code: 'candidate_workspace_required',
   message: 'Пройдите мастер знакомства прежде, чем выбирать кампанию.',
 } as const;
+
+function removedAutoRoleIds(
+  campaign: CandidateWorkspaceState['campaign'],
+  kept: ReadonlySet<string>,
+): string[] {
+  const previouslyChosen = new Set(campaign?.roles ?? []);
+  return (campaign?.auto?.roles ?? [])
+    .filter(
+      (role) =>
+        (previouslyChosen.has(role.id) || previouslyChosen.has(role.title)) &&
+        !kept.has(role.id) &&
+        !kept.has(role.title),
+    )
+    .map((role) => role.id);
+}
 
 const handleSaveCampaign: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config } = deps;
@@ -77,19 +95,15 @@ const handleSaveCampaign: Handler = async (deps, request, reply) => {
     );
   }
   const previousRevision = stored.campaign?.revision ?? 0;
-  const roles = body.roles.map((role) => typeof role === 'string' ? role : role.title);
-  const kept = new Set(body.roles.flatMap((role) =>
-    typeof role === 'string' ? [role] : [role.id, role.title].filter((value): value is string => Boolean(value)),
-  ));
-  const previouslyChosen = new Set(stored.campaign?.roles ?? []);
-  const removedAutoIds = (stored.campaign?.auto?.roles ?? [])
-    .filter(
-      (role) =>
-        (previouslyChosen.has(role.id) || previouslyChosen.has(role.title)) &&
-        !kept.has(role.id) &&
-        !kept.has(role.title),
-    )
-    .map((role) => role.id);
+  const roles = body.roles.map((role) => (typeof role === 'string' ? role : role.title));
+  const kept = new Set(
+    body.roles.flatMap((role) =>
+      typeof role === 'string'
+        ? [role]
+        : [role.id, role.title].filter((value): value is string => Boolean(value)),
+    ),
+  );
+  const removedAutoIds = removedAutoRoleIds(stored.campaign, kept);
   candidateStore.saveCandidateWorkspace(candidate.id, {
     ...stored,
     campaign: {
@@ -99,12 +113,12 @@ const handleSaveCampaign: Handler = async (deps, request, reply) => {
       revision: previousRevision + 1,
       updatedAt: new Date().toISOString(),
       ...(stored.campaign?.auto ? { auto: stored.campaign.auto } : {}),
-      ...((stored.campaign?.dismissed?.length || removedAutoIds.length)
+      ...(stored.campaign?.dismissed?.length || removedAutoIds.length
         ? { dismissed: [...new Set([...(stored.campaign?.dismissed ?? []), ...removedAutoIds])] }
         : {}),
     },
   });
-
+  deps.matchedPoolPrecompute?.prioritizeCampaign(candidate.id);
   return {
     data: campaignMeta(readCampaign(candidateStore, candidate.id)),
     meta: { requestId: request.id },
@@ -112,7 +126,13 @@ const handleSaveCampaign: Handler = async (deps, request, reply) => {
 };
 
 const handleRebuildCampaignRoles: Handler = async (deps, request, reply) => {
-  const candidate = authenticateCandidate(request, reply, deps.candidateStore, deps.authService, deps.config);
+  const candidate = authenticateCandidate(
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
+  );
   if (!candidate) return undefined;
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
   void rebuildCampaignRoles(deps, candidate.id, { force: true }).catch((error) => {

@@ -550,6 +550,9 @@ export interface CandidateStore {
 
   getCandidateWorkspace(candidateId: string): CandidateWorkspaceState | null;
 
+  /** Недавние посетители с явной кампанией; id остаётся только в памяти HTTP-процесса. */
+  listRecentCampaignCandidateIds?(since: string): string[];
+
   saveCandidateWorkspace(
     candidateId: string,
     workspace: CandidateWorkspaceState,

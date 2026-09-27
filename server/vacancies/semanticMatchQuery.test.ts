@@ -56,6 +56,7 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     const detail = plan.map((row) => row.detail).join('\n');
     expect(detail).toContain('vacancy_semantic_match');
     expect(detail).not.toMatch(/SCAN .*vacancy_semantic\b/u);
+    expect(detail).toMatch(/SEARCH excluded USING .*\(id=\? AND function_code=\?\)/u);
   });
 
   it('отдаёт совпавшие функции, отсортированные по свежести, без дублей', () => {
@@ -98,7 +99,9 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
       preferRemote: false,
       limit: 50,
     });
-    const knownRows = database.prepare(levelled.sql).all(...levelled.params) as Array<{ payload: string }>;
+    const knownRows = database.prepare(levelled.sql).all(...levelled.params) as Array<{
+      payload: string;
+    }>;
     expect(knownRows.map((row) => JSON.parse(row.payload).id)).toEqual(['unknown', 'known']);
 
     const unlevelled = buildSemanticMatchQuery({
@@ -108,7 +111,9 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
       preferRemote: false,
       limit: 50,
     });
-    const anyLevelRows = database.prepare(unlevelled.sql).all(...unlevelled.params) as Array<{ payload: string }>;
+    const anyLevelRows = database.prepare(unlevelled.sql).all(...unlevelled.params) as Array<{
+      payload: string;
+    }>;
     expect(anyLevelRows.map((row) => JSON.parse(row.payload).id)).toEqual(['unknown', 'known']);
   });
 
@@ -118,7 +123,11 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     seed('ops-marketing-title', 'ops', 4, 3_000);
     database
       .prepare('UPDATE vacancy_semantic SET title_key = ? WHERE id = ? AND function_code = ?')
-      .run('chief of staff vp operations marketing advertising ecommerce', 'ops-marketing-title', 'ops');
+      .run(
+        'chief of staff vp operations marketing advertising ecommerce',
+        'ops-marketing-title',
+        'ops',
+      );
     database
       .prepare(
         `INSERT INTO vacancy_semantic (id, function_code, level_rank, title_key, published_ms, is_remote)
@@ -176,6 +185,9 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
 
     const rows = database.prepare(sql).all(...params) as Array<{ payload: string }>;
     // «VP Engineering & Product» — целевая роль для CTO, продукт не исключаем.
-    expect(rows.map((row) => JSON.parse(row.payload).id).sort()).toEqual(['ops-role', 'product-ops']);
+    expect(rows.map((row) => JSON.parse(row.payload).id).sort()).toEqual([
+      'ops-role',
+      'product-ops',
+    ]);
   });
 });

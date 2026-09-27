@@ -473,6 +473,10 @@ export class SqliteCandidateStore implements CandidateStore {
     return this.workspaceRepository.get(candidateId);
   }
 
+  listRecentCampaignCandidateIds(since: string): string[] {
+    return this.workspaceRepository.listRecentCampaignCandidateIds(since);
+  }
+
   saveCandidateWorkspace(
     candidateId: string,
     workspace: CandidateWorkspaceState,
