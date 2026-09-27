@@ -6366,6 +6366,35 @@
   max-height: 900px;
 }
 
+/* «Подробнее» о вакансии (B250): фиксированные границы, чтобы карточка не
+   росла за пределы экрана — прокручивается только тело, шапка и панель
+   «Откликнуться»/«Открыть на площадке» остаются на месте. */
+.career-modal-card.is-detail {
+  max-width: 720px;
+  max-height: 85vh;
+}
+
+.career-modal-card.is-detail .vacancies-info-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 600px) {
+  .career-modal-card.is-detail {
+    width: 100vw;
+    height: 100dvh;
+    max-width: 100vw;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .career-modal-backdrop:has(.career-modal-card.is-detail) {
+    padding: 0;
+  }
+}
+
 .career-connector-webview-host {
   min-height: min(560px, calc(100vh - 160px));
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -6437,9 +6466,6 @@
   font-size: var(--career-text-sm);
   line-height: 1.5;
   margin: 0;
-  max-height: 55vh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .vacancies-info-description p {

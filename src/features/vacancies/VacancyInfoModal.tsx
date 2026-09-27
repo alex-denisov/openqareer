@@ -21,12 +21,7 @@ interface VacancyInfoModalProps {
  * web) instead of a dead anchor.
  */
 export function VacancyInfoModal({ isOpen, onClose, cluster }: VacancyInfoModalProps) {
-  const sources = vacancySourceLabels(cluster.sources);
   const detail = useVacancyDetail(cluster.id, isOpen);
-  const skills =
-    detail.status === 'ready' && detail.detail.skills.length > 0
-      ? detail.detail.skills
-      : cluster.skills;
   return (
     <ImportModalShell
       isOpen={isOpen}
@@ -34,45 +29,71 @@ export function VacancyInfoModal({ isOpen, onClose, cluster }: VacancyInfoModalP
       titleId="vacancy-info-title"
       title={cluster.canonicalTitle}
       icon={<Info size={18} aria-hidden="true" />}
+      detail
     >
-      <div className="career-modal-body vacancies-info-body">
-        <p className="vacancies-info-subtitle">{infoSubtitle(cluster)}</p>
-
-        <VacancyDescription detail={detail} summary={cluster.descriptionSummary} />
-
-        {skills.length > 0 ? (
-          <ul className="vacancies-info-skills">
-            {skills.map((skill) => (
-              <li key={skill}>{skill}</li>
-            ))}
-          </ul>
-        ) : null}
-
-        {sources.length > 0 ? (
-          <p className="vacancies-info-sources">Источники: {sources.join(', ')}</p>
-        ) : null}
-
-        <div className="vacancies-info-recruiter">
-          <h4>Кто нанимает</h4>
-          <RecruiterContactsBlock
-            vacancyId={cluster.id}
-            vacancyPayload={recruiterEnrichPayload(cluster)}
-          />
-        </div>
-
-        {cluster.primaryUrl ? (
-          <button
-            type="button"
-            className="vacancies-btn vacancies-btn-secondary"
-            onClick={() => {
-              void openExternalLink(cluster.primaryUrl);
-            }}
-          >
-            Открыть на площадке
-          </button>
-        ) : null}
-      </div>
+      <VacancyInfoContent cluster={cluster} detail={detail} />
+      <VacancyInfoFooter primaryUrl={cluster.primaryUrl} />
     </ImportModalShell>
+  );
+}
+
+/** Scrollable body (B250): everything except the header and the pinned
+ *  «Открыть на площадке» panel, which `ImportModalShell` keeps in place. */
+function VacancyInfoContent({
+  cluster,
+  detail,
+}: {
+  readonly cluster: MatchedVacancyItem['cluster'];
+  readonly detail: VacancyDetailState;
+}) {
+  const sources = vacancySourceLabels(cluster.sources);
+  const skills =
+    detail.status === 'ready' && detail.detail.skills.length > 0
+      ? detail.detail.skills
+      : cluster.skills;
+  return (
+    <div className="career-modal-body vacancies-info-body vacancies-info-scroll">
+      <p className="vacancies-info-subtitle">{infoSubtitle(cluster)}</p>
+
+      <VacancyDescription detail={detail} summary={cluster.descriptionSummary} />
+
+      {skills.length > 0 ? (
+        <ul className="vacancies-info-skills">
+          {skills.map((skill) => (
+            <li key={skill}>{skill}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      {sources.length > 0 ? (
+        <p className="vacancies-info-sources">Источники: {sources.join(', ')}</p>
+      ) : null}
+
+      <div className="vacancies-info-recruiter">
+        <h4>Кто нанимает</h4>
+        <RecruiterContactsBlock
+          vacancyId={cluster.id}
+          vacancyPayload={recruiterEnrichPayload(cluster)}
+        />
+      </div>
+    </div>
+  );
+}
+
+function VacancyInfoFooter({ primaryUrl }: { readonly primaryUrl: string }) {
+  if (!primaryUrl) return null;
+  return (
+    <div className="career-modal-footer vacancies-info-footer">
+      <button
+        type="button"
+        className="vacancies-btn vacancies-btn-secondary"
+        onClick={() => {
+          void openExternalLink(primaryUrl);
+        }}
+      >
+        Открыть на площадке
+      </button>
+    </div>
   );
 }
 

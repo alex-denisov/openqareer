@@ -10,7 +10,16 @@ interface ImportModalShellProps {
   readonly onClose: () => void;
   readonly children: ReactNode;
   readonly wide?: boolean;
+  /**
+   * A tall, text-heavy dialog (B250): capped at 720px/85vh on desktop and a
+   * full-screen sheet on mobile, so only its own body scrolls — the header
+   * and any pinned footer the caller renders as the last child stay in place.
+   */
+  readonly detail?: boolean;
 }
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * One shell for every connector dialog.
@@ -35,6 +44,7 @@ export function ImportModalShell({
   onClose,
   children,
   wide = false,
+  detail = false,
 }: ImportModalShellProps) {
   const card = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -47,9 +57,24 @@ export function ImportModalShell({
         : null;
     closeButton.current?.focus();
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      onClose();
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !card.current) return;
+      const focusable = card.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener('keydown', handleKey);
     return () => {
@@ -69,7 +94,7 @@ export function ImportModalShell({
       }}
     >
       <div
-        className={`career-modal-card${wide ? ' is-wide' : ''}`}
+        className={`career-modal-card${wide ? ' is-wide' : ''}${detail ? ' is-detail' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
