@@ -117,6 +117,14 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).toContain('COO');
   });
 
+  it('defaults to «Все роли кампании» and lists vacancies for every role', () => {
+    const html = render({
+      matched: [matchedItem('c-1', 'VP Technology Ops'), matchedItem('c-2', 'COO')],
+    });
+    expect(html).toContain('Все роли кампании');
+    expect(html).toMatch(/vacancies-chip-accent is-selected"[^>]*>\s*Все роли кампании/);
+  });
+
   it('does not render without a campaign or a level', () => {
     expect(() => render({ campaign: undefined, candidateLevel: undefined })).not.toThrow();
   });
@@ -133,12 +141,23 @@ describe('VacanciesScreen (B250)', () => {
     expect(eight).not.toContain('vacancy-hypothesis-banner');
   });
 
-  it('keeps saved-search controls available when the matched pool is empty', () => {
-    const html = render({ matched: [], total: 0, subscriptions: [] });
+  it('не показывает блок «Сохранённые запросы» на экране «Вакансии»', () => {
+    const html = render({ matched: [], total: 0 });
 
-    expect(html).toContain('career-vacancy-saved');
-    expect(html).toContain('Новый запрос к площадке');
+    expect(html).not.toContain('career-vacancy-saved');
+    expect(html).not.toContain('Новый запрос к площадке');
     expect(html).toContain('По роли VP Technology Ops пока нет вакансий');
+  });
+
+  it('баннер предлагает «Выбрать регион», когда кандидат сам не выбирал регион', () => {
+    const html = render({ campaign: { ...campaignWithCount(5), regions: { value: ['Дубай'], origin: 'profile' } } });
+    expect(html).toContain('Выбрать регион');
+    expect(html).not.toContain('Расширить географию');
+  });
+
+  it('баннер предлагает «Расширить географию», когда кандидат сам выбрал регион', () => {
+    const html = render({ campaign: { ...campaignWithCount(5), regions: { value: ['Дубай'], origin: 'explicit' } } });
+    expect(html).toContain('Расширить географию');
   });
 
   it('names the available source and offers a retry when loading fails', () => {

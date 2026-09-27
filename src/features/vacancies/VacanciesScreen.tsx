@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Check } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
-import type { VacancySubscription } from '../coach/coachApi';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import { titleMatchesRole } from '../../../shared/vacancyRoleTitleMatch';
 import { vacancyAge } from './vacancyFilters';
 import { VacancyDetailPanel } from './VacancyDetailPanel';
 import { VacancyHypothesisBanner } from './VacancyHypothesisBanner';
-import { SavedSearchesFold } from './VacancyFilterPanel';
 import { useVacancyCampaignActions } from './useVacancyCampaignActions';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
 import { PageHeader } from '../shell/PageHeader';
@@ -20,7 +18,7 @@ import {
   type VacanciesScreenState,
 } from './VacanciesScreenFilters';
 
-const EMPTY_STATE: VacanciesScreenState = { regions: [], remoteOnly: false };
+const EMPTY_STATE: VacanciesScreenState = { roles: [], regions: [], remoteOnly: false };
 
 /**
  * «Вакансии» (B248/B250) — верх экрана и список пула.
@@ -48,9 +46,6 @@ interface VacanciesScreenProps {
   /** B248 §2 — тот же индикатор пути, что и на остальных экранах кампании. */
   readonly pathIndicator?: VacanciesPathIndicator;
   readonly applications?: VacancyApplications;
-  readonly subscriptions?: readonly VacancySubscription[];
-  readonly defaultQuery?: string;
-  readonly onRefreshSavedSearch?: () => Promise<void>;
 }
 
 function useVacanciesScreenBoard(
@@ -62,7 +57,6 @@ function useVacanciesScreenBoard(
   const regions = campaign?.regions.value ?? [];
   const [state, setState] = useState<VacanciesScreenState>({
     ...EMPTY_STATE,
-    role: roles[0],
     regions,
     remoteOnly: campaign?.remoteOnly ?? false,
   });
@@ -73,10 +67,7 @@ function useVacanciesScreenBoard(
     if (!campaign) return;
     setState((current) => ({
       ...current,
-      role:
-        current.role && campaign.roles.value.includes(current.role)
-          ? current.role
-          : campaign.roles.value[0],
+      roles: current.roles.filter((role) => campaign.roles.value.includes(role)),
       regions: current.regions.length > 0 ? current.regions : campaign.regions.value,
       remoteOnly: campaign?.remoteOnly ?? false,
     }));
@@ -94,7 +85,7 @@ function useVacanciesScreenBoard(
     effectiveId,
     selectedItem: filtered.find((item) => item.cluster.id === effectiveId),
     roleHypotheses: campaign?.roleHypotheses ?? [],
-    primaryRole: state.role ?? roles[0],
+    primaryRole: state.roles[0] ?? roles[0],
     mobileDetailOpen,
     onSelect: (id: string) => {
       setSelectedId(id);
@@ -116,9 +107,6 @@ export function VacanciesScreen({
   now = new Date().toISOString(),
   pathIndicator,
   applications,
-  subscriptions = [],
-  defaultQuery,
-  onRefreshSavedSearch,
 }: VacanciesScreenProps) {
   const [activeCampaign, setActiveCampaign] = useActiveCampaign(campaign);
   const board = useVacanciesScreenBoard(matched, activeCampaign, now);
@@ -126,12 +114,10 @@ export function VacanciesScreen({
     onCampaignUpdated: campaignUpdateHandler(setActiveCampaign, board.setState),
     onRetry,
   });
-  const savedSearches = savedSearchControls(subscriptions, defaultQuery, onRefreshSavedSearch);
 
   return (
     <div className="vacancies-screen">
       <VacanciesScreenHeader primaryRole={board.primaryRole} pathIndicator={pathIndicator} />
-      {savedSearches}
       <VacanciesScreenBody
         loading={loading}
         failed={failed}
@@ -154,27 +140,12 @@ export function VacanciesScreen({
   );
 }
 
-function savedSearchControls(
-  subscriptions: readonly VacancySubscription[],
-  defaultQuery: string | undefined,
-  onRefreshSavedSearch: (() => Promise<void>) | undefined,
-): ReactNode {
-  return (
-    <SavedSearchesFold
-      subscriptions={subscriptions}
-      defaultQuery={defaultQuery}
-      onRefresh={onRefreshSavedSearch}
-      compactOnMobile
-    />
-  );
-}
-
 function campaignUpdateHandler(
   setCampaign: ReturnType<typeof useActiveCampaign>[1],
   setScreenState: ReturnType<typeof useVacanciesScreenBoard>['setState'],
 ) {
-  return (updated: CampaignMetaView, selectedRole: string | undefined) =>
-    applyCampaignUpdate(updated, selectedRole, setCampaign, setScreenState);
+  return (updated: CampaignMetaView, addedRole: string | undefined) =>
+    applyCampaignUpdate(updated, addedRole, setCampaign, setScreenState);
 }
 
 function VacanciesScreenHeader({
@@ -204,14 +175,14 @@ function useActiveCampaign(campaign?: CampaignMetaView) {
 
 function applyCampaignUpdate(
   campaign: CampaignMetaView,
-  selectedRole: string | undefined,
+  addedRole: string | undefined,
   setCampaign: ReturnType<typeof useActiveCampaign>[1],
   setScreenState: ReturnType<typeof useVacanciesScreenBoard>['setState'],
 ) {
   setCampaign(campaign);
   setScreenState((current) => ({
     ...current,
-    role: selectedRole ?? current.role,
+    roles: addedRole ? [...current.roles, addedRole] : current.roles,
     regions: campaign.regions.value,
     remoteOnly: campaign.remoteOnly ?? false,
   }));
@@ -280,7 +251,6 @@ function VacanciesResults(props: VacanciesResultsProps) {
           onReset={() =>
             props.board.setState({
               ...EMPTY_STATE,
-              role: props.board.roles[0],
               regions: props.board.regions,
               remoteOnly: props.campaign?.remoteOnly ?? false,
             })
@@ -327,6 +297,7 @@ function VacancyHypothesisSection({
       role={hypothesis.role}
       vacancyCount={hypothesis.vacancyCount}
       adjacentRole={adjacentRole}
+      regionsChosenExplicitly={campaign?.regions.origin === 'explicit'}
       remoteOnly={campaign?.remoteOnly ?? false}
       saving={actions.saving}
       error={actions.error}
@@ -463,7 +434,12 @@ function filterByScreenState(
   now: string,
 ): MatchedVacancyItem[] {
   return items.filter(({ cluster }) => {
-    if (state.role && !titleMatchesRole(cluster.canonicalTitle, state.role)) return false;
+    if (
+      state.roles.length > 0 &&
+      !state.roles.some((role) => titleMatchesRole(cluster.canonicalTitle, role))
+    ) {
+      return false;
+    }
     if (state.remoteOnly && !cluster.isRemote) return false;
     if (state.regions.length > 0 && !state.remoteOnly) {
       const location = cluster.canonicalLocation?.toLocaleLowerCase('ru-RU') ?? '';
