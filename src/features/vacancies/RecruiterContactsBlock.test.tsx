@@ -1,7 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { RecruiterContact } from '../../../shared/recruiterContact';
-import { RecruiterContactsBlock } from './RecruiterContactsBlock';
+import {
+  RecruiterContactsBlock,
+  RecruiterContactsResults,
+  type RecruiterContactsState,
+} from './RecruiterContactsBlock';
 
 describe('RecruiterContactsBlock', () => {
   const sampleContact: RecruiterContact = {
@@ -39,9 +43,7 @@ describe('RecruiterContactsBlock', () => {
   };
 
   it('отображает кнопку «Рекрутер» с тултипом, если контакты ещё не искались (B236 §4.4)', () => {
-    const html = renderToStaticMarkup(
-      <RecruiterContactsBlock vacancyId="vac-1" />,
-    );
+    const html = renderToStaticMarkup(<RecruiterContactsBlock vacancyId="vac-1" />);
     expect(html).toContain('>Рекрутер<');
     expect(html).toContain('Найти того, кто ведёт вакансию');
     expect(html).not.toContain('Найти прямые контакты');
@@ -86,5 +88,22 @@ describe('RecruiterContactsBlock', () => {
     expect(html).toContain('Рекрутер или hiring manager в открытых источниках не нашлись');
     expect(html).toContain('Искать ещё раз');
     expect(html).not.toContain('Прямые контакты');
+  });
+
+  it('без согласия «Вы в поиске» предлагает дать его и искать, а не тупик (C59)', () => {
+    const state: RecruiterContactsState = {
+      contacts: [],
+      hasSearched: false,
+      loading: false,
+      error: null,
+      job: null,
+      consentRequired: true,
+      handleEnrich: async () => undefined,
+      handleGrantConsent: async () => undefined,
+    };
+    const html = renderToStaticMarkup(<RecruiterContactsResults state={state} />);
+    expect(html).toContain('Разрешить и найти');
+    expect(html).toContain('Вы в поиске');
+    expect(html).not.toContain('role="alert"');
   });
 });

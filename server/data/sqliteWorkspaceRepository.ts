@@ -67,7 +67,7 @@ export class SqliteWorkspaceRepository {
     if (!Number.isFinite(sinceMs)) return [];
     const rows = this.database.prepare(
       'SELECT candidate_id, workspace_cipher, updated_at FROM candidate_workspaces',
-    ).all() as WorkspaceRow[];
+    ).all() as unknown as WorkspaceRow[];
     return rows.flatMap((row) => {
       if (!row.candidate_id) return [];
       const workspace = readStoredCandidateWorkspace(JSON.parse(

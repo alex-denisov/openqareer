@@ -12,9 +12,11 @@ import {
 } from '@phosphor-icons/react';
 import type { EmailStatus, RecruiterContact } from '../../../shared/recruiterContact';
 import { CareerTooltip } from '../shell/CareerTooltip';
+import { CoachApiError } from '../coach/apiClient';
 import {
   enrichRecruiterContacts,
   getRecruiterContacts,
+  grantSearchConsent,
   type RecruiterContactsResponse,
   type EnrichVacancyPayload,
 } from './recruiterContactsApi';
@@ -66,11 +68,7 @@ function EmailAction({ email }: { readonly email: string }) {
 
   return (
     <div className="career-recruiter-email-wrap">
-      <a
-        href={`mailto:${email}`}
-        className="career-recruiter-link"
-        title="Написать письмо"
-      >
+      <a href={`mailto:${email}`} className="career-recruiter-link" title="Написать письмо">
         <EnvelopeSimple size={15} aria-hidden="true" />
         <span>{email}</span>
       </a>
@@ -88,16 +86,20 @@ function EmailAction({ email }: { readonly email: string }) {
   );
 }
 
+function contactHrefs(contact: RecruiterContact) {
+  return {
+    tgHref: contact.telegram?.startsWith('http')
+      ? contact.telegram
+      : `https://t.me/${contact.telegram?.replace(/^@/, '')}`,
+    waHref: contact.whatsapp?.startsWith('http')
+      ? contact.whatsapp
+      : `https://wa.me/${contact.whatsapp?.replace(/\D/g, '')}`,
+    phoneHref: `tel:${contact.phone?.replace(/[^\d+]/g, '')}`,
+  };
+}
+
 function SocialActions({ contact }: { readonly contact: RecruiterContact }) {
-  const tgHref = contact.telegram?.startsWith('http')
-    ? contact.telegram
-    : `https://t.me/${contact.telegram?.replace(/^@/, '')}`;
-
-  const waHref = contact.whatsapp?.startsWith('http')
-    ? contact.whatsapp
-    : `https://wa.me/${contact.whatsapp?.replace(/\D/g, '')}`;
-
-  const phoneHref = `tel:${contact.phone?.replace(/[^\d+]/g, '')}`;
+  const { tgHref, waHref, phoneHref } = contactHrefs(contact);
 
   return (
     <>
@@ -120,13 +122,23 @@ function SocialActions({ contact }: { readonly contact: RecruiterContact }) {
         </a>
       )}
       {contact.linkedinUrl && (
-        <a href={contact.linkedinUrl} target="_blank" rel="noreferrer" className="career-recruiter-link">
+        <a
+          href={contact.linkedinUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="career-recruiter-link"
+        >
           <span>LinkedIn</span>
           <ArrowSquareOut size={13} aria-hidden="true" />
         </a>
       )}
       {contact.githubUrl && (
-        <a href={contact.githubUrl} target="_blank" rel="noreferrer" className="career-recruiter-link">
+        <a
+          href={contact.githubUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="career-recruiter-link"
+        >
           <span>GitHub</span>
           <ArrowSquareOut size={13} aria-hidden="true" />
         </a>
@@ -160,8 +172,8 @@ function EmptyContactsNotice({ onRetry }: { readonly onRetry: () => void }) {
   return (
     <div className="career-recruiter-empty">
       <span>
-        Рекрутер или hiring manager в открытых источниках не нашлись. Попробуйте
-        «Нетворкинг» — знакомый в компании заменяет контакт.
+        Рекрутер или hiring manager в открытых источниках не нашлись. Попробуйте «Нетворкинг» —
+        знакомый в компании заменяет контакт.
       </span>
       <button type="button" className="career-recruiter-retry-btn" onClick={onRetry}>
         Искать ещё раз
@@ -187,6 +199,74 @@ function ErrorContactsNotice({
   );
 }
 
+const CONSENT_REQUIRED_CODE = 'search_consent_required';
+
+function isConsentRequired(reason: unknown): boolean {
+  return reason instanceof CoachApiError && reason.code === CONSENT_REQUIRED_CODE;
+}
+
+/** Без согласия сервер отказывает; вместо ошибки кандидат видит, на что соглашается. */
+function ConsentRequiredNotice({ onGrant }: { readonly onGrant: () => void }) {
+  return (
+    <div className="career-recruiter-empty">
+      <span>
+        Чтобы найти, кто ведёт вакансию, включите режим «Вы в поиске»: мы будем искать контакты
+        нанимающих по вашим вакансиям.
+      </span>
+      <button type="button" className="career-recruiter-retry-btn" onClick={onGrant}>
+        Разрешить и найти
+      </button>
+    </div>
+  );
+}
+
+interface EnrichSink {
+  readonly setContacts: (contacts: readonly RecruiterContact[]) => void;
+  readonly setJob: (job: RecruiterContactJob | null) => void;
+  readonly setHasSearched: (searched: boolean) => void;
+}
+
+/** Запуск поиска и согласие «Вы в поиске», без которого сервер отказывает (C59). */
+function useEnrichAction(
+  vacancyId: string,
+  sink: EnrichSink,
+  onContactsLoaded?: (contacts: RecruiterContact[]) => void,
+) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [consentRequired, setConsentRequired] = useState(false);
+  const { setContacts, setJob, setHasSearched } = sink;
+
+  const handleEnrich = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await enrichRecruiterContacts(vacancyId);
+      setContacts(result.contacts);
+      setJob(result.job);
+      setHasSearched(result.job?.status === 'ready');
+      if (result.job?.status === 'ready') onContactsLoaded?.(result.contacts);
+    } catch (err) {
+      if (isConsentRequired(err)) setConsentRequired(true);
+      else setError(err instanceof Error ? err.message : 'Поиск не удался. Попробуйте ещё раз.');
+    } finally {
+      setLoading(false);
+    }
+  }, [vacancyId, onContactsLoaded, setContacts, setJob, setHasSearched]);
+
+  const handleGrantConsent = useCallback(async () => {
+    try {
+      await grantSearchConsent();
+      setConsentRequired(false);
+      await handleEnrich();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось сохранить согласие.');
+    }
+  }, [handleEnrich]);
+
+  return { loading, error, setError, consentRequired, handleEnrich, handleGrantConsent };
+}
+
 export function useRecruiterContacts({
   vacancyId,
   vacancyPayload: _vacancyPayload,
@@ -201,10 +281,15 @@ export function useRecruiterContacts({
   onContactsLoaded?: (contacts: RecruiterContact[]) => void;
 }) {
   const [contacts, setContacts] = useState<readonly RecruiterContact[]>(initialContacts ?? []);
-  const [hasSearched, setHasSearched] = useState(initialSearched || Boolean(initialContacts?.length));
+  const [hasSearched, setHasSearched] = useState(
+    initialSearched || Boolean(initialContacts?.length),
+  );
   const [job, setJob] = useState<RecruiterContactJob | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const enrich = useEnrichAction(
+    vacancyId,
+    { setContacts, setJob, setHasSearched },
+    onContactsLoaded,
+  );
 
   const refreshState = useCallback(async (): Promise<RecruiterContactsResponse> => {
     const result = await getRecruiterContacts(vacancyId);
@@ -216,25 +301,18 @@ export function useRecruiterContacts({
     return result;
   }, [vacancyId]);
 
-  useRecruiterContactJobPolling(job, refreshState, setError);
+  useRecruiterContactJobPolling(job, refreshState, enrich.setError);
 
-  const handleEnrich = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await enrichRecruiterContacts(vacancyId);
-      setContacts(result.contacts);
-      setJob(result.job);
-      setHasSearched(result.job?.status === 'ready');
-      if (result.job?.status === 'ready') onContactsLoaded?.(result.contacts);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Поиск не удался. Попробуйте ещё раз.');
-    } finally {
-      setLoading(false);
-    }
-  }, [vacancyId, onContactsLoaded]);
-
-  return { contacts, hasSearched, loading, error, job, handleEnrich };
+  return {
+    contacts,
+    hasSearched,
+    loading: enrich.loading,
+    error: enrich.error,
+    job,
+    consentRequired: enrich.consentRequired,
+    handleEnrich: enrich.handleEnrich,
+    handleGrantConsent: enrich.handleGrantConsent,
+  };
 }
 
 function useRecruiterContactJobPolling(
@@ -246,7 +324,9 @@ function useRecruiterContactJobPolling(
     if (!job || !['queued', 'running'].includes(job.status)) return undefined;
     const timer = window.setInterval(() => {
       void refreshState().catch((reason) => {
-        setError(reason instanceof Error ? reason.message : 'Не удалось обновить состояние поиска.');
+        setError(
+          reason instanceof Error ? reason.message : 'Не удалось обновить состояние поиска.',
+        );
       });
     }, 1_000);
     return () => window.clearInterval(timer);
@@ -270,6 +350,7 @@ export function RecruiterContactsTrigger({
   if (
     state.loading ||
     state.error ||
+    state.consentRequired ||
     state.job?.status === 'queued' ||
     state.job?.status === 'running' ||
     state.hasSearched ||
@@ -290,17 +371,28 @@ export function RecruiterContactsTrigger({
 export function RecruiterContactsResults({ state }: { readonly state: RecruiterContactsState }) {
   const { contacts, hasSearched, loading, error, job, handleEnrich } = state;
 
+  if (state.consentRequired && !loading && !error) {
+    return <ConsentRequiredNotice onGrant={() => void state.handleGrantConsent()} />;
+  }
+
   if (loading || job?.status === 'queued' || job?.status === 'running') {
     return (
       <div className="career-recruiter-loading" aria-busy="true">
         <CircleNotch size={18} className="career-spin" aria-hidden="true" />
-        <span>{job?.status === 'queued' ? 'Запрос поставлен в очередь…' : 'Ищем, кто ведёт вакансию…'}</span>
+        <span>
+          {job?.status === 'queued' ? 'Запрос поставлен в очередь…' : 'Ищем, кто ведёт вакансию…'}
+        </span>
       </div>
     );
   }
 
   if (error || job?.status === 'failed') {
-    return <ErrorContactsNotice error={error ?? 'Поиск контактов не завершился. Попробуйте ещё раз.'} onRetry={handleEnrich} />;
+    return (
+      <ErrorContactsNotice
+        error={error ?? 'Поиск контактов не завершился. Попробуйте ещё раз.'}
+        onRetry={handleEnrich}
+      />
+    );
   }
   if (hasSearched && contacts.length === 0) return <EmptyContactsNotice onRetry={handleEnrich} />;
   if (contacts.length > 0) {

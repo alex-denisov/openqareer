@@ -39,3 +39,13 @@ export async function enrichRecruiterContacts(
   const data = await readData<RecruiterContactsResponse>(response);
   return { contacts: data.contacts ?? [], job: data.job ?? null };
 }
+
+/** Согласие «Вы в поиске» (B263): без него сервер не ищет контакт нанимающего. */
+export async function grantSearchConsent(): Promise<void> {
+  const response = await apiFetch('/api/v1/candidate/search-consent', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ granted: true }),
+  });
+  await readData<unknown>(response);
+}

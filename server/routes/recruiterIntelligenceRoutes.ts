@@ -9,6 +9,7 @@ import {
   hasSafeMutationOrigin,
   withDeps,
 } from './helpers';
+import { toCandidateContact } from './candidateRecruiterContact';
 
 /** Срез 1 (B263): без согласия «Вы в поиске» сервер отклоняет запрос, а не только скрывает кнопку в UI. */
 function requireSearchConsent(
@@ -128,7 +129,7 @@ async function handleGetContacts(
   const job = recruiterContactsRepo?.getJob(candidate.id, vacancyId) ?? null;
 
   return {
-    data: { contacts, job },
+    data: { contacts: contacts.map(toCandidateContact), job },
     meta: { requestId: request.id },
   };
 }

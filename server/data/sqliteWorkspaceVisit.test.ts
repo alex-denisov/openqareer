@@ -58,7 +58,7 @@ describe('candidate workspace visit marks', () => {
     const withoutCampaign = createCandidate(store);
     const stale = createCandidate(store);
     const campaign = {
-      roles: ['Head of Operations'], regions: ['mena'] as const, revision: 1,
+      roles: ['Head of Operations'], regions: ['mena' as const], revision: 1,
       updatedAt: '2026-09-27T00:00:00.000Z',
     };
     store.saveCandidateWorkspace(recent.id, { ...WORKSPACE, campaign });
