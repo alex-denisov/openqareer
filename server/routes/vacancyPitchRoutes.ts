@@ -192,14 +192,19 @@ function saveGeneratedCoverLetter(
   applicationId: string,
   content: string,
 ): void {
-  candidateStore.saveDocumentAndLinkApplicationMaterial(candidateId, applicationId, 'cover_letter', {
-    kind: 'cover_letter',
-    source: 'generated',
-    fileName: 'cover-letter.txt',
-    mimeType: 'text/plain',
-    contentBase64: Buffer.from(content, 'utf8').toString('base64'),
-    parseStatus: 'not_applicable',
-  });
+  candidateStore.saveDocumentAndLinkApplicationMaterial(
+    candidateId,
+    applicationId,
+    'cover_letter',
+    {
+      kind: 'cover_letter',
+      source: 'generated',
+      fileName: 'cover-letter.txt',
+      mimeType: 'text/plain',
+      contentBase64: Buffer.from(content, 'utf8').toString('base64'),
+      parseStatus: 'not_applicable',
+    },
+  );
 }
 
 const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
@@ -214,7 +219,11 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   }
 
   const cluster = multiSourceEngine.getActiveCluster(vacancyId);
-  const poolVacancy = !cluster ? multiSourceEngine.getVacancy?.(vacancyId) : undefined;
+  const sourceId = vacancyId.startsWith('cluster-')
+    ? vacancyId.slice('cluster-'.length)
+    : vacancyId;
+  const loaded = await multiSourceEngine.loadVacancyDescription(sourceId);
+  const poolVacancy = loaded.vacancy ?? multiSourceEngine.getVacancy?.(sourceId);
   const vacancy = resolvePitchVacancy(body, vacancyId, cluster, poolVacancy);
   if (!vacancy.title) {
     return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
@@ -224,7 +233,12 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
     title: vacancy.title,
   });
   if (body?.applicationId) {
-    saveGeneratedCoverLetter(candidateStore, candidate.id, body.applicationId, result.atsCoverLetter);
+    saveGeneratedCoverLetter(
+      candidateStore,
+      candidate.id,
+      body.applicationId,
+      result.atsCoverLetter,
+    );
   }
   return {
     data: {

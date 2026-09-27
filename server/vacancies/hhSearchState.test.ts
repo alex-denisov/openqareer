@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseHhSearchState, HH_STATE_UNREADABLE } from './hhSearchState';
 
@@ -68,6 +70,18 @@ describe('parseHhSearchState', () => {
     expect(parsed.publishedAt).toBe('2026-09-08T13:07:42.322+03:00');
     expect(parsed.provenance.sourceId).toBe('src-hh-search');
     expect(parsed.provenance.externalId).toBe('133712099');
+  });
+
+  it('сохраняет требования и обязанности из сниппета поисковой выдачи', () => {
+    const page = readFileSync(
+      fileURLToPath(new URL('./__fixtures__/hh-search-snippet.html', import.meta.url)),
+      'utf8',
+    );
+    const result = parseHhSearchState(page, context);
+
+    expect(result.vacancies[0].description).toBe(
+      'TypeScript и опыт тестирования\n\nПоддерживать качество релизов',
+    );
   });
 
   it('«не указана» — это отсутствие зарплаты, а не ноль', () => {

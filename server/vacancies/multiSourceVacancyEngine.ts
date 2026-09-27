@@ -78,6 +78,17 @@ export type SourceFetcher = (
   options?: { query?: string },
 ) => Promise<UnifiedVacancy[] | SourceReading>;
 
+/** Читает полный текст только когда кандидат дошёл до конкретной вакансии. */
+export interface VacancyDescriptionLoader {
+  load(url: string): Promise<string | undefined>;
+}
+
+export interface VacancyDescriptionLoadResult {
+  readonly vacancy?: UnifiedVacancy;
+  /** Площадка отказала или не дала разметку: UI не должен выдавать сниппет за полный текст. */
+  readonly unavailable: boolean;
+}
+
 /**
  * What one sync actually did. `syncSource` used to return `void`, so an admin
  * route could only answer `success: true` — including for a run that failed
@@ -319,6 +330,8 @@ export class MultiSourceVacancyEngine {
    * ссылок — измерение, а не догадка, и выдумывать её нельзя (B200 срез 2).
    */
   private readonly linkProbe?: LinkProbe;
+  private readonly descriptionLoader?: VacancyDescriptionLoader;
+  private readonly descriptionLoads = new Map<string, Promise<VacancyDescriptionLoadResult>>();
 
   constructor(options?: {
     sources?: VacancySourceConfig[];
@@ -326,6 +339,7 @@ export class MultiSourceVacancyEngine {
     pool?: VacancyPoolStore;
     robots?: RobotsPolicyLoader;
     linkProbe?: LinkProbe;
+    descriptionLoader?: VacancyDescriptionLoader;
     recluster?: ReclusterMode;
   }) {
     this.reclusterMode = options?.recluster ?? { mode: 'sync' };
@@ -339,6 +353,7 @@ export class MultiSourceVacancyEngine {
     this.pool = options?.pool ?? new MemoryVacancyPoolStore();
     this.robots = options?.robots;
     this.linkProbe = options?.linkProbe;
+    this.descriptionLoader = options?.descriptionLoader;
     // Source state is a small bounded registry, unlike the vacancy/cluster
     // pool. Load it immediately so the HTTP admin surface can show a durable
     // manual-sync request without hydrating any pool rows (B231).
@@ -852,6 +867,47 @@ export class MultiSourceVacancyEngine {
 
   public getVacancy(id: string): UnifiedVacancy | undefined {
     return this.pool.getVacancy(id);
+  }
+
+  /**
+   * Дочитывает одну hh-карточку по явному действию кандидата и кладёт текст в
+   * ту же запись пула. Никакого фонового обхода: один id — один запрос.
+   */
+  public loadVacancyDescription(id: string): Promise<VacancyDescriptionLoadResult> {
+    const existing = this.pool.getVacancy(id);
+    if (!existing || existing.provenance.sourceId !== 'src-hh-search' || !this.descriptionLoader) {
+      return Promise.resolve({ ...(existing ? { vacancy: existing } : {}), unavailable: false });
+    }
+    if (existing.fullDescription?.trim())
+      return Promise.resolve({ vacancy: existing, unavailable: false });
+    const pending = this.descriptionLoads.get(id);
+    if (pending) return pending;
+    const load = this.loadAndStoreVacancyDescription(existing);
+    this.descriptionLoads.set(id, load);
+    void load.finally(() => this.descriptionLoads.delete(id));
+    return load;
+  }
+
+  /** Первые карточки подбора греются последовательно, не создавая веер запросов. */
+  public async preloadVacancyDescriptions(ids: readonly string[], limit = 20): Promise<void> {
+    for (const id of ids.slice(0, limit)) {
+      await this.loadVacancyDescription(id);
+    }
+  }
+
+  private async loadAndStoreVacancyDescription(
+    vacancy: UnifiedVacancy,
+  ): Promise<VacancyDescriptionLoadResult> {
+    let fullDescription: string | undefined;
+    try {
+      fullDescription = await this.descriptionLoader!.load(vacancy.url);
+    } catch {
+      return { vacancy, unavailable: true };
+    }
+    if (!fullDescription) return { vacancy, unavailable: true };
+    const updated = { ...vacancy, fullDescription };
+    this.pool.mergeSourceSlice(vacancy.provenance.sourceId, [updated]);
+    return { vacancy: updated, unavailable: false };
   }
 
   /** Есть ли запись в пуле — по индексу, без чтения текста (быстрый проход hh, B219). */

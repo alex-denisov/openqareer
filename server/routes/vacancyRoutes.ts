@@ -518,7 +518,8 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
   const sourceId = clusterId.startsWith('cluster-')
     ? clusterId.slice('cluster-'.length)
     : clusterId;
-  const full = multiSourceEngine.getVacancy?.(sourceId);
+  const loaded = await multiSourceEngine.loadVacancyDescription(sourceId);
+  const full = loaded.vacancy ?? multiSourceEngine.getVacancy?.(sourceId);
   if (!cluster && !full) {
     if (multiSourceEngine.isKnownVacancyGone(clusterId)) {
       return sendError(reply, request, 410, 'vacancy_gone', 'Вакансия снята с площадки.', false);
@@ -532,12 +533,13 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
     (longest, value) => (value.length > longest.length ? value : longest),
     '',
   );
-  const truncated = description.length === 0 || looksLikeExcerpt(description);
+  const truncated = loaded.unavailable || description.length === 0 || looksLikeExcerpt(description);
   return {
     data: {
       id: clusterId,
       description: description || cluster?.descriptionSummary?.trim() || '',
       truncated,
+      ...(loaded.unavailable ? { unavailable: true } : {}),
       skills: cluster?.skills?.length ? cluster.skills : (full?.requiredSkills ?? []),
       responsibilities: full?.responsibilities ?? [],
     },
