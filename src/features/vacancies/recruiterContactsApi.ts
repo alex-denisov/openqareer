@@ -1,4 +1,5 @@
 import type { RecruiterContact, RecruiterContactJob } from '../../../shared/recruiterContact';
+import type { SearchConsentState } from '../../../shared/searchConsent';
 import { apiFetch, readData } from '../coach/apiClient';
 
 export interface EnrichVacancyPayload {
@@ -40,12 +41,24 @@ export async function enrichRecruiterContacts(
   return { contacts: data.contacts ?? [], job: data.job ?? null };
 }
 
-/** Согласие «Вы в поиске» (B263): без него сервер не ищет контакт нанимающего. */
-export async function grantSearchConsent(): Promise<void> {
+/** Согласие «Вы в поиске» (B263, C64): чтение и переключение согласия. */
+export async function getSearchConsent(): Promise<SearchConsentState> {
+  const response = await apiFetch('/api/v1/candidate/search-consent');
+  const data = await readData<{ consent: SearchConsentState }>(response);
+  return data.consent;
+}
+
+export async function setSearchConsent(granted: boolean): Promise<SearchConsentState> {
   const response = await apiFetch('/api/v1/candidate/search-consent', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ granted: true }),
+    body: JSON.stringify({ granted }),
   });
-  await readData<unknown>(response);
+  const data = await readData<{ consent: SearchConsentState }>(response);
+  return data.consent;
+}
+
+/** Согласие «Вы в поиске» (B263): без него сервер не ищет контакт нанимающего. */
+export async function grantSearchConsent(): Promise<void> {
+  await setSearchConsent(true);
 }

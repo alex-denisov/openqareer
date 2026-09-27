@@ -52,6 +52,44 @@ describe('recruiter intelligence API routes', () => {
     expect(response.json().error.code).toBe('search_consent_required');
   });
 
+  it('после отзыва согласия (PUT { granted: false }) поиск контактов снова возвращает 403 search_consent_required', async () => {
+    const app = await createApp();
+    const grantRes = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/search-consent',
+      headers: {
+        authorization: candidateAuthorization(app),
+        origin: 'http://localhost:3000',
+      },
+      payload: { granted: true },
+    });
+    expect(grantRes.statusCode).toBe(200);
+
+    const revokeRes = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/search-consent',
+      headers: {
+        authorization: candidateAuthorization(app),
+        origin: 'http://localhost:3000',
+      },
+      payload: { granted: false },
+    });
+    expect(revokeRes.statusCode).toBe(200);
+    expect(revokeRes.json().data.consent.granted).toBe(false);
+
+    const enrichRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/vacancies/vac-1/enrich-contacts',
+      headers: {
+        authorization: candidateAuthorization(app),
+        origin: 'http://localhost:3000',
+      },
+      payload: {},
+    });
+    expect(enrichRes.statusCode).toBe(403);
+    expect(enrichRes.json().error.code).toBe('search_consent_required');
+  });
+
   it('не принимает пользовательский текст вместо канонической вакансии', async () => {
     const app = await createApp();
     await app.inject({

@@ -12,3 +12,10 @@ export interface SearchConsentState {
 
 /** Текущая версия внутренней политики поиска рекрутеров/самопроверки. */
 export const SEARCH_CONSENT_POLICY_VERSION = 'search-consent-2026-09-27';
+
+/**
+ * Единый текст разъяснения согласия «Вы в поиске» (C64, B263).
+ * Читается в блоке «Рекрутер» (RecruiterContactsBlock) и в шапке Профиля (ProfileTopcard).
+ */
+export const SEARCH_CONSENT_TEXT =
+  'Чтобы найти, кто ведёт вакансию, включите режим «Вы в поиске»: мы будем искать контакты нанимающих по вашим вакансиям.';

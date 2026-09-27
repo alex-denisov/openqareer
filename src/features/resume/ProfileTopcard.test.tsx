@@ -66,4 +66,31 @@ describe('ProfileTopcard — source and connection status (C54)', () => {
     const html = renderToStaticMarkup(<ProfileTopcard draft={draft} onDraftChange={() => {}} reader={null} connections={connections} />);
     expect(html).not.toContain('career-profile-screen-connection-chip');
   });
+
+  it('отображает строку «Вы в поиске» со статусом «выключено», константным текстом и кнопкой «Включить» по умолчанию (C64)', () => {
+    const html = renderToStaticMarkup(<ProfileTopcard draft={draft} onDraftChange={() => {}} reader={null} />);
+    expect(html).toContain('Вы в поиске');
+    expect(html).toContain('выключено');
+    expect(html).toContain('Включить');
+    expect(html).toContain('Чтобы найти, кто ведёт вакансию, включите режим «Вы в поиске»');
+  });
+
+  it('отображает статус «включено», дату обновления и кнопку «Выключить», когда согласие дано (C64)', () => {
+    const html = renderToStaticMarkup(
+      <ProfileTopcard
+        draft={draft}
+        onDraftChange={() => {}}
+        reader={null}
+        searchConsent={{
+          granted: true,
+          policyVersion: 'search-consent-2026-09-27',
+          updatedAt: '2026-09-27T10:00:00.000Z',
+        }}
+      />,
+    );
+    expect(html).toContain('Вы в поиске');
+    expect(html).toContain('включено');
+    expect(html).toContain('обновлено 27 сентября 2026');
+    expect(html).toContain('Выключить');
+  });
 });

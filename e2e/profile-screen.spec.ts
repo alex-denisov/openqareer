@@ -362,6 +362,33 @@ async function stubSession(page: Page): Promise<void> {
         },
       });
     }
+    if (pathname === '/api/v1/candidate/search-consent') {
+      if (request.method() === 'PUT') {
+        const body = request.postDataJSON() as { granted?: boolean } | null;
+        return route.fulfill({
+          json: {
+            data: {
+              consent: {
+                granted: Boolean(body?.granted),
+                policyVersion: 'search-consent-2026-09-27',
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          },
+        });
+      }
+      return route.fulfill({
+        json: {
+          data: {
+            consent: {
+              granted: false,
+              policyVersion: 'search-consent-2026-09-27',
+              updatedAt: '2026-09-21T09:00:00.000Z',
+            },
+          },
+        },
+      });
+    }
     return route.fulfill({ json: { data: null } });
   });
 }
@@ -494,5 +521,106 @@ test.describe('B265 Profile screen', () => {
     await page.getByRole('button', { name: 'Подтвердить и применить к целям поиска' }).click();
     await expect(page).toHaveURL(/\/app/);
     await expect.poll(() => patched).toMatchObject({ workMode: expect.any(String) });
+  });
+
+  test('переключает статус «Вы в поиске» (включить -> выключить) на desktop 1440 (C64)', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    let consentState = {
+      granted: false,
+      policyVersion: 'search-consent-2026-09-27',
+      updatedAt: '2026-09-21T09:00:00.000Z',
+    };
+    await stubSession(page);
+    await page.route('**/api/v1/candidate/search-consent', async (route) => {
+      const request = route.request();
+      if (request.method() === 'PUT') {
+        const body = request.postDataJSON() as { granted?: boolean } | null;
+        consentState = {
+          granted: Boolean(body?.granted),
+          policyVersion: 'search-consent-2026-09-27',
+          updatedAt: new Date().toISOString(),
+        };
+        return route.fulfill({ json: { data: { consent: consentState } } });
+      }
+      return route.fulfill({ json: { data: { consent: consentState } } });
+    });
+
+    await openProfile(page);
+
+    const consentRow = page.locator('.career-profile-screen-search-consent');
+    await expect(consentRow).toBeVisible();
+    await expect(consentRow).toContainText('Вы в поиске');
+    await expect(consentRow).toContainText('выключено');
+
+    const toggleBtn = consentRow.getByRole('button', { name: /Включить|Выключить/ });
+    await expect(toggleBtn).toHaveText('Включить');
+    await toggleBtn.click();
+
+    await expect(consentRow).toContainText('включено');
+    await expect(toggleBtn).toHaveText('Выключить');
+
+    await toggleBtn.click();
+    await expect(consentRow).toContainText('выключено');
+    await expect(toggleBtn).toHaveText('Включить');
+
+    await page.screenshot({ path: 'output/playwright/C64/profile-search-consent-1440.png' });
+    await page.screenshot({
+      path: '/Users/alexeydenisov/Projects/openqareer/output/playwright/C64/profile-search-consent-1440.png',
+    });
+  });
+
+  test('переключает статус «Вы в поиске» (включить -> выключить) на mobile 390 (C64)', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    let consentState = {
+      granted: false,
+      policyVersion: 'search-consent-2026-09-27',
+      updatedAt: '2026-09-21T09:00:00.000Z',
+    };
+    await stubSession(page);
+    await page.route('**/api/v1/candidate/search-consent', async (route) => {
+      const request = route.request();
+      if (request.method() === 'PUT') {
+        const body = request.postDataJSON() as { granted?: boolean } | null;
+        consentState = {
+          granted: Boolean(body?.granted),
+          policyVersion: 'search-consent-2026-09-27',
+          updatedAt: new Date().toISOString(),
+        };
+        return route.fulfill({ json: { data: { consent: consentState } } });
+      }
+      return route.fulfill({ json: { data: { consent: consentState } } });
+    });
+
+    await openProfile(page);
+
+    const consentRow = page.locator('.career-profile-screen-search-consent');
+    await expect(consentRow).toBeVisible();
+    await expect(consentRow).toContainText('Вы в поиске');
+    await expect(consentRow).toContainText('выключено');
+
+    const toggleBtn = consentRow.getByRole('button', { name: /Включить|Выключить/ });
+    await expect(toggleBtn).toHaveText('Включить');
+    await toggleBtn.click();
+
+    await expect(consentRow).toContainText('включено');
+    await expect(toggleBtn).toHaveText('Выключить');
+
+    await toggleBtn.click();
+    await expect(consentRow).toContainText('выключено');
+    await expect(toggleBtn).toHaveText('Включить');
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+
+    await page.screenshot({ path: 'output/playwright/C64/profile-search-consent-390.png' });
+    await page.screenshot({
+      path: '/Users/alexeydenisov/Projects/openqareer/output/playwright/C64/profile-search-consent-390.png',
+    });
   });
 });

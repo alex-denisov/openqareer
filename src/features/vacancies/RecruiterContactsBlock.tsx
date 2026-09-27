@@ -11,6 +11,7 @@ import {
   User,
 } from '@phosphor-icons/react';
 import type { EmailStatus, RecruiterContact } from '../../../shared/recruiterContact';
+import { SEARCH_CONSENT_TEXT } from '../../../shared/searchConsent';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import { CoachApiError } from '../coach/apiClient';
 import {
@@ -209,10 +210,7 @@ function isConsentRequired(reason: unknown): boolean {
 function ConsentRequiredNotice({ onGrant }: { readonly onGrant: () => void }) {
   return (
     <div className="career-recruiter-empty">
-      <span>
-        Чтобы найти, кто ведёт вакансию, включите режим «Вы в поиске»: мы будем искать контакты
-        нанимающих по вашим вакансиям.
-      </span>
+      <span>{SEARCH_CONSENT_TEXT}</span>
       <button type="button" className="career-recruiter-retry-btn" onClick={onGrant}>
         Разрешить и найти
       </button>
