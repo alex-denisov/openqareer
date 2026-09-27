@@ -213,6 +213,54 @@ describe('ats board adapters', () => {
     expect(vacancy?.publishedAt).toBe(new Date('2026-07-10').toISOString());
   });
 
+  it('Workable: сохраняет requirements и benefits в описание вакансии (C62)', () => {
+    const [vacancy] = normalizeAtsBoard(
+      'ats-workable-zego',
+      {
+        name: 'Zego',
+        jobs: [
+          {
+            title: 'Senior Data Engineer',
+            shortcode: 'W12345',
+            employment_type: 'Full-time',
+            url: 'https://apply.workable.com/j/W12345',
+            description: '<p>About the role</p>',
+            requirements: '<p>5+ years SQL and Spark</p>',
+            benefits: '<p>Private healthcare</p>',
+          },
+        ],
+      },
+      { observedAt: OBSERVED_AT },
+    );
+
+    expect(vacancy?.description).toContain('About the role');
+    expect(vacancy?.description).toContain('5+ years SQL and Spark');
+    expect(vacancy?.description).toContain('Private healthcare');
+  });
+
+  it('Greenhouse: сохраняет departments в skills и читает локацию из offices при отсутствии location.name (C62)', () => {
+    const [vacancy] = normalizeAtsBoard(
+      'ats-greenhouse-figma',
+      {
+        jobs: [
+          {
+            id: 9999,
+            title: 'Infrastructure Lead',
+            absolute_url: 'https://boards.greenhouse.io/figma/jobs/9999',
+            location: { name: '' },
+            offices: [{ name: 'Amsterdam Office', location: 'Amsterdam, Netherlands' }],
+            departments: [{ name: 'Infrastructure' }, { name: 'Security' }],
+            content: 'Lead our core cloud infrastructure',
+          },
+        ],
+      },
+      { observedAt: OBSERVED_AT, sourceName: 'Figma' },
+    );
+
+    expect(vacancy?.requiredSkills).toEqual(['Infrastructure', 'Security']);
+    expect(vacancy?.location).toBe('Amsterdam, Netherlands');
+  });
+
   it('читает запись Recruitee с зарплатой и публичной ссылкой', () => {
     const [vacancy] = normalizeAtsBoard(
       'ats-recruitee-hygraph',

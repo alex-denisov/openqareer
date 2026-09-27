@@ -2,6 +2,7 @@ import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import {
   asArray,
   buildJsonVacancy,
+  firstOf,
   fromEpochMilliseconds,
   fromIso,
   fromLooseDate,
@@ -216,7 +217,15 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
   greenhouse: (payload, context, sourceId, board) =>
     listOf(payload, (value) => asArray(record(value).jobs)).map((item) => {
       const job = record(item);
-      const location = text(record(job.location).name) || undefined;
+      const offices = asArray(job.offices);
+      const officeLocation = firstOf(
+        offices?.map((off) => text(record(off).location) || text(record(off).name)),
+      );
+      const location = text(record(job.location).name) || officeLocation || undefined;
+      const departments =
+        asArray(job.departments)
+          ?.map((dept) => text(record(dept).name))
+          .filter(Boolean) ?? [];
       return buildJsonVacancy({
         sourceId,
         context,
@@ -226,7 +235,7 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
         location,
         isRemote: /\bremote\b/i.test(location ?? ''),
         description: text(job.content) || text(job.title),
-        skills: [],
+        skills: departments,
         url: text(job.absolute_url),
         publishedAt: fromIso(job.first_published ?? job.updated_at),
       });
@@ -282,6 +291,12 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
     const accountName = text(account.name);
     return listOf(payload, (value) => asArray(record(value).jobs)).map((item) => {
       const job = record(item);
+      const descParts = [
+        text(job.description),
+        text(job.requirements),
+        text(job.benefits),
+      ].filter(Boolean);
+      const description = descParts.join('\n\n') || text(job.title);
       return buildJsonVacancy({
         sourceId,
         context,
@@ -290,7 +305,7 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
         company: employer(accountName, context, board),
         location: placeOf(text(job.city), text(job.country)),
         isRemote: job.telecommuting === true,
-        description: text(job.description) || text(job.title),
+        description,
         skills: [],
         employmentType: text(job.employment_type) || undefined,
         experienceLevel: text(job.experience) || undefined,

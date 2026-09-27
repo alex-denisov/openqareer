@@ -112,6 +112,7 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
       .filter((item) => record(item).legal === undefined)
       .map((item) => {
         const job = record(item);
+        const salary = remoteOkSalary(job);
         return build({
           sourceId,
           context,
@@ -122,6 +123,7 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
           isRemote: true,
           description: text(job.description) || text(job.position),
           skills: stringList(job.tags),
+          salary,
           url: text(job.url),
           publishedAt: fromIso(job.date),
         });
@@ -446,6 +448,17 @@ function numericSalary(job: JsonRecord): UnifiedVacancy['salary'] | undefined {
   const to = numeric(job.salary_max);
   if (from === undefined && to === undefined) return undefined;
   return { from, to, currency: 'RUR' };
+}
+
+function remoteOkSalary(job: JsonRecord): UnifiedVacancy['salary'] | undefined {
+  const from = numeric(job.salary_min);
+  const to = numeric(job.salary_max);
+  if (from === undefined && to === undefined) return undefined;
+  return {
+    ...(from !== undefined ? { from } : {}),
+    ...(to !== undefined ? { to } : {}),
+    currency: 'USD',
+  };
 }
 
 /** Имя вложенного справочника Get on Board: `{ data: { attributes: { name } } }`. */

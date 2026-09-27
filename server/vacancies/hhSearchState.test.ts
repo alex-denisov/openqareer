@@ -225,4 +225,45 @@ describe('parseHhSearchState', () => {
 
     expect(result.vacancies).toHaveLength(0);
   });
+
+  it('сохраняет сниппет (требования и обязанности) как описание, если полного нет', () => {
+    const vacancyWithSnippet = {
+      ...vacancy,
+      snippet: {
+        requirement: 'Опыт работы с <highlight>TypeScript</highlight> и Node.js от 3 лет.',
+        responsibility: 'Проектирование и разработка масштабируемых сервисов.',
+      },
+    };
+    const result = parseHhSearchState(
+      pageWith({ vacancySearchResult: { totalResults: 1, vacancies: [vacancyWithSnippet] } }),
+      context,
+    );
+
+    expect(result.vacancies).toHaveLength(1);
+    const parsed = result.vacancies[0];
+    expect(parsed.description).toContain('Опыт работы с TypeScript и Node.js от 3 лет.');
+    expect(parsed.description).toContain('Проектирование и разработка масштабируемых сервисов.');
+    expect(parsed.qualifications).toEqual([
+      'Опыт работы с TypeScript и Node.js от 3 лет.',
+    ]);
+    expect(parsed.responsibilities).toEqual([
+      'Проектирование и разработка масштабируемых сервисов.',
+    ]);
+  });
+
+  it('сохраняет сниппет только с требованиями или только с обязанностями', () => {
+    const onlyReq = {
+      ...vacancy,
+      snippet: {
+        requirement: 'Знание SQL и архитектуры баз данных.',
+      },
+    };
+    const result = parseHhSearchState(
+      pageWith({ vacancySearchResult: { totalResults: 1, vacancies: [onlyReq] } }),
+      context,
+    );
+    expect(result.vacancies[0].description).toBe('Знание SQL и архитектуры баз данных.');
+    expect(result.vacancies[0].qualifications).toEqual(['Знание SQL и архитектуры баз данных.']);
+    expect(result.vacancies[0].responsibilities).toBeUndefined();
+  });
 });
