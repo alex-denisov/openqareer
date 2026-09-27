@@ -562,6 +562,7 @@ describe('CareerWorkspaceShell brand chrome', () => {
       const rail = html.slice(html.indexOf('<aside id="career-rail"'), html.indexOf('</aside>'));
       expect(rail).toContain('career-brand-mark');
       expect(rail).not.toContain('brand-lockup-qareer');
+      expect(rail).toContain('role="tooltip"');
     });
 
     /**
@@ -677,6 +678,7 @@ describe('рельс «Пульт»', () => {
     expect(plan).not.toBeNull();
     expect(plan![0]).toContain(`aria-label="Тарифы, план ${CURRENT_PLAN.name}"`);
     expect(plan![0]).not.toContain('career-rail-plan-text');
+    expect(plan![0]).toContain('M12 3.2 20.4 12 12 20.8 3.6 12z');
   });
 
   it('подсвечивает пункт плана как активный на экране тарифов', () => {

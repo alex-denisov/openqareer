@@ -43,7 +43,12 @@ describe('buildPathIndicator', () => {
   it('marks «Подборка» in progress («вы здесь») while the pool has matches and nothing is confirmed yet', () => {
     const steps = buildPathIndicator({
       track: [
-        { id: 'campaign', label: 'Кампания поиска', status: 'active', reason: 'Готовим первое действие' },
+        {
+          id: 'campaign',
+          label: 'Кампания поиска',
+          status: 'active',
+          reason: 'Готовим первое действие',
+        },
       ],
       matchedPoolCount: 3,
       confirmedApplications: 0,
@@ -58,7 +63,12 @@ describe('buildPathIndicator', () => {
   it('marks «Подборка» done once the candidate has moved on to a confirmed application', () => {
     const steps = buildPathIndicator({
       track: [
-        { id: 'campaign', label: 'Кампания поиска', status: 'active', reason: 'Готовим первое действие' },
+        {
+          id: 'campaign',
+          label: 'Кампания поиска',
+          status: 'active',
+          reason: 'Готовим первое действие',
+        },
       ],
       matchedPoolCount: 3,
       confirmedApplications: 1,
@@ -70,7 +80,12 @@ describe('buildPathIndicator', () => {
   it('marks «Подборка» in progress when a campaign is active but the pool is still empty', () => {
     const steps = buildPathIndicator({
       track: [
-        { id: 'campaign', label: 'Кампания поиска', status: 'active', reason: 'Готовим первое действие' },
+        {
+          id: 'campaign',
+          label: 'Кампания поиска',
+          status: 'active',
+          reason: 'Готовим первое действие',
+        },
       ],
       matchedPoolCount: 0,
       confirmedApplications: 0,
@@ -130,10 +145,12 @@ describe('buildPathIndicator', () => {
 
   it('points every step at an existing screen, never a placeholder route', () => {
     const steps = buildPathIndicator({ matchedPoolCount: 0, confirmedApplications: 0 });
-    const destinations = new Set(steps.map((step) => step.destination));
-
-    for (const destination of destinations) {
-      expect(['profile', 'career', 'opportunities']).toContain(destination);
-    }
+    expect(steps.map(({ id, destination }) => [id, destination])).toEqual([
+      ['profile', 'profile'],
+      ['role', 'career'],
+      ['shortlist', 'opportunities'],
+      ['responses', 'responses'],
+      ['interviews', 'responses'],
+    ]);
   });
 });

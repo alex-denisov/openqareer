@@ -329,13 +329,53 @@ test.describe('B232 readability gate', () => {
     expect(unmatched).toEqual([]);
   });
 
-  /**
-   * B248, owner review 2026-09-23 — the phone build once wrapped the path
-   * indicator's five steps onto two rows, and «Профиль»'s label ran into
-   * «Роль»'s dot. The mockup keeps one row and scrolls horizontally instead;
-   * this asserts that directly rather than trusting a screenshot.
-   */
-  test('the path indicator on the phone stays one row without wrapping or overlapping labels', async ({
+  test('the collapsed desktop rail hides captions and the path opens only existing sections', async ({
+    page,
+  }, info) => {
+    test.skip(info.project.name !== 'desktop-1440', 'desktop only');
+    const unmatched = await mockSignedInCabinet(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+
+    const rail = page.locator('aside#career-rail');
+    await expect(rail.locator('.career-nav-button span')).toHaveCount(5);
+    const captions = await rail.locator('.career-nav-button span').evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        text: node.textContent,
+        width: node.getBoundingClientRect().width,
+      })),
+    );
+    expect(captions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ text: 'Сегодня', width: 1 }),
+        expect.objectContaining({ text: 'Вакансии', width: 1 }),
+      ]),
+    );
+    await rail.getByRole('button', { name: 'Вакансии', exact: true }).hover();
+    await expect(rail.getByRole('tooltip')).toContainText('Вакансии');
+
+    const routes = [
+      ['Профиль', '.career-profile-screen-view'],
+      ['Роль', '.career-campaign'],
+      ['Подборка', '.vacancies-screen'],
+      ['Отклики', '.career-responses-board-wrap, .career-responses-empty'],
+      ['Интервью', '.career-responses-board-wrap, .career-responses-empty'],
+    ] as const;
+    for (const [label, target] of routes) {
+      await page.goto('/app', { waitUntil: 'domcontentloaded' });
+      await expect(
+        page.getByRole('button', { name: new RegExp(`^${label}\\.`) }).first(),
+      ).toBeVisible();
+      await page
+        .getByRole('button', { name: new RegExp(`^${label}\\.`) })
+        .first()
+        .click();
+      await expect(page.locator(target).first()).toBeVisible();
+    }
+    expect(unmatched).toEqual([]);
+  });
+
+  test('the path indicator on the phone is a one-line current-step summary without overflow', async ({
     page,
   }, info) => {
     test.skip(info.project.name !== 'mobile-390', 'phone only');
@@ -344,36 +384,24 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
     await openSection(page, 'Сегодня');
 
-    const steps = page.locator('.career-path-step');
-    await expect(steps).toHaveCount(5);
-
     const facts = await page.evaluate(() => {
-      const nodes = [...document.querySelectorAll<HTMLElement>('.career-path-step')];
-      const tops = nodes.map((node) => Math.round(node.getBoundingClientRect().top));
-      const dots = nodes.map((node) =>
-        node.querySelector('.career-path-dot')?.getBoundingClientRect(),
-      );
-      const labels = nodes.map((node) =>
-        node.querySelector('.career-path-label')?.getBoundingClientRect(),
-      );
-      const overlaps: string[] = [];
-      for (let i = 0; i < labels.length; i += 1) {
-        const label = labels[i];
-        if (!label) continue;
-        for (let j = 0; j < dots.length; j += 1) {
-          if (j === i) continue;
-          const dot = dots[j];
-          if (!dot) continue;
-          const ix = Math.min(label.right, dot.right) - Math.max(label.left, dot.left);
-          const iy = Math.min(label.bottom, dot.bottom) - Math.max(label.top, dot.top);
-          if (ix > 2 && iy > 2) overlaps.push(`step ${i} label × step ${j} dot`);
-        }
-      }
-      return { singleRow: new Set(tops).size === 1, tops, overlaps };
+      const path = document.querySelector<HTMLElement>('.career-path');
+      const summary = document.querySelector<HTMLElement>('.career-path-mobile-summary');
+      if (!path || !summary) return null;
+      const pathBox = path.getBoundingClientRect();
+      const summaryBox = summary.getBoundingClientRect();
+      return {
+        pathHeight: pathBox.height,
+        summaryHeight: summaryBox.height,
+        pathOverflow: path.scrollWidth - path.clientWidth,
+      };
     });
 
-    expect(facts.singleRow, JSON.stringify(facts)).toBe(true);
-    expect(facts.overlaps, JSON.stringify(facts)).toEqual([]);
+    expect(facts).not.toBeNull();
+    expect(facts!.pathHeight).toBeLessThanOrEqual(48);
+    expect(facts!.summaryHeight).toBeGreaterThanOrEqual(44);
+    expect(facts!.pathOverflow).toBeLessThanOrEqual(0);
+    await expect(page.locator('.career-path-mobile-summary')).toContainText(/^Шаг \d из 5/);
     expect(unmatched).toEqual([]);
   });
 

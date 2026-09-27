@@ -6,7 +6,7 @@ import type { CareerJourney } from '../journey/careerJourneyEngine';
  * both the anonymous-workspace shell and the authenticated cabinet, whose
  * `onNavigate` callbacks accept different (but overlapping) view unions.
  */
-export type PathDestination = 'profile' | 'career' | 'opportunities';
+export type PathDestination = 'profile' | 'career' | 'opportunities' | 'responses';
 
 /**
  * B248 — the cross-screen path indicator: Профиль → Роль → Подборка →
@@ -56,7 +56,9 @@ function formatInterviewReason(scheduledAt: string): string {
   const date = new Date(scheduledAt);
   if (Number.isNaN(date.getTime())) return 'Дата уточняется';
   const weekday = new Intl.DateTimeFormat('ru-RU', { weekday: 'long' }).format(date);
-  const time = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(date);
+  const time = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(
+    date,
+  );
   return `${weekday}, ${time}`;
 }
 
@@ -107,14 +109,15 @@ function responsesStepOf(input: PathIndicatorInput): PathStep {
   // A live pipeline is «you are here», not «done» — «done» stayed for the
   // wizard-only workspace, which has no board and only knows a first
   // confirmed application (B251 S4, accepted screenshot review).
-  const state: PathStepState = active > 0 ? 'in-progress' : input.confirmedApplications > 0 ? 'done' : 'not-started';
+  const state: PathStepState =
+    active > 0 ? 'in-progress' : input.confirmedApplications > 0 ? 'done' : 'not-started';
   const reason =
     state === 'in-progress'
       ? `${active} в работе — вы здесь`
       : state === 'done'
         ? 'Есть подтверждённый отклик'
         : 'Откликов нет — начните с очереди дня';
-  return { id: 'responses', label: 'Отклики', state, reason, destination: 'opportunities' };
+  return { id: 'responses', label: 'Отклики', state, reason, destination: 'responses' };
 }
 
 function interviewsStepOf(input: PathIndicatorInput): PathStep {
@@ -124,7 +127,7 @@ function interviewsStepOf(input: PathIndicatorInput): PathStep {
       label: 'Интервью',
       state: 'in-progress',
       reason: `${input.nearestInterview.company} · ${formatInterviewReason(input.nearestInterview.scheduledAt)}`,
-      destination: 'opportunities',
+      destination: 'responses',
     };
   }
   return {
@@ -132,7 +135,7 @@ function interviewsStepOf(input: PathIndicatorInput): PathStep {
     label: 'Интервью',
     state: 'not-started',
     reason: NO_INTERVIEW_DATA_REASON,
-    destination: 'opportunities',
+    destination: 'responses',
   };
 }
 
