@@ -1,6 +1,6 @@
 import type { ApplicationView } from './applicationDerivedFields';
 import { pluralRu } from '../../shared/pluralRu';
-import type { VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
+import type { VacancyLevelMatch, VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
 
 /** Структура зарплаты как в matched-vacancies — клиент форматирует сам. */
 export interface TodaySalary {
@@ -13,7 +13,7 @@ export interface TodaySalary {
 /** Fit-точки новой вакансии (B248): роль/уровень из объяснения совпадения, гео пока нечем считать. */
 export interface TodayFit {
   readonly role: VacancyRoleMatch;
-  readonly level: VacancyRoleMatch | null;
+  readonly level: VacancyLevelMatch;
   readonly geo: boolean | null;
 }
 
@@ -36,7 +36,7 @@ export interface TodayQueueItem {
   readonly clusterId?: string;
   readonly title: string;
   readonly company: string | null;
-  /** Короткая причина строкой — «6 рабочих дней без ответа», «сегодня», «через 2 дня». `null` — нечего честно сказать. */
+  /** Короткая причина строкой — «6 дней без ответа», «сегодня», «через 2 дня». `null` — нечего честно сказать. */
   readonly eyebrow: string | null;
   readonly dueAt: string | null;
   readonly salary?: TodaySalary;
@@ -61,11 +61,12 @@ export interface TodayNewVacanciesCaption {
 export interface TodayDigest {
   readonly waitingForYou: number;
   readonly newVacancies: number;
+  readonly followUpsDueToday: number;
   readonly closedVacancies: number;
   readonly interviewsAhead: number;
   readonly nextInterview: TodayNextInterview | null;
   readonly newVacanciesCaption: TodayNewVacanciesCaption | null;
-  /** До двух строк вида «Peraton — 6 рабочих дней тишины». */
+  /** До двух строк вида «Peraton — 6 дней тишины». */
   readonly followUpCaptions: readonly string[];
 }
 
@@ -115,7 +116,8 @@ const MAX_FOLLOW_UP_CAPTIONS = 2;
 
 function eyebrowFor(application: ApplicationView): string | null {
   if (application.followUp && (application.followUp.urgency === 'due' || application.followUp.urgency === 'stale')) {
-    return `${application.followUp.businessDaysSinceContact} рабочих дней без ответа`;
+    const days = application.followUp.daysSinceContact;
+    return `${pluralRu(days, ['день', 'дня', 'дней'])} без ответа`;
   }
   if (application.nearestInterview?.scheduledAt) {
     const days = daysUntil(application.nearestInterview.scheduledAt);
@@ -164,15 +166,12 @@ function newVacancyCaption(
 
 function followUpCaptionsFor(applications: readonly ApplicationView[]): string[] {
   return applications
-    .filter(
-      (application) =>
-        application.followUp && (application.followUp.urgency === 'due' || application.followUp.urgency === 'stale'),
-    )
+    .filter((application) => application.followUp?.urgency === 'due')
     .slice(0, MAX_FOLLOW_UP_CAPTIONS)
     .map((application) => {
       const company = companyOf(application) ?? application.vacancy?.title ?? 'Вакансия';
-      const days = application.followUp?.businessDaysSinceContact ?? 0;
-      return `${company} — ${days} рабочих дней тишины`;
+      const days = application.followUp?.daysSinceContact ?? 0;
+      return `${company} — ${pluralRu(days, ['день', 'дня', 'дней'])} тишины`;
     });
 }
 
@@ -189,6 +188,7 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
     digest: {
       waitingForYou: waitingApplications.length,
       newVacancies: input.newVacancies?.length ?? 0,
+      followUpsDueToday: input.applications.filter((application) => application.followUp?.urgency === 'due').length,
       closedVacancies: input.closedVacanciesSinceVisit,
       interviewsAhead: upcomingInterviews.length,
       nextInterview: nextInterviewOf(upcomingInterviews[0]),

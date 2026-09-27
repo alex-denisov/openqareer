@@ -1,12 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildApp } from './app';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { EMPTY_RESUME_DRAFT } from './domain/resumeDraft';
 import { apps, config, noSessions, stores, successProvider } from './appTestHarness';
 import type { MatchedVacancyItem } from './vacancies/multiSourceVacancyEngine';
+import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
+import { normalizeTitleKey } from './vacancies/titleParse/normalizeTitleKey';
 
 /** `GET /today` (B251, S4, architecture.md §4, §57, §97). */
-function pool(roleMatches: readonly ('target' | 'partial' | 'none')[] = ['target']): MatchedVacancyItem[] {
+function pool(
+  roleMatches: readonly ('target' | 'partial' | 'none')[] = ['target'],
+  remoteFlags: readonly boolean[] = [],
+): MatchedVacancyItem[] {
   return roleMatches.map((roleMatch, index) => {
     const clusterId = `cluster-${index + 1}`;
     return {
@@ -15,7 +20,7 @@ function pool(roleMatches: readonly ('target' | 'partial' | 'none')[] = ['target
         canonicalTitle: `Инженер данных ${index + 1}`,
         canonicalCompany: 'Компания',
         canonicalLocation: 'Москва',
-        isRemote: false,
+        isRemote: remoteFlags[index] ?? false,
         skills: [],
         descriptionSummary: 'Описание вакансии. '.repeat(20),
         primaryUrl: `https://example.test/${index + 1}`,
@@ -41,6 +46,10 @@ function pool(roleMatches: readonly ('target' | 'partial' | 'none')[] = ['target
 async function createApp(options?: {
   withMatchingEngine?: boolean;
   roleMatches?: readonly ('target' | 'partial' | 'none')[];
+  remoteFlags?: readonly boolean[];
+  experienceTitle?: string;
+  titleParseStore?: SqliteTitleParseStore;
+  remoteOnly?: boolean;
 }) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',
@@ -49,12 +58,44 @@ async function createApp(options?: {
   const candidate = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
   candidateStore.saveResumeDraft(
     candidate.id,
-    { ...EMPTY_RESUME_DRAFT, targetRole: 'Инженер данных' },
+    {
+      ...EMPTY_RESUME_DRAFT,
+      targetRole: 'Инженер данных',
+      experience: options?.experienceTitle
+        ? [
+            {
+              id: 'experience-1',
+              chronologyMemoryId: 'chronology-1',
+              title: options.experienceTitle,
+              current: true,
+              bulletMemoryIds: [],
+            },
+          ]
+        : [],
+    },
     [],
   );
+  if (options?.remoteOnly) {
+    candidateStore.saveCandidateWorkspace(candidate.id, {
+      resumeText: '',
+      resumeSource: 'text',
+      targetDirection: 'Инженер данных',
+      regions: ['ru'],
+      currentSituation: '',
+      constraints: '',
+      urgency: 'active',
+      campaign: {
+        roles: ['Инженер данных'],
+        regions: ['ru'],
+        remoteOnly: true,
+        revision: 1,
+        updatedAt: '2026-09-24T00:00:00.000Z',
+      },
+    });
+  }
 
   const engine = {
-    getMatchedVacanciesAsync: async () => pool(options?.roleMatches),
+    getMatchedVacanciesAsync: async () => pool(options?.roleMatches, options?.remoteFlags),
     isKnownVacancyGone: () => false,
     restore: () => ({ clusters: 0, sources: 0 }),
   };
@@ -65,6 +106,7 @@ async function createApp(options?: {
     candidateStore,
     authService: noSessions,
     multiSourceVacancyEngine: options?.withMatchingEngine ? (engine as never) : undefined,
+    titleParseStore: options?.titleParseStore,
     serveStatic: false,
   });
   apps.push(app);
@@ -136,6 +178,34 @@ describe('GET /candidate/today', () => {
     expect(body.digest.newVacancies).toBe(0);
   });
 
+  it('applies the explicit remote-only campaign choice to Vacancies and Today', async () => {
+    const { app, authorization } = await createApp({
+      withMatchingEngine: true,
+      roleMatches: ['target', 'target'],
+      remoteFlags: [false, true],
+      remoteOnly: true,
+    });
+
+    const vacancies = await app.inject({
+      url: '/api/v1/candidate/matched-vacancies',
+      headers: { authorization },
+    });
+    expect(vacancies.statusCode).toBe(200);
+    expect(vacancies.json().data).toHaveLength(1);
+    expect(vacancies.json().data[0].cluster.isRemote).toBe(true);
+    expect(vacancies.json().meta.campaign.remoteOnly).toBe(true);
+
+    const today = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow`,
+      headers: { authorization },
+    });
+    expect(today.statusCode).toBe(200);
+    expect(today.json().data.digest.newVacancies).toBe(1);
+    expect(today.json().data.queue.map((item: { clusterId?: string }) => item.clusterId)).toEqual([
+      'cluster-2',
+    ]);
+  });
+
   // The app maps every Zod validation failure to 422 (`runtime.ts`), the
   // same single error shape every other route uses — not a one-off 400.
   it('rejects an invalid tz', async () => {
@@ -155,5 +225,39 @@ describe('GET /candidate/today', () => {
     const response = await app.inject({ url: `${TODAY_URL}?tz=Europe/Moscow` });
 
     expect(response.statusCode).toBe(401);
+  });
+});
+
+describe('GET /candidate/matched-vacancies level explanation', () => {
+  it('uses the stored title parse to classify a vacancy when title rules cannot', async () => {
+    const titleParseStore = new SqliteTitleParseStore({ databasePath: ':memory:' });
+    titleParseStore.insertIfMissing({
+      titleKey: normalizeTitleKey('Инженер данных 1'),
+      sampleTitle: 'Инженер данных 1',
+      functions: [],
+      levelRank: 0,
+      roleLabel: null,
+      parsedBy: 'rules',
+      model: null,
+      taxonomyVersion: 1,
+      priority: 0,
+    });
+    expect(titleParseStore.getByKey(normalizeTitleKey('Инженер данных 1'))?.levelRank).toBe(0);
+    const getByKey = vi.spyOn(titleParseStore, 'getByKey');
+    const { app, authorization } = await createApp({
+      withMatchingEngine: true,
+      experienceTitle: 'VP Technology Operations',
+      titleParseStore,
+    });
+
+    const response = await app.inject({
+      url: '/api/v1/candidate/matched-vacancies',
+      headers: { authorization },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().meta.candidateLevel).toBe('vp');
+    expect(getByKey).toHaveBeenCalledWith('инженер данных');
+    expect(response.json().data[0].explanation.levelMatch).toBe('below');
   });
 });

@@ -8,39 +8,26 @@ import {
 } from './onboardingWizardSteps';
 
 describe('onboardingWizardSteps', () => {
-  it('lists the file/LinkedIn/hh branch as six steps, live progress in slot 2', () => {
-    expect(stepsForBranch('file')).toEqual([
-      'source',
-      'progress',
-      'review',
-      'roles',
-      'geo',
-      'done',
-    ]);
+  it('lists the file/LinkedIn/hh branch with one combined role and region step', () => {
+    expect(stepsForBranch('file')).toEqual(['source', 'progress', 'review', 'campaign', 'done']);
   });
 
-  it('lists the talk branch with the three-question step in the same slot 2', () => {
-    expect(stepsForBranch('talk')).toEqual([
-      'source',
-      'talk',
-      'review',
-      'roles',
-      'geo',
-      'done',
-    ]);
+  it('keeps the profileless branch to a short role and region form', () => {
+    expect(stepsForBranch('talk')).toEqual(['source', 'talk', 'done']);
   });
 
-  it.each<[OnboardingBranch, string, number]>([
-    ['file', 'source', 1],
-    ['file', 'progress', 2],
-    ['file', 'review', 3],
-    ['file', 'roles', 4],
-    ['file', 'geo', 5],
-    ['file', 'done', 6],
-    ['talk', 'talk', 2],
-  ])('reports dot %i for %s on the %s branch', (branch, id, dot) => {
+  it.each<[OnboardingBranch, string, number, number]>([
+    ['file', 'source', 1, 5],
+    ['file', 'progress', 2, 5],
+    ['file', 'review', 3, 5],
+    ['file', 'campaign', 4, 5],
+    ['file', 'done', 5, 5],
+    ['talk', 'source', 1, 3],
+    ['talk', 'talk', 2, 3],
+    ['talk', 'done', 3, 3],
+  ])('reports dot %i for %s on the %s branch', (branch, id, dot, total) => {
     expect(stepInfo(branch, id as never).dot).toBe(dot);
-    expect(stepInfo(branch, id as never).total).toBe(6);
+    expect(stepInfo(branch, id as never).total).toBe(total);
   });
 
   it('refuses a step id that does not belong to the branch', () => {

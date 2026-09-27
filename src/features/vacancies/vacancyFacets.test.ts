@@ -44,6 +44,7 @@ function makeItem(
     explanation: {
       clusterId: id,
       roleMatch: "target",
+      levelMatch: "unknown",
       requirements: { matched: 2, total: 3 },
       matchingPoints: ["Skill A"],
       missingPoints: ["Skill B"],

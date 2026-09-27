@@ -1,4 +1,8 @@
-import type { VacancyRequirementCoverage, VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
+import type {
+  VacancyLevelMatch,
+  VacancyRequirementCoverage,
+  VacancyRoleMatch,
+} from '../../shared/vacancyMatchOrder';
 
 export type VacancySourceType =
   | 'hh'
@@ -109,7 +113,7 @@ export interface VacancyMatchExplanation {
    * заголовок вакансии не даёт сигнала об уровне; точка в этом случае не
    * рисуется, а не подставляет совпадение из отсутствия данных (PRB-016).
    */
-  levelMatch?: VacancyRoleMatch;
+  levelMatch: VacancyLevelMatch;
   /**
    * Требования вакансии: сколько перечислено и сколько из них подтверждено.
    * `undefined` — вакансия требований не перечислила, сравнивать не с чем;

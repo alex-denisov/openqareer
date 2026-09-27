@@ -1,4 +1,5 @@
 import { apiFetch, readData } from '../coach/apiClient';
+import type { VacancyLevelMatch } from '../../../shared/vacancyMatchOrder';
 
 /**
  * Транспорт «Сегодня» (B251 S4b, architecture.md §57): `POST /visits`
@@ -19,7 +20,7 @@ export type TodayRoleMatch = 'target' | 'partial' | 'none';
 
 export interface TodayFit {
   readonly role: TodayRoleMatch;
-  readonly level: TodayRoleMatch | null;
+  readonly level: VacancyLevelMatch;
   readonly geo: boolean | null;
 }
 
@@ -64,6 +65,7 @@ export interface TodayNewVacanciesCaption {
 export interface TodayDigest {
   readonly waitingForYou: number;
   readonly newVacancies: number;
+  readonly followUpsDueToday: number;
   readonly closedVacancies: number;
   readonly interviewsAhead: number;
   readonly nextInterview: TodayNextInterview | null;

@@ -35,7 +35,7 @@ function item(
     explanation: {
       clusterId: 'c-1',
       roleMatch: 'target',
-      levelMatch: 'target',
+      levelMatch: 'match',
       outsideGeography: false,
       matchingPoints: ['Опыт управления P&L'],
       missingPoints: ['Опыт публичной компании'],
@@ -88,6 +88,18 @@ describe('VacancyDetailPanel (B250)', () => {
     const html = render();
     expect(html).toContain('Откликнуться');
     expect(html).toContain('<button');
+  });
+
+  it('explains below, above, and unknown vacancy levels', () => {
+    expect(render({ item: item({ levelMatch: 'below' }) })).toContain(
+      'Вакансия ниже целевого уровня',
+    );
+    expect(render({ item: item({ levelMatch: 'above' }) })).toContain(
+      'Вакансия выше целевого уровня',
+    );
+    const unknown = render({ item: item({ levelMatch: 'unknown' }) });
+    expect(unknown).toContain('Уровень не распознан');
+    expect(unknown).toContain('is-unknown');
   });
 
   it('opens the source through the shared external-link utility and records the click', () => {

@@ -449,6 +449,8 @@ export interface CandidateStore {
   /** Трекер откликов (B251, S1–S2). Ленивый перенос старых `applied` на первом чтении. */
   listApplications(candidateId: string, options?: ReadApplicationOptions): ApplicationView[];
 
+  getApplication(candidateId: string, applicationId: string): ApplicationView | null;
+
   createApplication(
     candidateId: string,
     input: CreateApplicationInput & { manualVacancy?: import('../../shared/vacancyApplication').VacancyApplicationSnapshot },

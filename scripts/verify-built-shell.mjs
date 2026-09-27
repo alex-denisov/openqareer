@@ -42,6 +42,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   let hhConnected = true;
   let hhDisconnectAttempts = 0;
   let createdVacancyView = null;
+  let savedCampaign = null;
   // B159: собранный каркас спрашивает у продакшена его SHA, чтобы сказать
   // кандидату, отстала ли сборка. В гейте бэкенда нет, поэтому `/health`
   // отвечает тем же, чем прод, — сорока символами SHA.
@@ -108,6 +109,25 @@ async function verifyViewport(browser, baseUrl, viewport) {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ data: null }),
+    });
+  });
+  await page.route('**/api/v1/candidate/campaign', async (route) => {
+    const request = route.request();
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON();
+      savedCampaign = {
+        roles: {
+          value: body.roles.map((role) => (typeof role === 'string' ? role : role.title)),
+          origin: 'explicit',
+        },
+        regions: { value: body.regions, origin: 'explicit' },
+        remoteOnly: body.remoteOnly ?? false,
+      };
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: savedCampaign }),
     });
   });
   // Диалог не едет в снимке — его читают отдельной страницей (INC-030).
@@ -1107,6 +1127,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
   } else {
     await vacAge.waitFor({ state: 'attached' });
   }
+  if (viewport.width <= 1023) {
+    await page.getByRole('button', { name: 'Фильтры и сохранённые запросы' }).click();
+  }
   // Фильтр свежести обязан отсечь запись девятнадцатидневной давности.
   await page.getByRole('button', { name: '7 дней', exact: true }).click();
   assert(
@@ -1267,22 +1290,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
 
   await page.getByRole('button', { name: 'Расскажу сам' }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
-  const [q1, q2, q3] = await page.getByRole('textbox').all();
-  await q1.fill(
-    'Проверяю, что смена источника удаляет факты и ссылки от ранее выбранного профиля.',
-  );
-  await q2.fill('Меньше операционки.');
-  await q3.fill('Команда выросла вдвое.');
-  await page.getByRole('button', { name: 'Продолжить' }).click();
-  await page.getByRole('heading', { name: 'Проверьте профиль' }).waitFor();
-  await page.getByRole('button', { name: 'Продолжить' }).click();
-  await page.getByRole('heading', { name: 'На какие роли вас купят' }).waitFor();
-  await page.getByRole('button', { name: 'Продолжить' }).click();
-  await page.getByRole('heading', { name: 'География и формат' }).waitFor();
+  const quickRole = page.getByRole('textbox', { name: 'На какую роль ищете работу?' });
+  await quickRole.fill('Вице-президент по операциям');
+  await page.getByRole('button', { name: 'Россия', exact: true }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await page.getByRole('heading', { name: 'Первая подборка готова' }).waitFor();
-  await page.getByRole('button', { name: 'Перейти в «Сегодня»' }).click();
-  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Перейти в «Вакансии»' }).click();
+  await page.getByRole('heading', { name: 'Вакансии', exact: true }).waitFor();
   const sourceCleanWorkspace = JSON.parse(
     await page.evaluate(() => localStorage.getItem('candidate-workspace')),
   );
@@ -1290,7 +1304,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
     sourceCleanWorkspace.linkedinUrl === undefined
       && sourceCleanWorkspace.hhUrl === undefined
       && sourceCleanWorkspace.resumeSource === 'text'
-      && !sourceCleanWorkspace.resumeText.includes('linkedin.com')
+      && sourceCleanWorkspace.resumeText === ''
+      && sourceCleanWorkspace.targetDirection === 'Вице-президент по операциям'
+      && sourceCleanWorkspace.regions.includes('ru')
       && sourceCleanWorkspace.profileFacts?.length !== 2,
     `${viewport.name}: source switch retained stale profile evidence`,
   );

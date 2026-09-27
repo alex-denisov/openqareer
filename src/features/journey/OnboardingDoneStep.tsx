@@ -4,7 +4,7 @@ interface OnboardingDoneStepProps {
 }
 
 /**
- * Step 6, "Первая подборка готова" (onboarding.html). The mockup also shows
+ * The final step, "Первая подборка готова" (onboarding.html). The mockup also shows
  * a live vacancy count, "новых сегодня" and a second role's count — those
  * numbers come from the campaign/pool the candidate is about to open, which
  * is not read from this screen (mockup-data-gap.md, "Онбординг" §Шаг 6); a

@@ -1,20 +1,16 @@
 /**
  * B251, S2 — follow-up trekker policy (architecture.md §3, §6).
  *
- * Replaces the calendar-day formula from `followUpTracker` (client only,
- * `5/8` calendar days) with business days for `standard` and a calendar
- * window for `executive`. The server and the client share this module so
+ * The server and the client share the UTC calendar-day schedule so
  * "Сегодня" (S4) and the tracker card (S3) never disagree.
  *
- * Timezone: the candidate's timezone is not stored anywhere yet (architecture
- * §7 risk), so callers pass `timezoneOffsetMinutes` from the client's `?tz=`.
- * A local calendar day is the UTC instant shifted by that offset, truncated
- * to a date. Holidays are not modeled.
+ * Reminders fall on calendar days 5 and 8; the status becomes stale on day 14.
+ * A company-provided deadline still takes precedence.
  */
 
 export type ApplicationProcessProfile = 'standard' | 'executive';
 export type FollowUpUrgency = 'upcoming' | 'due' | 'stale';
-export type FollowUpSource = 'company_deadline' | 'standard_schedule' | 'executive_window';
+export type FollowUpSource = 'company_deadline' | 'standard_schedule';
 
 export interface FollowUpInput {
   readonly processProfile: ApplicationProcessProfile;
@@ -23,7 +19,7 @@ export interface FollowUpInput {
   /** The deadline the company itself promised. Always wins over the formula. */
   readonly companyDueAt?: string | null;
   readonly now?: string;
-  /** Minutes east of UTC, e.g. 180 for Moscow. Defaults to 0 (UTC). */
+  /** Retained for older callers; reminder dates are calculated in UTC. */
   readonly timezoneOffsetMinutes?: number;
 }
 
@@ -31,15 +27,12 @@ export interface FollowUpStatus {
   readonly dueAt: string;
   readonly urgency: FollowUpUrgency;
   readonly source: FollowUpSource;
-  /** Only meaningful for `standard`; `executive` counts calendar days instead. */
-  readonly businessDaysSinceContact: number;
+  readonly daysSinceContact: number;
 }
 
 const STANDARD_FIRST_REMINDER_DAYS = 5;
 const STANDARD_SECOND_REMINDER_DAYS = 8;
-const STANDARD_STALE_AFTER_DAYS = 10;
-const EXECUTIVE_WINDOW_OPENS_DAYS = 7;
-const EXECUTIVE_WINDOW_CLOSES_DAYS = 10;
+const STANDARD_STALE_AFTER_DAYS = 14;
 
 /** Local calendar date (midnight UTC of the shifted instant) as epoch days. */
 function localDayIndex(iso: string, timezoneOffsetMinutes: number): number {
@@ -89,75 +82,57 @@ export function addBusinessDays(
   return localDayToIso(day, timezoneOffsetMinutes);
 }
 
-function addCalendarDays(fromIso: string, days: number, timezoneOffsetMinutes = 0): string {
-  return localDayToIso(localDayIndex(fromIso, timezoneOffsetMinutes) + days, timezoneOffsetMinutes);
+function utcDayIndex(iso: string): number {
+  return Math.floor(new Date(iso).getTime() / 86_400_000);
+}
+
+function utcDayToIso(dayIndex: number): string {
+  return new Date(dayIndex * 86_400_000).toISOString();
+}
+
+function calendarDaysBetween(fromIso: string, toIso: string): number {
+  return utcDayIndex(toIso) - utcDayIndex(fromIso);
+}
+
+function addUtcCalendarDays(fromIso: string, days: number): string {
+  return utcDayToIso(utcDayIndex(fromIso) + days);
 }
 
 function urgencyFromDeadline(now: string, dueAt: string): FollowUpUrgency {
   return new Date(now).getTime() >= new Date(dueAt).getTime() ? 'due' : 'upcoming';
 }
 
-function standardFollowUp(
-  lastContactAt: string,
-  now: string,
-  timezoneOffsetMinutes: number,
-): FollowUpStatus {
-  const elapsed = businessDaysBetween(lastContactAt, now, timezoneOffsetMinutes);
+function standardFollowUp(lastContactAt: string, now: string): FollowUpStatus {
+  const elapsed = calendarDaysBetween(lastContactAt, now);
   const dueAt =
     elapsed < STANDARD_FIRST_REMINDER_DAYS
-      ? addBusinessDays(lastContactAt, STANDARD_FIRST_REMINDER_DAYS, timezoneOffsetMinutes)
+      ? addUtcCalendarDays(lastContactAt, STANDARD_FIRST_REMINDER_DAYS)
       : elapsed < STANDARD_SECOND_REMINDER_DAYS
-        ? addBusinessDays(lastContactAt, STANDARD_SECOND_REMINDER_DAYS, timezoneOffsetMinutes)
-        : addBusinessDays(lastContactAt, STANDARD_STALE_AFTER_DAYS, timezoneOffsetMinutes);
+        ? addUtcCalendarDays(lastContactAt, STANDARD_SECOND_REMINDER_DAYS)
+        : addUtcCalendarDays(lastContactAt, STANDARD_STALE_AFTER_DAYS);
   const urgency: FollowUpUrgency =
     elapsed >= STANDARD_STALE_AFTER_DAYS
       ? 'stale'
       : elapsed >= STANDARD_FIRST_REMINDER_DAYS
         ? 'due'
         : 'upcoming';
-  return { dueAt, urgency, source: 'standard_schedule', businessDaysSinceContact: elapsed };
-}
-
-function executiveFollowUp(
-  lastContactAt: string,
-  now: string,
-  timezoneOffsetMinutes: number,
-): FollowUpStatus {
-  const opensAt = addCalendarDays(lastContactAt, EXECUTIVE_WINDOW_OPENS_DAYS, timezoneOffsetMinutes);
-  const closesAt = addCalendarDays(lastContactAt, EXECUTIVE_WINDOW_CLOSES_DAYS, timezoneOffsetMinutes);
-  const nowMs = new Date(now).getTime();
-  const urgency: FollowUpUrgency =
-    nowMs >= new Date(closesAt).getTime()
-      ? 'stale'
-      : nowMs >= new Date(opensAt).getTime()
-        ? 'due'
-        : 'upcoming';
-  const dueAt = urgency === 'upcoming' ? opensAt : closesAt;
-  return {
-    dueAt,
-    urgency,
-    source: 'executive_window',
-    businessDaysSinceContact: businessDaysBetween(lastContactAt, now, timezoneOffsetMinutes),
-  };
+  return { dueAt, urgency, source: 'standard_schedule', daysSinceContact: elapsed };
 }
 
 /**
  * The company's own promised deadline always wins over the formula
  * (architecture.md §3): a recruiter who says "we'll answer by the 20th"
- * overrides the 5/8/10 schedule and the executive window alike.
+ * overrides the 5/8/14 schedule.
  */
 export function computeFollowUpStatus(input: FollowUpInput): FollowUpStatus {
   const now = input.now ?? new Date().toISOString();
-  const tz = input.timezoneOffsetMinutes ?? 0;
   if (input.companyDueAt) {
     return {
       dueAt: input.companyDueAt,
       urgency: urgencyFromDeadline(now, input.companyDueAt),
       source: 'company_deadline',
-      businessDaysSinceContact: businessDaysBetween(input.lastContactAt, now, tz),
+      daysSinceContact: calendarDaysBetween(input.lastContactAt, now),
     };
   }
-  return input.processProfile === 'executive'
-    ? executiveFollowUp(input.lastContactAt, now, tz)
-    : standardFollowUp(input.lastContactAt, now, tz);
+  return standardFollowUp(input.lastContactAt, now);
 }

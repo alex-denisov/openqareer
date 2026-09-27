@@ -20,6 +20,16 @@ describe('deriveCandidateTargetLevel', () => {
     ).toBe('head');
   });
 
+  it('uses the campaign auto-level before the prior position when role titles are broad', () => {
+    expect(
+      deriveCandidateTargetLevel({
+        targetRoles: ['Technology Operations'],
+        campaignLevel: 'vp',
+        experience: [{ title: 'Senior Engineer', current: true }],
+      }),
+    ).toBe('vp');
+  });
+
   it('falls back to the first experience entry when nothing is marked current', () => {
     expect(
       deriveCandidateTargetLevel({

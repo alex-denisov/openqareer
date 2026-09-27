@@ -1,4 +1,4 @@
-import type { VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
+import type { VacancyLevelMatch } from '../../shared/vacancyMatchOrder';
 import { normalizeTextForComparison } from './vacancyFingerprint';
 
 /**
@@ -114,20 +114,25 @@ export function inferSeniorityLevel(title: string): SeniorityLevel | undefined {
 }
 
 /**
- * Совпадение переиспользует шкалу роль-матча (`target`/`partial`/`none`):
- * один и тот же fit-dot-словарь на экране, один шаг лестницы — partial, два и
- * больше — none.
+ * Разница до одной ступени считается совпадением. Для более далёких ролей
+ * сохраняем направление относительно целевого уровня кандидата.
  */
 export function evaluateLevelMatch(
   candidateLevel: SeniorityLevel | undefined,
   vacancyTitle: string,
-): VacancyRoleMatch | undefined {
-  if (!candidateLevel) return undefined;
-  const vacancyLevel = inferSeniorityLevel(vacancyTitle);
-  if (!vacancyLevel) return undefined;
+  storedLevelRank?: number | null,
+): VacancyLevelMatch {
+  if (!candidateLevel) return 'unknown';
+  const vacancyLevel =
+    storedLevelRank === undefined ? inferSeniorityLevel(vacancyTitle) : levelFromRank(storedLevelRank);
+  if (!vacancyLevel) return 'unknown';
 
-  const distance = Math.abs(LEVEL_RANK[candidateLevel] - LEVEL_RANK[vacancyLevel]);
-  if (distance === 0) return 'target';
-  if (distance === 1) return 'partial';
-  return 'none';
+  const difference = LEVEL_RANK[vacancyLevel] - LEVEL_RANK[candidateLevel];
+  if (Math.abs(difference) <= 1) return 'match';
+  return difference > 0 ? 'above' : 'below';
+}
+
+function levelFromRank(rank: number | null): SeniorityLevel | undefined {
+  if (rank === null || !Number.isInteger(rank)) return undefined;
+  return (Object.keys(LEVEL_RANK) as SeniorityLevel[]).find((level) => LEVEL_RANK[level] === rank);
 }

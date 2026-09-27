@@ -113,7 +113,7 @@ const APPLICATIONS = [
       dueAt: '2026-09-24T00:00:00.000Z',
       urgency: 'due',
       source: 'auto',
-      businessDaysSinceContact: 6,
+      daysSinceContact: 6,
     },
   }),
   application({
@@ -321,6 +321,39 @@ test.describe('B251 responses screen', () => {
     await expect(board).toContainText('Enterprise Architect, Senior Advisor');
     await expect(board).toContainText('Peraton');
     await expect(board).toContainText('компания скрыта');
+  });
+
+  test('marks a sent follow-up from the response card and refreshes its deadline', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.route('**/api/v1/candidate/applications/a-3/events', async (route) => {
+      expect(route.request().postDataJSON()).toMatchObject({ kind: 'follow_up_sent' });
+      await route.fulfill({
+        json: {
+          data: application({
+            ...APPLICATIONS[2],
+            followUp: {
+              dueAt: '2026-10-02T00:00:00.000Z',
+              urgency: 'upcoming',
+              source: 'standard_schedule',
+              daysSinceContact: 0,
+            },
+            whoseTurn: 'company',
+          }),
+        },
+      });
+    });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openResponses(page);
+
+    const card = page.locator('.career-responses-card').filter({ hasText: 'Peraton' });
+    await card.getByRole('button', { name: 'Отметить follow-up отправленным' }).click();
+    await expect(card.getByRole('button', { name: 'Отметить follow-up отправленным' })).toHaveCount(
+      0,
+    );
+    await expect(card).toContainText('Отправлен · рано для follow-up');
   });
 
   test('the screen fits 1440 and 390 with no horizontal overflow', async ({ page }, testInfo) => {

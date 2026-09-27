@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { captureCareerHarness } from './helpers/capture-career-harness';
 
 /**
  * B250 — верх экрана «Вакансии» (баннер роли/гипотез, уровень, фильтры) и
@@ -53,6 +54,11 @@ const SNAPSHOT = {
 const CAMPAIGN = {
   roles: { value: ['Enterprise Architect'], origin: 'profile' },
   regions: { value: ['United States', 'Philippines', 'Германия'], origin: 'profile' },
+  remoteOnly: false,
+  autoRoles: [
+    { id: 'architect.primary', title: 'Enterprise Architect', kind: 'primary' as const },
+    { id: 'architect.cloud', title: 'Cloud Architect', kind: 'adjacent' as const },
+  ],
   roleHypotheses: [
     { role: 'Enterprise Architect', vacancyCount: 34, isHypothesis: false },
     { role: 'Cloud Architect', vacancyCount: 6, isHypothesis: true },
@@ -97,7 +103,7 @@ function explanation(id: string, overrides: Partial<Record<string, unknown>> = {
   return {
     clusterId: id,
     roleMatch: 'target',
-    levelMatch: 'target',
+    levelMatch: 'match',
     outsideGeography: false,
     matchingPoints: ['Опыт управления P&L', 'Международная команда'],
     missingPoints: [],
@@ -122,6 +128,7 @@ const MATCHED_ITEMS = [
       salary: { from: 180000, currency: 'USD', gross: true },
     }),
     explanation: explanation('c-2', {
+      levelMatch: 'below',
       missingPoints: ['Опыт работы с госзаказчиками'],
     }),
   },
@@ -130,7 +137,7 @@ const MATCHED_ITEMS = [
       canonicalLocation: 'United States',
       salary: { to: 220000, currency: 'USD', gross: true },
     }),
-    explanation: explanation('c-3', { levelMatch: 'related' }),
+    explanation: explanation('c-3', { levelMatch: 'unknown' }),
   },
   {
     cluster: cluster('c-4', 'Enterprise Architect Director', 'HRTx, Inc.', {
@@ -156,7 +163,18 @@ const MATCHED_ITEMS = [
   },
 ];
 
-async function stubSession(page: Page): Promise<void> {
+interface VacancyStubScenario {
+  readonly matchedItems?: typeof MATCHED_ITEMS;
+  readonly total?: number;
+  readonly campaign?: typeof CAMPAIGN;
+  readonly failMatched?: boolean;
+  readonly campaignUpdates?: unknown[];
+  readonly matchedReadCount?: { value: number };
+}
+
+async function stubSession(page: Page, scenario: VacancyStubScenario = {}): Promise<void> {
+  let currentCampaign = scenario.campaign ?? CAMPAIGN;
+  let matchedReads = 0;
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -167,14 +185,49 @@ async function stubSession(page: Page): Promise<void> {
     if (pathname === '/api/v1/candidate/workspace') {
       return route.fulfill({ json: { data: null } });
     }
-    if (pathname === '/api/v1/candidate/matched-vacancies') {
+    if (pathname === '/api/v1/candidate/vacancy-sources') {
       return route.fulfill({
         json: {
-          data: MATCHED_ITEMS,
+          data: [
+            { id: 'hh', name: 'hh.ru', health: { status: 'healthy' } },
+            { id: 'remotive', name: 'Remotive', health: { status: 'unavailable' } },
+          ],
+        },
+      });
+    }
+    if (request.method() === 'POST' && pathname === '/api/v1/candidate/campaign') {
+      const update = request.postDataJSON() as {
+        roles: Array<string | { id: string; title: string }>;
+        regions: string[];
+        remoteOnly?: boolean;
+      };
+      scenario.campaignUpdates?.push(update);
+      const roles = update.roles.map((role) => (typeof role === 'string' ? role : role.title));
+      currentCampaign = {
+        ...currentCampaign,
+        roles: { value: roles, origin: 'explicit' },
+        regions: { value: update.regions, origin: 'explicit' },
+        remoteOnly: update.remoteOnly ?? false,
+        roleHypotheses: roles.map((role) => ({ role, vacancyCount: 0, isHypothesis: true })),
+      };
+      return route.fulfill({ json: { data: currentCampaign } });
+    }
+    if (pathname === '/api/v1/candidate/matched-vacancies') {
+      matchedReads += 1;
+      if (scenario.matchedReadCount) scenario.matchedReadCount.value = matchedReads;
+      if (scenario.failMatched) {
+        return route.fulfill({
+          status: 503,
+          json: { error: { code: 'source_unavailable', message: 'Подбор не ответил.' } },
+        });
+      }
+      return route.fulfill({
+        json: {
+          data: scenario.matchedItems ?? MATCHED_ITEMS,
           meta: {
-            total: 61,
+            total: scenario.total ?? 61,
             nextOffset: null,
-            campaign: CAMPAIGN,
+            campaign: currentCampaign,
             candidateLevel: 'VP / C-level',
           },
         },
@@ -280,7 +333,9 @@ async function openVacancies(page: Page): Promise<void> {
 }
 
 test.describe('B250 vacancies screen', () => {
-  test('shows the campaign banner, role hypotheses, level and pool rows', async ({ page }) => {
+  test('shows the campaign banner, role hypotheses, level and pool rows', async ({
+    page,
+  }, testInfo) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -289,6 +344,9 @@ test.describe('B250 vacancies screen', () => {
     await expect(page.locator('.vacancies-screen h1')).toHaveText('Вакансии');
     await expect(page.locator('.career-eyebrow')).toContainText('Enterprise Architect');
 
+    if (testInfo.project.name === 'mobile-390') {
+      await page.getByRole('button', { name: 'Фильтры и сохранённые запросы' }).click();
+    }
     const filters = page.locator('.vacancies-filters');
     await expect(filters.getByText('Enterprise Architect (34)')).toBeVisible();
     await expect(filters.getByText(/Cloud Architect \(6\).*гипотеза/)).toBeVisible();
@@ -309,15 +367,26 @@ test.describe('B250 vacancies screen', () => {
     await rows.first().locator('.vac-row').click();
     await expect(rows.first().locator('.vac-row')).toHaveAttribute('aria-pressed', 'true');
     await expect(rows.first().locator('.vac-row')).toHaveClass(/is-selected/);
+    await expect(rows.first().locator('.fit-dot').nth(1)).toHaveAttribute(
+      'title',
+      'Вакансия ниже целевого уровня',
+    );
 
     await filters.getByText(/Cloud Architect \(6\).*гипотеза/).click();
     await expect(rows).toHaveCount(1);
     await expect(rows.first()).toContainText('Sonsoft Inc');
+    await expect(rows.first().locator('.fit-dot').nth(1)).toHaveClass(/is-unknown/);
+    await expect(rows.first().locator('.fit-dot').nth(1)).toHaveAttribute(
+      'title',
+      'Уровень не распознан',
+    );
     // Только верхняя граница вилки — компактно, с префиксом «до».
     await expect(rows.first()).toContainText('до $220k');
   });
 
-  test('the screen fits 1440 and 390 with no horizontal overflow', async ({ page }, testInfo) => {
+  test('the screen fits 1440, 390 and 320 with no horizontal overflow', async ({
+    page,
+  }, testInfo) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -341,6 +410,12 @@ test.describe('B250 vacancies screen', () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(narrowOverflow).toBeLessThanOrEqual(0);
+    await page.setViewportSize({ width: 320, height: 844 });
+    const compactOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(compactOverflow).toBeLessThanOrEqual(0);
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({
       path: process.env.SHOTS_DIR
         ? `${process.env.SHOTS_DIR}/vacancies-390.png`
@@ -427,5 +502,100 @@ test.describe('B250 vacancies screen', () => {
       name: 'Откликнуться',
     });
     await expect(mobileApplyButton).toBeVisible();
+  });
+
+  test('low role coverage exposes explicit campaign changes', async ({ page }, testInfo) => {
+    const updates: unknown[] = [];
+    const lowCampaign = {
+      ...CAMPAIGN,
+      roleHypotheses: [{ role: 'Enterprise Architect', vacancyCount: 5, isHypothesis: true }],
+    };
+    await stubSession(page, {
+      campaign: lowCampaign,
+      matchedItems: MATCHED_ITEMS.slice(0, 5),
+      total: 5,
+      campaignUpdates: updates,
+    });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    const banner = page.locator('.vacancy-hypothesis-banner');
+    await expect(banner).toContainText('Это гипотеза, не результат.');
+    await expect(banner).toContainText('По роли Enterprise Architect найдено 5 вакансий');
+    if (testInfo.project.name === 'mobile-390') {
+      const filterToggle = page.getByRole('button', {
+        name: 'Фильтры и сохранённые запросы',
+      });
+      await expect(filterToggle).toHaveAttribute('aria-expanded', 'false');
+      const firstRow = page.locator('.vac-list-item').first();
+      await expect(firstRow).toBeVisible();
+      const firstRowBottom = await firstRow.evaluate(
+        (element) => element.getBoundingClientRect().bottom,
+      );
+      const bottomNavTop = await page
+        .locator('.career-mobile-nav')
+        .evaluate((element) => element.getBoundingClientRect().top);
+      expect(firstRowBottom).toBeLessThan(bottomNavTop);
+    }
+    await captureCareerHarness(page, testInfo.outputPath('vacancies-hypothesis.html'));
+    await page.screenshot({
+      path: testInfo.outputPath('vacancies-hypothesis.png'),
+      fullPage: true,
+    });
+    await banner.getByRole('button', { name: /Добавить роль/ }).click();
+    await expect.poll(() => updates.length).toBe(1);
+    expect(
+      (updates[0] as { roles: Array<string | { id: string; title: string }> }).roles,
+    ).toContainEqual({ id: 'architect.cloud', title: 'Cloud Architect' });
+
+    await banner.getByRole('button', { name: 'Расширить географию' }).click();
+    await banner.getByRole('button', { name: 'Добавить EU' }).click();
+    await expect.poll(() => updates.length).toBe(2);
+    expect((updates[1] as { regions: string[] }).regions).toContain('eu');
+
+    await banner.getByRole('button', { name: 'Добавить «Удалённо»' }).click();
+    await expect.poll(() => updates.length).toBe(3);
+    expect((updates[2] as { remoteOnly: boolean }).remoteOnly).toBe(true);
+  });
+
+  test('shows a zero-result hypothesis and names a source when loading fails', async ({
+    page,
+  }, testInfo) => {
+    await stubSession(page, {
+      matchedItems: [],
+      total: 0,
+      campaign: {
+        ...CAMPAIGN,
+        roleHypotheses: [{ role: 'Enterprise Architect', vacancyCount: 0, isHypothesis: true }],
+      },
+    });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+    await expect(page.locator('.vacancies-state')).toContainText(
+      'По роли Enterprise Architect пока нет вакансий',
+    );
+    await expect(page.locator('.vacancy-hypothesis-banner')).toContainText(
+      'По роли Enterprise Architect найдено 0 вакансий',
+    );
+    await page.screenshot({ path: testInfo.outputPath('vacancies-empty.png'), fullPage: true });
+
+    const errorPage = await page.context().newPage();
+    const matchedReadCount = { value: 0 };
+    await stubSession(errorPage, { failMatched: true, matchedReadCount });
+    await seedWorkspace(errorPage);
+    await errorPage.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(errorPage);
+    await expect(errorPage.locator('.vacancies-state.is-error')).toContainText('Remotive');
+    const retry = errorPage.getByRole('button', { name: 'Повторить' });
+    await expect(retry).toBeVisible();
+    await errorPage.screenshot({
+      path: testInfo.outputPath('vacancies-error.png'),
+      fullPage: true,
+    });
+    await retry.click();
+    await expect.poll(() => matchedReadCount.value).toBeGreaterThan(1);
+    await errorPage.close();
   });
 });

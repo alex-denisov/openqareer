@@ -33,7 +33,7 @@ function newVacancy(overrides: Partial<TodayNewVacancy> = {}): TodayNewVacancy {
     firstObservedAt: '2026-09-24T08:00:00.000Z',
     lastSeenAt: '2026-09-24T08:00:00.000Z',
     sourcesCount: 1,
-    fit: { role: 'target', level: null, geo: null },
+    fit: { role: 'target', level: 'unknown', geo: null },
     ...overrides,
   };
 }
@@ -87,7 +87,7 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
     expect(snapshot.digest.closedVacancies).toBe(2);
     const item = snapshot.queue.find((entry) => entry.kind === 'new_vacancy');
     expect(item?.eyebrow).toBe('сегодня');
-    expect(item?.fit).toEqual({ role: 'target', level: null, geo: null });
+    expect(item?.fit).toEqual({ role: 'target', level: 'unknown', geo: null });
     expect(snapshot.digest.newVacanciesCaption).toEqual({
       campaignRole: 'DevOps Engineer',
       sourcesCount: 1,
@@ -98,16 +98,48 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
 
   it('marks a stale follow-up as an overdue queue item and follow-up list entry', () => {
     const stale = application({
-      followUp: { dueAt: '2026-09-22T00:00:00.000Z', urgency: 'stale', source: 'standard_schedule', businessDaysSinceContact: 6 },
+      followUp: { dueAt: '2026-09-22T00:00:00.000Z', urgency: 'stale', source: 'standard_schedule', daysSinceContact: 6 },
     });
     const snapshot = buildTodaySnapshot({ ...BASE_INPUT, applications: [stale], newVacancies: [] });
 
     expect(snapshot.queue[0].kind).toBe('follow_up');
-    expect(snapshot.queue[0].eyebrow).toBe('6 рабочих дней без ответа');
+    expect(snapshot.queue[0].eyebrow).toBe('6 дней без ответа');
     expect(snapshot.followUps).toEqual([
       { applicationId: 'app-1', company: 'FinCloud', title: 'Продуктовый аналитик', status: 'overdue' },
     ]);
-    expect(snapshot.digest.followUpCaptions).toEqual(['FinCloud — 6 рабочих дней тишины']);
+    expect(snapshot.digest.followUpsDueToday).toBe(0);
+    expect(snapshot.digest.followUpCaptions).toEqual([]);
+  });
+
+  it('counts only follow-ups due today, independent of the capped sidebar list', () => {
+    const due = Array.from({ length: 6 }, (_, index) =>
+      application({
+        id: `due-${index}`,
+        followUp: {
+          dueAt: '2026-09-24T00:00:00.000Z',
+          urgency: 'due',
+          source: 'standard_schedule',
+          daysSinceContact: 5,
+        },
+      }),
+    );
+    const overdue = application({
+      id: 'overdue',
+      followUp: {
+        dueAt: '2026-09-22T00:00:00.000Z',
+        urgency: 'stale',
+        source: 'standard_schedule',
+        daysSinceContact: 7,
+      },
+    });
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      applications: [...due, overdue],
+      newVacancies: [],
+    });
+
+    expect(snapshot.digest.followUpsDueToday).toBe(6);
+    expect(snapshot.followUps).toHaveLength(5);
   });
 
   it('surfaces the nearest interview across applications', () => {

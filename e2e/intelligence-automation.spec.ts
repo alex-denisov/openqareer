@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { captureCareerHarness } from './helpers/capture-career-harness';
 
 const REGISTERED_CANDIDATE = {
   username: 'intelligence.candidate',
@@ -188,7 +189,7 @@ async function openOpportunities(page: Page): Promise<void> {
 test.describe('B156 truthful market intelligence boundary', () => {
   test('candidate sees the source-backed vacancy search without fabricated outcomes', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -196,6 +197,19 @@ test.describe('B156 truthful market intelligence boundary', () => {
     // Market intelligence lives in «Поиске» since «Пульт»; «Главная» only
     // recommends the next step.
     await openOpportunities(page);
+    const savedSearchToggle = page.getByRole('button', {
+      name: 'Senior Software Engineer',
+      exact: true,
+    });
+    await expect(savedSearchToggle).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath('vacancies-saved-search.png'),
+      fullPage: true,
+    });
+    await captureCareerHarness(page, testInfo.outputPath('vacancies-saved-search.html'));
+    if ((await savedSearchToggle.getAttribute('aria-expanded')) === 'false') {
+      await savedSearchToggle.click();
+    }
 
     const marketSearch = page.locator('.career-saved-searches').filter({
       has: page.getByRole('heading', { name: '12 найдено' }),
@@ -208,6 +222,11 @@ test.describe('B156 truthful market intelligence boundary', () => {
     await expect(marketSearch.getByRole('button', { name: 'Собрать сейчас' })).toBeVisible();
     await expect(marketSearch.getByRole('button', { name: 'Остановить сбор' })).toBeVisible();
     await expect(marketSearch.getByRole('button', { name: 'Удалить запрос' })).toBeVisible();
+    const poolError = page.locator('.vacancies-state').filter({
+      hasText: 'Не удалось загрузить общий пул вакансий',
+    });
+    await expect(poolError).toContainText('Источник сбоя не определён');
+    await expect(poolError).toContainText('Сохранённые запросы показываются отдельно');
 
     for (const fabricatedOutcome of [
       'Авто-поднятие резюме',

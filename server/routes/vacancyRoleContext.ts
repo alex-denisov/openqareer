@@ -43,7 +43,14 @@ export function readTargetLevel(
   targetRoles: readonly string[],
 ) {
   const experience = candidateStore.getSnapshot(candidateId)?.resume?.draft.experience ?? [];
-  return deriveCandidateTargetLevel({ targetRoles, experience });
+  const workspace = candidateStore.getCandidateWorkspace(candidateId);
+  const automaticRoles = workspace?.campaign?.auto?.roles ?? [];
+  const automaticPrimary = automaticRoles.find((role) => role.kind === 'primary') ?? automaticRoles[0];
+  return deriveCandidateTargetLevel({
+    targetRoles,
+    experience,
+    ...(automaticPrimary?.level ? { campaignLevel: automaticPrimary.level } : {}),
+  });
 }
 
 // Ответы на задания меняют порядок ролей одного яруса и никогда — состав

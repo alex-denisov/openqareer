@@ -1,31 +1,21 @@
 /**
- * Step order for the redesigned onboarding wizard (B248 macro layout,
- * B249 slice). The mockup fixes six dots regardless of branch: the "tell it
- * myself" branch swaps the live-parse-progress screen (slot 2) for three
- * structured questions, everything else stays in the same place
- * (docs/v1-release/tasks/work/B248/onboarding.html).
+ * File intake gets one combined role-and-region confirmation screen. The
+ * profileless branch stays short: role, region, then the first selection.
  */
 export type OnboardingBranch = 'file' | 'talk';
 
-export type OnboardingStepId =
-  | 'source'
-  | 'progress'
-  | 'talk'
-  | 'review'
-  | 'roles'
-  | 'geo'
-  | 'done';
+export type OnboardingStepId = 'source' | 'progress' | 'talk' | 'review' | 'campaign' | 'done';
 
 export interface OnboardingStepInfo {
   readonly id: OnboardingStepId;
-  /** 1-based position among the six dots the mockup always shows. */
+  /** 1-based position in this branch's steps. */
   readonly dot: number;
-  readonly total: 6;
+  readonly total: number;
 }
 
 const STEP_ORDER: Readonly<Record<OnboardingBranch, readonly OnboardingStepId[]>> = {
-  file: ['source', 'progress', 'review', 'roles', 'geo', 'done'],
-  talk: ['source', 'talk', 'review', 'roles', 'geo', 'done'],
+  file: ['source', 'progress', 'review', 'campaign', 'done'],
+  talk: ['source', 'talk', 'done'],
 };
 
 export function stepsForBranch(branch: OnboardingBranch): readonly OnboardingStepId[] {
@@ -41,7 +31,7 @@ export function stepInfo(branch: OnboardingBranch, id: OnboardingStepId): Onboar
   if (index === -1) {
     throw new Error(`onboarding step "${id}" is not part of the "${branch}" branch`);
   }
-  return { id, dot: index + 1, total: 6 };
+  return { id, dot: index + 1, total: STEP_ORDER[branch].length };
 }
 
 export function nextStep(

@@ -36,6 +36,7 @@ describe('useToday', () => {
       digest: {
         waitingForYou: 0,
         newVacancies: 3,
+        followUpsDueToday: 0,
         closedVacancies: 0,
         interviewsAhead: 0,
         nextInterview: null,

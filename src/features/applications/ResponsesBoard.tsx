@@ -156,6 +156,7 @@ function BoardColumn({
             onChangeStage={(stage, occurredAt) => state.changeStage(application.id, stage, occurredAt)}
             onRetry={() => state.retryStageChange(application.id)}
             onSaveNote={(notes) => state.saveNote(application.id, notes)}
+            onMarkFollowUpSent={() => state.markFollowUpSent(application.id)}
             onSkip={(reasonId) => void state.skip(application, reasonId)}
           />
         ))}

@@ -317,6 +317,7 @@ export const todaySnapshot = {
   digest: {
     waitingForYou: 3,
     newVacancies: 9,
+    followUpsDueToday: 2,
     closedVacancies: 1,
     interviewsAhead: 1,
     nextInterview: {
@@ -330,7 +331,7 @@ export const todaySnapshot = {
       sourcesCount: 3,
       updatedAt: '2026-09-23T09:14:00.000Z',
     },
-    followUpCaptions: ['Ozon — 5 рабочих дней тишины'],
+    followUpCaptions: ['Ozon — 5 дней тишины'],
   },
   queue: [
     {
@@ -338,7 +339,7 @@ export const todaySnapshot = {
       applicationId: 'app-b232-1',
       title: 'Head of Product, Payments',
       company: 'Ozon',
-      eyebrow: 'Follow-up · 5 рабочих дней без ответа',
+      eyebrow: 'Follow-up · 5 дней без ответа',
       dueAt: '2026-09-23T00:00:00.000Z',
       salary: { from: 420000, currency: 'rub' },
       fit: null,
@@ -352,7 +353,7 @@ export const todaySnapshot = {
       dueAt: null,
       salary: { from: 380000, to: 480000, currency: 'rub' },
       location: 'Москва · гибрид',
-      fit: { role: 'target', level: 'target', geo: true },
+      fit: { role: 'target', level: 'match', geo: true },
     },
     {
       kind: 'interview',

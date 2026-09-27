@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { ClockCountdown, DotsThreeVertical, Sparkle } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { TodayDigest, TodayFollowUp, TodayQueueItem, TodaySnapshot } from './todayApi';
 import { formatTodaySalary } from './todayCompensation';
 import { companyInitials, digestBasis, followUpStatusLabel } from './todayFormat';
+import { vacancyLevelMatchLabel } from '../vacancies/vacancyLevelMatch';
 
 /**
  * «Сегодня» (B251 S5): дайджест дня, очередь решений, follow-up по срокам и
@@ -17,9 +19,16 @@ export interface TodayScreenProps {
   readonly loading: boolean;
   readonly failed: boolean;
   readonly onRetry: () => void;
+  readonly onMarkFollowUpSent: (applicationId: string) => Promise<void>;
 }
 
-export function TodayScreen({ snapshot, loading, failed, onRetry }: TodayScreenProps) {
+export function TodayScreen({
+  snapshot,
+  loading,
+  failed,
+  onRetry,
+  onMarkFollowUpSent,
+}: TodayScreenProps) {
   if (failed) return <TodayError onRetry={onRetry} />;
   if (loading && !snapshot) return <TodaySkeleton />;
   if (!snapshot) return null;
@@ -35,9 +44,9 @@ export function TodayScreen({ snapshot, loading, failed, onRetry }: TodayScreenP
       {vacanciesPending ? <TodayPendingNotice /> : null}
       <TodayDigestRow digest={digest} />
       <div className="career-today-panels">
-        <TodayQueue queue={queue} />
+        <TodayQueue queue={queue} onMarkFollowUpSent={onMarkFollowUpSent} />
         <div className="career-today-side">
-          <TodayFollowUps followUps={followUps} />
+          <TodayFollowUps followUps={followUps} onMarkFollowUpSent={onMarkFollowUpSent} />
           <TodaySinceLastVisit items={sinceLastVisit.items} />
         </div>
       </div>
@@ -51,17 +60,17 @@ function TodayDigestRow({ digest }: { digest: TodayDigest }) {
       <DigestCard
         value={digest.newVacancies}
         label={pluralRu(digest.newVacancies, [
-          'новая релевантная вакансия за сутки',
-          'новые релевантные вакансии за сутки',
-          'новых релевантных вакансий за сутки',
+          'новая релевантная вакансия с прошлого визита',
+          'новые релевантные вакансии с прошлого визита',
+          'новых релевантных вакансий с прошлого визита',
         ])}
         basis={digestBasis('new', digest)}
       />
       <DigestCard
-        value={digest.waitingForYou}
-        label="follow-up просят действия сегодня"
+        value={digest.followUpsDueToday}
+        label="follow-up назначено на сегодня"
         basis={digestBasis('followUp', digest)}
-        attention={digest.waitingForYou > 0}
+        attention={digest.followUpsDueToday > 0}
       />
       <DigestCard
         value={digest.interviewsAhead}
@@ -96,7 +105,13 @@ function DigestCard({
   );
 }
 
-function TodayQueue({ queue }: { queue: readonly TodayQueueItem[] }) {
+function TodayQueue({
+  queue,
+  onMarkFollowUpSent,
+}: {
+  queue: readonly TodayQueueItem[];
+  onMarkFollowUpSent: (applicationId: string) => Promise<void>;
+}) {
   return (
     <section className="career-today-queue" aria-label="Очередь дня">
       <header className="career-today-queue-head">
@@ -113,7 +128,12 @@ function TodayQueue({ queue }: { queue: readonly TodayQueueItem[] }) {
       ) : (
         <ul className="career-today-list">
           {queue.map((item, index) => (
-            <QueueRow key={queueKey(item)} item={item} isFirst={index === 0} />
+            <QueueRow
+              key={queueKey(item)}
+              item={item}
+              isFirst={index === 0}
+              onMarkFollowUpSent={onMarkFollowUpSent}
+            />
           ))}
         </ul>
       )}
@@ -121,7 +141,15 @@ function TodayQueue({ queue }: { queue: readonly TodayQueueItem[] }) {
   );
 }
 
-function QueueRow({ item, isFirst }: { item: TodayQueueItem; isFirst: boolean }) {
+function QueueRow({
+  item,
+  isFirst,
+  onMarkFollowUpSent,
+}: {
+  item: TodayQueueItem;
+  isFirst: boolean;
+  onMarkFollowUpSent: (applicationId: string) => Promise<void>;
+}) {
   const salary = formatTodaySalary(item.salary);
   const isVacancy = item.kind === 'new_vacancy' || item.kind === 'shortlist';
   const secondLine = isVacancy ? (salary ?? 'вилка не указана') : (salary ?? 'Ждём вас');
@@ -144,7 +172,7 @@ function QueueRow({ item, isFirst }: { item: TodayQueueItem; isFirst: boolean })
       </div>
       {item.fit ? <QueueFit fit={item.fit} /> : <span className="career-today-item-fit" />}
       <div className="career-today-item-actions">
-        <QueueAction item={item} />
+        <QueueAction item={item} onMarkFollowUpSent={onMarkFollowUpSent} />
         <button
           type="button"
           className="career-btn-icon"
@@ -162,28 +190,42 @@ function QueueFit({ fit }: { fit: NonNullable<TodayQueueItem['fit']> }) {
   return (
     <div className="career-today-item-fit">
       <FitDot ok={fit.role !== 'none'} label="роль" />
-      <FitDot ok={fit.level === null ? null : fit.level !== 'none'} label="уровень" />
+      <FitDot
+        ok={fit.level === 'match' ? true : fit.level === 'unknown' ? null : false}
+        label="уровень"
+        title={vacancyLevelMatchLabel(fit.level)}
+      />
       <FitDot ok={fit.geo} label="гео" />
     </div>
   );
 }
 
-function FitDot({ ok, label }: { ok: boolean | null; label: string }) {
-  if (ok === null) return <span className="career-today-fit-dot is-unknown">{label} —</span>;
+function FitDot({ ok, label, title }: { ok: boolean | null; label: string; title?: string }) {
+  if (ok === null) {
+    return (
+      <span className="career-today-fit-dot is-unknown" title={title} aria-label={title}>
+        {label} —
+      </span>
+    );
+  }
   return (
-    <span className={`career-today-fit-dot${ok ? ' is-yes' : ' is-no'}`}>
+    <span className={`career-today-fit-dot${ok ? ' is-yes' : ' is-no'}`} title={title}>
       {ok ? label : `${label} —`}
     </span>
   );
 }
 
-function QueueAction({ item }: { item: TodayQueueItem }) {
+function QueueAction({
+  item,
+  onMarkFollowUpSent,
+}: {
+  item: TodayQueueItem;
+  onMarkFollowUpSent: (applicationId: string) => Promise<void>;
+}) {
   if (item.kind === 'follow_up') {
-    return (
-      <button type="button" className="career-btn career-btn-primary career-btn-sm">
-        Написать сейчас
-      </button>
-    );
+    return item.applicationId ? (
+      <MarkFollowUpButton applicationId={item.applicationId} onMark={onMarkFollowUpSent} />
+    ) : null;
   }
   if (item.kind === 'interview') {
     return (
@@ -199,7 +241,13 @@ function QueueAction({ item }: { item: TodayQueueItem }) {
   );
 }
 
-function TodayFollowUps({ followUps }: { followUps: readonly TodayFollowUp[] }) {
+function TodayFollowUps({
+  followUps,
+  onMarkFollowUpSent,
+}: {
+  followUps: readonly TodayFollowUp[];
+  onMarkFollowUpSent: (applicationId: string) => Promise<void>;
+}) {
   if (followUps.length === 0) return null;
   return (
     <section className="career-today-followups" aria-label="Follow-up по срокам">
@@ -213,6 +261,9 @@ function TodayFollowUps({ followUps }: { followUps: readonly TodayFollowUp[] }) 
             <span className={`career-today-followup-when metric is-${item.status}`}>
               {followUpStatusLabel(item.status)}
             </span>
+            {item.status === 'sent' ? null : (
+              <MarkFollowUpButton applicationId={item.applicationId} onMark={onMarkFollowUpSent} />
+            )}
           </li>
         ))}
       </ul>
@@ -220,16 +271,49 @@ function TodayFollowUps({ followUps }: { followUps: readonly TodayFollowUp[] }) 
   );
 }
 
+function MarkFollowUpButton({
+  applicationId,
+  onMark,
+}: {
+  applicationId: string;
+  onMark: (applicationId: string) => Promise<void>;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+  return (
+    <span className="career-today-followup-action">
+      {failed ? <span role="alert">Не удалось сохранить отметку.</span> : null}
+      <button
+        type="button"
+        className="career-btn career-btn-secondary career-btn-sm"
+        disabled={saving}
+        onClick={() => {
+          setSaving(true);
+          setFailed(false);
+          void onMark(applicationId)
+            .catch(() => setFailed(true))
+            .finally(() => setSaving(false));
+        }}
+      >
+        {saving ? 'Сохраняем…' : 'Отметить отправленным'}
+      </button>
+    </span>
+  );
+}
+
 function TodaySinceLastVisit({ items }: { items: readonly string[] }) {
-  if (items.length === 0) return null;
   return (
     <section className="career-today-since" aria-label="С прошлого визита">
       <h2>С прошлого визита</h2>
-      <ul>
-        {items.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
+      {items.length > 0 ? (
+        <ul>
+          {items.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="career-today-since-empty">Новых вакансий и событий нет.</p>
+      )}
     </section>
   );
 }

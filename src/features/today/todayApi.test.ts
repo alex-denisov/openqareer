@@ -27,6 +27,7 @@ describe('todayApi', () => {
       digest: {
         waitingForYou: 1,
         newVacancies: 2,
+        followUpsDueToday: 0,
         closedVacancies: 0,
         interviewsAhead: 0,
         nextInterview: null,

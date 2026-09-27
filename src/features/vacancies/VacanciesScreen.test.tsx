@@ -28,7 +28,7 @@ function matchedItem(
     explanation: {
       clusterId: id,
       roleMatch: 'target',
-      levelMatch: 'target',
+      levelMatch: 'match',
       outsideGeography: false,
       matchingPoints: [],
       missingPoints: [],
@@ -42,11 +42,41 @@ function matchedItem(
 const campaign: CampaignMetaView = {
   roles: { value: ['VP Technology Ops'], origin: 'profile' },
   regions: { value: ['Дубай', 'Европа'], origin: 'profile' },
+  remoteOnly: false,
+  autoRoles: [
+    {
+      id: 'primary',
+      title: 'VP Technology Ops',
+      titleRu: 'Вице-президент по технологиям',
+      level: 'vp',
+      kind: 'primary',
+      reason: 'Управлял технологическими операциями.',
+      evidenceRefs: ['memory:1'],
+      evidence: ['Управлял технологическими операциями.'],
+    },
+    {
+      id: 'adjacent',
+      title: 'COO',
+      titleRu: 'Операционный директор',
+      level: 'c-level',
+      kind: 'adjacent',
+      reason: 'Руководил операциями.',
+      evidenceRefs: ['memory:2'],
+      evidence: ['Руководил операциями.'],
+    },
+  ],
   roleHypotheses: [
     { role: 'VP Technology Ops', vacancyCount: 34, isHypothesis: false },
     { role: 'COO', vacancyCount: 6, isHypothesis: true },
   ],
 };
+
+function campaignWithCount(vacancyCount: number): CampaignMetaView {
+  return {
+    ...campaign,
+    roleHypotheses: [{ role: 'VP Technology Ops', vacancyCount, isHypothesis: vacancyCount < 8 }],
+  };
+}
 
 function render(overrides: Partial<Parameters<typeof VacanciesScreen>[0]> = {}) {
   return renderToStaticMarkup(
@@ -89,5 +119,33 @@ describe('VacanciesScreen (B250)', () => {
 
   it('does not render without a campaign or a level', () => {
     expect(() => render({ campaign: undefined, candidateLevel: undefined })).not.toThrow();
+  });
+
+  it('marks counts of zero and five as a hypothesis, but not eight', () => {
+    const empty = render({ campaign: campaignWithCount(0), matched: [], total: 0 });
+    expect(empty).toContain('По роли VP Technology Ops найдено 0 вакансий');
+    expect(empty).toContain('По роли VP Technology Ops пока нет вакансий');
+
+    const five = render({ campaign: campaignWithCount(5), total: 5 });
+    expect(five).toContain('По роли VP Technology Ops найдено 5 вакансий');
+
+    const eight = render({ campaign: campaignWithCount(8), total: 8 });
+    expect(eight).not.toContain('vacancy-hypothesis-banner');
+  });
+
+  it('keeps saved-search controls available when the matched pool is empty', () => {
+    const html = render({ matched: [], total: 0, subscriptions: [] });
+
+    expect(html).toContain('career-vacancy-saved');
+    expect(html).toContain('Новый запрос к площадке');
+    expect(html).toContain('По роли VP Technology Ops пока нет вакансий');
+  });
+
+  it('names the available source and offers a retry when loading fails', () => {
+    const html = render({ failed: true, failureSourceLabel: 'Remotive', onRetry: () => {} });
+
+    expect(html).toContain('Не удалось загрузить подборку');
+    expect(html).toContain('Remotive');
+    expect(html).toContain('Повторить');
   });
 });

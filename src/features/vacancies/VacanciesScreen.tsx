@@ -1,15 +1,20 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Check } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
+import type { VacancySubscription } from '../coach/coachApi';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import { titleMatchesRole } from '../../../shared/vacancyRoleTitleMatch';
 import { pluralRu } from '../../../shared/pluralRu';
 import { vacancyAge } from './vacancyFilters';
 import { VacancyRow } from './VacancyRow';
 import { VacancyDetailPanel } from './VacancyDetailPanel';
+import { VacancyHypothesisBanner } from './VacancyHypothesisBanner';
+import { SavedSearchesFold } from './VacancyFilterPanel';
+import { useVacancyCampaignActions } from './useVacancyCampaignActions';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
 import type { PathDestination, PathStep } from '../shell/pathIndicator';
 import type { VacancyApplications } from './useVacancyApplications';
+import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
 
 const FRESHNESS_OPTIONS = [
   { days: 0, label: 'Сегодня' },
@@ -44,10 +49,17 @@ interface VacanciesScreenProps {
   readonly total: number;
   readonly campaign?: CampaignMetaView;
   readonly candidateLevel?: string | null;
+  readonly loading?: boolean;
+  readonly failed?: boolean;
+  readonly failureSourceLabel?: string;
+  readonly onRetry?: () => void;
   readonly now?: string;
   /** B248 §2 — тот же индикатор пути, что и на остальных экранах кампании. */
   readonly pathIndicator?: VacanciesPathIndicator;
   readonly applications?: VacancyApplications;
+  readonly subscriptions?: readonly VacancySubscription[];
+  readonly defaultQuery?: string;
+  readonly onRefreshSavedSearch?: () => Promise<void>;
 }
 
 function useVacanciesScreenBoard(
@@ -61,9 +73,22 @@ function useVacanciesScreenBoard(
     ...EMPTY_STATE,
     role: roles[0],
     regions,
+    remoteOnly: campaign?.remoteOnly ?? false,
   });
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+
+  useEffect(() => {
+    if (!campaign) return;
+    setState((current) => ({
+      ...current,
+      role: current.role && campaign.roles.value.includes(current.role)
+        ? current.role
+        : campaign.roles.value[0],
+      regions: current.regions.length > 0 ? current.regions : campaign.regions.value,
+      remoteOnly: campaign?.remoteOnly ?? false,
+    }));
+  }, [campaign]);
 
   const filtered = useMemo(() => filterByScreenState(matched, state, now), [matched, state, now]);
   const effectiveId = selectedId ?? filtered[0]?.cluster.id;
@@ -92,42 +117,305 @@ export function VacanciesScreen({
   total,
   campaign,
   candidateLevel,
+  loading = false,
+  failed = false,
+  failureSourceLabel,
+  onRetry,
   now = new Date().toISOString(),
   pathIndicator,
   applications,
+  subscriptions = [],
+  defaultQuery,
+  onRefreshSavedSearch,
 }: VacanciesScreenProps) {
-  const board = useVacanciesScreenBoard(matched, campaign, now);
+  const [activeCampaign, setActiveCampaign] = useActiveCampaign(campaign);
+  const board = useVacanciesScreenBoard(matched, activeCampaign, now);
+  const actions = useVacancyCampaignActions(activeCampaign, {
+    onCampaignUpdated: campaignUpdateHandler(setActiveCampaign, board.setState),
+    onRetry,
+  });
+  const savedSearches = savedSearchControls(subscriptions, defaultQuery, onRefreshSavedSearch);
 
   return (
     <div className="vacancies-screen">
-      <VacanciesHeader primaryRole={board.primaryRole} />
+      <VacanciesScreenHeader primaryRole={board.primaryRole} pathIndicator={pathIndicator} />
+      <VacanciesScreenBody
+        loading={loading}
+        failed={failed}
+        failureSourceLabel={failureSourceLabel}
+        onRetry={onRetry}
+        savedSearches={savedSearches}
+      >
+        <VacanciesResults
+          matched={matched}
+          total={total}
+          campaign={activeCampaign}
+          candidateLevel={candidateLevel}
+          now={now}
+          applications={applications}
+          savedSearches={savedSearches}
+          board={board}
+          actions={actions}
+          onRetry={onRetry}
+          onToggleRemote={() => void actions.toggleRemote()}
+        />
+      </VacanciesScreenBody>
+    </div>
+  );
+}
+
+function savedSearchControls(
+  subscriptions: readonly VacancySubscription[],
+  defaultQuery: string | undefined,
+  onRefreshSavedSearch: (() => Promise<void>) | undefined,
+): ReactNode {
+  return (
+    <SavedSearchesFold
+      subscriptions={subscriptions}
+      defaultQuery={defaultQuery}
+      onRefresh={onRefreshSavedSearch}
+      compactOnMobile
+    />
+  );
+}
+
+function campaignUpdateHandler(
+  setCampaign: ReturnType<typeof useActiveCampaign>[1],
+  setScreenState: ReturnType<typeof useVacanciesScreenBoard>['setState'],
+) {
+  return (updated: CampaignMetaView, selectedRole: string | undefined) =>
+    applyCampaignUpdate(updated, selectedRole, setCampaign, setScreenState);
+}
+
+function VacanciesScreenHeader({
+  primaryRole,
+  pathIndicator,
+}: {
+  readonly primaryRole?: string;
+  readonly pathIndicator?: VacanciesPathIndicator;
+}) {
+  return (
+    <>
+      <VacanciesHeader primaryRole={primaryRole} />
       {pathIndicator ? (
         <CareerPathIndicator steps={pathIndicator.steps} onNavigate={pathIndicator.onNavigate} />
       ) : null}
-      <VacanciesLayout
-        roleHypotheses={board.roleHypotheses}
-        regions={board.regions}
-        candidateLevel={candidateLevel}
-        state={board.state}
-        onChange={board.setState}
-        onReset={() => board.setState({ ...EMPTY_STATE, role: board.roles[0], regions: board.regions })}
-        total={total}
-        filtered={board.filtered}
-        now={now}
-        effectiveId={board.effectiveId}
-        selectedItem={board.selectedItem}
-        applications={applications}
-        mobileDetailOpen={board.mobileDetailOpen}
-        onSelect={board.onSelect}
-        onBack={board.onBack}
-      />
+    </>
+  );
+}
+
+function useActiveCampaign(campaign?: CampaignMetaView) {
+  const [active, setActive] = useState(campaign);
+  useEffect(() => {
+    if (campaign) setActive(campaign);
+  }, [campaign]);
+  return [active, setActive] as const;
+}
+
+function applyCampaignUpdate(
+  campaign: CampaignMetaView,
+  selectedRole: string | undefined,
+  setCampaign: ReturnType<typeof useActiveCampaign>[1],
+  setScreenState: ReturnType<typeof useVacanciesScreenBoard>['setState'],
+) {
+  setCampaign(campaign);
+  setScreenState((current) => ({
+    ...current,
+    role: selectedRole ?? current.role,
+    regions: campaign.regions.value,
+    remoteOnly: campaign.remoteOnly ?? false,
+  }));
+}
+
+function VacanciesScreenBody({
+  loading,
+  failed,
+  failureSourceLabel,
+  onRetry,
+  savedSearches,
+  children,
+}: {
+  readonly loading: boolean;
+  readonly failed: boolean;
+  readonly failureSourceLabel?: string;
+  readonly onRetry?: () => void;
+  readonly savedSearches: ReactNode;
+  readonly children: ReactNode;
+}) {
+  if (loading) {
+    return (
+      <div className="vacancies-content">
+        {savedSearches}
+        <VacanciesLoadingState />
+      </div>
+    );
+  }
+  if (failed) {
+    return (
+      <div className="vacancies-content">
+        {savedSearches}
+        <VacanciesErrorState sourceLabel={failureSourceLabel} onRetry={onRetry} />
+      </div>
+    );
+  }
+  return children;
+}
+
+interface VacanciesResultsProps {
+  readonly matched: readonly MatchedVacancyItem[];
+  readonly total: number;
+  readonly campaign?: CampaignMetaView;
+  readonly candidateLevel?: string | null;
+  readonly now: string;
+  readonly applications?: VacancyApplications;
+  readonly savedSearches: ReactNode;
+  readonly board: ReturnType<typeof useVacanciesScreenBoard>;
+  readonly actions: ReturnType<typeof useVacancyCampaignActions>;
+  readonly onRetry?: () => void;
+  readonly onToggleRemote: () => void;
+}
+
+function VacanciesResults(props: VacanciesResultsProps) {
+  return (
+    <div className="vacancies-content">
+      <VacancyHypothesisSection campaign={props.campaign} board={props.board} actions={props.actions} />
+      {props.matched.length === 0 ? (
+        <>
+          {props.savedSearches}
+          <VacanciesEmptyState role={props.board.primaryRole} onRetry={props.onRetry} />
+        </>
+      ) : (
+        <VacanciesLayout
+          roleHypotheses={props.board.roleHypotheses}
+          regions={props.board.regions}
+          remoteOnly={props.campaign?.remoteOnly ?? false}
+          candidateLevel={props.candidateLevel}
+          state={props.board.state}
+          onChange={props.board.setState}
+          onReset={() =>
+            props.board.setState({
+              ...EMPTY_STATE,
+              role: props.board.roles[0],
+              regions: props.board.regions,
+              remoteOnly: props.campaign?.remoteOnly ?? false,
+            })
+          }
+          total={props.total}
+          filtered={props.board.filtered}
+          now={props.now}
+          effectiveId={props.board.effectiveId}
+          selectedItem={props.board.selectedItem}
+          applications={props.applications}
+          savedSearches={props.savedSearches}
+          mobileDetailOpen={props.board.mobileDetailOpen}
+          onSelect={props.board.onSelect}
+          onBack={props.board.onBack}
+          onToggleRemote={props.onToggleRemote}
+        />
+      )}
     </div>
+  );
+}
+
+function VacancyHypothesisSection({
+  campaign,
+  board,
+  actions,
+}: {
+  readonly campaign?: CampaignMetaView;
+  readonly board: ReturnType<typeof useVacanciesScreenBoard>;
+  readonly actions: ReturnType<typeof useVacancyCampaignActions>;
+}) {
+  const [regionsOpen, setRegionsOpen] = useState(false);
+  const hypothesis = campaign?.roleHypotheses?.find(
+    (item) => item.role === board.primaryRole && item.isHypothesis,
+  );
+  if (!hypothesis) return null;
+
+  const adjacentRole = campaign?.autoRoles?.find(
+    (role) => role.kind === 'adjacent' && !campaign.roles.value.includes(role.title),
+  );
+  const availableRegions = CANDIDATE_REGION_CATALOGUE.filter(
+    (region) => !board.regions.includes(region.id),
+  );
+
+  return (
+    <VacancyHypothesisBanner
+      role={hypothesis.role}
+      vacancyCount={hypothesis.vacancyCount}
+      adjacentRole={adjacentRole}
+      remoteOnly={campaign?.remoteOnly ?? false}
+      saving={actions.saving}
+      error={actions.error}
+      onAddAdjacentRole={(role) => void actions.addAdjacentRole(role)}
+      onAddRegion={(region) => {
+        void actions.addRegion(region).then((saved) => {
+          if (saved) setRegionsOpen(false);
+        });
+      }}
+      onToggleRemote={() => void actions.toggleRemote()}
+      regionsOpen={regionsOpen}
+      onToggleRegions={() => setRegionsOpen((open) => !open)}
+      availableRegions={availableRegions}
+    />
+  );
+}
+
+function VacanciesLoadingState() {
+  return (
+    <p className="vacancies-state" aria-busy="true">
+      Загружаем подборку по кампании…
+    </p>
+  );
+}
+
+function VacanciesErrorState({
+  sourceLabel,
+  onRetry,
+}: {
+  readonly sourceLabel?: string;
+  readonly onRetry?: () => void;
+}) {
+  return (
+    <section className="vacancies-state is-error" role="alert">
+      <h2>Не удалось загрузить подборку</h2>
+      <p>
+        Не удалось загрузить общий пул вакансий.{' '}
+        {sourceLabel
+          ? `Проблемные источники: ${sourceLabel}.`
+          : 'Источник сбоя не определён.'}{' '}
+        Сохранённые запросы показываются отдельно; роль и география сохранены.
+      </p>
+      {onRetry ? (
+        <button type="button" className="vacancies-btn vacancies-btn-primary" onClick={onRetry}>
+          Повторить
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+function VacanciesEmptyState({ role, onRetry }: { readonly role?: string; readonly onRetry?: () => void }) {
+  return (
+    <section className="vacancies-state">
+      <h2>{role ? `По роли ${role} пока нет вакансий` : 'Для подбора не выбрана роль'}</h2>
+      <p>
+        Пустая выдача сама по себе ничего не говорит о рынке. Можно добавить смежную роль,
+        расширить регионы или включить удалённый поиск.
+      </p>
+      {onRetry ? (
+        <button type="button" className="vacancies-btn vacancies-btn-secondary" onClick={onRetry}>
+          Обновить подбор
+        </button>
+      ) : null}
+    </section>
   );
 }
 
 interface VacanciesLayoutProps {
   readonly roleHypotheses: NonNullable<CampaignMetaView['roleHypotheses']>;
   readonly regions: readonly string[];
+  readonly remoteOnly: boolean;
   readonly candidateLevel?: string | null;
   readonly state: VacanciesScreenState;
   readonly onChange: (updater: (prev: VacanciesScreenState) => VacanciesScreenState) => void;
@@ -138,45 +426,36 @@ interface VacanciesLayoutProps {
   readonly effectiveId?: string;
   readonly selectedItem?: MatchedVacancyItem;
   readonly applications?: VacancyApplications;
+  readonly savedSearches: ReactNode;
   readonly mobileDetailOpen: boolean;
   readonly onSelect: (id: string) => void;
   readonly onBack: () => void;
+  readonly onToggleRemote: () => void;
 }
 
-function VacanciesLayout({
-  roleHypotheses,
-  regions,
-  candidateLevel,
-  state,
-  onChange,
-  onReset,
-  total,
-  filtered,
-  now,
-  effectiveId,
-  selectedItem,
-  applications,
-  mobileDetailOpen,
-  onSelect,
-  onBack,
-}: VacanciesLayoutProps) {
+function VacanciesLayout(props: VacanciesLayoutProps) {
   return (
     <div className="vacancies-layout">
-      <VacanciesFilters
-        roleHypotheses={roleHypotheses}
-        regions={regions}
-        candidateLevel={candidateLevel}
-        state={state}
-        onChange={onChange}
-        onReset={onReset}
+      <VacanciesFilters {...props} />
+      <VacanciesList
+        total={props.total}
+        items={props.filtered}
+        now={props.now}
+        selectedId={props.effectiveId}
+        onSelect={props.onSelect}
+        onReset={props.onReset}
       />
-      <VacanciesList total={total} items={filtered} now={now} selectedId={effectiveId} onSelect={onSelect} />
       <aside
-        className={`vacancies-detail-col${mobileDetailOpen ? ' is-open' : ''}`}
+        className={`vacancies-detail-col${props.mobileDetailOpen ? ' is-open' : ''}`}
         aria-label="Карточка вакансии"
       >
-        {selectedItem ? (
-          <VacancyDetailPanel item={selectedItem} now={now} applications={applications} onBack={onBack} />
+        {props.selectedItem ? (
+          <VacancyDetailPanel
+            item={props.selectedItem}
+            now={props.now}
+            applications={props.applications}
+            onBack={props.onBack}
+          />
         ) : null}
       </aside>
     </div>
@@ -190,33 +469,67 @@ function VacanciesHeader({ primaryRole }: { readonly primaryRole?: string }) {
         <p className="career-eyebrow">{primaryRole ? `Кампания · ${primaryRole}` : 'Кампания'}</p>
         <h1>Вакансии</h1>
         <p className="vacancies-desc">
-          Отсортировано по совпадению с профилем. Откройте карточку — решение «Откликнуться»
-          принимается там же, без перехода на площадку.
+          Отклик оформляется здесь, без перехода на площадку.
         </p>
       </div>
     </header>
   );
 }
 
-function VacanciesFilters({
+type VacanciesFiltersProps = Pick<
+  VacanciesLayoutProps,
+  | 'roleHypotheses'
+  | 'regions'
+  | 'remoteOnly'
+  | 'candidateLevel'
+  | 'state'
+  | 'onChange'
+  | 'onReset'
+  | 'onToggleRemote'
+  | 'savedSearches'
+>;
+
+function VacanciesFilters(props: VacanciesFiltersProps) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="vacancies-filter-column">
+      <button
+        type="button"
+        className="vacancies-btn vacancies-btn-secondary vacancies-mobile-filter-toggle"
+        aria-label="Фильтры и сохранённые запросы"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <span>Фильтры и запросы</span>
+        <span aria-hidden="true">{expanded ? 'Скрыть' : 'Показать'}</span>
+      </button>
+      <aside className={`vacancies-filters${expanded ? ' is-mobile-open' : ''}`} aria-label="Фильтры">
+        <VacanciesFilterControls {...props} />
+      </aside>
+    </div>
+  );
+}
+
+function VacanciesFilterControls({
   roleHypotheses,
   regions,
+  remoteOnly,
   candidateLevel,
   state,
   onChange,
   onReset,
-}: {
-  readonly roleHypotheses: NonNullable<CampaignMetaView['roleHypotheses']>;
-  readonly regions: readonly string[];
-  readonly candidateLevel?: string | null;
-  readonly state: VacanciesScreenState;
-  readonly onChange: (updater: (prev: VacanciesScreenState) => VacanciesScreenState) => void;
-  readonly onReset: () => void;
-}) {
+  onToggleRemote,
+  savedSearches,
+}: VacanciesFiltersProps) {
   return (
-    <aside className="vacancies-filters" aria-label="Фильтры">
-      <RoleHypothesesGroup roleHypotheses={roleHypotheses} state={state} onChange={onChange} />
+    <>
+      <RoleHypothesesGroup
+        roleHypotheses={roleHypotheses}
+        state={state}
+        onChange={onChange}
+      />
       <RegionsGroup regions={regions} state={state} onChange={onChange} />
+      <RemoteOnlyGroup remoteOnly={remoteOnly} onToggle={onToggleRemote} />
 
       {candidateLevel ? (
         <FieldGroup title="Уровень">
@@ -225,7 +538,7 @@ function VacanciesFilters({
       ) : null}
 
       <FreshnessGroup state={state} onChange={onChange} />
-
+      {savedSearches}
       <button
         type="button"
         className="vacancies-btn vacancies-btn-secondary vacancies-reset"
@@ -233,7 +546,21 @@ function VacanciesFilters({
       >
         Сбросить фильтры
       </button>
-    </aside>
+    </>
+  );
+}
+
+function RemoteOnlyGroup({
+  remoteOnly,
+  onToggle,
+}: {
+  readonly remoteOnly: boolean;
+  readonly onToggle: () => void;
+}) {
+  return (
+    <FieldGroup title="Формат работы">
+      <Chip label="Удалённо" isSelected={remoteOnly} onClick={onToggle} />
+    </FieldGroup>
   );
 }
 
@@ -317,12 +644,14 @@ function VacanciesList({
   now,
   selectedId,
   onSelect,
+  onReset,
 }: {
   readonly total: number;
   readonly items: readonly MatchedVacancyItem[];
   readonly now: string;
   readonly selectedId?: string;
   readonly onSelect: (id: string) => void;
+  readonly onReset: () => void;
 }) {
   return (
     <section className="vacancies-list-col" aria-label="Список вакансий">
@@ -332,17 +661,26 @@ function VacanciesList({
           уровню
         </span>
       </div>
-      <ul className="vac-list">
-        {items.map((item) => (
-          <VacancyRow
-            key={item.cluster.id}
-            item={item}
-            now={now}
-            isSelected={selectedId === item.cluster.id}
-            onSelect={() => onSelect(item.cluster.id)}
-          />
-        ))}
-      </ul>
+      {items.length > 0 ? (
+        <ul className="vac-list">
+          {items.map((item) => (
+            <VacancyRow
+              key={item.cluster.id}
+              item={item}
+              now={now}
+              isSelected={selectedId === item.cluster.id}
+              onSelect={() => onSelect(item.cluster.id)}
+            />
+          ))}
+        </ul>
+      ) : (
+        <div className="vacancies-filter-empty">
+          <p>По выбранной роли и фильтрам совпадающих вакансий нет.</p>
+          <button type="button" className="vacancies-btn vacancies-btn-secondary" onClick={onReset}>
+            Сбросить фильтры
+          </button>
+        </div>
+      )}
     </section>
   );
 }
@@ -439,14 +777,24 @@ function RoleChip({
 }
 
 /** Единственная точка «есть совпадение» на всех трёх fit-dots (B248). */
-export function FitDot({ isYes, title }: { readonly isYes: boolean; readonly title: string }) {
+export function FitDot({
+  isYes,
+  title,
+  ariaLabel,
+  isUnknown = false,
+}: {
+  readonly isYes: boolean;
+  readonly title: string;
+  readonly ariaLabel?: string;
+  readonly isUnknown?: boolean;
+}) {
   return (
     <span
-      className={`fit-dot${isYes ? ' is-yes' : ' is-no'}`}
+      className={`fit-dot${isUnknown ? ' is-unknown' : isYes ? ' is-yes' : ' is-no'}`}
       title={title}
-      aria-label={`${title}: ${isYes ? 'совпадает' : 'не совпадает'}`}
+      aria-label={ariaLabel ?? `${title}: ${isYes ? 'совпадает' : 'не совпадает'}`}
     >
-      {isYes ? <Check weight="bold" size={11} /> : '—'}
+      {isUnknown ? '?' : isYes ? <Check weight="bold" size={11} /> : '—'}
     </span>
   );
 }

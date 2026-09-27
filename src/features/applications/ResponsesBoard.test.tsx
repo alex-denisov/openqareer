@@ -37,6 +37,7 @@ function readyState(applications: readonly ApplicationView[]): UseApplications {
     reload: () => {},
     changeStage: () => {},
     retryStageChange: () => {},
+    markFollowUpSent: async () => {},
     saveNote: () => {},
     addManualCard: async () => {},
     skip: async () => {},

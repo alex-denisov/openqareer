@@ -30,6 +30,7 @@ export interface ApplicationTrackerMethods {
   listVacancyApplications(candidateId: string): VacancyApplication[];
   recordVacancyApplication(candidateId: string, input: VacancyApplicationInput): VacancyApplication;
   listApplications(candidateId: string, options?: ReadApplicationOptions): ApplicationView[];
+  getApplication(candidateId: string, applicationId: string): ApplicationView | null;
   createApplication(
     candidateId: string,
     input: CreateApplicationInput & { manualVacancy?: VacancyApplicationSnapshot },
@@ -87,6 +88,7 @@ function createCoreApplicationMethods(
   | 'listVacancyApplications'
   | 'recordVacancyApplication'
   | 'listApplications'
+  | 'getApplication'
   | 'createApplication'
   | 'patchApplication'
   | 'recordApplicationEvent'
@@ -104,6 +106,10 @@ function createCoreApplicationMethods(
     listApplications(candidateId, options) {
       requireCandidate(candidateId);
       return tracker.list(candidateId, options);
+    },
+    getApplication(candidateId, applicationId) {
+      requireCandidate(candidateId);
+      return tracker.get(candidateId, applicationId);
     },
     createApplication(candidateId, input) {
       requireCandidate(candidateId);

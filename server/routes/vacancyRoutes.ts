@@ -52,6 +52,8 @@ import {
 } from './helpers';
 import { hhMarketQuerySchema } from './schemas';
 import { pitchRankingContext } from './pitchRankingContext';
+import { evaluateLevelMatch } from '../vacancies/levelMatcher';
+import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -381,20 +383,44 @@ function finishMatchedVacancies(
   candidateStore: RouteDeps['candidateStore'],
   candidateId: string,
 ): MatchedVacancyItem[] {
+  const geographyAndRemote = campaign.remoteOnly
+    ? snapshot.filter((item) => item.cluster.isRemote)
+    : snapshot;
   // SQL добирает кандидатов до лимита любыми свежими записями; при названной
   // роли в подбор идут только совпавшие с ней, и счётчик считает их же.
   // Записи вне рынков кампании помечены и стоят после остальных (PRB-040).
   const roleFiltered = markGeography(
     targetRoles.length > 0
-      ? snapshot.filter((item) => item.explanation.roleMatch !== 'none')
-      : snapshot,
+      ? geographyAndRemote.filter((item) => item.explanation.roleMatch !== 'none')
+      : geographyAndRemote,
     campaign.regions.value as CandidateRegion[],
   );
   return applyVacancyDecisions(roleFiltered, candidateStore.listVacancyDecisions(candidateId));
 }
 
+function addStoredVacancyLevels(
+  items: readonly MatchedVacancyItem[],
+  candidateLevel: ReturnType<typeof readTargetLevel>,
+  titleParseStore: RouteDeps['titleParseStore'],
+): MatchedVacancyItem[] {
+  return items.map((item) => {
+    const parsed = titleParseStore.getByKey(normalizeTitleKey(item.cluster.canonicalTitle));
+    return {
+      ...item,
+      explanation: {
+        ...item.explanation,
+        levelMatch: evaluateLevelMatch(
+          candidateLevel,
+          item.cluster.canonicalTitle,
+          parsed?.levelRank,
+        ),
+      },
+    };
+  });
+}
+
 const handleMatchedVacancies: Handler = async (
-  { authService, candidateStore, config, multiSourceEngine },
+  { authService, candidateStore, config, multiSourceEngine, titleParseStore },
   request,
   reply,
 ) => {
@@ -433,14 +459,17 @@ const handleMatchedVacancies: Handler = async (
   // Гипотеза роли (B247, срез 2): порог считается по тому же снимку, что и
   // сам подбор — до фильтра по роли/гео, иначе роль без вакансий в её же
   // рынке выглядела бы гипотезой из-за чужого фильтра, а не своего счёта.
-  const vacancyCountsByRole = countMatchedVacanciesByRole(snapshot, targetRoles);
+  const hypothesisSnapshot = campaign.remoteOnly
+    ? snapshot.filter((item) => item.cluster.isRemote)
+    : snapshot;
+  const vacancyCountsByRole = countMatchedVacanciesByRole(hypothesisSnapshot, targetRoles);
   const campaignWithHypotheses = readCampaign(candidateStore, candidate.id, vacancyCountsByRole);
 
   // Весь подбор одним телом не доходит: маршрут рвёт ответ примерно на 20 460
   // байт (INC-029). Экран забирает пул страницами внутри доказанного бюджета.
   const page = buildMatchedVacancyPage(matched, offset);
   return {
-    data: page.items,
+    data: addStoredVacancyLevels(page.items, targetLevel, titleParseStore),
     meta: {
       requestId: request.id,
       total: page.total,
@@ -781,6 +810,9 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   if (!candidate) return undefined;
   const vacancyId = (request.params as { id: string }).id;
   const body = vacancyPitchInputSchema.parse(request.body ?? {});
+  if (body?.applicationId && !candidateStore.getApplication(candidate.id, body.applicationId)) {
+    return sendError(reply, request, 404, 'application_not_found', 'Отклик не найден.', false);
+  }
 
   const cluster = multiSourceEngine.getActiveCluster(vacancyId);
   const poolVacancy = !cluster ? multiSourceEngine.getVacancy?.(vacancyId) : undefined;

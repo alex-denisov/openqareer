@@ -7,6 +7,7 @@ const snapshot: TodaySnapshot = {
   digest: {
     waitingForYou: 2,
     newVacancies: 3,
+    followUpsDueToday: 1,
     closedVacancies: 1,
     interviewsAhead: 1,
     nextInterview: {
@@ -20,7 +21,7 @@ const snapshot: TodaySnapshot = {
       sourcesCount: 3,
       updatedAt: '2026-09-24T09:14:00.000Z',
     },
-    followUpCaptions: ['Peraton — 6 рабочих дней тишины', 'Genetec — обещанный срок истёк'],
+    followUpCaptions: ['Peraton — 6 дней тишины', 'Genetec — обещанный срок истёк'],
   },
   queue: [
     {
@@ -28,7 +29,7 @@ const snapshot: TodaySnapshot = {
       applicationId: 'app-1',
       title: 'Enterprise Architect, Senior Advisor',
       company: 'Peraton',
-      eyebrow: 'Follow-up · 6 рабочих дней без ответа',
+      eyebrow: 'Follow-up · 6 дней без ответа',
       dueAt: null,
       salary: { from: 176000, currency: 'usd' },
       fit: null,
@@ -42,7 +43,7 @@ const snapshot: TodaySnapshot = {
       dueAt: null,
       salary: { from: 190000, to: 240000, currency: 'usd' },
       location: 'Canada · удалённо',
-      fit: { role: 'target', level: 'target', geo: true },
+      fit: { role: 'target', level: 'match', geo: true },
     },
   ],
   followUps: [
@@ -57,7 +58,14 @@ const snapshot: TodaySnapshot = {
 
 function renderTodayScreen(props: Partial<Parameters<typeof TodayScreen>[0]> = {}) {
   return renderToStaticMarkup(
-    <TodayScreen snapshot={snapshot} loading={false} failed={false} onRetry={vi.fn()} {...props} />,
+    <TodayScreen
+      snapshot={snapshot}
+      loading={false}
+      failed={false}
+      onRetry={vi.fn()}
+      onMarkFollowUpSent={vi.fn(async () => undefined)}
+      {...props}
+    />,
   );
 }
 
@@ -66,8 +74,9 @@ describe('TodayScreen (B251 S5)', () => {
     const html = renderTodayScreen();
 
     expect(html).toContain('3</span>');
+    expect(html).toContain('follow-up назначено на сегодня');
     expect(html).toContain('кампания VP Technology Ops');
-    expect(html).toContain('Peraton — 6 рабочих дней тишины');
+    expect(html).toContain('Peraton — 6 дней тишины');
     expect(html).toContain('HRTx Inc. · раунд 2');
   });
 
@@ -82,7 +91,7 @@ describe('TodayScreen (B251 S5)', () => {
     const html = renderTodayScreen();
 
     expect(html).toContain('роль');
-    expect(html).toContain('Написать сейчас');
+    expect(html).toContain('Отметить отправленным');
     expect(html).toContain('Открыть');
   });
 
@@ -123,6 +132,6 @@ describe('TodayScreen (B251 S5)', () => {
     expect(html).toContain('Очередь дня');
     expect(html).toContain('career-today-digest');
     expect(html).toContain('Добавьте роль или регион');
-    expect(html).not.toContain('Новых вакансий с прошлого визита нет');
+    expect(html).toContain('Новых вакансий и событий нет.');
   });
 });

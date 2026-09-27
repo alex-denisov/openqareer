@@ -520,7 +520,10 @@ export function CareerWorkspaceShell({
           {intakeVisible ? (
             <OnboardingWizard
               key={`intake-${intakeSeed}`}
-              onComplete={completeIntake}
+              onComplete={(input) => {
+                setActiveView('opportunities');
+                completeIntake(input);
+              }}
               hasAccount={Boolean(session)}
               onStartedChange={setIntakeStarted}
               onSignIn={() => setAccountOpen(true)}

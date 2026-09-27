@@ -156,6 +156,8 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
 
     await expect(page.locator('.career-intake-error')).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: 'Три вопроса о последней роли' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Роль и регион' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'На какую роль ищете работу?' })).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Где рассматриваете работу' })).toBeVisible();
   });
 });

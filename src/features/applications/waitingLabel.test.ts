@@ -22,19 +22,19 @@ describe('waitingLabel', () => {
       waitingLabel({
         ...base,
         whoseTurn: 'candidate',
-        followUp: { dueAt: '2026-09-01', urgency: 'stale', source: 'standard_schedule', businessDaysSinceContact: 12 },
+        followUp: { dueAt: '2026-09-01', urgency: 'stale', source: 'standard_schedule', daysSinceContact: 12 },
       }).text,
     ).toBe('Follow-up просрочен');
   });
 
-  it('counts business days once a follow-up is due', () => {
+  it('shows calendar days once a follow-up is due', () => {
     expect(
       waitingLabel({
         ...base,
         whoseTurn: 'candidate',
-        followUp: { dueAt: '2026-09-01', urgency: 'due', source: 'standard_schedule', businessDaysSinceContact: 6 },
+        followUp: { dueAt: '2026-09-01', urgency: 'due', source: 'standard_schedule', daysSinceContact: 6 },
       }).text,
-    ).toBe('Follow-up сегодня · 6 раб. дн.');
+    ).toBe('Follow-up сегодня · 6 дней');
   });
 
   it('asks for interview prep ahead of the follow-up formula', () => {
@@ -53,7 +53,7 @@ describe('waitingLabel', () => {
     expect(
       waitingLabel({
         ...base,
-        followUp: { dueAt: '2026-09-10', urgency: 'upcoming', source: 'standard_schedule', businessDaysSinceContact: 1 },
+        followUp: { dueAt: '2026-09-10', urgency: 'upcoming', source: 'standard_schedule', daysSinceContact: 1 },
       }),
     ).toEqual({ text: 'Отправлен · рано для follow-up', on: 'them' });
   });

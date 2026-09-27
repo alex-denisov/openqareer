@@ -156,6 +156,10 @@ export class SqliteDocumentRepository {
     };
   }
 
+  belongsToCandidate(candidateId: string, documentId: string): boolean {
+    return this.find(candidateId, documentId) !== null;
+  }
+
   delete(
     candidateId: string,
     documentId: string,

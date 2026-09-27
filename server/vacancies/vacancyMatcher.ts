@@ -172,7 +172,7 @@ export function matchCandidateWithVacancy(
   return {
     clusterId: vacancy.id,
     roleMatch: roleEval.roleMatch,
-    ...(levelMatch ? { levelMatch } : {}),
+    levelMatch,
     ...(requirements ? { requirements } : {}),
     matchingPoints: [...roleEval.matchingPoints, ...skillEval.matchingPoints, ...locationPoints],
     matchingFacts: [

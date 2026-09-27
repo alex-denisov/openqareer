@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { ArrowLeft, ArrowRight } from '@phosphor-icons/react';
-import { disconnectConnection, getConnections } from '../coach/coachApi';
+import { disconnectConnection, getConnections, putCandidateWorkspace } from '../coach/coachApi';
+import {
+  getCandidateCampaign,
+  rebuildCandidateCampaignRoles,
+  saveCandidateCampaign,
+  type CandidateCampaignUpdate,
+  type CampaignMetaView,
+} from '../coach/matchedVacancyApi';
 import { closeConnectorSession, resetConnectorSession } from '../connections/connectorSession';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
-import type { CandidateRegion } from '../workspace/candidateRegions';
+import { isCandidateRegion, type CandidateRegion } from '../workspace/candidateRegions';
 import { parseResumeContent } from '../workspace/resumeParser';
 import type { WorkspaceInput } from '../workspace/workspaceStorage';
 import { connectedProfileSource, type ConnectedProfileSource } from './connectedProfileSource';
@@ -11,14 +18,16 @@ import { IntakeSourceStep, type SourceChoice } from './IntakeSourceStep';
 import { intakeSourceLock } from './intakeSourceLock';
 import { OnboardingSourceCards } from './OnboardingSourceCards';
 import { OnboardingProgressStep } from './OnboardingProgressStep';
-import { OnboardingTalkStep, type OnboardingTalkValues } from './OnboardingTalkStep';
+import { type OnboardingTalkValues } from './OnboardingTalkStep';
 import { OnboardingReviewStep } from './OnboardingReviewStep';
-import { OnboardingRolesStep } from './OnboardingRolesStep';
+import { ONBOARDING_FORMAT_OPTIONS, type OnboardingFormat } from './onboardingFormat';
 import {
-  OnboardingGeoStep,
-  ONBOARDING_FORMAT_OPTIONS,
-  type OnboardingFormat,
-} from './OnboardingGeoStep';
+  OnboardingCampaignStep,
+  OnboardingQuickStartStep,
+  type OnboardingCampaignRole,
+  type OnboardingCampaignState,
+} from './OnboardingCampaignStep';
+import { rebuildAndWaitForModelCampaign } from './onboardingCampaign';
 import { OnboardingDoneStep } from './OnboardingDoneStep';
 import { OnboardingWizardChrome } from './OnboardingWizardChrome';
 import { buildParseProgressCounts, buildProfileReviewRows } from './profileFactReviewRows';
@@ -50,8 +59,7 @@ function sourceLabelFor(sourceChoice: SourceChoice, ingestedSource?: string): st
   return 'из резюме';
 }
 
-// One state machine drives every step; splitting it would scatter the
-// transition rules the mockup fixes as one flow (onboarding.html).
+// One state machine drives the profile and profileless paths.
 // eslint-disable-next-line max-lines-per-function
 export function OnboardingWizard({
   onComplete,
@@ -76,8 +84,13 @@ export function OnboardingWizard({
   const [isHhEmptyAccount, setHhEmptyAccount] = useState(false);
   const [isLinkedinConnected, setLinkedinConnected] = useState(false);
   const [connectedSource, setConnectedSource] = useState<ConnectedProfileSource>();
-  const [talk, setTalk] = useState<OnboardingTalkValues>(emptyTalk);
-  const [selectedRoleTitle, setSelectedRoleTitle] = useState<string>();
+  const [quickRole, setQuickRole] = useState('');
+  const [campaignRoles, setCampaignRoles] = useState<readonly OnboardingCampaignRole[]>([]);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<readonly string[]>([]);
+  const [campaignState, setCampaignState] = useState<OnboardingCampaignState>('loading');
+  const [campaignStartedAt, setCampaignStartedAt] = useState(0);
+  const [campaignError, setCampaignError] = useState<string>();
+  const campaignRunId = useRef(0);
   const [regions, setRegions] = useState<readonly CandidateRegion[]>([]);
   const [format, setFormat] = useState<OnboardingFormat>(ONBOARDING_FORMAT_OPTIONS[0]);
   const [reviewOverrides, setReviewOverrides] = useState<Record<string, string>>({});
@@ -88,6 +101,10 @@ export function OnboardingWizard({
 
   const branch: OnboardingBranch = sourceChoice === 'none' ? 'talk' : 'file';
   const ingested = ingestion.result;
+  const profileRoleTitle = ingested?.parsed.targetRole ?? ingested?.parsed.experience[0]?.title;
+  const selectedRoleTitle =
+    campaignRoles.find((role) => selectedRoleIds.includes(role.id))?.title ??
+    (quickRole.trim() || profileRoleTitle);
 
   // The account door on the rail is the only way an anonymous candidate can
   // register, and the first step (source choice) does not need an account
@@ -98,10 +115,10 @@ export function OnboardingWizard({
   }, [step, onStartedChange]);
 
   useEffect(() => {
-    if (step !== 'done') return;
+    if (step !== 'done' && !(step === 'campaign' && campaignState === 'loading')) return;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [step]);
+  }, [step, campaignState]);
 
   useEffect(() => {
     if (!error) return;
@@ -183,82 +200,219 @@ export function OnboardingWizard({
   const roleCards = useMemo(
     () =>
       buildOnboardingRoleCards({
-        targetRole: ingested?.parsed.targetRole,
+        targetRole: profileRoleTitle,
         experience: ingested?.parsed.experience ?? [],
       }),
-    [ingested],
+    [ingested, profileRoleTitle],
   );
 
-  useEffect(() => {
-    if (!selectedRoleTitle && roleCards.length > 0) setSelectedRoleTitle(roleCards[0].title);
-  }, [roleCards, selectedRoleTitle]);
+  const profileRoleOptions = useMemo(
+    () =>
+      roleCards.map((card) => ({
+        id: `profile-${card.id}`,
+        title: card.title,
+        titleRu: card.title,
+        source: 'profile' as const,
+        reason: 'Роль предложена по должностям из профиля.',
+        evidence: card.evidenceTags,
+      })),
+    [roleCards],
+  );
+
+  function buildWorkspaceInput(primaryRole = selectedRoleTitle): WorkspaceInput {
+    return buildOnboardingWorkspaceInput({
+      sourceChoice,
+      ingested,
+      talk: emptyTalk,
+      selectedRoleTitle: primaryRole,
+      regions,
+      format,
+      reviewOverrides,
+      linkedinUrl,
+      hhUrl,
+    });
+  }
+
+  function setProfileRoleFallback(message?: string) {
+    setCampaignRoles(profileRoleOptions);
+    setSelectedRoleIds(profileRoleOptions.map((role) => role.id));
+    setCampaignError(message);
+    setCampaignState('fallback');
+  }
+
+  async function startCampaignRebuild() {
+    const runId = ++campaignRunId.current;
+    if (!hasAccount) {
+      setProfileRoleFallback('Войдите, чтобы получить роли модели и сохранить подборку.');
+      return;
+    }
+
+    try {
+      const result = await rebuildAndWaitForModelCampaign({
+        persistProfile: () => putCandidateWorkspace(buildWorkspaceInput()),
+        requestRebuild: rebuildCandidateCampaignRoles,
+        readCampaign: getCandidateCampaign,
+      });
+      if (runId !== campaignRunId.current) return;
+      if (result.status === 'timeout') {
+        setProfileRoleFallback();
+        return;
+      }
+
+      const roles = campaignRolesFromMeta(result.campaign);
+      setCampaignRoles(roles);
+      setSelectedRoleIds(roles.map((role) => role.id));
+      setCampaignError(undefined);
+      setCampaignState('model');
+      const inferredRegions = result.campaign.regions.value.filter(isCandidateRegion);
+      if (regions.length === 0 && inferredRegions.length > 0) setRegions(inferredRegions);
+    } catch {
+      if (runId === campaignRunId.current) {
+        setProfileRoleFallback('Не удалось получить роли модели. Продолжите с ролями из профиля.');
+      }
+    }
+  }
+
+  function toggleRegion(region: CandidateRegion) {
+    setRegions((current) =>
+      current.includes(region) ? current.filter((item) => item !== region) : [...current, region],
+    );
+  }
+
+  function toggleRole(roleId: string) {
+    setSelectedRoleIds((current) =>
+      current.includes(roleId) ? current.filter((id) => id !== roleId) : [...current, roleId],
+    );
+  }
+
+  function addRole(title: string) {
+    const normalized = title.trim();
+    if (!normalized) return;
+    const exists = campaignRoles.find(
+      (role) => role.title.toLocaleLowerCase('ru') === normalized.toLocaleLowerCase('ru'),
+    );
+    if (exists) {
+      setSelectedRoleIds((current) =>
+        current.includes(exists.id) ? current : [...current, exists.id],
+      );
+      return;
+    }
+    const id = `candidate-${Date.now()}`;
+    setCampaignRoles((current) => [...current, { id, title: normalized, source: 'candidate' }]);
+    setSelectedRoleIds((current) => [...current, id]);
+  }
+
+  async function persistCampaignSelection(
+    roles: readonly OnboardingCampaignRole[] = campaignRoles,
+    selectedIds: readonly string[] = selectedRoleIds,
+    primaryRole = selectedRoleTitle,
+  ) {
+    const payload: CandidateCampaignUpdate = {
+      roles: roles
+        .filter((role) => selectedIds.includes(role.id))
+        .map((role) => (role.source === 'model' ? { id: role.id, title: role.title } : role.title)),
+      regions,
+      remoteOnly: false,
+    };
+    await putCandidateWorkspace(buildWorkspaceInput(primaryRole));
+    await saveCandidateCampaign(payload);
+  }
+
+  async function advanceSource() {
+    if (sourceChoice === 'profile-import' && !ingested && !connectedSource) {
+      setError(
+        isDesktop
+          ? 'Подключите профиль с площадки или выберите PDF, либо «Расскажу сам».'
+          : 'Подключение площадок доступно в приложении для компьютера. Выберите PDF, либо «Расскажу сам».',
+      );
+      return;
+    }
+    if (sourceChoice === 'pdf' && !ingested) {
+      setError('Загрузите PDF или выберите другой источник.');
+      return;
+    }
+    if (sourceChoice === 'text') {
+      if (typedResume.trim().length < 80) {
+        setError('Добавьте хотя бы 80 знаков, чтобы собрать профиль из текста.');
+        return;
+      }
+      await ingestion.acceptParsed(parseResumeContent(typedResume), 'text');
+    }
+    setStep(nextStepId(branch, step) ?? step);
+  }
+
+  async function saveQuickCampaign() {
+    const title = quickRole.trim();
+    if (!title) return setError('Укажите роль, по которой ищете работу.');
+    if (regions.length === 0) return setError('Выберите хотя бы один регион.');
+    if (!hasAccount) {
+      setError('Войдите, чтобы сохранить роли и открыть подборку.');
+      onSignIn?.();
+      return;
+    }
+
+    const role: OnboardingCampaignRole = { id: 'candidate-quick-role', title, source: 'candidate' };
+    try {
+      await persistCampaignSelection([role], [role.id], title);
+      setCampaignRoles([role]);
+      setSelectedRoleIds([role.id]);
+      setStep('done');
+    } catch {
+      setError('Не удалось сохранить кампанию. Проверьте соединение и повторите.');
+    }
+  }
+
+  function requestModelRoles() {
+    setCampaignStartedAt(Date.now());
+    setCampaignError(undefined);
+    setCampaignState('loading');
+    setStep('campaign');
+    void startCampaignRebuild();
+  }
+
+  async function confirmCampaign() {
+    if (campaignState === 'loading') return;
+    if (selectedRoleIds.length === 0) return setError('Выберите или добавьте хотя бы одну роль.');
+    if (regions.length === 0) return setError('Выберите хотя бы один регион.');
+    if (!hasAccount) {
+      setError('Войдите, чтобы сохранить кампанию и открыть подборку.');
+      onSignIn?.();
+      return;
+    }
+    try {
+      await persistCampaignSelection();
+      setStep('done');
+    } catch {
+      setError('Не удалось сохранить кампанию. Проверьте соединение и повторите.');
+    }
+  }
 
   async function goNext() {
     setError(undefined);
-    if (step === 'source') {
-      if (sourceChoice === 'profile-import' && !ingested && !connectedSource) {
-        setError(
-          isDesktop
-            ? 'Подключите профиль с площадки или выберите PDF, либо «Расскажу сам».'
-            : 'Подключение площадок доступно в приложении для компьютера. Выберите PDF, либо «Расскажу сам».',
-        );
-        return;
-      }
-      if (sourceChoice === 'pdf' && !ingested) {
-        setError('Загрузите PDF или выберите другой источник.');
-        return;
-      }
-      if (sourceChoice === 'text') {
-        if (typedResume.trim().length < 80) {
-          setError('Добавьте хотя бы 80 знаков, чтобы собрать профиль из текста.');
-          return;
-        }
-        await ingestion.acceptParsed(parseResumeContent(typedResume), 'text');
-      }
-      setStep(nextStepId(branch, step) ?? step);
-      return;
-    }
-    if (step === 'talk') {
-      if (talk.tasks.trim().length < 20) {
-        setError('Добавьте пару предложений о том, чем вы реально занимались.');
-        return;
-      }
-      const combined = [
-        `Что делал(а): ${talk.tasks}`,
-        `Что хочет изменить: ${talk.change}`,
-        `Результат через год: ${talk.successMeasure}`,
-      ].join('\n');
-      await ingestion.acceptParsed(parseResumeContent(combined), 'text');
-      setStep(nextStepId(branch, step) ?? step);
-      return;
-    }
+    if (step === 'source') return advanceSource();
+    if (step === 'talk') return saveQuickCampaign();
+    if (step === 'review') return requestModelRoles();
+    if (step === 'campaign') return confirmCampaign();
     setStep(nextStepId(branch, step) ?? step);
   }
 
   function goBack() {
     setError(undefined);
+    if (step === 'campaign' && campaignState === 'loading') campaignRunId.current += 1;
     const previous = previousStepId(branch, step);
     if (previous) setStep(previous);
   }
 
   function complete() {
-    onComplete(
-      buildOnboardingWorkspaceInput({
-        sourceChoice,
-        ingested,
-        talk,
-        selectedRoleTitle,
-        regions,
-        format,
-        reviewOverrides,
-        linkedinUrl,
-        hhUrl,
-      }),
-    );
+    onComplete(buildWorkspaceInput());
   }
 
   return (
-    <section className="career-intake career-onboarding" aria-labelledby="onboarding-title">
+    <section
+      className="career-intake career-onboarding"
+      data-step={step}
+      aria-labelledby="onboarding-title"
+    >
       <OnboardingWizardChrome
         step={stepInfo(branch, step)}
         title={titleFor(step)}
@@ -389,7 +543,14 @@ export function OnboardingWizard({
       ) : null}
 
       {step === 'talk' ? (
-        <OnboardingTalkStep {...talk} onChange={(patch) => setTalk((c) => ({ ...c, ...patch }))} />
+        <OnboardingQuickStartStep
+          roleTitle={quickRole}
+          regions={regions}
+          format={format}
+          onRoleChange={setQuickRole}
+          onToggleRegion={toggleRegion}
+          onChangeFormat={setFormat}
+        />
       ) : null}
 
       {step === 'review' ? (
@@ -410,27 +571,18 @@ export function OnboardingWizard({
         />
       ) : null}
 
-      {step === 'roles' ? (
-        <OnboardingRolesStep
-          cards={roleCards}
-          selectedIds={roleCards.filter((c) => c.title === selectedRoleTitle).map((c) => c.id)}
-          onToggle={(id) => {
-            const card = roleCards.find((c) => c.id === id);
-            if (card) setSelectedRoleTitle(card.title);
-          }}
-        />
-      ) : null}
-
-      {step === 'geo' ? (
-        <OnboardingGeoStep
+      {step === 'campaign' ? (
+        <OnboardingCampaignStep
+          state={campaignState}
+          roles={campaignRoles}
+          selectedRoleIds={selectedRoleIds}
           regions={regions}
-          prefilledRegion={undefined}
           format={format}
-          onToggleRegion={(region) =>
-            setRegions((current) =>
-              current.includes(region) ? current.filter((r) => r !== region) : [...current, region],
-            )
-          }
+          elapsedSeconds={Math.max(0, Math.floor((now - campaignStartedAt) / 1000))}
+          error={campaignError}
+          onToggleRole={toggleRole}
+          onAddRole={addRole}
+          onToggleRegion={toggleRegion}
           onChangeFormat={setFormat}
         />
       ) : null}
@@ -460,10 +612,13 @@ export function OnboardingWizard({
         <button
           className="career-primary-button"
           type="button"
-          disabled={step === 'progress' && ingestion.busy}
+          disabled={
+            (step === 'progress' && ingestion.busy) ||
+            (step === 'campaign' && campaignState === 'loading')
+          }
           onClick={() => (step === 'done' ? complete() : void goNext())}
         >
-          {step === 'done' ? 'Перейти в «Сегодня»' : 'Продолжить'}
+          {step === 'done' ? 'Перейти в «Вакансии»' : 'Продолжить'}
           <ArrowRight size={18} weight="bold" />
         </button>
       </footer>
@@ -471,17 +626,7 @@ export function OnboardingWizard({
   );
 
   function buildDeferredWorkspaceInput(): WorkspaceInput {
-    return buildOnboardingWorkspaceInput({
-      sourceChoice,
-      ingested,
-      talk,
-      selectedRoleTitle,
-      regions,
-      format,
-      reviewOverrides,
-      linkedinUrl,
-      hhUrl,
-    });
+    return buildWorkspaceInput();
   }
 }
 
@@ -492,13 +637,11 @@ function titleFor(step: OnboardingStepId): string {
     case 'progress':
       return 'Разбираем резюме';
     case 'talk':
-      return 'Три вопроса о последней роли';
+      return 'Роль и регион';
     case 'review':
       return 'Проверьте профиль';
-    case 'roles':
-      return 'На какие роли вас купят';
-    case 'geo':
-      return 'География и формат';
+    case 'campaign':
+      return 'Роли и регионы';
     case 'done':
       return 'Первая подборка готова';
   }
@@ -511,14 +654,25 @@ function descriptionFor(step: OnboardingStepId): string {
     case 'progress':
       return 'Обычно занимает меньше минуты. Ничего подтверждать пока не нужно.';
     case 'talk':
-      return 'Без готового резюме начнём с задач, а не с должностей — так честнее видно, что переносится в новую роль.';
+      return 'Если профиля пока нет, укажите роль и регион — подбор начнётся с этих условий.';
     case 'review':
       return 'Подтвердите одним экраном — это войдёт в письма и подбор. Можно поправить конкретный пункт, не отвечая заново на всё.';
-    case 'roles':
-      return 'Выберите роль. По каждой — сколько вакансий уже в источниках и чем роль подтверждена в вашем опыте.';
-    case 'geo':
-      return 'Отметьте, где готовы искать, и формат занятости.';
+    case 'campaign':
+      return 'Подтвердите или измените роли с уровнями и основаниями из профиля, затем выберите регионы.';
     case 'done':
-      return 'Кампания собрана — дальше подбор продолжается в «Сегодня».';
+      return 'Кампания собрана — откройте подходящие вакансии.';
   }
+}
+
+function campaignRolesFromMeta(campaign: CampaignMetaView): OnboardingCampaignRole[] {
+  return (campaign.autoRoles ?? []).map((role) => ({
+    id: role.id,
+    title: role.title,
+    titleRu: role.titleRu,
+    level: role.level,
+    kind: role.kind,
+    reason: role.reason,
+    evidence: role.evidence,
+    source: 'model' as const,
+  }));
 }
