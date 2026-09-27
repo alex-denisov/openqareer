@@ -62,10 +62,22 @@ export function htmlToFeedText(html: string): string {
     const stripped = decodeFeedEntities(
       text
         .replace(/<(?:script|style)\b[^>]*>[\s\S]*?<\/(?:script|style)>/gi, ' ')
+        // Safe text keeps the structure candidates need, but never the source
+        // markup itself: React only receives strings and creates the elements.
+        .replace(/<\/?(?:p|div|section|article|h[1-6]|blockquote)\b[^>]*>/gi, '\n\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<li\b[^>]*>/gi, '\n- ')
+        .replace(/<\/li>/gi, '')
         .replace(/<[^>]+>/g, ' '),
     );
     if (stripped === text) break;
     text = stripped;
   }
-  return text.replace(/\s+/g, ' ').trim();
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }

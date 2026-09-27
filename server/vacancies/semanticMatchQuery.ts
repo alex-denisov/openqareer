@@ -52,7 +52,11 @@ function buildExcludedTitleFilter(excludedFunctions: readonly ('sales' | 'market
 export function buildSemanticMatchQuery(
   input: SemanticMatchQueryInput,
 ): { sql: string; params: SQLInputValue[] } {
-  const levelFilter = input.levelRank === null ? '' : 'AND s.level_rank BETWEEN ? AND ?';
+  // У источника уровень часто отсутствует даже у релевантной руководящей
+  // роли. Неизвестный уровень остаётся видимым и ранжируется объяснением, а
+  // не исчезает до того, как кандидат сможет его прочитать.
+  const levelFilter =
+    input.levelRank === null ? '' : 'AND (s.level_rank BETWEEN ? AND ? OR s.level_rank IS NULL)';
   const excludedFunctions = (['sales', 'marketing', 'finance', 'project-mgmt', 'education'] as const).filter(
     (code) => !input.functionCodes.includes(code),
   );

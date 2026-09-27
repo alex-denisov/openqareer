@@ -87,7 +87,7 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual(['v-close']);
   });
 
-  it('excludes unknown levels for a levelled candidate, but keeps them without a target level', () => {
+  it('keeps an unknown level visible for a levelled candidate instead of silently discarding it', () => {
     seed('known', 'eng-mgmt', 3, 1_000);
     seed('unknown', 'eng-mgmt', null, 2_000);
     const window = { fromMs: 0, toMs: 5_000 };
@@ -99,7 +99,7 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
       limit: 50,
     });
     const knownRows = database.prepare(levelled.sql).all(...levelled.params) as Array<{ payload: string }>;
-    expect(knownRows.map((row) => JSON.parse(row.payload).id)).toEqual(['known']);
+    expect(knownRows.map((row) => JSON.parse(row.payload).id)).toEqual(['unknown', 'known']);
 
     const unlevelled = buildSemanticMatchQuery({
       functionCodes: ['eng-mgmt'],

@@ -155,6 +155,21 @@ describe('VacancyInfoModal full text (B266)', () => {
     expect(document.body.textContent).toContain('Own the P&L.');
     expect(document.body.textContent).toContain('Cloud');
   });
+
+  it('renders stored paragraph and list markers as safe semantic elements', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(new Response('{}'));
+    vi.spyOn(apiClient, 'readData').mockResolvedValue({
+      id: 'c-1',
+      description: 'О роли\n\n- Руководить командой\n- Развивать платформу\n\nУсловия обсуждаются.',
+      skills: [],
+      responsibilities: [],
+    } as never);
+    await act(async () => {
+      root.render(<VacancyInfoModal isOpen onClose={vi.fn()} cluster={cluster()} />);
+    });
+    expect(document.querySelectorAll('.vacancies-info-description p')).toHaveLength(2);
+    expect(document.querySelectorAll('.vacancies-info-description ul li')).toHaveLength(2);
+  });
 });
 
 describe('VacancyInfoModal recruiter contacts (B266)', () => {

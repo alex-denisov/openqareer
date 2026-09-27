@@ -97,13 +97,7 @@ function VacancyDescription({
   const partial = detail.status === 'ready' && detail.detail.truncated;
   return (
     <div className="vacancies-info-description">
-      {text
-        .split(/\n{2,}|\n/u)
-        .map((paragraph) => paragraph.trim())
-        .filter(Boolean)
-        .map((paragraph, index) => (
-          <p key={index}>{paragraph}</p>
-        ))}
+      <DescriptionBlocks text={text} />
       {partial ? (
         <p className="is-empty">
           Площадка отдала только начало описания — полный текст откройте на площадке.
@@ -111,6 +105,24 @@ function VacancyDescription({
       ) : null}
     </div>
   );
+}
+
+function DescriptionBlocks({ text }: { readonly text: string }) {
+  const paragraphs = text.split(/\n{2,}/u).map((part) => part.trim()).filter(Boolean);
+  return paragraphs.map((paragraph, index) => {
+    const lines = paragraph.split('\n').map((line) => line.trim()).filter(Boolean);
+    const list = lines.every((line) => /^[-*]\s+/u.test(line));
+    if (list) {
+      return (
+        <ul key={index}>
+          {lines.map((line) => (
+            <li key={line}>{line.replace(/^[-*]\s+/u, '')}</li>
+          ))}
+        </ul>
+      );
+    }
+    return <p key={index}>{lines.join(' ')}</p>;
+  });
 }
 
 function infoSubtitle(cluster: MatchedVacancyItem['cluster']): string {

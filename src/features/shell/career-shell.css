@@ -6446,6 +6446,15 @@
   margin: 0 0 var(--career-space-3);
 }
 
+.vacancies-info-description ul {
+  margin: 0 0 var(--career-space-3);
+  padding-inline-start: var(--career-space-5);
+}
+
+.vacancies-info-description li + li {
+  margin-top: var(--career-space-1);
+}
+
 .vacancies-info-description.is-empty {
   color: var(--career-text-dim);
   font-style: italic;

@@ -10,6 +10,15 @@ import { UNKNOWN_PUBLISHED_AT } from './jsonVacancyRecord';
 const OBSERVED_AT = '2026-08-30T12:00:00.000Z';
 
 describe('json source adapters', () => {
+  it.each([
+    ['src-arbeitnow', { data: [{ slug: 'html-1', title: 'Engineer', company_name: 'A', description: '<p>О роли</p><ul><li>Строить</li><li>Вести</li></ul>', remote: true, url: 'https://example.test/a', tags: [], created_at: 1787000000 }] }],
+    ['src-remoteok', [{ id: 'html-2', position: 'Engineer', company: 'B', description: '<p>О роли</p><ul><li>Строить</li><li>Вести</li></ul>', location: 'Worldwide', url: 'https://example.test/b', tags: [], date: '2026-08-28T10:00:00Z' }]],
+    ['src-jobicy', { jobs: [{ id: 'html-3', jobTitle: 'Engineer', companyName: 'C', jobDescription: '<p>О роли</p><ul><li>Строить</li><li>Вести</li></ul>', jobGeo: 'Remote', jobIndustry: [], jobType: [], url: 'https://example.test/c', pubDate: '2026-08-28' }] }],
+  ])('preserves safe description structure from the live %s adapter shape', (sourceId, payload) => {
+    const [vacancy] = normalizeJsonSource(sourceId, payload, { observedAt: OBSERVED_AT });
+    expect(vacancy?.description).toBe('О роли\n\n- Строить\n- Вести');
+  });
+
   it('normalises an arbeitnow record', () => {
     const [vacancy] = normalizeJsonSource(
       'src-arbeitnow',
@@ -410,7 +419,7 @@ describe('what the candidate reads from a JSON board (B164)', () => {
       },
       { observedAt: OBSERVED_AT },
     );
-    expect(vacancy?.description).toBe('Lust auf einen Neustart? Keine Vorkenntnisse nötig.');
+    expect(vacancy?.description).toBe('Lust auf einen Neustart?\n\nKeine Vorkenntnisse nötig.');
   });
 });
 

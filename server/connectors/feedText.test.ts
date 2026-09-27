@@ -32,7 +32,13 @@ describe('feed HTML turned into readable text (B164)', () => {
       htmlToFeedText(
         '<p><strong>About&nbsp;Us</strong></p><p>We build things.<br>Remote&nbsp;first.</p>',
       ),
-    ).toBe('About Us We build things. Remote first.');
+    ).toBe('About Us\n\nWe build things.\nRemote first.');
+  });
+
+  it('keeps safe paragraph and list boundaries for descriptions from HTML feeds', () => {
+    expect(
+      htmlToFeedText('<p>Responsibilities</p><ul><li>Lead delivery</li><li>Build teams</li></ul>'),
+    ).toBe('Responsibilities\n\n- Lead delivery\n- Build teams');
   });
 
   it('leaves text that carries no markup alone', () => {
