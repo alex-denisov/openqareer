@@ -28,7 +28,7 @@ import { initialsFor } from './accountIdentity';
 import { createIntakeCompletion } from './intakeCompletion';
 import { CareerAccountPanel, type AccountSection } from './CareerAccountPanel';
 import { AppErrorBoundary } from './AppErrorBoundary';
-import { CareerTooltip } from './CareerTooltip';
+import { CareerTooltip, type TooltipTriggerProps } from './CareerTooltip';
 import { CareerPathIndicator } from './CareerPathIndicator';
 import { buildPathIndicator } from './pathIndicator';
 import { keepsIntakeAcrossIdentityChange, shouldShowIntake } from './intakeContinuity';
@@ -683,6 +683,7 @@ function NavigationButton({
   disabled = false,
   lockedReason,
   onClick,
+  ...tooltipProps
 }: {
   label: string;
   icon: SectionIcon;
@@ -690,7 +691,7 @@ function NavigationButton({
   disabled?: boolean;
   lockedReason?: string;
   onClick: () => void;
-}) {
+} & TooltipTriggerProps) {
   return (
     <button
       className={`career-nav-button ${active ? 'is-active' : ''}`}
@@ -699,7 +700,8 @@ function NavigationButton({
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       aria-label={disabled && lockedReason ? `${label}. ${lockedReason}` : label}
-      title={disabled ? (lockedReason ?? label) : label}
+      title={disabled ? (lockedReason ?? label) : undefined}
+      {...tooltipProps}
     >
       <ItemIcon size={22} active={active} />
       <span>{label}</span>

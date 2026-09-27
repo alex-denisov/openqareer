@@ -257,10 +257,22 @@ async function openSection(page: Page, label: (typeof SECTIONS)[number]): Promis
     // «Поиск» has no rail item in the B248 IA (Сегодня · Профиль · Вакансии ·
     // Отклики · Консультант); it opens from the path indicator's «Роль»
     // step instead (career-consultant-notes.md §2).
-    await page
-      .getByRole('button', { name: /^Роль\./ })
-      .first()
-      .click();
+    const desktopRole = page
+      .locator('.career-path-desktop')
+      .getByRole('button', { name: /^Роль\./ });
+    if (await desktopRole.isVisible()) {
+      await desktopRole.first().click();
+    } else {
+      const mobileSummary = page.locator('.career-path-mobile-summary');
+      if (await mobileSummary.isVisible()) {
+        await mobileSummary.click();
+      } else {
+        await page
+          .getByRole('button', { name: /Роль\./ })
+          .first()
+          .click();
+      }
+    }
   } else {
     const rail = page.locator('aside#career-rail nav');
     const mobile = page.locator('nav.career-mobile-nav');
@@ -269,7 +281,9 @@ async function openSection(page: Page, label: (typeof SECTIONS)[number]): Promis
   }
   const landmark = {
     Сегодня: page.locator('.career-today'),
-    Роль: page.locator('.career-campaign-tile').first(),
+    // The path indicator's «Роль» step opens Vacancies now, not the
+    // unreachable search screen (fix(C52): the Role step opens Vacancies).
+    Роль: page.locator('.vac-list-item').first(),
     Вакансии: page.locator('.vac-list-item').first(),
   }[label];
   await expect(landmark).toBeVisible();
@@ -356,7 +370,7 @@ test.describe('B232 readability gate', () => {
 
     const routes = [
       ['Профиль', '.career-profile-screen-view'],
-      ['Роль', '.career-campaign'],
+      ['Роль', '.vacancies-screen'],
       ['Подборка', '.vacancies-screen'],
       ['Отклики', '.career-responses-board-wrap, .career-responses-empty'],
       ['Интервью', '.career-responses-board-wrap, .career-responses-empty'],
@@ -547,10 +561,11 @@ test.describe('B232 readability gate', () => {
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-    await openSection(page, 'Роль');
 
-    await expect(page.locator('.career-automation-list')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Посмотреть тарифы', exact: true }).click();
+    const tariffsTrigger = page
+      .locator('.career-rail-plan:visible, .career-mobile-tariffs:visible')
+      .first();
+    await tariffsTrigger.click();
     await expect(
       page.getByRole('heading', { name: 'Сколько делать за вас', exact: true }),
     ).toBeVisible();
@@ -573,5 +588,29 @@ test.describe('B232 readability gate', () => {
     await expect(page.getByText('Не удалось загрузить резюме')).toHaveCount(0);
     await expect(page.getByText('FinCloud').first()).toBeVisible();
     await expect(page.getByText('Head of Product').first()).toBeVisible();
+  });
+
+  test('capture C52 screenshots: rail and path', async ({ page }) => {
+    await mockSignedInCabinet(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+
+    await page.screenshot({ path: 'output/playwright/C52/rail-collapsed-1440.png' });
+
+    await page.locator('.career-rail-toggle').click();
+    await page.screenshot({ path: 'output/playwright/C52/rail-expanded-1440.png' });
+
+    await page
+      .locator('.career-path')
+      .screenshot({ path: 'output/playwright/C52/path-indicator-1440.png' });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await page.screenshot({ path: 'output/playwright/C52/rail-and-path-390.png' });
+    await page
+      .locator('.career-path')
+      .screenshot({ path: 'output/playwright/C52/path-indicator-390.png' });
   });
 });

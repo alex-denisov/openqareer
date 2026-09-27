@@ -8,7 +8,7 @@ import {
   type ReactElement,
 } from 'react';
 
-interface TooltipTriggerProps {
+export interface TooltipTriggerProps {
   'aria-describedby'?: string;
   tabIndex?: number;
   onBlur?: FocusEventHandler<HTMLElement>;
