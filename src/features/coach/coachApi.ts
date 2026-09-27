@@ -19,6 +19,8 @@ type CoachPhase = 'discovery' | 'evidence' | 'role' | 'market' | 'resume' | 'tar
 const AUTH_REQUEST_TIMEOUT_MS = 8_000;
 import {
   CoachApiError as CoachApiErrorClass,
+  API_MUTATION_TIMEOUT_MS,
+  apiRequestSignal,
   apiFetch,
   readData,
   readDataArray,
@@ -460,11 +462,13 @@ export async function getCandidateWorkspace(): Promise<WorkspaceInput | null> {
 
 export async function putCandidateWorkspace(
   workspace: WorkspaceInput,
+  signal?: AbortSignal,
 ): Promise<WorkspaceInput> {
   const response = await apiFetch('/api/v1/candidate/workspace', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspace }),
+    signal: apiRequestSignal(signal, API_MUTATION_TIMEOUT_MS),
   });
   return readDataObject<WorkspaceInput>(response);
 }

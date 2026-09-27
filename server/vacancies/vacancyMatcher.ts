@@ -104,26 +104,34 @@ function evaluateSemanticRole(
 ) {
   const parsed = rulesParse(vacancyTitle);
   const matchingPoints: string[] = [];
-  if (!parsed.functions.some((code) => roleFunctions.includes(code))) {
+  const titleWords = new Set(normalizeTextForComparison(vacancyTitle).split(/\s+/u));
+  const containsOtherCommercialFunction = (['sales', 'marketing'] as const).some((code) =>
+    !roleFunctions.includes(code) && (parsed.functions.includes(code) || titleWords.has(code)),
+  );
+  if (
+    containsOtherCommercialFunction ||
+    !parsed.functions.some((code) => roleFunctions.includes(code))
+  ) {
     return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints };
   }
 
   const targetRank = targetLevel ? LEVEL_RANK[targetLevel] : undefined;
-  let roleMatch: VacancyRoleMatch;
-  if (targetRank === undefined || parsed.levelRank === null) {
-    // Уровень одной из сторон неизвестен — известна только функция.
-    roleMatch = 'partial';
-  } else {
-    const distance = Math.abs(parsed.levelRank - targetRank);
-    roleMatch = distance === 0 ? 'target' : distance === 1 ? 'partial' : 'none';
-  }
-  if (roleMatch !== 'none') {
-    matchingPoints.push(
-      roleMatch === 'target'
-        ? 'Функция и уровень роли совпадают.'
-        : 'Функция роли совпадает, уровень — соседняя ступень.',
-    );
-  }
+  // Semantic SQL already limits persisted title_parse.level_rank to the
+  // candidate's level and its adjacent step. The rules parser can disagree
+  // with a persisted/model parse, so it must not reject an SQL-selected item.
+  const distance =
+    targetRank !== undefined && parsed.levelRank !== null
+      ? Math.abs(parsed.levelRank - targetRank)
+      : undefined;
+  const roleMatch: VacancyRoleMatch =
+    distance === 0 ? 'target' : 'partial';
+  matchingPoints.push(
+    roleMatch === 'target'
+      ? 'Функция роли и уровень совпадают по разбору названия.'
+      : targetRank === undefined
+        ? 'Функция роли совпадает; уровень кандидата неизвестен.'
+        : 'Функция роли совпадает; уровень отобран семантическим фильтром.',
+  );
   return { roleMatch, matchingPoints };
 }
 

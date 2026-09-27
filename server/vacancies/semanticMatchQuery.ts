@@ -28,24 +28,43 @@ const ALIVE = 'i.expired = 0';
  * слияние веток идёт уже по ограниченному числу строк (после правки — 3–9 мс
  * на том же наборе, см. `semanticMatchQuery.bench.test.ts`).
  */
-function buildFunctionBranch(levelFilter: string): string {
+function buildFunctionBranch(levelFilter: string, excludedFunctionFilter: string): string {
   return `SELECT * FROM (
     SELECT s.id AS id, s.published_ms AS p, i.is_remote AS remote
     FROM vacancy_semantic s INDEXED BY vacancy_semantic_match
     JOIN vacancy_pool_index i ON i.id = s.id
-    WHERE s.function_code = ? ${levelFilter}
+    WHERE s.function_code = ? ${levelFilter} ${excludedFunctionFilter}
       AND s.published_ms BETWEEN ? AND ? AND ${ALIVE} AND i.is_active = 1
     ORDER BY s.published_ms DESC
     LIMIT ?
   )`;
 }
 
+function buildExcludedTitleFilter(excludedFunctions: readonly ('sales' | 'marketing')[]): string {
+  if (excludedFunctions.length === 0) return '';
+  const normalizedTitle = `lower(replace(replace(replace(replace(replace(s.title_key,
+    '&', ' '), '-', ' '), '/', ' '), ',', ' '), ':', ' '))`;
+  return excludedFunctions
+    .map((code) => `AND instr(' ' || ${normalizedTitle} || ' ', ' ${code} ') = 0`)
+    .join('\n      ');
+}
+
 export function buildSemanticMatchQuery(
   input: SemanticMatchQueryInput,
 ): { sql: string; params: SQLInputValue[] } {
-  const levelFilter =
-    input.levelRank === null ? '' : 'AND (s.level_rank IS NULL OR s.level_rank BETWEEN ? AND ?)';
-  const branch = buildFunctionBranch(levelFilter);
+  const levelFilter = input.levelRank === null ? '' : 'AND s.level_rank BETWEEN ? AND ?';
+  const excludedFunctions = (['sales', 'marketing'] as const).filter(
+    (code) => !input.functionCodes.includes(code),
+  );
+  const excludedFunctionFilter = excludedFunctions.length
+    ? `AND NOT EXISTS (
+        SELECT 1 FROM vacancy_semantic excluded
+        WHERE excluded.id = s.id AND excluded.function_code IN (${excludedFunctions
+          .map(() => '?')
+          .join(', ')})
+      ) ${buildExcludedTitleFilter(excludedFunctions)}`
+    : '';
+  const branch = buildFunctionBranch(levelFilter, excludedFunctionFilter);
   const branches = input.functionCodes.map(() => branch).join('\nUNION ALL\n');
   const remoteOrder = '(CASE WHEN remote = 1 THEN 1 ELSE 0 END)';
   const order = `${input.preferRemote ? 'r DESC, ' : ''}p DESC`;
@@ -63,6 +82,7 @@ export function buildSemanticMatchQuery(
   for (const code of input.functionCodes) {
     params.push(code);
     if (input.levelRank !== null) params.push(input.levelRank - 1, input.levelRank + 1);
+    params.push(...excludedFunctions);
     params.push(input.window.fromMs, input.window.toMs, input.limit);
   }
   params.push(input.limit);

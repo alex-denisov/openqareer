@@ -101,7 +101,9 @@ function FollowUpSentControl({
   const [failed, setFailed] = useState(false);
   if (
     application.stage !== 'applied' ||
-    (application.followUp?.urgency !== 'due' && application.followUp?.urgency !== 'stale')
+    (application.followUp?.urgency !== 'due' &&
+      application.followUp?.urgency !== 'overdue' &&
+      application.followUp?.urgency !== 'stale')
   ) {
     return null;
   }

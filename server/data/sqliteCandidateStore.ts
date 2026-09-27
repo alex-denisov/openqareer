@@ -27,9 +27,6 @@ import type {
   ImportedResumeEvidence,
   StoredResumeDraft,
   TurnRequest,
-  CandidateDocumentInput,
-  CandidateDocumentWithContent,
-  StoredCandidateDocument,
   ResumeImportCommit,
   CommittedResumeImport,
   StoredNativeSourceConnection,
@@ -58,6 +55,10 @@ import {
   createApplicationTrackerMethods,
   type ApplicationTrackerMethods,
 } from './sqliteCandidateStoreApplicationMethods';
+import {
+  createSqliteCandidateStoreDocumentMethods,
+  type SqliteCandidateStoreDocumentMethods,
+} from './sqliteCandidateStoreDocumentMethods';
 import type { CareerStrategy } from '../../shared/careerStrategy';
 import type {
   StoredVacancy,
@@ -139,6 +140,7 @@ export class SqliteCandidateStore implements CandidateStore {
       applicationTracker: this.applicationTracker,
     } = createRepositories(this.database, this.sealedText));
     this.wireApplicationTrackerMethods();
+    this.wireDocumentMethods();
     this.conversations = new ConversationController({
       database: this.database,
       sealedText: this.sealedText,
@@ -166,6 +168,20 @@ export class SqliteCandidateStore implements CandidateStore {
     Object.assign(
       this,
       createApplicationTrackerMethods(this.applicationTracker, (id) => this.requireCandidate(id)),
+    );
+  }
+
+  private wireDocumentMethods(): void {
+    Object.assign(
+      this,
+      createSqliteCandidateStoreDocumentMethods({
+        database: this.database,
+        documents: this.documentRepository,
+        requireCandidate: (candidateId) => this.requireCandidate(candidateId),
+        transaction: (operation) => this.transaction(operation),
+        linkMaterial: (candidateId, applicationId, role, documentId) =>
+          this.linkApplicationMaterial(candidateId, applicationId, role, documentId),
+      }),
     );
   }
 
@@ -267,76 +283,6 @@ export class SqliteCandidateStore implements CandidateStore {
       documents: this.documentRepository.list(candidateId),
       vacancySubscriptions: this.vacancyRepository.list(candidateId),
     };
-  }
-
-  saveDocument(
-    candidateId: string,
-    input: CandidateDocumentInput,
-  ): { created: boolean; document: StoredCandidateDocument } {
-    this.requireCandidate(candidateId);
-    return this.documentRepository.save(candidateId, input);
-  }
-
-  getDocument(
-    candidateId: string,
-    documentId: string,
-  ): CandidateDocumentWithContent | null {
-    this.requireCandidate(candidateId);
-    return this.documentRepository.get(candidateId, documentId);
-  }
-
-  deleteDocument(candidateId: string, documentId: string): boolean {
-    this.requireCandidate(candidateId);
-    return this.transaction(() => {
-      const deleted = this.documentRepository.delete(candidateId, documentId);
-      if (deleted) this.invalidateDocumentKnowledge(candidateId, documentId);
-      return deleted;
-    });
-  }
-
-  setDocumentRetention(
-    candidateId: string,
-    documentId: string,
-    retentionUntil: string | null,
-    now: string,
-  ): StoredCandidateDocument | null {
-    this.requireCandidate(candidateId);
-    const normalizedRetentionUntil = normalizeRetentionUntil(
-      retentionUntil,
-      now,
-    );
-    return this.documentRepository.setRetention(
-      candidateId,
-      documentId,
-      normalizedRetentionUntil,
-    );
-  }
-
-  purgeExpiredDocuments(now: string, limit: number): number {
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-      throw new CandidateStoreConflictError();
-    }
-    const expired = this.documentRepository.listExpired(now, limit);
-    return this.transaction(() => {
-      let purged = 0;
-      for (const document of expired) {
-        if (
-          this.documentRepository.delete(
-            document.candidateId,
-            document.documentId,
-            now,
-          )
-        ) {
-          this.invalidateDocumentKnowledge(
-            document.candidateId,
-            document.documentId,
-            now,
-          );
-          purged += 1;
-        }
-      }
-      return purged;
-    });
   }
 
   createVacancySubscription(
@@ -493,6 +439,12 @@ export class SqliteCandidateStore implements CandidateStore {
   declare getSinceLastVisit: ApplicationTrackerMethods['getSinceLastVisit'];
   declare countSystemClosuresSince: ApplicationTrackerMethods['countSystemClosuresSince'];
   declare countCompanyEventsSince: ApplicationTrackerMethods['countCompanyEventsSince'];
+  declare saveDocument: SqliteCandidateStoreDocumentMethods['saveDocument'];
+  declare saveDocumentAndLinkApplicationMaterial: SqliteCandidateStoreDocumentMethods['saveDocumentAndLinkApplicationMaterial'];
+  declare getDocument: SqliteCandidateStoreDocumentMethods['getDocument'];
+  declare deleteDocument: SqliteCandidateStoreDocumentMethods['deleteDocument'];
+  declare setDocumentRetention: SqliteCandidateStoreDocumentMethods['setDocumentRetention'];
+  declare purgeExpiredDocuments: SqliteCandidateStoreDocumentMethods['purgeExpiredDocuments'];
 
   requestPlan: CandidateStore['requestPlan'] = (id, plan, note) => insertPlanRequest(this.database, id, plan, note);
   listPlanRequests: CandidateStore['listPlanRequests'] = (id) => selectPlanRequests(this.database, id);
@@ -745,46 +697,6 @@ export class SqliteCandidateStore implements CandidateStore {
     this.database.close();
   }
 
-  private invalidateDocumentKnowledge(
-    candidateId: string,
-    documentId: string,
-    invalidatedAt = new Date().toISOString(),
-  ): void {
-    const sourceRef = `document:${documentId}`;
-    const deletedSourceRef = `deleted-document:${documentId}`;
-    const rows = this.database
-      .prepare(
-        `SELECT id, status, source_message_ids
-         FROM memory
-         WHERE candidate_id = ? AND status != 'deleted'`,
-      )
-      .all(candidateId) as Array<{
-      id: string;
-      status: StoredMemory['status'];
-      source_message_ids: string;
-    }>;
-    for (const row of rows) {
-      const sourceRefs = JSON.parse(row.source_message_ids) as string[];
-      if (!sourceRefs.includes(sourceRef)) continue;
-      const remainingRefs = sourceRefs.filter((ref) => ref !== sourceRef);
-      this.database
-        .prepare(
-          `UPDATE memory
-           SET source_message_ids = ?, status = ?, updated_at = ?
-           WHERE candidate_id = ? AND id = ?`,
-        )
-        .run(
-          JSON.stringify(
-            remainingRefs.length > 0 ? remainingRefs : [deletedSourceRef],
-          ),
-          remainingRefs.length > 0 ? row.status : 'proposed',
-          invalidatedAt,
-          candidateId,
-          row.id,
-        );
-    }
-  }
-
   private requireCandidate(candidateId: string): CandidateIdentity {
     const row = this.database
       .prepare(
@@ -813,25 +725,6 @@ export class SqliteCandidateStore implements CandidateStore {
       throw error;
     }
   }
-}
-
-function normalizeRetentionUntil(
-  retentionUntil: string | null,
-  now: string,
-): string | null {
-  if (retentionUntil === null) return null;
-  const nowTime = Date.parse(now);
-  const retentionTime = Date.parse(retentionUntil);
-  const maxRetentionTime = nowTime + 10 * 366 * 24 * 60 * 60 * 1_000;
-  if (
-    !Number.isFinite(nowTime) ||
-    !Number.isFinite(retentionTime) ||
-    retentionTime <= nowTime ||
-    retentionTime > maxRetentionTime
-  ) {
-    throw new CandidateDocumentRetentionError();
-  }
-  return new Date(retentionTime).toISOString();
 }
 
 /** Every `candidate_media` row a draft still points at — the rest gets pruned. */

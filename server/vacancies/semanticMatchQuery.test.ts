@@ -86,4 +86,68 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     const rows = database.prepare(sql).all(...params) as Array<{ payload: string }>;
     expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual(['v-close']);
   });
+
+  it('excludes unknown levels for a levelled candidate, but keeps them without a target level', () => {
+    seed('known', 'eng-mgmt', 3, 1_000);
+    seed('unknown', 'eng-mgmt', null, 2_000);
+    const window = { fromMs: 0, toMs: 5_000 };
+    const levelled = buildSemanticMatchQuery({
+      functionCodes: ['eng-mgmt'],
+      levelRank: 3,
+      window,
+      preferRemote: false,
+      limit: 50,
+    });
+    const knownRows = database.prepare(levelled.sql).all(...levelled.params) as Array<{ payload: string }>;
+    expect(knownRows.map((row) => JSON.parse(row.payload).id)).toEqual(['known']);
+
+    const unlevelled = buildSemanticMatchQuery({
+      functionCodes: ['eng-mgmt'],
+      levelRank: null,
+      window,
+      preferRemote: false,
+      limit: 50,
+    });
+    const anyLevelRows = database.prepare(unlevelled.sql).all(...unlevelled.params) as Array<{ payload: string }>;
+    expect(anyLevelRows.map((row) => JSON.parse(row.payload).id)).toEqual(['unknown', 'known']);
+  });
+
+  it('filters a marketing and operations title from an operations-only campaign', () => {
+    seed('ops-role', 'ops', 4, 1_000);
+    seed('marketing-ops', 'ops', 3, 2_000);
+    seed('ops-marketing-title', 'ops', 4, 3_000);
+    database
+      .prepare('UPDATE vacancy_semantic SET title_key = ? WHERE id = ? AND function_code = ?')
+      .run('chief of staff vp operations marketing advertising ecommerce', 'ops-marketing-title', 'ops');
+    database
+      .prepare(
+        `INSERT INTO vacancy_semantic (id, function_code, level_rank, title_key, published_ms, is_remote)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run('marketing-ops', 'marketing', 3, 'marketing operations', 2_000, 0);
+
+    const operationsOnly = buildSemanticMatchQuery({
+      functionCodes: ['ops'],
+      levelRank: 4,
+      window: { fromMs: 0, toMs: 5_000 },
+      preferRemote: false,
+      limit: 50,
+    });
+    const operationsRows = database
+      .prepare(operationsOnly.sql)
+      .all(...operationsOnly.params) as Array<{ payload: string }>;
+    expect(operationsRows.map((row) => JSON.parse(row.payload).id)).toEqual(['ops-role']);
+
+    const operationsAndMarketing = buildSemanticMatchQuery({
+      functionCodes: ['ops', 'marketing'],
+      levelRank: 4,
+      window: { fromMs: 0, toMs: 5_000 },
+      preferRemote: false,
+      limit: 50,
+    });
+    const combinedRows = database
+      .prepare(operationsAndMarketing.sql)
+      .all(...operationsAndMarketing.params) as Array<{ payload: string }>;
+    expect(combinedRows.map((row) => JSON.parse(row.payload).id)).toContain('marketing-ops');
+  });
 });

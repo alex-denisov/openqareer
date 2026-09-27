@@ -7591,7 +7591,7 @@
 
 .career-today-digest {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--career-space-4);
 }
 
@@ -7646,6 +7646,10 @@
 }
 
 @media (max-width: 1024px) {
+  .career-today-digest {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .career-today-panels {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -7908,7 +7912,7 @@
 @media (max-width: 640px) {
   .career-today-digest {
     gap: var(--career-space-2);
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .career-today-digest-card {
@@ -12725,12 +12729,6 @@
 }
 
 @media (max-width: 320px) {
-  html:has(.career-shell--onboarding-fullscreen),
-  body:has(.career-shell--onboarding-fullscreen),
-  #root:has(.career-shell--onboarding-fullscreen) {
-    min-width: 0;
-  }
-
   .career-onboarding-top {
     flex-wrap: wrap;
     gap: var(--career-space-2);
@@ -12851,7 +12849,6 @@
   width: 100%;
   justify-content: space-between;
   text-align: left;
-  white-space: normal;
 }
 
 .vacancies-mobile-filter-toggle > span:first-child {

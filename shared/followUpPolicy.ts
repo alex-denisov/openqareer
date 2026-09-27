@@ -9,13 +9,17 @@
  */
 
 export type ApplicationProcessProfile = 'standard' | 'executive';
-export type FollowUpUrgency = 'upcoming' | 'due' | 'stale';
+export type FollowUpUrgency = 'upcoming' | 'due' | 'overdue' | 'stale' | 'sent';
 export type FollowUpSource = 'company_deadline' | 'standard_schedule';
 
 export interface FollowUpInput {
   readonly processProfile: ApplicationProcessProfile;
-  /** Last of: applied, follow-up sent, company response — the clock reset points. */
+  /** The application event that starts the fixed reminder schedule. */
+  readonly appliedAt: string;
+  /** Last of: applied, follow-up sent, company response — used for silence copy. */
   readonly lastContactAt: string;
+  /** Number of scheduled reminders already marked sent. */
+  readonly remindersSent?: number;
   /** The deadline the company itself promised. Always wins over the formula. */
   readonly companyDueAt?: string | null;
   readonly now?: string;
@@ -98,24 +102,31 @@ function addUtcCalendarDays(fromIso: string, days: number): string {
   return utcDayToIso(utcDayIndex(fromIso) + days);
 }
 
-function urgencyFromDeadline(now: string, dueAt: string): FollowUpUrgency {
-  return new Date(now).getTime() >= new Date(dueAt).getTime() ? 'due' : 'upcoming';
+function urgencyFromDeadline(now: string, dueAt: string): Exclude<FollowUpUrgency, 'stale' | 'sent'> {
+  const today = utcDayIndex(now);
+  const dueDay = utcDayIndex(dueAt);
+  if (today < dueDay) return 'upcoming';
+  return today === dueDay ? 'due' : 'overdue';
 }
 
-function standardFollowUp(lastContactAt: string, now: string): FollowUpStatus {
+function standardFollowUp(
+  appliedAt: string,
+  lastContactAt: string,
+  remindersSent: number,
+  now: string,
+): FollowUpStatus {
   const elapsed = calendarDaysBetween(lastContactAt, now);
-  const dueAt =
-    elapsed < STANDARD_FIRST_REMINDER_DAYS
-      ? addUtcCalendarDays(lastContactAt, STANDARD_FIRST_REMINDER_DAYS)
-      : elapsed < STANDARD_SECOND_REMINDER_DAYS
-        ? addUtcCalendarDays(lastContactAt, STANDARD_SECOND_REMINDER_DAYS)
-        : addUtcCalendarDays(lastContactAt, STANDARD_STALE_AFTER_DAYS);
+  const sentCount = Math.max(0, Math.floor(remindersSent));
+  const dueAt = addUtcCalendarDays(
+    appliedAt,
+    sentCount === 0 ? STANDARD_FIRST_REMINDER_DAYS : STANDARD_SECOND_REMINDER_DAYS,
+  );
   const urgency: FollowUpUrgency =
-    elapsed >= STANDARD_STALE_AFTER_DAYS
-      ? 'stale'
-      : elapsed >= STANDARD_FIRST_REMINDER_DAYS
-        ? 'due'
-        : 'upcoming';
+    sentCount >= 2
+      ? 'sent'
+      : calendarDaysBetween(appliedAt, now) >= STANDARD_STALE_AFTER_DAYS
+        ? 'stale'
+        : urgencyFromDeadline(now, dueAt);
   return { dueAt, urgency, source: 'standard_schedule', daysSinceContact: elapsed };
 }
 
@@ -134,5 +145,10 @@ export function computeFollowUpStatus(input: FollowUpInput): FollowUpStatus {
       daysSinceContact: calendarDaysBetween(input.lastContactAt, now),
     };
   }
-  return standardFollowUp(input.lastContactAt, now);
+  return standardFollowUp(
+    input.appliedAt,
+    input.lastContactAt,
+    input.remindersSent ?? 0,
+    now,
+  );
 }

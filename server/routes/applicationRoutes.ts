@@ -14,6 +14,7 @@ import { peekMatchedVacancies, readMatchProfile } from '../vacancies/matchedPool
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readTargetLevel } from './vacancyRoleContext';
 import { buildTodaySnapshot, type TodayNewVacancy } from '../domain/todayDigest';
+import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -195,7 +196,11 @@ const todayQuerySchema = z.object({ tz: ianaTimezoneSchema });
 function peekTodayMatchedVacancies(
   deps: Pick<RouteDeps, 'candidateStore' | 'multiSourceEngine'>,
   candidateId: string,
-): { matched: MatchedVacancyItem[] | undefined; targetRoles: readonly string[] } {
+): {
+  matched: MatchedVacancyItem[] | undefined;
+  targetRoles: readonly string[];
+  targetLevel: ReturnType<typeof readTargetLevel>;
+} {
   const { candidateStore, multiSourceEngine } = deps;
   const { confirmedSkills } = readMatchProfile(candidateStore, candidateId);
   const campaign = readCampaign(candidateStore, candidateId);
@@ -211,7 +216,34 @@ function peekTodayMatchedVacancies(
   return {
     matched: matched?.filter((item) => !campaign.remoteOnly || item.cluster.isRemote),
     targetRoles,
+    targetLevel,
   };
+}
+
+function todayNewVacancies(
+  matched: readonly MatchedVacancyItem[] | undefined,
+  targetLevel: ReturnType<typeof readTargetLevel>,
+  titleParseStore: RouteDeps['titleParseStore'],
+): TodayNewVacancy[] | undefined {
+  return matched
+    ? addStoredVacancyLevels(matched, targetLevel, (key) => titleParseStore.getByKey(key)).map(
+        (item) => ({
+          clusterId: item.cluster.id,
+          title: item.cluster.canonicalTitle,
+          company: item.cluster.canonicalCompany,
+          firstObservedAt: item.cluster.firstObservedAt,
+          lastSeenAt: item.cluster.lastSeenAt,
+          salary: item.cluster.salary,
+          location: item.cluster.canonicalLocation,
+          sourcesCount: new Set(item.cluster.sources.map((source) => source.sourceId)).size,
+          fit: {
+            role: item.explanation.roleMatch,
+            level: item.explanation.levelMatch ?? 'unknown',
+            geo: null,
+          },
+        }),
+      )
+    : undefined;
 }
 
 /**
@@ -220,7 +252,7 @@ function peekTodayMatchedVacancies(
  * `undefined`, а не запускает синхронный подбор в HTTP-обработчике (B230).
  */
 const handleToday: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, config, multiSourceEngine } = deps;
+  const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   todayQuerySchema.parse(request.query ?? {});
@@ -230,24 +262,8 @@ const handleToday: Handler = async (deps, request, reply) => {
     isVacancyGone: (clusterId) => multiSourceEngine.isKnownVacancyGone(clusterId),
   });
 
-  const { matched, targetRoles } = peekTodayMatchedVacancies(deps, candidate.id);
-  const newVacancies: TodayNewVacancy[] | undefined = matched?.map((item) => ({
-    clusterId: item.cluster.id,
-    title: item.cluster.canonicalTitle,
-    company: item.cluster.canonicalCompany,
-    firstObservedAt: item.cluster.firstObservedAt,
-    lastSeenAt: item.cluster.lastSeenAt,
-    salary: item.cluster.salary,
-    location: item.cluster.canonicalLocation,
-    sourcesCount: new Set(item.cluster.sources.map((source) => source.sourceId)).size,
-    fit: {
-      role: item.explanation.roleMatch,
-      level: item.explanation.levelMatch ?? 'unknown',
-      // Ничего в объяснении совпадения пока не сравнивает гео кандидата с
-      // вакансией (unifiedVacancy.ts): точку не рисуем из отсутствия данных (PRB-016).
-      geo: null as boolean | null,
-    },
-  }));
+  const { matched, targetRoles, targetLevel } = peekTodayMatchedVacancies(deps, candidate.id);
+  const newVacancies = todayNewVacancies(matched, targetLevel, titleParseStore);
   const freshNewVacancies =
     newVacancies === undefined
       ? undefined

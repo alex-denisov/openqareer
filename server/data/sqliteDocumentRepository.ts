@@ -157,7 +157,14 @@ export class SqliteDocumentRepository {
   }
 
   belongsToCandidate(candidateId: string, documentId: string): boolean {
-    return this.find(candidateId, documentId) !== null;
+    const row = this.database
+      .prepare(
+        `SELECT 1
+         FROM candidate_documents
+         WHERE candidate_id = ? AND id = ? AND deleted_at IS NULL`,
+      )
+      .get(candidateId, documentId);
+    return row !== undefined;
   }
 
   delete(

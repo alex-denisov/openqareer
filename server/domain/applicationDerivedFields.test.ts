@@ -38,7 +38,7 @@ describe('deriveApplicationFields', () => {
     expect(result.whoseTurn).toBe('candidate');
   });
 
-  it('computes follow-up from the last of applied/follow-up-sent/responded events', () => {
+  it('anchors the next reminder to the application date after follow-up was sent', () => {
     const events = [
       stageEvent('applied', '2024-01-01T09:00:00Z'),
       { id: 'f', kind: 'follow_up_sent' as const, fromStage: null, toStage: null, occurredAt: '2024-01-08T09:00:00Z', recordedAt: '2024-01-08T09:00:00Z', provenance: 'candidate' as const },
@@ -50,9 +50,12 @@ describe('deriveApplicationFields', () => {
       interviews: [],
       now: '2024-01-09T09:00:00Z',
     });
-    // Last contact is the follow-up sent on 01-08; the next UTC day is upcoming.
+    // The second reminder remains on applied day 8; sending the first does not
+    // move it to day 13. Silence itself still uses the latest contact event.
+    expect(result.followUp?.dueAt).toBe('2024-01-09T00:00:00.000Z');
+    expect(result.followUp?.urgency).toBe('due');
     expect(result.followUp?.daysSinceContact).toBe(1);
-    expect(result.whoseTurn).toBe('company');
+    expect(result.whoseTurn).toBe('candidate');
   });
 
   it('flags an interview inside 72h without prep as the candidate’s turn', () => {

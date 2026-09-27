@@ -33,7 +33,9 @@ function closedLabel(stage: string, closedReason: string | null): WaitingLabel {
 
 function candidateTurnLabel(input: WaitingLabelInput): string {
   if (input.stage === 'saved' && !input.hasMaterials) return 'Соберите письмо';
-  if (input.followUp?.urgency === 'stale') return 'Follow-up просрочен';
+  if (input.followUp?.urgency === 'stale' || input.followUp?.urgency === 'overdue') {
+    return 'Follow-up просрочен';
+  }
   if (input.followUp?.urgency === 'due') {
     const days = input.followUp.daysSinceContact;
     return `Follow-up сегодня · ${pluralRu(days, ['день', 'дня', 'дней'])}`;

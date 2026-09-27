@@ -85,6 +85,29 @@ describe('SQLite candidate memory', () => {
     ).toThrow(CandidateStoreConflictError);
   });
 
+  it('rolls a generated document back if its application disappeared before linking', () => {
+    const store = createStore();
+    const candidate = createCandidate(store);
+
+    expect(() =>
+      store.saveDocumentAndLinkApplicationMaterial(
+        candidate.id,
+        'removed-during-generation',
+        'cover_letter',
+        {
+          kind: 'cover_letter',
+          source: 'generated',
+          fileName: 'cover-letter.txt',
+          mimeType: 'text/plain',
+          contentBase64: Buffer.from('A generated letter').toString('base64'),
+          parseStatus: 'not_applicable',
+        },
+      ),
+    ).toThrow();
+
+    expect(store.getSnapshot(candidate.id).documents).toEqual([]);
+  });
+
   it('rejects market context added to a legacy turn without a request digest', () => {
     const directory = mkdtempSync(join(tmpdir(), 'openqareer-turn-digest-'));
     directories.push(directory);

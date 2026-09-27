@@ -31,12 +31,13 @@ describe('businessDaysBetween / addBusinessDays', () => {
 });
 
 describe('computeFollowUpStatus — application follow-up schedule', () => {
-  const lastContactAt = '2024-01-01T09:00:00Z';
+  const appliedAt = '2024-01-01T09:00:00Z';
 
   it('is upcoming before calendar day 5 and exposes the UTC deadline', () => {
     const status = computeFollowUpStatus({
       processProfile: 'standard',
-      lastContactAt,
+      appliedAt,
+      lastContactAt: appliedAt,
       now: '2024-01-05T23:59:59Z',
     });
     expect(status.urgency).toBe('upcoming');
@@ -45,43 +46,68 @@ describe('computeFollowUpStatus — application follow-up schedule', () => {
     expect(status.daysSinceContact).toBe(4);
   });
 
-  it('is due on day 5 and advances the second reminder to day 8', () => {
+  it('keeps the second reminder on applied day 8 after the first is sent', () => {
     const status = computeFollowUpStatus({
       processProfile: 'standard',
-      lastContactAt,
+      appliedAt,
+      lastContactAt: appliedAt,
       now: '2024-01-06T00:00:00Z',
     });
     expect(status.urgency).toBe('due');
-    expect(status.dueAt).toBe('2024-01-09T00:00:00.000Z');
+    expect(status.dueAt).toBe('2024-01-06T00:00:00.000Z');
     expect(status.daysSinceContact).toBe(5);
+
+    const afterSendingFirst = computeFollowUpStatus({
+      processProfile: 'standard',
+      appliedAt,
+      lastContactAt: '2024-01-06T10:00:00Z',
+      remindersSent: 1,
+      now: '2024-01-06T12:00:00Z',
+    });
+    expect(afterSendingFirst.urgency).toBe('upcoming');
+    expect(afterSendingFirst.dueAt).toBe('2024-01-09T00:00:00.000Z');
+    expect(afterSendingFirst.daysSinceContact).toBe(0);
 
     const second = computeFollowUpStatus({
       processProfile: 'standard',
-      lastContactAt,
+      appliedAt,
+      lastContactAt: '2024-01-06T10:00:00Z',
+      remindersSent: 1,
       now: '2024-01-09T12:00:00Z',
     });
     expect(second.urgency).toBe('due');
-    expect(second.dueAt).toBe('2024-01-15T00:00:00.000Z');
-    expect(second.daysSinceContact).toBe(8);
+    expect(second.dueAt).toBe('2024-01-09T00:00:00.000Z');
+    expect(second.daysSinceContact).toBe(3);
   });
 
-  it('becomes stale at day 14, regardless of the viewer timezone', () => {
-    const beforeStale = computeFollowUpStatus({
+  it('classifies the due UTC date as today and older dates as overdue', () => {
+    const dueToday = computeFollowUpStatus({
       processProfile: 'standard',
-      lastContactAt,
-      now: '2024-01-14T23:59:59Z',
-      timezoneOffsetMinutes: 180,
+      appliedAt,
+      lastContactAt: appliedAt,
+      now: '2024-01-06T23:59:59Z',
     });
-    expect(beforeStale.urgency).toBe('due');
+    expect(dueToday.urgency).toBe('due');
 
+    const overdue = computeFollowUpStatus({
+      processProfile: 'standard',
+      appliedAt,
+      lastContactAt: appliedAt,
+      now: '2024-01-07T00:00:00Z',
+    });
+    expect(overdue.urgency).toBe('overdue');
+    expect(overdue.dueAt).toBe('2024-01-06T00:00:00.000Z');
+  });
+
+  it('stops reminders after both scheduled follow-ups have been sent', () => {
     const status = computeFollowUpStatus({
       processProfile: 'standard',
-      lastContactAt,
+      appliedAt,
+      lastContactAt: '2024-01-09T10:00:00Z',
+      remindersSent: 2,
       now: '2024-01-15T00:00:00Z',
-      timezoneOffsetMinutes: -480,
     });
-    expect(status.urgency).toBe('stale');
-    expect(status.daysSinceContact).toBe(14);
+    expect(status.urgency).toBe('sent');
   });
 });
 
@@ -91,6 +117,7 @@ describe('computeFollowUpStatus — executive profile', () => {
   it('uses the same 5/8/14 calendar schedule for the sent stage', () => {
     const beforeWindow = computeFollowUpStatus({
       processProfile: 'executive',
+      appliedAt: lastContactAt,
       lastContactAt,
       now: '2024-01-05T09:00:00Z',
     });
@@ -98,14 +125,18 @@ describe('computeFollowUpStatus — executive profile', () => {
 
     const insideWindow = computeFollowUpStatus({
       processProfile: 'executive',
+      appliedAt: lastContactAt,
       lastContactAt,
+      remindersSent: 1,
       now: '2024-01-06T09:00:00Z',
     });
-    expect(insideWindow.urgency).toBe('due');
+    expect(insideWindow.urgency).toBe('upcoming');
     expect(insideWindow.source).toBe('standard_schedule');
+    expect(insideWindow.dueAt).toBe('2024-01-09T00:00:00.000Z');
 
     const afterWindow = computeFollowUpStatus({
       processProfile: 'executive',
+      appliedAt: lastContactAt,
       lastContactAt,
       now: '2024-01-15T00:00:00Z',
     });
@@ -117,6 +148,7 @@ describe('computeFollowUpStatus — company deadline', () => {
   it('overrides the standard schedule even while it would otherwise be upcoming', () => {
     const status = computeFollowUpStatus({
       processProfile: 'standard',
+      appliedAt: '2024-01-01T09:00:00Z',
       lastContactAt: '2024-01-01T09:00:00Z',
       companyDueAt: '2024-01-03T00:00:00Z',
       now: '2024-01-02T09:00:00Z',
@@ -129,11 +161,12 @@ describe('computeFollowUpStatus — company deadline', () => {
   it('overrides the executive window and reports overdue once it has passed', () => {
     const status = computeFollowUpStatus({
       processProfile: 'executive',
+      appliedAt: '2024-01-01T09:00:00Z',
       lastContactAt: '2024-01-01T09:00:00Z',
       companyDueAt: '2024-01-02T00:00:00Z',
       now: '2024-01-05T09:00:00Z',
     });
     expect(status.source).toBe('company_deadline');
-    expect(status.urgency).toBe('due');
+    expect(status.urgency).toBe('overdue');
   });
 });

@@ -2063,7 +2063,7 @@ interface WriteTally {
   maxTransactionMs: number;
 }
 
-function parseVacancy(payload: string): UnifiedVacancy | undefined {
+export function parseVacancy(payload: string): UnifiedVacancy | undefined {
   try {
     const parsed: unknown = JSON.parse(payload);
     if (!parsed || typeof parsed !== 'object') return undefined;

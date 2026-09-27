@@ -1,6 +1,9 @@
 import type { MatchedVacancyItem } from './cabinetTypes';
 import {
+  API_MUTATION_TIMEOUT_MS,
+  API_READ_TIMEOUT_MS,
   CoachApiError as CoachApiErrorClass,
+  apiRequestSignal,
   apiFetch,
   readData,
   throwApiError,
@@ -127,12 +130,17 @@ export async function saveCandidateCampaign(
 }
 
 export async function getCandidateCampaign(signal?: AbortSignal): Promise<CampaignMetaView> {
-  const response = await apiFetch('/api/v1/candidate/campaign', { signal });
+  const response = await apiFetch('/api/v1/candidate/campaign', {
+    signal: apiRequestSignal(signal, API_READ_TIMEOUT_MS),
+  });
   return readData<CampaignMetaView>(response);
 }
 
-export async function rebuildCandidateCampaignRoles(): Promise<void> {
-  const response = await apiFetch('/api/v1/candidate/campaign/roles/rebuild', { method: 'POST' });
+export async function rebuildCandidateCampaignRoles(signal?: AbortSignal): Promise<void> {
+  const response = await apiFetch('/api/v1/candidate/campaign/roles/rebuild', {
+    method: 'POST',
+    signal: apiRequestSignal(signal, API_MUTATION_TIMEOUT_MS),
+  });
   await readData<{ status: 'queued' }>(response);
 }
 

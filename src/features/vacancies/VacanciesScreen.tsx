@@ -4,9 +4,7 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { VacancySubscription } from '../coach/coachApi';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import { titleMatchesRole } from '../../../shared/vacancyRoleTitleMatch';
-import { pluralRu } from '../../../shared/pluralRu';
 import { vacancyAge } from './vacancyFilters';
-import { VacancyRow } from './VacancyRow';
 import { VacancyDetailPanel } from './VacancyDetailPanel';
 import { VacancyHypothesisBanner } from './VacancyHypothesisBanner';
 import { SavedSearchesFold } from './VacancyFilterPanel';
@@ -15,19 +13,11 @@ import { CareerPathIndicator } from '../shell/CareerPathIndicator';
 import type { PathDestination, PathStep } from '../shell/pathIndicator';
 import type { VacancyApplications } from './useVacancyApplications';
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
-
-const FRESHNESS_OPTIONS = [
-  { days: 0, label: 'Сегодня' },
-  { days: 7, label: '7 дней' },
-  { days: 30, label: '30 дней' },
-] as const;
-
-export interface VacanciesScreenState {
-  readonly role?: string;
-  readonly regions: readonly string[];
-  readonly remoteOnly: boolean;
-  readonly freshnessDays?: number;
-}
+import {
+  VacanciesFilters,
+  VacanciesList,
+  type VacanciesScreenState,
+} from './VacanciesScreenFilters';
 
 const EMPTY_STATE: VacanciesScreenState = { regions: [], remoteOnly: false };
 
@@ -140,12 +130,12 @@ export function VacanciesScreen({
   return (
     <div className="vacancies-screen">
       <VacanciesScreenHeader primaryRole={board.primaryRole} pathIndicator={pathIndicator} />
+      {savedSearches}
       <VacanciesScreenBody
         loading={loading}
         failed={failed}
         failureSourceLabel={failureSourceLabel}
         onRetry={onRetry}
-        savedSearches={savedSearches}
       >
         <VacanciesResults
           matched={matched}
@@ -154,7 +144,6 @@ export function VacanciesScreen({
           candidateLevel={candidateLevel}
           now={now}
           applications={applications}
-          savedSearches={savedSearches}
           board={board}
           actions={actions}
           onRetry={onRetry}
@@ -232,20 +221,17 @@ function VacanciesScreenBody({
   failed,
   failureSourceLabel,
   onRetry,
-  savedSearches,
   children,
 }: {
   readonly loading: boolean;
   readonly failed: boolean;
   readonly failureSourceLabel?: string;
   readonly onRetry?: () => void;
-  readonly savedSearches: ReactNode;
   readonly children: ReactNode;
 }) {
   if (loading) {
     return (
       <div className="vacancies-content">
-        {savedSearches}
         <VacanciesLoadingState />
       </div>
     );
@@ -253,7 +239,6 @@ function VacanciesScreenBody({
   if (failed) {
     return (
       <div className="vacancies-content">
-        {savedSearches}
         <VacanciesErrorState sourceLabel={failureSourceLabel} onRetry={onRetry} />
       </div>
     );
@@ -268,7 +253,6 @@ interface VacanciesResultsProps {
   readonly candidateLevel?: string | null;
   readonly now: string;
   readonly applications?: VacancyApplications;
-  readonly savedSearches: ReactNode;
   readonly board: ReturnType<typeof useVacanciesScreenBoard>;
   readonly actions: ReturnType<typeof useVacancyCampaignActions>;
   readonly onRetry?: () => void;
@@ -283,10 +267,7 @@ function VacanciesResults(props: VacanciesResultsProps) {
         actions={props.actions}
       />
       {props.matched.length === 0 ? (
-        <>
-          {props.savedSearches}
-          <VacanciesEmptyState role={props.board.primaryRole} onRetry={props.onRetry} />
-        </>
+        <VacanciesEmptyState role={props.board.primaryRole} onRetry={props.onRetry} />
       ) : (
         <VacanciesLayout
           roleHypotheses={props.board.roleHypotheses}
@@ -309,7 +290,6 @@ function VacanciesResults(props: VacanciesResultsProps) {
           effectiveId={props.board.effectiveId}
           selectedItem={props.board.selectedItem}
           applications={props.applications}
-          savedSearches={props.savedSearches}
           mobileDetailOpen={props.board.mobileDetailOpen}
           onSelect={props.board.onSelect}
           onBack={props.board.onBack}
@@ -432,7 +412,6 @@ interface VacanciesLayoutProps {
   readonly effectiveId?: string;
   readonly selectedItem?: MatchedVacancyItem;
   readonly applications?: VacancyApplications;
-  readonly savedSearches: ReactNode;
   readonly mobileDetailOpen: boolean;
   readonly onSelect: (id: string) => void;
   readonly onBack: () => void;
@@ -479,212 +458,6 @@ function VacanciesHeader({ primaryRole }: { readonly primaryRole?: string }) {
   );
 }
 
-type VacanciesFiltersProps = Pick<
-  VacanciesLayoutProps,
-  | 'roleHypotheses'
-  | 'regions'
-  | 'candidateLevel'
-  | 'state'
-  | 'onChange'
-  | 'onReset'
-  | 'savedSearches'
->;
-
-function VacanciesFilters(props: VacanciesFiltersProps) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <div className="vacancies-filter-column">
-      <button
-        type="button"
-        className="vacancies-btn vacancies-btn-secondary vacancies-mobile-filter-toggle"
-        aria-label="Фильтры и сохранённые запросы"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-      >
-        <span>Фильтры и запросы</span>
-        <span aria-hidden="true">{expanded ? 'Скрыть' : 'Показать'}</span>
-      </button>
-      <aside
-        className={`vacancies-filters${expanded ? ' is-mobile-open' : ''}`}
-        aria-label="Фильтры"
-      >
-        <VacanciesFilterControls {...props} />
-      </aside>
-    </div>
-  );
-}
-
-function VacanciesFilterControls({
-  roleHypotheses,
-  regions,
-  candidateLevel,
-  state,
-  onChange,
-  onReset,
-  savedSearches,
-}: VacanciesFiltersProps) {
-  return (
-    <>
-      <RoleHypothesesGroup roleHypotheses={roleHypotheses} state={state} onChange={onChange} />
-      <RegionsGroup regions={regions} state={state} onChange={onChange} />
-      <RemoteOnlyGroup state={state} onChange={onChange} />
-
-      {candidateLevel ? (
-        <FieldGroup title="Уровень">
-          <Chip label={candidateLevel} isSelected />
-        </FieldGroup>
-      ) : null}
-
-      <FreshnessGroup state={state} onChange={onChange} />
-      {savedSearches}
-      <button
-        type="button"
-        className="vacancies-btn vacancies-btn-secondary vacancies-reset"
-        onClick={onReset}
-      >
-        Сбросить фильтры
-      </button>
-    </>
-  );
-}
-
-/** Локальный фильтр: кампанию на сервере меняет только баннер гипотезы, не клик по фильтру. */
-function RemoteOnlyGroup({ state, onChange }: Pick<VacanciesFiltersProps, 'state' | 'onChange'>) {
-  return (
-    <FieldGroup title="Формат работы">
-      <Chip
-        label="Удалённо"
-        isSelected={state.remoteOnly}
-        onClick={() => onChange((prev) => ({ ...prev, remoteOnly: !prev.remoteOnly }))}
-      />
-    </FieldGroup>
-  );
-}
-
-interface FilterGroupProps {
-  readonly state: VacanciesScreenState;
-  readonly onChange: (updater: (prev: VacanciesScreenState) => VacanciesScreenState) => void;
-}
-
-function RoleHypothesesGroup({
-  roleHypotheses,
-  state,
-  onChange,
-}: FilterGroupProps & {
-  readonly roleHypotheses: NonNullable<CampaignMetaView['roleHypotheses']>;
-}) {
-  if (roleHypotheses.length === 0) return null;
-  return (
-    <FieldGroup title="Роль кампании">
-      {roleHypotheses.map((hypothesis) => (
-        <RoleChip
-          key={hypothesis.role}
-          role={hypothesis.role}
-          vacancyCount={hypothesis.vacancyCount}
-          isHypothesis={hypothesis.isHypothesis}
-          isSelected={state.role === hypothesis.role}
-          onSelect={() => onChange((prev) => ({ ...prev, role: hypothesis.role }))}
-        />
-      ))}
-    </FieldGroup>
-  );
-}
-
-function RegionsGroup({
-  regions,
-  state,
-  onChange,
-}: FilterGroupProps & { readonly regions: readonly string[] }) {
-  if (regions.length === 0) return null;
-  return (
-    <FieldGroup title="География">
-      {regions.map((region) => (
-        <Chip
-          key={region}
-          label={region}
-          isSelected={state.regions.includes(region)}
-          onClick={() =>
-            onChange((prev) => ({ ...prev, regions: toggleRegion(prev.regions, region) }))
-          }
-        />
-      ))}
-    </FieldGroup>
-  );
-}
-
-function FreshnessGroup({ state, onChange }: FilterGroupProps) {
-  return (
-    <FieldGroup title="Свежесть">
-      {FRESHNESS_OPTIONS.map((option) => (
-        <Chip
-          key={option.days}
-          label={option.label}
-          isSelected={state.freshnessDays === option.days}
-          onClick={() =>
-            onChange((prev) => ({
-              ...prev,
-              freshnessDays: prev.freshnessDays === option.days ? undefined : option.days,
-            }))
-          }
-        />
-      ))}
-    </FieldGroup>
-  );
-}
-
-function VacanciesList({
-  total,
-  items,
-  now,
-  selectedId,
-  onSelect,
-  onReset,
-}: {
-  readonly total: number;
-  readonly items: readonly MatchedVacancyItem[];
-  readonly now: string;
-  readonly selectedId?: string;
-  readonly onSelect: (id: string) => void;
-  readonly onReset: () => void;
-}) {
-  return (
-    <section className="vacancies-list-col" aria-label="Список вакансий">
-      <div className="vacancies-list-head">
-        <span className="vacancies-list-hint">
-          {pluralRu(total, ['вакансия', 'вакансии', 'вакансий'])} · показаны совпадающие по роли и
-          уровню
-        </span>
-      </div>
-      {items.length > 0 ? (
-        <ul className="vac-list">
-          {items.map((item) => (
-            <VacancyRow
-              key={item.cluster.id}
-              item={item}
-              now={now}
-              isSelected={selectedId === item.cluster.id}
-              onSelect={() => onSelect(item.cluster.id)}
-            />
-          ))}
-        </ul>
-      ) : (
-        <div className="vacancies-filter-empty">
-          <p>По выбранной роли и фильтрам совпадающих вакансий нет.</p>
-          <button type="button" className="vacancies-btn vacancies-btn-secondary" onClick={onReset}>
-            Сбросить фильтры
-          </button>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function toggleRegion(regions: readonly string[], region: string): readonly string[] {
-  return regions.includes(region)
-    ? regions.filter((entry) => entry !== region)
-    : [...regions, region];
-}
-
 function filterByScreenState(
   items: readonly MatchedVacancyItem[],
   state: VacanciesScreenState,
@@ -706,67 +479,6 @@ function filterByScreenState(
     }
     return true;
   });
-}
-
-function FieldGroup({ title, children }: { readonly title: string; readonly children: ReactNode }) {
-  return (
-    <div className="vacancies-field-group">
-      <h3>{title}</h3>
-      <div className="vacancies-chip-row">{children}</div>
-    </div>
-  );
-}
-
-function Chip({
-  label,
-  isSelected,
-  onClick,
-}: {
-  readonly label: string;
-  readonly isSelected: boolean;
-  readonly onClick?: () => void;
-}) {
-  if (!onClick) {
-    return <span className={`vacancies-chip${isSelected ? ' is-selected' : ''}`}>{label}</span>;
-  }
-
-  return (
-    <button
-      type="button"
-      className={`vacancies-chip${isSelected ? ' is-selected' : ''}`}
-      aria-pressed={isSelected}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-}
-
-function RoleChip({
-  role,
-  vacancyCount,
-  isHypothesis,
-  isSelected,
-  onSelect,
-}: {
-  readonly role: string;
-  readonly vacancyCount: number;
-  readonly isHypothesis: boolean;
-  readonly isSelected: boolean;
-  readonly onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={`vacancies-chip vacancies-chip-accent${isSelected ? ' is-selected' : ''}${
-        isHypothesis ? ' vacancies-chip-hypothesis' : ''
-      }`}
-      aria-pressed={isSelected}
-      onClick={onSelect}
-    >
-      {role} ({vacancyCount}){isHypothesis ? ' — гипотеза' : ''}
-    </button>
-  );
 }
 
 /** Единственная точка «есть совпадение» на всех трёх fit-dots (B248). */

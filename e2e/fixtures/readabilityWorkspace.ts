@@ -318,6 +318,7 @@ export const todaySnapshot = {
     waitingForYou: 3,
     newVacancies: 9,
     followUpsDueToday: 2,
+    followUpsOverdue: 0,
     closedVacancies: 1,
     interviewsAhead: 1,
     nextInterview: {

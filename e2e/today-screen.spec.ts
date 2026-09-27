@@ -84,6 +84,7 @@ const TODAY_SNAPSHOT = {
     waitingForYou: 2,
     newVacancies: 12,
     followUpsDueToday: 2,
+    followUpsOverdue: 1,
     closedVacancies: 2,
     interviewsAhead: 1,
     nextInterview: {
@@ -255,6 +256,7 @@ const EMPTY_TODAY_SNAPSHOT = {
     waitingForYou: 0,
     newVacancies: 0,
     followUpsDueToday: 0,
+    followUpsOverdue: 0,
     closedVacancies: 0,
     interviewsAhead: 0,
     nextInterview: null,
@@ -417,6 +419,10 @@ test.describe('B251 today screen', () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(wideOverflow).toBeLessThanOrEqual(0);
+    const wideDigestColumns = await page
+      .locator('.career-today-digest')
+      .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
+    expect(wideDigestColumns).toBe(4);
     await page.screenshot({
       path: process.env.SHOTS_DIR
         ? `${process.env.SHOTS_DIR}/today-1440.png`
@@ -431,7 +437,7 @@ test.describe('B251 today screen', () => {
     const digestColumns = await page
       .locator('.career-today-digest')
       .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
-    expect(digestColumns).toBe(3);
+    expect(digestColumns).toBe(2);
     await expect(
       page.getByRole('button', { name: 'Отметить отправленным' }).first(),
     ).toBeInViewport();

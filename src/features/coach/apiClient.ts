@@ -43,6 +43,13 @@ export const SESSION_TOKEN_STORAGE_KEY = 'openqareer_session_token';
  */
 export const SESSION_EXPIRED_EVENT = 'openqareer:session-expired';
 export const API_READ_TIMEOUT_MS = 20_000;
+export const API_MUTATION_TIMEOUT_MS = 30_000;
+
+/** Combines caller cancellation with a finite transport deadline. */
+export function apiRequestSignal(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
 
 export function getStoredSessionToken(): string | null {
   if (typeof window === 'undefined') return null;

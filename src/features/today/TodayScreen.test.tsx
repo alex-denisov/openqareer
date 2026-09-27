@@ -8,6 +8,7 @@ const snapshot: TodaySnapshot = {
     waitingForYou: 2,
     newVacancies: 3,
     followUpsDueToday: 1,
+    followUpsOverdue: 1,
     closedVacancies: 1,
     interviewsAhead: 1,
     nextInterview: {
@@ -48,6 +49,7 @@ const snapshot: TodaySnapshot = {
   ],
   followUps: [
     { applicationId: 'app-1', company: 'Peraton', title: 'Enterprise Architect', status: 'today' },
+    { applicationId: 'app-2', company: 'Genetec', title: 'Enterprise Architect', status: 'overdue' },
   ],
   sinceLastVisit: {
     since: '2026-09-23T09:00:00.000Z',
@@ -75,6 +77,9 @@ describe('TodayScreen (B251 S5)', () => {
 
     expect(html).toContain('3</span>');
     expect(html).toContain('follow-up назначено на сегодня');
+    expect(html).toContain('follow-up просрочено');
+    expect(html.match(/class="career-today-digest-number"/gu)).toHaveLength(4);
+    expect(html).toContain('class="career-today-digest-number">1</span>');
     expect(html).toContain('кампания VP Technology Ops');
     expect(html).toContain('Peraton — 6 дней тишины');
     expect(html).toContain('HRTx Inc. · раунд 2');
@@ -95,6 +100,13 @@ describe('TodayScreen (B251 S5)', () => {
     expect(html).toContain('Открыть');
   });
 
+  it('uses one in-progress set for the queue action and follow-up list action', () => {
+    const html = renderTodayScreen({ markingFollowUpIds: new Set(['app-1']) });
+
+    expect(html.match(/Сохраняем…/gu)).toHaveLength(2);
+    expect(html.match(/disabled="" aria-busy="true"/gu)).toHaveLength(2);
+  });
+
   it('renders follow-ups by due date and the since-last-visit digest', () => {
     const html = renderTodayScreen();
 
@@ -110,6 +122,7 @@ describe('TodayScreen (B251 S5)', () => {
 
     expect(html).toContain('aria-label="Читаем очередь дня"');
     expect(html).toContain('aria-busy="true"');
+    expect(html.match(/career-today-digest-card/gu)).toHaveLength(4);
   });
 
   it('shows a retry action when the reading failed', () => {

@@ -28,6 +28,7 @@ describe('todayApi', () => {
         waitingForYou: 1,
         newVacancies: 2,
         followUpsDueToday: 0,
+        followUpsOverdue: 0,
         closedVacancies: 0,
         interviewsAhead: 0,
         nextInterview: null,
@@ -46,7 +47,9 @@ describe('todayApi', () => {
     const result = await getTodaySnapshot('Europe/Moscow');
 
     expect(result).toEqual(snapshot);
-    expect(spy).toHaveBeenCalledWith('/api/v1/candidate/today?tz=Europe%2FMoscow');
+    expect(spy).toHaveBeenCalledWith('/api/v1/candidate/today?tz=Europe%2FMoscow', {
+      signal: undefined,
+    });
   });
 
   it('surfaces the server message on failure', async () => {

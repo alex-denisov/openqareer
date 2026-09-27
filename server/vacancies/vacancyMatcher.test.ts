@@ -179,6 +179,14 @@ describe('Explainable Vacancy Matcher', () => {
       expect(explanation.roleMatch).toBe('partial');
     });
 
+    it('keeps an SQL-selected semantic role when the rules level disagrees', () => {
+      const explanation = matchCandidateWithVacancy(ctoCandidate, {
+        ...sampleCluster,
+        canonicalTitle: 'Engineering Manager',
+      });
+      expect(explanation.roleMatch).toBe('partial');
+    });
+
     it('partial — уровень кандидата неизвестен, известна только функция', () => {
       const explanation = matchCandidateWithVacancy(
         { ...ctoCandidate, targetLevel: undefined },
@@ -193,6 +201,19 @@ describe('Explainable Vacancy Matcher', () => {
         canonicalTitle: 'VP of Channel Sales',
       });
       expect(explanation.roleMatch).toBe('none');
+    });
+
+    it('none — operations-only campaigns reject a mixed marketing title', () => {
+      const roleExplanation = matchCandidateWithVacancy(
+        { ...ctoCandidate, semanticRoleFunctions: ['ops'], targetRoles: ['COO'] },
+        { ...sampleCluster, canonicalTitle: 'Marketing Creative & Operations' },
+      );
+      const titleExplanation = matchCandidateWithVacancy(
+        { ...ctoCandidate, semanticRoleFunctions: ['ops'], targetRoles: ['COO'] },
+        { ...sampleCluster, canonicalTitle: 'Chief of Staff VP Operations Marketing Advertising Ecommerce' },
+      );
+      expect(roleExplanation.roleMatch).toBe('none');
+      expect(titleExplanation.roleMatch).toBe('none');
     });
   });
 });

@@ -25,7 +25,13 @@ export interface WhoseTurnInput {
 export function computeApplicationTurn(input: WhoseTurnInput): ApplicationTurn {
   if (input.stage === 'rejected' || input.stage === 'archived') return null;
   if (input.stage === 'saved' && !input.hasMaterials) return 'candidate';
-  if (input.followUpUrgency === 'due' || input.followUpUrgency === 'stale') return 'candidate';
+  if (
+    input.followUpUrgency === 'due' ||
+    input.followUpUrgency === 'overdue' ||
+    input.followUpUrgency === 'stale'
+  ) {
+    return 'candidate';
+  }
   if (input.upcomingInterviewNeedsPrep) return 'candidate';
   if (input.stage === 'offer') return 'candidate';
   return 'company';

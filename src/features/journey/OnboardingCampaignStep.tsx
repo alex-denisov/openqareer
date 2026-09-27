@@ -1,20 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState, type KeyboardEvent, type MutableRefObject } from 'react';
 import { CANDIDATE_REGION_CATALOGUE, type CandidateRegion } from '../workspace/candidateRegions';
 import { ONBOARDING_FORMAT_OPTIONS, type OnboardingFormat } from './onboardingFormat';
-
-export type OnboardingCampaignState = 'loading' | 'model' | 'fallback';
-
-export interface OnboardingCampaignRole {
-  readonly id: string;
-  /** Server title used for vacancy matching and saving the campaign. */
-  readonly title: string;
-  readonly titleRu?: string;
-  readonly level?: 'ic' | 'lead' | 'head' | 'vp' | 'c-level' | null;
-  readonly kind?: 'primary' | 'adjacent';
-  readonly reason?: string;
-  readonly evidence?: readonly string[];
-  readonly source: 'model' | 'profile' | 'candidate';
-}
+import { DEFAULT_WAIT_MS } from './onboardingCampaign';
+import type { OnboardingCampaignRole, OnboardingCampaignState } from './onboardingCampaignTypes';
 
 interface OnboardingCampaignStepProps {
   readonly state: OnboardingCampaignState;
@@ -22,7 +10,7 @@ interface OnboardingCampaignStepProps {
   readonly selectedRoleIds: readonly string[];
   readonly regions: readonly CandidateRegion[];
   readonly format: OnboardingFormat;
-  readonly elapsedSeconds: number;
+  readonly elapsedSeconds: number | null;
   readonly error?: string;
   readonly onToggleRole: (roleId: string) => void;
   readonly onAddRole: (title: string) => void;
@@ -60,7 +48,7 @@ function CampaignStateNotice({ state, error }: { state: OnboardingCampaignState;
   if (state === 'model') return null;
   return (
     <p className="career-inline-note" role="status">
-      {error ?? 'Модель не успела ответить за 90 секунд.'} Ниже роли из профиля. Проверьте их,
+      {error ?? `Модель не успела ответить за ${DEFAULT_WAIT_MS / 1000} секунд.`} Ниже роли из профиля. Проверьте их,
       выберите подходящие или добавьте свою.
     </p>
   );
@@ -216,17 +204,24 @@ function FormatChoices({
   format: OnboardingFormat;
   onChange: (format: OnboardingFormat) => void;
 }) {
+  const radioRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
   return (
     <>
       <div className="career-onboarding-format-row" role="radiogroup" aria-label="Формат работы">
-        {ONBOARDING_FORMAT_OPTIONS.map((option) => (
+        {ONBOARDING_FORMAT_OPTIONS.map((option, index) => (
           <button
             key={option}
             type="button"
             role="radio"
             aria-checked={format === option}
+            tabIndex={format === option ? 0 : -1}
             className={`tag ${format === option ? 'is-selected' : ''}`}
+            ref={(element) => {
+              radioRefs.current[index] = element;
+            }}
             onClick={() => onChange(option)}
+            onKeyDown={(event) => moveFormatWithArrow(event, index, radioRefs, onChange)}
           >
             {option}
           </button>
@@ -249,8 +244,22 @@ function FormatChoices({
   );
 }
 
-function CampaignProgress({ elapsedSeconds }: { readonly elapsedSeconds: number }) {
-  const remainingSeconds = Math.max(0, 90 - elapsedSeconds);
+function moveFormatWithArrow(
+  event: KeyboardEvent<HTMLButtonElement>,
+  index: number,
+  radioRefs: MutableRefObject<Array<HTMLButtonElement | null>>,
+  onChange: (format: OnboardingFormat) => void,
+): void {
+  if (!event.key.startsWith('Arrow')) return;
+  event.preventDefault();
+  const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1;
+  const nextIndex = (index + delta + ONBOARDING_FORMAT_OPTIONS.length) % ONBOARDING_FORMAT_OPTIONS.length;
+  radioRefs.current[nextIndex]?.focus();
+  onChange(ONBOARDING_FORMAT_OPTIONS[nextIndex]);
+}
+
+function CampaignProgress({ elapsedSeconds }: { readonly elapsedSeconds: number | null }) {
+  const remainingSeconds = Math.max(0, DEFAULT_WAIT_MS / 1000 - (elapsedSeconds ?? 0));
   return (
     <div
       className="career-onboarding-progress-list"
@@ -259,10 +268,16 @@ function CampaignProgress({ elapsedSeconds }: { readonly elapsedSeconds: number 
       aria-busy="true"
     >
       <h2>Собираем роли по профилю</h2>
-      <p>Запрос отправлен модели. Ждём подтверждённый ответ, до таймаута — 90 секунд.</p>
-      <p>
-        Прошло {elapsedSeconds} с · осталось ждать до {remainingSeconds} с
-      </p>
+      {elapsedSeconds === null ? (
+        <p>Сохраняем профиль и запускаем подбор.</p>
+      ) : (
+        <>
+          <p>Запрос отправлен модели. Ждём подтверждённый ответ.</p>
+          <p>
+            Прошло {elapsedSeconds} с · осталось ждать до {remainingSeconds} с
+          </p>
+        </>
+      )}
       <div className="career-onboarding-progress-row is-active">
         <span className="career-onboarding-progress-mark" aria-hidden="true" />
         <span>Подбираем роли с опорой на опыт</span>

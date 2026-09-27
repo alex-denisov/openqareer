@@ -153,6 +153,14 @@ describe('applications route · S2 materials/interviews/offer/events', () => {
   it('records a follow-up-sent event without changing the stage', async () => {
     const { app, authorization, candidateStore } = await createApp();
     const id = await createCard(app, authorization, 'cluster-1');
+    const before = await app.inject({
+      method: 'GET',
+      url: APPLICATIONS_URL,
+      headers: { authorization },
+    });
+    const initialDueAt = before.json().data.find((entry: { id: string }) => entry.id === id)
+      .followUp.dueAt as string;
+    const secondReminderDueAt = new Date(Date.parse(initialDueAt) + 3 * 86_400_000).toISOString();
     const response = await app.inject({
       method: 'POST',
       url: `${APPLICATIONS_URL}/${id}/events`,
@@ -163,7 +171,7 @@ describe('applications route · S2 materials/interviews/offer/events', () => {
     expect(response.json().data.stage).toBe('applied');
     expect(response.json().data.followUp).toMatchObject({
       source: 'standard_schedule',
-      dueAt: '2030-01-06T00:00:00.000Z',
+      dueAt: secondReminderDueAt,
     });
 
     const other = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });

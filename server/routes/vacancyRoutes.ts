@@ -1,8 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { markGeography } from '../vacancies/vacancyGeography';
 import { vacancySubscriptionInputSchema } from '../domain/vacancy';
-import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
 import type { ProposedRole } from '../../shared/roleProposals';
 import {
   MAX_EXCLUDED_FAMILIES,
@@ -18,29 +16,14 @@ import {
   strategyRoleFromProposal,
   type StrategyRole,
 } from '../../shared/careerStrategy';
-import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
-import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { confirmChosenTitle } from '../vacancies/roleHypotheses';
-import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
-import { countMatchedVacanciesByRole } from '../vacancies/vacancyRoleCounts';
-import { campaignMeta, readCampaign } from './campaignContext';
-import { unconfirmedCandidateMatchResponse } from './matchedVacancyResponse';
-import type { CampaignResolution } from '../vacancies/campaign';
 import { registerCampaignRoutes } from './campaignRoutes';
-import { readRoleContext, readTargetLevel, type RoleContext } from './vacancyRoleContext';
-import { readMatchedSnapshot, readMatchProfile } from '../vacancies/matchedPoolContext';
+import { readRoleContext, type RoleContext } from './vacancyRoleContext';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
-import {
-  filterUsablePitchFacts,
-  generateVacancyPitch,
-  type PitchLanguage,
-  type PitchTone,
-  type VacancyPitchInputFact,
-} from '../domain/vacancyPitchService';
-import { COVER_LETTER_BUDGET_MS, withinTimeBudget } from '../providers/coverLetterWriter';
-import type { PitchFactRankingContext } from '../domain/pitchFactRanking';
 import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';
 import { registerApplicationRoutes } from './applicationRoutes';
+import { registerMatchedVacancyRoutes } from './matchedVacancyRoutes';
+import { registerVacancyPitchRoutes } from './vacancyPitchRoutes';
 import { registerPlanRequestRoutes } from './planRequestRoutes';
 import type { RouteDeps } from './deps';
 import {
@@ -51,9 +34,6 @@ import {
   withDeps,
 } from './helpers';
 import { hhMarketQuerySchema } from './schemas';
-import { pitchRankingContext } from './pitchRankingContext';
-import { evaluateLevelMatch } from '../vacancies/levelMatcher';
-import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -96,10 +76,6 @@ const handleHhMarket: Handler = async ({ searchVacancies }, request, reply) => {
     );
   }
 };
-
-const matchedVacanciesQuerySchema = z.object({
-  offset: z.coerce.number().int().min(0).default(0),
-});
 
 /**
  * Гипотезы роли считает сервер (B180, срез 1б).
@@ -370,126 +346,6 @@ function isProposed(context: RoleContext, title: string): boolean {
   return findProposal(context, title) !== undefined;
 }
 
-/**
- * Everything that happens to the matched pool after its cache read: role and
- * geography filtering, then decisions (`saved`/`skip`) applied strictly
- * after the cache (architecture.md §4, §7) so a click never forces a full
- * pool recompute (B230/B247).
- */
-function finishMatchedVacancies(
-  snapshot: readonly MatchedVacancyItem[],
-  targetRoles: readonly string[],
-  campaign: CampaignResolution,
-  candidateStore: RouteDeps['candidateStore'],
-  candidateId: string,
-): MatchedVacancyItem[] {
-  const geographyAndRemote = campaign.remoteOnly
-    ? snapshot.filter((item) => item.cluster.isRemote)
-    : snapshot;
-  // SQL добирает кандидатов до лимита любыми свежими записями; при названной
-  // роли в подбор идут только совпавшие с ней, и счётчик считает их же.
-  // Записи вне рынков кампании помечены и стоят после остальных (PRB-040).
-  const roleFiltered = markGeography(
-    targetRoles.length > 0
-      ? geographyAndRemote.filter((item) => item.explanation.roleMatch !== 'none')
-      : geographyAndRemote,
-    campaign.regions.value as CandidateRegion[],
-  );
-  return applyVacancyDecisions(roleFiltered, candidateStore.listVacancyDecisions(candidateId));
-}
-
-function addStoredVacancyLevels(
-  items: readonly MatchedVacancyItem[],
-  candidateLevel: ReturnType<typeof readTargetLevel>,
-  titleParseStore: RouteDeps['titleParseStore'],
-): MatchedVacancyItem[] {
-  return items.map((item) => {
-    const parsed = titleParseStore.getByKey(normalizeTitleKey(item.cluster.canonicalTitle));
-    return {
-      ...item,
-      explanation: {
-        ...item.explanation,
-        levelMatch: evaluateLevelMatch(
-          candidateLevel,
-          item.cluster.canonicalTitle,
-          parsed?.levelRank,
-        ),
-      },
-    };
-  });
-}
-
-const handleMatchedVacancies: Handler = async (
-  { authService, candidateStore, config, multiSourceEngine, titleParseStore },
-  request,
-  reply,
-) => {
-  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
-  if (!candidate) return undefined;
-  const { offset } = matchedVacanciesQuerySchema.parse(request.query);
-
-  const { confirmedSkills } = readMatchProfile(candidateStore, candidate.id);
-  const campaign = readCampaign(candidateStore, candidate.id);
-  const targetRoles = [...campaign.roles.value];
-
-  // Matching an invented profile produced «Подтверждённый навык: TypeScript»
-  // for a candidate who confirmed nothing, and a match percentage computed
-  // from it. No confirmed profile means no match claim (B161).
-  if (confirmedSkills.length === 0 && targetRoles.length === 0) {
-    return unconfirmedCandidateMatchResponse(request.id, offset, campaign);
-  }
-
-  // Подбор считается один раз на чтение: страницы одного чтения обязаны
-  // приходить из одного списка, иначе смещение указывает не на ту запись.
-  const targetLevel = readTargetLevel(candidateStore, candidate.id, targetRoles);
-  const snapshot = await readMatchedSnapshot(
-    multiSourceEngine,
-    candidate.id,
-    confirmedSkills,
-    targetRoles,
-    targetLevel,
-  );
-  const matched = finishMatchedVacancies(
-    snapshot,
-    targetRoles,
-    campaign,
-    candidateStore,
-    candidate.id,
-  );
-  // Гипотеза роли (B247, срез 2): порог считается по тому же снимку, что и
-  // сам подбор — до фильтра по роли/гео, иначе роль без вакансий в её же
-  // рынке выглядела бы гипотезой из-за чужого фильтра, а не своего счёта.
-  const hypothesisSnapshot = campaign.remoteOnly
-    ? snapshot.filter((item) => item.cluster.isRemote)
-    : snapshot;
-  const vacancyCountsByRole = countMatchedVacanciesByRole(hypothesisSnapshot, targetRoles);
-  const campaignWithHypotheses = readCampaign(candidateStore, candidate.id, vacancyCountsByRole);
-
-  // Весь подбор одним телом не доходит: маршрут рвёт ответ примерно на 20 460
-  // байт (INC-029). Экран забирает пул страницами внутри доказанного бюджета.
-  const page = buildMatchedVacancyPage(matched, offset);
-  return {
-    data: addStoredVacancyLevels(page.items, targetLevel, titleParseStore),
-    meta: {
-      requestId: request.id,
-      total: page.total,
-      offset: page.offset,
-      nextOffset: page.nextOffset,
-      // Смещения всех страниц — только с первой: без них кабинет узнаёт, куда
-      // идти дальше, лишь из предыдущего ответа, и держит канал 73 секунды
-      // шестьюдесятью кругами подряд (PRB-023, B211).
-      ...(page.pageOffsets ? { pageOffsets: page.pageOffsets } : {}),
-      // Баннер расхождения профиль/кампания читает конкретные значения обеих
-      // сторон отсюда, а не пересчитывает их сам (B247, срез 1). Гипотезы роли
-      // едут в том же теле — экран «Вакансии» не пересчитывает порог сам.
-      campaign: campaignMeta(campaignWithHypotheses),
-      // Фильтр «уровень» экрана «Вакансии» подписывает свой чип тем же
-      // значением, что и матчер, а не переспрашивает кандидата отдельно.
-      candidateLevel: targetLevel ?? null,
-    },
-  };
-};
-
 const handleListSources: Handler = async (
   { authService, candidateStore, config },
   request,
@@ -642,31 +498,6 @@ const handleDeleteSubscription: Handler = async (deps, request, reply) => {
   return reply.code(204).send();
 };
 
-const vacancyPitchInputSchema = z
-  .object({
-    tone: z.enum(['executive', 'confident', 'technical']).optional(),
-    /** Overrides language auto-detected from the vacancy's own text (B266). */
-    language: z.enum(['en', 'ru']).optional(),
-    /**
-     * B251, S2, architecture.md §4: when set, the generated cover letter is
-     * saved to `candidate_documents` (`cover_letter`, `generated`) and linked
-     * to this card. Without it the route behaves exactly as before.
-     */
-    applicationId: z.string().trim().min(1).max(200).optional(),
-    vacancy: z
-      .object({
-        title: z.string().trim().min(1).optional(),
-        company: z.string().trim().optional(),
-        description: z.string().optional(),
-        requiredSkills: z.array(z.string()).optional(),
-        responsibilities: z.array(z.string()).optional(),
-        location: z.string().optional(),
-        isRemote: z.boolean().optional(),
-      })
-      .optional(),
-  })
-  .optional();
-
 /**
  * Full text of one vacancy for the in-app «Подробнее» (B266). The matched
  * list trims `descriptionSummary` for payload size; the source vacancy keeps
@@ -714,166 +545,6 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
   };
 };
 
-/**
- * Модель пишет письмо, шаблон остаётся запасом (B266, пункт 7): пустой,
- * невалидный или упавший ответ не должен оставить кандидата без письма.
- */
-async function writeCoverLetterBody(
-  deps: RouteDeps,
-  request: FastifyRequest,
-  vacancy: {
-    title: string;
-    company?: string;
-    description?: string;
-    requiredSkills: readonly string[];
-  },
-  facts: readonly VacancyPitchInputFact[],
-  language: PitchLanguage,
-  tone: PitchTone,
-  rankingContext?: PitchFactRankingContext,
-): Promise<{ body?: string; stage?: string }> {
-  const { coverLetterWriter } = deps;
-  if (!coverLetterWriter) return {};
-  const usableFacts = filterUsablePitchFacts(facts).map((fact) => ({
-    ref: fact.id,
-    statement: fact.statement,
-    domain: fact.domain,
-    createdAt: fact.createdAt,
-    updatedAt: fact.updatedAt,
-  }));
-  const writing = coverLetterWriter.writeCoverLetter({
-    facts: usableFacts,
-    vacancy: {
-      title: vacancy.title,
-      ...(vacancy.company ? { company: vacancy.company } : {}),
-      ...(vacancy.description ? { description: vacancy.description } : {}),
-      requirements: vacancy.requiredSkills,
-      ...(rankingContext ? { rankingContext } : {}),
-    },
-    language,
-    tone,
-  });
-  const outcome = await withinTimeBudget(writing, COVER_LETTER_BUDGET_MS);
-  if (outcome.failure) {
-    // Причина отказа — для лога сервера, не для кандидата (тот же уговор,
-    // что и у называния ролей); текст кандидата и ключ провайдера в лог не идут.
-    request.log.warn(outcome.failure, 'cover-letter-stage-failed');
-  }
-  return outcome.body ? { body: outcome.body, stage: outcome.stage } : {};
-}
-
-/** Одна и та же вакансия собирается из тела запроса, кластера и пула один раз. */
-function resolvePitchVacancy(
-  body: z.infer<typeof vacancyPitchInputSchema>,
-  vacancyId: string,
-  cluster: ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>,
-  poolVacancy: ReturnType<NonNullable<RouteDeps['multiSourceEngine']['getVacancy']>> | undefined,
-) {
-  return {
-    id: vacancyId,
-    title: body?.vacancy?.title ?? cluster?.canonicalTitle ?? poolVacancy?.title,
-    company: body?.vacancy?.company ?? cluster?.canonicalCompany ?? poolVacancy?.company,
-    description:
-      body?.vacancy?.description ?? cluster?.descriptionSummary ?? poolVacancy?.description,
-    requiredSkills:
-      body?.vacancy?.requiredSkills ?? cluster?.skills ?? poolVacancy?.requiredSkills ?? [],
-    responsibilities: body?.vacancy?.responsibilities ?? poolVacancy?.responsibilities ?? [],
-    location: body?.vacancy?.location ?? cluster?.canonicalLocation ?? poolVacancy?.location,
-    isRemote: body?.vacancy?.isRemote ?? cluster?.isRemote ?? poolVacancy?.isRemote ?? false,
-  };
-}
-
-/** 404/410 — вакансия снята или её не было вовсе; текст отличает их для кандидата. */
-function vacancyNotFoundResponse(
-  reply: FastifyReply,
-  request: FastifyRequest,
-  multiSourceEngine: RouteDeps['multiSourceEngine'],
-  vacancyId: string,
-) {
-  if (multiSourceEngine.isKnownVacancyGone(vacancyId)) {
-    return sendError(
-      reply,
-      request,
-      410,
-      'vacancy_gone',
-      'Вакансия снята или обновилась — обновите список.',
-      false,
-    );
-  }
-  return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
-}
-
-const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, config, multiSourceEngine } = deps;
-  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
-  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
-  if (!candidate) return undefined;
-  const vacancyId = (request.params as { id: string }).id;
-  const body = vacancyPitchInputSchema.parse(request.body ?? {});
-  if (body?.applicationId && !candidateStore.getApplication(candidate.id, body.applicationId)) {
-    return sendError(reply, request, 404, 'application_not_found', 'Отклик не найден.', false);
-  }
-
-  const cluster = multiSourceEngine.getActiveCluster(vacancyId);
-  const poolVacancy = !cluster ? multiSourceEngine.getVacancy?.(vacancyId) : undefined;
-  const vacancy = resolvePitchVacancy(body, vacancyId, cluster, poolVacancy);
-  if (!vacancy.title) {
-    return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
-  }
-  const title = vacancy.title;
-  const pitchVacancy = { ...vacancy, title };
-  const rankingContext = pitchRankingContext(candidateStore, deps.titleParseStore, candidate.id, title);
-
-  const snapshot = candidateStore.getSnapshot(candidate.id);
-  const facts = snapshot?.memory ?? [];
-  const tone = body?.tone ?? 'executive';
-  const pitch = generateVacancyPitch({
-    vacancy: pitchVacancy,
-    candidateName: snapshot?.resume?.draft?.candidate?.fullName,
-    facts,
-    tone,
-    ...(rankingContext ? { rankingContext } : {}),
-    ...(body?.language ? { language: body.language } : {}),
-  });
-
-  const written = await writeCoverLetterBody(deps, request, pitchVacancy, facts, pitch.language, tone, rankingContext);
-  const atsCoverLetter = written.body ?? pitch.atsCoverLetter;
-  if (body?.applicationId) {
-    linkGeneratedCoverLetter(candidateStore, candidate.id, body.applicationId, atsCoverLetter);
-  }
-  return {
-    data: {
-      ...pitch,
-      atsCoverLetter,
-      bodySource: written.body ? ('model' as const) : ('template' as const),
-      ...(written.body && written.stage ? { stage: written.stage } : {}),
-    },
-    meta: { requestId: request.id },
-  };
-};
-
-/**
- * Saves the generated letter to `candidate_documents` and links it to the
- * card (architecture.md §4). Throws `ApplicationNotFoundError` if the card
- * is not the candidate's own — the generic error mapper turns that into 404.
- */
-function linkGeneratedCoverLetter(
-  candidateStore: RouteDeps['candidateStore'],
-  candidateId: string,
-  applicationId: string,
-  coverLetterText: string,
-): void {
-  const { document } = candidateStore.saveDocument(candidateId, {
-    kind: 'cover_letter',
-    source: 'generated',
-    fileName: 'cover-letter.txt',
-    mimeType: 'text/plain',
-    contentBase64: Buffer.from(coverLetterText, 'utf8').toString('base64'),
-    parseStatus: 'not_applicable',
-  });
-  candidateStore.linkApplicationMaterial(candidateId, applicationId, 'cover_letter', document.id);
-}
-
 /** Ручной отклик (B165, срез 1) — свои два маршрута, чтение и запись. */
 function registerVacancyApplicationRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/candidate/vacancy-applications', withDeps(deps, handleListVacancyApplications));
@@ -917,7 +588,6 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
     { config: { rateLimit: { max: 20, timeWindow: '5 minutes' } } },
     withDeps(deps, handleHhMarket),
   );
-  app.get('/api/v1/candidate/matched-vacancies', withDeps(deps, handleMatchedVacancies));
   app.get('/api/v1/candidate/vacancies/:id/detail', withDeps(deps, handleVacancyDetail));
   app.get('/api/v1/candidate/role-hypotheses', withDeps(deps, handleRoleHypotheses));
   app.get('/api/v1/candidate/work-preferences', withDeps(deps, handleReadWorkPreferences));
@@ -939,9 +609,6 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
   app.get('/api/v1/candidate/vacancy-sources', withDeps(deps, handleListSources));
   registerVacancySubscriptionRoutes(app, deps);
   registerRecruiterIntelligenceRoutes(app, deps);
-  app.post(
-    '/api/v1/candidate/vacancies/:id/pitch',
-    { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
-    withDeps(deps, handleGenerateVacancyPitch),
-  );
+  registerMatchedVacancyRoutes(app, deps);
+  registerVacancyPitchRoutes(app, deps);
 }

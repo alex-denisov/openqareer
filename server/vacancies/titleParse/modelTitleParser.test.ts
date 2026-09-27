@@ -76,6 +76,28 @@ describe('VertexModelTitleParser (B267 S4)', () => {
     ]);
   });
 
+  it('preserves both marketing and operations functions from the model for a compound title', async () => {
+    const parser = new VertexModelTitleParser(vertex, {
+      fetchImpl: async () =>
+        vertexResponse([
+          { titleKey: 'vp marketing creative operations', functions: ['marketing', 'ops'], levelRank: 3 },
+        ]),
+      token: async () => 'token',
+    });
+
+    await expect(
+      parser.parse([
+        { titleKey: 'vp marketing creative operations', sampleTitle: 'VP Marketing Creative & Operations' },
+      ]),
+    ).resolves.toEqual([
+      {
+        titleKey: 'vp marketing creative operations',
+        functions: ['marketing', 'ops'],
+        levelRank: 3,
+      },
+    ]);
+  });
+
   it('sends no enum inside array items, which Vertex rejects with 400', async () => {
     let sent = '';
     const parser = new VertexModelTitleParser(vertex, {

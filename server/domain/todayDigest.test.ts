@@ -108,7 +108,38 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
       { applicationId: 'app-1', company: 'FinCloud', title: 'Продуктовый аналитик', status: 'overdue' },
     ]);
     expect(snapshot.digest.followUpsDueToday).toBe(0);
+    expect(snapshot.digest.followUpsOverdue).toBe(1);
     expect(snapshot.digest.followUpCaptions).toEqual([]);
+  });
+
+  it('counts due-on-UTC-day and overdue reminders separately', () => {
+    const due = application({
+      id: 'due',
+      followUp: {
+        dueAt: '2026-09-24T00:00:00.000Z',
+        urgency: 'due',
+        source: 'standard_schedule',
+        daysSinceContact: 5,
+      },
+    });
+    const overdue = application({
+      id: 'overdue',
+      followUp: {
+        dueAt: '2026-09-23T00:00:00.000Z',
+        urgency: 'overdue',
+        source: 'standard_schedule',
+        daysSinceContact: 6,
+      },
+    });
+
+    const snapshot = buildTodaySnapshot({ ...BASE_INPUT, applications: [due, overdue], newVacancies: [] });
+
+    expect(snapshot.digest.followUpsDueToday).toBe(1);
+    expect(snapshot.digest.followUpsOverdue).toBe(1);
+    expect(snapshot.followUps).toEqual([
+      { applicationId: 'due', company: 'FinCloud', title: 'Продуктовый аналитик', status: 'today' },
+      { applicationId: 'overdue', company: 'FinCloud', title: 'Продуктовый аналитик', status: 'overdue' },
+    ]);
   });
 
   it('counts only follow-ups due today, independent of the capped sidebar list', () => {

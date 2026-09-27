@@ -107,6 +107,13 @@ describe('rulesParse (B267 S1)', () => {
     expect(result.functions).toEqual(expect.arrayContaining(['ops', 'eng-mgmt']));
   });
 
+  it('keeps marketing alongside operations in a compound marketing title', () => {
+    const result = rulesParse('VP Marketing Creative & Operations');
+
+    expect(result.functions).toEqual(['marketing', 'ops']);
+    expect(result.levelRank).toBe(LEVEL_RANK.vp);
+  });
+
   it('does not confuse VP Channel Sales with engineering management', () => {
     expect(rulesParse('VP Channel Sales').functions).toEqual(['sales']);
   });

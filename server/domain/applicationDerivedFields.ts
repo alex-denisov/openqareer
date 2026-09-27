@@ -45,9 +45,11 @@ export function deriveApplicationFields(input: DeriveApplicationFieldsInput): Ap
   };
   const nearestInterview = pickNearestInterview(input.interviews, now);
   const followUp = FOLLOW_UP_ACTIVE_STAGES.has(input.application.stage)
-    ? computeFollowUpStatus({
+      ? computeFollowUpStatus({
         processProfile: input.application.processProfile,
+        appliedAt: applicationAppliedAt(input.application, input.events),
         lastContactAt: lastContactAt(input.application, input.events),
+        remindersSent: followUpSentCount(input.events),
         companyDueAt: input.application.followUpDueAt,
         now,
         timezoneOffsetMinutes: input.timezoneOffsetMinutes,
@@ -75,6 +77,21 @@ export function deriveApplicationFields(input: DeriveApplicationFieldsInput): Ap
 }
 
 /** "Последнее из событий: отклик, отправленный follow-up, ответ компании" (architecture.md §3). */
+function applicationAppliedAt(
+  application: StoredApplication,
+  events: readonly StoredApplicationEvent[],
+): string {
+  const appliedEvents = events
+    .filter((event) => event.kind === 'stage' && event.toStage === 'applied')
+    .map((event) => event.occurredAt)
+    .sort();
+  return appliedEvents[0] ?? application.stageChangedAt;
+}
+
+function followUpSentCount(events: readonly StoredApplicationEvent[]): number {
+  return events.filter((event) => event.kind === 'follow_up_sent').length;
+}
+
 function lastContactAt(application: StoredApplication, events: readonly StoredApplicationEvent[]): string {
   const candidates = events
     .filter(

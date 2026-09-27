@@ -66,6 +66,7 @@ export interface TodayDigest {
   readonly waitingForYou: number;
   readonly newVacancies: number;
   readonly followUpsDueToday: number;
+  readonly followUpsOverdue: number;
   readonly closedVacancies: number;
   readonly interviewsAhead: number;
   readonly nextInterview: TodayNextInterview | null;
@@ -95,12 +96,12 @@ export interface TodaySnapshot {
   readonly vacanciesPending: boolean;
 }
 
-export async function recordCandidateVisit(): Promise<{ since: string | null }> {
-  const response = await apiFetch('/api/v1/candidate/visits', { method: 'POST' });
+export async function recordCandidateVisit(signal?: AbortSignal): Promise<{ since: string | null }> {
+  const response = await apiFetch('/api/v1/candidate/visits', { method: 'POST', signal });
   return readData<{ since: string | null }>(response);
 }
 
-export async function getTodaySnapshot(tz: string): Promise<TodaySnapshot> {
-  const response = await apiFetch(`/api/v1/candidate/today?tz=${encodeURIComponent(tz)}`);
+export async function getTodaySnapshot(tz: string, signal?: AbortSignal): Promise<TodaySnapshot> {
+  const response = await apiFetch(`/api/v1/candidate/today?tz=${encodeURIComponent(tz)}`, { signal });
   return readData<TodaySnapshot>(response);
 }

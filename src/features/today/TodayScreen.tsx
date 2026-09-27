@@ -6,6 +6,8 @@ import { formatTodaySalary } from './todayCompensation';
 import { companyInitials, digestBasis, followUpStatusLabel } from './todayFormat';
 import { vacancyLevelMatchLabel } from '../vacancies/vacancyLevelMatch';
 
+const NO_PENDING_FOLLOW_UPS: ReadonlySet<string> = new Set();
+
 /**
  * «Сегодня» (B251 S5): дайджест дня, очередь решений, follow-up по срокам и
  * дайджест «с прошлого визита» — по макету `B248/today.html`. Первая строка
@@ -20,6 +22,7 @@ export interface TodayScreenProps {
   readonly failed: boolean;
   readonly onRetry: () => void;
   readonly onMarkFollowUpSent: (applicationId: string) => Promise<void>;
+  readonly markingFollowUpIds?: ReadonlySet<string>;
 }
 
 export function TodayScreen({
@@ -28,6 +31,7 @@ export function TodayScreen({
   failed,
   onRetry,
   onMarkFollowUpSent,
+  markingFollowUpIds = NO_PENDING_FOLLOW_UPS,
 }: TodayScreenProps) {
   if (failed) return <TodayError onRetry={onRetry} />;
   if (loading && !snapshot) return <TodaySkeleton />;
@@ -44,9 +48,17 @@ export function TodayScreen({
       {vacanciesPending ? <TodayPendingNotice /> : null}
       <TodayDigestRow digest={digest} />
       <div className="career-today-panels">
-        <TodayQueue queue={queue} onMarkFollowUpSent={onMarkFollowUpSent} />
+        <TodayQueue
+          queue={queue}
+          onMarkFollowUpSent={onMarkFollowUpSent}
+          markingFollowUpIds={markingFollowUpIds}
+        />
         <div className="career-today-side">
-          <TodayFollowUps followUps={followUps} onMarkFollowUpSent={onMarkFollowUpSent} />
+          <TodayFollowUps
+            followUps={followUps}
+            onMarkFollowUpSent={onMarkFollowUpSent}
+            markingFollowUpIds={markingFollowUpIds}
+          />
           <TodaySinceLastVisit items={sinceLastVisit.items} />
         </div>
       </div>
@@ -71,6 +83,12 @@ function TodayDigestRow({ digest }: { digest: TodayDigest }) {
         label="follow-up назначено на сегодня"
         basis={digestBasis('followUp', digest)}
         attention={digest.followUpsDueToday > 0}
+      />
+      <DigestCard
+        value={digest.followUpsOverdue}
+        label="follow-up просрочено"
+        basis={null}
+        attention={digest.followUpsOverdue > 0}
       />
       <DigestCard
         value={digest.interviewsAhead}
@@ -108,9 +126,11 @@ function DigestCard({
 function TodayQueue({
   queue,
   onMarkFollowUpSent,
+  markingFollowUpIds,
 }: {
   queue: readonly TodayQueueItem[];
   onMarkFollowUpSent: (applicationId: string) => Promise<void>;
+  markingFollowUpIds: ReadonlySet<string>;
 }) {
   return (
     <section className="career-today-queue" aria-label="Очередь дня">
@@ -133,6 +153,7 @@ function TodayQueue({
               item={item}
               isFirst={index === 0}
               onMarkFollowUpSent={onMarkFollowUpSent}
+              markingFollowUpIds={markingFollowUpIds}
             />
           ))}
         </ul>
@@ -145,10 +166,12 @@ function QueueRow({
   item,
   isFirst,
   onMarkFollowUpSent,
+  markingFollowUpIds,
 }: {
   item: TodayQueueItem;
   isFirst: boolean;
   onMarkFollowUpSent: (applicationId: string) => Promise<void>;
+  markingFollowUpIds: ReadonlySet<string>;
 }) {
   const salary = formatTodaySalary(item.salary);
   const isVacancy = item.kind === 'new_vacancy' || item.kind === 'shortlist';
@@ -172,7 +195,11 @@ function QueueRow({
       </div>
       {item.fit ? <QueueFit fit={item.fit} /> : <span className="career-today-item-fit" />}
       <div className="career-today-item-actions">
-        <QueueAction item={item} onMarkFollowUpSent={onMarkFollowUpSent} />
+        <QueueAction
+          item={item}
+          onMarkFollowUpSent={onMarkFollowUpSent}
+          markingFollowUpIds={markingFollowUpIds}
+        />
         <button
           type="button"
           className="career-btn-icon"
@@ -218,13 +245,19 @@ function FitDot({ ok, label, title }: { ok: boolean | null; label: string; title
 function QueueAction({
   item,
   onMarkFollowUpSent,
+  markingFollowUpIds,
 }: {
   item: TodayQueueItem;
   onMarkFollowUpSent: (applicationId: string) => Promise<void>;
+  markingFollowUpIds: ReadonlySet<string>;
 }) {
   if (item.kind === 'follow_up') {
     return item.applicationId ? (
-      <MarkFollowUpButton applicationId={item.applicationId} onMark={onMarkFollowUpSent} />
+      <MarkFollowUpButton
+        applicationId={item.applicationId}
+        isSaving={markingFollowUpIds.has(item.applicationId)}
+        onMark={onMarkFollowUpSent}
+      />
     ) : null;
   }
   if (item.kind === 'interview') {
@@ -244,9 +277,11 @@ function QueueAction({
 function TodayFollowUps({
   followUps,
   onMarkFollowUpSent,
+  markingFollowUpIds,
 }: {
   followUps: readonly TodayFollowUp[];
   onMarkFollowUpSent: (applicationId: string) => Promise<void>;
+  markingFollowUpIds: ReadonlySet<string>;
 }) {
   if (followUps.length === 0) return null;
   return (
@@ -262,7 +297,11 @@ function TodayFollowUps({
               {followUpStatusLabel(item.status)}
             </span>
             {item.status === 'sent' ? null : (
-              <MarkFollowUpButton applicationId={item.applicationId} onMark={onMarkFollowUpSent} />
+              <MarkFollowUpButton
+                applicationId={item.applicationId}
+                isSaving={markingFollowUpIds.has(item.applicationId)}
+                onMark={onMarkFollowUpSent}
+              />
             )}
           </li>
         ))}
@@ -273,12 +312,13 @@ function TodayFollowUps({
 
 function MarkFollowUpButton({
   applicationId,
+  isSaving,
   onMark,
 }: {
   applicationId: string;
+  isSaving: boolean;
   onMark: (applicationId: string) => Promise<void>;
 }) {
-  const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
   return (
     <span className="career-today-followup-action">
@@ -286,16 +326,14 @@ function MarkFollowUpButton({
       <button
         type="button"
         className="career-btn career-btn-secondary career-btn-sm"
-        disabled={saving}
+        disabled={isSaving}
+        aria-busy={isSaving}
         onClick={() => {
-          setSaving(true);
           setFailed(false);
-          void onMark(applicationId)
-            .catch(() => setFailed(true))
-            .finally(() => setSaving(false));
+          void onMark(applicationId).catch(() => setFailed(true));
         }}
       >
-        {saving ? 'Сохраняем…' : 'Отметить отправленным'}
+        {isSaving ? 'Сохраняем…' : 'Отметить отправленным'}
       </button>
     </span>
   );
@@ -343,6 +381,7 @@ function TodaySkeleton() {
   return (
     <div className="career-today" aria-busy="true" aria-label="Читаем очередь дня">
       <div className="career-today-digest">
+        <div className="career-skeleton-line is-wide career-today-digest-card" />
         <div className="career-skeleton-line is-wide career-today-digest-card" />
         <div className="career-skeleton-line is-wide career-today-digest-card" />
         <div className="career-skeleton-line is-wide career-today-digest-card" />

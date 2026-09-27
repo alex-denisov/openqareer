@@ -62,6 +62,7 @@ export interface TodayDigest {
   readonly waitingForYou: number;
   readonly newVacancies: number;
   readonly followUpsDueToday: number;
+  readonly followUpsOverdue: number;
   readonly closedVacancies: number;
   readonly interviewsAhead: number;
   readonly nextInterview: TodayNextInterview | null;
@@ -115,7 +116,10 @@ const MAX_QUEUE_ITEMS = 5;
 const MAX_FOLLOW_UP_CAPTIONS = 2;
 
 function eyebrowFor(application: ApplicationView): string | null {
-  if (application.followUp && (application.followUp.urgency === 'due' || application.followUp.urgency === 'stale')) {
+  if (
+    application.followUp &&
+    ['due', 'overdue', 'stale'].includes(application.followUp.urgency)
+  ) {
     const days = application.followUp.daysSinceContact;
     return `${pluralRu(days, ['день', 'дня', 'дней'])} без ответа`;
   }
@@ -133,7 +137,10 @@ function daysUntil(iso: string, now = new Date().toISOString()): number | null {
 }
 
 function queueKindFor(application: ApplicationView): 'follow_up' | 'interview' | 'candidate_turn' {
-  if (application.followUp && (application.followUp.urgency === 'due' || application.followUp.urgency === 'stale')) {
+  if (
+    application.followUp &&
+    ['due', 'overdue', 'stale'].includes(application.followUp.urgency)
+  ) {
     return 'follow_up';
   }
   if (application.nearestInterview?.scheduledAt) return 'interview';
@@ -146,8 +153,11 @@ function companyOf(application: ApplicationView): string | null {
 }
 
 function followUpStatusFor(application: ApplicationView): TodayFollowUpStatus | null {
-  if (application.followUp?.urgency === 'stale') return 'overdue';
   if (application.followUp?.urgency === 'due') return 'today';
+  if (application.followUp?.urgency === 'overdue' || application.followUp?.urgency === 'stale') {
+    return 'overdue';
+  }
+  if (application.followUp?.urgency === 'sent') return 'sent';
   return null;
 }
 
@@ -189,6 +199,10 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
       waitingForYou: waitingApplications.length,
       newVacancies: input.newVacancies?.length ?? 0,
       followUpsDueToday: input.applications.filter((application) => application.followUp?.urgency === 'due').length,
+      followUpsOverdue: input.applications.filter(
+        (application) =>
+          application.followUp?.urgency === 'overdue' || application.followUp?.urgency === 'stale',
+      ).length,
       closedVacancies: input.closedVacanciesSinceVisit,
       interviewsAhead: upcomingInterviews.length,
       nextInterview: nextInterviewOf(upcomingInterviews[0]),

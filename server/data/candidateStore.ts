@@ -371,6 +371,16 @@ export interface CandidateStore {
     candidateId: string,
     input: CandidateDocumentInput,
   ): { created: boolean; document: StoredCandidateDocument };
+  saveDocumentAndLinkApplicationMaterial(
+    candidateId: string,
+    applicationId: string,
+    role: ApplicationMaterialRole,
+    input: CandidateDocumentInput,
+  ): {
+    created: boolean;
+    document: StoredCandidateDocument;
+    material: StoredApplicationMaterial;
+  };
   getDocument(
     candidateId: string,
     documentId: string,
