@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
-import { CaretLeft, CaretRight, Crown, ShieldCheck } from '@phosphor-icons/react';
+import { CaretLeft, CaretRight, ShieldCheck } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import {
   VacanciesIcon,
@@ -7,6 +7,7 @@ import {
   TodayIcon,
   ResponsesIcon,
   ConsultantIcon,
+  TariffsIcon,
   type SectionIconProps,
 } from './sectionIcons';
 import type { AuthUser } from '../coach/coachApi';
@@ -27,6 +28,7 @@ import { initialsFor } from './accountIdentity';
 import { createIntakeCompletion } from './intakeCompletion';
 import { CareerAccountPanel, type AccountSection } from './CareerAccountPanel';
 import { AppErrorBoundary } from './AppErrorBoundary';
+import { CareerTooltip, type TooltipTriggerProps } from './CareerTooltip';
 import { CareerPathIndicator } from './CareerPathIndicator';
 import { buildPathIndicator } from './pathIndicator';
 import { keepsIntakeAcrossIdentityChange, shouldShowIntake } from './intakeContinuity';
@@ -382,9 +384,16 @@ export function CareerWorkspaceShell({
           <BrandMark variant={railExpanded ? 'lockup' : 'mark'} size={30} />
         </button>
         <nav>
-          {primaryNavigation.map((item) => (
-            <NavigationButton key={item.key} {...railButtonProps(item)} />
-          ))}
+          {primaryNavigation.map((item) => {
+            const navigationButton = <NavigationButton {...railButtonProps(item)} />;
+            return railExpanded ? (
+              <span key={item.key}>{navigationButton}</span>
+            ) : (
+              <CareerTooltip key={item.key} content={item.label}>
+                {navigationButton}
+              </CareerTooltip>
+            );
+          })}
         </nav>
         <div className="career-rail-bottom">
           {session?.role === 'admin' ? (
@@ -406,7 +415,7 @@ export function CareerWorkspaceShell({
             aria-label={`Тарифы, план ${planName}`}
             title={`Тарифы. План «${planName}»`}
           >
-            <Crown size={railExpanded ? 18 : 20} aria-hidden="true" />
+            <TariffsIcon size={railExpanded ? 18 : 20} active={activeView === 'tariffs'} />
             {railExpanded ? (
               <span className="career-rail-plan-text">
                 <b>План · {planName}</b>
@@ -674,6 +683,7 @@ function NavigationButton({
   disabled = false,
   lockedReason,
   onClick,
+  ...tooltipProps
 }: {
   label: string;
   icon: SectionIcon;
@@ -681,7 +691,7 @@ function NavigationButton({
   disabled?: boolean;
   lockedReason?: string;
   onClick: () => void;
-}) {
+} & TooltipTriggerProps) {
   return (
     <button
       className={`career-nav-button ${active ? 'is-active' : ''}`}
@@ -690,7 +700,8 @@ function NavigationButton({
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       aria-label={disabled && lockedReason ? `${label}. ${lockedReason}` : label}
-      title={disabled ? (lockedReason ?? label) : label}
+      title={disabled ? (lockedReason ?? label) : undefined}
+      {...tooltipProps}
     >
       <ItemIcon size={22} active={active} />
       <span>{label}</span>

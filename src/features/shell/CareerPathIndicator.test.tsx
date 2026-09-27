@@ -28,4 +28,19 @@ describe('CareerPathIndicator', () => {
     expect(html).toContain('data-state="done"');
     expect(html).not.toContain('Откликов нет');
   });
+
+  it('keeps only the current step in the compact mobile summary', () => {
+    const steps = buildPathIndicator({
+      matchedPoolCount: 2,
+      confirmedApplications: 0,
+    });
+    const html = renderToStaticMarkup(
+      <CareerPathIndicator steps={steps} onNavigate={() => undefined} />,
+    );
+
+    expect(html).toContain('career-path-mobile-summary');
+    expect(html).toContain('Шаг 3 из 5');
+    expect(html).toContain('Подборка');
+    expect(html).toContain('2 в подборке — вы здесь');
+  });
 });

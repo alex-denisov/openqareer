@@ -403,13 +403,17 @@
   gap: 12px;
 }
 
-/* B248 (owner decision 2026-09-23) — the default rail matches the mockup's
-   ~96px rail: icon above a visible caption, not an icon-only 52px square
-   with a hidden label. The wider `[data-rail='expanded']` skin below still
-   exists for a candidate who wants the caption beside the icon instead. */
+.career-rail nav > .career-tooltip,
+.career-rail nav > span {
+  display: block;
+}
+
+/* C52 — the collapsed rail is a compact icon rail. Names remain available to
+   assistive technology and appear in the existing focus/hover tooltip; the
+   expanded rail is the intentional place for visible labels. */
 .career-nav-button {
   width: 100%;
-  min-height: 56px;
+  min-height: 52px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -431,6 +435,14 @@
   font-weight: 600;
   line-height: 1.15;
   text-align: center;
+}
+
+.career-shell[data-rail='collapsed'] .career-nav-button > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 
 .career-nav-button:not(:disabled):hover {
@@ -812,43 +824,49 @@
    repeated on every campaign screen (`career-consultant-notes.md` §2). Three
    states only — done / active / pending — never a fourth decorative one. */
 .career-path {
-  display: flex;
-  align-items: flex-start;
-  gap: 0;
+  height: 48px;
   margin: 0 0 var(--career-space-6);
-  padding: var(--career-space-4) var(--career-space-5);
+  padding: 1px var(--career-space-4);
   background: var(--career-surface);
   border: 1px solid var(--career-line);
   border-radius: var(--career-radius-md);
-  overflow-x: auto;
+  overflow: hidden;
+}
+
+.career-path-desktop {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  min-width: 0;
 }
 
 .career-path-step {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--career-space-2);
   flex: 1;
-  min-width: 148px;
+  min-width: 0;
 }
 
 .career-path-step:last-child {
-  flex: 0 0 auto;
   min-width: 0;
 }
 
 .career-path-connector {
   flex: 1;
   height: 1px;
-  margin-top: 11px;
+  margin-top: 0;
   background: var(--career-line-strong);
-  min-width: var(--career-space-6);
+  min-width: var(--career-space-2);
 }
 
 .career-path-btn {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--career-space-2);
   min-height: var(--career-target-min);
+  min-width: 0;
+  max-width: 100%;
   background: none;
   border: none;
   padding: var(--career-space-1);
@@ -865,12 +883,11 @@
 
 .career-path-dot {
   flex: none;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
   display: grid;
   place-items: center;
-  margin-top: 1px;
   border: 1.7px solid var(--career-text-dim);
   color: transparent;
 }
@@ -897,9 +914,10 @@
 
 .career-path-copy {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: baseline;
+  gap: var(--career-space-1);
   min-width: 0;
+  max-width: 100%;
 }
 
 .career-path-label {
@@ -918,23 +936,85 @@
      captions), not this reason line, which is real content. */
   font-size: var(--career-text-xs);
   color: var(--career-text-dim);
-  line-height: 1.3;
+  display: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .career-path-step[data-state='active'] .career-path-reason {
+  display: block;
   color: var(--career-warning);
 }
 
+.career-path-mobile-summary {
+  display: none;
+}
+
 @media (max-width: 760px) {
-  /* Five full steps never fit 390px. Per the B248 mockup (owner review
-     2026-09-23), the row does not wrap or shrink — it scrolls horizontally
-     as one line, with the right edge faded so scrollability reads as a
-     signal rather than a clipped layout bug. `readability.spec.ts` exempts
-     `.career-path`'s own children from its generic "wide" check for exactly
-     this reason (B232 §wide, see comment there). */
+  /* A phone names the current decision rather than shrinking five controls
+     into an unreadable rail. The summary opens the same real section. */
   .career-path {
-    mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
-    -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+    padding: 1px var(--career-space-2);
+  }
+
+  .career-path-desktop {
+    display: none;
+  }
+
+  .career-path-mobile-summary {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--career-target-min);
+    display: flex;
+    align-items: center;
+    gap: var(--career-space-2);
+    padding: 0;
+    border: 0;
+    color: var(--career-text);
+    background: transparent;
+    font: inherit;
+    text-align: left;
+  }
+
+  .career-path-mobile-dots {
+    display: flex;
+    gap: var(--career-space-1);
+    flex: none;
+  }
+
+  .career-path-mobile-dots > span {
+    width: var(--career-space-2);
+    height: var(--career-space-2);
+    border: 1px solid var(--career-text-dim);
+    border-radius: 999px;
+  }
+
+  .career-path-mobile-dots > span[data-state='done'] {
+    border-color: var(--career-success);
+    background: var(--career-success);
+  }
+
+  .career-path-mobile-dots > span[data-state='active'] {
+    border-color: var(--career-accent);
+    background: var(--career-accent);
+  }
+
+  .career-path-mobile-summary > span:not(.career-path-mobile-dots) {
+    font-size: var(--career-text-xs);
+    white-space: nowrap;
+  }
+
+  .career-path-mobile-label {
+    font-weight: 600;
+  }
+
+  .career-path-mobile-reason {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--career-text-dim);
   }
 }
 
