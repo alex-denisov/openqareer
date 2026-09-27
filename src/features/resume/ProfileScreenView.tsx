@@ -1,6 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
-import { updateAccountProfile, type CandidateMemory, type ImportedSourceSummary } from '../coach/coachApi';
+import {
+  getConnections,
+  updateAccountProfile,
+  type CandidateConnection,
+  type CandidateMemory,
+  type ImportedSourceSummary,
+} from '../coach/coachApi';
 import { applyRoutePremises } from '../cabinet/routePremises';
 import { CandidateReputationAuditView } from '../reputation/CandidateReputationAuditView';
 import { normalizeCandidateRegions } from '../workspace/candidateRegions';
@@ -128,6 +134,9 @@ export interface ProfileScreenSurfaceProps {
   readonly onSectionSave: (next: ResumeDraft) => void;
   /** Opens «Аккаунт → Подключения», where a real re-import starts (B266). */
   readonly onOpenConnections?: () => void;
+  /** hh.ru/LinkedIn status chips in the topcard (C54 п.11); undefined while
+   *  the read has not landed. */
+  readonly connections?: readonly CandidateConnection[];
   readonly onConfirmOpenToWork: (confirmation: OpenToWorkConfirmation) => void;
   readonly confirmingOpenToWork?: boolean;
   /**
@@ -159,6 +168,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
     onDraftChange,
     onSectionSave,
     onOpenConnections,
+    connections,
     onConfirmOpenToWork,
     confirmingOpenToWork,
     tab = 'profile',
@@ -195,6 +205,8 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
           updatedAt={props.view?.savedAt?.updatedAt}
           reader={props.view?.reader ?? null}
           onDraftChange={onDraftChange}
+          connections={connections}
+          onOpenConnections={onOpenConnections}
         />
       </div>
       {saveError ? (
@@ -238,11 +250,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
               <ProfileRecommendationsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
               <ProfileAchievementsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
             </div>
-            <ProfileSideRail
-              draft={draft}
-              importedSource={importedSource}
-              onOpenConnections={onOpenConnections}
-            />
+            <ProfileSideRail draft={draft} />
           </div>
         </>
       )}
@@ -296,6 +304,30 @@ function useConfirmOpenToWork(
 }
 
 /**
+ * hh.ru/LinkedIn status chips (C54 п.11) read the same connections endpoint
+ * `AccountConnectionsManager` does; a failed read shows «Не подключено»
+ * rather than blocking the profile — the chip still opens the real panel to
+ * retry (mirrors `AccountConnectionsManager`'s own fallback).
+ */
+function useConnectionStatuses(): readonly CandidateConnection[] | undefined {
+  const [connections, setConnections] = useState<CandidateConnection[]>();
+  useEffect(() => {
+    let current = true;
+    void getConnections()
+      .then((loaded) => {
+        if (current) setConnections(loaded);
+      })
+      .catch(() => {
+        if (current) setConnections([]);
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
+  return connections;
+}
+
+/**
  * Connects the candidate-scoped resume API to `ProfileScreenSurface` — the
  * rail's «Профиль» section, replacing Resume Studio wholesale (B265). Uses
  * the same `useResumeStudio` hook Resume Studio does, so a draft saved here
@@ -312,6 +344,7 @@ export function ProfileScreenView({
   onUpdateWorkspace,
 }: ProfileScreenViewProps) {
   const state = useResumeStudio(onRefreshFacts);
+  const connections = useConnectionStatuses();
   const { confirming: confirmingOtw, confirm: confirmOpenToWork } = useConfirmOpenToWork(
     workspace,
     onUpdateWorkspace,
@@ -344,6 +377,7 @@ export function ProfileScreenView({
       onDraftChange={state.setDraft}
       onSectionSave={onSectionSave}
       onOpenConnections={onOpenConnections}
+      connections={connections}
       onConfirmOpenToWork={(confirmation) => void confirmOpenToWork(confirmation)}
       confirmingOpenToWork={confirmingOtw}
       tab={tab}

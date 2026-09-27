@@ -11479,21 +11479,24 @@
 
 .career-profile-screen-id-row {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr) auto;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
   gap: var(--career-space-5);
   align-items: start;
 }
 
+/* Avatar 96px → 64px, name h1 → --career-text-xl (C54 п.6): the topcard was
+   the only h1 in the app on --career-text-display; every other h1 already
+   sits on --career-text-xl, so this was the odd one out, not a new size. */
 .career-profile-screen-avatar {
-  width: 96px;
-  height: 96px;
+  width: 64px;
+  height: 64px;
   border-radius: 999px;
   background: linear-gradient(155deg, var(--career-accent), var(--career-accent-soft));
   color: var(--career-accent-ink);
   display: grid;
   place-items: center;
   font-weight: 700;
-  font-size: var(--career-text-xl);
+  font-size: var(--career-text-md);
   border: 1px solid var(--career-line-strong);
   object-fit: cover;
 }
@@ -11513,16 +11516,63 @@
 }
 
 .career-profile-screen-name-row h1 {
-  font-size: var(--career-text-display);
+  font-size: var(--career-text-xl);
   font-weight: 700;
   margin: 0;
-  line-height: 1.05;
+  line-height: 1.15;
 }
 
 .career-profile-screen-headline {
-  font-size: var(--career-text-lg);
+  font-size: var(--career-text-md);
   color: var(--career-text-soft);
   margin: 0;
+}
+
+.career-profile-screen-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+}
+
+.career-profile-screen-source-chip {
+  display: inline-flex;
+}
+
+.career-profile-screen-source-chip summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--career-target-min);
+  padding: 0 var(--career-space-3);
+  border-radius: 999px;
+  border: 1px solid var(--career-line-strong);
+  background: var(--career-surface);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  cursor: pointer;
+  list-style: none;
+}
+
+.career-profile-screen-source-chip summary::-webkit-details-marker {
+  display: none;
+}
+
+.career-profile-screen-source-chip .career-profile-screen-coverage {
+  margin: var(--career-space-2) 0 0;
+  padding: var(--career-space-3);
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-bg-elevated);
+  list-style: none;
+  max-width: 320px;
+}
+
+/* Reuses `.career-profile-screen-tag`'s shape/colour (incl. `.is-accent`);
+   only the target size is chip-specific — this one is a real button, not a
+   status label, so it needs the 44px touch target the rest already use. */
+.career-profile-screen-connection-chip {
+  min-height: var(--career-target-min);
 }
 
 .career-profile-screen-id-meta {
@@ -11723,6 +11773,16 @@
 .career-profile-screen-anchor-nav a:hover {
   color: var(--career-text-soft);
   background: var(--career-surface);
+}
+
+/* The sticky nav above is not transparent — its own `border-bottom` already
+   shows a seam. The defect was that anchor targets had no offset for it, so
+   a clicked heading landed exactly under the nav (C54 п.7). Height here is
+   the nav's own box: two rows of --career-space-2 padding plus its 36px
+   link, plus one more gap so the heading clears the border, not just the
+   nav's edge. */
+.career-profile-screen-section {
+  scroll-margin-top: calc(var(--career-space-2) * 2 + 36px + var(--career-space-3));
 }
 
 .career-profile-screen-layout {
@@ -12049,12 +12109,6 @@
   align-items: center;
   gap: var(--career-space-2);
   font-size: var(--career-text-md);
-  margin: 0 0 var(--career-space-3);
-}
-
-.career-profile-screen-rail-hint {
-  color: var(--career-text-dim);
-  font-size: var(--career-text-aux);
   margin: 0 0 var(--career-space-3);
 }
 
