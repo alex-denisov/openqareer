@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  CaretDown,
   CheckCircle,
   EnvelopeSimple,
   Globe,
@@ -8,11 +9,14 @@ import {
   PaperPlaneTilt,
   PencilSimple,
   Phone,
+  PlugsConnected,
 } from '@phosphor-icons/react';
 import { useCandidateMediaSrc } from './candidateMediaSrc';
-import type { ImportedSource } from './resumeSourceCoverage';
+import { resumeSourceCoverage, type ImportedSource } from './resumeSourceCoverage';
 import { patchTopcard } from './profileEditing';
 import type { ResumeDraft, ResumeReaderProvenance } from './resumeTypes';
+import type { CandidateConnection } from '../coach/coachApi';
+import { CONNECTION_PLATFORMS, PLATFORM_LABELS } from '../connections/platformLabels';
 
 interface ProfileTopcardProps {
   readonly draft: ResumeDraft;
@@ -20,6 +24,10 @@ interface ProfileTopcardProps {
   readonly updatedAt?: string;
   readonly reader: ResumeReaderProvenance | null;
   readonly onDraftChange: (draft: ResumeDraft) => void;
+  /** Undefined while the status read has not landed yet (B266 pattern). */
+  readonly connections?: readonly CandidateConnection[];
+  /** Opens «Аккаунт → Подключения» (C54 п.11) — no chip without it. */
+  readonly onOpenConnections?: () => void;
 }
 
 /**
@@ -37,8 +45,8 @@ function TopcardAvatar({ draft }: { readonly draft: ResumeDraft }) {
         src={src}
         onError={() => setBroken(true)}
         alt=""
-        width={96}
-        height={96}
+        width={64}
+        height={64}
       />
     );
   }
@@ -196,12 +204,95 @@ function TopcardEdit({
   );
 }
 
+/**
+ * "Источник профиля" used to be a whole side-rail card, always open
+ * (`SourceCoveragePanel`, pre-C54); the owner called it excessive and in the
+ * way — folded into one line here, the full filled/empty list opens only on
+ * click (C54 п.5, `<details>`, never an always-open card).
+ */
+function SourceCoverageChip({
+  draft,
+  importedSource,
+}: {
+  readonly draft: ResumeDraft;
+  readonly importedSource?: ImportedSource;
+}) {
+  const coverage = resumeSourceCoverage(draft);
+  const total = coverage.filled.length + coverage.empty.length;
+  return (
+    <details className="career-profile-screen-source-chip">
+      <summary>
+        <CheckCircle size={13} weight="fill" />
+        {importedSource ? `Импортировано из ${importedSource.label}` : 'Источник профиля'} ·{' '}
+        {coverage.filled.length}/{total}
+        <CaretDown size={12} />
+      </summary>
+      <ul className="career-profile-screen-coverage">
+        {coverage.filled.map((section) => (
+          <li key={section.id}>
+            <span>{section.label}</span>
+            <span>заполнено</span>
+          </li>
+        ))}
+        {coverage.empty.map((section) => (
+          <li key={section.id} className="is-missing">
+            <span>{section.label}</span>
+            <span>не заполнено</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+function connectionStatusLabel(status: CandidateConnection['status'] | undefined): string {
+  return status === 'connected' ? 'Подключено' : 'Не подключено';
+}
+
+/**
+ * Two chips, hh.ru and LinkedIn, visible on the profile itself without a
+ * trip to settings (C54 п.11, owner remark). Both click through to the same
+ * `AccountConnectionsManager` the settings drawer already renders — this
+ * component never re-implements connect/disconnect.
+ */
+function ConnectionStatusChips({
+  connections,
+  onOpenConnections,
+}: {
+  readonly connections?: readonly CandidateConnection[];
+  readonly onOpenConnections: () => void;
+}) {
+  return (
+    <>
+      {CONNECTION_PLATFORMS.map((platform) => {
+        const found = connections?.find((connection) => connection.platform === platform);
+        const connected = found?.status === 'connected';
+        return (
+          <button
+            key={platform}
+            type="button"
+            className={`career-profile-screen-tag career-profile-screen-connection-chip${
+              connected ? ' is-accent' : ''
+            }`}
+            onClick={onOpenConnections}
+          >
+            <PlugsConnected size={13} />
+            {PLATFORM_LABELS[platform]} — {connectionStatusLabel(found?.status)}
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
 export function ProfileTopcard({
   draft,
   importedSource,
   updatedAt,
   reader,
   onDraftChange,
+  connections,
+  onOpenConnections,
 }: ProfileTopcardProps) {
   const fullName = draft.candidate.fullName?.trim();
   const headline = draft.candidate.headline?.trim() ?? draft.targetRole?.trim();
@@ -213,12 +304,6 @@ export function ProfileTopcard({
         <div className="career-profile-screen-id-main">
           <div className="career-profile-screen-name-row">
             <h1>{fullName || 'Имя не указано'}</h1>
-            {importedSource ? (
-              <span className="career-profile-screen-tag is-accent">
-                <CheckCircle size={13} weight="fill" />
-                Импортировано · {importedSource.label}
-              </span>
-            ) : null}
           </div>
           {headline ? <p className="career-profile-screen-headline">{headline}</p> : null}
           <div className="career-profile-screen-id-meta">
@@ -235,6 +320,12 @@ export function ProfileTopcard({
               </span>
             ) : null}
             <span>Резюме прочитано: {readerLabel(reader)}</span>
+          </div>
+          <div className="career-profile-screen-status-row">
+            <SourceCoverageChip draft={draft} importedSource={importedSource} />
+            {onOpenConnections ? (
+              <ConnectionStatusChips connections={connections} onOpenConnections={onOpenConnections} />
+            ) : null}
           </div>
           <ContactRow draft={draft} />
         </div>

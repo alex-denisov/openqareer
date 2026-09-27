@@ -4,7 +4,7 @@ import { ProfileSideRail } from './ProfileSideRail';
 import type { ResumeDraft } from './resumeTypes';
 
 const draft: ResumeDraft = {
-  candidate: { fullName: 'Jordan Rivers' },
+  candidate: { fullName: 'Jordan Rivers', contact: { email: 'jordan@example.com' } },
   experience: [],
   skills: [],
   education: [],
@@ -12,20 +12,15 @@ const draft: ResumeDraft = {
   courses: [],
 };
 
-describe('ProfileSideRail source card (B266)', () => {
-  it('does not claim a section is empty in the source, only that it is not filled', () => {
+describe('ProfileSideRail (C54 — source moved to the topcard)', () => {
+  it('no longer renders a separate «Источник профиля» card — it lives in the topcard now', () => {
     const html = renderToStaticMarkup(<ProfileSideRail draft={draft} />);
-    expect(html).not.toContain('пусто в источнике');
-    expect(html).toContain('не заполнено');
+    expect(html).not.toContain('Источник профиля');
+    expect(html).not.toContain('Импорт и подключения');
   });
 
-  it('sends a re-import to the connections, not to a server re-read labelled as an import', () => {
-    const html = renderToStaticMarkup(<ProfileSideRail draft={draft} onOpenConnections={() => {}} />);
-    expect(html).not.toContain('Обновить импорт');
-    expect(html).toContain('Импорт и подключения');
-  });
-
-  it('shows no import button when nothing can open the connections', () => {
-    expect(renderToStaticMarkup(<ProfileSideRail draft={draft} />)).not.toContain('<button');
+  it('still renders the contacts panel', () => {
+    const html = renderToStaticMarkup(<ProfileSideRail draft={draft} />);
+    expect(html).toContain('jordan@example.com');
   });
 });
