@@ -10,7 +10,7 @@ import { registerApplicationInterviewRoutes } from './applicationInterviewRoutes
 import { registerApplicationOfferRoutes } from './applicationOfferRoutes';
 import { registerVacancySkipRoutes } from './vacancySkipRoutes';
 import { readCampaign } from './campaignContext';
-import { peekMatchedVacancies, readMatchProfile } from '../vacancies/matchedPoolContext';
+import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readTargetLevel } from './vacancyRoleContext';
 import { buildTodaySnapshot, type TodayNewVacancy } from '../domain/todayDigest';
@@ -189,32 +189,31 @@ const ianaTimezoneSchema = z
 const todayQuerySchema = z.object({ tz: ianaTimezoneSchema });
 
 /**
- * Тот же отпечаток снимка, что и у самого подбора (уровень включительно):
- * иначе `/today` смотрел бы ключ без уровня и никогда не находил снимок,
- * записанный с уровнем, и вечно отдавал `vacanciesPending: true`.
+ * Тот же отпечаток снимка, что и у самого подбора (уровень включительно), но
+ * читается асинхронно (`readMatchedSnapshot`), не `peek`: очередь дня не
+ * должна зависеть от того, заходил ли кандидат в «Вакансии» за последние 90
+ * с (C55). Кандидат без роли/навыков подбирать физически нечем — матчинг не
+ * запускается, `matched` — пустой список, а не «неизвестно».
  */
-function peekTodayMatchedVacancies(
+async function readTodayMatchedVacancies(
   deps: Pick<RouteDeps, 'candidateStore' | 'multiSourceEngine'>,
   candidateId: string,
-): {
-  matched: MatchedVacancyItem[] | undefined;
+): Promise<{
+  matched: MatchedVacancyItem[];
   targetRoles: readonly string[];
   targetLevel: ReturnType<typeof readTargetLevel>;
-} {
+}> {
   const { candidateStore, multiSourceEngine } = deps;
   const { confirmedSkills } = readMatchProfile(candidateStore, candidateId);
   const campaign = readCampaign(candidateStore, candidateId);
   const targetRoles = [...campaign.roles.value];
   const targetLevel = readTargetLevel(candidateStore, candidateId, targetRoles);
-  const matched = peekMatchedVacancies(
-    multiSourceEngine,
-    candidateId,
-    confirmedSkills,
-    targetRoles,
-    targetLevel,
-  );
+  const matched =
+    confirmedSkills.length === 0 && targetRoles.length === 0
+      ? []
+      : await readMatchedSnapshot(multiSourceEngine, candidateId, confirmedSkills, targetRoles, targetLevel);
   return {
-    matched: matched?.filter((item) => !campaign.remoteOnly || item.cluster.isRemote),
+    matched: matched.filter((item) => !campaign.remoteOnly || item.cluster.isRemote),
     targetRoles,
     targetLevel,
   };
@@ -247,9 +246,12 @@ function todayNewVacancies(
 }
 
 /**
- * `GET /today` (architecture.md §4, §57, §97): дайджест дня. Подбор читается
- * из уже готового снимка (`peekMatchedVacancies`) — холодный кэш отдаёт
- * `undefined`, а не запускает синхронный подбор в HTTP-обработчике (B230).
+ * `GET /today` (architecture.md §4, §57, §97; C55): дайджест дня. Подбор
+ * читается тем же асинхронным путём, что и «Вакансии» (`readMatchedSnapshot`)
+ * — очередь дня не зависит от того, заходил ли кандидат в «Вакансии» за
+ * последние 90 с. Снимок общий на процесс (`matchedPoolContext.ts`), так что
+ * повторное чтение в пределах TTL ничего не пересчитывает (B230 остаётся в
+ * силе — считаем один раз на снимок, а не на каждый запрос).
  */
 const handleToday: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
@@ -262,15 +264,11 @@ const handleToday: Handler = async (deps, request, reply) => {
     isVacancyGone: (clusterId) => multiSourceEngine.isKnownVacancyGone(clusterId),
   });
 
-  const { matched, targetRoles, targetLevel } = peekTodayMatchedVacancies(deps, candidate.id);
-  const newVacancies = todayNewVacancies(matched, targetLevel, titleParseStore);
-  const freshNewVacancies =
-    newVacancies === undefined
-      ? undefined
-      : newVacancies.filter(
-          (vacancy) =>
-            vacancy.fit.role !== 'none' && (since === null || vacancy.firstObservedAt > since),
-        );
+  const { matched, targetRoles, targetLevel } = await readTodayMatchedVacancies(deps, candidate.id);
+  const newVacancies = todayNewVacancies(matched, targetLevel, titleParseStore) ?? [];
+  const freshNewVacancies = newVacancies.filter(
+    (vacancy) => vacancy.fit.role !== 'none' && (since === null || vacancy.firstObservedAt > since),
+  );
 
   const closedVacanciesSinceVisit =
     since === null ? 0 : candidateStore.countSystemClosuresSince(candidate.id, since);
@@ -284,7 +282,7 @@ const handleToday: Handler = async (deps, request, reply) => {
     closedVacanciesSinceVisit,
     campaignRole: targetRoles[0] ?? null,
     companyEventsSinceVisit,
-    ...(newVacancies ? { shortlist: newVacancies } : {}),
+    shortlist: newVacancies,
   });
   return { data: snapshot, meta: { requestId: request.id } };
 };
