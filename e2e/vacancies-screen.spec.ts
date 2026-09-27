@@ -333,7 +333,9 @@ async function openVacancies(page: Page): Promise<void> {
 }
 
 test.describe('B250 vacancies screen', () => {
-  test('shows the campaign banner, role hypotheses, level and pool rows', async ({ page }) => {
+  test('shows the campaign banner, role hypotheses, level and pool rows', async ({
+    page,
+  }, testInfo) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -342,6 +344,9 @@ test.describe('B250 vacancies screen', () => {
     await expect(page.locator('.vacancies-screen h1')).toHaveText('Вакансии');
     await expect(page.locator('.career-eyebrow')).toContainText('Enterprise Architect');
 
+    if (testInfo.project.name === 'mobile-390') {
+      await page.getByRole('button', { name: 'Фильтры и сохранённые запросы' }).click();
+    }
     const filters = page.locator('.vacancies-filters');
     await expect(filters.getByText('Enterprise Architect (34)')).toBeVisible();
     await expect(filters.getByText(/Cloud Architect \(6\).*гипотеза/)).toBeVisible();
@@ -538,7 +543,7 @@ test.describe('B250 vacancies screen', () => {
       path: testInfo.outputPath('vacancies-hypothesis.png'),
       fullPage: true,
     });
-    await banner.getByRole('button', { name: /Добавить смежную роль/ }).click();
+    await banner.getByRole('button', { name: /Добавить роль/ }).click();
     await expect.poll(() => updates.length).toBe(1);
     expect(
       (updates[0] as { roles: Array<string | { id: string; title: string }> }).roles,

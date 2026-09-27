@@ -26,8 +26,8 @@ export function VacancyHypothesisBanner(props: VacancyHypothesisBannerProps) {
         <p className="vacancy-hypothesis-title">Это гипотеза, не результат.</p>
         <p>
           По роли {props.role} найдено{' '}
-          {pluralRu(props.vacancyCount, ['вакансия', 'вакансии', 'вакансий'])}. Пока этого мало,
-          чтобы делать вывод о рынке.
+          {pluralRu(props.vacancyCount, ['вакансия', 'вакансии', 'вакансий'])}. Пока мало данных
+          для вывода о рынке.
         </p>
       </div>
       <CampaignActionButtons {...props} />
@@ -106,7 +106,7 @@ function AdjacentRoleAction({
       disabled={saving}
       onClick={() => onSelect(role)}
     >
-      Добавить смежную роль «{role.title}»
+      Добавить роль «{role.title}»
     </button>
   );
 }

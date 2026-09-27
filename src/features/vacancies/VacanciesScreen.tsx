@@ -469,8 +469,7 @@ function VacanciesHeader({ primaryRole }: { readonly primaryRole?: string }) {
         <p className="career-eyebrow">{primaryRole ? `Кампания · ${primaryRole}` : 'Кампания'}</p>
         <h1>Вакансии</h1>
         <p className="vacancies-desc">
-          Отсортировано по совпадению с профилем. Откройте карточку — решение «Откликнуться»
-          принимается там же, без перехода на площадку.
+          Отклик оформляется здесь, без перехода на площадку.
         </p>
       </div>
     </header>
@@ -497,10 +496,11 @@ function VacanciesFilters(props: VacanciesFiltersProps) {
       <button
         type="button"
         className="vacancies-btn vacancies-btn-secondary vacancies-mobile-filter-toggle"
+        aria-label="Фильтры и сохранённые запросы"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
       >
-        <span>Фильтры и сохранённые запросы</span>
+        <span>Фильтры и запросы</span>
         <span aria-hidden="true">{expanded ? 'Скрыть' : 'Показать'}</span>
       </button>
       <aside className={`vacancies-filters${expanded ? ' is-mobile-open' : ''}`} aria-label="Фильтры">

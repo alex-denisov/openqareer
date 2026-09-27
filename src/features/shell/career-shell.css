@@ -13086,6 +13086,31 @@
   }
 }
 
+@media (max-width: 760px) {
+  .career-main:has(.career-cabinet-view-opportunities) {
+    padding-top: var(--career-space-3);
+  }
+
+  .career-cabinet-view-opportunities .career-view-heading {
+    gap: var(--career-space-2);
+    margin-bottom: var(--career-space-3);
+  }
+
+  .career-cabinet-view-opportunities .career-path {
+    margin-bottom: var(--career-space-3);
+    padding-block: var(--career-space-2);
+  }
+
+  .career-cabinet-view-opportunities .vacancy-hypothesis-banner {
+    gap: var(--career-space-2);
+    padding: var(--career-space-3);
+  }
+
+  .career-cabinet-view-opportunities .vacancies-list-head {
+    margin-bottom: var(--career-space-2);
+  }
+}
+
 .vacancies-field-group {
   margin-bottom: var(--career-space-5);
 }
