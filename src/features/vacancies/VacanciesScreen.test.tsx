@@ -149,9 +149,8 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).toContain('По роли VP Technology Ops пока нет вакансий');
   });
 
-  it('баннер предлагает «Выбрать регион», когда кандидат сам не выбирал регион', () => {
+  it('баннер не предлагает «Расширить географию», когда кандидат сам не выбирал регион', () => {
     const html = render({ campaign: { ...campaignWithCount(5), regions: { value: ['Дубай'], origin: 'profile' } } });
-    expect(html).toContain('Выбрать регион');
     expect(html).not.toContain('Расширить географию');
   });
 
@@ -167,4 +166,37 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).toContain('Remotive');
     expect(html).toContain('Повторить');
   });
+
+  it('показывает кнопку «Добавить: <регион>» в фильтре «География» из suggestedRegions, сам не применяя (C63)', () => {
+    const html = render({
+      campaign: {
+        ...campaignWithCount(10),
+        regions: { value: [], origin: 'default' },
+        suggestedRegions: ['mena'],
+      },
+    });
+    expect(html).toContain('Добавить: MENA');
+  });
+
+  it('кампания с origin: profile читается как без ограничения (regions=[]) и предлагает подсказку (C63)', () => {
+    const html = render({
+      campaign: {
+        ...campaignWithCount(5),
+        regions: { value: ['mena'], origin: 'profile' },
+      },
+    });
+    expect(html).not.toContain('Расширить географию');
+    expect(html).toContain('Добавить: MENA');
+  });
+
+  it('кампания с явным пустым выбором (без ограничения) не предлагает «Расширить географию» (C63)', () => {
+    const html = render({
+      campaign: {
+        ...campaignWithCount(5),
+        regions: { value: [], origin: 'explicit' },
+      },
+    });
+    expect(html).not.toContain('Расширить географию');
+  });
 });
+

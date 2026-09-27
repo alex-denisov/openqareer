@@ -29,18 +29,21 @@ function storeFor(saved: CandidateWorkspaceState, location?: string): RouteDeps[
   } as unknown as RouteDeps['candidateStore'];
 }
 
-describe('readCampaign profile geography (C22)', () => {
-  it('infers the profile market from Dubai even when workspace regions are stale', () => {
+describe('readCampaign profile geography (C22 / C63)', () => {
+  it('infers suggestedRegions from Dubai while keeping campaign regions unrestricted by default', () => {
     const resolution = readCampaign(storeFor(workspace(['us']), 'Dubai · Remote'), 'candidate');
 
-    expect(resolution.regions).toEqual({ value: ['mena'], origin: 'profile' });
+    expect(resolution.regions).toEqual({ value: [], origin: 'default' });
+    expect(resolution.suggestedRegions).toEqual(['mena']);
   });
 
-  it('maps a Russian profile location to the existing Russia market code', () => {
-    expect(readCampaign(storeFor(workspace([]), 'Moscow, Russia'), 'candidate').regions).toEqual({
-      value: ['ru'],
-      origin: 'profile',
+  it('maps a Russian profile location to suggestedRegions without auto-applying to campaign', () => {
+    const resolution = readCampaign(storeFor(workspace([]), 'Moscow, Russia'), 'candidate');
+    expect(resolution.regions).toEqual({
+      value: [],
+      origin: 'default',
     });
+    expect(resolution.suggestedRegions).toEqual(['ru']);
   });
 
   it('keeps a candidate campaign selection ahead of the inferred profile market', () => {
@@ -51,13 +54,15 @@ describe('readCampaign profile geography (C22)', () => {
       updatedAt: '2026-09-26T00:00:00.000Z',
     });
 
-    expect(readCampaign(storeFor(saved, 'Dubai'), 'candidate').regions).toEqual({
+    const resolution = readCampaign(storeFor(saved, 'Dubai'), 'candidate');
+    expect(resolution.regions).toEqual({
       value: ['eu'],
       origin: 'explicit',
     });
+    expect(resolution.suggestedRegions).toEqual(['mena']);
   });
 
-  it('leaves the stored empty campaign regions untouched while resolving from the profile', () => {
+  it('leaves the stored empty campaign regions untouched and explicit while suggesting profile region', () => {
     const saved = workspace([], {
       roles: [],
       regions: [],
@@ -65,28 +70,38 @@ describe('readCampaign profile geography (C22)', () => {
       updatedAt: '2026-09-26T00:00:00.000Z',
     });
 
-    expect(readCampaign(storeFor(saved, 'Dubai'), 'candidate').regions).toEqual({
-      value: ['mena'],
-      origin: 'profile',
+    const resolution = readCampaign(storeFor(saved, 'Dubai'), 'candidate');
+    expect(resolution.regions).toEqual({
+      value: [],
+      origin: 'explicit',
     });
+    expect(resolution.suggestedRegions).toEqual(['mena']);
     expect(saved.campaign?.regions).toEqual([]);
   });
 
-  it('falls back to saved regions when the profile location is blank or unknown', () => {
+  it('falls back to workspace regions as suggestions when profile location is blank or unknown', () => {
     const saved = workspace(['ru']);
 
-    expect(readCampaign(storeFor(saved, ''), 'candidate').regions).toEqual({
-      value: ['ru'],
-      origin: 'profile',
-    });
-    expect(readCampaign(storeFor(workspace([]), ''), 'candidate').regions).toEqual({
+    const res1 = readCampaign(storeFor(saved, ''), 'candidate');
+    expect(res1.regions).toEqual({
       value: [],
       origin: 'default',
     });
-    expect(readCampaign(storeFor(workspace(['us']), 'Atlantis'), 'candidate').regions).toEqual({
-      value: ['us'],
-      origin: 'profile',
+    expect(res1.suggestedRegions).toEqual(['ru']);
+
+    const res2 = readCampaign(storeFor(workspace([]), ''), 'candidate');
+    expect(res2.regions).toEqual({
+      value: [],
+      origin: 'default',
     });
+    expect(res2.suggestedRegions).toEqual([]);
+
+    const res3 = readCampaign(storeFor(workspace(['us']), 'Atlantis'), 'candidate');
+    expect(res3.regions).toEqual({
+      value: [],
+      origin: 'default',
+    });
+    expect(res3.suggestedRegions).toEqual(['us']);
   });
 
   it('returns model role level, reason and statements cited by evidenceRefs', () => {

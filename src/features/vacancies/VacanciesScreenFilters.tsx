@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { pluralRu } from '../../../shared/pluralRu';
+import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import { VacancyRow } from './VacancyRow';
@@ -15,6 +16,7 @@ export interface VacanciesScreenState {
 export interface VacanciesScreenFiltersProps {
   readonly roleHypotheses: NonNullable<CampaignMetaView['roleHypotheses']>;
   readonly regions: readonly string[];
+  readonly suggestedRegions?: readonly string[];
   readonly candidateLevel?: string | null;
   readonly state: VacanciesScreenState;
   readonly onChange: (updater: (prev: VacanciesScreenState) => VacanciesScreenState) => void;
@@ -54,6 +56,7 @@ export function VacanciesFilters(props: VacanciesScreenFiltersProps) {
 function VacanciesFilterControls({
   roleHypotheses,
   regions,
+  suggestedRegions,
   candidateLevel,
   state,
   onChange,
@@ -62,7 +65,12 @@ function VacanciesFilterControls({
   return (
     <>
       <RoleHypothesesGroup roleHypotheses={roleHypotheses} state={state} onChange={onChange} />
-      <RegionsGroup regions={regions} state={state} onChange={onChange} />
+      <RegionsGroup
+        regions={regions}
+        suggestedRegions={suggestedRegions}
+        state={state}
+        onChange={onChange}
+      />
       <RemoteOnlyGroup state={state} onChange={onChange} />
       {candidateLevel ? (
         <FieldGroup title="Уровень">
@@ -135,18 +143,33 @@ function RoleHypothesesGroup({
   );
 }
 
+function regionLabel(id: string): string {
+  const found = CANDIDATE_REGION_CATALOGUE.find(
+    (entry) => entry.id === id || entry.label.toLowerCase() === id.toLowerCase(),
+  );
+  return found?.label ?? id;
+}
+
 function RegionsGroup({
   regions,
+  suggestedRegions = [],
   state,
   onChange,
-}: FilterGroupProps & { readonly regions: readonly string[] }) {
-  if (regions.length === 0) return null;
+}: FilterGroupProps & {
+  readonly regions: readonly string[];
+  readonly suggestedRegions?: readonly string[];
+}) {
+  const visibleRegions = Array.from(new Set([...regions, ...state.regions]));
+  const unselectedSuggested = suggestedRegions.filter(
+    (reg) => !visibleRegions.includes(reg) && !visibleRegions.includes(regionLabel(reg)),
+  );
+  if (visibleRegions.length === 0 && unselectedSuggested.length === 0) return null;
   return (
     <FieldGroup title="География">
-      {regions.map((region) => (
+      {visibleRegions.map((region) => (
         <Chip
           key={region}
-          label={region}
+          label={regionLabel(region)}
           isSelected={state.regions.includes(region)}
           onClick={() =>
             onChange((prev) => ({
@@ -157,6 +180,21 @@ function RegionsGroup({
             }))
           }
         />
+      ))}
+      {unselectedSuggested.map((region) => (
+        <button
+          key={`suggested-${region}`}
+          type="button"
+          className="vacancies-chip vacancies-chip-suggested"
+          onClick={() =>
+            onChange((prev) => ({
+              ...prev,
+              regions: [...prev.regions, region],
+            }))
+          }
+        >
+          Добавить: {regionLabel(region)}
+        </button>
       ))}
     </FieldGroup>
   );

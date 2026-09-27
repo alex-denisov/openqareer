@@ -92,6 +92,7 @@ export interface CampaignResolution {
    * вакансии по ролям: без счёта нечего размечать (см. `annotateRoleHypotheses`).
    */
   readonly roleHypotheses?: readonly RoleHypothesisFlag[];
+  readonly suggestedRegions?: readonly string[];
 }
 
 export interface ResolveCampaignInput {
@@ -172,7 +173,12 @@ export function resolveCampaign(input: ResolveCampaignInput): CampaignResolution
   const modelRoles = input.auto?.roles.map((role) => role.title) ?? [];
 
   const roles = resolveField(input.explicit?.roles, modelRoles, derivedRoles);
-  const regions = resolveField(input.explicit?.regions, [], derivedRegions);
+  const explicitRegions = input.explicit?.regions;
+  const isProfileOrigin = (input.explicit as { readonly origin?: string } | null)?.origin === 'profile';
+  const regions: CampaignField<readonly string[]> =
+    explicitRegions !== undefined && !isProfileOrigin
+      ? { value: explicitRegions, origin: 'explicit' }
+      : { value: [], origin: 'default' };
 
   return {
     roles,
@@ -190,6 +196,7 @@ export function resolveCampaign(input: ResolveCampaignInput): CampaignResolution
       roles: divergenceOf(roles, derivedRoles),
       regions: divergenceOf(regions, derivedRegions),
     },
+    suggestedRegions: derivedRegions,
     ...(input.vacancyCountsByRole
       ? { roleHypotheses: annotateRoleHypotheses(roles.value, input.vacancyCountsByRole) }
       : {}),

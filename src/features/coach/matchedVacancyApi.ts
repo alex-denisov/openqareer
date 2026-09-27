@@ -47,6 +47,7 @@ export interface CampaignMetaView {
     readonly evidence: readonly string[];
   }[];
   readonly roleHypotheses?: readonly CampaignRoleHypothesis[];
+  readonly suggestedRegions?: readonly string[];
 }
 
 export interface CandidateCampaignUpdate {

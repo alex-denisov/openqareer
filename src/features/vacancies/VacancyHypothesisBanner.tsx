@@ -74,19 +74,20 @@ function CampaignActionButtons({
   | 'onToggleRegions'
   | 'onToggleRemote'
 >) {
-  const expandLabel = regionsChosenExplicitly ? 'Расширить географию' : 'Выбрать регион';
   return (
     <div className="vacancy-hypothesis-actions" aria-label="Как изменить кампанию">
       <AdjacentRoleAction role={adjacentRole} saving={saving} onSelect={onAddAdjacentRole} />
-      <button
-        type="button"
-        className="vacancies-btn vacancies-btn-secondary"
-        aria-expanded={regionsOpen}
-        onClick={onToggleRegions}
-        disabled={saving || availableRegions.length === 0}
-      >
-        {regionsOpen ? 'Скрыть регионы' : expandLabel}
-      </button>
+      {regionsChosenExplicitly ? (
+        <button
+          type="button"
+          className="vacancies-btn vacancies-btn-secondary"
+          aria-expanded={regionsOpen}
+          onClick={onToggleRegions}
+          disabled={saving || availableRegions.length === 0}
+        >
+          {regionsOpen ? 'Скрыть регионы' : 'Расширить географию'}
+        </button>
+      ) : null}
       {/* Баннер только расширяет выдачу: «только удалённо» сужает её, поэтому здесь его можно лишь снять. */}
       {remoteOnly ? (
         <button

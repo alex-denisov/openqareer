@@ -54,6 +54,7 @@ const SNAPSHOT = {
 const CAMPAIGN = {
   roles: { value: ['Enterprise Architect'], origin: 'profile' },
   regions: { value: ['United States', 'Philippines', 'Германия'], origin: 'profile' },
+  suggestedRegions: ['mena'],
   remoteOnly: false,
   autoRoles: [
     { id: 'architect.primary', title: 'Enterprise Architect', kind: 'primary' as const },
@@ -513,6 +514,7 @@ test.describe('B250 vacancies screen', () => {
     const updates: unknown[] = [];
     const lowCampaign = {
       ...CAMPAIGN,
+      regions: { value: ['United States', 'Philippines', 'Германия'], origin: 'explicit' as const },
       roleHypotheses: [{ role: 'Enterprise Architect', vacancyCount: 5, isHypothesis: true }],
     };
     await stubSession(page, {
@@ -548,6 +550,7 @@ test.describe('B250 vacancies screen', () => {
       path: testInfo.outputPath('vacancies-hypothesis.png'),
       fullPage: true,
     });
+
     await banner.getByRole('button', { name: /Добавить роль/ }).click();
     await expect.poll(() => updates.length).toBe(1);
     expect(
@@ -562,6 +565,48 @@ test.describe('B250 vacancies screen', () => {
     // «Только удалённо» сужает выдачу, поэтому баннер его не предлагает — только снимает.
     await expect(banner.getByRole('button', { name: /Удалённо/ })).toHaveCount(0);
     expect(updates).toHaveLength(2);
+  });
+
+  test('geo filter shows suggestedRegions button without auto-applying (C63)', async ({
+    page,
+  }, testInfo) => {
+    await stubSession(page, {
+      campaign: {
+        ...CAMPAIGN,
+        suggestedRegions: ['mena'],
+      },
+    });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    // C63: Баннер «Расширить географию» не появляется у кампании без ограничения (origin: profile).
+    await expect(
+      page
+        .locator('.vacancy-hypothesis-banner')
+        .getByRole('button', { name: 'Расширить географию' }),
+    ).toHaveCount(0);
+
+    if (testInfo.project.name === 'mobile-390') {
+      const filterToggle = page.getByRole('button', {
+        name: 'Фильтры и сохранённые запросы',
+      });
+      await filterToggle.click();
+      await page.waitForTimeout(300);
+      const suggestedBtn = page.getByRole('button', { name: 'Добавить: MENA' });
+      await expect(suggestedBtn).toBeVisible();
+      await page.screenshot({
+        path: 'output/playwright/C63/geo-filter-suggested-390.png',
+        fullPage: true,
+      });
+    } else {
+      const suggestedBtn = page.getByRole('button', { name: 'Добавить: MENA' });
+      await expect(suggestedBtn).toBeVisible();
+      await page.screenshot({
+        path: 'output/playwright/C63/geo-filter-suggested-1440.png',
+        fullPage: true,
+      });
+    }
   });
 
   test('shows a zero-result hypothesis and names a source when loading fails', async ({
