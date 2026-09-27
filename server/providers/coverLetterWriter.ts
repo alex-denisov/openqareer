@@ -24,8 +24,13 @@ import { VertexTokenProvider, vertexPublisherBaseUrl, type VertexConfig } from '
 import { selectProviderQueue, type ProviderQueueEntry, type ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
-/** Столько же, сколько идёт в называние ролей — тот же входной бюджет (B266). */
-const MAX_FACTS = 40;
+/**
+ * Замер 25.09 (B251/B267 S6, CJM4): письмо шло ~25,6 с при 40 фактах во
+ * входе — модель тратила время на лишний контекст. Выжимка из 5-7 лучших
+ * фактов (ранжирование уже кладёт нужные факты первыми) укладывает p50 в
+ * рамки задачи, не меняя модель и не теряя точных совпадений с вакансией.
+ */
+const MAX_FACTS = 7;
 const MAX_STATEMENT = 400;
 const MAX_TITLE = 200;
 const MAX_REQUIREMENT = 120;
@@ -53,6 +58,8 @@ export interface CoverLetterFact {
   readonly domain?: string;
   readonly createdAt?: string;
   readonly updatedAt?: string;
+  /** Кандидат подтвердил факт или он ещё ждёт подтверждения (C46, ранжирование фактов). */
+  readonly status?: 'proposed' | 'confirmed' | 'corrected';
 }
 
 export interface CoverLetterVacancy {
@@ -95,8 +102,11 @@ export interface CoverLetterWriter {
  * Общий срок на письмо. Очередь ждёт до 50 с на ступень, а запрос письма на
  * клиенте без таймаута: без срока кандидат минутами смотрел бы на спиннер.
  * По истечении срока идёт шаблон (B266, пункт 7).
+ *
+ * Было 25 с (B266); задача C46 (B251/B267 S6) требует p50 < 10 с. Честный
+ * переход на шаблон при таймауте остаётся тем же путём — не новой ошибкой.
  */
-export const COVER_LETTER_BUDGET_MS = 25_000;
+export const COVER_LETTER_BUDGET_MS = 9_000;
 
 export async function withinTimeBudget(
   writing: Promise<CoverLetterOutcome>,

@@ -8,6 +8,8 @@ export interface RankablePitchFact {
   readonly domain?: string;
   readonly createdAt?: string;
   readonly updatedAt?: string;
+  /** Кандидат подтвердил/поправил факт, либо он ещё ждёт подтверждения (C46). */
+  readonly status?: 'proposed' | 'confirmed' | 'corrected';
 }
 
 export interface PitchRankingVacancy {
@@ -132,6 +134,14 @@ function semanticGroup(
   return isPositionForVacancy(fact, context) ? 'matching-position' : undefined;
 }
 
+/**
+ * Подтверждённый факт кандидат сам проверил или поправил — письмо должно
+ * ссылаться на него раньше импортированного и ещё не подтверждённого (C46).
+ */
+function basisRank(fact: RankablePitchFact): number {
+  return fact.status === 'confirmed' || fact.status === 'corrected' ? 0 : 1;
+}
+
 function freshness(fact: RankablePitchFact): number {
   const value = Date.parse(fact.updatedAt ?? fact.createdAt ?? '');
   return Number.isNaN(value) ? 0 : value;
@@ -200,6 +210,8 @@ export function rankPitchFacts<T extends RankablePitchFact>(
     .sort((left, right) => {
       const groupDifference = GROUP_PRIORITY[left.group] - GROUP_PRIORITY[right.group];
       if (groupDifference !== 0) return groupDifference;
+      const basisDifference = basisRank(left.fact) - basisRank(right.fact);
+      if (basisDifference !== 0) return basisDifference;
       if (
         (left.group === 'matched-experience' || left.group === 'matching-position') &&
         left.overlap !== right.overlap

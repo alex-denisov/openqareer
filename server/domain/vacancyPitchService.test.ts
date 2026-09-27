@@ -125,6 +125,18 @@ describe('vacancyPitchService', () => {
     );
   });
 
+  it('reports which vacancy requirements the letter answered (C46)', () => {
+    const pitch = generateVacancyPitch({
+      vacancy: sampleVacancy,
+      candidateName: 'Алексей Денисов',
+      facts: sampleFacts,
+      tone: 'technical',
+      language: 'ru',
+    });
+
+    expect(pitch.coveredRequirements).toEqual(['TypeScript', 'Node.js', 'PostgreSQL']);
+  });
+
   it('adapts phrasing based on selected tone', () => {
     const execPitch = generateVacancyPitch({
       vacancy: sampleVacancy,

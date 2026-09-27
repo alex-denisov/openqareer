@@ -229,7 +229,7 @@ describe('LlmCoverLetterWriter', () => {
     expect(call).not.toHaveProperty('max_completion_tokens');
   });
 
-  it('отправляет не больше 40 фактов', async () => {
+  it('отправляет не больше 7 лучших фактов (C46: меньше контекста — быстрее ответ)', async () => {
     const many = Array.from({ length: 60 }, (_, i) => ({
       ref: `memory:${i}`,
       statement: `Факт номер ${i}`,
@@ -241,7 +241,7 @@ describe('LlmCoverLetterWriter', () => {
       messages: Array<{ role: string; content: string }>;
     };
     const sent = JSON.parse(call.messages[1].content) as { facts: unknown[] };
-    expect(sent.facts.length).toBe(40);
+    expect(sent.facts.length).toBe(7);
   });
 
   it('перед лимитом ставит опыт по роли выше сертификатов', async () => {
@@ -312,6 +312,41 @@ describe('LlmCoverLetterWriter', () => {
     const sent = JSON.parse(call.messages[1].content) as { facts: Array<{ ref: string }> };
 
     expect(sent.facts[0]?.ref).toBe('memory:evidence');
+  });
+
+  it('ставит подтверждённый факт раньше импортированного в промпте (C46)', async () => {
+    const stub = client(JSON.stringify({ body: 'Письмо.' }));
+    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
+    await writer.writeCoverLetter({
+      ...input,
+      facts: [
+        { ref: 'imp-skill', statement: 'Kafka pipeline design', domain: 'skill', status: 'proposed' },
+        { ref: 'conf-skill', statement: 'Terraform infrastructure', domain: 'skill', status: 'confirmed' },
+      ],
+    });
+    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const sent = JSON.parse(call.messages[1].content) as { facts: Array<{ ref: string }> };
+    expect(sent.facts.map((fact) => fact.ref)).toEqual(['conf-skill', 'imp-skill']);
+  });
+
+  it('промпт несёт требования вакансии и evidenceRefs фактов (C46)', async () => {
+    const stub = client(JSON.stringify({ body: 'Письмо.' }));
+    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
+    await writer.writeCoverLetter({
+      ...input,
+      vacancy: { ...input.vacancy, requirements: ['TypeScript', 'Kubernetes'] },
+    });
+    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const sent = JSON.parse(call.messages[1].content) as {
+      vacancy: { requirements: string[] };
+      facts: Array<{ ref: string }>;
+    };
+    expect(sent.vacancy.requirements).toEqual(['TypeScript', 'Kubernetes']);
+    expect(sent.facts.map((fact) => fact.ref)).toEqual(['memory:1', 'memory:2']);
   });
 });
 

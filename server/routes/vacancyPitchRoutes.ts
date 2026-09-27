@@ -42,6 +42,20 @@ const vacancyPitchInputSchema = z
   })
   .optional();
 
+/**
+ * Раскладка времени письма на составляющие: сборка контекста (снимок
+ * кандидата + разбор роли кампании) отдельно от ожидания провайдера. Только
+ * числа и имя ступени — ни текста письма, ни фактов кандидата (C46).
+ */
+function logPitchTiming(entry: {
+  readonly contextMs: number;
+  readonly providerMs: number;
+  readonly totalMs: number;
+  readonly stage?: string;
+}): void {
+  console.info(JSON.stringify({ event: 'vacancy-pitch-timing', ...entry }));
+}
+
 /** Model writing is bounded; the deterministic template remains the fallback. */
 async function writeCoverLetterBody(
   deps: RouteDeps,
@@ -55,7 +69,8 @@ async function writeCoverLetterBody(
   facts: readonly VacancyPitchInputFact[],
   language: PitchLanguage,
   tone: PitchTone,
-  rankingContext?: PitchFactRankingContext,
+  rankingContext: PitchFactRankingContext | undefined,
+  contextMs: number,
 ): Promise<{ body?: string; stage?: string }> {
   const { coverLetterWriter } = deps;
   if (!coverLetterWriter) return {};
@@ -65,6 +80,7 @@ async function writeCoverLetterBody(
     domain: fact.domain,
     createdAt: fact.createdAt,
     updatedAt: fact.updatedAt,
+    status: fact.status,
   }));
   const writing = coverLetterWriter.writeCoverLetter({
     facts: usableFacts,
@@ -78,8 +94,17 @@ async function writeCoverLetterBody(
     language,
     tone,
   });
+  const providerStart = Date.now();
   const outcome = await withinTimeBudget(writing, COVER_LETTER_BUDGET_MS);
+  const providerMs = Date.now() - providerStart;
   if (outcome.failure) request.log.warn(outcome.failure, 'cover-letter-stage-failed');
+  const stage = outcome.stage ?? outcome.failure?.stage;
+  logPitchTiming({
+    contextMs,
+    providerMs,
+    totalMs: contextMs + providerMs,
+    ...(stage ? { stage } : {}),
+  });
   return outcome.body ? { body: outcome.body, stage: outcome.stage } : {};
 }
 
@@ -129,6 +154,7 @@ async function writeVacancyPitch(
   body: z.infer<typeof vacancyPitchInputSchema>,
   vacancy: ReturnType<typeof resolvePitchVacancy> & { title: string },
 ) {
+  const contextStart = Date.now();
   const rankingContext = pitchRankingContext(
     deps.candidateStore,
     deps.titleParseStore,
@@ -146,6 +172,7 @@ async function writeVacancyPitch(
     ...(rankingContext ? { rankingContext } : {}),
     ...(body?.language ? { language: body.language } : {}),
   });
+  const contextMs = Date.now() - contextStart;
   const written = await writeCoverLetterBody(
     deps,
     request,
@@ -154,6 +181,7 @@ async function writeVacancyPitch(
     pitch.language,
     tone,
     rankingContext,
+    contextMs,
   );
   return { pitch, written, atsCoverLetter: written.body ?? pitch.atsCoverLetter };
 }

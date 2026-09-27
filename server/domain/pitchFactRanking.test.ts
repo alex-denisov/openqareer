@@ -140,6 +140,17 @@ describe('rankPitchFacts', () => {
     ]);
   });
 
+  it('ставит подтверждённый факт раньше импортированного в той же группе (C46)', () => {
+    const facts = [
+      { id: 'imp-skill-1', statement: 'Kafka pipeline design', domain: 'skill', status: 'proposed' },
+      { id: 'conf-skill-1', statement: 'Terraform infrastructure', domain: 'skill', status: 'confirmed' },
+    ] as const;
+
+    const ranked = rankPitchFacts(facts, { title: 'Platform Engineer' });
+
+    expect(ranked.map((fact) => fact.id)).toEqual(['conf-skill-1', 'imp-skill-1']);
+  });
+
   it('убирает один и тот же текст под разными хвостами идентификатора', () => {
     // Прод 25.09: «Drove CSAT from 23% to 68%…» пришёл как resp-3-2 и как ach-3-1.
     const statement = 'Drove CSAT from 23% to 68% and FCR from 5% to 83%.';

@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from './app';
 import type { ServerConfig } from './config';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
@@ -524,6 +524,49 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
       .listApplications(candidateId)
       .find((a) => a.id === applicationId);
     expect(application?.materials).toMatchObject({ coverLetter: true });
+  });
+
+  // C46 (B251/B267 S6): раскладка 25 с на составляющие — структурная запись,
+  // только числа и имя провайдера, без текста письма и фактов.
+  it('logs structured vacancy-pitch-timing with numbers and provider name only', async () => {
+    const writer: CoverLetterWriter = {
+      writeCoverLetter: async () => ({ body: 'Письмо.', stage: 'openai:gpt-test' }),
+    };
+    const { app, candidates } = await createApp([sampleCluster], { coverLetterWriter: writer });
+    const { cookie, candidateId } = await login(app);
+    candidates.importResumeEvidence(candidateId, {
+      sourceLabel: 'test-import',
+      entries: [{ memoryId: 'mem-301', domain: 'skill', statement: 'Владею TypeScript, Node.js' }],
+    });
+    candidates.reviewMemories(candidateId, ['mem-301'], 'confirm');
+
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: {},
+    });
+    const calls = [...spy.mock.calls];
+    spy.mockRestore();
+
+    expect(response.statusCode).toBe(200);
+    const entry = calls
+      .map((call) => {
+        try {
+          return JSON.parse(String(call[0])) as Record<string, unknown>;
+        } catch {
+          return undefined;
+        }
+      })
+      .find((parsed) => parsed?.event === 'vacancy-pitch-timing');
+    expect(entry).toMatchObject({
+      stage: 'openai:gpt-test',
+      contextMs: expect.any(Number),
+      providerMs: expect.any(Number),
+      totalMs: expect.any(Number),
+    });
+    expect(JSON.stringify(entry)).not.toMatch(/TypeScript|Node\.js|mem-301/u);
   });
 
   it('returns 404 when applicationId belongs to a different candidate', async () => {

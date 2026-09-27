@@ -70,6 +70,8 @@ export interface VacancyPitchResponse {
   readonly atsCoverLetter: string;
   readonly usedEvidenceIds: readonly string[];
   readonly usedFacts: readonly VacancyPitchUsedFact[];
+  /** Требования вакансии, на которые письмо ответило конкретным фактом профиля (C46). */
+  readonly coveredRequirements: readonly string[];
   readonly language: PitchLanguage;
   /**
    * Состояния «мало фактов» / «требования не сопоставлены» уходят сюда, а не
@@ -351,6 +353,30 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
+/**
+ * Требования вакансии, подтверждённые фактом профиля, и их доказательства.
+ * Общая проверка для абзаца про стек и для `coveredRequirements` в ответе
+ * API (C46) — оба должны согласиться, что именно письмо покрыло.
+ */
+function matchRequirements(
+  reqSkills: readonly string[],
+  facts: readonly VacancyPitchInputFact[],
+): { matched: string[]; missing: string[]; matchedIds: string[] } {
+  const matched: string[] = [];
+  const missing: string[] = [];
+  const matchedIds: string[] = [];
+  for (const req of reqSkills) {
+    const matchedFact = facts.find((f) => hasPositiveSkillEvidence(f, req));
+    if (matchedFact) {
+      matched.push(req);
+      matchedIds.push(matchedFact.id);
+    } else {
+      missing.push(req);
+    }
+  }
+  return { matched, missing, matchedIds };
+}
+
 function buildStackParagraph(
   copy: Copy,
   vacancy: VacancyPitchInputVacancy,
@@ -363,18 +389,11 @@ function buildStackParagraph(
   // candidate would copy to a recruiter (B266).
   if (reqSkills.length === 0) return '';
 
-  const matchedSkills: string[] = [];
-  const missingSkills: string[] = [];
-
-  for (const req of reqSkills) {
-    const matchedFact = facts.find((f) => hasPositiveSkillEvidence(f, req));
-    if (matchedFact) {
-      matchedSkills.push(req);
-      usedIds.add(matchedFact.id);
-    } else {
-      missingSkills.push(req);
-    }
-  }
+  const { matched: matchedSkills, missing: missingSkills, matchedIds } = matchRequirements(
+    reqSkills,
+    facts,
+  );
+  for (const id of matchedIds) usedIds.add(id);
 
   const parts: string[] = [];
   if (matchedSkills.length > 0) {
@@ -478,6 +497,7 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
     id,
     basis: basisById.get(id) ?? 'imported',
   }));
+  const coveredRequirements = matchRequirements(vacancy.requiredSkills ?? [], usableFacts).matched;
 
   return {
     vacancyId: vacancy.id,
@@ -489,6 +509,7 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
     atsCoverLetter: stripHiddenMarkers(atsCoverLetter),
     usedEvidenceIds: Array.from(usedEvidenceIds),
     usedFacts,
+    coveredRequirements,
     language,
     notices,
     generatedAt: new Date().toISOString(),
