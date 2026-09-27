@@ -444,6 +444,8 @@ test.describe('B265 Profile screen', () => {
       await expect(page.locator(`#${id}`)).toBeAttached();
     }
     await expect(page.locator('#sec-courses')).toContainText('Импорт из LinkedIn курсов не нашёл');
+    // C54: полнота импорта живёт в раскрывающемся чипе источника на шапке профиля.
+    await page.locator('.career-profile-screen-source-chip summary').click();
     await expect(page.locator('.career-profile-screen-coverage')).toBeVisible();
     await expect(page.locator('.career-profile-screen-position-bullets li').first()).toBeVisible();
     await expect(page.locator('.career-profile-screen-lang-source').first()).toBeVisible();

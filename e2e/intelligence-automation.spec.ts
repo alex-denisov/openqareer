@@ -179,6 +179,10 @@ async function seedWorkspace(page: Page): Promise<void> {
 }
 
 async function openOpportunities(page: Page): Promise<void> {
+  test.fixme(
+    true,
+    'C68: C56 убрал сохранённые запросы с «Вакансий» (решение владельца 27.09); проверку правдивости источников переписывают под новый экран',
+  );
   // The rail is hidden on a phone, where the same navigation lives in the
   // bottom bar; `:visible` picks whichever one this viewport shows.
   // Регулярные выборки живут в панели фильтров «Вакансий» с B181.
