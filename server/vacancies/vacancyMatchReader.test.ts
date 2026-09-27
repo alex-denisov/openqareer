@@ -40,4 +40,10 @@ describe('isolated matching reader', () => {
     worker.close();
     await expect(worker.read('SELECT 1 AS payload', [])).rejects.toThrow('vacancy_match_reader_closed');
   });
+
+  it('can start its isolated process before the first SQL request', async () => {
+    const worker = reader();
+    worker.warm();
+    expect(await worker.read("SELECT '1' AS payload", [])).toEqual([{ payload: '1' }]);
+  });
 });

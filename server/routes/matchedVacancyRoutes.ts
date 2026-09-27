@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
 import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
 import type { CampaignResolution } from '../vacancies/campaign';
@@ -21,6 +22,13 @@ const matchedVacanciesQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+/** Первый запрос к конкретному движку равен первому запросу процесса в runtime. */
+const observedMatchEngines = new WeakSet<object>();
+
+function elapsedMs(startedAt: number): number {
+  return Number((performance.now() - startedAt).toFixed(2));
+}
+
 function finishMatchedVacancies(
   snapshot: readonly MatchedVacancyItem[],
   targetRoles: readonly string[],
@@ -40,23 +48,57 @@ function finishMatchedVacancies(
   return applyVacancyDecisions(roleFiltered, candidateStore.listVacancyDecisions(candidateId));
 }
 
+function buildMatchedResponse(
+  snapshot: readonly MatchedVacancyItem[], targetRoles: readonly string[], campaign: CampaignResolution,
+  candidateStore: RouteDeps['candidateStore'], candidateId: string,
+  targetLevel: ReturnType<typeof readTargetLevel>, titleParseStore: RouteDeps['titleParseStore'], offset: number,
+) {
+  const pageAndExplanationsStartedAt = performance.now();
+  const matched = finishMatchedVacancies(snapshot, targetRoles, campaign, candidateStore, candidateId);
+  const hypothesisSnapshot = campaign.remoteOnly ? snapshot.filter((item) => item.cluster.isRemote) : snapshot;
+  const counts = countMatchedVacanciesByRole(hypothesisSnapshot, targetRoles);
+  const campaignWithHypotheses = readCampaign(candidateStore, candidateId, counts);
+  const page = buildMatchedVacancyPage(matched, offset);
+  const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt);
+  const titleParseStartedAt = performance.now();
+  const data = addStoredVacancyLevels(page.items, targetLevel, (key) => titleParseStore.getByKey(key));
+  return { data, page, campaignWithHypotheses, pageAndExplanationsMs, titleParseAndLevelsMs: elapsedMs(titleParseStartedAt) };
+}
+
+function logMatchedTiming(
+  request: FastifyRequest, mode: 'legacy' | 'semantic', cold: boolean,
+  candidateCampaignMs: number, semanticQueryAndSqlMs: number, response: ReturnType<typeof buildMatchedResponse>, requestStartedAt: number,
+): void {
+  request.log.info({
+    mode, cold, candidateCampaignMs, semanticQueryAndSqlMs, clusterJsonAndClustersMs: 0,
+    titleParseAndLevelsMs: response.titleParseAndLevelsMs,
+    pageAndExplanationsMs: response.pageAndExplanationsMs, enrichmentsMs: elapsedMs(requestStartedAt),
+  }, 'matched-vacancies-timing');
+}
+
 const handleMatchedVacancies: Handler = async (
   { authService, candidateStore, config, multiSourceEngine, titleParseStore },
   request,
   reply,
 ) => {
+  const requestStartedAt = performance.now();
+  const cold = !observedMatchEngines.has(multiSourceEngine);
+  observedMatchEngines.add(multiSourceEngine);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const { offset } = matchedVacanciesQuerySchema.parse(request.query);
+  const candidateCampaignStartedAt = performance.now();
   const { confirmedSkills } = readMatchProfile(candidateStore, candidate.id);
   const campaign = readCampaign(candidateStore, candidate.id);
   const targetRoles = [...campaign.roles.value];
+  const candidateCampaignMs = elapsedMs(candidateCampaignStartedAt);
 
   if (confirmedSkills.length === 0 && targetRoles.length === 0) {
     return unconfirmedCandidateMatchResponse(request.id, offset, campaign);
   }
 
   const targetLevel = readTargetLevel(candidateStore, candidate.id, targetRoles);
+  const semanticQueryStartedAt = performance.now();
   const snapshot = await readMatchedSnapshot(
     multiSourceEngine,
     candidate.id,
@@ -64,29 +106,25 @@ const handleMatchedVacancies: Handler = async (
     targetRoles,
     targetLevel,
   );
-  const matched = finishMatchedVacancies(
-    snapshot,
-    targetRoles,
-    campaign,
-    candidateStore,
-    candidate.id,
+  const semanticQueryAndSqlMs = elapsedMs(semanticQueryStartedAt);
+  const response = buildMatchedResponse(
+    snapshot, targetRoles, campaign, candidateStore, candidate.id, targetLevel, titleParseStore, offset,
   );
-  const hypothesisSnapshot = campaign.remoteOnly
-    ? snapshot.filter((item) => item.cluster.isRemote)
-    : snapshot;
-  const vacancyCountsByRole = countMatchedVacanciesByRole(hypothesisSnapshot, targetRoles);
-  const campaignWithHypotheses = readCampaign(candidateStore, candidate.id, vacancyCountsByRole);
-  const page = buildMatchedVacancyPage(matched, offset);
+
+  logMatchedTiming(
+    request, config.matchMode ?? 'legacy', cold, candidateCampaignMs,
+    semanticQueryAndSqlMs, response, requestStartedAt,
+  );
 
   return {
-    data: addStoredVacancyLevels(page.items, targetLevel, (key) => titleParseStore.getByKey(key)),
+    data: response.data,
     meta: {
       requestId: request.id,
-      total: page.total,
-      offset: page.offset,
-      nextOffset: page.nextOffset,
-      ...(page.pageOffsets ? { pageOffsets: page.pageOffsets } : {}),
-      campaign: campaignMeta(campaignWithHypotheses),
+      total: response.page.total,
+      offset: response.page.offset,
+      nextOffset: response.page.nextOffset,
+      ...(response.page.pageOffsets ? { pageOffsets: response.page.pageOffsets } : {}),
+      campaign: campaignMeta(response.campaignWithHypotheses),
       candidateLevel: targetLevel ?? null,
     },
   };

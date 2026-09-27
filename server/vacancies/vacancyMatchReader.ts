@@ -39,6 +39,15 @@ export class VacancyMatchReader implements MatchRowReader {
     private readonly maxPending = 8,
   ) {}
 
+  /**
+   * Создаёт изолированный reader после `listen`, пока кандидат ещё ничего не
+   * ждёт. Сам SQL не выполняется: неизвестный профиль нельзя подменять
+   * произвольным прогревочным запросом.
+   */
+  warm(): void {
+    if (!this.closed) this.worker ??= this.startWorker();
+  }
+
   read(sql: string, params: SQLInputValue[]): Promise<Row[]> {
     if (this.closed) return Promise.reject(new Error('vacancy_match_reader_closed'));
     if (this.pending.size >= this.maxPending) {

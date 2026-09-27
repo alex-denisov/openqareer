@@ -668,6 +668,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return results;
   }
 
+  /** Запускает дочерний read-only процесс вне HTTP-обработчика (C44). */
+  warmMatchReader(): void {
+    if (this.databasePath === ':memory:') return;
+    const reader = (this.matchReader ??= new VacancyMatchReader(this.databasePath));
+    if (reader instanceof VacancyMatchReader) reader.warm();
+  }
+
   /** Роль, которой нет ни в одной записи, заставляет обойти весь пул — на
    * проде это ~20 с, дольше бюджета читателя. Такой отказ фазы по терминам
    * не отменяет подбор: кандидат получает свежие записи из фазы дополнения,

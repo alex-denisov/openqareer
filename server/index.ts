@@ -308,6 +308,10 @@ try {
     runDocumentRetentionPurge();
     runRetentionSweep();
   }, 30_000)?.unref();
+  // Первый semantic-read не платит за создание отдельного SQLite-процесса.
+  // Это только запуск reader: данные и SQL остаются запросом кандидата, а
+  // HTTP уже слушает, когда OS начинает создавать дочерний процесс.
+  setImmediate(() => vacancyEngine.pool.warmMatchReader()).unref();
   vacancyRefreshTimer = setInterval(runVacancyRefresh, 5 * 60 * 1_000);
   vacancyRefreshTimer.unref();
   recruiterIntelligenceTimer = setInterval(runRecruiterIntelligence, 5_000);
