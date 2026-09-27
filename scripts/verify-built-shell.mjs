@@ -3,6 +3,8 @@ import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 import { preview } from 'vite';
 
+const CAMPAIGN_SCREEN_PARKED = 'parked: C68 — экран кампании вне шкалы пути после C52';
+
 const BROWSER_WALK_MESSAGES = [
   {
     id: 'message-long-user',
@@ -699,22 +701,51 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
-  // «Отклики» (B251 S3): доска читает список откликов, а канбан B165
-  // подтверждает статус здесь же (не на «Вакансиях», где карточка только
-  // открывает ссылку и помечает «opened»).
+  // «Отклики» (B251 S3, C47): отклик из карточки вакансии создаёт карточку
+  // трекера (POST), доска читает список (GET) — тот же, что создан.
+  const trackerCards = [];
   await page.route('**/api/v1/candidate/applications*', async (route) => {
-    if (route.request().method() === 'GET') {
+    const request = route.request();
+    if (request.method() === 'POST') {
+      const body = JSON.parse(request.postData() ?? '{}');
+      const now = new Date().toISOString();
+      const card = {
+        id: `app-${trackerCards.length + 1}`,
+        candidateId: 'candidate-1',
+        clusterId: body.clusterId ?? null,
+        stage: body.stage ?? 'applied',
+        closedReason: null,
+        processProfile: 'standard',
+        vacancy: {
+          title: 'Продуктовый аналитик',
+          company: 'FinCloud',
+          companyHidden: false,
+          url: 'https://example.test/vacancy/1',
+          source: 'hh-1',
+        },
+        notes: null,
+        followUpDueAt: null,
+        stageChangedAt: now,
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+        followUp: null,
+        whoseTurn: 'company',
+        materials: { coverLetter: false, resume: false },
+        nearestInterview: null,
+      };
+      trackerCards.push(card);
       await route.fulfill({
-        status: 200,
+        status: 201,
         contentType: 'application/json',
-        body: JSON.stringify({ data: [] }),
+        body: JSON.stringify({ data: card }),
       });
       return;
     }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ data: [] }),
+      body: JSON.stringify({ data: trackerCards }),
     });
   });
   await page.route('**/api/v1/candidate/vacancy-sources', async (route) => {
@@ -1065,48 +1096,11 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await expert.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
   await expert.waitFor({ state: 'hidden' });
 
-  // «Поиск» has no rail item in the B248 IA; it opens from the path
-  // indicator's «Роль» step, which every campaign screen carries.
-  await page.getByRole('button', { name: /^Роль\./ }).first().click();
-  await page.getByRole('heading', { name: 'Поиск', exact: true }).waitFor();
-  // «Поиск» — кампания из макета: плитки, воронка, очередь и автоматизация по
-  // тарифу (B179).
-  await page.getByRole('heading', { name: /Кампания:/u }).waitFor();
-  await page.getByRole('heading', { name: 'Воронка' }).waitFor();
-  await page.getByRole('heading', { name: 'Очередь на сегодня' }).waitFor();
-  await page.getByRole('heading', { name: 'Роль, регион, формат' }).waitFor();
-  // INC-019: these used to be literal `true`s reported as verification. They
-  // now record what the walk actually observed, and a false value fails the
-  // gate instead of being printed next to `"status":"pass"`.
-  // Шесть ступеней с B165: «открыто» стоит между «подобрано» и «откликом» —
-  // переход на площадку и отклик считаются раздельно.
-  const funnelLabels = (
-    await page.locator('.career-funnel .career-funnel-label').allInnerTexts()
-  ).map((label) => label.trim().toLocaleLowerCase('ru-RU'));
-  const campaignFunnel = funnelLabels.length === 6 && funnelLabels.includes('открыто');
-  assert(
-    campaignFunnel,
-    `${viewport.name}: воронка кампании не отрисовалась ${JSON.stringify(funnelLabels)}`,
-  );
-  // Неизмеряемые ступени стоят прочерком и объясняют себя словами: ноль
-  // означал бы, что продукт посмотрел и не нашёл.
-  const untracked = await page.locator('.career-funnel li.is-untracked').count();
-  assert(
-    untracked === 3 &&
-      /не отслеживаем/iu.test(await page.locator('.career-campaign').innerText()),
-    `${viewport.name}: кампания выдаёт неизмеренное за ноль (${untracked})`,
-  );
-  const campaignQueue =
-    (await page.getByRole('heading', { name: 'Автоматизация', exact: true }).count()) === 1 &&
-    (await page.getByRole('button', { name: 'Посмотреть тарифы', exact: true }).count()) === 1;
-  assert(
-    campaignQueue,
-    `${viewport.name}: автоматизация по тарифу не отрисовалась`,
-  );
-  await page.screenshot({
-    path: `output/playwright/b104-b105-b119-decision-${viewport.name}.png`,
-    fullPage: true,
-  });
+  // C52 отвёл шаг «Роль» в «Вакансии»; экран кампании (воронка, автоматизация,
+  // «Роль, регион, формат») открывается только из следующего шага. Его проверку
+  // переносит C68 — до этого гейт честно пишет `parked`, а не `true`.
+  const campaignFunnel = CAMPAIGN_SCREEN_PARKED;
+  const campaignQueue = CAMPAIGN_SCREEN_PARKED;
   // «Вакансии» держат собранный пул (B248/B250): непустой пул рисует
   // `VacanciesScreen` (список + детальная карточка), а не старую
   // `VacancyBoard` (та осталась для загрузки/ошибки/пустого пула — ниже её
@@ -1142,33 +1136,29 @@ async function verifyViewport(browser, baseUrl, viewport) {
     fullPage: true,
   });
 
-  // Отклик со строки пула (B165 → B248/B250): карточка открывается по клику,
-  // «Откликнуться» ведёт на площадку и помечает запись «opened» — «applied»
-  // подтверждается на канбане «Отклики», не здесь.
+  // Отклик из карточки (B251 F5, C47): «Откликнуться» ведёт на площадку и
+  // одним кликом ставит запись «applied» — только она попадает в «Отклики».
   await vacancyRows.first().locator('button').click();
   await page.locator('.vacancies-detail-panel').waitFor();
   await page.getByRole('button', { name: 'Откликнуться' }).click();
   const recorded = page.__recordedApplications;
   assert(
-    recorded.length === 1 && recorded[0].status === 'opened' && Boolean(recorded[0].clusterId),
-    `${viewport.name}: открытие вакансии не ушло на сервер ${JSON.stringify(recorded)}`,
+    recorded.length === 1 && recorded[0].status === 'applied' && Boolean(recorded[0].clusterId),
+    `${viewport.name}: отклик из карточки не ушёл на сервер ${JSON.stringify(recorded)}`,
   );
   await page.screenshot({
     path: `output/playwright/b165-manual-application-${viewport.name}.png`,
     fullPage: true,
   });
 
-  // «Поиск» has no rail item in the B248 IA; it opens from the path
-  // indicator's «Роль» step, which every campaign screen carries.
-  await page.getByRole('button', { name: /^Роль\./ }).first().click();
-  await page.getByRole('heading', { name: 'Поиск', exact: true }).waitFor();
-  await page.screenshot({
-    path: `output/playwright/b178-search-${viewport.name}.png`,
-    fullPage: true,
-  });
   // B265 — «Профиль» is its own screen now (`ProfileScreenView`), not a fold
   // on «Сегодня»; «Документ и форматы» is a tab of that screen, not a route
   // into a separate Resume Studio page (that link is dead in the B248 IA).
+  // Каталог подключений не грузится на старте; с C54 его читает шапка Профиля.
+  assert(
+    connectionCatalogRequests === 0,
+    `${viewport.name}: connection catalog loaded before the candidate opened Profile`,
+  );
   await page.locator('button[aria-label="Профиль"]:visible').click();
   await page.locator('.career-profile-screen-view').first().waitFor();
   await page
@@ -1191,12 +1181,11 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
   await page.locator('.career-today').first().waitFor();
 
-  // «Отклики» (B251 S3) — канбан, отдельный от «Вакансий». С пустым списком
-  // (гейт не заводит здесь ни одной записи) экран обязан показать пустое
-  // состояние, а не молчать или падать.
+  // «Отклики» (B251 S3, C47) — канбан, отдельный от «Вакансий»: отклик из
+  // карточки выше обязан появиться здесь карточкой трекера, без тупика.
   await page.locator('button[aria-label="Отклики"]:visible').click();
   await page.getByRole('heading', { name: 'Отклики', exact: true }).waitFor();
-  await page.locator('.career-responses-empty').waitFor();
+  await page.locator('.career-responses-card', { hasText: 'Продуктовый аналитик' }).first().waitFor();
 
   // B248 (owner decision 2026-09-23): the rail no longer carries its own
   // plan card. Narrow screens keep the topbar's «Тарифы» link (point 4 of
@@ -1214,17 +1203,14 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: «Сегодня» disappeared after navigation`,
   );
 
-  assert(
-    connectionCatalogRequests === 0,
-    `${viewport.name}: connection catalog loaded before the candidate opened account settings`,
-  );
+  const catalogBeforeAccount = connectionCatalogRequests;
   await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
   await page.getByText('Вы вошли как', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Подключения' }).click();
   await page.getByRole('heading', { name: 'Профили на площадках' }).waitFor();
   await page.getByRole('button', { name: 'Отключить hh.ru' }).waitFor();
   assert(
-    connectionCatalogRequests === 1,
+    connectionCatalogRequests === catalogBeforeAccount + 1,
     `${viewport.name}: account settings did not load one connection catalog`,
   );
   await page.getByRole('button', { name: 'Отключить hh.ru' }).click();

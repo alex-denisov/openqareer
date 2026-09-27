@@ -104,7 +104,11 @@ export function CareerCabinet({
       ) => {
         vacancyApplications.record(clusterId, status, vacancy);
         if (status === 'applied') {
-          void applicationsTracker.addManualCard({ clusterId, stage: 'applied' });
+          // Сбой записи карточки не должен ронять страницу: трекер перечитывает
+          // сервер — карточка могла уже создаться (повторный отклик, 409).
+          void applicationsTracker
+            .addManualCard({ clusterId, stage: 'applied' })
+            .catch(() => applicationsTracker.reload());
         }
       },
     }),
