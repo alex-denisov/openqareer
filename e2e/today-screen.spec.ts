@@ -383,10 +383,19 @@ test.describe('B251 today screen', () => {
     await expect(page.locator('.career-today-digest')).toContainText('HRTx Inc.');
 
     const rows = page.locator('.career-today-item');
-    await expect(rows).toHaveCount(4);
-    await expect(rows.first()).toHaveClass(/is-first/);
-    await expect(rows.first()).toContainText('Peraton');
-    await expect(rows.nth(1)).not.toHaveClass(/is-first/);
+    // 1 consultant action + 4 queue items = 5 items
+    await expect(rows).toHaveCount(5);
+    const consultantCard = rows.first();
+    await expect(consultantCard).toHaveClass(/is-first/);
+    await expect(consultantCard).toHaveClass(/career-today-consultant-card/);
+    await expect(consultantCard).toContainText('Консультант · Один шаг на сегодня');
+    await expect(consultantCard).toContainText('Что изменится:');
+    await expect(consultantCard.locator('.career-today-consultant-action')).toBeVisible();
+    await expect(consultantCard.locator('.career-today-consultant-dismiss')).toBeVisible();
+
+    const secondRow = rows.nth(1);
+    await expect(secondRow).not.toHaveClass(/is-first/);
+    await expect(secondRow).toContainText('Peraton');
     await expect(page.locator('body')).not.toContainText('Следующее действие');
 
     await expect(page.locator('.career-today-followups')).toContainText('Follow-up по срокам');
@@ -426,10 +435,11 @@ test.describe('B251 today screen', () => {
       .locator('.career-today-digest')
       .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
     expect(wideDigestColumns).toBe(4);
+    await expect(page.locator('.career-today-consultant-card')).toBeVisible();
     await page.screenshot({
       path: process.env.SHOTS_DIR
         ? `${process.env.SHOTS_DIR}/today-1440.png`
-        : testInfo.outputPath('today-1440.png'),
+        : 'output/playwright/C57/today-1440.png',
       fullPage: true,
     });
 
@@ -441,17 +451,18 @@ test.describe('B251 today screen', () => {
       .locator('.career-today-digest')
       .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
     expect(digestColumns).toBe(2);
-    await expect(
-      page.getByRole('button', { name: 'Отметить отправленным' }).first(),
-    ).toBeInViewport();
+    await expect(page.locator('.career-today-consultant-card')).toBeVisible();
     const narrowOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(narrowOverflow).toBeLessThanOrEqual(0);
+    await page.addStyleTag({
+      content: `.career-mobile-nav { position: static !important; }`,
+    });
     await page.screenshot({
       path: process.env.SHOTS_DIR
         ? `${process.env.SHOTS_DIR}/today-390.png`
-        : testInfo.outputPath('today-390.png'),
+        : 'output/playwright/C57/today-390.png',
       fullPage: true,
     });
 
@@ -466,8 +477,41 @@ test.describe('B251 today screen', () => {
     await expect(page.locator('.career-today-digest')).toContainText('0');
     await expect(page.locator('.career-today-since')).toHaveCount(0);
     await expect(page.locator('.career-today-since-hint')).toHaveCount(0);
+    // Consultant proposal is shown initially even with an empty queue
+    await expect(page.locator('.career-today-consultant-card')).toBeVisible();
+    await expect(page.locator('.career-today-empty')).toHaveCount(0);
+
+    // After dismissing the proposal, the honest empty queue message appears
+    await page.locator('.career-today-consultant-dismiss').click();
+    await expect(page.locator('.career-today-consultant-card')).toHaveCount(0);
     await expect(page.locator('.career-today-empty')).toContainText(
       'Новые вакансии появятся здесь сами.',
     );
+  });
+
+  test('consultant action button navigates to target view without opening drawer', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await openApp(page);
+
+    const consultantCard = page.locator('.career-today-consultant-card');
+    await expect(consultantCard).toBeVisible();
+
+    // Click primary action button on consultant card
+    await consultantCard.locator('.career-today-consultant-action').click();
+
+    // Navigates to target section (e.g. Profile)
+    await expect(page.locator('.career-page-header h1')).toHaveText('Профиль');
+    // Does NOT open the expert panel / chat drawer
+    await expect(page.locator('.career-drawer')).toHaveCount(0);
+    await expect(page.locator('.career-expert-panel')).toHaveCount(0);
+
+    // Return to Today view
+    await page.locator('.career-nav-button:visible').filter({ hasText: 'Сегодня' }).click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Сегодня');
+    // Resolved proposal does not return
+    await expect(page.locator('.career-today-consultant-card')).toHaveCount(0);
   });
 });

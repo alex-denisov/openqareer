@@ -31,6 +31,7 @@ import { cabinetJourney } from './cabinetJourney';
 import { useCareerStrategy, type CareerStrategyRead } from './useCareerStrategy';
 import { countConfirmedApplications } from '../../../shared/vacancyApplication';
 import type { CareerCabinetView } from './cabinetViews';
+import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 
 export type { CareerCabinetView } from './cabinetViews';
 
@@ -211,6 +212,7 @@ export function CareerCabinet({
             applicationsTracker={applicationsTracker}
             data={data}
             profileTab={profileTab}
+            consultantAction={journey?.reasonedAction}
             onNavigate={onNavigate}
             onSavePremises={savePremises}
             onOpenTariffs={onOpenTariffs}
@@ -225,7 +227,15 @@ export function CareerCabinet({
 
 /** «Сегодня» reads its own digest through `useToday` — the cabinet's
  * `useCareerCabinetData` snapshot has no queue or digest fields of its own. */
-function TodaySection() {
+function TodaySection({
+  candidateId,
+  consultantAction,
+  onNavigate,
+}: {
+  candidateId?: string;
+  consultantAction?: ReasonedCareerAction;
+  onNavigate?: (view: CareerCabinetView) => void;
+}) {
   const { snapshot, loading, failed, refresh, markFollowUpSent, markingFollowUpIds } = useToday();
   return (
     <TodayScreen
@@ -235,6 +245,9 @@ function TodaySection() {
       onRetry={() => void refresh()}
       onMarkFollowUpSent={markFollowUpSent}
       markingFollowUpIds={markingFollowUpIds}
+      candidateId={candidateId}
+      consultantAction={consultantAction}
+      onNavigate={onNavigate}
     />
   );
 }
@@ -263,6 +276,7 @@ function CabinetSection({
   applicationsTracker,
   data,
   profileTab,
+  consultantAction,
   onNavigate,
   onSavePremises,
   onOpenTariffs,
@@ -280,6 +294,7 @@ function CabinetSection({
   applicationsTracker: ReturnType<typeof useApplications>;
   data: ReturnType<typeof useCareerCabinetData>;
   profileTab: ProfileTab;
+  consultantAction?: ReasonedCareerAction;
   onNavigate: (view: CareerCabinetView) => void;
   onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
   onOpenTariffs?: () => void;
@@ -287,7 +302,13 @@ function CabinetSection({
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }) {
   if (view === 'today') {
-    return <TodaySection />;
+    return (
+      <TodaySection
+        candidateId={session.candidateId}
+        consultantAction={consultantAction}
+        onNavigate={onNavigate}
+      />
+    );
   }
   // B265 — the rail's «Профиль» is its own screen (topcard, Open to work,
   // every imported section, edit-in-place), not Resume Studio. «Резюме»

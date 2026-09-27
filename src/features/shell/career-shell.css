@@ -7666,6 +7666,29 @@
   white-space: nowrap;
 }
 
+.career-today-consultant-card .career-today-item-title {
+  white-space: normal;
+}
+
+.career-today-item-rationale {
+  margin-top: 2px;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.45;
+}
+
+.career-today-item-effect {
+  margin-top: 4px;
+  color: var(--career-text);
+  font-size: var(--career-text-xs);
+  line-height: 1.45;
+}
+
+.career-today-effect-label {
+  color: var(--career-text-dim);
+  font-weight: 600;
+}
+
 .career-today-item-meta {
   display: flex;
   flex-wrap: wrap;

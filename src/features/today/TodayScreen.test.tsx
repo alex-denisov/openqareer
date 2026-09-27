@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { TodayScreen } from './TodayScreen';
+import { consultantTargetView, TodayScreen } from './TodayScreen';
+import { clearConsultantActionResolution, resolveConsultantAction } from './consultantActionStorage';
 import type { TodaySnapshot } from './todayApi';
 
 const snapshot: TodaySnapshot = {
@@ -155,4 +156,77 @@ describe('TodayScreen (B251 S5)', () => {
     expect(html).toContain('Решений на сегодня нет: подборка разобрана.');
     expect(html).toContain('Новые вакансии появятся здесь сами.');
   });
+
+  describe('Консультант на «Сегодня» (C57)', () => {
+    const mockAction: Parameters<typeof TodayScreen>[0]['consultantAction'] = {
+      revision: 'career-action-policy-v1-2026-08-07',
+      type: 'review',
+      destination: 'profile',
+      headline: 'Добавим полный источник',
+      label: 'Дополнить профиль',
+      rationale: 'Сначала закрываем «материала недостаточно для полного разбора».',
+      expectedChange: 'Полный источник откроет недостающие даты, задачи и результаты.',
+      findingIds: ['readability-short'],
+      roleIds: ['role-target'],
+      marketIds: ['eu', 'mena'],
+      alternatives: [],
+      approvalBoundary: 'Профиль меняется только после согласования.',
+    };
+
+    it('встраивает карточку консультанта в очередь дня с заголовком, обоснованием и кнопкой действия', () => {
+      const html = renderTodayScreen({ consultantAction: mockAction });
+
+      expect(html).toContain('career-today-consultant-card');
+      expect(html).toContain('Консультант · Один шаг на сегодня');
+      expect(html).toContain('Добавим полный источник');
+      expect(html).toContain('Сначала закрываем «материала недостаточно для полного разбора».');
+      expect(html).toContain('Что изменится:');
+      expect(html).toContain('Полный источник откроет недостающие даты, задачи и результаты.');
+      expect(html).toContain('Дополнить профиль');
+      expect(html).toContain('Отклонить предложение');
+      // Total cards count in queue increases
+      expect(html).toContain('3 карточки · решение нужно по каждой');
+    });
+
+    it('показывает карточку консультанта в пустой очереди вместо заглушки «Решений на сегодня нет»', () => {
+      const html = renderTodayScreen({
+        snapshot: {
+          ...snapshot,
+          queue: [],
+          followUps: [],
+          sinceLastVisit: { since: null, items: [] },
+        },
+        consultantAction: mockAction,
+      });
+
+      expect(html).toContain('career-today-consultant-card');
+      expect(html).toContain('Добавим полный источник');
+      expect(html).toContain('1 карточка · решение нужно по каждой');
+      expect(html).not.toContain('Решений на сегодня нет: подборка разобрана.');
+    });
+
+    it('не показывает отклонённое или принятое предложение консультанта', () => {
+      const testCandId = 'cand-c57-test';
+      resolveConsultantAction(testCandId, mockAction, 'dismissed');
+
+      const html = renderTodayScreen({
+        candidateId: testCandId,
+        consultantAction: mockAction,
+      });
+
+      expect(html).not.toContain('career-today-consultant-card');
+      expect(html).toContain('2 карточки · решение нужно по каждой');
+
+      clearConsultantActionResolution(testCandId, mockAction);
+    });
+
+    it('маршрутизирует read-only действия в правильные разделы кабинета', () => {
+      expect(consultantTargetView('profile')).toBe('profile');
+      expect(consultantTargetView('evidence')).toBe('profile');
+      expect(consultantTargetView('coach')).toBe('profile');
+      expect(consultantTargetView('career')).toBe('career');
+      expect(consultantTargetView('search')).toBe('opportunities');
+    });
+  });
 });
+
