@@ -22,6 +22,16 @@ export interface RecruiterContactJob {
   readonly finishedAt: string | null;
 }
 
+export interface RecruiterSourceReceipt {
+  readonly receiptId: string;
+  readonly source: string;
+  readonly method: string;
+  readonly observedAt: string;
+  readonly confidence: number;
+  readonly sourceUrl?: string;
+  readonly verifiedAt?: string;
+}
+
 export interface RecruiterContact {
   readonly id: string;
   readonly vacancyId: string;
@@ -38,6 +48,7 @@ export interface RecruiterContact {
   readonly twitterUrl: string | null;
   readonly sourceType: string;
   readonly confidence: number;
+  readonly sourceReceipt?: RecruiterSourceReceipt;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -58,6 +69,7 @@ export interface RecruiterContactInput {
   readonly twitterUrl?: string | null;
   readonly sourceType: string;
   readonly confidence: number;
+  readonly sourceReceipt?: RecruiterSourceReceipt;
   readonly createdAt?: string;
   readonly updatedAt?: string;
 }

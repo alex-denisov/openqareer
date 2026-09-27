@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS recruiter_contacts (
   twitter_url TEXT,
   source_type TEXT NOT NULL,
   confidence REAL NOT NULL,
+  source_receipt TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 ) STRICT;
@@ -69,6 +70,7 @@ interface RecruiterContactRow {
   twitter_url: string | null;
   source_type: string;
   confidence: number;
+  source_receipt: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -105,6 +107,7 @@ function toContact(row: RecruiterContactRow): RecruiterContact {
     twitterUrl: row.twitter_url,
     sourceType: row.source_type,
     confidence: Number(row.confidence),
+    sourceReceipt: row.source_receipt ? JSON.parse(row.source_receipt) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -140,6 +143,7 @@ function contactToParams(contact: RecruiterContact, vacancyId: string): SQLInput
     contact.twitterUrl ?? null,
     contact.sourceType,
     contact.confidence,
+    contact.sourceReceipt ? JSON.stringify(contact.sourceReceipt) : null,
     contact.createdAt,
     contact.updatedAt,
   ];
@@ -170,6 +174,11 @@ export class SqliteRecruiterContactsRepository {
         "ALTER TABLE recruiter_contacts ADD COLUMN candidate_id TEXT NOT NULL DEFAULT ''",
       );
     }
+    if (!columns.some((column) => column.name === 'source_receipt')) {
+      this.database.exec(
+        'ALTER TABLE recruiter_contacts ADD COLUMN source_receipt TEXT',
+      );
+    }
     this.ensureCandidateForeignKey();
   }
 
@@ -191,12 +200,12 @@ export class SqliteRecruiterContactsRepository {
         id, candidate_id, vacancy_id, company_name, full_name, role_title,
         email, email_status, phone, telegram, whatsapp,
         linkedin_url, github_url, twitter_url, source_type,
-        confidence, created_at, updated_at
+        confidence, source_receipt, created_at, updated_at
       )
       SELECT old.id, old.candidate_id, old.vacancy_id, old.company_name,
         old.full_name, old.role_title, old.email, old.email_status, old.phone,
         old.telegram, old.whatsapp, old.linkedin_url, old.github_url,
-        old.twitter_url, old.source_type, old.confidence, old.created_at,
+        old.twitter_url, old.source_type, old.confidence, old.source_receipt, old.created_at,
         old.updated_at
       FROM recruiter_contacts_legacy_fk old
       WHERE EXISTS (SELECT 1 FROM candidates c WHERE c.id = old.candidate_id)
@@ -223,8 +232,8 @@ export class SqliteRecruiterContactsRepository {
         id, candidate_id, vacancy_id, company_name, full_name, role_title,
         email, email_status, phone, telegram, whatsapp,
         linkedin_url, github_url, twitter_url, source_type,
-        confidence, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        confidence, source_receipt, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.database.exec('BEGIN TRANSACTION');
@@ -251,7 +260,7 @@ export class SqliteRecruiterContactsRepository {
         id, candidate_id, vacancy_id, company_name, full_name, role_title,
         email, email_status, phone, telegram, whatsapp,
         linkedin_url, github_url, twitter_url, source_type,
-        confidence, created_at, updated_at
+        confidence, source_receipt, created_at, updated_at
       FROM recruiter_contacts
       WHERE candidate_id = ? AND vacancy_id = ?
       ORDER BY confidence DESC, created_at ASC

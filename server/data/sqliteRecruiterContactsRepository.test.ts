@@ -63,6 +63,31 @@ describe('SqliteRecruiterContactsRepository', () => {
     expect(retrieved[1]).toEqual(sampleContact2);
   });
 
+  it('сохраняет и извлекает внутреннюю квитанцию источника (sourceReceipt)', () => {
+    const { repo } = createRepo();
+    const contactWithReceipt: RecruiterContact = {
+      ...sampleContact1,
+      id: 'rc-receipt',
+      sourceType: 'linkedin_pool',
+      sourceReceipt: {
+        receiptId: 'rcpt-100',
+        source: 'linkedin_pool',
+        method: 'pool_session',
+        observedAt: '2026-09-27T12:00:00.000Z',
+        confidence: 0.95,
+        sourceUrl: 'https://linkedin.com/in/elena-smirnova',
+      },
+    };
+
+    repo.saveContacts('candidate-1', 'vac-101', [contactWithReceipt]);
+    const retrieved = repo.getContactsByVacancyId('candidate-1', 'vac-101');
+    expect(retrieved).toHaveLength(1);
+    expect(retrieved[0].sourceReceipt).toBeDefined();
+    expect(retrieved[0].sourceReceipt?.receiptId).toBe('rcpt-100');
+    expect(retrieved[0].sourceReceipt?.source).toBe('linkedin_pool');
+    expect(retrieved[0].sourceReceipt?.method).toBe('pool_session');
+  });
+
   it('возвращает пустой массив для вакансии без контактов', () => {
     const { repo } = createRepo();
     const retrieved = repo.getContactsByVacancyId('non-existent');

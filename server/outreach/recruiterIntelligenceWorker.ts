@@ -1,4 +1,5 @@
 import type { SqliteRecruiterContactsRepository } from '../data/sqliteRecruiterContactsRepository';
+import type { SqliteLinkedinPoolRepository } from '../linkedinPool/sqliteLinkedinPoolRepository';
 import { discoverRecruiterContacts } from './recruiterIntelligenceService';
 import type { UnifiedVacancyInput } from './recruiterIntelligenceService';
 
@@ -6,6 +7,7 @@ export interface RecruiterIntelligenceWorkerOptions {
   readonly repository: SqliteRecruiterContactsRepository;
   readonly resolveVacancy: (vacancyId: string) => UnifiedVacancyInput;
   readonly maxJobs?: number;
+  readonly linkedinPool?: SqliteLinkedinPoolRepository;
 }
 
 /** Processes a bounded durable batch outside the request handler. */
@@ -20,7 +22,9 @@ export async function runRecruiterIntelligenceJobs(
     try {
       const vacancy = options.resolveVacancy(job.vacancyId);
       if (!vacancy.title) throw new Error('vacancy_not_found');
-      const contacts = await discoverRecruiterContacts(vacancy);
+      const contacts = await discoverRecruiterContacts(vacancy, {
+        linkedinPool: options.linkedinPool,
+      });
       options.repository.saveContacts(job.candidateId, job.vacancyId, contacts);
       options.repository.finishJob(job.id, 'ready');
       completed += 1;
