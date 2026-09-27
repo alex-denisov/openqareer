@@ -187,6 +187,9 @@ function SavedSearchesToggleRow({
           <Plus size={12} aria-hidden="true" />
         </button>
       </CareerTooltip>
+      {subscriptions.length === 0 && !createOpen ? (
+        <p className="career-cabinet-tag">Сохранённый запрос повторяется по расписанию.</p>
+      ) : null}
     </div>
   );
 }
@@ -208,9 +211,8 @@ function SavedSearchesContent({
   readonly onShowDetails: () => void;
   readonly onCreated: () => void;
 }) {
-  if (subscriptions.length === 0 && !createOpen) {
-    return <p className="career-cabinet-tag">Сохранённый запрос повторяется по расписанию.</p>;
-  }
+  // The empty-state hint sits in the toggle row, keeping the block one line tall.
+  if (subscriptions.length === 0 && !createOpen) return null;
   return (
     <>
       {subscriptions.length > 0 && !detailsOpen && !createOpen ? (

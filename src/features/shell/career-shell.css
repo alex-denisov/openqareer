@@ -13201,6 +13201,11 @@
     text-align: left;
     white-space: normal;
   }
+
+  /* The + button's tooltip and label carry the hint; the list stays above the fold. */
+  .vacancies-screen .career-vacancy-saved .career-vacancy-chips .career-cabinet-tag {
+    display: none;
+  }
 }
 
 .vacancies-btn-secondary {
