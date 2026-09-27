@@ -53,7 +53,7 @@ export function buildSemanticMatchQuery(
   input: SemanticMatchQueryInput,
 ): { sql: string; params: SQLInputValue[] } {
   const levelFilter = input.levelRank === null ? '' : 'AND s.level_rank BETWEEN ? AND ?';
-  const excludedFunctions = (['sales', 'marketing', 'product', 'finance', 'project-mgmt', 'education'] as const).filter(
+  const excludedFunctions = (['sales', 'marketing', 'finance', 'project-mgmt', 'education'] as const).filter(
     (code) => !input.functionCodes.includes(code),
   );
   const excludedCommercialFunctions = excludedFunctions.filter(

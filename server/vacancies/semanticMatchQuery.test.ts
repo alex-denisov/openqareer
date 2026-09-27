@@ -151,7 +151,7 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     expect(combinedRows.map((row) => JSON.parse(row.payload).id)).toContain('marketing-ops');
   });
 
-  it('filters adjacent product, finance, PMO and education functions from a Tech/Ops campaign', () => {
+  it('filters finance, PMO and education but keeps Eng & Product composites in a Tech/Ops campaign', () => {
     seed('ops-role', 'ops', 3, 1_000);
     for (const [id, adjacent] of [
       ['product-ops', 'product'],
@@ -175,6 +175,7 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     });
 
     const rows = database.prepare(sql).all(...params) as Array<{ payload: string }>;
-    expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual(['ops-role']);
+    // «VP Engineering & Product» — целевая роль для CTO, продукт не исключаем.
+    expect(rows.map((row) => JSON.parse(row.payload).id).sort()).toEqual(['ops-role', 'product-ops']);
   });
 });
