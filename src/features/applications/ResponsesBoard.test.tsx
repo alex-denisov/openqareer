@@ -126,6 +126,20 @@ describe('ResponsesBoard columns', () => {
     expect(html).toContain('Повторить');
   });
 
+  it('explains a conflicting edit and offers to refresh the card', () => {
+    const state: UseApplications = {
+      ...readyState([application({ id: 'a1' })]),
+      conflicts: new Set(['a1']),
+    };
+    const html = renderToStaticMarkup(
+      <ResponsesBoard state={state} onOpenVacancies={() => {}} />,
+    );
+
+    expect(html).toContain('Карточку изменили в другом окне.');
+    expect(html).toContain('Ваши изменения не сохранены.');
+    expect(html).toContain('Обновить карточку');
+  });
+
   it('renders a hidden-company card without leaking the name', () => {
     const applications = [
       application({

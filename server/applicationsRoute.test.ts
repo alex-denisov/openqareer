@@ -120,6 +120,7 @@ describe('applications route · CRUD', () => {
     });
     expect(stale.statusCode).toBe(409);
     expect(stale.json().error.code).toBe('application_version_conflict');
+    expect(stale.json().error.details).toEqual({ currentVersion: 2 });
   });
 
   it('requires a candidate session for every verb', async () => {

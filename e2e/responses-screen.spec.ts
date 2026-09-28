@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
 
 /**
  * B251 S3 — экран «Отклики» (канбан пайплайна из макета
@@ -321,6 +322,66 @@ test.describe('B251 responses screen', () => {
     await expect(board).toContainText('Enterprise Architect, Senior Advisor');
     await expect(board).toContainText('Peraton');
     await expect(board).toContainText('компания скрыта');
+  });
+
+  test('refreshes a card after another window wins the version conflict', async ({
+    page,
+  }, testInfo) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    let changedElsewhere = false;
+    const latestApplications = APPLICATIONS.map((item) =>
+      item.id === 'a-1' ? application({ ...item, stage: 'responded', version: 2 }) : item,
+    );
+    await page.route('**/api/v1/candidate/applications**', async (route) => {
+      const request = route.request();
+      if (request.method() === 'PATCH') {
+        changedElsewhere = true;
+        await route.fulfill({
+          status: 409,
+          json: {
+            error: {
+              code: 'application_version_conflict',
+              message: 'Карточку изменили в другом окне. Обновите данные и повторите действие.',
+              details: { currentVersion: 2 },
+            },
+          },
+        });
+        return;
+      }
+      if (request.method() === 'GET') {
+        await route.fulfill({
+          json: { data: changedElsewhere ? latestApplications : APPLICATIONS },
+        });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openResponses(page);
+
+    const card = page.getByRole('article').filter({ hasText: 'Cloud & Infra Solution Architect' });
+    await card.getByRole('button', { name: 'Действия с карточкой' }).click();
+    await card.getByRole('combobox', { name: 'Этап' }).selectOption('responded');
+    await card.getByRole('button', { name: 'Сохранить этап' }).click();
+
+    const conflict = card.getByRole('alert');
+    await expect(conflict).toContainText('Карточку изменили в другом окне.');
+    await expect(conflict).toContainText('Ваши изменения не сохранены.');
+    await expect(conflict.getByRole('button', { name: 'Обновить карточку' })).toBeVisible();
+    await mkdir('output/playwright/B251', { recursive: true });
+    await page.screenshot({
+      path: `output/playwright/B251/conflict-${testInfo.project.name}.png`,
+      fullPage: true,
+    });
+
+    await conflict.getByRole('button', { name: 'Обновить карточку' }).click();
+    const updatedCard = page
+      .locator('.career-responses-column[aria-label="Ответ"] .career-responses-card')
+      .filter({ hasText: 'Cloud & Infra Solution Architect' });
+    await expect(updatedCard).toBeVisible();
+    await expect(updatedCard.getByRole('alert')).toHaveCount(0);
   });
 
   test('marks a sent follow-up from the response card and refreshes its deadline', async ({

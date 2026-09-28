@@ -190,7 +190,7 @@ export class SqliteApplicationRepository {
     const current = this.get(candidateId, id);
     if (!current) throw new ApplicationNotFoundError();
     if (current.version !== input.expectedVersion) {
-      throw new ApplicationVersionConflictError();
+      throw new ApplicationVersionConflictError(current.version);
     }
     const nextStage = input.stage ?? current.stage;
     const stageChanged = nextStage !== current.stage;
@@ -556,7 +556,11 @@ export class SqliteApplicationRepository {
         id,
         input.expectedVersion,
       );
-    if (result.changes !== 1) throw new ApplicationVersionConflictError();
+    if (result.changes !== 1) {
+      const latest = this.get(candidateId, id);
+      if (!latest) throw new ApplicationNotFoundError();
+      throw new ApplicationVersionConflictError(latest.version);
+    }
     if (stageChanged) {
       this.insertEvent(candidateId, id, {
         kind: 'stage',

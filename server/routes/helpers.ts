@@ -11,6 +11,7 @@ interface ErrorBody {
     message: string;
     requestId: string;
     retryable: boolean;
+    details?: Record<string, unknown>;
     /**
      * Per-field messages for form submissions. Without these a rejected
      * registration collapses into one anonymous line and the candidate cannot
@@ -40,6 +41,7 @@ export function sendError(
   message: string,
   retryable: boolean,
   fields?: Record<string, string>,
+  details?: Record<string, unknown>,
 ): FastifyReply {
   const body: ErrorBody = {
     error: {
@@ -48,6 +50,7 @@ export function sendError(
       requestId: request.id,
       retryable,
       ...(fields && Object.keys(fields).length > 0 ? { fields } : {}),
+      ...(details && Object.keys(details).length > 0 ? { details } : {}),
     },
   };
   return reply.code(statusCode).send(body);
