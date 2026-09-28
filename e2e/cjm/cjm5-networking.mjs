@@ -40,7 +40,11 @@ export async function runCjm5(outDir, sharedStatePath) {
     await page.waitForTimeout(4000);
     networkingStep[vp] = {
       opened: true,
-      title: await dialog.locator('h2').first().innerText().catch(() => null),
+      title: await dialog
+        .locator('h2')
+        .first()
+        .innerText()
+        .catch(() => null),
       contactCategories: await dialog.locator('[role="tab"]').allInnerTexts(),
       contactCount: await dialog.locator('.career-outreach-list [role="button"]').count(),
       canCopy: await dialog.getByRole('button', { name: /Скопировать текст/u }).count(),
