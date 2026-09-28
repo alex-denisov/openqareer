@@ -58,8 +58,6 @@ export type {
   VacancySourceRegistryEntry,
 } from './cabinetTypes';
 
-
-
 export interface AuthUser {
   username: string;
   email: string | null;
@@ -236,6 +234,11 @@ export interface CoachResult {
     expectedSignal: string;
     measureAfter: string;
     risk: 'read_only' | 'candidate_data_write' | 'external_side_effect';
+    resumeRevision?: {
+      section: 'headline' | 'about' | 'experience';
+      experienceId: string | null;
+      proposedText: string;
+    } | null;
   }>;
   intelligence?: {
     orchestrationRevision: string;
@@ -278,6 +281,7 @@ export interface CareerCommand {
   commandId: string;
   capability: CoachResult['actionProposals'][number]['kind'];
   status: CareerCommandStatus;
+  profileRevisionReverted?: boolean;
   proposal: CoachResult['actionProposals'][number];
   provenance?: {
     strategyDecisionId: string;
@@ -300,6 +304,7 @@ export interface CareerCommand {
     connector: {
       id: string;
       transport:
+        | 'internal'
         | 'official_api'
         | 'public_feed'
         | 'public_http_parser'
@@ -451,7 +456,6 @@ export interface DisconnectedConnection {
   importedData: 'retained';
 }
 
-
 export async function disconnectConnection(
   platform: 'linkedin' | 'hh',
 ): Promise<DisconnectedConnection> {
@@ -482,7 +486,6 @@ export async function putCandidateWorkspace(
   });
   return readDataObject<WorkspaceInput>(response);
 }
-
 
 export async function getAccount(): Promise<AccountSnapshot> {
   const response = await apiFetch('/api/v1/account');
@@ -704,73 +707,21 @@ export async function sendCoachTurn(input: {
     // Older immutable releases return the complete result; preserve compatibility.
     if (typeof data.message === 'string') return data;
     if (data.status !== 'pending' && data.status !== 'completed') {
-      throw new CoachApiErrorClass('Сервис вернул ответ неожиданной формы.', 'malformed_response', true);
+      throw new CoachApiErrorClass(
+        'Сервис вернул ответ неожиданной формы.',
+        'malformed_response',
+        true,
+      );
     }
   } catch (error) {
-    if (!(error instanceof CoachApiErrorClass) ||
-      !['network_error', 'malformed_response'].includes(error.code)) throw error;
+    if (
+      !(error instanceof CoachApiErrorClass) ||
+      !['network_error', 'malformed_response'].includes(error.code)
+    )
+      throw error;
     // The POST may have succeeded: read the saved operation, never generate again.
   }
   return receiveCoachResult<CoachResult>(key);
-}
-
-export async function prepareCareerCommand(input: {
-  turnIdempotencyKey: string;
-  proposalIndex: number;
-  idempotencyKey?: string;
-  executionTarget?: unknown;
-}): Promise<CareerCommand> {
-  const response = await apiFetch('/api/v1/candidate/career-commands', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID(),
-    },
-    body: JSON.stringify({
-      turnIdempotencyKey: input.turnIdempotencyKey,
-      proposalIndex: input.proposalIndex,
-      ...(input.executionTarget ? { executionTarget: input.executionTarget } : {}),
-    }),
-  });
-  return readDataObject(response);
-}
-
-export async function approveCareerCommand(
-  commandId: string,
-  input: { idempotencyKey?: string } = {},
-): Promise<CareerCommand> {
-  const response = await apiFetch(
-    `/api/v1/candidate/career-commands/${encodeURIComponent(commandId)}/approvals`,
-    {
-      method: 'POST',
-      headers: {
-        'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID(),
-      },
-    },
-  );
-  return readDataObject(response);
-}
-
-export async function revertCareerCommand(commandId: string): Promise<CareerCommand> {
-  const response = await apiFetch(
-    `/api/v1/candidate/career-commands/${encodeURIComponent(commandId)}/revert`,
-    {
-      method: 'POST',
-    },
-  );
-  return readDataObject(response);
-}
-
-export async function getCareerCommand(commandId: string): Promise<CareerCommand> {
-  const response = await apiFetch(
-    `/api/v1/candidate/career-commands/${encodeURIComponent(commandId)}`,
-  );
-  return readDataObject(response);
-}
-
-export async function getCareerCommands(): Promise<CareerCommand[]> {
-  const response = await apiFetch('/api/v1/candidate/career-commands');
-  return readDataArray<CareerCommand>(response);
 }
 
 export async function changeMemory(
@@ -786,7 +737,6 @@ export async function changeMemory(
     await throwApiError(response);
   }
 }
-
 
 /**
  * One decision over a whole imported batch. Confirming thirty-odd facts one
@@ -808,15 +758,12 @@ export async function reviewMemories(
   return ((await response.json()) as { data: { reviewed: number } }).data.reviewed;
 }
 
-
 /**
  * Гипотезы роли считает сервер (B180, срез 1б): требования, на которых они
  * строятся, страница подбора вырезает ради байтового бюджета (INC-029), и в
  * браузере считать было не из чего. Ответ — до трёх ролей, сотни байт.
  */
-export async function getRoleHypotheses(
-  signal?: AbortSignal,
-): Promise<ProposedRole[]> {
+export async function getRoleHypotheses(signal?: AbortSignal): Promise<ProposedRole[]> {
   const response = await apiFetch('/api/v1/candidate/role-hypotheses', { signal });
   if (!response.ok) {
     await throwApiError(response);
@@ -852,9 +799,7 @@ export interface WorkPreferencesRead {
  * Продукт ничего не отправляет за кандидата: он записывает, что кандидат ушёл
  * на площадку и что он сам подтвердил отклик.
  */
-export async function getVacancyApplications(
-  signal?: AbortSignal,
-): Promise<VacancyApplication[]> {
+export async function getVacancyApplications(signal?: AbortSignal): Promise<VacancyApplication[]> {
   const response = await apiFetch('/api/v1/candidate/vacancy-applications', { signal });
   return readDataArray<VacancyApplication>(response);
 }
@@ -872,9 +817,7 @@ export async function recordVacancyApplication(input: {
   return readDataObject<VacancyApplication>(response);
 }
 
-export async function getWorkPreferences(
-  signal?: AbortSignal,
-): Promise<WorkPreferencesRead> {
+export async function getWorkPreferences(signal?: AbortSignal): Promise<WorkPreferencesRead> {
   const response = await apiFetch('/api/v1/candidate/work-preferences', { signal });
   return readDataObject<WorkPreferencesRead>(response);
 }
@@ -896,25 +839,21 @@ export async function submitWorkPreferences(input: {
  *
  * `null` — законный ответ: кандидат ещё не выбирал, и это не ошибка.
  */
-export async function getCareerStrategy(
-  signal?: AbortSignal,
-): Promise<CareerStrategy | null> {
+export async function getCareerStrategy(signal?: AbortSignal): Promise<CareerStrategy | null> {
   const response = await apiFetch('/api/v1/candidate/strategy', { signal });
   return readData<CareerStrategy | null>(response);
 }
 
-/**
- * Смена роли обнуляет накопленную воронку, поэтому причина обязательна — её
- * требует сервер, а не только экран.
- */
+/** Смена роли обнуляет накопленную воронку, поэтому причину требует сервер. */
 export async function chooseCareerStrategyRole(input: {
   readonly title: string;
   readonly reason?: string;
 }): Promise<CareerStrategy> {
-  const response = await apiFetch('/api/v1/candidate/strategy', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-  return readDataObject<CareerStrategy>(response);
+  return readDataObject<CareerStrategy>(
+    await apiFetch('/api/v1/candidate/strategy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+  );
 }

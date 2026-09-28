@@ -1,8 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
-import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
 import { MIGRATION_37 } from './profileRevisionSchema';
-
-export type ProfileRevisionRepoOptions = DatabaseSync | { databasePath: string };
+import type { SealedText } from './sealedText';
 
 export interface ProfileRevisionRecord {
   readonly id: string;
@@ -22,37 +20,17 @@ interface RevisionRow {
   command_id: string;
   section: 'headline' | 'about' | 'experience';
   experience_id: string | null;
-  previous_text: string;
-  applied_text: string;
+  previous_text_cipher: string;
+  applied_text_cipher: string;
   created_at: string;
   reverted_at: string | null;
 }
 
-function mapRow(row: RevisionRow): ProfileRevisionRecord {
-  return {
-    id: row.id,
-    candidateId: row.candidate_id,
-    commandId: row.command_id,
-    section: row.section,
-    experienceId: row.experience_id,
-    previousText: row.previous_text,
-    appliedText: row.applied_text,
-    createdAt: row.created_at,
-    revertedAt: row.reverted_at,
-  };
-}
-
 export class SqliteProfileRevisionRepository {
-  private readonly database: DatabaseSync;
-
-  constructor(options: ProfileRevisionRepoOptions) {
-    if (options instanceof DatabaseSync) {
-      this.database = options;
-    } else {
-      this.database = new DatabaseSync(options.databasePath);
-      this.database.exec('PRAGMA journal_mode = WAL;');
-      applySqliteBusyTimeout(this.database);
-    }
+  constructor(
+    private readonly database: DatabaseSync,
+    private readonly sealedText: SealedText,
+  ) {
     this.database.exec(MIGRATION_37);
   }
 
@@ -68,7 +46,7 @@ export class SqliteProfileRevisionRepository {
   }): ProfileRevisionRecord {
     this.database
       .prepare(
-        `INSERT INTO profile_revisions (id, candidate_id, command_id, section, experience_id, previous_text, applied_text, created_at, reverted_at)
+        `INSERT INTO profile_revisions (id, candidate_id, command_id, section, experience_id, previous_text_cipher, applied_text_cipher, created_at, reverted_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       )
       .run(
@@ -77,8 +55,8 @@ export class SqliteProfileRevisionRepository {
         input.commandId,
         input.section,
         input.experienceId ?? null,
-        input.previousText,
-        input.appliedText,
+        this.seal(input.candidateId, input.id, 'previous', input.previousText),
+        this.seal(input.candidateId, input.id, 'applied', input.appliedText),
         input.createdAt,
       );
     return {
@@ -91,24 +69,24 @@ export class SqliteProfileRevisionRepository {
   listRevisions(candidateId: string): ProfileRevisionRecord[] {
     const rows = this.database
       .prepare(
-        `SELECT id, candidate_id, command_id, section, experience_id, previous_text, applied_text, created_at, reverted_at
+        `SELECT id, candidate_id, command_id, section, experience_id, previous_text_cipher, applied_text_cipher, created_at, reverted_at
          FROM profile_revisions
          WHERE candidate_id = ?
          ORDER BY created_at DESC`,
       )
       .all(candidateId) as unknown as RevisionRow[];
-    return rows.map(mapRow);
+    return rows.map((row) => this.mapRow(row));
   }
 
   getRevisionByCommandId(candidateId: string, commandId: string): ProfileRevisionRecord | null {
     const row = this.database
       .prepare(
-        `SELECT id, candidate_id, command_id, section, experience_id, previous_text, applied_text, created_at, reverted_at
+        `SELECT id, candidate_id, command_id, section, experience_id, previous_text_cipher, applied_text_cipher, created_at, reverted_at
          FROM profile_revisions
          WHERE candidate_id = ? AND command_id = ?`,
       )
       .get(candidateId, commandId) as unknown as RevisionRow | undefined;
-    return row ? mapRow(row) : null;
+    return row ? this.mapRow(row) : null;
   }
 
   markReverted(candidateId: string, commandId: string, revertedAt: string): void {
@@ -121,7 +99,35 @@ export class SqliteProfileRevisionRepository {
       .run(revertedAt, candidateId, commandId);
   }
 
-  close(): void {
-    this.database.close();
+  private mapRow(row: RevisionRow): ProfileRevisionRecord {
+    return {
+      id: row.id,
+      candidateId: row.candidate_id,
+      commandId: row.command_id,
+      section: row.section,
+      experienceId: row.experience_id,
+      previousText: this.sealedText.open(
+        row.previous_text_cipher,
+        profileRevisionAssociatedData(row.candidate_id, row.id, 'previous'),
+      ),
+      appliedText: this.sealedText.open(
+        row.applied_text_cipher,
+        profileRevisionAssociatedData(row.candidate_id, row.id, 'applied'),
+      ),
+      createdAt: row.created_at,
+      revertedAt: row.reverted_at,
+    };
   }
+
+  private seal(candidateId: string, id: string, field: 'previous' | 'applied', value: string) {
+    return this.sealedText.seal(value, profileRevisionAssociatedData(candidateId, id, field));
+  }
+}
+
+function profileRevisionAssociatedData(
+  candidateId: string,
+  revisionId: string,
+  field: 'previous' | 'applied',
+): string {
+  return `candidate:${candidateId}:profile-revision:${revisionId}:${field}`;
 }

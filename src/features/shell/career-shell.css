@@ -20,6 +20,7 @@
   --career-radius-sm: 10px;
   --career-radius-md: 16px;
   --career-radius-lg: 24px;
+  --career-border-width: 1px;
   /* B232 — одна шкала текста на весь кабинет. Шесть кеглей, пол 13 px:
      аудит 2026-09-20 насчитал 59 значений font-size и 40–55 % текста мельче
      12 px. Литерал в font-size запрещён контрактом (cssContract.test.ts). */
@@ -1120,7 +1121,7 @@
   inline-size: max-content;
   max-inline-size: min(var(--career-tooltip-max), calc(100vw - (var(--career-space-4) * 2)));
   padding: var(--career-space-2) var(--career-space-3);
-  border: 1px solid var(--career-line-strong);
+  border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
   color: var(--career-text);
   background: var(--career-surface-raised);
@@ -1277,7 +1278,7 @@
   height: 34px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--career-line);
+  border: var(--career-border-width) solid var(--career-line);
   border-radius: 50%;
   color: var(--career-text-dim);
   font-family: var(--font-mono);
@@ -12105,22 +12106,22 @@
    ============================================================================ */
 
 .career-consultant-suggestion {
-  margin-top: 14px;
-  padding: 14px 16px;
+  margin-top: var(--career-space-3);
+  padding: var(--career-space-3) var(--career-space-4);
   background: var(--career-surface-raised);
   border: 1px solid var(--career-line-strong);
-  border-left: 3px solid var(--career-accent);
-  border-radius: 8px;
+  border-inline-start: var(--career-space-1) solid var(--career-accent);
+  border-radius: var(--career-radius-sm);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--career-space-3);
 }
 
 .career-consultant-suggestion-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--career-space-2);
   flex-wrap: wrap;
 }
 
@@ -12133,7 +12134,7 @@
 }
 
 .career-consultant-suggestion-rationale {
-  font-size: 13px;
+  font-size: var(--career-text-xs);
   color: var(--career-text-main);
   font-weight: 500;
 }
@@ -12141,11 +12142,11 @@
 .career-consultant-suggestion-comparison {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: var(--career-space-3);
   background: var(--career-surface-base);
   border: 1px solid var(--career-line);
-  border-radius: 6px;
-  padding: 12px;
+  border-radius: var(--career-radius-sm);
+  padding: var(--career-space-3);
 }
 
 @media (max-width: 600px) {
@@ -12157,11 +12158,11 @@
 .career-consultant-suggestion-col {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--career-space-1);
 }
 
 .career-consultant-suggestion-col-label {
-  font-size: 11px;
+  font-size: var(--career-text-aux);
   font-weight: 600;
   color: var(--career-text-muted);
   text-transform: uppercase;
@@ -12172,7 +12173,7 @@
   color: var(--career-text-soft);
   text-decoration: line-through;
   opacity: 0.8;
-  font-size: 13px;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
   white-space: pre-wrap;
   margin: 0;
@@ -12181,7 +12182,7 @@
 .career-consultant-suggestion-col.is-proposed .career-consultant-suggestion-text {
   color: var(--career-text-main);
   font-weight: 500;
-  font-size: 13px;
+  font-size: var(--career-text-xs);
   line-height: 1.45;
   white-space: pre-wrap;
   margin: 0;
@@ -12190,13 +12191,13 @@
 .career-consultant-suggestion-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--career-space-2);
 }
 
 .career-consultant-suggestion-status {
-  font-size: 13px;
+  font-size: var(--career-text-xs);
   font-weight: 600;
-  color: var(--career-positive);
+  color: var(--career-success);
 }
 
 /* ============================================================================

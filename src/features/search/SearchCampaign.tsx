@@ -6,11 +6,8 @@ import type { CareerStrategy } from '../../../shared/careerStrategy';
 import { campaignRoleLine } from '../cabinet/careerStrategyView';
 import { StrategyReviewPanel } from './StrategyReviewPanel';
 import type { CareerCommand } from '../coach/coachApi';
-import {
-  getCareerCommands,
-  getMatchedVacancyPage,
-  getVacancyApplications,
-} from '../coach/coachApi';
+import { getCareerCommands } from '../coach/careerCommandApi';
+import { getMatchedVacancyPage, getVacancyApplications } from '../coach/coachApi';
 import type { VacancyApplication } from '../../../shared/vacancyApplication';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { collectMatchedPool, withDeadline } from '../vacancies/vacancyRead';
@@ -158,7 +155,7 @@ export function SearchCampaign({
 function FunnelPanel({ campaign }: { campaign: SearchCampaignView }) {
   return (
     <section className="career-home-panel">
-        <header>
+      <header>
         <h3>Воронка</h3>
         <span className="career-cabinet-tag">первые три ступени — по вашим действиям здесь</span>
       </header>
@@ -168,9 +165,7 @@ function FunnelPanel({ campaign }: { campaign: SearchCampaignView }) {
             <span className="career-funnel-value">
               {step.value === undefined ? <EyeSlash size={16} aria-hidden="true" /> : step.value}
             </span>
-            <span className="career-funnel-label">
-              {step.label}
-            </span>
+            <span className="career-funnel-label">{step.label}</span>
             {step.value === undefined ? (
               <small className="career-funnel-untracked-label">не отслеживаем</small>
             ) : null}
@@ -178,8 +173,8 @@ function FunnelPanel({ campaign }: { campaign: SearchCampaignView }) {
         ))}
       </ol>
       <p className="career-cabinet-tag">
-        Дальше отклик живёт на площадке и в почте работодателя — они нам этого не сообщают,
-        поэтому просмотры, ответы и интервью не считаем и нулём не показываем.
+        Дальше отклик живёт на площадке и в почте работодателя — они нам этого не сообщают, поэтому
+        просмотры, ответы и интервью не считаем и нулём не показываем.
       </p>
     </section>
   );

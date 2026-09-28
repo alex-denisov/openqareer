@@ -1,12 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
-import type { CareerActionProposal } from './domain/coach';
+import { describe, expect, it, vi } from 'vitest';
+import type { CareerActionProposal, CoachTurnInput } from './domain/coach';
 import type { CoachProvider } from './providers/coachProvider';
-import { createApp, candidateAuthorization, successProvider } from './appTestHarness';
+import { EMPTY_RESUME_DRAFT } from './domain/resumeDraft';
+import { createApp, candidateAuthorization, stores, successProvider } from './appTestHarness';
 
-function providerWithProposals(proposals: CareerActionProposal[]): CoachProvider {
+function providerWithProposals(
+  proposals: CareerActionProposal[],
+  onInput?: (input: CoachTurnInput) => void,
+): CoachProvider {
   return {
     async createTurn(input, idempotencyKey) {
+      onInput?.(input);
       const turn = await successProvider.createTurn(input, idempotencyKey);
       return {
         ...turn,
@@ -31,6 +36,11 @@ describe('resume.revise career command (C58)', () => {
       expectedSignal: 'Сильный профиль',
       measureAfter: '2026-10-01',
       risk: 'candidate_data_write',
+      resumeRevision: {
+        section: 'about',
+        experienceId: null,
+        proposedText: 'Выдуманный текст',
+      },
     };
     const app = await createApp(providerWithProposals([proposal]));
     const authorization = candidateAuthorization(app);
@@ -52,14 +62,7 @@ describe('resume.revise career command (C58)', () => {
         origin: 'http://localhost:3000',
         'idempotency-key': commandId,
       },
-      payload: {
-        turnIdempotencyKey,
-        proposalIndex: 0,
-        executionTarget: {
-          section: 'about',
-          proposedText: 'Выдуманный текст',
-        },
-      },
+      payload: { turnIdempotencyKey, proposalIndex: 0 },
     });
 
     expect(response.statusCode).toBe(422);
@@ -72,20 +75,64 @@ describe('resume.revise career command (C58)', () => {
     const proposal: CareerActionProposal = {
       kind: 'resume.revise',
       objective: 'Сформулировать блок О себе',
-      evidenceRefs: [messageId],
+      evidenceRefs: ['memory:fact-about-1'],
       acceptanceCriteria: ['Текст обновлён'],
       expectedSignal: 'Готово',
       measureAfter: '2026-10-01',
       risk: 'candidate_data_write',
+      resumeRevision: {
+        section: 'about',
+        experienceId: null,
+        proposedText: '15 лет опыта в финтех-платформах.',
+      },
     };
-    const app = await createApp(providerWithProposals([proposal]));
+    let observedResumeContext: CoachTurnInput['resumeContext'];
+    const app = await createApp(
+      providerWithProposals([proposal], (input) => {
+        observedResumeContext = input.resumeContext;
+      }),
+    );
     const authorization = candidateAuthorization(app);
+
+    const snapshot = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/me',
+      headers: { authorization },
+    });
+    const candidateId = snapshot.json().data.candidate.id as string;
+    const store = stores[stores.length - 1];
+    store.importResumeEvidence(candidateId, {
+      sourceLabel: 'Факт из профиля кандидата',
+      entries: [
+        {
+          memoryId: 'fact-about-1',
+          domain: 'responsibility',
+          statement: '15 лет строю платформы в финтехе.',
+        },
+      ],
+    });
+    store.saveResumeDraft(
+      candidateId,
+      {
+        ...EMPTY_RESUME_DRAFT,
+        candidate: { ...EMPTY_RESUME_DRAFT.candidate, about: 'Руководила платформами в финтехе.' },
+      },
+      [],
+    );
 
     await app.inject({
       method: 'POST',
       url: '/api/v1/coach/turn',
       headers: { authorization, 'idempotency-key': turnIdempotencyKey },
-      payload: { messageId, content: 'Обнови О себе' },
+      payload: {
+        messageId,
+        content: 'Обнови раздел «Обо мне»; 15 лет строю платформы в финтехе.',
+      },
+    });
+    expect(observedResumeContext).toMatchObject({
+      about: 'Руководила платформами в финтехе.',
+      headline: null,
+      experiences: [],
     });
 
     const commandId = randomUUID();
@@ -97,20 +144,18 @@ describe('resume.revise career command (C58)', () => {
         origin: 'http://localhost:3000',
         'idempotency-key': commandId,
       },
-      payload: {
-        turnIdempotencyKey,
-        proposalIndex: 0,
-        executionTarget: {
-          section: 'about',
-          proposedText: '15 лет опыта в финтех-платформах.',
-        },
-      },
+      payload: { turnIdempotencyKey, proposalIndex: 0 },
     });
 
     expect(createRes.statusCode).toBe(201);
     const command = createRes.json().data;
     expect(command.status).toBe('awaiting_approval');
     expect(command.capability).toBe('resume.revise');
+    expect(command.executionTarget).toMatchObject({
+      section: 'about',
+      currentText: 'Руководила платформами в финтехе.',
+      proposedText: '15 лет опыта в финтех-платформах.',
+    });
 
     // До одобрения профиль кандидата НЕ изменён
     const beforeApproval = await app.inject({
@@ -118,10 +163,37 @@ describe('resume.revise career command (C58)', () => {
       url: '/api/v1/candidate/resume',
       headers: { authorization },
     });
-    expect(beforeApproval.json().data?.draft?.candidate?.about ?? '').not.toContain('15 лет опыта в финтех-платформах.');
+    expect(beforeApproval.json().data?.draft?.candidate?.about).toBe(
+      'Руководила платформами в финтехе.',
+    );
 
     // Кандидат нажимает «Принять» (одобряет команду)
     const approvalId = randomUUID();
+    const revisionRepo = store.profileRevisionRepo;
+    const recordRevision = vi.spyOn(revisionRepo, 'recordRevision').mockImplementation(() => {
+      throw new Error('journal write failed');
+    });
+    const failedApply = await app.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/career-commands/${commandId}/approvals`,
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': approvalId,
+      },
+    });
+
+    expect(failedApply.statusCode).toBe(500);
+    const unchangedAfterFailure = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/resume',
+      headers: { authorization },
+    });
+    expect(unchangedAfterFailure.json().data.draft.candidate.about).toBe(
+      'Руководила платформами в финтехе.',
+    );
+    recordRevision.mockRestore();
+
     const approveRes = await app.inject({
       method: 'POST',
       url: `/api/v1/candidate/career-commands/${commandId}/approvals`,
@@ -132,7 +204,7 @@ describe('resume.revise career command (C58)', () => {
       },
     });
 
-    expect(approveRes.statusCode).toBe(200);
+    expect(approveRes.statusCode, JSON.stringify(approveRes.json())).toBe(200);
     expect(approveRes.json().data.status).toBe('completed_with_receipt');
 
     // После одобрения профиль обновлён
@@ -142,6 +214,17 @@ describe('resume.revise career command (C58)', () => {
       headers: { authorization },
     });
     expect(afterApproval.json().data.draft.candidate.about).toBe('15 лет опыта в финтех-платформах.');
+    expect(store.getSnapshot(candidateId).memory.find((item) => item.id === 'fact-about-1')?.status).toBe(
+      'confirmed',
+    );
+    expect(approveRes.json().data.execution).toMatchObject({
+      status: 'completed_with_receipt',
+      connector: {
+        id: 'openqareer-profile-revision',
+        transport: 'internal',
+        evidenceKind: 'candidate_confirmation',
+      },
+    });
 
     // Откат правки (revert)
     const revertRes = await app.inject({
@@ -160,7 +243,131 @@ describe('resume.revise career command (C58)', () => {
       url: '/api/v1/candidate/resume',
       headers: { authorization },
     });
-    expect(afterRevert.json().data?.draft?.candidate?.about ?? '').toBe('');
+    expect(afterRevert.json().data?.draft?.candidate?.about).toBe(
+      'Руководила платформами в финтехе.',
+    );
+    const commandsAfterRevert = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/career-commands',
+      headers: { authorization },
+    });
+    expect(commandsAfterRevert.json().data[0].profileRevisionReverted).toBe(true);
+  });
+
+  it('rejects a stale experience target and preserves a later candidate edit on revert', async () => {
+    const turnIdempotencyKey = randomUUID();
+    const messageId = randomUUID();
+    const staleProposal: CareerActionProposal = {
+      kind: 'resume.revise',
+      objective: 'Уточнить должность в опыте',
+      evidenceRefs: [messageId],
+      acceptanceCriteria: ['Раздел опыта обновлён'],
+      expectedSignal: 'Должность точнее отражает подтверждённые факты.',
+      measureAfter: '2026-10-01',
+      risk: 'candidate_data_write',
+      resumeRevision: {
+        section: 'experience',
+        experienceId: 'missing-experience',
+        proposedText: 'Ведущий инженер',
+      },
+    };
+    const app = await createApp(providerWithProposals([staleProposal]));
+    const authorization = candidateAuthorization(app);
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/coach/turn',
+      headers: { authorization, 'idempotency-key': turnIdempotencyKey },
+      payload: { messageId, content: 'Обнови опыт работы в резюме.' },
+    });
+    const staleCommand = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/career-commands',
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': randomUUID(),
+      },
+      payload: { turnIdempotencyKey, proposalIndex: 0 },
+    });
+    expect(staleCommand.statusCode).toBe(422);
+    expect(staleCommand.json().error.code).toBe('resume_revision_target_stale');
+
+    const rollbackKey = randomUUID();
+    const rollbackMessage = randomUUID();
+    const aboutProposal: CareerActionProposal = {
+      ...staleProposal,
+      objective: 'Уточнить блок «Обо мне»',
+      evidenceRefs: [rollbackMessage],
+      resumeRevision: {
+        section: 'about',
+        experienceId: null,
+        proposedText: 'Руководила финтех-платформами.',
+      },
+    };
+    const rollbackApp = await createApp(providerWithProposals([aboutProposal]));
+    const rollbackAuthorization = candidateAuthorization(rollbackApp);
+    const snapshot = await rollbackApp.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/me',
+      headers: { authorization: rollbackAuthorization },
+    });
+    const candidateId = snapshot.json().data.candidate.id as string;
+    const store = stores[stores.length - 1]!;
+    const originalDraft = {
+      ...EMPTY_RESUME_DRAFT,
+      candidate: { ...EMPTY_RESUME_DRAFT.candidate, about: 'Исходный текст.' },
+    };
+    store.saveResumeDraft(candidateId, originalDraft, []);
+    await rollbackApp.inject({
+      method: 'POST',
+      url: '/api/v1/coach/turn',
+      headers: { authorization: rollbackAuthorization, 'idempotency-key': rollbackKey },
+      payload: { messageId: rollbackMessage, content: 'Перепиши мой профиль в резюме.' },
+    });
+    const commandId = randomUUID();
+    const prepared = await rollbackApp.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/career-commands',
+      headers: {
+        authorization: rollbackAuthorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': commandId,
+      },
+      payload: { turnIdempotencyKey: rollbackKey, proposalIndex: 0 },
+    });
+    expect(prepared.statusCode).toBe(201);
+    const approved = await rollbackApp.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/career-commands/${commandId}/approvals`,
+      headers: {
+        authorization: rollbackAuthorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': commandId,
+      },
+    });
+    expect(approved.statusCode).toBe(200);
+
+    store.saveResumeDraft(
+      candidateId,
+      {
+        ...originalDraft,
+        candidate: { ...originalDraft.candidate, about: 'Кандидат внёс более позднюю правку.' },
+      },
+      [],
+    );
+    const reverted = await rollbackApp.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/career-commands/${commandId}/revert`,
+      headers: { authorization: rollbackAuthorization, origin: 'http://localhost:3000' },
+    });
+    expect(reverted.statusCode).toBe(409);
+    const afterConflict = await rollbackApp.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/resume',
+      headers: { authorization: rollbackAuthorization },
+    });
+    expect(afterConflict.json().data.draft.candidate.about).toBe(
+      'Кандидат внёс более позднюю правку.',
+    );
   });
 });
-

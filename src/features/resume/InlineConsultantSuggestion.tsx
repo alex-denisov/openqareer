@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Spinner } from '@phosphor-icons/react';
 
 export interface InlineSuggestionItem {
   readonly id: string;
@@ -31,10 +32,12 @@ function SuggestionComparison({
 }) {
   return (
     <div className="career-consultant-suggestion-comparison">
-      {currentText ? (
+      {currentText !== undefined ? (
         <div className="career-consultant-suggestion-col is-current">
           <span className="career-consultant-suggestion-col-label">Сейчас</span>
-          <p className="career-consultant-suggestion-text">{currentText}</p>
+          <p className="career-consultant-suggestion-text">
+            {currentText || 'Раздел пока пуст.'}
+          </p>
         </div>
       ) : null}
       <div className="career-consultant-suggestion-col is-proposed">
@@ -61,8 +64,10 @@ function AppliedActions({
           className="career-quiet-button"
           onClick={onRevert}
           disabled={busy}
+          aria-busy={busy || undefined}
         >
-          Откатить
+          {busy ? <Spinner size={16} aria-hidden="true" /> : null}
+          {busy ? 'Откатываем…' : 'Откатить'}
         </button>
       ) : null}
     </div>
@@ -87,14 +92,17 @@ function PendingActions({
         className="career-primary-button"
         onClick={onAccept}
         disabled={busy || loading}
+        aria-busy={busy || loading || undefined}
       >
-        Принять
+        {busy ? <Spinner size={16} aria-hidden="true" /> : null}
+        {busy ? 'Применяем…' : 'Принять'}
       </button>
       <button
         type="button"
         className="career-quiet-button"
         onClick={onDismiss}
         disabled={busy || loading}
+        aria-busy={busy || loading || undefined}
       >
         Отклонить
       </button>
@@ -130,12 +138,16 @@ function useSuggestionActionState(
 ) {
   const [busy, setBusy] = useState(false);
   const [applied, setApplied] = useState(Boolean(suggestion.applied));
+  const [error, setError] = useState<string>();
 
   const handleAccept = async () => {
     setBusy(true);
+    setError(undefined);
     try {
       await onAccept(suggestion);
       setApplied(true);
+    } catch (reason) {
+      setError(actionErrorMessage(reason));
     } finally {
       setBusy(false);
     }
@@ -144,15 +156,23 @@ function useSuggestionActionState(
   const handleRevert = async () => {
     if (!onRevert) return;
     setBusy(true);
+    setError(undefined);
     try {
       await onRevert(suggestion);
       setApplied(false);
+    } catch (reason) {
+      setError(actionErrorMessage(reason));
     } finally {
       setBusy(false);
     }
   };
 
-  return { busy, applied, handleAccept, handleRevert };
+  return { busy, applied, error, handleAccept, handleRevert };
+}
+
+function actionErrorMessage(reason: unknown): string {
+  if (reason instanceof Error && reason.message.trim()) return reason.message;
+  return 'Не удалось сохранить правку профиля. Повторите попытку.';
 }
 
 export function InlineConsultantSuggestion({
@@ -162,7 +182,7 @@ export function InlineConsultantSuggestion({
   onRevert,
   loading,
 }: InlineConsultantSuggestionProps) {
-  const { busy, applied, handleAccept, handleRevert } = useSuggestionActionState(
+  const { busy, applied, error, handleAccept, handleRevert } = useSuggestionActionState(
     suggestion,
     onAccept,
     onRevert,
@@ -174,6 +194,7 @@ export function InlineConsultantSuggestion({
       data-testid={`consultant-suggestion-${suggestion.id}`}
       role="region"
       aria-label="Предложение карьерного консультанта"
+      aria-busy={busy || loading || undefined}
     >
       <SuggestionHead title={suggestion.title} rationale={suggestion.rationale} />
       <SuggestionComparison
@@ -190,6 +211,11 @@ export function InlineConsultantSuggestion({
           onDismiss={() => onDismiss(suggestion)}
         />
       )}
+      {error ? (
+        <p className="career-command-error" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

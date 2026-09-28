@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   careerActionProposalSchema,
   type CareerActionProposal,
+  type ResumeRevisionProposal,
 } from '../domain/coach';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 
@@ -28,15 +29,35 @@ export const resumeReviseExecutionTargetSchema = z
     targetType: z.literal('resume_block').optional(),
     section: z.enum(['headline', 'about', 'experience']),
     experienceId: z.string().optional(),
-    currentText: z.string().optional(),
+    currentText: z.string().max(10_000),
     proposedText: z.string().min(1).max(10_000),
     previousText: z.string().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((target, context) => {
+    if (target.section === 'experience' && !target.experienceId) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'experience revision needs an existing entry id' });
+    }
+    if (target.section !== 'experience' && target.experienceId) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'only experience revisions have an entry id' });
+    }
+  });
 
 export type ResumeReviseExecutionTarget = z.infer<
   typeof resumeReviseExecutionTargetSchema
 >;
+
+export function bindResumeRevisionTarget(
+  proposal: ResumeRevisionProposal,
+  currentText: string,
+): ResumeReviseExecutionTarget {
+  return resumeReviseExecutionTargetSchema.parse({
+    targetType: 'resume_block',
+    ...proposal,
+    experienceId: proposal.experienceId ?? undefined,
+    currentText,
+  });
+}
 
 export const careerCommandExecutionTargetSchema = z.union([
   hhApplicationExecutionTargetSchema,

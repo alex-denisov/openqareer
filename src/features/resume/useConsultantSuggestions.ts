@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
+import { type CareerCommand } from '../coach/coachApi';
 import {
   approveCareerCommand,
   getCareerCommands,
   revertCareerCommand,
-  type CareerCommand,
-} from '../coach/coachApi';
+} from '../coach/careerCommandApi';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 
 function commandToSuggestion(command: CareerCommand): InlineSuggestionItem | null {
-  if (command.capability !== 'resume.revise') return null;
+  if (
+    command.capability !== 'resume.revise' ||
+    command.profileRevisionReverted ||
+    command.status === 'failed'
+  ) {
+    return null;
+  }
   const target = command.executionTarget;
   if (!target || !target.section || !target.proposedText) return null;
 
@@ -48,10 +54,7 @@ function useSuggestionsCommands(candidateId: string) {
   return { commands, loading, load };
 }
 
-export function useConsultantSuggestions(
-  candidateId: string,
-  onProfileUpdated?: () => void,
-) {
+export function useConsultantSuggestions(candidateId: string, onProfileUpdated?: () => void) {
   const { commands, loading, load } = useSuggestionsCommands(candidateId);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 

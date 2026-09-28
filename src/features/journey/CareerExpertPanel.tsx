@@ -27,6 +27,7 @@ interface CareerExpertPanelProps {
   initialUser: AuthUser | null;
   initialSnapshot?: CandidateSnapshot;
   onIdentityChange?: (user: AuthUser) => void;
+  onCommandPrepared?: () => void;
   onClose: () => void;
 }
 
@@ -36,6 +37,7 @@ export function CareerExpertPanel({
   initialUser,
   initialSnapshot,
   onIdentityChange = () => undefined,
+  onCommandPrepared,
   onClose,
 }: CareerExpertPanelProps) {
   const [user, setUser] = useState<AuthUser | null>(initialUser);
@@ -281,6 +283,7 @@ export function CareerExpertPanel({
           <CareerIntelligenceSummary
             result={latestResult}
             turnIdempotencyKey={latestTurnIdempotencyKey}
+            onCommandPrepared={onCommandPrepared}
           />
         ) : null}
 
@@ -383,9 +386,11 @@ export function ExpertWaitingRow({ question }: { question: string }) {
 export function CareerIntelligenceSummary({
   result,
   turnIdempotencyKey,
+  onCommandPrepared,
 }: {
   result: CoachResult;
   turnIdempotencyKey?: string;
+  onCommandPrepared?: () => void;
 }) {
   return (
     <section className="career-intelligence-summary" aria-label="Карьерный трек и действия">
@@ -411,6 +416,7 @@ export function CareerIntelligenceSummary({
         <CareerActionProposalList
           proposals={result.actionProposals}
           turnIdempotencyKey={turnIdempotencyKey}
+          onCommandPrepared={onCommandPrepared}
         />
       ) : null}
     </section>

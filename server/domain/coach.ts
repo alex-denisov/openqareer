@@ -38,15 +38,72 @@ const CAREER_ACTION_KINDS = [
   'connection.request',
 ] as const;
 
-export const careerActionProposalSchema = z.object({
-  kind: z.enum(CAREER_ACTION_KINDS),
-  objective: z.string().trim().min(1).max(1_000),
-  evidenceRefs: z.array(z.string().min(1).max(80)).min(1).max(100),
-  acceptanceCriteria: z.array(z.string().trim().min(1).max(500)).min(1).max(20),
-  expectedSignal: z.string().trim().min(1).max(1_000),
-  measureAfter: z.string().date(),
-  risk: z.enum(['read_only', 'candidate_data_write', 'external_side_effect']),
-});
+export const resumeRevisionProposalSchema = z
+  .object({
+    section: z.enum(['headline', 'about', 'experience']),
+    experienceId: z.string().min(1).max(80).nullable(),
+    proposedText: z.string().trim().min(1).max(10_000),
+  })
+  .strict()
+  .superRefine((target, context) => {
+    if (target.section === 'experience' && !target.experienceId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'experience revision needs an existing entry id',
+      });
+    }
+    if (target.section !== 'experience' && target.experienceId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'only experience revisions have an entry id',
+      });
+    }
+  });
+
+export const careerActionProposalSchema = z
+  .object({
+    kind: z.enum(CAREER_ACTION_KINDS),
+    objective: z.string().trim().min(1).max(1_000),
+    evidenceRefs: z.array(z.string().min(1).max(80)).min(1).max(100),
+    acceptanceCriteria: z.array(z.string().trim().min(1).max(500)).min(1).max(20),
+    expectedSignal: z.string().trim().min(1).max(1_000),
+    measureAfter: z.string().date(),
+    risk: z.enum(['read_only', 'candidate_data_write', 'external_side_effect']),
+    resumeRevision: resumeRevisionProposalSchema.nullable().optional(),
+  })
+  .superRefine((proposal, context) => {
+    if (proposal.kind === 'resume.revise' && !proposal.resumeRevision) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'resume.revise needs a concrete profile target',
+      });
+    }
+    if (proposal.kind !== 'resume.revise' && proposal.resumeRevision) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'only resume.revise has a profile target',
+      });
+    }
+  });
+
+const resumeContextSchema = z
+  .object({
+    headline: z.string().nullable(),
+    about: z.string().nullable(),
+    experiences: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1).max(80),
+            title: z.string().nullable(),
+            employer: z.string().nullable(),
+            bulletMemoryIds: z.array(z.string().min(1).max(80)).max(20),
+          })
+          .strict(),
+      )
+      .max(50),
+  })
+  .strict();
 
 const careerTrackSchema = z.object({
   objective: z.string().trim().min(1).max(1_000),
@@ -144,6 +201,7 @@ export const coachTurnInputSchema = z.object({
   dataClass: z.enum(['synthetic', 'personal']).default('personal'),
   locale: z.enum(['ru-RU', 'en-US']).default('ru-RU'),
   phase: z.enum(COACH_PHASES).default('discovery'),
+  resumeContext: resumeContextSchema.optional(),
   messages: z.array(coachMessageSchema).min(1).max(30),
   knowledgeContext: knowledgeContextSchema.optional(),
   marketObservations: z.array(marketObservationSchema).max(20).optional(),
@@ -226,6 +284,7 @@ export const coachTurnResultSchema = z.object({
 });
 
 export type CoachTurnInput = z.infer<typeof coachTurnInputSchema>;
+export type ResumeRevisionProposal = z.infer<typeof resumeRevisionProposalSchema>;
 export type CoachTurnResult = z.infer<typeof coachTurnResultSchema>;
 export type CoachMessage = z.infer<typeof coachMessageSchema>;
 export type MemoryCandidate = z.infer<typeof memoryCandidateSchema>;
@@ -376,6 +435,26 @@ export const COACH_TURN_JSON_SCHEMA = {
             type: 'string',
             enum: ['read_only', 'candidate_data_write', 'external_side_effect'],
           },
+          resumeRevision: {
+            anyOf: [
+              {
+                type: 'object',
+                properties: {
+                  section: { type: 'string', enum: ['headline', 'about', 'experience'] },
+                  experienceId: {
+                    anyOf: [
+                      { type: 'string', minLength: 1, maxLength: 80 },
+                      { type: 'null' },
+                    ],
+                  },
+                  proposedText: { type: 'string', minLength: 1, maxLength: 10_000 },
+                },
+                required: ['section', 'experienceId', 'proposedText'],
+                additionalProperties: false,
+              },
+              { type: 'null' },
+            ],
+          },
         },
         required: [
           'kind',
@@ -385,6 +464,7 @@ export const COACH_TURN_JSON_SCHEMA = {
           'expectedSignal',
           'measureAfter',
           'risk',
+          'resumeRevision',
         ],
         additionalProperties: false,
       },
@@ -410,6 +490,7 @@ export function serializeCoachInput(input: CoachTurnInput): string {
     dataClass: input.dataClass,
     locale: input.locale,
     phase: input.phase,
+    ...(input.resumeContext ? { resumeContext: input.resumeContext } : {}),
     activeRole: input.activeRole ?? 'career_consultant',
     priorRoleContributions: input.priorRoleContributions ?? [],
     marketObservations: input.marketObservations ?? [],

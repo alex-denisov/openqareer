@@ -9,6 +9,7 @@ export const connectorActionSchema = z.enum([
 
 export type ConnectorAction = z.infer<typeof connectorActionSchema>;
 const connectorTransportSchema = z.enum([
+  'internal',
   'official_api',
   'public_feed',
   'public_http_parser',

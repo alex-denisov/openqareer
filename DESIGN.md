@@ -50,6 +50,8 @@ navigation; tariffs remain a visible top action.
   are always mono.
 - Spacing rhythm: `--career-space-1…8` = 4…32 px in 4 px steps; new rules use
   the tokens rather than raw pixel values.
+- Hairline edges use `--career-border-width` (1 px); section and control edges
+  share the same width.
 - Motion is 180–200 ms opacity plus a small transform and is disabled by
   `prefers-reduced-motion`.
 
