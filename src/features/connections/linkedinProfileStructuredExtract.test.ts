@@ -23,8 +23,14 @@ import {
   parseTopCard,
 } from './linkedinProfileStructuredExtract';
 
+import { linkedinProfileV2Schema } from '../../../shared/linkedinProfileV2';
+
 function fixture(name: string): string {
   return readFileSync(join(__dirname, '__fixtures__', 'linkedin', name), 'utf8');
+}
+
+function rootFixture(name: string): string {
+  return readFileSync(join(__dirname, '__fixtures__', name), 'utf8');
 }
 
 describe('parseTopCard (B265)', () => {
@@ -451,3 +457,72 @@ describe('parseCoursesSection (B266)', () => {
     ]);
   });
 });
+
+describe('B265 — extraction from linkedin-profile-scrolled.html & CEFR dictionary', () => {
+  const scrolledHtml = rootFixture('linkedin-profile-scrolled.html');
+
+  it('maps "Professional working proficiency" to CEFR B2 and does not create a second language row', () => {
+    const snippet = '<main><section><h2>Languages</h2><div>Spanish</div><div>Professional working proficiency</div></section></main>';
+    const languages = parseLanguagesSection(snippet);
+    expect(languages).toHaveLength(1);
+    expect(languages[0]).toEqual({
+      name: 'Spanish',
+      cefr: 'B2',
+      sourceLabel: 'Professional working proficiency',
+    });
+  });
+
+  it('extracts exactly 2 languages from linkedin-profile-scrolled.html without phantom proficiency rows', () => {
+    const languages = parseLanguagesSection(scrolledHtml);
+    expect(languages).toHaveLength(2);
+    expect(languages).toEqual([
+      { name: 'English', cefr: 'C1', sourceLabel: 'Full professional proficiency' },
+      { name: 'Russian', cefr: 'C2', sourceLabel: 'Native or bilingual proficiency' },
+    ]);
+    expect(languages.some((l) => l.name.includes('proficiency'))).toBe(false);
+  });
+
+  it('extracts certifications separately from courses from linkedin-profile-scrolled.html', () => {
+    const profile = extractStructuredLinkedInProfile({
+      profile: scrolledHtml,
+    });
+
+    expect(profile.certifications).toBeDefined();
+    expect(profile.certifications).toHaveLength(2);
+    expect(profile.certifications![0]).toEqual(
+      expect.objectContaining({
+        name: 'Agile Fundamentals',
+        issuer: 'Scrum Alliance',
+        issuedAt: 'Apr 2023',
+      }),
+    );
+    expect(profile.certifications![1]).toEqual(
+      expect.objectContaining({
+        name: 'AWS Fundamentals',
+        issuer: 'Amazon Web Services (AWS)',
+        issuedAt: 'Mar 2023',
+      }),
+    );
+
+    expect(profile.courses).toHaveLength(2);
+    expect(profile.courses[0]).toEqual({
+      name: 'Customer Care & Communication Skills',
+      institution: 'Kaspersky',
+    });
+    expect(profile.courses[1]).toEqual({
+      name: 'DevOps Engineering & Automation',
+      institution: 'Geekbrains',
+    });
+  });
+
+  it('drops invalid fields per M2 instead of failing extraction, resulting in schema-valid profile', () => {
+    const invalidProfile = extractStructuredLinkedInProfile({
+      profile: scrolledHtml,
+      experience: '<main><p>' + 'X'.repeat(400) + '</p></main>',
+    });
+
+    const parsed = linkedinProfileV2Schema.safeParse(invalidProfile);
+    expect(parsed.success).toBe(true);
+  });
+});
+

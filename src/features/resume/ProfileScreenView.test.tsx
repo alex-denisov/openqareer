@@ -238,4 +238,63 @@ describe('ProfileScreenSurface — states', () => {
     expect(auditHtml).not.toContain('sec-experience');
     expect(auditHtml).toContain('career-reputation-surface');
   });
+
+  it('renders languages with CEFR badge and certifications in their own section separate from courses (B265)', () => {
+    const draftWithCertsAndLangs: ResumeDraft = {
+      ...populatedDraft,
+      languages: [
+        {
+          id: 'lang-1',
+          evidenceMemoryId: 'mem-lang-1',
+          name: 'English',
+          cefr: 'C1',
+          sourceLabel: 'Full professional proficiency',
+        },
+        {
+          id: 'lang-2',
+          evidenceMemoryId: 'mem-lang-2',
+          name: 'Spanish',
+          cefr: 'B2',
+          sourceLabel: 'Professional working proficiency',
+        },
+      ],
+      certifications: [
+        {
+          id: 'cert-1',
+          name: 'AWS Certified Solutions Architect',
+          issuer: 'Amazon Web Services',
+          issuedAt: '2023',
+        },
+      ],
+      courses: [
+        {
+          id: 'course-1',
+          name: 'Cloud Operations Mastery',
+          institution: 'Tech Academy',
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      <ProfileScreenSurface {...baseProps} draft={draftWithCertsAndLangs} />,
+    );
+
+    // Languages: check name and CEFR badge
+    expect(html).toContain('English');
+    expect(html).toContain('Spanish');
+    expect(html).toContain('career-profile-screen-cefr');
+    expect(html).toContain('C1');
+    expect(html).toContain('B2');
+
+    // Certifications: separate section with id="sec-certificates"
+    expect(html).toContain('id="sec-certificates"');
+    expect(html).toContain('AWS Certified Solutions Architect');
+    expect(html).toContain('Amazon Web Services');
+
+    // Courses: separate section with id="sec-courses"
+    expect(html).toContain('id="sec-courses"');
+    expect(html).toContain('Cloud Operations Mastery');
+    expect(html).toContain('Tech Academy');
+  });
 });
+

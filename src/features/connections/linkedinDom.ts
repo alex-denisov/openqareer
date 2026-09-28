@@ -21,6 +21,14 @@ export function paragraphsOf(root: Element): string[] {
     .filter((text): text is string => Boolean(text));
 }
 
+/** Text of every element without element children, in document order. */
+export function leafTextLines(root: Element): string[] {
+  return Array.from(root.querySelectorAll('*'))
+    .filter((element) => element.children.length === 0)
+    .map((element) => element.textContent?.replace(/\s+/gu, ' ').trim() ?? '')
+    .filter(Boolean);
+}
+
 const MEDIA_HOST = 'media.licdn.com';
 const MEDIA_PATH = '/dms/image/';
 
