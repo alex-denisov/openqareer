@@ -905,13 +905,26 @@
   color: var(--career-accent);
 }
 
-.career-path-step[data-state='active'] .career-path-dot::before {
+.career-path-step[data-state='active']:not([data-status='done']) .career-path-dot::before {
   content: '';
   width: 8px;
   height: 8px;
   border-radius: 999px;
   background: currentColor;
 }
+
+.career-path-step[data-status='in-progress']:not([data-state='active']) .career-path-dot {
+  border-color: var(--career-warning);
+}
+
+.career-path-step[data-status='in-progress']:not([data-state='active']) .career-path-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--career-warning);
+}
+
 
 .career-path-copy {
   display: flex;
@@ -1009,6 +1022,12 @@
     border-color: var(--career-accent);
     background: var(--career-accent);
   }
+
+  .career-path-mobile-dots > span[data-status='in-progress']:not([data-state='active']) {
+    border-color: var(--career-warning);
+    background: var(--career-warning-soft);
+  }
+
 
   .career-path-mobile-summary > span:not(.career-path-mobile-dots) {
     font-size: var(--career-text-xs);

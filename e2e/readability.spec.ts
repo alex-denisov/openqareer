@@ -618,4 +618,45 @@ test.describe('B232 readability gate', () => {
       .locator('.career-path')
       .screenshot({ path: 'output/playwright/C52/path-indicator-390.png' });
   });
+
+  test('capture C73 screenshots: path indicator on campaign screens and today', async ({
+    page,
+  }) => {
+    await mockSignedInCabinet(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+
+    // Today screen: 0 active steps
+    await expect(page.locator('.career-path-step[data-state="active"]')).toHaveCount(0);
+    await page
+      .locator('.career-path')
+      .screenshot({ path: 'output/playwright/C73/path-indicator-today-1440.png' });
+    await page.screenshot({ path: 'output/playwright/C73/screen-today-1440.png' });
+
+    // Open opportunities (vacancies): exactly one active step ('Подборка')
+    await openSection(page, 'Вакансии');
+    const active = page.locator('.career-path-step[data-state="active"]');
+    await expect(active).toHaveCount(1);
+    await expect(active).toContainText('Подборка');
+    await page
+      .locator('.career-path')
+      .screenshot({ path: 'output/playwright/C73/path-indicator-opportunities-1440.png' });
+    await page.screenshot({ path: 'output/playwright/C73/screen-opportunities-1440.png' });
+
+    // 390 viewport
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await page.screenshot({ path: 'output/playwright/C73/screen-today-390.png' });
+    await page
+      .locator('.career-path')
+      .screenshot({ path: 'output/playwright/C73/path-indicator-today-390.png' });
+
+    await openSection(page, 'Вакансии');
+    await page.screenshot({ path: 'output/playwright/C73/screen-opportunities-390.png' });
+    await page
+      .locator('.career-path')
+      .screenshot({ path: 'output/playwright/C73/path-indicator-opportunities-390.png' });
+  });
 });

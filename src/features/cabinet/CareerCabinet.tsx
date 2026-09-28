@@ -179,7 +179,11 @@ export function CareerCabinet({
   // (`CareerWorkspaceShell`), wired to the cabinet's own journey, pool and
   // confirmed applications instead of a second read of any of them
   // (INC-024, B104). «Вакансии» draws it itself, after its own heading, to
-  // match the mockup order (приёмка B250 §a) — every other view keeps it here.
+  const hasInterviewStage =
+    applicationsTracker.applications.some(
+      (app) => app.stage === 'interview' || app.stage === 'offer',
+    ) || Boolean(nearestInterviewOf(applicationsTracker.applications));
+
   const pathIndicatorSteps =
     journey && !(data.loading && !data.snapshot)
       ? buildPathIndicator({
@@ -188,8 +192,11 @@ export function CareerCabinet({
           confirmedApplications: countConfirmedApplications(vacancyApplications.applications),
           activeResponses: countActiveResponses(applicationsTracker.applications),
           nearestInterview: nearestInterviewOf(applicationsTracker.applications),
+          activeSection: view,
+          hasInterviewStage,
         })
       : undefined;
+
 
   return (
     <AppErrorBoundary
