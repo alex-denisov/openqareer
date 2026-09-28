@@ -808,4 +808,109 @@ test.describe('B250 vacancies screen', () => {
       fullPage: false,
     });
   });
+
+  test('marks phantom, stale and suspicious vacancies, moves them down with reason displayed (B262)', async ({
+    page,
+  }, testInfo) => {
+    const isMobile = testInfo.project.name === 'mobile-390';
+    const vpSuffix = isMobile ? '390' : '1440';
+
+    const freshItem = {
+      cluster: cluster('c-fresh', 'Enterprise Architect', 'Fresh Tech Corp', {
+        firstObservedAt: '2026-09-25T10:00:00.000Z',
+        canonicalLocation: 'United States',
+        isRemote: true,
+      }),
+      explanation: explanation('c-fresh', {
+        matchingPoints: ['System Architecture'],
+      }),
+    };
+
+    const staleItem = {
+      cluster: cluster('c-stale', 'Enterprise Architect', 'Legacy Systems Inc', {
+        firstObservedAt: '2026-07-01T10:00:00.000Z', // > 60 days
+        canonicalLocation: 'United States',
+        isRemote: true,
+      }),
+      explanation: explanation('c-stale', {
+        matchingPoints: ['System Architecture'],
+      }),
+    };
+
+    const deadItem = {
+      cluster: cluster('c-dead', 'Enterprise Architect', 'Ghost Corp', {
+        firstObservedAt: '2026-09-25T10:00:00.000Z',
+        canonicalLocation: 'United States',
+        isRemote: true,
+        deadLink: true,
+      }),
+      explanation: explanation('c-dead', {
+        matchingPoints: ['System Architecture'],
+      }),
+    };
+
+    // Intentionally pass in reverse order [dead, stale, fresh] to verify compareMatchedVacancies sorting
+    await stubSession(page, {
+      matchedItems: [deadItem, staleItem, freshItem],
+      total: 3,
+    });
+    await seedWorkspace(page);
+
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    await expect(page.locator('.vacancies-screen h1')).toHaveText('Вакансии');
+
+    const rows = page.locator('.vac-row');
+    await expect(rows).toHaveCount(3);
+
+    // 1. Fresh item should be sorted to first position
+    const row0 = rows.nth(0);
+    await expect(row0).toContainText('Fresh Tech Corp');
+    await expect(row0.locator('.vac-trust-line')).toHaveCount(0);
+
+    // 2. Stale item should be sorted to second position with single line reason
+    const row1 = rows.nth(1);
+    await expect(row1).toContainText('Legacy Systems Inc');
+    const staleTrustLine = row1.locator('.vac-trust-line.is-stale');
+    await expect(staleTrustLine).toBeVisible();
+    await expect(staleTrustLine).toContainText('Вакансия открыта более 60 дней');
+
+    // 3. Dead link item should be sorted to third (bottom) position with single line reason
+    const row2 = rows.nth(2);
+    await expect(row2).toContainText('Ghost Corp');
+    const deadTrustLine = row2.locator('.vac-trust-line.is-suspicious');
+    await expect(deadTrustLine).toBeVisible();
+    await expect(deadTrustLine).toContainText('Ссылка на вакансию недоступна');
+
+    // 4. Click stale item and verify detail panel trust alert
+    await row1.click();
+    const detailPanel = page.locator('.vacancies-detail-panel');
+    await expect(detailPanel).toBeVisible();
+    const staleAlert = detailPanel.locator('.vacancies-detail-trust-alert.is-stale');
+    await expect(staleAlert).toBeVisible();
+    await expect(staleAlert).toContainText('Вакансия открыта более 60 дней');
+
+    // Screenshot of list with trust signals and detail panel
+    await page.screenshot({
+      path: `output/playwright/B262/trust-signals-stale-${vpSuffix}.png`,
+      fullPage: true,
+    });
+
+    // 5. Click dead link item and verify detail panel trust alert
+    if (isMobile) {
+      // In mobile, go back from detail panel to list
+      await page.locator('.vacancies-detail-back').click();
+    }
+    await row2.click();
+    await expect(detailPanel).toBeVisible();
+    const deadAlert = detailPanel.locator('.vacancies-detail-trust-alert.is-suspicious');
+    await expect(deadAlert).toBeVisible();
+    await expect(deadAlert).toContainText('Ссылка на вакансию недоступна');
+
+    await page.screenshot({
+      path: `output/playwright/B262/trust-signals-deadlink-${vpSuffix}.png`,
+      fullPage: true,
+    });
+  });
 });

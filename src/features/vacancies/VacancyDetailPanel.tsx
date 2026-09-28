@@ -16,6 +16,7 @@ import type { VacancyLevelMatch } from '../../../shared/vacancyMatchOrder';
 import { vacancyLevelMatchLabel } from './vacancyLevelMatch';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
+import { vacancyTrustSignals } from '../../../shared/vacancyTrustSignals';
 
 /**
  * Детальная панель «Вакансии» (B248/B250) — макет `vacancies.html`. Сетка
@@ -65,6 +66,7 @@ export function VacancyDetailPanel({
   const age = vacancyAge(cluster, now);
   const source = vacancySourceLabels(cluster.sources)[0];
   const signals = vacancySignals(cluster);
+  const trust = vacancyTrustSignals(cluster, now);
   const application = applications?.byCluster.get(cluster.id);
   return (
     <VacancyDetailPanelView
@@ -73,6 +75,7 @@ export function VacancyDetailPanel({
       age={age}
       source={source}
       signals={signals}
+      trust={trust}
       alreadyApplied={application?.status === 'applied'}
       applications={applications}
       onMarkAlreadyApplied={onMarkAlreadyApplied}
@@ -91,6 +94,7 @@ interface VacancyDetailViewProps {
   readonly age: ReturnType<typeof vacancyAge>;
   readonly source?: string;
   readonly signals: ReturnType<typeof vacancySignals>;
+  readonly trust: ReturnType<typeof vacancyTrustSignals>;
   readonly alreadyApplied: boolean;
   readonly applications?: VacancyApplications;
   readonly onMarkAlreadyApplied?: VacancyDetailPanelProps['onMarkAlreadyApplied'];
@@ -108,6 +112,7 @@ function VacancyDetailPanelView(props: VacancyDetailViewProps) {
     age,
     source,
     signals,
+    trust,
     alreadyApplied,
     applications,
     onMarkAlreadyApplied,
@@ -124,6 +129,7 @@ function VacancyDetailPanelView(props: VacancyDetailViewProps) {
         explanation={explanation}
         age={age}
         source={source}
+        trust={trust}
         onBack={onBack}
       />
       <VacancyProfileEvidence
@@ -152,12 +158,14 @@ function VacancyDetailHeader({
   explanation,
   age,
   source,
+  trust,
   onBack,
 }: {
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly explanation: MatchedVacancyItem['explanation'];
   readonly age: ReturnType<typeof vacancyAge>;
   readonly source?: string;
+  readonly trust: ReturnType<typeof vacancyTrustSignals>;
   readonly onBack: () => void;
 }) {
   return (
@@ -167,6 +175,16 @@ function VacancyDetailHeader({
         <span>Назад</span>
       </button>
       <VacancyDetailHead cluster={cluster} />
+      {trust.level !== 'ok' && trust.reasons.length > 0 ? (
+        <div
+          className={`vacancies-detail-trust-alert is-${trust.level}`}
+          role="status"
+          data-trust-level={trust.level}
+        >
+          <Warning size={16} aria-hidden="true" />
+          <span>{trust.reasons.join(' · ')}</span>
+        </div>
+      ) : null}
       <VacancyDetailMetaRow explanation={explanation} age={age} source={source} />
     </>
   );

@@ -13780,6 +13780,47 @@
   text-overflow: ellipsis;
 }
 
+.vac-trust-line {
+  display: block;
+  font-size: var(--career-text-aux);
+  line-height: 1.35;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vac-trust-line.is-stale {
+  color: var(--career-warning);
+}
+
+.vac-trust-line.is-suspicious {
+  color: var(--career-danger);
+}
+
+.vacancies-detail-trust-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  padding: var(--career-space-2) var(--career-space-3);
+  border-radius: var(--career-radius-sm);
+  font-size: var(--career-text-xs);
+  margin-top: var(--career-space-2);
+  line-height: 1.4;
+}
+
+.vacancies-detail-trust-alert.is-stale {
+  background: var(--career-warning-soft);
+  color: var(--career-warning);
+  border: 1px solid var(--career-warning);
+}
+
+.vacancies-detail-trust-alert.is-suspicious {
+  background: var(--career-danger-soft);
+  color: var(--career-danger);
+  border: 1px solid var(--career-danger);
+}
+
 .vac-meta {
   display: flex;
   align-items: center;
