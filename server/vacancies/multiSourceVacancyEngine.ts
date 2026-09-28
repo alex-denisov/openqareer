@@ -78,10 +78,17 @@ export type SourceFetcher = (
   options?: { query?: string },
 ) => Promise<UnifiedVacancy[] | SourceReading>;
 
+export interface VacancyDescriptionLoaded {
+  readonly description?: string;
+  readonly skills?: readonly string[];
+}
+
 /** Читает полный текст только когда кандидат дошёл до конкретной вакансии. */
 export interface VacancyDescriptionLoader {
-  load(url: string): Promise<string | undefined>;
+  load(url: string): Promise<VacancyDescriptionLoaded | string | undefined>;
+  isLoaded?(url: string): boolean;
 }
+
 
 export interface VacancyDescriptionLoadResult {
   readonly vacancy?: UnifiedVacancy;
@@ -878,8 +885,12 @@ export class MultiSourceVacancyEngine {
     if (!existing || existing.provenance.sourceId !== 'src-hh-search' || !this.descriptionLoader) {
       return Promise.resolve({ ...(existing ? { vacancy: existing } : {}), unavailable: false });
     }
-    if (existing.fullDescription?.trim())
+    if (
+      existing.fullDescription?.trim() &&
+      ((existing.requiredSkills?.length ?? 0) > 0 || this.descriptionLoader.isLoaded?.(existing.url))
+    ) {
       return Promise.resolve({ vacancy: existing, unavailable: false });
+    }
     const pending = this.descriptionLoads.get(id);
     if (pending) return pending;
     const load = this.loadAndStoreVacancyDescription(existing);
@@ -898,17 +909,34 @@ export class MultiSourceVacancyEngine {
   private async loadAndStoreVacancyDescription(
     vacancy: UnifiedVacancy,
   ): Promise<VacancyDescriptionLoadResult> {
-    let fullDescription: string | undefined;
+    let loaded: VacancyDescriptionLoaded | string | undefined;
     try {
-      fullDescription = await this.descriptionLoader!.load(vacancy.url);
+      loaded = await this.descriptionLoader!.load(vacancy.url);
     } catch {
       return { vacancy, unavailable: true };
     }
-    if (!fullDescription) return { vacancy, unavailable: true };
-    const updated = { ...vacancy, fullDescription };
+    if (!loaded) return { vacancy, unavailable: true };
+
+    const fullDescription = typeof loaded === 'string' ? loaded : loaded.description;
+    const loadedSkills =
+      typeof loaded === 'object' && Array.isArray(loaded.skills) ? loaded.skills : [];
+    if (!fullDescription && loadedSkills.length === 0) {
+      return { vacancy, unavailable: true };
+    }
+
+    const existingSkills = vacancy.requiredSkills ?? [];
+    const skillsToSave =
+      existingSkills.length > 0 ? existingSkills : [...loadedSkills];
+
+    const updated: UnifiedVacancy = {
+      ...vacancy,
+      ...(fullDescription ? { fullDescription } : {}),
+      requiredSkills: skillsToSave,
+    };
     this.pool.mergeSourceSlice(vacancy.provenance.sourceId, [updated]);
     return { vacancy: updated, unavailable: false };
   }
+
 
   /** Есть ли запись в пуле — по индексу, без чтения текста (быстрый проход hh, B219). */
   public hasVacancy(id: string): boolean {
