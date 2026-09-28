@@ -234,6 +234,63 @@ async function stubSession(page: Page, scenario: VacancyStubScenario = {}): Prom
         },
       });
     }
+    if (pathname === '/api/v1/candidate/search-consent') {
+      return route.fulfill({
+        json: { consent: { granted: true, grantedAt: '2026-09-20T08:00:00.000Z' } },
+      });
+    }
+    if (pathname.includes('/enrich-contacts') || pathname.endsWith('/contacts')) {
+      return route.fulfill({
+        json: {
+          data: {
+            contacts: [
+              {
+                id: 'c-recruiter-1',
+                vacancyId: 'c-1',
+                companyName: 'Genetec',
+                fullName: 'Елена Смирнова',
+                roleTitle: 'Technical Recruiter',
+                email: 'elena.smirnova@genetec.com',
+                emailStatus: 'verified',
+                phone: '+1 514 555-0199',
+                telegram: '@elena_genetec',
+                whatsapp: null,
+                linkedinUrl: 'https://linkedin.com/in/elena-smirnova',
+                githubUrl: null,
+                twitterUrl: null,
+                sourceType: 'domain_osint',
+                confidence: 0.95,
+                createdAt: '2026-09-20T08:00:00.000Z',
+                updatedAt: '2026-09-20T08:00:00.000Z',
+              },
+            ],
+            job: {
+              id: 'job-1',
+              vacancyId: 'c-1',
+              status: 'ready',
+              createdAt: '2026-09-20T08:00:00.000Z',
+            },
+          },
+        },
+      });
+    }
+    if (pathname.endsWith('/pitch')) {
+      return route.fulfill({
+        json: {
+          data: {
+            vacancyId: 'c-1',
+            emailPitch: { subject: 'Отклик', body: 'Текст письма' },
+            linkedInNote: 'Заметка для LinkedIn',
+            atsCoverLetter: 'ATS сопроводительное письмо',
+            contactMessage:
+              'Здравствуйте, Елена Смирнова! Меня зовут Алексей Денисов, откликаюсь на позицию Business Information Architect в Genetec. Коротко о моём опыте: сократил время закрытия вакансий на 30%. Буду рад короткому звонку, чтобы обсудить задачи роли и взаимные ожидания.',
+            usedEvidenceIds: ['evidence-1'],
+            language: 'ru',
+            generatedAt: '2026-09-28T09:00:00.000Z',
+          },
+        },
+      });
+    }
     return route.fulfill({ json: { data: null } });
   });
 }
@@ -677,5 +734,54 @@ test.describe('B250 vacancies screen', () => {
     await retry.click();
     await expect.poll(() => matchedReadCount.value).toBeGreaterThan(1);
     await errorPage.close();
+  });
+
+  test('C72: found recruiter card has «Написать» action opening message panel with copy and channel buttons', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+    await page.locator('.vac-list-item').first().locator('.vac-row').click();
+
+    const detail = page.locator('.vacancies-detail-col');
+    await expect(detail).toBeVisible();
+
+    const recruiterBtn = detail.locator('.career-recruiter-btn');
+    await expect(recruiterBtn).toBeVisible();
+    await recruiterBtn.click();
+
+    const recruiterCard = detail.locator('.career-recruiter-card');
+    await expect(recruiterCard).toBeVisible();
+    await expect(recruiterCard).toContainText('Елена Смирнова');
+
+    const writeBtn = recruiterCard.locator('.career-recruiter-write-btn');
+    await expect(writeBtn).toBeVisible();
+    await writeBtn.click();
+
+    const msgPanel = recruiterCard.locator('.career-recruiter-message-panel');
+    await expect(msgPanel).toBeVisible();
+    await expect(msgPanel).toContainText('Елена Смирнова');
+    await expect(msgPanel.locator('.career-recruiter-message-copy-btn')).toBeVisible();
+
+    await page.screenshot({
+      path: 'output/playwright/C72/recruiter-message-1440.png',
+      fullPage: true,
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(msgPanel).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+
+    await msgPanel.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: 'output/playwright/C72/recruiter-message-390.png',
+      fullPage: false,
+    });
   });
 });

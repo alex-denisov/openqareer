@@ -10,7 +10,7 @@ import { AuthService } from './auth/authService';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
 import { MemoryVacancyPoolStore } from './vacancies/memoryVacancyPoolStore';
 import type { VacancyCluster } from './domain/unifiedVacancy';
-import type { CoverLetterWriter } from './providers/coverLetterWriter';
+import type { CoverLetterWriter, CoverLetterWriteInput } from './providers/coverLetterWriter';
 import type { VacancyDescriptionLoader } from './vacancies/multiSourceVacancyEngine';
 import { normalizeJsonSource } from './vacancies/jsonSourceAdapters';
 import {
@@ -582,6 +582,50 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
       payload: { applicationId: 'not-a-real-application' },
     });
     expect(response.statusCode).toBe(404);
+  });
+
+  it('passes recipient to writer prompt and generates contactMessage with profile facts (C72)', async () => {
+    let capturedInput: CoverLetterWriteInput | undefined;
+    const writer: CoverLetterWriter = {
+      writeCoverLetter: async (input) => {
+        capturedInput = input;
+        return { body: 'Письмо нанимающему.', stage: 'openai:gpt-test' };
+      },
+    };
+    const { app, candidates } = await createApp([sampleCluster], { coverLetterWriter: writer });
+    const { cookie, candidateId } = await login(app);
+    candidates.importResumeEvidence(candidateId, {
+      sourceLabel: 'test-import',
+      entries: [
+        { memoryId: 'mem-401', domain: 'outcome', statement: 'Увеличил пропускную способность API на 50%' },
+      ],
+    });
+    candidates.reviewMemories(candidateId, ['mem-401'], 'confirm');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: {
+        recipient: {
+          name: 'Елена Смирнова',
+          role: 'Technical Recruiter',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const json = response.json();
+    expect(json.data.contactMessage).toBeDefined();
+    expect(json.data.contactMessage.length).toBeLessThanOrEqual(600);
+    expect(json.data.contactMessage).toContain('Елена Смирнова');
+    expect(json.data.contactMessage).toContain('Увеличил пропускную способность API на 50%');
+    expect(json.data.usedEvidenceIds).toContain('mem-401');
+
+    expect(capturedInput?.vacancy?.recipient).toEqual({
+      name: 'Елена Смирнова',
+      role: 'Technical Recruiter',
+    });
   });
 });
 

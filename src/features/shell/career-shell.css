@@ -9806,6 +9806,153 @@
   border: 1px solid var(--career-danger);
 }
 
+.career-recruiter-write-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--career-radius-sm);
+  border: 1px solid var(--career-accent);
+  background: var(--career-accent-soft, rgba(0, 102, 204, 0.08));
+  color: var(--career-accent);
+  font-size: var(--career-text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.career-recruiter-write-btn:hover {
+  background: var(--career-accent);
+  color: #fff;
+}
+
+.career-recruiter-write-btn:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+}
+
+.career-recruiter-message-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: var(--career-radius-sm);
+  border: 1px solid var(--career-line-strong);
+  background: var(--career-surface-raised);
+}
+
+.career-recruiter-message-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.career-recruiter-message-title {
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  color: var(--career-text);
+}
+
+.career-recruiter-message-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--career-text-soft);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.career-recruiter-message-close-btn:hover {
+  color: var(--career-text);
+  background: var(--career-line);
+}
+
+.career-recruiter-message-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--career-text-xs);
+  color: var(--career-text-soft);
+  padding: 8px 0;
+}
+
+.career-recruiter-message-error {
+  font-size: var(--career-text-xs);
+  color: var(--career-danger);
+  padding: 4px 0;
+}
+
+.career-recruiter-message-text {
+  margin: 0;
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+  color: var(--career-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.career-recruiter-message-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--career-line);
+}
+
+.career-recruiter-message-evidence-badge {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+}
+
+.career-recruiter-message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.career-recruiter-message-copy-btn,
+.career-recruiter-message-channel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--career-radius-sm);
+  font-size: var(--career-text-xs);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.career-recruiter-message-copy-btn {
+  border: 1px solid var(--career-line-strong);
+  background: var(--career-bg);
+  color: var(--career-text);
+}
+
+.career-recruiter-message-copy-btn:hover {
+  border-color: var(--career-accent);
+  color: var(--career-accent);
+}
+
+.career-recruiter-message-channel-btn {
+  border: 1px solid var(--career-accent);
+  background: var(--career-accent);
+  color: #fff;
+}
+
+.career-recruiter-message-channel-btn:hover {
+  opacity: 0.9;
+}
+
 @media (max-width: 768px) {
   .career-recruiter-header {
     flex-direction: column;

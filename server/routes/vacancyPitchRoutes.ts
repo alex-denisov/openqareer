@@ -28,6 +28,12 @@ const vacancyPitchInputSchema = z
     language: z.enum(['en', 'ru']).optional(),
     /** Saved, candidate-owned cover letter for an application card (B251). */
     applicationId: z.string().trim().min(1).max(200).optional(),
+    recipient: z
+      .object({
+        name: z.string().trim().min(1).max(200).optional(),
+        role: z.string().trim().max(200).optional(),
+      })
+      .optional(),
     vacancy: z
       .object({
         title: z.string().trim().min(1).optional(),
@@ -56,6 +62,17 @@ function logPitchTiming(entry: {
   console.info(JSON.stringify({ event: 'vacancy-pitch-timing', ...entry }));
 }
 
+function toUsableCoverLetterFacts(facts: readonly VacancyPitchInputFact[]) {
+  return filterUsablePitchFacts(facts).map((fact) => ({
+    ref: fact.id,
+    statement: fact.statement,
+    domain: fact.domain,
+    createdAt: fact.createdAt,
+    updatedAt: fact.updatedAt,
+    status: fact.status,
+  }));
+}
+
 /** Model writing is bounded; the deterministic template remains the fallback. */
 async function writeCoverLetterBody(
   deps: RouteDeps,
@@ -65,6 +82,7 @@ async function writeCoverLetterBody(
     company?: string;
     description?: string;
     requiredSkills: readonly string[];
+    recipient?: { name?: string; role?: string };
   },
   facts: readonly VacancyPitchInputFact[],
   language: PitchLanguage,
@@ -74,22 +92,15 @@ async function writeCoverLetterBody(
 ): Promise<{ body?: string; stage?: string }> {
   const { coverLetterWriter } = deps;
   if (!coverLetterWriter) return {};
-  const usableFacts = filterUsablePitchFacts(facts).map((fact) => ({
-    ref: fact.id,
-    statement: fact.statement,
-    domain: fact.domain,
-    createdAt: fact.createdAt,
-    updatedAt: fact.updatedAt,
-    status: fact.status,
-  }));
   const writing = coverLetterWriter.writeCoverLetter({
-    facts: usableFacts,
+    facts: toUsableCoverLetterFacts(facts),
     vacancy: {
       title: vacancy.title,
       ...(vacancy.company ? { company: vacancy.company } : {}),
       ...(vacancy.description ? { description: vacancy.description } : {}),
       requirements: vacancy.requiredSkills,
       ...(rankingContext ? { rankingContext } : {}),
+      ...(vacancy.recipient ? { recipient: vacancy.recipient } : {}),
     },
     language,
     tone,
@@ -125,6 +136,7 @@ function resolvePitchVacancy(
     responsibilities: body?.vacancy?.responsibilities ?? poolVacancy?.responsibilities ?? [],
     location: body?.vacancy?.location ?? cluster?.canonicalLocation ?? poolVacancy?.location,
     isRemote: body?.vacancy?.isRemote ?? cluster?.isRemote ?? poolVacancy?.isRemote ?? false,
+    recipient: body?.recipient,
   };
 }
 
@@ -171,6 +183,7 @@ async function writeVacancyPitch(
     tone,
     ...(rankingContext ? { rankingContext } : {}),
     ...(body?.language ? { language: body.language } : {}),
+    ...(body?.recipient ? { recipient: body.recipient } : {}),
   });
   const contextMs = Date.now() - contextStart;
   const written = await writeCoverLetterBody(

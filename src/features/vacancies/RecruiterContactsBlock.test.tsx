@@ -59,6 +59,14 @@ describe('RecruiterContactsBlock', () => {
     expect(html).toContain('Адрес подтверждён почтовым сервером');
   });
 
+  it('отображает действие «Написать» в карточке найденного контакта (C72)', () => {
+    const html = renderToStaticMarkup(
+      <RecruiterContactsBlock vacancyId="vac-1" initialContacts={[sampleContact]} />,
+    );
+    expect(html).toContain('career-recruiter-write-btn');
+    expect(html).toContain('Написать');
+  });
+
   it('отображает бейдж «Почта — гипотеза» для предположительного контакта', () => {
     const html = renderToStaticMarkup(
       <RecruiterContactsBlock vacancyId="vac-1" initialContacts={[hypothesisContact]} />,

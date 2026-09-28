@@ -453,4 +453,49 @@ describe('vacancyPitchService', () => {
     expect(pitch.emailPitch.body).not.toMatch(/\.\./u);
     expect(pitch.atsCoverLetter).not.toMatch(/:\n\s*\n/u);
   });
+
+  it('generates direct contactMessage under 600 chars addressed to recruiter with profile facts (C72)', () => {
+    const pitch = generateVacancyPitch({
+      vacancy: sampleVacancy,
+      candidateName: 'Алексей Денисов',
+      facts: sampleFacts,
+      tone: 'confident',
+      language: 'ru',
+      recipient: {
+        name: 'Елена Смирнова',
+        role: 'Technical Recruiter',
+      },
+    });
+
+    expect(pitch.contactMessage).toBeDefined();
+    expect(pitch.contactMessage.length).toBeLessThanOrEqual(600);
+    expect(pitch.contactMessage).toContain('Здравствуйте, Елена Смирнова!');
+    expect(pitch.contactMessage).toContain('Алексей Денисов');
+    expect(pitch.contactMessage).toContain('Lead Backend Engineer');
+    expect(pitch.contactMessage).toContain('15 000 RPS');
+    expect(pitch.usedEvidenceIds).toContain('mem-001');
+    expect(pitch.contactMessage).not.toContain('Go 5 лет');
+    expect(pitch.contactMessage).toMatch(/созвониться|звонк|встреч|обсудить/iu);
+  });
+
+  it('generates English contactMessage under 600 chars when language is en (C72)', () => {
+    const pitch = generateVacancyPitch({
+      vacancy: sampleVacancy,
+      candidateName: 'Alexey Denisov',
+      facts: sampleFacts,
+      tone: 'technical',
+      language: 'en',
+      recipient: {
+        name: 'Sarah Connor',
+        role: 'Engineering Lead',
+      },
+    });
+
+    expect(pitch.contactMessage).toBeDefined();
+    expect(pitch.contactMessage.length).toBeLessThanOrEqual(600);
+    expect(pitch.contactMessage).toContain('Hello Sarah Connor!');
+    expect(pitch.contactMessage).toContain('Alexey Denisov');
+    expect(pitch.contactMessage).toContain('Lead Backend Engineer');
+    expect(pitch.contactMessage).toMatch(/call|discuss|connect/iu);
+  });
 });

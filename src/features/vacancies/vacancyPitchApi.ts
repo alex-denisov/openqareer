@@ -4,6 +4,10 @@ export interface VacancyPitchPayload {
   readonly tone?: 'executive' | 'confident' | 'technical';
   /** Overrides the letter's auto-detected language. */
   readonly language?: 'en' | 'ru';
+  readonly recipient?: {
+    readonly name?: string;
+    readonly role?: string;
+  };
   readonly vacancy?: {
     readonly title?: string;
     readonly company?: string;
@@ -23,6 +27,7 @@ export interface VacancyPitchResult {
   };
   readonly linkedInNote: string;
   readonly atsCoverLetter: string;
+  readonly contactMessage?: string;
   readonly usedEvidenceIds: readonly string[];
   readonly usedFacts?: readonly { id: string; basis: 'confirmed' | 'imported' }[];
   readonly language?: 'en' | 'ru';
