@@ -31,9 +31,43 @@ describe('resolveCampaign (B247, срез 1)', () => {
       value: ['Head of Growth', 'CPO', 'VP Tech'],
       origin: 'profile',
     });
-    expect(resolution.regions).toEqual({ value: ['mena'], origin: 'profile' });
+    expect(resolution.regions).toEqual({ value: [], origin: 'default' });
+    expect(resolution.suggestedRegions).toEqual(['mena']);
     expect(resolution.divergence.roles).toBeNull();
     expect(resolution.divergence.regions).toBeNull();
+  });
+
+  it('явный пустой выбор кандидата сохраняет origin explicit и пустой список (C63)', () => {
+    const resolution = resolveCampaign({
+      memory: [],
+      profileRegions: ['mena'],
+      explicit: {
+        roles: ['VP Tech'],
+        regions: [],
+        revision: 1,
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      },
+    });
+
+    expect(resolution.regions).toEqual({ value: [], origin: 'explicit' });
+    expect(resolution.suggestedRegions).toEqual(['mena']);
+  });
+
+  it('существующая кампания с origin: profile читается как без ограничения (C63)', () => {
+    const resolution = resolveCampaign({
+      memory: [],
+      profileRegions: ['mena'],
+      explicit: {
+        roles: ['VP Tech'],
+        regions: ['mena'],
+        origin: 'profile',
+        revision: 1,
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      } as unknown as import('./campaign').StoredCampaignSelection,
+    });
+
+    expect(resolution.regions).toEqual({ value: [], origin: 'default' });
+    expect(resolution.suggestedRegions).toEqual(['mena']);
   });
 
   it('не задаёт подбор ролями, предложенными моделью и не принятыми кандидатом', () => {

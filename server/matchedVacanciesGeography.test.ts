@@ -150,7 +150,7 @@ describe('GET /api/v1/candidate/matched-vacancies (PRB-040)', () => {
     vacanciesCount: 1,
   });
 
-  it('counts only role matches and pushes records outside the campaign regions last', async () => {
+  it('does not narrow regions when candidate has not explicitly chosen campaign regions (C63)', async () => {
     const { app, candidates } = await createApp([
       cluster('us', 'Xray Technician', 'Austin, TX, United States'),
       cluster('vet', 'Veterinary Healthcare Virtual Assistant', 'Dubai, United Arab Emirates'),
@@ -180,8 +180,49 @@ describe('GET /api/v1/candidate/matched-vacancies (PRB-040)', () => {
       cluster: { id: string };
       explanation: { outsideGeography?: boolean };
     }>;
-    // Внутри яруса порядок решает подбор; здесь важно, что запись из США —
-    // последняя и подписана, а «ветеринарный ассистент» не прошёл роль.
+    // По умолчанию система регион не выбирает: выдача без ограничений
+    expect(items.map((item) => item.explanation.outsideGeography ?? false)).toEqual([false, false, false]);
+    expect(response.json().meta.total).toBe(3);
+    expect(response.json().meta.campaign.suggestedRegions).toEqual(['mena']);
+  });
+
+  it('counts only role matches and pushes records outside explicit campaign regions last', async () => {
+    const { app, candidates } = await createApp([
+      cluster('us', 'Xray Technician', 'Austin, TX, United States'),
+      cluster('vet', 'Veterinary Healthcare Virtual Assistant', 'Dubai, United Arab Emirates'),
+      cluster('mena', 'Xray Technician', 'Dubai, United Arab Emirates'),
+      cluster('remote', 'Senior Xray Technician', 'Remote', true),
+    ]);
+    const { cookie, candidateId } = await login(app);
+    candidates.saveResumeDraft(candidateId, { ...EMPTY_RESUME_DRAFT, targetRole: 'Xray Technician' }, []);
+    candidates.saveCandidateWorkspace(candidateId, {
+      resumeText: 'Xray Technician, seven years in radiology.',
+      resumeSource: 'text',
+      targetDirection: 'Xray Technician',
+      regions: ['mena'],
+      currentSituation: '',
+      constraints: '',
+      urgency: 'active',
+      campaign: {
+        roles: ['Xray Technician'],
+        regions: ['mena'],
+        revision: 1,
+        updatedAt: '2026-09-20T00:00:00.000Z',
+      },
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/matched-vacancies',
+      headers: { cookie },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const items = response.json().data as Array<{
+      cluster: { id: string };
+      explanation: { outsideGeography?: boolean };
+    }>;
+    // Явный выбор кандидата сохраняется: запись из США — последняя и помечена outsideGeography
     expect(items.slice(0, 2).map((item) => item.cluster.id).sort()).toEqual(['cluster-mena', 'cluster-remote']);
     expect(items[2].cluster.id).toBe('cluster-us');
     expect(items.map((item) => item.explanation.outsideGeography ?? false)).toEqual([false, false, true]);

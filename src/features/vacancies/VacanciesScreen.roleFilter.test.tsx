@@ -109,4 +109,45 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
     expect(restoredList?.textContent).toContain('VP Technology Ops');
     expect(restoredList?.textContent).toContain('COO');
   });
+
+  it('нажатие «Добавить: MENA» добавляет регион в фильтр (C63)', async () => {
+    await act(async () => {
+      root.render(
+        <VacanciesScreen
+          matched={[
+            matchedItem('c-1', 'VP Technology Ops'),
+            {
+              ...matchedItem('c-2', 'COO'),
+              cluster: {
+                ...matchedItem('c-2', 'COO').cluster,
+                canonicalLocation: 'Лондон',
+              },
+            },
+          ]}
+          total={2}
+          campaign={{
+            ...campaign,
+            regions: { value: [], origin: 'default' },
+            suggestedRegions: ['mena'],
+          }}
+          now="2026-09-24T09:00:00.000Z"
+        />,
+      );
+    });
+
+    const addMenaButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Добавить: MENA'),
+    );
+    expect(addMenaButton).toBeDefined();
+
+    expect(container.querySelector('.vac-list')?.textContent).toContain('VP Technology Ops');
+    expect(container.querySelector('.vac-list')?.textContent).toContain('COO');
+
+    await act(async () => addMenaButton?.click());
+
+    const menaChip = Array.from(container.querySelectorAll('.vacancies-chip')).find((chip) =>
+      chip.textContent === 'MENA',
+    );
+    expect(menaChip?.classList.contains('is-selected')).toBe(true);
+  });
 });

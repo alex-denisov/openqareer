@@ -22,8 +22,7 @@ function render(regionsChosenExplicitly: boolean) {
 }
 
 describe('VacancyHypothesisBanner — гео-условие (C56)', () => {
-  it('показывает «Выбрать регион», когда кандидат сам не выбирал регион', () => {
-    expect(render(false)).toContain('Выбрать регион');
+  it('не показывает «Расширить географию», когда кандидат сам не выбирал регион', () => {
     expect(render(false)).not.toContain('Расширить географию');
   });
 

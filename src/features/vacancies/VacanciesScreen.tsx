@@ -51,13 +51,25 @@ interface VacanciesScreenProps {
   readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
 }
 
+function extractBoardRegions(campaign?: CampaignMetaView) {
+  const isProfile = campaign?.regions.origin === 'profile';
+  return {
+    roles: campaign?.roles.value ?? [],
+    regions: isProfile ? [] : (campaign?.regions.value ?? []),
+    suggestedRegions: campaign?.suggestedRegions?.length
+      ? campaign.suggestedRegions
+      : isProfile
+        ? (campaign?.regions.value ?? [])
+        : [],
+  };
+}
+
 function useVacanciesScreenBoard(
   matched: readonly MatchedVacancyItem[],
   campaign: CampaignMetaView | undefined,
   now: string,
 ) {
-  const roles = campaign?.roles.value ?? [];
-  const regions = campaign?.regions.value ?? [];
+  const { roles, regions, suggestedRegions } = extractBoardRegions(campaign);
   const [state, setState] = useState<VacanciesScreenState>({
     ...EMPTY_STATE,
     regions,
@@ -68,10 +80,11 @@ function useVacanciesScreenBoard(
 
   useEffect(() => {
     if (!campaign) return;
+    const effectiveRegions = extractBoardRegions(campaign).regions;
     setState((current) => ({
       ...current,
       roles: current.roles.filter((role) => campaign.roles.value.includes(role)),
-      regions: current.regions.length > 0 ? current.regions : campaign.regions.value,
+      regions: current.regions.length > 0 ? current.regions : effectiveRegions,
       remoteOnly: campaign?.remoteOnly ?? false,
     }));
   }, [campaign]);
@@ -82,6 +95,7 @@ function useVacanciesScreenBoard(
   return {
     roles,
     regions,
+    suggestedRegions,
     state,
     setState,
     filtered,
@@ -253,6 +267,7 @@ function VacanciesResults(props: VacanciesResultsProps) {
         <VacanciesLayout
           roleHypotheses={props.board.roleHypotheses}
           regions={props.board.regions}
+          suggestedRegions={props.board.suggestedRegions}
           remoteOnly={props.campaign?.remoteOnly ?? false}
           candidateLevel={props.candidateLevel}
           state={props.board.state}
@@ -308,7 +323,9 @@ function VacancyHypothesisSection({
       role={hypothesis.role}
       vacancyCount={hypothesis.vacancyCount}
       adjacentRole={adjacentRole}
-      regionsChosenExplicitly={campaign?.regions.origin === 'explicit'}
+      regionsChosenExplicitly={
+        campaign?.regions.origin === 'explicit' && campaign.regions.value.length > 0
+      }
       remoteOnly={campaign?.remoteOnly ?? false}
       saving={actions.saving}
       error={actions.error}
@@ -383,6 +400,7 @@ function VacanciesEmptyState({
 interface VacanciesLayoutProps {
   readonly roleHypotheses: NonNullable<CampaignMetaView['roleHypotheses']>;
   readonly regions: readonly string[];
+  readonly suggestedRegions?: readonly string[];
   readonly remoteOnly: boolean;
   readonly candidateLevel?: string | null;
   readonly state: VacanciesScreenState;
