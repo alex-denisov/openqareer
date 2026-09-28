@@ -24,6 +24,43 @@ const TEST_ACCOUNT = {
   sessions: [],
 };
 
+const MATCHED_VACANCY = {
+  cluster: {
+    id: 'b156-hh-vacancy',
+    canonicalTitle: 'Senior Software Engineer',
+    canonicalCompany: 'Example Systems',
+    canonicalLocation: 'Москва',
+    isRemote: true,
+    salary: null,
+    descriptionSummary: 'TypeScript и распределённые системы.',
+    skills: ['TypeScript', 'Распределённые системы'],
+    primaryUrl: 'https://hh.ru/vacancy/15601',
+    sources: [
+      {
+        sourceType: 'hh',
+        sourceId: 'b156-hh-vacancy',
+        sourceName: 'hh.ru',
+        sourceUrl: 'https://hh.ru/vacancy/15601',
+        observedAt: '2026-09-28T08:00:00.000Z',
+      },
+    ],
+    firstObservedAt: '2026-09-28T08:00:00.000Z',
+    lastSeenAt: '2026-09-28T08:00:00.000Z',
+    status: 'active',
+    vacanciesCount: 1,
+  },
+  explanation: {
+    clusterId: 'b156-hh-vacancy',
+    roleMatch: 'target',
+    levelMatch: 'match',
+    outsideGeography: false,
+    matchingPoints: ['TypeScript'],
+    missingPoints: [],
+    summary: '',
+    calculatedAt: '2026-09-28T08:00:00.000Z',
+  },
+};
+
 const TEST_SNAPSHOT = {
   candidate: {
     id: 'candidate-b145-b146',
@@ -69,11 +106,37 @@ const TEST_SNAPSHOT = {
 
 async function stubSession(
   page: Page,
-  overrides: { subscriptions?: unknown[]; hhAccessClosed?: boolean } = {},
+  overrides: { subscriptions?: unknown[]; hhAccessClosed?: boolean; failMatched?: boolean } = {},
 ): Promise<void> {
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
+    if (pathname === '/api/v1/candidate/matched-vacancies') {
+      if (overrides.failMatched) {
+        return route.fulfill({
+          status: 503,
+          json: { error: { code: 'source_unavailable', message: 'Подбор не ответил.' } },
+        });
+      }
+      return route.fulfill({
+        json: {
+          data: [MATCHED_VACANCY],
+          meta: {
+            total: 1,
+            nextOffset: null,
+            campaign: {
+              roles: { value: ['Senior Software Engineer'], origin: 'profile' },
+              regions: { value: ['ru'], origin: 'profile' },
+              remoteOnly: false,
+              roleHypotheses: [
+                { role: 'Senior Software Engineer', vacancyCount: 1, isHypothesis: false },
+              ],
+            },
+            candidateLevel: 'Senior',
+          },
+        },
+      });
+    }
     if (pathname === '/api/v1/auth/me') {
       return route.fulfill({ json: { data: REGISTERED_CANDIDATE } });
     }
@@ -179,58 +242,36 @@ async function seedWorkspace(page: Page): Promise<void> {
 }
 
 async function openOpportunities(page: Page): Promise<void> {
-  test.fixme(
-    true,
-    'C68: C56 убрал сохранённые запросы с «Вакансий» (решение владельца 27.09); проверку правдивости источников переписывают под новый экран',
-  );
-  // The rail is hidden on a phone, where the same navigation lives in the
-  // bottom bar; `:visible` picks whichever one this viewport shows.
-  // Регулярные выборки живут в панели фильтров «Вакансий» с B181.
+  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/, { timeout: 10_000 });
+  // Рельс несёт кнопку «Вакансии»; на мобильном она же в нижней панели.
+  // `:visible` выбирает ту, что видна в данном вьюпорте.
   await page.locator('button[aria-label="Вакансии"]:visible').first().click();
-  await expect(page.locator('.career-vacancy-saved')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Вакансии', exact: true })).toBeVisible();
 }
 
 test.describe('B156 truthful market intelligence boundary', () => {
-  test('candidate sees the source-backed vacancy search without fabricated outcomes', async ({
+  test('candidate sees the Vacancies screen without fabricated outcomes', async ({
     page,
   }, testInfo) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
-    // Market intelligence lives in «Поиске» since «Пульт»; «Главная» only
-    // recommends the next step.
     await openOpportunities(page);
-    const savedSearchToggle = page.getByRole('button', {
-      name: 'Senior Software Engineer',
-      exact: true,
-    });
-    await expect(savedSearchToggle).toBeVisible();
+
     await page.screenshot({
-      path: testInfo.outputPath('vacancies-saved-search.png'),
+      path: testInfo.outputPath('vacancies-screen.png'),
       fullPage: true,
     });
-    await captureCareerHarness(page, testInfo.outputPath('vacancies-saved-search.html'));
-    if ((await savedSearchToggle.getAttribute('aria-expanded')) === 'false') {
-      await savedSearchToggle.click();
-    }
+    await captureCareerHarness(page, testInfo.outputPath('vacancies-screen.html'));
 
-    const marketSearch = page.locator('.career-saved-searches').filter({
-      has: page.getByRole('heading', { name: '12 найдено' }),
-    });
-    await expect(marketSearch).toBeVisible();
-    await expect(marketSearch.getByText('Senior Software Engineer', { exact: true })).toBeVisible();
-    // Сам список найденного отсюда убран: таблица пула стоит на том же экране,
-    // и дублировать её ссылками — показывать одни и те же вакансии дважды (B181).
-    await expect(marketSearch.getByRole('link', { name: 'Источник: hh.ru' })).toBeVisible();
-    await expect(marketSearch.getByRole('button', { name: 'Собрать сейчас' })).toBeVisible();
-    await expect(marketSearch.getByRole('button', { name: 'Остановить сбор' })).toBeVisible();
-    await expect(marketSearch.getByRole('button', { name: 'Удалить запрос' })).toBeVisible();
-    const poolError = page.locator('.vacancies-state').filter({
-      hasText: 'Не удалось загрузить общий пул вакансий',
-    });
-    await expect(poolError).toContainText('Источник сбоя не определён');
-    await expect(poolError).toContainText('Сохранённые запросы показываются отдельно');
+    // Экран показывает реальную вакансию и её источник; исходы отклика не выводятся.
+    await expect(page.getByRole('heading', { name: 'Вакансии', exact: true })).toBeVisible();
+    const vacancy = page.locator('.vac-list-item').first();
+    await expect(vacancy).toContainText('Senior Software Engineer');
+    await vacancy.locator('button').click();
+    const detail = page.locator('.vacancies-detail-panel');
+    await expect(detail).toContainText('Опубликована на hh.ru');
 
     for (const fabricatedOutcome of [
       'Авто-поднятие резюме',
@@ -244,33 +285,27 @@ test.describe('B156 truthful market intelligence boundary', () => {
       await expect(page.getByText(fabricatedOutcome, { exact: false })).toHaveCount(0);
     }
 
-    const accessibility = await new AxeBuilder({ page })
-      .include('.career-saved-searches')
-      .analyze();
+    const accessibility = await new AxeBuilder({ page }).include('.vacancies-screen').analyze();
     const criticalViolations = accessibility.violations.filter((v) => v.impact === 'critical');
     expect(criticalViolations).toEqual([]);
   });
 
-  test('the source picker names the hh.ru access refusal before a search is spent on it', async ({
+  test('the hh.ru access refusal is named honestly when vacancy loading fails', async ({
     page,
   }) => {
-    await stubSession(page, { subscriptions: [], hhAccessClosed: true });
+    await stubSession(page, {
+      subscriptions: [],
+      hhAccessClosed: true,
+      failMatched: true,
+    });
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
     await openOpportunities(page);
 
-    // B234: форма новой выборки — за «+» в блоке «Сохранённые».
-    await page.getByRole('button', { name: 'Новый запрос к площадке' }).click();
-    const create = page.locator('.career-market-create');
-    await expect(create).toBeVisible();
-    // B175 / INC-022: hh.ru answers 403 to the unauthenticated search, so the
-    // candidate reads that before choosing it — not «ещё не проверен».
-    // PRB-042: по умолчанию стоит отвечающая площадка; hh.ru выбирают руками.
-    await create.getByRole('combobox', { name: 'Источник вакансий' }).selectOption('hh');
-    const health = create.locator('.career-source-health');
-    await expect(health).toHaveClass(/is-official_access_required/);
-    await expect(health).toContainText('площадка закрыла доступ');
-    await expect(health).not.toContainText('не проверяли');
+    const error = page.locator('.vacancies-state');
+    await expect(error).toContainText('Поиск hh.ru без официального доступа недоступен');
+    await expect(error).toContainText('Вакансии общего подбора могут поступать');
+    await expect(error).not.toContainText('не проверяли');
   });
 });

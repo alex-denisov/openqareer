@@ -160,7 +160,7 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
       label: 'Роль',
       state: trackState(roleItem),
       reason: roleItem?.reason ?? 'Роль не выбрана',
-      destination: 'opportunities',
+      destination: 'career',
     },
     shortlistStepOf(input),
     responsesStepOf(input),

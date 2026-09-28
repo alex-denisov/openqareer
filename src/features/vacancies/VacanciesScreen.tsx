@@ -345,8 +345,7 @@ function VacanciesErrorState({
       <h2>Не удалось загрузить подборку</h2>
       <p>
         Не удалось загрузить общий пул вакансий.{' '}
-        {sourceLabel ? `Проблемные источники: ${sourceLabel}.` : 'Источник сбоя не определён.'}{' '}
-        Сохранённые запросы показываются отдельно; роль и география сохранены.
+        {sourceLabel ?? 'Причина сбоя не определена.'} Роль и география сохранены.
       </p>
       {onRetry ? (
         <button type="button" className="vacancies-btn vacancies-btn-primary" onClick={onRetry}>

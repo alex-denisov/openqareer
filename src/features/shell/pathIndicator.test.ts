@@ -147,7 +147,7 @@ describe('buildPathIndicator', () => {
     const steps = buildPathIndicator({ matchedPoolCount: 0, confirmedApplications: 0 });
     expect(steps.map(({ id, destination }) => [id, destination])).toEqual([
       ['profile', 'profile'],
-      ['role', 'opportunities'],
+      ['role', 'career'],
       ['shortlist', 'opportunities'],
       ['responses', 'responses'],
       ['interviews', 'responses'],

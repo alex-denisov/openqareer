@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import { updateAccountProfile, type AuthUser } from '../coach/coachApi';
+import { saveCandidateCampaign } from '../coach/matchedVacancyApi';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { visibleTargetDirection } from '../workspace/workspacePresentation';
 import { TodayScreen } from '../today/TodayScreen';
@@ -127,9 +128,8 @@ export function CareerCabinet({
 
   const savePremises = useCallback(
     async (draft: RoutePremisesDraft) => {
-      // Regions and the role live in the workspace. Without one there is
-      // nowhere to put them, and saving only the account half would drop the
-      // candidate's geography without saying so.
+      // Role and regions are campaign inputs as well as wizard answers.
+      // Without a workspace there is nowhere to keep the candidate's route.
       if (!workspace) {
         throw new Error(
           'сначала завершите карьерную диагностику — регионы и роль хранятся в её ответах',
@@ -139,11 +139,21 @@ export function CareerCabinet({
       if (patch) {
         data.setAccount(await updateAccountProfile(patch));
       }
-      // `onUpdateWorkspace` is the same write-through the wizard uses, so the
-      // answers reach `PUT /candidate/workspace` and survive this browser.
+      // Keep the original answers in sync with the explicit campaign selection.
       onUpdateWorkspace(applyRoutePremises(workspace, draft));
+      const targetRole = draft.targetRole.trim();
+      const preservedRoles = pool.campaign?.roles.value.length
+        ? [...pool.campaign.roles.value]
+        : targetDirection.trim()
+          ? [targetDirection.trim()]
+          : [];
+      await saveCandidateCampaign({
+        roles: targetRole ? [targetRole] : preservedRoles,
+        regions: [...draft.regions],
+      });
+      pool.refresh?.();
     },
-    [data, onUpdateWorkspace, workspace],
+    [data, onUpdateWorkspace, pool, targetDirection, workspace],
   );
   // «Профиль / Документ и форматы» — в шапке страницы, справа от заголовка
   // «Профиль», а не рядом с карточкой кандидата: карточка — факты о человеке,

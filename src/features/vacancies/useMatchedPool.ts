@@ -166,8 +166,20 @@ async function failureSourceLabel(): Promise<string | undefined> {
     const unhealthy = sources.filter(
       (source) => source.health.status !== 'healthy' && source.health.status !== 'not_checked',
     );
-    return unhealthy.slice(0, 3).map((source) => source.name).join(', ') || undefined;
+    return unhealthy.slice(0, 3).map(sourceFailureContext).join(' ') || undefined;
   } catch {
     return undefined;
   }
+}
+
+function sourceFailureContext(
+  source: Awaited<ReturnType<typeof getVacancySources>>[number],
+): string {
+  if (source.health.status === 'official_access_required') {
+    return `Поиск ${source.name} без официального доступа недоступен. Вакансии общего подбора могут поступать из разрешённого регулярного сбора.`;
+  }
+  if (source.health.status === 'degraded') {
+    return `${source.name}: источник отвечает с ошибками.`;
+  }
+  return `${source.name}: источник сейчас не отвечает.`;
 }

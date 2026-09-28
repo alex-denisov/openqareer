@@ -3,7 +3,8 @@ import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 import { preview } from 'vite';
 
-const CAMPAIGN_SCREEN_PARKED = 'parked: C68 — экран кампании вне шкалы пути после C52';
+
+
 
 const BROWSER_WALK_MESSAGES = [
   {
@@ -1096,11 +1097,31 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await expert.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
   await expert.waitFor({ state: 'hidden' });
 
-  // C52 отвёл шаг «Роль» в «Вакансии»; экран кампании (воронка, автоматизация,
-  // «Роль, регион, формат») открывается только из следующего шага. Его проверку
-  // переносит C68 — до этого гейт честно пишет `parked`, а не `true`.
-  const campaignFunnel = CAMPAIGN_SCREEN_PARKED;
-  const campaignQueue = CAMPAIGN_SCREEN_PARKED;
+  // «Поиск» остаётся без отдельного пункта рельса; кампания открывается шагом «Роль».
+  await page.getByRole('button', { name: /^Роль\./ }).first().click();
+  await page.getByRole('heading', { name: 'Поиск', exact: true }).waitFor();
+  await page.getByRole('heading', { name: /Кампания:/u }).waitFor();
+  await page.getByRole('heading', { name: 'Воронка' }).waitFor();
+  await page.getByRole('heading', { name: 'Очередь на сегодня' }).waitFor();
+  await page.getByRole('heading', { name: 'Роль, регион, формат' }).waitFor();
+  const funnelLabels = (
+    await page.locator('.career-funnel .career-funnel-label').allInnerTexts()
+  ).map((label) => label.trim().toLocaleLowerCase('ru-RU'));
+  const campaignFunnel = funnelLabels.length === 6 && funnelLabels.includes('открыто');
+  assert(
+    campaignFunnel,
+    `${viewport.name}: воронка кампании не отрисовалась ${JSON.stringify(funnelLabels)}`,
+  );
+  const untracked = await page.locator('.career-funnel li.is-untracked').count();
+  assert(
+    untracked === 3 && /не отслеживаем/iu.test(await page.locator('.career-campaign').innerText()),
+    `${viewport.name}: кампания выдаёт неизмеренное за ноль (${untracked})`,
+  );
+  const campaignQueue =
+    (await page.getByRole('heading', { name: 'Автоматизация', exact: true }).count()) === 1 &&
+    (await page.getByRole('button', { name: 'Посмотреть тарифы', exact: true }).count()) === 1;
+  assert(campaignQueue, `${viewport.name}: автоматизация по тарифу не отрисовалась`);
+
   // «Вакансии» держат собранный пул (B248/B250): непустой пул рисует
   // `VacanciesScreen` (список + детальная карточка), а не старую
   // `VacancyBoard` (та осталась для загрузки/ошибки/пустого пула — ниже её
