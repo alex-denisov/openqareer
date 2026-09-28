@@ -150,6 +150,26 @@ describe('SemanticBackfill (B267 S2)', () => {
     expect(semanticRows(database).map((row) => row.id)).toEqual(['v1']);
   });
 
+  it('ищет устаревшие строки чтением, а удаляет только по списку — без JOIN под блокировкой записи (B303)', () => {
+    const database = poolDatabase();
+    addVacancy(database, 'v1', 'Software Engineer');
+    const backfill = new SemanticBackfill(database);
+    backfill.step(100);
+    database.prepare('UPDATE vacancy_pool_index SET expired = 1 WHERE id = ?').run('v1');
+    const statements: string[] = [];
+    const prepare = database.prepare.bind(database);
+    database.prepare = ((sql: string) => {
+      statements.push(sql);
+      return prepare(sql);
+    }) as typeof database.prepare;
+
+    expect(backfill.step(100).pruned).toBe(1);
+
+    const deletes = statements.filter((sql) => /^\s*DELETE/i.test(sql));
+    expect(deletes.length).toBeGreaterThan(0);
+    for (const sql of deletes) expect(sql).not.toMatch(/JOIN|SELECT/i);
+  });
+
   it('укладывает порцию из 5 000 записей в бюджет короткой транзакции', () => {
     const database = poolDatabase();
     for (let index = 0; index < 5_000; index += 1) {

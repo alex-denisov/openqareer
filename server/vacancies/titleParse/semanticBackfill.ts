@@ -246,19 +246,33 @@ export class SemanticBackfill {
     return { resolved, newKeys };
   }
 
-  /** Строки вакансий, ушедших из живого пула, — ограниченной порцией за проход. */
+  /**
+   * Строки вакансий, ушедших из живого пула, — ограниченной порцией за проход.
+   * Поиск — обычным чтением (в WAL не мешает писателям), удаление — коротко по
+   * списку rowid: `DELETE … IN (SELECT … JOIN)` держал запись 104 с и ронял
+   * старт сервера и записи HTTP (B303).
+   */
   private pruneOrphans(): number {
-    return Number(
-      this.database
-        .prepare(
-          `DELETE FROM vacancy_semantic WHERE rowid IN (
-             SELECT s.rowid FROM vacancy_semantic s
-             LEFT JOIN vacancy_pool_index i ON i.id = s.id
-             WHERE i.id IS NULL OR i.expired = 1
-             LIMIT ?)`,
-        )
-        .run(PRUNE_CHUNK).changes,
-    );
+    const rowids = this.database
+      .prepare(
+        `SELECT s.rowid AS rowid FROM vacancy_semantic s
+         LEFT JOIN vacancy_pool_index i ON i.id = s.id
+         WHERE i.id IS NULL OR i.expired = 1
+         LIMIT ?`,
+      )
+      .all(PRUNE_CHUNK)
+      .map((row) => Number(row.rowid));
+    if (rowids.length === 0) return 0;
+    const drop = this.database.prepare('DELETE FROM vacancy_semantic WHERE rowid = ?');
+    this.database.exec('BEGIN');
+    try {
+      const removed = rowids.reduce((total, rowid) => total + Number(drop.run(rowid).changes), 0);
+      this.database.exec('COMMIT');
+      return removed;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
   }
 }
 
