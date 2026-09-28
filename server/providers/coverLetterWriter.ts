@@ -69,6 +69,10 @@ export interface CoverLetterVacancy {
   readonly requirements?: readonly string[];
   /** Не попадает в текст вакансии: только задаёт порядок фактов в промпте. */
   readonly rankingContext?: PitchFactRankingContext;
+  readonly recipient?: {
+    readonly name?: string;
+    readonly role?: string;
+  };
 }
 
 export interface CoverLetterWriteInput {
@@ -227,6 +231,7 @@ export function serializeInput(input: CoverLetterWriteInput): string {
         .slice(0, MAX_REQUIREMENTS)
         .map((requirement) => requirement.slice(0, MAX_REQUIREMENT)),
     },
+    ...(input.vacancy.recipient ? { recipient: input.vacancy.recipient } : {}),
     facts: rankedFacts.slice(0, MAX_FACTS).map((fact) => ({
       ref: fact.ref,
       statement: fact.statement.slice(0, MAX_STATEMENT),

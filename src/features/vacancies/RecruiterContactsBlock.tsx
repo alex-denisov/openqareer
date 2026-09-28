@@ -22,6 +22,7 @@ import {
   type EnrichVacancyPayload,
 } from './recruiterContactsApi';
 import type { RecruiterContactJob } from '../../../shared/recruiterContact';
+import { RecruiterMessagePanel } from './RecruiterMessagePanel';
 
 export interface RecruiterContactsBlockProps {
   readonly vacancyId: string;
@@ -149,6 +150,8 @@ function SocialActions({ contact }: { readonly contact: RecruiterContact }) {
 }
 
 function RecruiterCard({ contact }: { readonly contact: RecruiterContact }) {
+  const [showMessage, setShowMessage] = useState(false);
+
   return (
     <div className="career-recruiter-card">
       <div className="career-recruiter-header">
@@ -162,9 +165,24 @@ function RecruiterCard({ contact }: { readonly contact: RecruiterContact }) {
         <ContactBadge status={contact.emailStatus} />
       </div>
       <div className="career-recruiter-actions">
+        <button
+          type="button"
+          className="career-recruiter-write-btn"
+          onClick={() => setShowMessage((prev) => !prev)}
+          aria-expanded={showMessage}
+        >
+          <PaperPlaneTilt size={14} aria-hidden="true" />
+          <span>Написать</span>
+        </button>
         {contact.email && <EmailAction email={contact.email} />}
         <SocialActions contact={contact} />
       </div>
+      {showMessage && (
+        <RecruiterMessagePanel
+          contact={contact}
+          onClose={() => setShowMessage(false)}
+        />
+      )}
     </div>
   );
 }

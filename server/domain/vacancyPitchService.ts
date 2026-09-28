@@ -44,6 +44,11 @@ export interface VacancyPitchInputVacancy {
   readonly isRemote?: boolean;
 }
 
+export interface PitchRecipient {
+  readonly name?: string;
+  readonly role?: string;
+}
+
 export interface GenerateVacancyPitchOptions {
   readonly vacancy: VacancyPitchInputVacancy;
   readonly candidateName?: string;
@@ -53,6 +58,7 @@ export interface GenerateVacancyPitchOptions {
   readonly language?: PitchLanguage;
   /** Контекст разбора роли сохраняет один порядок для шаблона и модели. */
   readonly rankingContext?: PitchFactRankingContext;
+  readonly recipient?: PitchRecipient;
 }
 
 export interface VacancyPitchUsedFact {
@@ -68,6 +74,7 @@ export interface VacancyPitchResponse {
   };
   readonly linkedInNote: string;
   readonly atsCoverLetter: string;
+  readonly contactMessage: string;
   readonly usedEvidenceIds: readonly string[];
   readonly usedFacts: readonly VacancyPitchUsedFact[];
   /** Требования вакансии, на которые письмо ответило конкретным фактом профиля (C46). */
@@ -83,6 +90,7 @@ export interface VacancyPitchResponse {
 }
 
 const LINKEDIN_NOTE_LIMIT = 300;
+const CONTACT_MESSAGE_LIMIT = 600;
 
 /** При token-limit сохраняем только предложения, которые модель успела закончить. */
 export function trimIncompleteFinalSentence(text: string): string {
@@ -178,6 +186,11 @@ interface Copy {
     fitHeading: string;
     signOff: string;
   };
+  contactGreeting(name: string): string;
+  contactGreetingGeneric: string;
+  contactIntro(candidateName: string, title: string, company?: string): string;
+  contactFacts(statements: readonly string[]): string;
+  contactClosing(tone: PitchTone): string;
   companyFallback: string;
   candidateFallback: string;
   noticeNoFacts: string;
@@ -235,6 +248,22 @@ const RU_COPY: Copy = {
     fitHeading: 'Соответствие требованиям роли:',
     signOff: 'С уважением,',
   },
+  contactGreeting: (name) => `Здравствуйте, ${name}!`,
+  contactGreetingGeneric: 'Здравствуйте!',
+  contactIntro: (candidate, title, company) => {
+    const atCompany = company ? ` в ${company}` : '';
+    return `Меня зовут ${candidate}, пишу по поводу позиции ${title}${atCompany}.`;
+  },
+  contactFacts: (statements) => `Коротко о моём опыте: ${joinSentences(statements)}`,
+  contactClosing: (tone) => {
+    if (tone === 'technical') {
+      return 'Буду рад обсудить инженерные задачи и ответить на вопросы.';
+    }
+    if (tone === 'confident') {
+      return 'Предлагаю созвониться на 15 минут для предметного знакомства.';
+    }
+    return 'Буду рад короткому звонку, чтобы обсудить задачи роли и взаимные ожидания.';
+  },
   companyFallback: 'вашей команды',
   candidateFallback: 'Кандидат',
   noticeNoFacts: 'В профиле пока нет фактов, годных для письма — добавьте их перед отправкой.',
@@ -290,6 +319,22 @@ const EN_COPY: Copy = {
     resultsHeading: 'Key results:',
     fitHeading: 'Fit against the role requirements:',
     signOff: 'Best regards,',
+  },
+  contactGreeting: (name) => `Hello ${name}!`,
+  contactGreetingGeneric: 'Hello!',
+  contactIntro: (candidate, title, company) => {
+    const atCompany = company ? ` at ${company}` : '';
+    return `My name is ${candidate}, reaching out regarding the ${title} role${atCompany}.`;
+  },
+  contactFacts: (statements) => `Briefly on my background: ${joinSentences(statements)}`,
+  contactClosing: (tone) => {
+    if (tone === 'technical') {
+      return "I'd be glad to discuss engineering challenges and answer any questions.";
+    }
+    if (tone === 'confident') {
+      return "Let's set up a quick 15-minute call to discuss mutual fit.";
+    }
+    return "I'd welcome a brief call to discuss the role's scope and expectations.";
   },
   companyFallback: 'your team',
   candidateFallback: 'Candidate',
@@ -462,6 +507,74 @@ function buildAtsCoverLetter(
   ].join('\n');
 }
 
+function buildContactMessage(
+  copy: Copy,
+  vacancy: VacancyPitchInputVacancy,
+  candidateName: string,
+  facts: readonly VacancyPitchInputFact[],
+  tone: PitchTone,
+  recipient: PitchRecipient | undefined,
+  usedIds: Set<string>,
+  useRanking: boolean,
+): string {
+  const greeting = recipient?.name
+    ? copy.contactGreeting(recipient.name)
+    : copy.contactGreetingGeneric;
+  const intro = copy.contactIntro(candidateName, vacancy.title, vacancy.company);
+
+  const selectedFacts: VacancyPitchInputFact[] = [];
+  const primaryFact = useRanking
+    ? facts[0]
+    : facts.find((f) => f.domain === 'outcome' || /\d+/u.test(f.statement)) ?? facts[0];
+  if (primaryFact) {
+    selectedFacts.push(primaryFact);
+    usedIds.add(primaryFact.id);
+  }
+  const secondaryFact = facts.find((f) => f.id !== primaryFact?.id);
+  if (secondaryFact) {
+    selectedFacts.push(secondaryFact);
+    usedIds.add(secondaryFact.id);
+  }
+
+  const factSnippet =
+    selectedFacts.length > 0 ? copy.contactFacts(selectedFacts.map((f) => f.statement)) : '';
+  const cta = copy.contactClosing(tone);
+  const parts = [greeting, intro, factSnippet, cta].filter(Boolean);
+  return truncateSafely(parts.join(' '), CONTACT_MESSAGE_LIMIT);
+}
+
+function assemblePitches(params: {
+  copy: Copy;
+  vacancy: VacancyPitchInputVacancy;
+  candidateName: string;
+  usableFacts: readonly VacancyPitchInputFact[];
+  tone: PitchTone;
+  recipient?: PitchRecipient;
+  usedIds: Set<string>;
+  notices: string[];
+  useRanking: boolean;
+}) {
+  const { copy, vacancy, candidateName, usableFacts, tone, recipient, usedIds, notices, useRanking } = params;
+  const intro = copy.intro(vacancy.title, vacancy.company, tone);
+  const evidence = buildEvidenceParagraph(copy, usableFacts, usedIds, notices, useRanking);
+  const stack = buildStackParagraph(copy, vacancy, usableFacts, usedIds, notices);
+  const closing = copy.closing(tone);
+  return {
+    emailBody: [intro, evidence, stack, closing].filter((p) => p.length > 0).join('\n\n'),
+    linkedInNote: buildLinkedInNote(copy, vacancy, usableFacts, tone, usedIds, useRanking),
+    atsCoverLetter: buildAtsCoverLetter(copy, vacancy, candidateName, intro, evidence, stack, closing),
+    contactMessage: buildContactMessage(copy, vacancy, candidateName, usableFacts, tone, recipient, usedIds, useRanking),
+  };
+}
+
+function buildUsedFacts(
+  usedIds: Set<string>,
+  usableFacts: readonly VacancyPitchInputFact[],
+): VacancyPitchUsedFact[] {
+  const basisById = new Map(usableFacts.map((fact) => [fact.id, factBasis(fact)] as const));
+  return Array.from(usedIds).map((id) => ({ id, basis: basisById.get(id) ?? 'imported' }));
+}
+
 export function generateVacancyPitch(options: GenerateVacancyPitchOptions): VacancyPitchResponse {
   const { vacancy, tone = 'executive' } = options;
   const language = options.language ?? detectVacancyLanguage(vacancy);
@@ -474,42 +587,27 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
 
   const metricFact = usableFacts.find((f) => /\d+/u.test(f.statement));
   const subject = copy.subject(vacancy.title, candidateName, tone, Boolean(metricFact));
-
-  const intro = copy.intro(vacancy.title, vacancy.company, tone);
-  const evidence = buildEvidenceParagraph(copy, usableFacts, usedEvidenceIds, notices, useRanking);
-  const stack = buildStackParagraph(copy, vacancy, usableFacts, usedEvidenceIds, notices);
-  const closing = copy.closing(tone);
-
-  const emailBody = [intro, evidence, stack, closing].filter((p) => p.length > 0).join('\n\n');
-  const linkedInNote = buildLinkedInNote(copy, vacancy, usableFacts, tone, usedEvidenceIds, useRanking);
-  const atsCoverLetter = buildAtsCoverLetter(
+  const pitches = assemblePitches({
     copy,
     vacancy,
     candidateName,
-    intro,
-    evidence,
-    stack,
-    closing,
-  );
-
-  const basisById = new Map(usableFacts.map((fact) => [fact.id, factBasis(fact)] as const));
-  const usedFacts: VacancyPitchUsedFact[] = Array.from(usedEvidenceIds).map((id) => ({
-    id,
-    basis: basisById.get(id) ?? 'imported',
-  }));
-  const coveredRequirements = matchRequirements(vacancy.requiredSkills ?? [], usableFacts).matched;
+    usableFacts,
+    tone,
+    recipient: options.recipient,
+    usedIds: usedEvidenceIds,
+    notices,
+    useRanking,
+  });
 
   return {
     vacancyId: vacancy.id,
-    emailPitch: {
-      subject: stripHiddenMarkers(subject),
-      body: stripHiddenMarkers(emailBody),
-    },
-    linkedInNote: stripHiddenMarkers(linkedInNote),
-    atsCoverLetter: stripHiddenMarkers(atsCoverLetter),
+    emailPitch: { subject: stripHiddenMarkers(subject), body: stripHiddenMarkers(pitches.emailBody) },
+    linkedInNote: stripHiddenMarkers(pitches.linkedInNote),
+    atsCoverLetter: stripHiddenMarkers(pitches.atsCoverLetter),
+    contactMessage: stripHiddenMarkers(pitches.contactMessage),
     usedEvidenceIds: Array.from(usedEvidenceIds),
-    usedFacts,
-    coveredRequirements,
+    usedFacts: buildUsedFacts(usedEvidenceIds, usableFacts),
+    coveredRequirements: matchRequirements(vacancy.requiredSkills ?? [], usableFacts).matched,
     language,
     notices,
     generatedAt: new Date().toISOString(),
