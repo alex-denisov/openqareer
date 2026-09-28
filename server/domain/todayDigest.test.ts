@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTodaySnapshot, type TodayNewVacancy } from './todayDigest';
+import { buildTodaySnapshot, countApplicationsWaitingOver7Days, type TodayNewVacancy } from './todayDigest';
 import type { ApplicationView } from './applicationDerivedFields';
 
 function application(overrides: Partial<ApplicationView> = {}): ApplicationView {
@@ -247,9 +247,72 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
       companyEventsSinceVisit: 2,
     });
 
-    expect(snapshot.sinceLastVisit).toEqual({
-      since: '2026-09-01T00:00:00.000Z',
-      items: ['2 события от компаний'],
+    expect(snapshot.sinceLastVisit.since).toBe('2026-09-01T00:00:00.000Z');
+    expect(snapshot.sinceLastVisit.items).toEqual(['2 события от компаний']);
+  });
+
+  it('calculates applications waiting for response over 7 days and structures sinceLastVisit for returning candidate (B255)', () => {
+    const waiting9Days = application({
+      id: 'app-waiting-9',
+      stage: 'applied',
+      followUp: {
+        dueAt: '2026-09-20T00:00:00.000Z',
+        urgency: 'overdue',
+        source: 'standard_schedule',
+        daysSinceContact: 9,
+      },
+    });
+    const waiting5Days = application({
+      id: 'app-waiting-5',
+      stage: 'applied',
+      followUp: {
+        dueAt: '2026-09-24T00:00:00.000Z',
+        urgency: 'due',
+        source: 'standard_schedule',
+        daysSinceContact: 5,
+      },
+    });
+    const archivedOld = application({
+      id: 'app-archived',
+      stage: 'archived',
+      followUp: {
+        dueAt: '2026-09-10T00:00:00.000Z',
+        urgency: 'stale',
+        source: 'standard_schedule',
+        daysSinceContact: 15,
+      },
+    });
+    const interview = {
+      id: 'i-1',
+      scheduledAt: '2026-10-02T14:00:00.000Z',
+      prepStatus: 'none' as const,
+      round: 1,
+    };
+    const appWithInterview = application({
+      id: 'app-interview',
+      stage: 'interview',
+      nearestInterview: interview,
+    });
+
+    const applications = [waiting9Days, waiting5Days, archivedOld, appWithInterview];
+
+    expect(countApplicationsWaitingOver7Days(applications)).toBe(1);
+
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      since: '2026-09-20T10:00:00.000Z',
+      applications,
+      newVacancies: [newVacancy({ clusterId: 'c-1' }), newVacancy({ clusterId: 'c-2' })],
+    });
+
+    expect(snapshot.digest.applicationsWaitingOver7Days).toBe(1);
+    expect(snapshot.sinceLastVisit.newVacanciesCount).toBe(2);
+    expect(snapshot.sinceLastVisit.applicationsWaitingOver7Days).toBe(1);
+    expect(snapshot.sinceLastVisit.nearestInterview).toEqual({
+      company: 'FinCloud',
+      title: 'Продуктовый аналитик',
+      round: 1,
+      at: '2026-10-02T14:00:00.000Z',
     });
   });
 });

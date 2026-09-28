@@ -7538,6 +7538,65 @@
   gap: var(--career-space-6);
 }
 
+.career-today-return-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-1);
+  padding: var(--career-space-2) var(--career-space-3);
+  background: var(--career-surface);
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-lg);
+  font-size: var(--career-text-sm);
+  line-height: var(--career-line-sm);
+  color: var(--career-text-dim);
+}
+
+.career-today-return-prefix {
+  font-weight: 500;
+  color: var(--career-text);
+}
+
+.career-today-return-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+}
+
+.career-today-return-separator {
+  color: var(--career-text-dim);
+  user-select: none;
+}
+
+.career-today-return-link {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  color: var(--career-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.career-today-return-link:hover {
+  color: var(--career-accent-ink);
+}
+
+/* На телефоне пункты — столбиком, без разделителей в начале строки (B255). */
+@media (max-width: 480px) {
+  .career-today-return-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .career-today-return-separator {
+    display: none;
+  }
+}
+
 .career-today-subtitle {
   margin: 0;
   color: var(--career-text-dim);

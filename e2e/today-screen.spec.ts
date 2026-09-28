@@ -516,4 +516,119 @@ test.describe('B251 today screen', () => {
     // Resolved proposal does not return
     await expect(page.locator('.career-today-consultant-card')).toHaveCount(0);
   });
+
+  test('displays returning-user banner on second visit, navigates on click and matches 1440/390 (B255)', async ({
+    page,
+  }) => {
+    let visitCount = 0;
+    const FIRST_VISIT_SNAPSHOT = {
+      ...TODAY_SNAPSHOT,
+      sinceLastVisit: {
+        since: null,
+        items: [],
+      },
+    };
+
+    const SECOND_VISIT_SNAPSHOT = {
+      ...TODAY_SNAPSHOT,
+      digest: {
+        ...TODAY_SNAPSHOT.digest,
+        newVacancies: 3,
+        applicationsWaitingOver7Days: 1,
+        nextInterview: {
+          company: 'HRTx Inc.',
+          title: 'Enterprise Architect Director',
+          round: 2,
+          at: TODAY_NEXT_INTERVIEW_AT,
+        },
+      },
+      sinceLastVisit: {
+        since: '2026-09-24T10:00:00.000Z',
+        items: ['3 новые вакансии по VP Technology Ops'],
+        newVacanciesCount: 3,
+        applicationsWaitingOver7Days: 1,
+        nearestInterview: {
+          company: 'HRTx Inc.',
+          title: 'Enterprise Architect Director',
+          round: 2,
+          at: TODAY_NEXT_INTERVIEW_AT,
+        },
+      },
+    };
+
+    await stubSession(page, FIRST_VISIT_SNAPSHOT);
+    await seedWorkspace(page);
+
+    await page.route('**/api/v1/candidate/today*', async (route) => {
+      const data = visitCount === 0 ? FIRST_VISIT_SNAPSHOT : SECOND_VISIT_SNAPSHOT;
+      return route.fulfill({ json: { data } });
+    });
+
+    // Visit 1: Desktop 1440
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    await expect(page.locator('.career-today-return-banner')).toHaveCount(0);
+    await page.screenshot({ path: 'output/playwright/B255/visit-1-1440.png', fullPage: true });
+
+    // Visit 1: Mobile 390
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.locator('.career-today-return-banner')).toHaveCount(0);
+    await page.screenshot({ path: 'output/playwright/B255/visit-1-390.png', fullPage: true });
+
+    // Advance to Visit 2
+    visitCount = 1;
+
+    // Navigate to Profile and back to Today
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.locator('.career-nav-button:visible').filter({ hasText: 'Профиль' }).click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Профиль');
+
+    // Return to Today (Visit 2)
+    await page.locator('.career-nav-button:visible').filter({ hasText: 'Сегодня' }).click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Сегодня');
+
+    // Visit 2: Banner must be visible with all 3 items
+    const banner = page.locator('.career-today-return-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('С прошлого визита:');
+    await expect(banner.locator('[data-testid="since-visit-vacancies"]')).toHaveText(
+      '3 новые подходящие вакансии',
+    );
+    await expect(banner.locator('[data-testid="since-visit-applications"]')).toHaveText(
+      '1 отклик ждёт ответа больше 7 дней',
+    );
+    await expect(banner.locator('[data-testid="since-visit-interview"]')).toContainText(
+      'ближайшее интервью',
+    );
+    await page.screenshot({ path: 'output/playwright/B255/visit-2-1440.png', fullPage: true });
+
+    // Check responsive layout on 390
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(banner).toBeVisible();
+    const narrowOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(narrowOverflow).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: 'output/playwright/B255/visit-2-390.png', fullPage: true });
+
+    // Test Navigation: click vacancies link in banner
+    await banner.locator('[data-testid="since-visit-vacancies"]').click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Вакансии');
+
+    // Return to Today and click applications link in banner
+    await page.locator('.career-nav-button:visible').filter({ hasText: 'Сегодня' }).click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Сегодня');
+    await expect(banner).toBeVisible();
+
+    await banner.locator('[data-testid="since-visit-applications"]').click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Отклики');
+
+    // Return to Today and click interview link in banner
+    await page.locator('.career-nav-button:visible').filter({ hasText: 'Сегодня' }).click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Сегодня');
+    await expect(banner).toBeVisible();
+
+    await banner.locator('[data-testid="since-visit-interview"]').click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Отклики');
+  });
 });

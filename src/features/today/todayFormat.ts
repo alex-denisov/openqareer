@@ -1,4 +1,6 @@
+import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { TodayDigest, TodayFollowUp, TodayNewVacanciesCaption, TodayNextInterview } from './todayApi';
+import { pluralRu } from '../../../shared/pluralRu';
 
 /**
  * Подписи-обоснования под числом на плитке дайджеста (макет
@@ -62,4 +64,60 @@ export function companyInitials(company: string | null): string {
     .map((word) => word[0]?.toUpperCase() ?? '')
     .join('');
   return letters || '—';
+}
+
+export interface ReturningDigestItem {
+  readonly id: 'vacancies' | 'applications' | 'interview';
+  readonly label: string;
+  readonly targetView: CareerCabinetView;
+}
+
+export function formatInterviewDate(iso: string): string {
+  const date = new Date(iso);
+  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(date);
+}
+
+export function buildReturningDigestItems(input: {
+  since: string | null;
+  newVacanciesCount: number;
+  applicationsWaitingOver7Days: number;
+  nearestInterview: TodayNextInterview | null;
+}): readonly ReturningDigestItem[] {
+  if (!input.since) return [];
+
+  const items: ReturningDigestItem[] = [];
+
+  if (input.newVacanciesCount > 0) {
+    items.push({
+      id: 'vacancies',
+      label: pluralRu(input.newVacanciesCount, [
+        'новая подходящая вакансия',
+        'новые подходящие вакансии',
+        'новых подходящих вакансий',
+      ]),
+      targetView: 'opportunities',
+    });
+  }
+
+  if (input.applicationsWaitingOver7Days > 0) {
+    items.push({
+      id: 'applications',
+      label: pluralRu(input.applicationsWaitingOver7Days, [
+        'отклик ждёт ответа больше 7 дней',
+        'отклика ждут ответа больше 7 дней',
+        'откликов ждут ответа больше 7 дней',
+      ]),
+      targetView: 'responses',
+    });
+  }
+
+  if (input.nearestInterview?.at) {
+    items.push({
+      id: 'interview',
+      label: `ближайшее интервью ${formatInterviewDate(input.nearestInterview.at)}`,
+      targetView: 'responses',
+    });
+  }
+
+  return items;
 }
