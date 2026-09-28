@@ -52,6 +52,7 @@ const modelRoleSchema = z.object({
   reason: z.string().trim().min(1).max(500),
 }).strict();
 
+const MIN_ROLES = 5;
 const MAX_ROLES = 10;
 
 function candidateRoles(facts: readonly CampaignRoleFact[], profileTitle: string | null): Role[] {
@@ -133,13 +134,14 @@ function validateModelRoles(
   facts: readonly CampaignRoleFact[],
   dismissed: ReadonlySet<string>,
 ): CampaignRoleProposal[] | null {
-  const parsed = z.array(modelRoleSchema).min(4).max(MAX_ROLES).safeParse(raw);
+  const parsed = z.array(modelRoleSchema).min(MIN_ROLES).max(MAX_ROLES).safeParse(raw);
   if (!parsed.success) return null;
   const byId = new Map(candidates.map((role) => [role.id, role]));
   const factRefs = new Set(facts.map((fact) => fact.ref));
   if (parsed.data.filter((item) => item.kind === 'primary').length !== 1) return null;
   if (parsed.data.some((item) => !byId.has(item.id) || dismissed.has(item.id) || item.evidenceRefs.some((ref) => !factRefs.has(ref)))) return null;
   const unique = [...new Map(parsed.data.map((item) => [item.id, item])).values()];
+  if (unique.length !== parsed.data.length) return null;
   return unique.map((item) => toProposal(byId.get(item.id)!, item.level, item.kind, item.evidenceRefs, item.reason));
 }
 

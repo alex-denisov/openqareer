@@ -2,14 +2,14 @@ import type { CampaignRoleModel, CampaignRoleModelInput } from '../vacancies/cam
 import { retryOn429, VertexTokenProvider, vertexPublisherBaseUrl, type VertexConfig } from './vertexAi';
 
 const SYSTEM_PROMPT = `
-Выбери одну основную и 3–8 смежных ролей кандидата.
-Возверни JSON-массив. Каждый элемент: id, level, kind (primary|adjacent), evidenceRefs, reason.
-id выбирай только из candidates. level — только ic, lead, head, vp или c-level.
-evidenceRefs обязаны и должны ссылаться только на переданные facts.
+Выбери 5–10 уникальных ролей кандидата: одну основную и остальные смежные.
+Верни JSON-массив с полями id, level, kind (primary|adjacent), evidenceRefs и reason.
+Выбирай id только из candidates. level — только ic, lead, head, vp или c-level.
+Массив evidenceRefs у каждой роли должен быть непустым и ссылаться только на переданные facts.
 `;
 
 const RESPONSE_SCHEMA = {
-  type: 'array', minItems: 1, maxItems: 10,
+  type: 'array', minItems: 5, maxItems: 10,
   items: {
     type: 'object', additionalProperties: false,
     required: ['id', 'level', 'kind', 'evidenceRefs', 'reason'],

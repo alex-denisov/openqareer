@@ -25,6 +25,49 @@ describe('buildCampaignRoleSet (B267 S5)', () => {
     expect(result.roles.every((role) => role.title && role.titleRu && role.evidenceRefs.length > 0)).toBe(true);
   });
 
+  it('отклоняет ответ модели короче пяти ролей и использует правила', async () => {
+    const result = await buildCampaignRoleSet({
+      facts,
+      profileTitle: facts[0].statement,
+      model: {
+        propose: async ({ candidates }) => candidates.slice(0, 4).map((role, index) => ({
+          id: role.id,
+          level: role.levels.at(-1)!,
+          kind: index === 0 ? 'primary' : 'adjacent',
+          evidenceRefs: [facts[index % facts.length].ref],
+          reason: 'Подтверждено фактом профиля',
+        })),
+      },
+    });
+
+    expect(result.model).toBe('rules');
+    expect(result.roles.length).toBeGreaterThanOrEqual(5);
+    expect(result.roles.length).toBeLessThanOrEqual(10);
+  });
+
+  it('отклоняет ответ с повтором одной роли, который сокращает набор ниже пяти', async () => {
+    const result = await buildCampaignRoleSet({
+      facts,
+      profileTitle: facts[0].statement,
+      model: {
+        propose: async ({ candidates }) => {
+          const proposed = candidates.slice(0, 4).map((role, index) => ({
+            id: role.id,
+            level: role.levels.at(-1)!,
+            kind: index === 0 ? 'primary' : 'adjacent',
+            evidenceRefs: [facts[index % facts.length].ref],
+            reason: 'Подтверждено фактом профиля',
+          }));
+          return [...proposed, proposed[1]];
+        },
+      },
+    });
+
+    expect(result.model).toBe('rules');
+    expect(result.roles.length).toBeGreaterThanOrEqual(5);
+    expect(new Set(result.roles.map((role) => role.id)).size).toBe(result.roles.length);
+  });
+
   it('отбрасывает весь ответ модели с чужим id или без evidenceRefs', async () => {
     for (const bad of [
       [{ id: 'outside.role', level: 'vp', kind: 'primary', evidenceRefs: ['memory:title'], reason: 'x' }],
