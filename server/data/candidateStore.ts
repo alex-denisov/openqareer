@@ -39,6 +39,7 @@ import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
 import type { ResumeDraft } from '../domain/resumeDraft';
 import type { DownloadedMedia } from '../domain/candidateMedia';
 import type { StoredCandidateMedia } from './sqliteCandidateMediaRepository';
+import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import type {
@@ -217,6 +218,7 @@ export type StartedTurn =
         phase: CoachPhase;
         messages: CoachMessage[];
         knowledgeContext: NonNullable<CoachTurnInput['knowledgeContext']>;
+        resumeContext?: CoachTurnInput['resumeContext'];
       };
     }
   | {
@@ -305,6 +307,10 @@ export interface CommittedResumeImport {
 }
 
 export interface CandidateStore {
+  /** Candidate-scoped, encrypted profile revision journal on the same SQLite connection. */
+  readonly profileRevisionRepo: SqliteProfileRevisionRepository;
+  /** Joins nested store writes into one SQLite transaction. */
+  transaction<T>(operation: () => T): T;
   createCandidate(input: {
     dataClass: CandidateIdentity['dataClass'];
     locale: CandidateIdentity['locale'];

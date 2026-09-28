@@ -11,7 +11,8 @@ const PHASE_SIGNALS: ReadonlyArray<{
   },
   {
     phase: 'resume',
-    pattern: /(?:резюме|\bcv\b|resume)/iu,
+    pattern:
+      /(?:резюме|\bcv\b|resume|experience|профил(?:ь|я|е)|обо мне|о себе|опыт(?: работы)?|заголовок)/iu,
   },
   {
     phase: 'market',

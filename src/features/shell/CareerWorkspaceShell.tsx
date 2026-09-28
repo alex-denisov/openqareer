@@ -642,6 +642,7 @@ export function CareerWorkspaceShell({
             marketQuery={visibleWorkspace?.targetDirection}
             initialUser={session ?? null}
             onIdentityChange={resetForAccount}
+            onCommandPrepared={() => setCabinetRevision((revision) => revision + 1)}
             onClose={closeExpert}
           />
         </>

@@ -19,6 +19,7 @@ export class SqliteCareerCommandRepository {
   constructor(
     private readonly database: DatabaseSync,
     private readonly sealedText: SealedText,
+    private readonly inTransaction: <T>(operation: () => T) => T,
   ) {}
 
   save(command: CareerCommandRecord): CareerCommandRecord {
@@ -151,7 +152,7 @@ export class SqliteCareerCommandRepository {
       authorization: { approvalId: approval.id },
       updatedAt: input.consumedAt,
     };
-    this.transaction(() => {
+    this.inTransaction(() => {
       this.database
         .prepare(
           `INSERT INTO career_command_approvals
@@ -200,7 +201,7 @@ export class SqliteCareerCommandRepository {
       execution,
       updatedAt: claimedAt,
     };
-    this.transaction(() => {
+    this.inTransaction(() => {
       this.write(executing);
       const result = this.database
         .prepare(
@@ -231,7 +232,7 @@ export class SqliteCareerCommandRepository {
     ) {
       throw new CareerCommandConflictError();
     }
-    this.transaction(() => {
+    this.inTransaction(() => {
       this.write(command);
       const result = this.database
         .prepare(
@@ -253,7 +254,7 @@ export class SqliteCareerCommandRepository {
       )
       .all() as Array<{ candidate_id: string; command_id: string }>;
     if (!rows.length) return 0;
-    this.transaction(() => {
+    this.inTransaction(() => {
       for (const row of rows) {
         const command = this.get(row.candidate_id, row.command_id);
         if (command?.status !== 'executing' || !command.execution) {
@@ -306,17 +307,6 @@ export class SqliteCareerCommandRepository {
     if (result.changes !== 1) throw new CareerCommandNotFoundError();
   }
 
-  private transaction<T>(operation: () => T): T {
-    this.database.exec('BEGIN IMMEDIATE');
-    try {
-      const result = operation();
-      this.database.exec('COMMIT');
-      return result;
-    } catch (error) {
-      this.database.exec('ROLLBACK');
-      throw error;
-    }
-  }
 }
 
 export class CareerCommandNotFoundError extends Error {}

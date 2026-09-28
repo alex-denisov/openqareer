@@ -99,12 +99,10 @@ function createServices(
   >,
 ): AppServices {
   const { candidateStore } = options;
-  const careerCommandDispatcher = options.careerCommandExecutor
-    ? new CareerCommandDispatcher({
-        store: candidateStore,
-        executor: options.careerCommandExecutor,
-      })
-    : null;
+  const careerCommandDispatcher = new CareerCommandDispatcher({
+    store: candidateStore,
+    executor: options.careerCommandExecutor,
+  });
   const vacancyIntelligence =
     options.vacancyIntelligenceService ??
     new VacancyIntelligenceService({
@@ -318,7 +316,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
   const deps = assembleRouteDeps(options, services);
   const app = await createFastifyBase(config, logDestination);
-  app.addHook('onClose', () => services.titleParseStore.close());
+  app.addHook('onClose', () => {
+    services.titleParseStore.close();
+  });
   await registerApiRoutes(app, deps);
   registerErrorHandler(app);
   await registerStaticDelivery(app, config, serveStatic);

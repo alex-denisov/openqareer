@@ -12,6 +12,7 @@ import {
   type ResumeEvidenceSnapshot,
 } from '../domain/resumeStudio';
 import type { ResumeDraft } from '../domain/resumeDraft';
+import type { CoachTurnInput } from '../domain/coach';
 import type {
   CandidateCredentials,
   CandidateExport,
@@ -39,6 +40,7 @@ import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
 import { SqliteMarketRepository } from './sqliteMarketRepository';
 import { SqliteResumeRepository } from './sqliteResumeRepository';
 import { SqliteCandidateMediaRepository, type StoredCandidateMedia } from './sqliteCandidateMediaRepository';
+import { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
 import { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
@@ -97,6 +99,7 @@ import { SQLITE_HTTP_BUSY_TIMEOUT_MS, applySqliteBusyTimeout } from './sqliteBus
 export { CandidateNotFoundError, CandidateStoreConflictError, CandidateDocumentRetentionError };
 
 export class SqliteCandidateStore implements CandidateStore {
+  readonly profileRevisionRepo: SqliteProfileRevisionRepository;
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
   private readonly assessmentsRepository: SqliteAssessmentRepository;
@@ -138,7 +141,11 @@ export class SqliteCandidateStore implements CandidateStore {
       workPreferenceRepository: this.workPreferenceRepository,
       candidateMediaRepository: this.candidateMediaRepository,
       applicationTracker: this.applicationTracker,
-    } = createRepositories(this.database, this.sealedText));
+    } = createRepositories(
+      this.database,
+      this.sealedText,
+      (operation) => this.transaction(operation),
+    ));
     this.wireApplicationTrackerMethods();
     this.wireDocumentMethods();
     this.conversations = new ConversationController({
@@ -150,6 +157,17 @@ export class SqliteCandidateStore implements CandidateStore {
       database: this.database,
       sealedText: this.sealedText,
     });
+    this.configureDatabase();
+    this.profileRevisionRepo = new SqliteProfileRevisionRepository(
+      this.database,
+      this.sealedText,
+    );
+    this.careerCommandRepository.recoverInterruptedProcessing(
+      new Date().toISOString(),
+    );
+  }
+
+  private configureDatabase(): void {
     this.database.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = FULL;
@@ -158,9 +176,6 @@ export class SqliteCandidateStore implements CandidateStore {
     `);
     applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
     applyMigrations(this.database, (operation) => this.transaction(operation));
-    this.careerCommandRepository.recoverInterruptedProcessing(
-      new Date().toISOString(),
-    );
   }
 
   /** See `sqliteCandidateStoreApplicationMethods.ts` for what this wires in. */
@@ -241,12 +256,20 @@ export class SqliteCandidateStore implements CandidateStore {
     idempotencyKey: string,
     request: TurnRequest,
   ): StartedTurn {
-    return this.conversations.startTurn(
+    const started = this.conversations.startTurn(
       this.requireCandidate(candidateId),
       candidateId,
       idempotencyKey,
       request,
     );
+    if (started.state !== 'ready' || request.phase !== 'resume') return started;
+    return {
+      ...started,
+      input: {
+        ...started.input,
+        resumeContext: resumeContextOf(this.resumeRepository.get(candidateId)?.draft),
+      },
+    };
   }
 
   completeTurn(
@@ -714,7 +737,7 @@ export class SqliteCandidateStore implements CandidateStore {
     return candidateFromRow(row);
   }
 
-  private transaction<T>(operation: () => T): T {
+  transaction<T>(operation: () => T): T {
     // SQLite has no nested BEGIN. A batch review runs several dossier writes
     // that each know how to be atomic on their own, so an outer transaction
     // joins them instead of crashing on the second BEGIN (B166).
@@ -729,6 +752,21 @@ export class SqliteCandidateStore implements CandidateStore {
       throw error;
     }
   }
+}
+
+function resumeContextOf(
+  draft?: ResumeDraft,
+): NonNullable<CoachTurnInput['resumeContext']> {
+  return {
+    headline: draft?.candidate.headline ?? null,
+    about: draft?.candidate.about ?? null,
+    experiences: (draft?.experience ?? []).map((experience) => ({
+      id: experience.id,
+      title: experience.title ?? null,
+      employer: experience.employer ?? null,
+      bulletMemoryIds: [...experience.bulletMemoryIds],
+    })),
+  };
 }
 
 /** Every `candidate_media` row a draft still points at — the rest gets pruned. */
@@ -756,6 +794,7 @@ interface StoreRepositories {
 function createRepositories(
   database: DatabaseSync,
   sealedText: SealedText,
+  transaction: <T>(operation: () => T) => T,
 ): StoreRepositories {
   const legacyApplications = new SqliteVacancyApplicationRepository(database, sealedText);
   const workspaceRepository = new SqliteWorkspaceRepository(database, sealedText);
@@ -766,7 +805,7 @@ function createRepositories(
     marketRepository: new SqliteMarketRepository(database, sealedText),
     resumeRepository: new SqliteResumeRepository(database, sealedText),
     workspaceRepository,
-    careerCommandRepository: new SqliteCareerCommandRepository(database, sealedText),
+    careerCommandRepository: new SqliteCareerCommandRepository(database, sealedText, transaction),
     documentRepository,
     vacancyRepository: new SqliteVacancyRepository(database, sealedText),
     careerStrategyRepository: new SqliteCareerStrategyRepository(database, sealedText),

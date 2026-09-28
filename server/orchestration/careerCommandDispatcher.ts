@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { CandidateStore } from '../data/candidateStore';
 import {
   applyConnectorReceipt,
@@ -8,20 +9,34 @@ import {
 import {
   ConnectorHarness,
   type ConnectorAction,
+  type ConnectorReceipt,
   type ConnectorExecutor,
 } from '../connectors/connectorHarness';
+import type { ProfileRevisionRecord } from '../data/sqliteProfileRevisionRepository';
 import type { CareerActionProposal } from '../domain/coach';
-import type { CareerCommandRecord } from './careerCommandPlanner';
+import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
+import type { CareerCommandRecord, ResumeReviseExecutionTarget } from './careerCommandPlanner';
 
 interface CareerCommandDispatcherOptions {
   store: CandidateStore;
-  executor: ConnectorExecutor;
+  executor?: ConnectorExecutor;
   now?: () => Date;
+}
+
+export type CareerCommandView = CareerCommandRecord & {
+  readonly profileRevisionReverted?: true;
+};
+
+export class ResumeRevisionConflictError extends Error {
+  constructor() {
+    super('Профиль изменился после подготовки. Обновите предложение перед повтором.');
+    this.name = 'ResumeRevisionConflictError';
+  }
 }
 
 export class CareerCommandDispatcher {
   private readonly store: CandidateStore;
-  private readonly executor: ConnectorExecutor;
+  private readonly executor?: ConnectorExecutor;
   private readonly now: () => Date;
 
   constructor(options: CareerCommandDispatcherOptions) {
@@ -30,14 +45,42 @@ export class CareerCommandDispatcher {
     this.now = options.now ?? (() => new Date());
   }
 
-  async dispatch(
-    candidateId: string,
-    commandId: string,
-  ): Promise<CareerCommandRecord> {
+  list(candidateId: string): CareerCommandView[] {
+    return this.store
+      .listCareerCommands(candidateId)
+      .map((command) => this.withRevisionState(candidateId, command));
+  }
+
+  get(candidateId: string, commandId: string): CareerCommandView | null {
+    const command = this.store.getCareerCommand(candidateId, commandId);
+    return command ? this.withRevisionState(candidateId, command) : null;
+  }
+
+  isResumeRevisionCurrent(candidateId: string, command: CareerCommandRecord): boolean {
+    if (command.capability !== 'resume.revise' || !command.executionTarget) return false;
+    const target = command.executionTarget as ResumeReviseExecutionTarget;
+    const draft = this.store.getSnapshot(candidateId).resume?.draft ?? EMPTY_RESUME_DRAFT;
+    return currentTextForResumeRevision(draft, target) === target.currentText;
+  }
+
+  async dispatch(candidateId: string, commandId: string): Promise<CareerCommandRecord> {
     const command = this.store.getCareerCommand(candidateId, commandId);
     if (!command) throw new Error('career_command_not_found');
     if (command.status !== 'queued') return command;
 
+    if (command.capability === 'resume.revise') {
+      return this.dispatchResumeRevise(candidateId, command);
+    }
+    if (!this.executor) {
+      return command;
+    }
+    return this.dispatchConnectorCommand(candidateId, command);
+  }
+
+  private async dispatchConnectorCommand(
+    candidateId: string,
+    command: CareerCommandRecord,
+  ): Promise<CareerCommandRecord> {
     const startedAt = this.now().toISOString();
     const opportunityId = opportunityIdFor(command);
     const action = markConnectorActionExecuting(
@@ -51,10 +94,10 @@ export class CareerCommandDispatcher {
       }),
       startedAt,
     );
-    this.store.claimCareerCommand(candidateId, commandId, action, startedAt);
+    this.store.claimCareerCommand(candidateId, command.commandId, action, startedAt);
 
     const harness = new ConnectorHarness({
-      executor: this.executor,
+      executor: this.executor!,
       maxActions: 1,
       observedAt: () => this.now().toISOString(),
     });
@@ -72,7 +115,7 @@ export class CareerCommandDispatcher {
     });
     const finishedAt = this.now().toISOString();
     const execution = applyConnectorReceipt(action, receipt, finishedAt);
-    return this.store.finishCareerCommand(candidateId, commandId, {
+    return this.store.finishCareerCommand(candidateId, command.commandId, {
       ...command,
       status: finishedStatus(execution.status),
       authorization: { ...command.authorization },
@@ -80,6 +123,201 @@ export class CareerCommandDispatcher {
       updatedAt: finishedAt,
     });
   }
+
+  private async dispatchResumeRevise(
+    candidateId: string,
+    command: CareerCommandRecord,
+  ): Promise<CareerCommandRecord> {
+    const target = command.executionTarget as ResumeReviseExecutionTarget | null;
+    if (!target || !('section' in target)) {
+      throw new Error('resume_revise_target_missing');
+    }
+    return this.store.transaction(() => {
+      const startedAt = this.now().toISOString();
+      const action = markConnectorActionExecuting(
+        createConnectorAction({
+          actionId: command.commandId,
+          idempotencyKey: command.idempotency.key,
+          opportunityId: `command:${command.commandId}`,
+          action: 'message',
+          autonomy: 'approve_once',
+          createdAt: startedAt,
+        }),
+        startedAt,
+      );
+      this.store.claimCareerCommand(candidateId, command.commandId, action, startedAt);
+
+      const snapshot = this.store.getSnapshot(candidateId);
+      const currentDraft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
+      const previousText = currentTextForResumeRevision(currentDraft, target);
+      if (previousText === null || previousText !== target.currentText) {
+        throw new ResumeRevisionConflictError();
+      }
+      this.confirmEvidenceFacts(candidateId, snapshot, command.proposal.evidenceRefs);
+      const nextDraft = applyRevisionToDraft(currentDraft, target);
+      this.store.saveResumeDraft(candidateId, nextDraft, snapshot.resume?.evidenceSnapshot ?? []);
+
+      const finishedAt = this.now().toISOString();
+      this.recordResumeRevision(candidateId, command, target, previousText, finishedAt);
+      const execution = applyConnectorReceipt(
+        action,
+        profileRevisionReceipt(action, finishedAt),
+        finishedAt,
+      );
+      return this.store.finishCareerCommand(candidateId, command.commandId, {
+        ...command,
+        status: 'completed_with_receipt',
+        authorization: { ...command.authorization },
+        execution,
+        updatedAt: finishedAt,
+      });
+    });
+  }
+
+  private recordResumeRevision(
+    candidateId: string,
+    command: CareerCommandRecord,
+    target: ResumeReviseExecutionTarget,
+    previousText: string,
+    finishedAt: string,
+  ): void {
+    this.store.profileRevisionRepo.recordRevision({
+      id: randomUUID(),
+      candidateId,
+      commandId: command.commandId,
+      section: target.section,
+      experienceId: target.experienceId ?? null,
+      previousText,
+      appliedText: target.proposedText,
+      createdAt: finishedAt,
+    });
+  }
+
+  private confirmEvidenceFacts(
+    candidateId: string,
+    snapshot: ReturnType<CandidateStore['getSnapshot']>,
+    evidenceRefs: readonly string[],
+  ): void {
+    const memoryIds = new Set(snapshot.memory.map((item) => item.id));
+    const memoryRefsToConfirm = evidenceRefs
+      .map((ref) => (ref.startsWith('memory:') ? ref.slice('memory:'.length) : ref))
+      .filter((ref) => memoryIds.has(ref));
+    if (memoryRefsToConfirm.length > 0) {
+      this.store.reviewMemories(candidateId, memoryRefsToConfirm, 'confirm');
+    }
+  }
+
+  async revert(candidateId: string, commandId: string): Promise<CareerCommandRecord> {
+    const command = this.store.getCareerCommand(candidateId, commandId);
+    if (!command) throw new Error('career_command_not_found');
+    return this.store.transaction(() => {
+      const revision = this.store.profileRevisionRepo.getRevisionByCommandId(
+        candidateId,
+        commandId,
+      );
+      if (!revision) throw new Error('profile_revision_not_found');
+      if (revision.revertedAt) return command;
+
+      const snapshot = this.store.getSnapshot(candidateId);
+      const currentDraft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
+      const currentText = currentTextForRevisionRecord(currentDraft, revision);
+      if (currentText === null || currentText !== revision.appliedText) {
+        throw new ResumeRevisionConflictError();
+      }
+      const revertedDraft = revertDraftRevision(currentDraft, revision);
+      this.store.saveResumeDraft(
+        candidateId,
+        revertedDraft,
+        snapshot.resume?.evidenceSnapshot ?? [],
+      );
+      this.store.profileRevisionRepo.markReverted(candidateId, commandId, this.now().toISOString());
+      return command;
+    });
+  }
+
+  private withRevisionState(candidateId: string, command: CareerCommandRecord): CareerCommandView {
+    if (command.capability !== 'resume.revise') return command;
+    const revision = this.store.profileRevisionRepo.getRevisionByCommandId(
+      candidateId,
+      command.commandId,
+    );
+    return revision?.revertedAt ? { ...command, profileRevisionReverted: true } : command;
+  }
+}
+
+export function currentTextForResumeRevision(
+  draft: ResumeDraft,
+  target: {
+    readonly section: ResumeReviseExecutionTarget['section'];
+    readonly experienceId?: string | null;
+  },
+): string | null {
+  if (target.section === 'headline') {
+    return draft.candidate.headline ?? '';
+  }
+  if (target.section === 'about') {
+    return draft.candidate.about ?? '';
+  }
+  if (!target.experienceId) return null;
+  const experience = draft.experience.find((entry) => entry.id === target.experienceId);
+  return experience ? (experience.title ?? '') : null;
+}
+
+function applyRevisionToDraft(
+  draft: ResumeDraft,
+  target: ResumeReviseExecutionTarget,
+): ResumeDraft {
+  if (target.section === 'headline') {
+    return { ...draft, candidate: { ...draft.candidate, headline: target.proposedText } };
+  }
+  if (target.section === 'about') {
+    return { ...draft, candidate: { ...draft.candidate, about: target.proposedText } };
+  }
+  const experiences = [...draft.experience];
+  const idx = experiences.findIndex((entry) => entry.id === target.experienceId);
+  if (idx < 0) throw new ResumeRevisionConflictError();
+  experiences[idx] = { ...experiences[idx], title: target.proposedText };
+  return { ...draft, experience: experiences };
+}
+
+function currentTextForRevisionRecord(
+  draft: ResumeDraft,
+  revision: ProfileRevisionRecord,
+): string | null {
+  return currentTextForResumeRevision(draft, {
+    section: revision.section,
+    experienceId: revision.experienceId,
+  });
+}
+
+function revertDraftRevision(draft: ResumeDraft, revision: ProfileRevisionRecord): ResumeDraft {
+  if (revision.section === 'headline') {
+    return { ...draft, candidate: { ...draft.candidate, headline: revision.previousText } };
+  }
+  if (revision.section === 'about') {
+    return { ...draft, candidate: { ...draft.candidate, about: revision.previousText } };
+  }
+  const experiences = [...draft.experience];
+  const idx = experiences.findIndex((entry) => entry.id === revision.experienceId);
+  if (idx < 0) throw new ResumeRevisionConflictError();
+  experiences[idx] = { ...experiences[idx], title: revision.previousText };
+  return { ...draft, experience: experiences };
+}
+
+function profileRevisionReceipt(
+  action: ReturnType<typeof markConnectorActionExecuting>,
+  at: string,
+): ConnectorReceipt {
+  return {
+    connectorId: 'openqareer-profile-revision',
+    transport: 'internal',
+    action: action.action,
+    status: 'completed',
+    idempotencyKey: action.idempotencyKey,
+    opportunityId: action.opportunityId,
+    providerReference: `revision:${action.actionId}`,
+    evidence: { kind: 'candidate_confirmation', observedAt: at },
+  };
 }
 
 /**
@@ -87,7 +325,7 @@ export class CareerCommandDispatcher {
  * harness's at-most-once key and the connector's expected opportunity agree.
  */
 function opportunityIdFor(command: CareerCommandRecord): string {
-  return command.executionTarget
+  return command.executionTarget && 'vacancyId' in command.executionTarget
     ? `hh:vacancy:${command.executionTarget.vacancyId}`
     : `command:${command.commandId}`;
 }
@@ -104,9 +342,7 @@ function finishedStatus(
   return status;
 }
 
-function connectorActionFor(
-  capability: CareerActionProposal['kind'],
-): ConnectorAction {
+function connectorActionFor(capability: CareerActionProposal['kind']): ConnectorAction {
   switch (capability) {
     case 'application.submit':
       return 'application';

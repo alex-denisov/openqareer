@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { sendCoachTurn } from './coachApi';
 import {
   approveCareerCommand,
   getCareerCommand,
   getCareerCommands,
   prepareCareerCommand,
-  sendCoachTurn,
-} from './coachApi';
+} from './careerCommandApi';
 
 describe('career coach turn API', () => {
   afterEach(() => {

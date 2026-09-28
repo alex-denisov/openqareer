@@ -5,11 +5,9 @@ import type {
   ConnectorReceipt,
   ConnectorRequest,
 } from '../connectorHarness';
-import type { CareerCommandExecutionTarget } from '../../orchestration/careerCommandPlanner';
+import type { HhApplicationExecutionTarget } from '../../orchestration/careerCommandPlanner';
 import { hhExecutionPayloadSchema } from './hhConnector';
 import { HH_SELECTORS } from './hhSelectors';
-
-type HhApplicationExecutionTarget = CareerCommandExecutionTarget;
 
 const providerReferenceSchema = z
   .string()

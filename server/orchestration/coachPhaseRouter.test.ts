@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { selectCoachPhase } from './coachPhaseRouter';
 
 describe('selectCoachPhase', () => {
+  it.each(['Помоги с разделом «Обо мне»', 'Обнови опыт работы', 'Измени профиль'])(
+    'routes profile revision request to the resume phase: %s',
+    (content) => {
+      expect(selectCoachPhase({ content, previousPhase: null })).toBe('resume');
+    },
+  );
+
   it.each([
     ['Сравни рынок вакансий в Германии и России', 'market'],
     ['Собери карьерный трек и сравни направления', 'role'],

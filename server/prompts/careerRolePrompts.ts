@@ -3,7 +3,7 @@ import { CAREER_SUPER_PROMPT } from './careerSuperPrompt';
 
 export const CAREER_ROLE_PROMPT_REVISIONS: Record<CareerRole, string> = {
   career_consultant: 'career-consultant-v1.1-2026-08-12',
-  career_strategist: 'career-strategist-v1.1-2026-08-12',
+  career_strategist: 'career-strategist-v1.2-2026-09-28',
   career_expert: 'career-expert-v1.1-2026-08-12',
 };
 
@@ -26,6 +26,12 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
 - Не повышай confidence фактов и не обходи ограничения кандидата.
 - Заполни careerTrack и actionProposals. Каждое предложение обязано ссылаться
   на evidence, иметь критерии приёмки, ожидаемый сигнал и дату измерения.
+- Для resume.revise заполни resumeRevision точным разделом и существующим
+  experienceId из resumeContext; для остальных предложений верни null.
+- Переписывай только подтверждённые сведения из evidenceRefs и переданного
+  профиля. Не добавляй метрики, масштабы, работодателей, результаты или сроки,
+  которых нет в источниках. Если безопасной формулировки нет — не предлагай
+  resume.revise.
 - В фазе market каждая альтернатива обязана цитировать минимум одно переданное
   рыночное наблюдение дословным ref формата market:hh:<id>.
 `.trim(),

@@ -1,17 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { CoachApiError, type CareerCommand, type CoachResult } from '../coach/coachApi';
 import {
   approveCareerCommand,
-  CoachApiError,
   getCareerCommand,
   getCareerCommands,
   prepareCareerCommand,
-  type CareerCommand,
-  type CoachResult,
-} from '../coach/coachApi';
+} from '../coach/careerCommandApi';
 
 interface CareerActionProposalListProps {
   proposals: CoachResult['actionProposals'];
   turnIdempotencyKey?: string;
+  onCommandPrepared?: () => void;
 }
 
 interface CareerActionProposalCardProps {
@@ -29,19 +28,32 @@ interface CommandActionProps {
   busy: boolean;
   enabled: boolean;
   externalWrite: boolean;
+  profileRevision: boolean;
   onPrepare: () => void;
   onApprove: () => void;
   onRefresh: () => void;
 }
 
-function useCareerCommandState({
-  proposals,
-  turnIdempotencyKey,
-}: CareerActionProposalListProps) {
-  const [commands, setCommands] = useState<Record<number, CareerCommand>>({});
-  const [busyIndex, setBusyIndex] = useState<number>();
-  const [error, setError] = useState<string>();
+function prepareKeyFor(
+  keys: Map<string, string>,
+  turnIdempotencyKey: string | undefined,
+  index: number,
+): string {
+  const prepareScope = `${turnIdempotencyKey ?? 'no-turn'}:${index}`;
+  let idempotencyKey = keys.get(prepareScope);
+  if (!idempotencyKey) {
+    idempotencyKey = crypto.randomUUID();
+    keys.set(prepareScope, idempotencyKey);
+  }
+  return idempotencyKey;
+}
 
+function useStoredTurnCommands(
+  proposals: CareerActionProposalListProps['proposals'],
+  turnIdempotencyKey: string | undefined,
+) {
+  const [commands, setCommands] = useState<Record<number, CareerCommand>>({});
+  const [error, setError] = useState<string>();
   useEffect(() => {
     if (!turnIdempotencyKey) {
       setCommands({});
@@ -52,8 +64,7 @@ function useCareerCommandState({
       .then((stored) => {
         if (!active) return;
         const turnCommands = stored.filter(
-          (command) =>
-            command.provenance?.strategyDecisionId === turnIdempotencyKey,
+          (command) => command.provenance?.strategyDecisionId === turnIdempotencyKey,
         );
         setCommands(matchCommandsToProposals(turnCommands, proposals));
       })
@@ -64,31 +75,55 @@ function useCareerCommandState({
       active = false;
     };
   }, [proposals, turnIdempotencyKey]);
+  return { commands, setCommands, error, setError };
+}
+
+function useCareerCommandState({ proposals, turnIdempotencyKey }: CareerActionProposalListProps) {
+  const { commands, setCommands, error, setError } = useStoredTurnCommands(
+    proposals,
+    turnIdempotencyKey,
+  );
+  const [busyIndex, setBusyIndex] = useState<number>();
+  const prepareKeys = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    if (!turnIdempotencyKey) prepareKeys.current.clear();
+  }, [turnIdempotencyKey]);
 
   async function runCommandAction(
     index: number,
     action: () => Promise<CareerCommand>,
-  ) {
+  ): Promise<CareerCommand | undefined> {
     setBusyIndex(index);
     setError(undefined);
     try {
       const command = await action();
       setCommands((current) => ({ ...current, [index]: command }));
+      return command;
     } catch (reason) {
       setError(commandErrorMessage(reason));
+      return undefined;
     } finally {
       setBusyIndex(undefined);
     }
   }
 
-  return { commands, busyIndex, error, runCommandAction };
+  return {
+    commands,
+    busyIndex,
+    error,
+    runCommandAction,
+    prepareIdempotencyKeyFor: (index: number) =>
+      prepareKeyFor(prepareKeys.current, turnIdempotencyKey, index),
+  };
 }
 
 export function CareerActionProposalList({
   proposals,
   turnIdempotencyKey,
+  onCommandPrepared,
 }: CareerActionProposalListProps) {
-  const { commands, busyIndex, error, runCommandAction } =
+  const { commands, busyIndex, error, runCommandAction, prepareIdempotencyKeyFor } =
     useCareerCommandState({ proposals, turnIdempotencyKey });
 
   return (
@@ -102,6 +137,8 @@ export function CareerActionProposalList({
           command={commands[index]}
           busy={busyIndex === index}
           turnIdempotencyKey={turnIdempotencyKey}
+          prepareIdempotencyKeyFor={prepareIdempotencyKeyFor}
+          onCommandPrepared={onCommandPrepared}
           onRun={runCommandAction}
         />
       ))}
@@ -114,41 +151,62 @@ export function CareerActionProposalList({
   );
 }
 
-function CareerActionProposalItem({
-  proposal,
-  index,
-  command,
-  busy,
-  turnIdempotencyKey,
-  onRun,
-}: {
+interface CareerActionProposalItemProps {
   proposal: CoachResult['actionProposals'][number];
   index: number;
   command?: CareerCommand;
   busy: boolean;
   turnIdempotencyKey?: string;
-  onRun: (index: number, action: () => Promise<CareerCommand>) => Promise<void>;
-}) {
+  prepareIdempotencyKeyFor: (index: number) => string;
+  onCommandPrepared?: () => void;
+  onRun: (
+    index: number,
+    action: () => Promise<CareerCommand>,
+  ) => Promise<CareerCommand | undefined>;
+}
+
+function prepareProposalCommand({
+  index,
+  turnIdempotencyKey,
+  prepareIdempotencyKeyFor,
+  onCommandPrepared,
+  onRun,
+}: CareerActionProposalItemProps): void {
+  if (!turnIdempotencyKey) return;
+  void onRun(index, () =>
+    prepareCareerCommand({
+      turnIdempotencyKey,
+      proposalIndex: index,
+      idempotencyKey: prepareIdempotencyKeyFor(index),
+    }),
+  ).then((prepared) => {
+    if (prepared?.capability === 'resume.revise') onCommandPrepared?.();
+  });
+}
+
+function approveProposalCommand({ index, command, onRun }: CareerActionProposalItemProps): void {
+  if (!command) return;
+  void onRun(index, () =>
+    approveCareerCommand(command.commandId, { idempotencyKey: command.commandId }),
+  );
+}
+
+function refreshProposalCommand({ index, command, onRun }: CareerActionProposalItemProps): void {
+  if (!command) return;
+  void onRun(index, () => getCareerCommand(command.commandId));
+}
+
+function CareerActionProposalItem(props: CareerActionProposalItemProps) {
+  const { proposal, command, busy, turnIdempotencyKey } = props;
   return (
     <CareerActionProposalCard
       proposal={proposal}
       command={command}
       busy={busy}
       enabled={Boolean(turnIdempotencyKey)}
-      onPrepare={() => {
-        if (!turnIdempotencyKey) return;
-        void onRun(index, () =>
-          prepareCareerCommand({ turnIdempotencyKey, proposalIndex: index }),
-        );
-      }}
-      onApprove={() => {
-        if (!command) return;
-        void onRun(index, () => approveCareerCommand(command.commandId));
-      }}
-      onRefresh={() => {
-        if (!command) return;
-        void onRun(index, () => getCareerCommand(command.commandId));
-      }}
+      onPrepare={() => prepareProposalCommand(props)}
+      onApprove={() => approveProposalCommand(props)}
+      onRefresh={() => refreshProposalCommand(props)}
     />
   );
 }
@@ -163,7 +221,8 @@ export function CareerActionProposalCard({
   onRefresh,
 }: CareerActionProposalCardProps) {
   const externalWrite = proposal.risk === 'external_side_effect';
-  const status = commandStatus(command, externalWrite);
+  const profileRevision = proposal.kind === 'resume.revise';
+  const status = commandStatus(command, externalWrite, profileRevision);
   return (
     <article className="career-action-proposal">
       <div>
@@ -172,15 +231,14 @@ export function CareerActionProposalCard({
       </div>
       <p>{proposal.objective}</p>
       <small>
-        Сигнал: {proposal.expectedSignal} · проверка{' '}
-        {formatDate(proposal.measureAfter)}
+        Сигнал: {proposal.expectedSignal} · проверка {formatDate(proposal.measureAfter)}
       </small>
       {status.detail ? (
         <p className="career-command-status" role="status">
           {status.detail}
         </p>
       ) : null}
-      {command?.execution?.connector?.providerReference ? (
+      {!profileRevision && command?.execution?.connector?.providerReference ? (
         <small className="career-command-receipt">
           Receipt: {command.execution.connector.providerReference}
         </small>
@@ -190,6 +248,7 @@ export function CareerActionProposalCard({
         busy={busy}
         enabled={enabled}
         externalWrite={externalWrite}
+        profileRevision={profileRevision}
         onPrepare={onPrepare}
         onApprove={onApprove}
         onRefresh={onRefresh}
@@ -203,15 +262,19 @@ function CommandAction({
   busy,
   enabled,
   externalWrite,
+  profileRevision,
   onPrepare,
   onApprove,
   onRefresh,
 }: CommandActionProps) {
   if (!enabled) return null;
+  if (profileRevision && command?.status === 'awaiting_approval') return null;
   if (!command) {
-    const label = externalWrite
-      ? 'Подготовить к подтверждению'
-      : 'Сохранить задание';
+    const label = profileRevision
+      ? 'Подготовить правку для Профиля'
+      : externalWrite
+        ? 'Подготовить к подтверждению'
+        : 'Сохранить задание';
     return (
       <button type="button" disabled={busy} onClick={onPrepare}>
         {busy ? 'Сохраняем…' : label}
@@ -219,6 +282,7 @@ function CommandAction({
     );
   }
   if (command.status === 'awaiting_approval') {
+    if (profileRevision) return null;
     return (
       <button type="button" disabled={busy} onClick={onApprove}>
         {busy ? 'Подтверждаем…' : 'Подтвердить отправку'}
@@ -259,30 +323,41 @@ function proposalKey(proposal: CoachResult['actionProposals'][number]): string {
     proposal.expectedSignal,
     proposal.measureAfter,
     proposal.evidenceRefs,
+    proposal.resumeRevision ?? null,
   ]);
 }
 
 function commandStatus(
   command: CareerCommand | undefined,
   externalWrite: boolean,
+  profileRevision: boolean,
 ): { label: string; detail: string | null } {
+  if (command?.profileRevisionReverted) {
+    return {
+      label: 'Правка отменена',
+      detail:
+        'Исходный текст восстановлен. Подготовьте новое предложение, если нужно повторить правку.',
+    };
+  }
   if (!command) return proposedStatus(externalWrite);
+  if (profileRevision && command.status === 'awaiting_approval') {
+    return {
+      label: 'Ждёт вашего решения в Профиле',
+      detail:
+        'Откройте Профиль, сравните текст и подтвердите правку там. До этого профиль не меняется.',
+    };
+  }
   return commandStatuses[command.status];
 }
 
 function proposedStatus(externalWrite: boolean) {
   return {
-    label: externalWrite
-      ? 'Требует вашего подтверждения'
-      : 'Предложено · ещё не запущено',
+    label: externalWrite ? 'Требует вашего подтверждения' : 'Предложено · ещё не запущено',
     detail: null,
   };
 }
 
-const commandStatuses: Record<
-  CareerCommand['status'],
-  { label: string; detail: string }
-> = {
+const commandStatuses: Record<CareerCommand['status'], { label: string; detail: string }> = {
   awaiting_approval: {
     label: 'Требует вашего подтверждения',
     detail: 'Ничего не отправлено. Проверьте цель и подтвердите одно действие.',
