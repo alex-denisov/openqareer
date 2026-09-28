@@ -23,6 +23,8 @@ import { VacancyMatchReader, type MatchRowReader } from './vacancyMatchReader';
 import { buildSemanticMatchQuery } from './semanticMatchQuery';
 import { candidateRoleFunctionCodes } from './titleParse/candidateRoleFunctions';
 import { LEVEL_RANK } from './levelMatcher';
+import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
+import { mergeHhVacancySnapshot } from './hhVacancySnapshot';
 import type { SourceObservations } from './sourceHealthVerdict';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 import type { FunctionCode } from '../../shared/roleTaxonomy';
@@ -557,7 +559,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     if (codes.length === 0) return [];
     if (!this.isSemanticTableReady()) {
       console.warn(
-        JSON.stringify({ event: 'vacancy-match-semantic-not-ready', candidateId: candidate.candidateId }),
+        JSON.stringify({
+          event: 'vacancy-match-semantic-not-ready',
+          candidateId: candidate.candidateId,
+        }),
       );
       return [];
     }
@@ -798,6 +803,39 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     );
   }
 
+  /** Loads only the HH records in one write chunk so collection snapshots can
+   * preserve useful descriptions without hydrating the 500k-record slice. */
+  private loadExistingHhVacancies(
+    sourceId: string,
+    chunk: readonly UnifiedVacancy[],
+  ): Map<string, UnifiedVacancy> {
+    const existing = new Map<string, UnifiedVacancy>();
+    if (sourceId !== HH_SEARCH_SOURCE_ID) return existing;
+    const ids = Array.from(new Set(chunk.map((vacancy) => vacancy.id)));
+    const bindLimit = 800;
+    for (let offset = 0; offset < ids.length; offset += bindLimit) {
+      const selected = ids.slice(offset, offset + bindLimit);
+      const placeholders = selected.map(() => '?').join(', ');
+      const rows = this.database
+        .prepare(
+          `SELECT id, payload FROM vacancy_pool
+            WHERE source_id = ? AND id IN (${placeholders})
+              AND CASE WHEN json_valid(payload) THEN (
+                length(trim(coalesce(json_extract(payload, '$.description'), ''))) > 0 OR
+                length(trim(coalesce(json_extract(payload, '$.fullDescription'), ''))) > 0 OR
+                json_array_length(payload, '$.responsibilities') > 0 OR
+                json_array_length(payload, '$.qualifications') > 0
+              ) ELSE 0 END`,
+        )
+        .all(sourceId, ...selected) as Array<{ id: string; payload: string }>;
+      for (const row of rows) {
+        const parsed = parseVacancy(row.payload);
+        if (parsed) existing.set(row.id, parsed);
+      }
+    }
+    return existing;
+  }
+
   /**
    * Пишет срез порциями, каждая — своя транзакция. Одна дата `stored_at` на
    * весь вызов: по ней замена среза потом отличает записи этого чтения от тех,
@@ -815,10 +853,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     for (let offset = 0; offset < vacancies.length; offset += this.writeChunkSize) {
       const chunk = vacancies.slice(offset, offset + this.writeChunkSize);
       this.writeTransaction('upsert', sourceId, chunk.length, tally, () => {
+        const existing = this.loadExistingHhVacancies(sourceId, chunk);
         for (const vacancy of chunk) {
-          insert.run(vacancy.id, sourceId, vacancy.publishedAt, storedAt, JSON.stringify(vacancy));
-          index.run(...indexColumns(vacancy, sourceId), 0);
-          projection.run(vacancy.id, JSON.stringify(clusterProjectionOf(vacancy)));
+          const previous = existing.get(vacancy.id);
+          const stored =
+            previous && sourceId === HH_SEARCH_SOURCE_ID
+              ? mergeHhVacancySnapshot(previous, vacancy)
+              : vacancy;
+          existing.set(vacancy.id, stored);
+          insert.run(stored.id, sourceId, stored.publishedAt, storedAt, JSON.stringify(stored));
+          index.run(...indexColumns(stored, sourceId), 0);
+          projection.run(stored.id, JSON.stringify(clusterProjectionOf(stored)));
         }
       });
     }
@@ -838,10 +883,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     for (let offset = 0; offset < vacancies.length; offset += this.writeChunkSize) {
       const chunk = vacancies.slice(offset, offset + this.writeChunkSize);
       this.writeTransaction('upsert', sourceId, chunk.length, tally, () => {
+        const existing = this.loadExistingHhVacancies(sourceId, chunk);
         for (const vacancy of chunk) {
-          insert.run(vacancy.id, sourceId, vacancy.publishedAt, storedAt, JSON.stringify(vacancy));
-          index.run(...indexColumns(vacancy, sourceId), 0);
-          projection.run(vacancy.id, JSON.stringify(clusterProjectionOf(vacancy)));
+          const previous = existing.get(vacancy.id);
+          const stored =
+            previous && sourceId === HH_SEARCH_SOURCE_ID
+              ? mergeHhVacancySnapshot(previous, vacancy)
+              : vacancy;
+          existing.set(vacancy.id, stored);
+          insert.run(stored.id, sourceId, stored.publishedAt, storedAt, JSON.stringify(stored));
+          index.run(...indexColumns(stored, sourceId), 0);
+          projection.run(stored.id, JSON.stringify(clusterProjectionOf(stored)));
         }
       });
       await yieldToEventLoop();
