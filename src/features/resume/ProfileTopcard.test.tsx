@@ -6,7 +6,16 @@ import type { CandidateConnection } from '../coach/coachApi';
 
 const draft: ResumeDraft = {
   candidate: { fullName: 'Jordan Rivers', contact: { email: 'jordan@example.com' } },
-  experience: [{ id: 'e1', chronologyMemoryId: 'm1', title: 'PM', employer: 'Acme', current: true, bulletMemoryIds: [] }],
+  experience: [
+    {
+      id: 'e1',
+      chronologyMemoryId: 'm1',
+      title: 'PM',
+      employer: 'Acme',
+      current: true,
+      bulletMemoryIds: [],
+    },
+  ],
   skills: [{ id: 's1', name: 'SQL' }],
   education: [],
   languages: [],
@@ -36,14 +45,60 @@ const connections: CandidateConnection[] = [
 
 describe('ProfileTopcard — source and connection status (C54)', () => {
   it('folds the source coverage into a single-line chip, not a separate card', () => {
-    const html = renderToStaticMarkup(<ProfileTopcard draft={draft} onDraftChange={() => {}} reader={null} />);
+    const html = renderToStaticMarkup(
+      <ProfileTopcard draft={draft} onDraftChange={() => {}} reader={null} />,
+    );
     expect(html).toContain('career-profile-screen-source-chip');
     expect(html).not.toContain('career-profile-screen-rail-card');
   });
 
+  it('places the reader method beside the source chip and makes no claim for legacy profiles', () => {
+    const modelHtml = renderToStaticMarkup(
+      <ProfileTopcard
+        draft={draft}
+        onDraftChange={() => {}}
+        reader={{
+          method: 'model',
+          model: 'openai:gpt-5.6-mini',
+          promptRevision: 'resume-structuring-v1',
+          readAt: '2026-09-26T10:00:00.000Z',
+        }}
+      />,
+    );
+    const rulesHtml = renderToStaticMarkup(
+      <ProfileTopcard
+        draft={draft}
+        onDraftChange={() => {}}
+        reader={{
+          method: 'rules',
+          model: null,
+          promptRevision: null,
+          readAt: '2026-09-26T10:00:00.000Z',
+        }}
+      />,
+    );
+    const legacyHtml = renderToStaticMarkup(
+      <ProfileTopcard draft={draft} onDraftChange={() => {}} reader={null} />,
+    );
+
+    expect(modelHtml).toContain('Прочитано моделью');
+    expect(rulesHtml).toContain('Прочитано правилами');
+    expect(legacyHtml).not.toContain('Прочитано');
+    expect(legacyHtml).not.toContain('Резюме прочитано: неизвестно');
+    expect(modelHtml.indexOf('Прочитано моделью')).toBeGreaterThan(
+      modelHtml.indexOf('career-profile-screen-source-chip'),
+    );
+  });
+
   it('shows hh.ru and LinkedIn connection status chips using the shared status labels', () => {
     const html = renderToStaticMarkup(
-      <ProfileTopcard draft={draft} onDraftChange={() => {}} reader={null} connections={connections} onOpenConnections={() => {}} />,
+      <ProfileTopcard
+        draft={draft}
+        onDraftChange={() => {}}
+        reader={null}
+        connections={connections}
+        onOpenConnections={() => {}}
+      />,
     );
     expect(html).toContain('hh.ru');
     expect(html).toContain('Подключено');
@@ -63,7 +118,14 @@ describe('ProfileTopcard — source and connection status (C54)', () => {
   });
 
   it('shows no connection chips when there is nowhere to open connections', () => {
-    const html = renderToStaticMarkup(<ProfileTopcard draft={draft} onDraftChange={() => {}} reader={null} connections={connections} />);
+    const html = renderToStaticMarkup(
+      <ProfileTopcard
+        draft={draft}
+        onDraftChange={() => {}}
+        reader={null}
+        connections={connections}
+      />,
+    );
     expect(html).not.toContain('career-profile-screen-connection-chip');
   });
 });

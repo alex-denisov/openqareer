@@ -11354,6 +11354,11 @@
   gap: var(--career-space-2);
 }
 
+.career-profile-screen-reader-status {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
 .career-profile-screen-source-chip {
   display: inline-flex;
 }

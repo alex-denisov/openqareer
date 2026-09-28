@@ -285,15 +285,8 @@ function ConnectionStatusChips({
   );
 }
 
-export function ProfileTopcard({
-  draft,
-  importedSource,
-  updatedAt,
-  reader,
-  onDraftChange,
-  connections,
-  onOpenConnections,
-}: ProfileTopcardProps) {
+export function ProfileTopcard(props: ProfileTopcardProps) {
+  const { draft, updatedAt, onDraftChange } = props;
   const fullName = draft.candidate.fullName?.trim();
   const headline = draft.candidate.headline?.trim() ?? draft.targetRole?.trim();
   const location = draft.candidate.contact?.location?.trim();
@@ -319,14 +312,8 @@ export function ProfileTopcard({
                 Обновлено {formatDate(updatedAt)}
               </span>
             ) : null}
-            <span>Резюме прочитано: {readerLabel(reader)}</span>
           </div>
-          <div className="career-profile-screen-status-row">
-            <SourceCoverageChip draft={draft} importedSource={importedSource} />
-            {onOpenConnections ? (
-              <ConnectionStatusChips connections={connections} onOpenConnections={onOpenConnections} />
-            ) : null}
-          </div>
+          <ProfileStatusRow props={props} />
           <ContactRow draft={draft} />
         </div>
         <TopcardEdit draft={draft} onDraftChange={onDraftChange} />
@@ -335,10 +322,25 @@ export function ProfileTopcard({
   );
 }
 
-function readerLabel(reader: ResumeReaderProvenance | null): string {
-  if (!reader) return 'неизвестно';
-  if (reader.method === 'rules') return 'правилами';
-  return `модель ${reader.model}, ${formatDate(reader.readAt)}`;
+function ProfileStatusRow({ props }: { readonly props: ProfileTopcardProps }) {
+  return (
+    <div className="career-profile-screen-status-row">
+      <SourceCoverageChip draft={props.draft} importedSource={props.importedSource} />
+      {props.reader ? (
+        <span className="career-profile-screen-reader-status">{readerLabel(props.reader)}</span>
+      ) : null}
+      {props.onOpenConnections ? (
+        <ConnectionStatusChips
+          connections={props.connections}
+          onOpenConnections={props.onOpenConnections}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function readerLabel(reader: ResumeReaderProvenance): string {
+  return reader.method === 'rules' ? 'Прочитано правилами' : 'Прочитано моделью';
 }
 
 function formatDate(value: string): string {
