@@ -153,6 +153,12 @@ async function mockSignedInCabinet(page: Page): Promise<string[]> {
     if (path.endsWith('/candidate/applications')) {
       return route.fulfill({ json: { data: [] } });
     }
+    // C64: шапка Профиля читает согласие «Вы в поиске»; в фикстуре оно не дано.
+    if (path.endsWith('/candidate/search-consent')) {
+      return route.fulfill({
+        json: { data: { consent: { granted: false, policyVersion: '', updatedAt: '' } } },
+      });
+    }
     if (path.endsWith('/candidate/visits') && route.request().method() === 'POST') {
       return route.fulfill({ json: { data: { since: null } } });
     }
@@ -281,9 +287,8 @@ async function openSection(page: Page, label: (typeof SECTIONS)[number]): Promis
   }
   const landmark = {
     Сегодня: page.locator('.career-today'),
-    // The path indicator's «Роль» step opens Vacancies now, not the
-    // unreachable search screen (fix(C52): the Role step opens Vacancies).
-    Роль: page.locator('.vac-list-item').first(),
+    // C68 вернул шаг «Роль» на экран кампании: там правятся роль, регион и формат.
+    Роль: page.locator('.career-campaign').first(),
     Вакансии: page.locator('.vac-list-item').first(),
   }[label];
   await expect(landmark).toBeVisible();
@@ -370,7 +375,7 @@ test.describe('B232 readability gate', () => {
 
     const routes = [
       ['Профиль', '.career-profile-screen-view'],
-      ['Роль', '.vacancies-screen'],
+      ['Роль', '.career-campaign'],
       ['Подборка', '.vacancies-screen'],
       ['Отклики', '.career-responses-board-wrap, .career-responses-empty'],
       ['Интервью', '.career-responses-board-wrap, .career-responses-empty'],

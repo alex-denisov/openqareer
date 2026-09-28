@@ -749,6 +749,14 @@ async function verifyViewport(browser, baseUrl, viewport) {
       body: JSON.stringify({ data: trackerCards }),
     });
   });
+  // C64: шапка Профиля читает согласие «Вы в поиске»; в гейте оно не дано.
+  await page.route('**/api/v1/candidate/search-consent', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { consent: { granted: false, policyVersion: '', updatedAt: '' } } }),
+    });
+  });
   await page.route('**/api/v1/candidate/vacancy-sources', async (route) => {
     await route.fulfill({
       status: 200,
