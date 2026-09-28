@@ -144,3 +144,47 @@ describe('DesktopOutreachModal', () => {
     expect(html).not.toMatch(new RegExp(forbiddenWord, 'i'));
   });
 });
+
+describe('DesktopOutreachModal — нет контактов (B297)', () => {
+  const sampleVacancy = {
+    id: 'vac-202',
+    title: 'Head of AI & KI-Manager',
+    company: 'DataSmart Point',
+    location: 'Germany',
+    isRemote: true,
+  };
+
+  function render() {
+    return renderToStaticMarkup(
+      <DesktopOutreachModal isOpen onClose={vi.fn()} vacancy={sampleVacancy} />,
+    );
+  }
+
+  it('не рисует вкладки категорий и пустой список, а говорит прямо', () => {
+    const html = render();
+    expect(html).not.toContain('Категории контактов');
+    expect(html).not.toContain('Список контактов');
+    expect(html).toContain('В этой компании мы никого не знаем');
+  });
+
+  it('оставляет черновик и копирование — человек находится кандидатом', () => {
+    const html = render();
+    expect(html).toContain('Заметка');
+    expect(html).toContain('Скопировать');
+    expect(html).toContain('Head of AI');
+  });
+
+  it('рисует категории и список, когда контакты есть', () => {
+    const html = renderToStaticMarkup(
+      <DesktopOutreachModal
+        isOpen
+        onClose={vi.fn()}
+        vacancy={sampleVacancy}
+        initialProfiles={buildSyntheticProfiles('DataSmart Point')}
+      />,
+    );
+    expect(html).toContain('Категории контактов');
+    expect(html).toContain('Список контактов');
+    expect(html).not.toContain('В этой компании мы никого не знаем');
+  });
+});

@@ -10644,6 +10644,17 @@
   overflow-y: auto;
 }
 
+.career-outreach-blank {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--career-radius-sm);
+  background: var(--career-bg-elevated);
+  border: 1px solid var(--career-line);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+}
+
 .career-outreach-card {
   padding: 12px 14px;
   border-radius: var(--career-radius-sm);

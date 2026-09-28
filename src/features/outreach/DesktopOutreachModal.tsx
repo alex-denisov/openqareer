@@ -684,21 +684,31 @@ function OutreachModalBody({
   return (
     <main className="career-outreach-body">
       <OutreachQuotaBanner quota={c.state.quota} />
-      <OutreachFilterTabs
-        activeFilter={c.state.filter}
-        counts={c.counts}
-        onSelect={c.state.setFilter}
-      />
-      <div className="career-outreach-list" role="region" aria-label="Список контактов">
-        {c.shownProfiles.map((p) => (
-          <DecisionMakerCard
-            key={p.id}
-            profile={p}
-            isSelected={p.id === c.state.selectedId}
-            onSelect={() => c.state.setSelectedId(p.id)}
+      {c.shownProfiles.length > 0 ? (
+        <>
+          <OutreachFilterTabs
+            activeFilter={c.state.filter}
+            counts={c.counts}
+            onSelect={c.state.setFilter}
           />
-        ))}
-      </div>
+          <div className="career-outreach-list" role="region" aria-label="Список контактов">
+            {c.shownProfiles.map((p) => (
+              <DecisionMakerCard
+                key={p.id}
+                profile={p}
+                isSelected={p.id === c.state.selectedId}
+                onSelect={() => c.state.setSelectedId(p.id)}
+              />
+            ))}
+          </div>
+        </>
+      ) : (
+        <p className="career-outreach-blank">
+          В этой компании мы никого не знаем: контактов нет, и списка не будет. Найдите человека
+          сами — в LinkedIn или на сайте компании — и отправьте заметку ниже. Рекрутера по этой
+          вакансии мы ищем отдельно, кнопкой «Рекрутер» в этой же карточке.
+        </p>
+      )}
       <OutreachNoteForm
         isDesktop={c.isDesktop}
         selectedProfile={c.selectedProfile}

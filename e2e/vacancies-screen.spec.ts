@@ -614,7 +614,11 @@ test.describe('B250 vacancies screen', () => {
 
     const dialog = page.getByRole('dialog').first();
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('tablist', { name: 'Категории контактов' })).toBeVisible();
+    // Контактов у тестовой учётной записи нет, и продукт говорит об этом прямо,
+    // а не рисует пустой список с вкладками «(0)» (B297).
+    await expect(dialog.getByText('В этой компании мы никого не знаем')).toBeVisible();
+    await expect(dialog.getByRole('tablist', { name: 'Категории контактов' })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: /Скопировать/u })).toBeVisible();
   });
 
   test('low role coverage exposes explicit campaign changes', async ({ page }, testInfo) => {
