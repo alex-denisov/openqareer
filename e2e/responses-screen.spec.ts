@@ -415,7 +415,7 @@ test.describe('B251 responses screen', () => {
       'Откликнитесь на вакансию из подборки',
     );
     await expect(
-      page.locator('.career-responses-empty').getByRole('button', { name: 'Вакансии' }),
+      page.locator('.career-responses-empty').getByRole('button', { name: 'Перейти к вакансиям' }),
     ).toBeVisible();
   });
 

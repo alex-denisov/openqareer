@@ -39,7 +39,7 @@ export function ResponsesBoard({
       <ErrorState message={state.error ?? ''} offline={state.offline} onRetry={state.reload} />
     );
   }
-  if (state.applications.length === 0) return <EmptyState onOpenVacancies={onOpenVacancies} />;
+  if (state.applications.length === 0) return <EmptyState state={state} onOpenVacancies={onOpenVacancies} />;
   return <ReadyBoard state={state} onOpenVacancies={onOpenVacancies} />;
 }
 
@@ -53,25 +53,52 @@ function LoadingState() {
   );
 }
 
-function EmptyState({ onOpenVacancies }: { onOpenVacancies: () => void }) {
+function EmptyState({
+  state,
+  onOpenVacancies,
+}: {
+  state: UseApplications;
+  onOpenVacancies: () => void;
+}) {
+  const [addingManual, setAddingManual] = useState(false);
   return (
-    <div className="career-responses-empty">
-      <h3>Пайплайн пуст</h3>
-      <p>
-        Откликов ещё нет. Пайплайн наполняется из очереди дня — как только вы откликнетесь на первую
-        вакансию, здесь появится карточка с материалами и следующим шагом.
-      </p>
-      <p className="career-responses-empty-step">
-        Откликнитесь на вакансию из подборки, чтобы начать.
-      </p>
-      <button
-        type="button"
-        className="career-btn career-btn-primary career-btn-sm"
-        onClick={onOpenVacancies}
-      >
-        <Briefcase size={14} /> Вакансии
-      </button>
-    </div>
+    <>
+      <div className="career-responses-empty">
+        <h3>Пайплайн пуст</h3>
+        <p>
+          Откликов ещё нет. Пайплайн наполняется из очереди дня — как только вы откликнетесь на первую
+          вакансию, здесь появится карточка с материалами и следующим шагом.
+        </p>
+        <p className="career-responses-empty-step">
+          Откликнитесь на вакансию из подборки, чтобы начать.
+        </p>
+        <div className="career-responses-empty-actions">
+          <button
+            type="button"
+            className="career-btn career-btn-primary career-btn-sm"
+            onClick={onOpenVacancies}
+          >
+            <Briefcase size={14} /> Перейти к вакансиям
+          </button>
+          <button
+            type="button"
+            className="career-btn career-btn-secondary career-btn-sm"
+            onClick={() => setAddingManual(true)}
+          >
+            Добавить отклик вручную
+          </button>
+        </div>
+      </div>
+      {addingManual ? (
+        <ManualCardForm
+          onCancel={() => setAddingManual(false)}
+          onSubmit={async (input) => {
+            await state.addManualCard(input);
+            setAddingManual(false);
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 

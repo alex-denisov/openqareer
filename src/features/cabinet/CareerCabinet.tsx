@@ -31,6 +31,7 @@ import {
 import { cabinetJourney } from './cabinetJourney';
 import { useCareerStrategy, type CareerStrategyRead } from './useCareerStrategy';
 import { countConfirmedApplications } from '../../../shared/vacancyApplication';
+import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import type {
   VacancyProfileRequirement,
   VacancyProfileRequirementRequest,
@@ -97,6 +98,48 @@ export function CareerCabinet({
   // B251 S3 — трекер откликов читает свой собственный API, независимо от
   // ручного лога `useVacancyApplications` (совместимость со старым `.app`).
   const applicationsTracker = useApplications();
+  const recordConfirmedVacancy = vacancyApplications.recordConfirmed;
+  const refreshApplications = applicationsTracker.refreshApplications;
+  const addManualCard = applicationsTracker.addManualCard;
+  const scheduleInterview = applicationsTracker.scheduleInterview;
+  const markVacancyAlreadyApplied = useCallback(
+    (clusterId: string, vacancy: VacancyApplicationSnapshot) =>
+      recordConfirmedVacancy(clusterId, 'applied', vacancy),
+    [recordConfirmedVacancy],
+  );
+  const scheduleVacancyInterview = useCallback(
+    async (
+      clusterId: string,
+      scheduledAt: string,
+      vacancy: VacancyApplicationSnapshot,
+    ) => {
+      const currentApplications = await refreshApplications();
+      const existing = currentApplications.find((application) => application.clusterId === clusterId);
+      const application =
+        existing ??
+        (await addManualCard({
+          clusterId,
+          manualVacancy: vacancy,
+          stage: 'applied',
+        }));
+      try {
+        await scheduleInterview(application.id, scheduledAt);
+        return application;
+      } catch (reason) {
+        const refreshed = await refreshApplications();
+        const saved = refreshed.find((current) => current.id === application.id);
+        if (saved?.stage === 'interview' && saved.nearestInterview?.scheduledAt === scheduledAt) {
+          return saved;
+        }
+        throw reason;
+      }
+    },
+    [
+      addManualCard,
+      refreshApplications,
+      scheduleInterview,
+    ],
+  );
   // B251 F5 (C47) — confirming an application in «Вакансии» must land a card
   // in «Отклики»: the two logs live in different tables (server/data), so a
   // plain vacancyApplications.record() left the tracker empty forever.
@@ -108,14 +151,16 @@ export function CareerCabinet({
         status: Parameters<typeof vacancyApplications.record>[1],
         vacancy: Parameters<typeof vacancyApplications.record>[2],
       ) => {
-        vacancyApplications.record(clusterId, status, vacancy);
         if (status === 'applied') {
-          // Сбой записи карточки не должен ронять страницу: трекер перечитывает
-          // сервер — карточка могла уже создаться (повторный отклик, 409).
-          void applicationsTracker
-            .addManualCard({ clusterId, stage: 'applied' })
-            .catch(() => applicationsTracker.reload());
+          // Запись отклика атомарно создаёт карточку на сервере. Не создаём
+          // локальную карточку, пока эта запись не подтверждена.
+          void vacancyApplications
+            .recordConfirmed(clusterId, status, vacancy)
+            .then(() => applicationsTracker.refreshApplications())
+            .catch(() => undefined);
+          return;
         }
+        vacancyApplications.record(clusterId, status, vacancy);
       },
     }),
     [vacancyApplications, applicationsTracker],
@@ -234,6 +279,8 @@ export function CareerCabinet({
             vacancyApplications={trackedVacancyApplications}
             pathIndicatorSteps={pathIndicatorSteps}
             applicationsTracker={applicationsTracker}
+            onMarkAlreadyApplied={markVacancyAlreadyApplied}
+            onScheduleInterview={scheduleVacancyInterview}
             data={data}
             profileTab={profileTab}
             vacancyProfileRequest={vacancyProfileRequest}
@@ -301,6 +348,8 @@ function CabinetSection({
   vacancyApplications,
   pathIndicatorSteps,
   applicationsTracker,
+  onMarkAlreadyApplied,
+  onScheduleInterview,
   data,
   profileTab,
   vacancyProfileRequest,
@@ -322,6 +371,15 @@ function CabinetSection({
   vacancyApplications: ReturnType<typeof useVacancyApplications>;
   pathIndicatorSteps?: ReturnType<typeof buildPathIndicator>;
   applicationsTracker: ReturnType<typeof useApplications>;
+  onMarkAlreadyApplied: (
+    clusterId: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<void>;
+  onScheduleInterview: (
+    clusterId: string,
+    scheduledAt: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<ApplicationView>;
   data: ReturnType<typeof useCareerCabinetData>;
   profileTab: ProfileTab;
   vacancyProfileRequest: VacancyProfileRequirementRequest | null;
@@ -420,6 +478,8 @@ function CabinetSection({
       failureSourceLabel={pool.failureSourceLabel}
       onRetry={pool.refresh}
       applications={vacancyApplications}
+      onMarkAlreadyApplied={onMarkAlreadyApplied}
+      onScheduleInterview={onScheduleInterview}
       onOpenResponses={() => onNavigate('responses')}
       onOpenProfile={onOpenProfileRequirement}
       pathIndicator={pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined}

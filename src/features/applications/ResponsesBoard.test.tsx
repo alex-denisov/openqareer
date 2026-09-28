@@ -35,12 +35,14 @@ function readyState(applications: readonly ApplicationView[]): UseApplications {
     failedChanges: new Map(),
     conflicts: new Set(),
     reload: () => {},
+    refreshApplications: async () => applications,
     changeStage: () => {},
     scheduleInterview: async () => {},
     retryStageChange: () => {},
     markFollowUpSent: async () => {},
     saveNote: () => {},
-    addManualCard: async () => {},
+    addManualCard: async (input) =>
+      application({ clusterId: input.clusterId ?? null, stage: input.stage }),
     skip: async () => {},
   };
 }
@@ -96,6 +98,8 @@ describe('ResponsesBoard columns', () => {
     const html = renderToStaticMarkup(<ResponsesBoard state={readyState([])} onOpenVacancies={() => {}} />);
     expect(html).toContain('Пайплайн пуст');
     expect(html).toContain('Пайплайн наполняется из очереди дня');
+    expect(html).toContain('Перейти к вакансиям');
+    expect(html).toContain('Добавить отклик вручную');
   });
 
   it('renders an offline error without the raw message', () => {

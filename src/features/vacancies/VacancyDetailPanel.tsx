@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { ArrowLeft, Check, Warning } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
+import type { ApplicationView } from '../applications/applicationsApi';
+import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { vacancyAge } from './vacancyFilters';
 import { formatCompensationCompact } from './vacancyCompensation';
-import { openTargetLabel } from './vacancyOpenTarget';
 import type { VacancyApplications } from './useVacancyApplications';
 import { VacancyPitchModal } from './VacancyPitchModal';
 import { VacancyInfoModal } from './VacancyInfoModal';
@@ -14,6 +15,7 @@ import { openExternalLink } from '../../services/desktop/openExternalLink';
 import type { VacancyLevelMatch } from '../../../shared/vacancyMatchOrder';
 import { vacancyLevelMatchLabel } from './vacancyLevelMatch';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
+import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 
 /**
  * Детальная панель «Вакансии» (B248/B250) — макет `vacancies.html`. Сетка
@@ -26,6 +28,15 @@ interface VacancyDetailPanelProps {
   readonly item: MatchedVacancyItem;
   readonly now: string;
   readonly applications?: VacancyApplications;
+  readonly onMarkAlreadyApplied?: (
+    clusterId: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<void>;
+  readonly onScheduleInterview?: (
+    clusterId: string,
+    scheduledAt: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<ApplicationView>;
   readonly onBack: () => void;
   /** Opens «Отклики» after the candidate confirms an application (B251 F5,
    * C47): without this door the tracker card was reachable only by rail
@@ -40,6 +51,8 @@ export function VacancyDetailPanel({
   item,
   now,
   applications,
+  onMarkAlreadyApplied,
+  onScheduleInterview,
   onBack,
   onOpenResponses,
   onAddToProfile,
@@ -49,18 +62,121 @@ export function VacancyDetailPanel({
   const source = vacancySourceLabels(cluster.sources)[0];
   const signals = vacancySignals(cluster);
   const application = applications?.byCluster.get(cluster.id);
-  const alreadyApplied = application?.status === 'applied';
+  return (
+    <VacancyDetailPanelView
+      cluster={cluster}
+      explanation={explanation}
+      age={age}
+      source={source}
+      signals={signals}
+      alreadyApplied={application?.status === 'applied'}
+      applications={applications}
+      onMarkAlreadyApplied={onMarkAlreadyApplied}
+      onScheduleInterview={onScheduleInterview}
+      onBack={onBack}
+      onOpenResponses={onOpenResponses}
+      onAddToProfile={onAddToProfile}
+    />
+  );
+}
 
+interface VacancyDetailViewProps {
+  readonly cluster: MatchedVacancyItem['cluster'];
+  readonly explanation: MatchedVacancyItem['explanation'];
+  readonly age: ReturnType<typeof vacancyAge>;
+  readonly source?: string;
+  readonly signals: ReturnType<typeof vacancySignals>;
+  readonly alreadyApplied: boolean;
+  readonly applications?: VacancyApplications;
+  readonly onMarkAlreadyApplied?: VacancyDetailPanelProps['onMarkAlreadyApplied'];
+  readonly onScheduleInterview?: VacancyDetailPanelProps['onScheduleInterview'];
+  readonly onBack: () => void;
+  readonly onOpenResponses?: () => void;
+  readonly onAddToProfile?: VacancyDetailPanelProps['onAddToProfile'];
+}
+
+function VacancyDetailPanelView(props: VacancyDetailViewProps) {
+  const {
+    cluster,
+    explanation,
+    age,
+    source,
+    signals,
+    alreadyApplied,
+    applications,
+    onMarkAlreadyApplied,
+    onScheduleInterview,
+    onBack,
+    onOpenResponses,
+    onAddToProfile,
+  } = props;
   return (
     <div className="vacancies-detail-panel">
+      <VacancyDetailHeader
+        cluster={cluster}
+        explanation={explanation}
+        age={age}
+        source={source}
+        onBack={onBack}
+      />
+      <VacancyProfileEvidence
+        cluster={cluster}
+        explanation={explanation}
+        signals={signals}
+        onAddToProfile={onAddToProfile}
+      />
+      <VacancyRecruiterBlock cluster={cluster} />
+
+      <VacancyDetailActions
+        cluster={cluster}
+        alreadyApplied={alreadyApplied}
+        applications={applications}
+        onMarkAlreadyApplied={onMarkAlreadyApplied}
+        onScheduleInterview={onScheduleInterview}
+        onOpenResponses={onOpenResponses}
+      />
+    </div>
+  );
+}
+
+function VacancyDetailHeader({
+  cluster,
+  explanation,
+  age,
+  source,
+  onBack,
+}: {
+  readonly cluster: MatchedVacancyItem['cluster'];
+  readonly explanation: MatchedVacancyItem['explanation'];
+  readonly age: ReturnType<typeof vacancyAge>;
+  readonly source?: string;
+  readonly onBack: () => void;
+}) {
+  return (
+    <>
       <button type="button" className="vacancies-detail-back" onClick={onBack}>
         <ArrowLeft size={16} aria-hidden="true" />
         <span>Назад</span>
       </button>
-
       <VacancyDetailHead cluster={cluster} />
       <VacancyDetailMetaRow explanation={explanation} age={age} source={source} />
+    </>
+  );
+}
 
+function VacancyProfileEvidence({
+  cluster,
+  explanation,
+  signals,
+  onAddToProfile,
+}: {
+  readonly cluster: MatchedVacancyItem['cluster'];
+  readonly explanation: MatchedVacancyItem['explanation'];
+  readonly signals: ReturnType<typeof vacancySignals>;
+  readonly onAddToProfile?: VacancyDetailPanelProps['onAddToProfile'];
+}) {
+  return (
+    <>
       <VacancySignalGrid signals={signals} />
       <VacancyRequirementList
         title="Совпадает по фактам профиля"
@@ -72,21 +188,11 @@ export function VacancyDetailPanel({
         points={explanation.missingPoints}
         onAddToProfile={onAddToProfile}
       />
-
       <div className="vacancies-req-block">
         <h4>Вилка</h4>
         <p className="vacancies-comp-note">{formatCompensationCompact(cluster.salary)}</p>
       </div>
-
-      <VacancyRecruiterBlock cluster={cluster} />
-
-      <VacancyDetailActions
-        cluster={cluster}
-        alreadyApplied={alreadyApplied}
-        applications={applications}
-        onOpenResponses={onOpenResponses}
-      />
-    </div>
+    </>
   );
 }
 
@@ -194,42 +300,28 @@ function VacancyRecruiterBlock({ cluster }: { readonly cluster: MatchedVacancyIt
   );
 }
 
-function VacancyDetailActions({
-  cluster,
-  alreadyApplied,
-  applications,
-  onOpenResponses,
-}: {
+interface VacancyActionProps {
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly alreadyApplied: boolean;
   readonly applications?: VacancyApplications;
+  readonly onMarkAlreadyApplied?: (
+    clusterId: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<void>;
+  readonly onScheduleInterview?: (
+    clusterId: string,
+    scheduledAt: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<ApplicationView>;
   readonly onOpenResponses?: () => void;
-}) {
-  const target = openTargetLabel(cluster.sources);
+}
+
+function VacancyDetailActions(props: VacancyActionProps) {
   const [infoOpen, setInfoOpen] = useState(false);
-
-  const handleApply = () => {
-    void openExternalLink(cluster.primaryUrl);
-    // 'applied', not 'opened' (B251 F5): the detail panel is a single-click
-    // decision, unlike the list row's separate «открыл → откликнулся» pair —
-    // and only 'applied' puts a card into the «Отклики» tracker.
-    applications?.record(cluster.id, 'applied', {
-      title: cluster.canonicalTitle,
-      company: cluster.canonicalCompany ?? '',
-      url: cluster.primaryUrl,
-      source: cluster.sources[0]?.sourceId ?? '',
-    });
-  };
-
   return (
     <div className="vacancies-detail-actions">
-      {alreadyApplied ? (
-        <AppliedStatus target={target} onOpenResponses={onOpenResponses} />
-      ) : (
-        <button type="button" className="vacancies-btn vacancies-btn-primary" onClick={handleApply}>
-          Откликнуться
-        </button>
-      )}
+      <VacancyResponseAction {...props} />
+      <InterviewScheduleAction {...props} />
       <button
         type="button"
         className="vacancies-btn vacancies-btn-secondary"
@@ -237,25 +329,277 @@ function VacancyDetailActions({
       >
         Подробнее
       </button>
-      <VacancyPitchDoor cluster={cluster} />
-      <VacancyInfoModal isOpen={infoOpen} onClose={() => setInfoOpen(false)} cluster={cluster} />
+      <VacancyPitchDoor cluster={props.cluster} />
+      <VacancyInfoModal
+        isOpen={infoOpen}
+        onClose={() => setInfoOpen(false)}
+        cluster={props.cluster}
+      />
     </div>
   );
+}
+
+function VacancyResponseAction(props: VacancyActionProps) {
+  return props.alreadyApplied ? (
+    <AppliedStatus onOpenResponses={props.onOpenResponses} />
+  ) : (
+    <VacancyUnappliedActions
+      cluster={props.cluster}
+      applications={props.applications}
+      onMarkAlreadyApplied={props.onMarkAlreadyApplied}
+    />
+  );
+}
+
+function VacancyUnappliedActions({
+  cluster,
+  applications,
+  onMarkAlreadyApplied,
+}: Pick<VacancyActionProps, 'cluster' | 'applications' | 'onMarkAlreadyApplied'>) {
+  const [confirmationError, setConfirmationError] = useState<string>();
+  return (
+    <>
+      <ExternalApplyButton
+        cluster={cluster}
+        applications={applications}
+        showUnsavedError={!confirmationError}
+        onApply={() => setConfirmationError(undefined)}
+      />
+      {onMarkAlreadyApplied ? (
+        <ConfirmAlreadyAppliedButton
+          cluster={cluster}
+          onConfirm={onMarkAlreadyApplied}
+          onErrorChange={setConfirmationError}
+        />
+      ) : null}
+      {confirmationError ? (
+        <p className="vacancies-interview-error" role="alert">
+          {confirmationError}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+function ExternalApplyButton({
+  cluster,
+  applications,
+  showUnsavedError,
+  onApply,
+}: Pick<VacancyActionProps, 'cluster' | 'applications'> & {
+  readonly showUnsavedError: boolean;
+  readonly onApply: () => void;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        className="vacancies-btn vacancies-btn-primary"
+        onClick={() => {
+          onApply();
+          void openExternalLink(cluster.primaryUrl);
+          applications?.record(cluster.id, 'applied', vacancySnapshot(cluster));
+        }}
+      >
+        Откликнуться
+      </button>
+      {showUnsavedError && applications?.unsaved.has(cluster.id) ? (
+        <p className="vacancies-interview-error" role="alert">
+          Не удалось сохранить отклик. Состояние не изменено.
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+function ConfirmAlreadyAppliedButton({
+  cluster,
+  onConfirm,
+  onErrorChange,
+}: {
+  readonly cluster: MatchedVacancyItem['cluster'];
+  readonly onConfirm: NonNullable<VacancyActionProps['onMarkAlreadyApplied']>;
+  readonly onErrorChange: (error: string | undefined) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        className="vacancies-btn vacancies-btn-secondary"
+        disabled={saving}
+        aria-busy={saving}
+        onClick={() =>
+          runApplicationConfirmation(cluster, onConfirm, setSaving, onErrorChange)
+        }
+      >
+        {saving ? 'Сохраняем…' : 'Я уже откликнулся'}
+      </button>
+    </>
+  );
+}
+
+async function runApplicationConfirmation(
+  cluster: MatchedVacancyItem['cluster'],
+  onConfirm: NonNullable<VacancyActionProps['onMarkAlreadyApplied']>,
+  setSaving: (saving: boolean) => void,
+  setError: (error: string | undefined) => void,
+): Promise<void> {
+  setSaving(true);
+  setError(undefined);
+  try {
+    await onConfirm(cluster.id, vacancySnapshot(cluster));
+  } catch {
+    setError('Не удалось сохранить отклик. Состояние не изменено. Попробуйте ещё раз.');
+  } finally {
+    setSaving(false);
+  }
+}
+
+function InterviewScheduleAction({
+  cluster,
+  alreadyApplied,
+  onScheduleInterview,
+}: Pick<VacancyActionProps, 'cluster' | 'alreadyApplied' | 'onScheduleInterview'>) {
+  const [formOpen, setFormOpen] = useState(false);
+  const [preparationApplication, setPreparationApplication] = useState<ApplicationView>();
+  if (!alreadyApplied || !onScheduleInterview) return null;
+  return (
+    <>
+      <button
+        type="button"
+        className="vacancies-btn vacancies-btn-secondary"
+        onClick={() => setFormOpen(true)}
+      >
+        Назначили интервью
+      </button>
+      {formOpen ? (
+        <InterviewAssignmentForm
+          onCancel={() => setFormOpen(false)}
+          onSubmit={(scheduledAt) =>
+            onScheduleInterview(cluster.id, scheduledAt, vacancySnapshot(cluster))
+          }
+          onSaved={(application) => {
+            setFormOpen(false);
+            setPreparationApplication(application);
+          }}
+        />
+      ) : null}
+      {preparationApplication ? (
+        <InterviewPrepModal
+          isOpen
+          onClose={() => setPreparationApplication(undefined)}
+          vacancy={{
+            id: preparationApplication.id,
+            title: cluster.canonicalTitle,
+            company: cluster.canonicalCompany,
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function InterviewAssignmentForm({
+  onCancel,
+  onSubmit,
+  onSaved,
+}: {
+  readonly onCancel: () => void;
+  readonly onSubmit: (scheduledAt: string) => Promise<ApplicationView>;
+  readonly onSaved: (application: ApplicationView) => void;
+}) {
+  const [scheduledLocal, setScheduledLocal] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
+
+  return (
+    <form
+      className="vacancies-interview-assignment"
+      aria-label="Назначить интервью"
+      aria-busy={saving}
+      onSubmit={(event) =>
+        void submitInterviewSchedule(event, scheduledLocal, onSubmit, onSaved, setSaving, setError)
+      }
+    >
+      <label>
+        Дата и время интервью
+        <input
+          type="datetime-local"
+          required
+          value={scheduledLocal}
+          onChange={(event) => setScheduledLocal(event.target.value)}
+        />
+      </label>
+      {error ? (
+        <p className="vacancies-interview-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="vacancies-interview-actions">
+        <button type="button" className="vacancies-btn vacancies-btn-secondary" onClick={onCancel}>
+          Отмена
+        </button>
+        <button
+          type="submit"
+          className="vacancies-btn vacancies-btn-primary"
+          disabled={!scheduledLocal || saving}
+        >
+          {saving ? 'Сохраняем…' : 'Сохранить и открыть подготовку'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+async function submitInterviewSchedule(
+  event: FormEvent<HTMLFormElement>,
+  scheduledLocal: string,
+  onSubmit: (scheduledAt: string) => Promise<ApplicationView>,
+  onSaved: (application: ApplicationView) => void,
+  setSaving: (saving: boolean) => void,
+  setError: (error: string | undefined) => void,
+): Promise<void> {
+  event.preventDefault();
+  if (!scheduledLocal) return;
+  const scheduledAt = new Date(scheduledLocal);
+  if (Number.isNaN(scheduledAt.getTime())) {
+    setError('Проверьте дату и время интервью.');
+    return;
+  }
+  setSaving(true);
+  setError(undefined);
+  try {
+    onSaved(await onSubmit(scheduledAt.toISOString()));
+  } catch {
+    setError('Не удалось назначить интервью. Этап не изменён. Попробуйте ещё раз.');
+  } finally {
+    setSaving(false);
+  }
+}
+
+function vacancySnapshot(
+  cluster: MatchedVacancyItem['cluster'],
+): VacancyApplicationSnapshot {
+  return {
+    title: cluster.canonicalTitle,
+    company: cluster.canonicalCompany ?? '',
+    url: cluster.primaryUrl,
+    source: cluster.sources[0]?.sourceId ?? '',
+  };
 }
 
 /** Chip plus the door to «Отклики» (B251 F5, C47): confirming an application
  * has to tell the candidate the tracker card exists, not just stop talking. */
 function AppliedStatus({
-  target,
   onOpenResponses,
 }: {
-  readonly target: string;
   readonly onOpenResponses?: () => void;
 }) {
   return (
     <>
       <span className="vacancies-chip is-selected vacancies-detail-applied">
-        Отклик отмечен · открыт {target}
+        Отклик отмечен
       </span>
       {onOpenResponses ? (
         <button

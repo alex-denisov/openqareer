@@ -1,6 +1,7 @@
 import type { ApplicationView } from '../../../server/domain/applicationDerivedFields';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { SkipReasonId } from '../../../shared/skipReasons';
+import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import { apiFetch, readDataArray, readDataObject } from '../coach/apiClient';
 
 export type { ApplicationView } from '../../../server/domain/applicationDerivedFields';
@@ -18,7 +19,7 @@ export interface ManualVacancyInput {
 
 export interface CreateApplicationInput {
   readonly clusterId?: string;
-  readonly manualVacancy?: ManualVacancyInput;
+  readonly manualVacancy?: ManualVacancyInput | VacancyApplicationSnapshot;
   readonly stage: ApplicationStage;
   readonly occurredAt?: string;
 }
@@ -68,13 +69,21 @@ export interface ScheduleApplicationInterviewInput {
   readonly scheduledAt?: string | null;
 }
 
+export interface CreatedApplicationInterview {
+  readonly id: string;
+  readonly applicationId: string;
+  readonly round: number;
+  readonly scheduledAt: string | null;
+  readonly prepStatus: 'none' | 'ready';
+}
+
 /** Creates the interview record the stage change alone does not: `stage` and
  * `nearestInterview` live in separate tables (server/data/sqliteApplicationInterviewRepository.ts,
  * B251 S2), so «Интервью через N дней» on «Сегодня» stays empty without this call. */
 export async function createApplicationInterview(
   applicationId: string,
   input: ScheduleApplicationInterviewInput,
-): Promise<void> {
+): Promise<CreatedApplicationInterview> {
   const response = await apiFetch(
     `/api/v1/candidate/applications/${encodeURIComponent(applicationId)}/interviews`,
     {
@@ -83,7 +92,7 @@ export async function createApplicationInterview(
       body: JSON.stringify(input),
     },
   );
-  await readDataObject(response);
+  return readDataObject<CreatedApplicationInterview>(response);
 }
 
 export async function recordFollowUpSent(applicationId: string): Promise<ApplicationView> {

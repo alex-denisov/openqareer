@@ -205,6 +205,89 @@ describe('applications route · S2 materials/interviews/offer/events', () => {
     expect(patched.json().data).toMatchObject({ prepStatus: 'ready', prep: 'STAR stories' });
   });
 
+  it('moves an applied application to interview in the same transaction as its interview date', async () => {
+    const { app, authorization } = await createApp();
+    const id = await createCard(app, authorization, 'cluster-1', 'applied');
+    const scheduledAt = '2030-02-01T10:00:00Z';
+
+    const created = await app.inject({
+      method: 'POST',
+      url: `${APPLICATIONS_URL}/${id}/interviews`,
+      headers: { authorization, ...ORIGIN },
+      payload: { round: 1, scheduledAt },
+    });
+
+    expect(created.statusCode).toBe(200);
+    const listed = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    expect(listed.json().data[0]).toMatchObject({
+      id,
+      stage: 'interview',
+      nearestInterview: { scheduledAt, round: 1 },
+    });
+  });
+
+  it('keeps the previous stage when interview creation fails', async () => {
+    const { app, authorization, candidateStore } = await createApp();
+    const id = await createCard(app, authorization, 'cluster-1', 'applied');
+    const database = (candidateStore as unknown as { database: DatabaseSync }).database;
+    database.exec(`
+      CREATE TRIGGER reject_interview_for_test
+      BEFORE INSERT ON application_interviews
+      BEGIN
+        SELECT RAISE(ABORT, 'test interview write failure');
+      END;
+    `);
+
+    const failed = await app.inject({
+      method: 'POST',
+      url: `${APPLICATIONS_URL}/${id}/interviews`,
+      headers: { authorization, ...ORIGIN },
+      payload: { round: 1, scheduledAt: '2030-02-01T10:00:00Z' },
+    });
+
+    expect(failed.statusCode).toBe(500);
+    const listed = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    expect(listed.json().data[0]).toMatchObject({ id, stage: 'applied', nearestInterview: null });
+  });
+
+  it('rolls back the vacancy status when its tracker-card write fails', async () => {
+    const { app, authorization, candidateStore } = await createApp();
+    const database = (candidateStore as unknown as { database: DatabaseSync }).database;
+    database.exec(`
+      CREATE TRIGGER reject_tracker_card_for_test
+      BEFORE INSERT ON applications
+      BEGIN
+        SELECT RAISE(ABORT, 'test tracker write failure');
+      END;
+    `);
+
+    const failed = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancy-applications',
+      headers: { authorization, ...ORIGIN },
+      payload: {
+        clusterId: 'cluster-1',
+        status: 'applied',
+        vacancy: {
+          title: 'Architect',
+          company: 'Example',
+          url: 'https://example.test/jobs/1',
+          source: 'src-remotive',
+        },
+      },
+    });
+
+    expect(failed.statusCode).toBe(500);
+    const legacy = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/vacancy-applications',
+      headers: { authorization },
+    });
+    const tracker = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    expect(legacy.json().data).toEqual([]);
+    expect(tracker.json().data).toEqual([]);
+  });
+
   it('puts and reads back sealed offer terms', async () => {
     const { app, authorization } = await createApp();
     const id = await createCard(app, authorization, 'cluster-1', 'offer');

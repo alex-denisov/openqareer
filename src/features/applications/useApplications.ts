@@ -39,6 +39,7 @@ export interface UseApplications {
   /** Cards a 409 flagged as edited on another device: only a reload resolves them. */
   readonly conflicts: ReadonlySet<string>;
   readonly reload: () => void;
+  readonly refreshApplications: () => Promise<readonly ApplicationView[]>;
   readonly changeStage: (id: string, stage: ApplicationStage, occurredAt?: string) => void;
   /** Moves the card to `interview` and records the interview date (B251 F5):
    * a plain stage patch never fills `nearestInterview`, so «Сегодня» and the
@@ -47,7 +48,7 @@ export interface UseApplications {
   readonly retryStageChange: (id: string) => void;
   readonly markFollowUpSent: (id: string) => Promise<void>;
   readonly saveNote: (id: string, notes: string) => void;
-  readonly addManualCard: (input: CreateApplicationInput) => Promise<void>;
+  readonly addManualCard: (input: CreateApplicationInput) => Promise<ApplicationView>;
   readonly skip: (application: ApplicationView, reasonId: SkipReasonId) => Promise<void>;
 }
 
@@ -90,6 +91,15 @@ export function useApplications(): UseApplications {
 
   const reload = useCallback(() => setReloadToken((token) => token + 1), []);
 
+  const refreshApplications = useCallback(async () => {
+    const list = await listApplications();
+    setApplications(list);
+    setError(undefined);
+    setOffline(false);
+    setStatus('ready');
+    return list;
+  }, []);
+
   const writeStagePatch = useCallback(
     (
       id: string,
@@ -130,11 +140,29 @@ export function useApplications(): UseApplications {
 
   const scheduleInterview = useCallback(
     async (id: string, scheduledAt: string) => {
-      changeStage(id, 'interview', scheduledAt);
-      await createApplicationInterview(id, { round: 1, scheduledAt });
-      reload();
+      const interview = await createApplicationInterview(id, { round: 1, scheduledAt });
+      setApplications((list) => {
+        const current = list.find((application) => application.id === id);
+        if (!current) return list;
+        return replaceApplication(list, {
+          ...current,
+          stage: 'interview',
+          stageChangedAt:
+            current.stage === 'interview' ? current.stageChangedAt : (interview.scheduledAt ?? scheduledAt),
+          version: current.version + (current.stage === 'interview' ? 0 : 1),
+          nearestInterview: {
+            id: interview.id,
+            scheduledAt: interview.scheduledAt,
+            prepStatus: interview.prepStatus,
+            round: interview.round,
+          },
+        });
+      });
+      setFailedChanges((map) => withoutKey(map, id));
+      setConflicts((set) => without(set, id));
+      void refreshApplications().catch(() => undefined);
     },
-    [changeStage, reload],
+    [refreshApplications],
   );
 
   const retryStageChange = useCallback(
@@ -164,7 +192,12 @@ export function useApplications(): UseApplications {
 
   const addManualCard = useCallback(async (input: CreateApplicationInput) => {
     const created = await createApplication(input);
-    setApplications((list) => [...list, created]);
+    setApplications((list) =>
+      list.some((application) => application.id === created.id)
+        ? replaceApplication(list, created)
+        : [...list, created],
+    );
+    return created;
   }, []);
 
   const skip = useCallback(async (application: ApplicationView, reasonId: SkipReasonId) => {
@@ -187,6 +220,7 @@ export function useApplications(): UseApplications {
     failedChanges,
     conflicts,
     reload,
+    refreshApplications,
     changeStage,
     scheduleInterview,
     retryStageChange,

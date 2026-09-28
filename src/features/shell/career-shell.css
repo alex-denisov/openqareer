@@ -13169,6 +13169,52 @@
   flex-wrap: wrap;
 }
 
+.vacancies-interview-assignment {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  gap: var(--career-space-3);
+  min-width: 0;
+  padding: var(--career-space-3);
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+}
+
+.vacancies-interview-assignment label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2);
+  min-width: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-aux);
+}
+
+.vacancies-interview-assignment input {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--career-target-min);
+  padding: var(--career-space-2);
+  border: 1px solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text);
+  font: inherit;
+}
+
+.vacancies-interview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.vacancies-interview-error {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--career-warning);
+  font-size: var(--career-text-aux);
+}
+
 .vacancies-detail-applied {
   flex: 1;
   text-align: center;
@@ -13932,6 +13978,12 @@
   margin: 0;
   font-size: var(--career-text-xs);
   max-width: 60ch;
+}
+
+.career-responses-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
 }
 
 @media (max-width: 760px) {

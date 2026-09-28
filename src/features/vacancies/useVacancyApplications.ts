@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import type {
   VacancyApplication,
   VacancyApplicationSnapshot,
@@ -17,6 +17,12 @@ export interface VacancyApplications {
     status: VacancyApplicationStatus,
     vacancy: VacancyApplicationSnapshot,
   ) => void;
+  /** Waits for an in-product confirmation so the caller can keep the prior state on failure. */
+  readonly recordConfirmed: (
+    clusterId: string,
+    status: VacancyApplicationStatus,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<void>;
 }
 
 /**
@@ -35,6 +41,8 @@ export function useVacancyApplications(
     provided ?? [],
   );
   const [unsaved, setUnsaved] = useState<ReadonlySet<string>>(new Set());
+  const record = useOptimisticVacancyRecord(setApplications, setUnsaved);
+  const recordConfirmed = useConfirmedVacancyRecord(setApplications, setUnsaved);
 
   useEffect(() => {
     if (provided) return;
@@ -50,7 +58,22 @@ export function useVacancyApplications(
     };
   }, [provided]);
 
-  const record = useCallback(
+  const byCluster = useMemo(
+    () => new Map(applications.map((application) => [application.clusterId, application])),
+    [applications],
+  );
+
+  return { applications, byCluster, unsaved, record, recordConfirmed };
+}
+
+type SetVacancyApplications = Dispatch<SetStateAction<readonly VacancyApplication[]>>;
+type SetUnsavedVacancies = Dispatch<SetStateAction<ReadonlySet<string>>>;
+
+function useOptimisticVacancyRecord(
+  setApplications: SetVacancyApplications,
+  setUnsaved: SetUnsavedVacancies,
+) {
+  return useCallback(
     (
       clusterId: string,
       status: VacancyApplicationStatus,
@@ -69,15 +92,31 @@ export function useVacancyApplications(
           setUnsaved((current) => new Set(current).add(clusterId));
         });
     },
-    [],
+    [setApplications, setUnsaved],
   );
+}
 
-  const byCluster = useMemo(
-    () => new Map(applications.map((application) => [application.clusterId, application])),
-    [applications],
+function useConfirmedVacancyRecord(
+  setApplications: SetVacancyApplications,
+  setUnsaved: SetUnsavedVacancies,
+) {
+  return useCallback(
+    async (
+      clusterId: string,
+      status: VacancyApplicationStatus,
+      vacancy: VacancyApplicationSnapshot,
+    ) => {
+      setUnsaved((current) => without(current, clusterId));
+      try {
+        const saved = await recordVacancyApplication({ clusterId, status, vacancy });
+        setApplications((current) => mergeApplication(current, saved));
+      } catch (reason) {
+        setUnsaved((current) => new Set(current).add(clusterId));
+        throw reason;
+      }
+    },
+    [setApplications, setUnsaved],
   );
-
-  return { applications, byCluster, unsaved, record };
 }
 
 function without(current: ReadonlySet<string>, clusterId: string): ReadonlySet<string> {

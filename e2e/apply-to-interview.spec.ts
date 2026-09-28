@@ -175,6 +175,7 @@ async function seedWorkspace(page: Page): Promise<void> {
 
 interface ApplicationRecord {
   id: string;
+  clusterId?: string | null;
   stage: string;
   version: number;
   vacancy: { title: string; company: string; companyHidden: boolean; url: string; source: string };
@@ -185,7 +186,7 @@ function applicationView(record: ApplicationRecord) {
   return {
     id: record.id,
     candidateId: CANDIDATE.candidateId,
-    clusterId: 'c-1',
+    clusterId: record.clusterId === undefined ? 'c-1' : record.clusterId,
     stage: record.stage,
     closedReason: null,
     processProfile: 'standard',
@@ -203,12 +204,31 @@ function applicationView(record: ApplicationRecord) {
   };
 }
 
+interface VacancyApplicationRecord {
+  clusterId: string;
+  status: string;
+  vacancy: unknown;
+  openedAt: string | null;
+  appliedAt: string | null;
+  confirmedBy: 'candidate' | null;
+}
+
+interface StubOptions {
+  readonly initialVacancyApplications?: VacancyApplicationRecord[];
+  readonly failAppliedWrite?: boolean;
+  readonly failInterviewCreation?: boolean;
+}
+
 /** One route table shared by both tests: an in-memory tracker that mutates
  * as the candidate applies, moves the stage and schedules the interview —
  * the chain has no meaning against a frozen fixture. */
-function stubSession(page: Page, initialApplications: ApplicationRecord[] = []): Promise<void> {
+function stubSession(
+  page: Page,
+  initialApplications: ApplicationRecord[] = [],
+  options: StubOptions = {},
+): Promise<void> {
   const applications = initialApplications;
-  const vacancyApplications: Array<{ clusterId: string; status: string; vacancy: unknown }> = [];
+  const vacancyApplications = [...(options.initialVacancyApplications ?? [])];
   return page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -236,16 +256,52 @@ function stubSession(page: Page, initialApplications: ApplicationRecord[] = []):
         status: string;
         vacancy: unknown;
       };
-      vacancyApplications.push(body);
+      if (options.failAppliedWrite && body.status === 'applied') {
+        return route.fulfill({ status: 500, json: { error: 'write_failed' } });
+      }
+      const appliedAt = body.status === 'applied' ? '2026-09-27T09:00:00.000Z' : null;
+      const stored: VacancyApplicationRecord = {
+        ...body,
+        openedAt: '2026-09-27T09:00:00.000Z',
+        appliedAt,
+        confirmedBy: appliedAt ? 'candidate' : null,
+      };
+      const existing = vacancyApplications.find(
+        (application) => application.clusterId === body.clusterId,
+      );
+      if (existing) Object.assign(existing, stored);
+      else vacancyApplications.push(stored);
+      if (body.status === 'applied') {
+        const tracked = applications.find(
+          (application) => application.clusterId === body.clusterId,
+        );
+        if (tracked) tracked.stage = 'applied';
+        else {
+          applications.push({
+            id: `app-${applications.length + 1}`,
+            clusterId: body.clusterId,
+            stage: 'applied',
+            version: 1,
+            vacancy: {
+              title: CLUSTER.canonicalTitle,
+              company: CLUSTER.canonicalCompany,
+              companyHidden: false,
+              url: CLUSTER.primaryUrl,
+              source: 'hh',
+            },
+            nearestInterview: null,
+          });
+        }
+      }
       return route.fulfill({
         json: {
           data: {
             clusterId: body.clusterId,
             status: body.status,
             vacancy: body.vacancy,
-            openedAt: body.status === 'opened' ? '2026-09-27T09:00:00.000Z' : null,
-            appliedAt: body.status === 'applied' ? '2026-09-27T09:00:00.000Z' : null,
-            confirmedBy: body.status === 'applied' ? 'candidate' : null,
+            openedAt: stored.openedAt,
+            appliedAt: stored.appliedAt,
+            confirmedBy: stored.confirmedBy,
           },
         },
       });
@@ -254,17 +310,32 @@ function stubSession(page: Page, initialApplications: ApplicationRecord[] = []):
       return route.fulfill({ json: { data: vacancyApplications } });
     }
     if (request.method() === 'POST' && pathname === '/api/v1/candidate/applications') {
-      const body = request.postDataJSON() as { clusterId: string; stage: string };
+      const body = request.postDataJSON() as {
+        clusterId?: string;
+        stage: string;
+        manualVacancy?: {
+          title: string;
+          company?: string;
+          companyHidden?: boolean;
+          url?: string;
+          source: string;
+        };
+      };
+      const existing = applications.find(
+        (item) => body.clusterId !== undefined && item.clusterId === body.clusterId,
+      );
+      if (existing) return route.fulfill({ json: { data: applicationView(existing) } });
       const created: ApplicationRecord = {
-        id: 'app-1',
+        id: `app-${applications.length + 1}`,
+        clusterId: body.clusterId ?? null,
         stage: body.stage,
         version: 1,
         vacancy: {
-          title: CLUSTER.canonicalTitle,
-          company: CLUSTER.canonicalCompany,
-          companyHidden: false,
-          url: CLUSTER.primaryUrl,
-          source: 'hh',
+          title: body.manualVacancy?.title ?? CLUSTER.canonicalTitle,
+          company: body.manualVacancy?.company ?? CLUSTER.canonicalCompany,
+          companyHidden: body.manualVacancy?.companyHidden ?? false,
+          url: body.manualVacancy?.url ?? CLUSTER.primaryUrl,
+          source: body.manualVacancy?.source ?? 'hh',
         },
         nearestInterview: null,
       };
@@ -278,12 +349,14 @@ function stubSession(page: Page, initialApplications: ApplicationRecord[] = []):
       record.version += 1;
       return route.fulfill({ json: { data: applicationView(record) } });
     }
-    if (
-      request.method() === 'POST' &&
-      pathname === '/api/v1/candidate/applications/app-1/interviews'
-    ) {
+    if (request.method() === 'POST' && pathname.endsWith('/interviews')) {
+      if (options.failInterviewCreation) {
+        return route.fulfill({ status: 500, json: { error: 'interview_write_failed' } });
+      }
       const body = request.postDataJSON() as { round: number; scheduledAt: string };
-      const record = applications.find((item) => item.id === 'app-1')!;
+      const applicationId = pathname.split('/').at(-2);
+      const record = applications.find((item) => item.id === applicationId)!;
+      record.stage = 'interview';
       record.nearestInterview = {
         id: 'iv-1',
         scheduledAt: body.scheduledAt,
@@ -393,6 +466,33 @@ async function walkChain(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Закрыть модальное окно' }).click();
 }
 
+async function walkManualAppliedChain(page: Page): Promise<void> {
+  const viewport = page.viewportSize()?.width ?? 0;
+  await openVacancies(page);
+  await page.locator('.vac-list-item').first().locator('.vac-row').click();
+  await page.getByRole('button', { name: 'Я уже откликнулся' }).click();
+  await expect(page.locator('.vacancies-detail-col')).toContainText('Отклик отмечен');
+
+  await page.getByRole('button', { name: 'Назначили интервью' }).click();
+  await page.getByLabel('Дата и время интервью').fill('2026-09-30T13:45');
+  await page.screenshot({ path: `output/playwright/c70-interview-assignment-${viewport}.png` });
+  await page.getByRole('button', { name: 'Сохранить и открыть подготовку' }).click();
+
+  const preparation = page.getByRole('dialog');
+  await expect(preparation).toContainText('Genetec');
+  await preparation.screenshot({ path: `output/playwright/c70-interview-prep-${viewport}.png` });
+}
+
+async function walkExistingAppliedVacancyToPrep(page: Page): Promise<void> {
+  await openVacancies(page);
+  await page.locator('.vac-list-item').first().locator('.vac-row').click();
+  await expect(page.locator('.vacancies-detail-col')).toContainText('Отклик отмечен');
+  await page.getByRole('button', { name: 'Назначили интервью' }).click();
+  await page.getByLabel('Дата и время интервью').fill('2026-09-30T13:45');
+  await page.getByRole('button', { name: 'Сохранить и открыть подготовку' }).click();
+  await expect(page.getByRole('dialog')).toContainText('Genetec');
+}
+
 test.describe('C47 apply-to-interview chain', () => {
   test('walks vacancy → apply → responses → interview stage → today → prep on 1440', async ({
     page,
@@ -429,7 +529,118 @@ test.describe('C47 apply-to-interview chain', () => {
     await expect(page.locator('.career-responses-empty')).toContainText(
       'Откликнитесь на вакансию из подборки',
     );
-    await page.locator('.career-responses-empty').getByRole('button', { name: 'Вакансии' }).click();
+    await page
+      .locator('.career-responses-empty')
+      .getByRole('button', { name: 'Перейти к вакансиям' })
+      .click();
     await expect(page.locator('.vacancies-screen')).toBeVisible();
+  });
+
+  test('marks an external application and opens interview prep directly on 1440', async ({
+    page,
+  }) => {
+    await stubSession(page, [], { failInterviewCreation: false });
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await walkManualAppliedChain(page);
+  });
+
+  test('marks an external application and opens interview prep directly on 390', async ({
+    page,
+  }) => {
+    await stubSession(page, [], { failInterviewCreation: false });
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await walkManualAppliedChain(page);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  test('creates a missing tracker card for an already-applied vacancy', async ({ page }) => {
+    await stubSession(page, [], {
+      initialVacancyApplications: [
+        {
+          clusterId: 'c-1',
+          status: 'applied',
+          vacancy: { title: CLUSTER.canonicalTitle, company: CLUSTER.canonicalCompany },
+          openedAt: '2026-09-20T09:00:00.000Z',
+          appliedAt: '2026-09-20T09:00:00.000Z',
+          confirmedBy: 'candidate',
+        },
+      ],
+    });
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+
+    await walkExistingAppliedVacancyToPrep(page);
+  });
+
+  test('keeps the vacancy unapplied when saving the manual confirmation fails', async ({
+    page,
+  }) => {
+    await stubSession(page, [], { failAppliedWrite: true });
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+    await page.locator('.vac-list-item').first().locator('.vac-row').click();
+
+    await page.getByRole('button', { name: 'Я уже откликнулся' }).click();
+
+    await expect(page.locator('.vacancies-interview-error')).toContainText('Состояние не изменено');
+    await expect(page.locator('.vacancies-detail-col')).not.toContainText('Отклик отмечен');
+    await expect(page.getByRole('button', { name: 'Я уже откликнулся' })).toBeVisible();
+  });
+
+  test('keeps the applied stage and does not open prep when interview scheduling fails', async ({
+    page,
+  }) => {
+    await stubSession(page, [], {
+      initialVacancyApplications: [
+        {
+          clusterId: 'c-1',
+          status: 'applied',
+          vacancy: { title: CLUSTER.canonicalTitle, company: CLUSTER.canonicalCompany },
+          openedAt: '2026-09-20T09:00:00.000Z',
+          appliedAt: '2026-09-20T09:00:00.000Z',
+          confirmedBy: 'candidate',
+        },
+      ],
+      failInterviewCreation: true,
+    });
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+    await page.locator('.vac-list-item').first().locator('.vac-row').click();
+    await page.getByRole('button', { name: 'Назначили интервью' }).click();
+    await page.getByLabel('Дата и время интервью').fill('2026-09-30T13:45');
+    await page.getByRole('button', { name: 'Сохранить и открыть подготовку' }).click();
+
+    await expect(page.locator('.vacancies-interview-error')).toContainText('Этап не изменён');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('.vacancies-detail-col')).toContainText('Отклик отмечен');
+  });
+
+  test('adds a manual response from the empty tracker', async ({ page }) => {
+    await stubSession(page, []);
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openResponses(page);
+
+    await page.getByRole('button', { name: 'Добавить отклик вручную' }).click();
+    const form = page.getByRole('dialog', { name: 'Добавить карточку вручную' });
+    await form.getByLabel('Роль').fill('Архитектор платформы');
+    await form.getByRole('textbox', { name: 'Компания' }).fill('Genetec');
+    await form.getByRole('button', { name: 'Добавить' }).click();
+
+    await expect(page.locator('.career-responses-card')).toContainText('Архитектор платформы');
+    await expect(page.locator('.career-responses-card')).toContainText('Genetec');
   });
 });

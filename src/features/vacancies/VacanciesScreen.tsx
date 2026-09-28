@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Check } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
+import type { ApplicationView } from '../applications/applicationsApi';
+import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import { titleMatchesRole } from '../../../shared/vacancyRoleTitleMatch';
 import { vacancyAge } from './vacancyFilters';
 import { VacancyDetailPanel } from './VacancyDetailPanel';
@@ -47,6 +49,15 @@ interface VacanciesScreenProps {
   /** B248 §2 — тот же индикатор пути, что и на остальных экранах кампании. */
   readonly pathIndicator?: VacanciesPathIndicator;
   readonly applications?: VacancyApplications;
+  readonly onMarkAlreadyApplied?: (
+    clusterId: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<void>;
+  readonly onScheduleInterview?: (
+    clusterId: string,
+    scheduledAt: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<ApplicationView>;
   readonly onOpenResponses?: () => void;
   readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
 }
@@ -112,28 +123,50 @@ function useVacanciesScreenBoard(
   };
 }
 
-export function VacanciesScreen({
-  matched,
-  total,
-  campaign,
-  candidateLevel,
-  loading = false,
-  failed = false,
-  failureSourceLabel,
-  onRetry,
-  now = new Date().toISOString(),
-  pathIndicator,
-  applications,
-  onOpenResponses,
-  onOpenProfile,
-}: VacanciesScreenProps) {
+export function VacanciesScreen(input: VacanciesScreenProps) {
+  const { campaign, matched, now: providedNow } = input;
+  const now = providedNow ?? new Date().toISOString();
   const [activeCampaign, setActiveCampaign] = useActiveCampaign(campaign);
   const board = useVacanciesScreenBoard(matched, activeCampaign, now);
   const actions = useVacancyCampaignActions(activeCampaign, {
     onCampaignUpdated: campaignUpdateHandler(setActiveCampaign, board.setState),
-    onRetry,
+    onRetry: input.onRetry,
   });
 
+  return (
+    <VacanciesScreenView
+      input={input}
+      activeCampaign={activeCampaign}
+      now={now}
+      board={board}
+      actions={actions}
+    />
+  );
+}
+
+function VacanciesScreenView({
+  input,
+  activeCampaign,
+  now,
+  board,
+  actions,
+}: {
+  readonly input: VacanciesScreenProps;
+  readonly activeCampaign?: CampaignMetaView;
+  readonly now: string;
+  readonly board: ReturnType<typeof useVacanciesScreenBoard>;
+  readonly actions: ReturnType<typeof useVacancyCampaignActions>;
+}) {
+  const results = (
+    <VacanciesResults {...input} campaign={activeCampaign} now={now} board={board} actions={actions} />
+  );
+  const {
+    loading = false,
+    failed = false,
+    failureSourceLabel,
+    onRetry,
+    pathIndicator,
+  } = input;
   return (
     <div className="vacancies-screen">
       <VacanciesScreenHeader primaryRole={board.primaryRole} pathIndicator={pathIndicator} />
@@ -143,19 +176,7 @@ export function VacanciesScreen({
         failureSourceLabel={failureSourceLabel}
         onRetry={onRetry}
       >
-        <VacanciesResults
-          matched={matched}
-          total={total}
-          campaign={activeCampaign}
-          candidateLevel={candidateLevel}
-          now={now}
-          applications={applications}
-          board={board}
-          actions={actions}
-          onRetry={onRetry}
-          onOpenResponses={onOpenResponses}
-          onOpenProfile={onOpenProfile}
-        />
+        {results}
       </VacanciesScreenBody>
     </div>
   );
@@ -246,6 +267,15 @@ interface VacanciesResultsProps {
   readonly candidateLevel?: string | null;
   readonly now: string;
   readonly applications?: VacancyApplications;
+  readonly onMarkAlreadyApplied?: (
+    clusterId: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<void>;
+  readonly onScheduleInterview?: (
+    clusterId: string,
+    scheduledAt: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<ApplicationView>;
   readonly board: ReturnType<typeof useVacanciesScreenBoard>;
   readonly actions: ReturnType<typeof useVacancyCampaignActions>;
   readonly onRetry?: () => void;
@@ -285,6 +315,8 @@ function VacanciesResults(props: VacanciesResultsProps) {
           effectiveId={props.board.effectiveId}
           selectedItem={props.board.selectedItem}
           applications={props.applications}
+          onMarkAlreadyApplied={props.onMarkAlreadyApplied}
+          onScheduleInterview={props.onScheduleInterview}
           mobileDetailOpen={props.board.mobileDetailOpen}
           onSelect={props.board.onSelect}
           onBack={props.board.onBack}
@@ -412,6 +444,15 @@ interface VacanciesLayoutProps {
   readonly effectiveId?: string;
   readonly selectedItem?: MatchedVacancyItem;
   readonly applications?: VacancyApplications;
+  readonly onMarkAlreadyApplied?: (
+    clusterId: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<void>;
+  readonly onScheduleInterview?: (
+    clusterId: string,
+    scheduledAt: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<ApplicationView>;
   readonly mobileDetailOpen: boolean;
   readonly onSelect: (id: string) => void;
   readonly onBack: () => void;
@@ -440,6 +481,8 @@ function VacanciesLayout(props: VacanciesLayoutProps) {
             item={props.selectedItem}
             now={props.now}
             applications={props.applications}
+            onMarkAlreadyApplied={props.onMarkAlreadyApplied}
+            onScheduleInterview={props.onScheduleInterview}
             onBack={props.onBack}
             onOpenResponses={props.onOpenResponses}
             onAddToProfile={props.onOpenProfile}

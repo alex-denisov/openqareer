@@ -150,6 +150,7 @@ describe('VacancyDetailPanel (B250)', () => {
       byCluster: new Map(),
       unsaved: new Set<string>(),
       record,
+      recordConfirmed: vi.fn().mockResolvedValue(undefined),
     };
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -209,10 +210,75 @@ describe('VacancyDetailPanel (B250)', () => {
       ]),
       unsaved: new Set<string>(),
       record: vi.fn(),
+      recordConfirmed: vi.fn().mockResolvedValue(undefined),
     };
     const html = render({ applications });
     expect(html).toContain('Отклик отмечен');
     expect(html).not.toContain('>Откликнуться<');
+  });
+
+  it('lets the candidate confirm an off-product application without opening the vacancy site', async () => {
+    const openSpy = vi.spyOn(openExternalLinkModule, 'openExternalLink').mockResolvedValue(true);
+    openSpy.mockClear();
+    const onMarkAlreadyApplied = vi.fn().mockResolvedValue(undefined);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <VacancyDetailPanel
+          item={item()}
+          now="2026-09-24T09:00:00.000Z"
+          onBack={vi.fn()}
+          onMarkAlreadyApplied={onMarkAlreadyApplied}
+        />,
+      );
+    });
+    const button = Array.from(container.querySelectorAll('button')).find(
+      (element) => element.textContent === 'Я уже откликнулся',
+    );
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onMarkAlreadyApplied).toHaveBeenCalledWith(
+      'c-1',
+      expect.objectContaining({ title: 'Business Information Architect', url: 'https://example.com/vacancy' }),
+    );
+    expect(openSpy).not.toHaveBeenCalled();
+    openSpy.mockRestore();
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('keeps the prior state and explains a failed manual application write', async () => {
+    const onMarkAlreadyApplied = vi.fn().mockRejectedValue(new Error('write failed'));
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <VacancyDetailPanel
+          item={item()}
+          now="2026-09-24T09:00:00.000Z"
+          onBack={vi.fn()}
+          onMarkAlreadyApplied={onMarkAlreadyApplied}
+        />,
+      );
+    });
+    const button = Array.from(container.querySelectorAll('button')).find(
+      (element) => element.textContent === 'Я уже откликнулся',
+    );
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Не удалось сохранить отклик. Состояние не изменено.');
+    expect(container.textContent).not.toContain('Отклик отмечен');
+    act(() => root.unmount());
+    container.remove();
   });
 
   it('renders a «Назад» control for the mobile full-screen panel', () => {

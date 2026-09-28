@@ -54,6 +54,7 @@ export class ApplicationTrackerController {
     private readonly legacyApplications: SqliteVacancyApplicationRepository,
     private readonly workspaces: SqliteWorkspaceRepository,
     private readonly documents: SqliteDocumentRepository,
+    private readonly transaction: <T>(operation: () => T) => T,
   ) {
     this.applications = new SqliteApplicationRepository(database, sealedText);
     this.materials = new SqliteApplicationMaterialsRepository(database);
@@ -68,11 +69,13 @@ export class ApplicationTrackerController {
   }
 
   recordLegacy(candidateId: string, input: VacancyApplicationInput): VacancyApplication {
-    const stored = this.legacyApplications.record(candidateId, input);
-    if (input.status === 'applied') {
-      this.applications.recordLegacyApplied(candidateId, input.clusterId, input.vacancy);
-    }
-    return stored;
+    return this.transaction(() => {
+      const stored = this.legacyApplications.record(candidateId, input);
+      if (input.status === 'applied') {
+        this.applications.recordLegacyApplied(candidateId, input.clusterId, input.vacancy);
+      }
+      return stored;
+    });
   }
 
   /**
@@ -151,8 +154,17 @@ export class ApplicationTrackerController {
   }
 
   createInterview(candidateId: string, applicationId: string, input: CreateInterviewInput): StoredApplicationInterview {
-    this.mustGetOwn(candidateId, applicationId);
-    return this.interviews.create(applicationId, input);
+    return this.transaction(() => {
+      const application = this.mustGetOwn(candidateId, applicationId);
+      if (application.stage !== 'interview') {
+        this.applications.patch(candidateId, applicationId, {
+          expectedVersion: application.version,
+          stage: 'interview',
+          ...(input.scheduledAt ? { occurredAt: input.scheduledAt } : {}),
+        });
+      }
+      return this.interviews.create(applicationId, input);
+    });
   }
 
   patchInterview(

@@ -629,15 +629,46 @@ async function verifyViewport(browser, baseUrl, viewport) {
     });
   });
   // Ручные отклики (B165, срез 1): экран читает свою ручку, а подтверждение
-  // уходит на неё же. Стенд помнит записанное, чтобы прогон видел ровно то,
-  // что увидит кандидат, — и запоминает тела запросов для проверки.
+  // уходит на неё же. Сервер атомарно создаёт карточку трекера при статусе
+  // applied; стенд отражает тот же dual-write, чтобы экран видел карточку.
   page.__recordedApplications = [];
+  const trackerCards = [];
   await page.route('**/api/v1/candidate/vacancy-applications', async (route) => {
     const request = route.request();
     if (request.method() === 'POST') {
       const body = JSON.parse(request.postData() ?? '{}');
       page.__recordedApplications.push(body);
       const now = new Date().toISOString();
+      if (
+        body.status === 'applied' &&
+        !trackerCards.some((application) => application.clusterId === body.clusterId)
+      ) {
+        trackerCards.push({
+          id: `app-${trackerCards.length + 1}`,
+          candidateId: 'candidate-1',
+          clusterId: body.clusterId,
+          stage: 'applied',
+          closedReason: null,
+          processProfile: 'standard',
+          vacancy: {
+            title: body.vacancy?.title ?? 'Продуктовый аналитик',
+            company: body.vacancy?.company ?? 'FinCloud',
+            companyHidden: false,
+            url: body.vacancy?.url ?? 'https://example.test/vacancy/1',
+            source: body.vacancy?.source ?? 'hh-1',
+          },
+          notes: null,
+          followUpDueAt: null,
+          stageChangedAt: now,
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+          followUp: null,
+          whoseTurn: 'company',
+          materials: { coverLetter: false, resume: false },
+          nearestInterview: null,
+        });
+      }
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -703,8 +734,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     });
   });
   // «Отклики» (B251 S3, C47): отклик из карточки вакансии создаёт карточку
-  // трекера (POST), доска читает список (GET) — тот же, что создан.
-  const trackerCards = [];
+  // трекера вместе со статусом отклика, доска читает его список (GET).
   await page.route('**/api/v1/candidate/applications*', async (route) => {
     const request = route.request();
     if (request.method() === 'POST') {
