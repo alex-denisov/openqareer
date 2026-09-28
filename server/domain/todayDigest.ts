@@ -1,4 +1,5 @@
 import type { ApplicationView } from './applicationDerivedFields';
+import { isClosedApplicationStage } from '../../shared/applicationStage';
 import { pluralRu } from '../../shared/pluralRu';
 import type { VacancyLevelMatch, VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
 
@@ -116,10 +117,7 @@ const MAX_QUEUE_ITEMS = 5;
 const MAX_FOLLOW_UP_CAPTIONS = 2;
 
 function eyebrowFor(application: ApplicationView): string | null {
-  if (
-    application.followUp &&
-    ['due', 'overdue', 'stale'].includes(application.followUp.urgency)
-  ) {
+  if (application.followUp && ['due', 'overdue', 'stale'].includes(application.followUp.urgency)) {
     const days = application.followUp.daysSinceContact;
     return `${pluralRu(days, ['день', 'дня', 'дней'])} без ответа`;
   }
@@ -137,10 +135,7 @@ function daysUntil(iso: string, now = new Date().toISOString()): number | null {
 }
 
 function queueKindFor(application: ApplicationView): 'follow_up' | 'interview' | 'candidate_turn' {
-  if (
-    application.followUp &&
-    ['due', 'overdue', 'stale'].includes(application.followUp.urgency)
-  ) {
+  if (application.followUp && ['due', 'overdue', 'stale'].includes(application.followUp.urgency)) {
     return 'follow_up';
   }
   if (application.nearestInterview?.scheduledAt) return 'interview';
@@ -166,9 +161,13 @@ function newVacancyCaption(
   campaignRole: string | null,
 ): TodayNewVacanciesCaption | null {
   if (!newVacancies || newVacancies.length === 0) return null;
-  const sourcesCount = newVacancies.reduce((max, vacancy) => Math.max(max, vacancy.sourcesCount), 0);
+  const sourcesCount = newVacancies.reduce(
+    (max, vacancy) => Math.max(max, vacancy.sourcesCount),
+    0,
+  );
   const updatedAt = newVacancies.reduce<string | null>(
-    (latest, vacancy) => (latest === null || vacancy.lastSeenAt > latest ? vacancy.lastSeenAt : latest),
+    (latest, vacancy) =>
+      latest === null || vacancy.lastSeenAt > latest ? vacancy.lastSeenAt : latest,
     null,
   );
   return { campaignRole, sourcesCount, updatedAt };
@@ -198,7 +197,9 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
     digest: {
       waitingForYou: waitingApplications.length,
       newVacancies: input.newVacancies?.length ?? 0,
-      followUpsDueToday: input.applications.filter((application) => application.followUp?.urgency === 'due').length,
+      followUpsDueToday: input.applications.filter(
+        (application) => application.followUp?.urgency === 'due',
+      ).length,
       followUpsOverdue: input.applications.filter(
         (application) =>
           application.followUp?.urgency === 'overdue' || application.followUp?.urgency === 'stale',
@@ -219,7 +220,9 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
 /** Лучшие по совпадению вакансии подборки, по которым ещё нет ни отклика, ни «новой». */
 function shortlistToReview(input: BuildTodaySnapshotInput): readonly TodayNewVacancy[] {
   const taken = new Set<string>([
-    ...input.applications.flatMap((application) => (application.clusterId ? [application.clusterId] : [])),
+    ...input.applications.flatMap((application) =>
+      application.clusterId ? [application.clusterId] : [],
+    ),
     ...(input.newVacancies ?? []).map((vacancy) => vacancy.clusterId),
   ]);
   return (input.shortlist ?? []).filter((vacancy) => !taken.has(vacancy.clusterId));
@@ -267,9 +270,14 @@ function buildQueue(
 
 function upcomingInterviewsOf(applications: readonly ApplicationView[]): ApplicationView[] {
   return applications
-    .filter((application) => application.nearestInterview?.scheduledAt)
+    .filter(
+      (application) =>
+        application.nearestInterview?.scheduledAt && !isClosedApplicationStage(application.stage),
+    )
     .sort((a, b) =>
-      (a.nearestInterview?.scheduledAt as string).localeCompare(b.nearestInterview?.scheduledAt as string),
+      (a.nearestInterview?.scheduledAt as string).localeCompare(
+        b.nearestInterview?.scheduledAt as string,
+      ),
     );
 }
 
@@ -286,7 +294,10 @@ function nextInterviewOf(application: ApplicationView | undefined): TodayNextInt
 function buildFollowUps(applications: readonly ApplicationView[]): TodayFollowUp[] {
   return applications
     .map((application) => ({ application, status: followUpStatusFor(application) }))
-    .filter((entry): entry is { application: ApplicationView; status: TodayFollowUpStatus } => entry.status !== null)
+    .filter(
+      (entry): entry is { application: ApplicationView; status: TodayFollowUpStatus } =>
+        entry.status !== null,
+    )
     .slice(0, MAX_FOLLOW_UPS)
     .map(({ application, status }) => ({
       applicationId: application.id,
@@ -310,7 +321,11 @@ function sinceLastVisitItemsOf(input: BuildTodaySnapshotInput): string[] {
   }
   if (input.companyEventsSinceVisit > 0) {
     items.push(
-      pluralRu(input.companyEventsSinceVisit, ['событие от компаний', 'события от компаний', 'событий от компаний']),
+      pluralRu(input.companyEventsSinceVisit, [
+        'событие от компаний',
+        'события от компаний',
+        'событий от компаний',
+      ]),
     );
   }
   return items;

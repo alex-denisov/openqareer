@@ -34,8 +34,14 @@ export function isKnownApplicationStage(value: string): value is ApplicationStag
  * его клик не имеет права откатить продвинувшуюся карточку обратно к
  * «Откликнулся» (architecture.md §4).
  */
-export function canLegacyClientAdvanceToApplied(
-  currentStage: ApplicationStage | null,
-): boolean {
+export function canLegacyClientAdvanceToApplied(currentStage: ApplicationStage | null): boolean {
   return currentStage === null || currentStage === 'saved';
+}
+
+/**
+ * Закрытая карточка (отказ или архив) больше не часть активного поиска:
+ * её интервью не считаются ни в «Сегодня», ни в шкале пути (B293).
+ */
+export function isClosedApplicationStage(stage: ApplicationStage): boolean {
+  return stage === 'rejected' || stage === 'archived';
 }

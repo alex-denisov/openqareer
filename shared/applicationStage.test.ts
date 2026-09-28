@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   APPLICATION_STAGES,
   canLegacyClientAdvanceToApplied,
+  isClosedApplicationStage,
   isKnownApplicationStage,
 } from './applicationStage';
 
@@ -29,8 +30,19 @@ describe('applicationStage', () => {
   });
 
   it('never lets the legacy client advance a card that moved past saved', () => {
-    for (const stage of ['applied', 'responded', 'interview', 'offer', 'rejected', 'archived'] as const) {
+    for (const stage of [
+      'applied',
+      'responded',
+      'interview',
+      'offer',
+      'rejected',
+      'archived',
+    ] as const) {
       expect(canLegacyClientAdvanceToApplied(stage)).toBe(false);
     }
+  });
+
+  it('treats archived and rejected as closed, everything else as live (B293)', () => {
+    expect(APPLICATION_STAGES.filter(isClosedApplicationStage)).toEqual(['rejected', 'archived']);
   });
 });

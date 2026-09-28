@@ -98,14 +98,24 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
 
   it('marks a stale follow-up as an overdue queue item and follow-up list entry', () => {
     const stale = application({
-      followUp: { dueAt: '2026-09-22T00:00:00.000Z', urgency: 'stale', source: 'standard_schedule', daysSinceContact: 6 },
+      followUp: {
+        dueAt: '2026-09-22T00:00:00.000Z',
+        urgency: 'stale',
+        source: 'standard_schedule',
+        daysSinceContact: 6,
+      },
     });
     const snapshot = buildTodaySnapshot({ ...BASE_INPUT, applications: [stale], newVacancies: [] });
 
     expect(snapshot.queue[0].kind).toBe('follow_up');
     expect(snapshot.queue[0].eyebrow).toBe('6 дней без ответа');
     expect(snapshot.followUps).toEqual([
-      { applicationId: 'app-1', company: 'FinCloud', title: 'Продуктовый аналитик', status: 'overdue' },
+      {
+        applicationId: 'app-1',
+        company: 'FinCloud',
+        title: 'Продуктовый аналитик',
+        status: 'overdue',
+      },
     ]);
     expect(snapshot.digest.followUpsDueToday).toBe(0);
     expect(snapshot.digest.followUpsOverdue).toBe(1);
@@ -132,13 +142,22 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
       },
     });
 
-    const snapshot = buildTodaySnapshot({ ...BASE_INPUT, applications: [due, overdue], newVacancies: [] });
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      applications: [due, overdue],
+      newVacancies: [],
+    });
 
     expect(snapshot.digest.followUpsDueToday).toBe(1);
     expect(snapshot.digest.followUpsOverdue).toBe(1);
     expect(snapshot.followUps).toEqual([
       { applicationId: 'due', company: 'FinCloud', title: 'Продуктовый аналитик', status: 'today' },
-      { applicationId: 'overdue', company: 'FinCloud', title: 'Продуктовый аналитик', status: 'overdue' },
+      {
+        applicationId: 'overdue',
+        company: 'FinCloud',
+        title: 'Продуктовый аналитик',
+        status: 'overdue',
+      },
     ]);
   });
 
@@ -177,9 +196,18 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
     const withInterview = application({
       id: 'app-2',
       whoseTurn: 'company',
-      nearestInterview: { id: 'i1', scheduledAt: '2026-09-30T10:00:00.000Z', prepStatus: 'none', round: 2 },
+      nearestInterview: {
+        id: 'i1',
+        scheduledAt: '2026-09-30T10:00:00.000Z',
+        prepStatus: 'none',
+        round: 2,
+      },
     });
-    const snapshot = buildTodaySnapshot({ ...BASE_INPUT, applications: [withInterview], newVacancies: [] });
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      applications: [withInterview],
+      newVacancies: [],
+    });
 
     expect(snapshot.digest.interviewsAhead).toBe(1);
     expect(snapshot.digest.nextInterview).toEqual({
@@ -188,6 +216,26 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
       round: 2,
       at: '2026-09-30T10:00:00.000Z',
     });
+  });
+
+  it('ignores interviews of archived and rejected applications (B293)', () => {
+    const interview = {
+      id: 'i1',
+      scheduledAt: '2026-09-30T10:00:00.000Z',
+      prepStatus: 'none' as const,
+      round: 1,
+    };
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      applications: [
+        application({ id: 'a', stage: 'archived', nearestInterview: interview }),
+        application({ id: 'r', stage: 'rejected', nearestInterview: interview }),
+      ],
+      newVacancies: [],
+    });
+
+    expect(snapshot.digest.interviewsAhead).toBe(0);
+    expect(snapshot.digest.nextInterview).toBeNull();
   });
 
   it('reports since-last-visit counters as plain strings, skipping zero counts', () => {
@@ -218,9 +266,14 @@ describe('today queue from the shortlist (B266)', () => {
       newVacancies: [newVacancy({ clusterId: 'cluster-1', title: 'Role 1' })],
       shortlist,
     });
-    const vacancyItems = snapshot.queue.filter((item) => item.kind !== 'candidate_turn' && item.kind !== 'follow_up' && item.kind !== 'interview');
+    const vacancyItems = snapshot.queue.filter(
+      (item) =>
+        item.kind !== 'candidate_turn' && item.kind !== 'follow_up' && item.kind !== 'interview',
+    );
     expect(vacancyItems[0]).toMatchObject({ kind: 'new_vacancy', clusterId: 'cluster-1' });
-    const fromShortlist = vacancyItems.filter((item) => item.kind === 'shortlist').map((item) => item.clusterId);
+    const fromShortlist = vacancyItems
+      .filter((item) => item.kind === 'shortlist')
+      .map((item) => item.clusterId);
     expect(fromShortlist).not.toContain('cluster-0');
     expect(fromShortlist).not.toContain('cluster-1');
     expect(snapshot.queue.length).toBeLessThanOrEqual(5);

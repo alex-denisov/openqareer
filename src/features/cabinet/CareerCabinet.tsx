@@ -30,6 +30,7 @@ import {
 } from './routePremises';
 import { cabinetJourney } from './cabinetJourney';
 import { useCareerStrategy, type CareerStrategyRead } from './useCareerStrategy';
+import { isClosedApplicationStage } from '../../../shared/applicationStage';
 import { countConfirmedApplications } from '../../../shared/vacancyApplication';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import type {
@@ -108,13 +109,11 @@ export function CareerCabinet({
     [recordConfirmedVacancy],
   );
   const scheduleVacancyInterview = useCallback(
-    async (
-      clusterId: string,
-      scheduledAt: string,
-      vacancy: VacancyApplicationSnapshot,
-    ) => {
+    async (clusterId: string, scheduledAt: string, vacancy: VacancyApplicationSnapshot) => {
       const currentApplications = await refreshApplications();
-      const existing = currentApplications.find((application) => application.clusterId === clusterId);
+      const existing = currentApplications.find(
+        (application) => application.clusterId === clusterId,
+      );
       const application =
         existing ??
         (await addManualCard({
@@ -134,11 +133,7 @@ export function CareerCabinet({
         throw reason;
       }
     },
-    [
-      addManualCard,
-      refreshApplications,
-      scheduleInterview,
-    ],
+    [addManualCard, refreshApplications, scheduleInterview],
   );
   // B251 F5 (C47) — confirming an application in «Вакансии» must land a card
   // in «Отклики»: the two logs live in different tables (server/data), so a
@@ -241,7 +236,6 @@ export function CareerCabinet({
           hasInterviewStage,
         })
       : undefined;
-
 
   return (
     <AppErrorBoundary
@@ -378,10 +372,7 @@ function CabinetSection({
   vacancyApplications: ReturnType<typeof useVacancyApplications>;
   pathIndicatorSteps?: ReturnType<typeof buildPathIndicator>;
   applicationsTracker: ReturnType<typeof useApplications>;
-  onMarkAlreadyApplied: (
-    clusterId: string,
-    vacancy: VacancyApplicationSnapshot,
-  ) => Promise<void>;
+  onMarkAlreadyApplied: (clusterId: string, vacancy: VacancyApplicationSnapshot) => Promise<void>;
   onScheduleInterview: (
     clusterId: string,
     scheduledAt: string,
@@ -595,7 +586,10 @@ function nearestInterviewOf(
   applications: readonly ApplicationView[],
 ): { company: string; scheduledAt: string } | null {
   const withInterview = applications
-    .filter((application) => application.nearestInterview?.scheduledAt)
+    .filter(
+      (application) =>
+        application.nearestInterview?.scheduledAt && !isClosedApplicationStage(application.stage),
+    )
     .sort((a, b) =>
       (a.nearestInterview?.scheduledAt as string).localeCompare(
         b.nearestInterview?.scheduledAt as string,
