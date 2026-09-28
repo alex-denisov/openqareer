@@ -48,6 +48,26 @@ function vacancy(
   };
 }
 
+function hhVacancy(
+  description: string,
+  observedAt: string,
+  overrides: Partial<UnifiedVacancy> = {},
+): UnifiedVacancy {
+  const sourceId = 'src-hh-search';
+  const base = vacancy(sourceId + ':901', sourceId);
+  return {
+    ...base,
+    description,
+    provenance: {
+      ...base.provenance,
+      sourceUrl: 'https://hh.ru/vacancy/901',
+      externalId: '901',
+      observedAt,
+    },
+    ...overrides,
+  };
+}
+
 const directories: string[] = [];
 const sqliteStores: SqliteVacancyPoolStore[] = [];
 
@@ -204,6 +224,70 @@ describe.each(implementations)('VacancyPoolStore parity: %s', (_name, open) => {
     expect(store.getVacancy('b2')?.title).toBe('Data Engineer');
     expect(store.getVacancy('b5')?.title).toBe('New');
     expect(store.countSourceSlice('channel').total).toBe(1);
+  });
+
+  it('keeps a non-empty HH description over an empty repeat and fills an empty record', () => {
+    const store = open();
+    const observedAt = '2026-09-11T10:00:00.000Z';
+    store.replaceSourceSlice('src-hh-search', [
+      hhVacancy('Сниппет требований', observedAt, {
+        responsibilities: ['Поддерживать сервис'],
+        qualifications: ['TypeScript'],
+      }),
+    ]);
+
+    store.replaceSourceSlice('src-hh-search', [hhVacancy('', '2026-09-12T10:00:00.000Z')]);
+
+    expect(store.getVacancy('src-hh-search:901')?.description).toBe('Сниппет требований');
+    expect(store.getVacancy('src-hh-search:901')?.responsibilities).toEqual([
+      'Поддерживать сервис',
+    ]);
+    expect(store.getVacancy('src-hh-search:901')?.qualifications).toEqual(['TypeScript']);
+
+    const emptyStore = open();
+    emptyStore.replaceSourceSlice('src-hh-search', [hhVacancy('', '2026-09-11T10:00:00.000Z')]);
+    emptyStore.replaceSourceSlice('src-hh-search', [
+      hhVacancy('Новый сниппет', '2026-09-12T10:00:00.000Z'),
+    ]);
+    expect(emptyStore.getVacancy('src-hh-search:901')?.description).toBe('Новый сниппет');
+  });
+
+  it('preserves a C61 full description when a repeated HH search returns a snippet', () => {
+    const store = open();
+    store.replaceSourceSlice('src-hh-search', [
+      hhVacancy('Сниппет из выдачи', '2026-09-11T10:00:00.000Z', {
+        fullDescription: 'Полный текст из карточки hh.ru',
+      }),
+    ]);
+
+    store.replaceSourceSlice('src-hh-search', [
+      hhVacancy('Более свежий сниппет из выдачи', '2026-09-12T10:00:00.000Z'),
+    ]);
+
+    expect(store.getVacancy('src-hh-search:901')?.description).toBe(
+      'Более свежий сниппет из выдачи',
+    );
+    expect(store.getVacancy('src-hh-search:901')?.fullDescription).toBe(
+      'Полный текст из карточки hh.ru',
+    );
+  });
+
+  it('replaces an older HH snippet with the later collection result', () => {
+    const store = open();
+    store.replaceSourceSlice('src-hh-search', [
+      hhVacancy('Старый сниппет', '2026-09-12T10:00:00.000Z', {
+        responsibilities: ['Старая обязанность'],
+      }),
+    ]);
+
+    store.replaceSourceSlice('src-hh-search', [
+      hhVacancy('Новый сниппет', '2026-09-13T10:00:00.000Z', {
+        responsibilities: ['Новая обязанность'],
+      }),
+    ]);
+
+    expect(store.getVacancy('src-hh-search:901')?.description).toBe('Новый сниппет');
+    expect(store.getVacancy('src-hh-search:901')?.responsibilities).toEqual(['Новая обязанность']);
   });
 
   it('drops records no tick observed since the sweep began (B219)', () => {
@@ -381,5 +465,24 @@ describe.each(implementations)('VacancyPoolStore parity: %s', (_name, open) => {
     store.deleteCluster('cluster-p1');
     expect(store.countClusters()).toBe(0);
     expect(store.loadClusters()).toEqual([]);
+  });
+});
+
+describe('SQLite async HH source replacement', () => {
+  it('preserves the C61 full description during a maintenance-worker refresh', async () => {
+    const store = sqlite();
+    store.replaceSourceSlice('src-hh-search', [
+      hhVacancy('Сниппет из выдачи', '2026-09-11T10:00:00.000Z', {
+        fullDescription: 'Полный текст из карточки hh.ru',
+      }),
+    ]);
+
+    await store.replaceSourceSliceAsync('src-hh-search', [
+      hhVacancy('Новый сниппет', '2026-09-12T10:00:00.000Z'),
+    ]);
+
+    const saved = store.getVacancy('src-hh-search:901');
+    expect(saved?.description).toBe('Новый сниппет');
+    expect(saved?.fullDescription).toBe('Полный текст из карточки hh.ru');
   });
 });

@@ -27,6 +27,8 @@ import {
   type CatalogEntryRow,
 } from './vacancyCatalogProjection';
 import { catalogListings } from './vacancyCatalogFacets';
+import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
+import { mergeHhVacancySnapshot } from './hhVacancySnapshot';
 
 interface StoredRow {
   readonly vacancy: UnifiedVacancy;
@@ -250,15 +252,21 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
   private upsert(sourceId: string, vacancy: UnifiedVacancy): void {
     const existing = this.rows.get(vacancy.id);
     this.rows.set(vacancy.id, {
-      vacancy,
+      vacancy:
+        sourceId === HH_SEARCH_SOURCE_ID && existing?.sourceId === sourceId
+          ? mergeHhVacancySnapshot(existing.vacancy, vacancy)
+          : vacancy,
       sourceId,
       ...(existing?.expiredAt ? { expiredAt: existing.expiredAt } : {}),
     });
   }
 
   replaceSourceSlice(sourceId: string, vacancies: readonly UnifiedVacancy[]): void {
+    const incomingIds = new Set(vacancies.map((vacancy) => vacancy.id));
     for (const [id, row] of this.rows) {
-      if (row.expiredAt === undefined && row.sourceId === sourceId) this.rows.delete(id);
+      if (row.expiredAt === undefined && row.sourceId === sourceId && !incomingIds.has(id)) {
+        this.rows.delete(id);
+      }
     }
     for (const vacancy of vacancies) this.upsert(sourceId, vacancy);
   }
