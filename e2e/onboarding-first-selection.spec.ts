@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { captureCareerHarness } from './helpers/capture-career-harness';
@@ -95,18 +96,31 @@ function campaign(
   };
 }
 
-async function stubFirstLogin(page: Page) {
+async function stubFirstLogin(page: Page, options: { startAnonymous?: boolean } = {}) {
   let workspace: unknown = null;
   let rebuildRequested = false;
   let campaignReads = 0;
   let campaignSave: { roles: readonly unknown[]; regions: readonly string[] } | undefined;
   let savedCampaign = campaign('profile', []);
+  let userSession: typeof CANDIDATE | null = options.startAnonymous ? null : CANDIDATE;
+
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
-    if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: CANDIDATE } });
-    if (pathname === '/api/v1/account') return route.fulfill({ json: { data: ACCOUNT } });
-    if (pathname === '/api/v1/candidate/me') return route.fulfill({ json: { data: SNAPSHOT } });
+    if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: userSession } });
+    if (pathname === '/api/v1/auth/register' && request.method() === 'POST') {
+      const body = (request.postDataJSON() as Record<string, string>) ?? {};
+      userSession = {
+        ...CANDIDATE,
+        displayName: body.displayName || CANDIDATE.displayName,
+        email: body.email || CANDIDATE.email,
+      };
+      return route.fulfill({ json: { data: userSession } });
+    }
+    if (pathname === '/api/v1/account')
+      return route.fulfill({ json: { data: userSession ? ACCOUNT : null } });
+    if (pathname === '/api/v1/candidate/me')
+      return route.fulfill({ json: { data: userSession ? SNAPSHOT : null } });
     if (pathname === '/api/v1/candidate/connections') return route.fulfill({ json: { data: [] } });
     if (pathname === '/api/v1/candidate/workspace' && request.method() === 'GET') {
       return route.fulfill({ json: { data: workspace } });
@@ -117,7 +131,7 @@ async function stubFirstLogin(page: Page) {
     }
     if (pathname === '/api/v1/candidate/resume/import' && request.method() === 'POST') {
       return route.fulfill({
-        json: { data: { parsed: PARSED_RESUME, resume: {}, structuredBy: 'rules', factCount: 1 } },
+        json: { data: { parsed: PARSED_RESUME, resume: {}, structuredBy: 'rules', factCount: 6 } },
       });
     }
     if (pathname === '/api/v1/candidate/campaign/roles/rebuild' && request.method() === 'POST') {
@@ -146,12 +160,49 @@ async function stubFirstLogin(page: Page) {
     if (pathname === '/api/v1/candidate/matched-vacancies') {
       return route.fulfill({
         json: {
-          data: [],
+          data: [
+            {
+              cluster: {
+                id: 'c-1',
+                canonicalTitle: 'VP of Operations',
+                canonicalCompany: 'Scale Corp',
+                canonicalLocation: 'Dubai',
+                isRemote: true,
+                salary: { from: 15000, to: 20000, currency: 'USD', gross: true },
+                descriptionSummary: 'Operational leadership across 4 markets',
+                skills: ['Operations'],
+                primaryUrl: 'https://example.com/vacancy-1',
+                sources: [
+                  {
+                    sourceType: 'hh',
+                    sourceId: 'c-1',
+                    sourceName: 'hh.ru',
+                    sourceUrl: 'https://hh.ru/vacancy/1',
+                    observedAt: '2026-09-20T08:00:00.000Z',
+                  },
+                ],
+                firstObservedAt: '2026-09-20T08:00:00.000Z',
+                lastSeenAt: '2026-09-23T08:00:00.000Z',
+                status: 'active',
+                vacanciesCount: 1,
+              },
+              explanation: {
+                clusterId: 'c-1',
+                roleMatch: 'target',
+                levelMatch: 'match',
+                outsideGeography: false,
+                matchingPoints: ['Operations'],
+                missingPoints: [],
+                summary: 'Direct role match',
+                calculatedAt: '2026-09-24T08:00:00.000Z',
+              },
+            },
+          ],
           meta: {
-            total: 0,
+            total: 1,
             nextOffset: null,
             campaign: savedCampaign,
-            candidateLevel: null,
+            candidateLevel: 'vp',
           },
         },
       });
@@ -166,6 +217,7 @@ async function stubFirstLogin(page: Page) {
     savedCampaign: () => campaignSave,
     modelRebuildRequested: () => rebuildRequested,
     campaignReadCount: () => campaignReads,
+    getUserSession: () => userSession,
   };
 }
 
@@ -268,5 +320,136 @@ test.describe('B249 first selection onboarding', () => {
     await page.getByRole('button', { name: 'Перейти в «Вакансии»' }).click();
     await expect(page.getByRole('heading', { name: 'Вакансии', level: 1 })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Для подбора не выбрана роль' })).toHaveCount(0);
+  });
+
+  test('new candidate journey from registration and PDF import to first selection in under 5 minutes (B249)', async ({
+    page,
+  }, testInfo) => {
+    const startedAt = Date.now();
+    const vpSuffix = testInfo.project.name === 'mobile-390' ? '390' : '1440';
+    const timings: Record<string, number> = {};
+
+    const takeStepScreenshot = async (stepSlug: string) => {
+      await page.screenshot({
+        path: `output/playwright/B249/${stepSlug}-${vpSuffix}.png`,
+        fullPage: true,
+      });
+    };
+
+    const recordStep = async (stepName: string, action: () => Promise<void>) => {
+      const stepStart = Date.now();
+      await action();
+      const durationMs = Date.now() - stepStart;
+      timings[stepName] = durationMs;
+      console.log(`[B249 timing] step="${stepName}" duration=${durationMs}ms`);
+    };
+
+    const api = await stubFirstLogin(page, { startAnonymous: true });
+    await openNewCandidate(page);
+
+    // Шаг 1: Регистрация нового кандидата
+    await recordStep('01-registration', async () => {
+      await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
+      await takeStepScreenshot('step-01-pre-register');
+      await page.getByRole('button', { name: 'Войти' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Аккаунт' });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole('button', { name: 'Создать аккаунт' }).click();
+      await dialog.getByLabel('Как к вам обращаться').fill('Мария Ковалёва');
+      await dialog.getByLabel('Email').fill('maria.kovaleva@example.test');
+      await dialog.getByLabel('Пароль').fill('test-passphrase-2026');
+      await dialog.locator('#account-legal-consent').check();
+      await dialog.getByRole('button', { name: 'Создать и начать' }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
+      await takeStepScreenshot('step-01-registered');
+    });
+
+    // Шаг 2: Загрузка PDF резюме
+    await recordStep('02-pdf-import', async () => {
+      const pdfPath = join(
+        process.cwd(),
+        'src/features/workspace/fixtures/linkedin-owner-profile.pdf',
+      );
+      const fileInput = page.locator('.career-file-button input[type="file"]');
+      await fileInput.setInputFiles(pdfPath);
+      // Ожидаем завершения разбора PDF
+      await expect(page.locator('.career-file-button')).not.toContainText('Разбираем резюме…', {
+        timeout: 20_000,
+      });
+      await expect(page.locator('.career-file-button')).toContainText(
+        /linkedin-owner-profile\.pdf|\d+\s*стр\./i,
+      );
+      // Проверяем видимое и активное следующее действие
+      const continueBtn = page.getByRole('button', { name: 'Продолжить', exact: true });
+      await expect(continueBtn).toBeVisible();
+      await expect(continueBtn).toBeEnabled();
+      await takeStepScreenshot('step-02-pdf-uploaded');
+      await continueBtn.click();
+    });
+
+    // Шаг 3: Прогресс разбора (счётчики опыта, образования, навыков)
+    await recordStep('03-parse-progress', async () => {
+      await expect(page.locator('[data-step="progress"]')).toBeVisible();
+      const continueBtn = page.getByRole('button', { name: 'Продолжить', exact: true });
+      await expect(continueBtn).toBeVisible();
+      await expect(continueBtn).toBeEnabled();
+      await takeStepScreenshot('step-03-parse-progress');
+      await continueBtn.click();
+    });
+
+    // Шаг 4: Проверка фактов профиля
+    await recordStep('04-profile-review', async () => {
+      await expect(page.locator('[data-step="review"]')).toBeVisible();
+      const continueBtn = page.getByRole('button', { name: 'Продолжить', exact: true });
+      await expect(continueBtn).toBeVisible();
+      await expect(continueBtn).toBeEnabled();
+      await takeStepScreenshot('step-04-profile-review');
+      await continueBtn.click();
+    });
+
+    // Шаг 5: Кампания — роли и регионы (гипотезы модели)
+    await recordStep('05-campaign-roles', async () => {
+      await expect(page.locator('[data-step="campaign"]')).toBeVisible();
+      await expect(page.getByText('Запрос отправлен модели')).toBeVisible();
+      const roleBtn = page.getByRole('button', { name: /Вице-президент по операциям/ });
+      await expect(roleBtn).toBeVisible({ timeout: 15_000 });
+      await expect(roleBtn).toHaveAttribute('aria-pressed', 'true');
+      const continueBtn = page.getByRole('button', { name: 'Продолжить', exact: true });
+      await expect(continueBtn).toBeVisible();
+      await expect(continueBtn).toBeEnabled();
+      await takeStepScreenshot('step-05-campaign-roles');
+      await continueBtn.click();
+    });
+
+    // Шаг 6: Первая подборка готова
+    await recordStep('06-done-ready', async () => {
+      await expect(page.getByRole('heading', { name: 'Первая подборка готова' })).toBeVisible();
+      const vacanciesBtn = page.getByRole('button', { name: 'Перейти в «Вакансии»' });
+      await expect(vacanciesBtn).toBeVisible();
+      await expect(vacanciesBtn).toBeEnabled();
+      await takeStepScreenshot('step-06-done-ready');
+      await vacanciesBtn.click();
+    });
+
+    // Шаг 7: Экран «Вакансии» с первой подборкой
+    await recordStep('07-vacancies-feed', async () => {
+      await expect(page.getByRole('heading', { name: 'Вакансии', level: 1 })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Для подбора не выбрана роль' })).toHaveCount(
+        0,
+      );
+      await takeStepScreenshot('step-07-vacancies-feed');
+    });
+
+    const totalElapsedMs = Date.now() - startedAt;
+    console.log(
+      `[B249 summary ${vpSuffix}] Total time from registration to vacancies: ${totalElapsedMs}ms (${(totalElapsedMs / 1000).toFixed(1)}s)`,
+    );
+    console.log(`[B249 step breakdown ${vpSuffix}]:`, JSON.stringify(timings, null, 2));
+
+    expect(totalElapsedMs).toBeLessThan(5 * 60 * 1000); // Путь строго меньше 5 минут
+    expect(api.modelRebuildRequested()).toBe(true);
+    expect(api.savedCampaign()).toBeDefined();
+    expect(api.getUserSession()).not.toBeNull();
   });
 });
