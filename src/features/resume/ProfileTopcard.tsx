@@ -14,7 +14,9 @@ import {
 import { useCandidateMediaSrc } from './candidateMediaSrc';
 import { resumeSourceCoverage, type ImportedSource } from './resumeSourceCoverage';
 import { patchTopcard } from './profileEditing';
+import { ProfileSearchConsentRow } from './ProfileSearchConsentRow';
 import type { ResumeDraft, ResumeReaderProvenance } from './resumeTypes';
+import type { SearchConsentState } from '../../../shared/searchConsent';
 import type { CandidateConnection } from '../coach/coachApi';
 import { CONNECTION_PLATFORMS, PLATFORM_LABELS } from '../connections/platformLabels';
 
@@ -28,6 +30,8 @@ interface ProfileTopcardProps {
   readonly connections?: readonly CandidateConnection[];
   /** Opens «Аккаунт → Подключения» (C54 п.11) — no chip without it. */
   readonly onOpenConnections?: () => void;
+  readonly searchConsent?: SearchConsentState | null;
+  readonly onSearchConsentChange?: (consent: SearchConsentState) => void;
 }
 
 /**
@@ -285,6 +289,34 @@ function ConnectionStatusChips({
   );
 }
 
+function TopcardMeta({
+  location,
+  updatedAt,
+  reader,
+}: {
+  readonly location?: string;
+  readonly updatedAt?: string;
+  readonly reader: ResumeReaderProvenance | null;
+}) {
+  return (
+    <div className="career-profile-screen-id-meta">
+      {location ? (
+        <span>
+          <MapPin size={14} />
+          {location}
+        </span>
+      ) : null}
+      {updatedAt ? (
+        <span>
+          <CheckCircle size={14} />
+          Обновлено {formatDate(updatedAt)}
+        </span>
+      ) : null}
+      <span>Резюме прочитано: {readerLabel(reader)}</span>
+    </div>
+  );
+}
+
 export function ProfileTopcard({
   draft,
   importedSource,
@@ -293,6 +325,8 @@ export function ProfileTopcard({
   onDraftChange,
   connections,
   onOpenConnections,
+  searchConsent,
+  onSearchConsentChange,
 }: ProfileTopcardProps) {
   const fullName = draft.candidate.fullName?.trim();
   const headline = draft.candidate.headline?.trim() ?? draft.targetRole?.trim();
@@ -306,27 +340,17 @@ export function ProfileTopcard({
             <h1>{fullName || 'Имя не указано'}</h1>
           </div>
           {headline ? <p className="career-profile-screen-headline">{headline}</p> : null}
-          <div className="career-profile-screen-id-meta">
-            {location ? (
-              <span>
-                <MapPin size={14} />
-                {location}
-              </span>
-            ) : null}
-            {updatedAt ? (
-              <span>
-                <CheckCircle size={14} />
-                Обновлено {formatDate(updatedAt)}
-              </span>
-            ) : null}
-            <span>Резюме прочитано: {readerLabel(reader)}</span>
-          </div>
+          <TopcardMeta location={location} updatedAt={updatedAt} reader={reader} />
           <div className="career-profile-screen-status-row">
             <SourceCoverageChip draft={draft} importedSource={importedSource} />
             {onOpenConnections ? (
               <ConnectionStatusChips connections={connections} onOpenConnections={onOpenConnections} />
             ) : null}
           </div>
+          <ProfileSearchConsentRow
+            initialConsent={searchConsent}
+            onConsentChange={onSearchConsentChange}
+          />
           <ContactRow draft={draft} />
         </div>
         <TopcardEdit draft={draft} onDraftChange={onDraftChange} />
