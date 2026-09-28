@@ -201,6 +201,7 @@ function BoardColumn({
               state.scheduleInterview(application.id, scheduledAt)
             }
             onRetry={() => state.retryStageChange(application.id)}
+            onRefresh={state.reload}
             onSaveNote={(notes) => state.saveNote(application.id, notes)}
             onMarkFollowUpSent={() => state.markFollowUpSent(application.id)}
             onSkip={(reasonId) => void state.skip(application, reasonId)}

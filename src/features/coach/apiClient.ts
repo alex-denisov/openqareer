@@ -20,6 +20,7 @@ interface ApiErrorEnvelope {
     message?: string;
     retryable?: boolean;
     fields?: Record<string, string>;
+    details?: Record<string, unknown>;
   };
 }
 
@@ -30,6 +31,7 @@ export class CoachApiError extends Error {
     readonly retryable: boolean,
     /** Per-field messages, when the server rejected specific form fields. */
     readonly fields: Record<string, string> = {},
+    readonly details: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = 'CoachApiError';
@@ -269,5 +271,6 @@ export async function throwApiError(response: Response): Promise<never> {
     envelope.error?.code ?? `http_${response.status}`,
     envelope.error?.retryable ?? response.status >= 500,
     envelope.error?.fields ?? {},
+    envelope.error?.details ?? {},
   );
 }

@@ -109,14 +109,19 @@ describe('SqliteApplicationRepository', () => {
       );
     };
 
-    expect(() =>
+    let conflict: unknown;
+    try {
       repo.patch(
         'candidate-1',
         created.id,
         { expectedVersion: created.version, stage: 'responded', notes: 'second update' },
         '2026-09-26T00:02:00.000Z',
-      ),
-    ).toThrow(ApplicationVersionConflictError);
+      );
+    } catch (error) {
+      conflict = error;
+    }
+    expect(conflict).toBeInstanceOf(ApplicationVersionConflictError);
+    expect(conflict).toMatchObject({ currentVersion: 2 });
 
     expect(repo.get('candidate-1', created.id)).toMatchObject({
       stage: 'applied',

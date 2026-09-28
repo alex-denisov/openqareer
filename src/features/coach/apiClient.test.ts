@@ -166,4 +166,22 @@ describe('apiClient', () => {
       expect(dispatched).toEqual([]);
     });
   });
+
+  it('preserves currentVersion details from an application conflict', async () => {
+    const response = new Response(
+      JSON.stringify({
+        error: {
+          code: 'application_version_conflict',
+          message: 'Карточку изменили в другом окне.',
+          details: { currentVersion: 2 },
+        },
+      }),
+      { status: 409, headers: { 'Content-Type': 'application/json' } },
+    );
+
+    await expect(readData(response)).rejects.toMatchObject({
+      code: 'application_version_conflict',
+      details: { currentVersion: 2 },
+    });
+  });
 });

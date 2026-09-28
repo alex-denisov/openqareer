@@ -184,7 +184,11 @@ export function useApplications(): UseApplications {
       if (current) {
         void patchApplication(id, { expectedVersion: current.version, notes })
           .then((saved) => setApplications((list) => replaceApplication(list, saved)))
-          .catch(() => undefined);
+          .catch((reason: unknown) => {
+            if (isVersionConflict(reason)) {
+              setConflicts((set) => new Set(set).add(id));
+            }
+          });
       }
       return snapshot;
     });

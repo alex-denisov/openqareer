@@ -27,6 +27,7 @@ interface ResponsesCardProps {
   readonly onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   readonly onScheduleInterview: (scheduledAt: string) => Promise<void>;
   readonly onRetry: () => void;
+  readonly onRefresh: () => void;
   readonly onSaveNote: (notes: string) => void;
   readonly onMarkFollowUpSent: () => Promise<void>;
   readonly onSkip: (reasonId: SkipReasonId) => void;
@@ -57,6 +58,7 @@ export function ResponsesCard({
   onChangeStage,
   onScheduleInterview,
   onRetry,
+  onRefresh,
   onSaveNote,
   onMarkFollowUpSent,
   onSkip,
@@ -79,7 +81,7 @@ export function ResponsesCard({
       <MaterialsBadge
         hasMaterials={application.materials.coverLetter || application.materials.resume}
       />
-      <CardAlerts failed={failed} conflicted={conflicted} onRetry={onRetry} />
+      <CardAlerts failed={failed} conflicted={conflicted} onRetry={onRetry} onRefresh={onRefresh} />
       {application.stage === 'interview' ? (
         <PrepareInterviewControl application={application} />
       ) : null}
@@ -237,10 +239,12 @@ function CardAlerts({
   failed,
   conflicted,
   onRetry,
+  onRefresh,
 }: {
   failed: boolean;
   conflicted: boolean;
   onRetry: () => void;
+  onRefresh: () => void;
 }) {
   return (
     <>
@@ -254,7 +258,10 @@ function CardAlerts({
       ) : null}
       {conflicted ? (
         <p className="career-responses-card-failed" role="alert">
-          Карточку изменили на другом устройстве. Обновите список.
+          Карточку изменили в другом окне. Ваши изменения не сохранены.{' '}
+          <button type="button" onClick={onRefresh}>
+            Обновить карточку
+          </button>
         </p>
       ) : null}
     </>

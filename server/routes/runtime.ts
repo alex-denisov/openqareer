@@ -87,6 +87,31 @@ function getErrorStatusCode(error: unknown): number | undefined {
   return undefined;
 }
 
+function mappedErrorDetails(error: unknown): Record<string, unknown> | undefined {
+  if (error instanceof ApplicationVersionConflictError) {
+    return { currentVersion: error.currentVersion };
+  }
+  return undefined;
+}
+
+function sendMappedError(
+  error: unknown,
+  mapped: MappedError,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): FastifyReply {
+  return sendError(
+    reply,
+    request,
+    mapped.status,
+    mapped.code,
+    mapped.message,
+    false,
+    undefined,
+    mappedErrorDetails(error),
+  );
+}
+
 function providerMessage(code: CoachProviderError['code']): string {
   switch (code) {
     case 'provider_rate_limited':
@@ -190,9 +215,7 @@ function respondKnownError(
     );
   }
   const mapped = mappedErrors.find((entry) => entry.match(error));
-  if (mapped) {
-    return sendError(reply, request, mapped.status, mapped.code, mapped.message, false);
-  }
+  if (mapped) return sendMappedError(error, mapped, request, reply);
   if (error instanceof CareerCommandPolicyError) {
     return sendError(
       reply,
