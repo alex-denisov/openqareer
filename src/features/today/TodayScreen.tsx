@@ -5,9 +5,9 @@ import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import { isConsultantActionResolved, resolveConsultantAction } from './consultantActionStorage';
-import type { TodayDigest, TodayFollowUp, TodayQueueItem, TodaySnapshot } from './todayApi';
+import type { TodayDigest, TodayFollowUp, TodayQueueItem, TodaySinceLastVisit, TodaySnapshot } from './todayApi';
 import { formatTodaySalary } from './todayCompensation';
-import { companyInitials, digestBasis, followUpStatusLabel } from './todayFormat';
+import { buildReturningDigestItems, companyInitials, digestBasis, followUpStatusLabel } from './todayFormat';
 import { vacancyLevelMatchLabel } from '../vacancies/vacancyLevelMatch';
 
 const NO_PENDING_FOLLOW_UPS: ReadonlySet<string> = new Set();
@@ -98,9 +98,46 @@ export function TodayScreen({
   if (loading && !snapshot) return <TodaySkeleton />;
   if (!snapshot) return null;
 
+  return (
+    <TodayContent
+      snapshot={snapshot}
+      activeAction={activeAction}
+      onAccept={onAccept}
+      onDismiss={onDismiss}
+      onMarkFollowUpSent={onMarkFollowUpSent}
+      markingFollowUpIds={markingFollowUpIds}
+      onNavigate={onNavigate}
+    />
+  );
+}
+
+interface TodayContentProps {
+  readonly snapshot: TodaySnapshot;
+  readonly activeAction?: ReasonedCareerAction;
+  readonly onAccept: () => void;
+  readonly onDismiss: () => void;
+  readonly onMarkFollowUpSent: (applicationId: string) => Promise<void>;
+  readonly markingFollowUpIds: ReadonlySet<string>;
+  readonly onNavigate?: (view: CareerCabinetView) => void;
+}
+
+function TodayContent({
+  snapshot,
+  activeAction,
+  onAccept,
+  onDismiss,
+  onMarkFollowUpSent,
+  markingFollowUpIds,
+  onNavigate,
+}: TodayContentProps) {
   const { digest, queue, followUps, sinceLastVisit, vacanciesPending } = snapshot;
   return (
     <div className="career-today">
+      <TodayReturnBanner
+        sinceLastVisit={sinceLastVisit}
+        digest={digest}
+        onNavigate={onNavigate}
+      />
       <p className="career-today-subtitle">
         Что изменилось с прошлого визита и что решить сегодня.
       </p>
@@ -124,6 +161,53 @@ export function TodayScreen({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function TodayReturnBanner({
+  sinceLastVisit,
+  digest,
+  onNavigate,
+}: {
+  readonly sinceLastVisit: TodaySinceLastVisit;
+  readonly digest: TodayDigest;
+  readonly onNavigate?: (view: CareerCabinetView) => void;
+}) {
+  const newVacanciesCount = sinceLastVisit.newVacanciesCount ?? digest.newVacancies;
+  const applicationsWaitingOver7Days =
+    sinceLastVisit.applicationsWaitingOver7Days ?? digest.applicationsWaitingOver7Days ?? 0;
+  const nearestInterview = sinceLastVisit.nearestInterview ?? digest.nextInterview;
+
+  const items = buildReturningDigestItems({
+    since: sinceLastVisit.since,
+    newVacanciesCount,
+    applicationsWaitingOver7Days,
+    nearestInterview,
+  });
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="career-today-return-banner" data-testid="career-today-return-banner">
+      <span className="career-today-return-prefix">С прошлого визита: </span>
+      {items.map((item, index) => (
+        <span key={item.id} className="career-today-return-segment">
+          {index > 0 ? (
+            <span className="career-today-return-separator" aria-hidden="true">
+              {' · '}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className="career-today-return-link"
+            data-testid={`since-visit-${item.id}`}
+            onClick={() => onNavigate?.(item.targetView)}
+          >
+            {item.label}
+          </button>
+        </span>
+      ))}
     </div>
   );
 }

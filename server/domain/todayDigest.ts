@@ -70,6 +70,8 @@ export interface TodayDigest {
   readonly newVacanciesCaption: TodayNewVacanciesCaption | null;
   /** До двух строк вида «Peraton — 6 дней тишины». */
   readonly followUpCaptions: readonly string[];
+  /** Отклики, которые ждут ответа компании больше 7 дней (B255). */
+  readonly applicationsWaitingOver7Days: number;
 }
 
 export type TodayFollowUpStatus = 'today' | 'overdue' | 'sent';
@@ -84,6 +86,9 @@ export interface TodayFollowUp {
 export interface TodaySinceLastVisit {
   readonly since: string | null;
   readonly items: readonly string[];
+  readonly newVacanciesCount: number;
+  readonly applicationsWaitingOver7Days: number;
+  readonly nearestInterview: TodayNextInterview | null;
 }
 
 export interface TodaySnapshot {
@@ -185,6 +190,28 @@ function followUpCaptionsFor(applications: readonly ApplicationView[]): string[]
 }
 
 /**
+ * Количество откликов, которые ждут ответа компании больше 7 дней (B255).
+ * Исключаются закрытые отклики (rejected, archived) и сохранённые без отправки (saved).
+ */
+export function countApplicationsWaitingOver7Days(
+  applications: readonly ApplicationView[],
+  now = new Date().toISOString(),
+): number {
+  return applications.filter((application) => {
+    if (application.stage !== 'applied' && application.stage !== 'responded') {
+      return false;
+    }
+    if (application.followUp && typeof application.followUp.daysSinceContact === 'number') {
+      return application.followUp.daysSinceContact > 7;
+    }
+    const dateStr = application.stageChangedAt;
+    if (!dateStr) return false;
+    const diffMs = Date.parse(now) - Date.parse(dateStr);
+    return !Number.isNaN(diffMs) && diffMs > 7 * 86_400_000;
+  }).length;
+}
+
+/**
  * Сборщик «Сегодня» (B251, S4/S4b, architecture.md §57): чистая функция, весь
  * ввод-вывод — на вызывающей стороне маршрута.
  */
@@ -193,6 +220,8 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
     (application) => application.whoseTurn === 'candidate',
   );
   const upcomingInterviews = upcomingInterviewsOf(input.applications);
+  const applicationsWaitingOver7Days = countApplicationsWaitingOver7Days(input.applications);
+  const nearestInterview = nextInterviewOf(upcomingInterviews[0]);
   return {
     digest: {
       waitingForYou: waitingApplications.length,
@@ -206,13 +235,20 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
       ).length,
       closedVacancies: input.closedVacanciesSinceVisit,
       interviewsAhead: upcomingInterviews.length,
-      nextInterview: nextInterviewOf(upcomingInterviews[0]),
+      nextInterview: nearestInterview,
       newVacanciesCaption: newVacancyCaption(input.newVacancies, input.campaignRole),
       followUpCaptions: followUpCaptionsFor(input.applications),
+      applicationsWaitingOver7Days,
     },
     queue: buildQueue(waitingApplications, input.newVacancies, shortlistToReview(input)),
     followUps: buildFollowUps(input.applications),
-    sinceLastVisit: { since: input.since, items: sinceLastVisitItemsOf(input) },
+    sinceLastVisit: {
+      since: input.since,
+      items: sinceLastVisitItemsOf(input),
+      newVacanciesCount: input.newVacancies?.length ?? 0,
+      applicationsWaitingOver7Days,
+      nearestInterview,
+    },
     vacanciesPending: input.newVacancies === undefined,
   };
 }

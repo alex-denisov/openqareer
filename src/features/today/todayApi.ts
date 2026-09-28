@@ -72,6 +72,8 @@ export interface TodayDigest {
   readonly nextInterview: TodayNextInterview | null;
   readonly newVacanciesCaption: TodayNewVacanciesCaption | null;
   readonly followUpCaptions: readonly string[];
+  /** Отклики, которые ждут ответа компании больше 7 дней (B255). */
+  readonly applicationsWaitingOver7Days?: number;
 }
 
 export type TodayFollowUpStatus = 'today' | 'overdue' | 'sent';
@@ -86,6 +88,9 @@ export interface TodayFollowUp {
 export interface TodaySinceLastVisit {
   readonly since: string | null;
   readonly items: readonly string[];
+  readonly newVacanciesCount?: number;
+  readonly applicationsWaitingOver7Days?: number;
+  readonly nearestInterview?: TodayNextInterview | null;
 }
 
 export interface TodaySnapshot {

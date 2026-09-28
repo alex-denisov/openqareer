@@ -116,13 +116,80 @@ describe('TodayScreen (B251 S5)', () => {
     expect(html).toContain('сегодня');
   });
 
+  it('shows returning-user line at the top with clickable links when returning (B255)', () => {
+    const htmlWithReturning = renderTodayScreen({
+      snapshot: {
+        ...snapshot,
+        digest: {
+          ...snapshot.digest,
+          applicationsWaitingOver7Days: 2,
+        },
+        sinceLastVisit: {
+          since: '2026-09-23T09:00:00.000Z',
+          items: ['Genetec запросили доступность на этой неделе'],
+          newVacanciesCount: 3,
+          applicationsWaitingOver7Days: 2,
+          nearestInterview: {
+            company: 'HRTx Inc.',
+            title: 'Enterprise Architect Director',
+            round: 2,
+            at: '2026-09-26T14:00:00.000Z',
+          },
+        },
+      },
+    });
+
+    expect(htmlWithReturning).toContain('career-today-return-banner');
+    expect(htmlWithReturning).toContain('С прошлого визита:');
+    expect(htmlWithReturning).toContain('3 новые подходящие вакансии');
+    expect(htmlWithReturning).toContain('2 отклика ждут ответа больше 7 дней');
+    expect(htmlWithReturning).toContain('ближайшее интервью 26 сентября');
+    expect(htmlWithReturning).toContain('data-testid="since-visit-vacancies"');
+    expect(htmlWithReturning).toContain('data-testid="since-visit-applications"');
+    expect(htmlWithReturning).toContain('data-testid="since-visit-interview"');
+  });
+
+  it('does not show the returning banner when since is null or nothing is new (B255)', () => {
+    const htmlFirstVisit = renderTodayScreen({
+      snapshot: {
+        ...snapshot,
+        sinceLastVisit: { since: null, items: [] },
+      },
+    });
+    expect(htmlFirstVisit).not.toContain('career-today-return-banner');
+
+    const htmlNothingNew = renderTodayScreen({
+      snapshot: {
+        ...snapshot,
+        digest: {
+          ...snapshot.digest,
+          newVacancies: 0,
+          applicationsWaitingOver7Days: 0,
+          nextInterview: null,
+        },
+        sinceLastVisit: {
+          since: '2026-09-23T09:00:00.000Z',
+          items: [],
+          newVacanciesCount: 0,
+          applicationsWaitingOver7Days: 0,
+          nearestInterview: null,
+        },
+      },
+    });
+    expect(htmlNothingNew).not.toContain('career-today-return-banner');
+  });
+
   it('shows since-last-visit facts as a hint line under the queue title, not a separate block (C55)', () => {
-    const html = renderTodayScreen();
+    const html = renderTodayScreen({
+      snapshot: {
+        ...snapshot,
+        sinceLastVisit: { since: null, items: ['Genetec запросили доступность на этой неделе'] },
+      },
+    });
 
     expect(html).toContain('career-today-since-hint');
     expect(html).toContain('Genetec запросили доступность на этой неделе');
     // No separate «С прошлого визита» section duplicating the KPI tiles.
-    expect(html).not.toContain('С прошлого визита');
     expect(html).not.toContain('career-today-since"');
   });
 
