@@ -4,7 +4,9 @@ set -Eeuo pipefail
 readonly DEPLOY_USER=openqareer-deploy
 readonly RELEASE_ROOT=/srv/openqareer
 readonly LISTEN_ADDRESS=127.0.0.1:3210
-readonly EXPECTED_PRIVATE_ADDRESS=172.31.41.215
+# Адрес, по которому установщик узнаёт «свой» хост. AWS — прежний по умолчанию;
+# новый хост передаёт свой: OPENQAREER_EXPECTED_ADDRESS=<адрес> bootstrap.sh … (B305).
+readonly EXPECTED_PRIVATE_ADDRESS="${OPENQAREER_EXPECTED_ADDRESS:-172.31.41.215}"
 readonly CADDYFILE=/etc/caddy/Caddyfile
 readonly CADDY_KEY_URL=https://dl.cloudsmith.io/public/caddy/stable/gpg.key
 readonly CADDY_REPOSITORY_URL=https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt
