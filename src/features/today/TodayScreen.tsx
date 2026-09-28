@@ -1,13 +1,28 @@
 import { useState } from 'react';
-import { ClockCountdown, DotsThreeVertical, Sparkle } from '@phosphor-icons/react';
+import { ClockCountdown, DotsThreeVertical, Sparkle, X } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
+import type { CareerCabinetView } from '../cabinet/cabinetViews';
+import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
+import { isConsultantActionResolved, resolveConsultantAction } from './consultantActionStorage';
 import type { TodayDigest, TodayFollowUp, TodayQueueItem, TodaySnapshot } from './todayApi';
 import { formatTodaySalary } from './todayCompensation';
 import { companyInitials, digestBasis, followUpStatusLabel } from './todayFormat';
 import { vacancyLevelMatchLabel } from '../vacancies/vacancyLevelMatch';
 
 const NO_PENDING_FOLLOW_UPS: ReadonlySet<string> = new Set();
+
+/**
+ * Маршрутизация действия консультанта в разделы кабинета.
+ * Read-only действия открывают соответствующий раздел без создания фоновых команд.
+ */
+export function consultantTargetView(
+  destination: ReasonedCareerAction['destination'],
+): CareerCabinetView {
+  if (destination === 'career') return 'career';
+  if (destination === 'search') return 'opportunities';
+  return 'profile';
+}
 
 /**
  * «Сегодня» (B251 S5): дайджест дня, очередь решений, follow-up по срокам и
@@ -24,6 +39,42 @@ export interface TodayScreenProps {
   readonly onRetry: () => void;
   readonly onMarkFollowUpSent: (applicationId: string) => Promise<void>;
   readonly markingFollowUpIds?: ReadonlySet<string>;
+  readonly candidateId?: string;
+  readonly consultantAction?: ReasonedCareerAction;
+  readonly onNavigate?: (view: CareerCabinetView) => void;
+}
+
+function useTodayConsultantAction({
+  candidateId,
+  consultantAction,
+  onNavigate,
+}: {
+  candidateId?: string;
+  consultantAction?: ReasonedCareerAction;
+  onNavigate?: (view: CareerCabinetView) => void;
+}) {
+  const [resolvedActionKey, setResolvedActionKey] = useState<string | null>(null);
+  const currentActionKey = consultantAction?.headline ?? null;
+  const isResolved =
+    !consultantAction ||
+    resolvedActionKey === currentActionKey ||
+    isConsultantActionResolved(candidateId, consultantAction);
+  const activeAction = isResolved ? undefined : consultantAction;
+
+  const onAccept = () => {
+    if (!consultantAction) return;
+    resolveConsultantAction(candidateId, consultantAction, 'accepted');
+    setResolvedActionKey(consultantAction.headline);
+    onNavigate?.(consultantTargetView(consultantAction.destination));
+  };
+
+  const onDismiss = () => {
+    if (!consultantAction) return;
+    resolveConsultantAction(candidateId, consultantAction, 'dismissed');
+    setResolvedActionKey(consultantAction.headline);
+  };
+
+  return { activeAction, onAccept, onDismiss };
 }
 
 export function TodayScreen({
@@ -33,14 +84,21 @@ export function TodayScreen({
   onRetry,
   onMarkFollowUpSent,
   markingFollowUpIds = NO_PENDING_FOLLOW_UPS,
+  candidateId,
+  consultantAction,
+  onNavigate,
 }: TodayScreenProps) {
+  const { activeAction, onAccept, onDismiss } = useTodayConsultantAction({
+    candidateId,
+    consultantAction,
+    onNavigate,
+  });
+
   if (failed) return <TodayError onRetry={onRetry} />;
   if (loading && !snapshot) return <TodaySkeleton />;
   if (!snapshot) return null;
 
   const { digest, queue, followUps, sinceLastVisit, vacanciesPending } = snapshot;
-  // The digest and the queue always show (B266): an empty queue is a
-  // statement about today, not a reason to hide the counts behind one card.
   return (
     <div className="career-today">
       <p className="career-today-subtitle">
@@ -54,6 +112,9 @@ export function TodayScreen({
           sinceLastVisitItems={sinceLastVisit.items}
           onMarkFollowUpSent={onMarkFollowUpSent}
           markingFollowUpIds={markingFollowUpIds}
+          consultantAction={activeAction}
+          onAcceptConsultant={onAccept}
+          onDismissConsultant={onDismiss}
         />
         <div className="career-today-side">
           <TodayFollowUps
@@ -135,44 +196,151 @@ function sinceHintOf(items: readonly string[]) {
   return <p className="career-today-since-hint">{extra.join(' · ')}</p>;
 }
 
+function TodayQueueList({
+  queue,
+  hasConsultantCard,
+  consultantAction,
+  onAcceptConsultant,
+  onDismissConsultant,
+  onMarkFollowUpSent,
+  markingFollowUpIds,
+}: {
+  queue: readonly TodayQueueItem[];
+  hasConsultantCard: boolean;
+  consultantAction?: ReasonedCareerAction;
+  onAcceptConsultant?: () => void;
+  onDismissConsultant?: () => void;
+  onMarkFollowUpSent: (applicationId: string) => Promise<void>;
+  markingFollowUpIds: ReadonlySet<string>;
+}) {
+  return (
+    <ul className="career-today-list">
+      {consultantAction ? (
+        <ConsultantQueueCard
+          action={consultantAction}
+          isFirst={true}
+          onAccept={onAcceptConsultant}
+          onDismiss={onDismissConsultant}
+        />
+      ) : null}
+      {queue.map((item, index) => (
+        <QueueRow
+          key={queueKey(item)}
+          item={item}
+          isFirst={!hasConsultantCard && index === 0}
+          onMarkFollowUpSent={onMarkFollowUpSent}
+          markingFollowUpIds={markingFollowUpIds}
+        />
+      ))}
+    </ul>
+  );
+}
+
 function TodayQueue({
   queue,
   sinceLastVisitItems,
   onMarkFollowUpSent,
   markingFollowUpIds,
+  consultantAction,
+  onAcceptConsultant,
+  onDismissConsultant,
 }: {
   queue: readonly TodayQueueItem[];
   sinceLastVisitItems: readonly string[];
   onMarkFollowUpSent: (applicationId: string) => Promise<void>;
   markingFollowUpIds: ReadonlySet<string>;
+  consultantAction?: ReasonedCareerAction;
+  onAcceptConsultant?: () => void;
+  onDismissConsultant?: () => void;
 }) {
+  const hasConsultantCard = Boolean(consultantAction);
+  const totalCount = queue.length + (hasConsultantCard ? 1 : 0);
+
   return (
     <section className="career-today-queue" aria-label="Очередь дня">
       <header className="career-today-queue-head">
         <h2>Очередь дня</h2>
         <span className="career-today-hint">
-          {pluralRu(queue.length, ['карточка', 'карточки', 'карточек'])} · решение нужно по каждой
+          {pluralRu(totalCount, ['карточка', 'карточки', 'карточек'])} · решение нужно по каждой
         </span>
       </header>
       {sinceHintOf(sinceLastVisitItems)}
-      {queue.length === 0 ? (
+      {totalCount === 0 ? (
         <p className="career-today-empty">
           Решений на сегодня нет: подборка разобрана. Новые вакансии появятся здесь сами.
         </p>
       ) : (
-        <ul className="career-today-list">
-          {queue.map((item, index) => (
-            <QueueRow
-              key={queueKey(item)}
-              item={item}
-              isFirst={index === 0}
-              onMarkFollowUpSent={onMarkFollowUpSent}
-              markingFollowUpIds={markingFollowUpIds}
-            />
-          ))}
-        </ul>
+        <TodayQueueList
+          queue={queue}
+          hasConsultantCard={hasConsultantCard}
+          consultantAction={consultantAction}
+          onAcceptConsultant={onAcceptConsultant}
+          onDismissConsultant={onDismissConsultant}
+          onMarkFollowUpSent={onMarkFollowUpSent}
+          markingFollowUpIds={markingFollowUpIds}
+        />
       )}
     </section>
+  );
+}
+
+function ConsultantCardBody({ action }: { action: ReasonedCareerAction }) {
+  return (
+    <div className="career-today-item-body">
+      <span className="career-today-item-kind is-accent">
+        Консультант · Один шаг на сегодня
+      </span>
+      <div className="career-today-item-title">{action.headline}</div>
+      <div className="career-today-item-rationale">{action.rationale}</div>
+      {action.expectedChange ? (
+        <div className="career-today-item-effect">
+          <span className="career-today-effect-label">Что изменится:</span>{' '}
+          {action.expectedChange}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ConsultantQueueCard({
+  action,
+  isFirst,
+  onAccept,
+  onDismiss,
+}: {
+  action: ReasonedCareerAction;
+  isFirst: boolean;
+  onAccept?: () => void;
+  onDismiss?: () => void;
+}) {
+  return (
+    <li
+      className={`career-today-item career-today-consultant-card${isFirst ? ' is-first' : ''}`}
+      data-testid="consultant-queue-card"
+    >
+      <span className="career-today-item-logo is-consultant">
+        <Sparkle size={18} aria-hidden="true" />
+      </span>
+      <ConsultantCardBody action={action} />
+      <span className="career-today-item-fit" />
+      <div className="career-today-item-actions">
+        <button
+          type="button"
+          className="career-btn career-btn-primary career-btn-sm career-today-consultant-action"
+          onClick={onAccept}
+        >
+          {action.label}
+        </button>
+        <button
+          type="button"
+          className="career-btn-icon career-today-consultant-dismiss"
+          aria-label="Отклонить предложение"
+          onClick={onDismiss}
+        >
+          <X size={16} aria-hidden="true" />
+        </button>
+      </div>
+    </li>
   );
 }
 

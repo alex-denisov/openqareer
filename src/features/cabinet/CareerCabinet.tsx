@@ -36,6 +36,7 @@ import type {
   VacancyProfileRequirementRequest,
 } from '../vacancies/vacancyProfileRequirement';
 import type { CareerCabinetView } from './cabinetViews';
+import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 
 export type { CareerCabinetView } from './cabinetViews';
 
@@ -236,6 +237,7 @@ export function CareerCabinet({
             data={data}
             profileTab={profileTab}
             vacancyProfileRequest={vacancyProfileRequest}
+            consultantAction={journey?.reasonedAction}
             onNavigate={onNavigate}
             onOpenProfileRequirement={openProfileRequirement}
             onVacancyRequirementHandled={clearProfileRequirement}
@@ -252,7 +254,15 @@ export function CareerCabinet({
 
 /** «Сегодня» reads its own digest through `useToday` — the cabinet's
  * `useCareerCabinetData` snapshot has no queue or digest fields of its own. */
-function TodaySection() {
+function TodaySection({
+  candidateId,
+  consultantAction,
+  onNavigate,
+}: {
+  candidateId?: string;
+  consultantAction?: ReasonedCareerAction;
+  onNavigate?: (view: CareerCabinetView) => void;
+}) {
   const { snapshot, loading, failed, refresh, markFollowUpSent, markingFollowUpIds } = useToday();
   return (
     <TodayScreen
@@ -262,6 +272,9 @@ function TodaySection() {
       onRetry={() => void refresh()}
       onMarkFollowUpSent={markFollowUpSent}
       markingFollowUpIds={markingFollowUpIds}
+      candidateId={candidateId}
+      consultantAction={consultantAction}
+      onNavigate={onNavigate}
     />
   );
 }
@@ -291,6 +304,7 @@ function CabinetSection({
   data,
   profileTab,
   vacancyProfileRequest,
+  consultantAction,
   onNavigate,
   onOpenProfileRequirement,
   onVacancyRequirementHandled,
@@ -311,6 +325,7 @@ function CabinetSection({
   data: ReturnType<typeof useCareerCabinetData>;
   profileTab: ProfileTab;
   vacancyProfileRequest: VacancyProfileRequirementRequest | null;
+  consultantAction?: ReasonedCareerAction;
   onNavigate: (view: CareerCabinetView) => void;
   onOpenProfileRequirement: (context: VacancyProfileRequirement) => void;
   onVacancyRequirementHandled: () => void;
@@ -320,7 +335,13 @@ function CabinetSection({
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }) {
   if (view === 'today') {
-    return <TodaySection />;
+    return (
+      <TodaySection
+        candidateId={session.candidateId}
+        consultantAction={consultantAction}
+        onNavigate={onNavigate}
+      />
+    );
   }
   // B265 — the rail's «Профиль» is its own screen (topcard, Open to work,
   // every imported section, edit-in-place), not Resume Studio. «Резюме»
