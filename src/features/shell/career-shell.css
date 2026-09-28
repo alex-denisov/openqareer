@@ -971,7 +971,9 @@
      into an unreadable rail. The summary opens the same real section. */
   .career-path {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--career-space-2);
     height: auto;
     padding: 1px var(--career-space-2);
   }
@@ -981,8 +983,10 @@
   }
 
   .career-path-mobile-summary {
-    width: 100%;
+    flex: 1 1 0;
+    width: auto;
     min-width: 0;
+    overflow: hidden;
     min-height: var(--career-target-min);
     display: flex;
     align-items: center;
@@ -997,8 +1001,9 @@
 
   .career-path-mobile-role {
     display: inline-flex;
-    align-self: flex-end;
-    margin: 0 var(--career-space-2) var(--career-space-2) 0;
+    flex: none;
+    white-space: nowrap;
+    margin: 0;
   }
 
   .career-path-mobile-dots {
@@ -1035,6 +1040,9 @@
   }
 
   .career-path-mobile-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-weight: 600;
   }
 
@@ -11992,15 +12000,9 @@
   .career-profile-screen-name-row h1 {
     font-size: var(--career-text-xl);
   }
+  /* B294: чипы переносятся, а не прячутся за скрытой прокруткой. */
   .career-profile-screen-status-row {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding-bottom: 2px;
-  }
-  .career-profile-screen-status-row::-webkit-scrollbar {
-    display: none;
+    flex-wrap: wrap;
   }
   .career-profile-screen-details-toggle {
     display: inline-flex;
