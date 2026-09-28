@@ -849,9 +849,10 @@ test.describe('B250 vacancies screen', () => {
       }),
     };
 
-    // Intentionally pass in reverse order [dead, stale, fresh] to verify compareMatchedVacancies sorting
+    // Порядок задаёт сервер (C71: экран и API — один порядок); заглушка отдаёт
+    // его так, как отсортировал бы сервер. Сам порядок — в vacancyMatchOrder.test.ts.
     await stubSession(page, {
-      matchedItems: [deadItem, staleItem, freshItem],
+      matchedItems: [freshItem, staleItem, deadItem],
       total: 3,
     });
     await seedWorkspace(page);

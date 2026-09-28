@@ -6,7 +6,6 @@ import type { ApplicationView } from '../applications/applicationsApi';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import { DesktopOutreachModal } from '../outreach/DesktopOutreachModal';
 import { titleMatchesRole } from '../../../shared/vacancyRoleTitleMatch';
-import { compareMatchedVacancies } from '../../../shared/vacancyMatchOrder';
 import { vacancyAge } from './vacancyFilters';
 import { VacancyDetailPanel } from './VacancyDetailPanel';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
@@ -569,7 +568,7 @@ function filterByScreenState(
       if (days === null || days > state.freshnessDays) return false;
     }
     return true;
-  }).sort((a, b) => compareMatchedVacancies(a, b, now));
+  });
 }
 
 /** Единственная точка «есть совпадение» на всех трёх fit-dots (B248). */
