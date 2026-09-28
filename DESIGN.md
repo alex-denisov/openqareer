@@ -69,7 +69,7 @@ navigation; tariffs remain a visible top action.
 
 - Primary design widths: 390 px and 1440 px; the desktop app window (1176 px
   content) and the `tauri.conf.json` size (1280 px) are gated too. The document
-  must never overflow horizontally at 320 px or wider, and text boxes never
+  must never overflow horizontally at 280 px or wider, and text boxes never
   overlap (`e2e/readability.spec.ts`).
 - Long lists render a page of 20 and grow on request; a 400-row list is never
   painted at once.

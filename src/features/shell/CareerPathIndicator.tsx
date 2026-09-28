@@ -30,35 +30,50 @@ function currentStepOf(steps: readonly PathStep[]): {
  * this component never decides state itself, it only renders `pathIndicator`.
  */
 export function CareerPathIndicator({ steps, onNavigate }: CareerPathIndicatorProps) {
-  const current = currentStepOf(steps);
   return (
     <nav className="career-path" aria-label="Прогресс кампании">
-      <div className="career-path-desktop">
-        {steps.map((step, index) => (
-          <div key={step.id} className="career-path-step" data-state={DATA_STATE[step.state]}>
-            <button
-              type="button"
-              className="career-path-btn"
-              onClick={() => onNavigate(step.destination)}
-              aria-label={`${step.label}. ${step.state === 'done' ? 'Готово' : step.reason}`}
-              title={step.reason}
-            >
-              <span className="career-path-dot" aria-hidden="true">
-                {step.state === 'done' ? <PathCheckIcon size={13} /> : null}
-              </span>
-              <span className="career-path-copy">
-                <span className="career-path-label">{step.label}</span>
-                {step.state === 'done' ? null : (
-                  <span className="career-path-reason">{step.reason}</span>
-                )}
-              </span>
-            </button>
-            {index < steps.length - 1 ? (
-              <span className="career-path-connector" aria-hidden="true" />
-            ) : null}
-          </div>
-        ))}
-      </div>
+      <DesktopPathSteps steps={steps} onNavigate={onNavigate} />
+      <MobilePathSummary steps={steps} onNavigate={onNavigate} />
+    </nav>
+  );
+}
+
+function DesktopPathSteps({ steps, onNavigate }: CareerPathIndicatorProps) {
+  return (
+    <div className="career-path-desktop">
+      {steps.map((step, index) => (
+        <div key={step.id} className="career-path-step" data-state={DATA_STATE[step.state]}>
+          <button
+            type="button"
+            className="career-path-btn"
+            onClick={() => onNavigate(step.destination)}
+            aria-label={`${step.label}. ${step.state === 'done' ? 'Готово' : step.reason}`}
+            title={step.reason}
+          >
+            <span className="career-path-dot" aria-hidden="true">
+              {step.state === 'done' ? <PathCheckIcon size={13} /> : null}
+            </span>
+            <span className="career-path-copy">
+              <span className="career-path-label">{step.label}</span>
+              {step.state === 'done' ? null : (
+                <span className="career-path-reason">{step.reason}</span>
+              )}
+            </span>
+          </button>
+          {index < steps.length - 1 ? (
+            <span className="career-path-connector" aria-hidden="true" />
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MobilePathSummary({ steps, onNavigate }: CareerPathIndicatorProps) {
+  const current = currentStepOf(steps);
+  const roleStep = steps.find((step) => step.id === 'role');
+  return (
+    <>
       <button
         type="button"
         className="career-path-mobile-summary"
@@ -76,6 +91,17 @@ export function CareerPathIndicator({ steps, onNavigate }: CareerPathIndicatorPr
         <span className="career-path-mobile-label">{current.step.label}</span>
         <span className="career-path-mobile-reason">{current.step.reason}</span>
       </button>
-    </nav>
+      {roleStep && current.step.id !== roleStep.id ? (
+        <button
+          type="button"
+          className="career-quiet-button career-path-mobile-role"
+          onClick={() => onNavigate(roleStep.destination)}
+          aria-label={`${roleStep.label}. ${roleStep.state === 'done' ? 'Готово' : roleStep.reason}`}
+          title={roleStep.reason}
+        >
+          Настроить роль
+        </button>
+      ) : null}
+    </>
   );
 }

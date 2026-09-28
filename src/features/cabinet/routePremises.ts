@@ -9,10 +9,9 @@ import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 export type RouteWorkMode = NonNullable<AccountSnapshot['profile']['workMode']>;
 
 /**
- * The three premises «Карьера» shows above the route. They live in two places
- * on the server — the role and the regions are the candidate's wizard answers,
- * the work mode is an account profile field — so the editor reads and writes
- * both rather than pretending one store owns all three (B160).
+ * The three premises «Карьера» shows above the route. Role and regions update
+ * both the candidate's saved campaign and wizard answers; work mode is an
+ * account profile field. The editor reads and writes each owning store (B160).
  */
 export interface RoutePremisesDraft {
   readonly targetRole: string;

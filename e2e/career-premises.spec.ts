@@ -1,5 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
+import { mkdir } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
+import { captureCareerHarness } from './helpers/capture-career-harness';
 
 /**
  * B160 remainder — «Изменить условия» used to open the «Аккаунт» panel,
@@ -56,14 +58,64 @@ const SNAPSHOT = {
 interface Captured {
   workspace?: Record<string, unknown>;
   profile?: Record<string, unknown>;
+  campaign?: { roles: string[]; regions: string[] };
 }
 
 async function stubSession(page: Page, captured: Captured): Promise<void> {
+  let campaign = {
+    roles: { value: ['Senior Software Engineer'], origin: 'profile' },
+    regions: { value: ['ru'], origin: 'profile' },
+    remoteOnly: false,
+    roleHypotheses: [{ role: 'Senior Software Engineer', vacancyCount: 0, isHypothesis: false }],
+  };
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
     if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: CANDIDATE } });
     if (pathname === '/api/v1/candidate/me') return route.fulfill({ json: { data: SNAPSHOT } });
+    if (pathname === '/api/v1/candidate/matched-vacancies') {
+      return route.fulfill({
+        json: {
+          data: [],
+          meta: { total: 0, nextOffset: null, campaign, candidateLevel: 'Senior' },
+        },
+      });
+    }
+    if (pathname === '/api/v1/candidate/campaign' && request.method() === 'POST') {
+      const update = request.postDataJSON() as { roles: string[]; regions: string[] };
+      captured.campaign = update;
+      campaign = {
+        roles: { value: update.roles, origin: 'explicit' },
+        regions: { value: update.regions, origin: 'explicit' },
+        remoteOnly: false,
+        roleHypotheses: update.roles.map((role) => ({
+          role,
+          vacancyCount: 0,
+          isHypothesis: false,
+        })),
+      };
+      return route.fulfill({ json: { data: campaign } });
+    }
+    if (pathname === '/api/v1/candidate/matched-vacancies') {
+      return route.fulfill({
+        json: {
+          data: [],
+          meta: {
+            total: 0,
+            nextOffset: null,
+            campaign: {
+              roles: { value: ['Senior Software Engineer'], origin: 'profile' },
+              regions: { value: ['ru'], origin: 'profile' },
+              remoteOnly: false,
+              roleHypotheses: [
+                { role: 'Senior Software Engineer', vacancyCount: 0, isHypothesis: false },
+              ],
+            },
+            candidateLevel: 'Senior',
+          },
+        },
+      });
+    }
     if (pathname === '/api/v1/account') {
       if (request.method() === 'PATCH') {
         const body = request.postDataJSON() as Record<string, unknown>;
@@ -128,14 +180,8 @@ async function seedWorkspace(page: Page): Promise<void> {
 }
 
 async function openCareer(page: Page): Promise<void> {
-  test.fixme(
-    true,
-    'C68: после C52 шаг «Роль» ведёт в «Вакансии»; экран кампании открывается только из следующего шага — проверку переписывают под новую навигацию',
-  );
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  // «Поиск» has no rail item in the B248 IA (Сегодня · Профиль · Вакансии ·
-  // Отклики · Консультант); it opens from the path indicator's «Роль» step,
-  // which every campaign screen carries (career-consultant-notes.md §2).
+  // «Поиск» остаётся без отдельного пункта рельса; шаг «Роль» открывает кампанию.
   await page
     .getByRole('button', { name: /^Роль\./ })
     .first()
@@ -147,7 +193,7 @@ async function openCareer(page: Page): Promise<void> {
 test.describe('B160 route premises are editable in the cabinet', () => {
   test('the candidate changes role, regions and work mode where they are shown', async ({
     page,
-  }) => {
+  }, testInfo) => {
     const captured: Captured = {};
     await stubSession(page, captured);
     await seedWorkspace(page);
@@ -165,15 +211,38 @@ test.describe('B160 route premises are editable in the cabinet', () => {
 
     await editor.getByRole('checkbox', { name: 'EU' }).check();
     await editor.getByLabel('Формат работы').selectOption('remote');
+    await mkdir('output/playwright/C68', { recursive: true });
+    const screenshotName =
+      testInfo.project.name === 'mobile-390'
+        ? 'premises-mobile-390.png'
+        : 'premises-desktop-1440.png';
+    await page.screenshot({
+      path: `output/playwright/C68/${screenshotName}`,
+      fullPage: testInfo.project.name !== 'mobile-390',
+    });
+    await captureCareerHarness(page, testInfo.outputPath('career-premises.html'));
     await editor.getByRole('button', { name: 'Сохранить предпосылки' }).click();
 
     await expect(editor).toBeHidden();
     await expect(page.locator('.career-route-premises')).toContainText('Руководитель продукта');
     await expect(page.locator('.career-route-premises')).toContainText('EU');
     await expect(page.locator('.career-route-premises')).toContainText('Удалённо');
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const savedScreenshotName =
+      testInfo.project.name === 'mobile-390'
+        ? 'premises-saved-mobile-390.png'
+        : 'premises-saved-desktop-1440.png';
+    await page.screenshot({
+      path: `output/playwright/C68/${savedScreenshotName}`,
+      fullPage: testInfo.project.name !== 'mobile-390',
+    });
 
     expect(captured.workspace?.targetDirection).toBe('Руководитель продукта');
     expect(captured.workspace?.regions).toEqual(['ru', 'eu']);
+    expect(captured.campaign).toEqual({
+      roles: ['Руководитель продукта'],
+      regions: ['ru', 'eu'],
+    });
     expect(captured.profile).toMatchObject({
       headline: 'Руководитель продукта',
       workMode: 'remote',

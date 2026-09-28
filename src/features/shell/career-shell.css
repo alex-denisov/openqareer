@@ -956,6 +956,9 @@
   /* A phone names the current decision rather than shrinking five controls
      into an unreadable rail. The summary opens the same real section. */
   .career-path {
+    display: flex;
+    flex-direction: column;
+    height: auto;
     padding: 1px var(--career-space-2);
   }
 
@@ -976,6 +979,11 @@
     background: transparent;
     font: inherit;
     text-align: left;
+  }
+
+  .career-path-mobile-role {
+    align-self: flex-end;
+    margin: 0 var(--career-space-2) var(--career-space-2) 0;
   }
 
   .career-path-mobile-dots {
