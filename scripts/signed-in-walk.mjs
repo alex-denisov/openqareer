@@ -63,17 +63,23 @@ const credentials =
         username: environment.OPENQAREER_ADMIN_USERNAME,
         password: environment.OPENQAREER_ADMIN_PASSWORD,
       }
-    : role === 'qa'
+    : role === 'owner'
       ? {
-          // Синтетический кандидат первого запуска: у него мастер пройден
-          // только что, поэтому им проверяется путь нового пользователя.
-          username: environment.OPENQAREER_QA_CANDIDATE_USERNAME,
-          password: environment.OPENQAREER_QA_CANDIDATE_PASSWORD,
+          // adenisov.test — единственный кандидат с полным LinkedIn: на нём CJM-обходы.
+          username: environment.OPENQAREER_OWNER_TEST_USERNAME,
+          password: environment.OPENQAREER_OWNER_TEST_PASSWORD,
         }
-      : {
-        username: environment.OPENQAREER_TEST_CANDIDATE_USERNAME,
-        password: environment.OPENQAREER_TEST_CANDIDATE_PASSWORD,
-      };
+      : role === 'qa'
+        ? {
+            // Синтетический кандидат первого запуска: у него мастер пройден
+            // только что, поэтому им проверяется путь нового пользователя.
+            username: environment.OPENQAREER_QA_CANDIDATE_USERNAME,
+            password: environment.OPENQAREER_QA_CANDIDATE_PASSWORD,
+          }
+        : {
+            username: environment.OPENQAREER_TEST_CANDIDATE_USERNAME,
+            password: environment.OPENQAREER_TEST_CANDIDATE_PASSWORD,
+          };
 
 if (!anonymous && (!credentials.username || !credentials.password)) {
   throw new Error(`в ${ENV_FILE} нет учётной записи для роли «${role}»`);
@@ -108,7 +114,11 @@ if (!anonymous) {
     `вход под «${credentials.username}»: ${signedIn ? 'да' : 'НЕТ'} → ${page.url()}\n`,
   );
   if (!signedIn) {
-    const message = await page.locator('[role="alert"]').first().textContent().catch(() => null);
+    const message = await page
+      .locator('[role="alert"]')
+      .first()
+      .textContent()
+      .catch(() => null);
     if (message) process.stdout.write(`сообщение формы: ${message.trim()}\n`);
   }
 }
@@ -139,23 +149,42 @@ if (shot) {
 if (adminShots && role === 'admin' && signedIn) {
   mkdirSync(adminShots, { recursive: true });
   for (const tab of ['users', 'vacancies', 'sources', 'audit', 'linkedin']) {
-    await page.locator(`.admin-nav-item`).filter({ hasText: {
-      users: 'Учётные записи', vacancies: 'База вакансий', sources: 'Источники вакансий',
-      audit: 'Журнал аудита', linkedin: 'Аккаунты LinkedIn',
-    }[tab] }).click();
-    const ready = await page.waitForFunction((activeTab) => {
-      if (activeTab === 'sources') {
-        return Boolean(document.querySelector('.admin-register-count[data-complete="true"], .admin-note.is-empty-note[data-complete="true"], .admin-error'));
-      }
-      const readySelector = {
-        users: '.admin-user-table tbody tr, .admin-empty-state',
-        vacancies: '.admin-vacancy-row, .admin-empty-state, .admin-alert--error',
-        sources: '.admin-source-card, .admin-empty-state, .admin-error',
-        audit: '.admin-audit-row, .admin-empty-state, .admin-alert--error',
-        linkedin: '.admin-linkedin-card, .admin-empty-state, .admin-error',
-      }[activeTab];
-      return Boolean(readySelector && document.querySelector(readySelector));
-    }, tab, { timeout: 30000 }).then(() => true).catch(() => false);
+    await page
+      .locator(`.admin-nav-item`)
+      .filter({
+        hasText: {
+          users: 'Учётные записи',
+          vacancies: 'База вакансий',
+          sources: 'Источники вакансий',
+          audit: 'Журнал аудита',
+          linkedin: 'Аккаунты LinkedIn',
+        }[tab],
+      })
+      .click();
+    const ready = await page
+      .waitForFunction(
+        (activeTab) => {
+          if (activeTab === 'sources') {
+            return Boolean(
+              document.querySelector(
+                '.admin-register-count[data-complete="true"], .admin-note.is-empty-note[data-complete="true"], .admin-error',
+              ),
+            );
+          }
+          const readySelector = {
+            users: '.admin-user-table tbody tr, .admin-empty-state',
+            vacancies: '.admin-vacancy-row, .admin-empty-state, .admin-alert--error',
+            sources: '.admin-source-card, .admin-empty-state, .admin-error',
+            audit: '.admin-audit-row, .admin-empty-state, .admin-alert--error',
+            linkedin: '.admin-linkedin-card, .admin-empty-state, .admin-error',
+          }[activeTab];
+          return Boolean(readySelector && document.querySelector(readySelector));
+        },
+        tab,
+        { timeout: 30000 },
+      )
+      .then(() => true)
+      .catch(() => false);
     if (!ready) process.stdout.write(`экран ${tab}: загрузка не завершилась за 30 с\n`);
     const filename = join(adminShots, `${tab}.png`);
     await page.screenshot({ path: filename, fullPage: false });
