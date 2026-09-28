@@ -338,3 +338,38 @@ describe('VacancyDetailPanel recruiter contacts honesty (B266)', () => {
     container.remove();
   });
 });
+
+describe('VacancyDetailPanel — шаг к сетевому контакту (B297)', () => {
+  it('показывает «Нетворкинг» только когда экран умеет открыть окно контактов', () => {
+    expect(render()).not.toContain('Нетворкинг');
+    expect(render({ onOpenNetworking: () => undefined })).toContain('Нетворкинг');
+  });
+
+  it('открывает сетевой контакт по нажатию и не отправляет ничего сам', () => {
+    const onOpenNetworking = vi.fn();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <VacancyDetailPanel
+          item={item()}
+          now="2026-09-24T09:00:00.000Z"
+          onBack={vi.fn()}
+          onOpenNetworking={onOpenNetworking}
+        />,
+      );
+    });
+    const button = Array.from(container.querySelectorAll('button')).find(
+      (element) => element.textContent === 'Нетворкинг',
+    );
+
+    act(() => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onOpenNetworking).toHaveBeenCalledTimes(1);
+    act(() => root.unmount());
+    container.remove();
+  });
+});

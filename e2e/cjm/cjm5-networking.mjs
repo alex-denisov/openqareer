@@ -25,13 +25,36 @@ export async function runCjm5(outDir, sharedStatePath) {
   });
 
   const networkingAvailability = {};
+  const networkingStep = {};
   for (const vp of ['1440', '390']) {
-    networkingAvailability[vp] = await run.pages[vp]
-      .getByRole('button', { name: 'Нетворкинг', exact: true })
-      .count();
+    const page = run.pages[vp];
+    const trigger = page.getByRole('button', { name: 'Нетворкинг', exact: true });
+    networkingAvailability[vp] = await trigger.count();
+    if (networkingAvailability[vp] === 0) {
+      networkingStep[vp] = { opened: false, reason: 'кнопки нет в детали вакансии' };
+      continue;
+    }
+    await trigger.first().click();
+    const dialog = page.getByRole('dialog').first();
+    await dialog.waitFor({ state: 'visible', timeout: 15_000 });
+    await page.waitForTimeout(4000);
+    networkingStep[vp] = {
+      opened: true,
+      title: await dialog.locator('h2').first().innerText().catch(() => null),
+      contactCategories: await dialog.locator('[role="tab"]').allInnerTexts(),
+      contactCount: await dialog.locator('.career-outreach-list [role="button"]').count(),
+      canCopy: await dialog.getByRole('button', { name: /Скопировать текст/u }).count(),
+      // Сам продукт ничего не отправляет: закрываем окно, ничего не нажимая.
+      closedBy: await dialog
+        .getByRole('button', { name: /Закрыть|Отмена/u })
+        .first()
+        .click()
+        .then(() => 'кнопка закрытия')
+        .catch(() => 'Esc или клик вне окна'),
+    };
   }
   const result = await run.close();
-  return { cjm: 'CJM5', title: 'Нетворкинг', networkingAvailability, ...result };
+  return { cjm: 'CJM5', title: 'Нетворкинг', networkingAvailability, networkingStep, ...result };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -43,6 +66,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         cjm: r.cjm,
         steps: r.steps.map((s) => s.name),
         networkingAvailability: r.networkingAvailability,
+        networkingStep: r.networkingStep,
         runtimeErrors: r.runtimeErrors,
       },
       null,

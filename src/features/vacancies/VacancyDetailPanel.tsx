@@ -45,6 +45,9 @@ interface VacancyDetailPanelProps {
   /** Opens the profile so the candidate can add the experience that covers
    * the requirement; without a handler the button is not rendered. */
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
+  /** Opens the contact window for this vacancy (B297): who works in the
+   * company and the note to write. Nothing is sent by the product. */
+  readonly onOpenNetworking?: () => void;
 }
 
 export function VacancyDetailPanel({
@@ -56,6 +59,7 @@ export function VacancyDetailPanel({
   onBack,
   onOpenResponses,
   onAddToProfile,
+  onOpenNetworking,
 }: VacancyDetailPanelProps) {
   const { cluster, explanation } = item;
   const age = vacancyAge(cluster, now);
@@ -76,6 +80,7 @@ export function VacancyDetailPanel({
       onBack={onBack}
       onOpenResponses={onOpenResponses}
       onAddToProfile={onAddToProfile}
+      onOpenNetworking={onOpenNetworking}
     />
   );
 }
@@ -93,6 +98,7 @@ interface VacancyDetailViewProps {
   readonly onBack: () => void;
   readonly onOpenResponses?: () => void;
   readonly onAddToProfile?: VacancyDetailPanelProps['onAddToProfile'];
+  readonly onOpenNetworking?: VacancyDetailPanelProps['onOpenNetworking'];
 }
 
 function VacancyDetailPanelView(props: VacancyDetailViewProps) {
@@ -109,6 +115,7 @@ function VacancyDetailPanelView(props: VacancyDetailViewProps) {
     onBack,
     onOpenResponses,
     onAddToProfile,
+    onOpenNetworking,
   } = props;
   return (
     <div className="vacancies-detail-panel">
@@ -134,6 +141,7 @@ function VacancyDetailPanelView(props: VacancyDetailViewProps) {
         onMarkAlreadyApplied={onMarkAlreadyApplied}
         onScheduleInterview={onScheduleInterview}
         onOpenResponses={onOpenResponses}
+        onOpenNetworking={onOpenNetworking}
       />
     </div>
   );
@@ -317,6 +325,22 @@ interface VacancyActionProps {
     vacancy: VacancyApplicationSnapshot,
   ) => Promise<ApplicationView>;
   readonly onOpenResponses?: () => void;
+  /** Opens the contact window: who is in the company and what to write. Without
+   * a handler the candidate would have no way out of the vacancy (B297). */
+  readonly onOpenNetworking?: () => void;
+}
+
+function NetworkingAction({ onOpenNetworking }: { readonly onOpenNetworking?: () => void }) {
+  if (!onOpenNetworking) return null;
+  return (
+    <button
+      type="button"
+      className="vacancies-btn vacancies-btn-secondary"
+      onClick={onOpenNetworking}
+    >
+      Нетворкинг
+    </button>
+  );
 }
 
 function VacancyDetailActions(props: VacancyActionProps) {
@@ -325,6 +349,7 @@ function VacancyDetailActions(props: VacancyActionProps) {
     <div className="vacancies-detail-actions">
       <VacancyResponseAction {...props} />
       <InterviewScheduleAction {...props} />
+      <NetworkingAction onOpenNetworking={props.onOpenNetworking} />
       <button
         type="button"
         className="vacancies-btn vacancies-btn-secondary"

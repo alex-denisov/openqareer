@@ -4,6 +4,7 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import type { ApplicationView } from '../applications/applicationsApi';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
+import { DesktopOutreachModal } from '../outreach/DesktopOutreachModal';
 import { titleMatchesRole } from '../../../shared/vacancyRoleTitleMatch';
 import { vacancyAge } from './vacancyFilters';
 import { VacancyDetailPanel } from './VacancyDetailPanel';
@@ -60,6 +61,9 @@ interface VacanciesScreenProps {
   ) => Promise<ApplicationView>;
   readonly onOpenResponses?: () => void;
   readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
+  /** B297: окно сетевого контакта. Без обработчика вакансия остаётся тупиком —
+   * смотреть контакты и писать было негде. */
+  readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
 }
 
 function extractBoardRegions(campaign?: CampaignMetaView) {
@@ -132,15 +136,34 @@ export function VacanciesScreen(input: VacanciesScreenProps) {
     onCampaignUpdated: campaignUpdateHandler(setActiveCampaign, board.setState),
     onRetry: input.onRetry,
   });
+  const [outreachVacancy, setOutreachVacancy] = useState<MatchedVacancyItem['cluster']>();
+  const openNetworking = (vacancy: MatchedVacancyItem['cluster']) => setOutreachVacancy(vacancy);
 
   return (
-    <VacanciesScreenView
-      input={input}
-      activeCampaign={activeCampaign}
-      now={now}
-      board={board}
-      actions={actions}
-    />
+    <>
+      <VacanciesScreenView
+        input={input}
+        activeCampaign={activeCampaign}
+        now={now}
+        board={board}
+        actions={actions}
+        onOpenNetworking={openNetworking}
+      />
+      {outreachVacancy ? (
+        <DesktopOutreachModal
+          isOpen
+          onClose={() => setOutreachVacancy(undefined)}
+          vacancy={{
+            id: outreachVacancy.id,
+            title: outreachVacancy.canonicalTitle,
+            company: outreachVacancy.canonicalCompany,
+            location: outreachVacancy.canonicalLocation,
+            isRemote: outreachVacancy.isRemote,
+            skills: outreachVacancy.skills,
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -150,15 +173,24 @@ function VacanciesScreenView({
   now,
   board,
   actions,
+  onOpenNetworking,
 }: {
   readonly input: VacanciesScreenProps;
   readonly activeCampaign?: CampaignMetaView;
   readonly now: string;
   readonly board: ReturnType<typeof useVacanciesScreenBoard>;
   readonly actions: ReturnType<typeof useVacancyCampaignActions>;
+  readonly onOpenNetworking: (vacancy: MatchedVacancyItem['cluster']) => void;
 }) {
   const results = (
-    <VacanciesResults {...input} campaign={activeCampaign} now={now} board={board} actions={actions} />
+    <VacanciesResults
+      {...input}
+      campaign={activeCampaign}
+      now={now}
+      board={board}
+      actions={actions}
+      onOpenNetworking={onOpenNetworking}
+    />
   );
   const {
     loading = false,
@@ -267,6 +299,7 @@ interface VacanciesResultsProps {
   readonly candidateLevel?: string | null;
   readonly now: string;
   readonly applications?: VacancyApplications;
+  readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
   readonly onMarkAlreadyApplied?: (
     clusterId: string,
     vacancy: VacancyApplicationSnapshot,
@@ -322,6 +355,7 @@ function VacanciesResults(props: VacanciesResultsProps) {
           onBack={props.board.onBack}
           onOpenResponses={props.onOpenResponses}
           onOpenProfile={props.onOpenProfile}
+          onOpenNetworking={props.onOpenNetworking}
         />
       )}
     </div>
@@ -458,6 +492,7 @@ interface VacanciesLayoutProps {
   readonly onBack: () => void;
   readonly onOpenResponses?: () => void;
   readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
+  readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
 }
 
 function VacanciesLayout(props: VacanciesLayoutProps) {
@@ -486,6 +521,11 @@ function VacanciesLayout(props: VacanciesLayoutProps) {
             onBack={props.onBack}
             onOpenResponses={props.onOpenResponses}
             onAddToProfile={props.onOpenProfile}
+            onOpenNetworking={
+              props.onOpenNetworking
+                ? () => props.onOpenNetworking?.(props.selectedItem!.cluster)
+                : undefined
+            }
           />
         ) : null}
       </aside>

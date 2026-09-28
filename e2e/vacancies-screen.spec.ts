@@ -597,6 +597,26 @@ test.describe('B250 vacancies screen', () => {
     await expect(mobileApplyButton).toBeVisible();
   });
 
+  test('«Нетворкинг» открывает контакты компании и ничего не отправляет (B297)', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    const networking = page
+      .locator('.vacancies-detail-col')
+      .getByRole('button', { name: 'Нетворкинг' });
+    await expect(networking).toBeVisible();
+    await networking.click();
+
+    const dialog = page.getByRole('dialog').first();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('tablist', { name: 'Категории контактов' })).toBeVisible();
+  });
+
   test('low role coverage exposes explicit campaign changes', async ({ page }, testInfo) => {
     const updates: unknown[] = [];
     const lowCampaign = {
