@@ -289,45 +289,8 @@ function ConnectionStatusChips({
   );
 }
 
-function TopcardMeta({
-  location,
-  updatedAt,
-  reader,
-}: {
-  readonly location?: string;
-  readonly updatedAt?: string;
-  readonly reader: ResumeReaderProvenance | null;
-}) {
-  return (
-    <div className="career-profile-screen-id-meta">
-      {location ? (
-        <span>
-          <MapPin size={14} />
-          {location}
-        </span>
-      ) : null}
-      {updatedAt ? (
-        <span>
-          <CheckCircle size={14} />
-          Обновлено {formatDate(updatedAt)}
-        </span>
-      ) : null}
-      <span>Резюме прочитано: {readerLabel(reader)}</span>
-    </div>
-  );
-}
-
-export function ProfileTopcard({
-  draft,
-  importedSource,
-  updatedAt,
-  reader,
-  onDraftChange,
-  connections,
-  onOpenConnections,
-  searchConsent,
-  onSearchConsentChange,
-}: ProfileTopcardProps) {
+export function ProfileTopcard(props: ProfileTopcardProps) {
+  const { draft, updatedAt, onDraftChange } = props;
   const fullName = draft.candidate.fullName?.trim();
   const headline = draft.candidate.headline?.trim() ?? draft.targetRole?.trim();
   const location = draft.candidate.contact?.location?.trim();
@@ -340,16 +303,24 @@ export function ProfileTopcard({
             <h1>{fullName || 'Имя не указано'}</h1>
           </div>
           {headline ? <p className="career-profile-screen-headline">{headline}</p> : null}
-          <TopcardMeta location={location} updatedAt={updatedAt} reader={reader} />
-          <div className="career-profile-screen-status-row">
-            <SourceCoverageChip draft={draft} importedSource={importedSource} />
-            {onOpenConnections ? (
-              <ConnectionStatusChips connections={connections} onOpenConnections={onOpenConnections} />
+          <div className="career-profile-screen-id-meta">
+            {location ? (
+              <span>
+                <MapPin size={14} />
+                {location}
+              </span>
+            ) : null}
+            {updatedAt ? (
+              <span>
+                <CheckCircle size={14} />
+                Обновлено {formatDate(updatedAt)}
+              </span>
             ) : null}
           </div>
+          <ProfileStatusRow props={props} />
           <ProfileSearchConsentRow
-            initialConsent={searchConsent}
-            onConsentChange={onSearchConsentChange}
+            initialConsent={props.searchConsent}
+            onConsentChange={props.onSearchConsentChange}
           />
           <ContactRow draft={draft} />
         </div>
@@ -359,10 +330,25 @@ export function ProfileTopcard({
   );
 }
 
-function readerLabel(reader: ResumeReaderProvenance | null): string {
-  if (!reader) return 'неизвестно';
-  if (reader.method === 'rules') return 'правилами';
-  return `модель ${reader.model}, ${formatDate(reader.readAt)}`;
+function ProfileStatusRow({ props }: { readonly props: ProfileTopcardProps }) {
+  return (
+    <div className="career-profile-screen-status-row">
+      <SourceCoverageChip draft={props.draft} importedSource={props.importedSource} />
+      {props.reader ? (
+        <span className="career-profile-screen-reader-status">{readerLabel(props.reader)}</span>
+      ) : null}
+      {props.onOpenConnections ? (
+        <ConnectionStatusChips
+          connections={props.connections}
+          onOpenConnections={props.onOpenConnections}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function readerLabel(reader: ResumeReaderProvenance): string {
+  return reader.method === 'rules' ? 'Прочитано правилами' : 'Прочитано моделью';
 }
 
 function formatDate(value: string): string {

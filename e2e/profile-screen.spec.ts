@@ -1,5 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { mkdir } from 'node:fs/promises';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { captureCareerHarness } from './helpers/capture-career-harness';
 import type { MatchedVacancyItem } from '../src/features/coach/cabinetTypes';
@@ -501,6 +503,71 @@ const SECTION_IDS = [
 ] as const;
 
 test.describe('B265 Profile screen', () => {
+  test('shows the saved reader method beside the source chip', async ({ page }) => {
+    await stubSession(page);
+    await page.route('**/api/v1/candidate/resume', async (route) => {
+      await route.fulfill({
+        json: {
+          data: {
+            draft: DRAFT,
+            savedAt: {
+              createdAt: '2026-09-21T09:00:00.000Z',
+              updatedAt: '2026-09-21T09:00:00.000Z',
+            },
+            projection: { evidenceSnapshot: [], master: null, germany: null },
+            evidenceFreshness: { stale: [] },
+            reader: {
+              method: 'model',
+              model: 'openai:gpt-5.6-mini',
+              promptRevision: 'resume-structuring-v1',
+              readAt: '2026-09-26T10:00:00.000Z',
+            },
+          },
+        },
+      });
+    });
+    await openProfile(page);
+
+    const row = page.locator('.career-profile-screen-status-row');
+    const readerStatus = row.locator('.career-profile-screen-reader-status');
+    await expect(readerStatus).toHaveText('Прочитано моделью');
+    await expect(row.locator('.career-profile-screen-source-chip')).toBeVisible();
+    await expect(page.getByText('Резюме прочитано: неизвестно', { exact: true })).toHaveCount(0);
+    const accessibility = await new AxeBuilder({ page })
+      .include('.career-profile-screen-view')
+      .analyze();
+    expect(accessibility.violations.filter((violation) => violation.impact === 'critical')).toEqual(
+      [],
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      ),
+    ).toBeLessThanOrEqual(0);
+
+    const width = page.viewportSize()?.width ?? 0;
+    const outputDir = join(process.cwd(), 'test-results', 'c67-reader-provenance');
+    mkdirSync(outputDir, { recursive: true });
+    await page.screenshot({ path: join(outputDir, 'profile-reader-' + width + '.png') });
+    const snapshot = await page.evaluate(() => {
+      const styles = Array.from(document.styleSheets)
+        .flatMap((sheet) => {
+          try {
+            return Array.from(sheet.cssRules, (rule) => rule.cssText);
+          } catch {
+            return [];
+          }
+        })
+        .join('\n');
+      const html = document.documentElement.outerHTML
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, '')
+        .replace(/<link\b(?=[^>]*rel=["']stylesheet["'])[^>]*>/giu, '');
+      return html.replace('</head>', '<style>' + styles + '</style></head>');
+    });
+    expect(snapshot.length).toBeGreaterThan(10_000);
+    writeFileSync(join(outputDir, 'profile-reader-' + width + '.html'), snapshot);
+  });
+
   test('shows every section from an imported v2 draft, desktop 1440', async ({
     page,
   }, testInfo) => {
