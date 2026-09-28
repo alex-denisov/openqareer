@@ -117,4 +117,108 @@ describe('compareMatchedVacancies', () => {
     const order = [distantWithMatches, remoteZero].sort(compareMatchedVacancies);
     expect(order[0]).toBe(remoteZero);
   });
+
+  describe('B262 · сигналы доверия к вакансиям', () => {
+    const now = '2026-09-28T12:00:00.000Z';
+
+    it('ranks fresh vacancies above stale ones (>= 60 days) within the qualified tier', () => {
+      const fresh = {
+        cluster: { firstObservedAt: '2026-09-20T00:00:00.000Z', isRemote: true },
+        explanation: {
+          roleMatch: 'target' as const,
+          levelMatch: 'match' as const,
+          requirements: { matched: 2, total: 5 },
+        },
+      };
+      const stale = {
+        cluster: {
+          firstObservedAt: '2026-07-01T00:00:00.000Z', // > 60 days
+          isRemote: true,
+        },
+        explanation: {
+          roleMatch: 'target' as const,
+          levelMatch: 'match' as const,
+          requirements: { matched: 4, total: 5 }, // even with higher match count
+        },
+      };
+
+      const order = [stale, fresh].sort((a, b) => compareMatchedVacancies(a, b, now));
+      expect(order).toEqual([fresh, stale]);
+    });
+
+    it('ranks fresh vacancies above phantom reposts (>= 3) within the qualified tier', () => {
+      const fresh = {
+        cluster: { firstObservedAt: '2026-09-20T00:00:00.000Z', isRemote: true, vacanciesCount: 1 },
+        explanation: {
+          roleMatch: 'target' as const,
+          levelMatch: 'match' as const,
+          requirements: { matched: 2, total: 5 },
+        },
+      };
+      const phantom = {
+        cluster: {
+          firstObservedAt: '2026-09-20T00:00:00.000Z',
+          isRemote: true,
+          vacanciesCount: 4, // >= 3 reposts
+        },
+        explanation: {
+          roleMatch: 'target' as const,
+          levelMatch: 'match' as const,
+          requirements: { matched: 2, total: 5 },
+        },
+      };
+
+      const order = [phantom, fresh].sort((a, b) => compareMatchedVacancies(a, b, now));
+      expect(order).toEqual([fresh, phantom]);
+    });
+
+    it('ranks suspicious and dead links below stale and fresh vacancies of the same tier', () => {
+      const fresh = {
+        cluster: { firstObservedAt: '2026-09-20T00:00:00.000Z', isRemote: true },
+        explanation: {
+          roleMatch: 'target' as const,
+          levelMatch: 'match' as const,
+          requirements: { matched: 1, total: 5 },
+        },
+      };
+      const stale = {
+        cluster: { firstObservedAt: '2026-07-01T00:00:00.000Z', isRemote: true },
+        explanation: {
+          roleMatch: 'target' as const,
+          levelMatch: 'match' as const,
+          requirements: { matched: 1, total: 5 },
+        },
+      };
+      const deadLink = {
+        cluster: {
+          firstObservedAt: '2026-09-25T00:00:00.000Z',
+          isRemote: true,
+          deadLink: true,
+        },
+        explanation: {
+          roleMatch: 'target' as const,
+          levelMatch: 'match' as const,
+          requirements: { matched: 5, total: 5 },
+        },
+      };
+      const scam = {
+        cluster: {
+          firstObservedAt: '2026-09-25T00:00:00.000Z',
+          isRemote: true,
+          canonicalTitle: 'Быстрый доход от 5000$ в день',
+        },
+        explanation: {
+          roleMatch: 'target' as const,
+          levelMatch: 'match' as const,
+          requirements: { matched: 5, total: 5 },
+        },
+      };
+
+      const order = [scam, deadLink, stale, fresh].sort((a, b) => compareMatchedVacancies(a, b, now));
+      expect(order[0]).toBe(fresh);
+      expect(order[1]).toBe(stale);
+      expect(order.slice(2)).toContain(deadLink);
+      expect(order.slice(2)).toContain(scam);
+    });
+  });
 });

@@ -6,6 +6,8 @@
  * покрытых требований, география и свежесть записи.
  */
 
+import { vacancyTrustSignals, type VacancyTrustInput } from './vacancyTrustSignals';
+
 export type VacancyRoleMatch = 'target' | 'partial' | 'none';
 export type VacancyLevelMatch = 'match' | 'below' | 'above' | 'unknown';
 
@@ -15,7 +17,10 @@ export interface VacancyRequirementCoverage {
 }
 
 export interface OrderableMatch {
-  readonly cluster: { readonly firstObservedAt?: string; readonly isRemote?: boolean };
+  readonly cluster: VacancyTrustInput & {
+    readonly firstObservedAt?: string;
+    readonly isRemote?: boolean;
+  };
   readonly explanation: {
     readonly roleMatch?: VacancyRoleMatch;
     readonly levelMatch?: VacancyLevelMatch;
@@ -85,7 +90,18 @@ function observedAt(match: OrderableMatch): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-export function compareMatchedVacancies(left: OrderableMatch, right: OrderableMatch): number {
+export function trustRank(match: OrderableMatch, now: string = ''): number {
+  const signals = vacancyTrustSignals(match.cluster, now);
+  if (signals.level === 'ok') return 2;
+  if (signals.level === 'stale') return 1;
+  return 0; // 'suspicious' and dead links
+}
+
+export function compareMatchedVacancies(
+  left: OrderableMatch,
+  right: OrderableMatch,
+  now: string = '',
+): number {
   // 1. Целевая функция выше смежной (adjacent) и несовпавшей (none)
   const fnDiff = functionRank(right) - functionRank(left);
   if (fnDiff !== 0) return fnDiff;
@@ -97,6 +113,10 @@ export function compareMatchedVacancies(left: OrderableMatch, right: OrderableMa
   const rightQualified = isQualifiedTier(right);
 
   if (leftQualified && rightQualified) {
+    // Сигналы доверия (B262): подозрительные/мертвые ссылки уходят вниз ступени, устаревшие — ниже свежих
+    const trustDiff = trustRank(right, now) - trustRank(left, now);
+    if (trustDiff !== 0) return trustDiff;
+
     const reqDiff = requirementStatus(right) - requirementStatus(left);
     if (reqDiff !== 0) return reqDiff;
     const roleDiff = roleRank(right) - roleRank(left);
@@ -114,8 +134,9 @@ export function compareMatchedVacancies(left: OrderableMatch, right: OrderableMa
 
   // Если одна запись в квалифицированной ступени (с хотя бы n=0 или ≥1), а другая нет (дальний офис или несовпавший уровень):
   if (leftQualified !== rightQualified) {
-    if (leftQualified && requirementStatus(left) >= 1) return -1;
-    if (rightQualified && requirementStatus(right) >= 1) return 1;
+    // Мёртвая ссылка или мошенническая вакансия не должны перевешивать валидную вакансию другой ступени
+    if (leftQualified && trustRank(left, now) > 0 && requirementStatus(left) >= 1) return -1;
+    if (rightQualified && trustRank(right, now) > 0 && requirementStatus(right) >= 1) return 1;
   }
 
   // Общий порядок ранжирования для остальных случаев:
@@ -128,6 +149,10 @@ export function compareMatchedVacancies(left: OrderableMatch, right: OrderableMa
   // Внутри сопоставимой роли: допустимая география выше дальних офисов
   const geoTierDiff = geographyTier(right) - geographyTier(left);
   if (geoTierDiff !== 0) return geoTierDiff;
+
+  // Сигналы доверия (B262): подозрительные/мертвые ссылки уходят вниз ступени, устаревшие — ниже свежих
+  const trustDiff = trustRank(right, now) - trustRank(left, now);
+  if (trustDiff !== 0) return trustDiff;
 
   const reqDiff = requirementStatus(right) - requirementStatus(left);
   if (reqDiff !== 0) return reqDiff;

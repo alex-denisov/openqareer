@@ -173,6 +173,9 @@ interface VacancyCluster {
   status: 'active' | 'archived';
   vacanciesCount: number;
   companyFeatures?: VacancyCompanyFeatures;
+  /** B262/B200: признак недоступности ссылки вакансии */
+  deadLink?: boolean;
+  linkStatus?: 'open' | 'gone' | 'unknown';
 }
 
 export interface VacancyMatchingFact {

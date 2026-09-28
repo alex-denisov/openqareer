@@ -2,6 +2,7 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { vacancyAge } from './vacancyFilters';
 import { formatCompensationCompact } from './vacancyCompensation';
 import type { VacancyLevelMatch, VacancyRoleMatch } from '../../../shared/vacancyMatchOrder';
+import { vacancyTrustSignals } from '../../../shared/vacancyTrustSignals';
 
 /**
  * Одна строка списка «Вакансии» (B248/B250): логотип-инициалы, заголовок и
@@ -21,6 +22,7 @@ export function VacancyRow({
 }) {
   const { cluster, explanation } = item;
   const age = vacancyAge(cluster, now);
+  const trust = vacancyTrustSignals(cluster, now);
 
   return (
     <li className="vac-list-item">
@@ -36,6 +38,15 @@ export function VacancyRow({
         <span className="vac-main">
           <span className="vac-title">{cluster.canonicalTitle}</span>
           <span className="vac-sub">{vacancySubtitle(cluster)}</span>
+          {trust.level !== 'ok' && trust.reasons.length > 0 ? (
+            <span
+              className={`vac-trust-line is-${trust.level}`}
+              role="status"
+              data-trust-level={trust.level}
+            >
+              {trust.reasons[0]}
+            </span>
+          ) : null}
           <span className="vac-meta">
             <span className="vac-comp">{formatCompensationCompact(cluster.salary)}</span>
             <span className="vac-age">{age.label}</span>

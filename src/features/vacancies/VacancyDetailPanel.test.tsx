@@ -372,4 +372,25 @@ describe('VacancyDetailPanel — шаг к сетевому контакту (B2
     act(() => root.unmount());
     container.remove();
   });
+
+  describe('B262 · сигналы доверия в карточке вакансии', () => {
+    it('не показывает блок предупреждения для чистых валидных вакансий', () => {
+      const html = render();
+      expect(html).not.toContain('vacancies-detail-trust-alert');
+    });
+
+    it('показывает предупреждение для устаревших вакансий (>= 60 дней)', () => {
+      const staleItem = item({}, { firstObservedAt: '2026-07-01T08:00:00.000Z' });
+      const html = render({ item: staleItem });
+      expect(html).toContain('vacancies-detail-trust-alert is-stale');
+      expect(html).toContain('Вакансия открыта более 60 дней');
+    });
+
+    it('показывает предупреждение для вакансий с мертвыми ссылками', () => {
+      const deadItem = item({}, { deadLink: true });
+      const html = render({ item: deadItem });
+      expect(html).toContain('vacancies-detail-trust-alert is-suspicious');
+      expect(html).toContain('Ссылка на вакансию недоступна');
+    });
+  });
 });

@@ -133,4 +133,29 @@ describe('VacancyRow (B250)', () => {
     const html = render({ item: noMatch });
     expect(html).toContain('нет');
   });
+
+  describe('B262 · trust signals in vacancy row', () => {
+    it('does not render trust line for clean/ok vacancies', () => {
+      const html = render();
+      expect(html).not.toContain('vac-trust-line');
+    });
+
+    it('renders single-line stale reason for vacancies open >= 60 days', () => {
+      const staleItem = item({
+        firstObservedAt: '2026-07-01T08:00:00.000Z', // > 60 days before 2026-09-24
+      });
+      const html = render({ item: staleItem });
+      expect(html).toContain('vac-trust-line is-stale');
+      expect(html).toContain('Вакансия открыта более 60 дней');
+    });
+
+    it('renders single-line suspicious reason for dead links', () => {
+      const deadItem = item({
+        deadLink: true,
+      });
+      const html = render({ item: deadItem });
+      expect(html).toContain('vac-trust-line is-suspicious');
+      expect(html).toContain('Ссылка на вакансию недоступна');
+    });
+  });
 });
