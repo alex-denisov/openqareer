@@ -89,7 +89,6 @@ export interface VacancyDescriptionLoader {
   isLoaded?(url: string): boolean;
 }
 
-
 export interface VacancyDescriptionLoadResult {
   readonly vacancy?: UnifiedVacancy;
   /** Площадка отказала или не дала разметку: UI не должен выдавать сниппет за полный текст. */
@@ -887,7 +886,8 @@ export class MultiSourceVacancyEngine {
     }
     if (
       existing.fullDescription?.trim() &&
-      ((existing.requiredSkills?.length ?? 0) > 0 || this.descriptionLoader.isLoaded?.(existing.url))
+      ((existing.requiredSkills?.length ?? 0) > 0 ||
+        this.descriptionLoader.isLoaded?.(existing.url))
     ) {
       return Promise.resolve({ vacancy: existing, unavailable: false });
     }
@@ -925,8 +925,7 @@ export class MultiSourceVacancyEngine {
     }
 
     const existingSkills = vacancy.requiredSkills ?? [];
-    const skillsToSave =
-      existingSkills.length > 0 ? existingSkills : [...loadedSkills];
+    const skillsToSave = existingSkills.length > 0 ? existingSkills : [...loadedSkills];
 
     const updated: UnifiedVacancy = {
       ...vacancy,
@@ -936,7 +935,6 @@ export class MultiSourceVacancyEngine {
     this.pool.mergeSourceSlice(vacancy.provenance.sourceId, [updated]);
     return { vacancy: updated, unavailable: false };
   }
-
 
   /** Есть ли запись в пуле — по индексу, без чтения текста (быстрый проход hh, B219). */
   public hasVacancy(id: string): boolean {

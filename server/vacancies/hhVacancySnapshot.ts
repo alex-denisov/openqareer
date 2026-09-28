@@ -36,9 +36,7 @@ export function mergeHhVacancySnapshot(
   const keepExistingSkills =
     (!incoming.requiredSkills || incoming.requiredSkills.length === 0) &&
     Boolean(existing.requiredSkills?.length);
-  const requiredSkills = keepExistingSkills
-    ? existing.requiredSkills
-    : incoming.requiredSkills;
+  const requiredSkills = keepExistingSkills ? existing.requiredSkills : incoming.requiredSkills;
   const merged: UnifiedVacancy = {
     ...incoming,
     description,
@@ -52,4 +50,3 @@ export function mergeHhVacancySnapshot(
   if (!fullDescription) delete merged.fullDescription;
   return merged;
 }
-

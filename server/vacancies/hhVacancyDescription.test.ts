@@ -59,4 +59,3 @@ describe('HhVacancyDescriptionLoader', () => {
     expect(transport).toHaveBeenCalledTimes(1);
   });
 });
-

@@ -103,5 +103,3 @@ describe('hh full-description on demand', () => {
     expect(explanation.requirements?.matched).toBe(1);
   });
 });
-
-

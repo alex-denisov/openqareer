@@ -104,4 +104,3 @@ export class HhVacancyDescriptionLoader {
     return details;
   }
 }
-
