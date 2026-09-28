@@ -117,6 +117,19 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).toContain('COO');
   });
 
+  it('preserves the matched order supplied by the server', () => {
+    const html = render({
+      matched: [
+        matchedItem('server-first', 'Server first partial', { roleMatch: 'partial' }),
+        matchedItem('server-second', 'Server second target', { roleMatch: 'target' }),
+      ],
+    });
+
+    expect(html.indexOf('Server first partial')).toBeLessThan(
+      html.indexOf('Server second target'),
+    );
+  });
+
   it('defaults to «Все роли кампании» and lists vacancies for every role', () => {
     const html = render({
       matched: [matchedItem('c-1', 'VP Technology Ops'), matchedItem('c-2', 'COO')],
@@ -199,4 +212,3 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).not.toContain('Расширить географию');
   });
 });
-

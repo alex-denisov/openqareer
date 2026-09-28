@@ -107,6 +107,8 @@ export interface VacancyMatchExplanation {
   clusterId: string;
   /** Совпадение названия вакансии с целевыми ролями кандидата. */
   roleMatch: VacancyRoleMatch;
+  /** Роль из соседней функции, добавленная к подбору как смежная. */
+  adjacentRole?: boolean;
   /**
    * Совпадение по уровню (IC/лид/head/VP/C-level) — третий fit-dot рядом с
    * ролью и гео (B248). `undefined` — кандидат не назвал целевой уровень или
@@ -137,8 +139,8 @@ export interface VacancyMatchExplanation {
   matchingCount?: number;
   missingCount?: number;
   /**
-   * Вакансия вне рынков кампании кандидата (PRB-040). Такая запись стоит после
-   * остальных и подписана, но не скрыта: источник мог назвать страну неточно.
+   * Вакансия вне рынков кампании кандидата (PRB-040). При равной значимости
+   * роли такая запись стоит после остальных и подписана, но не скрыта.
    */
   outsideGeography?: boolean;
   /**

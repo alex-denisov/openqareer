@@ -190,4 +190,22 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
       'product-ops',
     ]);
   });
+
+  it('includes product roles after target-function rows for Eng/Ops campaigns', () => {
+    seed('target-ops', 'ops', 3, 1_000);
+    seed('adjacent-product', 'product', 3, 2_000);
+    const { sql, params } = buildSemanticMatchQuery({
+      functionCodes: ['eng-mgmt', 'it-ops', 'ops'],
+      levelRank: 3,
+      window: { fromMs: 0, toMs: 5_000 },
+      preferRemote: false,
+      limit: 50,
+    });
+
+    const rows = database.prepare(sql).all(...params) as Array<{ payload: string }>;
+    expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual([
+      'target-ops',
+      'adjacent-product',
+    ]);
+  });
 });

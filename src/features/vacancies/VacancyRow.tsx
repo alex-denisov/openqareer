@@ -52,7 +52,7 @@ function VacancyFitChips({
 }: {
   readonly explanation: MatchedVacancyItem['explanation'];
 }) {
-  const roleChip = roleChipDetails(explanation.roleMatch);
+  const roleChip = roleChipDetails(explanation.roleMatch, explanation.adjacentRole);
   const levelChip = levelChipDetails(explanation.levelMatch);
   const geoChip = geoChipDetails(explanation.outsideGeography);
 
@@ -83,7 +83,7 @@ function VacancyFitChips({
 
 interface VacancyFitChipProps {
   readonly label: 'Роль' | 'Уровень' | 'Гео';
-  readonly status: 'совпадает' | 'рядом' | 'нет';
+  readonly status: 'совпадает' | 'рядом' | 'смежная' | 'нет';
   readonly tone: 'yes' | 'nearby' | 'no' | 'unknown';
   readonly title: string;
   readonly ariaLabel?: string;
@@ -111,16 +111,23 @@ function VacancyFitChip({ label, status, tone, title, ariaLabel }: VacancyFitChi
   );
 }
 
-function roleChipDetails(roleMatch: VacancyRoleMatch): {
-  readonly status: 'совпадает' | 'рядом' | 'нет';
+function roleChipDetails(roleMatch: VacancyRoleMatch, adjacentRole?: boolean): {
+  readonly status: 'совпадает' | 'рядом' | 'смежная' | 'нет';
   readonly tone: 'yes' | 'nearby' | 'no';
   readonly title: string;
 } {
+  if (adjacentRole) {
+    return {
+      status: 'смежная',
+      tone: 'nearby',
+      title: 'Смежная роль вне семейств кампании',
+    };
+  }
   if (roleMatch === 'target') {
     return { status: 'совпадает', tone: 'yes', title: 'Семья ролей: совпадает' };
   }
   if (roleMatch === 'partial') {
-    return { status: 'рядом', tone: 'nearby', title: 'Смежная роль' };
+    return { status: 'рядом', tone: 'nearby', title: 'Функция совпадает, уровень рядом' };
   }
   return { status: 'нет', tone: 'no', title: 'Семья ролей: не совпадает' };
 }

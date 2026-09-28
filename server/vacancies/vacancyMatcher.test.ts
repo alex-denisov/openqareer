@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancyMatcher';
 import { lintTextQuality } from '../../shared/textQualityLinter';
@@ -177,6 +178,32 @@ describe('Explainable Vacancy Matcher', () => {
         canonicalTitle: 'VP of Engineering',
       });
       expect(explanation.roleMatch).toBe('partial');
+    });
+
+    it('labels a product role as adjacent and keeps it below campaign-function matches', () => {
+      const explanation = matchCandidateWithVacancy(ctoCandidate, {
+        ...sampleCluster,
+        canonicalTitle: 'Product Manager',
+      });
+      expect(explanation.roleMatch).toBe('partial');
+      expect(explanation.adjacentRole).toBe(true);
+      expect(explanation.summary).toContain('к смежной продуктовой роли');
+    });
+
+    it('orders a target-function partial match above an adjacent product role', () => {
+      const targetFunction = {
+        cluster: { firstObservedAt: '2026-09-20T00:00:00.000Z' },
+        explanation: { roleMatch: 'partial' as const, requirements: { matched: 1, total: 2 } },
+      };
+      const adjacentFunction = {
+        cluster: { firstObservedAt: '2026-09-24T00:00:00.000Z' },
+        explanation: {
+          roleMatch: 'partial' as const,
+          adjacentRole: true,
+          requirements: { matched: 2, total: 2 },
+        },
+      };
+      expect(compareMatchedVacancies(targetFunction, adjacentFunction)).toBeLessThan(0);
     });
 
     it('keeps an SQL-selected semantic role when the rules level disagrees', () => {

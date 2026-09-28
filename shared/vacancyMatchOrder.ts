@@ -2,8 +2,8 @@
  * Порядок подобранных вакансий. Раньше очередь сортировалась сводным баллом,
  * который сам себя выдумывал (PRB-016): веса 50/35/15 ничем не обоснованы, а
  * вакансия без требований получала 30 баллов из отсутствия данных. Сравнивается
- * только измеримое — совпадение с целевой ролью, доля покрытых требований и
- * свежесть записи.
+ * только измеримое — совпадение с целевой ролью, признак смежной роли, доля
+ * покрытых требований, география и свежесть записи.
  */
 
 export type VacancyRoleMatch = 'target' | 'partial' | 'none';
@@ -15,10 +15,12 @@ export interface VacancyRequirementCoverage {
 }
 
 export interface OrderableMatch {
-  readonly cluster: { readonly firstObservedAt?: string };
+  readonly cluster: { readonly firstObservedAt?: string; readonly isRemote?: boolean };
   readonly explanation: {
     readonly roleMatch?: VacancyRoleMatch;
     readonly requirements?: VacancyRequirementCoverage;
+    readonly adjacentRole?: boolean;
+    readonly outsideGeography?: boolean;
   };
 }
 
@@ -26,6 +28,11 @@ const ROLE_RANK: Record<VacancyRoleMatch, number> = { target: 2, partial: 1, non
 
 function roleRank(match: OrderableMatch): number {
   return ROLE_RANK[match.explanation.roleMatch ?? 'none'];
+}
+
+function geographyRank(match: OrderableMatch): number {
+  if (match.cluster.isRemote) return 0;
+  return match.explanation.outsideGeography ? 2 : 1;
 }
 
 /** Доля покрытых требований; `-1` — вакансия требований не перечислила. */
@@ -43,9 +50,12 @@ function observedAt(match: OrderableMatch): number {
 export function compareMatchedVacancies(left: OrderableMatch, right: OrderableMatch): number {
   return (
     roleRank(right) - roleRank(left) ||
+    Number(left.explanation.adjacentRole ?? false) -
+      Number(right.explanation.adjacentRole ?? false) ||
     coverageShare(right) - coverageShare(left) ||
     (right.explanation.requirements?.matched ?? 0) -
       (left.explanation.requirements?.matched ?? 0) ||
+    geographyRank(left) - geographyRank(right) ||
     observedAt(right) - observedAt(left)
   );
 }
