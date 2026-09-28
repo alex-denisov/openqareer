@@ -43,7 +43,10 @@ function finishMatchedVacancies(
     targetRoles.length > 0
       ? geographyAndRemote.filter((item) => item.explanation.roleMatch !== 'none')
       : geographyAndRemote,
-    campaign.regions.value as CandidateRegion[],
+    [
+      ...(campaign.regions.value as CandidateRegion[]),
+      ...((campaign.suggestedRegions ?? []) as CandidateRegion[]),
+    ],
   );
   return applyVacancyDecisions(roleFiltered, candidateStore.listVacancyDecisions(candidateId));
 }

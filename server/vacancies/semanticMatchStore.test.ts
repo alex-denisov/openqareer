@@ -34,20 +34,22 @@ function card(id: string, title: string) {
   };
 }
 
-function poolWith(matchMode: 'legacy' | 'semantic', label: boolean) {
+function poolWith(matchMode: 'legacy' | 'semantic', label: boolean, includeAdjacentProduct = false) {
   const directory = mkdtempSync(join(tmpdir(), 'semantic-match-'));
   directories.push(directory);
   const path = join(directory, 'pool.db');
   const store = new SqliteVacancyPoolStore({ databasePath: path, matchMode });
   closers.push(() => store.close());
-  store.replaceSourceSlice('src', [
+  const vacancies = [
     card('vp-eng', 'VP of Engineering'),
     card('cto', 'Chief Technology Officer'),
     card('vp-sales', 'VP of Channel Sales'),
     card('growth', 'Head of Growth & Marketing'),
     card('cpp', 'C++ Developer'),
     card('ru-sales', 'Менеджер по продажам'),
-  ]);
+    ...(includeAdjacentProduct ? [card('cpo', 'Chief Product Officer')] : []),
+  ];
+  store.replaceSourceSlice('src', vacancies);
   while (store.backfillStep(100) > 0) {
     /* проекция сведения до конца */
   }
@@ -79,6 +81,15 @@ describe('подбор по смыслу на хранилище (B267 S3)', () 
     expect(ids).not.toContain('growth');
     expect(ids).not.toContain('cpp');
     expect(ids).not.toContain('ru-sales');
+  });
+
+  it('keeps an adjacent product role after target-function vacancies in semantic mode', () => {
+    const store = poolWith('semantic', true, true);
+
+    const ids = store.queryMatchCandidates(vp, { nowMs, limit: 50 }).map((vacancy) => vacancy.id);
+
+    expect(ids).toContain('cpo');
+    expect(ids.indexOf('vp-eng')).toBeLessThan(ids.indexOf('cpo'));
   });
 
   it('пока смысловой индекс пуст, отвечает прежним подбором, а не пустотой', () => {

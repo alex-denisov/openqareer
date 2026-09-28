@@ -185,6 +185,8 @@ interface VacancyMatchExplanation {
   clusterId: string;
   /** Совпадение названия вакансии с целевыми ролями кандидата. */
   roleMatch: VacancyRoleMatch;
+  /** Роль из соседней функции, добавленная к подбору как смежная. */
+  adjacentRole?: boolean;
   /**
    * Совпадение по уровню (IC/лид/head/VP/C-level) — третий fit-dot рядом с
    * ролью и гео (B248). Неизвестный разбор показывается явно.

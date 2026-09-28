@@ -40,6 +40,13 @@ interface MatchingFactPoint {
   readonly factId?: string;
 }
 
+const PRODUCT_ADJACENT_CAMPAIGN_FUNCTIONS: readonly FunctionCode[] = [
+  'eng',
+  'eng-mgmt',
+  'it-ops',
+  'ops',
+];
+
 function evaluateSkills(
   candidateSkills: string[],
   vacancySkills: string[],
@@ -88,14 +95,13 @@ function evaluateRole(targetRoles: string[], vacancyTitle: string) {
       matchingPoints.push(`Частичное совпадение по роли: ${targetRole}`);
     }
   }
-  return { roleMatch, matchingPoints };
+  return { roleMatch, matchingPoints, adjacentRole: false };
 }
 
 /**
  * Смысловая оценка (B267 S3): функция вакансии — из разбора названия
- * правилами, а не из подстроки. `none` не выходит из этой функции ложью —
- * SQL-подбор уже не приносит вакансию без совпавшей функции, здесь только
- * защита для прямого вызова (тесты, будущая переоценка снимка).
+ * правилами, а не из подстроки. Единственное смежное исключение — продуктовые
+ * роли для Eng/Ops кампаний; остальные несовпадения остаются `none`.
  */
 function evaluateSemanticRole(
   roleFunctions: readonly FunctionCode[],
@@ -108,11 +114,17 @@ function evaluateSemanticRole(
   const containsOtherCommercialFunction = (['sales', 'marketing'] as const).some((code) =>
     !roleFunctions.includes(code) && (parsed.functions.includes(code) || titleWords.has(code)),
   );
+  const primaryFunction = parsed.functions[0];
+  const hasTargetFunction = parsed.functions.some((code) => roleFunctions.includes(code));
+  const adjacentProductRole =
+    PRODUCT_ADJACENT_CAMPAIGN_FUNCTIONS.some((code) => roleFunctions.includes(code)) &&
+    parsed.functions.includes('product') &&
+    (!primaryFunction || !roleFunctions.includes(primaryFunction));
   if (
     containsOtherCommercialFunction ||
-    !parsed.functions.some((code) => roleFunctions.includes(code))
+    (!hasTargetFunction && !adjacentProductRole)
   ) {
-    return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints };
+    return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
   }
 
   const targetRank = targetLevel ? LEVEL_RANK[targetLevel] : undefined;
@@ -123,16 +135,24 @@ function evaluateSemanticRole(
     targetRank !== undefined && parsed.levelRank !== null
       ? Math.abs(parsed.levelRank - targetRank)
       : undefined;
-  const roleMatch: VacancyRoleMatch =
-    distance === 0 ? 'target' : 'partial';
-  matchingPoints.push(
-    roleMatch === 'target'
-      ? 'Функция роли и уровень совпадают по разбору названия.'
-      : targetRank === undefined
-        ? 'Функция роли совпадает; уровень кандидата неизвестен.'
-        : 'Функция роли совпадает; уровень отобран семантическим фильтром.',
-  );
-  return { roleMatch, matchingPoints };
+  const roleMatch: VacancyRoleMatch = adjacentProductRole
+    ? 'partial'
+    : distance === 0
+      ? 'target'
+      : 'partial';
+  if (adjacentProductRole) {
+    matchingPoints.push('Смежная продуктовая роль вне семейств кампании.');
+  }
+  if (!adjacentProductRole) {
+    matchingPoints.push(
+      roleMatch === 'target'
+        ? 'Функция роли и уровень совпадают по разбору названия.'
+        : targetRank === undefined
+          ? 'Функция роли совпадает; уровень кандидата неизвестен.'
+          : 'Функция роли совпадает; уровень отобран семантическим фильтром.',
+    );
+  }
+  return { roleMatch, matchingPoints, adjacentRole: adjacentProductRole };
 }
 
 const ROLE_SENTENCE: Record<VacancyRoleMatch, string> = {
@@ -145,11 +165,15 @@ const ROLE_SENTENCE: Record<VacancyRoleMatch, string> = {
 function summarize(
   roleMatch: VacancyRoleMatch,
   requirements: { matched: number; total: number } | undefined,
+  adjacentRole = false,
 ): string {
   const coverage = requirements
     ? `Совпало ${requirements.matched} из ${requirements.total} требований вакансии.`
     : 'Вакансия не перечислила требований — сравнивать не с чем.';
-  return `${coverage} ${ROLE_SENTENCE[roleMatch]}`;
+  const roleSentence = adjacentRole
+    ? 'Название относится к смежной продуктовой роли вне целевых семейств кампании.'
+    : ROLE_SENTENCE[roleMatch];
+  return `${coverage} ${roleSentence}`;
 }
 
 export function matchCandidateWithVacancy(
@@ -180,6 +204,7 @@ export function matchCandidateWithVacancy(
   return {
     clusterId: vacancy.id,
     roleMatch: roleEval.roleMatch,
+    ...(roleEval.adjacentRole ? { adjacentRole: true } : {}),
     levelMatch,
     ...(requirements ? { requirements } : {}),
     matchingPoints: [...roleEval.matchingPoints, ...skillEval.matchingPoints, ...locationPoints],
@@ -189,7 +214,7 @@ export function matchCandidateWithVacancy(
       ...locationPoints.map((text) => ({ text })),
     ],
     missingPoints: skillEval.missingPoints,
-    summary: summarize(roleEval.roleMatch, requirements),
+    summary: summarize(roleEval.roleMatch, requirements, roleEval.adjacentRole),
     calculatedAt: new Date().toISOString(),
   };
 }

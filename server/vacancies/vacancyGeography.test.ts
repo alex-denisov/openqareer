@@ -61,4 +61,27 @@ describe('markGeography', () => {
     const anywhere = markGeography([item('u', 'United States')], []);
     expect(anywhere[0].explanation.outsideGeography).toBeUndefined();
   });
+
+  it('uses geography after role relevance and ranks remote ahead of a distant office at the same relevance', () => {
+    const partial = (id: string, location: string | undefined, isRemote = false) => ({
+      ...item(id, location, isRemote),
+      explanation: { ...item(id, location, isRemote).explanation, roleMatch: 'partial' as const },
+    });
+    const marked = markGeography(
+      [
+        item('distant-target', 'Austin, TX, United States'),
+        partial('distant-partial', 'Austin, TX, United States'),
+        partial('remote-partial', 'Remote', true),
+        partial('local-partial', 'Dubai, United Arab Emirates'),
+      ],
+      ['mena'],
+    );
+
+    expect(marked.map((entry) => entry.cluster.id)).toEqual([
+      'distant-target',
+      'remote-partial',
+      'local-partial',
+      'distant-partial',
+    ]);
+  });
 });

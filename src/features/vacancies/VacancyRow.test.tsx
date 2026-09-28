@@ -115,6 +115,16 @@ describe('VacancyRow (B250)', () => {
     expect(html).toContain('рядом');
   });
 
+  it('labels adjacent roles separately from partial target-function matches', () => {
+    const adjacent: MatchedVacancyItem = {
+      ...item(),
+      explanation: { ...item().explanation, roleMatch: 'partial', adjacentRole: true },
+    };
+    const html = render({ item: adjacent });
+    expect(html).toContain('смежная');
+    expect(html).toContain('Смежная роль вне семейств кампании');
+  });
+
   it('renders status «нет» when role or geo does not match', () => {
     const noMatch: MatchedVacancyItem = {
       ...item(),

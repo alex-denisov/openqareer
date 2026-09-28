@@ -18,6 +18,12 @@ export interface SemanticMatchQueryInput {
 }
 
 const ALIVE = 'i.expired = 0';
+const PRODUCT_ADJACENT_CAMPAIGN_FUNCTIONS: readonly FunctionCode[] = [
+  'eng',
+  'eng-mgmt',
+  'it-ops',
+  'ops',
+];
 
 /**
  * Одна ветка на код функции (план §5 п.3): у массовой функции (`eng` ≈ 30 %
@@ -26,11 +32,18 @@ const ALIVE = 'i.expired = 0';
  * тыс. строк). Каждая ветка использует `vacancy_semantic_match` напрямую под
  * свой `ORDER BY published_ms DESC LIMIT`, без полной сортировки функции;
  * слияние веток идёт уже по ограниченному числу строк (после правки — 3–9 мс
- * на том же наборе, см. `semanticMatchQuery.bench.test.ts`).
+ * на том же наборе, см. `semanticMatchQuery.bench.test.ts`). Для кампаний
+ * Eng/Ops продуктовые роли читаются отдельной помеченной веткой и попадают в
+ * пул только после записей целевых семейств.
  */
-function buildFunctionBranch(levelFilter: string, excludedFunctionFilter: string): string {
+function buildFunctionBranch(
+  levelFilter: string,
+  excludedFunctionFilter: string,
+  isTargetFunction: boolean,
+): string {
   return `SELECT * FROM (
-    SELECT s.id AS id, s.published_ms AS p, i.is_remote AS remote
+    SELECT s.id AS id, s.published_ms AS p, i.is_remote AS remote,
+      ${isTargetFunction ? 1 : 0} AS target
     FROM vacancy_semantic s INDEXED BY vacancy_semantic_match
     JOIN vacancy_pool_index i ON i.id = s.id
     WHERE s.function_code = ? ${levelFilter} ${excludedFunctionFilter}
@@ -49,6 +62,34 @@ function buildExcludedTitleFilter(excludedFunctions: readonly ('sales' | 'market
     .join('\n      ');
 }
 
+function queryFunctionCodesFor(targetCodes: readonly FunctionCode[]): FunctionCode[] {
+  const includeProductAdjacents = targetCodes.some((code) =>
+    PRODUCT_ADJACENT_CAMPAIGN_FUNCTIONS.includes(code),
+  );
+  const adjacentFunctions: readonly FunctionCode[] =
+    includeProductAdjacents && !targetCodes.includes('product') ? ['product'] : [];
+  return Array.from(new Set([...targetCodes, ...adjacentFunctions]));
+}
+
+function excludedFunctionCodesFor(targetCodes: readonly FunctionCode[]) {
+  return (['sales', 'marketing', 'finance', 'project-mgmt', 'education'] as const).filter(
+    (code) => !targetCodes.includes(code),
+  );
+}
+
+function buildExcludedFunctionFilter(excludedFunctions: readonly string[]): string {
+  if (excludedFunctions.length === 0) return '';
+  const excludedCommercialFunctions = excludedFunctions.filter(
+    (code): code is 'sales' | 'marketing' => code === 'sales' || code === 'marketing',
+  );
+  return `AND NOT EXISTS (
+        SELECT 1 FROM vacancy_semantic excluded
+        WHERE excluded.id = s.id AND excluded.function_code IN (${excludedFunctions
+          .map(() => '?')
+          .join(', ')})
+      ) ${buildExcludedTitleFilter(excludedCommercialFunctions)}`;
+}
+
 export function buildSemanticMatchQuery(
   input: SemanticMatchQueryInput,
 ): { sql: string; params: SQLInputValue[] } {
@@ -57,36 +98,32 @@ export function buildSemanticMatchQuery(
   // не исчезает до того, как кандидат сможет его прочитать.
   const levelFilter =
     input.levelRank === null ? '' : 'AND (s.level_rank BETWEEN ? AND ? OR s.level_rank IS NULL)';
-  const excludedFunctions = (['sales', 'marketing', 'finance', 'project-mgmt', 'education'] as const).filter(
-    (code) => !input.functionCodes.includes(code),
-  );
-  const excludedCommercialFunctions = excludedFunctions.filter(
-    (code): code is 'sales' | 'marketing' => code === 'sales' || code === 'marketing',
-  );
-  const excludedFunctionFilter = excludedFunctions.length
-    ? `AND NOT EXISTS (
-        SELECT 1 FROM vacancy_semantic excluded
-        WHERE excluded.id = s.id AND excluded.function_code IN (${excludedFunctions
-          .map(() => '?')
-          .join(', ')})
-      ) ${buildExcludedTitleFilter(excludedCommercialFunctions)}`
-    : '';
-  const branch = buildFunctionBranch(levelFilter, excludedFunctionFilter);
-  const branches = input.functionCodes.map(() => branch).join('\nUNION ALL\n');
+  const excludedFunctions = excludedFunctionCodesFor(input.functionCodes);
+  const excludedFunctionFilter = buildExcludedFunctionFilter(excludedFunctions);
+  const queryFunctionCodes = queryFunctionCodesFor(input.functionCodes);
+  const branches = queryFunctionCodes
+    .map((code) =>
+      buildFunctionBranch(
+        levelFilter,
+        excludedFunctionFilter,
+        input.functionCodes.includes(code),
+      ),
+    )
+    .join('\nUNION ALL\n');
   const remoteOrder = '(CASE WHEN remote = 1 THEN 1 ELSE 0 END)';
-  const order = `${input.preferRemote ? 'r DESC, ' : ''}p DESC`;
+  const remoteSelectionOrder = input.preferRemote ? 'r DESC, ' : '';
   const sql = `WITH candidates AS (${branches}),
     selected AS (
-      SELECT id, max(p) AS p, max(${remoteOrder}) AS r
+      SELECT id, max(p) AS p, max(${remoteOrder}) AS r, max(target) AS t
       FROM candidates
       GROUP BY id
-      ORDER BY ${order}
+      ORDER BY t DESC, ${remoteSelectionOrder}p DESC
       LIMIT ?
     ) SELECT c.cluster_json AS payload FROM selected sel
       JOIN vacancy_cluster_input c ON c.id = sel.id
-      ORDER BY ${input.preferRemote ? 'sel.r DESC, ' : ''}sel.p DESC, sel.id ASC`;
+      ORDER BY sel.t DESC, ${input.preferRemote ? 'sel.r DESC, ' : ''}sel.p DESC, sel.id ASC`;
   const params: SQLInputValue[] = [];
-  for (const code of input.functionCodes) {
+  for (const code of queryFunctionCodes) {
     params.push(code);
     if (input.levelRank !== null) params.push(input.levelRank - 1, input.levelRank + 1);
     params.push(...excludedFunctions);

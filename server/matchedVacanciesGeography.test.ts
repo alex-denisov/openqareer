@@ -150,7 +150,7 @@ describe('GET /api/v1/candidate/matched-vacancies (PRB-040)', () => {
     vacanciesCount: 1,
   });
 
-  it('does not narrow regions when candidate has not explicitly chosen campaign regions (C63)', async () => {
+  it('ranks remote and suggested-profile-region roles before distant offices without hiding them (C71)', async () => {
     const { app, candidates } = await createApp([
       cluster('us', 'Xray Technician', 'Austin, TX, United States'),
       cluster('vet', 'Veterinary Healthcare Virtual Assistant', 'Dubai, United Arab Emirates'),
@@ -180,8 +180,16 @@ describe('GET /api/v1/candidate/matched-vacancies (PRB-040)', () => {
       cluster: { id: string };
       explanation: { outsideGeography?: boolean };
     }>;
-    // По умолчанию система регион не выбирает: выдача без ограничений
-    expect(items.map((item) => item.explanation.outsideGeography ?? false)).toEqual([false, false, false]);
+    const ids = items.map((item) => item.cluster.id);
+    // C63 остаётся мягкой подсказкой: удалёнка и MENA выше офиса в США,
+    // но вакансия за пределами рынка остаётся доступна в списке.
+    expect(ids.slice(0, 2).sort()).toEqual(['cluster-mena', 'cluster-remote']);
+    expect(ids[2]).toBe('cluster-us');
+    expect(items.map((item) => item.explanation.outsideGeography ?? false)).toEqual([
+      false,
+      false,
+      true,
+    ]);
     expect(response.json().meta.total).toBe(3);
     expect(response.json().meta.campaign.suggestedRegions).toEqual(['mena']);
   });

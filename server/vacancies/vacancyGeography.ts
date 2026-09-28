@@ -140,8 +140,10 @@ export interface GeographyMatch extends OrderableMatch {
 }
 
 /**
- * Помечает записи вне рынков кампании и ставит их после остальных. Удалёнка и
- * место, которого словарь не знает, «вне географии» не считаются.
+ * Помечает записи вне выбранных или профильных рынков. При одинаковом
+ * соответствии роли и требованиям такие офисы стоят после удалённых, местных
+ * и неизвестных мест. Удалёнка
+ * и место, которого словарь не знает, «вне географии» не считаются.
  */
 export function markGeography<T extends GeographyMatch>(
   matched: readonly T[],
@@ -158,9 +160,5 @@ export function markGeography<T extends GeographyMatch>(
     if (!region || wanted.has(region)) return item;
     return { ...item, explanation: { ...item.explanation, outsideGeography: true } };
   });
-  return marked.sort(
-    (left, right) =>
-      Number(left.explanation.outsideGeography ?? false) -
-        Number(right.explanation.outsideGeography ?? false) || compareMatchedVacancies(left, right),
-  );
+  return marked.sort(compareMatchedVacancies);
 }
