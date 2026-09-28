@@ -29,8 +29,20 @@ const FRESHNESS_OPTIONS = [
   { days: 30, label: '30 дней' },
 ] as const;
 
+export function countActiveFilters(state: VacanciesScreenState): number {
+  return (
+    state.roles.length +
+    state.regions.length +
+    (state.remoteOnly ? 1 : 0) +
+    (state.freshnessDays !== undefined ? 1 : 0)
+  );
+}
+
 export function VacanciesFilters(props: VacanciesScreenFiltersProps) {
   const [expanded, setExpanded] = useState(false);
+  const activeCount = countActiveFilters(props.state);
+  const filterLabel = `Фильтры · ${pluralRu(activeCount, ['активный', 'активных', 'активных'])}`;
+
   return (
     <div className="vacancies-filter-column">
       <button
@@ -40,7 +52,7 @@ export function VacanciesFilters(props: VacanciesScreenFiltersProps) {
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
       >
-        <span>Фильтры и запросы</span>
+        <span>{filterLabel}</span>
         <span aria-hidden="true">{expanded ? 'Скрыть' : 'Показать'}</span>
       </button>
       <aside

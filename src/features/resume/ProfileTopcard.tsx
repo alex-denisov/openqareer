@@ -290,10 +290,13 @@ function ConnectionStatusChips({
 }
 
 export function ProfileTopcard(props: ProfileTopcardProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const { draft, updatedAt, onDraftChange } = props;
   const fullName = draft.candidate.fullName?.trim();
   const headline = draft.candidate.headline?.trim() ?? draft.targetRole?.trim();
   const location = draft.candidate.contact?.location?.trim();
+  const hasDetails = Boolean(location || updatedAt || draft.candidate.contact);
+
   return (
     <section className="career-profile-screen-topcard" aria-label="Основные данные профиля">
       <div className="career-profile-screen-id-row">
@@ -303,30 +306,86 @@ export function ProfileTopcard(props: ProfileTopcardProps) {
             <h1>{fullName || 'Имя не указано'}</h1>
           </div>
           {headline ? <p className="career-profile-screen-headline">{headline}</p> : null}
-          <div className="career-profile-screen-id-meta">
-            {location ? (
-              <span>
-                <MapPin size={14} />
-                {location}
-              </span>
-            ) : null}
-            {updatedAt ? (
-              <span>
-                <CheckCircle size={14} />
-                Обновлено {formatDate(updatedAt)}
-              </span>
-            ) : null}
-          </div>
           <ProfileStatusRow props={props} />
+          {hasDetails ? (
+            <ProfileDetailsToggle
+              isOpen={detailsOpen}
+              onToggle={() => setDetailsOpen((prev) => !prev)}
+            />
+          ) : null}
+          <ProfileTopcardDetails
+            isOpen={detailsOpen}
+            location={location}
+            updatedAt={updatedAt}
+            draft={draft}
+          />
           <ProfileSearchConsentRow
             initialConsent={props.searchConsent}
             onConsentChange={props.onSearchConsentChange}
           />
-          <ContactRow draft={draft} />
         </div>
         <TopcardEdit draft={draft} onDraftChange={onDraftChange} />
       </div>
     </section>
+  );
+}
+
+function ProfileDetailsToggle({
+  isOpen,
+  onToggle,
+}: {
+  readonly isOpen: boolean;
+  readonly onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="career-profile-screen-details-toggle"
+      aria-expanded={isOpen}
+      onClick={onToggle}
+    >
+      <span>{isOpen ? 'Скрыть' : 'Подробнее'}</span>
+      <CaretDown
+        size={14}
+        aria-hidden="true"
+        style={{
+          transform: isOpen ? 'rotate(180deg)' : undefined,
+          transition: 'transform 160ms ease',
+        }}
+      />
+    </button>
+  );
+}
+
+function ProfileTopcardDetails({
+  isOpen,
+  location,
+  updatedAt,
+  draft,
+}: {
+  readonly isOpen: boolean;
+  readonly location?: string;
+  readonly updatedAt?: string;
+  readonly draft: ResumeDraft;
+}) {
+  return (
+    <div className={`career-profile-screen-details${isOpen ? ' is-open' : ''}`}>
+      <div className="career-profile-screen-id-meta">
+        {location ? (
+          <span>
+            <MapPin size={14} />
+            {location}
+          </span>
+        ) : null}
+        {updatedAt ? (
+          <span>
+            <CheckCircle size={14} />
+            Обновлено {formatDate(updatedAt)}
+          </span>
+        ) : null}
+      </div>
+      <ContactRow draft={draft} />
+    </div>
   );
 }
 

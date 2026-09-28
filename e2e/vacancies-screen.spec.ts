@@ -404,6 +404,10 @@ test.describe('B250 vacancies screen', () => {
     );
     expect(wideOverflow).toBeLessThanOrEqual(0);
     await page.screenshot({
+      path: 'output/playwright/C74/vacancies-1440.png',
+      fullPage: true,
+    });
+    await page.screenshot({
       path: process.env.SHOTS_DIR
         ? `${process.env.SHOTS_DIR}/vacancies-1440.png`
         : testInfo.outputPath('vacancies-1440.png'),
@@ -412,6 +416,20 @@ test.describe('B250 vacancies screen', () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.locator('.vacancies-screen')).toBeVisible();
+
+    // C74: filters collapsed by default on <= 480px into single line with active count
+    const filterToggle = page.locator('.vacancies-mobile-filter-toggle');
+    await expect(filterToggle).toBeVisible();
+    await expect(filterToggle).toContainText(/Фильтры\s*·\s*\d+\s*активн/);
+    await expect(filterToggle).toHaveAttribute('aria-expanded', 'false');
+
+    // C74: first row of vacancies list is visible without scrolling on 390
+    const firstRow = page.locator('.vac-list-item').first();
+    await expect(firstRow).toBeVisible();
+    const firstRowBox = await firstRow.boundingBox();
+    expect(firstRowBox).not.toBeNull();
+    expect(firstRowBox!.y).toBeLessThan(844);
+
     const narrowOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
@@ -422,6 +440,10 @@ test.describe('B250 vacancies screen', () => {
     );
     expect(compactOverflow).toBeLessThanOrEqual(0);
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: 'output/playwright/C74/vacancies-390.png',
+      fullPage: false,
+    });
     await page.screenshot({
       path: process.env.SHOTS_DIR
         ? `${process.env.SHOTS_DIR}/vacancies-390.png`
@@ -464,6 +486,14 @@ test.describe('B250 vacancies screen', () => {
     await page.locator('.vac-list-item').first().locator('.vac-row').click();
     await expect(detail).toBeVisible();
     await expect(list).not.toBeVisible();
+
+    // C74: actions and recruiter block are visible on 390 in the top section
+    await expect(detail.locator('.vacancies-detail-actions')).toBeVisible();
+    await expect(detail.locator('.vacancies-recruiter-block')).toBeVisible();
+    await page.screenshot({
+      path: 'output/playwright/C74/vacancy-detail-390.png',
+      fullPage: false,
+    });
 
     await detail.getByText('Назад').click();
     await expect(detail).not.toBeVisible();

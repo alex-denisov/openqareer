@@ -592,6 +592,7 @@ test.describe('B265 Profile screen', () => {
     );
     expect(overflow).toBeLessThanOrEqual(0);
 
+    await screenshotFullProfilePage(page, 'output/playwright/C74/profile-1440.png');
     await screenshotFullProfilePage(page, testInfo.outputPath('profile-1440.png'));
 
     const accessibility = await new AxeBuilder({ page })
@@ -605,6 +606,19 @@ test.describe('B265 Profile screen', () => {
     await stubSession(page);
     await openProfile(page);
 
+    // C74: candidate name is visible without scrolling on 390
+    const nameHeading = page.locator('.career-profile-screen-name-row h1');
+    await expect(nameHeading).toBeVisible();
+    const nameBox = await nameHeading.boundingBox();
+    expect(nameBox).not.toBeNull();
+    expect(nameBox!.y).toBeLessThan(844);
+
+    // C74: details toggle is present and collapsed by default
+    const detailsToggle = page.locator('.career-profile-screen-details-toggle');
+    await expect(detailsToggle).toBeVisible();
+    await expect(detailsToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(detailsToggle).toContainText('Подробнее');
+
     for (const id of SECTION_IDS) {
       await expect(page.locator(`#${id}`)).toBeAttached();
     }
@@ -614,6 +628,10 @@ test.describe('B265 Profile screen', () => {
     );
     expect(overflow).toBeLessThanOrEqual(0);
 
+    await page.screenshot({
+      path: 'output/playwright/C74/profile-390.png',
+      fullPage: false,
+    });
     await screenshotFullProfilePage(page, testInfo.outputPath('profile-390.png'));
   });
 

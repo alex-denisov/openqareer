@@ -235,6 +235,14 @@ describe('VacancyDetailPanel (B250)', () => {
     expect(html).toContain('Кто нанимает');
     expect(html).toContain('Рекрутер');
   });
+
+  it('structures sections so mobile layout can order actions -> recruiter -> requirements -> description (C74)', () => {
+    const html = render();
+    expect(html).toContain('vacancies-detail-actions');
+    expect(html).toContain('vacancies-recruiter-block');
+    expect(html).toContain('vacancies-detail-requirements');
+    expect(html).toContain('vacancies-detail-description');
+  });
 });
 
 describe('VacancyDetailPanel recruiter contacts honesty (B266)', () => {
