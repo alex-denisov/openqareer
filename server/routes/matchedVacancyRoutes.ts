@@ -6,7 +6,11 @@ import type { CampaignResolution } from '../vacancies/campaign';
 import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import { markGeography } from '../vacancies/vacancyGeography';
-import { readMatchedSnapshot, readMatchProfile } from '../vacancies/matchedPoolContext';
+import {
+  invalidateAllMatchedVacancies,
+  readMatchedSnapshot,
+  readMatchProfile,
+} from '../vacancies/matchedPoolContext';
 import { countMatchedVacanciesByRole } from '../vacancies/vacancyRoleCounts';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
@@ -83,6 +87,7 @@ function buildMatchedResponse(
   return {
     data,
     page,
+    preloadIds: matched.slice(0, 20).map((item) => item.cluster.id.replace(/^cluster-/u, '')),
     campaignWithHypotheses,
     pageAndExplanationsMs,
     titleParseAndLevelsMs: elapsedMs(titleParseStartedAt),
@@ -113,15 +118,35 @@ function logMatchedTiming(
   );
 }
 
-function preloadFirstPageDescriptions(
+function preloadTopMatchedDescriptions(
   engine: RouteDeps['multiSourceEngine'],
-  items: readonly MatchedVacancyItem[],
+  vacancyIds: readonly string[],
   offset: number,
+  request: FastifyRequest,
 ): void {
   if (offset !== 0) return;
   if (typeof engine.preloadVacancyDescriptions !== 'function') return;
-  const ids = items.map((item) => item.cluster.id.replace(/^cluster-/u, ''));
-  void engine.preloadVacancyDescriptions(ids);
+  if (vacancyIds.length === 0) return;
+  void engine
+    .preloadVacancyDescriptions(vacancyIds, 20)
+    .then((summary) => {
+      if (summary.loaded > 0) invalidateAllMatchedVacancies(engine);
+      request.log.info({ event: 'hh-description-preload', ...summary }, 'hh-description-preload');
+    })
+    .catch(() => {
+      // Keep provider details and vacancy URLs out of the log. Counts make an
+      // unexpected preload failure visible without writing vacancy content.
+      request.log.warn(
+        {
+          event: 'hh-description-preload',
+          requested: vacancyIds.length,
+          loaded: 0,
+          skipped: 0,
+          failed: vacancyIds.length,
+        },
+        'hh-description-preload',
+      );
+    });
 }
 
 async function readMatchedPage(
@@ -211,8 +236,9 @@ const handleMatchedVacancies: Handler = async (
     offset,
   );
 
-  // Чтение последовательное и не задерживает ответ списка: массового обхода нет.
-  preloadFirstPageDescriptions(multiSourceEngine, response.page.items, offset);
+  // Чтение последовательное, охватывает первые 20 совпадений и не задерживает
+  // ответ списка; размер транспортного ответа страницей остаётся прежним.
+  preloadTopMatchedDescriptions(multiSourceEngine, response.preloadIds, offset, request);
 
   logMatchedTiming(
     request,

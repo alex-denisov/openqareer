@@ -93,7 +93,17 @@ export interface VacancyDescriptionLoadResult {
   readonly vacancy?: UnifiedVacancy;
   /** Площадка отказала или не дала разметку: UI не должен выдавать сниппет за полный текст. */
   readonly unavailable: boolean;
+  readonly status: 'loaded' | 'cached' | 'skipped' | 'failed';
 }
+
+export interface VacancyDescriptionPreloadSummary {
+  readonly requested: number;
+  readonly loaded: number;
+  readonly skipped: number;
+  readonly failed: number;
+}
+
+const MAX_PERSISTED_DESCRIPTION_IDS = 2_000;
 
 /**
  * What one sync actually did. `syncSource` used to return `void`, so an admin
@@ -338,6 +348,8 @@ export class MultiSourceVacancyEngine {
   private readonly linkProbe?: LinkProbe;
   private readonly descriptionLoader?: VacancyDescriptionLoader;
   private readonly descriptionLoads = new Map<string, Promise<VacancyDescriptionLoadResult>>();
+  /** Successful fetches become cached only after the pool write also succeeds. */
+  private readonly persistedDescriptionIds = new Set<string>();
 
   constructor(options?: {
     sources?: VacancySourceConfig[];
@@ -882,14 +894,21 @@ export class MultiSourceVacancyEngine {
   public loadVacancyDescription(id: string): Promise<VacancyDescriptionLoadResult> {
     const existing = this.pool.getVacancy(id);
     if (!existing || existing.provenance.sourceId !== 'src-hh-search' || !this.descriptionLoader) {
-      return Promise.resolve({ ...(existing ? { vacancy: existing } : {}), unavailable: false });
+      return Promise.resolve({
+        ...(existing ? { vacancy: existing } : {}),
+        unavailable: false,
+        status: 'skipped',
+      });
+    }
+    const source = this.sources.get(existing.provenance.sourceId);
+    if (!source?.enabled || this.rights.get(source.id) !== 'live') {
+      return Promise.resolve({ vacancy: existing, unavailable: false, status: 'skipped' });
     }
     if (
-      existing.fullDescription?.trim() &&
-      ((existing.requiredSkills?.length ?? 0) > 0 ||
-        this.descriptionLoader.isLoaded?.(existing.url))
+      this.persistedDescriptionIds.has(id) ||
+      (existing.fullDescription?.trim() && (existing.requiredSkills?.length ?? 0) > 0)
     ) {
-      return Promise.resolve({ vacancy: existing, unavailable: false });
+      return Promise.resolve({ vacancy: existing, unavailable: false, status: 'cached' });
     }
     const pending = this.descriptionLoads.get(id);
     if (pending) return pending;
@@ -900,10 +919,23 @@ export class MultiSourceVacancyEngine {
   }
 
   /** Первые карточки подбора греются последовательно, не создавая веер запросов. */
-  public async preloadVacancyDescriptions(ids: readonly string[], limit = 20): Promise<void> {
-    for (const id of ids.slice(0, limit)) {
-      await this.loadVacancyDescription(id);
+  public async preloadVacancyDescriptions(
+    ids: readonly string[],
+    limit = 20,
+  ): Promise<VacancyDescriptionPreloadSummary> {
+    const selected = Array.from(new Set(ids)).slice(0, limit);
+    const counts = { loaded: 0, skipped: 0, failed: 0 };
+    for (let index = 0; index < selected.length; index += 1) {
+      const id = selected[index]!;
+      const result = await this.loadVacancyDescription(id);
+      if (result.status === 'loaded') counts.loaded += 1;
+      else if (result.status === 'failed') {
+        counts.failed += 1;
+        counts.skipped += selected.length - index - 1;
+        break;
+      } else counts.skipped += 1;
     }
+    return { requested: selected.length, ...counts };
   }
 
   private async loadAndStoreVacancyDescription(
@@ -913,15 +945,15 @@ export class MultiSourceVacancyEngine {
     try {
       loaded = await this.descriptionLoader!.load(vacancy.url);
     } catch {
-      return { vacancy, unavailable: true };
+      return { vacancy, unavailable: true, status: 'failed' };
     }
-    if (!loaded) return { vacancy, unavailable: true };
+    if (!loaded) return { vacancy, unavailable: true, status: 'failed' };
 
     const fullDescription = typeof loaded === 'string' ? loaded : loaded.description;
     const loadedSkills =
       typeof loaded === 'object' && Array.isArray(loaded.skills) ? loaded.skills : [];
     if (!fullDescription && loadedSkills.length === 0) {
-      return { vacancy, unavailable: true };
+      return { vacancy, unavailable: true, status: 'failed' };
     }
 
     const existingSkills = vacancy.requiredSkills ?? [];
@@ -932,8 +964,18 @@ export class MultiSourceVacancyEngine {
       ...(fullDescription ? { fullDescription } : {}),
       requiredSkills: skillsToSave,
     };
-    this.pool.mergeSourceSlice(vacancy.provenance.sourceId, [updated]);
-    return { vacancy: updated, unavailable: false };
+    try {
+      this.pool.mergeSourceSlice(vacancy.provenance.sourceId, [updated]);
+    } catch {
+      return { vacancy, unavailable: true, status: 'failed' };
+    }
+    this.persistedDescriptionIds.delete(vacancy.id);
+    this.persistedDescriptionIds.add(vacancy.id);
+    if (this.persistedDescriptionIds.size > MAX_PERSISTED_DESCRIPTION_IDS) {
+      const oldest = this.persistedDescriptionIds.values().next();
+      if (!oldest.done) this.persistedDescriptionIds.delete(oldest.value);
+    }
+    return { vacancy: updated, unavailable: false, status: 'loaded' };
   }
 
   /** Есть ли запись в пуле — по индексу, без чтения текста (быстрый проход hh, B219). */

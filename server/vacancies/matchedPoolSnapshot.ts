@@ -39,6 +39,7 @@ export interface MatchedPoolSnapshotsOptions {
 export class MatchedPoolSnapshots {
   private readonly entries = new Map<string, Snapshot>();
   private readonly pending = new Map<string, Promise<MatchedVacancyItem[]>>();
+  private generation = 0;
   private readonly ttlMs: number;
   private readonly maxEntries: number;
   private readonly clock: () => number;
@@ -55,10 +56,21 @@ export class MatchedPoolSnapshots {
 
   /** Смена кампании меняет смысл подбора, поэтому старые ключи кандидата не ждут TTL. */
   deleteCandidate(candidateId: string): void {
-    const prefix = `${candidateId} `;
+    const prefix = `${this.generation} ${candidateId} `;
     for (const key of this.entries.keys()) {
       if (key.startsWith(prefix)) this.entries.delete(key);
     }
+  }
+
+  /** Shared pool writes affect every candidate's ranking and explanations. */
+  invalidateAll(): void {
+    this.generation += 1;
+    this.entries.clear();
+    this.pending.clear();
+  }
+
+  private key(candidateId: string, profileKey: string): string {
+    return `${this.generation} ${candidateId} ${profileKey}`;
   }
 
   /**
@@ -73,7 +85,7 @@ export class MatchedPoolSnapshots {
     profileKey: string,
     compute: () => MatchedVacancyItem[],
   ): MatchedVacancyItem[] {
-    const key = `${candidateId} ${profileKey}`;
+    const key = this.key(candidateId, profileKey);
     const now = this.clock();
     const stored = this.entries.get(key);
     if (stored && now - stored.storedAt < this.ttlMs) return stored.items;
@@ -90,7 +102,7 @@ export class MatchedPoolSnapshots {
    * true`, а не запускает синхронный подбор в HTTP-обработчике (B230).
    */
   peek(candidateId: string, profileKey: string): MatchedVacancyItem[] | undefined {
-    const key = `${candidateId} ${profileKey}`;
+    const key = this.key(candidateId, profileKey);
     const stored = this.entries.get(key);
     if (!stored || this.clock() - stored.storedAt >= this.ttlMs) return undefined;
     return stored.items;
@@ -103,7 +115,8 @@ export class MatchedPoolSnapshots {
     profileKey: string,
     compute: () => Promise<MatchedVacancyItem[]>,
   ): Promise<MatchedVacancyItem[]> {
-    const key = `${candidateId} ${profileKey}`;
+    const generation = this.generation;
+    const key = this.key(candidateId, profileKey);
     const stored = this.entries.get(key);
     if (stored && this.clock() - stored.storedAt < this.ttlMs) return stored.items;
     const running = this.pending.get(key);
@@ -112,9 +125,11 @@ export class MatchedPoolSnapshots {
     const computation = Promise.resolve()
       .then(compute)
       .then((items) => {
-        const now = this.clock();
-        this.entries.set(key, { items, storedAt: now });
-        this.evict(now);
+        if (generation === this.generation) {
+          const now = this.clock();
+          this.entries.set(key, { items, storedAt: now });
+          this.evict(now);
+        }
         return items;
       })
       .finally(() => {

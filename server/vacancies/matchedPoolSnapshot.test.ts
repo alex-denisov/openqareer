@@ -85,6 +85,29 @@ describe('MatchedPoolSnapshots', () => {
     expect(second[0].cluster.id).toBe('b');
   });
 
+  it('invalidates shared vacancy snapshots for every candidate, including in-flight reads', async () => {
+    const snapshots = new MatchedPoolSnapshots();
+    let finishOldRead!: (items: MatchedVacancyItem[]) => void;
+    const oldRead = snapshots.readAsync(
+      'cand-1',
+      'profile',
+      () => new Promise((resolve) => (finishOldRead = resolve)),
+    );
+    await Promise.resolve();
+    snapshots.read('cand-2', 'profile', () => [item('stale-two')]);
+
+    snapshots.invalidateAll();
+    const refreshed = await snapshots.readAsync('cand-2', 'profile', async () => [
+      item('fresh-two'),
+    ]);
+    finishOldRead([item('stale-one')]);
+    await oldRead;
+
+    expect(snapshots.peek('cand-2', 'profile')).toBe(refreshed);
+    expect(snapshots.peek('cand-1', 'profile')).toBeUndefined();
+    expect(refreshed[0]?.cluster.id).toBe('fresh-two');
+  });
+
   it('память не растёт без предела: старые снимки вытесняются', () => {
     let now = 0;
     const snapshots = new MatchedPoolSnapshots({ maxEntries: 2, clock: () => now });
@@ -106,7 +129,12 @@ describe('MatchedPoolSnapshots', () => {
     const snapshots = new MatchedPoolSnapshots();
     let resolve!: (items: MatchedVacancyItem[]) => void;
     let calls = 0;
-    const compute = () => { calls++; return new Promise<MatchedVacancyItem[]>((done) => { resolve = done; }); };
+    const compute = () => {
+      calls++;
+      return new Promise<MatchedVacancyItem[]>((done) => {
+        resolve = done;
+      });
+    };
     const first = snapshots.readAsync('one', 'profile', compute);
     const second = snapshots.readAsync('one', 'profile', compute);
     const other = snapshots.readAsync('two', 'profile', async () => [item('private-two')]);
@@ -120,9 +148,18 @@ describe('MatchedPoolSnapshots', () => {
   it('does not cache failures or expire a snapshot before its computation completes', async () => {
     let now = 0;
     const snapshots = new MatchedPoolSnapshots({ ttlMs: 10, clock: () => now });
-    await expect(snapshots.readAsync('one', 'profile', async () => { throw new Error('unavailable'); })).rejects.toThrow('unavailable');
-    const first = await snapshots.readAsync('one', 'profile', async () => { now = 100; return [item('one')]; });
+    await expect(
+      snapshots.readAsync('one', 'profile', async () => {
+        throw new Error('unavailable');
+      }),
+    ).rejects.toThrow('unavailable');
+    const first = await snapshots.readAsync('one', 'profile', async () => {
+      now = 100;
+      return [item('one')];
+    });
     expect(await snapshots.readAsync('one', 'profile', async () => [item('wrong')])).toBe(first);
-    expect((await snapshots.readAsync('one', 'changed', async () => [item('changed')]))[0].cluster.id).toBe('changed');
+    expect(
+      (await snapshots.readAsync('one', 'changed', async () => [item('changed')]))[0].cluster.id,
+    ).toBe('changed');
   });
 });

@@ -3,6 +3,7 @@ import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacan
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { createClusterFromVacancy } from './vacancyDeduplicator';
+import { HhVacancyDescriptionLoader } from './hhVacancyDescription';
 import { matchCandidateWithVacancy } from './vacancyMatcher';
 
 const source: VacancySourceConfig = {
@@ -11,6 +12,7 @@ const source: VacancySourceConfig = {
   type: 'hh_search',
   enabled: true,
   targetUrl: 'https://hh.ru/search/vacancy',
+  addressStatus: 'live',
   refreshIntervalMinutes: 20,
   itemsFoundTotal: 0,
   itemsActiveTotal: 0,
@@ -101,5 +103,112 @@ describe('hh full-description on demand', () => {
     );
     expect(explanation.requirements?.total).toBe(3);
     expect(explanation.requirements?.matched).toBe(1);
+  });
+
+  it('повторяет запись закешированной страницы после временной ошибки пула', async () => {
+    const pool = new MemoryVacancyPoolStore();
+    const existing = { ...vacancy, fullDescription: 'Описание из поиска' };
+    pool.mergeSourceSlice(source.id, [existing]);
+    const originalMerge = pool.mergeSourceSlice.bind(pool);
+    let failFirstWrite = true;
+    vi.spyOn(pool, 'mergeSourceSlice').mockImplementation((...args) => {
+      if (failFirstWrite) {
+        failFirstWrite = false;
+        throw new Error('temporary_write_failure');
+      }
+      return originalMerge(...args);
+    });
+    const transport = vi.fn().mockResolvedValue({
+      status: 200,
+      body: [
+        '<div data-qa="vacancy-description"><p>Полное описание вакансии</p></div>',
+        '<div data-qa="skills-element"><span>TypeScript</span></div>',
+        '<div data-qa="skills-element"><span>React</span></div>',
+      ].join(''),
+    });
+    const engine = new MultiSourceVacancyEngine({
+      sources: [source],
+      pool,
+      descriptionLoader: new HhVacancyDescriptionLoader({
+        transport,
+        sleep: async () => undefined,
+        minIntervalMs: 0,
+      }),
+    });
+
+    await expect(engine.loadVacancyDescription(vacancy.id)).resolves.toMatchObject({
+      status: 'failed',
+      unavailable: true,
+    });
+    await expect(engine.loadVacancyDescription(vacancy.id)).resolves.toMatchObject({
+      status: 'loaded',
+      unavailable: false,
+    });
+
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(pool.getVacancy(vacancy.id)?.requiredSkills).toEqual(['TypeScript', 'React']);
+    expect(pool.getVacancy(vacancy.id)?.fullDescription).toBe('Полное описание вакансии');
+  });
+
+  it('не загружает детали, если источник выключен или разрешение не live', async () => {
+    const pool = new MemoryVacancyPoolStore();
+    pool.mergeSourceSlice(source.id, [vacancy]);
+    const load = vi.fn().mockResolvedValue({
+      description: 'Полное описание вакансии',
+      skills: ['TypeScript'],
+    });
+    const disabledEngine = new MultiSourceVacancyEngine({
+      sources: [{ ...source, enabled: false }],
+      pool,
+      descriptionLoader: { load },
+    });
+
+    await expect(disabledEngine.loadVacancyDescription(vacancy.id)).resolves.toMatchObject({
+      status: 'skipped',
+      unavailable: false,
+    });
+    expect(load).not.toHaveBeenCalled();
+
+    const forbiddenEngine = new MultiSourceVacancyEngine({
+      sources: [{ ...source, addressStatus: 'robots_forbidden' }],
+      pool,
+      descriptionLoader: { load },
+    });
+    await expect(forbiddenEngine.loadVacancyDescription(vacancy.id)).resolves.toMatchObject({
+      status: 'skipped',
+      unavailable: false,
+    });
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('stops a preload batch after the first provider refusal', async () => {
+    const pool = new MemoryVacancyPoolStore();
+    const secondVacancy = {
+      ...vacancy,
+      id: 'src-hh-search:9002',
+      fingerprint: 'src-hh-search:9002',
+      url: 'https://hh.ru/vacancy/9002',
+      provenance: {
+        ...vacancy.provenance,
+        sourceUrl: 'https://hh.ru/vacancy/9002',
+      },
+    };
+    pool.mergeSourceSlice(source.id, [vacancy, secondVacancy]);
+    const transport = vi.fn().mockResolvedValue({ status: 403, body: '' });
+    const engine = new MultiSourceVacancyEngine({
+      sources: [source],
+      pool,
+      descriptionLoader: new HhVacancyDescriptionLoader({
+        transport,
+        sleep: async () => undefined,
+        minIntervalMs: 0,
+      }),
+    });
+
+    await expect(
+      engine.preloadVacancyDescriptions([vacancy.id, secondVacancy.id]),
+    ).resolves.toEqual({ requested: 2, loaded: 0, skipped: 1, failed: 1 });
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(transport).toHaveBeenCalledWith(vacancy.url);
   });
 });
