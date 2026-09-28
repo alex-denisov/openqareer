@@ -24,6 +24,8 @@ export interface PathStep {
   readonly id: PathStepId;
   readonly label: string;
   readonly state: PathStepState;
+  /** Whether this step corresponds to the currently open screen. */
+  readonly isCurrent: boolean;
   /** Why the step is not «готов» yet, in the candidate's language. */
   readonly reason: string;
   /** Nearest existing screen the step opens on click. */
@@ -47,7 +49,15 @@ export interface PathIndicatorInput {
   readonly activeResponses?: number;
   /** The candidate's next scheduled interview, when the tracker has one. */
   readonly nearestInterview?: { readonly company: string; readonly scheduledAt: string } | null;
+  /**
+   * C73: The currently open section/view. Defines which step is «текущий».
+   * On 'today' (or unrecognised), no step is current.
+   */
+  readonly activeSection?: string;
+  /** C73: Whether responses contain any application in interview stage. */
+  readonly hasInterviewStage?: boolean;
 }
+
 
 const NO_JOURNEY_REASON = 'Резюме не загружено';
 const NO_INTERVIEW_DATA_REASON = 'Интервью не назначено';
@@ -76,6 +86,39 @@ function findTrackItem(
   return track?.find((item) => item.id === id);
 }
 
+/**
+ * C73: Maps an open section to its current path step.
+ * On «Сегодня» (or when undefined/tariffs), no step is current.
+ * Exactly one step is current on every campaign screen.
+ */
+export function currentStepForSection(
+  section: string | undefined,
+  options?: {
+    readonly hasInterviewStage?: boolean;
+    readonly nearestInterview?: { readonly company: string; readonly scheduledAt: string } | null;
+  },
+): PathStepId | null {
+  if (!section || section === 'today' || section === 'tariffs') {
+    return null;
+  }
+  if (section === 'profile' || section === 'resume') {
+    return 'profile';
+  }
+  if (section === 'career') {
+    return 'role';
+  }
+  if (section === 'opportunities') {
+    return 'shortlist';
+  }
+  if (section === 'responses') {
+    if (options?.hasInterviewStage || Boolean(options?.nearestInterview)) {
+      return 'interviews';
+    }
+    return 'responses';
+  }
+  return null;
+}
+
 function shortlistStepOf(input: PathIndicatorInput): PathStep {
   const campaignState = trackState(findTrackItem(input.track, 'campaign'));
   // Пул — не финальный шаг: как только появился первый подтверждённый отклик,
@@ -94,6 +137,7 @@ function shortlistStepOf(input: PathIndicatorInput): PathStep {
     id: 'shortlist',
     label: 'Подборка',
     state,
+    isCurrent: false,
     reason:
       state === 'done'
         ? 'Кампания вернула вакансии'
@@ -117,7 +161,14 @@ function responsesStepOf(input: PathIndicatorInput): PathStep {
       : state === 'done'
         ? 'Есть подтверждённый отклик'
         : 'Откликов нет — начните с очереди дня';
-  return { id: 'responses', label: 'Отклики', state, reason, destination: 'responses' };
+  return {
+    id: 'responses',
+    label: 'Отклики',
+    state,
+    isCurrent: false,
+    reason,
+    destination: 'responses',
+  };
 }
 
 function interviewsStepOf(input: PathIndicatorInput): PathStep {
@@ -126,6 +177,7 @@ function interviewsStepOf(input: PathIndicatorInput): PathStep {
       id: 'interviews',
       label: 'Интервью',
       state: 'in-progress',
+      isCurrent: false,
       reason: `${input.nearestInterview.company} · ${formatInterviewReason(input.nearestInterview.scheduledAt)}`,
       destination: 'responses',
     };
@@ -134,6 +186,7 @@ function interviewsStepOf(input: PathIndicatorInput): PathStep {
     id: 'interviews',
     label: 'Интервью',
     state: 'not-started',
+    isCurrent: false,
     reason: NO_INTERVIEW_DATA_REASON,
     destination: 'responses',
   };
@@ -147,11 +200,12 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
   const profileItem = findTrackItem(input.track, 'career-picture');
   const roleItem = findTrackItem(input.track, 'role-market');
 
-  const steps: readonly PathStep[] = [
+  const rawSteps: readonly PathStep[] = [
     {
       id: 'profile',
       label: 'Профиль',
       state: trackState(profileItem),
+      isCurrent: false,
       reason: profileItem?.reason ?? NO_JOURNEY_REASON,
       destination: 'profile',
     },
@@ -159,6 +213,7 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
       id: 'role',
       label: 'Роль',
       state: trackState(roleItem),
+      isCurrent: false,
       reason: roleItem?.reason ?? 'Роль не выбрана',
       destination: 'career',
     },
@@ -167,8 +222,18 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
     interviewsStepOf(input),
   ];
 
-  return keepSingleCurrentStep(steps);
+  const stepsWithSequentialState = keepSingleCurrentStep(rawSteps);
+  const currentStepId = currentStepForSection(input.activeSection, {
+    hasInterviewStage: input.hasInterviewStage,
+    nearestInterview: input.nearestInterview,
+  });
+
+  return stepsWithSequentialState.map((step) => ({
+    ...step,
+    isCurrent: currentStepId !== null && step.id === currentStepId,
+  }));
 }
+
 
 const SEQUENTIAL_STEPS: ReadonlySet<string> = new Set(['profile', 'role', 'shortlist']);
 

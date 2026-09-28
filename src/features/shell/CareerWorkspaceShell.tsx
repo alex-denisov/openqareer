@@ -559,6 +559,7 @@ export function CareerWorkspaceShell({
                 // both live once a candidate signs in (B165, B104).
                 matchedPoolCount: 0,
                 confirmedApplications: 0,
+                activeSection: activeView,
               })}
               onNavigate={navigate}
             />

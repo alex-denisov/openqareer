@@ -1,24 +1,30 @@
 import { PathCheckIcon } from './sectionIcons';
-import type { PathDestination, PathStep, PathStepState } from './pathIndicator';
+import type { PathDestination, PathStep } from './pathIndicator';
+
 
 interface CareerPathIndicatorProps {
   readonly steps: readonly PathStep[];
   readonly onNavigate: (destination: PathDestination) => void;
 }
 
-const DATA_STATE: Record<PathStepState, 'done' | 'active' | 'pending'> = {
-  done: 'done',
-  'in-progress': 'active',
-  'not-started': 'pending',
-};
+function stepDataState(step: PathStep): 'done' | 'active' | 'pending' {
+  if (step.isCurrent) return 'active';
+  if (step.state === 'done') return 'done';
+  return 'pending';
+}
 
 function currentStepOf(steps: readonly PathStep[]): {
   readonly step: PathStep;
   readonly index: number;
 } {
-  const index = steps.findIndex((step) => step.state === 'in-progress');
+  const explicitIndex = steps.findIndex((step) => step.isCurrent);
+  if (explicitIndex >= 0) {
+    return { step: steps[explicitIndex]!, index: explicitIndex };
+  }
+  const inProgressIndex = steps.findIndex((step) => step.state === 'in-progress');
   const pendingIndex = steps.findIndex((step) => step.state === 'not-started');
-  const currentIndex = index >= 0 ? index : pendingIndex >= 0 ? pendingIndex : steps.length - 1;
+  const currentIndex =
+    inProgressIndex >= 0 ? inProgressIndex : pendingIndex >= 0 ? pendingIndex : steps.length - 1;
   return { step: steps[currentIndex]!, index: currentIndex };
 }
 
@@ -42,11 +48,18 @@ function DesktopPathSteps({ steps, onNavigate }: CareerPathIndicatorProps) {
   return (
     <div className="career-path-desktop">
       {steps.map((step, index) => (
-        <div key={step.id} className="career-path-step" data-state={DATA_STATE[step.state]}>
+        <div
+          key={step.id}
+          className="career-path-step"
+          data-state={stepDataState(step)}
+          data-status={step.state}
+          data-current={step.isCurrent ? 'true' : 'false'}
+        >
           <button
             type="button"
             className="career-path-btn"
             onClick={() => onNavigate(step.destination)}
+            aria-current={step.isCurrent ? 'step' : undefined}
             aria-label={`${step.label}. ${step.state === 'done' ? 'Готово' : step.reason}`}
             title={step.reason}
           >
@@ -55,7 +68,7 @@ function DesktopPathSteps({ steps, onNavigate }: CareerPathIndicatorProps) {
             </span>
             <span className="career-path-copy">
               <span className="career-path-label">{step.label}</span>
-              {step.state === 'done' ? null : (
+              {step.state === 'done' && !step.isCurrent ? null : (
                 <span className="career-path-reason">{step.reason}</span>
               )}
             </span>
@@ -82,9 +95,14 @@ function MobilePathSummary({ steps, onNavigate }: CareerPathIndicatorProps) {
       >
         <span className="career-path-mobile-dots" aria-hidden="true">
           {steps.map((step) => (
-            <span key={step.id} data-state={DATA_STATE[step.state]} />
+            <span
+              key={step.id}
+              data-state={stepDataState(step)}
+              data-status={step.state}
+            />
           ))}
         </span>
+
         <span>
           Шаг {current.index + 1} из {steps.length}
         </span>

@@ -153,4 +153,99 @@ describe('buildPathIndicator', () => {
       ['interviews', 'responses'],
     ]);
   });
+
+  describe('C73: current step matches the open section', () => {
+    it('sets step «Профиль» as current on profile screen', () => {
+      const steps = buildPathIndicator({
+        matchedPoolCount: 0,
+        confirmedApplications: 0,
+        activeSection: 'profile',
+      });
+      const current = steps.filter((step) => step.isCurrent);
+      expect(current).toHaveLength(1);
+      expect(current[0]?.id).toBe('profile');
+    });
+
+    it('sets step «Роль» as current on career screen, even if role is already done', () => {
+      const steps = buildPathIndicator({
+        track: [
+          { id: 'career-picture', label: 'Карьерная картина', status: 'complete', reason: 'Готово' },
+          { id: 'role-market', label: 'Роль и рынок', status: 'complete', reason: 'Готово' },
+        ],
+        matchedPoolCount: 5,
+        confirmedApplications: 0,
+        activeSection: 'career',
+      });
+      const current = steps.filter((step) => step.isCurrent);
+      expect(current).toHaveLength(1);
+      expect(current[0]?.id).toBe('role');
+      expect(current[0]?.state).toBe('done');
+    });
+
+    it('sets step «Подборка» as current on opportunities screen', () => {
+      const steps = buildPathIndicator({
+        matchedPoolCount: 3,
+        confirmedApplications: 0,
+        activeSection: 'opportunities',
+      });
+      const current = steps.filter((step) => step.isCurrent);
+      expect(current).toHaveLength(1);
+      expect(current[0]?.id).toBe('shortlist');
+    });
+
+    it('sets step «Отклики» as current on responses screen when there are no interview stages', () => {
+      const steps = buildPathIndicator({
+        matchedPoolCount: 3,
+        confirmedApplications: 1,
+        activeResponses: 2,
+        activeSection: 'responses',
+      });
+      const current = steps.filter((step) => step.isCurrent);
+      expect(current).toHaveLength(1);
+      expect(current[0]?.id).toBe('responses');
+    });
+
+    it('sets step «Интервью» as current on responses screen when there are interview stages', () => {
+      const steps = buildPathIndicator({
+        matchedPoolCount: 3,
+        confirmedApplications: 1,
+        activeResponses: 2,
+        hasInterviewStage: true,
+        activeSection: 'responses',
+      });
+      const current = steps.filter((step) => step.isCurrent);
+      expect(current).toHaveLength(1);
+      expect(current[0]?.id).toBe('interviews');
+    });
+
+    it('has zero current steps on «Сегодня» screen, keeping completion statuses separate', () => {
+      const steps = buildPathIndicator({
+        track: [
+          { id: 'career-picture', label: 'Карьерная картина', status: 'complete', reason: 'Готово' },
+          { id: 'role-market', label: 'Роль и рынок', status: 'active', reason: 'Проверяем рынок' },
+        ],
+        matchedPoolCount: 0,
+        confirmedApplications: 0,
+        activeSection: 'today',
+      });
+      const current = steps.filter((step) => step.isCurrent);
+      expect(current).toHaveLength(0);
+      expect(steps.find((step) => step.id === 'profile')?.state).toBe('done');
+      expect(steps.find((step) => step.id === 'role')?.state).toBe('in-progress');
+    });
+
+    it('ensures exactly one current step on every campaign screen', () => {
+      const campaignSections = ['profile', 'career', 'opportunities', 'responses'] as const;
+      for (const section of campaignSections) {
+        const steps = buildPathIndicator({
+          matchedPoolCount: 1,
+          confirmedApplications: 0,
+          activeSection: section,
+        });
+        const current = steps.filter((step) => step.isCurrent);
+        expect(current).toHaveLength(1);
+      }
+    });
+  });
 });
+

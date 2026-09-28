@@ -368,13 +368,14 @@ test.describe('B251 today screen', () => {
     await openApp(page);
 
     await expect(page.locator('.career-path-step').nth(0)).toHaveAttribute('data-state', 'done');
-    await expect(page.locator('.career-path-step').nth(1)).toHaveAttribute('data-state', 'active');
+    await expect(page.locator('.career-path-step[data-state="active"]')).toHaveCount(0);
     const responseStep = page.locator('.career-path-step').nth(3);
-    await expect(responseStep).toHaveAttribute('data-state', 'active');
+    await expect(responseStep).toHaveAttribute('data-status', 'in-progress');
     await expect(responseStep).toContainText('3 в работе');
     const interviewStep = page.locator('.career-path-step').nth(4);
-    await expect(interviewStep).toHaveAttribute('data-state', 'active');
+    await expect(interviewStep).toHaveAttribute('data-status', 'in-progress');
     await expect(interviewStep).toContainText('HRTx Inc.');
+
     await expect(page.locator('.career-page-header h1')).toHaveText('Сегодня');
     await expect(page.locator('.career-today-digest')).toContainText('12');
     await expect(page.locator('.career-today-digest')).toContainText(
@@ -446,7 +447,8 @@ test.describe('B251 today screen', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.locator('.career-today')).toBeVisible();
     await expect(page.locator('.career-path-step').nth(0)).toHaveAttribute('data-state', 'done');
-    await expect(page.locator('.career-path-step').nth(1)).toHaveAttribute('data-state', 'active');
+    await expect(page.locator('.career-path-step[data-state="active"]')).toHaveCount(0);
+
     const digestColumns = await page
       .locator('.career-today-digest')
       .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
