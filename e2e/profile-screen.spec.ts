@@ -1072,7 +1072,7 @@ test.describe('B265 Profile screen', () => {
 
   test('переключает статус «Вы в поиске» (включить -> выключить) на desktop 1440 (C64)', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     let consentState = {
       granted: false,
@@ -1114,13 +1114,13 @@ test.describe('B265 Profile screen', () => {
 
     await page.screenshot({ path: 'output/playwright/C64/profile-search-consent-1440.png' });
     await page.screenshot({
-      path: '/Users/alexeydenisov/Projects/openqareer/output/playwright/C64/profile-search-consent-1440.png',
+      path: testInfo.outputPath('profile-search-consent-1440.png'),
     });
   });
 
   test('переключает статус «Вы в поиске» (включить -> выключить) на mobile 390 (C64)', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
     let consentState = {
       granted: false,
@@ -1167,7 +1167,7 @@ test.describe('B265 Profile screen', () => {
 
     await page.screenshot({ path: 'output/playwright/C64/profile-search-consent-390.png' });
     await page.screenshot({
-      path: '/Users/alexeydenisov/Projects/openqareer/output/playwright/C64/profile-search-consent-390.png',
+      path: testInfo.outputPath('profile-search-consent-390.png'),
     });
   });
 });
