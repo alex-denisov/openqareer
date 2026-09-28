@@ -257,13 +257,17 @@ describe('MaintenanceWorker (B230)', () => {
     const directory = mkdtempSync(join(tmpdir(), 'maintenance-worker-'));
     directories.push(directory);
     let calls = 0;
+    let releaseStuckSource: (() => void) | undefined;
+    const stuckSource = new Promise<UnifiedVacancy[]>((resolve) => {
+      releaseStuckSource = () => resolve([]);
+    });
     const composed = composeVacancyEngine({
       databasePath: join(directory, 'db.sqlite'),
       fetchRobots: offline,
       fetcher: (s) => {
         calls += 1;
         // Первая площадка волны висит как обход hh.ru; остальные отвечают.
-        if (calls === 1) return new Promise(() => undefined);
+        if (calls === 1) return stuckSource;
         return Promise.resolve([vacancy(s, calls)]);
       },
       recluster: { mode: 'keyed', batchSize: 100 },
@@ -274,17 +278,29 @@ describe('MaintenanceWorker (B230)', () => {
       composed.pool.loadSourceStates().filter((state) => state.lastStatus === 'healthy').length;
 
     // Волна с зависшей площадкой не завершается, но её остальные площадки прочитаны.
-    void worker.runSyncWave();
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    let firstWaveFinished = false;
+    const firstWave = worker.runSyncWave().then((report) => {
+      firstWaveFinished = true;
+      return report;
+    });
+    await vi.waitFor(() => expect(healthy()).toBeGreaterThan(0), { timeout: 10_000 });
     const afterFirst = healthy();
-    expect(afterFirst).toBeGreaterThan(0);
 
     // Следующая волна не ждёт предыдущую: новые площадки читаются.
-    void worker.runSyncWave();
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(healthy()).toBeGreaterThan(afterFirst);
+    let nextWaveFinished = false;
+    const nextWave = worker.runSyncWave().then((report) => {
+      nextWaveFinished = true;
+      return report;
+    });
+    await vi.waitFor(() => expect(healthy()).toBeGreaterThan(afterFirst), {
+      timeout: 10_000,
+    });
+    expect(firstWaveFinished).toBe(false);
+    expect(nextWaveFinished).toBe(false);
 
-    await expect(worker.stop(100)).resolves.toEqual({ waveFinished: false });
+    releaseStuckSource?.();
+    await expect(firstWave).resolves.toMatchObject({ synced: expect.any(Number) });
+    await expect(nextWave).resolves.toMatchObject({ synced: expect.any(Number) });
     composed.close();
   }, 30_000);
 
