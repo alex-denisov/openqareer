@@ -25,6 +25,7 @@ import {
 import { preferStructuredResume } from '../domain/resumeStructuring';
 import { structureWithinBudget } from '../providers/resumeStructurer';
 import { handleImportStructuredResume } from './structuredResumeImportRoute';
+import { registerCandidateExperienceFactRoutes } from './candidateExperienceFactRoutes';
 import { rebuildCampaignRoles } from '../vacancies/rebuildCampaignRoles';
 import { parseResumeContent } from '../../src/features/workspace/resumeParser';
 import { normalizeResumeSourceText } from '../../src/features/workspace/resumeSourceText';
@@ -888,6 +889,7 @@ export async function registerCandidateRoutes(
   deps: RouteDeps,
 ): Promise<void> {
   await registerCandidateLifecycle(app, deps);
+  await registerCandidateExperienceFactRoutes(app, deps);
   await registerResumeEndpoints(app, deps);
   await registerDocumentEndpoints(app, deps);
 }

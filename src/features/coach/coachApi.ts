@@ -237,6 +237,7 @@ export interface CoachResult {
     resumeRevision?: {
       section: 'headline' | 'about' | 'experience';
       experienceId: string | null;
+      memoryId: string | null;
       proposedText: string;
     } | null;
   }>;
@@ -292,6 +293,7 @@ export interface CareerCommand {
     targetType?: 'resume_block';
     section?: 'headline' | 'about' | 'experience';
     experienceId?: string;
+    memoryId?: string;
     currentText?: string;
     proposedText?: string;
     previousText?: string;

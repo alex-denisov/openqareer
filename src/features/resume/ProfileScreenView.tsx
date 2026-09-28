@@ -30,6 +30,7 @@ import { useResumeStudio } from './useResumeStudio';
 import { useConsultantSuggestions } from './useConsultantSuggestions';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import type { ResumeDraft, ResumeStudioView } from './resumeTypes';
+import type { VacancyProfileRequirementRequest } from '../vacancies/vacancyProfileRequirement';
 
 const ANCHORS: readonly { id: string; label: string }[] = [
   { id: 'sec-about', label: 'Обо мне' },
@@ -69,7 +70,13 @@ function ProfileLoadingState() {
   );
 }
 
-function ProfileErrorState({ message, onRetry }: { readonly message?: string; readonly onRetry: () => void }) {
+function ProfileErrorState({
+  message,
+  onRetry,
+}: {
+  readonly message?: string;
+  readonly onRetry: () => void;
+}) {
   return (
     <div className="career-profile-screen-state" role="alert">
       <WarningCircle size={24} />
@@ -112,12 +119,13 @@ function workspaceWithOpenToWorkRegions(
   });
 }
 
-function isDraftEmpty(draft: ResumeDraft): boolean {
+function isDraftEmpty(draft: ResumeDraft, memory: readonly CandidateMemory[]): boolean {
   return (
     !draft.candidate.fullName?.trim() &&
     !draft.experience.length &&
     !draft.education.length &&
-    !(draft.skills?.length ?? 0)
+    !(draft.skills?.length ?? 0) &&
+    !memory.some((item) => item.status === 'confirmed' && item.domain === 'responsibility')
   );
 }
 
@@ -145,6 +153,10 @@ export interface ProfileScreenSurfaceProps {
   readonly onAcceptSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
   readonly onDismissSuggestion?: (suggestion: InlineSuggestionItem) => void;
   readonly onRevertSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
+  readonly vacancyRequirement?: VacancyProfileRequirementRequest;
+  readonly onVacancyRequirementHandled?: () => void;
+  readonly onVacancySuggestionPrepared?: (commandId: string) => Promise<void> | void;
+  readonly onManualExperienceFactAdded?: () => Promise<void> | void;
   /**
    * "Профиль / Документ и форматы" now lives in the page header, beside the
    * «Профиль» title, not next to the topcard (owner review round 3) — the
@@ -194,10 +206,23 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
       </div>
     );
   }
-  if (isDraftEmpty(draft)) {
+  if (isDraftEmpty(draft, memory)) {
     return (
       <div className="career-profile-screen-view">
         <ProfileEmptyState />
+        {props.vacancyRequirement ? (
+          <ProfileExperienceSection
+            candidateId={candidateId}
+            draft={draft}
+            memory={memory}
+            saving={saving}
+            onSectionSave={onSectionSave}
+            vacancyRequirement={props.vacancyRequirement}
+            onVacancyRequirementHandled={props.onVacancyRequirementHandled}
+            onVacancySuggestionPrepared={props.onVacancySuggestionPrepared}
+            onManualExperienceFactAdded={props.onManualExperienceFactAdded}
+          />
+        ) : null}
       </div>
     );
   }
@@ -245,6 +270,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
                 onRevertSuggestion={props.onRevertSuggestion}
               />
               <ProfileExperienceSection
+                candidateId={candidateId}
                 draft={draft}
                 memory={memory}
                 saving={saving}
@@ -253,10 +279,22 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
                 onAcceptSuggestion={props.onAcceptSuggestion}
                 onDismissSuggestion={props.onDismissSuggestion}
                 onRevertSuggestion={props.onRevertSuggestion}
+                vacancyRequirement={props.vacancyRequirement}
+                onVacancyRequirementHandled={props.onVacancyRequirementHandled}
+                onVacancySuggestionPrepared={props.onVacancySuggestionPrepared}
+                onManualExperienceFactAdded={props.onManualExperienceFactAdded}
               />
-              <ProfileEducationSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileEducationSection
+                draft={draft}
+                saving={saving}
+                onSectionSave={onSectionSave}
+              />
               <ProfileSkillsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
-              <ProfileCertificatesSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileCertificatesSection
+                draft={draft}
+                saving={saving}
+                onSectionSave={onSectionSave}
+              />
               <ProfileProjectsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
               <ProfileCoursesSection
                 draft={draft}
@@ -264,9 +302,21 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
                 onSectionSave={onSectionSave}
                 importedLabel={importedSource?.label}
               />
-              <ProfileLanguagesSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
-              <ProfileRecommendationsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
-              <ProfileAchievementsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileLanguagesSection
+                draft={draft}
+                saving={saving}
+                onSectionSave={onSectionSave}
+              />
+              <ProfileRecommendationsSection
+                draft={draft}
+                saving={saving}
+                onSectionSave={onSectionSave}
+              />
+              <ProfileAchievementsSection
+                draft={draft}
+                saving={saving}
+                onSectionSave={onSectionSave}
+              />
             </div>
             <ProfileSideRail draft={draft} />
           </div>
@@ -292,6 +342,8 @@ interface ProfileScreenViewProps {
    */
   readonly workspace?: CandidateWorkspace;
   readonly onUpdateWorkspace?: (workspace: CandidateWorkspace) => void;
+  readonly vacancyRequirement?: VacancyProfileRequirementRequest;
+  readonly onVacancyRequirementHandled?: () => void;
 }
 
 /**
@@ -355,23 +407,8 @@ function useSectionSaveHandler(state: ReturnType<typeof useResumeStudio>) {
   );
 }
 
-/**
- * Connects the candidate-scoped resume API to `ProfileScreenSurface` — the
- * rail's «Профиль» section, replacing Resume Studio wholesale (B265). Uses
- * the same `useResumeStudio` hook Resume Studio does, so a draft saved here
- * and one saved there can never disagree about the wire contract.
- */
-export function ProfileScreenView(props: ProfileScreenViewProps) {
-  const {
-    candidateId,
-    memory,
-    importedSources,
-    onRefreshFacts,
-    onOpenConnections,
-    tab,
-    workspace,
-    onUpdateWorkspace,
-  } = props;
+function useProfileScreenController(props: ProfileScreenViewProps) {
+  const { candidateId, onRefreshFacts, workspace, onUpdateWorkspace } = props;
   const state = useResumeStudio(onRefreshFacts);
   const connections = useConnectionStatuses();
   const { confirming: confirmingOtw, confirm: confirmOpenToWork } = useConfirmOpenToWork(
@@ -379,18 +416,78 @@ export function ProfileScreenView(props: ProfileScreenViewProps) {
     onUpdateWorkspace,
   );
   const onSectionSave = useSectionSaveHandler(state);
-  const consultant = useConsultantSuggestions(candidateId, () => {
-    state.reload();
+  const reloadResume = state.reload;
+  const refreshProfile = useCallback(async () => {
+    await reloadResume();
     onRefreshFacts?.();
-  });
+  }, [onRefreshFacts, reloadResume]);
+  const consultant = useConsultantSuggestions(candidateId, refreshProfile);
+  return {
+    state,
+    connections,
+    confirmingOtw,
+    confirmOpenToWork,
+    onSectionSave,
+    refreshProfile,
+    consultant,
+  };
+}
 
+/**
+ * Connects the candidate-scoped resume API to `ProfileScreenSurface` — the
+ * rail's «Профиль» section, replacing Resume Studio wholesale (B265). Uses
+ * the same `useResumeStudio` hook Resume Studio does, so a draft saved here
+ * and one saved there can never disagree about the wire contract.
+ */
+function useVacancySuggestionReveal(
+  reloadSuggestions: () => Promise<void>,
+  suggestions: readonly InlineSuggestionItem[],
+) {
+  const [suggestionToReveal, setSuggestionToReveal] = useState<string>();
+  const revealSuggestion = useCallback(
+    async (commandId: string) => {
+      await reloadSuggestions();
+      setSuggestionToReveal(commandId);
+    },
+    [reloadSuggestions],
+  );
+  useEffect(() => {
+    if (!suggestionToReveal) return;
+    const suggestion = document.querySelector<HTMLElement>(
+      `[data-testid="consultant-suggestion-${suggestionToReveal}"]`,
+    );
+    if (!suggestion) return;
+    suggestion.scrollIntoView({ block: 'center' });
+    setSuggestionToReveal(undefined);
+  }, [suggestions, suggestionToReveal]);
+  return revealSuggestion;
+}
+
+function ProfileScreenSurfaceWithController({
+  props,
+  controller,
+  onVacancySuggestionPrepared,
+}: {
+  readonly props: ProfileScreenViewProps;
+  readonly controller: ReturnType<typeof useProfileScreenController>;
+  readonly onVacancySuggestionPrepared: (commandId: string) => Promise<void>;
+}) {
+  const {
+    state,
+    connections,
+    confirmingOtw,
+    confirmOpenToWork,
+    onSectionSave,
+    refreshProfile,
+    consultant,
+  } = controller;
   return (
     <ProfileScreenSurface
-      candidateId={candidateId}
+      candidateId={props.candidateId}
       view={state.view}
       draft={state.draft}
-      memory={memory}
-      importedSource={importedSourceOf(importedSources)}
+      memory={props.memory}
+      importedSource={importedSourceOf(props.importedSources)}
       loading={state.loading}
       saving={state.saving}
       error={state.error}
@@ -398,15 +495,34 @@ export function ProfileScreenView(props: ProfileScreenViewProps) {
       onRetry={state.reload}
       onDraftChange={state.setDraft}
       onSectionSave={onSectionSave}
-      onOpenConnections={onOpenConnections}
+      onOpenConnections={props.onOpenConnections}
       connections={connections}
       onConfirmOpenToWork={(confirmation) => void confirmOpenToWork(confirmation)}
       confirmingOpenToWork={confirmingOtw}
-      tab={tab}
+      tab={props.tab}
+      vacancyRequirement={props.vacancyRequirement}
+      onVacancyRequirementHandled={props.onVacancyRequirementHandled}
+      onVacancySuggestionPrepared={onVacancySuggestionPrepared}
+      onManualExperienceFactAdded={refreshProfile}
       suggestions={consultant.suggestions}
       onAcceptSuggestion={consultant.acceptSuggestion}
       onDismissSuggestion={consultant.dismissSuggestion}
       onRevertSuggestion={consultant.revertSuggestion}
+    />
+  );
+}
+
+export function ProfileScreenView(props: ProfileScreenViewProps) {
+  const controller = useProfileScreenController(props);
+  const onVacancySuggestionPrepared = useVacancySuggestionReveal(
+    controller.consultant.reload,
+    controller.consultant.suggestions,
+  );
+  return (
+    <ProfileScreenSurfaceWithController
+      props={props}
+      controller={controller}
+      onVacancySuggestionPrepared={onVacancySuggestionPrepared}
     />
   );
 }

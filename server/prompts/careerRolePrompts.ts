@@ -27,7 +27,9 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
 - Заполни careerTrack и actionProposals. Каждое предложение обязано ссылаться
   на evidence, иметь критерии приёмки, ожидаемый сигнал и дату измерения.
 - Для resume.revise заполни resumeRevision точным разделом и существующим
-  experienceId из resumeContext; для остальных предложений верни null.
+  experienceId из resumeContext. Для правки факта опыта заполни memoryId только
+  из bulletMemoryIds этой позиции; для заголовка и «Обо мне» верни memoryId: null.
+  Для остальных предложений верни null.
 - Переписывай только подтверждённые сведения из evidenceRefs и переданного
   профиля. Не добавляй метрики, масштабы, работодателей, результаты или сроки,
   которых нет в источниках. Если безопасной формулировки нет — не предлагай
@@ -56,9 +58,6 @@ const EXECUTION_BOUNDARY = `
   сервером после policy, consent, idempotency и receipt gates.
 `.trim();
 
-export function careerInstructionsForRole(
-  role: CareerRole = 'career_consultant',
-): string {
-  return [CAREER_SUPER_PROMPT, CAREER_ROLE_PROMPTS[role], EXECUTION_BOUNDARY]
-    .join('\n\n');
+export function careerInstructionsForRole(role: CareerRole = 'career_consultant'): string {
+  return [CAREER_SUPER_PROMPT, CAREER_ROLE_PROMPTS[role], EXECUTION_BOUNDARY].join('\n\n');
 }

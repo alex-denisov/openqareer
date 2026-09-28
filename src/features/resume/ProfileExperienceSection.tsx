@@ -15,8 +15,11 @@ import {
   type InlineSuggestionItem,
 } from './InlineConsultantSuggestion';
 import type { ResumeDraft, ResumeExperienceInput } from './resumeTypes';
+import { VacancyRequirementAssistant } from './VacancyRequirementAssistant';
+import type { VacancyProfileRequirementRequest } from '../vacancies/vacancyProfileRequirement';
 
 export interface ProfileExperienceSectionProps {
+  readonly candidateId?: string;
   readonly draft: ResumeDraft;
   readonly memory?: readonly CandidateMemory[];
   readonly saving?: boolean;
@@ -25,6 +28,10 @@ export interface ProfileExperienceSectionProps {
   readonly onAcceptSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
   readonly onDismissSuggestion?: (suggestion: InlineSuggestionItem) => void;
   readonly onRevertSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
+  readonly vacancyRequirement?: VacancyProfileRequirementRequest;
+  readonly onVacancyRequirementHandled?: () => void;
+  readonly onVacancySuggestionPrepared?: (commandId: string) => Promise<void> | void;
+  readonly onManualExperienceFactAdded?: () => Promise<void> | void;
 }
 
 /**
@@ -342,7 +349,20 @@ function ExperienceGroupsList({
   );
 }
 
-export function ProfileExperienceSection({
+export function ProfileExperienceSection({ ...props }: ProfileExperienceSectionProps) {
+  return (
+    <section
+      className="career-profile-screen-panel career-profile-screen-section"
+      id="sec-experience"
+      aria-labelledby="sec-experience-title"
+    >
+      <ExperienceSectionContent {...props} />
+    </section>
+  );
+}
+
+function ExperienceSectionContent({
+  candidateId,
   draft,
   memory = [],
   saving,
@@ -351,27 +371,68 @@ export function ProfileExperienceSection({
   onAcceptSuggestion,
   onDismissSuggestion,
   onRevertSuggestion,
+  vacancyRequirement,
+  onVacancyRequirementHandled,
+  onVacancySuggestionPrepared,
+  onManualExperienceFactAdded,
 }: ProfileExperienceSectionProps) {
   const groups = groupExperienceByEmployer(draft.experience);
+  const additionalFacts = additionalExperienceFacts(draft, memory);
   const addPosition = () => onSectionSave(addExperience(draft, `manual-${Date.now()}`));
 
   return (
-    <section
-      className="career-profile-screen-panel career-profile-screen-section"
-      id="sec-experience"
-      aria-labelledby="sec-experience-title"
-    >
-      <SectionHead
-        id="sec-experience-title"
-        title="Опыт"
-        count={
-          draft.experience.length
-            ? `${draft.experience.length} позиции · ${groups.length} компании`
-            : undefined
-        }
-        imported={draft.experience.length > 0}
-        action={<SectionAddButton label="Добавить место работы" onClick={addPosition} />}
+    <>
+      <ExperienceSectionHeading draft={draft} groupCount={groups.length} onAdd={addPosition} />
+      <VacancyRequirementSlot
+        candidateId={candidateId}
+        draft={draft}
+        memory={memory}
+        request={vacancyRequirement}
+        onHandled={onVacancyRequirementHandled}
+        onSuggestionPrepared={onVacancySuggestionPrepared}
+        onManualFactAdded={onManualExperienceFactAdded}
       />
+      <ExperienceSectionLists
+        groups={groups}
+        memory={memory}
+        saving={saving}
+        draft={draft}
+        onSectionSave={onSectionSave}
+        additionalFacts={additionalFacts}
+        suggestions={suggestions}
+        onAcceptSuggestion={onAcceptSuggestion}
+        onDismissSuggestion={onDismissSuggestion}
+        onRevertSuggestion={onRevertSuggestion}
+      />
+    </>
+  );
+}
+
+function ExperienceSectionLists({
+  groups,
+  memory,
+  saving,
+  draft,
+  onSectionSave,
+  additionalFacts,
+  suggestions,
+  onAcceptSuggestion,
+  onDismissSuggestion,
+  onRevertSuggestion,
+}: {
+  readonly groups: readonly ReturnType<typeof groupExperienceByEmployer>[number][];
+  readonly memory: readonly CandidateMemory[];
+  readonly saving?: boolean;
+  readonly draft: ResumeDraft;
+  readonly onSectionSave: (next: ResumeDraft) => void;
+  readonly additionalFacts: readonly CandidateMemory[];
+  readonly suggestions?: readonly InlineSuggestionItem[];
+  readonly onAcceptSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
+  readonly onDismissSuggestion?: (suggestion: InlineSuggestionItem) => void;
+  readonly onRevertSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
+}) {
+  return (
+    <>
       <ExperienceGroupsList
         groups={groups}
         memory={memory}
@@ -379,6 +440,7 @@ export function ProfileExperienceSection({
         draft={draft}
         onSectionSave={onSectionSave}
       />
+      <AdditionalExperienceFacts facts={additionalFacts} />
       <ExperienceSuggestionsList
         draft={draft}
         suggestions={suggestions}
@@ -387,7 +449,87 @@ export function ProfileExperienceSection({
         onDismissSuggestion={onDismissSuggestion}
         onRevertSuggestion={onRevertSuggestion}
       />
-    </section>
+    </>
   );
 }
 
+function additionalExperienceFacts(
+  draft: ResumeDraft,
+  memory: readonly CandidateMemory[],
+): readonly CandidateMemory[] {
+  const linkedMemoryIds = new Set(draft.experience.flatMap((entry) => entry.bulletMemoryIds));
+  return memory.filter(
+    (item) =>
+      item.status === 'confirmed' &&
+      item.domain === 'responsibility' &&
+      !linkedMemoryIds.has(item.id),
+  );
+}
+
+function ExperienceSectionHeading({
+  draft,
+  groupCount,
+  onAdd,
+}: {
+  readonly draft: ResumeDraft;
+  readonly groupCount: number;
+  readonly onAdd: () => void;
+}) {
+  return (
+    <SectionHead
+      id="sec-experience-title"
+      title="Опыт"
+      count={
+        draft.experience.length
+          ? `${draft.experience.length} позиции · ${groupCount} компании`
+          : undefined
+      }
+      imported={draft.experience.length > 0}
+      action={<SectionAddButton label="Добавить место работы" onClick={onAdd} />}
+    />
+  );
+}
+
+function VacancyRequirementSlot({
+  candidateId,
+  draft,
+  memory,
+  request,
+  onHandled,
+  onSuggestionPrepared,
+  onManualFactAdded,
+}: {
+  readonly candidateId?: string;
+  readonly draft: ResumeDraft;
+  readonly memory: readonly CandidateMemory[];
+  readonly request?: VacancyProfileRequirementRequest;
+  readonly onHandled?: () => void;
+  readonly onSuggestionPrepared?: (commandId: string) => Promise<void> | void;
+  readonly onManualFactAdded?: () => Promise<void> | void;
+}) {
+  if (!request || !candidateId) return null;
+  return (
+    <VacancyRequirementAssistant
+      draft={draft}
+      memory={memory}
+      request={request}
+      onHandled={onHandled ?? (() => undefined)}
+      onSuggestionPrepared={onSuggestionPrepared ?? (() => undefined)}
+      onManualFactAdded={onManualFactAdded ?? (() => undefined)}
+    />
+  );
+}
+
+function AdditionalExperienceFacts({ facts }: { readonly facts: readonly CandidateMemory[] }) {
+  if (!facts.length) return null;
+  return (
+    <div className="career-profile-screen-additional-facts">
+      <h3>Дополнительные факты опыта</h3>
+      <ul>
+        {facts.map((fact) => (
+          <li key={fact.id}>{fact.statement}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}

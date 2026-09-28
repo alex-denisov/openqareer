@@ -41,6 +41,7 @@ import { SqliteMarketRepository } from './sqliteMarketRepository';
 import { SqliteResumeRepository } from './sqliteResumeRepository';
 import { SqliteCandidateMediaRepository, type StoredCandidateMedia } from './sqliteCandidateMediaRepository';
 import { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
+import { SqliteManualExperienceFactRepository } from './sqliteManualExperienceFactRepository';
 import { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
@@ -622,6 +623,46 @@ export class SqliteCandidateStore implements CandidateStore {
     change: MemoryChange,
   ): StoredMemory | null {
     return this.conversations.changeMemory(candidateId, memoryId, change);
+  }
+
+  addManualExperienceFact(
+    candidateId: string,
+    memoryId: string,
+    statement: string,
+    experienceId?: string,
+  ): StoredMemory {
+    this.requireCandidate(candidateId);
+    return this.transaction(() => {
+      const snapshot = this.getSnapshot(candidateId);
+      const draft = snapshot.resume?.draft;
+      if (experienceId && !draft?.experience.some((entry) => entry.id === experienceId)) {
+        throw new CandidateStoreConflictError();
+      }
+      const existingFact = snapshot.memory.some((item) => item.id === memoryId);
+      const existingExperienceId = draft?.experience.find((entry) =>
+        entry.bulletMemoryIds.includes(memoryId),
+      )?.id;
+      if (existingFact && existingExperienceId !== experienceId) {
+        throw new CandidateStoreConflictError();
+      }
+      const memory = new SqliteManualExperienceFactRepository(
+        this.database,
+        this.sealedText,
+      ).add(candidateId, memoryId, statement);
+      if (experienceId && draft) {
+        const experience = draft.experience.map((entry) =>
+          entry.id === experienceId && !entry.bulletMemoryIds.includes(memoryId)
+            ? { ...entry, bulletMemoryIds: [...entry.bulletMemoryIds, memoryId] }
+            : entry,
+        );
+        this.saveResumeDraft(
+          candidateId,
+          { ...draft, experience },
+          snapshot.resume?.evidenceSnapshot ?? [],
+        );
+      }
+      return memory;
+    });
   }
 
   reviewMemories(

@@ -87,6 +87,7 @@ function resolveExecutionTarget(
   const currentText = currentTextForResumeRevision(
     snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT,
     proposal.resumeRevision,
+    snapshot.memory,
   );
   if (currentText === null) {
     return {

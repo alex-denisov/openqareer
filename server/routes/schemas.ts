@@ -157,7 +157,10 @@ export const adminUserQuerySchema = z.object({
   searchField: z.enum(['all', 'username', 'email', 'displayName']).default('all'),
   role: z.enum(['candidate', 'admin']).optional(),
   tier: z.enum(['free', 'pro', 'executive', 'enterprise']).optional(),
-  blocked: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  blocked: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
   sortBy: z.enum(['name', 'role', 'tier', 'created', 'sessions']).default('created'),
   sortDirection: z.enum(['asc', 'desc']).default('desc'),
   limit: z.coerce.number().int().min(1).max(100).default(25),
@@ -339,6 +342,13 @@ export const memoryChangeSchema = z
     }
   });
 
+export const manualExperienceFactSchema = z
+  .object({
+    statement: z.string().trim().min(1).max(1_000),
+    experienceId: z.string().trim().min(1).max(80).optional(),
+  })
+  .strict();
+
 export const assessmentIdSchema = z.enum(['product-case-v1']);
 
 export const resumeImportSchema = z
@@ -427,7 +437,10 @@ export const structuredResumeImportSchema = z
     source: z.literal('linkedin'),
     extractorVersion: z.string().trim().min(1).max(60),
     /** Field paths (never values) the device removed to pass the schema (B266). */
-    droppedFields: z.array(z.string().regex(/^[A-Za-z0-9_.:[\]]{1,120}$/u)).max(40).optional(),
+    droppedFields: z
+      .array(z.string().regex(/^[A-Za-z0-9_.:[\]]{1,120}$/u))
+      .max(40)
+      .optional(),
     sourceReceipt: z
       .object({
         platform: z.literal('linkedin'),

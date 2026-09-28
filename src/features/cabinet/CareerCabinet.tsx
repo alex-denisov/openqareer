@@ -31,6 +31,10 @@ import {
 import { cabinetJourney } from './cabinetJourney';
 import { useCareerStrategy, type CareerStrategyRead } from './useCareerStrategy';
 import { countConfirmedApplications } from '../../../shared/vacancyApplication';
+import type {
+  VacancyProfileRequirement,
+  VacancyProfileRequirementRequest,
+} from '../vacancies/vacancyProfileRequirement';
 import type { CareerCabinetView } from './cabinetViews';
 
 export type { CareerCabinetView } from './cabinetViews';
@@ -159,6 +163,16 @@ export function CareerCabinet({
   // «Профиль», а не рядом с карточкой кандидата: карточка — факты о человеке,
   // вкладки решают, что показывает весь экран (B265 review round 3).
   const [profileTab, setProfileTab] = useState<ProfileTab>('profile');
+  const [vacancyProfileRequest, setVacancyProfileRequest] =
+    useState<VacancyProfileRequirementRequest | null>(null);
+  const openProfileRequirement = useCallback(
+    (context: VacancyProfileRequirement) => {
+      setVacancyProfileRequest({ ...context, requestId: crypto.randomUUID() });
+      onNavigate('profile');
+    },
+    [onNavigate],
+  );
+  const clearProfileRequirement = useCallback(() => setVacancyProfileRequest(null), []);
   const showsVacanciesScreen = view === 'opportunities';
   // B248 §2 — the same path indicator the anonymous wizard shows
   // (`CareerWorkspaceShell`), wired to the cabinet's own journey, pool and
@@ -221,7 +235,10 @@ export function CareerCabinet({
             applicationsTracker={applicationsTracker}
             data={data}
             profileTab={profileTab}
+            vacancyProfileRequest={vacancyProfileRequest}
             onNavigate={onNavigate}
+            onOpenProfileRequirement={openProfileRequirement}
+            onVacancyRequirementHandled={clearProfileRequirement}
             onSavePremises={savePremises}
             onOpenTariffs={onOpenTariffs}
             onOpenConnections={onOpenConnections}
@@ -273,7 +290,10 @@ function CabinetSection({
   applicationsTracker,
   data,
   profileTab,
+  vacancyProfileRequest,
   onNavigate,
+  onOpenProfileRequirement,
+  onVacancyRequirementHandled,
   onSavePremises,
   onOpenTariffs,
   onOpenConnections,
@@ -290,7 +310,10 @@ function CabinetSection({
   applicationsTracker: ReturnType<typeof useApplications>;
   data: ReturnType<typeof useCareerCabinetData>;
   profileTab: ProfileTab;
+  vacancyProfileRequest: VacancyProfileRequirementRequest | null;
   onNavigate: (view: CareerCabinetView) => void;
+  onOpenProfileRequirement: (context: VacancyProfileRequirement) => void;
+  onVacancyRequirementHandled: () => void;
   onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
@@ -309,7 +332,12 @@ function CabinetSection({
         candidateId={session.candidateId}
         memory={data.snapshot?.memory ?? []}
         importedSources={data.snapshot?.importedSources}
-        onRefreshFacts={() => void data.refresh()}
+        vacancyRequirement={vacancyProfileRequest ?? undefined}
+        onVacancyRequirementHandled={onVacancyRequirementHandled}
+        onRefreshFacts={() => {
+          void data.refresh();
+          pool.refresh?.();
+        }}
         onOpenConnections={onOpenConnections}
         tab={profileTab}
         workspace={workspace}
@@ -372,7 +400,7 @@ function CabinetSection({
       onRetry={pool.refresh}
       applications={vacancyApplications}
       onOpenResponses={() => onNavigate('responses')}
-      onOpenProfile={() => onNavigate('profile')}
+      onOpenProfile={onOpenProfileRequirement}
       pathIndicator={pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined}
     />
   );
