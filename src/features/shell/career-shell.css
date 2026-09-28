@@ -11819,6 +11819,14 @@
   }
 }
 
+.career-profile-screen-details-toggle {
+  display: none;
+}
+
+.career-profile-screen-details {
+  display: contents;
+}
+
 @media (max-width: 760px) {
   .career-profile-screen-side-col {
     grid-template-columns: 1fr;
@@ -11836,6 +11844,39 @@
   }
   .career-profile-screen-name-row h1 {
     font-size: var(--career-text-xl);
+  }
+  .career-profile-screen-status-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .career-profile-screen-status-row::-webkit-scrollbar {
+    display: none;
+  }
+  .career-profile-screen-details-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--career-space-1);
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--career-accent);
+    font-size: var(--career-text-xs);
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: var(--career-space-1);
+    width: fit-content;
+  }
+  .career-profile-screen-details {
+    display: none;
+  }
+  .career-profile-screen-details.is-open {
+    display: flex;
+    flex-direction: column;
+    gap: var(--career-space-2);
+    margin-top: var(--career-space-1);
   }
   .career-profile-screen-field-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -13010,17 +13051,23 @@
   display: none;
   width: 100%;
   justify-content: space-between;
+  align-items: center;
   text-align: left;
+  white-space: nowrap;
 }
 
 .vacancies-mobile-filter-toggle > span:first-child {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .vacancies-mobile-filter-toggle > span:last-child {
   flex: none;
   color: var(--career-text-dim);
   font-size: var(--career-text-xs);
+  white-space: nowrap;
 }
 
 .vacancies-screen .career-vacancy-saved {
@@ -13274,6 +13321,44 @@
     display: block;
   }
 
+  .vacancies-detail-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--career-space-3);
+  }
+
+  .vacancies-detail-panel .vacancies-detail-back {
+    order: 1;
+  }
+
+  .vacancies-detail-panel .vacancies-detail-head {
+    order: 2;
+  }
+
+  .vacancies-detail-panel .vacancies-detail-meta-row {
+    order: 3;
+  }
+
+  .vacancies-detail-panel .vacancies-signals {
+    order: 4;
+  }
+
+  .vacancies-detail-panel .vacancies-detail-actions {
+    order: 10;
+  }
+
+  .vacancies-detail-panel .vacancies-recruiter-block {
+    order: 20;
+  }
+
+  .vacancies-detail-panel .vacancies-detail-requirements {
+    order: 30;
+  }
+
+  .vacancies-detail-panel .vacancies-detail-description {
+    order: 40;
+  }
+
   .vacancies-layout:has(.vacancies-detail-col.is-open) .vacancies-list-col {
     display: none;
   }
@@ -13394,7 +13479,7 @@
 }
 
 .vacancies-screen .vacancies-mobile-filter-toggle {
-  white-space: normal;
+  white-space: nowrap;
 }
 
 .vacancies-btn:disabled {

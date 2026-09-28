@@ -178,17 +178,20 @@ function VacancyProfileEvidence({
   return (
     <>
       <VacancySignalGrid signals={signals} />
-      <VacancyRequirementList
-        title="Совпадает по фактам профиля"
-        points={explanation.matchingPoints}
-        tone="yes"
-      />
-      <VacancyMissingRequirements
-        cluster={cluster}
-        points={explanation.missingPoints}
-        onAddToProfile={onAddToProfile}
-      />
-      <div className="vacancies-req-block">
+      <div className="vacancies-detail-requirements">
+        <VacancyRequirementList
+          title="Совпадает по фактам профиля"
+          points={explanation.matchingPoints}
+          tone="yes"
+        />
+        <VacancyMissingRequirements
+          cluster={cluster}
+          points={explanation.missingPoints}
+          onAddToProfile={onAddToProfile}
+        />
+      </div>
+
+      <div className="vacancies-detail-description vacancies-req-block">
         <h4>Вилка</h4>
         <p className="vacancies-comp-note">{formatCompensationCompact(cluster.salary)}</p>
       </div>

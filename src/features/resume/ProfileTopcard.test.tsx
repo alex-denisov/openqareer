@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ProfileTopcard } from './ProfileTopcard';
@@ -154,5 +157,90 @@ describe('ProfileTopcard — source and connection status (C54)', () => {
     expect(html).toContain('включено');
     expect(html).toContain('обновлено 27 сентября 2026');
     expect(html).toContain('Выключить');
+  });
+
+  describe('ProfileTopcard mobile details collapse (C74)', () => {
+    const detailedDraft: ResumeDraft = {
+      ...draft,
+      candidate: {
+        ...draft.candidate,
+        headline: 'VP of Engineering',
+        contact: {
+          email: 'jordan@example.com',
+          location: 'Берлин, Германия',
+          phone: '+49 123 456789',
+        },
+      },
+    };
+
+    it('renders a «Подробнее» toggle when topcard has extra details and details are collapsed initially', () => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      act(() => {
+        root.render(
+          <ProfileTopcard
+            draft={detailedDraft}
+            updatedAt="2026-09-21T09:00:00.000Z"
+            onDraftChange={() => {}}
+            reader={null}
+          />,
+        );
+      });
+
+      const toggle = container.querySelector(
+        '.career-profile-screen-details-toggle',
+      ) as HTMLButtonElement;
+      expect(toggle).not.toBeNull();
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(toggle.textContent).toContain('Подробнее');
+
+      const details = container.querySelector('.career-profile-screen-details') as HTMLElement;
+      expect(details).not.toBeNull();
+      expect(details.classList.contains('is-open')).toBe(false);
+
+      act(() => root.unmount());
+      container.remove();
+    });
+
+    it('toggles details open and closed when clicking «Подробнее»', () => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      act(() => {
+        root.render(
+          <ProfileTopcard
+            draft={detailedDraft}
+            updatedAt="2026-09-21T09:00:00.000Z"
+            onDraftChange={() => {}}
+            reader={null}
+          />,
+        );
+      });
+
+      const toggle = container.querySelector(
+        '.career-profile-screen-details-toggle',
+      ) as HTMLButtonElement;
+      const details = container.querySelector('.career-profile-screen-details') as HTMLElement;
+
+      act(() => {
+        toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+      expect(toggle.textContent).toContain('Скрыть');
+      expect(details.classList.contains('is-open')).toBe(true);
+
+      act(() => {
+        toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(toggle.textContent).toContain('Подробнее');
+      expect(details.classList.contains('is-open')).toBe(false);
+
+      act(() => root.unmount());
+      container.remove();
+    });
   });
 });
