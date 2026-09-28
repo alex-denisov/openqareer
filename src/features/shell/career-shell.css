@@ -925,7 +925,6 @@
   background: var(--career-warning);
 }
 
-
 .career-path-copy {
   display: flex;
   align-items: baseline;
@@ -1027,7 +1026,6 @@
     border-color: var(--career-warning);
     background: var(--career-warning-soft);
   }
-
 
   .career-path-mobile-summary > span:not(.career-path-mobile-dots) {
     font-size: var(--career-text-xs);
@@ -14250,4 +14248,12 @@
     mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
     -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
   }
+}
+
+.career-profile-screen-details-caret {
+  transition: transform 160ms ease;
+}
+
+.career-profile-screen-details-toggle[aria-expanded='true'] .career-profile-screen-details-caret {
+  transform: rotate(180deg);
 }

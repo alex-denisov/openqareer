@@ -348,10 +348,7 @@ function ProfileDetailsToggle({
       <CaretDown
         size={14}
         aria-hidden="true"
-        style={{
-          transform: isOpen ? 'rotate(180deg)' : undefined,
-          transition: 'transform 160ms ease',
-        }}
+        className="career-profile-screen-details-caret"
       />
     </button>
   );
