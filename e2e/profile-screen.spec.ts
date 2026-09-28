@@ -593,6 +593,7 @@ test.describe('B265 Profile screen', () => {
     expect(overflow).toBeLessThanOrEqual(0);
 
     await screenshotFullProfilePage(page, 'output/playwright/C74/profile-1440.png');
+    await screenshotFullProfilePage(page, 'output/playwright/B265/profile-1440.png');
     await screenshotFullProfilePage(page, testInfo.outputPath('profile-1440.png'));
 
     const accessibility = await new AxeBuilder({ page })
@@ -630,6 +631,10 @@ test.describe('B265 Profile screen', () => {
 
     await page.screenshot({
       path: 'output/playwright/C74/profile-390.png',
+      fullPage: false,
+    });
+    await page.screenshot({
+      path: 'output/playwright/B265/profile-390.png',
       fullPage: false,
     });
     await screenshotFullProfilePage(page, testInfo.outputPath('profile-390.png'));

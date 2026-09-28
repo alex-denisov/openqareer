@@ -8,7 +8,8 @@ import type {
   ParsedResumeProject,
   ParsedResumeRecommendation,
 } from '../workspace/resumeParserTypes';
-import { paragraphsOf, parseFragment, textOf } from './linkedinDom';
+import { leafTextLines, paragraphsOf, parseFragment, textOf } from './linkedinDom';
+import { htmlToLines } from './linkedinProfileExtract';
 
 function splitIssued(text: string): { issuedAt?: string; expiresAt?: string } {
   const [issuedPart, expiresPart] = text.split('·').map((part) => part.trim());
@@ -18,21 +19,28 @@ function splitIssued(text: string): { issuedAt?: string; expiresAt?: string } {
   };
 }
 
+const CERT_HEADING = /^(?:licenses?\s*&\s*)?certifications?(?:\s*\(\d+\))?$/iu;
+
 /**
  * Certification items have no stable per-item wrapper (B264 §0): they are
  * read as `name, issuer, "Issued …"` triples in document order instead.
  */
 export function parseCertificationsSection(html: string): ParsedResumeCertification[] {
-  const paragraphs = paragraphsOf(parseFragment(html).body);
-  const certifications: ParsedResumeCertification[] = [];
-  for (const [index, text] of paragraphs.entries()) {
-    if (!/^Issued\s/u.test(text) || index < 2) continue;
-    const name = paragraphs[index - 2];
-    const issuer = paragraphs[index - 1];
-    if (!name) continue;
-    certifications.push({ name, issuer, ...splitIssued(text) });
+  const body = parseFragment(html).body;
+  const readings = [() => paragraphsOf(body), () => htmlToLines(html), () => leafTextLines(body)];
+  for (const read of readings) {
+    const lines = read();
+    const certifications: ParsedResumeCertification[] = [];
+    for (const [index, text] of lines.entries()) {
+      if (!/^Issued\s/u.test(text) || index < 2) continue;
+      const name = lines[index - 2];
+      const issuer = lines[index - 1];
+      if (!name || CERT_HEADING.test(name)) continue;
+      certifications.push({ name, issuer, ...splitIssued(text) });
+    }
+    if (certifications.length > 0) return certifications;
   }
-  return certifications;
+  return [];
 }
 
 function findItemRoot(anchor: Element): Element {
@@ -121,18 +129,40 @@ const COURSE_CARD_SELECTOR =
   '[componentkey$="CourseDetailsSection"], [componentkey$="CourseTopLevelSection"]';
 const ASSOCIATED_WITH = /^Associated with\s+/u;
 
-/**
- * Reads the courses card: each course title may be followed by an
- * «Associated with <organisation>» line (B266; LinkedIn shows no year here).
- */
-export function parseCoursesSection(html: string): ParsedResumeCourse[] {
-  const card = parseFragment(html).querySelector(COURSE_CARD_SELECTOR);
-  if (!card) return [];
-  const lines = paragraphsOf(card).filter((line) => !/^courses?$/iu.test(line));
+function reduceCourseLines(lines: readonly string[]): ParsedResumeCourse[] {
   return lines.reduce<ParsedResumeCourse[]>((courses, line) => {
     if (!ASSOCIATED_WITH.test(line)) return [...courses, { name: line }];
     const last = courses.at(-1);
     if (!last || last.institution) return courses;
     return [...courses.slice(0, -1), { ...last, institution: line.replace(ASSOCIATED_WITH, '') }];
   }, []);
+}
+
+/**
+ * Reads the courses card: each course title may be followed by an
+ * «Associated with <organisation>» line (B266; LinkedIn shows no year here).
+ */
+export function parseCoursesSection(html: string): ParsedResumeCourse[] {
+  const card = parseFragment(html).querySelector(COURSE_CARD_SELECTOR);
+  if (card) {
+    const lines = paragraphsOf(card).filter((line) => !/^courses?$/iu.test(line));
+    return reduceCourseLines(lines);
+  }
+  const allLines = htmlToLines(html);
+  const courseIndex = allLines.findIndex((line) => /^courses(?:\s*\(\d+\))?$/iu.test(line));
+  if (courseIndex !== -1) {
+    const slice: string[] = [];
+    for (let i = courseIndex + 1; i < allLines.length; i++) {
+      const line = allLines[i];
+      if (
+        /^show all\b/iu.test(line) ||
+        /^(?:languages|interests|skills|projects|licenses|volunteer)/iu.test(line)
+      ) {
+        break;
+      }
+      slice.push(line);
+    }
+    return reduceCourseLines(slice);
+  }
+  return [];
 }

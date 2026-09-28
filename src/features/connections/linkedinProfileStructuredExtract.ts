@@ -7,10 +7,10 @@
 import {
   isLinkedInProficiencyLabel,
   linkedInCefrForProficiency,
+  type LinkedInProfileV2,
 } from '../../../shared/linkedinProfileV2';
 import type {
   ParsedResumeAchievement,
-  ParsedResumeCourse,
   ParsedResumeAchievementKind,
   ParsedResumeLanguage,
   ParsedResumeOpenToWork,
@@ -27,43 +27,41 @@ import {
 } from './linkedinCredentialExtract';
 import {
   decodeSafetyGoUrl,
+  leafTextLines,
   mediaSourceUrl,
   paragraphsOf,
   parseFragment,
   textOf,
 } from './linkedinDom';
+import {
+  sanitizeLinkedInProfileV2,
+  validLinkedInProfileWithDrops,
+} from './linkedinProfileSanitize';
 
 /** Logged with the payload so a markup drift shows up server-side (architecture §2). */
 export const LI_SDUI_EXTRACTOR_VERSION = 'li-sdui-1';
 
 /** The "form" of ParsedResume v2 sent over the wire — no `rawText` (architecture §2). */
-export type LinkedInProfileV2 = Omit<ReturnType<typeof emptyLinkedInProfileV2>, never>;
+export type { LinkedInProfileV2 };
 
-function emptyLinkedInProfileV2() {
+function emptyLinkedInProfileV2(): LinkedInProfileV2 {
   return {
-    fullName: undefined as string | undefined,
-    headline: undefined as string | undefined,
-    photoSourceUrl: undefined as string | undefined,
-    about: undefined as string | undefined,
-    contact: { links: [] as string[] } as {
-      email?: string;
-      phone?: string;
-      telegram?: string;
-      location?: string;
-      links: string[];
-      linkedinUrl?: string;
-    },
-    experience: [] as ReturnType<typeof parseExperienceSection>,
-    skills: [] as string[],
-    education: [] as ReturnType<typeof parseEducationSection>,
-    courses: [] as ParsedResumeCourse[],
-    tests: [] as never[],
-    recommendations: [] as ReturnType<typeof parseRecommendationsSection>,
-    languages: [] as ParsedResumeLanguage[],
-    certifications: [] as ReturnType<typeof parseCertificationsSection>,
-    projects: [] as ReturnType<typeof parseProjectsSection>,
-    achievements: [] as ParsedResumeAchievement[],
-    openToWork: undefined as ParsedResumeOpenToWork | undefined,
+    fullName: undefined,
+    headline: undefined,
+    photoSourceUrl: undefined,
+    about: undefined,
+    contact: { links: [] },
+    experience: [],
+    skills: [],
+    education: [],
+    courses: [],
+    tests: [],
+    recommendations: [],
+    languages: [],
+    certifications: [],
+    projects: [],
+    achievements: [],
+    openToWork: undefined,
   };
 }
 
@@ -153,13 +151,6 @@ function languagePairs(lines: readonly string[]): ParsedResumeLanguage[] {
   return languages;
 }
 
-/** Text of every element without element children, in document order. */
-function leafTextLines(root: Element): string[] {
-  return Array.from(root.querySelectorAll('*'))
-    .filter((element) => element.children.length === 0)
-    .map((element) => element.textContent?.replace(/\s+/gu, ' ').trim() ?? '')
-    .filter(Boolean);
-}
 
 const CONTACT_LABELS = new Set(['Your profile', 'Website', 'Phone', 'Email']);
 
@@ -292,6 +283,8 @@ export interface TolerantExtraction {
   readonly profile: LinkedInProfileV2;
   /** Sections whose parser threw on this markup; each one is left empty (B266). */
   readonly failedSections: readonly string[];
+  /** Field paths (never values) dropped to pass linkedinProfileV2Schema (M2). */
+  readonly droppedFields?: readonly string[];
 }
 
 /**
@@ -310,8 +303,24 @@ export function extractStructuredLinkedInProfileTolerant(
     () => (pages.contactInfo ? parseContactInfo(pages.contactInfo) : { links: [] }),
     { links: [] as string[] },
   );
+  const rawProfile = assembleRawSections(pages, section, topCard, contact);
+  const valid = validLinkedInProfileWithDrops(rawProfile);
+  const profile = valid ? valid.profile : sanitizeLinkedInProfileV2(rawProfile);
+  const droppedFields = [
+    ...failedSections.map((name) => `section:${name}`),
+    ...(valid?.dropped ?? []),
+  ];
+  return { profile, failedSections, ...(droppedFields.length > 0 ? { droppedFields } : {}) };
+}
+
+function assembleRawSections(
+  pages: LinkedInProfilePages,
+  section: ReturnType<typeof sectionReader>,
+  topCard: TopCard,
+  contact: ReturnType<typeof parseContactInfo>,
+): LinkedInProfileV2 {
   const base = emptyLinkedInProfileV2();
-  const profile: LinkedInProfileV2 = {
+  return {
     ...base,
     fullName: topCard.fullName,
     headline: topCard.headline,
@@ -322,7 +331,7 @@ export function extractStructuredLinkedInProfileTolerant(
     education: section('education', () => firstNonEmpty(pages.education, pages.profile, parseEducationSection), []),
     certifications: section(
       'certifications',
-      () => (pages.certifications ? parseCertificationsSection(pages.certifications) : []),
+      () => firstNonEmpty(pages.certifications, pages.profile, parseCertificationsSection),
       [],
     ),
     projects: section('projects', () => (pages.projects ? parseProjectsSection(pages.projects) : []), []),
@@ -344,7 +353,6 @@ export function extractStructuredLinkedInProfileTolerant(
     ),
     openToWork: section('openToWork', () => parseOpenToWork(pages.profile), undefined),
   };
-  return { profile, failedSections };
 }
 
 /**
