@@ -961,7 +961,8 @@
   color: var(--career-warning);
 }
 
-.career-path-mobile-summary {
+.career-path-mobile-summary,
+.career-path-mobile-role {
   display: none;
 }
 
@@ -995,6 +996,7 @@
   }
 
   .career-path-mobile-role {
+    display: inline-flex;
     align-self: flex-end;
     margin: 0 var(--career-space-2) var(--career-space-2) 0;
   }
@@ -13195,6 +13197,9 @@
 .vacancies-mobile-filter-toggle {
   display: none;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  gap: var(--career-space-2);
   justify-content: space-between;
   align-items: center;
   text-align: left;
