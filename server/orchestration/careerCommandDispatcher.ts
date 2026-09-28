@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CandidateStore } from '../data/candidateStore';
+import type { CandidateSnapshot, CandidateStore } from '../data/candidateStore';
 import {
   applyConnectorReceipt,
   createConnectorAction,
@@ -59,8 +59,9 @@ export class CareerCommandDispatcher {
   isResumeRevisionCurrent(candidateId: string, command: CareerCommandRecord): boolean {
     if (command.capability !== 'resume.revise' || !command.executionTarget) return false;
     const target = command.executionTarget as ResumeReviseExecutionTarget;
-    const draft = this.store.getSnapshot(candidateId).resume?.draft ?? EMPTY_RESUME_DRAFT;
-    return currentTextForResumeRevision(draft, target) === target.currentText;
+    const snapshot = this.store.getSnapshot(candidateId);
+    const draft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
+    return currentTextForResumeRevision(draft, target, snapshot.memory) === target.currentText;
   }
 
   async dispatch(candidateId: string, commandId: string): Promise<CareerCommandRecord> {
@@ -132,45 +133,84 @@ export class CareerCommandDispatcher {
     if (!target || !('section' in target)) {
       throw new Error('resume_revise_target_missing');
     }
-    return this.store.transaction(() => {
-      const startedAt = this.now().toISOString();
-      const action = markConnectorActionExecuting(
-        createConnectorAction({
-          actionId: command.commandId,
-          idempotencyKey: command.idempotency.key,
-          opportunityId: `command:${command.commandId}`,
-          action: 'message',
-          autonomy: 'approve_once',
-          createdAt: startedAt,
-        }),
-        startedAt,
-      );
-      this.store.claimCareerCommand(candidateId, command.commandId, action, startedAt);
+    return this.store.transaction(() => this.executeResumeRevision(candidateId, command, target));
+  }
 
-      const snapshot = this.store.getSnapshot(candidateId);
-      const currentDraft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
-      const previousText = currentTextForResumeRevision(currentDraft, target);
-      if (previousText === null || previousText !== target.currentText) {
-        throw new ResumeRevisionConflictError();
-      }
-      this.confirmEvidenceFacts(candidateId, snapshot, command.proposal.evidenceRefs);
-      const nextDraft = applyRevisionToDraft(currentDraft, target);
-      this.store.saveResumeDraft(candidateId, nextDraft, snapshot.resume?.evidenceSnapshot ?? []);
+  private executeResumeRevision(
+    candidateId: string,
+    command: CareerCommandRecord,
+    target: ResumeReviseExecutionTarget,
+  ): CareerCommandRecord {
+    const startedAt = this.now().toISOString();
+    const action = this.startProfileRevision(command, startedAt);
+    this.store.claimCareerCommand(candidateId, command.commandId, action, startedAt);
+    const snapshot = this.store.getSnapshot(candidateId);
+    const currentDraft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
+    const previousText = currentTextForResumeRevision(currentDraft, target, snapshot.memory);
+    if (previousText === null || previousText !== target.currentText) {
+      throw new ResumeRevisionConflictError();
+    }
+    this.applyResumeRevision(candidateId, command, target, currentDraft, snapshot);
+    const finishedAt = this.now().toISOString();
+    this.recordResumeRevision(candidateId, command, target, previousText, finishedAt);
+    return this.finishProfileRevision(candidateId, command, action, finishedAt);
+  }
 
-      const finishedAt = this.now().toISOString();
-      this.recordResumeRevision(candidateId, command, target, previousText, finishedAt);
-      const execution = applyConnectorReceipt(
-        action,
-        profileRevisionReceipt(action, finishedAt),
-        finishedAt,
-      );
-      return this.store.finishCareerCommand(candidateId, command.commandId, {
-        ...command,
-        status: 'completed_with_receipt',
-        authorization: { ...command.authorization },
-        execution,
-        updatedAt: finishedAt,
+  private startProfileRevision(command: CareerCommandRecord, startedAt: string) {
+    return markConnectorActionExecuting(
+      createConnectorAction({
+        actionId: command.commandId,
+        idempotencyKey: command.idempotency.key,
+        opportunityId: `command:${command.commandId}`,
+        action: 'message',
+        autonomy: 'approve_once',
+        createdAt: startedAt,
+      }),
+      startedAt,
+    );
+  }
+
+  private applyResumeRevision(
+    candidateId: string,
+    command: CareerCommandRecord,
+    target: ResumeReviseExecutionTarget,
+    currentDraft: ResumeDraft,
+    snapshot: CandidateSnapshot,
+  ): void {
+    if (target.memoryId) {
+      const revised = this.store.changeMemory(candidateId, target.memoryId, {
+        action: 'correct',
+        statement: target.proposedText,
       });
+      if (!revised) throw new ResumeRevisionConflictError();
+    } else {
+      this.store.saveResumeDraft(
+        candidateId,
+        applyRevisionToDraft(currentDraft, target),
+        snapshot.resume?.evidenceSnapshot ?? [],
+      );
+    }
+    const evidenceSnapshot = target.memoryId ? this.store.getSnapshot(candidateId) : snapshot;
+    this.confirmEvidenceFacts(candidateId, evidenceSnapshot, command.proposal.evidenceRefs);
+  }
+
+  private finishProfileRevision(
+    candidateId: string,
+    command: CareerCommandRecord,
+    action: ReturnType<typeof markConnectorActionExecuting>,
+    finishedAt: string,
+  ): CareerCommandRecord {
+    const execution = applyConnectorReceipt(
+      action,
+      profileRevisionReceipt(action, finishedAt),
+      finishedAt,
+    );
+    return this.store.finishCareerCommand(candidateId, command.commandId, {
+      ...command,
+      status: 'completed_with_receipt',
+      authorization: { ...command.authorization },
+      execution,
+      updatedAt: finishedAt,
     });
   }
 
@@ -220,16 +260,30 @@ export class CareerCommandDispatcher {
 
       const snapshot = this.store.getSnapshot(candidateId);
       const currentDraft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
-      const currentText = currentTextForRevisionRecord(currentDraft, revision);
+      const target = command.executionTarget as ResumeReviseExecutionTarget;
+      const currentText = currentTextForResumeRevision(currentDraft, target, snapshot.memory);
       if (currentText === null || currentText !== revision.appliedText) {
         throw new ResumeRevisionConflictError();
       }
-      const revertedDraft = revertDraftRevision(currentDraft, revision);
-      this.store.saveResumeDraft(
-        candidateId,
-        revertedDraft,
-        snapshot.resume?.evidenceSnapshot ?? [],
-      );
+      if (target.memoryId) {
+        const reverted = this.store.changeMemory(candidateId, target.memoryId, {
+          action: 'correct',
+          statement: revision.previousText,
+        });
+        if (!reverted) throw new ResumeRevisionConflictError();
+        this.confirmEvidenceFacts(
+          candidateId,
+          this.store.getSnapshot(candidateId),
+          command.proposal.evidenceRefs,
+        );
+      } else {
+        const revertedDraft = revertDraftRevision(currentDraft, revision);
+        this.store.saveResumeDraft(
+          candidateId,
+          revertedDraft,
+          snapshot.resume?.evidenceSnapshot ?? [],
+        );
+      }
       this.store.profileRevisionRepo.markReverted(candidateId, commandId, this.now().toISOString());
       return command;
     });
@@ -250,7 +304,9 @@ export function currentTextForResumeRevision(
   target: {
     readonly section: ResumeReviseExecutionTarget['section'];
     readonly experienceId?: string | null;
+    readonly memoryId?: string | null;
   },
+  memory: CandidateSnapshot['memory'] = [],
 ): string | null {
   if (target.section === 'headline') {
     return draft.candidate.headline ?? '';
@@ -260,7 +316,11 @@ export function currentTextForResumeRevision(
   }
   if (!target.experienceId) return null;
   const experience = draft.experience.find((entry) => entry.id === target.experienceId);
-  return experience ? (experience.title ?? '') : null;
+  if (!experience) return null;
+  if (!target.memoryId) return experience.title ?? '';
+  if (!experience.bulletMemoryIds.includes(target.memoryId)) return null;
+  const fact = memory.find((item) => item.id === target.memoryId);
+  return fact?.status === 'confirmed' ? fact.statement : null;
 }
 
 function applyRevisionToDraft(
@@ -278,16 +338,6 @@ function applyRevisionToDraft(
   if (idx < 0) throw new ResumeRevisionConflictError();
   experiences[idx] = { ...experiences[idx], title: target.proposedText };
   return { ...draft, experience: experiences };
-}
-
-function currentTextForRevisionRecord(
-  draft: ResumeDraft,
-  revision: ProfileRevisionRecord,
-): string | null {
-  return currentTextForResumeRevision(draft, {
-    section: revision.section,
-    experienceId: revision.experienceId,
-  });
 }
 
 function revertDraftRevision(draft: ResumeDraft, revision: ProfileRevisionRecord): ResumeDraft {

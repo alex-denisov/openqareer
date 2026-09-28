@@ -5,6 +5,7 @@ import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import { titleMatchesRole } from '../../../shared/vacancyRoleTitleMatch';
 import { vacancyAge } from './vacancyFilters';
 import { VacancyDetailPanel } from './VacancyDetailPanel';
+import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { VacancyHypothesisBanner } from './VacancyHypothesisBanner';
 import { useVacancyCampaignActions } from './useVacancyCampaignActions';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
@@ -47,7 +48,7 @@ interface VacanciesScreenProps {
   readonly pathIndicator?: VacanciesPathIndicator;
   readonly applications?: VacancyApplications;
   readonly onOpenResponses?: () => void;
-  readonly onOpenProfile?: () => void;
+  readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
 }
 
 function useVacanciesScreenBoard(
@@ -235,7 +236,7 @@ interface VacanciesResultsProps {
   readonly actions: ReturnType<typeof useVacancyCampaignActions>;
   readonly onRetry?: () => void;
   readonly onOpenResponses?: () => void;
-  readonly onOpenProfile?: () => void;
+  readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
 }
 
 function VacanciesResults(props: VacanciesResultsProps) {
@@ -344,8 +345,8 @@ function VacanciesErrorState({
     <section className="vacancies-state is-error" role="alert">
       <h2>Не удалось загрузить подборку</h2>
       <p>
-        Не удалось загрузить общий пул вакансий.{' '}
-        {sourceLabel ?? 'Причина сбоя не определена.'} Роль и география сохранены.
+        Не удалось загрузить общий пул вакансий. {sourceLabel ?? 'Причина сбоя не определена.'} Роль
+        и география сохранены.
       </p>
       {onRetry ? (
         <button type="button" className="vacancies-btn vacancies-btn-primary" onClick={onRetry}>
@@ -397,7 +398,7 @@ interface VacanciesLayoutProps {
   readonly onSelect: (id: string) => void;
   readonly onBack: () => void;
   readonly onOpenResponses?: () => void;
-  readonly onOpenProfile?: () => void;
+  readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
 }
 
 function VacanciesLayout(props: VacanciesLayoutProps) {

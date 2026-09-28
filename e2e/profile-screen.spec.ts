@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { mkdir } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { captureCareerHarness } from './helpers/capture-career-harness';
+import type { MatchedVacancyItem } from '../src/features/coach/cabinetTypes';
 
 /**
  * B265 — the rail's «Профиль» replaces Resume Studio with its own screen.
@@ -317,6 +318,43 @@ const DRAFT = {
       locations: ['Берлин', 'Remote (EU)'],
       workplaceTypes: ['hybrid', 'remote'],
     },
+  },
+};
+
+const C66_VACANCY: MatchedVacancyItem = {
+  cluster: {
+    id: 'c66-platform-vacancy',
+    canonicalTitle: 'Platform Engineer',
+    canonicalCompany: 'Acme Systems',
+    canonicalLocation: 'Берлин',
+    isRemote: true,
+    salary: { from: 120_000, to: 150_000, currency: 'EUR' },
+    descriptionSummary: 'Развитие внутренней платформы.',
+    skills: ['Kubernetes'],
+    primaryUrl: 'https://hh.ru/vacancy/c66-1',
+    sources: [
+      {
+        sourceType: 'hh',
+        sourceId: 'c66-platform-vacancy',
+        sourceName: 'hh.ru',
+        sourceUrl: 'https://hh.ru/vacancy/c66-1',
+        observedAt: '2026-09-28T08:00:00.000Z',
+      },
+    ],
+    firstObservedAt: '2026-09-28T08:00:00.000Z',
+    lastSeenAt: '2026-09-28T08:00:00.000Z',
+    status: 'active',
+    vacanciesCount: 1,
+  },
+  explanation: {
+    clusterId: 'c66-platform-vacancy',
+    roleMatch: 'target',
+    levelMatch: 'match',
+    outsideGeography: false,
+    matchingPoints: [],
+    missingPoints: ['Опыт работы с Kubernetes'],
+    summary: '',
+    calculatedAt: '2026-09-28T08:00:00.000Z',
   },
 };
 
@@ -670,6 +708,7 @@ test.describe('B265 Profile screen', () => {
           resumeRevision: {
             section: 'about',
             experienceId: null,
+            memoryId: null,
             proposedText: '15 лет строю инженерные организации в финтехе и платёжных системах.',
           },
         },
@@ -754,5 +793,186 @@ test.describe('B265 Profile screen', () => {
     await expect(suggestion).toContainText('Станет');
     await expect(suggestion).toContainText('15 лет строю инженерные организации');
     await expect(suggestion.getByRole('button', { name: 'Принять' })).toBeVisible();
+  });
+
+  test('C66: a missing vacancy requirement opens its grounded fact in Experience', async ({
+    page,
+  }, testInfo) => {
+    const requirement = C66_VACANCY.explanation.missingPoints[0]!;
+    const commandId = 'c66b5f4e-1f64-4f5a-a644-529367728a77';
+    const memoryId = 'mem-resp-1b';
+    const currentText = MEMORY.find((item) => item.id === memoryId)!.statement;
+    const proposedText =
+      'Мигрировала платёжное ядро на Kubernetes без простоя, сократив время релиза с 3 недель до 2 дней.';
+    const turnResult = {
+      message: 'Есть подтверждённый факт о миграции ядра на Kubernetes.',
+      phase: 'resume',
+      nextQuestion: null,
+      memoryCandidates: [],
+      completeness: { known: ['Миграция платёжного ядра'], unknown: [] },
+      safety: { needsHuman: false, reason: null },
+      careerTrack: null,
+      actionProposals: [
+        {
+          kind: 'resume.revise',
+          objective: 'Подтвердить опыт Kubernetes фактом миграции платёжного ядра.',
+          evidenceRefs: [`memory:${memoryId}`],
+          acceptanceCriteria: ['Формулировка точно повторяет подтверждённый факт.'],
+          expectedSignal: 'Требование вакансии совпадает с фактом опыта.',
+          measureAfter: '2026-10-01',
+          risk: 'candidate_data_write',
+          resumeRevision: {
+            section: 'experience',
+            experienceId: 'exp-1',
+            memoryId,
+            proposedText,
+          },
+        },
+      ],
+    };
+    let turnIdempotencyKey = '';
+    let turnContent = '';
+    let preparedBody: Record<string, unknown> | undefined;
+    let preparedCommand: Record<string, unknown> | undefined;
+    let accepted = false;
+    let matchedReadsAfterAccept = 0;
+
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.route('**/api/v1/candidate/me', async (route) => {
+      const memory = MEMORY.map((fact) =>
+        accepted && fact.id === memoryId ? { ...fact, statement: proposedText } : fact,
+      );
+      return route.fulfill({ json: { data: { ...SNAPSHOT, memory } } });
+    });
+    await page.route('**/api/v1/candidate/matched-vacancies**', async (route) => {
+      if (accepted) matchedReadsAfterAccept += 1;
+      const item = accepted
+        ? {
+            ...C66_VACANCY,
+            explanation: {
+              ...C66_VACANCY.explanation,
+              matchingPoints: [requirement],
+              missingPoints: [],
+            },
+          }
+        : C66_VACANCY;
+      return route.fulfill({
+        json: { data: [item], meta: { total: 1, nextOffset: null, pageOffsets: [0] } },
+      });
+    });
+    await page.route('**/api/v1/candidate/vacancy-sources', (route) =>
+      route.fulfill({ json: { data: [] } }),
+    );
+    await page.route('**/api/v1/candidate/vacancy-applications', (route) =>
+      route.fulfill({ json: { data: [] } }),
+    );
+    await page.route('**/api/v1/candidate/applications', (route) =>
+      route.fulfill({ json: { data: [] } }),
+    );
+    await page.route('**/api/v1/coach/turn**', async (route) => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      if (request.method() === 'POST' && pathname === '/api/v1/coach/turn') {
+        turnIdempotencyKey = String(request.headers()['idempotency-key']);
+        turnContent = String((request.postDataJSON() as { content?: unknown }).content ?? '');
+        return route.fulfill({
+          status: 202,
+          json: { data: { status: 'pending', idempotencyKey: turnIdempotencyKey } },
+        });
+      }
+      return route.fulfill({ json: { data: turnResult } });
+    });
+    await page.route('**/api/v1/candidate/career-commands**', async (route) => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      if (pathname === '/api/v1/candidate/career-commands' && request.method() === 'GET') {
+        return route.fulfill({ json: { data: preparedCommand ? [preparedCommand] : [] } });
+      }
+      if (pathname === '/api/v1/candidate/career-commands' && request.method() === 'POST') {
+        preparedBody = request.postDataJSON() as Record<string, unknown>;
+        const proposal = turnResult.actionProposals[0];
+        preparedCommand = {
+          schemaVersion: 'career-command-v1',
+          commandId,
+          candidateId: CANDIDATE.candidateId,
+          capability: 'resume.revise',
+          proposal,
+          executionTarget: {
+            targetType: 'resume_block',
+            section: 'experience',
+            experienceId: 'exp-1',
+            memoryId,
+            currentText,
+            proposedText,
+          },
+          status: 'awaiting_approval',
+          provenance: {
+            strategyDecisionId: turnIdempotencyKey,
+            evidenceRefs: proposal.evidenceRefs,
+            modelInvocationIds: [],
+          },
+          authorization: { approvalId: null },
+          idempotency: {
+            key: String(request.headers()['idempotency-key']),
+            payloadDigest: 'b'.repeat(64),
+            semantics: 'at_most_once',
+          },
+          execution: null,
+          createdAt: '2026-09-28T00:00:00.000Z',
+          updatedAt: '2026-09-28T00:00:00.000Z',
+        };
+        return route.fulfill({ status: 201, json: { data: preparedCommand } });
+      }
+      if (pathname.endsWith('/approvals') && request.method() === 'POST') {
+        accepted = true;
+        preparedCommand = { ...preparedCommand, status: 'completed_with_receipt' };
+        return route.fulfill({ json: { data: preparedCommand } });
+      }
+      return route.fulfill({ json: { data: null } });
+    });
+
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await page.locator('button[aria-label="Вакансии"]:visible').first().click();
+    const vacancy = page.locator('.vac-list-item').first();
+    await expect(vacancy).toContainText('Platform Engineer');
+    await vacancy.locator('button').click();
+    await page
+      .locator('.vacancies-detail-panel')
+      .getByRole('button', { name: 'Добавить в профиль' })
+      .click();
+
+    await expect(page.locator('#sec-experience')).toBeVisible();
+    await expect.poll(() => turnContent).toContain(requirement);
+    const suggestion = page.locator(`[data-testid="consultant-suggestion-${commandId}"]`);
+    await expect(suggestion).toBeVisible();
+    expect(turnIdempotencyKey).toMatch(/^[0-9a-f-]{36}$/u);
+    await expect.poll(() => preparedBody).toMatchObject({ proposalIndex: 0 });
+    expect(preparedBody).not.toHaveProperty('executionTarget');
+    const accessibility = await new AxeBuilder({ page }).include('#sec-experience').analyze();
+    expect(
+      accessibility.violations.filter((violation) =>
+        ['critical', 'serious'].includes(violation.impact ?? ''),
+      ),
+    ).toEqual([]);
+    await mkdir('output/playwright/C66', { recursive: true });
+    const viewport = testInfo.project.name === 'mobile-390' ? 'mobile-390' : 'desktop-1440';
+    await suggestion.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `output/playwright/C66/requirement-${viewport}.png` });
+    await captureCareerHarness(page, testInfo.outputPath('vacancy-requirement-profile.html'));
+
+    await suggestion.getByRole('button', { name: 'Принять' }).click();
+    await expect(suggestion).toContainText('Правка применена');
+    await expect.poll(() => accepted).toBe(true);
+    await expect.poll(() => matchedReadsAfterAccept).toBeGreaterThan(0);
+    await page.locator('button[aria-label="Вакансии"]:visible').first().click();
+    await expect(
+      page.locator('.vacancies-req-block').filter({ hasText: 'Совпадает по фактам профиля' }),
+    ).toContainText(requirement);
+    await expect(
+      page
+        .locator('.vacancies-req-block')
+        .filter({ hasText: 'Требования вакансии, которых нет в вашем профиле' }),
+    ).toHaveCount(0);
   });
 });

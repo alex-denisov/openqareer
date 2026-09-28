@@ -70,9 +70,7 @@ describe('VacancyDetailPanel (B250)', () => {
     expect(html).toContain('Совпадает по фактам профиля');
     expect(html).toContain('Опыт управления P&amp;L');
     expect(html).toContain('Требования вакансии, которых нет в вашем профиле');
-    expect(html).toContain(
-      'Подтвердите опытом в профиле — или будьте готовы обсудить на интервью',
-    );
+    expect(html).toContain('Подтвердите опытом в профиле — или будьте готовы обсудить на интервью');
     expect(html).toContain('Опыт публичной компании');
     expect(html).not.toContain('Добавить в профиль');
   });
@@ -80,6 +78,39 @@ describe('VacancyDetailPanel (B250)', () => {
   it('offers «Добавить в профиль» only when the profile can be opened', () => {
     const html = render({ onAddToProfile: () => undefined });
     expect(html).toContain('Добавить в профиль');
+  });
+
+  it('sends the exact missing requirement and vacancy identity to the profile route', () => {
+    const onAddToProfile = vi.fn();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <VacancyDetailPanel
+          item={item()}
+          now="2026-09-24T09:00:00.000Z"
+          onBack={vi.fn()}
+          onAddToProfile={onAddToProfile}
+        />,
+      );
+    });
+    const button = Array.from(container.querySelectorAll('button')).find(
+      (element) => element.textContent === 'Добавить в профиль',
+    );
+
+    act(() => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onAddToProfile).toHaveBeenCalledWith({
+      requirement: 'Опыт публичной компании',
+      vacancyId: 'c-1',
+      vacancyTitle: 'Business Information Architect',
+      vacancyCompany: 'Genetec',
+    });
+    act(() => root.unmount());
+    container.remove();
   });
 
   it('hides the matched/unconfirmed blocks when there is nothing to show', () => {
@@ -125,7 +156,12 @@ describe('VacancyDetailPanel (B250)', () => {
     const root = createRoot(container);
     act(() => {
       root.render(
-        <VacancyDetailPanel item={item()} now="2026-09-24T09:00:00.000Z" onBack={vi.fn()} applications={applications} />,
+        <VacancyDetailPanel
+          item={item()}
+          now="2026-09-24T09:00:00.000Z"
+          onBack={vi.fn()}
+          applications={applications}
+        />,
       );
     });
     const button = Array.from(container.querySelectorAll('button')).find(
@@ -135,7 +171,11 @@ describe('VacancyDetailPanel (B250)', () => {
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(openSpy).toHaveBeenCalledWith('https://example.com/vacancy');
-    expect(record).toHaveBeenCalledWith('c-1', 'applied', expect.objectContaining({ url: 'https://example.com/vacancy' }));
+    expect(record).toHaveBeenCalledWith(
+      'c-1',
+      'applied',
+      expect.objectContaining({ url: 'https://example.com/vacancy' }),
+    );
     act(() => root.unmount());
     container.remove();
   });

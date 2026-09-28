@@ -333,6 +333,12 @@ export interface CandidateStore {
   ): void;
   getCoachTurn(candidateId: string, key: string): { status: StoredTurn['status']; result: CoachTurnResult | null } | null;
   getSnapshot(candidateId: string): CandidateSnapshot;
+  addManualExperienceFact(
+    candidateId: string,
+    memoryId: string,
+    statement: string,
+    experienceId?: string,
+  ): StoredMemory;
   changeMemory(
     candidateId: string,
     memoryId: string,

@@ -54,7 +54,10 @@ function useSuggestionsCommands(candidateId: string) {
   return { commands, loading, load };
 }
 
-export function useConsultantSuggestions(candidateId: string, onProfileUpdated?: () => void) {
+export function useConsultantSuggestions(
+  candidateId: string,
+  onProfileUpdated?: () => Promise<void> | void,
+) {
   const { commands, loading, load } = useSuggestionsCommands(candidateId);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 

@@ -42,6 +42,7 @@ export const resumeRevisionProposalSchema = z
   .object({
     section: z.enum(['headline', 'about', 'experience']),
     experienceId: z.string().min(1).max(80).nullable(),
+    memoryId: z.string().min(1).max(80).nullable(),
     proposedText: z.string().trim().min(1).max(10_000),
   })
   .strict()
@@ -56,6 +57,12 @@ export const resumeRevisionProposalSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'only experience revisions have an entry id',
+      });
+    }
+    if (target.section !== 'experience' && target.memoryId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'only experience revisions can target a fact',
       });
     }
   });
@@ -442,14 +449,14 @@ export const COACH_TURN_JSON_SCHEMA = {
                 properties: {
                   section: { type: 'string', enum: ['headline', 'about', 'experience'] },
                   experienceId: {
-                    anyOf: [
-                      { type: 'string', minLength: 1, maxLength: 80 },
-                      { type: 'null' },
-                    ],
+                    anyOf: [{ type: 'string', minLength: 1, maxLength: 80 }, { type: 'null' }],
+                  },
+                  memoryId: {
+                    anyOf: [{ type: 'string', minLength: 1, maxLength: 80 }, { type: 'null' }],
                   },
                   proposedText: { type: 'string', minLength: 1, maxLength: 10_000 },
                 },
-                required: ['section', 'experienceId', 'proposedText'],
+                required: ['section', 'experienceId', 'memoryId', 'proposedText'],
                 additionalProperties: false,
               },
               { type: 'null' },

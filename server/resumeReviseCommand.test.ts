@@ -39,6 +39,7 @@ describe('resume.revise career command (C58)', () => {
       resumeRevision: {
         section: 'about',
         experienceId: null,
+        memoryId: null,
         proposedText: 'Выдуманный текст',
       },
     };
@@ -83,6 +84,7 @@ describe('resume.revise career command (C58)', () => {
       resumeRevision: {
         section: 'about',
         experienceId: null,
+        memoryId: null,
         proposedText: '15 лет опыта в финтех-платформах.',
       },
     };
@@ -213,10 +215,12 @@ describe('resume.revise career command (C58)', () => {
       url: '/api/v1/candidate/resume',
       headers: { authorization },
     });
-    expect(afterApproval.json().data.draft.candidate.about).toBe('15 лет опыта в финтех-платформах.');
-    expect(store.getSnapshot(candidateId).memory.find((item) => item.id === 'fact-about-1')?.status).toBe(
-      'confirmed',
+    expect(afterApproval.json().data.draft.candidate.about).toBe(
+      '15 лет опыта в финтех-платформах.',
     );
+    expect(
+      store.getSnapshot(candidateId).memory.find((item) => item.id === 'fact-about-1')?.status,
+    ).toBe('confirmed');
     expect(approveRes.json().data.execution).toMatchObject({
       status: 'completed_with_receipt',
       connector: {
@@ -268,6 +272,7 @@ describe('resume.revise career command (C58)', () => {
       resumeRevision: {
         section: 'experience',
         experienceId: 'missing-experience',
+        memoryId: null,
         proposedText: 'Ведущий инженер',
       },
     };
@@ -301,6 +306,7 @@ describe('resume.revise career command (C58)', () => {
       resumeRevision: {
         section: 'about',
         experienceId: null,
+        memoryId: null,
         proposedText: 'Руководила финтех-платформами.',
       },
     };
@@ -369,5 +375,196 @@ describe('resume.revise career command (C58)', () => {
     expect(afterConflict.json().data.draft.candidate.about).toBe(
       'Кандидат внёс более позднюю правку.',
     );
+  });
+
+  it('revises the confirmed experience fact itself and restores it through the profile revision', async () => {
+    const turnIdempotencyKey = randomUUID();
+    const messageId = randomUUID();
+    const experienceId = 'exp-platform-1';
+    const memoryId = 'fact-kubernetes-1';
+    const originalFact = 'Поддерживала внутреннюю платформу разработки.';
+    const proposal: CareerActionProposal = {
+      kind: 'resume.revise',
+      objective: 'Подтвердить опыт работы с Kubernetes.',
+      evidenceRefs: [`memory:${memoryId}`],
+      acceptanceCriteria: ['Формулировка опирается на существующий факт.'],
+      expectedSignal: 'Требование вакансии отражено в опыте.',
+      measureAfter: '2026-10-01',
+      risk: 'candidate_data_write',
+      resumeRevision: {
+        section: 'experience',
+        experienceId,
+        memoryId,
+        proposedText: 'Поддерживала внутреннюю платформу разработки на Kubernetes.',
+      },
+    };
+    const app = await createApp(providerWithProposals([proposal]));
+    const authorization = candidateAuthorization(app);
+    const candidateResponse = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/me',
+      headers: { authorization },
+    });
+    const candidateId = candidateResponse.json().data.candidate.id as string;
+    const store = stores[stores.length - 1]!;
+    store.importResumeEvidence(candidateId, {
+      sourceLabel: 'Факт из профиля кандидата',
+      entries: [{ memoryId, domain: 'responsibility', statement: originalFact }],
+    });
+    store.changeMemory(candidateId, memoryId, { action: 'confirm' });
+    store.saveResumeDraft(
+      candidateId,
+      {
+        ...EMPTY_RESUME_DRAFT,
+        experience: [
+          {
+            id: experienceId,
+            chronologyMemoryId: 'chronology-platform-1',
+            title: 'Platform Engineer',
+            employer: 'Acme',
+            current: true,
+            bulletMemoryIds: [memoryId],
+          },
+        ],
+      },
+      [],
+    );
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/coach/turn',
+      headers: { authorization, 'idempotency-key': turnIdempotencyKey },
+      payload: {
+        messageId,
+        content: 'Для вакансии проверь мой опыт Kubernetes и предложи правку в разделе опыта.',
+      },
+    });
+    const commandId = randomUUID();
+    const prepared = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/career-commands',
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': commandId,
+      },
+      payload: { turnIdempotencyKey, proposalIndex: 0 },
+    });
+
+    expect(prepared.statusCode).toBe(201);
+    expect(prepared.json().data.executionTarget).toMatchObject({
+      section: 'experience',
+      experienceId,
+      memoryId,
+      currentText: originalFact,
+      proposedText: proposal.resumeRevision?.proposedText,
+    });
+    const beforeApproval = store.getSnapshot(candidateId);
+    expect(beforeApproval.memory.find((fact) => fact.id === memoryId)?.statement).toBe(
+      originalFact,
+    );
+
+    const approved = await app.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/career-commands/${commandId}/approvals`,
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': commandId,
+      },
+    });
+    expect(approved.statusCode).toBe(200);
+    const afterApproval = store.getSnapshot(candidateId);
+    expect(afterApproval.memory.find((fact) => fact.id === memoryId)).toMatchObject({
+      statement: proposal.resumeRevision?.proposedText,
+      status: 'confirmed',
+    });
+    expect(afterApproval.resume?.draft.experience[0]).toMatchObject({
+      id: experienceId,
+      title: 'Platform Engineer',
+      bulletMemoryIds: [memoryId],
+    });
+
+    const reverted = await app.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/career-commands/${commandId}/revert`,
+      headers: { authorization, origin: 'http://localhost:3000' },
+    });
+    expect(reverted.statusCode).toBe(200);
+    expect(
+      store.getSnapshot(candidateId).memory.find((fact) => fact.id === memoryId),
+    ).toMatchObject({
+      statement: originalFact,
+      status: 'confirmed',
+    });
+  });
+
+  it('stores a candidate-authored experience fact as confirmed and attaches it to the selected position', async () => {
+    const app = await createApp();
+    const authorization = candidateAuthorization(app);
+    const candidateResponse = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/me',
+      headers: { authorization },
+    });
+    const candidateId = candidateResponse.json().data.candidate.id as string;
+    const store = stores[stores.length - 1]!;
+    const experienceId = 'exp-manual-1';
+    store.saveResumeDraft(
+      candidateId,
+      {
+        ...EMPTY_RESUME_DRAFT,
+        experience: [
+          {
+            id: experienceId,
+            chronologyMemoryId: 'chronology-manual-1',
+            title: 'Platform Engineer',
+            employer: 'Acme',
+            current: true,
+            bulletMemoryIds: [],
+          },
+        ],
+      },
+      [],
+    );
+    const memoryId = randomUUID();
+    const payload = {
+      statement: 'Развернула три Kubernetes-кластера и настроила резервирование.',
+      experienceId,
+    };
+    const headers = {
+      authorization,
+      origin: 'http://localhost:3000',
+      'idempotency-key': memoryId,
+    };
+
+    const added = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/experience-facts',
+      headers,
+      payload,
+    });
+    expect(added.statusCode).toBe(200);
+    expect(added.json().data.memory).toMatchObject({
+      id: memoryId,
+      statement: payload.statement,
+      status: 'confirmed',
+      domain: 'responsibility',
+      confidence: 'candidate-confirmed',
+    });
+    expect(store.getSnapshot(candidateId).resume?.draft.experience[0]?.bulletMemoryIds).toEqual([
+      memoryId,
+    ]);
+
+    const repeated = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/experience-facts',
+      headers,
+      payload,
+    });
+    expect(repeated.statusCode).toBe(200);
+    expect(
+      store.getSnapshot(candidateId).memory.filter((fact) => fact.id === memoryId),
+    ).toHaveLength(1);
   });
 });

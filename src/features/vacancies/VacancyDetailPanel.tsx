@@ -13,6 +13,7 @@ import { recruiterEnrichPayload } from './recruiterEnrichPayload';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import type { VacancyLevelMatch } from '../../../shared/vacancyMatchOrder';
 import { vacancyLevelMatchLabel } from './vacancyLevelMatch';
+import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 
 /**
  * Детальная панель «Вакансии» (B248/B250) — макет `vacancies.html`. Сетка
@@ -32,7 +33,7 @@ interface VacancyDetailPanelProps {
   readonly onOpenResponses?: () => void;
   /** Opens the profile so the candidate can add the experience that covers
    * the requirement; without a handler the button is not rendered. */
-  readonly onAddToProfile?: () => void;
+  readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
 }
 
 export function VacancyDetailPanel({
@@ -66,13 +67,10 @@ export function VacancyDetailPanel({
         points={explanation.matchingPoints}
         tone="yes"
       />
-      <VacancyRequirementList
-        title="Требования вакансии, которых нет в вашем профиле"
-        subtitle="Подтвердите опытом в профиле — или будьте готовы обсудить на интервью"
+      <VacancyMissingRequirements
+        cluster={cluster}
         points={explanation.missingPoints}
-        tone="no"
-        actionLabel="Добавить в профиль"
-        onAction={onAddToProfile}
+        onAddToProfile={onAddToProfile}
       />
 
       <div className="vacancies-req-block">
@@ -89,6 +87,37 @@ export function VacancyDetailPanel({
         onOpenResponses={onOpenResponses}
       />
     </div>
+  );
+}
+
+function VacancyMissingRequirements({
+  cluster,
+  points,
+  onAddToProfile,
+}: {
+  readonly cluster: MatchedVacancyItem['cluster'];
+  readonly points: readonly string[];
+  readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
+}) {
+  return (
+    <VacancyRequirementList
+      title="Требования вакансии, которых нет в вашем профиле"
+      subtitle="Подтвердите опытом в профиле — или будьте готовы обсудить на интервью"
+      points={points}
+      tone="no"
+      actionLabel="Добавить в профиль"
+      onAction={
+        onAddToProfile
+          ? (requirement) =>
+              onAddToProfile({
+                requirement,
+                vacancyId: cluster.id,
+                vacancyTitle: cluster.canonicalTitle,
+                vacancyCompany: cluster.canonicalCompany,
+              })
+          : undefined
+      }
+    />
   );
 }
 
@@ -329,7 +358,7 @@ function VacancyRequirementList({
   readonly points: readonly string[];
   readonly tone: 'yes' | 'no';
   readonly actionLabel?: string;
-  readonly onAction?: () => void;
+  readonly onAction?: (point: string) => void;
 }) {
   if (points.length === 0) return null;
   const Icon = tone === 'yes' ? Check : Warning;
@@ -348,7 +377,7 @@ function VacancyRequirementList({
               <button
                 type="button"
                 className="vacancies-req-action-btn"
-                onClick={onAction}
+                onClick={() => onAction(point)}
               >
                 {actionLabel}
               </button>

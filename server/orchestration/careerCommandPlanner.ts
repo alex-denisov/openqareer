@@ -20,15 +20,14 @@ export const hhApplicationExecutionTargetSchema = z
   })
   .strict();
 
-export type HhApplicationExecutionTarget = z.infer<
-  typeof hhApplicationExecutionTargetSchema
->;
+export type HhApplicationExecutionTarget = z.infer<typeof hhApplicationExecutionTargetSchema>;
 
 export const resumeReviseExecutionTargetSchema = z
   .object({
     targetType: z.literal('resume_block').optional(),
     section: z.enum(['headline', 'about', 'experience']),
     experienceId: z.string().optional(),
+    memoryId: z.string().optional(),
     currentText: z.string().max(10_000),
     proposedText: z.string().min(1).max(10_000),
     previousText: z.string().optional(),
@@ -36,16 +35,26 @@ export const resumeReviseExecutionTargetSchema = z
   .strict()
   .superRefine((target, context) => {
     if (target.section === 'experience' && !target.experienceId) {
-      context.addIssue({ code: z.ZodIssueCode.custom, message: 'experience revision needs an existing entry id' });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'experience revision needs an existing entry id',
+      });
     }
     if (target.section !== 'experience' && target.experienceId) {
-      context.addIssue({ code: z.ZodIssueCode.custom, message: 'only experience revisions have an entry id' });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'only experience revisions have an entry id',
+      });
+    }
+    if (target.section !== 'experience' && target.memoryId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'only experience revisions have a fact id',
+      });
     }
   });
 
-export type ResumeReviseExecutionTarget = z.infer<
-  typeof resumeReviseExecutionTargetSchema
->;
+export type ResumeReviseExecutionTarget = z.infer<typeof resumeReviseExecutionTargetSchema>;
 
 export function bindResumeRevisionTarget(
   proposal: ResumeRevisionProposal,
@@ -55,6 +64,7 @@ export function bindResumeRevisionTarget(
     targetType: 'resume_block',
     ...proposal,
     experienceId: proposal.experienceId ?? undefined,
+    memoryId: proposal.memoryId ?? undefined,
     currentText,
   });
 }
@@ -65,8 +75,7 @@ export const careerCommandExecutionTargetSchema = z.union([
 ]);
 
 export type CareerCommandExecutionTarget =
-  | z.infer<typeof hhApplicationExecutionTargetSchema>
-  | ResumeReviseExecutionTarget;
+  z.infer<typeof hhApplicationExecutionTargetSchema> | ResumeReviseExecutionTarget;
 
 export interface VerifiedCareerApproval {
   id: string;
@@ -148,16 +157,10 @@ export class CareerCommandPlanner {
     executionTarget?: CareerCommandExecutionTarget | null;
   }): CareerCommandRecord {
     const proposal = validateProposal(input);
-    const executionTarget = validateExecutionTarget(
-      proposal,
-      input.executionTarget ?? null,
-    );
+    const executionTarget = validateExecutionTarget(proposal, input.executionTarget ?? null);
     const commandId = this.createId();
 
-    if (
-      input.approval &&
-      !approvalMatches(input, commandId, proposal, this.now())
-    ) {
+    if (input.approval && !approvalMatches(input, commandId, proposal, this.now())) {
       throw new CareerCommandPolicyError('invalid_approval');
     }
     const approvalId = input.approval?.id ?? null;
@@ -215,6 +218,25 @@ function validateExecutionTarget(
     if (!target.success) {
       throw new CareerCommandPolicyError('invalid_execution_target');
     }
+    const proposed = proposal.resumeRevision;
+    if (
+      !proposed ||
+      target.data.section !== proposed.section ||
+      (target.data.experienceId ?? null) !== proposed.experienceId ||
+      (target.data.memoryId ?? null) !== proposed.memoryId ||
+      target.data.proposedText !== proposed.proposedText
+    ) {
+      throw new CareerCommandPolicyError('invalid_execution_target');
+    }
+    if (
+      target.data.memoryId &&
+      !proposal.evidenceRefs.some(
+        (reference) =>
+          reference === `memory:${target.data.memoryId}` || reference === target.data.memoryId,
+      )
+    ) {
+      throw new CareerCommandPolicyError('invalid_execution_target');
+    }
     return target.data;
   }
   throw new CareerCommandPolicyError('invalid_execution_target');
@@ -229,11 +251,7 @@ function validateProposal(input: {
   z.string().uuid().parse(input.idempotencyKey);
   if (
     proposal.risk === 'external_side_effect' &&
-    ![
-      'application.submit',
-      'outreach.send',
-      'connection.request',
-    ].includes(proposal.kind)
+    !['application.submit', 'outreach.send', 'connection.request'].includes(proposal.kind)
   ) {
     throw new CareerCommandPolicyError('invalid_capability_risk');
   }
@@ -270,10 +288,10 @@ function approvalMatches(
 ): boolean {
   return Boolean(
     input.approval &&
-      input.approval.candidateId === input.principal.candidateId &&
-      input.approval.commandId === commandId &&
-      input.approval.capability === proposal.kind &&
-      Date.parse(input.approval.expiresAt) > now.getTime(),
+    input.approval.candidateId === input.principal.candidateId &&
+    input.approval.commandId === commandId &&
+    input.approval.capability === proposal.kind &&
+    Date.parse(input.approval.expiresAt) > now.getTime(),
   );
 }
 
