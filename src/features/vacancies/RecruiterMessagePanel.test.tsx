@@ -98,4 +98,51 @@ describe('RecruiterMessagePanel (C72)', () => {
     act(() => root.unmount());
     container.remove();
   });
+
+  async function renderLoaded() {
+    vi.spyOn(vacancyPitchApi, 'requestVacancyPitch').mockResolvedValue({
+      vacancyId: 'vac-101',
+      emailPitch: { subject: 'S', body: 'B' },
+      linkedInNote: 'N',
+      atsCoverLetter: 'A',
+      contactMessage: 'Здравствуйте, Елена!',
+      usedEvidenceIds: [],
+      language: 'ru',
+      generatedAt: new Date().toISOString(),
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<RecruiterMessagePanel contact={sampleContact} />);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const button = container.querySelector<HTMLButtonElement>('.career-recruiter-message-copy-btn');
+    return { container, root, button };
+  }
+
+  async function clickCopy(writeText: () => Promise<void>) {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const view = await renderLoaded();
+    await act(async () => {
+      view.button?.click();
+      await Promise.resolve();
+    });
+    const label = view.button?.textContent ?? '';
+    act(() => view.root.unmount());
+    view.container.remove();
+    return label;
+  }
+
+  it('says «Скопировано» only after the clipboard write succeeds', async () => {
+    expect(await clickCopy(() => Promise.resolve())).toContain('Скопировано');
+  });
+
+  it('says the copy failed when the clipboard write is rejected', async () => {
+    expect(await clickCopy(() => Promise.reject(new Error('denied')))).toContain(
+      'Не скопировалось',
+    );
+  });
 });

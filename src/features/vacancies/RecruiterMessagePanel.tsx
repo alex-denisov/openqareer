@@ -27,7 +27,9 @@ export function resolveContactChannels(
   }
   if (contact.telegram) {
     const handle = contact.telegram.replace(/^@/, '');
-    const tgHref = contact.telegram.startsWith('http') ? contact.telegram : `https://t.me/${handle}`;
+    const tgHref = contact.telegram.startsWith('http')
+      ? contact.telegram
+      : `https://t.me/${handle}`;
     channels.push({ label: 'Telegram', href: tgHref, target: '_blank' });
   }
   if (contact.linkedinUrl) {
@@ -43,11 +45,7 @@ export function resolveContactChannels(
   return channels;
 }
 
-function ChannelButtons({
-  channels,
-}: {
-  readonly channels: readonly ContactChannel[];
-}) {
+function ChannelButtons({ channels }: { readonly channels: readonly ContactChannel[] }) {
   return (
     <>
       {channels.map((channel) => (
@@ -67,24 +65,34 @@ function ChannelButtons({
 }
 
 function CopyButton({ message }: { readonly message: string }) {
-  const [copied, setCopied] = useState(false);
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   const handleCopy = () => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      void navigator.clipboard.writeText(message);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+    if (!clipboard) {
+      setState('failed');
+      return;
     }
+    clipboard.writeText(message).then(
+      () => {
+        setState('copied');
+        setTimeout(() => setState('idle'), 2000);
+      },
+      () => setState('failed'),
+    );
   };
+  const copied = state === 'copied';
 
   return (
-    <button
-      type="button"
-      className="career-recruiter-message-copy-btn"
-      onClick={handleCopy}
-    >
+    <button type="button" className="career-recruiter-message-copy-btn" onClick={handleCopy}>
       {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-      <span>{copied ? 'Скопировано' : 'Скопировать'}</span>
+      <span>
+        {copied
+          ? 'Скопировано'
+          : state === 'failed'
+            ? 'Не скопировалось — выделите текст'
+            : 'Скопировать'}
+      </span>
     </button>
   );
 }
@@ -161,11 +169,13 @@ export function RecruiterMessagePanel({
   const channels = resolveContactChannels(contact, defaultSubject, message);
 
   return (
-    <div className="career-recruiter-message-panel" role="region" aria-label="Сообщение нанимающему">
+    <div
+      className="career-recruiter-message-panel"
+      role="region"
+      aria-label="Сообщение нанимающему"
+    >
       <div className="career-recruiter-message-header">
-        <span className="career-recruiter-message-title">
-          Сообщение для {contact.fullName}
-        </span>
+        <span className="career-recruiter-message-title">Сообщение для {contact.fullName}</span>
         {onClose && (
           <button
             type="button"
