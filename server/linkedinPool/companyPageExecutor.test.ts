@@ -7,6 +7,7 @@ import { SqliteLinkedinPoolRepository } from './sqliteLinkedinPoolRepository';
 import type { LinkedinSessionCookie } from './sessionContract';
 import { recordLinkedinExecutorPageAttempt } from './executorAuditRepository';
 import {
+  detectCadencePageKind,
   hasLinkedinExecutorDailyCapacity,
   isLinkedinExecutorWithinHours,
   linkedinExecutorPageDelayMs,
@@ -14,6 +15,7 @@ import {
   LinkedinPoolCompanyPageExecutor,
   readLinkedinPoolExecutorConfig,
 } from './companyPageExecutor';
+import { planDay } from './linkedinCadencePolicy';
 
 const actor = { actorUserId: 'admin-user', actorUsername: 'admin.test' };
 const encryptionKey = Buffer.alloc(32, 23);
@@ -120,7 +122,7 @@ function fakeBrowser(options?: { challenge?: boolean }) {
 }
 
 function enabledConfig(accountId: string) {
-  return { enabled: true as const, accountId, timezone: 'UTC' };
+  return { enabled: true as const, accountId, timezone: 'UTC', mode: 'warmup' as const };
 }
 
 describe('LinkedIn pool executor controls', () => {
@@ -148,6 +150,16 @@ describe('LinkedIn pool executor controls', () => {
         OPENQAREER_LINKEDIN_POOL_EXECUTOR_TIMEZONE: 'Europe/Moscow',
       }),
     ).toThrow('linkedin_pool_executor_owner_telegram_required');
+    expect(() =>
+      readLinkedinPoolExecutorConfig({
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_ENABLED: 'true',
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_ACCOUNT_ID: '11111111-1111-4111-8111-111111111111',
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_TIMEZONE: 'Europe/Moscow',
+        OPENQAREER_TELEGRAM_BOT_TOKEN: 'token',
+        OPENQAREER_TELEGRAM_OWNER_CHAT_ID: '1',
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_MODE: 'invalid_mode',
+      }),
+    ).toThrow('linkedin_pool_executor_mode_invalid');
     expect(
       readLinkedinPoolExecutorConfig({
         OPENQAREER_LINKEDIN_POOL_EXECUTOR_ENABLED: 'true',
@@ -160,6 +172,37 @@ describe('LinkedIn pool executor controls', () => {
       enabled: true,
       accountId: '11111111-1111-4111-8111-111111111111',
       timezone: 'Europe/Moscow',
+      mode: 'warmup',
+    });
+    expect(
+      readLinkedinPoolExecutorConfig({
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_ENABLED: 'true',
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_ACCOUNT_ID: '11111111-1111-4111-8111-111111111111',
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_TIMEZONE: 'Europe/Moscow',
+        OPENQAREER_TELEGRAM_BOT_TOKEN: 'token',
+        OPENQAREER_TELEGRAM_OWNER_CHAT_ID: '1',
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_MODE: 'active_search',
+      }),
+    ).toEqual({
+      enabled: true,
+      accountId: '11111111-1111-4111-8111-111111111111',
+      timezone: 'Europe/Moscow',
+      mode: 'active_search',
+    });
+    expect(
+      readLinkedinPoolExecutorConfig({
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_ENABLED: 'true',
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_ACCOUNT_ID: '11111111-1111-4111-8111-111111111111',
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_TIMEZONE: 'Europe/Moscow',
+        OPENQAREER_TELEGRAM_BOT_TOKEN: 'token',
+        OPENQAREER_TELEGRAM_OWNER_CHAT_ID: '1',
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_MODE: 'scout_pool',
+      }),
+    ).toEqual({
+      enabled: true,
+      accountId: '11111111-1111-4111-8111-111111111111',
+      timezone: 'Europe/Moscow',
+      mode: 'scout_pool',
     });
   });
 
@@ -219,6 +262,7 @@ describe('LinkedinPoolCompanyPageExecutor', () => {
       now: () => now,
       random: () => 0.5,
       wait,
+      decide: () => ({ status: 'run' }),
     });
 
     await expect(executor.runStep()).resolves.toMatchObject({
@@ -229,7 +273,7 @@ describe('LinkedinPoolCompanyPageExecutor', () => {
     expect(fake.navigated).toHaveLength(2);
     expect(fake.navigated[0]).toContain('/search/results/companies/');
     expect(fake.navigated[1]).toBe('https://www.linkedin.com/company/northwind-group/people/');
-    expect(wait).toHaveBeenCalledWith(40_000, expect.any(AbortSignal));
+    expect(wait).toHaveBeenCalledWith(5_500, expect.any(AbortSignal));
     const rows = repository
       .getDatabase()
       .prepare('SELECT company_name, full_name, role_title, linkedin_url FROM linkedin_pool_company_recruiters')
@@ -265,6 +309,7 @@ describe('LinkedinPoolCompanyPageExecutor', () => {
       notifyOwner,
       now: () => now,
       wait: async () => undefined,
+      decide: () => ({ status: 'run' }),
     });
 
     await expect(executor.runStep()).resolves.toMatchObject({
@@ -305,6 +350,7 @@ describe('LinkedinPoolCompanyPageExecutor', () => {
       browserFactory,
       notifyOwner: async () => ({ status: 'disabled' }),
       now: () => now,
+      decide: (_plan, _now, pages) => ({ status: pages >= 39 ? 'daily_limit' : 'run' }),
     });
     await expect(atLimit.runStep()).resolves.toMatchObject({ status: 'daily_limit' });
 
@@ -315,8 +361,152 @@ describe('LinkedinPoolCompanyPageExecutor', () => {
       browserFactory,
       notifyOwner: async () => ({ status: 'disabled' }),
       now: () => new Date('2026-09-29T22:00:00.000Z'),
+      decide: () => ({ status: 'outside_window' }),
     });
     await expect(outsideHours.runStep()).resolves.toMatchObject({ status: 'outside_window' });
     expect(browserFactory).not.toHaveBeenCalled();
+  });
+});
+
+describe('LinkedinPoolCompanyPageExecutor Cadence and Backoff (B316)', () => {
+  it('stops without starting browser on window_skipped, rest_day, daily_limit, and outside_window', async () => {
+    const repository = createRepository();
+    const account = await createReadyAccount(repository, 'pool-cadence@example.test');
+    seedCompany(repository);
+    const browserFactory = vi.fn();
+
+    const skipped = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id),
+      repository,
+      database: repository.getDatabase(),
+      browserFactory,
+      notifyOwner: async () => ({ status: 'disabled' }),
+      decide: () => ({ status: 'window_skipped' }),
+    });
+    await expect(skipped.runStep()).resolves.toMatchObject({ status: 'window_skipped' });
+    expect(browserFactory).not.toHaveBeenCalled();
+
+    const restDay = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id),
+      repository,
+      database: repository.getDatabase(),
+      browserFactory,
+      notifyOwner: async () => ({ status: 'disabled' }),
+      decide: () => ({ status: 'rest_day' }),
+    });
+    await expect(restDay.runStep()).resolves.toMatchObject({ status: 'rest_day' });
+    expect(browserFactory).not.toHaveBeenCalled();
+
+    const dailyLimit = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id),
+      repository,
+      database: repository.getDatabase(),
+      browserFactory,
+      notifyOwner: async () => ({ status: 'disabled' }),
+      decide: () => ({ status: 'daily_limit' }),
+    });
+    await expect(dailyLimit.runStep()).resolves.toMatchObject({ status: 'daily_limit' });
+    expect(browserFactory).not.toHaveBeenCalled();
+
+    const outside = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id),
+      repository,
+      database: repository.getDatabase(),
+      browserFactory,
+      notifyOwner: async () => ({ status: 'disabled' }),
+      decide: () => ({ status: 'outside_window' }),
+    });
+    await expect(outside.runStep()).resolves.toMatchObject({ status: 'outside_window' });
+    expect(browserFactory).not.toHaveBeenCalled();
+  });
+
+  it('implements exponential backoff with jitter on transient failures and resets on success', async () => {
+    const repository = createRepository();
+    const account = await createReadyAccount(repository, 'pool-backoff@example.test');
+    for (let c = 1; c <= 5; c++) {
+      seedCompany(repository, `Company ${c}`);
+    }
+    let currentTime = new Date('2026-09-29T13:30:00.000Z');
+    let failBrowser = true;
+    const browserFactory = vi.fn(async () => {
+      if (failBrowser) throw new Error('network down');
+      const fake = fakeBrowser();
+      return fake.browser as never;
+    });
+
+    const executor = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id),
+      repository,
+      database: repository.getDatabase(),
+      browserFactory,
+      notifyOwner: async () => ({ status: 'disabled' }),
+      now: () => currentTime,
+      random: () => 0.5,
+      decide: () => ({ status: 'run' }),
+      wait: async () => undefined,
+    });
+
+    const res1 = await executor.runStep();
+    expect(res1.status).toBe('transient_failure');
+    expect(browserFactory).toHaveBeenCalledTimes(1);
+
+    currentTime = new Date(currentTime.getTime() + 30_000);
+    const res2 = await executor.runStep();
+    expect(res2.status).toBe('transient_failure');
+    expect(browserFactory).toHaveBeenCalledTimes(1);
+
+    currentTime = new Date(currentTime.getTime() + 31_000);
+    const res3 = await executor.runStep();
+    expect(res3.status).toBe('transient_failure');
+    expect(browserFactory).toHaveBeenCalledTimes(2);
+
+    currentTime = new Date(currentTime.getTime() + 60_000);
+    const res4 = await executor.runStep();
+    expect(res4.status).toBe('transient_failure');
+    expect(browserFactory).toHaveBeenCalledTimes(2);
+
+    currentTime = new Date(currentTime.getTime() + 65_000);
+    failBrowser = false;
+    const res5 = await executor.runStep();
+    expect(res5.status).toBe('processed');
+    expect(browserFactory).toHaveBeenCalledTimes(3);
+
+    currentTime = new Date(currentTime.getTime() + 5_000);
+    failBrowser = true;
+    const res6 = await executor.runStep();
+    expect(res6.status).toBe('transient_failure');
+    expect(browserFactory).toHaveBeenCalledTimes(4);
+  });
+
+  it('detects cadence page kind and applies corresponding dwell delays', () => {
+    expect(detectCadencePageKind('https://www.linkedin.com/search/results/companies/?keywords=Northwind')).toBe('skim');
+    expect(detectCadencePageKind('https://www.linkedin.com/company/northwind/people/')).toBe('read');
+    expect(detectCadencePageKind('https://www.linkedin.com/in/riley-example/')).toBe('deep');
+    expect(detectCadencePageKind('https://www.linkedin.com/pulse/leadership-trends/')).toBe('deep');
+    expect(detectCadencePageKind('https://www.linkedin.com/posts/activity-123')).toBe('deep');
+  });
+
+  it('caches the day plan per account and date in memory', async () => {
+    const repository = createRepository();
+    const account = await createReadyAccount(repository, 'pool-cache@example.test');
+    seedCompany(repository);
+    const planSpy = vi.fn(planDay);
+
+    const executor = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id),
+      repository,
+      database: repository.getDatabase(),
+      browserFactory: async () => fakeBrowser().browser as never,
+      notifyOwner: async () => ({ status: 'disabled' }),
+      now: () => now,
+      planDay: planSpy,
+      decide: () => ({ status: 'window_skipped' }),
+    });
+
+    await executor.runStep();
+    await executor.runStep();
+    await executor.runStep();
+
+    expect(planSpy).toHaveBeenCalledTimes(1);
   });
 });

@@ -5,13 +5,24 @@ export const LINKEDIN_EXECUTOR_WINDOW_START_HOUR = 9;
 export const LINKEDIN_EXECUTOR_WINDOW_END_HOUR = 21;
 export const LINKEDIN_EXECUTOR_TARGET_SCAN_LIMIT = 2_000;
 
+import type { CadenceMode } from './linkedinCadencePolicy';
+
+export type LinkedinPoolExecutorMode = CadenceMode;
+
 export type LinkedinPoolExecutorConfig =
   | { readonly enabled: false }
-  | { readonly enabled: true; readonly accountId: string; readonly timezone: string };
+  | {
+      readonly enabled: true;
+      readonly accountId: string;
+      readonly timezone: string;
+      readonly mode: LinkedinPoolExecutorMode;
+    };
 
 export type LinkedinPoolExecutorStatus =
   | 'disabled'
   | 'outside_window'
+  | 'window_skipped'
+  | 'rest_day'
   | 'daily_limit'
   | 'no_target'
   | 'account_not_ready'
@@ -48,7 +59,12 @@ export function readLinkedinPoolExecutorConfig(
   ) {
     throw new Error('linkedin_pool_executor_owner_telegram_required');
   }
-  return { enabled: true, accountId, timezone };
+  const rawMode = environment.OPENQAREER_LINKEDIN_POOL_EXECUTOR_MODE?.trim().toLowerCase();
+  const mode = (rawMode || 'warmup') as LinkedinPoolExecutorMode;
+  if (mode !== 'warmup' && mode !== 'active_search' && mode !== 'scout_pool') {
+    throw new Error('linkedin_pool_executor_mode_invalid');
+  }
+  return { enabled: true, accountId, timezone, mode };
 }
 
 export function isLinkedinExecutorWithinHours(now: Date, timezone: string): boolean {

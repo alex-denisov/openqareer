@@ -252,11 +252,11 @@ export function decide(
   pagesToday: number,
   timezone = 'UTC',
 ): CadenceDecision {
-  if (pagesToday >= plan.dailyPageBudget) {
-    return { status: 'daily_limit' };
-  }
   if (plan.isRestDay) {
     return { status: 'rest_day' };
+  }
+  if (pagesToday >= plan.dailyPageBudget) {
+    return { status: 'daily_limit' };
   }
 
   const localMins = getLocalMinutesOfDay(now, timezone);

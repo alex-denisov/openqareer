@@ -23,15 +23,20 @@ import {
   type LinkedinPoolExecutorDailyUsage,
 } from './executorAuditRepository';
 import {
-  hasLinkedinExecutorDailyCapacity,
-  isLinkedinExecutorWithinHours,
-  linkedinExecutorPageDelayMs,
   linkedinLocalDayStart,
   LINKEDIN_EXECUTOR_TARGET_SCAN_LIMIT,
   type LinkedinPoolExecutorConfig,
   type LinkedinPoolExecutorReport,
   type LinkedinPoolExecutorStatus,
 } from './companyPageExecutorPolicy';
+import {
+  decide,
+  pageDelayMs,
+  planDay,
+  type CadenceMode,
+  type CadencePageKind,
+  type DayPlan,
+} from './linkedinCadencePolicy';
 
 export {
   hasLinkedinExecutorDailyCapacity,
@@ -42,6 +47,7 @@ export {
 } from './companyPageExecutorPolicy';
 export type {
   LinkedinPoolExecutorConfig,
+  LinkedinPoolExecutorMode,
   LinkedinPoolExecutorReport,
   LinkedinPoolExecutorStatus,
 } from './companyPageExecutorPolicy';
@@ -55,6 +61,8 @@ export interface LinkedinPoolExecutorDependencies {
   readonly now?: () => Date;
   readonly random?: () => number;
   readonly wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  readonly planDay?: typeof planDay;
+  readonly decide?: typeof decide;
 }
 
 interface ReadySession {
@@ -67,6 +75,12 @@ interface PageRead {
   readonly reason?: 'challenge_required' | 'expired' | 'login_required';
 }
 
+export function detectCadencePageKind(url: string): CadencePageKind {
+  if (/\/in\/|\/pulse\/|\/posts\//iu.test(url)) return 'deep';
+  if (/\/people\/?/iu.test(url)) return 'read';
+  return 'skim';
+}
+
 /** B253 limits this owner-approved exception to the dedicated pool and company/recruiter reads. */
 export class LinkedinPoolCompanyPageExecutor {
   private readonly config: LinkedinPoolExecutorConfig;
@@ -77,12 +91,17 @@ export class LinkedinPoolCompanyPageExecutor {
   private readonly now: () => Date;
   private readonly random: () => number;
   private readonly wait: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  private readonly planDayFn?: typeof planDay;
+  private readonly decideFn?: typeof decide;
   private pauseController?: AbortController;
   private activeBrowser?: Browser;
   private activeContext?: BrowserContext;
   private running = false;
   private stopped = false;
   private reauthRequired = false;
+  private consecutiveTransientFailures = 0;
+  private backoffUntilMs = 0;
+  private cachedPlan?: { key: string; plan: DayPlan };
 
   constructor(dependencies: LinkedinPoolExecutorDependencies) {
     this.config = dependencies.config;
@@ -93,6 +112,8 @@ export class LinkedinPoolCompanyPageExecutor {
     this.now = dependencies.now ?? (() => new Date());
     this.random = dependencies.random ?? Math.random;
     this.wait = dependencies.wait ?? abortableWait;
+    this.planDayFn = dependencies.planDay;
+    this.decideFn = dependencies.decide;
     if (this.config.enabled) ensureCompanyRecruitersSchema(this.database);
   }
 
@@ -101,11 +122,20 @@ export class LinkedinPoolCompanyPageExecutor {
     if (this.stopped) return report('stopped');
     if (this.reauthRequired) return report('needs_reauth');
     if (this.running) return report('stopped');
+    if (this.isBackingOff()) return report('transient_failure');
     this.running = true;
     try {
-      return await this.runEnabledStep();
+      const outcome = await this.runEnabledStep();
+      if (outcome.status === 'processed') {
+        this.resetBackoff();
+      } else if (outcome.status === 'transient_failure') {
+        this.recordTransientFailure();
+      }
+      return outcome;
     } catch {
-      return report(this.stopped ? 'stopped' : 'transient_failure');
+      if (this.stopped) return report('stopped');
+      this.recordTransientFailure();
+      return report('transient_failure');
     } finally {
       this.running = false;
       await this.closeBrowser();
@@ -118,11 +148,50 @@ export class LinkedinPoolCompanyPageExecutor {
     await this.closeBrowser();
   }
 
+  private isBackingOff(): boolean {
+    return this.now().getTime() < this.backoffUntilMs;
+  }
+
+  private recordTransientFailure(): void {
+    this.consecutiveTransientFailures += 1;
+    const baseMinutes = Math.min(60, Math.pow(2, this.consecutiveTransientFailures - 1));
+    const baseMs = baseMinutes * 60_000;
+    const sample = Math.min(1, Math.max(0, this.random()));
+    const jitter = 0.8 + 0.4 * sample;
+    this.backoffUntilMs = this.now().getTime() + Math.round(baseMs * jitter);
+  }
+
+  private resetBackoff(): void {
+    this.consecutiveTransientFailures = 0;
+    this.backoffUntilMs = 0;
+  }
+
+  private getOrComputePlan(accountId: string, now: Date, timezone: string, mode?: CadenceMode): DayPlan {
+    const effectiveMode = mode || 'warmup';
+    const localDateStr = formatLocalDate(now, timezone);
+    const key = `${accountId}:${localDateStr}:${effectiveMode}:${timezone}`;
+    if (this.cachedPlan?.key === key) {
+      return this.cachedPlan.plan;
+    }
+    const compute = this.planDayFn ?? planDay;
+    const plan = compute(accountId, localDateStr, effectiveMode, timezone);
+    this.cachedPlan = { key, plan };
+    return plan;
+  }
+
   private async runEnabledStep(): Promise<LinkedinPoolExecutorReport> {
     const config = this.config;
     if (!config.enabled) return report('disabled');
     const now = this.now();
-    if (!isLinkedinExecutorWithinHours(now, config.timezone)) return report('outside_window');
+    const plan = this.getOrComputePlan(config.accountId, now, config.timezone, config.mode);
+    const dailyUsage = getLinkedinExecutorDailyUsage(
+      this.database,
+      config.accountId,
+      linkedinLocalDayStart(now, config.timezone).toISOString(),
+    );
+    const decision = (this.decideFn ?? decide)(plan, now, dailyUsage.pageCount, config.timezone);
+    if (decision.status !== 'run') return report(decision.status);
+
     const account = this.repository
       .list({ limit: 200, offset: 0 })
       .accounts.find((entry) => entry.id === config.accountId);
@@ -131,25 +200,20 @@ export class LinkedinPoolCompanyPageExecutor {
       return this.blockForReauth('login_required');
     }
     if (account.state !== 'ready') return report('account_not_ready');
+
     const session = await this.readReadySession(account.id, account.serverSession?.expiresAt, now);
     if ('report' in session) return session.report;
 
-    const dailyUsage = getLinkedinExecutorDailyUsage(
-      this.database,
-      account.id,
-      linkedinLocalDayStart(now, config.timezone).toISOString(),
-    );
-    if (!hasLinkedinExecutorDailyCapacity(dailyUsage.pageCount)) return report('daily_limit');
     const companyName = this.nextCompanyName(dailyUsage);
     if (!companyName) return report('no_target');
+
     if (dailyUsage.pageCount > 0) {
-      await this.waitBetweenPages();
+      await this.waitBetweenPages('read');
       if (this.stopped) return report('stopped');
-      if (!isLinkedinExecutorWithinHours(this.now(), config.timezone)) {
-        return report('outside_window');
-      }
+      const midDecision = (this.decideFn ?? decide)(plan, this.now(), dailyUsage.pageCount, config.timezone);
+      if (midDecision.status !== 'run') return report(midDecision.status);
     }
-    return this.collectCompany(account.id, companyName, session.cookies);
+    return this.collectCompany(account.id, companyName, session.cookies, plan, dailyUsage.pageCount);
   }
 
   private async readReadySession(
@@ -192,6 +256,8 @@ export class LinkedinPoolCompanyPageExecutor {
     accountId: string,
     companyName: string,
     cookies: readonly LinkedinSessionCookie[],
+    plan: DayPlan,
+    pagesBefore: number,
   ): Promise<LinkedinPoolExecutorReport> {
     const hash = companyHash(companyName);
     recordLinkedinExecutorCompanyAttempt(this.database, accountId, hash, this.now());
@@ -205,14 +271,12 @@ export class LinkedinPoolCompanyPageExecutor {
     const companyUrl = parseLinkedinCompanySearchPageHtml(search.html ?? '', companyName);
     if (!companyUrl) return report('processed', 1, 0);
 
-    await this.waitBetweenPages();
+    await this.waitBetweenPages('skim');
     if (this.stopped) return report('stopped', 1, 0);
-    if (
-      !this.config.enabled ||
-      !isLinkedinExecutorWithinHours(this.now(), this.config.timezone)
-    ) {
-      return report('outside_window', 1, 0);
-    }
+    if (!this.config.enabled) return report('disabled', 1, 0);
+    const midDecision = (this.decideFn ?? decide)(plan, this.now(), pagesBefore + 1, this.config.timezone);
+    if (midDecision.status !== 'run') return report(midDecision.status, 1, 0);
+
     const peopleUrl = `${companyUrl}/people/`;
     const people = await this.readPage(page, peopleUrl, 'company_people', hash);
     if (people.status !== 'ready') return this.handlePageFailure(people, 2);
@@ -289,10 +353,10 @@ export class LinkedinPoolCompanyPageExecutor {
     return { ...report('needs_reauth'), notification: outcome.status };
   }
 
-  private async waitBetweenPages(): Promise<void> {
+  private async waitBetweenPages(kind: CadencePageKind): Promise<void> {
     this.pauseController = new AbortController();
     try {
-      await this.wait(linkedinExecutorPageDelayMs(this.random), this.pauseController.signal);
+      await this.wait(pageDelayMs(kind, this.random), this.pauseController.signal);
     } finally {
       this.pauseController = undefined;
     }
@@ -344,6 +408,19 @@ function hasControlCharacters(value: string): boolean {
     const code = character.charCodeAt(0);
     return code < 0x20 || code === 0x7f;
   });
+}
+
+function formatLocalDate(date: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((p) => p.type === 'year')?.value ?? '1970';
+  const month = parts.find((p) => p.type === 'month')?.value ?? '01';
+  const day = parts.find((p) => p.type === 'day')?.value ?? '01';
+  return `${year}-${month}-${day}`;
 }
 
 function abortableWait(milliseconds: number, signal: AbortSignal): Promise<void> {
